@@ -1,5 +1,5 @@
 name: "Beregeningsplanner"
-version: "0.1.0"
+version: "0.2.0"
 slug: beregeningsplanner
 description: >-
   Ontwerp een automatische tuinberegening: gebieden tekenen, sproeiers
@@ -11,12 +11,23 @@ arch:
   - amd64
 startup: application
 boot: auto
-# Voorlopig alleen via het HA-zijpaneel (ingress): geen gepubliceerde poort en
-# dus geen login nodig. Voor gebruik buiten HA komt de app op een eigen server
-# (zie docker-compose.yml in de root).
+ports:
+  3300/tcp: 3300
+ports_description:
+  3300/tcp: "Webinterface (los van ingress, nodig voor de Cloudflare-tunnel aquatech.den-hollander.com)"
+# De gepubliceerde poort blijft naast ingress staan: de tunnel bereikt de app
+# via de poort, ingress (HA-zijpaneel) via het wisselende ingress-pad.
+webui: "http://[HOST]:[PORT:3300]/"
 ingress: true
 ingress_port: 3300
 panel_icon: mdi:sprinkler-variant
 panel_title: Beregening
+environment:
+  DATA_DIR: /data
+# Leeg laten: een `null`-waarde hier maakt de optie voor Supervisor verplicht
+# en dan start de app niet zonder code.
 options: {}
-schema: {}
+schema:
+  # Nodig voor toegang buiten Home Assistant om (tunnel). Via het
+  # HA-zijpaneel (ingress) is geen code nodig.
+  access_code: "password?"

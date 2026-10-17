@@ -1,4 +1,5 @@
-# Los draaien buiten Home Assistant (bijv. op een eigen server): `docker compose up -d`.
+# Los draaien buiten Home Assistant (bijv. op een eigen server):
+# `ACCESS_CODE=... docker compose up -d` -> http://<server>:3300
 services:
   beregeningsplanner:
     build: ./beregeningsplanner
@@ -7,3 +8,10 @@ services:
       - "${APP_PORT:-3300}:3300"
     environment:
       - PORT=3300
+      - DATA_DIR=/data
+      - ACCESS_CODE=${ACCESS_CODE:-}
+    volumes:
+      - beregeningsplanner-data:/data
+
+volumes:
+  beregeningsplanner-data:

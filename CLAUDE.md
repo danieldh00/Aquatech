@@ -24,7 +24,15 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 
 - Repository `https://github.com/danieldh00/Aquatech` (store-slug `c1355dc8`),
   app-slug **`c1355dc8_beregeningsplanner`**, auto_update + watchdog aan.
-- Alleen ingress (paneel **Beregening**), geen gepubliceerde poort en geen login.
+- Ingress (paneel **Beregening**, geen login) én gepubliceerde poort 3300
+  voor de tunnel **https://aquatech.den-hollander.com** (login met
+  `access_code` uit de app-opties; sessiesleutel in `/data/session-secret`).
+- **Ingress alleen vertrouwen op header + Supervisor-IP (`172.30.32.2`)**
+  (`backend/src/auth.js`); de header alleen is te vervalsen. Zonder geldige
+  sessie serveert de server op elk pad `backend/src/login.html`.
+- Cloudflared-app (`9074a9fa_cloudflared`) → `additional_hosts`:
+  `aquatech.den-hollander.com → http://c1355dc8-beregeningsplanner:3300`.
+- **Nooit secrets in de repo of in chat**: `access_code` alleen in de app-opties.
 - Logs: `ha_get_logs(source="supervisor", slug="c1355dc8_beregeningsplanner")`;
   health via ingress: `ha_manage_app(slug=..., path="/api/health")`.
 
@@ -47,7 +55,7 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 
 ```sh
 cd beregeningsplanner/backend && npm install
-PORT=3300 node src/server.js      # http://localhost:3300
+DATA_DIR=/tmp/bp ACCESS_CODE=test PORT=3300 node src/server.js   # http://localhost:3300
 npm test                          # node --test
 ```
 
