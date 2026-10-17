@@ -348,7 +348,7 @@
       }
       const b = loaded.background;
       // voorlopige schaal: plan ca. 30 m breed; daarna herkennen of kalibreren
-      this.state.background = { dataUrl: b.dataUrl, width: b.width, height: b.height, x: 0, y: 0, scale: window.Concept.FALLBACK_WIDTH_M / b.width, opacity: 0.6 };
+      this.state.background = { dataUrl: b.dataUrl, width: b.width, height: b.height, paper: b.paper || null, x: 0, y: 0, scale: window.Concept.FALLBACK_WIDTH_M / b.width, opacity: 0.6 };
       this._analyzeImage = loaded.analyze;
       if (!this.state.meta.name || this.state.meta.name === 'Nieuw beregeningsplan') this.state.meta.name = file.name.replace(/\.[^.]+$/, '');
       await this.refreshBackground();
@@ -371,6 +371,7 @@
       const extraWarnings = [];
       try {
         const img = this._analyzeImage || await window.PlanImport.analyzeImageFrom(st.background.dataUrl);
+        if (!img.paper && st.background.paper) img.paper = st.background.paper;
         this._analyzeImage = img;
         let raw = null;
         if (useAi) {
@@ -386,6 +387,13 @@
           raw = await window.LocalRecognizer.analyze(img, (msg) => this.busy(`Plan wordt lokaal gelezen: ${msg}`));
         }
         result = window.Concept.build(raw, img);
+        if (result.scaleInfo.estimated && result.gardenWidthPx) {
+          // geen maat op het plan: liever de gebruiker vragen dan sproeiers op een verkeerde schaal plaatsen
+          this.busy(null);
+          const answer = prompt(`Er staat geen leesbare maat op het plan.\nHoe breed is de tuin ongeveer (de herkende vlakken, van links naar rechts) in meters?\n\nLeeg laten = aanname ${window.Concept.FALLBACK_GARDEN_M} m; kalibreren kan later altijd in stap 1.`, '');
+          const widthM = parseFloat(String(answer || '').replace(',', '.'));
+          if (widthM > 0 && widthM < 1000) result = window.Concept.build(raw, img, { gardenWidthM: widthM });
+        }
         result.warnings.unshift(...extraWarnings);
         result.local = Boolean(raw.local);
       } catch (e) {

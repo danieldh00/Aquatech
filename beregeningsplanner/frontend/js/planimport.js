@@ -55,7 +55,21 @@
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, cv.width, cv.height);
     await page.render({ canvasContext: ctx, viewport }).promise;
-    return { canvas: cv, pages: pdf.numPages };
+    // papierformaat (1 pt = 1/72 inch) en, als de tekst in de PDF staat, de schaal "1:N"
+    const paper = { widthM: (base.width / 72) * 0.0254, ratio: null };
+    try {
+      const text = (await page.getTextContent()).items.map((it) => it.str).join(' ');
+      paper.ratio = parseRatio(text);
+    } catch (e) { /* geen tekstlaag: dan alleen tekstherkenning */ }
+    return { canvas: cv, pages: pdf.numPages, paper };
+  }
+
+  /** Schaalaanduiding "1:50", "1 : 100", "schaal 1/200" → 50, 100, 200 (of null). */
+  function parseRatio(text) {
+    const m = /(?:^|[^\d.,])1\s*[:/]\s*(\d{2,4})(?![\d.,]*\d)/.exec(String(text));
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return n >= 10 && n <= 5000 ? n : null;
   }
 
   /**
@@ -64,10 +78,10 @@
    * verhouding `analyze.factor` tot die van de ondergrond.
    */
   async function load(file) {
-    let source, w, h, pages = 1;
+    let source, w, h, pages = 1, paper = null;
     if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
       const r = await renderPdf(file);
-      source = r.canvas; w = r.canvas.width; h = r.canvas.height; pages = r.pages;
+      source = r.canvas; w = r.canvas.width; h = r.canvas.height; pages = r.pages; paper = r.paper;
     } else {
       const url = URL.createObjectURL(file);
       try {
@@ -80,8 +94,8 @@
     const bg = scaled(source, w, h, BG_MAX);
     const an = scaled(bg, bg.width, bg.height, ANALYZE_MAX);
     return {
-      background: { dataUrl: bg.toDataURL('image/jpeg', 0.88), width: bg.width, height: bg.height },
-      analyze: { dataUrl: an.toDataURL('image/jpeg', 0.9), width: an.width, height: an.height, factor: an.width / bg.width },
+      background: { dataUrl: bg.toDataURL('image/jpeg', 0.88), width: bg.width, height: bg.height, paper },
+      analyze: { dataUrl: an.toDataURL('image/jpeg', 0.9), width: an.width, height: an.height, factor: an.width / bg.width, paper },
       pages,
     };
   }
@@ -93,5 +107,5 @@
     return { dataUrl: an.toDataURL('image/jpeg', 0.9), width: an.width, height: an.height, factor: an.width / img.naturalWidth };
   }
 
-  window.PlanImport = { load, analyzeImageFrom, loadImage };
+  window.PlanImport = { load, analyzeImageFrom, loadImage, parseRatio };
 })();

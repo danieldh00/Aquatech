@@ -47,16 +47,26 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   hebben `areaId` en eigen zonegroepen (`bed-spray`, `bed-rotator`); druppelslang
   en druppelaars zijn de groepen `drip` en `drippers`. `App._syncBedSprinklers`
   plaatst/verwijdert ze bij een wijziging van de methode.
-- **Lokale herkenning** (`js/localrecog.js`, standaard): kleurclassificatie
-  (HSV-regels in `classify`) → meerderheidsfilter → sluiten → componenten →
-  contour; schaal via Tesseract.js 5.1.1 (lokaal in `vendor/tesseract/`, `eng`
-  best_int, absolute URL's voor worker/core/lang) + `measureLine` (maatlijn moet
-  aan beide kanten voorbij de tekst lopen). Labels (`VOCAB` + `matchLabel`,
-  Levenshtein-speling) uit 6 OCR-rondes (`readText`: cijfers recht/gedraaid,
-  tekst normaal/zwart-wit recht/gedraaid, taal `nld+eng`) typeren gekleurde
-  vlakken of halen omsloten lijnvlakken uit (`enclosedRegions`). Zelfde uitvoerformaat als de AI;
-  bij een AI-fout valt `makeConcept` terug op lokaal. Unittests in
-  `backend/test/localrecog.test.js` laden de frontendcode in een vm-sandbox.
+- **Lokale herkenning** (`js/localrecog.js`, standaard): papiermodel
+  (`paperModel`: lichtste neutrale pixels per cel, 3e-graads veelterm, iteratief
+  zonder donkere cellen; niet bij egaal wit/digitaal of als >4% lichter dan het
+  papier wordt) → delen door papier → middelen zonder inktpixels
+  (`inkFreeBlur`) → kleurclassificatie (HSV + chroma in `classify`, werkt op
+  bleek potlood) → meerderheidsfilter → sluiten → componenten (beeldrand bij
+  foto's, titelblok/los grijs zonder contact met de tuin eruit) → contour met
+  sleutelgatsnede voor grote gaten. Pixelpijplijn `areasFromPixels` is zonder
+  canvas testbaar. Schaal via Tesseract.js 5.1.1 (lokaal in `vendor/tesseract/`,
+  `nld+eng`, absolute URL's) + `measureLine` (maatlijn moet aan beide
+  kanten voorbij het tekenkader `textBox` lopen); lezingen sterk/zwak
+  (`lengthReadings`), keuze in `pickScale`. Geen maat → `Concept.build` geeft
+  `gardenWidthPx` en de app vraagt de tuinbreedte; PDF: `paper` {widthM, ratio
+  "1:N"} uit `planimport.js`. Labels (`VOCAB` + `matchLabel`, Levenshtein-speling)
+  uit 6 OCR-rondes (`readText`: cijfers recht/gedraaid, tekst normaal/zwart-wit
+  recht/gedraaid, taal `nld+eng`) typeren gekleurde vlakken of halen omsloten
+  lijnvlakken uit (`enclosedRegions`). Referentie: potloodfoto "De Groenblijver" (geen
+  maatlijn, schaal 1:50). Zelfde uitvoerformaat als de AI; bij een AI-fout valt
+  `makeConcept` terug op lokaal. Unittests in `backend/test/localrecog.test.js`
+  laden de frontendcode in een vm-sandbox.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - Logs: `ha_get_logs(source="supervisor", slug="c1355dc8_beregeningsplanner")`;
