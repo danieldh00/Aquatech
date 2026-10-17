@@ -1,0 +1,26 @@
+name: Add-on-versie
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+    paths:
+      - "beregeningsplanner/**"
+
+jobs:
+  version-must-increase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Vergelijk met vorige versie
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ref="origin/${{ github.base_ref }}"
+          else
+            ref="${{ github.event.before }}"
+          fi
+          python3 scripts/check_addon_version.py "$ref"

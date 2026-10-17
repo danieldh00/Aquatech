@@ -1,0 +1,9 @@
+# Los draaien buiten Home Assistant (bijv. op een eigen server): `docker compose up -d`.
+services:
+  beregeningsplanner:
+    build: ./beregeningsplanner
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3300}:3300"
+    environment:
+      - PORT=3300

@@ -1,0 +1,22 @@
+name: "Beregeningsplanner"
+version: "0.1.0"
+slug: beregeningsplanner
+description: >-
+  Ontwerp een automatische tuinberegening: gebieden tekenen, sproeiers
+  automatisch plaatsen met neerslagsimulatie, zones en leidingen met
+  drukverlies, en een stuklijst (Eco/Expert/Premium) met export naar Excel.
+url: "https://github.com/danieldh00/Aquatech"
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+# Voorlopig alleen via het HA-zijpaneel (ingress): geen gepubliceerde poort en
+# dus geen login nodig. Voor gebruik buiten HA komt de app op een eigen server
+# (zie docker-compose.yml in de root).
+ingress: true
+ingress_port: 3300
+panel_icon: mdi:sprinkler-variant
+panel_title: Beregening
+options: {}
+schema: {}

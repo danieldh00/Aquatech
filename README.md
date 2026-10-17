@@ -2,7 +2,13 @@
 
 Webapplicatie om een automatische tuinberegening te ontwerpen, geïnspireerd op de werkwijze van de DVS Beregnungsplaner: gebieden tekenen → systeemelementen → sproeiers → zones en leidingen → stuklijst.
 
-Volledig client-side (HTML/JS, geen build-stap, geen server). Open `index.html` in een moderne browser (Chrome, Edge, Firefox) of host de map op een willekeurige webserver.
+De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn drie manieren om hem te draaien:
+
+| Manier | Hoe |
+|---|---|
+| **Home Assistant-add-on** (testen) | Instellingen → Add-ons → Add-on-winkel → ⋮ → Repositories → `https://github.com/danieldh00/Aquatech#master` toevoegen, daarna **Beregeningsplanner** installeren en starten. Openen via het **Beregening**-paneel in het zijmenu. |
+| **Eigen server** (Docker) | `docker compose up -d` in de root → `http://<server>:3300` |
+| **Lokaal** | `beregeningsplanner/frontend/index.html` direct in de browser openen |
 
 ## Stappen
 
@@ -35,8 +41,8 @@ Het `.xlsx`-bestand bevat de tabbladen:
 
 ## Aanpassen
 
-- **Artikelen en prijzen**: `js/catalog.js` → `C.articles` (prijzen zijn indicatief, excl. btw).
-- **Sproeiertypes, druppelslang, buizen en hydraulische uitgangspunten**: eveneens in `js/catalog.js`.
+- **Artikelen en prijzen**: `beregeningsplanner/frontend/js/catalog.js` → `C.articles` (prijzen zijn indicatief, excl. btw).
+- **Sproeiertypes, druppelslang, buizen en hydraulische uitgangspunten**: eveneens in `beregeningsplanner/frontend/js/catalog.js`.
 
 ## Opslag
 
@@ -45,15 +51,22 @@ Het project wordt automatisch in de browser (localStorage) bewaard. Met **Opslaa
 ## Structuur
 
 ```
-index.html          UI-opbouw
-css/app.css         Opmaak
-js/geometry.js      Geometrie (polygonen, afstanden, omsluitende rechthoek)
-js/catalog.js       Producten, prijzen en technische uitgangspunten
-js/planner.js       Automatische sproeierplaatsing
-js/hydraulics.js    Zones, leidingtracé en drukverlies
-js/simulation.js    Neerslagsimulatie
-js/bom.js           Stuklijst en Excel-export
-js/editor.js        Canvas-editor (tekenen, selecteren, zoomen)
-js/app.js           Applicatielogica en panelen
-vendor/exceljs.min.js  ExcelJS 4.4.0 (MIT) voor .xlsx-export
+repository.yaml                     HA add-on-store
+docker-compose.yml                  draaien buiten HA (poort 3300)
+beregeningsplanner/                 de add-on
+  config.yaml, Dockerfile, apparmor.txt, CHANGELOG.md, DOCS.md, icon.png, logo.png
+  backend/src/server.js             express: serveert frontend + /api/health
+  backend/test/                     node --test
+  frontend/                         de planner (alle paden relatief, i.v.m. ingress)
+    frontend/index.html          UI-opbouw
+    frontend/css/app.css         Opmaak
+    frontend/js/geometry.js      Geometrie (polygonen, afstanden, omsluitende rechthoek)
+    frontend/js/catalog.js       Producten, prijzen en technische uitgangspunten
+    frontend/js/planner.js       Automatische sproeierplaatsing
+frontend/js/hydraulics.js    Zones, leidingtracé en drukverlies
+frontend/js/simulation.js    Neerslagsimulatie
+frontend/js/bom.js           Stuklijst en Excel-export
+frontend/js/editor.js        Canvas-editor (tekenen, selecteren, zoomen)
+frontend/js/app.js           Applicatielogica en panelen
+frontend/vendor/exceljs.min.js  ExcelJS 4.4.0 (MIT) voor .xlsx-export
 ```
