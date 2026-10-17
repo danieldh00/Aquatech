@@ -6,7 +6,7 @@ De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn drie
 
 | Manier | Hoe |
 |---|---|
-| **Home Assistant-add-on** (testen) | Instellingen → Add-ons → Add-on-winkel → ⋮ → Repositories → `https://github.com/danieldh00/Aquatech#master` toevoegen, daarna **Beregeningsplanner** installeren en starten. Openen via het **Beregening**-paneel in het zijmenu. |
+| **Home Assistant-add-on** (testen) | Instellingen → Add-ons → Add-on-winkel → ⋮ → Repositories → `https://github.com/danieldh00/Aquatech` toevoegen, daarna **Beregeningsplanner** installeren en starten. Openen via het **Beregening**-paneel in het zijmenu. |
 | **Eigen server** (Docker) | `docker compose up -d` in de root → `http://<server>:3300` |
 | **Lokaal** | `beregeningsplanner/frontend/index.html` direct in de browser openen |
 

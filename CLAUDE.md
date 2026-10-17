@@ -10,13 +10,23 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 
 ## Branchmodel
 
-- **`master`** = productie; Supervisor kloont die (repo-URL in HA:
-  `https://github.com/danieldh00/Aquatech#master`). Features via
-  `feature/<naam>` of `claude/<naam>`.
-- Elke wijziging in `beregeningsplanner/` op `master` vereist een **versie-bump**
-  in `beregeningsplanner/config.yaml` + entry in `CHANGELOG.md`, anders biedt HA
-  geen update aan. `scripts/check_addon_version.py` (workflow `addon-version.yml`)
-  bewaakt dat.
+- Supervisor kloont de **default branch** van GitHub. Die is nu nog
+  `feature/beregeningsplanner` (eerste push); doel is **`master`** als
+  productiebranch en GitHub-default, met features via `feature/<naam>` of
+  `claude/<naam>`. Na het omzetten van de default branch de repository in HA
+  verwijderen en opnieuw toevoegen (let op: dan verandert de slug).
+- Elke wijziging in `beregeningsplanner/` op de productiebranch vereist een
+  **versie-bump** in `beregeningsplanner/config.yaml` + entry in `CHANGELOG.md`,
+  anders biedt HA geen update aan. `scripts/check_addon_version.py` (workflow
+  `addon-version.yml`, op `master`) bewaakt dat.
+
+## Home Assistant
+
+- Repository `https://github.com/danieldh00/Aquatech` (store-slug `c1355dc8`),
+  app-slug **`c1355dc8_beregeningsplanner`**, auto_update + watchdog aan.
+- Alleen ingress (paneel **Beregening**), geen gepubliceerde poort en geen login.
+- Logs: `ha_get_logs(source="supervisor", slug="c1355dc8_beregeningsplanner")`;
+  health via ingress: `ha_manage_app(slug=..., path="/api/health")`.
 
 ## Harde regels
 
