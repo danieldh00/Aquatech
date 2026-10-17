@@ -68,11 +68,12 @@ function createApp({ accessCode = '', secret }) {
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
-  // Alles hieronder (de planner zelf) alleen via HA-ingress of met een geldige
-  // sessie-cookie. Anders de inlogpagina, op elk pad, zodat een herlaad na het
-  // inloggen meteen de planner toont.
+  // Zonder ingestelde toegangscode is de planner openbaar (er staat geen
+  // gevoelige data op de server). Met code: alleen via HA-ingress of met een
+  // geldige sessie-cookie, anders de inlogpagina op elk pad, zodat een herlaad
+  // na het inloggen meteen de planner toont.
   app.use((req, res, next) => {
-    if (auth.isAuthenticated(req)) return next();
+    if (!accessCode || auth.isAuthenticated(req)) return next();
     if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(401).end();
     res.status(401);
     res.setHeader('Cache-Control', 'no-store');
@@ -104,7 +105,7 @@ if (require.main === module) {
   const secret = loadOrCreateSecret(dataDir);
   const port = Number(process.env.PORT) || 3300;
   if (!accessCode) {
-    console.warn('Geen toegangscode ingesteld: de planner werkt alleen via het Home Assistant-zijpaneel (ingress) tot je access_code invult.');
+    console.log('Geen toegangscode ingesteld: de planner is zonder inloggen bereikbaar. Vul access_code in om inloggen verplicht te maken.');
   }
   createApp({ accessCode, secret }).listen(port, () => {
     console.log(`Beregeningsplanner luistert op poort ${port}`);

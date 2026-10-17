@@ -4,13 +4,14 @@ Ontwerp een automatische tuinberegening en exporteer de stuklijst naar Excel.
 
 ## Gebruik
 
-1. Vul onder **Configuratie** een `access_code` in (een wachtwoord naar
-   keuze). Die heb je nodig om de planner buiten Home Assistant om te
-   openen via `https://aquatech.den-hollander.com`.
-2. Start (of herstart) de app.
-3. Open de planner via het **Beregening**-paneel in het HA-zijmenu (geen code
-   nodig), of via de tunnel-URL en log daar één keer in met de code.
-4. Klik op **Voorbeeld** om een ingevulde tuin te zien, of begin met
+1. Start de app. Zonder verdere instellingen is de planner bereikbaar via
+   het **Beregening**-paneel in het HA-zijmenu en via
+   `https://aquatech.den-hollander.com`, zonder inloggen.
+2. Wil je de publieke URL afschermen? Vul dan onder **Configuratie** een
+   `access_code` in en herstart de app. Buiten Home Assistant om moet je dan
+   één keer inloggen (het toestel onthoudt dat een jaar); via het HA-paneel
+   is nooit een code nodig.
+3. Klik op **Voorbeeld** om een ingevulde tuin te zien, of begin met
    **Nieuw** en doorloop de zes stappen links.
 
 ## Cloudflare-tunnel

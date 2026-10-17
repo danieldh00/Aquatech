@@ -25,11 +25,12 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 - Repository `https://github.com/danieldh00/Aquatech` (store-slug `c1355dc8`),
   app-slug **`c1355dc8_beregeningsplanner`**, auto_update + watchdog aan.
 - Ingress (paneel **Beregening**, geen login) én gepubliceerde poort 3300
-  voor de tunnel **https://aquatech.den-hollander.com** (login met
-  `access_code` uit de app-opties; sessiesleutel in `/data/session-secret`).
+  voor de tunnel **https://aquatech.den-hollander.com**. Op verzoek van de
+  gebruiker **openbaar zonder login** zolang `access_code` leeg is; met code
+  is inloggen verplicht buiten ingress (sessiesleutel in `/data/session-secret`).
 - **Ingress alleen vertrouwen op header + Supervisor-IP (`172.30.32.2`)**
-  (`backend/src/auth.js`); de header alleen is te vervalsen. Zonder geldige
-  sessie serveert de server op elk pad `backend/src/login.html`.
+  (`backend/src/auth.js`); de header alleen is te vervalsen. Met code en zonder
+  geldige sessie serveert de server op elk pad `backend/src/login.html`.
 - Cloudflared-app (`9074a9fa_cloudflared`) → `additional_hosts`:
   `aquatech.den-hollander.com → http://c1355dc8-beregeningsplanner:3300`.
 - **Nooit secrets in de repo of in chat**: `access_code` alleen in de app-opties.

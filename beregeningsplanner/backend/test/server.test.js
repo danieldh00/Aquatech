@@ -103,12 +103,15 @@ test('andere toegangscode maakt oude cookies ongeldig', async () => {
   }
 });
 
-test('zonder ingestelde code kan niemand inloggen', async () => {
+test('zonder ingestelde code is de planner openbaar en is inloggen niet nodig', async () => {
   const { server, base } = await start({ accessCode: '' });
   try {
-    const { res } = await login(base, '');
-    assert.strictEqual(res.status, 409);
-    assert.strictEqual((await fetch(`${base}/`)).status, 401);
+    const res = await fetch(`${base}/`);
+    assert.strictEqual(res.status, 200);
+    assert.match(await res.text(), /Beregeningsplanner/);
+    assert.strictEqual((await fetch(`${base}/js/app.js`)).status, 200);
+    const { res: login409 } = await login(base, '');
+    assert.strictEqual(login409.status, 409);
   } finally {
     server.close();
   }

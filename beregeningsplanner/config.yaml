@@ -1,5 +1,5 @@
 name: "Beregeningsplanner"
-version: "0.2.0"
+version: "0.2.1"
 slug: beregeningsplanner
 description: >-
   Ontwerp een automatische tuinberegening: gebieden tekenen, sproeiers
@@ -28,6 +28,6 @@ environment:
 # en dan start de app niet zonder code.
 options: {}
 schema:
-  # Nodig voor toegang buiten Home Assistant om (tunnel). Via het
-  # HA-zijpaneel (ingress) is geen code nodig.
+  # Optioneel. Leeg = planner openbaar via de tunnel. Ingevuld = inloggen
+  # verplicht buiten Home Assistant om; via het HA-zijpaneel nooit een code.
   access_code: "password?"

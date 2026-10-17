@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- **Toegangscode is optioneel.** Zonder `access_code` is de planner via
+  https://aquatech.den-hollander.com zonder inloggen te gebruiken. Vul je een
+  code in, dan is inloggen buiten Home Assistant om weer verplicht.
+
 ## 0.2.0
 
 - **Bereikbaar via https://aquatech.den-hollander.com** (Cloudflare-tunnel).
