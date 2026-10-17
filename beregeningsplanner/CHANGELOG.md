@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+
+- Is het API-tegoed bij Anthropic op, dan meldt "Plan laden en concept maken"
+  dat nu duidelijk (in plaats van "Herkennen mislukt (502)").
+
 ## 0.4.1
 
 - **Duidelijkere foutmelding bij "Herkennen mislukt".** De melding van de

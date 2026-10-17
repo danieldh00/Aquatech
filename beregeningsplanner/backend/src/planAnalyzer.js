@@ -123,6 +123,8 @@ function apiMessage(err) {
   return String(m || err.message || 'onbekende fout').slice(0, 400);
 }
 
+const isNoCredit = (err) => err instanceof Anthropic.APIError && /credit balance/i.test(apiMessage(err));
+
 function describe(err) {
   return `${err.status ?? '-'} ${err.error?.error?.type || err.name}: ${apiMessage(err)}${err.requestID ? ` (request ${err.requestID})` : ''}`;
 }
@@ -164,7 +166,7 @@ function createPlanAnalyzer({ apiKey, client, log = (msg) => console.warn(msg) }
           .stream({ ...params, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' })
           .finalMessage();
       } catch (err) {
-        if (!(err instanceof Anthropic.BadRequestError)) throw err;
+        if (!(err instanceof Anthropic.BadRequestError) || isNoCredit(err)) throw err;
         // Sommige accounts/regio's ondersteunen de fallback-beta niet: één keer zonder.
         log(`Verzoek met fallback geweigerd (${describe(err)}); opnieuw zonder fallback.`);
         message = await anthropic.messages.stream(params).finalMessage();
@@ -175,6 +177,7 @@ function createPlanAnalyzer({ apiKey, client, log = (msg) => console.warn(msg) }
       if (err instanceof Anthropic.PermissionDeniedError) throw new AnalyzeError('permission', `Deze API-sleutel heeft geen toegang: ${apiMessage(err)}`);
       if (err instanceof Anthropic.NotFoundError) throw new AnalyzeError('not_found', `Model niet beschikbaar voor deze API-sleutel: ${apiMessage(err)}`);
       if (err instanceof Anthropic.RateLimitError) throw new AnalyzeError('rate_limited', 'De AI-dienst is even overbelast of het tegoed is op. Probeer het later opnieuw.', 429);
+      if (isNoCredit(err)) throw new AnalyzeError('no_credit', 'Het API-tegoed bij Anthropic is op. Koop tegoed via console.anthropic.com → Plans & Billing; daarna werkt automatisch herkennen meteen weer.', 402);
       if (err instanceof Anthropic.BadRequestError) throw new AnalyzeError('bad_request', `De AI-dienst weigert het verzoek: ${apiMessage(err)}`);
       if (err instanceof Anthropic.APIError) throw new AnalyzeError('api_error', `Fout bij de AI-dienst (${err.status ?? 'verbinding'}): ${apiMessage(err)}`);
       throw err;

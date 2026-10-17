@@ -132,3 +132,16 @@ test('fallback-beta geweigerd: één nieuwe poging zonder beta, foutmelding van 
   await assert.rejects(createPlanAnalyzer({ client: client2, log: () => {} }).analyze({ mediaType: 'image/png', data: 'x', width: 10, height: 10 }),
     (e) => e.code === 'bad_request' && /schema niet ondersteund/.test(e.message));
 });
+
+test('tegoed op: duidelijke melding, geen tweede poging', async () => {
+  const Anthropic = require('@anthropic-ai/sdk');
+  const msg = 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.';
+  let plainCalls = 0;
+  const client = {
+    beta: { messages: { stream: () => ({ finalMessage: async () => { throw new Anthropic.BadRequestError(400, { type: 'error', error: { type: 'invalid_request_error', message: msg } }, msg, new Headers()); } }) } },
+    messages: { stream: () => { plainCalls++; return { finalMessage: async () => ({}) }; } },
+  };
+  await assert.rejects(createPlanAnalyzer({ client, log: () => {} }).analyze({ mediaType: 'image/png', data: 'x', width: 10, height: 10 }),
+    (e) => e.code === 'no_credit' && e.status === 402 && /tegoed/.test(e.message));
+  assert.strictEqual(plainCalls, 0);
+});
