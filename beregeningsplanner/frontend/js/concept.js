@@ -87,7 +87,7 @@
     if (!(mppAnalyze > 0) || !isFinite(mppAnalyze)) {
       mppAnalyze = FALLBACK_WIDTH_M / analyzeImage.width;
       estimated = true;
-      warnings.push(`Geen schaal gevonden; aangenomen dat het plan ${FALLBACK_WIDTH_M} m breed is. Kalibreer de schaal in stap 1.`);
+      warnings.push(`Geen leesbare maat met maatlijn gevonden; aangenomen dat het plan ${FALLBACK_WIDTH_M} m breed is. Kalibreer de schaal in stap 1 met een bekende maat.`);
     } else if (result.scale.confidence === 'laag' || result.scale.method === 'schatting') {
       warnings.push(`Schaal geschat (${result.scale.evidence || 'geen maat gevonden'}). Controleer met "Schaal kalibreren".`);
     }

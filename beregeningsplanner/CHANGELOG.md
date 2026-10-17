@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+- **Plan herkennen zonder AI.** "Plan laden en concept maken" werkt nu ook
+  zonder API-sleutel, volledig in de browser en gratis:
+  - vlakken worden op kleur herkend (groen = gazon, donkergroen = haag,
+    bruin/roze = beplanting, grijs/beige = bebouwing en verharding,
+    blauw = water), gaten door tekst en lijnen worden gedicht;
+  - de schaal wordt gelezen uit maten met een maatlijn ("12,00 m", "450 cm",
+    "8500" mm), ook verticale maten, via lokale tekstherkenning.
+- Met een API-sleutel kies je in stap 1 tussen **Lokaal** en **AI**. Lukt de
+  AI niet (bijv. geen tegoed), dan wordt automatisch lokaal herkend.
+
 ## 0.4.2
 
 - Is het API-tegoed bij Anthropic op, dan meldt "Plan laden en concept maken"

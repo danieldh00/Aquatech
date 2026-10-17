@@ -366,13 +366,28 @@
       const st = this.state;
       if (!st.background || !st.background.dataUrl) { this.toast('Laad eerst een plan.', true); return; }
       if ((st.areas.length || st.sprinklers.length) && !confirm('Het huidige ontwerp wordt vervangen door een nieuw concept. Doorgaan?')) return;
-      this.busy('Plan wordt gelezen: schaal, gazon, borders en bebouwing herkennen… Dit duurt meestal 1 à 2 minuten.');
+      const useAi = this.aiStatus && this.aiStatus.available && st.settings.recognizer === 'ai';
       let result;
+      const extraWarnings = [];
       try {
         const img = this._analyzeImage || await window.PlanImport.analyzeImageFrom(st.background.dataUrl);
         this._analyzeImage = img;
-        const raw = await window.Concept.analyze(img);
+        let raw = null;
+        if (useAi) {
+          this.busy('Plan wordt gelezen met AI: schaal, gazon, borders en bebouwing herkennen… Dit duurt meestal 1 à 2 minuten.');
+          try {
+            raw = await window.Concept.analyze(img);
+          } catch (e) {
+            extraWarnings.push(`AI-herkenning niet gelukt (${e.message}); lokaal herkend.`);
+          }
+        }
+        if (!raw) {
+          this.busy('Plan wordt lokaal gelezen (zonder AI)…');
+          raw = await window.LocalRecognizer.analyze(img, (msg) => this.busy(`Plan wordt lokaal gelezen: ${msg}`));
+        }
         result = window.Concept.build(raw, img);
+        result.warnings.unshift(...extraWarnings);
+        result.local = Boolean(raw.local);
       } catch (e) {
         this.busy(null);
         this.toast(e.message, true);
@@ -399,7 +414,7 @@
       this.showStep(3);
       const sc = result.scaleInfo;
       const scaleTxt = sc.estimated ? 'schaal niet gevonden' : `schaal via ${sc.method}${sc.confidence ? ` (${sc.confidence})` : ''}`;
-      this.toast(`Concept gemaakt: ${st.areas.length} vlakken, ${count} sproeiers, ${st.zones.length} zones; ${scaleTxt}. Pas aan waar nodig.`);
+      this.toast(`Concept gemaakt${result.local ? ' (lokaal)' : ' (AI)'}: ${st.areas.length} vlakken, ${count} sproeiers, ${st.zones.length} zones; ${scaleTxt}. Pas aan waar nodig.`);
       this.refreshAiStatus();
     },
 
@@ -579,11 +594,15 @@
         }).join('')}
         <h3>Plan</h3>
         <p class="hint">Laad een tuinontwerp, plattegrond, schets of luchtfoto (JPG, PNG of PDF). De planner leest de schaal en de vlakken en maakt een concept met sproeiers, zones en leidingen dat je daarna aanpast.</p>
-        ${ai.available ? `
-          <button id="plan-concept" class="btn primary">Plan laden en concept maken…</button>
-          ${bg ? '<button id="bg-concept" class="btn">Concept maken van deze ondergrond</button>' : ''}
-          <p class="hint small">Nog ${ai.remainingToday} keer automatisch herkennen vandaag.</p>`
-        : `<p class="hint small">${ai.checked ? 'Automatisch herkennen is niet ingesteld (vul <code>anthropic_api_key</code> in bij de app-configuratie in Home Assistant). Je kunt het plan wel als ondergrond laden en vlakken met de toverstaf uittrekken.' : 'Beschikbaarheid van automatisch herkennen wordt gecontroleerd…'}</p>`}
+        ${ai.available ? `<label>Herkennen met<select id="recognizer">
+            <option value="local" ${s.recognizer !== 'ai' ? 'selected' : ''}>Lokaal (zonder AI, gratis)</option>
+            <option value="ai" ${s.recognizer === 'ai' ? 'selected' : ''}>AI (nauwkeuriger, API-tegoed; nog ${ai.remainingToday} vandaag)</option>
+          </select></label>` : ''}
+        <button id="plan-concept" class="btn primary">Plan laden en concept maken…</button>
+        ${bg ? '<button id="bg-concept" class="btn">Concept maken van deze ondergrond</button>' : ''}
+        <p class="hint small">${s.recognizer === 'ai' && ai.available
+          ? 'De AI leest ook lijntekeningen en schetsen.'
+          : 'Lokaal herkennen werkt het best op <b>gekleurde</b> tuinontwerpen: groen = gazon, donkergroen = haag, bruin/roze = beplanting, grijs/beige = bebouwing en verharding, blauw = water. De schaal wordt gelezen uit een maat met maatlijn (bijv. "12,00 m" of "1250").'}</p>
         <button id="bg-load" class="btn">${bg ? 'Ander plan als ondergrond laden…' : 'Alleen als ondergrond laden…'}</button>
         <input type="file" id="bg-file" accept="image/*,application/pdf,.pdf" hidden>
         ${bg ? `
@@ -601,6 +620,7 @@
         $(`#m-${k}`, el).oninput = (e) => { m[k] = e.target.value; this._save(); if (k === 'name') $('#project-title').textContent = m.name; };
       });
       $('#project-title').textContent = m.name;
+      if ($('#recognizer', el)) $('#recognizer', el).onchange = (e) => { this.state.settings.recognizer = e.target.value; this._save(); this.renderStepPanel(); };
       $('#mth-lawn', el).onchange = (e) => { this.state.settings.sprinklerType = e.target.value; this.state.settings.radius = null; this._save(); };
       el.querySelectorAll('[data-mth]').forEach((sel) => {
         sel.onchange = () => {

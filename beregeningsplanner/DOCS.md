@@ -43,6 +43,25 @@ andere methode. Iedere methode krijgt eigen zones, omdat de neerslag verschilt.
 
 ## Plan laden en concept maken
 
+Herkennen kan **lokaal** (standaard, zonder AI, gratis) of met **AI** (als er
+een API-sleutel is ingesteld).
+
+**Lokaal** werkt het best op gekleurde tuinontwerpen:
+
+| Kleur in het plan | Wordt |
+|---|---|
+| Licht- en middengroen | Gazon |
+| Donkergroen | Haag / heesters |
+| Bruin, oranje, roze, paars | Beplanting |
+| Grijs, licht beige | Bebouwing en verharding (droog houden) |
+| Blauw | Water (mag nat worden) |
+| Wit (papier), zwart (lijnen, tekst) | Genegeerd |
+
+De schaal wordt gelezen uit een maat met maatlijn: "12,00 m", "450 cm" of
+een getal als "8500" (millimeters, zoals op bouwtekeningen). Staat er geen
+maat op, kalibreer dan de schaal zelf. Lijntekeningen zonder kleur trek je uit
+met de toverstaf. **AI** leest ook lijntekeningen, schetsen en luchtfoto's.
+
 1. Ga naar stap 1 en klik op **Plan laden en concept maken…**.
 2. Kies een tuinontwerp, plattegrond, schets of luchtfoto (JPG, PNG of PDF;
    bij een PDF wordt de eerste pagina gebruikt).

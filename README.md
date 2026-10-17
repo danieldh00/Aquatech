@@ -14,7 +14,7 @@ De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn drie
 
 | Stap | Functie |
 |---|---|
-| 1. Project & ondergrond | **Beregeningsmethode** per soort vlak (druppelslang, druppelaars, sproeiers of geen); **Plan laden en concept maken**: plan (JPG/PNG/PDF) wordt gelezen (schaal + vlakken) en er wordt direct een volledig concept gemaakt; of alleen als ondergrond laden en de schaal zelf kalibreren |
+| 1. Project & ondergrond | **Beregeningsmethode** per soort vlak (druppelslang, druppelaars, sproeiers of geen); **Plan laden en concept maken**: plan (JPG/PNG/PDF) wordt gelezen (schaal + vlakken), lokaal zonder AI (kleur + tekstherkenning) of met AI en er wordt direct een volledig concept gemaakt; of alleen als ondergrond laden en de schaal zelf kalibreren |
 | 2. Gebieden tekenen | Gazon, beplanting/border, haag, plantenbak, *mag nat worden*, *moet droog blijven*; **toverstaf** (vlak op kleur uittrekken), vrije vorm of rechthoek, hoekpunten verslepen/toevoegen |
 | 3. Systeemelementen | Wateraansluiting (dynamische druk + debiet, emmertest-tip), besturing, ventielkast, waterpunten |
 | 4. Sproeiers | Automatisch kop-tot-kop plaatsen of handmatig (sproeihoek wordt op rand/hoek automatisch bepaald); neerslagsimulatie met gelijkmatigheid (DU), droge plekken en water op vlakken die droog moeten blijven |
@@ -67,6 +67,7 @@ beregeningsplanner/                 de add-on
     frontend/js/planimport.js    Plan inlezen (JPG/PNG/PDF via pdf.js)
     frontend/js/autotrace.js     Toverstaf (vlak op kleur uittrekken)
     frontend/js/concept.js       Van herkend plan naar concept
+    frontend/js/localrecog.js    Lokale herkenning: vlakken op kleur, schaal via OCR (Tesseract)
 frontend/js/hydraulics.js    Zones, leidingtracé en drukverlies
 frontend/js/simulation.js    Neerslagsimulatie
 frontend/js/bom.js           Stuklijst en Excel-export
