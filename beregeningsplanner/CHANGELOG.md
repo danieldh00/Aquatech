@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0
+
+- **Labels lezen, ook handgeschreven.** Woorden als *gras*, *gazon*, *terras*,
+  *border*, *beplanting*, *haag*, *vijver*, *grind*, *woning*, *plantenbak*
+  (Nederlands, Duits en Engels; kleine schrijf- en leesfouten mogen) bepalen
+  het soort vlak waarin ze staan:
+  - in een gekleurd plan gaat het label vóór de kleur (een groen vlak met
+    "border" wordt beplanting);
+  - in een lijntekening of handschets wordt het vlak dat door de getekende
+    lijnen rond het label wordt omsloten automatisch uitgetrokken.
+- Tekstherkenning met Nederlandse taaldata, in meerdere rondes (normaal en
+  zwart-wit, recht en gedraaid) voor betere resultaten bij handschrift.
+- Bij een schaal uit één maat toont de planner welke maat gebruikt is en de
+  resulterende planbreedte, zodat een verkeerde lezing direct opvalt.
+
 ## 0.5.0
 
 - **Plan herkennen zonder AI.** "Plan laden en concept maken" werkt nu ook

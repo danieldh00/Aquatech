@@ -57,6 +57,15 @@ een API-sleutel is ingesteld).
 | Blauw | Water (mag nat worden) |
 | Wit (papier), zwart (lijnen, tekst) | Genegeerd |
 
+**Labels** in het plan bepalen het soort vlak, ook als ze met de hand
+geschreven zijn: *gras/gazon*, *border/beplanting/heesters*, *haag*,
+*plantenbak*, *terras/woning/pad/oprit*, *vijver/grind*. In een gekleurd plan
+gaat het label vóór de kleur. In een lijntekening of handschets wordt het vlak
+dat door de lijnen rond het label wordt omsloten automatisch uitgetrokken;
+teken de lijnen daarvoor zo gesloten mogelijk. Duidelijk blokschrift wordt het
+best gelezen; zeer grillig handschrift lukt niet altijd (dan helpt de
+toverstaf of de AI-optie).
+
 De schaal wordt gelezen uit een maat met maatlijn: "12,00 m", "450 cm" of
 een getal als "8500" (millimeters, zoals op bouwtekeningen). Staat er geen
 maat op, kalibreer dan de schaal zelf. Lijntekeningen zonder kleur trek je uit

@@ -51,7 +51,10 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   (HSV-regels in `classify`) → meerderheidsfilter → sluiten → componenten →
   contour; schaal via Tesseract.js 5.1.1 (lokaal in `vendor/tesseract/`, `eng`
   best_int, absolute URL's voor worker/core/lang) + `measureLine` (maatlijn moet
-  aan beide kanten voorbij de tekst lopen). Zelfde uitvoerformaat als de AI;
+  aan beide kanten voorbij de tekst lopen). Labels (`VOCAB` + `matchLabel`,
+  Levenshtein-speling) uit 6 OCR-rondes (`readText`: cijfers recht/gedraaid,
+  tekst normaal/zwart-wit recht/gedraaid, taal `nld+eng`) typeren gekleurde
+  vlakken of halen omsloten lijnvlakken uit (`enclosedRegions`). Zelfde uitvoerformaat als de AI;
   bij een AI-fout valt `makeConcept` terug op lokaal. Unittests in
   `backend/test/localrecog.test.js` laden de frontendcode in een vm-sandbox.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
