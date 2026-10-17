@@ -14,8 +14,8 @@ De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn drie
 
 | Stap | Functie |
 |---|---|
-| 1. Project & ondergrond | **Plan laden en concept maken**: plan (JPG/PNG/PDF) wordt gelezen (schaal + vlakken) en er wordt direct een volledig concept gemaakt; of alleen als ondergrond laden en de schaal zelf kalibreren |
-| 2. Gebieden tekenen | Gazon, beplanting/border, haag, *mag nat worden*, *moet droog blijven*; **toverstaf** (vlak op kleur uittrekken), vrije vorm of rechthoek, hoekpunten verslepen/toevoegen |
+| 1. Project & ondergrond | **Beregeningsmethode** per soort vlak (druppelslang, druppelaars, sproeiers of geen); **Plan laden en concept maken**: plan (JPG/PNG/PDF) wordt gelezen (schaal + vlakken) en er wordt direct een volledig concept gemaakt; of alleen als ondergrond laden en de schaal zelf kalibreren |
+| 2. Gebieden tekenen | Gazon, beplanting/border, haag, plantenbak, *mag nat worden*, *moet droog blijven*; **toverstaf** (vlak op kleur uittrekken), vrije vorm of rechthoek, hoekpunten verslepen/toevoegen |
 | 3. Systeemelementen | Wateraansluiting (dynamische druk + debiet, emmertest-tip), besturing, ventielkast, waterpunten |
 | 4. Sproeiers | Automatisch kop-tot-kop plaatsen of handmatig (sproeihoek wordt op rand/hoek automatisch bepaald); neerslagsimulatie met gelijkmatigheid (DU), droge plekken en water op vlakken die droog moeten blijven |
 | 5. Zones & leidingen | Automatische zone-indeling per sproeiergroep binnen het beschikbare debiet; leidingtracé (MST) met PE-diameterkeuze en drukverlies |

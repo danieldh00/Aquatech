@@ -23,12 +23,13 @@
 
     // Sproeiers
     for (const s of state.sprinklers) {
+      const bed = Boolean(s.areaId); // in beplanting: hoger sproeierhuis (30 cm)
       if (s.type === 'spray') {
-        add(level === 'eco' ? 'SPR-POP10' : 'SPR-POP10-PRS', 1);
+        add(bed ? 'SPR-POP30-PRS' : level === 'eco' ? 'SPR-POP10' : 'SPR-POP10-PRS', 1, bed ? 'beplanting' : '');
         add('SPR-VAN', 1);
         add(level === 'eco' ? 'CON-ECO' : 'CON-FLEX', 1);
       } else if (s.type === 'rotator' || s.type === 'strip') {
-        add('ROT-POP10-PRS', 1);
+        add(bed ? 'ROT-POP30-PRS' : 'ROT-POP10-PRS', 1, bed ? 'beplanting' : '');
         add(s.type === 'strip' ? 'ROT-STRIP' : C.rotatorNozzle(s.r), 1);
         add(level === 'eco' ? 'CON-ECO' : 'CON-FLEX', 1);
       } else if (s.type === 'rotor') {
@@ -69,24 +70,41 @@
     }
     add('FIT-RED', reducers);
 
-    // Druppelirrigatie
-    let dripM = 0, dripRuns = 0;
+    // Druppelirrigatie: druppelslang en/of losse druppelaars
+    let dripM = 0, dripRuns = 0, supplyM = 0, supplyRuns = 0, drippers = 0, microM = 0;
     const dripZones = new Set();
-    for (const a of state.areas) {
-      if (!C.areaTypes[a.type] || C.areaTypes[a.type].irrigate !== 'drip' || a.pts.length < 3) continue;
-      const di = Hy.dripInfo(a);
-      dripM += di.lengthM;
-      const runs = Math.max(1, Math.ceil(di.lengthM / C.drip.maxRunM));
-      dripRuns += runs;
+    for (const a of Hy.dripAreas(state)) {
+      const di = Hy.dripInfo(a, Hy.methodOf(state, a));
       if (a.zone) dripZones.add(a.zone);
-      add('DRIP-T', Math.max(2, Math.ceil(di.lengthM / 10)));
+      if (di.method === 'drippers') {
+        drippers += di.count;
+        microM += di.microM;
+        supplyM += di.supplyM;
+        supplyRuns += di.runs;
+        add('DRIP-T', Math.max(1, di.runs - 1) + (a.type === 'planter' ? 1 : 0));
+      } else {
+        dripM += di.lengthM;
+        dripRuns += di.runs;
+        add('DRIP-T', Math.max(2, Math.ceil(di.lengthM / 10)));
+      }
     }
     if (dripM) {
       add('DRIP-16', Math.ceil(dripM * 1.05), 'incl. 5% reserve');
-      add('DRIP-END', dripRuns * 2);
       add('DRIP-PIN', Math.ceil(dripM));
-      add('DRIP-PRV', Math.max(1, dripZones.size));
       if (level !== 'eco') add('DRIP-FLUSH', dripRuns);
+    }
+    if (drippers) {
+      add('DRIP-PE16', Math.ceil(supplyM * 1.05), 'aanvoer druppelaars, incl. 5% reserve');
+      add('DRIPPER-2', drippers);
+      add('MICRO-46', Math.ceil(microM * 1.1), 'incl. 10% reserve');
+      add('MICRO-CON', drippers * 2);
+      add('MICRO-PIN', drippers);
+      add('DRIP-PIN', Math.ceil(supplyM));
+      add('PUNCH', 1);
+    }
+    if (dripM || drippers) {
+      add('DRIP-END', (dripRuns + supplyRuns) * 2);
+      add('DRIP-PRV', Math.max(1, dripZones.size));
     }
 
     // Ventielen, kast, besturing
@@ -133,8 +151,11 @@
     const sessions = Math.max(1, state.settings.sessions || 3);
     return calc.zones.filter((z) => !z.empty).map((zr) => {
       let pr;
-      if (zr.zone.group === 'drip') {
-        pr = C.drip.lphPerM / C.drip.rowSpacingBed;
+      if (zr.zone.group === 'drip' || zr.zone.group === 'drippers') {
+        // gemiddelde gift over de beplante oppervlakte van de zone
+        const lph = zr.members.reduce((s, m) => s + m.q, 0);
+        const area = zr.members.reduce((s, m) => s + (m.drip ? m.drip.areaM2 : 0), 0);
+        pr = area > 0 ? lph / area : C.drip.lphPerM / C.drip.rowSpacingBed;
       } else {
         pr = C.groups[zr.zone.group].pr;
       }

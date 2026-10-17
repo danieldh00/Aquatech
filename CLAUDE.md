@@ -41,6 +41,12 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   frontend (`js/concept.js`) rekent om naar meters en bouwt het concept. Kosten
   begrensd met `ai_daily_limit` + 10/uur per IP; de route valt achter de login
   als er een `access_code` is. Tests bootsen de API na (geen echte aanroepen).
+- **Beregeningsmethode** per vlak: `Hydraulics.methodOf(state, area)` =
+  `area.method` → `settings.methods[type]` → `areaTypes[type].defaultMethod`
+  (`dripline` | `drippers` | `sprinklers` | `none`). Sproeiers in beplanting
+  hebben `areaId` en eigen zonegroepen (`bed-spray`, `bed-rotator`); druppelslang
+  en druppelaars zijn de groepen `drip` en `drippers`. `App._syncBedSprinklers`
+  plaatst/verwijdert ze bij een wijziging van de methode.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - Logs: `ha_get_logs(source="supervisor", slug="c1355dc8_beregeningsplanner")`;

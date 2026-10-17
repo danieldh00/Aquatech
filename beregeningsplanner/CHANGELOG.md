@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+
+- **Beregeningsmethode kiezen aan het begin (stap 1)** voor borders, hagen en
+  plantenbakken: **druppelslang**, **druppelaars** (losse druppelaar per plant
+  of pot via microbuis), **sproeiers** (pop-up 30 cm boven de beplanting) of
+  **geen beregening**. Ook het sproeiertype voor het gazon kies je hier.
+- **Per vlak afwijken** in het eigenschappenpaneel ("Beregening"), met
+  hoeveelheden en gift (mm/u) per vlak.
+- **Nieuw vlaktype Plantenbak** (standaard druppelaars); ook herkend bij
+  "Plan laden en concept maken".
+- Elke methode krijgt eigen zones (andere neerslag), het beregeningsschema
+  rekent de looptijd per methode en de stuklijst bevat de juiste onderdelen
+  (druppelaars, microbuis, aanvoerbuis, ponstang, 30 cm-sproeierhuizen).
+
 ## 0.3.0
 
 - **Plan laden en concept maken.** Laad een tuinontwerp, plattegrond, schets

@@ -27,6 +27,20 @@ De app luistert op poort 3300. In de Cloudflared-app staat daarvoor bij
 `c1355dc8-beregeningsplanner` is de slug van deze app met `_` vervangen door
 `-`. Na wijzigen de Cloudflared-app herstarten.
 
+## Beregeningsmethode
+
+In stap 1 kies je per soort vlak hoe het water krijgt:
+
+| Vlak | Keuzes (standaard vet) |
+|---|---|
+| Gazon | **Meerstraalsrotator**, pop-up sproeier, turbinesproeier |
+| Beplanting / border | **Druppelslang**, druppelaars, sproeiers, geen |
+| Haag | **Druppelslang**, druppelaars, sproeiers, geen |
+| Plantenbak | **Druppelaars**, druppelslang, geen |
+
+Per vlak kun je afwijken: selecteer het vlak en kies bij **Beregening** een
+andere methode. Iedere methode krijgt eigen zones, omdat de neerslag verschilt.
+
 ## Plan laden en concept maken
 
 1. Ga naar stap 1 en klik op **Plan laden en concept maken…**.

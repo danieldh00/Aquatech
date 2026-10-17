@@ -58,7 +58,18 @@
     spray: { label: 'Sproeiers', pr: 40 },
     rotator: { label: 'Rotators', pr: 10 },
     rotor: { label: 'Turbinesproeiers', pr: 13 },
-    drip: { label: 'Druppelirrigatie', pr: null },
+    'bed-spray': { label: 'Sproeiers beplanting', pr: 40 },
+    'bed-rotator': { label: 'Rotators beplanting', pr: 10 },
+    drip: { label: 'Druppelslang', pr: null },
+    drippers: { label: 'Druppelaars', pr: null },
+  };
+
+  /** Beregeningsmethodes voor beplanting, hagen en plantenbakken. */
+  C.methods = {
+    dripline: { label: 'Druppelslang', desc: 'Slang met ingebouwde druppelaars in rijen; ideaal voor borders en hagen.' },
+    drippers: { label: 'Druppelaars', desc: 'Losse druppelaar per plant of pot via microbuis; ideaal voor plantenbakken en solitaire planten.' },
+    sprinklers: { label: 'Sproeiers', desc: 'Pop-up sproeiers (30 cm) boven de beplanting; voor dichte, lage beplanting.' },
+    none: { label: 'Geen beregening', desc: 'Dit vlak krijgt geen beregening.' },
   };
 
   /** Druppelslang. */
@@ -72,6 +83,18 @@
     maxRunM: 100,
   };
   C.drip.lphPerM = C.drip.emitterLph / C.drip.emitterSpacing;
+  C.drip.rowSpacingPlanter = 0.3;
+
+  /** Losse druppelaars (drukgecompenseerd) op microbuis 4/6 mm. */
+  C.drippers = {
+    lph: 2,
+    perM2Bed: 2.5, // ca. één plant per 0,4 m²
+    spacingHedge: 0.5, // m langs de haag
+    perM2Planter: 4, // plantenbak: dichter beplant
+    minPerPlanter: 2,
+    microTubeM: 0.6, // m microbuis per druppelaar
+    supplyRowSpacing: 1.0, // m tussen 16 mm-aanvoerleidingen in een border
+  };
 
   /** PE-buis (PN6). Binnendiameters in mm. */
   C.pipes = [
@@ -92,8 +115,12 @@
   /** Gebiedstypes. */
   C.areaTypes = {
     lawn: { label: 'Gazon', fill: 'rgba(76,175,80,0.35)', stroke: '#2e7d32', irrigate: 'sprinkler' },
-    bed: { label: 'Beplanting / border', fill: 'rgba(141,110,99,0.35)', stroke: '#6d4c41', irrigate: 'drip' },
-    hedge: { label: 'Haag', fill: 'rgba(27,94,32,0.45)', stroke: '#1b5e20', irrigate: 'drip' },
+    bed: { label: 'Beplanting / border', fill: 'rgba(141,110,99,0.35)', stroke: '#6d4c41', irrigate: 'drip',
+      methods: ['dripline', 'drippers', 'sprinklers', 'none'], defaultMethod: 'dripline' },
+    hedge: { label: 'Haag', fill: 'rgba(27,94,32,0.45)', stroke: '#1b5e20', irrigate: 'drip',
+      methods: ['dripline', 'drippers', 'sprinklers', 'none'], defaultMethod: 'dripline' },
+    planter: { label: 'Plantenbak', fill: 'rgba(255,167,38,0.35)', stroke: '#e65100', irrigate: 'drip',
+      methods: ['drippers', 'dripline', 'none'], defaultMethod: 'drippers' },
     wet: { label: 'Mag nat worden', fill: 'rgba(144,202,249,0.30)', stroke: '#64b5f6', irrigate: null },
     dry: { label: 'Moet droog blijven (huis, terras)', fill: 'rgba(158,158,158,0.45)', stroke: '#616161', irrigate: null },
   };
@@ -118,6 +145,8 @@
     'SPR-POP10': { name: 'Pop-up sproeierhuis 10 cm', unit: 'st', price: 4.5 },
     'SPR-POP10-PRS': { name: 'Pop-up sproeierhuis 10 cm met drukregeling (2,1 bar)', unit: 'st', price: 7.9 },
     'SPR-VAN': { name: 'Verstelbare sproeikop (boog 0–360°)', unit: 'st', price: 3.2 },
+    'SPR-POP30-PRS': { name: 'Pop-up sproeierhuis 30 cm met drukregeling (beplanting)', unit: 'st', price: 11.5 },
+    'ROT-POP30-PRS': { name: 'Pop-up sproeierhuis 30 cm met drukregeling 2,8 bar (rotator, beplanting)', unit: 'st', price: 13.9 },
     'ROT-POP10-PRS': { name: 'Pop-up sproeierhuis 10 cm met drukregeling 2,8 bar (voor rotator)', unit: 'st', price: 8.9 },
     'ROT-MP1000': { name: 'Rotatorsproeikop 2,5–4,5 m', unit: 'st', price: 9.5 },
     'ROT-MP2000': { name: 'Rotatorsproeikop 4,0–6,4 m', unit: 'st', price: 9.5 },
@@ -166,6 +195,12 @@
     'DRIP-ADAPT': { name: 'Overgang PE 25 mm naar 16 mm', unit: 'st', price: 1.5 },
     'DRIP-PIN': { name: 'Grondpen voor druppelslang', unit: 'st', price: 0.12 },
     'DRIP-FLUSH': { name: 'Spoelventiel 16 mm (automatisch)', unit: 'st', price: 2.5 },
+    'DRIP-PE16': { name: 'Aanvoerbuis 16 mm (zonder druppelaars)', unit: 'm', price: 0.35 },
+    'DRIPPER-2': { name: 'Druppelaar drukgecompenseerd 2 l/u', unit: 'st', price: 0.35 },
+    'MICRO-46': { name: 'Microbuis 4/6 mm', unit: 'm', price: 0.25 },
+    'MICRO-CON': { name: 'Insteekkoppeling microbuis 4 mm', unit: 'st', price: 0.12 },
+    'MICRO-PIN': { name: 'Druppelpen voor microbuis', unit: 'st', price: 0.15 },
+    'PUNCH': { name: 'Ponstang voor druppelaars', unit: 'st', price: 6.5 },
     'TAPE': { name: 'Teflontape', unit: 'rol', price: 1.2 },
   };
 

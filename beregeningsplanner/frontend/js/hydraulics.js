@@ -32,10 +32,42 @@
     return C.pipes[C.pipes.length - 1];
   }
 
-  /** Drupgegevens van een beplantings-/haagvlak. */
-  function dripInfo(area) {
-    const spacing = area.type === 'hedge' ? C.drip.rowSpacingHedge : C.drip.rowSpacingBed;
+  /** Gekozen beregeningsmethode van een vlak: eigen keuze, anders projectstandaard, anders typestandaard. */
+  function methodOf(state, area) {
+    const t = C.areaTypes[area.type];
+    if (!t || !t.methods) return area.type === 'lawn' ? 'sprinklers' : 'none';
+    if (area.method && t.methods.includes(area.method)) return area.method;
+    const d = state && state.settings && state.settings.methods && state.settings.methods[area.type];
+    return d && t.methods.includes(d) ? d : t.defaultMethod;
+  }
+
+  const isDripMethod = (m) => m === 'dripline' || m === 'drippers';
+
+  /** Vlakken die druppelirrigatie krijgen. */
+  function dripAreas(state) {
+    return state.areas.filter((a) => a.pts.length >= 3 && isDripMethod(methodOf(state, a)));
+  }
+
+  function hasIrrigation(state) {
+    return state.sprinklers.length > 0 || dripAreas(state).length > 0;
+  }
+
+  /** Druppelgegevens van een vlak voor de gegeven methode (druppelslang of druppelaars). */
+  function dripInfo(area, method = 'dripline') {
     const a = G.area(area.pts);
+    const rect = G.minWidthRect(area.pts);
+    if (method === 'drippers') {
+      const D = C.drippers;
+      let count;
+      if (area.type === 'hedge') count = Math.ceil(rect.length / D.spacingHedge) * Math.max(1, Math.round(rect.width / 0.6));
+      else if (area.type === 'planter') count = Math.max(D.minPerPlanter, Math.ceil(a * D.perM2Planter));
+      else count = Math.max(1, Math.ceil(a * D.perM2Bed));
+      const rows = area.type === 'planter' ? 1 : Math.max(1, Math.round(rect.width / D.supplyRowSpacing));
+      const supplyM = Math.ceil(rect.length * rows + 1);
+      const lph = count * D.lph;
+      return { method, count, supplyM, microM: Math.ceil(count * D.microTubeM), lph, areaM2: a, mmh: lph / Math.max(a, 0.1), runs: rows };
+    }
+    const spacing = area.type === 'hedge' ? C.drip.rowSpacingHedge : area.type === 'planter' ? C.drip.rowSpacingPlanter : C.drip.rowSpacingBed;
     let lengthM;
     if (area.type === 'hedge') {
       // haag: lengte langs de lange zijde, aantal lijnen afhankelijk van de breedte
@@ -46,7 +78,8 @@
       lengthM = Math.max(1, a / spacing);
     }
     lengthM = Math.ceil(lengthM);
-    return { lengthM, lph: lengthM * C.drip.lphPerM, areaM2: a, spacing, mmh: (C.drip.lphPerM / spacing) };
+    const lph = lengthM * C.drip.lphPerM;
+    return { method, lengthM, lph, areaM2: a, spacing, mmh: lph / Math.max(a, 0.1), runs: Math.max(1, Math.ceil(lengthM / C.drip.maxRunM)) };
   }
 
   function element(state, kind) {
@@ -72,13 +105,15 @@
     const list = [];
     for (const s of state.sprinklers) {
       const t = C.sprinklerTypes[s.type];
-      list.push({ kind: 'spr', ref: s, group: t.group, q: C.sprinklerFlowLph(s), pos: { x: s.x, y: s.y } });
+      // sproeiers in beplanting krijgen eigen zones (andere waterbehoefte dan gazon)
+      const group = s.areaId ? `bed-${t.group === 'rotator' ? 'rotator' : 'spray'}` : t.group;
+      list.push({ kind: 'spr', ref: s, group, q: C.sprinklerFlowLph(s), pos: { x: s.x, y: s.y } });
     }
-    for (const a of state.areas) {
-      if (!C.areaTypes[a.type] || C.areaTypes[a.type].irrigate !== 'drip' || a.pts.length < 3) continue;
-      const di = dripInfo(a);
+    for (const a of dripAreas(state)) {
+      const method = methodOf(state, a);
+      const di = dripInfo(a, method);
       const entry = G.pointInPolygon(vb, a.pts) ? vb : G.closestOnPolygon(vb, a.pts).pt;
-      list.push({ kind: 'drip', ref: a, group: 'drip', q: di.lph, pos: entry, drip: di });
+      list.push({ kind: 'drip', ref: a, group: method === 'drippers' ? 'drippers' : 'drip', q: di.lph, pos: entry, drip: di });
     }
     return list;
   }
@@ -89,7 +124,7 @@
     const maxQ = maxZoneLph(state);
     const all = members(state);
     const zones = [];
-    const order = ['spray', 'rotator', 'rotor', 'drip'];
+    const order = ['spray', 'rotator', 'rotor', 'bed-spray', 'bed-rotator', 'drip', 'drippers'];
     for (const group of order) {
       const pool = all.filter((m) => m.group === group);
       // Evenwichtige verdeling: streef naar gelijke zones binnen het maximum
@@ -256,5 +291,5 @@
     return state.calc;
   }
 
-  window.Hydraulics = { lossBar, velocity, pickPipe, dripInfo, autoZones, calculate, members, valveBoxPos, maxZoneLph, ZONE_COLORS };
+  window.Hydraulics = { lossBar, velocity, pickPipe, dripInfo, methodOf, dripAreas, hasIrrigation, isDripMethod, autoZones, calculate, members, valveBoxPos, maxZoneLph, ZONE_COLORS };
 })();

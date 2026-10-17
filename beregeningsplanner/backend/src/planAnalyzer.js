@@ -6,7 +6,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const MODEL = 'claude-opus-5-5';
 
-const AREA_TYPES = ['lawn', 'bed', 'hedge', 'wet', 'dry'];
+const AREA_TYPES = ['lawn', 'bed', 'hedge', 'planter', 'wet', 'dry'];
 const ELEMENT_KINDS = ['source', 'controller', 'valvebox', 'outlet'];
 
 const point = {
@@ -80,6 +80,7 @@ Je krijgt één afbeelding van een tuinplan. Coördinaten zijn pixels in die afb
    - "lawn": gazon/grasveld (hier komen sproeiers).
    - "bed": beplanting, borders, struiken, moestuin (druppelirrigatie).
    - "hedge": hagen.
+   - "planter": plantenbakken en grote potten (los van de grond of verhoogd).
    - "wet": vlakken die nat mogen worden maar geen beregening krijgen (grindpaden, boomspiegels, vijver).
    - "dry": wat droog moet blijven: woning, schuur, terras, bestrating, oprit, overkapping, carport.
    Laat vlakken buiten de tuin weg. Overlappingen mogen (een border in een gazon is een apart vlak). Geef elk vlak een korte Nederlandse naam.

@@ -27,7 +27,8 @@
     return {
       version: 1,
       meta: { name: 'Nieuw beregeningsplan', customer: '', address: '' },
-      settings: { pressure: 3.5, flow: 2.0, level: 'expert', targetMm: 20, sessions: 3, sprinklerType: 'rotator', radius: null },
+      settings: { pressure: 3.5, flow: 2.0, level: 'expert', targetMm: 20, sessions: 3, sprinklerType: 'rotator', radius: null,
+        methods: { bed: 'dripline', hedge: 'dripline', planter: 'drippers' }, bedSprinklerType: 'spray' },
       background: null,
       areas: [],
       elements: [],
@@ -212,7 +213,10 @@
       if (!sel) return;
       this.checkpoint();
       const st = this.state;
-      if (sel.kind === 'area') st.areas = st.areas.filter((a) => a.id !== sel.id);
+      if (sel.kind === 'area') {
+        st.areas = st.areas.filter((a) => a.id !== sel.id);
+        st.sprinklers = st.sprinklers.filter((s) => s.areaId !== sel.id);
+      }
       if (sel.kind === 'sprinkler') st.sprinklers = st.sprinklers.filter((s) => s.id !== sel.id);
       if (sel.kind === 'element') st.elements = st.elements.filter((e) => e.id !== sel.id);
       this.editor.selection = null;
@@ -231,16 +235,49 @@
       const lawns = st.areas.filter((a) => a.type === 'lawn' && a.pts.length >= 3 && (!areaIds || areaIds.includes(a.id)));
       if (!lawns.length) { this.toast('Teken eerst een gazonvlak (stap 2).', true); return; }
       this.checkpoint();
-      const count = this._placeSprinklers(lawns, type);
+      let count = this._placeSprinklers(lawns, type);
+      if (!areaIds) count += this._syncBedSprinklers(true);
       this.commit();
       this.toast(`${count} sproeiers geplaatst. Controleer de neerslagkaart.`);
+    },
+    /**
+     * Sproeiers in beplanting/hagen in lijn brengen met de gekozen methode:
+     * plaatsen waar 'sproeiers' gekozen is (of opnieuw bij `force`), weghalen waar niet.
+     * @returns aantal geplaatste sproeiers
+     */
+    _syncBedSprinklers(force = false, onlyArea = null) {
+      const st = this.state;
+      let placed = 0;
+      for (const a of st.areas) {
+        if (onlyArea && a.id !== onlyArea) continue;
+        if (a.type === 'lawn' || a.pts.length < 3) continue;
+        const want = Hy.methodOf(st, a) === 'sprinklers';
+        const has = st.sprinklers.some((s) => s.areaId === a.id);
+        if (want && has && !force) continue;
+        st.sprinklers = st.sprinklers.filter((s) => s.areaId !== a.id);
+        if (!want) continue;
+        const heads = window.Planner.autoPlace(a.pts, st.settings.bedSprinklerType || 'spray');
+        heads.forEach((h) => { h.areaId = a.id; });
+        st.sprinklers.push(...heads);
+        placed += heads.length;
+      }
+      // bestaande indeling klopt niet meer als er sproeiers bij- of afkomen
+      st.sprinklers.forEach((s) => { if (s.areaId && !st.zones.some((z) => z.id === s.zone)) s.zone = null; });
+      this._pruneZones();
+      return placed;
+    },
+    /** Na wijzigen van een methode: sproeiers bijwerken en zones opnieuw indelen als die er al waren. */
+    _applyMethods(onlyArea = null) {
+      const hadZones = this.state.zones.length > 0;
+      this._syncBedSprinklers(false, onlyArea);
+      if (hadZones && Hy.hasIrrigation(this.state)) Hy.autoZones(this.state);
     },
     _placeSprinklers(lawns, type) {
       const st = this.state;
       let count = 0;
       for (const a of lawns) {
         // verwijder bestaande sproeiers binnen of op de rand van dit vlak
-        st.sprinklers = st.sprinklers.filter((s) => !(G.pointInPolygon(s, a.pts) || G.closestOnPolygon(s, a.pts).d < 0.05));
+        st.sprinklers = st.sprinklers.filter((s) => s.areaId || !(G.pointInPolygon(s, a.pts) || G.closestOnPolygon(s, a.pts).d < 0.05));
         const heads = window.Planner.autoPlace(a.pts, type, { r: st.settings.radius || null });
         st.sprinklers.push(...heads);
         count += heads.length;
@@ -253,7 +290,7 @@
       return count;
     },
     autoZones() {
-      if (!this.state.sprinklers.length && !this.state.areas.some((a) => C.areaTypes[a.type].irrigate === 'drip')) {
+      if (!Hy.hasIrrigation(this.state)) {
         this.toast('Plaats eerst sproeiers of teken beplanting.', true);
         return;
       }
@@ -352,8 +389,9 @@
       st.zones = [];
       this.editor.selection = null;
       const lawns = st.areas.filter((a) => a.type === 'lawn');
-      const count = lawns.length ? this._placeSprinklers(lawns, st.settings.sprinklerType) : 0;
-      if (count || st.areas.some((a) => C.areaTypes[a.type].irrigate === 'drip')) Hy.autoZones(st);
+      let count = lawns.length ? this._placeSprinklers(lawns, st.settings.sprinklerType) : 0;
+      count += this._syncBedSprinklers(true);
+      if (Hy.hasIrrigation(st)) Hy.autoZones(st);
       this.conceptWarnings = result.warnings;
       this.busy(null);
       this.commit();
@@ -504,7 +542,7 @@
       $('#btn-next').disabled = this.step === STEPS.length - 1;
       if (this.editor.tool !== 'select') this.editor.setTool('select');
       // passende lagen per stap
-      if (STEPS[this.step].id === 'zones' && !this.state.zones.length && (this.state.sprinklers.length || this.state.areas.some((a) => C.areaTypes[a.type].irrigate === 'drip'))) {
+      if (STEPS[this.step].id === 'zones' && !this.state.zones.length && Hy.hasIrrigation(this.state)) {
         Hy.autoZones(this.state);
         this.recalc();
       }
@@ -526,10 +564,19 @@
       const m = this.state.meta;
       const bg = this.state.background;
       const ai = this.aiStatus ? { ...this.aiStatus, checked: true } : { available: false, checked: false };
+      const s = this.state.settings;
       return `
         <label>Projectnaam<input id="m-name" value="${esc(m.name)}"></label>
         <label>Klant<input id="m-customer" value="${esc(m.customer)}"></label>
         <label>Adres<input id="m-address" value="${esc(m.address)}"></label>
+        <h3>Beregeningsmethode</h3>
+        <p class="hint small">Kies per soort vlak hoe het water krijgt. Per vlak kun je hier later van afwijken (eigenschappenpaneel).</p>
+        <label>Gazon<select id="mth-lawn">${['rotator', 'spray', 'rotor'].map((k) => `<option value="${k}" ${s.sprinklerType === k ? 'selected' : ''}>${esc(C.sprinklerTypes[k].label)}</option>`).join('')}</select></label>
+        ${['bed', 'hedge', 'planter'].map((type) => {
+          const at = C.areaTypes[type];
+          const cur = (s.methods && s.methods[type]) || at.defaultMethod;
+          return `<label>${esc(at.label)}<select data-mth="${type}">${at.methods.map((k) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${esc(C.methods[k].label)}</option>`).join('')}</select></label>`;
+        }).join('')}
         <h3>Plan</h3>
         <p class="hint">Laad een tuinontwerp, plattegrond, schets of luchtfoto (JPG, PNG of PDF). De planner leest de schaal en de vlakken en maakt een concept met sproeiers, zones en leidingen dat je daarna aanpast.</p>
         ${ai.available ? `
@@ -554,6 +601,16 @@
         $(`#m-${k}`, el).oninput = (e) => { m[k] = e.target.value; this._save(); if (k === 'name') $('#project-title').textContent = m.name; };
       });
       $('#project-title').textContent = m.name;
+      $('#mth-lawn', el).onchange = (e) => { this.state.settings.sprinklerType = e.target.value; this.state.settings.radius = null; this._save(); };
+      el.querySelectorAll('[data-mth]').forEach((sel) => {
+        sel.onchange = () => {
+          this.checkpoint();
+          this.state.settings.methods = { ...(this.state.settings.methods || {}), [sel.dataset.mth]: sel.value };
+          this._applyMethods();
+          this.commit();
+          this.toast(`${C.areaTypes[sel.dataset.mth].label}: ${C.methods[sel.value].label}`);
+        };
+      });
       let concept = false;
       $('#bg-load', el).onclick = () => { concept = false; $('#bg-file', el).click(); };
       if ($('#plan-concept', el)) $('#plan-concept', el).onclick = () => { concept = true; $('#bg-file', el).click(); };
@@ -643,7 +700,8 @@
         ${types}
         <label class="inline"><input type="checkbox" id="r-auto" ${s.radius ? '' : 'checked'}> Worpwijdte automatisch</label>
         ${s.radius ? `<label>Worpwijdte (m)<input id="r-val" type="number" step="0.1" value="${s.radius}"></label>` : ''}
-        <button id="auto-place" class="btn primary">Automatisch plaatsen (alle gazons)</button>
+        <button id="auto-place" class="btn primary">Automatisch plaatsen</button>
+        <p class="hint small">Plaatst sproeiers op alle gazons en in beplanting waarvoor <b>Sproeiers</b> als methode gekozen is (stap 1).</p>
         <div class="row">
           <button class="btn" id="manual-place">Handmatig plaatsen</button>
           <button class="btn" id="manual-strip">Strooksproeier</button>
@@ -717,7 +775,7 @@
     // --- Stap 6
     _panel_bom() {
       const s = this.state.settings;
-      if (!this.state.zones.length && (this.state.sprinklers.length || this.state.areas.some((a) => C.areaTypes[a.type].irrigate === 'drip'))) {
+      if (!this.state.zones.length && Hy.hasIrrigation(this.state)) {
         Hy.autoZones(this.state);
         Hy.calculate(this.state);
       }
@@ -777,9 +835,22 @@
     _propsArea(a) {
       const opts = Object.entries(C.areaTypes).map(([k, t]) => `<option value="${k}" ${a.type === k ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
       let extra = '';
-      if (C.areaTypes[a.type].irrigate === 'drip' && a.pts.length >= 3) {
-        const di = Hy.dripInfo(a);
-        extra = `<table class="kv"><tr><td>Druppelslang</td><td>${di.lengthM} m</td></tr><tr><td>Debiet</td><td>${fmt(di.lph / 60)} l/min</td></tr><tr><td>Rijafstand</td><td>${fmt(di.spacing * 100, 0)} cm</td></tr></table>`;
+      const at = C.areaTypes[a.type];
+      if (at.methods && a.pts.length >= 3) {
+        const method = Hy.methodOf(this.state, a);
+        const def = (this.state.settings.methods && this.state.settings.methods[a.type]) || at.defaultMethod;
+        const mOpts = `<option value="">Standaard (${esc(C.methods[def].label)})</option>` + at.methods.map((k) => `<option value="${k}" ${a.method === k ? 'selected' : ''}>${esc(C.methods[k].label)}</option>`).join('');
+        extra = `<label>Beregening<select data-f="method">${mOpts}</select></label><p class="hint small">${esc(C.methods[method].desc)}</p>`;
+        if (method === 'dripline') {
+          const di = Hy.dripInfo(a, method);
+          extra += `<table class="kv"><tr><td>Druppelslang</td><td>${di.lengthM} m</td></tr><tr><td>Rijafstand</td><td>${fmt(di.spacing * 100, 0)} cm</td></tr><tr><td>Debiet</td><td>${fmt(di.lph / 60)} l/min</td></tr><tr><td>Gift</td><td>${fmt(di.mmh)} mm/u</td></tr></table>`;
+        } else if (method === 'drippers') {
+          const di = Hy.dripInfo(a, method);
+          extra += `<table class="kv"><tr><td>Druppelaars</td><td>${di.count} × ${fmt(C.drippers.lph, 0)} l/u</td></tr><tr><td>Aanvoerbuis 16 mm</td><td>${di.supplyM} m</td></tr><tr><td>Microbuis</td><td>${di.microM} m</td></tr><tr><td>Debiet</td><td>${fmt(di.lph / 60)} l/min</td></tr><tr><td>Gift</td><td>${fmt(di.mmh)} mm/u</td></tr></table>`;
+        } else if (method === 'sprinklers') {
+          const n = this.state.sprinklers.filter((s) => s.areaId === a.id).length;
+          extra += `<table class="kv"><tr><td>Sproeiers</td><td>${n}</td></tr></table><button class="btn" data-act="bedplace">Sproeiers opnieuw plaatsen</button>`;
+        }
       }
       if (a.type === 'lawn') {
         const rect = G.minWidthRect(a.pts);
@@ -856,8 +927,10 @@
             else if (f === 'len') obj.len = Math.max(t0.lMin, Math.min(t0.lMax, v || 4.6));
             else obj[f] = v;
           } else if (sel.kind === 'area') {
-            obj[f] = v;
-            if (f === 'type') obj.zone = null;
+            if (f === 'method') obj.method = v || null;
+            else obj[f] = v;
+            if (f === 'type') { obj.zone = null; obj.method = null; }
+            if (f === 'type' || f === 'method') this._applyMethods(obj.id);
           }
           this._pruneZones();
           this.commit();
@@ -872,6 +945,7 @@
         b.onclick = () => {
           if (b.dataset.act === 'delete') this.deleteSelection();
           if (b.dataset.act === 'autoplace') this.autoPlace([obj.id]);
+          if (b.dataset.act === 'bedplace') { this.checkpoint(); this._syncBedSprinklers(true, obj.id); if (this.state.zones.length) Hy.autoZones(this.state); this.commit(); }
         };
       });
     },

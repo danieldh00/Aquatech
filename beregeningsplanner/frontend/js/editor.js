@@ -380,8 +380,10 @@
         if (a.type === 'wet') ctx.setLineDash([6, 4]);
         ctx.stroke();
         ctx.setLineDash([]);
-        if (a.type === 'bed' || a.type === 'hedge') this._dripHatch(ctx, a);
-        if (a.zone && (a.type === 'bed' || a.type === 'hedge')) {
+        const method = window.Hydraulics.methodOf(st, a);
+        if (method === 'dripline') this._dripHatch(ctx, a);
+        else if (method === 'drippers') this._drippersDots(ctx, a);
+        if (a.zone && window.Hydraulics.isDripMethod(method)) {
           const z = st.zones.find((zz) => zz.id === a.zone);
           if (z) { ctx.strokeStyle = z.color; ctx.lineWidth = 3; ctx.setLineDash([2, 3]); ctx.stroke(); ctx.setLineDash([]); }
         }
@@ -485,7 +487,7 @@
     }
 
     _dripHatch(ctx, a) {
-      const spacing = a.type === 'hedge' ? C.drip.rowSpacingHedge : C.drip.rowSpacingBed;
+      const spacing = a.type === 'hedge' ? C.drip.rowSpacingHedge : a.type === 'planter' ? C.drip.rowSpacingPlanter : C.drip.rowSpacingBed;
       const S = this.view.scale;
       if (spacing * S < 4) return;
       const rect = G.minWidthRect(a.pts);
@@ -503,6 +505,23 @@
         ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
       }
       ctx.restore();
+    }
+
+    /** Druppelaars: stippen op de plantafstand. */
+    _drippersDots(ctx, a) {
+      const S = this.view.scale;
+      const per = a.type === 'planter' ? C.drippers.perM2Planter : C.drippers.perM2Bed;
+      const step = 1 / Math.sqrt(per);
+      if (step * S < 6) return;
+      const bb = G.bbox(a.pts);
+      ctx.fillStyle = 'rgba(62,39,35,0.7)';
+      for (let y = bb.minY + step / 2; y < bb.maxY; y += step) {
+        for (let x = bb.minX + step / 2; x < bb.maxX; x += step) {
+          if (!G.pointInPolygon({ x, y }, a.pts)) continue;
+          const p = this.toScreen({ x, y });
+          ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2); ctx.fill();
+        }
+      }
     }
 
     _zoneColor(s) {
