@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.0
+
+- **Lokale herkenning werkt nu ook op foto's en scans van getekende plannen**
+  (potlood, stift), niet alleen op digitale plannen:
+  - ongelijke belichting, grijs of getint papier en een kleurzweem worden
+    gecorrigeerd (papierkleur over het hele vel geschat); het papier zelf
+    wordt niet meer als één groot "droog te houden" vlak gezien;
+  - bleke potloodkleuren en arcering worden uitgemiddeld; zwarte lijnen en
+    tekst tellen daarbij niet mee en worden geen grijze "verharding" meer;
+  - geel (terras, vlonder) wordt verharding, blauwgroen wordt heesters;
+  - een gazon midden in de verharding valt niet meer binnen het
+    verhardingsvlak (grote gaten blijven open);
+  - titelblok, legenda en de rand van de foto (tafel) worden genegeerd.
+- **Schaal**: staat er geen maat met maatlijn op het plan, dan vraagt de
+  planner hoe breed de tuin is, in plaats van aan te nemen dat het hele vel
+  30 m breed is (leeg laten = tuin 10 m). Bij een PDF met "schaal 1:N" wordt
+  de schaal exact uit het paginaformaat berekend.
+- Maten lezen is betrouwbaarder: een maatlijn die de tekst raakt wordt goed
+  gemeten, "10,00 m" met lage OCR-betrouwbaarheid telt mee, en een gemiste
+  komma ("100 m") of "1:100" gelezen als "1100" geeft geen verkeerde schaal
+  meer.
+
 ## 0.5.0
 
 - **Plan herkennen zonder AI.** "Plan laden en concept maken" werkt nu ook

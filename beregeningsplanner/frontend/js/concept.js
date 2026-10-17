@@ -6,6 +6,7 @@
   const C = window.Catalog;
 
   const FALLBACK_WIDTH_M = 30; // aangenomen breedte van het plan als er geen schaal gevonden is
+  const FALLBACK_GARDEN_M = 10; // aangenomen breedte van de herkende tuin (gangbare achtertuin)
 
   /** Vraagt de backend om het plan te herkennen. */
   async function analyze(analyzeImage) {
@@ -74,22 +75,49 @@
     return els.map((e) => ({ id: G.uid('e'), kind: e.kind, x: +e.x.toFixed(3), y: +e.y.toFixed(3) }));
   }
 
+  /** Breedte in pixels van alle herkende vlakken samen (de getekende tuin), of 0. */
+  function gardenWidthPx(areas) {
+    const xs = [];
+    for (const a of areas || []) if (C.areaTypes[a.type]) for (const p of a.points || []) xs.push(p.x);
+    return xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
+  }
+
   /**
    * Zet het analyse-resultaat om naar vlakken en elementen in meters.
+   * Schaal, in volgorde: maat met maatlijn (analyse) → schaal 1:N met bekend papierformaat (PDF) →
+   * door de gebruiker opgegeven tuinbreedte → aanname (tuin 10 m breed, of het hele plan 30 m).
    * @param result  antwoord van /api/plan/analyze (pixels van de analyse-afbeelding)
-   * @param analyzeImage {width, height, factor} (factor = analyse-px / ondergrond-px)
-   * @returns {{background:{scale}, areas, elements, scaleInfo, warnings}}
+   * @param analyzeImage {width, height, factor, paper?: {widthM, ratio}} (factor = analyse-px / ondergrond-px)
+   * @param opts {gardenWidthM?}
+   * @returns {{backgroundScale, areas, elements, scaleInfo, warnings, gardenWidthPx}}
    */
-  function build(result, analyzeImage) {
+  function build(result, analyzeImage, opts = {}) {
     const warnings = [];
-    let mppAnalyze = result.scale && result.scale.metersPerPixel;
+    const scale = { ...(result.scale || {}) };
+    let mppAnalyze = scale.metersPerPixel;
     let estimated = false;
-    if (!(mppAnalyze > 0) || !isFinite(mppAnalyze)) {
-      mppAnalyze = FALLBACK_WIDTH_M / analyzeImage.width;
+    const found = mppAnalyze > 0 && isFinite(mppAnalyze) && scale.method !== 'schatting';
+    const paper = analyzeImage.paper || {};
+    const ratio = paper.ratio || scale.ratio;
+    const gw = gardenWidthPx(result.areas);
+    if (!found && paper.widthM > 0 && ratio > 0) {
+      mppAnalyze = (paper.widthM * ratio) / analyzeImage.width;
+      Object.assign(scale, { metersPerPixel: mppAnalyze, method: `schaal 1:${ratio}`, confidence: 'hoog', evidence: `schaal 1:${ratio} op papierbreedte ${Math.round(paper.widthM * 1000)} mm` });
+    } else if (!found && opts.gardenWidthM > 0 && gw > 0) {
+      mppAnalyze = opts.gardenWidthM / gw;
+      Object.assign(scale, { metersPerPixel: mppAnalyze, method: 'opgegeven tuinbreedte', confidence: 'middel', evidence: `tuin ${opts.gardenWidthM} m breed` });
+      warnings.push(`Schaal afgeleid uit de opgegeven tuinbreedte (${opts.gardenWidthM} m). Controleer met "Schaal kalibreren" als er een bekende maat is.`);
+    } else if (!(mppAnalyze > 0) || !isFinite(mppAnalyze)) {
       estimated = true;
-      warnings.push(`Geen leesbare maat met maatlijn gevonden; aangenomen dat het plan ${FALLBACK_WIDTH_M} m breed is. Kalibreer de schaal in stap 1 met een bekende maat.`);
-    } else if (result.scale.confidence === 'laag' || result.scale.method === 'schatting') {
-      warnings.push(`Schaal geschat (${result.scale.evidence || 'geen maat gevonden'}). Controleer met "Schaal kalibreren".`);
+      if (gw > 0) {
+        mppAnalyze = FALLBACK_GARDEN_M / gw;
+        warnings.push(`Geen leesbare maat met maatlijn gevonden${ratio ? ` (wel schaal 1:${ratio}, maar het papierformaat is bij een foto onbekend)` : ''}; aangenomen dat de tuin ${FALLBACK_GARDEN_M} m breed is. Kalibreer de schaal in stap 1 met een bekende maat.`);
+      } else {
+        mppAnalyze = FALLBACK_WIDTH_M / analyzeImage.width;
+        warnings.push(`Geen leesbare maat met maatlijn gevonden; aangenomen dat het plan ${FALLBACK_WIDTH_M} m breed is. Kalibreer de schaal in stap 1 met een bekende maat.`);
+      }
+    } else if (scale.confidence === 'laag' || scale.method === 'schatting') {
+      warnings.push(`Schaal geschat (${scale.evidence || 'geen maat gevonden'}). Controleer met "Schaal kalibreren".`);
     }
     const toWorld = (p) => ({ x: p.x * mppAnalyze, y: p.y * mppAnalyze });
     const counters = {};
@@ -109,10 +137,11 @@
       backgroundScale: mppAnalyze * analyzeImage.factor,
       areas,
       elements,
-      scaleInfo: { ...(result.scale || {}), estimated },
+      scaleInfo: { ...scale, estimated },
       warnings,
+      gardenWidthPx: gw,
     };
   }
 
-  window.Concept = { analyze, status, build, defaultElements, FALLBACK_WIDTH_M };
+  window.Concept = { analyze, status, build, defaultElements, FALLBACK_WIDTH_M, FALLBACK_GARDEN_M };
 })();

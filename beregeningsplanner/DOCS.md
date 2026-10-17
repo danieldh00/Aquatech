@@ -46,21 +46,36 @@ andere methode. Iedere methode krijgt eigen zones, omdat de neerslag verschilt.
 Herkennen kan **lokaal** (standaard, zonder AI, gratis) of met **AI** (als er
 een API-sleutel is ingesteld).
 
-**Lokaal** werkt het best op gekleurde tuinontwerpen:
+**Lokaal** werkt op gekleurde tuinontwerpen: digitaal, maar ook een foto of
+scan van een met potlood of stift ingekleurde tekening. Ongelijke belichting,
+grijs papier en een kleurzweem worden eerst gecorrigeerd; daarna telt de
+gemiddelde kleur per plek (zwarte lijnen en tekst tellen niet mee):
 
 | Kleur in het plan | Wordt |
 |---|---|
-| Licht- en middengroen | Gazon |
-| Donkergroen | Haag / heesters |
+| Licht- en middengroen (ook bleek potlood) | Gazon |
+| Donkergroen, blauwgroen | Haag / heesters |
 | Bruin, oranje, roze, paars | Beplanting |
-| Grijs, licht beige | Bebouwing en verharding (droog houden) |
+| Grijs, licht beige, geel, lichte baksteen | Bebouwing en verharding (droog houden) |
 | Blauw | Water (mag nat worden) |
 | Wit (papier), zwart (lijnen, tekst) | Genegeerd |
 
-De schaal wordt gelezen uit een maat met maatlijn: "12,00 m", "450 cm" of
-een getal als "8500" (millimeters, zoals op bouwtekeningen). Staat er geen
-maat op, kalibreer dan de schaal zelf. Lijntekeningen zonder kleur trek je uit
-met de toverstaf. **AI** leest ook lijntekeningen, schetsen en luchtfoto's.
+Titelblok, legenda en de rand van een foto (tafel, schaduw) worden genegeerd.
+Een vlak midden in een ander vlak (gazon in de verharding) blijft een eigen
+vlak; het omringende vlak krijgt daarvoor een smalle snede naar buiten.
+
+De schaal wordt, in deze volgorde, bepaald uit:
+
+1. een maat met maatlijn: "12,00 m", "450 cm" of een getal als "8500"
+   (millimeters, zoals op bouwtekeningen);
+2. bij een PDF: de schaalaanduiding "1:N" en het paginaformaat;
+3. de breedte van de tuin: staat er geen maat op, dan vraagt de planner hoe
+   breed de herkende tuin (van links naar rechts) is. Leeg laten = 10 m.
+
+Bij een foto zegt "schaal 1:50" niets, omdat het papierformaat onbekend is.
+Kalibreer de schaal na afloop met een bekende maat als die er is.
+Lijntekeningen zonder kleur trek je uit met de toverstaf. **AI** leest ook
+lijntekeningen, schetsen en luchtfoto's.
 
 1. Ga naar stap 1 en klik op **Plan laden en concept maken…**.
 2. Kies een tuinontwerp, plattegrond, schets of luchtfoto (JPG, PNG of PDF;
