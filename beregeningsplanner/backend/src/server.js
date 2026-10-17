@@ -109,7 +109,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       res.json(result);
     } catch (err) {
       if (err instanceof AnalyzeError) {
-        console.warn(`Plananalyse mislukt: ${err.code}`);
+        console.warn(`Plananalyse mislukt: ${err.code} – ${err.message}`);
         return res.status(err.status).json({ error: err.code, message: err.message });
       }
       next(err);

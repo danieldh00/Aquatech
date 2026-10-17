@@ -117,6 +117,16 @@ function validate(result, width, height) {
   };
 }
 
+/** Leesbare foutmelding uit een API-fout (zonder sleutel of afbeeldingsdata). */
+function apiMessage(err) {
+  const m = err && err.error && err.error.error && err.error.error.message;
+  return String(m || err.message || 'onbekende fout').slice(0, 400);
+}
+
+function describe(err) {
+  return `${err.status ?? '-'} ${err.error?.error?.type || err.name}: ${apiMessage(err)}${err.requestID ? ` (request ${err.requestID})` : ''}`;
+}
+
 class AnalyzeError extends Error {
   constructor(code, message, status = 502) {
     super(message);
@@ -125,37 +135,48 @@ class AnalyzeError extends Error {
   }
 }
 
-function createPlanAnalyzer({ apiKey, client }) {
+function createPlanAnalyzer({ apiKey, client, log = (msg) => console.warn(msg) }) {
   const anthropic = client || (apiKey ? new Anthropic({ apiKey }) : null);
 
   async function analyze({ mediaType, data, width, height }) {
     if (!anthropic) throw new AnalyzeError('not_configured', 'Automatisch herkennen is niet ingesteld: vul anthropic_api_key in bij de app-configuratie.', 409);
+    const params = {
+      model: MODEL,
+      max_tokens: 32000,
+      thinking: { type: 'adaptive' },
+      output_config: { effort: 'high', format: { type: 'json_schema', schema: SCHEMA } },
+      system: SYSTEM,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data } },
+            { type: 'text', text: `Afbeelding: ${width} × ${height} pixels. Lees dit tuinplan en geef schaal, gebieden en elementen.` },
+          ],
+        },
+      ],
+    };
     let message;
     try {
-      const stream = anthropic.beta.messages.stream({
-        model: MODEL,
-        max_tokens: 32000,
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'high', format: { type: 'json_schema', schema: SCHEMA } },
-        system: SYSTEM,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'base64', media_type: mediaType, data } },
-              { type: 'text', text: `Afbeelding: ${width} × ${height} pixels. Lees dit tuinplan en geef schaal, gebieden en elementen.` },
-            ],
-          },
-        ],
-      });
-      message = await stream.finalMessage();
+      try {
+        // Met server-side fallback: bij een weigering neemt een ander model het over.
+        message = await anthropic.beta.messages
+          .stream({ ...params, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' })
+          .finalMessage();
+      } catch (err) {
+        if (!(err instanceof Anthropic.BadRequestError)) throw err;
+        // Sommige accounts/regio's ondersteunen de fallback-beta niet: één keer zonder.
+        log(`Verzoek met fallback geweigerd (${describe(err)}); opnieuw zonder fallback.`);
+        message = await anthropic.messages.stream(params).finalMessage();
+      }
     } catch (err) {
+      if (err instanceof Anthropic.APIError) log(`AI-dienst gaf een fout: ${describe(err)}`);
       if (err instanceof Anthropic.AuthenticationError) throw new AnalyzeError('auth', 'De API-sleutel wordt geweigerd. Controleer anthropic_api_key in de app-configuratie.');
-      if (err instanceof Anthropic.RateLimitError) throw new AnalyzeError('rate_limited', 'De AI-dienst is even overbelast. Probeer het over een minuut opnieuw.', 429);
-      if (err instanceof Anthropic.BadRequestError) throw new AnalyzeError('bad_request', `De AI-dienst weigert het verzoek: ${err.message}`);
-      if (err instanceof Anthropic.APIError) throw new AnalyzeError('api_error', `Fout bij de AI-dienst (${err.status ?? 'verbinding'}).`);
+      if (err instanceof Anthropic.PermissionDeniedError) throw new AnalyzeError('permission', `Deze API-sleutel heeft geen toegang: ${apiMessage(err)}`);
+      if (err instanceof Anthropic.NotFoundError) throw new AnalyzeError('not_found', `Model niet beschikbaar voor deze API-sleutel: ${apiMessage(err)}`);
+      if (err instanceof Anthropic.RateLimitError) throw new AnalyzeError('rate_limited', 'De AI-dienst is even overbelast of het tegoed is op. Probeer het later opnieuw.', 429);
+      if (err instanceof Anthropic.BadRequestError) throw new AnalyzeError('bad_request', `De AI-dienst weigert het verzoek: ${apiMessage(err)}`);
+      if (err instanceof Anthropic.APIError) throw new AnalyzeError('api_error', `Fout bij de AI-dienst (${err.status ?? 'verbinding'}): ${apiMessage(err)}`);
       throw err;
     }
     if (message.stop_reason === 'refusal') throw new AnalyzeError('refusal', 'De AI-dienst wilde deze afbeelding niet verwerken.');

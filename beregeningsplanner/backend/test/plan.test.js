@@ -108,3 +108,27 @@ test('verzoek naar de AI-dienst: model, fallback, gestructureerde uitvoer en afb
   assert.strictEqual(req.messages[0].content[0].source.media_type, 'image/jpeg');
   assert.match(req.messages[0].content[1].text, /1200 × 900/);
 });
+
+test('fallback-beta geweigerd: één nieuwe poging zonder beta, foutmelding van de API wordt doorgegeven', async () => {
+  const Anthropic = require('@anthropic-ai/sdk');
+  const bad = (msg) => new Anthropic.BadRequestError(400, { type: 'error', error: { type: 'invalid_request_error', message: msg } }, msg, new Headers());
+  const ok = { stop_reason: 'end_turn', content: [{ type: 'text', text: '{"scale":{"method":"schatting","evidence":"","confidence":"laag","x1":0,"y1":0,"x2":0,"y2":0,"length_m":0},"areas":[],"elements":[],"notes":""}' }] };
+  const logs = [];
+  let plainReq;
+  const client = {
+    beta: { messages: { stream: () => ({ finalMessage: async () => { throw bad('fallbacks: unsupported'); } }) } },
+    messages: { stream: (r) => { plainReq = r; return { finalMessage: async () => ok }; } },
+  };
+  const r = await createPlanAnalyzer({ client, log: (m) => logs.push(m) }).analyze({ mediaType: 'image/png', data: 'x', width: 10, height: 10 });
+  assert.ok(r.scale);
+  assert.strictEqual(plainReq.fallbacks, undefined);
+  assert.strictEqual(plainReq.betas, undefined);
+  assert.match(logs[0], /fallbacks: unsupported/);
+
+  const client2 = {
+    beta: { messages: { stream: () => ({ finalMessage: async () => { throw bad('eerste'); } }) } },
+    messages: { stream: () => ({ finalMessage: async () => { throw bad('output_config.format: schema niet ondersteund'); } }) },
+  };
+  await assert.rejects(createPlanAnalyzer({ client: client2, log: () => {} }).analyze({ mediaType: 'image/png', data: 'x', width: 10, height: 10 }),
+    (e) => e.code === 'bad_request' && /schema niet ondersteund/.test(e.message));
+});

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+- **Duidelijkere foutmelding bij "Herkennen mislukt".** De melding van de
+  AI-dienst wordt nu volledig getoond en in de log gezet.
+- Weigert de AI-dienst het verzoek met de fallback-optie, dan probeert de app
+  het automatisch één keer zonder.
+
 ## 0.4.0
 
 - **Beregeningsmethode kiezen aan het begin (stap 1)** voor borders, hagen en
