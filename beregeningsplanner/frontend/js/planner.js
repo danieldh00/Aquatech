@@ -79,6 +79,36 @@
    */
   function autoPlace(rawPts, type, opts = {}) {
     if (!rawPts || rawPts.length < 3) return [];
+    if (opts.r || type === 'strip' || !window.Simulation) return placeWithRadius(rawPts, type, opts.r || null);
+    // Worpwijdte kiezen door varianten door te rekenen met de neerslagsimulatie.
+    const t = C.sprinklerTypes[type];
+    const rect = G.minWidthRect(G.orientCW(rawPts));
+    if (type !== 'rotor' && rect.width < NARROW_WIDTH) return placeWithRadius(rawPts, type, null);
+    const candidates = new Set([Math.round(autoRadius(type, Math.min(rect.width, inscribedDiameter(G.orientCW(rawPts)) * 1.1)) * 10) / 10]);
+    for (let r = t.rMin; r <= t.rMax + 1e-9; r += (t.rMax - t.rMin) / 10) candidates.add(Math.round(r * 10) / 10);
+    let best = null;
+    for (const r of candidates) {
+      const heads = placeWithRadius(rawPts, type, r);
+      const score = evaluate(rawPts, heads);
+      if (!best || score.cost < best.score.cost) best = { heads, score, r };
+    }
+    return best.heads;
+  }
+
+  /** Kosten van een indeling: aantal koppen, water buiten het gazon, ongelijkmatigheid en droge plekken. */
+  function evaluate(pts, heads) {
+    const sim = window.Simulation.simulate({ areas: [{ type: 'lawn', pts }], sprinklers: heads }, 0.3);
+    if (!sim || !sim.stats) return { cost: Infinity };
+    let outside = 0;
+    for (let k = 0; k < sim.values.length; k++) if (sim.mask[k] !== 1 && sim.values[k] > 0) outside++;
+    const outsideM2 = outside * sim.cellX * sim.cellY;
+    const area = G.area(pts);
+    const cost = heads.length + (outsideM2 / Math.max(area, 1)) * 40 + (1 - sim.stats.du) * 30 + sim.stats.dryPct * 1.5;
+    return { cost, outsideM2, du: sim.stats.du, dryPct: sim.stats.dryPct };
+  }
+
+  function placeWithRadius(rawPts, type, fixedR) {
+    const opts = { r: fixedR };
     const pts = G.orientCW(rawPts);
     const rect = G.minWidthRect(pts);
 
@@ -171,5 +201,5 @@
     return result;
   }
 
-  window.Planner = { autoPlace, autoRadius, NARROW_WIDTH };
+  window.Planner = { autoPlace, placeWithRadius, evaluate, autoRadius, NARROW_WIDTH };
 })();

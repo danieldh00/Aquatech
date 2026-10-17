@@ -53,6 +53,7 @@
       this.showStep(this.step);
       this.recalc();
       this.refreshBackground().then(() => this.editor.fit());
+      this.refreshAiStatus();
     },
 
     // ---------- Status & undo ----------
@@ -230,6 +231,12 @@
       const lawns = st.areas.filter((a) => a.type === 'lawn' && a.pts.length >= 3 && (!areaIds || areaIds.includes(a.id)));
       if (!lawns.length) { this.toast('Teken eerst een gazonvlak (stap 2).', true); return; }
       this.checkpoint();
+      const count = this._placeSprinklers(lawns, type);
+      this.commit();
+      this.toast(`${count} sproeiers geplaatst. Controleer de neerslagkaart.`);
+    },
+    _placeSprinklers(lawns, type) {
+      const st = this.state;
       let count = 0;
       for (const a of lawns) {
         // verwijder bestaande sproeiers binnen of op de rand van dit vlak
@@ -243,8 +250,7 @@
       st.sprinklers.forEach((s) => { s.zone = null; });
       this.editor.layers.heatmap = true;
       $('#layer-heatmap').checked = true;
-      this.commit();
-      this.toast(`${count} sproeiers geplaatst. Controleer de neerslagkaart.`);
+      return count;
     },
     autoZones() {
       if (!this.state.sprinklers.length && !this.state.areas.some((a) => C.areaTypes[a.type].irrigate === 'drip')) {
@@ -292,22 +298,94 @@
         img.src = bg.dataUrl;
       });
     },
-    loadBackground(file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const img = new Image();
-        img.onload = () => {
-          // schaal zodat de afbeelding ongeveer 30 m breed is; daarna kalibreren
-          this.state.background = { dataUrl: reader.result, x: 0, y: 0, scale: 30 / img.width, opacity: 0.6 };
-          this.editor.bgImg = img;
-          this._save();
-          this.editor.fit();
-          this.renderStepPanel();
-          this.toast('Ondergrond geladen. Kalibreer nu de schaal met een bekende maat.');
-        };
-        img.src = reader.result;
-      };
-      reader.readAsDataURL(file);
+    /** Laadt een plan (JPG/PNG/PDF) als ondergrond; met `concept` meteen automatisch herkennen. */
+    async loadBackground(file, { concept = false } = {}) {
+      this.busy('Plan wordt geladen…');
+      let loaded;
+      try {
+        loaded = await window.PlanImport.load(file);
+      } catch (e) {
+        this.busy(null);
+        this.toast(`Kan plan niet laden: ${e.message}`, true);
+        return;
+      }
+      const b = loaded.background;
+      // voorlopige schaal: plan ca. 30 m breed; daarna herkennen of kalibreren
+      this.state.background = { dataUrl: b.dataUrl, width: b.width, height: b.height, x: 0, y: 0, scale: window.Concept.FALLBACK_WIDTH_M / b.width, opacity: 0.6 };
+      this._analyzeImage = loaded.analyze;
+      if (!this.state.meta.name || this.state.meta.name === 'Nieuw beregeningsplan') this.state.meta.name = file.name.replace(/\.[^.]+$/, '');
+      await this.refreshBackground();
+      this._save();
+      this.editor.fit();
+      this.busy(null);
+      this.renderStepPanel();
+      if (loaded.pages > 1) this.toast(`PDF heeft ${loaded.pages} pagina's; de eerste pagina is geladen.`);
+      if (concept) await this.makeConcept();
+      else this.toast('Ondergrond geladen. Kalibreer de schaal of laat het concept automatisch maken.');
+    },
+
+    /** Plan laten herkennen en er een volledig, bewerkbaar concept van maken. */
+    async makeConcept() {
+      const st = this.state;
+      if (!st.background || !st.background.dataUrl) { this.toast('Laad eerst een plan.', true); return; }
+      if ((st.areas.length || st.sprinklers.length) && !confirm('Het huidige ontwerp wordt vervangen door een nieuw concept. Doorgaan?')) return;
+      this.busy('Plan wordt gelezen: schaal, gazon, borders en bebouwing herkennen… Dit duurt meestal 1 à 2 minuten.');
+      let result;
+      try {
+        const img = this._analyzeImage || await window.PlanImport.analyzeImageFrom(st.background.dataUrl);
+        this._analyzeImage = img;
+        const raw = await window.Concept.analyze(img);
+        result = window.Concept.build(raw, img);
+      } catch (e) {
+        this.busy(null);
+        this.toast(e.message, true);
+        this.conceptWarnings = [e.message];
+        this.renderWarnings();
+        this.refreshAiStatus();
+        return;
+      }
+      this.checkpoint();
+      Object.assign(st.background, { x: 0, y: 0, scale: result.backgroundScale });
+      st.areas = result.areas;
+      st.elements = result.elements;
+      st.sprinklers = [];
+      st.zones = [];
+      this.editor.selection = null;
+      const lawns = st.areas.filter((a) => a.type === 'lawn');
+      const count = lawns.length ? this._placeSprinklers(lawns, st.settings.sprinklerType) : 0;
+      if (count || st.areas.some((a) => C.areaTypes[a.type].irrigate === 'drip')) Hy.autoZones(st);
+      this.conceptWarnings = result.warnings;
+      this.busy(null);
+      this.commit();
+      this.editor.fit();
+      this.showStep(3);
+      const sc = result.scaleInfo;
+      const scaleTxt = sc.estimated ? 'schaal niet gevonden' : `schaal via ${sc.method}${sc.confidence ? ` (${sc.confidence})` : ''}`;
+      this.toast(`Concept gemaakt: ${st.areas.length} vlakken, ${count} sproeiers, ${st.zones.length} zones; ${scaleTxt}. Pas aan waar nodig.`);
+      this.refreshAiStatus();
+    },
+
+    async refreshAiStatus() {
+      this.aiStatus = await window.Concept.status();
+      if (STEPS[this.step].id === 'project') this.renderStepPanel();
+    },
+
+    /** Toverstaf: vlak met dezelfde kleur rond het aangeklikte punt uittrekken. */
+    wandAt(w, areaType) {
+      const bg = this.state.background;
+      if (!bg || !this.editor.bgImg) { this.toast('De toverstaf werkt op een geladen plan (stap 1).', true); return; }
+      const ix = (w.x - bg.x) / bg.scale, iy = (w.y - bg.y) / bg.scale;
+      const r = window.AutoTrace.wand(this.editor.bgImg, ix, iy, this.state.settings.wandTol || 40);
+      if (r.error) { this.toast(r.error, true); return; }
+      const pts = r.points.map((p) => ({ x: bg.x + p.x * bg.scale, y: bg.y + p.y * bg.scale }));
+      this.addArea(areaType, pts);
+    },
+
+    busy(text) {
+      const el = $('#busy');
+      if (!el) return;
+      el.classList.toggle('open', Boolean(text));
+      if (text) $('#busy-text').textContent = text;
     },
 
     // ---------- Bestanden ----------
@@ -348,6 +426,8 @@
       if (!confirm('Nieuw project starten? Niet-opgeslagen wijzigingen gaan verloren.')) return;
       this.checkpoint();
       this.state = emptyState();
+      this.conceptWarnings = [];
+      this._analyzeImage = null;
       this.editor.selection = null;
       this.editor.bgImg = null;
       this.editor.heat = null;
@@ -445,16 +525,24 @@
     _panel_project() {
       const m = this.state.meta;
       const bg = this.state.background;
+      const ai = this.aiStatus ? { ...this.aiStatus, checked: true } : { available: false, checked: false };
       return `
         <label>Projectnaam<input id="m-name" value="${esc(m.name)}"></label>
         <label>Klant<input id="m-customer" value="${esc(m.customer)}"></label>
         <label>Adres<input id="m-address" value="${esc(m.address)}"></label>
-        <h3>Ondergrond</h3>
-        <p class="hint">Laad een plattegrond, tuinontwerp of luchtfoto (JPG/PNG) en kalibreer de schaal met een bekende maat. Zonder ondergrond teken je op het meterraster.</p>
-        <button id="bg-load" class="btn">Afbeelding laden…</button>
-        <input type="file" id="bg-file" accept="image/*" hidden>
+        <h3>Plan</h3>
+        <p class="hint">Laad een tuinontwerp, plattegrond, schets of luchtfoto (JPG, PNG of PDF). De planner leest de schaal en de vlakken en maakt een concept met sproeiers, zones en leidingen dat je daarna aanpast.</p>
+        ${ai.available ? `
+          <button id="plan-concept" class="btn primary">Plan laden en concept maken…</button>
+          ${bg ? '<button id="bg-concept" class="btn">Concept maken van deze ondergrond</button>' : ''}
+          <p class="hint small">Nog ${ai.remainingToday} keer automatisch herkennen vandaag.</p>`
+        : `<p class="hint small">${ai.checked ? 'Automatisch herkennen is niet ingesteld (vul <code>anthropic_api_key</code> in bij de app-configuratie in Home Assistant). Je kunt het plan wel als ondergrond laden en vlakken met de toverstaf uittrekken.' : 'Beschikbaarheid van automatisch herkennen wordt gecontroleerd…'}</p>`}
+        <button id="bg-load" class="btn">${bg ? 'Ander plan als ondergrond laden…' : 'Alleen als ondergrond laden…'}</button>
+        <input type="file" id="bg-file" accept="image/*,application/pdf,.pdf" hidden>
         ${bg ? `
-          <button id="bg-cal" class="btn primary">Schaal kalibreren</button>
+          <h3>Schaal</h3>
+          <p class="hint small">Huidige schaal: plan is ${fmt((bg.width || (this.editor.bgImg && this.editor.bgImg.naturalWidth) || 0) * bg.scale)} m breed.</p>
+          <button id="bg-cal" class="btn">Schaal kalibreren</button>
           <p class="hint">Trek een lijn over een bekende maat (bijv. gevel of tegelpad) en voer de lengte in.</p>
           <label>Transparantie <input id="bg-op" type="range" min="0.1" max="1" step="0.05" value="${bg.opacity}"></label>
           <button id="bg-del" class="btn danger">Ondergrond verwijderen</button>` : ''}
@@ -466,8 +554,11 @@
         $(`#m-${k}`, el).oninput = (e) => { m[k] = e.target.value; this._save(); if (k === 'name') $('#project-title').textContent = m.name; };
       });
       $('#project-title').textContent = m.name;
-      $('#bg-load', el).onclick = () => $('#bg-file', el).click();
-      $('#bg-file', el).onchange = (e) => { if (e.target.files[0]) this.loadBackground(e.target.files[0]); };
+      let concept = false;
+      $('#bg-load', el).onclick = () => { concept = false; $('#bg-file', el).click(); };
+      if ($('#plan-concept', el)) $('#plan-concept', el).onclick = () => { concept = true; $('#bg-file', el).click(); };
+      if ($('#bg-concept', el)) $('#bg-concept', el).onclick = () => this.makeConcept();
+      $('#bg-file', el).onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) this.loadBackground(f, { concept }); };
       if ($('#bg-cal', el)) {
         $('#bg-cal', el).onclick = () => { this.editor.setTool('calibrate'); this.toast('Trek een lijn over een bekende maat.'); };
         $('#bg-op', el).oninput = (e) => { this.state.background.opacity = +e.target.value; this.editor.render(); };
@@ -486,12 +577,15 @@
       const btns = Object.entries(C.areaTypes).map(([k, t]) => `
         <div class="area-tool">
           <span class="swatch" style="background:${t.stroke}"></span><span class="lbl">${esc(t.label)}</span>
+          ${this.state.background ? `<button class="btn sm" data-tool="wand" data-type="${k}" title="Klik in het plan om het vlak automatisch uit te trekken">Toverstaf</button>` : ''}
           <button class="btn sm" data-tool="polygon" data-type="${k}" title="Vrije vorm">Vrije vorm</button>
           <button class="btn sm" data-tool="rect" data-type="${k}" title="Rechthoek">Rechthoek</button>
         </div>`).join('');
       return `
         <p class="hint">Teken eerst het gazon, daarna beplanting en hagen (druppelirrigatie) en vlakken die nat mogen worden of droog moeten blijven.</p>
         ${btns}
+        ${this.state.background ? `<label>Gevoeligheid toverstaf <input id="wand-tol" type="range" min="10" max="120" step="5" value="${this.state.settings.wandTol || 40}"></label>
+        <p class="hint small"><b>Toverstaf:</b> klik midden in een vlak op het plan; de planner trekt de rand met dezelfde kleur uit. Te veel? Verlaag de gevoeligheid. Te weinig? Verhoog hem.</p>` : ''}
         <p class="hint small"><b>Vrije vorm:</b> klik punten, sluit door op het eerste punt te klikken, dubbel te klikken of Enter. Backspace = laatste punt weg, Shift = hoeken van 45°, Alt = niet op het raster uitlijnen.<br>
         <b>Bewerken:</b> selecteer een vlak; sleep hoekpunten of de middenpunten van randen (nieuw hoekpunt).</p>
         <h3>Vlakken</h3>
@@ -499,6 +593,7 @@
       `;
     },
     _bind_areas(el) {
+      if ($('#wand-tol', el)) $('#wand-tol', el).onchange = (e) => { this.state.settings.wandTol = +e.target.value; this._save(); };
       el.querySelectorAll('[data-tool]').forEach((b) => {
         b.onclick = () => this.editor.setTool(b.dataset.tool, { areaType: b.dataset.type });
       });
@@ -785,7 +880,7 @@
       const el = $('#warnings');
       if (!el) return;
       const calc = this.state.calc;
-      const list = calc ? calc.warnings.slice() : [];
+      const list = (this.conceptWarnings || []).concat(calc ? calc.warnings : []);
       if (this.sim && this.editor.layers.heatmap && this.sim.stats && this.sim.stats.dryPct > 6) list.push(`Droge plekken: ${fmt(this.sim.stats.dryPct)}% van het gazon krijgt te weinig water.`);
       if (this.sim && this.editor.layers.heatmap && this.sim.overspray > 0.5) list.push(`Er valt water op ${fmt(this.sim.overspray)} m² die droog moet blijven.`);
       el.innerHTML = list.length ? `<h3>Aandachtspunten</h3><ul>${list.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
@@ -800,6 +895,7 @@
         element: `Plaats: ${opts.kind ? C.elementTypes[opts.kind].label : ''} – klik op het plan`,
         sprinkler: `Plaats: ${opts.type ? C.sprinklerTypes[opts.type].label : ''} – klik in of op de rand van het gazon · Esc = stoppen`,
         calibrate: 'Kalibreren: sleep een lijn over een bekende maat',
+        wand: `Toverstaf: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – klik midden in het vlak op het plan · Esc = stoppen`,
         measure: 'Meten: sleep een lijn',
       };
       $('#hint').textContent = hints[tool] || '';

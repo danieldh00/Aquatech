@@ -68,8 +68,8 @@
       <button id="help-close" class="btn ghost close">✕</button>
       <h2>Zo werkt de beregeningsplanner</h2>
       <ol>
-        <li><b>Project & ondergrond</b> – laad optioneel een plattegrond of luchtfoto en kalibreer de schaal.</li>
-        <li><b>Gebieden tekenen</b> – gazon, beplanting, hagen, en vlakken die nat mogen worden of droog moeten blijven.</li>
+        <li><b>Project & ondergrond</b> – laad een plan (JPG, PNG of PDF) en klik op <b>Plan laden en concept maken</b>: de schaal, het gazon, de borders en de bebouwing worden herkend en er wordt meteen een concept gemaakt. Of kalibreer de schaal zelf.</li>
+        <li><b>Gebieden tekenen</b> – gazon, beplanting, hagen, en vlakken die nat mogen worden of droog moeten blijven. Met de <b>toverstaf</b> klik je in een vlak op het plan en wordt de rand automatisch uitgetrokken.</li>
         <li><b>Systeemelementen</b> – wateraansluiting (druk + debiet), beregeningscomputer, ventielkast en waterpunten.</li>
         <li><b>Sproeiers</b> – automatisch (kop-tot-kop) of handmatig plaatsen en controleren met de neerslagsimulatie.</li>
         <li><b>Zones & leidingen</b> – automatische zone-indeling binnen het beschikbare debiet, leidingtracé en drukverlies.</li>
@@ -86,15 +86,23 @@
     </div>
   </div>
 
+  <div id="busy" class="busy" role="status" aria-live="polite">
+    <div class="busy-card"><div class="spinner"></div><p id="busy-text"></p></div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <script src="vendor/exceljs.min.js"></script>
+  <script src="vendor/pdf.min.js"></script>
   <script src="js/geometry.js"></script>
   <script src="js/catalog.js"></script>
   <script src="js/planner.js"></script>
   <script src="js/hydraulics.js"></script>
   <script src="js/simulation.js"></script>
   <script src="js/bom.js"></script>
+  <script src="js/planimport.js"></script>
+  <script src="js/autotrace.js"></script>
+  <script src="js/concept.js"></script>
   <script src="js/editor.js"></script>
   <script src="js/app.js"></script>
 </body>

@@ -131,6 +131,15 @@ td.num, th.num { text-align: right !important; white-space: nowrap; }
   background: var(--panel); border-top: 1px solid var(--line); color: var(--muted);
 }
 
+/* Bezig-melding */
+.busy { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 15; }
+.busy.open { display: flex; }
+.busy-card { background: #fff; border-radius: 12px; padding: 22px 26px; max-width: 420px; text-align: center; }
+.busy-card p { margin: 12px 0 0; color: var(--text); }
+.spinner { width: 34px; height: 34px; margin: 0 auto; border: 4px solid #e3f2fd; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.panel code { font-size: 12px; background: #f1f5f8; padding: 1px 4px; border-radius: 3px; }
+
 /* Help & toast */
 .help { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 10; }
 .help.open { display: flex; }

@@ -15,7 +15,10 @@ function loadOptions(dataDir) {
     if (err.code !== 'ENOENT') console.warn(`Kon ${optionsPath} niet lezen: ${err.message}`);
   }
   const accessCode = String(options.access_code || process.env.ACCESS_CODE || '').trim();
-  return { accessCode };
+  const anthropicApiKey = String(options.anthropic_api_key || process.env.ANTHROPIC_API_KEY || '').trim();
+  const limit = Number(options.ai_daily_limit ?? process.env.AI_DAILY_LIMIT);
+  const aiDailyLimit = Number.isFinite(limit) && limit >= 0 ? Math.floor(limit) : 30;
+  return { accessCode, anthropicApiKey, aiDailyLimit };
 }
 
 // Sleutel voor de sessie-cookies: één keer willekeurig aangemaakt en in /data

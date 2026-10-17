@@ -14,8 +14,8 @@ De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn drie
 
 | Stap | Functie |
 |---|---|
-| 1. Project & ondergrond | Projectgegevens; plattegrond/luchtfoto laden (JPG/PNG) en schaal kalibreren met een bekende maat |
-| 2. Gebieden tekenen | Gazon, beplanting/border, haag, *mag nat worden*, *moet droog blijven*; vrije vorm of rechthoek, hoekpunten verslepen/toevoegen |
+| 1. Project & ondergrond | **Plan laden en concept maken**: plan (JPG/PNG/PDF) wordt gelezen (schaal + vlakken) en er wordt direct een volledig concept gemaakt; of alleen als ondergrond laden en de schaal zelf kalibreren |
+| 2. Gebieden tekenen | Gazon, beplanting/border, haag, *mag nat worden*, *moet droog blijven*; **toverstaf** (vlak op kleur uittrekken), vrije vorm of rechthoek, hoekpunten verslepen/toevoegen |
 | 3. Systeemelementen | Wateraansluiting (dynamische druk + debiet, emmertest-tip), besturing, ventielkast, waterpunten |
 | 4. Sproeiers | Automatisch kop-tot-kop plaatsen of handmatig (sproeihoek wordt op rand/hoek automatisch bepaald); neerslagsimulatie met gelijkmatigheid (DU), droge plekken en water op vlakken die droog moeten blijven |
 | 5. Zones & leidingen | Automatische zone-indeling per sproeiergroep binnen het beschikbare debiet; leidingtracé (MST) met PE-diameterkeuze en drukverlies |
@@ -55,14 +55,18 @@ repository.yaml                     HA add-on-store
 docker-compose.yml                  draaien buiten HA (poort 3300)
 beregeningsplanner/                 de add-on
   config.yaml, Dockerfile, apparmor.txt, CHANGELOG.md, DOCS.md, icon.png, logo.png
-  backend/src/server.js             express: serveert frontend + /api/health
+  backend/src/server.js             express: frontend, login, /api/health, /api/plan/*
+  backend/src/planAnalyzer.js       plan lezen via de Claude API (schaal, vlakken, elementen)
   backend/test/                     node --test
   frontend/                         de planner (alle paden relatief, i.v.m. ingress)
     frontend/index.html          UI-opbouw
     frontend/css/app.css         Opmaak
     frontend/js/geometry.js      Geometrie (polygonen, afstanden, omsluitende rechthoek)
     frontend/js/catalog.js       Producten, prijzen en technische uitgangspunten
-    frontend/js/planner.js       Automatische sproeierplaatsing
+    frontend/js/planner.js       Automatische sproeierplaatsing (worpwijdte via simulatie)
+    frontend/js/planimport.js    Plan inlezen (JPG/PNG/PDF via pdf.js)
+    frontend/js/autotrace.js     Toverstaf (vlak op kleur uittrekken)
+    frontend/js/concept.js       Van herkend plan naar concept
 frontend/js/hydraulics.js    Zones, leidingtracé en drukverlies
 frontend/js/simulation.js    Neerslagsimulatie
 frontend/js/bom.js           Stuklijst en Excel-export

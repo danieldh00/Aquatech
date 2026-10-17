@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.0
+
+- **Plan laden en concept maken.** Laad een tuinontwerp, plattegrond, schets
+  of luchtfoto (JPG, PNG of **PDF**) en de planner leest zelf de schaal (via
+  een maatlijn of schaalstok) en de vlakken: gazon, borders, hagen, woning,
+  terras en bestrating. Daarna worden automatisch de wateraansluiting,
+  besturing en ventielkast geplaatst, sproeiers verdeeld, zones ingedeeld en
+  leidingen berekend. Alles is daarna gewoon aan te passen.
+  Vereist een API-sleutel van Anthropic in de app-configuratie
+  (`anthropic_api_key`); met `ai_daily_limit` (standaard 30) begrens je het
+  aantal analyses per dag.
+- **Toverstaf** (stap 2): klik midden in een vlak op het plan en de rand wordt
+  op kleur automatisch uitgetrokken. Werkt ook zonder API-sleutel en offline.
+- **Slimmere sproeierkeuze:** de worpwijdte wordt gekozen door meerdere
+  varianten door te rekenen met de neerslagsimulatie (minder koppen, weinig
+  water buiten het gazon, gelijkmatige verdeling).
+
 ## 0.2.2
 
 - **Alle termen in correct Nederlands.** Onder meer *turbinesproeier* (was

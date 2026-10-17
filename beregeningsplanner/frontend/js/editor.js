@@ -202,6 +202,10 @@
         this.app.placeElement(this.toolOpts.kind, w);
         return;
       }
+      if (t === 'wand') {
+        this.app.wandAt(w, this.toolOpts.areaType);
+        return;
+      }
       if (t === 'sprinkler') {
         this.app.placeSprinkler(this.toolOpts.type, w);
         return;

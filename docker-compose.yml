@@ -10,6 +10,8 @@ services:
       - PORT=3300
       - DATA_DIR=/data
       - ACCESS_CODE=${ACCESS_CODE:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - AI_DAILY_LIMIT=${AI_DAILY_LIMIT:-30}
     volumes:
       - beregeningsplanner-data:/data
 

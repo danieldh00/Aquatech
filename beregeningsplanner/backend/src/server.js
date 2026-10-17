@@ -5,6 +5,7 @@ const express = require('express');
 const { createAuth, remoteIp } = require('./auth');
 const { createRateLimiter } = require('./rateLimit');
 const { loadOptions, loadOrCreateSecret } = require('./options');
+const { createPlanAnalyzer, AnalyzeError } = require('./planAnalyzer');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
 const LOGIN_PAGE = path.join(__dirname, 'login.html');
@@ -22,12 +23,15 @@ function readVersion() {
   return process.env.BUILD_VERSION || PKG.version;
 }
 
-function createApp({ accessCode = '', secret }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit = 30, analyzer }) {
   const version = readVersion();
   const auth = createAuth({ secret, getAccessCode: () => accessCode });
+  const planAnalyzer = analyzer || createPlanAnalyzer({ apiKey: anthropicApiKey });
   const app = express();
 
   app.disable('x-powered-by');
+  // Grote limiet alleen voor de plananalyse (afbeelding als base64).
+  app.use('/api/plan/analyze', express.json({ limit: '12mb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -66,6 +70,52 @@ function createApp({ accessCode = '', secret }) {
     res.json({ ok: true });
   });
 
+  // Automatisch herkennen van een plan. De URL is (zonder toegangscode)
+  // openbaar, dus elke aanroep kost tegoed: per IP begrensd plus een
+  // dagelijks maximum voor de hele app (ai_daily_limit).
+  const analyzeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: remoteIp });
+  const daily = { day: '', count: 0 };
+  const today = () => new Date().toISOString().slice(0, 10);
+  const requireAppAccess = (req, res, next) => {
+    if (!accessCode || auth.isAuthenticated(req)) return next();
+    res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in met de toegangscode.' });
+  };
+
+  app.get('/api/plan/status', requireAppAccess, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (daily.day !== today()) Object.assign(daily, { day: today(), count: 0 });
+    res.json({ available: planAnalyzer.available, remainingToday: Math.max(0, aiDailyLimit - daily.count) });
+  });
+
+  app.post('/api/plan/analyze', requireAppAccess, analyzeLimiter, async (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const { image, width, height } = req.body || {};
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(image || ''));
+    const w = Number(width), h = Number(height);
+    if (!m || !(w > 0 && h > 0 && w <= 8000 && h <= 8000)) {
+      return res.status(400).json({ error: 'invalid_image', message: 'Ongeldige afbeelding.' });
+    }
+    if (!planAnalyzer.available) {
+      return res.status(409).json({ error: 'not_configured', message: 'Automatisch herkennen is niet ingesteld: vul anthropic_api_key in bij de app-configuratie.' });
+    }
+    if (daily.day !== today()) Object.assign(daily, { day: today(), count: 0 });
+    if (daily.count >= aiDailyLimit) {
+      return res.status(429).json({ error: 'daily_limit', message: 'Het dagelijkse maximum voor automatisch herkennen is bereikt. Probeer het morgen opnieuw of teken het plan zelf.' });
+    }
+    daily.count += 1;
+    try {
+      const result = await planAnalyzer.analyze({ mediaType: m[1], data: m[2], width: w, height: h });
+      console.log(`Plan geanalyseerd: ${result.areas.length} vlakken, schaal ${result.scale.method || '-'} (${result.scale.confidence || '-'})`);
+      res.json(result);
+    } catch (err) {
+      if (err instanceof AnalyzeError) {
+        console.warn(`Plananalyse mislukt: ${err.code}`);
+        return res.status(err.status).json({ error: err.code, message: err.message });
+      }
+      next(err);
+    }
+  });
+
   app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
   // Zonder ingestelde toegangscode is de planner openbaar (er staat geen
@@ -91,6 +141,7 @@ function createApp({ accessCode = '', secret }) {
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'invalid_json', message: 'Ongeldige JSON' });
+    if (err.type === 'entity.too.large') return res.status(413).json({ error: 'too_large', message: 'Bestand te groot.' });
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: 'Interne fout' });
   });
@@ -101,13 +152,14 @@ function createApp({ accessCode = '', secret }) {
 if (require.main === module) {
   const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', '..', '..', 'data');
   fs.mkdirSync(dataDir, { recursive: true });
-  const { accessCode } = loadOptions(dataDir);
+  const { accessCode, anthropicApiKey, aiDailyLimit } = loadOptions(dataDir);
   const secret = loadOrCreateSecret(dataDir);
   const port = Number(process.env.PORT) || 3300;
   if (!accessCode) {
     console.log('Geen toegangscode ingesteld: de planner is zonder inloggen bereikbaar. Vul access_code in om inloggen verplicht te maken.');
   }
-  createApp({ accessCode, secret }).listen(port, () => {
+  if (!anthropicApiKey) console.log('Geen anthropic_api_key ingesteld: automatisch herkennen van plannen staat uit (tekenen en de toverstaf werken wel).');
+  createApp({ accessCode, secret, anthropicApiKey, aiDailyLimit }).listen(port, () => {
     console.log(`Beregeningsplanner luistert op poort ${port}`);
   });
 }

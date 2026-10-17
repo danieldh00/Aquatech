@@ -1,5 +1,5 @@
 name: "Beregeningsplanner"
-version: "0.2.2"
+version: "0.3.0"
 slug: beregeningsplanner
 description: >-
   Ontwerp een automatische tuinberegening: gebieden tekenen, sproeiers
@@ -31,3 +31,9 @@ schema:
   # Optioneel. Leeg = planner openbaar via de tunnel. Ingevuld = inloggen
   # verplicht buiten Home Assistant om; via het HA-zijpaneel nooit een code.
   access_code: "password?"
+  # API-sleutel van Anthropic (console.anthropic.com) voor "Plan laden en
+  # concept maken". Leeg = automatisch herkennen uit; tekenen werkt altijd.
+  anthropic_api_key: "password?"
+  # Maximaal aantal plananalyses per dag voor de hele app (kostenbewaking,
+  # de publieke URL is zonder toegangscode voor iedereen bereikbaar).
+  ai_daily_limit: "int(0,500)?"

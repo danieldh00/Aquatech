@@ -33,7 +33,16 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   geldige sessie serveert de server op elk pad `backend/src/login.html`.
 - Cloudflared-app (`9074a9fa_cloudflared`) → `additional_hosts`:
   `aquatech.den-hollander.com → http://c1355dc8-beregeningsplanner:3300`.
-- **Nooit secrets in de repo of in chat**: `access_code` alleen in de app-opties.
+- **Nooit secrets in de repo of in chat**: `access_code` en `anthropic_api_key`
+  alleen in de app-opties.
+- **Plan herkennen** (`backend/src/planAnalyzer.js`): één Claude API-aanroep
+  (vision, gestructureerde JSON-uitvoer, fallback "default") die schaal
+  (referentiemaat in pixels + lengte in m), vlakken en elementen teruggeeft. De
+  frontend (`js/concept.js`) rekent om naar meters en bouwt het concept. Kosten
+  begrensd met `ai_daily_limit` + 10/uur per IP; de route valt achter de login
+  als er een `access_code` is. Tests bootsen de API na (geen echte aanroepen).
+- **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
+  3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - Logs: `ha_get_logs(source="supervisor", slug="c1355dc8_beregeningsplanner")`;
   health via ingress: `ha_manage_app(slug=..., path="/api/health")`.
 
