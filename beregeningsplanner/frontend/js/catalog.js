@@ -10,7 +10,7 @@
 
   /*
    * Sproeiertypes. Debiet wordt bepaald via de neerslag bij vierkantsverband (kop-tot-kop):
-   *   Q [l/h] = PR [mm/h] * r² [m²] * boog / 360
+   *   Q [l/u] = PR [mm/u] * r² [m²] * sproeihoek / 360
    * Voor strooksproeiers: Q = PR * lengte * breedte.
    */
   C.sprinklerTypes = {
@@ -24,16 +24,16 @@
       note: 'Hoge neerslag; geschikt voor kleine/onregelmatige vlakken.',
     },
     rotator: {
-      label: 'Multistream rotator (MP-type)',
+      label: 'Meerstraalsrotator (MP-type)',
       short: 'Rotator',
       group: 'rotator',
       rMin: 2.5, rMax: 10.7, rDefault: 6.0,
       pr: 10, minBar: 2.8, optBar: 2.8,
       color: '#2ca02c',
-      note: 'Lage, gelijke neerslag; minder afspoeling. Huis met drukregeling 2,8 bar.',
+      note: 'Lage, gelijkmatige neerslag; minder afspoeling. Sproeierhuis met drukregeling 2,8 bar.',
     },
     rotor: {
-      label: 'Turbineregner (getrieberegner)',
+      label: 'Turbinesproeier (tandwielaandrijving)',
       short: 'Turbine',
       group: 'rotor',
       rMin: 7.0, rMax: 14.0, rDefault: 10.0,
@@ -57,7 +57,7 @@
   C.groups = {
     spray: { label: 'Sproeiers', pr: 40 },
     rotator: { label: 'Rotators', pr: 10 },
-    rotor: { label: 'Turbineregners', pr: 13 },
+    rotor: { label: 'Turbinesproeiers', pr: 13 },
     drip: { label: 'Druppelirrigatie', pr: null },
   };
 
@@ -101,15 +101,15 @@
   /** Systeemelementen. */
   C.elementTypes = {
     source: { label: 'Wateraansluiting', short: 'W', color: '#0277bd', single: true },
-    controller: { label: 'Besturing (computer)', short: 'B', color: '#455a64', single: true },
+    controller: { label: 'Beregeningscomputer', short: 'B', color: '#455a64', single: true },
     valvebox: { label: 'Ventielkast', short: 'V', color: '#ef6c00', single: true },
     outlet: { label: 'Waterpunt / tappunt', short: 'T', color: '#00838f', single: false },
   };
 
   /** Uitvoeringsniveaus voor de stuklijst. */
   C.levels = {
-    eco: { label: 'Eco', desc: 'Functioneel en voordelig' },
-    expert: { label: 'Expert', desc: 'Aanbevolen: wifi-besturing, flexibele aansluitingen' },
+    eco: { label: 'Basis', desc: 'Functioneel en voordelig' },
+    expert: { label: 'Standaard', desc: 'Aanbevolen: beregeningscomputer met wifi, flexibele aansluitingen' },
     premium: { label: 'Premium', desc: 'Topkwaliteit met sensoren en extra comfort' },
   };
 
@@ -118,38 +118,38 @@
     'SPR-POP10': { name: 'Pop-up sproeierhuis 10 cm', unit: 'st', price: 4.5 },
     'SPR-POP10-PRS': { name: 'Pop-up sproeierhuis 10 cm met drukregeling (2,1 bar)', unit: 'st', price: 7.9 },
     'SPR-VAN': { name: 'Verstelbare sproeikop (boog 0–360°)', unit: 'st', price: 3.2 },
-    'ROT-POP10-PRS': { name: 'Pop-up huis 10 cm met drukregeling 2,8 bar (rotator)', unit: 'st', price: 8.9 },
-    'ROT-MP1000': { name: 'Rotator kop 2,5–4,5 m', unit: 'st', price: 9.5 },
-    'ROT-MP2000': { name: 'Rotator kop 4,0–6,4 m', unit: 'st', price: 9.5 },
-    'ROT-MP3000': { name: 'Rotator kop 6,7–9,1 m', unit: 'st', price: 9.5 },
-    'ROT-MP3500': { name: 'Rotator kop 9,4–10,7 m', unit: 'st', price: 10.5 },
-    'ROT-STRIP': { name: 'Rotator strookkop (zijstrook)', unit: 'st', price: 9.5 },
-    'TURB-10': { name: 'Turbineregner pop-up 10 cm, 7–14 m', unit: 'st', price: 17.5 },
-    'TURB-10-PRO': { name: 'Turbineregner pop-up 10 cm, RVS-stijgbuis, 7–14 m', unit: 'st', price: 27.5 },
+    'ROT-POP10-PRS': { name: 'Pop-up sproeierhuis 10 cm met drukregeling 2,8 bar (voor rotator)', unit: 'st', price: 8.9 },
+    'ROT-MP1000': { name: 'Rotatorsproeikop 2,5–4,5 m', unit: 'st', price: 9.5 },
+    'ROT-MP2000': { name: 'Rotatorsproeikop 4,0–6,4 m', unit: 'st', price: 9.5 },
+    'ROT-MP3000': { name: 'Rotatorsproeikop 6,7–9,1 m', unit: 'st', price: 9.5 },
+    'ROT-MP3500': { name: 'Rotatorsproeikop 9,4–10,7 m', unit: 'st', price: 10.5 },
+    'ROT-STRIP': { name: 'Rotatorsproeikop voor stroken (zijstrook)', unit: 'st', price: 9.5 },
+    'TURB-10': { name: 'Pop-up turbinesproeier 10 cm, 7–14 m', unit: 'st', price: 17.5 },
+    'TURB-10-PRO': { name: 'Pop-up turbinesproeier 10 cm met rvs-stijgbuis, 7–14 m', unit: 'st', price: 27.5 },
     'CON-ECO': { name: 'Sproeieraansluiting: zadel/T-stuk met ½" buitendraad', unit: 'st', price: 1.9 },
-    'CON-FLEX': { name: 'Flexibele aansluitset (swing pipe 0,5 m + 2 koppelingen)', unit: 'set', price: 3.6 },
-    'CON-FLEX-TURB': { name: 'Flexibele aansluitset ¾" turbineregner', unit: 'set', price: 4.6 },
+    'CON-FLEX': { name: 'Flexibele aansluitset (aansluitslang 0,5 m + 2 koppelingen)', unit: 'set', price: 3.6 },
+    'CON-FLEX-TURB': { name: 'Flexibele aansluitset ¾" voor turbinesproeier', unit: 'set', price: 4.6 },
     'PE-25': { name: 'PE-buis 25 mm PN6', unit: 'm', price: 0.85 },
     'PE-32': { name: 'PE-buis 32 mm PN6', unit: 'm', price: 1.25 },
     'PE-40': { name: 'PE-buis 40 mm PN6', unit: 'm', price: 1.95 },
     'PE-50': { name: 'PE-buis 50 mm PN6', unit: 'm', price: 2.95 },
-    'FIT-T-25': { name: 'Knel T-stuk 25 mm', unit: 'st', price: 2.4 },
-    'FIT-T-32': { name: 'Knel T-stuk 32 mm', unit: 'st', price: 3.4 },
-    'FIT-T-40': { name: 'Knel T-stuk 40 mm', unit: 'st', price: 5.2 },
-    'FIT-T-50': { name: 'Knel T-stuk 50 mm', unit: 'st', price: 7.9 },
-    'FIT-RED': { name: 'Knel verloopkoppeling (reductie)', unit: 'st', price: 2.9 },
-    'FIT-L-25': { name: 'Knel knie 90° 25 mm', unit: 'st', price: 2.0 },
-    'FIT-L-32': { name: 'Knel knie 90° 32 mm', unit: 'st', price: 2.9 },
-    'FIT-END-25': { name: 'Knel eindkap 25 mm', unit: 'st', price: 1.4 },
-    'FIT-END-32': { name: 'Knel eindkap 32 mm', unit: 'st', price: 1.9 },
-    'FIT-ADAPT': { name: 'Knel koppeling met buitendraad (ventielaansluiting)', unit: 'st', price: 1.9 },
+    'FIT-T-25': { name: 'Knelkoppeling T-stuk 25 mm', unit: 'st', price: 2.4 },
+    'FIT-T-32': { name: 'Knelkoppeling T-stuk 32 mm', unit: 'st', price: 3.4 },
+    'FIT-T-40': { name: 'Knelkoppeling T-stuk 40 mm', unit: 'st', price: 5.2 },
+    'FIT-T-50': { name: 'Knelkoppeling T-stuk 50 mm', unit: 'st', price: 7.9 },
+    'FIT-RED': { name: 'Knelkoppeling verloopstuk (reductie)', unit: 'st', price: 2.9 },
+    'FIT-L-25': { name: 'Knelkoppeling knie 90° 25 mm', unit: 'st', price: 2.0 },
+    'FIT-L-32': { name: 'Knelkoppeling knie 90° 32 mm', unit: 'st', price: 2.9 },
+    'FIT-END-25': { name: 'Knelkoppeling eindkap 25 mm', unit: 'st', price: 1.4 },
+    'FIT-END-32': { name: 'Knelkoppeling eindkap 32 mm', unit: 'st', price: 1.9 },
+    'FIT-ADAPT': { name: 'Knelkoppeling met buitendraad (ventielaansluiting)', unit: 'st', price: 1.9 },
     'VAL-24V': { name: 'Magneetventiel 1" 24 VAC', unit: 'st', price: 24.5 },
     'VAL-24V-FC': { name: 'Magneetventiel 1" 24 VAC met debietregeling', unit: 'st', price: 34.5 },
     'VAL-MANIFOLD': { name: 'Ventielverdeler (koppelstuk per ventiel)', unit: 'st', price: 4.5 },
     'BOX-STD': { name: 'Ventielkast standaard (max. 3 ventielen)', unit: 'st', price: 22.0 },
     'BOX-JUMBO': { name: 'Ventielkast jumbo (max. 6 ventielen)', unit: 'st', price: 39.0 },
     'CTRL-ECO': { name: 'Beregeningscomputer binnenmodel', unit: 'st', price: 69.0 },
-    'CTRL-WIFI': { name: 'Beregeningscomputer wifi (app-bediening, weerdata)', unit: 'st', price: 179.0 },
+    'CTRL-WIFI': { name: 'Beregeningscomputer met wifi (bediening via app, weergegevens)', unit: 'st', price: 179.0 },
     'SEN-RAIN': { name: 'Regensensor', unit: 'st', price: 29.0 },
     'SEN-SOIL': { name: 'Bodemvochtsensor', unit: 'st', price: 89.0 },
     'CAB-7': { name: 'Stuurkabel 7-aderig (ondergronds)', unit: 'm', price: 0.95 },
@@ -159,7 +159,7 @@
     'BACKFLOW': { name: 'Terugstroombeveiliging (klasse volgens NEN-EN 1717 / Waterwerkblad)', unit: 'st', price: 39.0 },
     'FILTER': { name: 'Hoofdfilter 1" 130 µm', unit: 'st', price: 19.5 },
     'OUTLET': { name: 'Waterpunt in grondkastje met snelkoppeling', unit: 'st', price: 29.0 },
-    'DRIP-16': { name: 'Druppelslang 16 mm, 2,2 l/h, 33 cm', unit: 'm', price: 0.55 },
+    'DRIP-16': { name: 'Druppelslang 16 mm, 2,2 l/u, druppelafstand 33 cm', unit: 'm', price: 0.55 },
     'DRIP-PRV': { name: 'Drukregelaar 1,5 bar + filter (druppelzone)', unit: 'st', price: 16.5 },
     'DRIP-T': { name: 'T-stuk 16 mm druppelslang', unit: 'st', price: 0.6 },
     'DRIP-END': { name: 'Eindstop 16 mm', unit: 'st', price: 0.35 },
@@ -177,7 +177,7 @@
     return 'ROT-MP3500';
   };
 
-  /** Debiet van een sproeier in l/h. */
+  /** Debiet van een sproeier in l/u. */
   C.sprinklerFlowLph = (s) => {
     const t = C.sprinklerTypes[s.type];
     if (!t) return 0;

@@ -154,6 +154,11 @@
     return d <= arc + 1e-6;
   };
 
+  /** Getal in Nederlandse notatie (decimale komma). */
+  G.nl = (v, d = 1) => Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d });
+  /** Zoals nl(), maar zonder overbodige nullen (4,6 i.p.v. 4,60). */
+  G.nlShort = (v, d = 2) => Number(v).toLocaleString('nl-NL', { maximumFractionDigits: d });
+
   G.uid = (() => {
     let n = Date.now() % 100000;
     return (prefix) => `${prefix}${(n++).toString(36)}`;

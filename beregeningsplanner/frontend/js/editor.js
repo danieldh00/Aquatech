@@ -439,7 +439,7 @@
         ctx.setLineDash([]);
         this.draft.forEach((p) => { const s = T(p); ctx.fillStyle = '#ff6f00'; ctx.fillRect(s.x - 3, s.y - 3, 6, 6); });
         const last = this.draft[this.draft.length - 1];
-        this._label(ctx, `${G.dist(last, m).toFixed(2)} m`, ms.x + 12, ms.y - 12, '#ff6f00', '#fff', 11);
+        this._label(ctx, `${G.nl(G.dist(last, m), 2)} m`, ms.x + 12, ms.y - 12, '#ff6f00', '#fff', 11);
       }
 
       const d = this.drag;
@@ -448,7 +448,7 @@
         ctx.strokeStyle = '#ff6f00'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
         ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(a.x - b.x), Math.abs(a.y - b.y));
         ctx.setLineDash([]);
-        this._label(ctx, `${Math.abs(d.end.x - d.start.x).toFixed(2)} × ${Math.abs(d.end.y - d.start.y).toFixed(2)} m`, b.x + 12, b.y - 12, '#ff6f00', '#fff', 11);
+        this._label(ctx, `${G.nl(Math.abs(d.end.x - d.start.x), 2)} × ${G.nl(Math.abs(d.end.y - d.start.y), 2)} m`, b.x + 12, b.y - 12, '#ff6f00', '#fff', 11);
       }
       const ml = d && (d.mode === 'calibrate' || d.mode === 'measure') ? { a: d.start, b: d.end } : this.tool === 'measure' ? this.lastMeasure : null;
       if (ml) {
@@ -456,7 +456,7 @@
         ctx.strokeStyle = d && d.mode === 'calibrate' ? '#d81b60' : '#6a1b9a';
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-        this._label(ctx, `${G.dist(ml.a, ml.b).toFixed(2)} m`, (a.x + b.x) / 2, (a.y + b.y) / 2 - 12, ctx.strokeStyle, '#fff', 11);
+        this._label(ctx, `${G.nl(G.dist(ml.a, ml.b), 2)} m`, (a.x + b.x) / 2, (a.y + b.y) / 2 - 12, ctx.strokeStyle, '#fff', 11);
       }
 
       if (!opts.noScale) this._scaleBar(ctx, w, h);
@@ -553,7 +553,7 @@
       }
       if (this.layers.labels && this.view.scale > 30) {
         const t = C.sprinklerTypes[s.type];
-        const txt = s.type === 'strip' ? `${s.width}×${s.len}` : `${s.r}m ${s.arc}°`;
+        const txt = s.type === 'strip' ? `${G.nlShort(s.width, 1)} × ${G.nlShort(s.len, 1)} m` : `${G.nlShort(s.r, 1)} m · ${s.arc}°`;
         ctx.font = '10px system-ui, sans-serif';
         ctx.fillStyle = '#263238';
         ctx.fillText(txt, p.x + 7, p.y - 6);
@@ -595,7 +595,7 @@
         const b = a.pts[(i + 1) % a.pts.length];
         const mid = this.toScreen({ x: (a.pts[i].x + b.x) / 2, y: (a.pts[i].y + b.y) / 2 });
         ctx.beginPath(); ctx.arc(mid.x, mid.y, 3, 0, Math.PI * 2); ctx.fillStyle = '#ffcc80'; ctx.fill(); ctx.fillStyle = '#fff';
-        if (this.layers.labels) this._label(ctx, `${G.dist(a.pts[i], b).toFixed(2)} m`, mid.x, mid.y - 12, '#e65100', '#fff', 10);
+        if (this.layers.labels) this._label(ctx, `${G.nl(G.dist(a.pts[i], b), 2)} m`, mid.x, mid.y - 12, '#e65100', '#fff', 10);
       }
     }
 
@@ -626,7 +626,7 @@
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + len * S, y); ctx.moveTo(x, y - 5); ctx.lineTo(x, y + 5); ctx.moveTo(x + len * S, y - 5); ctx.lineTo(x + len * S, y + 5); ctx.stroke();
       ctx.fillStyle = '#263238';
       ctx.font = '11px system-ui, sans-serif';
-      ctx.fillText(`${len} m`, x + len * S + 6, y + 4);
+      ctx.fillText(`${G.nlShort(len, 1)} m`, x + len * S + 6, y + 4);
     }
 
     /** Exporteert het plan als PNG (dataURL), passend gezoomd. */

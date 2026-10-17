@@ -238,10 +238,10 @@
       const zr = { zone: z, members: ms, q, pStart, critical, required, ok, edges, degree, dnAt, points,
         overflow: q > maxQ * 1.0001 };
       zoneResults.push(zr);
-      if (zr.overflow) warnings.push(`${z.name}: debiet ${(q / 1000).toFixed(2)} m³/h overschrijdt het beschikbare debiet.`);
-      if (critical < required) warnings.push(`${z.name}: druk bij kritische kop ${critical.toFixed(2)} bar < vereist ${required.toFixed(1)} bar.`);
+      if (zr.overflow) warnings.push(`${z.name}: debiet ${G.nl(q / 1000, 2)} m³/u is hoger dan het beschikbare debiet.`);
+      if (critical < required) warnings.push(`${z.name}: druk bij de laatste sproeier ${G.nl(critical, 2)} bar is lager dan de vereiste ${G.nl(required, 1)} bar.`);
       const groups = new Set(ms.map((m) => m.group));
-      if (groups.size > 1) warnings.push(`${z.name}: verschillende sproeiergroepen gemengd (ongelijke neerslag).`);
+      if (groups.size > 1) warnings.push(`${z.name}: verschillende sproeiertypes in één zone (ongelijke neerslag).`);
     }
 
     // Waterpunten op de hoofdleiding

@@ -1,10 +1,10 @@
 name: "Beregeningsplanner"
-version: "0.2.1"
+version: "0.2.2"
 slug: beregeningsplanner
 description: >-
   Ontwerp een automatische tuinberegening: gebieden tekenen, sproeiers
   automatisch plaatsen met neerslagsimulatie, zones en leidingen met
-  drukverlies, en een stuklijst (Eco/Expert/Premium) met export naar Excel.
+  drukverlies, en een stuklijst (Basis/Standaard/Premium) met export naar Excel.
 url: "https://github.com/danieldh00/Aquatech"
 arch:
   - aarch64

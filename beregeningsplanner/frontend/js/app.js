@@ -490,9 +490,9 @@
           <button class="btn sm" data-tool="rect" data-type="${k}" title="Rechthoek">Rechthoek</button>
         </div>`).join('');
       return `
-        <p class="hint">Teken eerst het gazon, daarna beplanting/hagen (druppelirrigatie) en vlakken die nat mogen worden of droog moeten blijven.</p>
+        <p class="hint">Teken eerst het gazon, daarna beplanting en hagen (druppelirrigatie) en vlakken die nat mogen worden of droog moeten blijven.</p>
         ${btns}
-        <p class="hint small"><b>Vrije vorm:</b> klik punten, sluit door op het eerste punt te klikken, dubbel te klikken of Enter. Backspace = laatste punt weg, Shift = 45°-hoeken, Alt = niet snappen.<br>
+        <p class="hint small"><b>Vrije vorm:</b> klik punten, sluit door op het eerste punt te klikken, dubbel te klikken of Enter. Backspace = laatste punt weg, Shift = hoeken van 45°, Alt = niet op het raster uitlijnen.<br>
         <b>Bewerken:</b> selecteer een vlak; sleep hoekpunten of de middenpunten van randen (nieuw hoekpunt).</p>
         <h3>Vlakken</h3>
         ${rows ? `<table class="list">${rows}</table>` : '<p class="hint">Nog geen vlakken.</p>'}
@@ -515,13 +515,13 @@
         return `<button class="btn elem" data-kind="${k}"><span class="badge" style="background:${t.color}">${t.short}</span>${esc(t.label)}${placed ? ` <span class="ok">✓${placed > 1 ? ' ' + placed : ''}</span>` : ''}</button>`;
       }).join('');
       return `
-        <p class="hint">Plaats de wateraansluiting, besturing en ventielkast. Waterpunten (tappunten) worden op de hoofdleiding aangesloten.</p>
+        <p class="hint">Plaats de wateraansluiting, de beregeningscomputer en de ventielkast. Waterpunten (tappunten) worden op de hoofdleiding aangesloten.</p>
         ${btns}
         <h3>Wateraansluiting</h3>
         <label>Dynamische waterdruk (bar)<input id="s-pressure" type="number" step="0.1" min="1" max="10" value="${s.pressure}"></label>
-        <label>Beschikbaar debiet (m³/h)<input id="s-flow" type="number" step="0.1" min="0.3" max="20" value="${s.flow}"></label>
-        <p class="hint small"><b>Emmertest:</b> vul een emmer van 10 liter bij volledig geopende kraan en meet de tijd t (s). Debiet = 36 / t m³/h (bijv. 18 s → 2,0 m³/h). Meet de druk met een manometer terwijl de kraan open staat.</p>
-        <p class="hint small">Max. debiet per zone: <b>${fmt(Hy.maxZoneLph(this.state) / 1000, 2)} m³/h</b> (${Math.round(C.hydraulics.zoneFlowFactor * 100)}% van het beschikbare debiet).</p>
+        <label>Beschikbaar debiet (m³/u)<input id="s-flow" type="number" step="0.1" min="0.3" max="20" value="${s.flow}"></label>
+        <p class="hint small"><b>Emmertest:</b> vul een emmer van 10 liter bij volledig geopende kraan en meet de tijd t (s). Debiet = 36 / t m³/u (bijv. 18 s → 2,0 m³/u). Meet de druk met een manometer terwijl de kraan open staat.</p>
+        <p class="hint small">Max. debiet per zone: <b>${fmt(Hy.maxZoneLph(this.state) / 1000, 2)} m³/u</b> (${Math.round(C.hydraulics.zoneFlowFactor * 100)}% van het beschikbare debiet).</p>
       `;
     },
     _bind_system(el) {
@@ -536,7 +536,7 @@
       const types = ['rotator', 'spray', 'rotor'].map((k) => {
         const t = C.sprinklerTypes[k];
         return `<label class="radio"><input type="radio" name="stype" value="${k}" ${s.sprinklerType === k ? 'checked' : ''}>
-          <span><b>${esc(t.label)}</b><br><span class="small">${t.rMin}–${t.rMax} m · ${t.pr} mm/h · min. ${t.minBar} bar. ${esc(t.note)}</span></span></label>`;
+          <span><b>${esc(t.label)}</b><br><span class="small">${G.nlShort(t.rMin, 1)}–${G.nlShort(t.rMax, 1)} m · ${t.pr} mm/u · min. ${G.nlShort(t.minBar, 1)} bar. ${esc(t.note)}</span></span></label>`;
       }).join('');
       const sim = this.editor.layers.heatmap ? this.sim : null;
       const st = sim && sim.stats;
@@ -554,19 +554,19 @@
           <button class="btn" id="manual-strip">Strooksproeier</button>
         </div>
         <button class="btn danger" id="clear-spr">Alle sproeiers verwijderen</button>
-        <p class="hint small">Smalle stroken (&lt; ${window.Planner.NARROW_WIDTH} m) krijgen automatisch strooksproeiers. Bij handmatig plaatsen op een rand of hoek wordt de boog automatisch ingesteld. Sleep een sproeier om te verplaatsen; pas boog en worpwijdte aan in het eigenschappenpaneel.</p>
+        <p class="hint small">Smalle stroken (&lt; ${window.Planner.NARROW_WIDTH} m) krijgen automatisch strooksproeiers. Bij handmatig plaatsen op een rand of hoek wordt de sproeihoek automatisch ingesteld. Sleep een sproeier om te verplaatsen; pas sproeihoek en worpwijdte aan in het eigenschappenpaneel.</p>
         <h3>Neerslagsimulatie</h3>
         <p class="small">Sproeiers: ${countTxt}</p>
         ${st ? `
           <table class="kv">
-            <tr><td>Gem. neerslag gazon</td><td>${fmt(st.mean)} mm/h</td></tr>
-            <tr><td>Verdeling (DU<sub>lq</sub>)</td><td class="${st.du >= 0.7 ? 'good' : st.du >= 0.55 ? 'warn' : 'bad'}">${fmt(st.du * 100, 0)}%</td></tr>
+            <tr><td>Gem. neerslag gazon</td><td>${fmt(st.mean)} mm/u</td></tr>
+            <tr><td>Gelijkmatigheid (DU)</td><td class="${st.du >= 0.7 ? 'good' : st.du >= 0.55 ? 'warn' : 'bad'}">${fmt(st.du * 100, 0)}%</td></tr>
             <tr><td>Droge plekken</td><td class="${st.dryPct < 2 ? 'good' : st.dryPct < 6 ? 'warn' : 'bad'}">${fmt(st.dryPct)}%</td></tr>
-            <tr><td>Overspray op droog-vlakken</td><td class="${sim.overspray < 0.5 ? 'good' : 'warn'}">${fmt(sim.overspray)} m²</td></tr>
+            <tr><td>Water op droog te houden vlakken</td><td class="${sim.overspray < 0.5 ? 'good' : 'warn'}">${fmt(sim.overspray)} m²</td></tr>
           </table>
           <div class="legend"><span style="background:#d32f2f"></span>droog <span style="background:#ffc107"></span>weinig <span style="background:#388e3c"></span>goed <span style="background:#1e88e5"></span>veel</div>
-          <p class="hint small">Streefwaarde DU ≥ 70% (goed), ≥ 55% (acceptabel).</p>`
-        : '<p class="hint">Zet de laag <b>Neerslag</b> aan om de verdeling te zien.</p>'}
+          <p class="hint small">Streefwaarde gelijkmatigheid ≥ 70% (goed), ≥ 55% (acceptabel).</p>`
+        : '<p class="hint">Zet de laag <b>Neerslagkaart</b> aan om de verdeling te zien.</p>'}
       `;
     },
     _bind_sprinklers(el) {
@@ -601,15 +601,15 @@
       const pipeTot = {};
       if (calc) calc.pipes.forEach((p) => { pipeTot[p.dn] = (pipeTot[p.dn] || 0) + p.len; });
       return `
-        <p class="hint">Sproeiers worden per type gegroepeerd in zones die binnen het beschikbare debiet (${fmt(Hy.maxZoneLph(this.state) / 1000, 2)} m³/h) blijven. Leidingen worden als kortste boomstructuur vanaf de ventielkast berekend, inclusief drukverlies (Hazen-Williams).</p>
+        <p class="hint">Sproeiers worden per type gegroepeerd in zones die binnen het beschikbare debiet (${fmt(Hy.maxZoneLph(this.state) / 1000, 2)} m³/u) blijven. Leidingen worden als kortste boomstructuur vanaf de ventielkast berekend, inclusief drukverlies (Hazen-Williams).</p>
         <button id="auto-zones" class="btn primary">Zones automatisch indelen</button>
         <p class="hint small">Een sproeier handmatig naar een andere zone verplaatsen? Selecteer de sproeier en kies de zone in het eigenschappenpaneel.</p>
         ${rows ? `
           <table class="list zones">
-            <tr><th>Zone</th><th>Type</th><th>#</th><th>m³/h</th><th>bar*</th></tr>
+            <tr><th>Zone</th><th>Type</th><th>Aantal</th><th>m³/u</th><th>bar*</th></tr>
             ${rows}
           </table>
-          <p class="hint small">* druk bij het kritische (laatste) punt, na hoofdleiding, ventiel en leidingverliezen.</p>
+          <p class="hint small">* druk bij de laatste sproeier, na aftrek van de verliezen in hoofdleiding, ventiel en leidingen.</p>
           <h3>Leidingen</h3>
           <table class="kv">${Object.keys(pipeTot).sort((a, b) => a - b).map((dn) => `<tr><td>PE ${dn} mm</td><td>${fmt(pipeTot[dn])} m</td></tr>`).join('')}</table>`
         : '<p class="hint">Nog geen zones.</p>'}
@@ -633,7 +633,7 @@
       const levels = Object.entries(C.levels).map(([k, l]) => `
         <label class="radio"><input type="radio" name="level" value="${k}" ${s.level === k ? 'checked' : ''}><span><b>${l.label}</b> – <span class="small">${esc(l.desc)}</span></span></label>`).join('');
       return `
-        <h3>Uitvoering</h3>
+        <h3>Uitvoeringsniveau</h3>
         ${levels}
         <button id="btn-export-xlsx" class="btn primary">Exporteer naar Excel</button>
         <div class="row">
@@ -645,7 +645,7 @@
           <label>Weekgift (mm)<input id="t-mm" type="number" min="5" max="50" value="${s.targetMm}"></label>
           <label>Beurten/week<input id="t-ses" type="number" min="1" max="7" value="${s.sessions}"></label>
         </div>
-        ${sched.length ? `<table class="list"><tr><th>Zone</th><th>mm/h</th><th>min/beurt</th></tr>
+        ${sched.length ? `<table class="list"><tr><th>Zone</th><th>mm/u</th><th>min/beurt</th></tr>
           ${sched.map((x) => `<tr><td><span class="swatch" style="background:${x.zone.color}"></span>${esc(x.zone.name)}</td><td class="num">${fmt(x.pr, 0)}</td><td class="num">${Math.round(x.minutesSession)}</td></tr>`).join('')}</table>` : ''}
         <h3>Stuklijst (${rows.length} regels)</h3>
         ${rows.length ? `<table class="list bom">
@@ -707,8 +707,8 @@
       const geom = s.type === 'strip'
         ? `<label>Breedte (m)<input data-f="width" type="number" step="0.1" min="${t.wMin}" max="${t.wMax}" value="${s.width}"></label>
            <label>Lengte (m)<input data-f="len" type="number" step="0.1" min="${t.lMin}" max="${t.lMax}" value="${s.len}"></label>`
-        : `<label>Worpwijdte (m) <span class="small">${t.rMin}–${t.rMax}</span><input data-f="r" type="number" step="0.1" min="${t.rMin}" max="${t.rMax}" value="${s.r}"></label>
-           <label>Boog (°)<input data-f="arc" type="number" step="5" min="10" max="360" value="${s.arc}"></label>
+        : `<label>Worpwijdte (m) <span class="small">${G.nlShort(t.rMin, 1)}–${G.nlShort(t.rMax, 1)}</span><input data-f="r" type="number" step="0.1" min="${t.rMin}" max="${t.rMax}" value="${s.r}"></label>
+           <label>Sproeihoek (°)<input data-f="arc" type="number" step="5" min="10" max="360" value="${s.arc}"></label>
            <div class="row"><button class="btn sm" data-arc="90">90°</button><button class="btn sm" data-arc="180">180°</button><button class="btn sm" data-arc="270">270°</button><button class="btn sm" data-arc="360">360°</button></div>`;
       return `
         <h3>Sproeier</h3>
@@ -719,8 +719,8 @@
         <label>Zone<select data-f="zone">${zoneOpts}</select></label>
         <table class="kv">
           <tr><td>Debiet</td><td>${fmt(C.sprinklerFlowLph(s) / 60, 2)} l/min</td></tr>
-          <tr><td>Neerslag</td><td>${t.pr} mm/h</td></tr>
-          <tr><td>Min. druk</td><td>${t.minBar} bar</td></tr>
+          <tr><td>Neerslag</td><td>${t.pr} mm/u</td></tr>
+          <tr><td>Min. druk</td><td>${G.nlShort(t.minBar, 1)} bar</td></tr>
           ${p != null ? `<tr><td>Berekende druk</td><td class="${p >= t.minBar ? 'good' : 'bad'}">${fmt(p, 2)} bar</td></tr>` : ''}
         </table>
         <button class="btn danger" data-act="delete">Verwijderen</button>`;
@@ -732,7 +732,7 @@
         <h3>${esc(et.label)}</h3>
         ${e.kind === 'source' ? `
           <label>Waterdruk (bar)<input data-s="pressure" type="number" step="0.1" value="${s.pressure}"></label>
-          <label>Debiet (m³/h)<input data-s="flow" type="number" step="0.1" value="${s.flow}"></label>` : ''}
+          <label>Debiet (m³/u)<input data-s="flow" type="number" step="0.1" value="${s.flow}"></label>` : ''}
         <table class="kv"><tr><td>Positie</td><td>${fmt(e.x, 2)}, ${fmt(e.y, 2)} m</td></tr></table>
         <button class="btn danger" data-act="delete">Verwijderen</button>`;
     },
@@ -787,15 +787,15 @@
       const calc = this.state.calc;
       const list = calc ? calc.warnings.slice() : [];
       if (this.sim && this.editor.layers.heatmap && this.sim.stats && this.sim.stats.dryPct > 6) list.push(`Droge plekken: ${fmt(this.sim.stats.dryPct)}% van het gazon krijgt te weinig water.`);
-      if (this.sim && this.editor.layers.heatmap && this.sim.overspray > 0.5) list.push(`Overspray: ${fmt(this.sim.overspray)} m² op vlakken die droog moeten blijven.`);
+      if (this.sim && this.editor.layers.heatmap && this.sim.overspray > 0.5) list.push(`Er valt water op ${fmt(this.sim.overspray)} m² die droog moet blijven.`);
       el.innerHTML = list.length ? `<h3>Aandachtspunten</h3><ul>${list.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
     },
 
     onToolChanged(tool, opts) {
       const hints = {
-        select: 'Klik om te selecteren · sleep om te verplaatsen · scrollen = zoomen · spatie/rechtermuis = schuiven',
+        select: 'Klik om te selecteren · sleep om te verplaatsen · scrollen = zoomen · spatiebalk of rechtermuisknop + slepen = verschuiven',
         pan: 'Sleep om het plan te verschuiven',
-        polygon: `Tekenen: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – klik punten, sluit op het eerste punt of Enter · Esc = annuleren`,
+        polygon: `Tekenen: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – klik de hoekpunten aan, sluit af op het eerste punt of met Enter · Esc = annuleren`,
         rect: `Rechthoek: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – sleep van hoek naar hoek`,
         element: `Plaats: ${opts.kind ? C.elementTypes[opts.kind].label : ''} – klik op het plan`,
         sprinkler: `Plaats: ${opts.type ? C.sprinklerTypes[opts.type].label : ''} – klik in of op de rand van het gazon · Esc = stoppen`,

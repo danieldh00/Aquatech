@@ -17,9 +17,9 @@ De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn drie
 | 1. Project & ondergrond | Projectgegevens; plattegrond/luchtfoto laden (JPG/PNG) en schaal kalibreren met een bekende maat |
 | 2. Gebieden tekenen | Gazon, beplanting/border, haag, *mag nat worden*, *moet droog blijven*; vrije vorm of rechthoek, hoekpunten verslepen/toevoegen |
 | 3. Systeemelementen | Wateraansluiting (dynamische druk + debiet, emmertest-tip), besturing, ventielkast, waterpunten |
-| 4. Sproeiers | Automatisch kop-tot-kop plaatsen of handmatig (boog wordt op rand/hoek automatisch bepaald); neerslagsimulatie met DU<sub>lq</sub>, droge plekken en overspray |
+| 4. Sproeiers | Automatisch kop-tot-kop plaatsen of handmatig (sproeihoek wordt op rand/hoek automatisch bepaald); neerslagsimulatie met gelijkmatigheid (DU), droge plekken en water op vlakken die droog moeten blijven |
 | 5. Zones & leidingen | Automatische zone-indeling per sproeiergroep binnen het beschikbare debiet; leidingtracé (MST) met PE-diameterkeuze en drukverlies |
-| 6. Stuklijst & export | Uitvoering Eco / Expert / Premium, beregeningsschema (looptijd per zone) en **export naar Excel** |
+| 6. Stuklijst & export | Uitvoeringsniveau Basis / Standaard / Premium, beregeningsschema (looptijd per zone) en **export naar Excel** |
 
 ## Excel-export
 
@@ -33,7 +33,7 @@ Het `.xlsx`-bestand bevat de tabbladen:
 
 ## Rekenmodel (indicatief)
 
-- Sproeierdebiet: `Q [l/h] = neerslag [mm/h] × r² × boog/360` (gelijke neerslag bij vierkantsverband); strooksproeier `Q = neerslag × lengte × breedte`.
+- Sproeierdebiet: `Q [l/u] = neerslag [mm/u] × r² × sproeihoek/360` (gelijke neerslag bij vierkantsverband); strooksproeier `Q = neerslag × lengte × breedte`.
 - Neerslagsimulatie: driehoeksprofiel per sproeier op een raster van 0,15–0,5 m.
 - Max. zonedebiet: 90% van het opgegeven beschikbare debiet.
 - Drukverlies: Hazen-Williams (C = 140, PE PN6), +10% voor hulpstukken, 0,3 bar voor filter/terugstroombeveiliging/hoofdkraan en 0,2 bar per magneetventiel. Hoogteverschillen worden niet meegenomen.

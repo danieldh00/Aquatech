@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.2
+
+- **Alle termen in correct Nederlands.** Onder meer *turbinesproeier* (was
+  turbineregner), *meerstraalsrotator*, *sproeihoek* (was boog),
+  *sproeibereik*, *neerslagkaart*, *gelijkmatigheid*, *beregeningscomputer*
+  en *knelkoppeling*; uitvoeringsniveaus heten nu **Basis / Standaard /
+  Premium**.
+- Eenheden in Nederlandse notatie: m³/u, l/u en mm/u, en een decimale komma
+  in maten, labels en de Excel-export.
+
 ## 0.2.1
 
 - **Toegangscode is optioneel.** Zonder `access_code` is de planner via
