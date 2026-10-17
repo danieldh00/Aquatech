@@ -187,3 +187,46 @@ test('concept: schaal uit 1:N op papierformaat, tuinbreedte of aanname', () => {
   const d = Cn.build({ ...res, scale: { metersPerPixel: 0.02, method: 'maatvoering', confidence: 'hoog' } }, { ...img, paper: { widthM: 0.42, ratio: 50 } });
   assert.strictEqual(d.backgroundScale, 0.02);
 });
+
+test('labels herkennen, ook slordig gelezen handschrift', () => {
+  const t = (w) => { const m = L.matchLabel(w); return m ? m.type : null; };
+  assert.strictEqual(t('gras'), 'lawn');
+  assert.strictEqual(t('Gazon'), 'lawn');
+  assert.strictEqual(t('gazn'), 'lawn'); // letter gemist
+  assert.strictEqual(t('grasveld,'), 'lawn');
+  assert.strictEqual(t('Terras'), 'dry');
+  assert.strictEqual(t('teras'), 'dry');
+  assert.strictEqual(t('WONING'), 'dry');
+  assert.strictEqual(t('bordr'), 'bed');
+  assert.strictEqual(t('beplantlng'), 'bed'); // i als l gelezen
+  assert.strictEqual(t('haag'), 'hedge');
+  assert.strictEqual(t('vijver'), 'wet');
+  assert.strictEqual(t('grind'), 'wet');
+  assert.strictEqual(t('plantenbak'), 'planter');
+  assert.strictEqual(t('Rasen'), 'lawn');
+  assert.strictEqual(t('ab'), null);
+  assert.strictEqual(t('graf'), null); // kort woord: geen speling
+  assert.strictEqual(t('12,00'), null);
+});
+
+test('labels uit meerdere OCR-rondes worden samengevoegd', () => {
+  const words = [
+    { text: 'gras', confidence: 70, bbox: { x0: 100, y0: 100, x1: 160, y1: 130 } },
+    { text: 'gras', confidence: 90, bbox: { x0: 102, y0: 101, x1: 158, y1: 129 } },
+    { text: 'terras', confidence: 80, bbox: { x0: 300, y0: 100, x1: 380, y1: 130 } },
+    { text: 'xyz', confidence: 90, bbox: { x0: 0, y0: 0, x1: 10, y1: 10 } },
+  ];
+  const labels = L.labelsFromWords(words);
+  assert.strictEqual(labels.length, 2);
+  assert.strictEqual(labels.find((l) => l.type === 'lawn').conf, 90);
+});
+
+test('schaal: meeste en zekerste lezingen winnen, tegenstrijdigheid verlaagt betrouwbaarheid', () => {
+  const k = (meters, px, conf, text) => ({ mpp: meters / px, meters, px, conf, text: text || String(meters) });
+  const a = L.pickScale([k(12, 600, 90), k(12, 600, 80), k(42, 600, 78)], 1300);
+  assert.ok(Math.abs(a.metersPerPixel - 0.02) < 1e-9);
+  assert.strictEqual(a.confidence, 'laag');
+  const b = L.pickScale([k(12, 600, 90), k(8.5, 425, 85)], 1300);
+  assert.strictEqual(b.confidence, 'hoog');
+  assert.strictEqual(L.pickScale([k(500, 10, 90)], 1300), null); // onwaarschijnlijk (650 km breed)
+});

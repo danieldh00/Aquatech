@@ -117,7 +117,9 @@
         warnings.push(`Geen leesbare maat met maatlijn gevonden; aangenomen dat het plan ${FALLBACK_WIDTH_M} m breed is. Kalibreer de schaal in stap 1 met een bekende maat.`);
       }
     } else if (scale.confidence === 'laag' || scale.method === 'schatting') {
-      warnings.push(`Schaal geschat (${scale.evidence || 'geen maat gevonden'}). Controleer met "Schaal kalibreren".`);
+      warnings.push(`Schaal onzeker (${scale.evidence || 'geen maat gevonden'}). Controleer met "Schaal kalibreren" in stap 1.`);
+    } else if (scale.confidence === 'middel' && result.local && scale.method === 'maatvoering') {
+      warnings.push(`Schaal bepaald uit één maat: ${scale.evidence}. Klopt de breedte van het plan (${(analyzeImage.width * mppAnalyze).toFixed(1).replace('.', ',')} m)? Zo niet: "Schaal kalibreren" in stap 1.`);
     }
     const toWorld = (p) => ({ x: p.x * mppAnalyze, y: p.y * mppAnalyze });
     const counters = {};

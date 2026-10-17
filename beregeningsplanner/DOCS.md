@@ -64,6 +64,15 @@ Titelblok, legenda en de rand van een foto (tafel, schaduw) worden genegeerd.
 Een vlak midden in een ander vlak (gazon in de verharding) blijft een eigen
 vlak; het omringende vlak krijgt daarvoor een smalle snede naar buiten.
 
+**Labels** in het plan bepalen het soort vlak, ook als ze met de hand
+geschreven zijn: *gras/gazon*, *border/beplanting/heesters*, *haag*,
+*plantenbak*, *terras/woning/pad/oprit*, *vijver/grind*. In een gekleurd plan
+gaat het label vóór de kleur. In een lijntekening of handschets wordt het vlak
+dat door de lijnen rond het label wordt omsloten automatisch uitgetrokken;
+teken de lijnen daarvoor zo gesloten mogelijk. Duidelijk blokschrift wordt het
+best gelezen; zeer grillig handschrift lukt niet altijd (dan helpt de
+toverstaf of de AI-optie).
+
 De schaal wordt, in deze volgorde, bepaald uit:
 
 1. een maat met maatlijn: "12,00 m", "450 cm" of een getal als "8500"

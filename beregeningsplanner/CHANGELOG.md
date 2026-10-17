@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0
+## 0.7.0
 
 - **Lokale herkenning werkt nu ook op foto's en scans van getekende plannen**
   (potlood, stift), niet alleen op digitale plannen:
@@ -21,6 +21,24 @@
   gemeten, "10,00 m" met lage OCR-betrouwbaarheid telt mee, en een gemiste
   komma ("100 m") of "1:100" gelezen als "1100" geeft geen verkeerde schaal
   meer.
+- Samen met het lezen van labels uit 0.6.0: de getekende omtrek van een vlak
+  (lijn zonder vulling) wordt nog steeds genegeerd, ook met de nieuwe
+  sleutelgatsnede.
+
+## 0.6.0
+
+- **Labels lezen, ook handgeschreven.** Woorden als *gras*, *gazon*, *terras*,
+  *border*, *beplanting*, *haag*, *vijver*, *grind*, *woning*, *plantenbak*
+  (Nederlands, Duits en Engels; kleine schrijf- en leesfouten mogen) bepalen
+  het soort vlak waarin ze staan:
+  - in een gekleurd plan gaat het label vóór de kleur (een groen vlak met
+    "border" wordt beplanting);
+  - in een lijntekening of handschets wordt het vlak dat door de getekende
+    lijnen rond het label wordt omsloten automatisch uitgetrokken.
+- Tekstherkenning met Nederlandse taaldata, in meerdere rondes (normaal en
+  zwart-wit, recht en gedraaid) voor betere resultaten bij handschrift.
+- Bij een schaal uit één maat toont de planner welke maat gebruikt is en de
+  resulterende planbreedte, zodat een verkeerde lezing direct opvalt.
 
 ## 0.5.0
 

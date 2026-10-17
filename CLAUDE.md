@@ -56,11 +56,14 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   foto's, titelblok/los grijs zonder contact met de tuin eruit) → contour met
   sleutelgatsnede voor grote gaten. Pixelpijplijn `areasFromPixels` is zonder
   canvas testbaar. Schaal via Tesseract.js 5.1.1 (lokaal in `vendor/tesseract/`,
-  `eng` best_int, absolute URL's) + `measureLine` (maatlijn moet aan beide
+  `nld+eng`, absolute URL's) + `measureLine` (maatlijn moet aan beide
   kanten voorbij het tekenkader `textBox` lopen); lezingen sterk/zwak
   (`lengthReadings`), keuze in `pickScale`. Geen maat → `Concept.build` geeft
   `gardenWidthPx` en de app vraagt de tuinbreedte; PDF: `paper` {widthM, ratio
-  "1:N"} uit `planimport.js`. Referentie: potloodfoto "De Groenblijver" (geen
+  "1:N"} uit `planimport.js`. Labels (`VOCAB` + `matchLabel`, Levenshtein-speling)
+  uit 6 OCR-rondes (`readText`: cijfers recht/gedraaid, tekst normaal/zwart-wit
+  recht/gedraaid, taal `nld+eng`) typeren gekleurde vlakken of halen omsloten
+  lijnvlakken uit (`enclosedRegions`). Referentie: potloodfoto "De Groenblijver" (geen
   maatlijn, schaal 1:50). Zelfde uitvoerformaat als de AI; bij een AI-fout valt
   `makeConcept` terug op lokaal. Unittests in `backend/test/localrecog.test.js`
   laden de frontendcode in een vm-sandbox.

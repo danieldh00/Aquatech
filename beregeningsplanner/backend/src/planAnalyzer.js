@@ -83,6 +83,7 @@ Je krijgt één afbeelding van een tuinplan. Coördinaten zijn pixels in die afb
    - "planter": plantenbakken en grote potten (los van de grond of verhoogd).
    - "wet": vlakken die nat mogen worden maar geen beregening krijgen (grindpaden, boomspiegels, vijver).
    - "dry": wat droog moet blijven: woning, schuur, terras, bestrating, oprit, overkapping, carport.
+   Gebruik ook teksten in het plan, ook handgeschreven ("gras", "gazon", "terras", "border", "haag", "vijver", "grind"), om te bepalen welk soort vlak het is; een label weegt zwaarder dan de kleur.
    Laat vlakken buiten de tuin weg. Overlappingen mogen (een border in een gazon is een apart vlak). Geef elk vlak een korte Nederlandse naam.
 3. Elementen (alleen als ze aangegeven zijn of logisch af te leiden): "source" = buitenkraan/wateraansluiting, "controller" = plek voor de beregeningscomputer (meestal aan de gevel), "valvebox" = ventielkast, "outlet" = tappunt. Als niets is aangegeven, zet dan de wateraansluiting op de gevel van de woning die het dichtst bij het gazon ligt.
 4. Notes: korte Nederlandse toelichting op onzekerheden (bijv. "maat 12,50 m slecht leesbaar").`;

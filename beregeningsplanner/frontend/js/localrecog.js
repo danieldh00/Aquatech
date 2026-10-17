@@ -326,7 +326,7 @@
    * Grote gaten (een gazon midden in de verharding, een border) blijven open: een polygoon kent geen gaten,
    * dus wordt er een smalle snede langs de kortste weg naar buiten gemaakt (sleutelgat).
    */
-  function componentPolygons(comp, w, eps, minHole) {
+  function componentPolygons(comp, w, eps, minHole, cls, minFill = 0.4) {
     const T = window.AutoTrace._internal;
     const pad = 2;
     const bw = comp.x1 - comp.x0 + 1 + 2 * pad, bh = comp.y1 - comp.y0 + 1 + 2 * pad;
@@ -337,7 +337,15 @@
     }
     const filled = T.fillHoles(local, bw, bh);
     const holeMask = new Uint8Array(bw * bh);
-    for (let k = 0; k < holeMask.length; k++) holeMask[k] = filled[k] && !local[k] ? 1 : 0;
+    let inner = 0; // binnenkant zonder ander vlak (papier, lijnen)
+    for (let k = 0; k < holeMask.length; k++) {
+      holeMask[k] = filled[k] && !local[k] ? 1 : 0;
+      if (!holeMask[k] || !cls) continue;
+      const x = (k % bw) + comp.x0 - pad, y = Math.floor(k / bw) + comp.y0 - pad;
+      if (!cls[y * w + x]) inner++;
+    }
+    // getekende omtrek (lijn) i.p.v. ingekleurd vlak: binnenin vrijwel leeg
+    if (minFill > 0 && comp.pix.length / Math.max(1, comp.pix.length + inner) < minFill) return [];
     const mask = filled.slice();
     const holes = components(holeMask, bw, bh, minHole);
     const holeId = new Int32Array(bw * bh).fill(-1);
@@ -377,6 +385,28 @@
       if (poly.length >= 3) out.push(poly);
     }
     return out;
+  }
+
+  /** Eén polygoon (gaten dicht), eventueel iets verdikt: voor vlakken die door lijnen rond een label omsloten zijn. */
+  function componentPolygon(comp, w, eps, minFill = 0, grow = 0) {
+    const pad = 2 + grow;
+    const bw = comp.x1 - comp.x0 + 1 + 2 * pad, bh = comp.y1 - comp.y0 + 1 + 2 * pad;
+    const local = new Uint8Array(bw * bh);
+    for (const k of comp.pix) {
+      const x = k % w, y = (k - x) / w;
+      local[(y - comp.y0 + pad) * bw + (x - comp.x0 + pad)] = 1;
+    }
+    let filled = window.AutoTrace._internal.fillHoles(local, bw, bh);
+    if (grow > 0) filled = morph(filled, bw, bh, grow, true);
+    if (minFill > 0) {
+      // getekende omtrek (lijn) i.p.v. ingekleurd vlak: binnenin vrijwel leeg
+      let n = 0;
+      for (let k = 0; k < filled.length; k++) n += filled[k];
+      if (comp.pix.length / Math.max(1, n) < minFill) return null;
+    }
+    const contour = window.AutoTrace._internal.traceContour(filled, bw, bh);
+    if (contour.length < 8) return null;
+    return window.AutoTrace._internal.simplify(contour, eps).map((p) => ({ x: p.x + comp.x0 - pad, y: p.y + comp.y0 - pad }));
   }
 
   function findAreas(img, onProgress, opts = {}) {
@@ -433,12 +463,14 @@
     const counters = {};
     for (const { c, comp } of found) {
       const type = CLASS_TYPE[c];
-      for (const poly of componentPolygons(comp, w, eps, minPx)) {
+      for (const poly of componentPolygons(comp, w, eps, minPx, cls)) {
         counters[type] = (counters[type] || 0) + 1;
         areas.push({ type, name: `${C.areaTypes[type].label} ${counters[type]}`, points: poly.map((p) => ({ x: p.x / f, y: p.y / f })) });
       }
     }
-    const res = { areas, coloredShare: colored / (w * h), normalized: cm.normalized };
+    const gray = new Uint8Array(w * h);
+    for (let k = 0; k < gray.length; k++) gray[k] = (data[k * 4] * 0.299 + data[k * 4 + 1] * 0.587 + data[k * 4 + 2] * 0.114) | 0;
+    const res = { areas, coloredShare: colored / (w * h), normalized: cm.normalized, work: { gray, w, h, f } };
     if (opts.debug) {
       const norm = new Uint8ClampedArray(w * h * 4);
       for (let k = 0; k < w * h; k++) { for (let c = 0; c < 3; c++) norm[k * 4 + c] = cm.rgb[k * 3 + c] * 255; norm[k * 4 + 3] = 255; }
@@ -468,16 +500,12 @@
     // De worker laadt kern en taaldata zelf in; relatieve paden zouden relatief aan het worker-script
     // worden opgelost, dus absolute URL's (werkt ook onder het wisselende ingress-pad).
     const base = new URL('vendor/tesseract/', window.location.href).href;
-    tessWorker = await window.Tesseract.createWorker('eng', 1, {
+    tessWorker = await window.Tesseract.createWorker('nld+eng', 1, {
       workerPath: base + 'worker.min.js',
       corePath: base,
       langPath: base + 'lang',
       gzip: true,
       workerBlobURL: false,
-    });
-    await tessWorker.setParameters({
-      tessedit_pageseg_mode: '11', // losse tekst verspreid over de tekening
-      tessedit_char_whitelist: '0123456789.,:/mMcC ',
     });
     return tessWorker;
   }
@@ -516,33 +544,47 @@
   }
 
   /**
-   * Kiest de schaal uit kandidaten {mpp, strong, text, px}; W = beeldbreedte in pixels.
-   * Grootste groep die binnen 8% overeenkomt, met minstens één sterke lezing; anders een groep van twee
-   * of meer zwakke lezingen; anders één zwakke lezing die een gangbare plangrootte geeft (laag vertrouwen).
+   * Kiest de schaal uit kandidaten {mpp, meters, px, text, strong?, conf?}; W = beeldbreedte in pixels.
+   * Groepen kandidaten die binnen 8% overeenkomen; dezelfde maat (zelfde lijn) uit meerdere OCR-rondes telt
+   * één keer. Een groep komt in aanmerking met een sterke lezing of met twee of meer verschillende maten;
+   * daarbinnen wint de groep met de meeste maten en de hoogste zekerheid. Anders: één zwakke lezing die een
+   * gangbare plangrootte geeft (laag). Tegenstrijdige lezingen verlagen de betrouwbaarheid.
    */
   function pickScale(cands, W) {
     const ok = cands.filter((k) => W * k.mpp >= 3 && W * k.mpp <= 200); // plan 3–200 m breed
-    const groups = ok.map((a) => ok.filter((b) => Math.abs(b.mpp - a.mpp) / a.mpp <= 0.08));
-    // dubbele lezingen van hetzelfde woord (bv. 100/10/1 m) tellen één keer
-    const size = (g) => new Set(g.map((k) => k.text + '@' + Math.round(k.px))).size;
-    let best = null, confidence = 'middel';
-    for (const g of groups) if (g.some((k) => k.strong) && (!best || size(g) > size(best))) best = g;
-    if (!best) for (const g of groups) if (size(g) >= 2 && (!best || size(g) > size(best))) best = g;
-    if (best) confidence = size(best) >= 2 ? 'hoog' : 'middel';
-    if (!best) {
+    if (!ok.length) return null;
+    const key = (k) => `${k.meters}@${Math.round(k.px / 5)}`; // dezelfde maat
+    const source = (k) => `${k.text}@${Math.round(k.px / 5)}`; // hetzelfde woord (alternatieve lezingen)
+    const strong = (k) => k.strong !== false;
+    const groups = ok.map((a) => {
+      const grp = ok.filter((b) => Math.abs(b.mpp - a.mpp) / a.mpp <= 0.08);
+      const distinct = [...new Map(grp.map((k) => [key(k), k])).values()];
+      const score = (grp.some(strong) ? 10000 : 0) + distinct.length * 100 + grp.reduce((s, k) => s + (k.conf == null ? 50 : k.conf), 0);
+      return { grp, distinct, score, eligible: grp.some(strong) || distinct.length >= 2 };
+    }).filter((g) => g.eligible).sort((a, b) => b.score - a.score);
+    let best = groups[0], confidence;
+    if (best) {
+      const own = new Set(best.grp.map(source));
+      const conflicts = ok.filter((k) => !best.grp.includes(k) && !own.has(source(k))).map((k) => `"${k.text}"`);
+      const many = best.distinct.length >= 2;
+      confidence = conflicts.length ? (many ? 'middel' : 'laag') : many ? 'hoog' : 'middel';
+      best.conflicts = [...new Set(conflicts)];
+    } else {
       const plaus = ok.filter((k) => W * k.mpp >= 5 && W * k.mpp <= 100);
       plaus.sort((a, b) => Math.abs(Math.log(W * a.mpp / 25)) - Math.abs(Math.log(W * b.mpp / 25)));
-      if (plaus.length) { best = [plaus[0]]; confidence = 'laag'; }
+      if (!plaus.length) return null;
+      best = { grp: [plaus[0]], distinct: [plaus[0]], conflicts: [] };
+      confidence = 'laag';
     }
-    if (!best) return null;
-    best = best.slice().sort((a, b) => a.mpp - b.mpp);
-    const median = best[Math.floor(best.length / 2)];
+    const sorted = best.grp.slice().sort((a, b) => a.mpp - b.mpp);
+    const median = sorted[Math.floor(sorted.length / 2)];
     return {
       metersPerPixel: median.mpp,
       method: 'maatvoering',
       confidence,
-      evidence: best.slice(0, 4).map((k) => `"${k.text}" = ${+k.meters.toFixed(3)} m over ${Math.round(k.px)} px`).join(', '),
-      count: size(best),
+      evidence: best.distinct.slice(0, 4).map((k) => `"${k.text}" = ${+k.meters.toFixed(3)} m over ${Math.round(k.px)} px`).join(', ') +
+        (best.conflicts.length ? `; tegenstrijdig gelezen: ${best.conflicts.slice(0, 3).join(', ')}` : ''),
+      count: best.distinct.length,
     };
   }
 
@@ -625,12 +667,36 @@
     return { x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) };
   }
 
-  /** Eén OCR-ronde op een canvas; geeft kandidaten {mpp, text} in pixels van dat canvas. */
-  async function scaleCandidates(worker, canvas) {
-    const { data } = await worker.recognize(canvas);
+  /** Beeldvariant voor OCR: eventueel 90° gedraaid en/of zwart-wit gemaakt. */
+  function variant(img, rotate, binary) {
+    const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+    const cv = document.createElement('canvas');
+    cv.width = rotate ? H : W;
+    cv.height = rotate ? W : H;
+    const c = cv.getContext('2d', { willReadFrequently: true });
+    c.fillStyle = '#fff';
+    c.fillRect(0, 0, cv.width, cv.height);
+    if (rotate) { c.translate(H, 0); c.rotate(Math.PI / 2); }
+    c.drawImage(img, 0, 0);
+    if (binary) {
+      const d = c.getImageData(0, 0, cv.width, cv.height);
+      for (let i = 0; i < d.data.length; i += 4) {
+        const g = d.data[i] * 0.299 + d.data[i + 1] * 0.587 + d.data[i + 2] * 0.114;
+        d.data[i] = d.data[i + 1] = d.data[i + 2] = g < 150 ? 0 : 255;
+      }
+      c.putImageData(d, 0, 0);
+    }
+    return cv;
+  }
+
+  /** Box in een 90° gedraaid beeld (x' = H - y, y' = x) terug naar het origineel. */
+  const unrotate = (b, H) => ({ x0: b.y0, y0: H - b.x1, x1: b.y1, y1: H - b.x0 });
+
+  /** Maatkandidaten uit de woorden van één OCR-ronde, gemeten op dat beeld. */
+  function scaleCandidates(ws, canvas) {
     // Tesseract geeft getallen met een komma ("10,00") met tekenwitlijst soms betrouwbaarheid 0; een getal
     // met eenheid telt daarom ook bij lage betrouwbaarheid, de maatlijn eromheen is dan het bewijs
-    const words = (data.words || []).filter((wd) => wd.text.trim());
+    const words = ws.filter((wd) => wd.text.trim());
     const gray = grayOf(canvas);
     const out = [];
     out.ratios = words.filter((wd) => wd.confidence > 40).map((wd) => window.PlanImport && window.PlanImport.parseRatio(wd.text)).filter(Boolean);
@@ -647,35 +713,234 @@
       const line = measureLine(gray, canvas.width, canvas.height, box);
       if (!line) return;
       const text = `${wd.text}${unitWord ? ' ' + next.text : ''}`;
-      for (const r of readings) out.push({ mpp: r.meters / line.len, strong: r.strong, text, meters: r.meters, px: line.len });
+      for (const r of readings) out.push({ mpp: r.meters / line.len, strong: r.strong, text, meters: r.meters, px: line.len, conf: wd.confidence });
     });
     return out;
   }
 
-  async function findScale(img, onProgress) {
-    onProgress && onProgress('Maten lezen (tekstherkenning)…');
+  /**
+   * Alle OCR-rondes: maten (cijfers, normaal + gedraaid) en labels (vrije tekst, normaal en zwart-wit,
+   * recht en gedraaid). Geeft woorden in originele coördinaten en alle maatkandidaten.
+   */
+  async function readText(img, onProgress) {
     const worker = await getWorker();
-    const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
-    const cv = document.createElement('canvas');
-    cv.width = W; cv.height = H;
-    const c = cv.getContext('2d');
-    c.fillStyle = '#fff'; c.fillRect(0, 0, W, H);
-    c.drawImage(img, 0, 0);
-    const cands = await scaleCandidates(worker, cv);
-    const ratios = cands.ratios;
-    // tweede ronde 90° gedraaid voor verticale maten
-    const rot = document.createElement('canvas');
-    rot.width = H; rot.height = W;
-    const rc = rot.getContext('2d');
-    rc.translate(H, 0); rc.rotate(Math.PI / 2); rc.drawImage(cv, 0, 0);
-    onProgress && onProgress('Verticale maten lezen…');
-    const rotCands = await scaleCandidates(worker, rot);
-    cands.push(...rotCands);
-    ratios.push(...rotCands.ratios);
-    const ratio = ratios[0] || null; // schaalaanduiding "1:N"; bruikbaar als het papierformaat bekend is (PDF)
-    const picked = pickScale(cands, W);
+    const H = img.naturalHeight || img.height;
+    const passes = [
+      { rotate: false, binary: false, digits: true, msg: 'Maten lezen…' },
+      { rotate: true, binary: false, digits: true, msg: 'Verticale maten lezen…' },
+      { rotate: false, binary: false, digits: false, msg: 'Teksten zoeken (gras, terras, border…)…' },
+      { rotate: false, binary: true, digits: false, msg: 'Teksten zoeken (zwart-wit)…' },
+      { rotate: true, binary: false, digits: false, msg: 'Verticale teksten zoeken…' },
+      { rotate: true, binary: true, digits: false, msg: 'Verticale teksten zoeken (zwart-wit)…' },
+    ];
+    const words = [];
+    const scales = [];
+    const ratios = []; // schaalaanduiding "1:N"; bruikbaar als het papierformaat bekend is (PDF)
+    for (const ps of passes) {
+      onProgress && onProgress(ps.msg);
+      const cv = variant(img, ps.rotate, ps.binary);
+      await worker.setParameters({
+        tessedit_pageseg_mode: '11', // losse tekst verspreid over de tekening
+        tessedit_char_whitelist: ps.digits ? '0123456789.,:/mMcC ' : '',
+      });
+      const { data } = await worker.recognize(cv);
+      const ws = data.words || [];
+      // de gemeten lijnlengte hangt niet af van de draaiing; de cijferronde is betrouwbaarder voor getallen
+      const sc = scaleCandidates(ws, cv);
+      scales.push(...sc.map((k) => ({ ...k, conf: k.conf + (ps.digits ? 10 : 0) })));
+      ratios.push(...sc.ratios);
+      if (ps.digits) continue;
+      for (const wd of ws) {
+        if (wd.confidence < 25 || !String(wd.text).trim()) continue;
+        words.push({ text: wd.text, confidence: wd.confidence, bbox: ps.rotate ? unrotate(wd.bbox, H) : { ...wd.bbox } });
+      }
+    }
+    return { words, scales, ratios };
+  }
+
+  async function findScale(img, onProgress) {
+    const { scales, ratios } = await readText(img, onProgress);
+    return scaleFrom(scales, ratios, img.naturalWidth || img.width);
+  }
+
+  /** Schaal uit maatkandidaten; zonder bruikbare maat eventueel alleen de schaalaanduiding "1:N". */
+  function scaleFrom(scales, ratios, W) {
+    const ratio = ratios[0] || null;
+    // "1:100" zonder dubbele punt gelezen ("1100") is geen maat
+    const noRatio = scales.filter((k) => k.strong || !ratios.some((r) => k.text.replace(/\D/g, '') === `1${r}`));
+    const picked = pickScale(noRatio, W);
     if (!picked) return ratio ? { metersPerPixel: null, method: 'schatting', confidence: 'laag', evidence: `schaal 1:${ratio}`, ratio } : null;
     return { ...picked, ratio };
+  }
+
+  // ---------------------------------------------------------------- labels (gras, terras, …)
+
+  /** Woorden per vlaksoort (Nederlands, Duits, Engels). */
+  const VOCAB = {
+    lawn: ['gras', 'gazon', 'grasveld', 'grasmat', 'speelgazon', 'rasen', 'rasenfläche', 'wiese', 'lawn', 'grass'],
+    bed: ['border', 'borders', 'beplanting', 'plantvak', 'plantvakken', 'bloemen', 'bloemenborder', 'bloemperk', 'perk',
+      'heesters', 'struiken', 'vasteplanten', 'planten', 'moestuin', 'kruidentuin', 'beet', 'beete', 'staudenbeet', 'blumen',
+      'sträucher', 'flowers', 'shrubs', 'plants', 'flowerbed'],
+    hedge: ['haag', 'heg', 'beukenhaag', 'ligusterhaag', 'taxushaag', 'coniferen', 'hecke', 'hedge'],
+    planter: ['plantenbak', 'plantenbakken', 'bak', 'bakken', 'pot', 'potten', 'kuip', 'pflanzkübel', 'kübel', 'planter'],
+    dry: ['terras', 'terrassen', 'woning', 'huis', 'woonhuis', 'schuur', 'tuinhuis', 'berging', 'garage', 'bestrating',
+      'tegels', 'klinkers', 'pad', 'tuinpad', 'oprit', 'carport', 'veranda', 'overkapping', 'patio', 'vlonder', 'zitplek',
+      'terrasse', 'haus', 'gebäude', 'weg', 'house', 'terrace', 'path', 'driveway', 'shed', 'deck'],
+    wet: ['vijver', 'water', 'grind', 'grindpad', 'kiezel', 'kiezels', 'split', 'teich', 'kies', 'pond', 'gravel'],
+  };
+  const VOCAB_INDEX = [];
+  for (const [type, words] of Object.entries(VOCAB)) for (const w of words) VOCAB_INDEX.push({ type, w: w.replace(/[^a-zäöüß]/g, '') });
+
+  function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    if (!m) return n;
+    if (!n) return m;
+    let prev = Array.from({ length: n + 1 }, (_, j) => j);
+    for (let i = 1; i <= m; i++) {
+      const cur = [i];
+      for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return prev[n];
+  }
+
+  /** Woord (ook slordig/handgeschreven gelezen) naar vlaksoort, of null. */
+  function matchLabel(text) {
+    const t = String(text).toLowerCase().replace(/[^a-zäöüß]/g, '');
+    if (t.length < 3) return null;
+    let best = null;
+    for (const v of VOCAB_INDEX) {
+      // korte woorden exact; langere met 1–2 tekens speling (handschrift)
+      const allowed = v.w.length <= 4 ? 0 : v.w.length <= 7 ? 1 : 2;
+      if (Math.abs(v.w.length - t.length) > allowed) continue;
+      const d = levenshtein(t, v.w);
+      if (d <= allowed && (!best || d < best.d)) best = { type: v.type, word: v.w, d };
+    }
+    return best;
+  }
+
+  /** Labels uit OCR-woorden; dezelfde tekst uit meerdere rondes wordt samengevoegd. */
+  function labelsFromWords(words) {
+    const out = [];
+    for (const wd of words) {
+      const m = matchLabel(wd.text);
+      if (!m) continue;
+      const l = { type: m.type, text: wd.text, conf: wd.confidence - m.d * 15, bbox: wd.bbox };
+      const cx = (l.bbox.x0 + l.bbox.x1) / 2, cy = (l.bbox.y0 + l.bbox.y1) / 2;
+      const dup = out.find((o) => cx >= o.bbox.x0 && cx <= o.bbox.x1 && cy >= o.bbox.y0 && cy <= o.bbox.y1);
+      if (dup) {
+        if (l.conf > dup.conf) Object.assign(dup, l);
+        continue;
+      }
+      out.push(l);
+    }
+    return out;
+  }
+
+  /**
+   * Vlak dat door getekende lijnen rond een label wordt omsloten (lijntekening of handschets).
+   * Lijnen worden iets verdikt om kleine gaten in handgetekende lijnen te dichten.
+   */
+  function enclosedRegions(work) {
+    const { gray, w, h } = work;
+    // achtergrondhelderheid = mediaan van de rand
+    const edge = [];
+    for (let x = 0; x < w; x += 4) edge.push(gray[x], gray[(h - 1) * w + x]);
+    edge.sort((a, b) => a - b);
+    const bgLum = edge[Math.floor(edge.length / 2)] || 255;
+    const thr = Math.min(170, bgLum - 55);
+    let dark = new Uint8Array(w * h);
+    for (let k = 0; k < dark.length; k++) dark[k] = gray[k] < thr ? 1 : 0;
+    const r = Math.max(1, Math.round(Math.max(w, h) / 300));
+    dark = morph(dark, w, h, r, true);
+    const free = new Uint8Array(w * h);
+    for (let k = 0; k < free.length; k++) free[k] = dark[k] ? 0 : 1;
+    const label = new Int32Array(w * h).fill(-1);
+    const comps = [];
+    const stack = [];
+    for (let k0 = 0; k0 < free.length; k0++) {
+      if (!free[k0] || label[k0] >= 0) continue;
+      const id = comps.length;
+      const pix = [];
+      let x0 = w, y0 = h, x1 = 0, y1 = 0, border = false;
+      stack.push(k0); label[k0] = id;
+      while (stack.length) {
+        const k = stack.pop();
+        pix.push(k);
+        const x = k % w, y = (k - x) / w;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        if (x === 0 || y === 0 || x === w - 1 || y === h - 1) border = true;
+        for (const n of [x > 0 ? k - 1 : -1, x < w - 1 ? k + 1 : -1, y > 0 ? k - w : -1, y < h - 1 ? k + w : -1]) {
+          if (n >= 0 && free[n] && label[n] < 0) { label[n] = id; stack.push(n); }
+        }
+      }
+      comps.push({ pix, x0, y0, x1, y1, border });
+    }
+    return { label, comps, w, h, r };
+  }
+
+  function regionForLabel(regions, box) {
+    const { label, comps, w, h, r } = regions;
+    const bw = box.x1 - box.x0, bh = box.y1 - box.y0;
+    const pad = Math.max(2 * r + 2, Math.round(bh * 0.6));
+    const votes = new Map();
+    const vote = (x, y) => {
+      x = Math.round(x); y = Math.round(y);
+      if (x < 0 || y < 0 || x >= w || y >= h) return;
+      const id = label[y * w + x];
+      if (id >= 0) votes.set(id, (votes.get(id) || 0) + 1);
+    };
+    for (let t = 0; t <= 1; t += 0.05) {
+      vote(box.x0 - pad + t * (bw + 2 * pad), box.y0 - pad);
+      vote(box.x0 - pad + t * (bw + 2 * pad), box.y1 + pad);
+      vote(box.x0 - pad, box.y0 - pad + t * (bh + 2 * pad));
+      vote(box.x1 + pad, box.y0 - pad + t * (bh + 2 * pad));
+    }
+    let best = -1, bn = 0;
+    for (const [id, n] of votes) if (n > bn) { bn = n; best = id; }
+    if (best < 0) return null;
+    const comp = comps[best];
+    const share = comp.pix.length / (w * h);
+    if (comp.pix.length < bw * bh * 3 || share > 0.7 || (comp.border && share > 0.25)) return null;
+    return comp;
+  }
+
+  /** Labels toepassen: type van gekleurde vlakken corrigeren, en lijnvlakken toevoegen. */
+  function applyLabels(areas, labels, work) {
+    const f = work.f;
+    let retyped = 0, added = 0;
+    const named = new Set();
+    const counters = {};
+    labels.sort((a, b) => b.conf - a.conf);
+    let regions = null;
+    const nameOf = (l) => l.text.replace(/[^\p{L}]/gu, '').toLowerCase().replace(/^./, (c) => c.toUpperCase()) || C.areaTypes[l.type].label;
+    for (const l of labels) {
+      const cx = (l.bbox.x0 + l.bbox.x1) / 2, cy = (l.bbox.y0 + l.bbox.y1) / 2;
+      // kleinste gekleurde vlak waar het label in staat
+      const hits = areas.filter((a) => G.pointInPolygon({ x: cx, y: cy }, a.points)).sort((a, b) => G.area(a.points) - G.area(b.points));
+      if (hits.length) {
+        const a = hits[0];
+        if (named.has(a)) continue;
+        named.add(a);
+        if (a.type !== l.type) retyped++;
+        a.type = l.type;
+        a.name = nameOf(l);
+        a.fromLabel = true;
+        continue;
+      }
+      regions = regions || enclosedRegions(work);
+      const box = { x0: l.bbox.x0 * f, y0: l.bbox.y0 * f, x1: l.bbox.x1 * f, y1: l.bbox.y1 * f };
+      const comp = regionForLabel(regions, box);
+      if (!comp || comp.used) continue;
+      comp.used = true;
+      const eps = Math.max(1.2, Math.max(work.w, work.h) / 450);
+      const poly = componentPolygon(comp, work.w, eps, 0, regions.r + 1);
+      if (!poly || poly.length < 3) continue;
+      counters[l.type] = (counters[l.type] || 0) + 1;
+      areas.push({ type: l.type, name: nameOf(l), points: poly.map((p) => ({ x: p.x / f, y: p.y / f })), fromLabel: true });
+      added++;
+    }
+    return { retyped, added };
   }
 
   // ---------------------------------------------------------------- samen
@@ -687,14 +952,33 @@
   async function analyze(analyzeImage, onProgress) {
     const img = await window.PlanImport.loadImage(analyzeImage.dataUrl);
     const notes = [];
-    const { areas, coloredShare } = findAreas(img, onProgress);
-    if (coloredShare < 0.05) notes.push('Het plan bevat weinig kleur (lijntekening). Vlakken worden op kleur herkend; trek ze hier uit met de toverstaf of teken ze zelf.');
-    let scale = null;
+    const { areas, coloredShare, work } = findAreas(img, onProgress);
+    let labelStats = { retyped: 0, added: 0 }, labels = [], scale = null;
     try {
-      scale = await findScale(img, onProgress);
+      const { words, scales, ratios } = await readText(img, onProgress);
+      scale = scaleFrom(scales, ratios, img.naturalWidth || img.width);
+      // gekleurde "vlakjes" die op een gelezen woord liggen zijn tekst (gekleurde inkt), geen vlak
+      const IW = img.naturalWidth || img.width, IH = img.naturalHeight || img.height;
+      const textBoxes = words.map((wd) => wd.bbox).filter((b) => b.y1 - b.y0 < IH * 0.08 && b.x1 - b.x0 < IW * 0.4);
+      for (let i = areas.length - 1; i >= 0; i--) {
+        const bb = G.bbox(areas[i].points);
+        const isText = textBoxes.some((b) => {
+          const m = (b.y1 - b.y0) * 0.5; // marge van een halve letterhoogte
+          return bb.minX >= b.x0 - m && bb.maxX <= b.x1 + m && bb.minY >= b.y0 - m && bb.maxY <= b.y1 + m;
+        });
+        // kleine blauwe vlekjes zijn bij pen-/inkttekeningen vrijwel altijd lijnen of tekst, geen vijver
+        const tinyWet = areas[i].type === 'wet' && G.area(areas[i].points) < IW * IH * 0.004;
+        if (isText || tinyWet) areas.splice(i, 1);
+      }
+      labels = labelsFromWords(words);
+      labelStats = applyLabels(areas, labels, work);
     } catch (e) {
-      notes.push(`Maten lezen lukte niet (${e.message}).`);
+      notes.push(`Teksten lezen lukte niet (${e.message}).`);
     }
+    if (labelStats.added || labelStats.retyped) {
+      notes.push(`${labels.length} label(s) gelezen: ${labelStats.added} vlak(ken) uit lijnen rond een label gehaald, ${labelStats.retyped} vlak(ken) van type veranderd.`);
+    }
+    if (coloredShare < 0.05 && !labelStats.added) notes.push('Het plan bevat weinig kleur en geen leesbare labels als "gras" of "terras". Trek de vlakken uit met de toverstaf of teken ze zelf.');
     return {
       scale: scale || { metersPerPixel: null, method: 'schatting', confidence: 'laag', evidence: '' },
       areas,
@@ -704,5 +988,8 @@
     };
   }
 
-  window.LocalRecognizer = { analyze, classify, parseLength, lengthReadings, pickScale, measureLine, findAreas, findScale, areasFromPixels, _internal: { paperModel, normalizedColors } };
+  window.LocalRecognizer = {
+    analyze, classify, parseLength, lengthReadings, pickScale, measureLine, findAreas, findScale, areasFromPixels,
+    readText, matchLabel, labelsFromWords, enclosedRegions, regionForLabel, applyLabels, _internal: { paperModel, normalizedColors },
+  };
 })();
