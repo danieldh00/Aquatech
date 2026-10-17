@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aquatech Beregeningsplanner</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2c-3.5 5-7 8.6-7 12.3A7 7 0 0 0 12 21a7 7 0 0 0 7-6.7C19 10.6 15.5 7 12 2Z"/></svg>
+      <span>Aquatech <b>Beregeningsplanner</b></span>
+    </div>
+    <div id="project-title" class="project-title"></div>
+    <div class="actions">
+      <button id="btn-demo" class="btn ghost" title="Laad een voorbeeldtuin">Voorbeeld</button>
+      <button id="btn-new" class="btn ghost">Nieuw</button>
+      <button id="btn-open" class="btn ghost">Openen</button>
+      <input type="file" id="file-open" accept=".json,application/json" hidden>
+      <button id="btn-save" class="btn ghost" title="Project opslaan als bestand">Opslaan</button>
+      <button id="btn-undo" class="btn ghost" title="Ongedaan maken (Ctrl+Z)">↶</button>
+      <button id="btn-redo" class="btn ghost" title="Opnieuw (Ctrl+Y)">↷</button>
+      <button id="btn-help" class="btn ghost" title="Help">?</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <nav id="steps" class="steps"></nav>
+      <section id="step-panel" class="panel"></section>
+      <div class="step-nav">
+        <button id="btn-prev" class="btn">← Vorige</button>
+        <button id="btn-next" class="btn primary">Volgende →</button>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="toolbar">
+        <button id="tool-select" data-t="select" class="tbtn active" title="Selecteren (Esc)">⬉ Selecteren</button>
+        <button id="tool-pan" data-t="pan" class="tbtn" title="Schuiven (of spatie ingedrukt houden)">✋</button>
+        <button id="tool-measure" data-t="measure" class="tbtn" title="Meten">📏</button>
+        <button id="tool-zoomin" class="tbtn" title="Inzoomen">＋</button>
+        <button id="tool-zoomout" class="tbtn" title="Uitzoomen">－</button>
+        <button id="tool-fit" class="tbtn" title="Passend maken">⤢</button>
+        <span class="sep"></span>
+        <label class="chk"><input type="checkbox" id="snap"> Raster 0,5 m</label>
+        <span class="sep"></span>
+        <span class="lbl">Lagen:</span>
+        <label class="chk"><input type="checkbox" id="layer-background"> Ondergrond</label>
+        <label class="chk"><input type="checkbox" id="layer-coverage"> Worpbereik</label>
+        <label class="chk"><input type="checkbox" id="layer-heatmap"> Neerslag</label>
+        <label class="chk"><input type="checkbox" id="layer-pipes"> Leidingen</label>
+        <label class="chk"><input type="checkbox" id="layer-labels"> Maten</label>
+      </div>
+      <div class="canvas-wrap"><canvas id="canvas"></canvas></div>
+      <div class="statusbar"><span id="hint"></span><span id="coords"></span></div>
+    </section>
+
+    <aside class="inspector">
+      <section id="props" class="panel"></section>
+      <section id="warnings" class="panel warnings"></section>
+    </aside>
+  </main>
+
+  <div id="help" class="help">
+    <div class="help-card">
+      <button id="help-close" class="btn ghost close">✕</button>
+      <h2>Zo werkt de beregeningsplanner</h2>
+      <ol>
+        <li><b>Project & ondergrond</b> – laad optioneel een plattegrond of luchtfoto en kalibreer de schaal.</li>
+        <li><b>Gebieden tekenen</b> – gazon, beplanting, hagen, en vlakken die nat mogen worden of droog moeten blijven.</li>
+        <li><b>Systeemelementen</b> – wateraansluiting (druk + debiet), besturing, ventielkast en waterpunten.</li>
+        <li><b>Sproeiers</b> – automatisch (kop-tot-kop) of handmatig plaatsen en controleren met de neerslagsimulatie.</li>
+        <li><b>Zones & leidingen</b> – automatische zone-indeling binnen het beschikbare debiet, leidingtracé en drukverlies.</li>
+        <li><b>Stuklijst & export</b> – kies Eco/Expert/Premium en exporteer naar Excel.</li>
+      </ol>
+      <h3>Bediening</h3>
+      <ul>
+        <li>Scrollen = zoomen; rechtermuisknop, middelste knop of spatie + slepen = schuiven.</li>
+        <li>Delete = selectie verwijderen; Ctrl+Z / Ctrl+Y = ongedaan maken / opnieuw.</li>
+        <li>Tekenen: Enter = vorm sluiten, Backspace = laatste punt weg, Shift = 45°, Alt = niet snappen.</li>
+        <li>Het project wordt automatisch in de browser bewaard. Gebruik <b>Opslaan</b> voor een bestand.</li>
+      </ul>
+      <p class="hint">Berekeningen zijn indicatief (Hazen-Williams, PE PN6, geen hoogteverschillen). Controleer altijd de werkelijke druk en het debiet ter plaatse.</p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="vendor/exceljs.min.js"></script>
+  <script src="js/geometry.js"></script>
+  <script src="js/catalog.js"></script>
+  <script src="js/planner.js"></script>
+  <script src="js/hydraulics.js"></script>
+  <script src="js/simulation.js"></script>
+  <script src="js/bom.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
