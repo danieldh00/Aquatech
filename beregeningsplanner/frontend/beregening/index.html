@@ -21,7 +21,8 @@
     <div class="actions">
       <button id="btn-demo" class="btn ghost" title="Laad een voorbeeldtuin">Voorbeeld</button>
       <button id="btn-new" class="btn ghost">Nieuw</button>
-      <button id="btn-open" class="btn ghost">Openen</button>
+      <button id="btn-myplans" class="btn ghost" title="Je eigen plannen op de server">Mijn plannen</button>
+      <button id="btn-open" class="btn ghost" title="Project openen uit een bestand">Openen</button>
       <input type="file" id="file-open" accept=".json,application/json" hidden>
       <button id="btn-save" class="btn ghost" title="Project opslaan als bestand">Opslaan</button>
       <button id="btn-undo" class="btn ghost" title="Ongedaan maken (Ctrl+Z)">↶</button>
@@ -96,9 +97,19 @@
         <li>Delete-toets = selectie verwijderen; Ctrl+Z / Ctrl+Y = ongedaan maken / opnieuw.</li>
         <li>Tekenen: Enter = vorm sluiten, Backspace = laatste punt weg, Shift = hoeken van 45°, Alt = niet op het raster uitlijnen.</li>
         <li>Telefoon of tablet: tik om te selecteren of een punt te zetten, sleep met één vinger om te verschuiven, knijp met twee vingers om te zoomen. Tijdens het tekenen staan <b>Punt terug</b>, <b>Vorm sluiten</b> en <b>Stoppen</b> boven in beeld; met <b>▾ Paneel</b> klap je het stappenpaneel in voor meer tekenruimte.</li>
-        <li>Het project wordt automatisch in de browser bewaard. Gebruik <b>Opslaan</b> voor een bestand.</li>
+        <li>Het project wordt automatisch in de browser en in <b>Mijn plannen</b> op de server bewaard. Gebruik <b>Opslaan</b> voor een bestand.</li>
       </ul>
       <p class="hint">Berekeningen zijn indicatief (Hazen-Williams, PE PN6, geen hoogteverschillen). Controleer altijd de werkelijke druk en het debiet ter plaatse.</p>
+    </div>
+  </div>
+
+  <div id="myplans" class="help">
+    <div class="help-card">
+      <button id="myplans-close" class="btn ghost close">✕</button>
+      <h2>Mijn plannen</h2>
+      <p class="hint">Je plannen worden automatisch op de server bewaard. Alleen jij ziet ze hier.</p>
+      <div id="myplans-list"></div>
+      <p><button id="myplans-new" class="btn primary">Nieuw plan</button></p>
     </div>
   </div>
 

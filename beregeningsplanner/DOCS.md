@@ -117,11 +117,42 @@ kleuren mogen afwijken.
 
 ## Opslag
 
-Projecten worden in de browser van het toestel bewaard (niet in de add-on).
-Gebruik **Opslaan** om een `.aquaplan.json`-bestand te downloaden en
-**Openen** om het later (of op een ander toestel) weer te laden.
-Let op: het HA-zijpaneel en `aquatech.den-hollander.com` zijn voor de browser
-twee verschillende websites en delen dus geen opgeslagen project.
+Plannen worden automatisch op twee plekken bewaard: in de browser van het
+toestel en, een paar seconden na elke wijziging, in **Mijn plannen** op de
+server (database `/data/aquatech.db`, zit in de back-ups van Home
+Assistant). Via **Mijn plannen** in de planner (of op het dashboard) open je
+een eerder plan. Iedere gebruiker ziet daar alleen de eigen plannen.
+**Opslaan** downloadt daarnaast nog steeds een `.aquaplan.json`-bestand en
+**Openen** laadt zo'n bestand als nieuw plan.
+
+## Gebruikers, rollen en historie van aanvragen
+
+Er zijn twee rollen:
+
+| Rol | Ziet | Wie |
+| --- | --- | --- |
+| **Beheerder** | alle plannen, de historie van alle aanvragen, gebruikersbeheer (module **Beheer**) | het HA-paneel, inloggen met de `access_code`, accounts met rol beheerder |
+| **Gebruiker** | alleen de eigen plannen | accounts met rol gebruiker, en gasten |
+
+- **Accounts** maak je als beheerder aan onder **Beheer → Gebruikers**
+  (gebruikersnaam, naam, rol, wachtwoord van minimaal 8 tekens). Inloggen
+  via `.../login` of de knop **Inloggen** rechtsboven. Een nieuw wachtwoord
+  of uitschakelen logt de gebruiker op alle toestellen uit.
+- **Gasten**: zolang er geen `access_code` is, kan iedereen de planner
+  zonder inloggen gebruiken. Elke browser krijgt dan een eigen anonieme
+  gebruiker en ziet alleen de eigen plannen. Met een `access_code` zijn er
+  geen gasten: inloggen (code of account) is verplicht.
+- **Historie** (**Beheer → Aanvragen**): elke aanvraag krijgt een regel met
+  datum, gebruiker, plan, klant, adres, oppervlaktes, sproeiers en zones:
+  een nieuw plan, wijzigingen (opeenvolgende wijzigingen van dezelfde
+  gebruiker binnen een half uur vormen één regel), een verwijdering en elke
+  automatische planherkenning. De historie is alleen voor beheerders, kan
+  niet door gebruikers worden gewist en blijft staan als een gebruiker het
+  plan verwijdert. Klik op een regel voor de details of om een kopie van dat
+  plan in de planner te openen; **Exporteer naar Excel** downloadt de
+  (gefilterde) historie als `.xlsx`.
+- Achter de Cloudflare-tunnel toont de historie als IP-adres dat van de
+  tunnel, niet dat van de bezoeker.
 
 ## Let op
 

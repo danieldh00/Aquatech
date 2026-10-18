@@ -35,6 +35,8 @@
       sprinklers: [],
       zones: [],
       calc: null,
+      // Id van het plan in "Mijn plannen" op de server (null = nog niet bewaard).
+      serverId: null,
     };
   }
 
@@ -55,6 +57,8 @@
       this.recalc();
       this.refreshBackground().then(() => this.editor.fit());
       this.refreshAiStatus();
+      this._openFromUrl();
+      window.addEventListener('beforeunload', () => this._flushSync());
     },
 
     // ---------- Status & undo ----------
@@ -110,6 +114,10 @@
     },
 
     _save() {
+      this._saveLocal();
+      this._scheduleSync();
+    },
+    _saveLocal() {
       try {
         const data = { ...this.state, calc: null, step: this.step };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -138,6 +146,150 @@
         settings: { ...base.settings, ...(data.settings || {}) },
         calc: null,
       };
+    },
+
+    // ---------- Mijn plannen (opslag op de server) ----------
+    // Elk plan met inhoud wordt een paar seconden na de laatste wijziging op de
+    // server bewaard. Alleen de eigenaar ziet het terug; de beheerder ziet het
+    // in de historie van aanvragen. Via file:// is er geen server.
+    _serverAvailable() {
+      return location.protocol !== 'file:';
+    },
+    _serverData() {
+      const { calc, serverId, ...data } = this.state;
+      return data;
+    },
+    _scheduleSync() {
+      if (!this._serverAvailable()) return;
+      const st = this.state;
+      if (!st.areas.length && !st.sprinklers.length && !st.serverId) return;
+      this._syncPending = true;
+      clearTimeout(this._syncT);
+      this._syncT = setTimeout(() => this._sync(), 4000);
+    },
+    async _sync() {
+      if (this._syncing) { this._scheduleSync(); return; }
+      this._syncPending = false;
+      this._syncing = true;
+      const id = this.state.serverId;
+      const send = (method, url) => fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: this._serverData() }) });
+      try {
+        let res = await send(id ? 'PUT' : 'POST', id ? `api/plans/${encodeURIComponent(id)}` : 'api/plans');
+        // Plan niet (meer) van deze gebruiker: als nieuw plan bewaren.
+        if (res.status === 404 && id) res = await send('POST', 'api/plans');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const plan = await res.json();
+        if (this.state.serverId !== plan.id) {
+          this.state.serverId = plan.id;
+          this._saveLocal();
+        }
+        this._syncFailed = false;
+      } catch (e) {
+        // Offline of geen toegang: het plan staat nog in de browser.
+        if (!this._syncFailed) console.warn('Plan niet op de server bewaard:', e.message);
+        this._syncFailed = true;
+      } finally {
+        this._syncing = false;
+      }
+    },
+    _flushSync() {
+      if (!this._syncPending || !this.state.serverId) return;
+      clearTimeout(this._syncT);
+      const body = JSON.stringify({ data: this._serverData() });
+      // keepalive mag maar 64 kB meesturen; grotere plannen (met achtergrond)
+      // zijn bij de vorige automatische opslag al bewaard.
+      if (body.length > 60000) return;
+      try {
+        fetch(`api/plans/${encodeURIComponent(this.state.serverId)}`, { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body });
+      } catch (e) { /* negeren */ }
+    },
+    async _openFromUrl() {
+      const params = new URLSearchParams(location.search);
+      // Kopie vanuit Beheer (historie of plan van een andere gebruiker): wordt
+      // een nieuw, eigen plan; het origineel blijft onaangeroerd.
+      if (params.get('copy')) {
+        history.replaceState(null, '', location.pathname);
+        let data = null;
+        try { data = JSON.parse(sessionStorage.getItem('aquatech-open-copy') || 'null'); sessionStorage.removeItem('aquatech-open-copy'); } catch (e) { /* geen opslag */ }
+        if (!data || !Array.isArray(data.areas)) return;
+        this.checkpoint();
+        this._apply(data);
+        this.state.serverId = null;
+        this.editor.selection = null;
+        this.editor.bgImg = null;
+        await this.refreshBackground();
+        this.commit();
+        this.editor.fit();
+        this.toast('Kopie geopend als nieuw plan');
+        return;
+      }
+      const id = params.get('plan');
+      if (!id || !this._serverAvailable()) return;
+      history.replaceState(null, '', location.pathname);
+      await this.openServerPlan(id);
+    },
+    async openServerPlan(id) {
+      try {
+        const res = await fetch(`api/plans/${encodeURIComponent(id)}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(res.status === 404 ? 'plan niet gevonden' : `HTTP ${res.status}`);
+        const plan = await res.json();
+        this.checkpoint();
+        this._apply(plan.data);
+        this.state.serverId = plan.id;
+        this.editor.selection = null;
+        this.editor.bgImg = null;
+        await this.refreshBackground();
+        this.commit(false);
+        this._saveLocal();
+        this.editor.fit();
+        this.toast(`Plan "${plan.title}" geopend`);
+      } catch (e) {
+        this.toast(`Kan plan niet openen: ${e.message}`, true);
+      }
+    },
+    async showMyPlans() {
+      const dlg = $('#myplans');
+      const list = $('#myplans-list');
+      dlg.classList.add('open');
+      if (!this._serverAvailable()) {
+        list.innerHTML = '<p class="hint">Mijn plannen werkt alleen via de server, niet vanuit een los bestand.</p>';
+        return;
+      }
+      list.innerHTML = '<p class="hint">Laden…</p>';
+      try {
+        if (this._syncPending) { clearTimeout(this._syncT); await this._sync(); }
+        const res = await fetch('api/plans', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { items } = await res.json();
+        if (!items.length) {
+          list.innerHTML = '<p class="hint">Nog geen plannen bewaard. Een plan wordt automatisch bewaard zodra je een vlak tekent.</p>';
+          return;
+        }
+        const when = (iso) => new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' });
+        list.innerHTML = `<table class="list"><thead><tr><th>Plan</th><th>Gewijzigd</th><th></th></tr></thead><tbody>${items.map((p) => `
+          <tr${p.id === this.state.serverId ? ' class="sel"' : ''}>
+            <td><b>${esc(p.title)}</b>${p.customer || p.address ? `<br><span class="hint">${esc([p.customer, p.address].filter(Boolean).join(' · '))}</span>` : ''}</td>
+            <td>${esc(when(p.updatedAt))}</td>
+            <td class="myplans-act">
+              ${p.id === this.state.serverId ? '<span class="hint">Geopend</span>' : `<button class="btn" data-open="${esc(p.id)}">Openen</button>`}
+              <button class="btn ghost" data-del="${esc(p.id)}" title="Verwijderen">🗑</button>
+            </td>
+          </tr>`).join('')}</tbody></table>`;
+        list.querySelectorAll('[data-open]').forEach((b) => {
+          b.onclick = async () => { dlg.classList.remove('open'); await this.openServerPlan(b.dataset.open); };
+        });
+        list.querySelectorAll('[data-del]').forEach((b) => {
+          b.onclick = async () => {
+            if (!confirm('Dit plan verwijderen uit Mijn plannen?')) return;
+            const r = await fetch(`api/plans/${encodeURIComponent(b.dataset.del)}`, { method: 'DELETE' });
+            if (!r.ok) { this.toast('Verwijderen mislukt', true); return; }
+            if (b.dataset.del === this.state.serverId) { this.state.serverId = null; this._saveLocal(); }
+            this.showMyPlans();
+          };
+        });
+      } catch (e) {
+        list.innerHTML = `<p class="hint">Kan de plannen niet laden (${esc(e.message)}).</p>`;
+      }
     },
 
     // ---------- Objecten ----------
@@ -461,7 +613,7 @@
       setTimeout(() => URL.revokeObjectURL(url), 2000);
     },
     saveProject() {
-      const data = { ...this.state, calc: null };
+      const data = this._serverData();
       const name = (this.state.meta.name || 'beregeningsplan').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'beregeningsplan';
       this.download(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), `${name}.aquaplan.json`);
     },
@@ -473,6 +625,8 @@
           if (!data || !Array.isArray(data.areas)) throw new Error('Ongeldig bestand');
           this.checkpoint();
           this._apply(data);
+          // Een geopend bestand wordt een nieuw plan in Mijn plannen.
+          this.state.serverId = null;
           this.editor.selection = null;
           this.refreshBackground().then(() => this.editor.fit());
           this.commit();
@@ -525,6 +679,9 @@
       $('#btn-open').onclick = () => $('#file-open').click();
       $('#file-open').onchange = (e) => { if (e.target.files[0]) this.openProject(e.target.files[0]); e.target.value = ''; };
       $('#btn-save').onclick = () => this.saveProject();
+      $('#btn-myplans').onclick = () => this.showMyPlans();
+      $('#myplans-close').onclick = () => $('#myplans').classList.remove('open');
+      $('#myplans-new').onclick = () => { $('#myplans').classList.remove('open'); this.newProject(); };
       $('#btn-undo').onclick = () => this.undo();
       $('#btn-redo').onclick = () => this.redo();
       $('#btn-help').onclick = () => $('#help').classList.toggle('open');

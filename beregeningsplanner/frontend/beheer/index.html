@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#01579b">
+  <meta name="robots" content="noindex">
+  <title>Beheer – Aquatech</title>
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="beheer.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het Aquatech-overzicht">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2c-3.5 5-7 8.6-7 12.3A7 7 0 0 0 12 21a7 7 0 0 0 7-6.7C19 10.6 15.5 7 12 2Z"/></svg>
+      <span>Aquatech <b>Beheer</b></span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash wide">
+    <div id="denied" class="notice" hidden></div>
+
+    <div id="app" hidden>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="history" role="tab">Aanvragen</button>
+        <button class="tab" data-tab="plans" role="tab">Plannen</button>
+        <button class="tab" data-tab="users" role="tab">Gebruikers</button>
+      </nav>
+
+      <section id="tab-history" class="tabpane">
+        <div class="filters">
+          <input id="h-search" type="search" placeholder="Zoek op plan, klant, adres of gebruiker">
+          <select id="h-user"><option value="">Alle gebruikers</option></select>
+          <select id="h-action">
+            <option value="">Alle acties</option>
+            <option value="aangemaakt">Aangemaakt</option>
+            <option value="bijgewerkt">Bijgewerkt</option>
+            <option value="verwijderd">Verwijderd</option>
+            <option value="analyse">Plan herkend</option>
+          </select>
+          <button id="h-export" class="btn primary">Exporteer naar Excel</button>
+        </div>
+        <p class="muted small">Elke regel is een aanvraag: een nieuw plan, een reeks wijzigingen (binnen een half uur samengevoegd), een verwijdering of een automatische planherkenning. De historie is alleen voor beheerders zichtbaar en blijft bewaard, ook als een gebruiker het plan verwijdert.</p>
+        <div class="tablewrap"><table class="grid" id="h-table"></table></div>
+        <div class="pager"><button id="h-prev" class="btn">← Nieuwer</button><span id="h-info" class="muted"></span><button id="h-next" class="btn">Ouder →</button></div>
+      </section>
+
+      <section id="tab-plans" class="tabpane" hidden>
+        <p class="muted small">Alle actuele plannen van alle gebruikers. Gebruikers zien zelf alleen hun eigen plannen.</p>
+        <div class="tablewrap"><table class="grid" id="p-table"></table></div>
+      </section>
+
+      <section id="tab-users" class="tabpane" hidden>
+        <form id="u-form" class="card-form">
+          <h3>Gebruiker toevoegen</h3>
+          <div class="row">
+            <label>Gebruikersnaam<input name="username" required pattern="[a-z0-9][a-z0-9._\-]{2,39}" autocomplete="off" placeholder="bijv. jan.devries"></label>
+            <label>Naam<input name="displayName" autocomplete="off" placeholder="Jan de Vries"></label>
+            <label>Rol<select name="role"><option value="gebruiker">Gebruiker</option><option value="beheerder">Beheerder</option></select></label>
+            <label>Wachtwoord<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+            <button class="btn primary" type="submit">Toevoegen</button>
+          </div>
+          <div id="u-err" class="err" role="alert"></div>
+        </form>
+        <label class="chk"><input type="checkbox" id="u-guests"> Gasten tonen (anonieme bezoekers zonder account)</label>
+        <div class="tablewrap"><table class="grid" id="u-table"></table></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="detail" class="modal" hidden>
+    <div class="modal-card">
+      <button class="btn ghost close" id="detail-close" title="Sluiten">✕</button>
+      <div id="detail-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../beregening/vendor/exceljs.min.js"></script>
+  <script src="../beregening/js/catalog.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="beheer.js"></script>
+</body>
+</html>

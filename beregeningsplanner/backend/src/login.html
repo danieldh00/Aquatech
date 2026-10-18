@@ -22,9 +22,11 @@
 <body>
   <form class="card" id="f">
     <h1><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2c-3.5 5-7 8.6-7 12.3A7 7 0 0 0 12 21a7 7 0 0 0 7-6.7C19 10.6 15.5 7 12 2Z"/></svg>Aquatech</h1>
-    <p>Log in met de toegangscode. Dit toestel onthoudt de inlog een jaar.</p>
-    <label for="code">Toegangscode</label>
-    <input id="code" name="code" type="password" autocomplete="current-password" required autofocus>
+    <p>Log in met je gebruikersnaam en wachtwoord, of laat de gebruikersnaam leeg en vul de toegangscode in. Dit toestel onthoudt de inlog een jaar.</p>
+    <label for="user">Gebruikersnaam</label>
+    <input id="user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus>
+    <label for="code" style="margin-top:12px">Wachtwoord of toegangscode</label>
+    <input id="code" name="code" type="password" autocomplete="current-password" required>
     <button id="b" type="submit">Inloggen</button>
     <div class="err" id="e" role="alert"></div>
   </form>
@@ -36,9 +38,10 @@
       try {
         const res = await fetch('/api/auth/login', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: document.getElementById('code').value }),
+          body: JSON.stringify({ username: document.getElementById('user').value.trim(), password: document.getElementById('code').value, code: document.getElementById('code').value }),
         });
-        if (res.ok) { location.reload(); return; }
+        // Op /login naar het dashboard, anders dezelfde pagina opnieuw laden.
+        if (res.ok) { if (/\/login$/.test(location.pathname)) location.href = './'; else location.reload(); return; }
         const body = await res.json().catch(() => ({}));
         e.textContent = body.message || 'Inloggen mislukt.';
       } catch (err) {

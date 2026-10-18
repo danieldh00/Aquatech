@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.10.0
+
+- **Nieuw: historie van aanvragen en gebruikers met rollen.** De app heeft
+  nu een database (`/data/aquatech.db`, in de HA-back-ups).
+  - **Mijn plannen**: elk plan wordt automatisch ook op de server bewaard.
+    Gebruikers zien alleen hun eigen plannen (in de planner en op het
+    dashboard).
+  - **Beheer** (nieuwe module, alleen voor beheerders): historie van alle
+    aanvragen met zoeken, filteren, details en Excel-export; overzicht van
+    alle plannen; gebruikers aanmaken, rol wijzigen, wachtwoord resetten en
+    uitschakelen.
+  - Rollen: het HA-paneel en inloggen met de toegangscode zijn beheerder;
+    accounts krijgen de rol beheerder of gebruiker. Zonder toegangscode
+    krijgt elke browser een eigen anonieme gast.
+  - Inlogpagina ook op `.../login`, met gebruikersnaam en wachtwoord (of
+    alleen de toegangscode, zoals voorheen). Bestaande inlogs blijven geldig.
+- Opgelost: automatisch herkennen vanuit de planner (`beregening/`) riep de
+  API op het verkeerde pad aan; de API is nu ook onder elke module
+  bereikbaar.
+
 ## 0.9.0
 
 - **Nieuw: Aquatech-dashboard als startpagina.** De app is nu de basis van

@@ -13,7 +13,10 @@
       <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2c-3.5 5-7 8.6-7 12.3A7 7 0 0 0 12 21a7 7 0 0 0 7-6.7C19 10.6 15.5 7 12 2Z"/></svg>
       <span>Aquatech</span>
     </div>
-    <span id="version" class="version"></span>
+    <div class="topbar-right">
+      <span id="account" class="account"></span>
+      <span id="version" class="version"></span>
+    </div>
   </header>
 
   <main class="dash">
@@ -24,6 +27,11 @@
 
     <section id="recent" class="recent" hidden></section>
 
+    <section id="myplans" hidden>
+      <h2>Mijn plannen</h2>
+      <div id="myplans-list" class="tiles"></div>
+    </section>
+
     <section>
       <h2>Modules</h2>
       <div id="modules" class="tiles"></div>
@@ -31,6 +39,7 @@
   </main>
 
   <script src="dashboard/modules.js"></script>
+  <script src="dashboard/account.js"></script>
   <script src="dashboard/dashboard.js"></script>
 </body>
 </html>

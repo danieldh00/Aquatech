@@ -5,7 +5,7 @@
   "description": "Backend van de Beregeningsplanner-add-on: serveert de planner (ingress en losse server)",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node --test"
   },
