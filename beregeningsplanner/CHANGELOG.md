@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.28.0
+
+- **Werkorders** (nieuwe module, tegel op het dashboard, voor beheerders en
+  installateurs; een klant ziet ze niet): van een offerte met status
+  **Akkoord** maak je een werkorder, in de offerte met de knop **Werkorder
+  maken** of in de module via **Nieuwe werkorder uit offerte**.
+- De werkorder bevat het uitvoeringsplan: werkstappen per fase
+  (voorbereiding, uitvoering, oplevering) in een logische volgorde, met de
+  uren uit de offerte en een kolom voor de werkelijke uren; de zone-indeling
+  uit het plan (onderdelen, debiet, leidinglengte en druk per zone); en de
+  materiaallijst zonder prijzen om af te vinken bij het verzamelen.
+- Inplannen met datum en starttijd, toewijzen aan een uitvoerder, ploeg,
+  werkinstructies, bijzonderheden van de locatie en een opleverblok. De
+  status volgt vanzelf (datum = gepland, eerste afgevinkte stap = in
+  uitvoering) en is ook met de hand te zetten.
+- Werkbon als PDF (afdrukversie met afvinkvakjes en aftekenregels) en Excel
+  (werkorder, zones en materialen op aparte tabbladen); het overzicht is ook
+  naar Excel te exporteren. Nummering `WO-<jaar>-0001` per omgeving.
+- Opties uit de offerte die de klant niet heeft gekozen, komen niet in de
+  werkorder (materialen en werkstappen).
+
 ## 0.27.0
 
 - **Hoofdbeheerders aanmaken**: in Hoofdbeheer opent de knop

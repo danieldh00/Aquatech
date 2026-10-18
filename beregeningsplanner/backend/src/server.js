@@ -14,6 +14,7 @@ const { createVault, loadOrCreateMasterKey } = require('./vault');
 const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes } = require('./quotes');
 const { createMailer } = require('./mailer');
+const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const crypto = require('crypto');
 
@@ -183,6 +184,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/quotes', express.json({ limit: '1mb' }));
   // Akkoord via de openbare link: met handtekening (PNG).
   app.use('/api/public', express.json({ limit: '512kb' }));
+  app.use('/api/workorders', express.json({ limit: '1mb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -412,6 +414,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     offertes: 'Alleen voor beheerders en installateurs.',
     'offertes.alle': 'Alleen voor beheerders en installateurs.',
     'plannen.alle': 'Alleen voor beheerders en installateurs.',
+    werkorders: 'Alleen voor beheerders en installateurs.',
   };
   const requireRight = (right) => (req, res, next) => {
     const user = identify(req);
@@ -830,6 +833,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
       return home === tid ? store.listCustomers(tid) : [...store.listCustomers(home), ...store.listCustomers(tid)];
+    },
+  });
+
+  // ---------- Werkorders (module Werkorders, zie workorders.js) ----------
+  registerWorkOrderRoutes(app, {
+    workorders: createWorkOrderStore(database), requireRight, requireAdmin, requireJson, audit,
+    // Medewerkers horen bij de live-tenant; in een testomgeving komen de
+    // testaccounts daarvan erbij (net als bij de klantaccounts hierboven).
+    staffTenantsOf: (req) => {
+      const tid = req.tenantId || tenant.id;
+      return [homeOf(tid), tid];
     },
   });
 

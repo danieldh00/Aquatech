@@ -386,12 +386,13 @@ function createStore(db) {
     return { tenant: t };
   }
 
-  // Leegmaken: plannen, historie, auditlog, sessies en gasten weg;
+  // Leegmaken: plannen, offertes, werkorders, historie, auditlog, sessies en gasten weg;
   // instellingen blijven.
   function clearData(tenantId) {
     q('DELETE FROM history WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM audit WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM sessions WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM work_orders WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM impersonations WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM support_grants WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM quotes WHERE tenant_id = ?').run(tenantId);

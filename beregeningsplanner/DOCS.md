@@ -214,6 +214,34 @@ alleen een vaste lijst bestanden zonder inloggen; de rest van de app blijft
 achter de login. Verzoeken op de openbare API zijn per IP begrensd. Een
 uitgeschakelde organisatie of ingetrokken link geeft *niet beschikbaar*.
 
+## Werkorders
+
+Module **Werkorders** (tegel op het dashboard), alleen voor beheerders en
+installateurs. Een werkorder maak je van een offerte met status **Akkoord**:
+in de offerte met **Werkorder maken** (staat er al een, dan opent de knop
+die), of in de module met **Nieuwe werkorder uit offerte**.
+
+- **Werkstappen**: de arbeidsregels van de offerte in uitvoeringsvolgorde
+  (aansluiting, sleuven, ventielkast, sproeiers, druppelleiding, besturing,
+  inregelen), met voorbereiding en oplevering eromheen. Per stap de geplande
+  uren uit de offerte en een veld voor de werkelijke uren; stappen zijn toe
+  te voegen, aan te passen en af te vinken.
+- **Zone-indeling** uit het gekoppelde plan: per zone de onderdelen, het
+  debiet, de leidinglengte en de druk bij de laatste kop. Na een wijziging
+  in het plan: menu ⋯ → *Zone-indeling opnieuw uit het plan*.
+- **Materialen**: de materiaalregels van de offerte zonder prijzen, af te
+  vinken bij het verzamelen (⋯ → *Materialen opnieuw uit de offerte*).
+- **Planning**: datum, starttijd, uitvoerder (beheerder of installateur),
+  ploeg, werkinstructies en bijzonderheden van de locatie. Status: nieuw,
+  gepland, in uitvoering, gereed of geannuleerd; een datum zet een nieuwe
+  werkorder op gepland, de eerste afgevinkte stap op in uitvoering.
+- **Werkbon**: PDF via het printvenster, met afvinkvakjes en aftekenregels
+  voor uitvoerder en klant, of Excel. Het overzicht is filterbaar (ook
+  "alleen aan mij toegewezen") en exporteert naar Excel.
+
+Nummering `WO-<jaar>-0001` per tenant en omgeving; een beheerder kan een
+werkorder definitief wissen (AVG).
+
 ## Gebruikers, rollen en historie van aanvragen
 
 Elke rol ziet op het dashboard alleen de modules die erbij horen; de server

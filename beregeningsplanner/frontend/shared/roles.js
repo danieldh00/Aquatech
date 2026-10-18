@@ -3,9 +3,10 @@
 // om te tonen wat iemand mag (tegels, knoppen, keuzelijsten).
 //
 // - beheerder:    alles binnen de eigen organisatie (tenant): gebruikers,
-//                 instellingen, historie, alle plannen en offertes.
-// - installateur: plannen maken en bewerken en offertes opstellen voor de
-//                 hele organisatie; geen gebruikers, instellingen of historie.
+//                 instellingen, historie, alle plannen, offertes en werkorders.
+// - installateur: plannen maken en bewerken, offertes opstellen en
+//                 werkorders uitvoeren voor de hele organisatie; geen
+//                 gebruikers, instellingen of historie.
 // - klant:        alleen de eigen plannen, en de offertes die voor hem zijn
 //                 klaargezet inzien en accepteren of afwijzen.
 // Een hoofdbeheerder (users.platform_admin) mag alles, in elke tenant.
@@ -13,13 +14,13 @@
   const ROLES = {
     beheerder: {
       label: 'Beheerder',
-      description: 'Alles binnen de organisatie: gebruikers, instellingen, historie, alle plannen en offertes.',
-      rights: ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'beheer'],
+      description: 'Alles binnen de organisatie: gebruikers, instellingen, historie, alle plannen, offertes en werkorders.',
+      rights: ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'werkorders', 'beheer'],
     },
     installateur: {
       label: 'Installateur',
-      description: 'Plannen maken en bewerken en offertes opstellen; geen gebruikers of instellingen.',
-      rights: ['plannen', 'plannen.alle', 'offertes', 'offertes.alle'],
+      description: 'Plannen maken en bewerken, offertes opstellen en werkorders uitvoeren; geen gebruikers of instellingen.',
+      rights: ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'werkorders'],
     },
     klant: {
       label: 'Klant',
@@ -28,7 +29,7 @@
     },
   };
   // Alle rechten; een hoofdbeheerder heeft ze allemaal plus 'hoofdbeheer'.
-  const RIGHTS = ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'offertes.klant', 'beheer', 'hoofdbeheer'];
+  const RIGHTS = ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'offertes.klant', 'werkorders', 'beheer', 'hoofdbeheer'];
   // Oude rolnaam (tot 0.22.0): een 'gebruiker' is nu een installateur.
   const ALIASES = { gebruiker: 'installateur' };
 

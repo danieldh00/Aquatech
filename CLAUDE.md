@@ -183,6 +183,14 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   Regels kunnen `optional`/`selected` zijn (`Core.included`, `chooseOptions`).
   E-mail via `mailer.js` (nodemailer, eigen SMTP: `mailServer` + geheim
   `mailPassword`); tests vervangen `mailerFor`.
+  afdrukversie (`#print`, print-CSS), geen PDF-bibliotheek.
+- **Werkorders** (`frontend/werkorders/`, 0.28.0, recht `werkorders`:
+  beheerder + installateur): kern `workorder-core.js` (UMD, `fromQuote`,
+  `zonesFromPlan`, `sanitize`, `progress`), opslag/routes
+  `backend/src/workorders.js` (tabel `work_orders`, migratie 10, nummer
+  `WO-<jaar>-0001`). Alleen uit een offerte met status `akkoord`; koppeling
+  met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
+  de offerte-editor.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - Health: `GET /api/health` (versie uit `package.json`).
