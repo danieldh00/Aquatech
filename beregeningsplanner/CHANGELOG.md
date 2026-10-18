@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0
+
+- **Huisstijl van AquaTech Service** (aquatechservice.nl) in het dashboard,
+  de beregeningsplanner en de inlogpagina: het AquaTech Service-logo in de
+  bovenbalk (op de telefoon alleen het schild), navy balken en kopteksten,
+  groene knoppen en het lettertype Montserrat (lokaal meegeleverd, werkt ook
+  zonder internet en onder Home Assistant).
+- Nieuw icoon en logo in Home Assistant met het schild van het logo.
+
 ## 0.9.0
 
 - **Nieuw: Aquatech-dashboard als startpagina.** De app is nu de basis van
