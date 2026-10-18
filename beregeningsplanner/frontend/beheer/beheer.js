@@ -14,7 +14,8 @@
   const AUDIT = {
     ingelogd: 'Ingelogd', uitgelogd: 'Uitgelogd', inloggen_mislukt: 'Inloggen mislukt', inloggen_geblokkeerd: 'Inloggen geblokkeerd',
     eerste_beheerder: 'Eerste beheerder', installatie_mislukt: 'Installatiecode onjuist', gebruiker_aangemaakt: 'Gebruiker aangemaakt',
-    gebruiker_gewijzigd: 'Gebruiker gewijzigd', sessies_ingetrokken: 'Uitgelogd op alle toestellen', instellingen_gewijzigd: 'Instellingen gewijzigd',
+    gebruiker_gewijzigd: 'Gebruiker gewijzigd', plan_gewist: 'Plan definitief gewist', backup_gemaakt: 'Back-up gemaakt',
+    backup_gedownload: 'Back-up gedownload', sessies_ingetrokken: 'Uitgelogd op alle toestellen', instellingen_gewijzigd: 'Instellingen gewijzigd',
   };
 
   function toast(msg, err = false) {
@@ -314,6 +315,7 @@
     const code = view.accessCode;
     const codeState = $('[data-state="accessCode"]');
     codeState.textContent = code.set ? 'Ingesteld: inloggen kan ook met de code (als beheerder).' : 'Niet ingesteld: inloggen alleen met een eigen account.';
+    $('#s-backup').backupKeepDays.value = view.backupKeepDays.value;
     const sec = $('#s-security');
     for (const k of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays']) sec[k].value = view[k].value;
     const acc = $('#s-access');
@@ -328,7 +330,22 @@
         ${esc(m.title)}${m.status === 'gepland' ? ' <span class="muted small">(binnenkort)</span>' : ''}</label>`).join('');
   }
 
+  const size = (n) => (n >= 1048576 ? `${num(n / 1048576)} MB` : `${num(n / 1024, 0)} kB`);
+  async function loadBackups() {
+    const el = $('#b-list');
+    try {
+      const { enabled, items } = await api('backups');
+      $('#b-now').disabled = !enabled;
+      el.innerHTML = !enabled ? 'Back-ups zijn op deze server niet beschikbaar.'
+        : !items.length ? 'Nog geen back-ups.'
+          : `<ul class="timeline">${items.map((b) => `<li><a href="../api/admin/backups/${encodeURIComponent(b.name)}" download>${esc(b.name)}</a> · ${esc(when(b.createdAt))} · ${esc(size(b.size))}</li>`).join('')}</ul>`;
+    } catch (e) {
+      el.textContent = `Kan de back-ups niet laden (${e.message}).`;
+    }
+  }
+
   async function loadSettings() {
+    if (state.backups) loadBackups();
     try {
       renderSettings((await api('settings')).settings);
     } catch (e) {
@@ -403,6 +420,19 @@
         }
       };
     });
+    const bk = $('#s-backup');
+    bk.onsubmit = (ev) => {
+      ev.preventDefault();
+      saveSettings(bk, { backupKeepDays: Number(bk.backupKeepDays.value) }, 'Instellingen opgeslagen');
+    };
+    $('#b-now').onclick = async () => {
+      const b = $('#b-now');
+      b.disabled = true;
+      b.textContent = 'Bezig…';
+      try { await api('backups', { method: 'POST' }); toast('Back-up gemaakt'); } catch (e) { toast(e.message, true); }
+      b.textContent = 'Nu back-up maken';
+      loadBackups();
+    };
     const sec = $('#s-security');
     sec.onsubmit = (ev) => {
       ev.preventDefault();
@@ -429,6 +459,8 @@
     if (d.disabled !== undefined) parts.push(d.disabled ? 'uitgeschakeld' : 'ingeschakeld');
     if (d.fields) parts.push(`velden: ${d.fields.join(', ')}`);
     if (d.count !== undefined) parts.push(`${d.count} sessie(s)`);
+    if (d.name) parts.push(d.name);
+    if (d.automatisch) parts.push('automatisch');
     return parts.join(' · ');
   }
 
@@ -471,6 +503,9 @@
       return;
     }
     $('#app').hidden = false;
+    // Back-ups bevatten de hele database (alle tenants): alleen voor hoofdbeheerders.
+    state.backups = Boolean(me.platformAdmin || (me.via === 'code' && me.tenant && me.tenant.slug === 'default'));
+    $('#s-backup').hidden = !state.backups;
     document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
     let timer;
     $('#h-search').oninput = () => { clearTimeout(timer); timer = setTimeout(() => { state.offset = 0; loadHistory(); }, 250); };

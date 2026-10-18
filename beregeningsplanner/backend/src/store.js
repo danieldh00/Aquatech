@@ -633,6 +633,20 @@ function createStore(db) {
     });
   }
 
+  // Definitief wissen (AVG-verzoek): het plan zelf en de persoonsgegevens in
+  // de historie (kopie, klant, adres, titel, IP). De regels blijven staan als
+  // spoor dat er iets was, zonder inhoud. Ook al verwijderde plannen.
+  function purgePlan(tenantId, id) {
+    return transaction(db, () => {
+      const p = q('SELECT id FROM plans WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+      const h = q(`UPDATE history SET snapshot = NULL, title = 'Gewist plan', customer = '', address = '', summary = '{}', ip = ''
+        WHERE tenant_id = ? AND plan_id = ?`).run(tenantId, String(id)).changes;
+      if (!p && !h) return null;
+      if (p) q('DELETE FROM plans WHERE id = ?').run(p.id);
+      return { plan: Boolean(p), history: h };
+    });
+  }
+
   function deletePlan(user, id, ip) {
     return transaction(db, () => {
       const p = findPlan(user, id);
@@ -648,7 +662,7 @@ function createStore(db) {
     accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem,
     ensureTenant, systemUser, createGuest, createAccount, updateAccount, countAdmins, authenticate, getUser, touchUser, listUsers, publicUser,
     createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
-    record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan,
+    record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
   };
 }
 

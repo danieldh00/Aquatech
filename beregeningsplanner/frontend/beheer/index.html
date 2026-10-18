@@ -130,6 +130,16 @@
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-backup" class="card-form settings">
+          <h3>Back-ups</h3>
+          <p class="muted small">Elke dag een versleutelde kopie van de database (plannen, historie, gebruikers, instellingen). Alleen terug te zetten met de hoofdsleutel van deze server; een gedownloade back-up is daarom veilig elders te bewaren. Bewaar wel een kopie buiten de server.</p>
+          <div class="row">
+            <label>Back-ups bewaren (dagen, 0 = uit) <span class="src" data-origin="backupKeepDays"></span><input name="backupKeepDays" type="number" min="0" max="365" step="1" required></label>
+          </div>
+          <div class="row"><button class="btn primary" type="submit">Opslaan</button><button type="button" class="btn" id="b-now">Nu back-up maken</button></div>
+          <div id="b-list" class="muted small"></div>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-modules" class="card-form settings">
           <h3>Modules op het dashboard</h3>
           <p class="muted small">Uitgezette modules verdwijnen van het dashboard. Beheer blijft altijd zichtbaar voor beheerders.</p>

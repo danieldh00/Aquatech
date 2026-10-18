@@ -10,6 +10,7 @@ const { openDb } = require('./db');
 const { createStore } = require('./store');
 const { createSettings, SettingsError, FIELDS } = require('./settings');
 const { createVault, loadOrCreateMasterKey } = require('./vault');
+const backups = require('./backup');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -86,7 +87,7 @@ function sendPage(res, file, version) {
 
 // accessCode, anthropicApiKey en aiDailyLimit zijn alleen startwaarden (net als
 // env); de actuele waarden komen uit de instellingen.
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -553,6 +554,61 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({ ok: true, revoked: n });
   });
 
+  // Plan definitief wissen, inclusief de inhoud van de historie (AVG).
+  app.delete('/api/admin/plans/:id', (req, res) => {
+    const out = store.purgePlan(req.tenantId, req.params.id);
+    if (!out) return res.status(404).json({ error: 'not_found', message: 'Plan niet gevonden.' });
+    audit(req, 'plan_gewist', { planId: req.params.id, historyRows: out.history });
+    res.json({ ok: true, ...out });
+  });
+
+  // ---------- Beheer: back-ups ----------
+  // Alleen versleutelde bestanden; downloaden is dus veilig voor een kopie
+  // elders (zonder de hoofdsleutel onleesbaar). Een back-up bevat de hele
+  // database (alle tenants), dus alleen voor hoofdbeheerders.
+  // (Ook met de toegangscode van de hoofdtenant, zoals op een installatie
+  // met één organisatie.)
+  app.use('/api/admin/backups', (req, res, next) => {
+    const u = req.user;
+    if (u.platform_admin || (u.kind === 'systeem' && req.tenantId === tenant.id)) return next();
+    res.status(403).json({ error: 'forbidden', message: 'Alleen voor hoofdbeheerders.' });
+  });
+  let backupRunning = null;
+  async function runBackup(req = null) {
+    if (!backupDir) throw Object.assign(new Error('Back-ups zijn niet ingesteld.'), { status: 501 });
+    if (backupRunning) return backupRunning;
+    backupRunning = (async () => {
+      try {
+        const b = await backups.createBackup({ db: database, dir: backupDir, vault });
+        backups.pruneBackups(backupDir, Math.max(1, settings.get('backupKeepDays')));
+        if (req) audit(req, 'backup_gemaakt', { name: b.name, size: b.size }, undefined, tenant.id);
+        else store.audit({ tenantId: tenant.id, action: 'backup_gemaakt', detail: { name: b.name, size: b.size, automatisch: true } });
+        return b;
+      } finally {
+        backupRunning = null;
+      }
+    })();
+    return backupRunning;
+  }
+
+  app.get('/api/admin/backups', (req, res) => {
+    res.json({ enabled: Boolean(backupDir), keepDays: settings.get('backupKeepDays'), items: backupDir ? backups.listBackups(backupDir) : [] });
+  });
+
+  app.post('/api/admin/backups', wrap(async (req, res) => {
+    if (!backupDir) return res.status(501).json({ error: 'not_supported', message: 'Back-ups zijn niet ingesteld.' });
+    res.status(201).json(await runBackup(req));
+  }));
+
+  app.get('/api/admin/backups/:name', (req, res) => {
+    const name = req.params.name;
+    if (!backupDir || !backups.isBackupName(name) || !fs.existsSync(path.join(backupDir, name))) {
+      return res.status(404).json({ error: 'not_found', message: 'Back-up niet gevonden.' });
+    }
+    audit(req, 'backup_gedownload', { name }, undefined, tenant.id);
+    res.download(path.join(backupDir, name), name);
+  });
+
   // Auditlog: beveiligingsgebeurtenissen.
   app.get('/api/admin/audit', (req, res) => {
     const { limit, offset, action } = req.query;
@@ -874,6 +930,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
     return total;
   };
+  // Automatische back-up als de nieuwste ouder is dan een dag.
+  app.locals.backupIfDue = async () => {
+    if (!backupDir || settings.get('backupKeepDays') === 0) return null;
+    const newest = backups.listBackups(backupDir)[0];
+    if (newest && Date.now() - Date.parse(newest.createdAt) < 23 * 3600 * 1000) return null;
+    return runBackup();
+  };
   return app;
 }
 
@@ -886,7 +949,8 @@ if (require.main === module) {
   console.log(`Hoofdsleutel voor versleuteling: ${master.source}`);
   const port = Number(process.env.PORT) || 3300;
   const db = openDb(path.join(dataDir, 'aquatech.db'));
-  const app = createApp({ secret, db, env: process.env, vault: createVault(master.key) });
+  const backupDir = process.env.BACKUP_DIR || path.join(dataDir, 'backups');
+  const app = createApp({ secret, db, env: process.env, vault: createVault(master.key), backupDir });
   const { settings } = app.locals;
 
   if (!app.locals.hasAdminAccount()) {
@@ -901,6 +965,9 @@ if (require.main === module) {
     } catch (err) {
       console.error('Onderhoud mislukt:', err);
     }
+    app.locals.backupIfDue()
+      .then((b) => { if (b) console.log(`Versleutelde back-up gemaakt: ${b.name} (${b.size} bytes) in ${backupDir}`); })
+      .catch((err) => console.error('Back-up mislukt:', err.message));
   };
   runMaintenance();
   setInterval(runMaintenance, 60 * 60 * 1000).unref();

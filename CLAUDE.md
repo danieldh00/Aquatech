@@ -77,6 +77,9 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   rehash bij inloggen. Eerste beheerder vereist installatiecode (log,
   `SETUP_CODE`) of toegangscode. Tabel `audit` (`store.audit`, nooit geheimen
   in `detail`), bewaartermijnen via `app.locals.maintenance` (elk uur).
+  Back-ups (`backup.js`, 0.19.0): VACUUM INTO + AES-GCM (`vault.derive('back-ups')`),
+  `/data/backups` of `BACKUP_DIR`, dagelijks via `app.locals.backupIfDue`,
+  `backupKeepDays`; `store.purgePlan` wist plan + historie-inhoud (AVG).
   CSP in server.js: inline scripts alleen in login/setup.html (op hash);
   nieuwe inline scripts elders werken niet. Proces zakt van root naar uid 1000
   (`dropPrivileges`, `RUN_AS_ROOT=1` slaat over). Test-wachtwoorden moeten
@@ -125,7 +128,7 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   (`frontend/beheer/`, `role: 'beheerder'` in modules.js) toont historie,
   plannen en gebruikers. De API is ook onder `<module>/api/...` bereikbaar
   (modules gebruiken relatieve `api/...`).
-- **Multitenant** (0.18.0): tenants in `tenants` (`environment` `live`|`test`,
+- **Multitenant** (0.20.0): tenants in `tenants` (`environment` `live`|`test`,
   `parent_id`, `disabled`); een testomgeving is een eigen tenant onder een
   live-tenant (eigen plannen/historie/instellingen, gebruikers van de
   live-tenant). Gebruikersnamen van accounts zijn globaal uniek; inloggen

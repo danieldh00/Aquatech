@@ -18,7 +18,8 @@ const PW = 'Tuin-Plan-2026!';
 async function start(opts = {}) {
   const db = opts.db || openDb();
   const store = createStore(db);
-  if (!opts.noAdmin) await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW });
+  // Zoals na het instelscherm: de eerste beheerder is hoofdbeheerder.
+  if (!opts.noAdmin) await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   return new Promise((resolve) => {
     const app = createApp({ secret: SECRET, db, ...opts });
     const server = app.listen(0, () => resolve({ app, db, store, server, base: `http://127.0.0.1:${server.address().port}` }));
@@ -235,6 +236,91 @@ test('beveiligingsheaders op pagina’s en API', async () => {
     assert.strictEqual((await fetch(`${base}/api/health`)).headers.get('cache-control'), 'no-store');
     const https = await fetch(`${base}/api/health`, { headers: { 'X-Forwarded-Proto': 'https' } });
     assert.match(https.headers.get('strict-transport-security'), /max-age=/);
+  } finally {
+    server.close();
+  }
+});
+
+test('versleutelde back-up: onleesbaar zonder sleutel, terug te zetten met sleutel', async () => {
+  const { createBackup, listBackups, pruneBackups, decryptFile, keyOf } = require('../src/backup');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-bk-'));
+  try {
+    const db = openDb();
+    const store = createStore(db);
+    const t = store.ensureTenant();
+    const { user } = await store.createAccount(t.id, { username: 'piet', role: 'gebruiker', password: PW });
+    store.savePlan(user, null, { areas: [], meta: { name: 'Tuin', customer: 'Familie Jansen' } }, '');
+    const vault = createVault(crypto.randomBytes(32));
+    const b = await createBackup({ db, dir, vault });
+    assert.deepStrictEqual(listBackups(dir).map((x) => x.name), [b.name]);
+    assert.strictEqual(fs.statSync(path.join(dir, b.name)).mode & 0o777, 0o600);
+    assert.ok(!fs.readFileSync(path.join(dir, b.name)).includes('Familie Jansen'), 'versleuteld');
+    assert.deepStrictEqual(fs.readdirSync(dir), [b.name], 'geen tijdelijke bestanden over');
+
+    const out = path.join(dir, 'terug.db');
+    await decryptFile(path.join(dir, b.name), out, keyOf(vault));
+    const restored = openDb(out);
+    assert.strictEqual(restored.prepare('SELECT customer FROM plans').get().customer, 'Familie Jansen');
+    restored.close();
+
+    await assert.rejects(decryptFile(path.join(dir, b.name), path.join(dir, 'fout.db'), keyOf(createVault(crypto.randomBytes(32)))));
+    assert.ok(!fs.existsSync(path.join(dir, 'fout.db')) && !fs.existsSync(path.join(dir, 'fout.db.part')));
+
+    // Bewaartermijn: oude weg, de nieuwste blijft altijd.
+    const old = path.join(dir, 'aquatech-20200101-000000.db.enc');
+    fs.copyFileSync(path.join(dir, b.name), old);
+    fs.utimesSync(old, new Date('2020-01-01'), new Date('2020-01-01'));
+    assert.deepStrictEqual(pruneBackups(dir, 14), ['aquatech-20200101-000000.db.enc']);
+    assert.deepStrictEqual(pruneBackups(dir, 0), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('back-up-API alleen voor hoofdbeheerders; download alleen geldige namen', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-bkapi-'));
+  const { server, base, store } = await start({ backupDir: dir });
+  try {
+    assert.strictEqual((await client(base).post('/api/admin/backups')).status, 401);
+    // Een gewone beheerder (geen hoofdbeheerder): de back-up bevat alle tenants.
+    await store.createAccount(store.ensureTenant().id, { username: 'tweede', role: 'beheerder', password: PW });
+    const b = client(base);
+    await b.post('/api/auth/login', { username: 'tweede', password: PW });
+    assert.strictEqual((await b.post('/api/admin/backups')).status, 403);
+    assert.strictEqual((await b.get('/api/admin/backups')).status, 403);
+    const a = client(base);
+    await a.post('/api/auth/login', { username: 'baas', password: PW });
+    const made = await a.post('/api/admin/backups');
+    assert.strictEqual(made.status, 201);
+    const list = (await a.get('/api/admin/backups')).body;
+    assert.strictEqual(list.enabled, true);
+    assert.strictEqual(list.items[0].name, made.body.name);
+    const dl = await fetch(`${base}/api/admin/backups/${made.body.name}`, { headers: { cookie: `aquatech_session=${a.jar.get('aquatech_session')}` } });
+    assert.strictEqual(dl.status, 200);
+    assert.strictEqual(Buffer.from(await dl.arrayBuffer()).subarray(0, 4).toString(), 'AQBK');
+    assert.strictEqual((await a.get('/api/admin/backups/..%2Fmaster-key')).status, 404);
+    assert.ok((await a.get('/api/admin/audit')).body.items.some((x) => x.action === 'backup_gedownload'));
+  } finally {
+    server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('plan definitief wissen haalt ook klantgegevens uit de historie', async () => {
+  const { server, base, store, db } = await start();
+  try {
+    const t = store.ensureTenant();
+    const { user } = await store.createAccount(t.id, { username: 'klaas', role: 'gebruiker', password: PW });
+    const plan = store.savePlan(user, null, { areas: [], meta: { name: 'Tuin Jansen', customer: 'Familie Jansen', address: 'Dorpsstraat 1' } }, '10.1.1.1');
+    store.deletePlan(user, plan.id, '10.1.1.1');
+    const a = client(base);
+    await a.post('/api/auth/login', { username: 'baas', password: PW });
+    const r = await (async () => { const res = await fetch(`${base}/api/admin/plans/${plan.id}`, { method: 'DELETE', headers: { cookie: `aquatech_session=${a.jar.get('aquatech_session')}` } }); return { status: res.status, body: await res.json() }; })();
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(r.body, { ok: true, plan: true, history: 2 });
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM plans').get().n, 0);
+    const dump = JSON.stringify(db.prepare('SELECT * FROM history').all());
+    assert.doesNotMatch(dump, /Jansen|Dorpsstraat|10\.1\.1\.1/);
   } finally {
     server.close();
   }

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.18.0
+## 0.20.0
 
 - **Multitenant.** De app kan meerdere klanten (tenants) bedienen, elk met
   eigen gebruikers, plannen, historie en instellingen die de andere tenants
@@ -28,6 +28,22 @@
   bewaartermijnen werken per tenant en per testomgeving. Versleutelde
   geheimen worden bij een nieuwe testomgeving opnieuw versleuteld
   overgenomen.
+- Back-ups (de hele database, alle tenants) zijn alleen voor
+  hoofdbeheerders, of met de toegangscode van de hoofdtenant. Plan
+  definitief wissen werkt in de actieve omgeving.
+
+## 0.19.0
+
+- **Versleutelde back-ups**: elke dag een kopie van de database in
+  `/data/backups` (of `BACKUP_DIR`), versleuteld met een van de hoofdsleutel
+  afgeleide sleutel. Standaard 14 dagen bewaard (Beheer → Instellingen →
+  Back-ups, 0 = uit). Daar kun je ook direct een back-up maken en een
+  back-up downloaden om elders te bewaren. Terugzetten:
+  `node src/backup.js decrypt <back-up> <aquatech.db>`.
+- **Plan definitief wissen** (AVG-verzoek, alleen beheerders, in het
+  Plannenoverzicht): verwijdert het plan en haalt klant, adres, kopieën en
+  IP-adressen uit de historie. Komt in het auditlog.
+
 ## 0.17.0
 
 - **Na een update altijd de nieuwe opmaak.** Op de iPhone kon de browser (of
