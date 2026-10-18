@@ -7,6 +7,10 @@ planner is module `frontend/beregening/` (URL `beregening/`). Gepland:
 planning, voorraadbeheer. Een module = map onder `frontend/` met eigen
 `index.html`; de server serveert die generiek (relatieve redirect
 `<id>` → `<id>/`, express.static met `redirect: false` i.v.m. ingress).
+Huisstijl AquaTech Service (aquatechservice.nl) in `frontend/shared/brand.css`:
+navy `#172f5e`, groen `#19924f` (knoppen), teal `#2cb0c0`, Montserrat (lokaal),
+wit logo `shared/logo-white.png` op navy. Inlogpagina heeft het logo inline
+(data-URI), want die wordt zonder toegang tot bestanden geserveerd.
 Draait voorlopig als Home Assistant-add-on (paneel **Aquatech**, slug
 ongewijzigd `beregeningsplanner`); later op een eigen server via
 `docker-compose.yml`.

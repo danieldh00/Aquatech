@@ -20,7 +20,7 @@
   beheerdersaccount maakt de app zelf een toegangscode aan en zet die in het
   log. De container stopt netjes bij `docker stop` en heeft een healthcheck.
 
-## 0.10.0
+## 0.11.0
 
 - **Nieuw: historie van aanvragen en gebruikers met rollen.** De app heeft
   nu een database (`/data/aquatech.db`, in de HA-back-ups).
@@ -39,6 +39,14 @@
 - Opgelost: automatisch herkennen vanuit de planner (`beregening/`) riep de
   API op het verkeerde pad aan; de API is nu ook onder elke module
   bereikbaar.
+## 0.10.0
+
+- **Huisstijl van AquaTech Service** (aquatechservice.nl) in het dashboard,
+  de beregeningsplanner en de inlogpagina: het AquaTech Service-logo in de
+  bovenbalk (op de telefoon alleen het schild), navy balken en kopteksten,
+  groene knoppen en het lettertype Montserrat (lokaal meegeleverd, werkt ook
+  zonder internet en onder Home Assistant).
+- Nieuw icoon en logo in Home Assistant met het schild van het logo.
 
 ## 0.9.0
 
