@@ -131,8 +131,11 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 - **Multitenant** (0.20.0): tenants in `tenants` (`environment` `live`|`test`,
   `parent_id`, `disabled`); een testomgeving is een eigen tenant onder een
   live-tenant (eigen plannen/historie/instellingen, gebruikers van de
-  live-tenant). Gebruikersnamen van accounts zijn globaal uniek; inloggen
-  zoekt over alle tenants. `users.platform_admin` = hoofdbeheerder (module
+  live-tenant). Gebruikersnamen zijn uniek per organisatie (live-tenant +
+  testomgevingen, `familyIds` in store.js), niet globaal (0.24.0); inloggen
+  met organisatiecode = tenant-slug (`store.loginTenant`, leeg = hoofdtenant,
+  testcode → live-tenant), onthouden in localStorage `aquatech_org`,
+  `login?org=` vult hem in. `users.platform_admin` = hoofdbeheerder (module
   `frontend/hoofdbeheer/`, API `/api/platform/*`); de hoofdtenant kan niet uit.
   In `server.js` zet `identify()` `req.user` (met `tenant_id` = actieve
   omgeving, `home_tenant_id` = eigen tenant) en `req.tenantId`: gegevens via

@@ -207,8 +207,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/auth/login', loginLimiter, wrap(async (req, res) => {
     const username = String(req.body?.username ?? '').trim().toLowerCase().slice(0, 60);
     if (username) {
-      // De organisatiecode bepaalt de tenant (leeg = hoofdtenant); dezelfde
-      // gebruikersnaam kan in meer organisaties bestaan.
+      // De organisatiecode bepaalt de organisatie (leeg = hoofdtenant); dezelfde
+      // gebruikersnaam kan in meer organisaties bestaan. Testaccounts van een
+      // testomgeving loggen in met de code van de organisatie of van die omgeving.
       const orgCode = String(req.body?.tenant ?? '').trim().toLowerCase().slice(0, 60);
       const home = store.loginTenant(orgCode);
       const key = `${home?.id || orgCode}:${username}`;
@@ -224,7 +225,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         return res.status(401).json({ error: 'wrong_login', message: 'Onjuiste organisatiecode, gebruikersnaam of wachtwoord.' });
       }
       failures.delete(key);
-      if (home.disabled && !user.platform_admin) {
+      // Testaccounts horen bij een testomgeving van de organisatie.
+      const own = store.getTenant(user.tenant_id);
+      if ((home.disabled || own?.disabled) && !user.platform_admin) {
         audit(req, 'inloggen_geweigerd', { username, reden: 'tenant_uitgeschakeld' }, user.id, user.tenant_id);
         return res.status(403).json({ error: 'tenant_disabled', message: 'Deze organisatie is uitgeschakeld. Neem contact op met de beheerder van het platform.' });
       }

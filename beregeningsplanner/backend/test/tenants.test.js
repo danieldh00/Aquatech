@@ -365,6 +365,12 @@ test('gebruikersnamen zijn uniek per tenant; de organisatiecode kiest de tenant'
     const c = await as('piet', 'Gras-Pomp-2027!', env.slug);
     assert.strictEqual((await c.get('/api/me')).body.tenant.slug, 'groen');
 
+    // Binnen de organisatie (live plus testomgevingen) is een naam uniek.
+    assert.strictEqual((await baas.post(`/api/platform/tenants/${env.id}/users`, { username: 'tester', role: 'klant', password: 'Bloem-Perk-2029!' })).status, 201);
+    assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'tester', role: 'klant', password: 'Bloem-Perk-2029!' })).status, 400);
+    const tester = await as('tester', 'Bloem-Perk-2029!', 'groen');
+    assert.strictEqual((await tester.get('/api/me')).body.tenant.id, env.id);
+
     // Blokkade na te veel fouten geldt per tenant: de Piet van Blauw kan nog in.
     for (let i = 0; i < 10; i++) assert.strictEqual((await loginFrom(base, '127.0.2.1', 'piet', 'fout', 'groen')).status, 401);
     assert.strictEqual((await loginFrom(base, nextIp(), 'piet', 'Gras-Pomp-2027!', 'groen')).status, 429);
