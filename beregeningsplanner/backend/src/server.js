@@ -16,6 +16,7 @@ const { createQuoteStore, registerQuoteRoutes } = require('./quotes');
 const { createMailer } = require('./mailer');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
+const { createShopStore, registerShopRoutes } = require('./shop');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -109,7 +110,7 @@ function sendPage(res, file, version) {
 
 // accessCode, anthropicApiKey en aiDailyLimit zijn alleen startwaarden (net als
 // env); de actuele waarden komen uit de instellingen.
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings) }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -845,6 +846,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const tid = req.tenantId || tenant.id;
       return [homeOf(tid), tid];
     },
+  });
+
+  // ---------- Webshopkoppeling (zie shop.js) ----------
+  registerShopRoutes(app, {
+    shop: createShopStore(database), requireUser, requireJson, audit, fetchImpl: shopFetch,
+    tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
+    syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }),
   });
 
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).

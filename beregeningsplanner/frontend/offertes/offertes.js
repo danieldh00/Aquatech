@@ -982,7 +982,10 @@
   }
 
   async function init() {
+    // Webshopprijzen (als de organisatie een webshop heeft gekoppeld) vóór het opbouwen uit een plan.
+    const shop = window.ShopCatalog ? window.ShopCatalog.load() : null;
     state.me = await window.AquatechAccount.load('../');
+    await shop;
     const rights = state.me.rights || [];
     state.admin = rights.includes('beheer');
     state.all = rights.includes('offertes.alle');

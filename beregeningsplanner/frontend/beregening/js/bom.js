@@ -15,7 +15,7 @@
       if (!qty || qty <= 0) return;
       const a = C.articles[code];
       if (!a) throw new Error(`Onbekend artikel ${code}`);
-      const cur = items.get(code) || { code, name: a.name, unit: a.unit, price: a.price, qty: 0, notes: new Set() };
+      const cur = items.get(code) || { code, name: a.name, unit: a.unit, price: a.price, sku: a.sku || '', url: a.url || '', qty: 0, notes: new Set() };
       cur.qty += qty;
       if (note) cur.notes.add(note);
       items.set(code, cur);
@@ -229,11 +229,15 @@
       { header: 'Prijs/eenheid', key: 'price', width: 14 },
       { header: 'Totaal', key: 'total', width: 14 },
       { header: 'Opmerking', key: 'notes', width: 28 },
+      { header: 'Artikelnr. webshop', key: 'sku', width: 18 },
+      { header: 'Link webshop', key: 'url', width: 22 },
     ];
     headerStyle(ws.getRow(1));
     rows.forEach((r, i) => {
       const n = i + 2;
-      ws.addRow({ code: r.code, name: r.name, qty: r.qty, unit: r.unit, price: r.price, total: { formula: `C${n}*E${n}` }, notes: r.notes });
+      ws.addRow({ code: r.code, name: r.name, qty: r.qty, unit: r.unit, price: r.price, total: { formula: `C${n}*E${n}` }, notes: r.notes, sku: r.sku,
+        url: r.url ? { text: 'Bekijk in webshop', hyperlink: r.url } : '' });
+      if (r.url) ws.getCell(`I${n}`).font = { color: { argb: 'FF0277BD' }, underline: true };
       ws.getCell(`E${n}`).numFmt = eur;
       ws.getCell(`F${n}`).numFmt = eur;
     });
@@ -250,9 +254,12 @@
       ws.getCell(`F${sumRow + i}`).font = { bold: true };
       ws.getCell(`F${sumRow + i}`).numFmt = eur;
     }
-    ws.getCell(`B${sumRow + 4}`).value = 'Prijzen indicatief, excl. btw. Pas kolom E aan naar actuele prijzen.';
+    const shop = window.ShopCatalog && window.ShopCatalog.info;
+    ws.getCell(`B${sumRow + 4}`).value = shop
+      ? `Prijzen excl. btw uit de webshop (${shop.shop}), bijgewerkt ${fmtDate(new Date(shop.syncedAt))}; regels zonder artikelnummer webshop hebben een indicatieve prijs.`
+      : 'Prijzen indicatief, excl. btw. Pas kolom E aan naar actuele prijzen.';
     ws.getCell(`B${sumRow + 4}`).font = { italic: true, color: { argb: 'FF757575' } };
-    ws.autoFilter = { from: 'A1', to: `G${last}` };
+    ws.autoFilter = { from: 'A1', to: `I${last}` };
 
     // 3. Zones
     const zs = wb.addWorksheet('Zones', { views: [{ state: 'frozen', ySplit: 1 }] });

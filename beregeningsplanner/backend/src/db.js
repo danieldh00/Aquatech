@@ -268,6 +268,30 @@ const MIGRATIONS = [
   CREATE INDEX work_orders_tenant ON work_orders (tenant_id, updated_at);
   CREATE INDEX work_orders_quote ON work_orders (tenant_id, quote_id);
   `,
+  // 11: webshopkoppeling: opgehaalde producten en de status van het ophalen per tenant.
+  `
+  CREATE TABLE shop_products (
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    id         TEXT NOT NULL,
+    sku        TEXT NOT NULL DEFAULT '',
+    name       TEXT NOT NULL DEFAULT '',
+    price      REAL,
+    currency   TEXT NOT NULL DEFAULT 'EUR',
+    url        TEXT NOT NULL DEFAULT '',
+    image      TEXT NOT NULL DEFAULT '',
+    in_stock   INTEGER NOT NULL DEFAULT 1,
+    code       TEXT NOT NULL DEFAULT '',
+    categories TEXT NOT NULL DEFAULT '[]',
+    PRIMARY KEY (tenant_id, id)
+  );
+  CREATE TABLE shop_sync (
+    tenant_id       TEXT PRIMARY KEY REFERENCES tenants(id),
+    synced_at       TEXT,
+    product_count   INTEGER,
+    last_attempt_at TEXT,
+    last_error      TEXT
+  );
+  `,
 ];
 
 function openDb(file = ':memory:') {

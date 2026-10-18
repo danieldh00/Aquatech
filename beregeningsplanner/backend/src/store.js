@@ -368,6 +368,8 @@ function createStore(db) {
     if (busy) return false;
     transaction(db, () => {
       q('DELETE FROM settings WHERE tenant_id = ?').run(id);
+      q('DELETE FROM shop_products WHERE tenant_id = ?').run(id);
+      q('DELETE FROM shop_sync WHERE tenant_id = ?').run(id);
       q('DELETE FROM audit WHERE tenant_id = ?').run(id);
       q('DELETE FROM tenants WHERE id = ?').run(id);
     });
@@ -414,6 +416,8 @@ function createStore(db) {
     transaction(db, () => {
       clearData(out.tenant.id);
       q('DELETE FROM settings WHERE tenant_id = ?').run(out.tenant.id);
+      q('DELETE FROM shop_products WHERE tenant_id = ?').run(out.tenant.id);
+      q('DELETE FROM shop_sync WHERE tenant_id = ?').run(out.tenant.id);
       q('DELETE FROM tenants WHERE id = ?').run(out.tenant.id);
     });
     return { ok: true };

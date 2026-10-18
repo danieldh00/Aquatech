@@ -58,6 +58,9 @@
       this.recalc();
       this.refreshBackground().then(() => this.editor.fit());
       this.refreshAiStatus();
+      if (window.ShopCatalog) {
+        window.ShopCatalog.load().then((info) => { if (info) { this.recalc(); if (STEPS[this.step].id === 'bom') this.renderStepPanel(); } });
+      }
       this._loadRights();
       this._openFromUrl();
       window.addEventListener('beforeunload', () => this._flushSync());
@@ -1074,10 +1077,18 @@
         <h3>Stuklijst (${rows.length} regels)</h3>
         ${rows.length ? `<table class="list bom">
           <tr><th>Omschrijving</th><th>Aantal</th><th>Totaal</th></tr>
-          ${rows.map((r) => `<tr title="${esc(r.code)}${r.notes ? ' – ' + esc(r.notes) : ''}"><td>${esc(r.name)}</td><td class="num">${r.qty} ${esc(r.unit)}</td><td class="num">${eur(r.total)}</td></tr>`).join('')}
-          <tr class="total"><td>Totaal excl. btw (indicatief)</td><td></td><td class="num">${eur(total)}</td></tr>
+          ${rows.map((r) => `<tr title="${esc(r.code)}${r.sku ? ' / ' + esc(r.sku) : ''}${r.notes ? ' – ' + esc(r.notes) : ''}"><td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>` : esc(r.name)}</td><td class="num">${r.qty} ${esc(r.unit)}</td><td class="num">${eur(r.total)}</td></tr>`).join('')}
+          <tr class="total"><td>Totaal excl. btw${rows.every((r) => r.url) ? '' : ' (indicatief)'}</td><td></td><td class="num">${eur(total)}</td></tr>
         </table>` : '<p class="hint">Nog geen onderdelen – plaats sproeiers en deel zones in.</p>'}
+        ${this._shopStatus(rows)}
       `;
+    },
+    _shopStatus(rows) {
+      const info = window.ShopCatalog && window.ShopCatalog.info;
+      const admin = this._can('beheer') ? ' <a href="../beheer/#webshop">Webshop koppelen</a>' : '';
+      if (!info) return this._serverAvailable() ? `<p class="hint small">Prijzen zijn indicatief.${admin}</p>` : '';
+      const linked = rows.filter((r) => r.url).length;
+      return `<p class="hint small">Prijzen uit de webshop (${esc(info.shop.replace(/^https?:\/\//, ''))}), bijgewerkt ${new Date(info.syncedAt).toLocaleDateString('nl-NL')}: ${linked} van ${rows.length} regels gekoppeld.${admin.replace('Webshop koppelen', 'Koppeling beheren')}</p>`;
     },
     _bind_bom(el) {
       const s = this.state.settings;
