@@ -1,8 +1,8 @@
 {
   "name": "beregeningsplanner-backend",
-  "version": "0.1.0",
+  "version": "0.15.0",
   "private": true,
-  "description": "Backend van de Beregeningsplanner-add-on: serveert de planner (ingress en losse server)",
+  "description": "Aquatech-webserver: dashboard, modules, accounts en API",
   "main": "src/server.js",
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/server.js",

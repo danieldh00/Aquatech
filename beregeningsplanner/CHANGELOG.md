@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.15.0
+
+- **Eerste beheerder in de browser.** Zolang er geen beheerdersaccount is,
+  toont de app bij het openen het scherm *Welkom bij Aquatech* om het eerste
+  beheerdersaccount (naam, gebruikersnaam, wachtwoord) aan te maken. Je bent
+  daarna meteen ingelogd en het scherm verschijnt niet meer. De
+  automatisch aangemaakte toegangscode in het log is vervallen.
+- **Inloggen is standaard verplicht**: iedereen logt in met een eigen
+  account. Gasten zonder inloggen kun je weer toestaan onder **Beheer →
+  Instellingen**. De toegangscode blijft optioneel bestaan.
+- De laatste actieve beheerder kan niet meer worden uitgeschakeld of
+  gebruiker gemaakt (anders zou iedereen een nieuwe eerste beheerder kunnen
+  aanmaken).
+- **Los van Home Assistant**: geen ingress en geen HA-paneel meer (dat gaf
+  automatisch beheerdersrechten), geen app-opties (`access_code`,
+  `anthropic_api_key`, `ai_daily_limit`) meer; alles staat in de app onder
+  Beheer → Instellingen of als omgevingsvariabele in Docker. De versie staat
+  nu in `package.json`. De Home Assistant-verpakking blijft tijdelijk alleen
+  bestaan zodat de huidige installatie deze update nog krijgt.
+
 ## 0.14.0
 
 - **Nieuw: Plannenoverzicht** (tegel op het dashboard en *Alle plannen →*

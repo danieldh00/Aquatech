@@ -8,7 +8,7 @@ const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
 function start(opts = {}) {
   return new Promise((resolve) => {
-    const server = createApp({ secret: SECRET, ...opts }).listen(0, () => {
+    const server = createApp({ secret: SECRET, env: { GUEST_ACCESS: 'true' }, ...opts }).listen(0, () => {
       resolve({ server, base: `http://127.0.0.1:${server.address().port}` });
     });
   });

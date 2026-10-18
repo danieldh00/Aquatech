@@ -2,7 +2,7 @@
 // npm-module nodig, dus geen multi-arch-bouwproblemen).
 //
 // Het datamodel is tenant-klaar: elke tabel heeft een tenant_id en elke query
-// filtert daarop. Als Home Assistant-add-on is er één tenant ("default"); bij
+// filtert daarop. Voorlopig is er één tenant ("default"); bij
 // de overstap naar een gedeelde server komen er tenants bij zonder dat het
 // schema verandert. Id's zijn willekeurige UUID's (niet te raden en later
 // zonder hernummeren over te zetten naar een andere database).

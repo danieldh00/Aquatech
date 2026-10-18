@@ -22,8 +22,7 @@
     const u = me.user;
     if (u && u.kind !== 'gast') {
       const role = u.role === 'beheerder' ? 'beheerder' : 'gebruiker';
-      // Via het Home Assistant-paneel is er niets om uit te loggen.
-      const out = me.via === 'ingress' ? '' : '<button type="button" data-logout>Uitloggen</button>';
+      const out = '<button type="button" data-logout>Uitloggen</button>';
       el.innerHTML = `<span>${esc(u.displayName)} <span class="role">· ${role}</span></span>${out}`;
     } else {
       el.innerHTML = `<span class="role">Gast</span><a href="${esc(base)}login">Inloggen</a>`;

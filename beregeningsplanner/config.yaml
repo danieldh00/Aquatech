@@ -1,11 +1,14 @@
+# TIJDELIJK: alleen nog zodat de bestaande Home Assistant-installatie updates
+# blijft krijgen tot de losse Docker-server draait (zie docker-compose.yml in
+# de root). De app zelf gebruikt niets van Home Assistant meer: geen ingress,
+# geen paneel, geen app-opties. Na de overstap mogen config.yaml,
+# apparmor.txt, icon.png, logo.png en ../repository.yaml weg.
 name: "Aquatech"
-version: "0.14.0"
+version: "0.15.0"
 slug: beregeningsplanner
 description: >-
-  Aquatech-dashboard met modules. Eerste module, de beregeningsplanner:
-  ontwerp een automatische tuinberegening: gebieden tekenen, sproeiers
-  automatisch plaatsen met neerslagsimulatie, zones en leidingen met
-  drukverlies, en een stuklijst (Basis/Standaard/Premium) met export naar Excel.
+  Aquatech-dashboard met modules (beregeningsplanner, beheer). Draait als
+  gewone webserver op poort 3300; inloggen met een eigen account.
 url: "https://github.com/danieldh00/Aquatech"
 arch:
   - aarch64
@@ -15,29 +18,9 @@ boot: auto
 ports:
   3300/tcp: 3300
 ports_description:
-  3300/tcp: "Webinterface (los van ingress, nodig voor de Cloudflare-tunnel aquatech.den-hollander.com)"
-# De gepubliceerde poort blijft naast ingress staan: de tunnel bereikt de app
-# via de poort, ingress (HA-zijpaneel) via het wisselende ingress-pad.
+  3300/tcp: "Webinterface (Cloudflare-tunnel aquatech.den-hollander.com)"
 webui: "http://[HOST]:[PORT:3300]/"
-ingress: true
-ingress_port: 3300
-panel_icon: mdi:view-dashboard-outline
-panel_title: Aquatech
 environment:
   DATA_DIR: /data
-# Leeg laten: een `null`-waarde hier maakt de optie voor Supervisor verplicht
-# en dan start de app niet zonder code.
 options: {}
-# Alleen nog startwaarden: alles is in te stellen in de app zelf (Beheer >
-# Instellingen) en wat daar is opgeslagen gaat voor. Zo werkt de app op een
-# losse Docker-server precies hetzelfde. Blijft staan zodat bestaande
-# installaties hun code en sleutel niet kwijtraken.
-schema:
-  # Optioneel. Leeg = planner openbaar via de tunnel. Ingevuld = inloggen
-  # verplicht buiten Home Assistant om; via het HA-zijpaneel nooit een code.
-  access_code: "password?"
-  # API-sleutel van Anthropic (console.anthropic.com) voor "Plan laden en
-  # concept maken". Leeg = automatisch herkennen uit; tekenen werkt altijd.
-  anthropic_api_key: "password?"
-  # Maximaal aantal plananalyses per dag voor de hele app.
-  ai_daily_limit: "int(0,500)?"
+schema: {}

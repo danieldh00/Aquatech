@@ -6,30 +6,16 @@ Excel. Planning en voorraadbeheer volgen.
 
 ## Gebruik
 
-1. Start de app. Zonder verdere instellingen is het dashboard bereikbaar
-   via het **Aquatech**-paneel in het HA-zijmenu en via
-   `https://aquatech.den-hollander.com`, zonder inloggen. Klik op de tegel
-   **Beregeningsplanner** (of ga direct naar `.../beregening/`); met
-   **Overzicht** linksboven in de planner ga je terug naar het dashboard.
-2. Wil je de publieke URL afschermen? Stel dan een toegangscode in onder
-   **Beheer → Instellingen** (werkt meteen, geen herstart). Buiten Home
-   Assistant om moet je dan één keer inloggen (het toestel onthoudt dat een
-   jaar); via het HA-paneel is nooit een code nodig.
-3. Klik op **Voorbeeld** om een ingevulde tuin te zien, of begin met
-   **Nieuw** en doorloop de zes stappen links.
-
-## Cloudflare-tunnel
-
-De app luistert op poort 3300. In de Cloudflared-app staat daarvoor bij
-`additional_hosts`:
-
-```yaml
-- hostname: aquatech.den-hollander.com
-  service: http://c1355dc8-beregeningsplanner:3300
-```
-
-`c1355dc8-beregeningsplanner` is de slug van deze app met `_` vervangen door
-`-`. Na wijzigen de Cloudflared-app herstarten.
+1. Start de server (zie *Server (Docker)* hieronder) en open de app in de
+   browser, bijvoorbeeld `https://aquatech.den-hollander.com`.
+2. **Eerste keer**: zolang er nog geen beheerder is, toont de app op elk
+   pad het scherm **Welkom bij Aquatech**. Vul je naam, een gebruikersnaam
+   en een wachtwoord in; dat wordt het eerste beheerdersaccount en je bent
+   meteen ingelogd. Daarna verschijnt dat scherm nooit meer.
+3. Daarna logt iedereen in met een eigen account (het toestel onthoudt de
+   inlog een jaar). Accounts maak je aan onder **Beheer → Gebruikers**.
+4. Klik op de tegel **Beregeningsplanner** (of ga direct naar
+   `.../beregening/`) en klik op **Voorbeeld** of begin met **Nieuw**.
 
 ## Beregeningsmethode
 
@@ -141,17 +127,20 @@ Er zijn twee rollen:
 
 | Rol | Ziet | Wie |
 | --- | --- | --- |
-| **Beheerder** | alle plannen, de historie van alle aanvragen, gebruikersbeheer en instellingen (module **Beheer**) | het HA-paneel, inloggen met de toegangscode, accounts met rol beheerder |
+| **Beheerder** | alle plannen, de historie van alle aanvragen, gebruikersbeheer en instellingen (module **Beheer**) | accounts met rol beheerder, en inloggen met de (optionele) toegangscode |
 | **Gebruiker** | alleen de eigen plannen | accounts met rol gebruiker, en gasten |
 
 - **Accounts** maak je als beheerder aan onder **Beheer → Gebruikers**
   (gebruikersnaam, naam, rol, wachtwoord van minimaal 8 tekens). Inloggen
   via `.../login` of de knop **Inloggen** rechtsboven. Een nieuw wachtwoord
   of uitschakelen logt de gebruiker op alle toestellen uit.
-- **Gasten**: zolang er geen toegangscode is, kan iedereen de planner
-  zonder inloggen gebruiken. Elke browser krijgt dan een eigen anonieme
-  gebruiker en ziet alleen de eigen plannen. Met een toegangscode zijn er
-  geen gasten: inloggen (code of account) is verplicht.
+- **Gasten**: standaard uit; zonder inloggen zie je alleen de inlogpagina.
+  Zet je onder **Beheer → Instellingen** *Gasten zonder inloggen toestaan*
+  aan (en is er geen toegangscode), dan kan iedereen de planner gebruiken.
+  Elke browser krijgt dan een eigen anonieme gebruiker en ziet alleen de
+  eigen plannen.
+- De **laatste actieve beheerder** kan niet worden uitgeschakeld of
+  gebruiker gemaakt; maak eerst een andere beheerder aan.
 - **Historie** (**Beheer → Aanvragen**): elke aanvraag krijgt een regel met
   datum, gebruiker, plan, klant, adres, oppervlaktes, sproeiers en zones:
   een nieuw plan, wijzigingen (opeenvolgende wijzigingen van dezelfde
@@ -167,8 +156,7 @@ Er zijn twee rollen:
 ## Instellingen
 
 Beheerders regelen alles onder **Beheer → Instellingen** (ook direct via
-`.../beheer/#settings`); de Home Assistant-configuratie is daarvoor niet meer
-nodig:
+`.../beheer/#settings`):
 
 | Instelling | Standaard |
 |---|---|
@@ -176,38 +164,36 @@ nodig:
 | API-sleutel van Anthropic | leeg |
 | Maximaal aantal AI-analyses per dag (hele app) | 30 |
 | Maximaal aantal AI-analyses per uur per IP-adres | 10 |
-| Toegangscode | leeg (openbaar) |
+| Gasten zonder inloggen toestaan | uit |
+| Toegangscode (optioneel, gedeelde beheerderscode) | leeg |
 | Modules op het dashboard aan/uit | alle aan |
 
 - De instellingen staan in de database (`/data/aquatech.db`) en werken
   meteen, zonder herstart.
 - Geheimen (API-sleutel, toegangscode) gaan nooit terug naar de browser; je
   ziet alleen of ze zijn ingesteld en van de sleutel de laatste 4 tekens.
-- Waarden die nog in de app-configuratie van Home Assistant staan
-  (`access_code`, `anthropic_api_key`, `ai_daily_limit`) of als
-  omgevingsvariabele in Docker zijn alleen **startwaarden**: zodra je een
+- Omgevingsvariabelen in Docker (`ACCESS_CODE`, `GUEST_ACCESS`,
+  `ANTHROPIC_API_KEY`, `AI_DAILY_LIMIT`, zie `.env.example`) zijn alleen
+  **startwaarden**: zodra je een
   instelling in het scherm opslaat, gaat die voor. Met **Terugzetten naar
   startwaarde** haal je de opgeslagen waarde weer weg.
 - Wie met de toegangscode is ingelogd kan die niet leegmaken (dan zou je
   jezelf buitensluiten); maak daarvoor eerst een beheerdersaccount aan.
 
-## Losse server (Docker)
+## Server (Docker)
 
-De app draait ook zonder Home Assistant, als gewone Docker-container
+De app is een gewone webserver in een Docker-container
 (`docker-compose.yml` in de root van de repository):
 
 ```sh
 git clone https://github.com/danieldh00/Aquatech.git && cd Aquatech
 docker compose up -d --build        # http://<server>:3300
-docker compose logs aquatech        # toont bij de eerste start de toegangscode
 ```
 
-- **Eerste start**: zonder toegangscode en zonder beheerdersaccount maakt de
-  app zelf een toegangscode aan en zet die in het log. Log daarmee in (dat is
-  beheerderstoegang), en stel onder **Beheer → Instellingen** een eigen code
-  en de API-sleutel in, of maak onder **Gebruikers** accounts aan. Wil je zelf
-  een startcode kiezen: zet `ACCESS_CODE` in een `.env`-bestand naast
-  `docker-compose.yml` (zie `.env.example`).
+- **Eerste start**: open de app en maak het eerste beheerdersaccount aan
+  (zie *Gebruik*). Doe dat meteen na het starten: tot dan kan iedereen die
+  de URL kent dat scherm zien. Is er via `ACCESS_CODE` al een toegangscode
+  ingesteld, dan vraagt het scherm die code ter bevestiging.
 - **Gegevens** staan in het volume `aquatech-data` (`/data` in de container):
   de database met plannen, historie, gebruikers en instellingen, en de
   sessiesleutel. Back-up: `docker compose cp aquatech:/data ./backup`.
@@ -215,9 +201,14 @@ docker compose logs aquatech        # toont bij de eerste start de toegangscode
 - **HTTPS**: zet er een reverse proxy (Caddy, Traefik, nginx) of een
   Cloudflare-tunnel voor die `X-Forwarded-Proto: https` meestuurt; dan
   krijgen de inlogcookies de `Secure`-vlag.
-- Overzetten vanuit Home Assistant: kopieer `aquatech.db` en `session-secret`
-  uit de `/data`-map van de add-on naar het volume; alle plannen, gebruikers,
-  instellingen en inlogs gaan mee.
+- **Overzetten** van een eerdere installatie: kopieer `aquatech.db` en
+  `session-secret` uit de oude `/data`-map naar het volume; alle plannen,
+  gebruikers, instellingen en inlogs gaan mee. Heeft die database nog geen
+  beheerdersaccount, dan verschijnt bij de eerste aanmelding het scherm om
+  er een aan te maken.
+- **Cloudflare-tunnel**: laat de tunnel naar `http://<server>:3300` wijzen
+  (of naar de containernaam `aquatech:3300` als cloudflared in hetzelfde
+  Docker-netwerk draait).
 
 ## Let op
 

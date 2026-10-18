@@ -498,7 +498,7 @@
     if (tessWorker) return tessWorker;
     await loadScript('vendor/tesseract/tesseract.min.js');
     // De worker laadt kern en taaldata zelf in; relatieve paden zouden relatief aan het worker-script
-    // worden opgelost, dus absolute URL's (werkt ook onder het wisselende ingress-pad).
+    // worden opgelost, dus absolute URL's (werkt ook onder een padprefix achter een proxy).
     const base = new URL('vendor/tesseract/', window.location.href).href;
     tessWorker = await window.Tesseract.createWorker('nld+eng', 1, {
       workerPath: base + 'worker.min.js',

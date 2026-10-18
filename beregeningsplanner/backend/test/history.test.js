@@ -9,6 +9,7 @@ const { openDb, MIGRATIONS } = require('../src/db');
 const { COOKIE_NAME } = require('../src/auth');
 
 const SECRET = 'y'.repeat(64);
+const GUESTS = { accessCode: '', env: { GUEST_ACCESS: 'true' } };
 
 function start(opts = {}) {
   return new Promise((resolve) => {
@@ -57,7 +58,7 @@ const plan = (name, extra = {}) => ({
 });
 
 test('zonder toegangscode: elke gast ziet alleen de eigen plannen, geen historie', async () => {
-  const { server, base } = await start({ accessCode: '' });
+  const { server, base } = await start(GUESTS);
   try {
     const a = client(base), b = client(base);
     assert.strictEqual((await a.get('/api/me')).body.guest, true);
@@ -221,7 +222,7 @@ test('oude sessie-cookie (van voor de accounts) blijft geldig als beheerder', as
 });
 
 test('schrijven vereist JSON', async () => {
-  const { server, base } = await start({ accessCode: '' });
+  const { server, base } = await start(GUESTS);
   try {
     const res = await fetch(`${base}/api/plans`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{"data":{"areas":[]}}' });
     assert.strictEqual(res.status, 415);
@@ -247,7 +248,7 @@ test('database blijft bewaard na herstart en migreert niet dubbel', () => {
 });
 
 test('API is ook relatief vanuit een module bereikbaar (beregening/api/...)', async () => {
-  const { server, base } = await start({ accessCode: '' });
+  const { server, base } = await start(GUESTS);
   try {
     const a = client(base);
     const made = await a.post('/beregening/api/plans', { data: plan('Via module') });

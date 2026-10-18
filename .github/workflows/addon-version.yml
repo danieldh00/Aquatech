@@ -1,4 +1,4 @@
-name: Add-on-versie
+name: Versie
 
 on:
   pull_request:
