@@ -5,6 +5,9 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : '–');
   const state = { items: [], mainId: null, current: null };
+  const Roles = window.AquatechRoles;
+  const roleOptions = (current) => Object.entries(Roles.ROLES)
+    .map(([k, r]) => `<option value="${k}"${k === current ? ' selected' : ''}>${esc(r.label)}</option>`).join('');
 
   function toast(msg, err = false) {
     const t = $('#toast');
@@ -153,7 +156,7 @@
     try { users = (await api(`platform/tenants/${encodeURIComponent(t.id)}/users`)).items || []; } catch (e) { toast(e.message, true); return; }
     const rows = users.map((u) => `<tr data-uid="${esc(u.id)}" class="${u.disabled ? 'off' : ''}">
         <td>${esc(u.displayName)}<br><span class="code">${esc(u.username)}</span></td>
-        <td>${u.kind === 'account' ? `<select data-f="role"><option value="gebruiker"${u.role === 'gebruiker' ? ' selected' : ''}>Gebruiker</option><option value="beheerder"${u.role === 'beheerder' ? ' selected' : ''}>Beheerder</option></select>` : esc(u.role)}${u.platformAdmin ? ' <span class="pill hoofd">hoofdbeheerder</span>' : ''}</td>
+        <td>${u.kind === 'account' ? `<select data-f="role">${roleOptions(u.role)}</select>` : esc(Roles.label(u.role))}${u.platformAdmin ? ' <span class="pill hoofd">hoofdbeheerder</span>' : ''}</td>
         <td>${esc(when(u.lastSeenAt))}</td>
         <td class="acts">${u.kind === 'account' ? `<button class="btn small" data-f="toggle">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button><button class="btn small" data-f="password">Wachtwoord</button>` : ''}</td>
       </tr>`).join('');
@@ -164,7 +167,7 @@
         <div class="row">
           <label>Gebruikersnaam<input name="username" required pattern="[a-z0-9][a-z0-9._\\-]{2,39}" autocomplete="off"></label>
           <label>Naam<input name="displayName" autocomplete="off"></label>
-          <label>Rol<select name="role"><option value="beheerder">Beheerder</option><option value="gebruiker">Gebruiker</option></select></label>
+          <label>Rol<select name="role">${roleOptions('beheerder')}</select></label>
           <label>Wachtwoord<input name="password" type="password" minlength="12" maxlength="128" required placeholder="minimaal 12 tekens" autocomplete="new-password"></label>
           <button class="btn primary" type="submit">Toevoegen</button>
         </div>

@@ -75,6 +75,10 @@ table.totals tr.grand td { font-weight: 700; font-size: 16px; border-top: 2px so
 
 /* ---------- Afdrukversie (A4) ---------- */
 .print-doc { display: none; }
+/* Klant bekijkt de offerte: het document zelf op het scherm, als een vel papier. */
+body.view-doc .print-doc { display: block; max-width: 820px; margin: 0 auto 40px; padding: 28px 32px; background: #fff; border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: 0 2px 10px rgba(23, 47, 94, 0.08); font-family: var(--at-font); font-size: 14px; color: #1d2733; line-height: 1.45; }
+@media (max-width: 760px) { body.view-doc .print-doc { padding: 16px; margin: 0 0 24px; } }
 
 @media print {
   @page { size: A4; margin: 12mm 14mm 14mm; }

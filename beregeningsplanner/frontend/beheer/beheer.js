@@ -9,6 +9,9 @@
   const KINDS = { account: 'Account', gast: 'Gast', systeem: 'Systeem' };
   const areaLabel = (t) => (window.Catalog && window.Catalog.areaTypes[t] ? window.Catalog.areaTypes[t].label : t);
   const PAGE = 100;
+  const Roles = window.AquatechRoles;
+  const roleOptions = (current) => Object.entries(Roles.ROLES)
+    .map(([k, r]) => `<option value="${k}"${k === current ? ' selected' : ''}>${esc(r.label)}</option>`).join('');
 
   const state = { offset: 0, total: 0, users: [], auditOffset: 0 };
   const AUDIT = {
@@ -16,6 +19,7 @@
     eerste_beheerder: 'Eerste beheerder', installatie_mislukt: 'Installatiecode onjuist', gebruiker_aangemaakt: 'Gebruiker aangemaakt',
     gebruiker_gewijzigd: 'Gebruiker gewijzigd', plan_gewist: 'Plan definitief gewist', backup_gemaakt: 'Back-up gemaakt',
     backup_gedownload: 'Back-up gedownload', sessies_ingetrokken: 'Uitgelogd op alle toestellen', instellingen_gewijzigd: 'Instellingen gewijzigd',
+    offerte_akkoord: 'Offerte geaccepteerd door klant', offerte_afgewezen: 'Offerte afgewezen door klant', offerte_gewist: 'Offerte definitief gewist',
   };
 
   function toast(msg, err = false) {
@@ -60,7 +64,7 @@
           <th class="num">Vlakken</th><th class="num">m²</th><th class="num">Sproeiers</th><th class="num">Zones</th></tr></thead><tbody>${items.map((h) => `
           <tr data-id="${esc(h.id)}">
             <td>${esc(when(h.updatedAt))}</td>
-            <td>${h.user ? esc(h.user.displayName) : '–'}${h.user && h.user.role === 'beheerder' ? ' <span class="pill beheerder">beheerder</span>' : ''}</td>
+            <td>${h.user ? esc(h.user.displayName) : '–'}${h.user && h.user.role !== 'installateur' ? ` <span class="pill ${esc(h.user.role)}">${esc(Roles.label(h.user.role).toLowerCase())}</span>` : ''}</td>
             <td><span class="pill ${esc(h.action)}">${esc(ACTIONS[h.action] || h.action)}</span></td>
             <td class="wrap">${esc(h.title)}${h.planDeleted && h.action !== 'analyse' ? ' <span class="pill verwijderd">plan verwijderd</span>' : ''}</td>
             <td class="wrap">${esc(h.customer)}</td>
@@ -247,7 +251,7 @@
         <td>${esc(u.displayName)}${u.disabled ? ' <span class="pill">uitgeschakeld</span>' : ''}</td>
         <td>${esc(u.username)}</td>
         <td>${esc(KINDS[u.kind] || u.kind)}</td>
-        <td>${editable ? `<select data-role="${esc(u.id)}"><option value="gebruiker"${u.role === 'gebruiker' ? ' selected' : ''}>Gebruiker</option><option value="beheerder"${u.role === 'beheerder' ? ' selected' : ''}>Beheerder</option></select>` : `<span class="pill ${u.role === 'beheerder' ? 'beheerder' : ''}">${esc(u.role)}</span>`}</td>
+        <td>${editable ? `<select data-role="${esc(u.id)}" title="${esc(Roles.ROLES[u.role] ? Roles.ROLES[u.role].description : '')}">${roleOptions(u.role)}</select>` : `<span class="pill ${esc(u.role)}">${esc(Roles.label(u.role))}</span>`}</td>
         <td class="num">${u.planCount}</td>
         <td class="num">${u.historyCount}</td>
         <td>${esc(when(u.lastSeenAt))}</td>

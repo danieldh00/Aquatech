@@ -21,7 +21,7 @@
     if (!el || location.protocol === 'file:') return;
     const u = me.user;
     if (u && u.kind !== 'gast') {
-      const role = u.role === 'beheerder' ? 'beheerder' : 'gebruiker';
+      const role = me.platformAdmin ? 'hoofdbeheerder' : u.role;
       const out = '<button type="button" data-logout>Uitloggen</button>';
       el.innerHTML = `<span>${esc(u.displayName)} <span class="role">· ${role}</span></span>${out}`;
     } else {

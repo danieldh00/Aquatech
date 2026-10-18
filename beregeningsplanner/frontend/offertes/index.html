@@ -73,6 +73,8 @@
           <label>E-mail<input data-f="customer.email" type="email" maxlength="200"></label>
           <label>Telefoon<input data-f="customer.phone" maxlength="40"></label>
         </div>
+        <label>Klantaccount<select id="e-account"><option value="">Geen (alleen intern)</option></select></label>
+        <p class="muted small">Met een klantaccount ziet de klant de offerte zelf zodra de status <b>Verzonden</b> is, en kan hij akkoord geven of afwijzen.</p>
       </section>
       <section class="card-form">
         <h3>Offerte</h3>
@@ -168,7 +170,21 @@
     </div>
   </div>
 
-  <!-- Afdrukversie (PDF): alleen zichtbaar bij afdrukken -->
+  <!-- Offerte bekijken (klant) -->
+  <main id="view-view" class="dash wide screen" hidden>
+    <div class="edit-bar">
+      <button id="v-back" class="btn">← Mijn offertes</button>
+      <h1 id="v-heading">Offerte</h1>
+      <span id="v-status" class="pill"></span>
+      <span class="spacer"></span>
+      <button id="v-accept" class="btn primary" hidden>Akkoord geven</button>
+      <button id="v-reject" class="btn" hidden>Afwijzen</button>
+      <button id="v-pdf" class="btn">PDF / afdrukken</button>
+    </div>
+    <div id="v-notice" class="notice" hidden></div>
+  </main>
+
+  <!-- Afdrukversie (PDF); voor een klant ook op het scherm -->
   <article id="print" class="print-doc" aria-hidden="true"></article>
 
   <div id="toast" class="toast screen"></div>

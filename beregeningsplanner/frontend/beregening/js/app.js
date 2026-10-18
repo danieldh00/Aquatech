@@ -58,6 +58,7 @@
       this.recalc();
       this.refreshBackground().then(() => this.editor.fit());
       this.refreshAiStatus();
+      this._loadRights();
       this._openFromUrl();
       window.addEventListener('beforeunload', () => this._flushSync());
     },
@@ -192,6 +193,17 @@
       } finally {
         this._syncing = false;
       }
+    },
+    // Rechten van de gebruiker (shared/roles.js): een klant maakt geen offertes.
+    async _loadRights() {
+      if (!this._serverAvailable()) return;
+      try {
+        const res = await fetch('api/me', { cache: 'no-store' });
+        if (res.ok) this.rights = (await res.json()).rights || [];
+      } catch (e) { /* offline: alles tonen, de server beslist */ }
+    },
+    _can(right) {
+      return !this.rights || this.rights.includes(right);
     },
     /** Naar de module Offertes: eerst het plan op de server bewaren. */
     async makeQuote() {
@@ -1051,7 +1063,7 @@
           <button id="btn-export-png" class="btn">Plan als PNG</button>
           <button id="btn-print" class="btn">Afdrukken</button>
         </div>
-        ${this._serverAvailable() ? '<button id="btn-quote" class="btn">Offerte maken van dit plan</button>' : ''}
+        ${this._serverAvailable() && this._can('offertes') ? '<button id="btn-quote" class="btn">Offerte maken van dit plan</button>' : ''}
         <h3>Beregeningsschema</h3>
         <div class="row">
           <label>Weekgift (mm)<input id="t-mm" type="number" min="5" max="50" value="${s.targetMm}"></label>

@@ -117,9 +117,11 @@ een eerder plan. Iedere gebruiker ziet daar alleen de eigen plannen.
 De tegel **Plannenoverzicht** op het dashboard (of *Alle plannen →* bij
 Mijn plannen) toont de plannen als tabel: projectnaam, klant, adres,
 oppervlaktes, sproeiers, zones en datums, met zoeken, sorteren (klik op een
-kolomkop), totalen en **Exporteer naar Excel**. Gebruikers zien hun eigen
-plannen; beheerders zien alle plannen met de gebruiker, kunnen per gebruiker
-filteren en ook verwijderde plannen tonen, en zien per plan de historie.
+kolomkop), totalen en **Exporteer naar Excel**. Een klant ziet zijn eigen
+plannen (tegel **Mijn plannen**); installateurs en beheerders zien alle
+plannen van de organisatie met de gebruiker en kunnen per gebruiker
+filteren; beheerders kunnen ook verwijderde plannen tonen en zien per plan
+de historie.
 
 ## Offertes
 
@@ -153,18 +155,30 @@ met **Nieuwe offerte uit plan**.
   voorrijkosten, standaard btw-tarief, geldigheid en standaardteksten. Ze
   gelden per tenant en omgeving.
 
-Gebruikers zien hun eigen offertes; beheerders kunnen alle offertes van de
-tenant tonen en een offerte definitief wissen (AVG). Een testomgeving heeft
-eigen offertes en nummering.
+Installateurs en beheerders zien hun eigen offertes en met *Van alle
+gebruikers* die van de hele organisatie; alleen beheerders kunnen een
+offerte definitief wissen (AVG). Een testomgeving heeft eigen offertes en
+nummering.
+
+**Klant**: koppel een offerte bij *Klantaccount* aan een account met de rol
+klant. Zodra de status **Verzonden** is, ziet de klant de offerte onder
+**Mijn offertes** als document (af te drukken als PDF) en kan hij **Akkoord
+geven** of **Afwijzen**; de status gaat dan mee en de reactie staat in het
+auditlog. Concepten ziet een klant nooit; een verlopen offerte kan hij niet
+meer accepteren. Met de opmaak *totaal per onderdeel* krijgt de klant ook
+via de API geen prijzen per regel.
 
 ## Gebruikers, rollen en historie van aanvragen
 
-Er zijn twee rollen:
+Elke rol ziet op het dashboard alleen de modules die erbij horen; de server
+controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
 
-| Rol | Ziet | Wie |
+| Rol | Mag | Wie |
 | --- | --- | --- |
-| **Beheerder** | alle plannen, de historie van alle aanvragen, gebruikersbeheer en instellingen (module **Beheer**) | accounts met rol beheerder, en inloggen met de (optionele) toegangscode |
-| **Gebruiker** | alleen de eigen plannen | accounts met rol gebruiker, en gasten |
+| **Hoofdbeheerder** | alles, in elke tenant, plus **Hoofdbeheer** (tenants en testomgevingen) | de eerste beheerder van het platform |
+| **Beheerder** | alles binnen de eigen organisatie: gebruikers, instellingen, historie, auditlog, alle plannen en offertes, bedrijfsgegevens, testomgevingen | accounts met rol beheerder, en inloggen met de (optionele) toegangscode |
+| **Installateur** | plannen maken en bewerken, alle plannen en offertes van de organisatie, offertes opstellen en aan een klant koppelen; geen gebruikers, instellingen of historie | accounts met rol installateur (vóór 0.22.0: *gebruiker*) |
+| **Klant** | alleen de eigen plannen, en de verzonden offertes voor zijn account inzien, afdrukken en accepteren of afwijzen | accounts met rol klant, en gasten |
 
 - **Accounts** maak je als beheerder aan onder **Beheer → Gebruikers**
   (gebruikersnaam, naam, rol, wachtwoord van minimaal 8 tekens). Inloggen
@@ -175,8 +189,8 @@ Er zijn twee rollen:
   aan (en is er geen toegangscode), dan kan iedereen de planner gebruiken.
   Elke browser krijgt dan een eigen anonieme gebruiker en ziet alleen de
   eigen plannen.
-- De **laatste actieve beheerder** kan niet worden uitgeschakeld of
-  gebruiker gemaakt; maak eerst een andere beheerder aan.
+- De **laatste actieve beheerder** kan niet worden uitgeschakeld of een
+  andere rol krijgen; maak eerst een andere beheerder aan.
 - **Historie** (**Beheer → Aanvragen**): elke aanvraag krijgt een regel met
   datum, gebruiker, plan, klant, adres, oppervlaktes, sproeiers en zones:
   een nieuw plan, wijzigingen (opeenvolgende wijzigingen van dezelfde

@@ -20,10 +20,13 @@
   let disabledModules = {};
 
   function renderModules(me) {
-    const role = me && me.user ? me.user.role : null;
-    const allowed = (m) => !m.role || (m.role === 'hoofdbeheerder' ? Boolean(me && me.platformAdmin) : m.role === role);
+    // Rechten komen van de server (api/me, zie shared/roles.js).
+    const rights = (me && me.rights) || [];
+    const has = (r) => [].concat(r).some((x) => rights.includes(x));
+    const allowed = (m) => !m.right || has(m.right);
     const html = (window.AquatechModules || [])
       .filter((m) => allowed(m) && (m.id === 'beheer' || m.id === 'hoofdbeheer' || disabledModules[m.id] !== false))
+      .map((m) => (m.alt && has(m.alt.right) && !has(m.alt.unless) ? { ...m, ...m.alt } : m))
       .map((m) => {
       const active = m.status === 'actief' && m.href;
       const body = `

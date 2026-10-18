@@ -66,7 +66,7 @@ test('zonder toegangscode: elke gast ziet alleen de eigen plannen, geen historie
     assert.strictEqual(created.status, 201);
     assert.ok(a.jar.has('aquatech_guest'), 'gast-cookie gezet');
     const me = (await a.get('/api/me')).body;
-    assert.strictEqual(me.user.role, 'gebruiker');
+    assert.strictEqual(me.user.role, 'klant', 'een gast is een klant');
     assert.strictEqual(me.user.kind, 'gast');
 
     assert.strictEqual((await a.get('/api/plans')).body.items.length, 1);
@@ -118,7 +118,7 @@ test('beheerder maakt gebruikers aan en ziet de historie van alle aanvragen', as
     const piet = await admin.post('/api/admin/users', { username: 'piet', displayName: 'Piet', role: 'gebruiker', password: 'Tuin-Plan-2026!' });
     assert.strictEqual(piet.status, 201);
     assert.strictEqual((await admin.post('/api/admin/users', { username: 'piet', role: 'gebruiker', password: 'Tuin-Plan-2026!' })).status, 400);
-    await admin.post('/api/admin/users', { username: 'kees', role: 'gebruiker', password: 'Gras-Pomp-2027!' });
+    await admin.post('/api/admin/users', { username: 'kees', role: 'klant', password: 'Gras-Pomp-2027!' });
 
     const p = client(base), k = client(base);
     assert.strictEqual((await p.post('/api/auth/login', { username: 'piet', password: 'fout-fout' })).status, 401);
@@ -134,7 +134,7 @@ test('beheerder maakt gebruikers aan en ziet de historie van alle aanvragen', as
     await p.put(`/api/plans/${made.body.id}`, { data: plan('Tuin Piet v3', { background: bg }) });
     await k.post('/api/plans', { data: plan('Tuin Kees') });
 
-    // Kees ziet Piets plan niet.
+    // Kees (klant) ziet Piets plan niet.
     assert.strictEqual((await k.get(`/api/plans/${made.body.id}`)).status, 404);
 
     let hist = (await admin.get('/api/admin/history')).body;

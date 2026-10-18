@@ -119,7 +119,7 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 - **Database** (`backend/src/db.js`, `node:sqlite`, geen npm-module) in
   `/data/aquatech.db`; migraties via `PRAGMA user_version` (alleen nieuwe
   toevoegen). Tenant-klaar: elke tabel heeft `tenant_id`, id's zijn UUID's.
-  `store.js`: users (rol `beheerder`|`gebruiker`, soort `account`|`gast`|
+  `store.js`: users (rol `beheerder`|`installateur`|`klant`, soort `account`|`gast`|
   `systeem`), plans (alleen eigenaar of beheerder) en `history` (append-only
   historie van aanvragen, snapshot zonder achtergrond, wijzigingen binnen 30
   min samengevoegd). Identiteit in `server.js` `identify()`: toegangscode =
@@ -141,6 +141,15 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   cookie `aquatech_env` (`<user>:<tenant>`, elke keer opnieuw gecontroleerd)
   en de leesbare `aquatech_env_hint` voor `shared/env.js` (testlabel,
   localStorage-achtervoegsel). Wisselaar in `dashboard/account.js`.
+- **Rollen** (0.22.0): rechten per rol in `frontend/shared/roles.js` (UMD,
+  ook door de server ge-required): `Roles.can(user, recht)`; hoofdbeheerder
+  (`platform_admin`) heeft alle rechten. Server: `requireRight(recht)`,
+  `/api/me` geeft `rights`; dashboardtegels via `right` (en `alt`) in
+  modules.js. Installateur ziet alle plannen/offertes van de tenant
+  (`/api/plans?all=1`), klant alleen eigen plannen + offertes met
+  `quotes.customer_id` = zijn id en status ≠ concept (`POST
+  /api/quotes/:id/respond`). Gast = klant. Migratie 6 bouwt `users` opnieuw
+  (CHECK op rol) met `foreignKeysOff: true` in `db.js`.
 - **Plannenoverzicht** (`frontend/plannen/`, voor iedereen): tabel uit
   `/api/plans` (eigen) of `/api/admin/plans` (beheerder, `?deleted=1`,
   `historyCount`); samenvatting per plan via `summarize()` op

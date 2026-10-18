@@ -7,9 +7,12 @@
 // De server serveert elke map met een `index.html` automatisch als module
 // (ook diepe paden en `<id>` zonder slash), dus aan de backend hoeft niets te
 // veranderen. Modules met `status: 'gepland'` staan als "binnenkort" op het
-// dashboard en zijn nog niet aan te klikken. Met `role: 'beheerder'` is een
-// module alleen voor beheerders zichtbaar, met `role: 'hoofdbeheerder'` alleen
-// voor hoofdbeheerders van het platform (de API controleert dat ook zelf).
+// dashboard en zijn nog niet aan te klikken. `right` bepaalt wie de tegel
+// ziet: een recht uit shared/roles.js (of een lijst, één ervan is genoeg),
+// bijv. 'beheer' (beheerders) of 'hoofdbeheer' (hoofdbeheerders van het
+// platform). Zonder `right` ziet iedereen de module. Met `alt` krijgt wie
+// het recht `alt.right` heeft (en niet `alt.unless`) een andere titel en
+// omschrijving. De API controleert de rechten ook zelf.
 (function (root) {
   const MODULES = [
     {
@@ -19,14 +22,17 @@
       href: 'beregening/',
       icon: 'sprinkler',
       status: 'actief',
+      right: 'plannen',
     },
     {
       id: 'plannen',
       title: 'Plannenoverzicht',
-      description: 'Alle beregeningsplannen in één tabel: projectnaam, klant, adres, oppervlaktes, sproeiers en zones, met Excel-export. Beheerders zien de plannen van iedereen met de historie.',
+      description: 'Alle beregeningsplannen in één tabel: projectnaam, klant, adres, oppervlaktes, sproeiers en zones, met Excel-export. Installateurs en beheerders zien de plannen van de hele organisatie.',
       href: 'plannen/',
       icon: 'table',
       status: 'actief',
+      right: 'plannen',
+      alt: { right: 'plannen', unless: 'plannen.alle', title: 'Mijn plannen', description: 'Uw beregeningsplannen in één tabel: projectnaam, adres, oppervlaktes, sproeiers en zones, met Excel-export.' },
     },
     {
       id: 'offertes',
@@ -35,6 +41,9 @@
       href: 'offertes/',
       icon: 'quote',
       status: 'actief',
+      right: ['offertes', 'offertes.klant'],
+      // Een klant (die zelf geen offertes opstelt) ziet de tegel zo.
+      alt: { right: 'offertes.klant', unless: 'offertes', title: 'Mijn offertes', description: 'De offertes die voor u klaarstaan: bekijken, afdrukken en akkoord geven of afwijzen.' },
     },
     {
       id: 'beheer',
@@ -43,7 +52,7 @@
       href: 'beheer/',
       icon: 'shield',
       status: 'actief',
-      role: 'beheerder',
+      right: 'beheer',
     },
     {
       id: 'hoofdbeheer',
@@ -52,7 +61,7 @@
       href: 'hoofdbeheer/',
       icon: 'globe',
       status: 'actief',
-      role: 'hoofdbeheerder',
+      right: 'hoofdbeheer',
     },
     {
       id: 'planning',
@@ -60,6 +69,7 @@
       description: 'Werkzaamheden en ploegen inplannen, gekoppeld aan projecten uit de beregeningsplanner.',
       icon: 'calendar',
       status: 'gepland',
+      right: 'offertes',
     },
     {
       id: 'voorraad',
@@ -67,6 +77,7 @@
       description: 'Artikelen, voorraad per locatie en bestellingen, met reservering vanuit de stuklijst.',
       icon: 'box',
       status: 'gepland',
+      right: 'offertes',
     },
   ];
 
