@@ -243,7 +243,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   app.get('/api/admin/plans', (req, res) => {
-    res.json({ items: store.listPlans(tenant.id, { ownerId: req.query.owner ? String(req.query.owner) : null }) });
+    res.json({ items: store.listPlans(tenant.id, {
+      ownerId: req.query.owner ? String(req.query.owner) : null,
+      includeDeleted: req.query.deleted === '1',
+      withHistory: true,
+    }) });
+  });
+
+  // Tijdlijn van één plan (ook als het plan verwijderd is).
+  app.get('/api/admin/plans/:id/history', (req, res) => {
+    res.json(store.listHistory(tenant.id, { planId: req.params.id, limit: 500 }));
   });
 
   app.get('/api/admin/plans/:id', (req, res) => {

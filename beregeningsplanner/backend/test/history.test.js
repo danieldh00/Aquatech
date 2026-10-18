@@ -260,3 +260,36 @@ test('API is ook relatief vanuit een module bereikbaar (beregening/api/...)', as
     server.close();
   }
 });
+
+test('plannenoverzicht: samenvatting per plan; beheerder ziet alles plus historie', async () => {
+  const { server, base } = await start();
+  try {
+    const admin = client(base);
+    await admin.post('/api/auth/login', { code: 'geheim' });
+    await admin.post('/api/admin/users', { username: 'joop', displayName: 'Joop', role: 'gebruiker', password: 'wachtwoord1' });
+    const j = client(base);
+    await j.post('/api/auth/login', { username: 'joop', password: 'wachtwoord1' });
+    const a = (await j.post('/api/plans', { data: plan('Tuin A', { background: { dataUrl: 'data:image/png;base64,AAAA' } }) })).body;
+    const b = (await j.post('/api/plans', { data: plan('Tuin B') })).body;
+    await j.del(`/api/plans/${b.id}`);
+
+    const own = (await j.get('/api/plans')).body.items;
+    assert.strictEqual(own.length, 1);
+    assert.deepStrictEqual([own[0].title, own[0].summary.areas, own[0].summary.m2ByType.lawn, own[0].summary.sprinklers], ['Tuin A', 1, 50, 2]);
+    assert.strictEqual(own[0].historyCount, undefined, 'gebruikers zien geen historie');
+    assert.strictEqual((await j.get(`/api/admin/plans/${a.id}/history`)).status, 403);
+
+    const all = (await admin.get('/api/admin/plans')).body.items;
+    assert.strictEqual(all.length, 1);
+    assert.strictEqual(all[0].owner.displayName, 'Joop');
+    assert.strictEqual(all[0].historyCount, 1);
+    const withDeleted = (await admin.get('/api/admin/plans?deleted=1')).body.items;
+    assert.strictEqual(withDeleted.length, 2);
+    assert.ok(withDeleted.find((p) => p.id === b.id).deletedAt);
+
+    const hist = (await admin.get(`/api/admin/plans/${b.id}/history`)).body;
+    assert.deepStrictEqual(hist.items.map((h) => h.action), ['verwijderd', 'aangemaakt']);
+  } finally {
+    server.close();
+  }
+});
