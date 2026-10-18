@@ -244,6 +244,13 @@ controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
   eigen plannen.
 - De **laatste actieve beheerder** kan niet worden uitgeschakeld of een
   andere rol krijgen; maak eerst een andere beheerder aan.
+- **Hoofdbeheerders** beheer je in **Hoofdbeheer → Hoofdbeheerders** (de
+  gebruikers van de hoofdtenant): vink *Hoofdbeheerder* aan bij een nieuwe
+  gebruiker, of gebruik *Hoofdbeheerder maken* / *intrekken* bij een
+  bestaand account. Hoofdbeheerders horen bij de hoofdtenant, hebben altijd
+  de rol beheerder en loggen in met een lege organisatiecode. Alleen een
+  hoofdbeheerder kan een andere hoofdbeheerder wijzigen, uitschakelen of
+  uitloggen; de laatste actieve hoofdbeheerder blijft altijd bestaan.
 - **Inloggen als een gebruiker (impersonatie)**: een hoofdbeheerder kan in
   **Hoofdbeheer → Gebruikers → Inloggen als** tijdelijk werken met de rol en
   rechten van een gebruiker, om mee te kijken of te helpen.

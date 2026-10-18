@@ -47,6 +47,7 @@ table.grid tr.off td { color: var(--muted); }
 .card-form h3 { margin: 0 0 10px; font-size: 15px; }
 .card-form .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
 .card-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.card-form label .hint { font-size: 12px; max-width: 280px; }
 .err { color: #c62828; font-size: 14px; min-height: 18px; margin-top: 6px; }
 .chk { display: inline-flex; gap: 6px; align-items: center; margin: 4px 0 10px; font-size: 14px; }
 
