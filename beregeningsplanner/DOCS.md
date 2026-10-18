@@ -225,6 +225,8 @@ Getoetst aan OWASP ASVS (niveau 2) en de AVG.
 | Eerste beheerder | alleen met de installatiecode uit het serverlog of de toegangscode |
 | Auditlog | inloggen, uitloggen, gebruikers en instellingen (Beheer → Auditlog) |
 | Bewaartermijnen | IP-adressen 90 dagen, auditlog 365 dagen (instelbaar) |
+| Back-ups | dagelijks, AES-256-GCM, 14 dagen bewaard (instelbaar), downloadbaar voor opslag elders |
+| Recht op vergetelheid | Plannenoverzicht → plan → *Definitief wissen* (plan + inhoud van de historie) |
 | Database | rechten 0600, `secure_delete`, integriteitscontrole bij de start |
 | Proces | draait als gewone gebruiker (uid 1000), niet als root |
 | Browser | Content-Security-Policy, X-Frame-Options, HSTS via https, `no-store` op de API |
@@ -244,12 +246,27 @@ Docker-secret* aan. Bewaar daarnaast een kopie van de sleutel in een
 wachtwoordkluis: zonder de sleutel zijn de opgeslagen geheimen onbruikbaar
 (een nieuwe sleutel betekent API-sleutel en toegangscode opnieuw invullen).
 
+**Back-ups terugzetten.** Stop de app, ontsleutel de back-up en zet die
+als database terug:
+
+```sh
+docker compose stop aquatech
+docker compose run --rm --no-deps -e RUN_AS_ROOT=1 aquatech \
+  node src/backup.js decrypt /data/backups/aquatech-JJJJMMDD-UUMMSS.db.enc /data/terug.db
+# controleer, en vervang daarna /data/aquatech.db door /data/terug.db
+docker compose start aquatech
+```
+
+Een wis-opdracht (definitief wissen) staat nog in de back-ups tot die na de
+bewaartermijn verdwijnen; vermeld dat in de privacyverklaring.
+
 **Nog te regelen bij de serverinrichting**
 
 - Schijfversleuteling op de host (LUKS/BitLocker) of een VPS-aanbieder met
   versleutelde opslag in de EU.
-- Externe back-ups van het volume (bijv. dagelijks naar een andere locatie),
-  periodiek een terugzettest; de hoofdsleutel apart bewaren.
+- De versleutelde back-ups uit `/data/backups` (of `BACKUP_DIR` op een
+  andere schijf) dagelijks naar een andere locatie kopiëren, periodiek een
+  terugzettest; de hoofdsleutel apart bewaren.
 - HTTPS via de Cloudflare-tunnel of een reverse proxy; poort 3300 niet
   rechtstreeks open zetten naar internet (alleen de tunnel).
 - Host bijwerken (`git pull && docker compose up -d --build` voor de app,
