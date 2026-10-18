@@ -198,6 +198,24 @@ controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
   eigen plannen.
 - De **laatste actieve beheerder** kan niet worden uitgeschakeld of een
   andere rol krijgen; maak eerst een andere beheerder aan.
+- **Inloggen als een gebruiker (impersonatie)**: een hoofdbeheerder kan in
+  **Hoofdbeheer → Gebruikers → Inloggen als** tijdelijk werken met de rol en
+  rechten van een gebruiker, om mee te kijken of te helpen.
+  - In een **testomgeving** zonder goedkeuring.
+  - In **live** alleen als de gebruiker zelf toestemming heeft gegeven op het
+    dashboard bij **Support op afstand** (1 uur, 4 uur, 1 dag of 3 dagen).
+    De gebruiker kan die toestemming altijd intrekken; een lopende
+    impersonatie stopt dan meteen. Hij ziet daar ook wie er onlangs heeft
+    meegekeken.
+  - Een impersonatie duurt hoogstens 8 uur (in live nooit langer dan de
+    toestemming). Zolang die loopt staat onderin elke pagina een rode balk
+    met **Terug naar eigen account**; uitloggen stopt de impersonatie ook.
+  - Elke start en elk einde staat in het auditlog (van de omgeving én van de
+    hoofdtenant, met de optionele reden), en wat er tijdens een impersonatie
+    gebeurt staat in het auditlog met de naam van de hoofdbeheerder erbij.
+    Een hoofdbeheerder kan niet worden overgenomen, en tijdens een
+    impersonatie kun je niet van omgeving wisselen of toestemming geven
+    namens de gebruiker.
 - **Historie** (**Beheer → Aanvragen**): elke aanvraag krijgt een regel met
   datum, gebruiker, plan, klant, adres, oppervlaktes, sproeiers en zones:
   een nieuw plan, wijzigingen (opeenvolgende wijzigingen van dezelfde

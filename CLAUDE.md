@@ -132,7 +132,7 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   `parent_id`, `disabled`); een testomgeving is een eigen tenant onder een
   live-tenant (eigen plannen/historie/instellingen, gebruikers van de
   live-tenant). Gebruikersnamen zijn uniek per organisatie (live-tenant +
-  testomgevingen, `familyIds` in store.js), niet globaal (0.24.0); inloggen
+  testomgevingen, `familyIds` in store.js), niet globaal (0.25.0); inloggen
   met organisatiecode = tenant-slug (`store.loginTenant`, leeg = hoofdtenant,
   testcode → live-tenant), onthouden in localStorage `aquatech_org`,
   `login?org=` vult hem in. `users.platform_admin` = hoofdbeheerder (module

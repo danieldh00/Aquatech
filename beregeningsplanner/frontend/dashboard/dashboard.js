@@ -107,5 +107,6 @@
   Promise.all([window.AquatechAccount.load(''), loadConfig()]).then(([me]) => {
     renderModules(me);
     renderMyPlans(me);
+    window.AquatechSupport.load(me);
   });
 })();
