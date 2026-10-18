@@ -13,6 +13,7 @@ const { createSettings, SettingsError, FIELDS } = require('./settings');
 const { createVault, loadOrCreateMasterKey } = require('./vault');
 const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes } = require('./quotes');
+const { createMailer } = require('./mailer');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const crypto = require('crypto');
@@ -63,6 +64,22 @@ function newSetupCode() {
 }
 const normCode = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+// Zonder inloggen bereikbaar: de openbare offertepagina (klant via een link
+// met token) en precies de bestanden die die pagina nodig heeft. Geen
+// ../-trucs: het pad moet na decoderen en normaliseren hetzelfde blijven.
+const PUBLIC_FILES = new Set([
+  '/openbaar/offerte.html', '/openbaar/offerte.js', '/openbaar/offerte.css',
+  '/shared/brand.css', '/shared/logo-white.png',
+  '/offertes/quote-core.js', '/offertes/quote-view.js', '/offertes/quote-view.css',
+]);
+function isPublicAsset(req) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  let p;
+  try { p = decodeURIComponent(req.path); } catch { return false; }
+  if (p !== path.posix.normalize(p) || p.includes('\\')) return false;
+  return PUBLIC_FILES.has(p) || /^\/shared\/fonts\/montserrat-latin-\d{3}-normal\.woff2$/.test(p);
+}
+
 // Een module is een map direct onder frontend/ met een eigen index.html.
 function isModule(name) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) return false;
@@ -92,7 +109,7 @@ function sendPage(res, file, version) {
 
 // accessCode, anthropicApiKey en aiDailyLimit zijn alleen startwaarden (net als
 // env); de actuele waarden komen uit de instellingen.
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings) }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -165,6 +182,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/plans', express.json({ limit: '12mb' }));
   // Een offerte met veel regels en lange teksten past niet in 16 kB.
   app.use('/api/quotes', express.json({ limit: '1mb' }));
+  // Akkoord via de openbare link: met handtekening (PNG).
+  app.use('/api/public', express.json({ limit: '512kb' }));
   app.use('/api/workorders', express.json({ limit: '1mb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
@@ -570,6 +589,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // alleen de gebruikers daarvan, nooit die van live.
   const usersTenantOf = (req) => (req.user && req.user.home_tenant_id === req.tenantId ? req.tenantId : homeOf(req.tenantId));
 
+  // Een hoofdbeheerder kan alleen door een (andere) hoofdbeheerder worden
+  // gewijzigd, uitgeschakeld of uitgelogd, niet door een beheerder van de tenant.
+  function guardPlatformAdmin(req, res, userId) {
+    const target = store.getUser(userId);
+    if (!target || !target.platform_admin || req.user.platform_admin) return false;
+    res.status(403).json({ error: 'forbidden', message: 'Alleen een hoofdbeheerder kan een hoofdbeheerder wijzigen.' });
+    return true;
+  }
+
   app.get('/api/admin/users', (req, res) => {
     res.json({ items: store.listUsers(usersTenantOf(req)) });
   });
@@ -587,6 +615,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const input = {};
     for (const k of ['displayName', 'role', 'disabled', 'password', 'username']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
     const home = usersTenantOf(req);
+    if (guardPlatformAdmin(req, res, req.params.id)) return;
     const out = await store.updateAccount(home, req.params.id, input);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_user', message: out.error });
     auditUserChange(req, out.user, input, home);
@@ -596,7 +625,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Welke velden, nooit de waarden van een wachtwoord.
   function auditUserChange(req, user, input, tenantId) {
     audit(req, 'gebruiker_gewijzigd', { userId: user.id, username: user.username, fields: Object.keys(input),
-      ...(input.role !== undefined ? { role: input.role } : {}), ...(input.disabled !== undefined ? { disabled: Boolean(input.disabled) } : {}) }, undefined, tenantId);
+      ...(input.role !== undefined ? { role: input.role } : {}), ...(input.disabled !== undefined ? { disabled: Boolean(input.disabled) } : {}),
+      ...(input.platformAdmin !== undefined ? { hoofdbeheerder: Boolean(input.platformAdmin) } : {}) }, undefined, tenantId);
   }
 
   // Gebruiker op alle toestellen uitloggen.
@@ -604,6 +634,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const home = usersTenantOf(req);
     const u = store.getUser(req.params.id);
     if (!u || u.tenant_id !== home) return res.status(404).json({ error: 'not_found', message: 'Gebruiker niet gevonden.' });
+    if (guardPlatformAdmin(req, res, u.id)) return;
     const n = store.revokeSessions(home, u.id);
     audit(req, 'sessies_ingetrokken', { userId: u.id, username: u.username, count: n }, undefined, home);
     res.json({ ok: true, revoked: n });
@@ -786,8 +817,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Offertes (module Offertes, zie quotes.js) ----------
   registerQuoteRoutes(app, {
-    quotes: createQuoteStore(database), identify, requireUser, requireAdmin, requireRight, requireJson, audit,
+    quotes: createQuoteStore(database, { vault }), identify, requireUser, requireAdmin, requireRight, requireJson, audit,
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
+    // Openbare offertelink: zonder inlog, dus de tenant volgt uit de offerte.
+    settingsForTenant: (id) => settingsFor(id), remoteIp, mailerFor,
+    tenantActive: (id) => {
+      const t = store.getTenant(id);
+      const live = t && t.parent_id ? store.getTenant(t.parent_id) : t;
+      return Boolean(t && !t.disabled && live && !live.disabled);
+    },
+    publicLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: remoteIp }),
     // Klantaccounts horen bij de live-tenant (ook als er in test gewerkt
     // wordt); in een testomgeving komen de testklanten daarvan erbij.
     customersOf: (req) => {
@@ -927,6 +966,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     return t;
   };
 
+  // Hoofdbeheerders wonen in de hoofdtenant: ze loggen in zonder organisatiecode.
+  const HOOFD_ONLY = 'Hoofdbeheerders horen bij de hoofdtenant. Maak ze aan bij de gebruikers van de hoofdtenant.';
+
   app.get('/api/platform/tenants/:id/users', (req, res) => {
     const t = userTenant(req, res);
     // Met de supporttoestemming erbij (nodig om in live als de gebruiker te werken).
@@ -936,10 +978,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/platform/tenants/:id/users', requireJson, wrap(async (req, res) => {
     const t = userTenant(req, res);
     if (!t) return;
-    const { username, displayName, role, password } = req.body || {};
-    const out = await store.createAccount(t.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password });
+    const { username, displayName, password } = req.body || {};
+    const platformAdmin = Boolean(req.body?.platformAdmin);
+    if (platformAdmin && t.id !== tenant.id) return res.status(400).json({ error: 'invalid_user', message: HOOFD_ONLY });
+    const role = platformAdmin ? 'beheerder' : req.body?.role;
+    const out = await store.createAccount(t.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password }, { platformAdmin });
     if (out.error) return res.status(400).json({ error: 'invalid_user', message: out.error });
-    audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role, door: 'hoofdbeheer' }, undefined, t.id);
+    audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role, door: 'hoofdbeheer',
+      ...(platformAdmin ? { hoofdbeheerder: true } : {}) }, undefined, t.id);
     res.status(201).json(store.publicUser(out.user));
   }));
 
@@ -948,6 +994,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!t) return;
     const input = {};
     for (const k of ['displayName', 'role', 'disabled', 'password']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
+    if (req.body?.platformAdmin !== undefined) {
+      input.platformAdmin = Boolean(req.body.platformAdmin);
+      if (input.platformAdmin && t.id !== tenant.id) return res.status(400).json({ error: 'invalid_user', message: HOOFD_ONLY });
+    }
     const out = await store.updateAccount(t.id, req.params.uid, input);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_user', message: out.error });
     auditUserChange(req, out.user, input, t.id);
@@ -971,7 +1021,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.use((req, res, next) => {
     const authenticated = auth.isAuthenticated(req);
-    if (authenticated || (guestsAllowed() && !needsSetup())) return next();
+    if (authenticated || (guestsAllowed() && !needsSetup()) || isPublicAsset(req)) return next();
     if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(401).end();
     res.status(401);
     res.setHeader('Cache-Control', 'no-store');

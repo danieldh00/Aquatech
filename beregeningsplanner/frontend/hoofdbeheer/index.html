@@ -25,24 +25,29 @@
     <div id="denied" class="notice" hidden></div>
 
     <div id="app" hidden>
-      <form id="t-form" class="card-form">
+      <form id="t-form" class="card-form" novalidate>
         <h3>Tenant toevoegen</h3>
         <div class="row">
-          <label>Naam<input name="name" required minlength="2" maxlength="80" autocomplete="off" placeholder="bijv. Groen Beregening BV"></label>
-          <label>Code<input name="slug" required pattern="[a-z0-9][a-z0-9\-]{1,39}" autocomplete="off" placeholder="groen-beregening"></label>
+          <label>Naam van de organisatie<input name="name" required minlength="2" maxlength="80" autocomplete="off" placeholder="bijv. Groen Beregening BV"></label>
+          <label>Organisatiecode<input name="slug" required maxlength="40" autocomplete="off" placeholder="groen-beregening"
+            data-rule="slug"><span class="hint">Vult zich vanzelf in. Kleine letters, cijfers en streepjes; hiermee loggen de gebruikers in.</span></label>
         </div>
-        <p class="muted small">Eerste beheerder (optioneel, kan ook later via Gebruikers). Gebruikersnamen zijn uniek binnen een tenant; de gebruikers loggen in met de code van de tenant als organisatiecode, hun gebruikersnaam en wachtwoord.</p>
+        <h4>Eerste beheerder <span class="muted small">(optioneel, kan ook later via Gebruikers)</span></h4>
         <div class="row">
-          <label>Gebruikersnaam<input name="adminUsername" pattern="[a-z0-9][a-z0-9._\-]{2,39}" autocomplete="off" placeholder="bijv. piet.groen"></label>
-          <label>Naam<input name="adminName" autocomplete="off" placeholder="Piet Groen"></label>
-          <label>Wachtwoord<input name="adminPassword" type="password" minlength="12" maxlength="128" placeholder="minimaal 12 tekens" autocomplete="new-password"></label>
-          <button class="btn primary" type="submit">Tenant aanmaken</button>
+          <label>Volledige naam<input name="adminName" maxlength="80" autocomplete="off" placeholder="bijv. Piet Groen"></label>
+          <label>Gebruikersnaam<input name="adminUsername" maxlength="40" autocomplete="off" placeholder="piet.groen"
+            data-rule="username"><span class="hint">Vult zich vanzelf in vanuit de naam. 3–40 tekens: kleine letters, cijfers, punt, streepje of underscore.</span></label>
+          <label>Wachtwoord<input name="adminPassword" type="password" maxlength="128" autocomplete="new-password" placeholder="minimaal 12 tekens"
+            data-rule="password"><span class="hint">Minimaal 12 tekens, niet de gebruikersnaam.</span></label>
         </div>
+        <p class="muted small" id="t-login-hint">De beheerder logt in met organisatiecode <b class="code" id="t-login-org">…</b>, gebruikersnaam <b class="code" id="t-login-user">…</b> en het wachtwoord.</p>
+        <div class="row"><button class="btn primary" type="submit">Tenant aanmaken</button></div>
         <div id="t-err" class="err" role="alert"></div>
       </form>
 
       <div class="filters">
         <input id="t-search" type="search" placeholder="Zoek op naam of code">
+        <button id="t-admins" class="btn">Hoofdbeheerders</button>
         <button id="t-export" class="btn">Exporteer naar Excel</button>
       </div>
       <p class="muted small">Een testomgeving hoort bij een tenant: eigen plannen, historie en instellingen, maar dezelfde gebruikers. Met <b>Openen</b> werk je in die omgeving; wisselen kan ook via de keuzelijst rechtsboven, zonder opnieuw in te loggen.</p>

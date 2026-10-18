@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.26.0
+## 0.28.0
 
 - **Werkorders** (nieuwe module, tegel op het dashboard, voor beheerders en
   installateurs; een klant ziet ze niet): van een offerte met status
@@ -20,6 +20,47 @@
   naar Excel te exporteren. Nummering `WO-<jaar>-0001` per omgeving.
 - Opties uit de offerte die de klant niet heeft gekozen, komen niet in de
   werkorder (materialen en werkstappen).
+
+## 0.27.0
+
+- **Hoofdbeheerders aanmaken**: in Hoofdbeheer opent de knop
+  *Hoofdbeheerders* de gebruikers van de hoofdtenant. Daar kun je een nieuwe
+  gebruiker meteen hoofdbeheerder maken, of een bestaand account
+  hoofdbeheerder maken of dat weer intrekken. Hoofdbeheerders horen altijd
+  bij de hoofdtenant en hebben de rol beheerder.
+- Alleen een hoofdbeheerder kan een hoofdbeheerder wijzigen, uitschakelen,
+  een nieuw wachtwoord geven of uitloggen; een gewone beheerder van de
+  hoofdtenant niet meer. De laatste actieve hoofdbeheerder kan niet worden
+  ingetrokken of uitgeschakeld.
+- **Nieuwe tenant: duidelijke velden voor de eerste beheerder**. Volledige
+  naam, gebruikersnaam en wachtwoord staan apart met uitleg eronder; de
+  gebruikersnaam vult zich vanuit de naam ("Piet Groen" → `piet.groen`) en
+  wordt vanzelf in kleine letters gezet. Een fout geeft een melding die zegt
+  wat er mis is, in plaats van de browsermelding "Gebruik de gevraagde
+  notatie". Onder het formulier staat waarmee de beheerder inlogt
+  (organisatiecode + gebruikersnaam).
+- Zelfde uitleg bij het toevoegen van gebruikers in Hoofdbeheer en Beheer.
+
+## 0.26.0
+
+- **Digitale offerte**: per offerte een persoonlijke link (*Digitale offerte*
+  in de editor). De klant opent die zonder account, bekijkt de offerte, kiest
+  eventuele opties en geeft akkoord met zijn naam, een handtekening (muis,
+  vinger of pen) en een vinkje voor de voorwaarden, of wijst af met een reden.
+  - Vastgelegd: naam, tijdstip, IP-adres, browser, handtekening, gekozen
+    opties, totaalbedrag en een kenmerk (SHA-256) van de geaccordeerde inhoud.
+    Daarna ligt de offerte vast; wijzigen kan alleen via een kopie.
+  - Je ziet of en hoe vaak de klant de offerte heeft geopend; de link is in
+    te trekken. Alleen een hash van het token staat doorzoekbaar in de
+    database, het token zelf versleuteld.
+  - **Opties**: zet een regel op *Optie* of *Optie (aan)*; de klant vinkt die
+    zelf aan of uit en het totaal rekent mee (ook in PDF en Excel).
+- **E-mail** via de eigen SMTP-server (Bedrijfsgegevens → E-mail, wachtwoord
+  versleuteld): offerte versturen met een knop naar de digitale offerte,
+  bevestiging naar de klant na een akkoord en een bericht naar het bedrijf.
+  Zonder mailserver opent *Versturen* het bericht in je eigen mailprogramma.
+- Klantaccounts geven in *Mijn offertes* op dezelfde manier akkoord (naam,
+  handtekening, voorwaarden).
 
 ## 0.25.0
 

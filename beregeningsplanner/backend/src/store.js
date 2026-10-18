@@ -216,12 +216,20 @@ function createStore(db) {
     if (losesAdmin && countAdmins(tenantId) <= 1) {
       return { error: 'Dit is de enige actieve beheerder. Maak eerst een andere beheerder aan.', status: 409 };
     }
-    if (losesAdmin && u.platform_admin && countPlatformAdmins() <= 1) {
-      return { error: 'Dit is de enige actieve hoofdbeheerder en die blijft actief beheerder.', status: 409 };
+    // De laatste actieve hoofdbeheerder blijft dat ook: anders kan niemand
+    // meer bij het hoofdbeheer.
+    const losesPlatform = u.platform_admin && !u.disabled && (losesAdmin || input.disabled || input.platformAdmin === false);
+    if (losesPlatform && countPlatformAdmins() <= 1) {
+      return { error: 'Dit is de enige actieve hoofdbeheerder. Maak eerst een andere hoofdbeheerder aan.', status: 409 };
     }
     if (input.displayName !== undefined) q('UPDATE users SET display_name = ? WHERE id = ?').run(String(input.displayName).trim() || u.username, u.id);
     if (input.role !== undefined) q('UPDATE users SET role = ? WHERE id = ?').run(input.role, u.id);
     if (input.disabled !== undefined) q('UPDATE users SET disabled = ? WHERE id = ?').run(input.disabled ? 1 : 0, u.id);
+    // Hoofdbeheerder worden of af: een hoofdbeheerder is altijd beheerder.
+    if (input.platformAdmin !== undefined) {
+      q('UPDATE users SET platform_admin = ? WHERE id = ?').run(input.platformAdmin ? 1 : 0, u.id);
+      if (input.platformAdmin) q("UPDATE users SET role = 'beheerder' WHERE id = ?").run(u.id);
+    }
     const newHash = input.password !== undefined ? await hashPassword(input.password) : null;
     if (newHash) q('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, u.id);
     // Nieuw wachtwoord of uitgeschakeld: op alle toestellen uitgelogd.

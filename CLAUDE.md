@@ -135,7 +135,9 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   testomgevingen, `familyIds` in store.js), niet globaal (0.25.0); inloggen
   met organisatiecode = tenant-slug (`store.loginTenant`, leeg = hoofdtenant,
   testcode → live-tenant), onthouden in localStorage `aquatech_org`,
-  `login?org=` vult hem in. `users.platform_admin` = hoofdbeheerder (module
+  `login?org=` vult hem in. `users.platform_admin` = hoofdbeheerder (alleen in de
+  hoofdtenant, aan/uit via `platformAdmin` op `/api/platform/tenants/:id/users`,
+  alleen door een hoofdbeheerder te wijzigen; module
   `frontend/hoofdbeheer/`, API `/api/platform/*`); de hoofdtenant kan niet uit.
   In `server.js` zet `identify()` `req.user` (met `tenant_id` = actieve
   omgeving, `home_tenant_id` = eigen tenant) en `req.tenantId`: gegevens via
@@ -170,11 +172,22 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   BOM + arbeidsnormen `LABOR`), opslag/routes in `backend/src/quotes.js`
   (tabel `quotes`, migratie 5, nummer `<prefix><jaar>-0001` per tenant),
   bedrijfsprofiel = instelling `quoteProfile` (type `object`). PDF via
+  afdrukversie (`#print`, print-CSS), geen PDF-bibliotheek. Document +
+  tekenvak/akkoordformulier gedeeld in `offertes/quote-view.js|.css`.
+  **Digitale offerte** (0.26.0): openbare pagina `frontend/openbaar/offerte.html`
+  (token in `#t=`, naar de server alleen als kop `X-Offerte-Token`; API
+  `/api/public/quote[/respond]`); bestanden zonder login via `PUBLIC_FILES`/
+  `isPublicAsset` in server.js (nieuwe afhankelijkheid van die pagina daar
+  toevoegen). Tabel `quotes`: `share_hash` (SHA-256), `share_token` (vault),
+  `acceptance` (JSON-bewijs); met een acceptance geeft PUT 409 `locked`.
+  Regels kunnen `optional`/`selected` zijn (`Core.included`, `chooseOptions`).
+  E-mail via `mailer.js` (nodemailer, eigen SMTP: `mailServer` + geheim
+  `mailPassword`); tests vervangen `mailerFor`.
   afdrukversie (`#print`, print-CSS), geen PDF-bibliotheek.
-- **Werkorders** (`frontend/werkorders/`, 0.26.0, recht `werkorders`:
+- **Werkorders** (`frontend/werkorders/`, 0.28.0, recht `werkorders`:
   beheerder + installateur): kern `workorder-core.js` (UMD, `fromQuote`,
   `zonesFromPlan`, `sanitize`, `progress`), opslag/routes
-  `backend/src/workorders.js` (tabel `work_orders`, migratie 9, nummer
+  `backend/src/workorders.js` (tabel `work_orders`, migratie 10, nummer
   `WO-<jaar>-0001`). Alleen uit een offerte met status `akkoord`; koppeling
   met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
   de offerte-editor.

@@ -55,6 +55,9 @@
       unit: str(l.unit, 12).trim(),
       price: round2(numIn(l.price, -1e7, 1e7)),
       vat: VAT_RATES.includes(Number(l.vat)) ? Number(l.vat) : 21,
+      // Optie: de klant kiest zelf of die meedoet; telt alleen mee als gekozen.
+      optional: Boolean(l.optional),
+      selected: Boolean(l.optional && l.selected),
     };
   }
 
@@ -95,6 +98,14 @@
   }
 
   const lineTotal = (l) => round2((Number(l.qty) || 0) * (Number(l.price) || 0));
+  // Telt de regel mee in de totalen? Een niet gekozen optie niet.
+  const included = (l) => !l.optional || Boolean(l.selected);
+
+  /** Kiest de opties: alleen de regels met een id uit `ids` staan aan. */
+  function chooseOptions(data, ids) {
+    const set = new Set((Array.isArray(ids) ? ids : []).map(String));
+    return { ...data, lines: data.lines.map((l) => (l.optional ? { ...l, selected: set.has(l.id) } : l)) };
+  }
 
   /**
    * Totalen: per sectie, subtotaal, korting (naar rato over de btw-tarieven),
@@ -107,6 +118,7 @@
     const bases = new Map();
     let subtotal = 0;
     for (const l of lines) {
+      if (!included(l)) continue;
       const t = lineTotal(l);
       bySection[l.section] = round2((bySection[l.section] || 0) + t);
       subtotal += t;
@@ -210,7 +222,7 @@
     return { lines, summary, warnings };
   }
 
-  const api = { SECTIONS, VAT_RATES, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, lineTotal, fromPlan, today, addDays, round2 };
+  const api = { SECTIONS, VAT_RATES, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, lineTotal, included, chooseOptions, fromPlan, today, addDays, round2 };
   root.QuoteCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
