@@ -19,7 +19,7 @@ function createRateLimiter({ windowMs, max, keyFn }) {
       hits.set(key, entry);
     }
     entry.count += 1;
-    if (entry.count > (typeof max === 'function' ? max() : max)) {
+    if (entry.count > (typeof max === 'function' ? max(req) : max)) {
       res.setHeader('Retry-After', Math.ceil((entry.reset - now) / 1000));
       return res.status(429).json({ error: 'rate_limited', message: 'Te veel verzoeken, probeer het zo opnieuw.' });
     }

@@ -257,7 +257,7 @@
       <td class="c-desc"><input data-l="description" value="${esc(l.description)}" maxlength="500" placeholder="Omschrijving">${l.code ? `<span class="code">${esc(l.code)}</span>` : ''}</td>
       <td class="c-qty"><input data-l="qty" class="num" type="number" step="any" value="${l.qty}" aria-label="Aantal"></td>
       <td class="c-unit"><input data-l="unit" value="${esc(l.unit)}" maxlength="12" aria-label="Eenheid"></td>
-      <td class="c-price"><input data-l="price" class="num" type="number" step="0.01" value="${l.price}" aria-label="Prijs per eenheid"></td>
+      <td class="c-price"><input data-l="price" class="num" type="number" step="0.01" value="${Number(l.price).toFixed(2)}" aria-label="Prijs per eenheid"></td>
       <td class="c-vat"><select data-l="vat" aria-label="Btw">${vat}</select></td>
       <td class="c-total num" data-total>${eur(Q.lineTotal(l))}</td>
       <td class="c-del"><button class="btn ghost icon" data-del title="Regel verwijderen">✕</button></td>
@@ -500,9 +500,11 @@
         <tr class="grand"><td>Totaal incl. btw</td><td class="num">${eur(t.total)}</td></tr>
       </table>
       ${d.terms ? `<h2>Voorwaarden</h2><p class="p-text">${esc(d.terms)}</p>` : ''}
-      <h2>Voor akkoord</h2>
-      <div class="p-sign"><div>Naam en datum</div><div>Handtekening</div></div>
-      <footer class="p-foot">${esc(foot)}</footer>`;
+      <div class="p-end">
+        <h2>Voor akkoord</h2>
+        <div class="p-sign"><div>Naam en datum</div><div>Handtekening</div></div>
+        <footer class="p-foot">${esc(foot)}</footer>
+      </div>`;
   }
 
   async function printQuote() {

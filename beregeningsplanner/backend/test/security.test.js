@@ -18,7 +18,8 @@ const PW = 'Tuin-Plan-2026!';
 async function start(opts = {}) {
   const db = opts.db || openDb();
   const store = createStore(db);
-  if (!opts.noAdmin) await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW });
+  // Zoals na het instelscherm: de eerste beheerder is hoofdbeheerder.
+  if (!opts.noAdmin) await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   return new Promise((resolve) => {
     const app = createApp({ secret: SECRET, db, ...opts });
     const server = app.listen(0, () => resolve({ app, db, store, server, base: `http://127.0.0.1:${server.address().port}` }));
@@ -276,11 +277,17 @@ test('versleutelde back-up: onleesbaar zonder sleutel, terug te zetten met sleut
   }
 });
 
-test('back-up-API alleen voor beheerders; download alleen geldige namen', async () => {
+test('back-up-API alleen voor hoofdbeheerders; download alleen geldige namen', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-bkapi-'));
-  const { server, base } = await start({ backupDir: dir });
+  const { server, base, store } = await start({ backupDir: dir });
   try {
     assert.strictEqual((await client(base).post('/api/admin/backups')).status, 401);
+    // Een gewone beheerder (geen hoofdbeheerder): de back-up bevat alle tenants.
+    await store.createAccount(store.ensureTenant().id, { username: 'tweede', role: 'beheerder', password: PW });
+    const b = client(base);
+    await b.post('/api/auth/login', { username: 'tweede', password: PW });
+    assert.strictEqual((await b.post('/api/admin/backups')).status, 403);
+    assert.strictEqual((await b.get('/api/admin/backups')).status, 403);
     const a = client(base);
     await a.post('/api/auth/login', { username: 'baas', password: PW });
     const made = await a.post('/api/admin/backups');

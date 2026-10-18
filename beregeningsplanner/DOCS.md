@@ -121,6 +121,42 @@ kolomkop), totalen en **Exporteer naar Excel**. Gebruikers zien hun eigen
 plannen; beheerders zien alle plannen met de gebruiker, kunnen per gebruiker
 filteren en ook verwijderde plannen tonen, en zien per plan de historie.
 
+## Offertes
+
+De module **Offertes** bouwt een offerte op uit een beregeningsplan. Start
+vanuit de planner (stap *Stuklijst & export* → **Offerte maken van dit
+plan**), vanuit het plannenoverzicht (**Offerte maken**) of in de module zelf
+met **Nieuwe offerte uit plan**.
+
+- **Materialen** komen uit de stuklijst van het plan (zelfde berekening als
+  de Excel-stuklijst, inclusief uitvoeringsniveau), met de ingestelde opslag
+  op de artikelprijzen.
+- **Arbeid** wordt geschat uit het plan: sproeiers, meters sleuf en leiding,
+  ventielen en ventielkast, besturing en kabel, druppelslang of druppelaars,
+  wateraansluiting, waterpunten en inregelen, afgerond op kwartieren tegen het
+  uurtarief. **Overig** bevat de voorrijkosten (als ingesteld) en eigen regels.
+- Alles is aan te passen: omschrijving, aantal, eenheid, prijs en btw-tarief
+  (21, 9 of 0%) per regel, regels toevoegen en verwijderen, een kortings-
+  percentage over het geheel (naar rato over de btw-tarieven), klantgegevens,
+  datum, geldigheid, inleiding en voorwaarden. Wijzigingen worden automatisch
+  bewaard. **Regels opnieuw uit het plan** neemt een gewijzigd plan over.
+- **PDF / afdrukken** opent de afdrukversie in huisstijl (A4); kies in het
+  printvenster *Opslaan als PDF*. Op de offerte staan alle regels met
+  prijzen, of per onderdeel alleen een totaalbedrag. **Excel** geeft de
+  offerte als werkblad met formules.
+- Elke offerte krijgt een vast nummer per jaar (`OF-2026-0001`, voorvoegsel
+  instelbaar) en een status: concept, verzonden, akkoord of afgewezen;
+  verlopen offertes zijn in het overzicht te herkennen. Het overzicht is naar
+  Excel te exporteren.
+- **Bedrijfsgegevens** (alleen beheerders): naam, adres, contact, KvK, btw-
+  nummer en IBAN voor op de offerte, plus uurtarief, opslag materiaal,
+  voorrijkosten, standaard btw-tarief, geldigheid en standaardteksten. Ze
+  gelden per tenant en omgeving.
+
+Gebruikers zien hun eigen offertes; beheerders kunnen alle offertes van de
+tenant tonen en een offerte definitief wissen (AVG). Een testomgeving heeft
+eigen offertes en nummering.
+
 ## Gebruikers, rollen en historie van aanvragen
 
 Er zijn twee rollen:

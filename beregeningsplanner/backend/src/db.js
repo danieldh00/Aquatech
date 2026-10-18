@@ -1,11 +1,11 @@
 // SQLite-database van de app (node:sqlite, ingebouwd in Node 22: geen native
 // npm-module nodig, dus geen multi-arch-bouwproblemen).
 //
-// Het datamodel is tenant-klaar: elke tabel heeft een tenant_id en elke query
-// filtert daarop. Voorlopig is er één tenant ("default"); bij
-// de overstap naar een gedeelde server komen er tenants bij zonder dat het
-// schema verandert. Id's zijn willekeurige UUID's (niet te raden en later
-// zonder hernummeren over te zetten naar een andere database).
+// Multitenant: elke tabel heeft een tenant_id en elke query filtert daarop.
+// De hoofdtenant ("default") bestaat altijd; andere tenants en hun
+// testomgevingen (eigen tenant met parent_id) maakt een hoofdbeheerder aan.
+// Id's zijn willekeurige UUID's (niet te raden en later zonder hernummeren
+// over te zetten naar een andere database).
 const fs = require('fs');
 const { DatabaseSync } = require('node:sqlite');
 
@@ -111,6 +111,23 @@ const MIGRATIONS = [
     created_at TEXT NOT NULL
   );
   CREATE INDEX audit_tenant ON audit (tenant_id, created_at);
+  `,
+  // Multitenant: tenants met live- en testomgevingen. Een testomgeving is een
+  // eigen tenant (eigen plannen, historie en instellingen) met parent_id naar
+  // de live-tenant; de gebruikers horen bij de live-tenant. platform_admin =
+  // hoofdbeheerder die alle tenants ziet en beheert. De beheerders van de
+  // bestaande tenant worden hoofdbeheerder.
+  `
+  ALTER TABLE tenants ADD COLUMN environment TEXT NOT NULL DEFAULT 'live' CHECK (environment IN ('live', 'test'));
+  ALTER TABLE tenants ADD COLUMN parent_id TEXT REFERENCES tenants(id);
+  ALTER TABLE tenants ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE tenants ADD COLUMN updated_at TEXT;
+  ALTER TABLE users ADD COLUMN platform_admin INTEGER NOT NULL DEFAULT 0;
+  UPDATE users SET platform_admin = 1
+    WHERE kind = 'account' AND role = 'beheerder' AND disabled = 0
+      AND tenant_id IN (SELECT id FROM tenants WHERE slug = 'default');
+  CREATE INDEX tenants_parent ON tenants (parent_id);
+  CREATE INDEX users_username ON users (username);
   `,
   // Offertes (module Offertes). Het offertenummer is uniek per tenant; een
   // offerte verwijst naar het plan waaruit ze is opgebouwd, zonder foreign

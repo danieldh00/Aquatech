@@ -8,7 +8,8 @@
   const Sim = window.Simulation;
   const BOM = window.BOM;
 
-  const STORAGE_KEY = 'aquatech-beregeningsplanner-v1';
+  // Per omgeving (live/test) een eigen lokaal concept, zie shared/env.js.
+  const STORAGE_KEY = `aquatech-beregeningsplanner-v1${window.AquatechEnv ? window.AquatechEnv.storageSuffix() : ''}`;
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = (v, d = 1) => (v == null || !isFinite(v) ? '–' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -191,6 +192,16 @@
       } finally {
         this._syncing = false;
       }
+    },
+    /** Naar de module Offertes: eerst het plan op de server bewaren. */
+    async makeQuote() {
+      clearTimeout(this._syncT);
+      if (this._syncPending || !this.state.serverId) await this._sync();
+      if (!this.state.serverId) {
+        this.toast('Het plan kon niet op de server worden bewaard; probeer het zo opnieuw.');
+        return;
+      }
+      location.href = `../offertes/?plan=${encodeURIComponent(this.state.serverId)}`;
     },
     _flushSync() {
       if (!this._syncPending || !this.state.serverId) return;
@@ -1040,6 +1051,7 @@
           <button id="btn-export-png" class="btn">Plan als PNG</button>
           <button id="btn-print" class="btn">Afdrukken</button>
         </div>
+        ${this._serverAvailable() ? '<button id="btn-quote" class="btn">Offerte maken van dit plan</button>' : ''}
         <h3>Beregeningsschema</h3>
         <div class="row">
           <label>Weekgift (mm)<input id="t-mm" type="number" min="5" max="50" value="${s.targetMm}"></label>
@@ -1061,6 +1073,8 @@
       $('#btn-export-xlsx', el).onclick = () => this.exportExcel();
       $('#btn-export-png', el).onclick = () => this.exportPlanPng();
       $('#btn-print', el).onclick = () => window.print();
+      const quote = $('#btn-quote', el);
+      if (quote) quote.onclick = () => this.makeQuote();
       $('#t-mm', el).onchange = (e) => { s.targetMm = Math.max(1, +e.target.value || 20); this._save(); this.renderStepPanel(); };
       $('#t-ses', el).onchange = (e) => { s.sessions = Math.max(1, Math.min(7, +e.target.value || 3)); this._save(); this.renderStepPanel(); };
     },

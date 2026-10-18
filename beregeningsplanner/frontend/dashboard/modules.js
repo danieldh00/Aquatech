@@ -8,7 +8,8 @@
 // (ook diepe paden en `<id>` zonder slash), dus aan de backend hoeft niets te
 // veranderen. Modules met `status: 'gepland'` staan als "binnenkort" op het
 // dashboard en zijn nog niet aan te klikken. Met `role: 'beheerder'` is een
-// module alleen voor beheerders zichtbaar (de API controleert dat ook zelf).
+// module alleen voor beheerders zichtbaar, met `role: 'hoofdbeheerder'` alleen
+// voor hoofdbeheerders van het platform (de API controleert dat ook zelf).
 (function (root) {
   const MODULES = [
     {
@@ -28,6 +29,14 @@
       status: 'actief',
     },
     {
+      id: 'offertes',
+      title: 'Offertes',
+      description: 'Offertes opbouwen uit een beregeningsplan: stuklijst en arbeid worden overgenomen, met bewerkbare prijzen, korting en btw, klantgegevens en export als PDF of Excel.',
+      href: 'offertes/',
+      icon: 'quote',
+      status: 'actief',
+    },
+    {
       id: 'beheer',
       title: 'Beheer',
       description: 'Historie van alle aanvragen, de plannen van alle gebruikers, gebruikersbeheer en de instellingen van de app (API-sleutel, toegangscode, modules).',
@@ -35,6 +44,15 @@
       icon: 'shield',
       status: 'actief',
       role: 'beheerder',
+    },
+    {
+      id: 'hoofdbeheer',
+      title: 'Hoofdbeheer',
+      description: 'Alle tenants (klanten) van het platform: aanmaken, wijzigen, uitschakelen, gebruikers beheren en testomgevingen naast live draaien.',
+      href: 'hoofdbeheer/',
+      icon: 'globe',
+      status: 'actief',
+      role: 'hoofdbeheerder',
     },
     {
       id: 'planning',

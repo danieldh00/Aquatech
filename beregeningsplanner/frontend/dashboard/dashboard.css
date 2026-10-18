@@ -75,3 +75,11 @@ h2 .h2-link:hover { text-decoration: underline; }
   .account > span:first-child .role { display: none; }
   .account a, .account button { flex: none; padding: 6px 10px; }
 }
+
+/* Omgevingswisselaar (live/test, tenants) in de kopbalk. */
+.account .env-select { font: inherit; color: #fff; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 6px; padding: 3px 6px; max-width: 220px; }
+.account .env-select option { color: #172f5e; }
+@media (max-width: 640px) { .account .env-select { max-width: 30vw; } }
+@media (max-width: 640px) {
+  .topbar:has(.env-select) .env-badge, .account:has(.env-select) > span { display: none; }
+}

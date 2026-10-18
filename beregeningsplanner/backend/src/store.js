@@ -137,17 +137,18 @@ function createStore(db) {
   function publicUser(u) {
     if (!u) return null;
     return { id: u.id, tenantId: u.tenant_id, username: u.username, displayName: u.display_name, role: u.role, kind: u.kind,
-      disabled: Boolean(u.disabled), createdAt: u.created_at, lastSeenAt: u.last_seen_at };
+      disabled: Boolean(u.disabled), platformAdmin: Boolean(u.platform_admin), createdAt: u.created_at, lastSeenAt: u.last_seen_at };
   }
 
   function getUser(id) {
     return q('SELECT * FROM users WHERE id = ?').get(String(id)) || null;
   }
 
-  function insertUser(tenantId, { username, displayName, role, kind, passwordHash = null }) {
-    const u = { id: newId(), tenant_id: tenantId, username, display_name: displayName, role, kind, password_hash: passwordHash, disabled: 0, created_at: now(), last_seen_at: null };
-    q(`INSERT INTO users (id, tenant_id, username, display_name, role, kind, password_hash, disabled, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`).run(u.id, tenantId, username, displayName, role, kind, passwordHash, u.created_at);
+  function insertUser(tenantId, { username, displayName, role, kind, passwordHash = null, platformAdmin = false }) {
+    const u = { id: newId(), tenant_id: tenantId, username, display_name: displayName, role, kind, password_hash: passwordHash, disabled: 0,
+      platform_admin: platformAdmin ? 1 : 0, created_at: now(), last_seen_at: null };
+    q(`INSERT INTO users (id, tenant_id, username, display_name, role, kind, password_hash, disabled, platform_admin, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`).run(u.id, tenantId, username, displayName, role, kind, passwordHash, u.platform_admin, u.created_at);
     return u;
   }
 
@@ -173,18 +174,23 @@ function createStore(db) {
     return null;
   }
 
-  async function createAccount(tenantId, input) {
+  // Gebruikersnamen van accounts zijn uniek over alle tenants: inloggen gaat
+  // met alleen gebruikersnaam en wachtwoord, de tenant volgt uit het account.
+  async function createAccount(tenantId, input, { platformAdmin = false } = {}) {
     const err = validateAccount(input);
     if (err) return { error: err };
-    if (q('SELECT 1 FROM users WHERE tenant_id = ? AND username = ?').get(tenantId, input.username)) {
+    if (usernameTaken(tenantId, input.username)) {
       return { error: 'Deze gebruikersnaam bestaat al.' };
     }
+    const passwordHash = await hashPassword(input.password);
+    if (usernameTaken(tenantId, input.username)) return { error: 'Deze gebruikersnaam bestaat al.' };
     const u = insertUser(tenantId, {
       username: input.username,
       displayName: String(input.displayName || '').trim() || input.username,
       role: input.role,
       kind: 'account',
-      passwordHash: await hashPassword(input.password),
+      passwordHash,
+      platformAdmin,
     });
     return { user: u };
   }
@@ -202,6 +208,9 @@ function createStore(db) {
     if (losesAdmin && countAdmins(tenantId) <= 1) {
       return { error: 'Dit is de enige actieve beheerder. Maak eerst een andere beheerder aan.', status: 409 };
     }
+    if (losesAdmin && u.platform_admin && countPlatformAdmins() <= 1) {
+      return { error: 'Dit is de enige actieve hoofdbeheerder en die blijft actief beheerder.', status: 409 };
+    }
     if (input.displayName !== undefined) q('UPDATE users SET display_name = ? WHERE id = ?').run(String(input.displayName).trim() || u.username, u.id);
     if (input.role !== undefined) q('UPDATE users SET role = ? WHERE id = ?').run(input.role, u.id);
     if (input.disabled !== undefined) q('UPDATE users SET disabled = ? WHERE id = ?').run(input.disabled ? 1 : 0, u.id);
@@ -217,8 +226,190 @@ function createStore(db) {
     return q("SELECT COUNT(*) AS n FROM users WHERE tenant_id = ? AND kind = 'account' AND role = 'beheerder' AND disabled = 0").get(tenantId).n;
   }
 
+  const usernameTaken = (tenantId, username) => Boolean(q("SELECT 1 FROM users WHERE username = ? AND (tenant_id = ? OR kind = 'account')").get(username, tenantId));
+
+  function countPlatformAdmins() {
+    return q("SELECT COUNT(*) AS n FROM users WHERE kind = 'account' AND platform_admin = 1 AND disabled = 0").get().n;
+  }
+
+  // ---------- Tenants en omgevingen ----------
+  // Een live-tenant is een klant (beregeningsbedrijf) met eigen gebruikers. Een
+  // testomgeving hoort bij een live-tenant: eigen plannen, historie en
+  // instellingen, maar dezelfde gebruikers, zodat je kunt wisselen zonder
+  // opnieuw in te loggen of een andere URL te gebruiken.
+  function tenantRow(t) {
+    if (!t) return null;
+    return { id: t.id, slug: t.slug, name: t.name, environment: t.environment || 'live', parentId: t.parent_id || null,
+      disabled: Boolean(t.disabled), createdAt: t.created_at, updatedAt: t.updated_at || t.created_at };
+  }
+
+  const getTenant = (id) => q('SELECT * FROM tenants WHERE id = ?').get(String(id)) || null;
+  const getTenantBySlug = (slug) => q('SELECT * FROM tenants WHERE slug = ?').get(String(slug)) || null;
+
+  function listTenants() {
+    const rows = q(`SELECT t.*,
+        (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id AND u.kind = 'account') AS user_count,
+        (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id AND u.kind = 'account' AND u.role = 'beheerder' AND u.disabled = 0) AS admin_count,
+        (SELECT COUNT(*) FROM plans p WHERE p.tenant_id = t.id AND p.deleted_at IS NULL) AS plan_count,
+        (SELECT MAX(h.updated_at) FROM history h WHERE h.tenant_id = t.id) AS last_activity
+      FROM tenants t ORDER BY t.name COLLATE NOCASE, t.created_at`).all();
+    const withStats = (t) => ({ ...tenantRow(t), userCount: t.user_count, adminCount: t.admin_count, planCount: t.plan_count, lastActivity: t.last_activity });
+    const live = rows.filter((t) => (t.environment || 'live') === 'live').map((t) => ({ ...withStats(t), environments: [] }));
+    const byId = new Map(live.map((t) => [t.id, t]));
+    for (const t of rows) if (t.environment === 'test' && byId.has(t.parent_id)) byId.get(t.parent_id).environments.push(withStats(t));
+    return live;
+  }
+
+  function validateTenant({ name, slug }, { partial = false } = {}) {
+    if (!partial || name !== undefined) {
+      const n = String(name || '').trim();
+      if (n.length < 2 || n.length > 80) return 'Naam: 2–80 tekens.';
+    }
+    if (!partial || slug !== undefined) {
+      if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(String(slug || ''))) return 'Code: 2–40 tekens, kleine letters, cijfers of streepje.';
+      if (getTenantBySlug(slug)) return 'Deze code is al in gebruik.';
+    }
+    return null;
+  }
+
+  function createTenant({ name, slug }) {
+    const err = validateTenant({ name, slug });
+    if (err) return { error: err };
+    const ts = now();
+    const t = { id: newId(), slug, name: String(name).trim() };
+    q("INSERT INTO tenants (id, slug, name, environment, created_at, updated_at) VALUES (?, ?, ?, 'live', ?, ?)").run(t.id, t.slug, t.name, ts, ts);
+    return { tenant: getTenant(t.id) };
+  }
+
+  // De hoofdtenant (slug 'default') host de hoofdbeheerders en blijft altijd aan.
+  function updateTenant(id, { name, disabled }) {
+    const t = getTenant(id);
+    if (!t) return { error: 'Tenant niet gevonden.', status: 404 };
+    const err = validateTenant({ name }, { partial: true });
+    if (err) return { error: err };
+    if (disabled && t.slug === 'default') return { error: 'De hoofdtenant kan niet worden uitgeschakeld.', status: 409 };
+    if (name !== undefined) q('UPDATE tenants SET name = ? WHERE id = ?').run(String(name).trim(), t.id);
+    if (disabled !== undefined) q('UPDATE tenants SET disabled = ? WHERE id = ?').run(disabled ? 1 : 0, t.id);
+    q('UPDATE tenants SET updated_at = ? WHERE id = ?').run(now(), t.id);
+    return { tenant: getTenant(t.id) };
+  }
+
+  const slugify = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20);
+
+  /**
+   * Nieuwe testomgeving bij een live-tenant. De instellingen (API-sleutel,
+   * limieten, modules) worden gekopieerd; met copyPlans ook de huidige plannen
+   * (nieuwe id's, zelfde eigenaar), zodat je met echte data kunt testen zonder
+   * live te raken.
+   */
+  function createEnvironment(parentId, { name, copyPlans = false, skipSettings = [] } = {}) {
+    const parent = getTenant(parentId);
+    if (!parent || parent.environment !== 'live') return { error: 'Live-tenant niet gevonden.', status: 404 };
+    const label = String(name || '').trim() || 'Test';
+    if (label.length > 60) return { error: 'Naam: maximaal 60 tekens.' };
+    const base = `${parent.slug}-${slugify(label) || 'test'}`.slice(0, 36);
+    let slug = base;
+    for (let i = 2; getTenantBySlug(slug); i++) slug = `${base}-${i}`;
+    return transaction(db, () => {
+      const ts = now();
+      const id = newId();
+      q("INSERT INTO tenants (id, slug, name, environment, parent_id, created_at, updated_at) VALUES (?, ?, ?, 'test', ?, ?, ?)")
+        .run(id, slug, label, parent.id, ts, ts);
+      // Versleutelde geheimen horen bij de tenant (zie settings.js); die
+      // kopieert de server opnieuw versleuteld (skipSettings).
+      for (const row of q('SELECT key, value, updated_by FROM settings WHERE tenant_id = ?').all(parent.id)) {
+        if (skipSettings.includes(row.key)) continue;
+        q('INSERT INTO settings (tenant_id, key, value, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)').run(id, row.key, row.value, ts, row.updated_by);
+      }
+      let copied = 0;
+      if (copyPlans) {
+        for (const p of q('SELECT * FROM plans WHERE tenant_id = ? AND deleted_at IS NULL').all(parent.id)) {
+          q(`INSERT INTO plans (id, tenant_id, owner_id, title, customer, address, data, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(newId(), id, p.owner_id, p.title, p.customer, p.address, p.data, p.created_at, p.updated_at);
+          copied++;
+        }
+      }
+      return { tenant: getTenant(id), copied };
+    });
+  }
+
+  // Voor het terugdraaien van een net aangemaakte tenant (bijv. als de eerste
+  // beheerder niet aan te maken was): alleen zolang er nog niets in staat.
+  function dropEmptyTenant(id) {
+    const busy = q('SELECT EXISTS (SELECT 1 FROM users WHERE tenant_id = ?) OR EXISTS (SELECT 1 FROM plans WHERE tenant_id = ?) OR EXISTS (SELECT 1 FROM tenants WHERE parent_id = ?) AS n').get(id, id, id).n;
+    if (busy) return false;
+    transaction(db, () => {
+      q('DELETE FROM settings WHERE tenant_id = ?').run(id);
+      q('DELETE FROM audit WHERE tenant_id = ?').run(id);
+      q('DELETE FROM tenants WHERE id = ?').run(id);
+    });
+    return true;
+  }
+
+  // Controle van een nieuw account zonder het aan te maken.
+  function accountProblem(tenantId, input) {
+    return validateAccount(input) || (usernameTaken(tenantId, input.username) ? 'Deze gebruikersnaam bestaat al.' : null);
+  }
+
+  function testEnvironment(id) {
+    const t = getTenant(id);
+    if (!t) return { error: 'Omgeving niet gevonden.', status: 404 };
+    if (t.environment !== 'test') return { error: 'Alleen testomgevingen kunnen worden leeggemaakt of verwijderd.', status: 409 };
+    return { tenant: t };
+  }
+
+  // Leegmaken: plannen, historie, auditlog, sessies en gasten weg;
+  // instellingen blijven.
+  function clearData(tenantId) {
+    q('DELETE FROM history WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM audit WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM sessions WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM quotes WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM plans WHERE tenant_id = ?').run(tenantId);
+    q(`DELETE FROM users WHERE tenant_id = ? AND NOT EXISTS (SELECT 1 FROM plans p WHERE p.owner_id = users.id)
+      AND NOT EXISTS (SELECT 1 FROM quotes o WHERE o.owner_id = users.id)`).run(tenantId);
+  }
+
+  function resetEnvironment(id) {
+    const out = testEnvironment(id);
+    if (out.error) return out;
+    transaction(db, () => clearData(out.tenant.id));
+    return { tenant: out.tenant };
+  }
+
+  function deleteEnvironment(id) {
+    const out = testEnvironment(id);
+    if (out.error) return out;
+    transaction(db, () => {
+      clearData(out.tenant.id);
+      q('DELETE FROM settings WHERE tenant_id = ?').run(out.tenant.id);
+      q('DELETE FROM tenants WHERE id = ?').run(out.tenant.id);
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Omgevingen waarin deze gebruiker mag werken: een hoofdbeheerder overal,
+   * een beheerder in de eigen tenant en de testomgevingen daarvan, een
+   * gebruiker alleen in de eigen tenant. Uitgeschakelde tenants vallen af
+   * (behalve voor de hoofdbeheerder).
+   */
+  function accessibleTenants(user) {
+    if (!user) return [];
+    if (user.platform_admin) return q('SELECT * FROM tenants ORDER BY name COLLATE NOCASE').all();
+    const home = getTenant(user.tenant_id);
+    if (!home || home.disabled) return [];
+    if (user.role !== 'beheerder') return [home];
+    return [home, ...q("SELECT * FROM tenants WHERE parent_id = ? AND environment = 'test' AND disabled = 0 ORDER BY name COLLATE NOCASE").all(home.id)];
+  }
+
   async function authenticate(tenantId, username, password) {
-    const u = q("SELECT * FROM users WHERE tenant_id = ? AND username = ? AND kind = 'account'").get(tenantId, String(username || '').trim().toLowerCase());
+    // Zonder tenantId: zoeken over alle tenants (gebruikersnamen zijn uniek).
+    const name = String(username || '').trim().toLowerCase();
+    const u = tenantId
+      ? q("SELECT * FROM users WHERE tenant_id = ? AND username = ? AND kind = 'account'").get(tenantId, name)
+      : q("SELECT * FROM users WHERE username = ? AND kind = 'account' ORDER BY created_at LIMIT 1").get(name);
     // Ook zonder gebruiker een hash uitrekenen: gelijke looptijd.
     const ok = await verifyPassword(password, u?.password_hash || await getDummyHash());
     if (!(ok && u && !u.disabled)) return null;
@@ -469,6 +660,8 @@ function createStore(db) {
   }
 
   return {
+    getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment,
+    accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem,
     ensureTenant, systemUser, createGuest, createAccount, updateAccount, countAdmins, authenticate, getUser, touchUser, listUsers, publicUser,
     createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,

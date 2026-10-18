@@ -196,3 +196,24 @@ test('API: bedrijfsprofiel lezen voor iedereen, wijzigen alleen door beheerders'
     server.close();
   }
 });
+
+test('testomgeving leegmaken en verwijderen neemt de offertes mee; offertes zijn per tenant', async () => {
+  const { createQuoteStore } = require('../src/quotes');
+  const db = openDb();
+  const store = createStore(db);
+  const live = store.ensureTenant();
+  const out = await store.createAccount(live.id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!' });
+  const user = out.user || out;
+  const env = store.createEnvironment(live.id, { name: 'Test' }).tenant;
+  const quotes = createQuoteStore(db);
+  const inLive = quotes.create({ ...user, tenant_id: live.id }, { date: '2026-05-01' });
+  const inTest = quotes.create({ ...user, tenant_id: env.id }, { date: '2026-05-01' });
+  assert.strictEqual(inLive.number, 'OF-2026-0001');
+  assert.strictEqual(inTest.number, 'OF-2026-0001', 'eigen nummering per omgeving');
+  assert.strictEqual(quotes.get({ ...user, tenant_id: live.id }, inTest.id), null, 'niet zichtbaar in een andere omgeving');
+  assert.ok(!store.resetEnvironment(env.id).error);
+  assert.strictEqual(quotes.list(env.id).length, 0);
+  assert.strictEqual(quotes.list(live.id).length, 1);
+  quotes.create({ ...user, tenant_id: env.id }, {});
+  assert.ok(store.deleteEnvironment(env.id).ok);
+});

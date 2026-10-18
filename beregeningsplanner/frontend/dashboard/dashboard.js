@@ -9,7 +9,9 @@
     calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4"/><path d="M16 3v4"/>',
     box: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5"/><path d="M12 12v9"/>',
     table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M3 14h18"/><path d="M9 9v11"/>',
+    quote: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6"/><path d="M10 17h6"/>',
     shield: '<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>',
     module: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   };
   const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.module}</svg>`;
@@ -19,8 +21,9 @@
 
   function renderModules(me) {
     const role = me && me.user ? me.user.role : null;
+    const allowed = (m) => !m.role || (m.role === 'hoofdbeheerder' ? Boolean(me && me.platformAdmin) : m.role === role);
     const html = (window.AquatechModules || [])
-      .filter((m) => (!m.role || m.role === role) && (m.id === 'beheer' || disabledModules[m.id] !== false))
+      .filter((m) => allowed(m) && (m.id === 'beheer' || m.id === 'hoofdbeheer' || disabledModules[m.id] !== false))
       .map((m) => {
       const active = m.status === 'actief' && m.href;
       const body = `
@@ -39,7 +42,7 @@
   // Het laatst bewerkte plan staat (per browser) in localStorage van de planner.
   function renderRecent() {
     let data = null;
-    try { data = JSON.parse(localStorage.getItem('aquatech-beregeningsplanner-v1') || 'null'); } catch (e) { /* geen opslag */ }
+    try { data = JSON.parse(localStorage.getItem(`aquatech-beregeningsplanner-v1${window.AquatechEnv ? window.AquatechEnv.storageSuffix() : ''}`) || 'null'); } catch (e) { /* geen opslag */ }
     if (!data || !data.meta) return;
     const areas = (data.areas || []).length;
     const sprinklers = (data.sprinklers || []).length;

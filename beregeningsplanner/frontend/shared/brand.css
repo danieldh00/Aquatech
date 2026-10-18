@@ -20,3 +20,7 @@
 .brand-mark { display: none; height: 28px; width: auto; }
 .brand-name { font-weight: 700; letter-spacing: 0.01em; }
 .brand-sep { width: 1px; align-self: stretch; margin: 2px 4px; background: rgba(255, 255, 255, 0.35); }
+
+/* Testomgeving (shared/env.js): oranje streep onder de kopbalk en een label. */
+.env-test .topbar { box-shadow: inset 0 -4px 0 #f5a623; }
+.env-badge { flex: none; align-self: center; background: #f5a623; color: #172f5e; font-family: var(--at-font); font-weight: 700; font-size: 12px; line-height: 1; padding: 5px 9px; border-radius: 999px; white-space: nowrap; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }

@@ -2,13 +2,13 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 
-const { createAuth, remoteIp } = require('./auth');
+const { createAuth, remoteIp, parseCookies } = require('./auth');
 const { createRateLimiter } = require('./rateLimit');
 const { loadOrCreateSecret } = require('./options');
 const { createPlanAnalyzer, AnalyzeError } = require('./planAnalyzer');
 const { openDb } = require('./db');
 const { createStore } = require('./store');
-const { createSettings, SettingsError } = require('./settings');
+const { createSettings, SettingsError, FIELDS } = require('./settings');
 const { createVault, loadOrCreateMasterKey } = require('./vault');
 const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes } = require('./quotes');
@@ -92,13 +92,28 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
-  // Voorlopig één tenant; zie db.js voor de opzet richting multitenant.
+  // De hoofdtenant ('default') bestaat altijd: daar horen de hoofdbeheerders,
+  // de toegangscode, gasten en het instelscherm bij. Andere tenants en de
+  // testomgevingen maakt een hoofdbeheerder aan in de module Hoofdbeheer.
   const tenant = store.ensureTenant();
   const startEnv = { ...env };
   if (accessCode) startEnv.ACCESS_CODE = accessCode;
   if (anthropicApiKey) startEnv.ANTHROPIC_API_KEY = anthropicApiKey;
   if (aiDailyLimit !== undefined) startEnv.AI_DAILY_LIMIT = aiDailyLimit;
-  const settings = createSettings({ db: database, tenantId: tenant.id, env: startEnv, vault });
+  // Instellingen per tenant (ook per testomgeving). De omgevingsvariabelen
+  // gelden alleen als startwaarde voor de hoofdtenant en diens testomgevingen.
+  const settingsCache = new Map();
+  function settingsFor(tenantId) {
+    let s = settingsCache.get(tenantId);
+    if (!s) {
+      const t = store.getTenant(tenantId);
+      const own = tenantId === tenant.id || (t && t.parent_id === tenant.id);
+      s = createSettings({ db: database, tenantId, env: own ? startEnv : {}, vault });
+      settingsCache.set(tenantId, s);
+    }
+    return s;
+  }
+  const settings = settingsFor(tenant.id);
   const installCode = setupCode || env.SETUP_CODE || newSetupCode();
   const getAccessCode = () => settings.get('accessCode');
   // Gasten (zonder inloggen) alleen als dat aanstaat en er geen code is.
@@ -107,18 +122,25 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const needsSetup = () => store.countAdmins(tenant.id) === 0;
   const auth = createAuth({ secret, store, tenantId: tenant.id, getAccessCode,
     idleDays: () => settings.get('sessionIdleDays'), maxDays: () => settings.get('sessionMaxDays') });
-  const audit = (req, action, detail = {}, userId) => store.audit({ tenantId: tenant.id, userId: userId === undefined ? req.user?.id || null : userId, action, detail, ip: remoteIp(req) });
+  // Standaard in het auditlog van de actieve omgeving (zonder inlog de hoofdtenant).
+  const audit = (req, action, detail = {}, userId, tenantId) => store.audit({ tenantId: tenantId || req.tenantId || tenant.id,
+    userId: userId === undefined ? req.user?.id || null : userId, action, detail, ip: remoteIp(req) });
   // Express 4 vangt geen afgewezen promises: doorgeven aan de foutafhandeling.
   const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-  // De AI-client volgt de API-sleutel uit de instellingen (zonder herstart).
-  let cachedAnalyzer = { key: null, analyzer: null };
-  function currentAnalyzer() {
+  // De AI-client volgt de API-sleutel uit de instellingen van de tenant (zonder herstart).
+  const analyzers = new Map();
+  function currentAnalyzer(tenantId = tenant.id) {
     if (analyzer) return analyzer;
-    const key = settings.get('anthropicApiKey');
-    if (cachedAnalyzer.key !== key) cachedAnalyzer = { key, analyzer: createAnalyzer({ apiKey: key }) };
-    return cachedAnalyzer.analyzer;
+    const key = settingsFor(tenantId).get('anthropicApiKey');
+    let cached = analyzers.get(key);
+    if (!cached) {
+      cached = createAnalyzer({ apiKey: key });
+      analyzers.set(key, cached);
+    }
+    return cached;
   }
-  const aiAvailable = () => settings.get('aiEnabled') && currentAnalyzer().available;
+  const aiAvailable = (tenantId = tenant.id) => settingsFor(tenantId).get('aiEnabled') && currentAnalyzer(tenantId).available;
+
   const app = express();
 
   app.disable('x-powered-by');
@@ -187,15 +209,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         audit(req, 'inloggen_geblokkeerd', { username }, null);
         return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
       }
-      const user = await store.authenticate(tenant.id, username, String(req.body?.password ?? '').slice(0, 1024));
+      // Gebruikersnamen zijn uniek over alle tenants: de tenant volgt uit het account.
+      const user = await store.authenticate(null, username, String(req.body?.password ?? '').slice(0, 1024));
       if (!user) {
         failed(username);
         audit(req, 'inloggen_mislukt', { username }, null);
         return res.status(401).json({ error: 'wrong_login', message: 'Onjuiste gebruikersnaam of wachtwoord.' });
       }
       failures.delete(username);
+      const home = store.getTenant(user.tenant_id);
+      if (!home || (home.disabled && !user.platform_admin)) {
+        audit(req, 'inloggen_geweigerd', { username, reden: 'tenant_uitgeschakeld' }, user.id, user.tenant_id);
+        return res.status(403).json({ error: 'tenant_disabled', message: 'Deze organisatie is uitgeschakeld. Neem contact op met de beheerder van het platform.' });
+      }
       auth.setCookie(req, res, user.id);
-      audit(req, 'ingelogd', { via: 'account' }, user.id);
+      clearEnvironment(req, res);
+      audit(req, 'ingelogd', { via: 'account' }, user.id, user.tenant_id);
       return res.json({ ok: true });
     }
     if (!getAccessCode()) {
@@ -206,14 +235,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return res.status(401).json({ error: 'wrong_code', message: 'Onjuiste toegangscode.' });
     }
     auth.setCookie(req, res);
+    clearEnvironment(req, res);
     audit(req, 'ingelogd', { via: 'toegangscode' }, null);
     res.json({ ok: true });
   }));
 
   app.post('/api/auth/logout', (req, res) => {
     const s = auth.session(req);
-    if (s) audit(req, 'uitgelogd', {}, s.user?.id || s.row.user_id);
+    if (s) audit(req, 'uitgelogd', {}, s.user?.id || s.row.user_id, s.row.tenant_id);
     auth.clearCookie(req, res);
+    clearEnvironment(req, res);
     res.json({ ok: true });
   });
 
@@ -236,7 +267,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return res.status(401).json({ error: 'wrong_code', message: getAccessCode() ? 'Onjuiste toegangscode.' : 'Onjuiste installatiecode. Je vindt die in het serverlog (docker compose logs).' });
     }
     const { username, displayName, password } = req.body || {};
-    const out = await store.createAccount(tenant.id, { username: String(username || '').trim().toLowerCase(), displayName, role: 'beheerder', password });
+    // De eerste beheerder is ook hoofdbeheerder (alle tenants).
+    const out = await store.createAccount(tenant.id, { username: String(username || '').trim().toLowerCase(), displayName, role: 'beheerder', password }, { platformAdmin: true });
     if (out.error) return res.status(400).json({ error: 'invalid_user', message: out.error });
     console.log(`Eerste beheerder aangemaakt: ${out.user.username}`);
     auth.setCookie(req, res, out.user.id);
@@ -249,6 +281,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // (Beheer > Instellingen) en is er geen code, dan is iedereen anders een gast
   // met een eigen (anonieme) gebruiker per browser. Een gast wordt pas
   // aangemaakt bij het eerste opslaan (ensureUser), niet bij elk bezoek.
+  //
+  // req.user is daarna de gebruiker zoals die in de gekozen omgeving werkt:
+  // tenant_id = de actieve omgeving (live of test), home_tenant_id = de tenant
+  // waar het account bij hoort. req.tenantId = de actieve omgeving (zonder
+  // inlog de hoofdtenant). Alle gegevens (plannen, historie, instellingen)
+  // gaan via req.tenantId; gebruikersbeheer via homeOf(req.tenantId).
   function identify(req) {
     if (req.user !== undefined) return req.user;
     const s = auth.session(req);
@@ -260,10 +298,55 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const g = gid && store.getUser(gid);
       user = g && g.kind === 'gast' && g.tenant_id === tenant.id && !g.disabled ? g : null;
     }
-    if (user) store.touchUser(user.id);
+    if (user) {
+      const home = store.getTenant(user.tenant_id);
+      if (!home || (home.disabled && !user.platform_admin)) user = null;
+    }
+    if (user) {
+      store.touchUser(user.id);
+      user = actingUser(req, user);
+    }
     req.user = user;
+    req.tenantId = user ? user.tenant_id : tenant.id;
     return user;
   }
+
+  // ---------- Omgevingen: live en test, wisselen zonder opnieuw inloggen ----------
+  // De keuze staat in een ondertekende cookie die aan de gebruiker vastzit
+  // (`<user-id>:<tenant-id>`); bij elk verzoek wordt opnieuw gecontroleerd of
+  // de gebruiker daar nog mag komen. De tweede cookie (leesbaar voor de
+  // frontend, niet beveiligend) toont de testbalk en scheidt het lokale
+  // concept van de planner per omgeving.
+  const ENV_COOKIE = 'aquatech_env';
+  const ENV_HINT = 'aquatech_env_hint';
+
+  function actingUser(req, user) {
+    const base = { ...user, home_tenant_id: user.tenant_id };
+    const raw = auth.readSigned(req, ENV_COOKIE, 'env');
+    if (!raw) return base;
+    const [uid, tid] = raw.split(':');
+    if (uid !== user.id || !tid || tid === user.tenant_id) return base;
+    if (!store.accessibleTenants(user).some((t) => t.id === tid)) return base;
+    return { ...base, tenant_id: tid, role: user.platform_admin ? 'beheerder' : user.role };
+  }
+
+  // Alleen wissen wat er is (de sessie-cookie blijft zo de eerste Set-Cookie).
+  // Toegankelijke omgevingen van een (werkende) gebruiker: op basis van het
+  // account in de eigen tenant, niet van de omgeving waar die nu werkt.
+  const accessibleFor = (user) => store.accessibleTenants({ ...user, tenant_id: user.home_tenant_id || user.tenant_id });
+
+  function clearEnvironment(req, res) {
+    const cookies = parseCookies(req.headers.cookie);
+    if (cookies[ENV_COOKIE]) auth.clearNamed(res, ENV_COOKIE);
+    if (cookies[ENV_HINT]) auth.clearNamed(res, ENV_HINT);
+  }
+
+  function environmentInfo(t) {
+    if (!t) return null;
+    const parent = t.parent_id ? store.getTenant(t.parent_id) : null;
+    return { ...store.tenantRow(t), parentName: parent ? parent.name : null };
+  }
+
 
   const guestLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: remoteIp });
   function ensureUser(req, res) {
@@ -291,6 +374,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (user.role !== 'beheerder') return res.status(403).json({ error: 'forbidden', message: 'Alleen voor beheerders.' });
     next();
   };
+  const requirePlatformAdmin = (req, res, next) => {
+    const user = identify(req);
+    if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+    if (!user.platform_admin) return res.status(403).json({ error: 'forbidden', message: 'Alleen voor hoofdbeheerders.' });
+    next();
+  };
   // Schrijven alleen met JSON (geen cross-site formulieren).
   const requireJson = (req, res, next) => {
     if (req.is('application/json')) return next();
@@ -302,15 +391,57 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.setHeader('Cache-Control', 'no-store');
     const user = identify(req);
     const via = auth.session(req)?.via || (user ? 'gast' : null);
+    const active = environmentInfo(store.getTenant(req.tenantId));
+    // De leesbare hint-cookie volgt de werkelijke omgeving (bijv. na het
+    // verwijderen van een testomgeving valt de gebruiker terug op live).
+    const hint = parseHint(req);
+    const wanted = user && active && active.environment === 'test' ? `${active.slug}|${active.name}` : null;
+    if (hint !== wanted) {
+      if (wanted) auth.setPlain(req, res, ENV_HINT, wanted, { httpOnly: false });
+      else auth.clearNamed(res, ENV_HINT);
+    }
     res.json({
       user: user ? store.publicUser(user) : null,
       via,
+      tenant: active,
+      platformAdmin: Boolean(user?.platform_admin),
+      environments: user ? accessibleFor(user).length : 0,
+
       // Staan gasten aan, dan werkt iedereen zonder inloggen als (nieuwe) gast.
       guest: !user && guestsAllowed(),
       accessCodeConfigured: Boolean(getAccessCode()),
       setupRequired: needsSetup(),
     });
   });
+
+  function parseHint(req) {
+    const raw = parseCookies(req.headers.cookie)[ENV_HINT];
+    return typeof raw === 'string' && raw ? raw : null;
+  }
+
+  // Omgevingen waarin deze gebruiker mag werken, en wisselen.
+  app.get('/api/environments', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const user = identify(req);
+    if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+    res.json({ current: req.tenantId, home: user.home_tenant_id, items: accessibleFor(user).map(environmentInfo) });
+  });
+
+  app.post('/api/environment', requireJson, (req, res) => {
+    const user = identify(req);
+    if (!user || user.kind === 'gast') return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+    const tid = String(req.body?.tenantId || '');
+    const target = accessibleFor(user).find((t) => t.id === tid);
+    if (!target) return res.status(404).json({ error: 'not_found', message: 'Omgeving niet gevonden.' });
+    clearEnvironment(req, res);
+    if (target.id !== user.home_tenant_id) {
+      auth.setSigned(req, res, ENV_COOKIE, `${user.id}:${target.id}`, 'env');
+      if (target.environment === 'test') auth.setPlain(req, res, ENV_HINT, `${target.slug}|${target.name}`, { httpOnly: false });
+    }
+    console.log(`${user.display_name} werkt nu in ${target.name} (${target.environment})`);
+    res.json({ ok: true, tenant: environmentInfo(target) });
+  });
+
 
   // ---------- Plannen: alleen de eigen plannen ----------
   const planLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 900, keyFn: (req) => req.user?.id || remoteIp(req) });
@@ -320,7 +451,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.setHeader('Cache-Control', 'no-store');
     const user = identify(req);
     if (!user) return res.json({ items: [] });
-    res.json({ items: store.listPlans(tenant.id, { ownerId: user.id }) });
+    res.json({ items: store.listPlans(req.tenantId, { ownerId: user.id }) });
   });
 
   app.get('/api/plans/:id', (req, res) => {
@@ -358,17 +489,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.get('/api/admin/history', (req, res) => {
     const { limit, offset, user, q, action } = req.query;
-    res.json(store.listHistory(tenant.id, { limit, offset, userId: user, search: q, action }));
+    res.json(store.listHistory(req.tenantId, { limit, offset, userId: user, search: q, action }));
   });
 
   app.get('/api/admin/history/:id', (req, res) => {
-    const h = store.getHistory(tenant.id, req.params.id);
+    const h = store.getHistory(req.tenantId, req.params.id);
     if (!h) return res.status(404).json({ error: 'not_found', message: 'Niet gevonden.' });
     res.json(h);
   });
 
   app.get('/api/admin/plans', (req, res) => {
-    res.json({ items: store.listPlans(tenant.id, {
+    res.json({ items: store.listPlans(req.tenantId, {
       ownerId: req.query.owner ? String(req.query.owner) : null,
       includeDeleted: req.query.deleted === '1',
       withHistory: true,
@@ -377,7 +508,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Tijdlijn van één plan (ook als het plan verwijderd is).
   app.get('/api/admin/plans/:id/history', (req, res) => {
-    res.json(store.listHistory(tenant.id, { planId: req.params.id, limit: 500 }));
+    res.json(store.listHistory(req.tenantId, { planId: req.params.id, limit: 500 }));
   });
 
   app.get('/api/admin/plans/:id', (req, res) => {
@@ -386,41 +517,49 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json(plan);
   });
 
+  // Gebruikers horen bij de live-tenant; in een testomgeving dezelfde lijst.
   app.get('/api/admin/users', (req, res) => {
-    res.json({ items: store.listUsers(tenant.id) });
+    res.json({ items: store.listUsers(homeOf(req.tenantId)) });
   });
 
   app.post('/api/admin/users', requireJson, wrap(async (req, res) => {
     const { username, displayName, role, password } = req.body || {};
-    const out = await store.createAccount(tenant.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password });
+    const home = homeOf(req.tenantId);
+    const out = await store.createAccount(home, { username: String(username || '').trim().toLowerCase(), displayName, role, password });
     if (out.error) return res.status(400).json({ error: 'invalid_user', message: out.error });
-    audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role });
+    audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role }, undefined, home);
     res.status(201).json(store.publicUser(out.user));
   }));
 
   app.patch('/api/admin/users/:id', requireJson, wrap(async (req, res) => {
     const input = {};
     for (const k of ['displayName', 'role', 'disabled', 'password', 'username']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
-    const out = await store.updateAccount(tenant.id, req.params.id, input);
+    const home = homeOf(req.tenantId);
+    const out = await store.updateAccount(home, req.params.id, input);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_user', message: out.error });
-    // Welke velden, nooit de waarden van een wachtwoord.
-    audit(req, 'gebruiker_gewijzigd', { userId: out.user.id, username: out.user.username, fields: Object.keys(input),
-      ...(input.role !== undefined ? { role: input.role } : {}), ...(input.disabled !== undefined ? { disabled: Boolean(input.disabled) } : {}) });
+    auditUserChange(req, out.user, input, home);
     res.json(store.publicUser(out.user));
   }));
 
+  // Welke velden, nooit de waarden van een wachtwoord.
+  function auditUserChange(req, user, input, tenantId) {
+    audit(req, 'gebruiker_gewijzigd', { userId: user.id, username: user.username, fields: Object.keys(input),
+      ...(input.role !== undefined ? { role: input.role } : {}), ...(input.disabled !== undefined ? { disabled: Boolean(input.disabled) } : {}) }, undefined, tenantId);
+  }
+
   // Gebruiker op alle toestellen uitloggen.
   app.post('/api/admin/users/:id/logout', (req, res) => {
+    const home = homeOf(req.tenantId);
     const u = store.getUser(req.params.id);
-    if (!u || u.tenant_id !== tenant.id) return res.status(404).json({ error: 'not_found', message: 'Gebruiker niet gevonden.' });
-    const n = store.revokeSessions(tenant.id, u.id);
-    audit(req, 'sessies_ingetrokken', { userId: u.id, username: u.username, count: n });
+    if (!u || u.tenant_id !== home) return res.status(404).json({ error: 'not_found', message: 'Gebruiker niet gevonden.' });
+    const n = store.revokeSessions(home, u.id);
+    audit(req, 'sessies_ingetrokken', { userId: u.id, username: u.username, count: n }, undefined, home);
     res.json({ ok: true, revoked: n });
   });
 
   // Plan definitief wissen, inclusief de inhoud van de historie (AVG).
   app.delete('/api/admin/plans/:id', (req, res) => {
-    const out = store.purgePlan(tenant.id, req.params.id);
+    const out = store.purgePlan(req.tenantId, req.params.id);
     if (!out) return res.status(404).json({ error: 'not_found', message: 'Plan niet gevonden.' });
     audit(req, 'plan_gewist', { planId: req.params.id, historyRows: out.history });
     res.json({ ok: true, ...out });
@@ -428,7 +567,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Beheer: back-ups ----------
   // Alleen versleutelde bestanden; downloaden is dus veilig voor een kopie
-  // elders (zonder de hoofdsleutel onleesbaar).
+  // elders (zonder de hoofdsleutel onleesbaar). Een back-up bevat de hele
+  // database (alle tenants), dus alleen voor hoofdbeheerders.
+  // (Ook met de toegangscode van de hoofdtenant, zoals op een installatie
+  // met één organisatie.)
+  app.use('/api/admin/backups', (req, res, next) => {
+    const u = req.user;
+    if (u.platform_admin || (u.kind === 'systeem' && req.tenantId === tenant.id)) return next();
+    res.status(403).json({ error: 'forbidden', message: 'Alleen voor hoofdbeheerders.' });
+  });
   let backupRunning = null;
   async function runBackup(req = null) {
     if (!backupDir) throw Object.assign(new Error('Back-ups zijn niet ingesteld.'), { status: 501 });
@@ -437,7 +584,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       try {
         const b = await backups.createBackup({ db: database, dir: backupDir, vault });
         backups.pruneBackups(backupDir, Math.max(1, settings.get('backupKeepDays')));
-        if (req) audit(req, 'backup_gemaakt', { name: b.name, size: b.size });
+        if (req) audit(req, 'backup_gemaakt', { name: b.name, size: b.size }, undefined, tenant.id);
         else store.audit({ tenantId: tenant.id, action: 'backup_gemaakt', detail: { name: b.name, size: b.size, automatisch: true } });
         return b;
       } finally {
@@ -461,25 +608,27 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!backupDir || !backups.isBackupName(name) || !fs.existsSync(path.join(backupDir, name))) {
       return res.status(404).json({ error: 'not_found', message: 'Back-up niet gevonden.' });
     }
-    audit(req, 'backup_gedownload', { name });
+    audit(req, 'backup_gedownload', { name }, undefined, tenant.id);
     res.download(path.join(backupDir, name), name);
   });
 
   // Auditlog: beveiligingsgebeurtenissen.
   app.get('/api/admin/audit', (req, res) => {
     const { limit, offset, action } = req.query;
-    res.json(store.listAudit(tenant.id, { limit, offset, action }));
+    res.json(store.listAudit(req.tenantId, { limit, offset, action }));
   });
 
-  // ---------- Beheer: instellingen ----------
+  // ---------- Beheer: instellingen (van de actieve omgeving) ----------
   app.get('/api/admin/settings', (req, res) => {
-    res.json({ settings: settings.view(), via: auth.session(req)?.via || null });
+    res.json({ settings: settingsFor(req.tenantId).view(), via: auth.session(req)?.via || null });
   });
 
   app.put('/api/admin/settings', requireJson, (req, res) => {
+    const settings = settingsFor(req.tenantId);
     const patch = req.body && typeof req.body === 'object' ? req.body : {};
-    const via = auth.session(req)?.via;
-    const oldCode = getAccessCode();
+    // De toegangscode geldt alleen voor de hoofdtenant.
+    const via = req.tenantId === tenant.id ? auth.session(req)?.via : null;
+    const oldCode = settings.get('accessCode');
     // Wie met de toegangscode is ingelogd, zou zichzelf buitensluiten door die
     // leeg te maken; met een beheerdersaccount kan het wel.
     const resets = Array.isArray(patch.reset) ? patch.reset : [];
@@ -496,7 +645,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       throw err;
     }
     // Nieuwe toegangscode: andere toestellen zijn uitgelogd, deze beheerder niet.
-    if (via === 'code' && getAccessCode() && getAccessCode() !== oldCode) auth.setCookie(req, res);
+    if (via === 'code' && settings.get('accessCode') && settings.get('accessCode') !== oldCode) auth.setCookie(req, res);
     if (changed.length) {
       console.log(`Instellingen gewijzigd door ${req.user?.display_name || 'beheerder'}: ${changed.join(', ')}`);
       audit(req, 'instellingen_gewijzigd', { fields: changed });
@@ -506,7 +655,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Sleutel testen zonder kosten: vraagt alleen het model op.
   app.post('/api/admin/settings/test-ai', async (req, res, next) => {
-    const a = currentAnalyzer();
+    const a = currentAnalyzer(req.tenantId);
     if (!a.check) return res.status(501).json({ error: 'not_supported', message: 'Testen is niet beschikbaar.' });
     try {
       res.json(await a.check());
@@ -519,18 +668,28 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Automatisch herkennen van een plan. De URL is (zonder toegangscode)
   // openbaar, dus elke aanroep kost tegoed: per IP begrensd plus een
   // dagelijks maximum voor de hele app (beide in Beheer > Instellingen).
-  const analyzeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: () => settings.get('aiHourlyPerIp'), keyFn: remoteIp });
-  const daily = { day: '', count: 0 };
+  // Limieten en dagteller per tenant (omgeving).
+  const analyzeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: (req) => settingsFor(req.tenantId || tenant.id).get('aiHourlyPerIp'), keyFn: (req) => `${req.tenantId || tenant.id}|${remoteIp(req)}` });
+  const dailyCounts = new Map();
   const today = () => new Date().toISOString().slice(0, 10);
+  function dailyFor(tenantId) {
+    let d = dailyCounts.get(tenantId);
+    if (!d || d.day !== today()) {
+      d = { day: today(), count: 0 };
+      dailyCounts.set(tenantId, d);
+    }
+    return d;
+  }
   const requireAppAccess = (req, res, next) => {
+    identify(req);
     if (guestsAllowed() || auth.isAuthenticated(req)) return next();
     res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
   };
 
   app.get('/api/plan/status', requireAppAccess, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    if (daily.day !== today()) Object.assign(daily, { day: today(), count: 0 });
-    res.json({ available: Boolean(aiAvailable()), remainingToday: Math.max(0, settings.get('aiDailyLimit') - daily.count) });
+    const settings = settingsFor(req.tenantId);
+    res.json({ available: Boolean(aiAvailable(req.tenantId)), remainingToday: Math.max(0, settings.get('aiDailyLimit') - dailyFor(req.tenantId).count) });
   });
 
   app.post('/api/plan/analyze', requireAppAccess, analyzeLimiter, async (req, res, next) => {
@@ -541,14 +700,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!m || !(w > 0 && h > 0 && w <= 8000 && h <= 8000)) {
       return res.status(400).json({ error: 'invalid_image', message: 'Ongeldige afbeelding.' });
     }
+    const settings = settingsFor(req.tenantId);
     if (!settings.get('aiEnabled')) {
       return res.status(409).json({ error: 'disabled', message: 'Automatisch herkennen met AI staat uit (Beheer > Instellingen). De lokale herkenning en tekenen werken wel.' });
     }
-    const planAnalyzer = currentAnalyzer();
+    const planAnalyzer = currentAnalyzer(req.tenantId);
     if (!planAnalyzer.available) {
       return res.status(409).json({ error: 'not_configured', message: 'Automatisch herkennen is niet ingesteld: een beheerder kan de API-sleutel invullen bij Beheer > Instellingen.' });
     }
-    if (daily.day !== today()) Object.assign(daily, { day: today(), count: 0 });
+    const daily = dailyFor(req.tenantId);
     if (daily.count >= settings.get('aiDailyLimit')) {
       return res.status(429).json({ error: 'daily_limit', message: 'Het dagelijkse maximum voor automatisch herkennen is bereikt. Probeer het morgen opnieuw of teken het plan zelf.' });
     }
@@ -559,7 +719,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const user = identify(req) || (guestsAllowed() ? ensureUser(req, res) : null);
       if (res.headersSent) return;
       if (user) {
-        store.record({ tenantId: tenant.id, userId: user.id, action: 'analyse', title: 'Plan herkend',
+        store.record({ tenantId: req.tenantId, userId: user.id, action: 'analyse', title: 'Plan herkend',
           summary: { areas: result.areas.length, elements: (result.elements || []).length, scale: result.scale.method || null, confidence: result.scale.confidence || null }, ip: ipOf(req) });
       }
       res.json(result);
@@ -575,14 +735,135 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // ---------- Offertes (module Offertes, zie quotes.js) ----------
   registerQuoteRoutes(app, {
     quotes: createQuoteStore(database), identify, requireUser, requireAdmin, requireJson, audit,
-    tenantOf: () => tenant.id, settingsOf: () => settings,
+    tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
   });
 
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
   app.get('/api/config', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ modules: settings.get('modules'), ai: Boolean(aiAvailable()) });
+    identify(req);
+    res.json({ modules: settingsFor(req.tenantId).get('modules'), ai: Boolean(aiAvailable(req.tenantId)) });
   });
+
+  // ---------- Hoofdbeheer: alle tenants en hun testomgevingen ----------
+  // De live-tenant van een (test)omgeving.
+  function homeOf(tenantId) {
+    const t = store.getTenant(tenantId);
+    return t && t.environment === 'test' && t.parent_id ? t.parent_id : tenantId;
+  }
+
+  app.use('/api/platform', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); }, requirePlatformAdmin);
+
+  const platformError = (res, out) => res.status(out.status || 400).json({ error: 'invalid_tenant', message: out.error });
+
+  app.get('/api/platform/tenants', (req, res) => {
+    res.json({ items: store.listTenants(), mainTenantId: tenant.id, current: req.tenantId });
+  });
+
+  // Nieuwe tenant, met optioneel meteen de eerste beheerder. Het account wordt
+  // vooraf gecontroleerd; lukt het daarna toch niet, dan gaat de tenant weer weg.
+  app.post('/api/platform/tenants', requireJson, wrap(async (req, res) => {
+    const { name, slug, admin } = req.body || {};
+    const withAdmin = Boolean(admin && (admin.username || admin.password));
+    const account = withAdmin ? { username: String(admin.username || '').trim().toLowerCase(), displayName: admin.displayName, role: 'beheerder', password: admin.password } : null;
+    if (account) {
+      const problem = store.accountProblem(null, account);
+      if (problem) return platformError(res, { error: `Eerste beheerder: ${problem}` });
+    }
+    const out = store.createTenant({ name, slug: String(slug || '').trim().toLowerCase() });
+    if (out.error) return platformError(res, out);
+    let user = null;
+    if (account) {
+      const acc = await store.createAccount(out.tenant.id, account);
+      if (acc.error) {
+        store.dropEmptyTenant(out.tenant.id);
+        return platformError(res, { error: `Eerste beheerder: ${acc.error}` });
+      }
+      user = acc.user;
+    }
+    console.log(`Tenant aangemaakt door ${req.user.display_name}: ${out.tenant.name} (${out.tenant.slug})`);
+    audit(req, 'tenant_aangemaakt', { tenantId: out.tenant.id, slug: out.tenant.slug, admin: user ? user.username : null }, undefined, tenant.id);
+    res.status(201).json({ tenant: store.tenantRow(out.tenant), admin: user ? store.publicUser(user) : null });
+  }));
+
+  app.patch('/api/platform/tenants/:id', requireJson, (req, res) => {
+    const input = {};
+    if (req.body?.name !== undefined) input.name = req.body.name;
+    if (req.body?.disabled !== undefined) input.disabled = Boolean(req.body.disabled);
+    const out = store.updateTenant(req.params.id, input);
+    if (out.error) return platformError(res, out);
+    if (input.disabled !== undefined) console.log(`Tenant ${out.tenant.name} ${input.disabled ? 'uitgeschakeld' : 'ingeschakeld'} door ${req.user.display_name}`);
+    audit(req, 'tenant_gewijzigd', { tenantId: out.tenant.id, fields: Object.keys(input), ...(input.disabled !== undefined ? { disabled: input.disabled } : {}) }, undefined, tenant.id);
+    res.json({ tenant: store.tenantRow(out.tenant) });
+  });
+
+  app.post('/api/platform/tenants/:id/environments', requireJson, (req, res) => {
+    // Geheimen zijn versleuteld per tenant: die niet als ruwe rij kopiëren,
+    // maar opnieuw opslaan via de instellingen van de nieuwe omgeving.
+    const secrets = Object.keys(FIELDS).filter((k) => FIELDS[k].type === 'secret');
+    const out = store.createEnvironment(req.params.id, { name: req.body?.name, copyPlans: Boolean(req.body?.copyPlans), skipSettings: secrets });
+    if (out.error) return platformError(res, out);
+    const from = settingsFor(req.params.id);
+    const view = from.view();
+    const patch = {};
+    for (const k of secrets) if (view[k].source === 'instellingen' && from.get(k)) patch[k] = from.get(k);
+    if (Object.keys(patch).length) settingsFor(out.tenant.id).update(patch, req.user.id);
+    audit(req, 'testomgeving_aangemaakt', { tenantId: out.tenant.id, parentId: req.params.id, slug: out.tenant.slug, copied: out.copied }, undefined, tenant.id);
+    console.log(`Testomgeving ${out.tenant.name} (${out.tenant.slug}) aangemaakt door ${req.user.display_name}, ${out.copied} plannen gekopieerd`);
+    res.status(201).json({ tenant: store.tenantRow(out.tenant), copied: out.copied });
+  });
+
+  app.post('/api/platform/tenants/:id/reset', requireJson, (req, res) => {
+    const out = store.resetEnvironment(req.params.id);
+    if (out.error) return platformError(res, out);
+    console.log(`Testomgeving ${out.tenant.name} leeggemaakt door ${req.user.display_name}`);
+    audit(req, 'testomgeving_leeggemaakt', { tenantId: out.tenant.id }, undefined, tenant.id);
+    res.json({ ok: true });
+  });
+
+  app.delete('/api/platform/tenants/:id', (req, res) => {
+    const out = store.deleteEnvironment(req.params.id);
+    if (out.error) return platformError(res, out);
+    settingsCache.delete(req.params.id);
+    dailyCounts.delete(req.params.id);
+    console.log(`Testomgeving verwijderd door ${req.user.display_name}`);
+    audit(req, 'testomgeving_verwijderd', { tenantId: req.params.id }, undefined, tenant.id);
+    res.json({ ok: true });
+  });
+
+  // Gebruikers van een tenant (accounts, zonder gasten) beheren.
+  const liveTenant = (req, res) => {
+    const t = store.getTenant(req.params.id);
+    if (!t) { res.status(404).json({ error: 'not_found', message: 'Tenant niet gevonden.' }); return null; }
+    if (t.environment !== 'live') { res.status(409).json({ error: 'invalid_tenant', message: 'Gebruikers horen bij de live-tenant.' }); return null; }
+    return t;
+  };
+
+  app.get('/api/platform/tenants/:id/users', (req, res) => {
+    const t = liveTenant(req, res);
+    if (t) res.json({ items: store.listUsers(t.id, { includeGuests: false }) });
+  });
+
+  app.post('/api/platform/tenants/:id/users', requireJson, wrap(async (req, res) => {
+    const t = liveTenant(req, res);
+    if (!t) return;
+    const { username, displayName, role, password } = req.body || {};
+    const out = await store.createAccount(t.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password });
+    if (out.error) return res.status(400).json({ error: 'invalid_user', message: out.error });
+    audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role, door: 'hoofdbeheer' }, undefined, t.id);
+    res.status(201).json(store.publicUser(out.user));
+  }));
+
+  app.patch('/api/platform/tenants/:id/users/:uid', requireJson, wrap(async (req, res) => {
+    const t = liveTenant(req, res);
+    if (!t) return;
+    const input = {};
+    for (const k of ['displayName', 'role', 'disabled', 'password']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
+    const out = await store.updateAccount(t.id, req.params.uid, input);
+    if (out.error) return res.status(out.status || 400).json({ error: 'invalid_user', message: out.error });
+    auditUserChange(req, out.user, input, t.id);
+    res.json(store.publicUser(out.user));
+  }));
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
@@ -648,7 +929,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.locals.hasAdminAccount = () => !needsSetup();
   app.locals.setupCode = installCode;
   // Onderhoud (elk uur vanuit main): bewaartermijnen toepassen.
-  app.locals.maintenance = () => store.applyRetention(tenant.id, { ipDays: settings.get('ipRetentionDays'), auditDays: settings.get('auditRetentionDays') });
+  // Per tenant en testomgeving, met de eigen bewaartermijnen.
+  app.locals.maintenance = () => {
+    const total = {};
+    for (const t of store.listTenants().flatMap((l) => [l, ...l.environments])) {
+      const s = settingsFor(t.id);
+      const r = store.applyRetention(t.id, { ipDays: s.get('ipRetentionDays'), auditDays: s.get('auditRetentionDays') });
+      for (const [k, v] of Object.entries(r)) total[k] = (total[k] || 0) + v;
+    }
+    return total;
+  };
   // Automatische back-up als de nieuwste ouder is dan een dag.
   app.locals.backupIfDue = async () => {
     if (!backupDir || settings.get('backupKeepDays') === 0) return null;

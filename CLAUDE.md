@@ -128,11 +128,30 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   (`frontend/beheer/`, `role: 'beheerder'` in modules.js) toont historie,
   plannen en gebruikers. De API is ook onder `<module>/api/...` bereikbaar
   (modules gebruiken relatieve `api/...`).
+- **Multitenant** (0.20.0): tenants in `tenants` (`environment` `live`|`test`,
+  `parent_id`, `disabled`); een testomgeving is een eigen tenant onder een
+  live-tenant (eigen plannen/historie/instellingen, gebruikers van de
+  live-tenant). Gebruikersnamen van accounts zijn globaal uniek; inloggen
+  zoekt over alle tenants. `users.platform_admin` = hoofdbeheerder (module
+  `frontend/hoofdbeheer/`, API `/api/platform/*`); de hoofdtenant kan niet uit.
+  In `server.js` zet `identify()` `req.user` (met `tenant_id` = actieve
+  omgeving, `home_tenant_id` = eigen tenant) en `req.tenantId`: gegevens via
+  `req.tenantId`, gebruikersbeheer via `homeOf()`. Instellingen per tenant via
+  `settingsFor()`. Wisselen: `POST /api/environment` zet de ondertekende
+  cookie `aquatech_env` (`<user>:<tenant>`, elke keer opnieuw gecontroleerd)
+  en de leesbare `aquatech_env_hint` voor `shared/env.js` (testlabel,
+  localStorage-achtervoegsel). Wisselaar in `dashboard/account.js`.
 - **Plannenoverzicht** (`frontend/plannen/`, voor iedereen): tabel uit
   `/api/plans` (eigen) of `/api/admin/plans` (beheerder, `?deleted=1`,
   `historyCount`); samenvatting per plan via `summarize()` op
   `json_remove(data,'$.background')`; tijdlijn via
   `/api/admin/plans/:id/history`. Hergebruikt `beheer/beheer.css`.
+- **Offertes** (`frontend/offertes/`, 0.21.0): rekenkern `quote-core.js`
+  (UMD, ook door de server geladen: `sanitize`, `totals`, `fromPlan` met
+  BOM + arbeidsnormen `LABOR`), opslag/routes in `backend/src/quotes.js`
+  (tabel `quotes`, migratie 5, nummer `<prefix><jaar>-0001` per tenant),
+  bedrijfsprofiel = instelling `quoteProfile` (type `object`). PDF via
+  afdrukversie (`#print`, print-CSS), geen PDF-bibliotheek.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - Health: `GET /api/health` (versie uit `package.json`).
