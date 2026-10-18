@@ -154,14 +154,17 @@
   async function usersDialog(t) {
     let users = [];
     try { users = (await api(`platform/tenants/${encodeURIComponent(t.id)}/users`)).items || []; } catch (e) { toast(e.message, true); return; }
+    const canImpersonate = (u) => u.kind === 'account' && !u.platformAdmin && !u.disabled;
+    const support = (u) => (u.platformAdmin || u.kind !== 'account' ? '–' : u.support ? `<span class="pill live" title="Supporttoegang voor live">tot ${esc(when(u.support.expiresAt))}</span>` : '<span class="muted">geen</span>');
     const rows = users.map((u) => `<tr data-uid="${esc(u.id)}" class="${u.disabled ? 'off' : ''}">
         <td>${esc(u.displayName)}<br><span class="code">${esc(u.username)}</span></td>
         <td>${u.kind === 'account' ? `<select data-f="role">${roleOptions(u.role)}</select>` : esc(Roles.label(u.role))}${u.platformAdmin ? ' <span class="pill hoofd">hoofdbeheerder</span>' : ''}</td>
         <td>${esc(when(u.lastSeenAt))}</td>
-        <td class="acts">${u.kind === 'account' ? `<button class="btn small" data-f="toggle">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button><button class="btn small" data-f="password">Wachtwoord</button>` : ''}</td>
+        <td>${support(u)}</td>
+        <td class="acts">${canImpersonate(u) ? '<button class="btn small" data-f="impersonate">Inloggen als</button>' : ''}${u.kind === 'account' ? `<button class="btn small" data-f="toggle">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button><button class="btn small" data-f="password">Wachtwoord</button>` : ''}</td>
       </tr>`).join('');
     modal(`<h2>Gebruikers van ${esc(t.name)}</h2>
-      <div class="tablewrap"><table class="grid" id="mu-table">${users.length ? `<thead><tr><th>Gebruiker</th><th>Rol</th><th>Laatst gezien</th><th></th></tr></thead><tbody>${rows}</tbody>` : '<tr><td class="empty">Nog geen gebruikers.</td></tr>'}</table></div>
+      <div class="tablewrap"><table class="grid" id="mu-table">${users.length ? `<thead><tr><th>Gebruiker</th><th>Rol</th><th>Laatst gezien</th><th>Support (live)</th><th></th></tr></thead><tbody>${rows}</tbody>` : '<tr><td class="empty">Nog geen gebruikers.</td></tr>'}</table></div>
       <form id="mu-form" class="card-form">
         <h3>Gebruiker toevoegen</h3>
         <div class="row">
@@ -187,6 +190,7 @@
       const tr = ev.target.closest('tr[data-uid]');
       if (!b || !tr) return;
       const u = users.find((x) => x.id === tr.dataset.uid);
+      if (b.dataset.f === 'impersonate') return impersonateDialog(t, u);
       if (b.dataset.f === 'toggle') patch(u.id, { disabled: !u.disabled }, u.disabled ? 'Ingeschakeld' : 'Uitgeschakeld');
       if (b.dataset.f === 'password') {
         const pw = prompt(`Nieuw wachtwoord voor ${u.displayName} (minimaal 12 tekens)`);
@@ -205,6 +209,42 @@
         toast('Gebruiker toegevoegd');
         await load();
         usersDialog(find(t.id) || t);
+      } catch (e) { $('.err', f).textContent = e.message; }
+    };
+  }
+
+  // ---------- Inloggen als een gebruiker (impersonatie) ----------
+  // In een testomgeving zonder goedkeuring; in live alleen als de gebruiker
+  // supporttoegang heeft gegeven. Terug kan altijd met de rode balk onderin.
+  function impersonateDialog(t, u) {
+    const envs = (find(t.id) || t).environments || [];
+    const opts = [
+      ...envs.filter((e) => !e.disabled).map((e) => `<option value="${esc(e.id)}">Test: ${esc(e.name)} (zonder goedkeuring)</option>`),
+      `<option value="${esc(t.id)}"${u.support ? '' : ' disabled'}>Live${u.support ? ` (toestemming tot ${esc(when(u.support.expiresAt))})` : ' (geen toestemming)'}</option>`,
+    ].join('');
+    const hint = u.support
+      ? ''
+      : `<p class="muted small">Voor live is toestemming nodig: ${esc(u.displayName)} geeft die zelf op het dashboard bij <b>Support op afstand</b>, voor een beperkte tijd.${envs.length ? '' : ' Deze tenant heeft nog geen testomgeving.'}</p>`;
+    modal(`<h2>Inloggen als ${esc(u.displayName)}</h2>
+      <p class="muted small">Je werkt dan met de rol en rechten van ${esc(u.displayName)} (${esc(Roles.label(u.role))}). Alles wat je doet komt met jouw naam in het auditlog. Terug naar je eigen account kan altijd met de rode balk onderin.</p>
+      ${hint}
+      <form id="imp-form" class="card-form">
+        <div class="row">
+          <label>Omgeving<select name="tenantId">${opts}</select></label>
+          <label>Reden (optioneel)<input name="reason" maxlength="200" autocomplete="off" placeholder="bijv. vraag over offerte"></label>
+        </div>
+        <div class="row"><button class="btn primary" type="submit">Inloggen als ${esc(u.displayName)}</button></div>
+        <div class="err" role="alert"></div>
+      </form>`);
+    const f = $('#imp-form');
+    const sel = f.tenantId;
+    if (sel.options[sel.selectedIndex]?.disabled) sel.selectedIndex = -1;
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      if (!sel.value) { $('.err', f).textContent = 'Kies een omgeving.'; return; }
+      try {
+        await api('platform/impersonate', { body: { userId: u.id, tenantId: sel.value, reason: f.reason.value.trim() } });
+        location.href = '../';
       } catch (e) { $('.err', f).textContent = e.message; }
     };
   }

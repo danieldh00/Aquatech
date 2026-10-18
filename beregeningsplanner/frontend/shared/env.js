@@ -30,13 +30,67 @@
     else bar.appendChild(badge);
   }
 
+  // Impersonatie: een hoofdbeheerder werkt als een andere gebruiker. De server
+  // zet dan de leesbare cookie `aquatech_imp_hint` (`<naam>|<verloopt>|live|test`).
+  // Op elke pagina staat zolang een balk met de knop terug naar het eigen account.
+  const script = document.currentScript;
+  const fromApp = (rel) => (script && script.src ? new URL(rel, script.src).href : rel);
+
+  function readImpersonation() {
+    const m = /(?:^|;\s*)aquatech_imp_hint=([^;]*)/.exec(document.cookie || '');
+    if (!m) return null;
+    let raw = '';
+    try { raw = decodeURIComponent(m[1]); } catch (e) { return null; }
+    const parts = raw.split('|');
+    if (parts.length < 3) return null;
+    const live = parts.pop() === 'live';
+    const expiresAt = parts.pop();
+    return { name: parts.join('|'), expiresAt, live };
+  }
+
+  const imp = readImpersonation();
+
+  async function stopImpersonation(btn) {
+    if (btn) btn.disabled = true;
+    try {
+      await fetch(fromApp('../api/impersonation/stop'), { method: 'POST' });
+    } catch (e) { /* toch terug: de server ruimt een verlopen impersonatie zelf op */ }
+    location.href = fromApp('../hoofdbeheer/');
+  }
+
+  function markImpersonation() {
+    if (!imp || document.querySelector('.imp-bar')) return;
+    document.documentElement.classList.add('impersonating');
+    const until = new Date(imp.expiresAt);
+    const time = isNaN(until) ? '' : until.toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    const bar = document.createElement('div');
+    bar.className = 'imp-bar';
+    bar.setAttribute('role', 'status');
+    const text = document.createElement('span');
+    text.className = 'imp-text';
+    const who = document.createElement('b');
+    who.textContent = imp.name;
+    text.append('Je werkt als ', who, ` · ${imp.live ? 'live, met toestemming' : 'testomgeving'}${time ? ` · tot ${time}` : ''}`);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Terug naar eigen account';
+    btn.onclick = () => stopImpersonation(btn);
+    bar.append(text, btn);
+    document.body.appendChild(bar);
+  }
+
   root.AquatechEnv = {
     current: env,
     isTest: Boolean(env),
-    // Achtervoegsel voor localStorage-sleutels: leeg in live.
-    storageSuffix: () => (env ? `@${env.slug}` : ''),
+    // Achtervoegsel voor localStorage-sleutels: leeg in live. Tijdens een
+    // impersonatie apart, zodat het lokale concept van de hoofdbeheerder en dat
+    // van de gebruiker niet door elkaar lopen.
+    storageSuffix: () => (env ? `@${env.slug}` : '') + (imp ? `#als:${imp.name}` : ''),
+    impersonation: imp,
+    stopImpersonation,
   };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mark);
-  else mark();
+  const ready = () => { mark(); markImpersonation(); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready);
+  else ready();
 })(window);

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.23.0
+
+- **Inloggen als een gebruiker (impersonatie)** voor de hoofdbeheerder:
+  vanuit Hoofdbeheer → Gebruikers werk je tijdelijk met de rol en rechten
+  van een gebruiker. In een testomgeving zonder goedkeuring; in live alleen
+  met toestemming die de gebruiker zelf geeft op het dashboard (*Support op
+  afstand*, voor 1 uur tot 3 dagen, altijd in te trekken).
+- Tijdens een impersonatie staat onderin elke pagina een rode balk met
+  **Terug naar eigen account** (één klik); hoogstens 8 uur, en uitloggen
+  stopt hem ook.
+- Auditlog: start, einde (met reden: gestopt, verlopen, toestemming
+  ingetrokken) en elke actie tijdens een impersonatie met de naam van de
+  hoofdbeheerder. De gebruiker ziet zelf wie er heeft meegekeken.
+
 ## 0.22.0
 
 - **Rollen**: hoofdbeheerder, beheerder, installateur en klant. Elke rol

@@ -83,3 +83,16 @@ h2 .h2-link:hover { text-decoration: underline; }
 @media (max-width: 640px) {
   .topbar:has(.env-select) .env-badge, .account:has(.env-select) > span { display: none; }
 }
+
+/* Support op afstand (dashboard/support.js) */
+.support-card { max-width: 640px; padding: 16px 18px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.support-card p { margin: 0 0 12px; }
+.support-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.support-card .btn, .support-card select { font: inherit; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+.support-card .btn { cursor: pointer; }
+.support-card .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.support-card .btn:disabled { opacity: 0.6; cursor: default; }
+.support-card .err { color: #c0392b; font-size: 13px; margin-top: 6px; }
+.support-card .err:empty { display: none; }
+.support-recent { margin-top: 12px; font-size: 13px; color: var(--muted); }
+.support-recent ul { margin: 6px 0 0; padding-left: 18px; }
