@@ -22,7 +22,7 @@
     {
       id: 'beheer',
       title: 'Beheer',
-      description: 'Historie van alle aanvragen, de plannen van alle gebruikers en gebruikersbeheer, met Excel-export.',
+      description: 'Historie van alle aanvragen, de plannen van alle gebruikers, gebruikersbeheer en de instellingen van de app (API-sleutel, toegangscode, modules).',
       href: 'beheer/',
       icon: 'shield',
       status: 'actief',

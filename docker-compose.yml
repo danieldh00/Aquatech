@@ -1,8 +1,13 @@
-# Los draaien buiten Home Assistant (bijv. op een eigen server):
-# `ACCESS_CODE=... docker compose up -d` -> http://<server>:3300
+# Aquatech als losse server, zonder Home Assistant:
+#   docker compose up -d --build      -> http://<server>:3300
+#   docker compose logs aquatech      -> eerste start: aangemaakte toegangscode
+# Instellingen (API-sleutel, toegangscode, limieten, modules) regel je daarna
+# in de app onder Beheer > Instellingen. De variabelen hieronder zijn alleen
+# startwaarden (optioneel, via een .env-bestand; zie .env.example).
 services:
-  beregeningsplanner:
+  aquatech:
     build: ./beregeningsplanner
+    image: aquatech:latest
     restart: unless-stopped
     ports:
       - "${APP_PORT:-3300}:3300"
@@ -11,9 +16,17 @@ services:
       - DATA_DIR=/data
       - ACCESS_CODE=${ACCESS_CODE:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - AI_DAILY_LIMIT=${AI_DAILY_LIMIT:-30}
+      - AI_DAILY_LIMIT=${AI_DAILY_LIMIT:-}
+      - TZ=${TZ:-Europe/Amsterdam}
     volumes:
-      - beregeningsplanner-data:/data
+      - aquatech-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3300/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
 
 volumes:
-  beregeningsplanner-data:
+  # Database (plannen, historie, gebruikers, instellingen) en sessiesleutel.
+  aquatech-data:

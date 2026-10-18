@@ -283,12 +283,122 @@
     }
   }
 
+  // ---------- Instellingen ----------
+  const SOURCES = { instellingen: '', homeassistant: 'uit Home Assistant', omgeving: 'uit Docker-omgeving', standaard: 'standaard' };
+
+  function renderSettings(view) {
+    state.settings = view;
+    const ai = $('#s-ai');
+    ai.aiEnabled.checked = view.aiEnabled.value;
+    ai.aiDailyLimit.value = view.aiDailyLimit.value;
+    ai.aiHourlyPerIp.value = view.aiHourlyPerIp.value;
+    document.querySelectorAll('[data-origin]').forEach((el) => { el.textContent = SOURCES[view[el.dataset.origin].source] || ''; });
+    document.querySelectorAll('[data-reset]').forEach((b) => { b.hidden = view[b.dataset.reset].source !== 'instellingen'; });
+    const key = view.anthropicApiKey;
+    const keyState = $('[data-state="anthropicApiKey"]');
+    keyState.textContent = key.set ? `Ingesteld${key.hint ? ` (eindigt op ${key.hint.replace('…', '')})` : ''}` : 'Niet ingesteld: AI-herkenning staat uit.';
+    keyState.className = `state ${key.set ? 'ok' : 'off'}`;
+    const code = view.accessCode;
+    const codeState = $('[data-state="accessCode"]');
+    codeState.textContent = code.set ? 'Ingesteld: inloggen is verplicht buiten Home Assistant.' : 'Geen code: de app is openbaar.';
+    codeState.className = `state ${code.set ? 'ok' : 'off'}`;
+    $('[data-clear="anthropicApiKey"]').disabled = !key.set;
+    $('[data-clear="accessCode"]').disabled = !code.set;
+    const mods = (window.AquatechModules || []).filter((m) => m.id !== 'beheer');
+    $('#s-module-list').innerHTML = mods.map((m) => `
+      <label class="chk"><input type="checkbox" data-module="${esc(m.id)}"${view.modules.value[m.id] === false ? '' : ' checked'}>
+        ${esc(m.title)}${m.status === 'gepland' ? ' <span class="muted small">(binnenkort)</span>' : ''}</label>`).join('');
+  }
+
+  async function loadSettings() {
+    try {
+      renderSettings((await api('settings')).settings);
+    } catch (e) {
+      toast(`Kan de instellingen niet laden: ${e.message}`, true);
+    }
+  }
+
+  async function saveSettings(form, patch, msg) {
+    const err = $('.err', form);
+    err.textContent = '';
+    try {
+      const out = await api('settings', { method: 'PUT', body: patch });
+      renderSettings(out.settings);
+      form.querySelectorAll('input[type=password]').forEach((i) => { i.value = ''; });
+      toast(out.changed.length ? msg : 'Niets gewijzigd');
+      return true;
+    } catch (e) {
+      err.textContent = e.message;
+      return false;
+    }
+  }
+
+  function initSettings() {
+    const ai = $('#s-ai');
+    ai.onsubmit = (ev) => {
+      ev.preventDefault();
+      const patch = { aiEnabled: ai.aiEnabled.checked, aiDailyLimit: Number(ai.aiDailyLimit.value), aiHourlyPerIp: Number(ai.aiHourlyPerIp.value) };
+      if (ai.anthropicApiKey.value.trim()) patch.anthropicApiKey = ai.anthropicApiKey.value.trim();
+      saveSettings(ai, patch, 'Instellingen opgeslagen');
+    };
+    $('#s-test').onclick = async () => {
+      const btn = $('#s-test');
+      const err = $('.err', ai);
+      // Eerst een net ingevulde sleutel opslaan, dan testen.
+      if (ai.anthropicApiKey.value.trim() && !(await saveSettings(ai, { anthropicApiKey: ai.anthropicApiKey.value.trim() }, 'Sleutel opgeslagen'))) return;
+      btn.disabled = true;
+      btn.textContent = 'Bezig…';
+      err.textContent = '';
+      try {
+        await api('settings/test-ai', { method: 'POST' });
+        toast('De sleutel werkt.');
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sleutel testen';
+      }
+    };
+    const acc = $('#s-access');
+    acc.onsubmit = (ev) => {
+      ev.preventDefault();
+      const v = acc.accessCode.value.trim();
+      if (!v) { $('.err', acc).textContent = 'Vul een nieuwe code in.'; return; }
+      saveSettings(acc, { accessCode: v }, 'Toegangscode opgeslagen');
+    };
+    document.querySelectorAll('[data-clear]').forEach((b) => {
+      b.onclick = () => {
+        const field = b.dataset.clear;
+        const q = field === 'accessCode'
+          ? 'Toegangscode verwijderen? De app is daarna voor iedereen zonder inloggen bereikbaar.'
+          : 'API-sleutel verwijderen? Automatisch herkennen met AI staat daarna uit.';
+        if (confirm(q)) saveSettings(b.closest('form'), { [field]: '' }, field === 'accessCode' ? 'Toegangscode verwijderd' : 'API-sleutel verwijderd');
+      };
+    });
+    document.querySelectorAll('[data-reset]').forEach((b) => {
+      b.onclick = () => {
+        if (confirm('Terugzetten naar de waarde uit Home Assistant, de Docker-omgeving of de standaardwaarde?')) {
+          saveSettings(b.closest('form'), { reset: [b.dataset.reset] }, 'Teruggezet');
+        }
+      };
+    });
+    const mods = $('#s-modules');
+    mods.onsubmit = (ev) => {
+      ev.preventDefault();
+      const modules = {};
+      mods.querySelectorAll('[data-module]').forEach((c) => { modules[c.dataset.module] = c.checked; });
+      saveSettings(mods, { modules }, 'Modules opgeslagen');
+    };
+  }
+
   // ---------- Algemeen ----------
   function showTab(name) {
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
     document.querySelectorAll('.tabpane').forEach((p) => { p.hidden = p.id !== `tab-${name}`; });
     if (name === 'plans') loadPlans();
     if (name === 'users') loadUsers();
+    if (name === 'settings') loadSettings();
+    try { window.history.replaceState(null, '', `#${name}`); } catch (e) { /* file:// */ }
   }
 
   async function init() {
@@ -311,10 +421,14 @@
     $('#h-export').onclick = exportHistory;
     $('#u-form').onsubmit = addUser;
     $('#u-guests').onchange = renderUsers;
+    initSettings();
     $('#detail-close').onclick = () => { $('#detail').hidden = true; };
     $('#detail').onclick = (e) => { if (e.target.id === 'detail') $('#detail').hidden = true; };
     await loadUsers().catch(() => {});
     loadHistory();
+    // Direct naar een tabblad via beheer/#settings.
+    const hash = location.hash.slice(1);
+    if (['plans', 'users', 'settings'].includes(hash)) showTab(hash);
   }
 
   init();

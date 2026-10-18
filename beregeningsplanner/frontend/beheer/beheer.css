@@ -61,3 +61,21 @@ dl.kv dd { margin: 0; }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #263238; color: #fff; padding: 10px 16px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 20; }
 .toast.show { opacity: 1; }
 .toast.err { background: #c62828; }
+
+/* Instellingen */
+.card-form.settings { max-width: 860px; }
+.card-form.settings > p { margin: 0 0 12px; }
+.card-form.settings .row { margin-top: 8px; }
+.card-form.settings .row > input { flex: 1 1 260px; min-width: 0; }
+.card-form.settings .row > label { flex: 0 1 220px; }
+.tabs { overflow-x: auto; }
+.tab { white-space: nowrap; }
+.field { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 12px; }
+.field .label { font-weight: 600; font-size: 14px; }
+.state { font-size: 14px; }
+.state.ok { color: var(--primary); }
+.state.off { color: var(--muted); }
+.src { font-weight: 400; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #eceff1; color: var(--muted); margin-left: 4px; }
+.src:empty { display: none; }
+.checks { display: flex; flex-direction: column; gap: 4px; }
+.card-form.settings label.chk { flex-direction: row; color: var(--text); font-size: 14px; }

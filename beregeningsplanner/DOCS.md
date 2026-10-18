@@ -11,10 +11,10 @@ Excel. Planning en voorraadbeheer volgen.
    `https://aquatech.den-hollander.com`, zonder inloggen. Klik op de tegel
    **Beregeningsplanner** (of ga direct naar `.../beregening/`); met
    **Overzicht** linksboven in de planner ga je terug naar het dashboard.
-2. Wil je de publieke URL afschermen? Vul dan onder **Configuratie** een
-   `access_code` in en herstart de app. Buiten Home Assistant om moet je dan
-   één keer inloggen (het toestel onthoudt dat een jaar); via het HA-paneel
-   is nooit een code nodig.
+2. Wil je de publieke URL afschermen? Stel dan een toegangscode in onder
+   **Beheer → Instellingen** (werkt meteen, geen herstart). Buiten Home
+   Assistant om moet je dan één keer inloggen (het toestel onthoudt dat een
+   jaar); via het HA-paneel is nooit een code nodig.
 3. Klik op **Voorbeeld** om een ingevulde tuin te zien, of begin met
    **Nieuw** en doorloop de zes stappen links.
 
@@ -101,10 +101,11 @@ lijntekeningen, schetsen en luchtfoto's.
 Hiervoor is een API-sleutel van Anthropic nodig:
 
 - Maak een sleutel aan op https://console.anthropic.com en vul hem in onder
-  **Configuratie** als `anthropic_api_key`. Herstart daarna de app.
-- Elke analyse kost een paar dubbeltjes aan API-tegoed. `ai_daily_limit`
-  (standaard 30) begrenst het aantal analyses per dag voor de hele app; daarnaast
-  geldt een maximum van 10 per uur per verbinding.
+  **Beheer → Instellingen** (met **Sleutel testen** controleer je hem
+  zonder kosten). Hij werkt meteen, zonder herstart.
+- Elke analyse kost een paar dubbeltjes aan API-tegoed. Het maximum per dag
+  (standaard 30, hele app) en per uur per IP-adres (standaard 10) stel je in
+  op dezelfde plek; daar zet je AI-herkenning ook helemaal uit.
 - Het plan wordt voor de analyse naar Anthropic gestuurd. Zonder sleutel blijft
   alles lokaal.
 
@@ -131,16 +132,16 @@ Er zijn twee rollen:
 
 | Rol | Ziet | Wie |
 | --- | --- | --- |
-| **Beheerder** | alle plannen, de historie van alle aanvragen, gebruikersbeheer (module **Beheer**) | het HA-paneel, inloggen met de `access_code`, accounts met rol beheerder |
+| **Beheerder** | alle plannen, de historie van alle aanvragen, gebruikersbeheer en instellingen (module **Beheer**) | het HA-paneel, inloggen met de toegangscode, accounts met rol beheerder |
 | **Gebruiker** | alleen de eigen plannen | accounts met rol gebruiker, en gasten |
 
 - **Accounts** maak je als beheerder aan onder **Beheer → Gebruikers**
   (gebruikersnaam, naam, rol, wachtwoord van minimaal 8 tekens). Inloggen
   via `.../login` of de knop **Inloggen** rechtsboven. Een nieuw wachtwoord
   of uitschakelen logt de gebruiker op alle toestellen uit.
-- **Gasten**: zolang er geen `access_code` is, kan iedereen de planner
+- **Gasten**: zolang er geen toegangscode is, kan iedereen de planner
   zonder inloggen gebruiken. Elke browser krijgt dan een eigen anonieme
-  gebruiker en ziet alleen de eigen plannen. Met een `access_code` zijn er
+  gebruiker en ziet alleen de eigen plannen. Met een toegangscode zijn er
   geen gasten: inloggen (code of account) is verplicht.
 - **Historie** (**Beheer → Aanvragen**): elke aanvraag krijgt een regel met
   datum, gebruiker, plan, klant, adres, oppervlaktes, sproeiers en zones:
@@ -153,6 +154,61 @@ Er zijn twee rollen:
   (gefilterde) historie als `.xlsx`.
 - Achter de Cloudflare-tunnel toont de historie als IP-adres dat van de
   tunnel, niet dat van de bezoeker.
+
+## Instellingen
+
+Beheerders regelen alles onder **Beheer → Instellingen** (ook direct via
+`.../beheer/#settings`); de Home Assistant-configuratie is daarvoor niet meer
+nodig:
+
+| Instelling | Standaard |
+|---|---|
+| AI-herkenning aan/uit | aan (werkt alleen met een API-sleutel) |
+| API-sleutel van Anthropic | leeg |
+| Maximaal aantal AI-analyses per dag (hele app) | 30 |
+| Maximaal aantal AI-analyses per uur per IP-adres | 10 |
+| Toegangscode | leeg (openbaar) |
+| Modules op het dashboard aan/uit | alle aan |
+
+- De instellingen staan in de database (`/data/aquatech.db`) en werken
+  meteen, zonder herstart.
+- Geheimen (API-sleutel, toegangscode) gaan nooit terug naar de browser; je
+  ziet alleen of ze zijn ingesteld en van de sleutel de laatste 4 tekens.
+- Waarden die nog in de app-configuratie van Home Assistant staan
+  (`access_code`, `anthropic_api_key`, `ai_daily_limit`) of als
+  omgevingsvariabele in Docker zijn alleen **startwaarden**: zodra je een
+  instelling in het scherm opslaat, gaat die voor. Met **Terugzetten naar
+  startwaarde** haal je de opgeslagen waarde weer weg.
+- Wie met de toegangscode is ingelogd kan die niet leegmaken (dan zou je
+  jezelf buitensluiten); maak daarvoor eerst een beheerdersaccount aan.
+
+## Losse server (Docker)
+
+De app draait ook zonder Home Assistant, als gewone Docker-container
+(`docker-compose.yml` in de root van de repository):
+
+```sh
+git clone https://github.com/danieldh00/Aquatech.git && cd Aquatech
+docker compose up -d --build        # http://<server>:3300
+docker compose logs aquatech        # toont bij de eerste start de toegangscode
+```
+
+- **Eerste start**: zonder toegangscode en zonder beheerdersaccount maakt de
+  app zelf een toegangscode aan en zet die in het log. Log daarmee in (dat is
+  beheerderstoegang), en stel onder **Beheer → Instellingen** een eigen code
+  en de API-sleutel in, of maak onder **Gebruikers** accounts aan. Wil je zelf
+  een startcode kiezen: zet `ACCESS_CODE` in een `.env`-bestand naast
+  `docker-compose.yml` (zie `.env.example`).
+- **Gegevens** staan in het volume `aquatech-data` (`/data` in de container):
+  de database met plannen, historie, gebruikers en instellingen, en de
+  sessiesleutel. Back-up: `docker compose cp aquatech:/data ./backup`.
+- **Bijwerken**: `git pull && docker compose up -d --build`.
+- **HTTPS**: zet er een reverse proxy (Caddy, Traefik, nginx) of een
+  Cloudflare-tunnel voor die `X-Forwarded-Proto: https` meestuurt; dan
+  krijgen de inlogcookies de `Secure`-vlag.
+- Overzetten vanuit Home Assistant: kopieer `aquatech.db` en `session-secret`
+  uit de `/data`-map van de add-on naar het volume; alle plannen, gebruikers,
+  instellingen en inlogs gaan mee.
 
 ## Let op
 

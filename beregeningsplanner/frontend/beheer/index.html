@@ -28,6 +28,7 @@
         <button class="tab active" data-tab="history" role="tab">Aanvragen</button>
         <button class="tab" data-tab="plans" role="tab">Plannen</button>
         <button class="tab" data-tab="users" role="tab">Gebruikers</button>
+        <button class="tab" data-tab="settings" role="tab">Instellingen</button>
       </nav>
 
       <section id="tab-history" class="tabpane">
@@ -68,6 +69,58 @@
         <label class="chk"><input type="checkbox" id="u-guests"> Gasten tonen (anonieme bezoekers zonder account)</label>
         <div class="tablewrap"><table class="grid" id="u-table"></table></div>
       </section>
+
+      <section id="tab-settings" class="tabpane" hidden>
+        <p class="muted small">Instellingen van de app. Ze staan in de database van de app en werken meteen, zonder herstart en zonder Home Assistant-configuratie. Een waarde uit Home Assistant of de Docker-omgeving geldt alleen zolang hier niets is opgeslagen.</p>
+
+        <form id="s-ai" class="card-form settings">
+          <h3>Automatisch herkennen met AI</h3>
+          <p class="muted small">Plan laden en laten herkennen via de Claude API van Anthropic. Zonder sleutel of uitgeschakeld gebruikt de planner de lokale herkenning; tekenen en de toverstaf werken altijd.</p>
+          <label class="chk"><input type="checkbox" name="aiEnabled"> AI-herkenning ingeschakeld</label>
+          <div class="field">
+            <span class="label">API-sleutel <span class="src" data-origin="anthropicApiKey"></span></span>
+            <span class="state" data-state="anthropicApiKey"></span>
+            <div class="row">
+              <input name="anthropicApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Nieuwe sleutel (sk-ant-…), leeg = ongewijzigd">
+              <button type="button" class="btn" id="s-test">Sleutel testen</button>
+              <button type="button" class="btn" data-clear="anthropicApiKey">Sleutel verwijderen</button>
+              <button type="button" class="btn ghost" data-reset="anthropicApiKey" hidden>Terugzetten naar startwaarde</button>
+            </div>
+            <span class="muted small">Aan te maken via console.anthropic.com → API Keys. De sleutel wordt nooit teruggestuurd naar de browser; je ziet alleen de laatste 4 tekens.</span>
+          </div>
+          <div class="row">
+            <label>Maximaal per dag (hele app) <span class="src" data-origin="aiDailyLimit"></span><input name="aiDailyLimit" type="number" min="0" max="500" step="1" required></label>
+            <label>Maximaal per uur per IP-adres <span class="src" data-origin="aiHourlyPerIp"></span><input name="aiHourlyPerIp" type="number" min="1" max="100" step="1" required></label>
+          </div>
+          <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
+          <div class="err" role="alert"></div>
+        </form>
+
+        <form id="s-access" class="card-form settings">
+          <h3>Toegang</h3>
+          <p class="muted small">Met een toegangscode moet iedereen buiten het Home Assistant-paneel inloggen; wie met de code inlogt is beheerder. Zonder code is de app openbaar en werkt iedereen als gast (alleen eigen plannen). Gebruikers met een eigen account beheer je op het tabblad Gebruikers.</p>
+          <div class="field">
+            <span class="label">Toegangscode <span class="src" data-origin="accessCode"></span></span>
+            <span class="state" data-state="accessCode"></span>
+            <div class="row">
+              <input name="accessCode" type="password" autocomplete="new-password" minlength="4" placeholder="Nieuwe code (minimaal 4 tekens)">
+              <button class="btn primary" type="submit">Code opslaan</button>
+              <button type="button" class="btn" data-clear="accessCode">Code verwijderen (openbaar)</button>
+              <button type="button" class="btn ghost" data-reset="accessCode" hidden>Terugzetten naar startwaarde</button>
+            </div>
+            <span class="muted small">Een nieuwe code logt alle toestellen uit die met de oude code zijn ingelogd (jij blijft ingelogd).</span>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
+
+        <form id="s-modules" class="card-form settings">
+          <h3>Modules op het dashboard</h3>
+          <p class="muted small">Uitgezette modules verdwijnen van het dashboard. Beheer blijft altijd zichtbaar voor beheerders.</p>
+          <div id="s-module-list" class="checks"></div>
+          <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
+          <div class="err" role="alert"></div>
+        </form>
+      </section>
     </div>
   </main>
 
@@ -82,6 +135,7 @@
 
   <script src="../beregening/vendor/exceljs.min.js"></script>
   <script src="../beregening/js/catalog.js"></script>
+  <script src="../dashboard/modules.js"></script>
   <script src="../dashboard/account.js"></script>
   <script src="beheer.js"></script>
 </body>

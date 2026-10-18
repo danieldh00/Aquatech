@@ -1,0 +1,160 @@
+const { transaction } = require('./db');
+
+// App-instellingen, te beheren door beheerders via Beheer > Instellingen. Ze
+// staan per tenant in de database (tabel settings) en werken zonder herstart.
+// Zo hangt de app niet meer af van de Home Assistant-configuratie en draait hij
+// net zo goed als losse Docker-container.
+//
+// Volgorde per instelling: database -> HA-opties (/data/options.json) ->
+// omgevingsvariabele -> standaardwaarde. HA-opties en omgeving zijn dus alleen
+// nog startwaarden: wat in het instellingenscherm is opgeslagen gaat voor.
+// Geheimen (API-sleutel, toegangscode) gaan nooit volledig terug naar de browser.
+
+const FIELDS = {
+  accessCode: { type: 'secret', option: 'access_code', env: 'ACCESS_CODE', default: '', min: 4 },
+  anthropicApiKey: { type: 'secret', option: 'anthropic_api_key', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
+  aiEnabled: { type: 'bool', default: true },
+  aiDailyLimit: { type: 'int', option: 'ai_daily_limit', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },
+  aiHourlyPerIp: { type: 'int', default: 10, min: 1, max: 100 },
+  modules: { type: 'flags', default: {} },
+};
+
+class SettingsError extends Error {
+  constructor(field, message) {
+    super(message);
+    this.field = field;
+  }
+}
+
+function coerce(def, raw) {
+  if (def.type === 'secret') return String(raw ?? '').trim();
+  if (def.type === 'bool') return raw === true || raw === 'true' || raw === 1 || raw === '1';
+  if (def.type === 'int') {
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.min(def.max, Math.max(def.min, Math.floor(n))) : def.default;
+  }
+  if (def.type === 'flags') {
+    const out = {};
+    if (raw && typeof raw === 'object') for (const [k, v] of Object.entries(raw)) if (/^[a-z0-9-]{1,40}$/.test(k)) out[k] = Boolean(v);
+    return out;
+  }
+  return raw;
+}
+
+/**
+ * @param db        database uit db.js
+ * @param tenantId  tenant waarvan de instellingen zijn
+ * @param options   HA-opties (inhoud van options.json) als startwaarden
+ * @param env       omgevingsvariabelen als startwaarden
+ */
+function createSettings({ db, tenantId, options = {}, env = {} }) {
+  // Eén proces per database: de waarden staan ook in het geheugen.
+  let stored = {};
+  for (const row of db.prepare('SELECT key, value FROM settings WHERE tenant_id = ?').all(tenantId)) {
+    try {
+      if (FIELDS[row.key]) stored[row.key] = JSON.parse(row.value);
+    } catch {
+      console.warn(`Instelling ${row.key} is onleesbaar en wordt genegeerd.`);
+    }
+  }
+
+  function source(key, ignoreStored = false) {
+    const def = FIELDS[key];
+    if (!ignoreStored && Object.prototype.hasOwnProperty.call(stored, key)) return 'instellingen';
+    const opt = def.option && options[def.option];
+    if (opt !== undefined && opt !== null && opt !== '') return 'homeassistant';
+    const ev = def.env && env[def.env];
+    if (ev !== undefined && ev !== '') return 'omgeving';
+    return 'standaard';
+  }
+
+  // initial = de startwaarde (HA-optie, omgeving of standaard), zonder wat in
+  // de database staat: daar gaat een veld naartoe bij 'terugzetten'.
+  function get(key, initial = false) {
+    const def = FIELDS[key];
+    if (!def) throw new Error(`Onbekende instelling ${key}`);
+    switch (source(key, initial)) {
+      case 'instellingen': return coerce(def, stored[key]);
+      case 'homeassistant': return coerce(def, options[def.option]);
+      case 'omgeving': return coerce(def, env[def.env]);
+      default: return def.type === 'flags' ? {} : def.default;
+    }
+  }
+
+  function save(next, changed, userId) {
+    const del = db.prepare('DELETE FROM settings WHERE tenant_id = ? AND key = ?');
+    const put = db.prepare(`INSERT INTO settings (tenant_id, key, value, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`);
+    const at = new Date().toISOString();
+    transaction(db, () => {
+      for (const key of changed) {
+        if (Object.prototype.hasOwnProperty.call(next, key)) put.run(tenantId, key, JSON.stringify(next[key]), at, userId || null);
+        else del.run(tenantId, key);
+      }
+    });
+  }
+
+  /**
+   * Wijzigingen uit het instellingenscherm. Geheimen: weglaten = ongewijzigd,
+   * tekst = nieuwe waarde, '' = leegmaken. `reset: ['veld']` zet een veld terug
+   * naar de startwaarde (HA-optie, omgeving of standaard).
+   * @param userId  wie de wijziging doet (voor updated_by)
+   * @returns lijst van gewijzigde velden
+   */
+  function update(patch = {}, userId = null) {
+    const next = { ...stored };
+    const changed = [];
+    for (const key of Array.isArray(patch.reset) ? patch.reset : []) {
+      if (FIELDS[key] && Object.prototype.hasOwnProperty.call(next, key)) {
+        delete next[key];
+        changed.push(key);
+      }
+    }
+    for (const [key, raw] of Object.entries(patch)) {
+      if (key === 'reset' || raw === undefined) continue;
+      const def = FIELDS[key];
+      if (!def) throw new SettingsError(key, `Onbekende instelling: ${key}`);
+      if (def.type === 'secret') {
+        if (typeof raw !== 'string') throw new SettingsError(key, 'Ongeldige waarde.');
+        const v = raw.trim();
+        if (v.length > 500) throw new SettingsError(key, 'Waarde is te lang.');
+        if (v && v.length < def.min) throw new SettingsError(key, `Minimaal ${def.min} tekens.`);
+        next[key] = v;
+      } else if (def.type === 'int') {
+        const n = raw;
+        if (typeof n !== 'number' || !Number.isInteger(n) || n < def.min || n > def.max) throw new SettingsError(key, `Kies een geheel getal van ${def.min} tot ${def.max}.`);
+        next[key] = n;
+      } else if (def.type === 'bool') {
+        if (typeof raw !== 'boolean') throw new SettingsError(key, 'Ongeldige waarde.');
+        next[key] = raw;
+      } else if (def.type === 'flags') {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new SettingsError(key, 'Ongeldige waarde.');
+        next[key] = { ...get(key), ...coerce(def, raw) };
+      }
+      changed.push(key);
+    }
+    const unique = [...new Set(changed)];
+    save(next, unique, userId);
+    stored = next;
+    return unique;
+  }
+
+  /** Overzicht voor het instellingenscherm. Geheimen gaan nooit volledig terug. */
+  function view() {
+    const out = {};
+    for (const [key, def] of Object.entries(FIELDS)) {
+      const value = get(key);
+      if (def.type === 'secret') {
+        out[key] = { set: Boolean(value), source: source(key) };
+        if (def.hint && value.length >= 12) out[key].hint = `…${value.slice(-4)}`;
+      } else {
+        out[key] = { value, source: source(key) };
+      }
+    }
+    return out;
+  }
+
+  return { get, update, view, FIELDS };
+}
+
+module.exports = { createSettings, SettingsError, FIELDS };
