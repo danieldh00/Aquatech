@@ -2,7 +2,8 @@
 <html lang="nl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#01579b">
   <title>Aquatech Beregeningsplanner</title>
   <link rel="stylesheet" href="css/app.css">
 </head>
@@ -31,6 +32,7 @@
       <section id="step-panel" class="panel"></section>
       <div class="step-nav">
         <button id="btn-prev" class="btn">← Vorige</button>
+        <button id="btn-sheet" class="btn sheet-toggle" title="Paneel in- of uitklappen" aria-expanded="true">▾ Paneel</button>
         <button id="btn-next" class="btn primary">Volgende →</button>
       </div>
     </aside>
@@ -53,11 +55,20 @@
         <label class="chk"><input type="checkbox" id="layer-pipes"> Leidingen</label>
         <label class="chk"><input type="checkbox" id="layer-labels"> Maten</label>
       </div>
-      <div class="canvas-wrap"><canvas id="canvas"></canvas></div>
+      <div class="canvas-wrap">
+        <canvas id="canvas"></canvas>
+        <div id="drawbar" class="drawbar" hidden>
+          <span id="drawbar-label" class="drawbar-label"></span>
+          <button data-db="undo" class="btn">↶ Punt terug</button>
+          <button data-db="finish" class="btn primary">✓ Vorm sluiten</button>
+          <button data-db="cancel" class="btn">✕ <span>Stoppen</span></button>
+        </div>
+      </div>
       <div class="statusbar"><span id="hint"></span><span id="coords"></span></div>
     </section>
 
     <aside class="inspector">
+      <button id="props-close" class="btn ghost close props-close" title="Selectie opheffen">✕</button>
       <section id="props" class="panel"></section>
       <section id="warnings" class="panel warnings"></section>
     </aside>
@@ -80,6 +91,7 @@
         <li>Scrollen = in- en uitzoomen; rechtermuisknop, middelste muisknop of spatiebalk + slepen = verschuiven.</li>
         <li>Delete-toets = selectie verwijderen; Ctrl+Z / Ctrl+Y = ongedaan maken / opnieuw.</li>
         <li>Tekenen: Enter = vorm sluiten, Backspace = laatste punt weg, Shift = hoeken van 45°, Alt = niet op het raster uitlijnen.</li>
+        <li>Telefoon of tablet: tik om te selecteren of een punt te zetten, sleep met één vinger om te verschuiven, knijp met twee vingers om te zoomen. Tijdens het tekenen staan <b>Punt terug</b>, <b>Vorm sluiten</b> en <b>Stoppen</b> boven in beeld; met <b>▾ Paneel</b> klap je het stappenpaneel in voor meer tekenruimte.</li>
         <li>Het project wordt automatisch in de browser bewaard. Gebruik <b>Opslaan</b> voor een bestand.</li>
       </ul>
       <p class="hint">Berekeningen zijn indicatief (Hazen-Williams, PE PN6, geen hoogteverschillen). Controleer altijd de werkelijke druk en het debiet ter plaatse.</p>

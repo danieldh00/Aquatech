@@ -153,14 +153,71 @@ td.num, th.num { text-align: right !important; white-space: nowrap; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.err { background: var(--danger); }
 
+/* Tekenbalk boven het canvas (vooral voor touch: geen Enter/Backspace/Esc) */
+.drawbar {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 3;
+  display: flex; align-items: center; gap: 6px; padding: 6px; max-width: calc(100% - 16px);
+  background: rgba(255,255,255,0.95); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+}
+.drawbar[hidden] { display: none; }
+.drawbar .btn { white-space: nowrap; }
+.drawbar-label { font-size: 13px; color: var(--muted); padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet-toggle, .props-close { display: none; }
+
+/* Grote raakvlakken voor vingers */
+@media (pointer: coarse) {
+  button, label, select, input { touch-action: manipulation; }
+  .btn, .tbtn { min-height: 40px; }
+  .btn.sm { min-height: 36px; padding: 6px 10px; font-size: 13px; }
+  .step { min-height: 40px; }
+  .toolbar .chk { min-height: 40px; }
+  .toolbar .chk input { width: 20px; height: 20px; }
+  /* 16px voorkomt dat iOS bij focus inzoomt */
+  .panel label input:not([type=checkbox]):not([type=radio]), .panel label select { font-size: 16px; padding: 8px; }
+  .area-tool { flex-wrap: wrap; }
+  table.list td, table.list th { padding: 9px 4px; }
+}
+
 @media (max-width: 1100px) {
   .layout { grid-template-columns: 290px 1fr; }
-  .inspector { display: none; }
+  /* Eigenschappen als zwevende kaart zodra er iets geselecteerd is */
+  .inspector {
+    display: none; position: fixed; right: 10px; bottom: 34px; width: 320px; max-height: 65vh; z-index: 8;
+    border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,0.2);
+  }
+  body.has-sel .inspector { display: flex; }
+  .props-close { display: inline-flex; position: absolute; top: 6px; right: 6px; z-index: 1; }
+  .inspector #props h3:first-child { margin-top: 4px; padding-right: 40px; }
 }
 @media (max-width: 760px) {
-  body { overflow: auto; }
-  .layout { grid-template-columns: 1fr; grid-template-rows: auto 70vh; }
-  .stage { order: -1; }
+  body { height: 100vh; height: 100dvh; }
+  .topbar { gap: 8px; padding: 6px 8px; padding-top: max(6px, env(safe-area-inset-top)); }
+  .brand span, .project-title { display: none; }
+  .actions { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .actions .btn { flex: none; padding: 6px 10px; }
+  .layout { display: flex; flex-direction: column; }
+  .stage { order: -1; flex: 1 1 auto; min-height: 40%; }
+  .sidebar { flex: 0 1 auto; max-height: 48%; border-right: 0; border-top: 1px solid var(--line); }
+  .steps { flex-direction: row; overflow-x: auto; padding: 6px; gap: 4px; flex: none; scrollbar-width: none; }
+  .step { flex: none; padding: 4px 8px; }
+  .step:not(.active) span:last-child { display: none; }
+  .step-nav { padding: 6px 8px; padding-bottom: max(6px, env(safe-area-inset-bottom)); gap: 6px; flex: none; }
+  .sheet-toggle { display: inline-flex; }
+  body.sheet-collapsed .sidebar .panel, body.sheet-collapsed .steps { display: none; }
+  .toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .toolbar > * { flex: none; }
+  .toolbar .chk { white-space: nowrap; }
+  #coords { display: none; }
+  .statusbar { font-size: 11px; }
+  #hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .inspector { left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 45vh; max-height: 45dvh; }
+  .inspector .panel { padding: 8px 12px; }
+  .drawbar { top: 6px; gap: 4px; padding: 4px; }
+  .drawbar .btn { padding: 6px 9px; }
+  .drawbar-label { display: none; }
+  .help-card { margin: 10px; padding: 16px; max-height: 90vh; }
+  .toast { bottom: 90px; }
 }
 
 @media print {
