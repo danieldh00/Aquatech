@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { createApp, FRONTEND_DIR } = require('../src/server');
+const { createApp, FRONTEND_DIR, versionAssets } = require('../src/server');
+const PKG = require('../package.json');
 const { openDb } = require('../src/db');
 const { createStore } = require('../src/store');
 
@@ -91,6 +92,17 @@ test('verkeerde code faalt, juiste code geeft toegang tot de planner', async () 
     }
     const css = await fetch(`${base}/beregening/css/app.css`, { headers: { cookie: ok.cookie } });
     assert.strictEqual(css.status, 200);
+    // Na een update geen oude CSS/JS uit een cache: versie achter elke verwijzing
+    const v = `?v=${PKG.version}`;
+    for (const p of ['/beregening/', '/beregening/index.html', '/beregening/diep/pad', '/']) {
+      const res = await fetch(base + p, { headers: { cookie: ok.cookie } });
+      assert.strictEqual(res.headers.get('cache-control'), 'no-cache');
+      const html = await res.text();
+      assert.ok(html.includes(`shared/brand.css${v}"`), p);
+      assert.doesNotMatch(html, /(?:href|src)="[^"]+\.(?:css|js)"/, p);
+    }
+    const versioned = await fetch(`${base}/beregening/css/app.css${v}`, { headers: { cookie: ok.cookie } });
+    assert.strictEqual(versioned.status, 200);
   } finally {
     server.close();
   }
@@ -239,4 +251,12 @@ test('de laatste actieve beheerder kan niet worden uitgeschakeld of gedegradeerd
   } finally {
     server.close();
   }
+});
+
+test('versionAssets: alleen lokale css/js, geen externe of data-URL\'s', () => {
+  const html = '<link rel="stylesheet" href="css/app.css"><script src="../shared/x.js"></script>'
+    + '<img src="logo.png"><a href="x.js">x</a><script src="https://cdn/x.js"></script><link href="a.css?x=1">';
+  assert.strictEqual(versionAssets(html, '1.2.3'),
+    '<link rel="stylesheet" href="css/app.css?v=1.2.3"><script src="../shared/x.js?v=1.2.3"></script>'
+    + '<img src="logo.png"><a href="x.js">x</a><script src="https://cdn/x.js"></script><link href="a.css?x=1">');
 });
