@@ -31,6 +31,11 @@
 - Back-ups (de hele database, alle tenants) zijn alleen voor
   hoofdbeheerders, of met de toegangscode van de hoofdtenant. Plan
   definitief wissen werkt in de actieve omgeving.
+## 0.19.1
+
+- Home Assistant-add-on: stoppen en herstarten gebeurt weer netjes. Sinds
+  de app als gewone gebruiker draait, mocht het init-proces het stopsignaal
+  niet doorgeven (AppArmor-profiel miste `capability kill`).
 
 ## 0.19.0
 
