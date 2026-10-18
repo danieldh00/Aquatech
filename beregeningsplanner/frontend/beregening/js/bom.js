@@ -15,7 +15,7 @@
       if (!qty || qty <= 0) return;
       const a = C.articles[code];
       if (!a) throw new Error(`Onbekend artikel ${code}`);
-      const cur = items.get(code) || { code, name: a.name, unit: a.unit, price: a.price, sku: a.sku || '', url: a.url || '', qty: 0, notes: new Set() };
+      const cur = items.get(code) || { code, name: a.name, unit: a.unit, price: a.price, sku: a.sku || '', url: a.url || '', shop: Boolean(a.shop), qty: 0, notes: new Set() };
       cur.qty += qty;
       if (note) cur.notes.add(note);
       items.set(code, cur);

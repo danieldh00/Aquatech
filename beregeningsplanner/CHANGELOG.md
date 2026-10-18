@@ -14,6 +14,8 @@
     toont welke artikelen nog niet gekoppeld zijn.
   - Per organisatie en per omgeving (een testomgeving heeft een eigen
     koppeling); producten in de nieuwe tabel `shop_products` (migratie 11).
+  - In een offerte komt de materiaalopslag niet op regels met een
+    webshopprijs (die is al een verkoopprijs); overige regels houden de opslag.
   - Alleen openbare https-adressen; mislukt het ophalen, dan blijven de
     vorige producten staan en ziet de beheerder de foutmelding.
 

@@ -181,7 +181,8 @@
     const id = () => `p${++n}`;
     const lines = rows.map((r) => ({
       id: id(), section: 'materiaal', code: r.code, description: r.name, qty: r.qty, unit: r.unit,
-      price: round2(r.price * (1 + markup)), vat,
+      // Webshopprijzen zijn al verkoopprijzen: daar geen opslag op.
+      price: round2(r.price * (1 + (r.shop ? 0 : markup))), vat,
     }));
 
     const qty = (re) => rows.filter((r) => re.test(r.code)).reduce((s, r) => s + r.qty, 0);
