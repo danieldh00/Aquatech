@@ -8,7 +8,8 @@
   const Sim = window.Simulation;
   const BOM = window.BOM;
 
-  const STORAGE_KEY = 'aquatech-beregeningsplanner-v1';
+  // Per omgeving (live/test) een eigen lokaal concept, zie shared/env.js.
+  const STORAGE_KEY = `aquatech-beregeningsplanner-v1${window.AquatechEnv ? window.AquatechEnv.storageSuffix() : ''}`;
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = (v, d = 1) => (v == null || !isFinite(v) ? '–' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }));

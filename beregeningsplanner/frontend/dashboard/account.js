@@ -27,6 +27,7 @@
     } else {
       el.innerHTML = `<span class="role">Gast</span><a href="${esc(base)}login">Inloggen</a>`;
     }
+    if (u && u.kind !== 'gast' && me.environments > 1) renderSwitcher(el, me, base);
     const btn = el.querySelector('[data-logout]');
     if (btn) {
       btn.onclick = async () => {
@@ -34,6 +35,46 @@
         location.href = base || './';
       };
     }
+  }
+
+  // Wisselen tussen live en testomgevingen (en voor een hoofdbeheerder tussen
+  // tenants) zonder opnieuw in te loggen. Na het wisselen wordt de pagina
+  // opnieuw geladen, zodat alle gegevens uit de nieuwe omgeving komen.
+  async function renderSwitcher(el, me, base) {
+    let data;
+    try {
+      const res = await fetch(`${base}api/environments`, { cache: 'no-store' });
+      if (!res.ok) return;
+      data = await res.json();
+    } catch (e) { return; }
+    const items = data.items || [];
+    if (items.length < 2) return;
+    const label = (t) => (t.environment === 'test' ? `${t.parentName || ''} · test: ${t.name}` : t.name) + (t.disabled ? ' (uit)' : '');
+    // Live-tenants op naam, de testomgevingen direct onder hun live-tenant.
+    const live = items.filter((t) => t.environment === 'live');
+    const ordered = [];
+    for (const t of live) {
+      ordered.push(t);
+      for (const e of items) if (e.parentId === t.id) ordered.push(e);
+    }
+    for (const t of items) if (!ordered.includes(t)) ordered.push(t);
+    const sel = document.createElement('select');
+    sel.className = 'env-select';
+    sel.title = 'Omgeving wisselen';
+    sel.setAttribute('aria-label', 'Omgeving');
+    sel.innerHTML = ordered.map((t) => `<option value="${esc(t.id)}"${t.id === data.current ? ' selected' : ''}>${esc(label(t))}</option>`).join('');
+    sel.onchange = async () => {
+      sel.disabled = true;
+      try {
+        const res = await fetch(`${base}api/environment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tenantId: sel.value }) });
+        if (!res.ok) throw new Error();
+        location.reload();
+      } catch (e) {
+        sel.disabled = false;
+        sel.value = data.current;
+      }
+    };
+    el.insertBefore(sel, el.firstChild);
   }
 
   root.AquatechAccount = { load };

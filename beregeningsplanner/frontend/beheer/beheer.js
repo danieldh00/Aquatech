@@ -307,7 +307,7 @@
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
-    const mods = (window.AquatechModules || []).filter((m) => m.id !== 'beheer');
+    const mods = (window.AquatechModules || []).filter((m) => m.id !== 'beheer' && m.id !== 'hoofdbeheer');
     $('#s-module-list').innerHTML = mods.map((m) => `
       <label class="chk"><input type="checkbox" data-module="${esc(m.id)}"${view.modules.value[m.id] === false ? '' : ' checked'}>
         ${esc(m.title)}${m.status === 'gepland' ? ' <span class="muted small">(binnenkort)</span>' : ''}</label>`).join('');
