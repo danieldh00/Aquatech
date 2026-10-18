@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.26.0
+## 0.27.0
 
 - **Hoofdbeheerders aanmaken**: in Hoofdbeheer opent de knop
   *Hoofdbeheerders* de gebruikers van de hoofdtenant. Daar kun je een nieuwe
@@ -19,6 +19,27 @@
   notatie". Onder het formulier staat waarmee de beheerder inlogt
   (organisatiecode + gebruikersnaam).
 - Zelfde uitleg bij het toevoegen van gebruikers in Hoofdbeheer en Beheer.
+
+## 0.26.0
+
+- **Digitale offerte**: per offerte een persoonlijke link (*Digitale offerte*
+  in de editor). De klant opent die zonder account, bekijkt de offerte, kiest
+  eventuele opties en geeft akkoord met zijn naam, een handtekening (muis,
+  vinger of pen) en een vinkje voor de voorwaarden, of wijst af met een reden.
+  - Vastgelegd: naam, tijdstip, IP-adres, browser, handtekening, gekozen
+    opties, totaalbedrag en een kenmerk (SHA-256) van de geaccordeerde inhoud.
+    Daarna ligt de offerte vast; wijzigen kan alleen via een kopie.
+  - Je ziet of en hoe vaak de klant de offerte heeft geopend; de link is in
+    te trekken. Alleen een hash van het token staat doorzoekbaar in de
+    database, het token zelf versleuteld.
+  - **Opties**: zet een regel op *Optie* of *Optie (aan)*; de klant vinkt die
+    zelf aan of uit en het totaal rekent mee (ook in PDF en Excel).
+- **E-mail** via de eigen SMTP-server (Bedrijfsgegevens → E-mail, wachtwoord
+  versleuteld): offerte versturen met een knop naar de digitale offerte,
+  bevestiging naar de klant na een akkoord en een bericht naar het bedrijf.
+  Zonder mailserver opent *Versturen* het bericht in je eigen mailprogramma.
+- Klantaccounts geven in *Mijn offertes* op dezelfde manier akkoord (naam,
+  handtekening, voorwaarden).
 
 ## 0.25.0
 

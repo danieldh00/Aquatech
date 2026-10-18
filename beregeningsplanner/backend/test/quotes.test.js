@@ -82,6 +82,19 @@ test('totalen: korting naar rato over de btw-tarieven', () => {
   assert.deepStrictEqual(t.bySection, { materiaal: 100, arbeid: 100, overig: 0.33 });
 });
 
+test('opties: een niet gekozen optie telt niet mee; de klant kiest', () => {
+  const data = Core.sanitize({ lines: [
+    { id: 'a', section: 'materiaal', qty: 1, price: 100, vat: 21 },
+    { id: 'b', section: 'materiaal', qty: 1, price: 50, vat: 21, optional: true },
+    { id: 'c', section: 'arbeid', qty: 1, price: 30, vat: 21, optional: true, selected: true },
+  ] });
+  assert.deepStrictEqual(data.lines.map((l) => [l.optional, l.selected]), [[false, false], [true, false], [true, true]]);
+  assert.strictEqual(Core.totals(data).subtotal, 130);
+  const chosen = Core.chooseOptions(data, ['b', 'a']);
+  assert.strictEqual(Core.totals(chosen).subtotal, 150, 'b aan, c uit; een vaste regel blijft');
+  assert.strictEqual(Core.sanitizeLine({ selected: true }).selected, false, 'alleen een optie kan gekozen zijn');
+});
+
 test('opschonen: onbekende tarieven, te lange teksten en rommel', () => {
   const d = Core.sanitize({ title: 'x'.repeat(500), discountPct: 400, lines: [{ section: 'hack', qty: 'abc', price: '12.5', vat: 7, description: '<b>' }], customer: 'nee' });
   assert.strictEqual(d.title.length, 200);
@@ -93,6 +106,27 @@ test('opschonen: onbekende tarieven, te lange teksten en rommel', () => {
 
 // ---------- API ----------
 const SECRET = 'z'.repeat(64);
+// Een echte (kleine) PNG als handtekening: 120x40, grijs met een streep.
+const SIG = (() => {
+  const zlib = require('zlib');
+  const crc = (buf) => {
+    let c = ~0;
+    for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); }
+    return ~c >>> 0;
+  };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type), data]);
+    const c = Buffer.alloc(4); c.writeUInt32BE(crc(td));
+    return Buffer.concat([len, td, c]);
+  };
+  const w = 120, h = 40;
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 0;
+  const raw = Buffer.alloc((w + 1) * h, 255);
+  for (let y = 0; y < h; y++) { raw[y * (w + 1)] = 0; raw[y * (w + 1) + 1 + ((y * 3) % w)] = 0; }
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 0 })), chunk('IEND', Buffer.alloc(0))]);
+  return `data:image/png;base64,${png.toString('base64')}`;
+})();
 function client(base) {
   const jar = new Map();
   async function call(method, p, body) {
@@ -112,7 +146,7 @@ function client(base) {
   return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b), del: (p) => call('DELETE', p) };
 }
 
-async function setup() {
+async function setup({ mailerFor } = {}) {
   const db = openDb();
   const store = createStore(db);
   const tid = store.ensureTenant().id;
@@ -121,14 +155,14 @@ async function setup() {
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: 'Tuin-Plan-2026!' });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: 'Tuin-Plan-2026!' });
   await store.createAccount(tid, { username: 'mien', displayName: 'Mien', role: 'klant', password: 'Tuin-Plan-2026!' });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
+  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, ...(mailerFor ? { mailerFor } : {}) }).listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username) => {
     const c = client(base);
     assert.strictEqual((await c.post('/api/auth/login', { username, password: 'Tuin-Plan-2026!' })).status, 200);
     return c;
   };
-  return { server, base, as };
+  return { server, base, as, store, tid, db };
 }
 
 test('API: offertes aanmaken, nummeren, afschermen en verwijderen', async () => {
@@ -211,7 +245,8 @@ test('API: klant ziet alleen verzonden offertes voor zijn account en kan akkoord
     assert.strictEqual((await klaas.del(`/api/quotes/${q.id}`)).status, 403);
 
     assert.strictEqual((await klaas.post(`/api/quotes/${q.id}/respond`, { answer: 'misschien' })).status, 400);
-    const ok = await klaas.post(`/api/quotes/${q.id}/respond`, { answer: 'akkoord' });
+    assert.strictEqual((await klaas.post(`/api/quotes/${q.id}/respond`, { answer: 'akkoord' })).status, 400, 'naam, handtekening en voorwaarden nodig');
+    const ok = await klaas.post(`/api/quotes/${q.id}/respond`, { answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature: SIG });
     assert.strictEqual(ok.status, 200);
     assert.strictEqual(ok.body.status, 'akkoord');
     assert.strictEqual((await klaas.post(`/api/quotes/${q.id}/respond`, { answer: 'afgewezen' })).status, 409, 'maar één keer');
@@ -221,7 +256,7 @@ test('API: klant ziet alleen verzonden offertes voor zijn account en kan akkoord
 
     // Verlopen: geen akkoord meer mogelijk.
     const old = (await piet.post('/api/quotes', { data: { ...data, validUntil: '2020-01-01' }, customerId: klaasId, status: 'verzonden' })).body;
-    assert.strictEqual((await klaas.post(`/api/quotes/${old.id}/respond`, { answer: 'akkoord' })).status, 409);
+    assert.strictEqual((await klaas.post(`/api/quotes/${old.id}/respond`, { answer: 'akkoord', name: 'Klaas', terms: true, signature: SIG })).status, 409);
     // Ontkoppelen: de klant ziet de offerte niet meer.
     await piet.put(`/api/quotes/${old.id}`, { customerId: null });
     assert.strictEqual((await klaas.get(`/api/quotes/${old.id}`)).status, 404);
@@ -273,4 +308,132 @@ test('testomgeving leegmaken en verwijderen neemt de offertes mee; offertes zijn
   assert.strictEqual(quotes.list(live.id).length, 1);
   quotes.create({ ...user, tenant_id: env.id }, {});
   assert.ok(store.deleteEnvironment(env.id).ok);
+});
+
+test('digitale offerte: link, openbare pagina, opties, tekenen, vastleggen en e-mail', async () => {
+  const { createMailer } = require('../src/mailer');
+  const sent = [];
+  const mailerFor = (settings) => createMailer(settings, { createTransport: () => ({ sendMail: async (m) => { sent.push(m); return {}; } }) });
+  const { server, base, as, tid, db } = await setup({ mailerFor });
+  try {
+    const piet = await as('piet'), baas = await as('baas'), anon = client(base);
+    const pub = async (token, method = 'GET', body, query = '') => {
+      const res = await fetch(`${base}/api/public/quote${method === 'POST' ? '/respond' : ''}${query}`, {
+        method, headers: { 'X-Offerte-Token': token, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
+      });
+      return { status: res.status, body: await res.json().catch(() => null) };
+    };
+    await baas.put('/api/quote-profile', { profile: { email: 'info@aquatech.test' } });
+    const year = new Date().getFullYear();
+    const data = { title: 'Beregening', date: `${year}-01-01`, validUntil: `${year + 1}-01-01`, layout: 'totaal', customer: { name: 'Fam. Jansen', email: 'jansen@klant.test' },
+      lines: [
+        { id: 'r1', section: 'materiaal', description: 'Sproeier', qty: 4, price: 10, vat: 21 },
+        { id: 'r2', section: 'arbeid', description: 'Montage', qty: 1, price: 60, vat: 21 },
+        { id: 'r3', section: 'materiaal', description: 'Regensensor', qty: 1, price: 50, vat: 21, optional: true },
+      ] };
+    const q = (await piet.post('/api/quotes', { data })).body;
+    assert.strictEqual(q.share.active, false);
+    const URL_OK = 'https://aquatech.example/pad/openbaar/offerte.html';
+    assert.strictEqual((await piet.post(`/api/quotes/${q.id}/share`, { url: 'javascript:alert(1)//openbaar/offerte.html' })).status, 400);
+    assert.strictEqual((await piet.post(`/api/quotes/${q.id}/share`, { url: 'https://evil.example/elders.html' })).status, 400);
+    const shared = (await piet.post(`/api/quotes/${q.id}/share`, { url: URL_OK })).body;
+    assert.strictEqual(shared.status, 'verzonden', 'met de link is de offerte verzonden');
+    assert.ok(shared.share.url.startsWith(`${URL_OK}#t=`));
+    const token = shared.share.url.split('#t=')[1];
+    assert.strictEqual((await piet.post(`/api/quotes/${q.id}/share`, { url: URL_OK })).body.share.url, shared.share.url, 'link blijft dezelfde');
+
+    // Openbaar: zonder of met een fout token niets.
+    assert.strictEqual((await pub('')).status, 404);
+    assert.strictEqual((await pub('x'.repeat(32))).status, 404);
+    const seen = await pub(token);
+    assert.strictEqual(seen.status, 200);
+    assert.strictEqual(seen.body.profile.email, 'info@aquatech.test');
+    assert.strictEqual(seen.body.quote.share, undefined, 'link en interne gegevens niet naar buiten');
+    assert.strictEqual(seen.body.quote.owner, undefined);
+    assert.strictEqual(seen.body.quote.data.lines.find((l) => l.id === 'r1').price, undefined, 'totaal per onderdeel: geen regelprijzen');
+    assert.strictEqual(seen.body.quote.data.lines.find((l) => l.id === 'r3').price, 50, 'een optie wel');
+    assert.deepStrictEqual(seen.body.quote.fixed.map((f) => [f.section, f.amount]).sort(), [['arbeid', 60], ['materiaal', 40]]);
+    await pub(token, 'GET', null, '?preview=1');
+    let mine = (await piet.get(`/api/quotes/${q.id}`)).body;
+    assert.strictEqual(mine.share.viewCount, 1, 'een voorbeeld telt niet als bekeken');
+    assert.ok(mine.share.viewedAt);
+
+    // De openbare pagina en wat die nodig heeft zijn zonder inloggen bereikbaar, de rest niet.
+    assert.strictEqual((await fetch(`${base}/openbaar/offerte.html`)).status, 200);
+    assert.strictEqual((await fetch(`${base}/offertes/quote-view.js`)).status, 200);
+    assert.strictEqual((await fetch(`${base}/offertes/offertes.js`)).status, 401);
+    assert.strictEqual((await fetch(`${base}/openbaar/%2e%2e/offertes/offertes.js`)).status, 401);
+    assert.strictEqual((await fetch(`${base}/openbaar/offerte.html/..%2f..%2fbeheer/`)).status, 401);
+
+    // Versturen: eerst een mailserver nodig.
+    assert.strictEqual((await piet.post(`/api/quotes/${q.id}/send`, { to: 'jansen@klant.test', url: URL_OK })).status, 409);
+    assert.strictEqual((await piet.put('/api/quote-mail', { config: { host: 'smtp.x' } })).status, 403);
+    const mail = await baas.put('/api/quote-mail', { config: { host: 'smtp.aquatech.test', port: 465, secure: true, user: 'offerte', from: 'AquaTech <offerte@aquatech.test>\r\nBcc: x@y.z' }, password: 'geheim-wachtwoord' });
+    assert.strictEqual(mail.status, 200);
+    assert.strictEqual(mail.body.passwordSet, true);
+    assert.ok(!JSON.stringify(mail.body).includes('geheim-wachtwoord'), 'wachtwoord nooit terug');
+    assert.ok(!mail.body.config.from.includes('\n'), 'geen kopregels in de afzender');
+    assert.strictEqual((await piet.get('/api/quote-profile')).body.mail, true);
+    assert.strictEqual((await piet.post(`/api/quotes/${q.id}/send`, { to: 'geen-adres', url: URL_OK })).status, 400);
+    const out = await piet.post(`/api/quotes/${q.id}/send`, { to: 'jansen@klant.test', subject: 'Uw offerte', message: 'Beste familie,\n\nHierbij.', url: URL_OK });
+    assert.strictEqual(out.status, 200);
+    assert.strictEqual(out.body.share.sentTo, 'jansen@klant.test');
+    assert.strictEqual(sent.length, 1);
+    assert.strictEqual(sent[0].to, 'jansen@klant.test');
+    assert.ok(sent[0].html.includes(shared.share.url.replace(/&/g, '&amp;')) && sent[0].text.includes(shared.share.url), 'link in de e-mail');
+
+    // Akkoord via de link: naam, handtekening en voorwaarden verplicht.
+    assert.strictEqual((await pub(token, 'POST', { answer: 'akkoord', name: 'J. Jansen', terms: true })).status, 400);
+    assert.strictEqual((await pub(token, 'POST', { answer: 'akkoord', name: 'J. Jansen', signature: SIG })).status, 400);
+    assert.strictEqual((await pub(token, 'POST', { answer: 'akkoord', name: 'J', terms: true, signature: SIG })).status, 400);
+    assert.strictEqual((await pub(token, 'POST', { answer: 'akkoord', name: 'J. Jansen', terms: true, signature: 'data:image/png;base64,AAAA' })).status, 400);
+    const acc = await pub(token, 'POST', { answer: 'akkoord', name: 'J. Jansen', terms: true, signature: SIG, options: ['r3', 'r1', 'onbekend'] });
+    assert.strictEqual(acc.status, 200);
+    assert.strictEqual(acc.body.quote.status, 'akkoord');
+    assert.strictEqual(acc.body.quote.acceptance.name, 'J. Jansen');
+    assert.strictEqual(acc.body.quote.acceptance.totalIncl, 181.5, 'met de gekozen optie: (40 + 60 + 50) x 1,21');
+    assert.strictEqual((await pub(token, 'POST', { answer: 'afgewezen' })).status, 409, 'maar één keer');
+    mine = (await piet.get(`/api/quotes/${q.id}`)).body;
+    assert.strictEqual(mine.status, 'akkoord');
+    assert.strictEqual(mine.totalIncl, 181.5);
+    assert.strictEqual(mine.acceptance.via, 'link');
+    assert.ok(mine.acceptance.ip, 'IP-adres vastgelegd');
+    assert.strictEqual(mine.acceptance.termsAccepted, true);
+    assert.deepStrictEqual(mine.acceptance.options, ['r3']);
+    assert.match(mine.acceptance.contentHash, /^[0-9a-f]{64}$/);
+    assert.strictEqual(mine.data.lines.find((l) => l.id === 'r3').selected, true);
+    // Vast: niet meer te wijzigen.
+    const locked = await piet.put(`/api/quotes/${q.id}`, { data: { ...data, title: 'Anders' } });
+    assert.strictEqual(locked.status, 409);
+    assert.strictEqual((await piet.put(`/api/quotes/${q.id}`, { status: 'concept' })).status, 409);
+    // Bevestiging naar de klant en bericht naar het bedrijf.
+    for (let i = 0; i < 50 && sent.length < 3; i++) await new Promise((r) => setTimeout(r, 20));
+    assert.deepStrictEqual(sent.slice(1).map((m) => m.to).sort(), ['info@aquatech.test', 'jansen@klant.test']);
+    assert.match(sent.find((m) => m.to === 'jansen@klant.test' && m !== sent[0]).subject, /Bevestiging/);
+    const audit = (await baas.get('/api/admin/audit')).body.items.map((a) => a.action);
+    for (const a of ['offertelink_gemaakt', 'offerte_verstuurd', 'offerte_akkoord']) assert.ok(audit.includes(a), a);
+    // Het geaccordeerde document blijft via de link te zien.
+    assert.strictEqual((await pub(token)).body.quote.acceptance.answer, 'akkoord');
+
+    // Afwijzen via de link; intrekken maakt de link onbruikbaar.
+    const q2 = (await piet.post('/api/quotes', { data })).body;
+    const t2 = (await piet.post(`/api/quotes/${q2.id}/share`, { url: URL_OK })).body.share.url.split('#t=')[1];
+    const rej = await pub(t2, 'POST', { answer: 'afgewezen', name: 'J. Jansen', reason: 'Te duur' });
+    assert.strictEqual(rej.status, 200);
+    assert.strictEqual(rej.body.quote.acceptance.reason, 'Te duur');
+    const q3 = (await piet.post('/api/quotes', { data })).body;
+    const t3 = (await piet.post(`/api/quotes/${q3.id}/share`, { url: URL_OK })).body.share.url.split('#t=')[1];
+    assert.strictEqual((await piet.del(`/api/quotes/${q3.id}/share`)).status, 200);
+    assert.strictEqual((await pub(t3)).status, 404, 'ingetrokken link werkt niet meer');
+    // Verlopen: geen akkoord.
+    const q4 = (await piet.post('/api/quotes', { data: { ...data, validUntil: '2020-01-01' } })).body;
+    const t4 = (await piet.post(`/api/quotes/${q4.id}/share`, { url: URL_OK })).body.share.url.split('#t=')[1];
+    assert.strictEqual((await pub(t4, 'POST', { answer: 'akkoord', name: 'J. Jansen', terms: true, signature: SIG })).status, 409);
+    // Uitgeschakelde organisatie: de link werkt niet.
+    db.prepare('UPDATE tenants SET disabled = 1 WHERE id = ?').run(tid);
+    assert.strictEqual((await pub(t4)).status, 404);
+    assert.strictEqual((await anon.get('/api/quote-mail')).status, 401);
+  } finally {
+    server.close();
+  }
 });

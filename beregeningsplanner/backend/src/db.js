@@ -224,6 +224,24 @@ const MIGRATIONS = [
   `
   DROP INDEX IF EXISTS users_username;
   `,
+  // Digitale offerte: een openbare link per offerte (alleen de SHA-256 van het
+  // token om op te zoeken, het token zelf versleuteld om de link opnieuw te
+  // tonen), bijhouden wanneer de klant die opende, en het vastgelegde akkoord
+  // (naam, handtekening, tijd, IP, hash van de geaccordeerde inhoud) als JSON.
+  `
+  ALTER TABLE quotes ADD COLUMN share_hash TEXT;
+  ALTER TABLE quotes ADD COLUMN share_token TEXT;
+  ALTER TABLE quotes ADD COLUMN share_url TEXT;
+  ALTER TABLE quotes ADD COLUMN shared_at TEXT;
+  ALTER TABLE quotes ADD COLUMN viewed_at TEXT;
+  ALTER TABLE quotes ADD COLUMN last_viewed_at TEXT;
+  ALTER TABLE quotes ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE quotes ADD COLUMN sent_at TEXT;
+  ALTER TABLE quotes ADD COLUMN sent_to TEXT;
+  ALTER TABLE quotes ADD COLUMN responded_at TEXT;
+  ALTER TABLE quotes ADD COLUMN acceptance TEXT;
+  CREATE UNIQUE INDEX quotes_share ON quotes (share_hash) WHERE share_hash IS NOT NULL;
+  `,
 ];
 
 function openDb(file = ':memory:') {

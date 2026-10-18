@@ -13,6 +13,7 @@ const { createSettings, SettingsError, FIELDS } = require('./settings');
 const { createVault, loadOrCreateMasterKey } = require('./vault');
 const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes } = require('./quotes');
+const { createMailer } = require('./mailer');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const crypto = require('crypto');
 
@@ -62,6 +63,22 @@ function newSetupCode() {
 }
 const normCode = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+// Zonder inloggen bereikbaar: de openbare offertepagina (klant via een link
+// met token) en precies de bestanden die die pagina nodig heeft. Geen
+// ../-trucs: het pad moet na decoderen en normaliseren hetzelfde blijven.
+const PUBLIC_FILES = new Set([
+  '/openbaar/offerte.html', '/openbaar/offerte.js', '/openbaar/offerte.css',
+  '/shared/brand.css', '/shared/logo-white.png',
+  '/offertes/quote-core.js', '/offertes/quote-view.js', '/offertes/quote-view.css',
+]);
+function isPublicAsset(req) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  let p;
+  try { p = decodeURIComponent(req.path); } catch { return false; }
+  if (p !== path.posix.normalize(p) || p.includes('\\')) return false;
+  return PUBLIC_FILES.has(p) || /^\/shared\/fonts\/montserrat-latin-\d{3}-normal\.woff2$/.test(p);
+}
+
 // Een module is een map direct onder frontend/ met een eigen index.html.
 function isModule(name) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) return false;
@@ -91,7 +108,7 @@ function sendPage(res, file, version) {
 
 // accessCode, anthropicApiKey en aiDailyLimit zijn alleen startwaarden (net als
 // env); de actuele waarden komen uit de instellingen.
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings) }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -164,6 +181,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/plans', express.json({ limit: '12mb' }));
   // Een offerte met veel regels en lange teksten past niet in 16 kB.
   app.use('/api/quotes', express.json({ limit: '1mb' }));
+  // Akkoord via de openbare link: met handtekening (PNG).
+  app.use('/api/public', express.json({ limit: '512kb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -795,8 +814,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Offertes (module Offertes, zie quotes.js) ----------
   registerQuoteRoutes(app, {
-    quotes: createQuoteStore(database), identify, requireUser, requireAdmin, requireRight, requireJson, audit,
+    quotes: createQuoteStore(database, { vault }), identify, requireUser, requireAdmin, requireRight, requireJson, audit,
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
+    // Openbare offertelink: zonder inlog, dus de tenant volgt uit de offerte.
+    settingsForTenant: (id) => settingsFor(id), remoteIp, mailerFor,
+    tenantActive: (id) => {
+      const t = store.getTenant(id);
+      const live = t && t.parent_id ? store.getTenant(t.parent_id) : t;
+      return Boolean(t && !t.disabled && live && !live.disabled);
+    },
+    publicLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: remoteIp }),
     // Klantaccounts horen bij de live-tenant (ook als er in test gewerkt
     // wordt); in een testomgeving komen de testklanten daarvan erbij.
     customersOf: (req) => {
@@ -980,7 +1007,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.use((req, res, next) => {
     const authenticated = auth.isAuthenticated(req);
-    if (authenticated || (guestsAllowed() && !needsSetup())) return next();
+    if (authenticated || (guestsAllowed() && !needsSetup()) || isPublicAsset(req)) return next();
     if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(401).end();
     res.status(401);
     res.setHeader('Cache-Control', 'no-store');

@@ -1,6 +1,7 @@
 const { transaction } = require('./db');
 const { createVault } = require('./vault');
 const { sanitizeProfile } = require('./quotes');
+const { sanitizeMail } = require('./mailer');
 
 // App-instellingen, te beheren door beheerders via Beheer > Instellingen. Ze
 // staan per tenant in de database (tabel settings) en werken zonder herstart.
@@ -33,6 +34,10 @@ const FIELDS = {
   backupKeepDays: { type: 'int', env: 'BACKUP_KEEP_DAYS', default: 14, min: 0, max: 365 },
   // Bedrijfsgegevens, uurtarief en standaardteksten voor offertes (quotes.js).
   quoteProfile: { type: 'object', default: {}, sanitize: sanitizeProfile },
+  // Eigen SMTP-server voor offertes en bevestigingen (mailer.js); het
+  // wachtwoord staat apart en versleuteld.
+  mailServer: { type: 'object', default: {}, sanitize: sanitizeMail },
+  mailPassword: { type: 'secret', default: '', min: 1 },
 };
 
 class SettingsError extends Error {
