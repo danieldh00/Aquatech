@@ -24,6 +24,11 @@
       this.bgImg = null;
       this.heat = null;
       this.spaceDown = false;
+      // Touch: actieve vingers, pinch-gebaar en grotere tolerantie voor vingers
+      this.pointers = new Map();
+      this.pinch = null;
+      this.gestureLock = false;
+      this.touch = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
       this._bind();
       this.resize();
     }
@@ -85,10 +90,13 @@
       this.render();
     }
 
+    /** Tolerantie in schermpixels; ruimer bij bediening met de vinger. */
+    _tol(px) { return this.touch ? Math.round(px * 2.2) : px; }
+
     snapPoint(p, ev) {
       let q = { x: p.x, y: p.y };
       // Snap naar bestaande hoekpunten
-      const tol = 8 / this.view.scale;
+      const tol = this._tol(8) / this.view.scale;
       for (const a of this.state.areas) {
         for (const v of a.pts) if (G.dist(v, p) < tol) return { x: v.x, y: v.y, snapped: true };
       }
@@ -111,7 +119,7 @@
 
     // ---------- Hit-testing ----------
     hitTest(w) {
-      const tol = 7 / this.view.scale;
+      const tol = this._tol(7) / this.view.scale;
       for (const e of [...this.state.elements].reverse()) {
         if (G.dist(e, w) < Math.max(tol * 1.5, 0.35)) return { kind: 'element', id: e.id };
       }
@@ -150,8 +158,13 @@
       cv.addEventListener('pointerdown', (e) => this._down(e));
       cv.addEventListener('pointermove', (e) => this._move(e));
       cv.addEventListener('pointerup', (e) => this._up(e));
+      cv.addEventListener('pointercancel', (e) => this._cancel(e));
+      // Geen 'ghost click' na een tik: anders landt de klik op het paneel dat net onder de vinger verschijnt
+      cv.addEventListener('touchend', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
       cv.addEventListener('dblclick', (e) => this._dbl(e));
       window.addEventListener('resize', () => this.resize());
+      // Paneel in- of uitklappen (mobiel) verandert de canvasmaat zonder window-resize
+      if (window.ResizeObserver) new ResizeObserver(() => this.resize()).observe(cv.parentElement);
       window.addEventListener('keydown', (e) => {
         if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
         if (e.code === 'Space') { this.spaceDown = true; cv.style.cursor = 'grab'; e.preventDefault(); }
@@ -159,8 +172,8 @@
           if (this.draft) { this.draft = null; this.render(); } else this.setTool('select');
         }
         if (e.key === 'Enter' && this.draft) this._finishPolygon();
-        if (e.key === 'Backspace' && this.draft && this.draft.length) { this.draft.pop(); this.render(); e.preventDefault(); }
-        if ((e.key === 'Delete' || e.key === 'Backspace') && !this.draft && this.selection) { this.app.deleteSelection(); e.preventDefault(); }
+        if (e.key === 'Backspace' && this.draft && this.draft.length) { this.undoPoint(); e.preventDefault(); }
+        else if ((e.key === 'Delete' || e.key === 'Backspace') && !this.draft && this.selection) { this.app.deleteSelection(); e.preventDefault(); }
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? this.app.redo() : this.app.undo(); }
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); this.app.redo(); }
       });
@@ -179,16 +192,30 @@
     _down(e) {
       const { sx, sy, w } = this._evPos(e);
       this.cv.setPointerCapture(e.pointerId);
+      const touch = e.pointerType === 'touch';
+      if (touch !== this.touch) { this.touch = touch; this.app.onToolChanged(this.tool, this.toolOpts); }
+      this.pointers.set(e.pointerId, { x: sx, y: sy });
+      if (this.pointers.size >= 2) { this._startPinch(); return; }
+      if (this.gestureLock) return;
+      this.mouse = { x: sx, y: sy, wx: w.x, wy: w.y };
       if (e.button === 1 || e.button === 2 || this.tool === 'pan' || this.spaceDown) {
         this.drag = { mode: 'pan', sx, sy, vx: this.view.x, vy: this.view.y };
         this.cv.style.cursor = 'grabbing';
         return;
       }
       const t = this.tool;
+      // Vinger: tikken plaatst een punt of element (bij loslaten), slepen verschuift het plan.
+      // Zo zet een tweevinger-pinch nooit per ongeluk een punt neer.
+      if (touch && (t === 'polygon' || t === 'element' || t === 'wand' || t === 'sprinkler')) {
+        this.drag = { mode: 'tap', sx, sy, vx: this.view.x, vy: this.view.y, w: t === 'polygon' ? this.snapPoint(w, e) : w };
+        this.mouse = { x: sx, y: sy, wx: this.drag.w.x, wy: this.drag.w.y };
+        this.render();
+        return;
+      }
       if (t === 'polygon') {
         const p = this.snapPoint(w, e);
         if (!this.draft) this.draft = [p];
-        else if (this.draft.length >= 3 && G.dist(p, this.draft[0]) < 10 / this.view.scale) this._finishPolygon();
+        else if (this.draft.length >= 3 && G.dist(p, this.draft[0]) < this._tol(10) / this.view.scale) this._finishPolygon();
         else this.draft.push(p);
         this.render();
         return;
@@ -213,7 +240,7 @@
       // select
       const hit = this.hitTest(w);
       if (hit && hit.kind === 'vertex') {
-        this.drag = { mode: 'vertex', id: hit.id, index: hit.index, moved: false };
+        this.drag = { mode: 'vertex', id: hit.id, index: hit.index, moved: false, sx, sy };
         return;
       }
       if (hit && hit.kind === 'midpoint') {
@@ -230,12 +257,18 @@
         const obj = this.app.findObject(hit);
         const orig = hit.kind === 'area' ? obj.pts.map((p) => ({ ...p })) : { x: obj.x, y: obj.y };
         this.drag = { mode: 'move', hit, start: w, orig, moved: false, withHeads: hit.kind === 'area' && e.altKey };
+      } else if (touch) {
+        // vinger op een lege plek: slepen verschuift het plan
+        this.drag = { mode: 'pan', sx, sy, vx: this.view.x, vy: this.view.y };
       }
       this.render();
     }
 
     _move(e) {
       const { sx, sy, w } = this._evPos(e);
+      if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, { x: sx, y: sy });
+      if (this.pinch) { this._updatePinch(); return; }
+      if (this.gestureLock) return;
       this.mouse = { x: sx, y: sy, wx: w.x, wy: w.y };
       this.app.onMouseMove(w);
       const d = this.drag;
@@ -243,11 +276,21 @@
         if (d.mode === 'pan') {
           this.view.x = d.vx - (sx - d.sx) / this.view.scale;
           this.view.y = d.vy - (sy - d.sy) / this.view.scale;
+        } else if (d.mode === 'tap') {
+          if (!d.panning && Math.hypot(sx - d.sx, sy - d.sy) > 10) d.panning = true;
+          if (d.panning) {
+            this.view.x = d.vx - (sx - d.sx) / this.view.scale;
+            this.view.y = d.vy - (sy - d.sy) / this.view.scale;
+          }
+          // voorbeeldlijn blijft naar het getikte punt wijzen
+          const ps = this.toScreen(d.w);
+          this.mouse = { x: ps.x, y: ps.y, wx: d.w.x, wy: d.w.y };
         } else if (d.mode === 'rect') {
           d.end = this.snapPoint(w, e);
         } else if (d.mode === 'calibrate' || d.mode === 'measure') {
           d.end = w;
         } else if (d.mode === 'vertex') {
+          if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < (this.touch ? 6 : 1)) return;
           if (!d.moved && !d.noCheckpoint) this.app.checkpoint();
           d.moved = true;
           const a = this.state.areas.find((x) => x.id === d.id);
@@ -255,7 +298,7 @@
           this.app.invalidate();
         } else if (d.mode === 'move') {
           const dx = w.x - d.start.x, dy = w.y - d.start.y;
-          if (!d.moved && Math.hypot(dx, dy) * this.view.scale < 3) return;
+          if (!d.moved && Math.hypot(dx, dy) * this.view.scale < this._tol(3)) return;
           if (!d.moved) this.app.checkpoint();
           d.moved = true;
           const obj = this.app.findObject(d.hit);
@@ -268,7 +311,7 @@
             obj.y = d.orig.y + dy;
             if (this.snap && !e.altKey && d.hit.kind === 'sprinkler') {
               // snap sproeier op dichtstbijzijnde vlakrand als dichtbij
-              const tol = 8 / this.view.scale;
+              const tol = this._tol(8) / this.view.scale;
               for (const a of this.state.areas) {
                 const c = G.closestOnPolygon(obj, a.pts);
                 if (c.d < tol) { obj.x = c.pt.x; obj.y = c.pt.y; break; }
@@ -280,6 +323,7 @@
         this.render();
         return;
       }
+      if (e.pointerType === 'touch') return;
       if (this.draft || this.tool !== 'select') { this.render(); return; }
       const hov = this.hitTest(w);
       const changed = JSON.stringify(hov) !== JSON.stringify(this.hover);
@@ -289,10 +333,22 @@
     }
 
     _up(e) {
+      this.pointers.delete(e.pointerId);
+      if (this.pinch || this.gestureLock) {
+        if (this.pointers.size < 2) this.pinch = null;
+        if (!this.pointers.size) this.gestureLock = false;
+        this.render();
+        return;
+      }
       const d = this.drag;
       this.drag = null;
       if (!d) return;
       if (d.mode === 'pan') { this.setTool(this.tool, this.toolOpts); return; }
+      if (d.mode === 'tap') {
+        if (!d.panning) this._tap(d.w);
+        this.render();
+        return;
+      }
       if (d.mode === 'rect') {
         const a = d.start, b = d.end;
         if (Math.abs(a.x - b.x) > 0.2 && Math.abs(a.y - b.y) > 0.2) {
@@ -319,7 +375,76 @@
       }
     }
 
+    _cancel(e) {
+      this.pointers.delete(e.pointerId);
+      if (this.pointers.size < 2) this.pinch = null;
+      if (!this.pointers.size) this.gestureLock = false;
+      this._abortDrag();
+      this.render();
+    }
+
+    /** Breekt een lopende sleepactie af (tweede vinger of geannuleerd gebaar). */
+    _abortDrag() {
+      const d = this.drag;
+      this.drag = null;
+      if (d && (d.mode === 'move' || d.mode === 'vertex') && d.moved) this.app.commit();
+    }
+
+    /** Tik met de vinger in een teken- of plaatsgereedschap. */
+    _tap(w) {
+      const t = this.tool;
+      if (t === 'polygon') {
+        if (!this.draft) this.draft = [w];
+        else if (this.draft.length >= 3 && G.dist(w, this.draft[0]) < this._tol(10) / this.view.scale) this._finishPolygon();
+        else this.draft.push(w);
+      } else if (t === 'element') this.app.placeElement(this.toolOpts.kind, w);
+      else if (t === 'wand') this.app.wandAt(w, this.toolOpts.areaType);
+      else if (t === 'sprinkler') this.app.placeSprinkler(this.toolOpts.type, w);
+    }
+
+    // ---------- Pinch (twee vingers: zoomen en verschuiven) ----------
+    _pinchInfo() {
+      const [a, b] = [...this.pointers.values()];
+      return { dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+    }
+
+    _startPinch() {
+      this._abortDrag();
+      this.gestureLock = true;
+      const p = this._pinchInfo();
+      this.pinch = { dist: p.dist, anchor: this.toWorld(p.mid.x, p.mid.y), scale: this.view.scale };
+      this.render();
+    }
+
+    _updatePinch() {
+      if (this.pointers.size < 2) return;
+      const p = this._pinchInfo();
+      const pc = this.pinch;
+      // het wereldpunt onder het beginmidden blijft onder het huidige midden van de vingers
+      this.view.scale = Math.max(2, Math.min(400, pc.scale * (p.dist / pc.dist)));
+      this.view.x = pc.anchor.x - p.mid.x / this.view.scale;
+      this.view.y = pc.anchor.y - p.mid.y / this.view.scale;
+      this.render();
+    }
+
+    /** Punt terug tijdens tekenen (knop of Backspace). */
+    undoPoint() {
+      if (!this.draft) return;
+      this.draft.pop();
+      if (!this.draft.length) this.draft = null;
+      this.render();
+    }
+
+    /** Huidige vorm sluiten (knop of Enter). */
+    finishPolygon() { if (this.draft) this._finishPolygon(); }
+
+    /** Tekenen afbreken; zonder lopende vorm terug naar selecteren. */
+    cancelDraw() {
+      if (this.draft) { this.draft = null; this.render(); } else this.setTool('select');
+    }
+
     _dbl() {
+      if (this.touch) return; // dubbeltik op touch: niet als 'sluiten' opvatten
       if (this.tool === 'polygon' && this.draft) {
         // dubbelklik voegt een extra punt toe bij mousedown; verwijder duplicaat
         if (this.draft.length >= 2) {
@@ -340,6 +465,7 @@
 
     // ---------- Rendering ----------
     render() {
+      if (this.app.updateDrawBar) this.app.updateDrawBar();
       if (this._raf) return;
       this._raf = requestAnimationFrame(() => { this._raf = null; this.draw(this.ctx, this.w, this.h, this.dpr); });
     }
@@ -431,21 +557,38 @@
         if (a) this._areaHandles(ctx, a);
       }
 
-      // Concept-polygoon
+      // Concept-polygoon. Op touch alleen een voorbeeldlijn zolang de vinger een nieuw punt vasthoudt.
+      const dr = this.drag;
+      const tapPt = dr && dr.mode === 'tap' && !dr.panning && this.tool === 'polygon' ? dr.w : null;
       if (this.draft && this.draft.length) {
-        const m = this.snapPoint({ x: this.mouse.wx, y: this.mouse.wy });
+        const live = !this.touch || tapPt;
+        const m = tapPt || this.snapPoint({ x: this.mouse.wx, y: this.mouse.wy });
         ctx.strokeStyle = '#ff6f00';
         ctx.lineWidth = 2;
         ctx.setLineDash([6, 4]);
         ctx.beginPath();
         this.draft.forEach((p, i) => { const s = T(p); i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y); });
         const ms = T(m);
-        ctx.lineTo(ms.x, ms.y);
+        if (live) ctx.lineTo(ms.x, ms.y);
         ctx.stroke();
         ctx.setLineDash([]);
         this.draft.forEach((p) => { const s = T(p); ctx.fillStyle = '#ff6f00'; ctx.fillRect(s.x - 3, s.y - 3, 6, 6); });
         const last = this.draft[this.draft.length - 1];
-        this._label(ctx, `${G.nl(G.dist(last, m), 2)} m`, ms.x + 12, ms.y - 12, '#ff6f00', '#fff', 11);
+        const off = this.touch ? 34 : 12; // label niet onder de vinger
+        if (live) this._label(ctx, `${G.nl(G.dist(last, m), 2)} m`, ms.x + off, ms.y - off, '#ff6f00', '#fff', this.touch ? 13 : 11);
+        if (this.touch && this.draft.length >= 3) {
+          // vangzone van het eerste punt: hier tikken sluit de vorm
+          const f = T(this.draft[0]);
+          ctx.strokeStyle = '#ff6f00'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(f.x, f.y, this._tol(10), 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255,111,0,0.15)'; ctx.fill(); ctx.stroke();
+        }
+      }
+      if (tapPt) {
+        const ms = T(tapPt);
+        ctx.strokeStyle = '#ff6f00'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(ms.x, ms.y, 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ms.x - 14, ms.y); ctx.lineTo(ms.x + 14, ms.y); ctx.moveTo(ms.x, ms.y - 14); ctx.lineTo(ms.x, ms.y + 14); ctx.stroke();
       }
 
       const d = this.drag;
@@ -611,13 +754,14 @@
       ctx.fillStyle = '#fff';
       ctx.strokeStyle = '#ff6f00';
       ctx.lineWidth = 1.5;
+      const hs = this.touch ? 7 : 4;
       for (let i = 0; i < a.pts.length; i++) {
         const p = this.toScreen(a.pts[i]);
-        ctx.fillRect(p.x - 4, p.y - 4, 8, 8);
-        ctx.strokeRect(p.x - 4, p.y - 4, 8, 8);
+        ctx.fillRect(p.x - hs, p.y - hs, hs * 2, hs * 2);
+        ctx.strokeRect(p.x - hs, p.y - hs, hs * 2, hs * 2);
         const b = a.pts[(i + 1) % a.pts.length];
         const mid = this.toScreen({ x: (a.pts[i].x + b.x) / 2, y: (a.pts[i].y + b.y) / 2 });
-        ctx.beginPath(); ctx.arc(mid.x, mid.y, 3, 0, Math.PI * 2); ctx.fillStyle = '#ffcc80'; ctx.fill(); ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(mid.x, mid.y, this.touch ? 6 : 3, 0, Math.PI * 2); ctx.fillStyle = '#ffcc80'; ctx.fill(); ctx.fillStyle = '#fff';
         if (this.layers.labels) this._label(ctx, `${G.nl(G.dist(a.pts[i], b), 2)} m`, mid.x, mid.y - 12, '#e65100', '#fff', 10);
       }
     }

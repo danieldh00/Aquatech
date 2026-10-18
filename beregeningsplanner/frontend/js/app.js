@@ -549,6 +549,45 @@
       }
       $('#snap').checked = this.editor.snap;
       $('#snap').onchange = (e) => { this.editor.snap = e.target.checked; };
+      // Tekenbalk (touch heeft geen Enter/Backspace/Esc)
+      document.querySelectorAll('#drawbar [data-db]').forEach((b) => {
+        b.onclick = () => {
+          if (b.dataset.db === 'undo') this.editor.undoPoint();
+          else if (b.dataset.db === 'finish') this.editor.finishPolygon();
+          else this.editor.cancelDraw();
+        };
+      });
+      $('#btn-sheet').onclick = () => this._setSheet(document.body.classList.contains('sheet-collapsed'));
+      $('#props-close').onclick = () => { this.editor.selection = null; this.onSelectionChanged(); this.renderStepPanel(); this.editor.render(); };
+    },
+
+    /** Mobiel: stappenpaneel in- of uitklappen voor meer tekenruimte. */
+    _setSheet(open) {
+      document.body.classList.toggle('sheet-collapsed', !open);
+      const b = $('#btn-sheet');
+      b.textContent = open ? '▾ Paneel' : '▴ Paneel';
+      b.setAttribute('aria-expanded', String(open));
+    },
+    _isMobile() { return !!(window.matchMedia && window.matchMedia('(max-width: 760px)').matches); },
+
+    /** Toont de tekenbalk zolang er een teken- of plaatsgereedschap actief is. */
+    updateDrawBar() {
+      const bar = $('#drawbar');
+      if (!bar || !this.editor) return;
+      const ed = this.editor;
+      const t = ed.tool;
+      const show = t !== 'select' && t !== 'pan' && (ed.touch || t === 'polygon');
+      bar.hidden = !show;
+      if (!show) return;
+      const n = ed.draft ? ed.draft.length : 0;
+      bar.querySelector('[data-db="undo"]').hidden = t !== 'polygon';
+      bar.querySelector('[data-db="undo"]').disabled = !n;
+      bar.querySelector('[data-db="finish"]').hidden = t !== 'polygon';
+      bar.querySelector('[data-db="finish"]').disabled = n < 3;
+      bar.querySelector('[data-db="cancel"] span').textContent = n ? 'Annuleren' : 'Stoppen';
+      const o = ed.toolOpts || {};
+      const name = o.areaType ? C.areaTypes[o.areaType].label : o.kind ? C.elementTypes[o.kind].label : o.type ? C.sprinklerTypes[o.type].label : '';
+      $('#drawbar-label').textContent = t === 'polygon' ? `${name}: ${n} punt${n === 1 ? '' : 'en'}` : name;
     },
 
     renderSteps() {
@@ -851,6 +890,7 @@
       const el = $('#props');
       const sel = this.editor.selection;
       const obj = this.findObject(sel);
+      document.body.classList.toggle('has-sel', !!obj);
       if (!obj) {
         el.innerHTML = '<p class="hint">Selecteer een vlak, sproeier of element om de eigenschappen te bewerken.</p>';
         return;
@@ -989,6 +1029,15 @@
     },
 
     onToolChanged(tool, opts) {
+      const touch = this.editor && this.editor.touch;
+      const touchHints = {
+        select: 'Tik om te selecteren · sleep om te verplaatsen · één vinger op een lege plek = verschuiven · knijpen = zoomen',
+        pan: 'Sleep om het plan te verschuiven · knijpen = zoomen',
+        polygon: `Tekenen: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – tik de hoekpunten aan; tik op het eerste punt of op Vorm sluiten · slepen = verschuiven`,
+        element: `Plaats: ${opts.kind ? C.elementTypes[opts.kind].label : ''} – tik op het plan`,
+        sprinkler: `Plaats: ${opts.type ? C.sprinklerTypes[opts.type].label : ''} – tik in of op de rand van het gazon`,
+        wand: `Toverstaf: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – tik midden in het vlak op het plan`,
+      };
       const hints = {
         select: 'Klik om te selecteren · sleep om te verplaatsen · scrollen = zoomen · spatiebalk of rechtermuisknop + slepen = verschuiven',
         pan: 'Sleep om het plan te verschuiven',
@@ -1000,7 +1049,10 @@
         wand: `Toverstaf: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – klik midden in het vlak op het plan · Esc = stoppen`,
         measure: 'Meten: sleep een lijn',
       };
-      $('#hint').textContent = hints[tool] || '';
+      $('#hint').textContent = (touch && touchHints[tool]) || hints[tool] || '';
+      // mobiel: bij tekenen het paneel inklappen voor meer ruimte, bij selecteren weer openen
+      if (this._isMobile() && tool !== 'pan' && tool !== this._lastTool) this._setSheet(tool === 'select');
+      this._lastTool = tool;
       document.querySelectorAll('.toolbar [data-t]').forEach((b) => b.classList.toggle('active', b.dataset.t === tool));
     },
     onMouseMove(w) {
