@@ -129,6 +129,30 @@ const MIGRATIONS = [
   CREATE INDEX tenants_parent ON tenants (parent_id);
   CREATE INDEX users_username ON users (username);
   `,
+  // Offertes (module Offertes). Het offertenummer is uniek per tenant; een
+  // offerte verwijst naar het plan waaruit ze is opgebouwd, zonder foreign
+  // key (de offerte blijft bestaan als het plan wordt gewist).
+  `
+  CREATE TABLE quotes (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    owner_id   TEXT NOT NULL REFERENCES users(id),
+    plan_id    TEXT,
+    number     TEXT NOT NULL,
+    status     TEXT NOT NULL DEFAULT 'concept' CHECK (status IN ('concept', 'verzonden', 'akkoord', 'afgewezen')),
+    title      TEXT NOT NULL DEFAULT '',
+    customer   TEXT NOT NULL DEFAULT '',
+    total_excl REAL NOT NULL DEFAULT 0,
+    total_incl REAL NOT NULL DEFAULT 0,
+    data       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    UNIQUE (tenant_id, number)
+  );
+  CREATE INDEX quotes_owner ON quotes (tenant_id, owner_id, updated_at);
+  CREATE INDEX quotes_plan ON quotes (tenant_id, plan_id);
+  `,
 ];
 
 function openDb(file = ':memory:') {

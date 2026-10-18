@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.21.0
+
+- **Offertes** (nieuwe module): een offerte opbouwen uit een
+  beregeningsplan. De stuklijst wordt als materiaalregels overgenomen (met
+  instelbare opslag) en de arbeid wordt uit het plan geschat (sproeiers,
+  sleuven en leidingen, ventielen, besturing, druppelirrigatie,
+  wateraansluiting, inregelen) tegen het uurtarief. Prijzen, aantallen,
+  btw-tarief per regel, korting, klantgegevens en teksten zijn aan te passen
+  en worden automatisch bewaard. Export als PDF (afdrukversie in huisstijl)
+  en als Excel met formules; het overzicht van alle offertes ook naar Excel.
+- Vast offertenummer per jaar en tenant, status (concept, verzonden,
+  akkoord, afgewezen) en herkenbaar verlopen offertes.
+- Bedrijfsgegevens, uurtarief, opslag, voorrijkosten en standaardteksten voor
+  offertes per tenant (beheerders, in de module Offertes).
+- Knop **Offerte maken** in de planner (stap Stuklijst & export) en in het
+  plannenoverzicht.
+
 ## 0.20.0
 
 - **Multitenant.** De app kan meerdere klanten (tenants) bedienen, elk met

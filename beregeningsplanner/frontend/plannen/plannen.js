@@ -164,7 +164,8 @@
         <dt>Laatst gewijzigd</dt><dd>${esc(when(p.updatedAt))}</dd>
         ${p.deletedAt ? `<dt>Verwijderd</dt><dd>${esc(when(p.deletedAt))}</dd>` : ''}
       </dl>
-      <div class="actions">${p.deletedAt ? '' : `<button class="btn primary" id="d-open">${own ? 'Openen in de planner' : 'Kopie openen in de planner'}</button>`}
+      <div class="actions">${p.deletedAt ? '' : `<button class="btn primary" id="d-open">${own ? 'Openen in de planner' : 'Kopie openen in de planner'}</button>
+        <a class="btn" href="../offertes/?plan=${encodeURIComponent(p.id)}">Offerte maken</a>`}
         ${state.admin ? '<button class="btn" id="d-purge">Definitief wissen</button>' : ''}</div>
       ${state.admin ? '<h3>Historie</h3><div id="d-history" class="muted small">Laden…</div>' : ''}`;
     const btn = $('#d-open');

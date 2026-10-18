@@ -146,6 +146,12 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   `historyCount`); samenvatting per plan via `summarize()` op
   `json_remove(data,'$.background')`; tijdlijn via
   `/api/admin/plans/:id/history`. Hergebruikt `beheer/beheer.css`.
+- **Offertes** (`frontend/offertes/`, 0.21.0): rekenkern `quote-core.js`
+  (UMD, ook door de server geladen: `sanitize`, `totals`, `fromPlan` met
+  BOM + arbeidsnormen `LABOR`), opslag/routes in `backend/src/quotes.js`
+  (tabel `quotes`, migratie 5, nummer `<prefix><jaar>-0001` per tenant),
+  bedrijfsprofiel = instelling `quoteProfile` (type `object`). PDF via
+  afdrukversie (`#print`, print-CSS), geen PDF-bibliotheek.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - Health: `GET /api/health` (versie uit `package.json`).

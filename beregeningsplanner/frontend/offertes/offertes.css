@@ -1,0 +1,115 @@
+/* Offertes: overzicht, bewerken en de afdrukversie (PDF). Basis uit beheer.css en plannen.css. */
+textarea { font: inherit; font-family: var(--at-font); padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; resize: vertical; width: 100%; box-sizing: border-box; }
+.card-form label input, .card-form label select, .card-form label textarea { color: var(--text); }
+.card-form > label { margin-bottom: 8px; }
+.card-form label input:not([type=checkbox]) { width: 100%; box-sizing: border-box; }
+.card-form.plain { border: 0; padding: 0; margin: 0; }
+.card-form h3 + label { margin-top: 0; }
+.row2, .row3 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+.row3 { grid-template-columns: 1fr 1fr 1fr; }
+label.inline { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+input.narrow { width: 90px; }
+input.full { width: 100%; box-sizing: border-box; margin: 6px 0 10px; }
+
+.pill.concept { background: #eceff1; color: #455a64; }
+.pill.verzonden { background: var(--primary-soft); color: var(--primary-dark); }
+.pill.akkoord { background: #e8f5e9; color: #2e7d32; }
+.pill.afgewezen { background: #ffebee; color: #c62828; }
+.pill.verlopen { background: #fff3e0; color: #ef6c00; }
+
+.edit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; position: relative; }
+.edit-bar h1 { margin: 0 4px; font-size: 22px; color: var(--primary-dark); }
+.edit-bar .spacer { flex: 1; }
+.menu { position: absolute; right: 0; top: 44px; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); z-index: 5; display: flex; flex-direction: column; min-width: 240px; padding: 4px; }
+.menu[hidden] { display: none; }
+.menu button { font: inherit; font-family: var(--at-font); text-align: left; background: none; border: 0; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+.menu button:hover { background: #f1f5f8; }
+.menu button.danger { color: #c62828; }
+.notice.warn { background: #fff8e1; border-color: #ffe082; margin-bottom: 14px; padding: 10px 14px; font-size: 14px; }
+.notice.warn ul { margin: 4px 0 0; padding-left: 18px; }
+
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.cols .card-form { margin-bottom: 14px; }
+.lines-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.lines-head h3 { margin: 0; }
+
+table.lines { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 4px; }
+table.lines th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+table.lines th.num, table.lines td.num { text-align: right; }
+table.lines td { padding: 3px 4px; border-bottom: 1px solid #f0f2f4; vertical-align: middle; }
+table.lines input, table.lines select { width: 100%; box-sizing: border-box; padding: 5px 6px; }
+table.lines input.num { text-align: right; }
+table.lines .c-desc { width: auto; min-width: 220px; }
+table.lines .c-qty { width: 80px; }
+table.lines .c-unit { width: 64px; }
+table.lines .c-price { width: 100px; }
+table.lines .c-vat { width: 74px; }
+table.lines .c-total { width: 100px; white-space: nowrap; }
+table.lines .c-del { width: 32px; }
+table.lines tr.section td { padding-top: 14px; font-weight: 700; color: var(--primary-dark); border-bottom: 2px solid var(--line); }
+table.lines tr.section td .sum { float: right; font-weight: 600; color: var(--text); }
+table.lines tr.add td { border-bottom: 0; padding-bottom: 8px; }
+table.lines .code { display: block; font-size: 11px; color: var(--muted); padding: 1px 6px 0; }
+.btn.icon { padding: 3px 7px; color: var(--muted); }
+.btn.icon:hover { color: #c62828; }
+
+.totals-wrap { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+table.totals { border-collapse: collapse; font-size: 14px; min-width: 300px; margin-left: auto; }
+table.totals td { padding: 4px 8px; }
+table.totals td.num { text-align: right; white-space: nowrap; }
+table.totals tr.grand td { font-weight: 700; font-size: 16px; border-top: 2px solid var(--primary-dark); color: var(--primary-dark); }
+
+.pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 55vh; overflow-y: auto; }
+.pick-list button { font: inherit; font-family: var(--at-font); text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+.pick-list button:hover { border-color: var(--primary); background: var(--primary-soft); }
+.pick-list .sub { display: block; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 760px) {
+  .cols, .row3 { grid-template-columns: 1fr; }
+  table.lines thead { display: none; }
+  table.lines tr.line { display: grid; grid-template-columns: 1fr 1fr 1fr 32px; gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  table.lines tr.line td { border: 0; padding: 0; }
+  table.lines tr.line td.c-desc { grid-column: 1 / -1; }
+  table.lines tr.line td.c-total { grid-column: 1 / 4; text-align: left; }
+}
+
+/* ---------- Afdrukversie (A4) ---------- */
+.print-doc { display: none; }
+
+@media print {
+  @page { size: A4; margin: 12mm 14mm 14mm; }
+  body { background: #fff !important; }
+  .screen, .topbar { display: none !important; }
+  .print-doc { display: block; font-family: var(--at-font); font-size: 10pt; color: #1d2733; line-height: 1.4; }
+  .print-doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+.print-doc .p-head { display: flex; justify-content: space-between; align-items: center; background: var(--at-navy); color: #fff; padding: 14px 18px; border-radius: 6px; }
+.print-doc .p-head img { height: 42px; }
+.print-doc .p-head .p-company { text-align: right; font-size: 8.5pt; line-height: 1.45; white-space: pre-line; }
+.print-doc .p-head .p-company b { font-size: 10pt; }
+.print-doc .p-meta { display: flex; justify-content: space-between; gap: 24px; margin: 22px 0 18px; }
+.print-doc .p-to { white-space: pre-line; }
+.print-doc .p-to .lbl, .print-doc .p-info .lbl { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7785; }
+.print-doc .p-info table { border-collapse: collapse; }
+.print-doc .p-info td { padding: 1px 0 1px 14px; }
+.print-doc .p-info td:first-child { color: #6b7785; padding-left: 0; }
+.print-doc h1 { font-size: 18pt; color: var(--at-navy); margin: 0 0 2px; }
+.print-doc .p-sub { color: var(--at-green); font-weight: 600; margin-bottom: 10px; }
+.print-doc .p-text { white-space: pre-line; margin: 0 0 12px; }
+.print-doc .p-design { background: var(--at-green-soft); border-left: 3px solid var(--at-green); padding: 6px 10px; margin: 0 0 14px; font-size: 9pt; }
+.print-doc table.p-lines { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+.print-doc table.p-lines th { background: var(--at-navy); color: #fff; font-weight: 600; font-size: 8.5pt; text-align: left; padding: 5px 6px; }
+.print-doc table.p-lines td { padding: 4px 6px; border-bottom: 1px solid #e3e7ec; vertical-align: top; }
+.print-doc table.p-lines .num { text-align: right; white-space: nowrap; }
+.print-doc table.p-lines tr.p-section td { font-weight: 700; color: var(--at-navy); background: #f2f5f9; border-bottom: 1px solid #d5dbe3; }
+.print-doc table.p-lines tr.p-sum td { font-weight: 600; border-bottom: 0; padding-bottom: 10px; }
+.print-doc table.p-lines tr { break-inside: avoid; }
+.print-doc table.p-totals { margin: 8px 0 18px auto; border-collapse: collapse; min-width: 260px; break-inside: avoid; }
+.print-doc table.p-totals td { padding: 3px 6px; }
+.print-doc table.p-totals td.num { text-align: right; white-space: nowrap; }
+.print-doc table.p-totals tr.grand td { font-weight: 700; font-size: 12pt; color: #fff; background: var(--at-green); }
+.print-doc h2 { font-size: 10pt; text-transform: uppercase; letter-spacing: 0.05em; color: var(--at-navy); margin: 16px 0 4px; }
+.print-doc .p-end { break-inside: avoid; }
+.print-doc .p-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 18px; break-inside: avoid; }
+.print-doc .p-sign div { border-top: 1px solid #9aa5b1; padding-top: 4px; min-height: 60px; font-size: 9pt; color: #6b7785; }
+.print-doc .p-foot { margin-top: 22px; padding-top: 6px; border-top: 2px solid var(--at-teal); font-size: 8pt; color: #6b7785; text-align: center; }

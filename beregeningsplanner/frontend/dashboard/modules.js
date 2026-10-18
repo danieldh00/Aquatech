@@ -29,6 +29,14 @@
       status: 'actief',
     },
     {
+      id: 'offertes',
+      title: 'Offertes',
+      description: 'Offertes opbouwen uit een beregeningsplan: stuklijst en arbeid worden overgenomen, met bewerkbare prijzen, korting en btw, klantgegevens en export als PDF of Excel.',
+      href: 'offertes/',
+      icon: 'quote',
+      status: 'actief',
+    },
+    {
       id: 'beheer',
       title: 'Beheer',
       description: 'Historie van alle aanvragen, de plannen van alle gebruikers, gebruikersbeheer en de instellingen van de app (API-sleutel, toegangscode, modules).',

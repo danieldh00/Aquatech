@@ -365,8 +365,10 @@ function createStore(db) {
     q('DELETE FROM history WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM audit WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM sessions WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM quotes WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM plans WHERE tenant_id = ?').run(tenantId);
-    q('DELETE FROM users WHERE tenant_id = ? AND NOT EXISTS (SELECT 1 FROM plans p WHERE p.owner_id = users.id)').run(tenantId);
+    q(`DELETE FROM users WHERE tenant_id = ? AND NOT EXISTS (SELECT 1 FROM plans p WHERE p.owner_id = users.id)
+      AND NOT EXISTS (SELECT 1 FROM quotes o WHERE o.owner_id = users.id)`).run(tenantId);
   }
 
   function resetEnvironment(id) {
