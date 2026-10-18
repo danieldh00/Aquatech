@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.12.0
+
+- **Nieuw: instellingenscherm** onder **Beheer → Instellingen** (alleen
+  beheerders), los van de Home Assistant-configuratie:
+  - API-sleutel van Anthropic invullen, testen (zonder kosten) en
+    verwijderen; de sleutel gaat nooit terug naar de browser, je ziet alleen
+    de laatste 4 tekens;
+  - AI-herkenning aan/uit, maximum per dag en per uur per IP-adres;
+  - toegangscode wijzigen of verwijderen (andere toestellen worden
+    uitgelogd, jij niet);
+  - modules op het dashboard aan- of uitzetten.
+  Alles staat in de database en werkt meteen, zonder herstart. De HA-opties
+  `access_code`, `anthropic_api_key` en `ai_daily_limit` blijven werken als
+  startwaarden zolang er in het scherm niets is opgeslagen.
+- **Klaar voor een losse Docker-server** zonder Home Assistant:
+  `docker compose up -d --build` (zie *Losse server (Docker)* in de
+  documentatie). Bij de eerste start zonder toegangscode en zonder
+  beheerdersaccount maakt de app zelf een toegangscode aan en zet die in het
+  log. De container stopt netjes bij `docker stop` en heeft een healthcheck.
+
 ## 0.10.0
 
 - **Nieuw: historie van aanvragen en gebruikers met rollen.** De app heeft

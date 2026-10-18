@@ -57,8 +57,15 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   geldige sessie serveert de server op elk pad `backend/src/login.html`.
 - Cloudflared-app (`9074a9fa_cloudflared`) → `additional_hosts`:
   `aquatech.den-hollander.com → http://c1355dc8-beregeningsplanner:3300`.
-- **Nooit secrets in de repo of in chat**: `access_code` en `anthropic_api_key`
-  alleen in de app-opties.
+- **Nooit secrets in de repo of in chat**: toegangscode en API-sleutel alleen
+  in **Beheer → Instellingen** (tabel `settings` in `/data/aquatech.db`,
+  `backend/src/settings.js`). Volgorde: database → HA-opties → env → standaard;
+  HA-opties/env zijn alleen startwaarden. Geheimen gaan nooit volledig naar de
+  frontend (`view()` geeft `set` + laatste 4 tekens van de sleutel).
+- **Los van HA (Docker)**: `docker-compose.yml` + `.env.example` in de root.
+  HA wordt herkend aan `SUPERVISOR_TOKEN` of `/data/options.json`; zonder HA,
+  zonder code en zonder beheerdersaccount maakt de server bij de start een
+  toegangscode aan en logt die.
 - **Plan herkennen** (`backend/src/planAnalyzer.js`): één Claude API-aanroep
   (vision, gestructureerde JSON-uitvoer, fallback "default") die schaal
   (referentiemaat in pixels + lengte in m), vlakken en elementen teruggeeft. De

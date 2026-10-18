@@ -13,9 +13,14 @@
   };
   const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.module}</svg>`;
 
+  // Modules die een beheerder bij Beheer > Instellingen heeft uitgezet.
+  let disabledModules = {};
+
   function renderModules(me) {
     const role = me && me.user ? me.user.role : null;
-    const html = (window.AquatechModules || []).filter((m) => !m.role || m.role === role).map((m) => {
+    const html = (window.AquatechModules || [])
+      .filter((m) => (!m.role || m.role === role) && (m.id === 'beheer' || disabledModules[m.id] !== false))
+      .map((m) => {
       const active = m.status === 'actief' && m.href;
       const body = `
         <span class="tile-icon">${icon(m.icon)}</span>
@@ -81,10 +86,18 @@
       .catch(() => {});
   }
 
+  function loadConfig() {
+    if (location.protocol === 'file:') return Promise.resolve();
+    return fetch('api/config', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => { if (c && c.modules) disabledModules = c.modules; })
+      .catch(() => {});
+  }
+
   renderModules(null);
   renderRecent();
   showVersion();
-  window.AquatechAccount.load('').then((me) => {
+  Promise.all([window.AquatechAccount.load(''), loadConfig()]).then(([me]) => {
     renderModules(me);
     renderMyPlans(me);
   });

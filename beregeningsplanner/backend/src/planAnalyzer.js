@@ -141,8 +141,21 @@ class AnalyzeError extends Error {
 function createPlanAnalyzer({ apiKey, client, log = (msg) => console.warn(msg) }) {
   const anthropic = client || (apiKey ? new Anthropic({ apiKey }) : null);
 
+  // Vertaalt een fout van de AI-dienst naar een begrijpelijke melding.
+  function toAnalyzeError(err) {
+    if (err instanceof Anthropic.APIError) log(`AI-dienst gaf een fout: ${describe(err)}`);
+    if (err instanceof Anthropic.AuthenticationError) return new AnalyzeError('auth', 'De API-sleutel wordt geweigerd. Controleer de API-sleutel bij Instellingen.');
+    if (err instanceof Anthropic.PermissionDeniedError) return new AnalyzeError('permission', `Deze API-sleutel heeft geen toegang: ${apiMessage(err)}`);
+    if (err instanceof Anthropic.NotFoundError) return new AnalyzeError('not_found', `Model niet beschikbaar voor deze API-sleutel: ${apiMessage(err)}`);
+    if (err instanceof Anthropic.RateLimitError) return new AnalyzeError('rate_limited', 'De AI-dienst is even overbelast of het tegoed is op. Probeer het later opnieuw.', 429);
+    if (isNoCredit(err)) return new AnalyzeError('no_credit', 'Het API-tegoed bij Anthropic is op. Koop tegoed via console.anthropic.com → Plans & Billing; daarna werkt automatisch herkennen meteen weer.', 402);
+    if (err instanceof Anthropic.BadRequestError) return new AnalyzeError('bad_request', `De AI-dienst weigert het verzoek: ${apiMessage(err)}`);
+    if (err instanceof Anthropic.APIError) return new AnalyzeError('api_error', `Fout bij de AI-dienst (${err.status ?? 'verbinding'}): ${apiMessage(err)}`);
+    return err;
+  }
+
   async function analyze({ mediaType, data, width, height }) {
-    if (!anthropic) throw new AnalyzeError('not_configured', 'Automatisch herkennen is niet ingesteld: vul anthropic_api_key in bij de app-configuratie.', 409);
+    if (!anthropic) throw new AnalyzeError('not_configured', 'Automatisch herkennen is niet ingesteld: stel de API-sleutel in bij Instellingen.', 409);
     const params = {
       model: MODEL,
       max_tokens: 32000,
@@ -173,15 +186,7 @@ function createPlanAnalyzer({ apiKey, client, log = (msg) => console.warn(msg) }
         message = await anthropic.messages.stream(params).finalMessage();
       }
     } catch (err) {
-      if (err instanceof Anthropic.APIError) log(`AI-dienst gaf een fout: ${describe(err)}`);
-      if (err instanceof Anthropic.AuthenticationError) throw new AnalyzeError('auth', 'De API-sleutel wordt geweigerd. Controleer anthropic_api_key in de app-configuratie.');
-      if (err instanceof Anthropic.PermissionDeniedError) throw new AnalyzeError('permission', `Deze API-sleutel heeft geen toegang: ${apiMessage(err)}`);
-      if (err instanceof Anthropic.NotFoundError) throw new AnalyzeError('not_found', `Model niet beschikbaar voor deze API-sleutel: ${apiMessage(err)}`);
-      if (err instanceof Anthropic.RateLimitError) throw new AnalyzeError('rate_limited', 'De AI-dienst is even overbelast of het tegoed is op. Probeer het later opnieuw.', 429);
-      if (isNoCredit(err)) throw new AnalyzeError('no_credit', 'Het API-tegoed bij Anthropic is op. Koop tegoed via console.anthropic.com → Plans & Billing; daarna werkt automatisch herkennen meteen weer.', 402);
-      if (err instanceof Anthropic.BadRequestError) throw new AnalyzeError('bad_request', `De AI-dienst weigert het verzoek: ${apiMessage(err)}`);
-      if (err instanceof Anthropic.APIError) throw new AnalyzeError('api_error', `Fout bij de AI-dienst (${err.status ?? 'verbinding'}): ${apiMessage(err)}`);
-      throw err;
+      throw toAnalyzeError(err);
     }
     if (message.stop_reason === 'refusal') throw new AnalyzeError('refusal', 'De AI-dienst wilde deze afbeelding niet verwerken.');
     if (message.stop_reason === 'max_tokens') throw new AnalyzeError('too_long', 'Het plan is te complex om in één keer te verwerken. Probeer een uitsnede.');
@@ -195,7 +200,18 @@ function createPlanAnalyzer({ apiKey, client, log = (msg) => console.warn(msg) }
     return { ...validate(parsed, width, height), model: message.model, usage: message.usage };
   }
 
-  return { available: Boolean(anthropic), analyze };
+  // Controleert sleutel en modeltoegang zonder kosten (opvragen van het model).
+  async function check() {
+    if (!anthropic) throw new AnalyzeError('not_configured', 'Er is geen API-sleutel ingesteld.', 409);
+    try {
+      await anthropic.models.retrieve(MODEL);
+    } catch (err) {
+      throw toAnalyzeError(err);
+    }
+    return { ok: true, model: MODEL };
+  }
+
+  return { available: Boolean(anthropic), analyze, check };
 }
 
 module.exports = { createPlanAnalyzer, validate, AnalyzeError, SCHEMA, MODEL };

@@ -71,6 +71,17 @@ const MIGRATIONS = [
   CREATE INDEX history_tenant ON history (tenant_id, updated_at);
   CREATE INDEX history_plan ON history (tenant_id, plan_id, updated_at);
   `,
+  // Instellingen per tenant (Beheer > Instellingen), waarde als JSON.
+  `
+  CREATE TABLE settings (
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    key        TEXT NOT NULL,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT REFERENCES users(id),
+    PRIMARY KEY (tenant_id, key)
+  );
+  `,
 ];
 
 function openDb(file = ':memory:') {

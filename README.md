@@ -14,7 +14,7 @@ De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn drie
 | Manier | Hoe |
 |---|---|
 | **Home Assistant-add-on** (testen) | Instellingen → Add-ons → Add-on-winkel → ⋮ → Repositories → `https://github.com/danieldh00/Aquatech` toevoegen, daarna **Aquatech** installeren en starten. Openen via het **Aquatech**-paneel in het zijmenu. |
-| **Eigen server** (Docker) | `docker compose up -d` in de root → `http://<server>:3300` |
+| **Eigen server** (Docker, los van HA) | `docker compose up -d --build` in de root → `http://<server>:3300`; de eerste toegangscode staat in `docker compose logs aquatech`. Zie *Losse server (Docker)* in `beregeningsplanner/DOCS.md`. |
 | **Lokaal** | `beregeningsplanner/frontend/index.html` (dashboard) of `beregeningsplanner/frontend/beregening/index.html` direct in de browser openen |
 
 ## Stappen
@@ -51,6 +51,12 @@ Het `.xlsx`-bestand bevat de tabbladen:
 - **Artikelen en prijzen**: `beregeningsplanner/frontend/beregening/js/catalog.js` → `C.articles` (prijzen zijn indicatief, excl. btw).
 - **Sproeiertypes, druppelslang, buizen en hydraulische uitgangspunten**: eveneens in `beregeningsplanner/frontend/beregening/js/catalog.js`.
 
+## Instellingen
+
+API-sleutel, toegangscode, AI-limieten en modules stel je als beheerder in
+onder **Beheer → Instellingen** (opgeslagen in de database, werkt zonder
+herstart). HA-opties en Docker-omgevingsvariabelen zijn alleen startwaarden.
+
 ## Opslag
 
 Het project wordt automatisch in de browser (localStorage) bewaard. Met **Opslaan/Openen** werk je met een `.aquaplan.json`-bestand, zodat je projecten kunt archiveren of delen.
@@ -68,11 +74,12 @@ Het project wordt automatisch in de browser (localStorage) bewaard. Met **Opslaa
 
 ```
 repository.yaml                     HA add-on-store
-docker-compose.yml                  draaien buiten HA (poort 3300)
+docker-compose.yml, .env.example    draaien buiten HA als losse container (poort 3300)
 beregeningsplanner/                 de add-on
   config.yaml, Dockerfile, apparmor.txt, CHANGELOG.md, DOCS.md, icon.png, logo.png
   backend/src/server.js             express: dashboard + modules, login, /api/health, /api/plan/*
   backend/src/planAnalyzer.js       plan lezen via de Claude API (schaal, vlakken, elementen)
+  backend/src/settings.js           instellingen (Beheer > Instellingen) in de database
   backend/test/                     node --test
   frontend/                         alle paden relatief, i.v.m. ingress
     frontend/index.html          dashboard (startpagina)

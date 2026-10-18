@@ -2,23 +2,18 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// Als Home Assistant-add-on schrijft Supervisor de ingevulde opties
-// (Instellingen > Apps > Beregeningsplanner > Configuratie) naar /data/options.json.
-// Buiten HA (lokaal, plain Docker) bestaat dat bestand niet en komt alles uit
-// de omgeving.
-function loadOptions(dataDir) {
+// Als Home Assistant-add-on schrijft Supervisor de ingevulde opties naar
+// /data/options.json. Die dienen alleen nog als startwaarden voor de
+// instellingen (zie settings.js); buiten HA bestaat het bestand niet.
+function readHaOptions(dataDir) {
   const optionsPath = process.env.OPTIONS_PATH || path.join(dataDir, 'options.json');
-  let options = {};
   try {
-    options = JSON.parse(fs.readFileSync(optionsPath, 'utf8'));
+    const options = JSON.parse(fs.readFileSync(optionsPath, 'utf8'));
+    return options && typeof options === 'object' ? options : {};
   } catch (err) {
     if (err.code !== 'ENOENT') console.warn(`Kon ${optionsPath} niet lezen: ${err.message}`);
+    return {};
   }
-  const accessCode = String(options.access_code || process.env.ACCESS_CODE || '').trim();
-  const anthropicApiKey = String(options.anthropic_api_key || process.env.ANTHROPIC_API_KEY || '').trim();
-  const limit = Number(options.ai_daily_limit ?? process.env.AI_DAILY_LIMIT);
-  const aiDailyLimit = Number.isFinite(limit) && limit >= 0 ? Math.floor(limit) : 30;
-  return { accessCode, anthropicApiKey, aiDailyLimit };
 }
 
 // Sleutel voor de sessie-cookies: één keer willekeurig aangemaakt en in /data
@@ -39,4 +34,4 @@ function loadOrCreateSecret(dataDir) {
   return secret;
 }
 
-module.exports = { loadOptions, loadOrCreateSecret };
+module.exports = { readHaOptions, loadOrCreateSecret };
