@@ -189,6 +189,12 @@ const MIGRATIONS = [
   CREATE INDEX quotes_customer ON quotes (tenant_id, customer_id);
   `,
   },
+  // Gebruikersnamen zijn uniek per tenant (UNIQUE (tenant_id, username) staat
+  // al op de tabel); bij het inloggen kiest de organisatiecode de tenant. De
+  // index voor zoeken op alleen de gebruikersnaam (over alle tenants) vervalt.
+  `
+  DROP INDEX IF EXISTS users_username;
+  `,
 ];
 
 function openDb(file = ':memory:') {

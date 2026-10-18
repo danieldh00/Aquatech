@@ -179,8 +179,9 @@ function createStore(db) {
     return null;
   }
 
-  // Gebruikersnamen van accounts zijn uniek over alle tenants: inloggen gaat
-  // met alleen gebruikersnaam en wachtwoord, de tenant volgt uit het account.
+  // Gebruikersnamen zijn uniek binnen een tenant (dezelfde voornaam kan in
+  // twee organisaties voorkomen). Een gebruiker wordt overal aangeduid met zijn
+  // eigen id; bij het inloggen bepaalt de organisatiecode de tenant.
   async function createAccount(tenantId, rawInput, { platformAdmin = false } = {}) {
     const input = withRole(rawInput);
     const err = validateAccount(input);
@@ -233,7 +234,7 @@ function createStore(db) {
     return q("SELECT COUNT(*) AS n FROM users WHERE tenant_id = ? AND kind = 'account' AND role = 'beheerder' AND disabled = 0").get(tenantId).n;
   }
 
-  const usernameTaken = (tenantId, username) => Boolean(q("SELECT 1 FROM users WHERE username = ? AND (tenant_id = ? OR kind = 'account')").get(username, tenantId));
+  const usernameTaken = (tenantId, username) => Boolean(tenantId && q('SELECT 1 FROM users WHERE tenant_id = ? AND username = ?').get(tenantId, username));
 
   function countPlatformAdmins() {
     return q("SELECT COUNT(*) AS n FROM users WHERE kind = 'account' AND platform_admin = 1 AND disabled = 0").get().n;
@@ -411,12 +412,24 @@ function createStore(db) {
     return [home, ...q("SELECT * FROM tenants WHERE parent_id = ? AND environment = 'test' AND disabled = 0 ORDER BY name COLLATE NOCASE").all(home.id)];
   }
 
+  /**
+   * De tenant waarin met een organisatiecode wordt ingelogd. Leeg = de
+   * hoofdtenant (daar staan de hoofdbeheerders). De code van een testomgeving
+   * leidt naar de live-tenant, want daar horen de gebruikers bij. Onbekend =
+   * null.
+   */
+  function loginTenant(code) {
+    const slug = String(code ?? '').trim().toLowerCase();
+    const t = slug ? getTenantBySlug(slug) : getTenantBySlug('default');
+    if (!t) return null;
+    return t.environment === 'test' && t.parent_id ? getTenant(t.parent_id) : getTenant(t.id);
+  }
+
   async function authenticate(tenantId, username, password) {
-    // Zonder tenantId: zoeken over alle tenants (gebruikersnamen zijn uniek).
+    // Altijd binnen één tenant zoeken: dezelfde gebruikersnaam kan in meer
+    // tenants voorkomen. Zonder tenant (onbekende code) wordt niemand gevonden.
     const name = String(username || '').trim().toLowerCase();
-    const u = tenantId
-      ? q("SELECT * FROM users WHERE tenant_id = ? AND username = ? AND kind = 'account'").get(tenantId, name)
-      : q("SELECT * FROM users WHERE username = ? AND kind = 'account' ORDER BY created_at LIMIT 1").get(name);
+    const u = tenantId ? q("SELECT * FROM users WHERE tenant_id = ? AND username = ? AND kind = 'account'").get(tenantId, name) : null;
     // Ook zonder gebruiker een hash uitrekenen: gelijke looptijd.
     const ok = await verifyPassword(password, u?.password_hash || await getDummyHash());
     if (!(ok && u && !u.disabled)) return null;
@@ -675,7 +688,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment,
     accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, systemUser, createGuest, createAccount, updateAccount, countAdmins, authenticate, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, systemUser, createGuest, createAccount, updateAccount, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
     createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
   };

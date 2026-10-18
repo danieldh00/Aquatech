@@ -31,7 +31,7 @@
           <label>Naam<input name="name" required minlength="2" maxlength="80" autocomplete="off" placeholder="bijv. Groen Beregening BV"></label>
           <label>Code<input name="slug" required pattern="[a-z0-9][a-z0-9\-]{1,39}" autocomplete="off" placeholder="groen-beregening"></label>
         </div>
-        <p class="muted small">Eerste beheerder (optioneel, kan ook later via Gebruikers). Gebruikersnamen zijn uniek over het hele platform; inloggen gaat met gebruikersnaam en wachtwoord op dezelfde URL.</p>
+        <p class="muted small">Eerste beheerder (optioneel, kan ook later via Gebruikers). Gebruikersnamen zijn uniek binnen een tenant; de gebruikers loggen in met de code van de tenant als organisatiecode, hun gebruikersnaam en wachtwoord.</p>
         <div class="row">
           <label>Gebruikersnaam<input name="adminUsername" pattern="[a-z0-9][a-z0-9._\-]{2,39}" autocomplete="off" placeholder="bijv. piet.groen"></label>
           <label>Naam<input name="adminName" autocomplete="off" placeholder="Piet Groen"></label>

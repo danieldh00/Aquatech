@@ -206,27 +206,31 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/auth/login', loginLimiter, wrap(async (req, res) => {
     const username = String(req.body?.username ?? '').trim().toLowerCase().slice(0, 60);
     if (username) {
-      if (lockedOut(username)) {
-        audit(req, 'inloggen_geblokkeerd', { username }, null);
+      // De organisatiecode bepaalt de tenant (leeg = hoofdtenant); dezelfde
+      // gebruikersnaam kan in meer organisaties bestaan.
+      const orgCode = String(req.body?.tenant ?? '').trim().toLowerCase().slice(0, 60);
+      const home = store.loginTenant(orgCode);
+      const key = `${home?.id || orgCode}:${username}`;
+      if (lockedOut(key)) {
+        audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, home?.id);
         return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
       }
-      // Gebruikersnamen zijn uniek over alle tenants: de tenant volgt uit het account.
-      const user = await store.authenticate(null, username, String(req.body?.password ?? '').slice(0, 1024));
+      // Ook bij een onbekende code een wachtwoord controleren (gelijke looptijd).
+      const user = await store.authenticate(home?.id || null, username, String(req.body?.password ?? '').slice(0, 1024));
       if (!user) {
-        failed(username);
-        audit(req, 'inloggen_mislukt', { username }, null);
-        return res.status(401).json({ error: 'wrong_login', message: 'Onjuiste gebruikersnaam of wachtwoord.' });
+        failed(key);
+        audit(req, 'inloggen_mislukt', { username, organisatie: orgCode }, null, home?.id);
+        return res.status(401).json({ error: 'wrong_login', message: 'Onjuiste organisatiecode, gebruikersnaam of wachtwoord.' });
       }
-      failures.delete(username);
-      const home = store.getTenant(user.tenant_id);
-      if (!home || (home.disabled && !user.platform_admin)) {
+      failures.delete(key);
+      if (home.disabled && !user.platform_admin) {
         audit(req, 'inloggen_geweigerd', { username, reden: 'tenant_uitgeschakeld' }, user.id, user.tenant_id);
         return res.status(403).json({ error: 'tenant_disabled', message: 'Deze organisatie is uitgeschakeld. Neem contact op met de beheerder van het platform.' });
       }
       auth.setCookie(req, res, user.id);
       clearEnvironment(req, res);
       audit(req, 'ingelogd', { via: 'account' }, user.id, user.tenant_id);
-      return res.json({ ok: true });
+      return res.json({ ok: true, tenant: home.slug === 'default' ? '' : home.slug });
     }
     if (!getAccessCode()) {
       return res.status(400).json({ error: 'username_required', message: 'Vul je gebruikersnaam en wachtwoord in.' });
@@ -396,6 +400,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   };
   const ipOf = (req) => remoteIp(req);
 
+  const loginCodeOf = (user) => {
+    const t = user && store.getTenant(user.home_tenant_id || user.tenant_id);
+    return !t || t.slug === 'default' ? '' : t.slug;
+  };
+
   app.get('/api/me', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const user = identify(req);
@@ -414,6 +423,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       via,
       tenant: active,
       platformAdmin: Boolean(user?.platform_admin),
+      // Organisatiecode waarmee de gebruikers van deze organisatie inloggen
+      // (leeg voor de hoofdtenant).
+      loginCode: loginCodeOf(user),
       // Wat deze gebruiker mag (zie roles.js); een nog niet bewaarde gast is een klant.
       rights: user ? Roles.rightsOf(user) : guestsAllowed() ? Roles.rightsOf({ role: 'klant' }) : [],
       environments: user ? accessibleFor(user).length : 0,
