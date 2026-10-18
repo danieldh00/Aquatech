@@ -21,7 +21,7 @@
     backup_gedownload: 'Back-up gedownload', sessies_ingetrokken: 'Uitgelogd op alle toestellen', instellingen_gewijzigd: 'Instellingen gewijzigd',
     offerte_akkoord: 'Offerte geaccepteerd door klant', offerte_afgewezen: 'Offerte afgewezen door klant', offerte_gewist: 'Offerte definitief gewist',
     impersonatie_gestart: 'Hoofdbeheerder werkt als gebruiker', impersonatie_beeindigd: 'Impersonatie beëindigd',
-    support_toegang_verleend: 'Supporttoegang gegeven', support_toegang_ingetrokken: 'Supporttoegang ingetrokken',
+    webshop_gesynchroniseerd: 'Webshopproducten opgehaald', support_toegang_verleend: 'Supporttoegang gegeven', support_toegang_ingetrokken: 'Supporttoegang ingetrokken',
   };
 
   function toast(msg, err = false) {
@@ -494,6 +494,7 @@
     if (name === 'plans') loadPlans();
     if (name === 'users') loadUsers();
     if (name === 'settings') loadSettings();
+    if (name === 'webshop') window.BeheerWebshop.load();
     if (name === 'audit') loadAudit();
     try { window.history.replaceState(null, '', `#${name}`); } catch (e) { /* file:// */ }
   }
@@ -529,13 +530,14 @@
     $('#u-form').onsubmit = addUser;
     $('#u-guests').onchange = renderUsers;
     initSettings();
+    window.BeheerWebshop.init({ toast });
     $('#detail-close').onclick = () => { $('#detail').hidden = true; };
     $('#detail').onclick = (e) => { if (e.target.id === 'detail') $('#detail').hidden = true; };
     await loadUsers().catch(() => {});
     loadHistory();
     // Direct naar een tabblad via beheer/#settings.
     const hash = location.hash.slice(1);
-    if (['plans', 'users', 'settings', 'audit'].includes(hash)) showTab(hash);
+    if (['plans', 'users', 'settings', 'webshop', 'audit'].includes(hash)) showTab(hash);
   }
 
   init();

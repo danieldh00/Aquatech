@@ -191,6 +191,15 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   `WO-<jaar>-0001`). Alleen uit een offerte met status `akkoord`; koppeling
   met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
   de offerte-editor.
+- **Webshopkoppeling** (0.29.0, prototype WooCommerce): `backend/src/woocommerce.js`
+  (adapter Store API/REST v3, `sanitizeShop`, alleen openbare https tenzij
+  `SHOP_ALLOW_INSECURE=1` voor tests) en `backend/src/shop.js` (tabellen
+  `shop_products`/`shop_sync`, migratie 11; koppelen aan `Catalog.articles`:
+  handmatig code→sku, meta `aquatech_code`, sku = code). Instellingen
+  `shopSource` + geheimen `shopConsumerKey`/`shopConsumerSecret` per tenant.
+  API `GET /api/catalog` (ingelogd), `/api/admin/shop[/sync]` (beheerder).
+  Frontend `beregening/js/shopcatalog.js` legt de prijzen over de catalogus
+  (planner + offertes, vóór `fromPlan`); beheer in `beheer/webshop.js`.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - Health: `GET /api/health` (versie uit `package.json`).

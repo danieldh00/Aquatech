@@ -437,3 +437,18 @@ test('digitale offerte: link, openbare pagina, opties, tekenen, vastleggen en e-
     server.close();
   }
 });
+
+test('offerte uit plan: geen materiaalopslag op regels met een webshopprijs', () => {
+  const C = lib.Catalog;
+  const orig = { ...C.articles['PE-25'] };
+  C.articles['PE-25'] = { ...orig, price: 2, shop: true, sku: 'PE25', url: 'https://shop.test/pe25' };
+  try {
+    const { lines } = JSON.parse(JSON.stringify(Core.fromPlan(garden(), lib, { markupPct: 10 })));
+    const pe = lines.find((l) => l.code === 'PE-25');
+    assert.strictEqual(pe.price, 2, 'webshopprijs zonder opslag');
+    const other = lines.find((l) => l.section === 'materiaal' && l.code !== 'PE-25');
+    assert.strictEqual(other.price, Core.round2(C.articles[other.code].price * 1.1), 'andere regels met opslag');
+  } finally {
+    C.articles['PE-25'] = orig;
+  }
+});

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.29.0
+
+- **Webshopkoppeling** (prototype, WooCommerce): in **Beheer → Webshop**
+  koppelt een beheerder de webshop van de organisatie. De stuklijst in de
+  planner, de Excel-export en nieuwe offertes gebruiken dan de naam, prijs
+  (omgerekend naar excl. btw), het artikelnummer en de link uit de webshop;
+  artikelen zonder koppeling houden de indicatieve prijs.
+  - Ophalen via de openbare Store API (geen sleutels) of de REST API v3 met
+    alleen-lezen sleutels; de sleutels staan versleuteld in de instellingen.
+  - Koppelen op SKU gelijk aan de artikelcode, het productveld
+    `aquatech_code` of een handmatige lijst `ARTIKELCODE=SKU`. Het tabblad
+    toont welke artikelen nog niet gekoppeld zijn.
+  - Per organisatie en per omgeving (een testomgeving heeft een eigen
+    koppeling); producten in de nieuwe tabel `shop_products` (migratie 11).
+  - In een offerte komt de materiaalopslag niet op regels met een
+    webshopprijs (die is al een verkoopprijs); overige regels houden de opslag.
+  - Alleen openbare https-adressen; mislukt het ophalen, dan blijven de
+    vorige producten staan en ziet de beheerder de foutmelding.
+
 ## 0.28.0
 
 - **Werkorders** (nieuwe module, tegel op het dashboard, voor beheerders en

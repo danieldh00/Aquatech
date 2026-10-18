@@ -29,6 +29,7 @@
         <button class="tab" data-tab="plans" role="tab">Plannen</button>
         <button class="tab" data-tab="users" role="tab">Gebruikers</button>
         <button class="tab" data-tab="settings" role="tab">Instellingen</button>
+        <button class="tab" data-tab="webshop" role="tab">Webshop</button>
         <button class="tab" data-tab="audit" role="tab">Auditlog</button>
       </nav>
 
@@ -151,6 +152,43 @@
           <div class="err" role="alert"></div>
         </form>
       </section>
+      <section id="tab-webshop" class="tabpane" hidden>
+        <p class="muted small">Koppel de webshop van je organisatie: de stuklijst in de planner, de Excel-export en nieuwe offertes gebruiken dan de naam, prijs en link uit de webshop. Een testomgeving heeft een eigen koppeling.</p>
+        <form id="w-form" class="card-form settings">
+          <h3>WooCommerce</h3>
+          <label>Webadres van de webshop<input name="url" type="url" placeholder="https://www.voorbeeld.nl" spellcheck="false"></label>
+          <label>Ophalen via<select name="mode">
+            <option value="store">Store API (openbaar, geen sleutels nodig)</option>
+            <option value="rest">REST API v3 (met sleutels, alleen-lezen)</option>
+          </select></label>
+          <div class="field" id="w-keys" style="display:none">
+            <span class="label">API-sleutels</span>
+            <span class="state" id="w-key-state"></span>
+            <div class="row">
+              <input name="consumerKey" type="text" autocomplete="off" spellcheck="false" placeholder="Consumer key (ck_…), leeg = ongewijzigd">
+              <input name="consumerSecret" type="password" autocomplete="new-password" spellcheck="false" placeholder="Consumer secret (cs_…), leeg = ongewijzigd">
+            </div>
+            <span class="muted small">Aan te maken in WordPress via WooCommerce → Instellingen → Geavanceerd → REST API, met alleen leesrechten. De sleutels worden versleuteld opgeslagen en nooit teruggestuurd naar de browser.</span>
+          </div>
+          <div class="row">
+            <label class="chk"><input type="checkbox" name="pricesIncludeTax"> Prijzen in de webshop zijn incl. btw</label>
+            <label>Btw-tarief<select name="vatRate"><option value="21">21%</option><option value="9">9%</option><option value="0">0%</option></select></label>
+          </div>
+          <label>Handmatige koppeling, één per regel: <code>ARTIKELCODE=SKU</code>
+            <textarea name="mapping" rows="5" spellcheck="false" placeholder="PE-25=PE25-PN6&#10;VAL-24V=HUNTER-PGV-101"></textarea></label>
+          <p class="muted small">Een product wordt gekoppeld als de SKU gelijk is aan de artikelcode van de planner, via het productveld <code>aquatech_code</code> (REST API) of via de lijst hierboven. Producten zonder prijs en variaties van variabele producten worden overgeslagen.</p>
+          <div class="row">
+            <button class="btn primary" type="submit">Opslaan en producten ophalen</button>
+            <button class="btn" type="button" id="w-sync">Opnieuw ophalen</button>
+            <button class="btn ghost" type="button" id="w-off">Koppeling verwijderen</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
+        <div class="card-form settings">
+          <h3>Status</h3>
+          <div id="w-status" class="muted">Laden…</div>
+        </div>
+      </section>
       <section id="tab-audit" class="tabpane" hidden>
         <p class="muted small">Beveiligingsgebeurtenissen: inloggen (ook mislukte pogingen), uitloggen, gebruikers en instellingen. Wachtwoorden, codes en sleutels worden nooit vastgelegd.</p>
         <div class="tablewrap"><table class="grid" id="a-table"></table></div>
@@ -174,6 +212,7 @@
   <script src="../beregening/js/catalog.js"></script>
   <script src="../dashboard/modules.js"></script>
   <script src="../dashboard/account.js"></script>
+  <script src="webshop.js"></script>
   <script src="beheer.js"></script>
 </body>
 </html>

@@ -2,6 +2,7 @@ const { transaction } = require('./db');
 const { createVault } = require('./vault');
 const { sanitizeProfile } = require('./quotes');
 const { sanitizeMail } = require('./mailer');
+const { sanitizeShop } = require('./woocommerce');
 
 // App-instellingen, te beheren door beheerders via Beheer > Instellingen. Ze
 // staan per tenant in de database (tabel settings) en werken zonder herstart.
@@ -38,6 +39,11 @@ const FIELDS = {
   // wachtwoord staat apart en versleuteld.
   mailServer: { type: 'object', default: {}, sanitize: sanitizeMail },
   mailPassword: { type: 'secret', default: '', min: 1 },
+  // Webshopkoppeling (shop.js): webadres, ophaalwijze, btw en handmatige
+  // koppeling; de sleutels van de WooCommerce REST API staan apart en versleuteld.
+  shopSource: { type: 'object', default: {}, sanitize: sanitizeShop },
+  shopConsumerKey: { type: 'secret', default: '', min: 10, hint: true },
+  shopConsumerSecret: { type: 'secret', default: '', min: 10 },
 };
 
 class SettingsError extends Error {
