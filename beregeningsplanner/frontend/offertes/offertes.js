@@ -248,6 +248,7 @@
     $('#e-menu [data-act=replan]').hidden = !d.planId;
     $('#e-menu [data-act=openplan]').hidden = !d.planId;
     $('#e-menu [data-act=purge]').hidden = !state.admin;
+    renderWorkOrder(q);
     renderWarnings();
     renderLines();
     window.scrollTo(0, 0);
@@ -261,6 +262,22 @@
     sel.innerHTML = '<option value="">Geen (alleen intern)</option>' + opts
       .map((c) => `<option value="${esc(c.id)}">${esc(c.displayName)}${c.username ? ` (${esc(c.username)})` : ''}${c.gone ? ' – uitgeschakeld' : ''}</option>`).join('');
     sel.value = q.customerId || '';
+  }
+
+  // Werkorder (module Werkorders): alleen bij een offerte met status akkoord.
+  async function renderWorkOrder(q) {
+    const btn = $('#e-wo');
+    btn.hidden = !state.werkorders || q.status !== 'akkoord';
+    if (btn.hidden) return;
+    btn.textContent = 'Werkorder maken';
+    btn.onclick = () => { location.href = `../werkorders/?quote=${encodeURIComponent(q.id)}`; };
+    try {
+      const items = (await api(`workorders?quote=${encodeURIComponent(q.id)}`)).items || [];
+      if (items.length && state.quote === q) {
+        btn.textContent = `Werkorder ${items[0].number}`;
+        btn.onclick = () => { location.href = `../werkorders/?id=${encodeURIComponent(items[0].id)}`; };
+      }
+    } catch (e) { /* knop blijft "Werkorder maken" */ }
   }
 
   // ---------- Klant: offerte bekijken en akkoord geven ----------
@@ -444,7 +461,10 @@
         return changed();
       }
     });
-    $('#e-status').onchange = (e) => save({ status: e.target.value });
+    $('#e-status').onchange = async (e) => {
+      await save({ status: e.target.value });
+      if (state.quote) renderWorkOrder(state.quote);
+    };
     $('#e-account').onchange = async (e) => {
       const q = state.quote;
       await save({ customerId: e.target.value || null });
@@ -782,6 +802,7 @@
     state.admin = rights.includes('beheer');
     state.all = rights.includes('offertes.alle');
     state.klant = !rights.includes('offertes') && rights.includes('offertes.klant');
+    state.werkorders = rights.includes('werkorders');
     if (!state.me.user && !state.me.guest) {
       $('#l-table').innerHTML = '<tr><td class="empty">Log eerst in om offertes te maken. <a href="../login">Inloggen</a></td></tr>';
       return;

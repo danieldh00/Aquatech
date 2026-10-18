@@ -189,6 +189,32 @@ const MIGRATIONS = [
   CREATE INDEX quotes_customer ON quotes (tenant_id, customer_id);
   `,
   },
+  // Werkorders (module Werkorders): ontstaan uit een geaccordeerde offerte.
+  // Verwijzingen naar offerte en plan zonder foreign key (de werkorder blijft
+  // bestaan als die worden gewist). Nummer uniek per tenant.
+  `
+  CREATE TABLE work_orders (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    owner_id     TEXT NOT NULL REFERENCES users(id),
+    quote_id     TEXT,
+    plan_id      TEXT,
+    number       TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'gepland', 'bezig', 'gereed', 'geannuleerd')),
+    title        TEXT NOT NULL DEFAULT '',
+    customer     TEXT NOT NULL DEFAULT '',
+    address      TEXT NOT NULL DEFAULT '',
+    planned_date TEXT,
+    assignee_id  TEXT REFERENCES users(id),
+    data         TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL,
+    deleted_at   TEXT,
+    UNIQUE (tenant_id, number)
+  );
+  CREATE INDEX work_orders_tenant ON work_orders (tenant_id, updated_at);
+  CREATE INDEX work_orders_quote ON work_orders (tenant_id, quote_id);
+  `,
 ];
 
 function openDb(file = ':memory:') {

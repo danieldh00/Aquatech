@@ -168,6 +168,13 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   (tabel `quotes`, migratie 5, nummer `<prefix><jaar>-0001` per tenant),
   bedrijfsprofiel = instelling `quoteProfile` (type `object`). PDF via
   afdrukversie (`#print`, print-CSS), geen PDF-bibliotheek.
+- **Werkorders** (`frontend/werkorders/`, 0.25.0, recht `werkorders`:
+  beheerder + installateur): kern `workorder-core.js` (UMD, `fromQuote`,
+  `zonesFromPlan`, `sanitize`, `progress`), opslag/routes
+  `backend/src/workorders.js` (tabel `work_orders`, migratie 7, nummer
+  `WO-<jaar>-0001`). Alleen uit een offerte met status `akkoord`; koppeling
+  met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
+  de offerte-editor.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - Health: `GET /api/health` (versie uit `package.json`).

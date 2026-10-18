@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Werkorders – AquaTech Service</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="../plannen/plannen.css">
+  <link rel="stylesheet" href="../offertes/offertes.css">
+  <link rel="stylesheet" href="werkorders.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Werkorders</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <!-- Overzicht -->
+  <main id="list-view" class="dash wide screen">
+    <section class="intro">
+      <h1>Werkorders</h1>
+      <p class="muted">Maak van een geaccordeerde offerte een werkorder: het uitvoeringsplan met werkstappen en uren, de zone-indeling uit het plan en de materiaallijst. Plan de klus in, wijs hem toe en vink af wat klaar is.</p>
+    </section>
+    <div id="l-stats" class="stats" hidden></div>
+    <div class="filters">
+      <input id="l-search" type="search" placeholder="Zoek op nummer, klant, adres of offerte">
+      <select id="l-status"><option value="">Alle statussen</option></select>
+      <label class="chk"><input type="checkbox" id="l-mine"> Alleen aan mij toegewezen</label>
+      <label class="chk"><input type="checkbox" id="l-done"> Ook gereed en geannuleerd</label>
+      <button id="l-new" class="btn primary">Nieuwe werkorder uit offerte</button>
+      <button id="l-export" class="btn">Exporteer naar Excel</button>
+    </div>
+    <div class="tablewrap"><table class="grid sortable" id="l-table"></table></div>
+    <p id="l-count" class="muted small"></p>
+  </main>
+
+  <!-- Werkorder bewerken -->
+  <main id="edit-view" class="dash wide screen" hidden>
+    <div class="edit-bar">
+      <button id="e-back" class="btn">← Overzicht</button>
+      <h1 id="e-heading">Werkorder</h1>
+      <span id="e-saved" class="muted small"></span>
+      <span class="spacer"></span>
+      <label class="inline">Status <select id="e-status"></select></label>
+      <button id="e-pdf" class="btn primary">Werkbon / PDF</button>
+      <button id="e-xlsx" class="btn">Excel</button>
+      <button id="e-more" class="btn" aria-haspopup="true">⋯</button>
+      <div id="e-menu" class="menu" hidden>
+        <button data-act="openquote">Offerte openen</button>
+        <button data-act="openplan">Plan openen in de planner</button>
+        <button data-act="rezones">Zone-indeling opnieuw uit het plan</button>
+        <button data-act="rematerials">Materialen opnieuw uit de offerte</button>
+        <button data-act="delete" class="danger">Verwijderen</button>
+        <button data-act="purge" class="danger" hidden>Definitief wissen</button>
+      </div>
+    </div>
+    <div id="e-warnings" class="notice warn" hidden></div>
+
+    <div class="cols">
+      <section class="card-form">
+        <h3>Klant en adres</h3>
+        <label>Naam / bedrijf<input data-f="customer.name" maxlength="200"></label>
+        <label>Contactpersoon<input data-f="customer.contact" maxlength="200"></label>
+        <label>Adres van de klus<textarea data-f="customer.address" rows="3" maxlength="400"></textarea></label>
+        <div class="row2">
+          <label>Telefoon<input data-f="customer.phone" maxlength="40"></label>
+          <label>E-mail<input data-f="customer.email" type="email" maxlength="200"></label>
+        </div>
+        <p id="e-route" class="muted small"></p>
+      </section>
+      <section class="card-form">
+        <h3>Planning</h3>
+        <label>Omschrijving<input data-f="title" maxlength="200"></label>
+        <div class="row2">
+          <label>Datum<input data-f="plannedDate" type="date"></label>
+          <label>Starttijd<input data-f="startTime" type="time"></label>
+        </div>
+        <div class="row2">
+          <label>Uitvoerder<select id="e-assignee"><option value="">Nog niet toegewezen</option></select></label>
+          <label>Ploeg / extra mensen<input data-f="crew" maxlength="200" placeholder="Bijv. Jan en Kees"></label>
+        </div>
+        <p id="e-links" class="muted small"></p>
+        <div id="e-progress" class="progress-box"></div>
+      </section>
+    </div>
+
+    <div class="cols">
+      <section class="card-form">
+        <h3>Werkinstructies</h3>
+        <textarea data-f="instructions" rows="4" maxlength="4000" placeholder="Wat moet de ploeg weten over de uitvoering: afwijkingen van het plan, afspraken met de klant, volgorde."></textarea>
+      </section>
+      <section class="card-form">
+        <h3>Bijzonderheden locatie</h3>
+        <textarea data-f="siteNotes" rows="4" maxlength="2000" placeholder="Bereikbaarheid, parkeren, sleutel, honden, kabels en leidingen, grondsoort."></textarea>
+      </section>
+    </div>
+
+    <section class="card-form" id="e-design-card">
+      <h3>Ontwerp en zone-indeling</h3>
+      <div id="e-design"></div>
+    </section>
+
+    <section class="card-form">
+      <div class="lines-head">
+        <h3>Werkstappen</h3>
+        <span id="e-hours" class="muted small"></span>
+      </div>
+      <div id="e-steps"></div>
+    </section>
+
+    <section class="card-form">
+      <div class="lines-head">
+        <h3>Materialen</h3>
+        <span id="e-picked" class="muted small"></span>
+      </div>
+      <div id="e-materials"></div>
+    </section>
+
+    <section class="card-form">
+      <h3>Oplevering</h3>
+      <label>Opmerkingen na uitvoering<textarea data-f="report.notes" rows="3" maxlength="4000" placeholder="Meerwerk, afwijkingen, wat nog moet gebeuren."></textarea></label>
+      <div class="row2">
+        <label>Opgeleverd op<input data-f="report.completedOn" type="date"></label>
+        <label>Afgetekend door (klant)<input data-f="report.signedBy" maxlength="200"></label>
+      </div>
+    </section>
+  </main>
+
+  <!-- Offerte kiezen -->
+  <div id="quote-picker" class="modal screen" hidden>
+    <div class="modal-card">
+      <button class="btn ghost close" data-close title="Sluiten">✕</button>
+      <h2>Werkorder uit een offerte</h2>
+      <p class="muted small">Alleen offertes met status <b>Akkoord</b>. De materialen en de arbeid uit de offerte worden het uitvoeringsplan; de zone-indeling komt uit het gekoppelde plan.</p>
+      <input id="qp-search" type="search" placeholder="Zoek op nummer, klant of omschrijving" class="full">
+      <div id="qp-list" class="pick-list"></div>
+    </div>
+  </div>
+
+  <!-- Afdrukversie (werkbon) -->
+  <article id="print" class="print-doc" aria-hidden="true"></article>
+
+  <div id="toast" class="toast screen"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../beregening/vendor/exceljs.min.js"></script>
+  <script src="../beregening/js/geometry.js"></script>
+  <script src="../beregening/js/catalog.js"></script>
+  <script src="../beregening/js/hydraulics.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="workorder-core.js"></script>
+  <script src="werkorders.js"></script>
+</body>
+</html>
