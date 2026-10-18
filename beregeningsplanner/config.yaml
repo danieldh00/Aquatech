@@ -1,5 +1,5 @@
 name: "Aquatech"
-version: "0.13.0"
+version: "0.14.0"
 slug: beregeningsplanner
 description: >-
   Aquatech-dashboard met modules. Eerste module, de beregeningsplanner:
