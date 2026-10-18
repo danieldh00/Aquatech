@@ -1,8 +1,9 @@
-name: "Beregeningsplanner"
-version: "0.7.0"
+name: "Aquatech"
+version: "0.8.0"
 slug: beregeningsplanner
 description: >-
-  Ontwerp een automatische tuinberegening: gebieden tekenen, sproeiers
+  Aquatech-dashboard met modules. Eerste module, de beregeningsplanner:
+  ontwerp een automatische tuinberegening: gebieden tekenen, sproeiers
   automatisch plaatsen met neerslagsimulatie, zones en leidingen met
   drukverlies, en een stuklijst (Basis/Standaard/Premium) met export naar Excel.
 url: "https://github.com/danieldh00/Aquatech"
@@ -20,8 +21,8 @@ ports_description:
 webui: "http://[HOST]:[PORT:3300]/"
 ingress: true
 ingress_port: 3300
-panel_icon: mdi:sprinkler-variant
-panel_title: Beregening
+panel_icon: mdi:view-dashboard-outline
+panel_title: Aquatech
 environment:
   DATA_DIR: /data
 # Leeg laten: een `null`-waarde hier maakt de optie voor Supervisor verplicht

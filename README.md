@@ -1,4 +1,11 @@
-# Aquatech Beregeningsplanner
+# Aquatech
+
+Aquatech is een modulair pakket (in de richting van een ERP voor
+beregeningsbedrijven). De startpagina is een dashboard met een tegel per
+module; de **beregeningsplanner** is de eerste module, planning en
+voorraadbeheer volgen.
+
+## Beregeningsplanner
 
 Webapplicatie om een automatische tuinberegening te ontwerpen, geïnspireerd op de werkwijze van de DVS Beregnungsplaner: gebieden tekenen → systeemelementen → sproeiers → zones en leidingen → stuklijst.
 
@@ -6,9 +13,9 @@ De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn drie
 
 | Manier | Hoe |
 |---|---|
-| **Home Assistant-add-on** (testen) | Instellingen → Add-ons → Add-on-winkel → ⋮ → Repositories → `https://github.com/danieldh00/Aquatech` toevoegen, daarna **Beregeningsplanner** installeren en starten. Openen via het **Beregening**-paneel in het zijmenu. |
+| **Home Assistant-add-on** (testen) | Instellingen → Add-ons → Add-on-winkel → ⋮ → Repositories → `https://github.com/danieldh00/Aquatech` toevoegen, daarna **Aquatech** installeren en starten. Openen via het **Aquatech**-paneel in het zijmenu. |
 | **Eigen server** (Docker) | `docker compose up -d` in de root → `http://<server>:3300` |
-| **Lokaal** | `beregeningsplanner/frontend/index.html` direct in de browser openen |
+| **Lokaal** | `beregeningsplanner/frontend/index.html` (dashboard) of `beregeningsplanner/frontend/beregening/index.html` direct in de browser openen |
 
 ## Stappen
 
@@ -41,12 +48,21 @@ Het `.xlsx`-bestand bevat de tabbladen:
 
 ## Aanpassen
 
-- **Artikelen en prijzen**: `beregeningsplanner/frontend/js/catalog.js` → `C.articles` (prijzen zijn indicatief, excl. btw).
-- **Sproeiertypes, druppelslang, buizen en hydraulische uitgangspunten**: eveneens in `beregeningsplanner/frontend/js/catalog.js`.
+- **Artikelen en prijzen**: `beregeningsplanner/frontend/beregening/js/catalog.js` → `C.articles` (prijzen zijn indicatief, excl. btw).
+- **Sproeiertypes, druppelslang, buizen en hydraulische uitgangspunten**: eveneens in `beregeningsplanner/frontend/beregening/js/catalog.js`.
 
 ## Opslag
 
 Het project wordt automatisch in de browser (localStorage) bewaard. Met **Opslaan/Openen** werk je met een `.aquaplan.json`-bestand, zodat je projecten kunt archiveren of delen.
+
+## Nieuwe module toevoegen
+
+1. Maak `beregeningsplanner/frontend/<id>/index.html` met eigen css/js in die
+   map. Alle URL's relatief; terug naar het dashboard met `href="../"`.
+2. Zet de module in `beregeningsplanner/frontend/dashboard/modules.js` op
+   `status: 'actief'` met `href: '<id>/'`.
+3. Klaar: de server serveert elke map met een `index.html` als module (ook
+   `<id>` zonder slash en diepe paden). Tests controleren de verwijzingen.
 
 ## Structuur
 
@@ -55,10 +71,13 @@ repository.yaml                     HA add-on-store
 docker-compose.yml                  draaien buiten HA (poort 3300)
 beregeningsplanner/                 de add-on
   config.yaml, Dockerfile, apparmor.txt, CHANGELOG.md, DOCS.md, icon.png, logo.png
-  backend/src/server.js             express: frontend, login, /api/health, /api/plan/*
+  backend/src/server.js             express: dashboard + modules, login, /api/health, /api/plan/*
   backend/src/planAnalyzer.js       plan lezen via de Claude API (schaal, vlakken, elementen)
   backend/test/                     node --test
-  frontend/                         de planner (alle paden relatief, i.v.m. ingress)
+  frontend/                         alle paden relatief, i.v.m. ingress
+    frontend/index.html          dashboard (startpagina)
+    frontend/dashboard/          opmaak, script en moduleregister (modules.js) van het dashboard
+  frontend/beregening/              module beregeningsplanner (bereikbaar op beregening/)
     frontend/index.html          UI-opbouw
     frontend/css/app.css         Opmaak
     frontend/js/geometry.js      Geometrie (polygonen, afstanden, omsluitende rechthoek)
@@ -73,5 +92,5 @@ frontend/js/simulation.js    Neerslagsimulatie
 frontend/js/bom.js           Stuklijst en Excel-export
 frontend/js/editor.js        Canvas-editor (tekenen, selecteren, zoomen)
 frontend/js/app.js           Applicatielogica en panelen
-frontend/vendor/exceljs.min.js  ExcelJS 4.4.0 (MIT) voor .xlsx-export
+frontend/beregening/vendor/exceljs.min.js  ExcelJS 4.4.0 (MIT) voor .xlsx-export
 ```

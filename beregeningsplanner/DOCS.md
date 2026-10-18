@@ -1,12 +1,16 @@
-# Beregeningsplanner
+# Aquatech
 
-Ontwerp een automatische tuinberegening en exporteer de stuklijst naar Excel.
+Dashboard met modules. De eerste module is de **beregeningsplanner**:
+ontwerp een automatische tuinberegening en exporteer de stuklijst naar
+Excel. Planning en voorraadbeheer volgen.
 
 ## Gebruik
 
-1. Start de app. Zonder verdere instellingen is de planner bereikbaar via
-   het **Beregening**-paneel in het HA-zijmenu en via
-   `https://aquatech.den-hollander.com`, zonder inloggen.
+1. Start de app. Zonder verdere instellingen is het dashboard bereikbaar
+   via het **Aquatech**-paneel in het HA-zijmenu en via
+   `https://aquatech.den-hollander.com`, zonder inloggen. Klik op de tegel
+   **Beregeningsplanner** (of ga direct naar `.../beregening/`); met
+   **Overzicht** linksboven in de planner ga je terug naar het dashboard.
 2. Wil je de publieke URL afschermen? Vul dan onder **Configuratie** een
    `access_code` in en herstart de app. Buiten Home Assistant om moet je dan
    één keer inloggen (het toestel onthoudt dat een jaar); via het HA-paneel

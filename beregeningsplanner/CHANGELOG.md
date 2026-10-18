@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.0
+
+- **Nieuw: Aquatech-dashboard als startpagina.** De app is nu de basis van
+  een groter pakket: de startpagina toont tegels per module. De
+  beregeningsplanner is de eerste module; *Planning* en *Voorraadbeheer*
+  staan er al als "binnenkort".
+- De planner staat nu op `beregening/` (bijv.
+  `https://aquatech.den-hollander.com/beregening/`) en heeft linksboven een
+  knop **Overzicht** terug naar het dashboard. Het opgeslagen plan blijft
+  gewoon staan; het dashboard toont het onder *Verder werken*.
+- Het HA-zijpaneel heet nu **Aquatech** (was *Beregening*); de app heet
+  in de add-on-winkel ook *Aquatech*. De slug blijft gelijk, dus de
+  Cloudflare-tunnel en instellingen werken ongewijzigd.
+
 ## 0.7.0
 
 - **Lokale herkenning werkt nu ook op foto's en scans van getekende plannen**

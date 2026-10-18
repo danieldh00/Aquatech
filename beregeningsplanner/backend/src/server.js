@@ -23,6 +23,16 @@ function readVersion() {
   return process.env.BUILD_VERSION || PKG.version;
 }
 
+// Een module is een map direct onder frontend/ met een eigen index.html.
+function isModule(name) {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) return false;
+  try {
+    return fs.statSync(path.join(FRONTEND_DIR, name, 'index.html')).isFile();
+  } catch (err) {
+    return false;
+  }
+}
+
 function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit = 30, analyzer }) {
   const version = readVersion();
   const auth = createAuth({ secret, getAccessCode: () => accessCode });
@@ -132,11 +142,25 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // no-cache: de browser controleert bij elke start of er een nieuwe versie is
   // (na een update meteen de nieuwe planner, zonder harde refresh).
-  app.use(express.static(FRONTEND_DIR, { index: 'index.html', setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
+  // redirect: false -- express zou `/beregening` absoluut doorsturen naar
+  // `/beregening/`, wat onder ingress buiten de app uitkomt; dat doen we
+  // hieronder zelf, relatief.
+  app.use(express.static(FRONTEND_DIR, { index: 'index.html', redirect: false, setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
 
-  // Onder ingress komt de app binnen op /api/hassio_ingress/<token>/; elk ander
-  // pad dat geen bestand is, is gewoon de app.
-  app.get('*', (req, res) => res.sendFile(path.join(FRONTEND_DIR, 'index.html')));
+  // Elke map in de frontend met een eigen index.html is een module van het
+  // dashboard (zie frontend/dashboard/modules.js). Onder ingress komt de app
+  // binnen op /api/hassio_ingress/<token>/, dus de doorverwijzing naar de
+  // module-URL met slash moet relatief zijn ("beregening/", niet "/beregening/").
+  app.get('*', (req, res) => {
+    const segs = req.path.split('/').filter(Boolean);
+    const mod = segs.length && isModule(segs[0]) ? segs[0] : null;
+    if (mod && segs.length === 1 && !req.path.endsWith('/')) {
+      const qs = req.originalUrl.slice(req.path.length);
+      return res.redirect(302, `${mod}/${qs}`);
+    }
+    // Elk ander pad dat geen bestand is: de module zelf, of anders het dashboard.
+    res.sendFile(path.join(FRONTEND_DIR, mod || '', 'index.html'));
+  });
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
