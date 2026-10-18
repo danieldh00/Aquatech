@@ -11,6 +11,7 @@ const { createStore } = require('./store');
 const { createSettings, SettingsError } = require('./settings');
 const { createVault, loadOrCreateMasterKey } = require('./vault');
 const backups = require('./backup');
+const { createQuoteStore, registerQuoteRoutes } = require('./quotes');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -132,6 +133,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/plan/analyze', express.json({ limit: '12mb' }));
   // Een plan bevat de achtergrondafbeelding (base64).
   app.use('/api/plans', express.json({ limit: '12mb' }));
+  // Een offerte met veel regels en lange teksten past niet in 16 kB.
+  app.use('/api/quotes', express.json({ limit: '1mb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -567,6 +570,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       }
       next(err);
     }
+  });
+
+  // ---------- Offertes (module Offertes, zie quotes.js) ----------
+  registerQuoteRoutes(app, {
+    quotes: createQuoteStore(database), identify, requireUser, requireAdmin, requireJson, audit,
+    tenantOf: () => tenant.id, settingsOf: () => settings,
   });
 
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).

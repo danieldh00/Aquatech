@@ -1,5 +1,6 @@
 const { transaction } = require('./db');
 const { createVault } = require('./vault');
+const { sanitizeProfile } = require('./quotes');
 
 // App-instellingen, te beheren door beheerders via Beheer > Instellingen. Ze
 // staan per tenant in de database (tabel settings) en werken zonder herstart.
@@ -30,6 +31,8 @@ const FIELDS = {
   // Versleutelde back-ups van de database: dagelijks, zoveel dagen bewaren
   // (0 = geen automatische back-ups).
   backupKeepDays: { type: 'int', env: 'BACKUP_KEEP_DAYS', default: 14, min: 0, max: 365 },
+  // Bedrijfsgegevens, uurtarief en standaardteksten voor offertes (quotes.js).
+  quoteProfile: { type: 'object', default: {}, sanitize: sanitizeProfile },
 };
 
 class SettingsError extends Error {
@@ -51,6 +54,7 @@ function coerce(def, raw) {
     if (raw && typeof raw === 'object') for (const [k, v] of Object.entries(raw)) if (/^[a-z0-9-]{1,40}$/.test(k)) out[k] = Boolean(v);
     return out;
   }
+  if (def.type === 'object') return def.sanitize(raw);
   return raw;
 }
 
@@ -102,7 +106,7 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
     switch (source(key, initial)) {
       case 'instellingen': return coerce(def, stored[key]);
       case 'omgeving': return coerce(def, env[def.env]);
-      default: return def.type === 'flags' ? {} : def.default;
+      default: return def.type === 'flags' ? {} : def.type === 'object' ? coerce(def, def.default) : def.default;
     }
   }
 
@@ -161,6 +165,9 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
       } else if (def.type === 'flags') {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new SettingsError(key, 'Ongeldige waarde.');
         next[key] = { ...get(key), ...coerce(def, raw) };
+      } else if (def.type === 'object') {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new SettingsError(key, 'Ongeldige waarde.');
+        next[key] = coerce(def, raw);
       }
       changed.push(key);
     }
