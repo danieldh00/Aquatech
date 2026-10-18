@@ -44,7 +44,7 @@ function client(base) {
     put: (p, b) => call('PUT', p, b),
     patch: (p, b) => call('PATCH', p, b),
     del: (p) => call('DELETE', p),
-    login: (username, password) => call('POST', '/api/auth/login', { username, password }),
+    login: (username, password, tenant) => call('POST', '/api/auth/login', { username, password, tenant }),
   };
 }
 
@@ -101,7 +101,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     // Nooit in live, en alleen voor hoofdbeheerders.
     assert.strictEqual((await baas.post(`/api/platform/tenants/${t.id}/testdata`)).status, 409);
     const piet = client(base);
-    await piet.login('piet', 'Gras-Pomp-2027!');
+    await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
     assert.strictEqual((await piet.post(`/api/platform/tenants/${env.id}/testdata`)).status, 403);
 
     const out = await baas.post(`/api/platform/tenants/${env.id}/testdata`);
@@ -113,7 +113,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
 
     // Een testklant komt direct in de testomgeving en ziet alleen het eigene.
     const klant = client(base);
-    assert.strictEqual((await klant.login(name('klant2'), password)).status, 200);
+    assert.strictEqual((await klant.login(name('klant2'), password, 'groen')).status, 200);
     const me = (await klant.get('/api/me')).body;
     assert.strictEqual(me.tenant.id, env.id);
     assert.strictEqual(me.user.role, 'klant');
@@ -124,7 +124,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
 
     // De installateur ziet alle plannen en offertes van de testomgeving.
     const inst = client(base);
-    await inst.login(name('installateur'), password);
+    await inst.login(name('installateur'), password, env.slug);
     assert.strictEqual((await inst.get('/api/plans?all=1')).body.items.length, counts.plans);
     assert.strictEqual((await inst.get('/api/quotes?all=1')).body.items.length, 5);
     const customers = (await inst.get('/api/quote-customers')).body.items;
@@ -132,7 +132,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
 
     // De testbeheerder beheert alleen de testaccounts, nooit live.
     const bea = client(base);
-    await bea.login(name('beheerder'), password);
+    await bea.login(name('beheerder'), password, 'groen');
     const users = (await bea.get('/api/admin/users')).body.items.map((u) => u.username);
     assert.strictEqual(users.length, 6);
     assert.ok(!users.includes('piet'));
@@ -153,11 +153,11 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.strictEqual(again.status, 201);
     assert.notStrictEqual(again.body.password, password);
     assert.strictEqual((await klant.get('/api/me')).body.user, null);
-    assert.strictEqual((await client(base).login(name('klant2'), again.body.password)).status, 200);
+    assert.strictEqual((await client(base).login(name('klant2'), again.body.password, 'groen')).status, 200);
 
     // Leegmaken ruimt de testaccounts op.
     assert.strictEqual((await baas.post(`/api/platform/tenants/${env.id}/reset`)).status, 200);
-    assert.strictEqual((await client(base).login(name('klant2'), again.body.password)).status, 401);
+    assert.strictEqual((await client(base).login(name('klant2'), again.body.password, 'groen')).status, 401);
     assert.strictEqual((await baas.get('/api/platform/tenants')).body.items.find((x) => x.id === t.id).environments[0].planCount, 0);
   } finally {
     server.close();

@@ -40,7 +40,7 @@ function client(base) {
     put: (p, b) => call('PUT', p, b),
     patch: (p, b) => call('PATCH', p, b),
     del: (p) => call('DELETE', p),
-    login: (username, password) => call('POST', '/api/auth/login', { username, password }),
+    login: (username, password, tenant) => call('POST', '/api/auth/login', { username, password, tenant }),
   };
 }
 
@@ -130,7 +130,7 @@ test('impersonatie in live: alleen met toestemming van de gebruiker, intrekken s
     assert.strictEqual(no.body.error, 'consent_required');
 
     const pc = client(base);
-    await pc.login('piet', 'Gras-Pomp-2027!');
+    await pc.login('piet', 'Gras-Pomp-2027!', 'groen');
     assert.strictEqual((await pc.get('/api/support')).body.grant, null);
     assert.strictEqual((await pc.post('/api/support', { hours: 5 })).status, 400);
     const g = await pc.post('/api/support', { hours: 1 });
@@ -175,7 +175,7 @@ test('impersonatie: verloopt vanzelf, stopt bij uitloggen en heeft grenzen', asy
 
     // Een gewone beheerder mag niet impersoneren.
     const pc = client(base);
-    await pc.login('piet', 'Gras-Pomp-2027!');
+    await pc.login('piet', 'Gras-Pomp-2027!', 'groen');
     assert.strictEqual((await pc.post('/api/platform/impersonate', { userId: kees.id, tenantId: env.id })).status, 403);
 
     // Verlopen: daarna weer de hoofdbeheerder zelf.
@@ -206,7 +206,7 @@ test('impersonatie: verloopt vanzelf, stopt bij uitloggen en heeft grenzen', asy
     const tester = await baas.post(`/api/platform/tenants/${env.id}/users`, { username: 'tester', displayName: 'Tester', role: 'klant', password: 'Bloem-Perk-2029!' });
     assert.strictEqual(tester.status, 201, JSON.stringify(tester.body));
     const tc = client(base);
-    await tc.login('tester', 'Bloem-Perk-2029!');
+    await tc.login('tester', 'Bloem-Perk-2029!', 'groen');
     assert.strictEqual((await tc.get('/api/support')).body.applicable, false);
     assert.strictEqual((await tc.post('/api/support', { hours: 1 })).status, 409);
     assert.strictEqual((await baas.post('/api/platform/impersonate', { userId: tester.body.id, tenantId: env.id })).status, 201);

@@ -184,6 +184,13 @@ controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
   (gebruikersnaam, naam, rol, wachtwoord van minimaal 8 tekens). Inloggen
   via `.../login` of de knop **Inloggen** rechtsboven. Een nieuw wachtwoord
   of uitschakelen logt de gebruiker op alle toestellen uit.
+- **Organisatiecode**: een gebruikersnaam is uniek binnen een organisatie
+  (de live-tenant met zijn testomgevingen), niet over het hele platform. Twee
+  organisaties kunnen dus allebei een *jan* hebben; elke gebruiker heeft in
+  de database zijn eigen id. Bij het inloggen vul je de organisatiecode in
+  (de code van de tenant, onder **Beheer → Gebruikers** te zien, met een
+  inloglink `login?org=<code>` die hem al invult). De browser onthoudt de
+  code. Leeg = de hoofdorganisatie, waar ook de hoofdbeheerders inloggen.
 - **Gasten**: standaard uit; zonder inloggen zie je alleen de inlogpagina.
   Zet je onder **Beheer → Instellingen** *Gasten zonder inloggen toestaan*
   aan (en is er geen toegangscode), dan kan iedereen de planner gebruiken.
@@ -318,7 +325,7 @@ Getoetst aan OWASP ASVS (niveau 2) en de AVG.
 | Geheimen (API-sleutel, toegangscode) | AES-256-GCM in de database, sleutel per doel afgeleid (HKDF) van de hoofdsleutel |
 | Wachtwoorden | scrypt (N=2^17, r=8, p=1), minimaal 12 tekens, geen voorspelbare woorden of gebruikersnaam |
 | Sessies | op de server, token alleen als SHA-256-hash opgeslagen; verloopt na 14 dagen zonder gebruik, uiterlijk na 30 dagen |
-| Inloggen | max. 10 pogingen per kwartier per IP en per gebruikersnaam |
+| Inloggen | max. 10 pogingen per kwartier per IP en per gebruikersnaam (per organisatie) |
 | Eerste beheerder | alleen met de installatiecode uit het serverlog of de toegangscode |
 | Auditlog | inloggen, uitloggen, gebruikers en instellingen (Beheer → Auditlog) |
 | Bewaartermijnen | IP-adressen 90 dagen, auditlog 365 dagen (instelbaar) |
