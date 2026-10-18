@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.19.1
+
+- Home Assistant-add-on: stoppen en herstarten gebeurt weer netjes. Sinds
+  de app als gewone gebruiker draait, mocht het init-proces het stopsignaal
+  niet doorgeven (AppArmor-profiel miste `capability kill`).
+
 ## 0.19.0
 
 - **Versleutelde back-ups**: elke dag een kopie van de database in
