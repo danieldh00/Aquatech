@@ -18,6 +18,8 @@
 - Werkbon als PDF (afdrukversie met afvinkvakjes en aftekenregels) en Excel
   (werkorder, zones en materialen op aparte tabbladen); het overzicht is ook
   naar Excel te exporteren. Nummering `WO-<jaar>-0001` per omgeving.
+- Opties uit de offerte die de klant niet heeft gekozen, komen niet in de
+  werkorder (materialen en werkstappen).
 
 ## 0.25.0
 

@@ -217,7 +217,8 @@
   function fromQuote(quote, plan = null, lib = null) {
     const q = quote || {};
     const d = q.data || {};
-    const lines = Array.isArray(d.lines) ? d.lines : [];
+    // Een optie die de klant niet heeft gekozen hoort niet bij de uitvoering.
+    const lines = (Array.isArray(d.lines) ? d.lines : []).filter((l) => !l.optional || l.selected);
     let n = 0;
     const id = (p) => `${p}${++n}`;
     const materials = lines.filter((l) => l.section === 'materiaal').map((l) => ({

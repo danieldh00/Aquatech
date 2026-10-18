@@ -67,6 +67,18 @@ test('werkorder uit offerte: materialen zonder prijzen, arbeid als werkstappen i
   assert.deepStrictEqual(data.zones, [], 'zonder plan geen zones');
 });
 
+test('werkorder uit offerte: niet gekozen opties vallen weg', () => {
+  const quote = { id: 'q2', number: 'OF-2026-0008', data: { lines: [
+    { id: 'a', section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st' },
+    { id: 'b', section: 'materiaal', description: 'Regensensor', qty: 1, unit: 'st', optional: true, selected: false },
+    { id: 'c', section: 'materiaal', description: 'Wifi-module', qty: 1, unit: 'st', optional: true, selected: true },
+    { id: 'd', section: 'arbeid', description: 'Regensensor monteren', qty: 0.5, unit: 'uur', optional: true },
+  ] } };
+  const { data } = W.fromQuote(quote);
+  assert.deepStrictEqual(data.materials.map((m) => m.description), ['Sproeier', 'Wifi-module']);
+  assert.ok(!data.steps.some((s) => /Regensensor/.test(s.title)));
+});
+
 test('werkorder met plan: zone-indeling met onderdelen, debiet en druk', () => {
   const { data, warnings } = plain(W.fromQuote(quoteFromGarden(), garden(), lib));
   assert.ok(data.zones.length >= 2);
