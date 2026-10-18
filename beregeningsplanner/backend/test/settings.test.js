@@ -7,6 +7,8 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/db');
 const { createStore } = require('../src/store');
 const { createSettings, SettingsError } = require('../src/settings');
+const { createVault } = require('../src/vault');
+const crypto = require('crypto');
 
 const SECRET = 'z'.repeat(64);
 const KEY = 'sk-ant-test-0123456789abcdefWXYZ';
@@ -105,13 +107,18 @@ test('instellingen blijven bewaard na een herstart', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-settings-'));
   const file = path.join(dir, 'aquatech.db');
   try {
+    const vault = createVault(crypto.randomBytes(32));
     let db = openDb(file);
     let tenant = createStore(db).ensureTenant();
-    createSettings({ db, tenantId: tenant.id }).update({ anthropicApiKey: KEY, modules: { planning: false } });
+    createSettings({ db, tenantId: tenant.id, vault }).update({ anthropicApiKey: KEY, modules: { planning: false } });
     db.close();
+    // De sleutel staat versleuteld in het bestand, niet als leesbare tekst.
+    assert.ok(!fs.readFileSync(file).includes(KEY));
     db = openDb(file);
     tenant = createStore(db).ensureTenant();
-    const s = createSettings({ db, tenantId: tenant.id });
+    // Met een andere hoofdsleutel is het geheim onbruikbaar (en wordt het genegeerd).
+    assert.strictEqual(createSettings({ db, tenantId: tenant.id, vault: createVault(crypto.randomBytes(32)) }).get('anthropicApiKey'), '');
+    const s = createSettings({ db, tenantId: tenant.id, vault });
     assert.strictEqual(s.get('anthropicApiKey'), KEY);
     assert.deepStrictEqual(s.get('modules'), { planning: false });
     db.close();
@@ -128,10 +135,10 @@ test('instellingen-API alleen voor beheerders', async () => {
     assert.strictEqual((await anon.put('/api/admin/settings', { aiEnabled: false })).status, 401);
     const a = await admin(base);
     // Een gewoon gebruikersaccount mag het niet.
-    const u = await a.post('/api/admin/users', { username: 'jan', displayName: 'Jan', role: 'gebruiker', password: 'wachtwoord1' });
+    const u = await a.post('/api/admin/users', { username: 'jan', displayName: 'Jan', role: 'gebruiker', password: 'Tuin-Plan-2026!' });
     assert.strictEqual(u.status, 201);
     const jan = client(base);
-    assert.strictEqual((await jan.post('/api/auth/login', { username: 'jan', password: 'wachtwoord1' })).status, 200);
+    assert.strictEqual((await jan.post('/api/auth/login', { username: 'jan', password: 'Tuin-Plan-2026!' })).status, 200);
     assert.strictEqual((await jan.get('/api/admin/settings')).status, 403);
     const r = await a.get('/api/admin/settings');
     assert.strictEqual(r.status, 200);
@@ -216,9 +223,9 @@ test('wie met de toegangscode beheert, kan die niet leegmaken', async () => {
     // Startwaarde is 'geheim' (uit de opstartparameters), dus terugzetten mag.
     assert.strictEqual(reset.status, 200);
     // Met een beheerdersaccount mag het wel.
-    await a.post('/api/admin/users', { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'wachtwoord1' });
+    await a.post('/api/admin/users', { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!' });
     const baas = client(base);
-    await baas.post('/api/auth/login', { username: 'baas', password: 'wachtwoord1' });
+    await baas.post('/api/auth/login', { username: 'baas', password: 'Tuin-Plan-2026!' });
     assert.strictEqual((await baas.put('/api/admin/settings', { accessCode: '' })).status, 200);
     assert.strictEqual((await client(base).get('/api/auth/status')).body.configured, false);
   } finally {

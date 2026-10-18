@@ -191,24 +191,72 @@ docker compose up -d --build        # http://<server>:3300
 ```
 
 - **Eerste start**: open de app en maak het eerste beheerdersaccount aan
-  (zie *Gebruik*). Doe dat meteen na het starten: tot dan kan iedereen die
-  de URL kent dat scherm zien. Is er via `ACCESS_CODE` al een toegangscode
-  ingesteld, dan vraagt het scherm die code ter bevestiging.
+  (zie *Gebruik*). Het scherm vraagt de **installatiecode** die bij het
+  starten in het log staat (`docker compose logs aquatech`), of de
+  toegangscode als die via `ACCESS_CODE` is ingesteld. Een vaste code kan
+  ook met `SETUP_CODE`.
 - **Gegevens** staan in het volume `aquatech-data` (`/data` in de container):
-  de database met plannen, historie, gebruikers en instellingen, en de
-  sessiesleutel. Back-up: `docker compose cp aquatech:/data ./backup`.
+  de database met plannen, historie, gebruikers en instellingen, de
+  sessiesleutel en (zonder `AQUATECH_MASTER_KEY_FILE`) de hoofdsleutel
+  `master-key`. Back-up: `docker compose cp aquatech:/data ./backup`.
 - **Bijwerken**: `git pull && docker compose up -d --build`.
 - **HTTPS**: zet er een reverse proxy (Caddy, Traefik, nginx) of een
   Cloudflare-tunnel voor die `X-Forwarded-Proto: https` meestuurt; dan
   krijgen de inlogcookies de `Secure`-vlag.
-- **Overzetten** van een eerdere installatie: kopieer `aquatech.db` en
-  `session-secret` uit de oude `/data`-map naar het volume; alle plannen,
+- **Overzetten** van een eerdere installatie: kopieer `aquatech.db`,
+  `master-key` en `session-secret` uit de oude `/data`-map naar het volume; alle plannen,
   gebruikers, instellingen en inlogs gaan mee. Heeft die database nog geen
   beheerdersaccount, dan verschijnt bij de eerste aanmelding het scherm om
   er een aan te maken.
 - **Cloudflare-tunnel**: laat de tunnel naar `http://<server>:3300` wijzen
   (of naar de containernaam `aquatech:3300` als cloudflared in hetzelfde
   Docker-netwerk draait).
+
+## Beveiliging en privacy
+
+Getoetst aan OWASP ASVS (niveau 2) en de AVG.
+
+| Onderdeel | Hoe |
+|---|---|
+| Geheimen (API-sleutel, toegangscode) | AES-256-GCM in de database, sleutel per doel afgeleid (HKDF) van de hoofdsleutel |
+| Wachtwoorden | scrypt (N=2^17, r=8, p=1), minimaal 12 tekens, geen voorspelbare woorden of gebruikersnaam |
+| Sessies | op de server, token alleen als SHA-256-hash opgeslagen; verloopt na 14 dagen zonder gebruik, uiterlijk na 30 dagen |
+| Inloggen | max. 10 pogingen per kwartier per IP en per gebruikersnaam |
+| Eerste beheerder | alleen met de installatiecode uit het serverlog of de toegangscode |
+| Auditlog | inloggen, uitloggen, gebruikers en instellingen (Beheer → Auditlog) |
+| Bewaartermijnen | IP-adressen 90 dagen, auditlog 365 dagen (instelbaar) |
+| Database | rechten 0600, `secure_delete`, integriteitscontrole bij de start |
+| Proces | draait als gewone gebruiker (uid 1000), niet als root |
+| Browser | Content-Security-Policy, X-Frame-Options, HSTS via https, `no-store` op de API |
+
+**Hoofdsleutel.** Standaard maakt de app bij de eerste start
+`/data/master-key` aan. Daarmee is een gelekt databasebestand alleen niet
+genoeg, maar wie het hele volume heeft, heeft ook de sleutel. Beter: zet de
+sleutel buiten het volume als Docker-secret:
+
+```sh
+mkdir -p secrets && docker compose cp aquatech:/data/master-key secrets/master-key   # of: openssl rand -hex 32 > secrets/master-key (alleen bij een nieuwe installatie)
+chmod 600 secrets/master-key
+```
+
+en zet in `docker-compose.yml` de regels onder *Hoofdsleutel als
+Docker-secret* aan. Bewaar daarnaast een kopie van de sleutel in een
+wachtwoordkluis: zonder de sleutel zijn de opgeslagen geheimen onbruikbaar
+(een nieuwe sleutel betekent API-sleutel en toegangscode opnieuw invullen).
+
+**Nog te regelen bij de serverinrichting**
+
+- Schijfversleuteling op de host (LUKS/BitLocker) of een VPS-aanbieder met
+  versleutelde opslag in de EU.
+- Externe back-ups van het volume (bijv. dagelijks naar een andere locatie),
+  periodiek een terugzettest; de hoofdsleutel apart bewaren.
+- HTTPS via de Cloudflare-tunnel of een reverse proxy; poort 3300 niet
+  rechtstreeks open zetten naar internet (alleen de tunnel).
+- Host bijwerken (`git pull && docker compose up -d --build` voor de app,
+  en het besturingssysteem/Docker zelf).
+- AVG: verwerkersovereenkomst met hosting- en AI-aanbieder (Anthropic, alleen
+  als AI-herkenning aanstaat), privacyverklaring voor klanten en een
+  register van verwerkingen.
 
 ## Let op
 

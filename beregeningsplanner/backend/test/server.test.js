@@ -17,10 +17,10 @@ function start(opts = {}) {
 }
 
 // Database met al een beheerder (anders verschijnt het instelscherm).
-function dbWithAdmin() {
+async function dbWithAdmin() {
   const db = openDb();
   const store = createStore(db);
-  store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'wachtwoord1' });
+  await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!' });
   return db;
 }
 
@@ -110,7 +110,7 @@ test('andere toegangscode maakt oude cookies ongeldig', async () => {
 });
 
 test('gasten aan en geen code: de planner is openbaar en inloggen is niet nodig', async () => {
-  const { server, base } = await start({ accessCode: '', env: { GUEST_ACCESS: 'true' }, db: dbWithAdmin() });
+  const { server, base } = await start({ accessCode: '', env: { GUEST_ACCESS: 'true' }, db: await dbWithAdmin() });
   try {
     const res = await fetch(`${base}/`);
     assert.strictEqual(res.status, 200);
@@ -164,7 +164,7 @@ test('planner heeft een relatieve link terug naar het dashboard', () => {
 });
 
 test('module zonder slash: relatieve doorverwijzing, querystring blijft', async () => {
-  const { server, base } = await start({ accessCode: '', env: { GUEST_ACCESS: 'true' }, db: dbWithAdmin() });
+  const { server, base } = await start({ accessCode: '', env: { GUEST_ACCESS: 'true' }, db: await dbWithAdmin() });
   try {
     for (const [p, loc] of [['/beregening', 'beregening/'], ['/beregening?x=1', 'beregening/?x=1']]) {
       const res = await fetch(base + p, { redirect: 'manual' });
@@ -181,16 +181,20 @@ test('module zonder slash: relatieve doorverwijzing, querystring blijft', async 
 });
 
 test('eerste start: instelscherm op elk pad, daarna inloggen met het nieuwe account', async () => {
-  const { server, base } = await start({ accessCode: '' });
+  const { server, base } = await start({ accessCode: '', setupCode: 'ABCD-EFGH-JKLM' });
   try {
     for (const p of ['/', '/beregening/', '/login']) {
       const res = await fetch(base + p);
       assert.match(await res.text(), /Beheerder aanmaken/, p);
     }
-    assert.deepStrictEqual(await (await fetch(`${base}/api/setup`)).json(), { required: true, codeRequired: false });
+    assert.deepStrictEqual(await (await fetch(`${base}/api/setup`)).json(), { required: true, codeRequired: true, codeKind: 'installatiecode' });
     const post = (body) => fetch(`${base}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    assert.strictEqual((await post({ username: 'x', displayName: 'X', password: 'kort' })).status, 400);
-    const ok = await post({ username: 'daniel', displayName: 'Daniël', password: 'wachtwoord1' });
+    // Zonder (juiste) installatiecode uit het serverlog lukt het niet.
+    assert.strictEqual((await post({ username: 'daniel', displayName: 'Daniël', password: 'Tuin-Plan-2026!' })).status, 401);
+    assert.strictEqual((await post({ username: 'daniel', displayName: 'Daniël', password: 'Tuin-Plan-2026!', code: 'ABCD-EFGH-JKLX' })).status, 401);
+    assert.strictEqual((await post({ username: 'x', displayName: 'X', password: 'kort', code: 'abcd efgh jklm' })).status, 400);
+    assert.strictEqual((await post({ username: 'daniel', displayName: 'Daniël', password: 'Wachtwoord2024!', code: 'abcd efgh jklm' })).status, 400, 'voorspelbaar wachtwoord');
+    const ok = await post({ username: 'daniel', displayName: 'Daniël', password: 'Tuin-Plan-2026!', code: 'abcd efgh jklm' });
     assert.strictEqual(ok.status, 201);
     const cookie = ok.headers.get('set-cookie').split(';')[0];
     const me = await (await fetch(`${base}/api/me`, { headers: { cookie } })).json();
@@ -198,7 +202,7 @@ test('eerste start: instelscherm op elk pad, daarna inloggen met het nieuwe acco
     assert.strictEqual(me.user.kind, 'account');
     assert.strictEqual((await fetch(`${base}/`, { headers: { cookie } })).status, 200);
     // Daarna kan niemand nog een eerste beheerder aanmaken; anderen krijgen de inlogpagina.
-    assert.strictEqual((await post({ username: 'indringer', displayName: 'I', password: 'wachtwoord1' })).status, 409);
+    assert.strictEqual((await post({ username: 'indringer', displayName: 'I', password: 'Tuin-Plan-2026!', code: 'ABCD-EFGH-JKLM' })).status, 409);
     const anon = await fetch(`${base}/`);
     assert.strictEqual(anon.status, 401);
     assert.match(await anon.text(), /Gebruikersnaam/);
@@ -213,15 +217,15 @@ test('eerste start met toegangscode: de code is nodig om de beheerder aan te mak
   try {
     assert.strictEqual((await (await fetch(`${base}/api/setup`)).json()).codeRequired, true);
     const post = (body) => fetch(`${base}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    assert.strictEqual((await post({ username: 'daniel', password: 'wachtwoord1', code: 'fout' })).status, 401);
-    assert.strictEqual((await post({ username: 'daniel', password: 'wachtwoord1', code: 'geheim' })).status, 201);
+    assert.strictEqual((await post({ username: 'daniel', password: 'Tuin-Plan-2026!', code: 'fout' })).status, 401);
+    assert.strictEqual((await post({ username: 'daniel', password: 'Tuin-Plan-2026!', code: 'geheim' })).status, 201);
   } finally {
     server.close();
   }
 });
 
 test('de laatste actieve beheerder kan niet worden uitgeschakeld of gedegradeerd', async () => {
-  const db = dbWithAdmin();
+  const db = await dbWithAdmin();
   const { server, base } = await start({ db });
   try {
     const { cookie } = await login(base);

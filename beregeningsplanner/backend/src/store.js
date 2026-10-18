@@ -13,22 +13,66 @@ const now = () => new Date().toISOString();
 const newId = () => crypto.randomUUID();
 
 // ---------- Wachtwoorden (scrypt, ingebouwd in Node) ----------
-const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 32 };
+// Parameters volgens de OWASP-aanbeveling voor scrypt (N=2^17, r=8, p=1:
+// 128 MiB geheugen per berekening). Asynchroon, zodat de server tijdens het
+// rekenen andere verzoeken blijft beantwoorden. Oudere, lichtere hashes worden
+// bij de eerstvolgende geslaagde inlog vervangen (needsRehash).
+const SCRYPT = { N: 2 ** 17, r: 8, p: 1, keylen: 32 };
+const SCRYPT_MAXMEM = 256 * 1024 * 1024;
 
-function hashPassword(password) {
+function scrypt(password, salt, keylen, { N, r, p }) {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(String(password), salt, keylen, { N, r, p, maxmem: SCRYPT_MAXMEM }, (err, key) => (err ? reject(err) : resolve(key)));
+  });
+}
+
+async function hashPassword(password) {
   const salt = crypto.randomBytes(16);
-  const hash = crypto.scryptSync(String(password), salt, SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p });
+  const hash = await scrypt(password, salt, SCRYPT.keylen, SCRYPT);
   return `scrypt$${SCRYPT.N}$${SCRYPT.r}$${SCRYPT.p}$${salt.toString('base64url')}$${hash.toString('base64url')}`;
 }
 
-function verifyPassword(password, stored) {
+async function verifyPassword(password, stored) {
   const parts = String(stored || '').split('$');
   if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
   const [, N, r, p, salt, hash] = parts;
   const expected = Buffer.from(hash, 'base64url');
-  const actual = crypto.scryptSync(String(password), Buffer.from(salt, 'base64url'), expected.length, { N: +N, r: +r, p: +p });
+  const actual = await scrypt(password, Buffer.from(salt, 'base64url'), expected.length, { N: +N, r: +r, p: +p });
   return crypto.timingSafeEqual(actual, expected);
 }
+
+function needsRehash(stored) {
+  const [, N, r, p] = String(stored || '').split('$');
+  return +N !== SCRYPT.N || +r !== SCRYPT.r || +p !== SCRYPT.p;
+}
+
+// Veelgebruikte (delen van) wachtwoorden; vergeleken zonder cijfers en tekens,
+// dus 'Wachtwoord2024!' valt er ook onder.
+const COMMON = new Set(`
+  wachtwoord password paswoord passwoord welkom welkomwelkom geheim geheimpje qwerty qwertyuiop azerty asdfgh
+  asdfghjkl zxcvbn abcdef abcdefgh abc letmein admin administrator beheerder gebruiker iloveyou monkey dragon
+  football voetbal ajax feyenoord psv sunshine princess zomer winter lente herfst voorjaar najaar maandag
+  aquatech aquatechservice beregening beregeningsplanner tuin tuinman sproeier water nunspeet nederland holland
+  amsterdam rotterdam utrecht test testtest changeme default master login secret trustno
+`.split(/\s+/).filter(Boolean));
+
+/** Wachtwoordbeleid (OWASP ASVS): lengte boven complexiteitsregels. */
+function passwordProblem(password, username = '') {
+  const pw = String(password || '');
+  if (pw.length < 12) return 'Wachtwoord: minimaal 12 tekens.';
+  if (pw.length > 128) return 'Wachtwoord: maximaal 128 tekens.';
+  const lower = pw.toLowerCase();
+  const user = String(username || '').toLowerCase();
+  if (user.length >= 3 && lower.includes(user)) return 'Het wachtwoord mag je gebruikersnaam niet bevatten.';
+  const core = lower.replace(/[^a-zà-ÿ]/g, '');
+  if (COMMON.has(core) || COMMON.has(lower) || new Set(lower).size < 5 || /^(.{1,4})\1+$/.test(lower)) {
+    return 'Dit wachtwoord is te voorspelbaar. Kies bijvoorbeeld een zin van een paar woorden.';
+  }
+  return null;
+}
+
+let dummyHash;
+const getDummyHash = async () => (dummyHash ||= await hashPassword(crypto.randomBytes(16).toString('hex')));
 
 // ---------- Samenvatting van een plan (voor de historie) ----------
 function polygonArea(pts) {
@@ -125,11 +169,11 @@ function createStore(db) {
     }
     if (displayName !== undefined && String(displayName).trim().length > 80) return 'Naam is te lang.';
     if ((!partial || role !== undefined) && !ROLES.includes(role)) return 'Ongeldige rol.';
-    if ((!partial || password !== undefined) && String(password || '').length < 8) return 'Wachtwoord: minimaal 8 tekens.';
+    if (!partial || password !== undefined) return passwordProblem(password, username);
     return null;
   }
 
-  function createAccount(tenantId, input) {
+  async function createAccount(tenantId, input) {
     const err = validateAccount(input);
     if (err) return { error: err };
     if (q('SELECT 1 FROM users WHERE tenant_id = ? AND username = ?').get(tenantId, input.username)) {
@@ -140,16 +184,16 @@ function createStore(db) {
       displayName: String(input.displayName || '').trim() || input.username,
       role: input.role,
       kind: 'account',
-      passwordHash: hashPassword(input.password),
+      passwordHash: await hashPassword(input.password),
     });
     return { user: u };
   }
 
-  function updateAccount(tenantId, id, input) {
+  async function updateAccount(tenantId, id, input) {
     const u = q('SELECT * FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
     if (!u) return { error: 'Gebruiker niet gevonden.', status: 404 };
     if (u.kind !== 'account') return { error: 'Systeem- en gastgebruikers zijn niet aan te passen.', status: 409 };
-    const err = validateAccount(input, { partial: true });
+    const err = validateAccount({ ...input, username: input.username ?? (input.password !== undefined ? u.username : undefined) }, { partial: true });
     if (err) return { error: err };
     if (input.username !== undefined) return { error: 'De gebruikersnaam is niet te wijzigen.' };
     // De laatste actieve beheerder blijft beheerder: anders verschijnt het
@@ -161,7 +205,10 @@ function createStore(db) {
     if (input.displayName !== undefined) q('UPDATE users SET display_name = ? WHERE id = ?').run(String(input.displayName).trim() || u.username, u.id);
     if (input.role !== undefined) q('UPDATE users SET role = ? WHERE id = ?').run(input.role, u.id);
     if (input.disabled !== undefined) q('UPDATE users SET disabled = ? WHERE id = ?').run(input.disabled ? 1 : 0, u.id);
-    if (input.password !== undefined) q('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(input.password), u.id);
+    const newHash = input.password !== undefined ? await hashPassword(input.password) : null;
+    if (newHash) q('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, u.id);
+    // Nieuw wachtwoord of uitgeschakeld: op alle toestellen uitgelogd.
+    if (newHash || input.disabled) revokeSessions(tenantId, u.id);
     return { user: getUser(u.id) };
   }
 
@@ -170,11 +217,84 @@ function createStore(db) {
     return q("SELECT COUNT(*) AS n FROM users WHERE tenant_id = ? AND kind = 'account' AND role = 'beheerder' AND disabled = 0").get(tenantId).n;
   }
 
-  function authenticate(tenantId, username, password) {
+  async function authenticate(tenantId, username, password) {
     const u = q("SELECT * FROM users WHERE tenant_id = ? AND username = ? AND kind = 'account'").get(tenantId, String(username || '').trim().toLowerCase());
     // Ook zonder gebruiker een hash uitrekenen: gelijke looptijd.
-    const ok = verifyPassword(password, u?.password_hash || DUMMY_HASH);
-    return ok && u && !u.disabled ? u : null;
+    const ok = await verifyPassword(password, u?.password_hash || await getDummyHash());
+    if (!(ok && u && !u.disabled)) return null;
+    if (needsRehash(u.password_hash)) {
+      // Zelfde wachtwoord, sterkere hash; de lopende sessies blijven geldig.
+      const hash = await hashPassword(password);
+      q('UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?').run(hash, u.id, u.password_hash);
+      q('UPDATE sessions SET fingerprint = ? WHERE user_id = ? AND via = ?').run(fingerprintOf(hash), u.id, 'user');
+      return getUser(u.id);
+    }
+    return u;
+  }
+
+  // ---------- Sessies ----------
+  // Het token (32 willekeurige bytes) staat alleen in de cookie; de database
+  // kent alleen de hash. De vingerafdruk hoort bij het wachtwoord (accounts)
+  // of de toegangscode: verandert die, dan vervalt de sessie.
+  const tokenHash = (token) => crypto.createHash('sha256').update(String(token)).digest('base64url');
+
+  function createSession({ tenantId, userId, via, fingerprint, maxMs, ip = '', userAgent = '' }) {
+    const token = crypto.randomBytes(32).toString('base64url');
+    const ts = Date.now();
+    q(`INSERT INTO sessions (id_hash, tenant_id, user_id, via, fingerprint, created_at, last_seen_at, expires_at, ip, user_agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(tokenHash(token), tenantId, userId, via, fingerprint,
+      new Date(ts).toISOString(), new Date(ts).toISOString(), new Date(ts + maxMs).toISOString(), String(ip).slice(0, 64), String(userAgent).slice(0, 200));
+    return token;
+  }
+
+  function findSession(token) {
+    if (typeof token !== 'string' || !/^[\w-]{40,60}$/.test(token)) return null;
+    return q('SELECT * FROM sessions WHERE id_hash = ?').get(tokenHash(token)) || null;
+  }
+
+  function touchSession(row) {
+    const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    if (row.last_seen_at < cutoff) q('UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?').run(now(), row.id_hash);
+  }
+
+  const deleteSession = (token) => q('DELETE FROM sessions WHERE id_hash = ?').run(tokenHash(token)).changes;
+  const dropSession = (row) => q('DELETE FROM sessions WHERE id_hash = ?').run(row.id_hash);
+  const revokeSessions = (tenantId, userId) => q('DELETE FROM sessions WHERE tenant_id = ? AND user_id = ?').run(tenantId, userId).changes;
+
+  // ---------- Auditlog ----------
+  // Beveiligingsgebeurtenissen (inloggen, gebruikers, instellingen). Nooit
+  // wachtwoorden, codes of sleutels in `detail`.
+  function audit({ tenantId, userId = null, action, detail = {}, ip = '' }) {
+    q('INSERT INTO audit (id, tenant_id, user_id, action, detail, ip, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(newId(), tenantId, userId, action, JSON.stringify(detail || {}), String(ip).slice(0, 64), now());
+  }
+
+  function listAudit(tenantId, { limit = 100, offset = 0, action = '' } = {}) {
+    const where = ['a.tenant_id = ?'];
+    const args = [tenantId];
+    if (action) { where.push('a.action = ?'); args.push(String(action)); }
+    const from = `FROM audit a LEFT JOIN users u ON u.id = a.user_id WHERE ${where.join(' AND ')}`;
+    const total = q(`SELECT COUNT(*) AS n ${from}`).get(...args).n;
+    const lim = Math.max(1, Math.min(1000, Math.floor(Number(limit)) || 100));
+    const off = Math.max(0, Math.floor(Number(offset)) || 0);
+    const items = q(`SELECT a.*, u.username, u.display_name ${from} ORDER BY a.created_at DESC, a.id LIMIT ? OFFSET ?`).all(...args, lim, off)
+      .map((a) => ({ id: a.id, action: a.action, detail: JSON.parse(a.detail || '{}'), ip: a.ip, createdAt: a.created_at,
+        user: a.user_id ? { id: a.user_id, username: a.username, displayName: a.display_name } : null }));
+    return { total, items };
+  }
+
+  // ---------- Bewaartermijnen (AVG) ----------
+  // IP-adressen wissen na ipDays, auditregels verwijderen na auditDays,
+  // verlopen sessies opruimen.
+  function applyRetention(tenantId, { ipDays, auditDays }) {
+    const before = (days) => new Date(Date.now() - days * 86400000).toISOString();
+    return transaction(db, () => ({
+      historyIps: q("UPDATE history SET ip = '' WHERE tenant_id = ? AND ip <> '' AND updated_at < ?").run(tenantId, before(ipDays)).changes,
+      auditIps: q("UPDATE audit SET ip = '' WHERE tenant_id = ? AND ip <> '' AND created_at < ?").run(tenantId, before(ipDays)).changes,
+      sessionIps: q("UPDATE sessions SET ip = '' WHERE tenant_id = ? AND ip <> '' AND created_at < ?").run(tenantId, before(ipDays)).changes,
+      audit: q('DELETE FROM audit WHERE tenant_id = ? AND created_at < ?').run(tenantId, before(auditDays)).changes,
+      sessions: q('DELETE FROM sessions WHERE expires_at < ?').run(now()).changes,
+    }));
   }
 
   function touchUser(id) {
@@ -187,11 +307,12 @@ function createStore(db) {
     return q(`
       SELECT u.*,
         (SELECT COUNT(*) FROM plans p WHERE p.owner_id = u.id AND p.deleted_at IS NULL) AS plan_count,
-        (SELECT COUNT(*) FROM history h WHERE h.user_id = u.id) AS history_count
+        (SELECT COUNT(*) FROM history h WHERE h.user_id = u.id) AS history_count,
+        (SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id AND s.expires_at > ?) AS session_count
       FROM users u WHERE u.tenant_id = ? ${includeGuests ? '' : "AND u.kind <> 'gast'"}
       ORDER BY CASE u.kind WHEN 'systeem' THEN 0 WHEN 'account' THEN 1 ELSE 2 END, u.display_name COLLATE NOCASE`)
-      .all(tenantId)
-      .map((u) => ({ ...publicUser(u), planCount: u.plan_count, historyCount: u.history_count }));
+      .all(now(), tenantId)
+      .map((u) => ({ ...publicUser(u), planCount: u.plan_count, historyCount: u.history_count, sessionCount: u.session_count }));
   }
 
   // ---------- Historie ----------
@@ -335,10 +456,13 @@ function createStore(db) {
 
   return {
     ensureTenant, systemUser, createGuest, createAccount, updateAccount, countAdmins, authenticate, getUser, touchUser, listUsers, publicUser,
+    createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan,
   };
 }
 
-const DUMMY_HASH = hashPassword(crypto.randomBytes(16).toString('hex'));
+// Vingerafdruk van een wachtwoord-hash voor de sessies (geen geheim, wel
+// uniek per wachtwoord): een nieuw wachtwoord maakt oude sessies ongeldig.
+const fingerprintOf = (value) => crypto.createHash('sha256').update(`fp:${value || ''}`).digest('base64url').slice(0, 22);
 
-module.exports = { createStore, hashPassword, verifyPassword, summarize, ROLES };
+module.exports = { createStore, hashPassword, verifyPassword, needsRehash, passwordProblem, fingerprintOf, summarize, ROLES };
