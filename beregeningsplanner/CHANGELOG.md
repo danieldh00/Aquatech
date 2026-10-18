@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.20.0
+
+- **Multitenant.** De app kan meerdere klanten (tenants) bedienen, elk met
+  eigen gebruikers, plannen, historie en instellingen die de andere tenants
+  niet zien. Inloggen blijft op dezelfde URL met gebruikersnaam en
+  wachtwoord: de tenant volgt uit het account (gebruikersnamen zijn daarom
+  uniek over het hele platform).
+- **Hoofdbeheer** (nieuwe module, alleen voor hoofdbeheerders): alle tenants
+  met gebruikers, plannen en laatste activiteit; tenants aanmaken (met
+  meteen de eerste beheerder), hernoemen, uit- en inschakelen, gebruikers van
+  een tenant beheren, een tenant openen om erin te werken, en het overzicht
+  exporteren naar Excel. De bestaande beheerders van Aquatech zijn
+  hoofdbeheerder geworden; de hoofdtenant kan niet worden uitgeschakeld en de
+  laatste hoofdbeheerder blijft actief.
+- **Testomgevingen naast live.** Per tenant een of meer testomgevingen met
+  eigen plannen, historie en instellingen (bij het aanmaken gekopieerd, en
+  desgewenst de huidige plannen). Wisselen gaat via de keuzelijst rechtsboven
+  zonder opnieuw in te loggen of een andere URL. In een testomgeving staat
+  een oranje streep en label in de kopbalk, en heeft de planner een eigen
+  lokaal concept. Testomgevingen zijn leeg te maken of te verwijderen; live
+  blijft ongemoeid. Beheerders van een tenant kunnen in de eigen
+  testomgevingen werken, gewone gebruikers alleen in live.
+- Limieten voor automatisch herkennen (per dag en per IP) gelden nu per
+  tenant en per omgeving.
+- Sessies horen bij de eigen tenant van het account; het auditlog en de
+  bewaartermijnen werken per tenant en per testomgeving. Versleutelde
+  geheimen worden bij een nieuwe testomgeving opnieuw versleuteld
+  overgenomen.
+- Back-ups (de hele database, alle tenants) zijn alleen voor
+  hoofdbeheerders, of met de toegangscode van de hoofdtenant. Plan
+  definitief wissen werkt in de actieve omgeving.
 ## 0.19.1
 
 - Home Assistant-add-on: stoppen en herstarten gebeurt weer netjes. Sinds

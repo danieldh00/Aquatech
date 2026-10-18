@@ -57,8 +57,10 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
       userId = u.id;
       fingerprint = userFingerprint(u);
     }
+    // Een account-sessie hoort bij de eigen tenant van het account (multitenant).
+    const sessionTenant = subject === 'code' ? tenantId : store.getUser(userId).tenant_id;
     return store.createSession({
-      tenantId, userId, via: subject === 'code' ? 'code' : 'user', fingerprint, maxMs: maxDays() * DAY_MS,
+      tenantId: sessionTenant, userId, via: subject === 'code' ? 'code' : 'user', fingerprint, maxMs: maxDays() * DAY_MS,
       ip: req ? remoteIp(req) : '', userAgent: req?.headers?.['user-agent'] || '',
     });
   }
@@ -66,7 +68,9 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
   // Geeft { subject: 'code', row } of { subject: 'user', user, row } terug, of null.
   function verifySession(token) {
     const row = store.findSession(token);
-    if (!row || row.tenant_id !== tenantId) return null;
+    if (!row) return null;
+    // Toegangscode: alleen de hoofdtenant; een account: alleen de eigen tenant.
+    if (row.via === 'code' && row.tenant_id !== tenantId) return null;
     const t = Date.now();
     const expired = Date.parse(row.expires_at) <= t
       || Date.parse(row.created_at) + maxDays() * DAY_MS <= t
@@ -78,7 +82,7 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
       return { subject: 'code', row };
     }
     const user = store.getUser(row.user_id);
-    if (!user || user.disabled || user.kind !== 'account' || !safeEqual(row.fingerprint, userFingerprint(user))) { store.dropSession(row); return null; }
+    if (!user || user.disabled || user.kind !== 'account' || user.tenant_id !== row.tenant_id || !safeEqual(row.fingerprint, userFingerprint(user))) { store.dropSession(row); return null; }
     store.touchSession(row);
     return { subject: 'user', user, row };
   }
@@ -109,14 +113,14 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
     res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
   }
 
-  function cookieAttrs(req, name, value, maxAgeMs) {
+  function cookieAttrs(req, name, value, maxAgeMs, { httpOnly = true } = {}) {
     // 'Secure' alleen als het verzoek via https binnenkwam (de tunnel zet
     // X-Forwarded-Proto); lokaal testen via http://ip:3300 moet ook werken.
     const attrs = [
       `${name}=${encodeURIComponent(value)}`,
       'Path=/',
       `Max-Age=${Math.floor(maxAgeMs / 1000)}`,
-      'HttpOnly',
+      ...(httpOnly ? ['HttpOnly'] : []),
       'SameSite=Lax',
     ];
     if (req.headers['x-forwarded-proto'] === 'https') attrs.push('Secure');
@@ -159,7 +163,31 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
     appendCookie(res, cookieAttrs(req, GUEST_COOKIE, `${id}.${hmac(secret, `guest:${id}`)}`, 365 * DAY_MS));
   }
 
-  return { requireAccess, isAuthenticated, session, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
+  // Losse ondertekende cookie voor een doel (bijv. de gekozen omgeving): de
+  // waarde is leesbaar, maar niet te vervalsen. httpOnly: false alleen voor
+  // waarden die de frontend mag lezen en die niets beveiligen.
+  function readSigned(req, name, purpose) {
+    const raw = parseCookies(req.headers.cookie)[name];
+    if (typeof raw !== 'string') return null;
+    const idx = raw.lastIndexOf('.');
+    if (idx < 1) return null;
+    const value = raw.slice(0, idx);
+    return safeEqual(raw.slice(idx + 1), hmac(secret, `${purpose}:${value}`)) ? value : null;
+  }
+
+  function setSigned(req, res, name, value, purpose, opts) {
+    appendCookie(res, cookieAttrs(req, name, `${value}.${hmac(secret, `${purpose}:${value}`)}`, maxDays() * DAY_MS, opts));
+  }
+
+  function setPlain(req, res, name, value, opts) {
+    appendCookie(res, cookieAttrs(req, name, value, maxDays() * DAY_MS, opts));
+  }
+
+  function clearNamed(res, name) {
+    appendCookie(res, `${name}=; Path=/; Max-Age=0; SameSite=Lax`);
+  }
+
+  return { readSigned, setSigned, setPlain, clearNamed, requireAccess, isAuthenticated, session, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
 }
 
 module.exports = { createAuth, remoteIp, parseCookies, COOKIE_NAME, GUEST_COOKIE };

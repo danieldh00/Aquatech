@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Hoofdbeheer – AquaTech Service</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="hoofdbeheer.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Hoofdbeheer</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash wide">
+    <div id="denied" class="notice" hidden></div>
+
+    <div id="app" hidden>
+      <form id="t-form" class="card-form">
+        <h3>Tenant toevoegen</h3>
+        <div class="row">
+          <label>Naam<input name="name" required minlength="2" maxlength="80" autocomplete="off" placeholder="bijv. Groen Beregening BV"></label>
+          <label>Code<input name="slug" required pattern="[a-z0-9][a-z0-9\-]{1,39}" autocomplete="off" placeholder="groen-beregening"></label>
+        </div>
+        <p class="muted small">Eerste beheerder (optioneel, kan ook later via Gebruikers). Gebruikersnamen zijn uniek over het hele platform; inloggen gaat met gebruikersnaam en wachtwoord op dezelfde URL.</p>
+        <div class="row">
+          <label>Gebruikersnaam<input name="adminUsername" pattern="[a-z0-9][a-z0-9._\-]{2,39}" autocomplete="off" placeholder="bijv. piet.groen"></label>
+          <label>Naam<input name="adminName" autocomplete="off" placeholder="Piet Groen"></label>
+          <label>Wachtwoord<input name="adminPassword" type="password" minlength="12" maxlength="128" placeholder="minimaal 12 tekens" autocomplete="new-password"></label>
+          <button class="btn primary" type="submit">Tenant aanmaken</button>
+        </div>
+        <div id="t-err" class="err" role="alert"></div>
+      </form>
+
+      <div class="filters">
+        <input id="t-search" type="search" placeholder="Zoek op naam of code">
+        <button id="t-export" class="btn">Exporteer naar Excel</button>
+      </div>
+      <p class="muted small">Een testomgeving hoort bij een tenant: eigen plannen, historie en instellingen, maar dezelfde gebruikers. Met <b>Openen</b> werk je in die omgeving; wisselen kan ook via de keuzelijst rechtsboven, zonder opnieuw in te loggen.</p>
+      <div class="tablewrap"><table class="grid" id="t-table"></table></div>
+    </div>
+  </main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card">
+      <button class="btn ghost close" id="modal-close" title="Sluiten">✕</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../beregening/vendor/exceljs.min.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="hoofdbeheer.js"></script>
+</body>
+</html>

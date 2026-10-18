@@ -324,7 +324,7 @@
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
-    const mods = (window.AquatechModules || []).filter((m) => m.id !== 'beheer');
+    const mods = (window.AquatechModules || []).filter((m) => m.id !== 'beheer' && m.id !== 'hoofdbeheer');
     $('#s-module-list').innerHTML = mods.map((m) => `
       <label class="chk"><input type="checkbox" data-module="${esc(m.id)}"${view.modules.value[m.id] === false ? '' : ' checked'}>
         ${esc(m.title)}${m.status === 'gepland' ? ' <span class="muted small">(binnenkort)</span>' : ''}</label>`).join('');
@@ -345,7 +345,7 @@
   }
 
   async function loadSettings() {
-    loadBackups();
+    if (state.backups) loadBackups();
     try {
       renderSettings((await api('settings')).settings);
     } catch (e) {
@@ -503,6 +503,9 @@
       return;
     }
     $('#app').hidden = false;
+    // Back-ups bevatten de hele database (alle tenants): alleen voor hoofdbeheerders.
+    state.backups = Boolean(me.platformAdmin || (me.via === 'code' && me.tenant && me.tenant.slug === 'default'));
+    $('#s-backup').hidden = !state.backups;
     document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
     let timer;
     $('#h-search').oninput = () => { clearTimeout(timer); timer = setTimeout(() => { state.offset = 0; loadHistory(); }, 250); };
