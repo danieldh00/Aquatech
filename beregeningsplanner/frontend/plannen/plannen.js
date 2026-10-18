@@ -164,10 +164,27 @@
         <dt>Laatst gewijzigd</dt><dd>${esc(when(p.updatedAt))}</dd>
         ${p.deletedAt ? `<dt>Verwijderd</dt><dd>${esc(when(p.deletedAt))}</dd>` : ''}
       </dl>
-      ${p.deletedAt ? '' : `<div class="actions"><button class="btn primary" id="d-open">${own ? 'Openen in de planner' : 'Kopie openen in de planner'}</button></div>`}
+      <div class="actions">${p.deletedAt ? '' : `<button class="btn primary" id="d-open">${own ? 'Openen in de planner' : 'Kopie openen in de planner'}</button>`}
+        ${state.admin ? '<button class="btn" id="d-purge">Definitief wissen</button>' : ''}</div>
       ${state.admin ? '<h3>Historie</h3><div id="d-history" class="muted small">Laden…</div>' : ''}`;
     const btn = $('#d-open');
     if (btn) btn.onclick = () => openPlan(p);
+    const purge = $('#d-purge');
+    if (purge) {
+      // AVG-verzoek: plan en de inhoud van de historie (kopieën, klant, adres) weg.
+      purge.onclick = async () => {
+        if (!confirm(`"${p.title}" definitief wissen, inclusief klantgegevens en kopieën in de historie? Dit kan niet ongedaan worden gemaakt (oude back-ups bevatten het plan nog tot ze verlopen).`)) return;
+        try {
+          const res = await fetch(`../api/admin/plans/${encodeURIComponent(p.id)}`, { method: 'DELETE', cache: 'no-store' });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || `HTTP ${res.status}`);
+          $('#detail').hidden = true;
+          toast('Plan definitief gewist');
+          load();
+        } catch (e) {
+          toast(`Wissen mislukt: ${e.message}`, true);
+        }
+      };
+    }
     $('#detail').hidden = false;
     if (!state.admin) return;
     try {

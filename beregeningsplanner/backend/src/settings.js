@@ -27,6 +27,9 @@ const FIELDS = {
   // zoveel dagen gewist; regels in het auditlog na zoveel dagen verwijderd.
   ipRetentionDays: { type: 'int', default: 90, min: 1, max: 3650 },
   auditRetentionDays: { type: 'int', default: 365, min: 30, max: 3650 },
+  // Versleutelde back-ups van de database: dagelijks, zoveel dagen bewaren
+  // (0 = geen automatische back-ups).
+  backupKeepDays: { type: 'int', env: 'BACKUP_KEEP_DAYS', default: 14, min: 0, max: 365 },
 };
 
 class SettingsError extends Error {
