@@ -14,6 +14,7 @@ const { createVault, loadOrCreateMasterKey } = require('./vault');
 const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes } = require('./quotes');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders');
+const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -126,8 +127,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const auth = createAuth({ secret, store, tenantId: tenant.id, getAccessCode,
     idleDays: () => settings.get('sessionIdleDays'), maxDays: () => settings.get('sessionMaxDays') });
   // Standaard in het auditlog van de actieve omgeving (zonder inlog de hoofdtenant).
+  // Werkt een hoofdbeheerder als deze gebruiker (impersonatie), dan staat diens
+  // gebruikersnaam erbij.
   const audit = (req, action, detail = {}, userId, tenantId) => store.audit({ tenantId: tenantId || req.tenantId || tenant.id,
-    userId: userId === undefined ? req.user?.id || null : userId, action, detail, ip: remoteIp(req) });
+    userId: userId === undefined ? req.user?.id || null : userId, action,
+    detail: req.user?.impersonator ? { ...detail, impersonatie: req.user.impersonator.username } : detail, ip: remoteIp(req) });
+  const impersonation = createImpersonation({ store, imp: createImpersonationStore(database), auth, audit, mainTenantId: tenant.id });
   // Express 4 vangt geen afgewezen promises: doorgeven aan de foutafhandeling.
   const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
   // De AI-client volgt de API-sleutel uit de instellingen van de tenant (zonder herstart).
@@ -209,27 +214,35 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/auth/login', loginLimiter, wrap(async (req, res) => {
     const username = String(req.body?.username ?? '').trim().toLowerCase().slice(0, 60);
     if (username) {
-      if (lockedOut(username)) {
-        audit(req, 'inloggen_geblokkeerd', { username }, null);
+      // De organisatiecode bepaalt de organisatie (leeg = hoofdtenant); dezelfde
+      // gebruikersnaam kan in meer organisaties bestaan. Testaccounts van een
+      // testomgeving loggen in met de code van de organisatie of van die omgeving.
+      const orgCode = String(req.body?.tenant ?? '').trim().toLowerCase().slice(0, 60);
+      const home = store.loginTenant(orgCode);
+      const key = `${home?.id || orgCode}:${username}`;
+      if (lockedOut(key)) {
+        audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, home?.id);
         return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
       }
-      // Gebruikersnamen zijn uniek over alle tenants: de tenant volgt uit het account.
-      const user = await store.authenticate(null, username, String(req.body?.password ?? '').slice(0, 1024));
+      // Ook bij een onbekende code een wachtwoord controleren (gelijke looptijd).
+      const user = await store.authenticate(home?.id || null, username, String(req.body?.password ?? '').slice(0, 1024));
       if (!user) {
-        failed(username);
-        audit(req, 'inloggen_mislukt', { username }, null);
-        return res.status(401).json({ error: 'wrong_login', message: 'Onjuiste gebruikersnaam of wachtwoord.' });
+        failed(key);
+        audit(req, 'inloggen_mislukt', { username, organisatie: orgCode }, null, home?.id);
+        return res.status(401).json({ error: 'wrong_login', message: 'Onjuiste organisatiecode, gebruikersnaam of wachtwoord.' });
       }
-      failures.delete(username);
-      const home = store.getTenant(user.tenant_id);
-      if (!home || (home.disabled && !user.platform_admin)) {
+      failures.delete(key);
+      // Testaccounts horen bij een testomgeving van de organisatie.
+      const own = store.getTenant(user.tenant_id);
+      if ((home.disabled || own?.disabled) && !user.platform_admin) {
         audit(req, 'inloggen_geweigerd', { username, reden: 'tenant_uitgeschakeld' }, user.id, user.tenant_id);
         return res.status(403).json({ error: 'tenant_disabled', message: 'Deze organisatie is uitgeschakeld. Neem contact op met de beheerder van het platform.' });
       }
+      impersonation.stop(req, res, 'opnieuw_ingelogd');
       auth.setCookie(req, res, user.id);
       clearEnvironment(req, res);
       audit(req, 'ingelogd', { via: 'account' }, user.id, user.tenant_id);
-      return res.json({ ok: true });
+      return res.json({ ok: true, tenant: home.slug === 'default' ? '' : home.slug });
     }
     if (!getAccessCode()) {
       return res.status(400).json({ error: 'username_required', message: 'Vul je gebruikersnaam en wachtwoord in.' });
@@ -238,6 +251,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       audit(req, 'inloggen_mislukt', { via: 'toegangscode' }, null);
       return res.status(401).json({ error: 'wrong_code', message: 'Onjuiste toegangscode.' });
     }
+    impersonation.stop(req, res, 'opnieuw_ingelogd');
     auth.setCookie(req, res);
     clearEnvironment(req, res);
     audit(req, 'ingelogd', { via: 'toegangscode' }, null);
@@ -245,6 +259,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }));
 
   app.post('/api/auth/logout', (req, res) => {
+    impersonation.stop(req, res, 'uitgelogd');
     const s = auth.session(req);
     if (s) audit(req, 'uitgelogd', {}, s.user?.id || s.row.user_id, s.row.tenant_id);
     auth.clearCookie(req, res);
@@ -308,7 +323,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
     if (user) {
       store.touchUser(user.id);
-      user = actingUser(req, user);
+      // Een hoofdbeheerder kan tijdelijk als een andere gebruiker werken (zie impersonation.js).
+      const as = s?.via === 'user' && user.platform_admin ? impersonation.resolve(req, user) : null;
+      user = as || actingUser(req, user);
     }
     req.user = user;
     req.tenantId = user ? user.tenant_id : tenant.id;
@@ -400,6 +417,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   };
   const ipOf = (req) => remoteIp(req);
 
+  const loginCodeOf = (user) => {
+    const t = user && store.getTenant(user.home_tenant_id || user.tenant_id);
+    return !t || t.slug === 'default' ? '' : t.slug;
+  };
+
   app.get('/api/me', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const user = identify(req);
@@ -413,14 +435,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       if (wanted) auth.setPlain(req, res, ENV_HINT, wanted, { httpOnly: false });
       else auth.clearNamed(res, ENV_HINT);
     }
+    impersonation.syncHint(req, res, user);
+    const imp = user?.impersonation;
     res.json({
       user: user ? store.publicUser(user) : null,
       via,
       tenant: active,
       platformAdmin: Boolean(user?.platform_admin),
+      // Organisatiecode waarmee de gebruikers van deze organisatie inloggen
+      // (leeg voor de hoofdtenant).
+      loginCode: loginCodeOf(user),
       // Wat deze gebruiker mag (zie roles.js); een nog niet bewaarde gast is een klant.
       rights: user ? Roles.rightsOf(user) : guestsAllowed() ? Roles.rightsOf({ role: 'klant' }) : [],
-      environments: user ? accessibleFor(user).length : 0,
+      // Tijdens een impersonatie wordt er niet gewisseld (eerst terug naar het eigen account).
+      environments: user && !imp ? accessibleFor(user).length : 0,
+      impersonation: imp ? { by: user.impersonator.display_name, expiresAt: imp.expiresAt, live: imp.live, environment: imp.tenantName } : null,
 
       // Staan gasten aan, dan werkt iedereen zonder inloggen als (nieuwe) gast.
       guest: !user && guestsAllowed(),
@@ -445,6 +474,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/environment', requireJson, (req, res) => {
     const user = identify(req);
     if (!user || user.kind === 'gast') return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+    if (user.impersonator) return res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' });
     const tid = String(req.body?.tenantId || '');
     const target = accessibleFor(user).find((t) => t.id === tid);
     if (!target) return res.status(404).json({ error: 'not_found', message: 'Omgeving niet gevonden.' });
@@ -899,7 +929,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.get('/api/platform/tenants/:id/users', (req, res) => {
     const t = userTenant(req, res);
-    if (t) res.json({ items: store.listUsers(t.id, { includeGuests: false }) });
+    // Met de supporttoestemming erbij (nodig om in live als de gebruiker te werken).
+    if (t) res.json({ items: store.listUsers(t.id, { includeGuests: false }).map((u) => ({ ...u, support: impersonation.activeGrant(u.id) })) });
   });
 
   app.post('/api/platform/tenants/:id/users', requireJson, wrap(async (req, res) => {
@@ -922,6 +953,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     auditUserChange(req, out.user, input, t.id);
     res.json(store.publicUser(out.user));
   }));
+
+  impersonation.register(app, { identify, requireJson, clearEnvironment, wrap });
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 

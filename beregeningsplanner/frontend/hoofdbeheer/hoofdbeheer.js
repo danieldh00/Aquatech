@@ -140,7 +140,7 @@
       <p class="muted small">${out.counts.plans} plannen en ${out.counts.quotes} offertes aangemaakt. Alle testaccounts hebben hetzelfde wachtwoord; dat wordt nergens bewaard en is alleen nu te zien. Opnieuw vullen geeft een nieuw wachtwoord.</p>
       <p>Wachtwoord: <b class="code" id="s-pw">${esc(out.password)}</b> <button class="btn small" id="s-copy">Kopiëren</button></p>
       <div class="tablewrap"><table class="grid"><thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Rol</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="muted small">Inloggen met een testaccount (bijvoorbeeld in een privévenster) brengt je direct in deze testomgeving, met de rechten van die rol.</p>
+      <p class="muted small">Inloggen met een testaccount (bijvoorbeeld in een privévenster) brengt je direct in deze testomgeving, met de rechten van die rol. Organisatiecode: <b class="code">${esc(t.slug)}</b>.</p>
       <div class="row"><button class="btn" id="s-xlsx">Inloggegevens naar Excel</button></div>`);
     $('#s-copy').onclick = () => navigator.clipboard.writeText(out.password).then(() => toast('Wachtwoord gekopieerd'), () => toast('Kopiëren lukt niet; selecteer het wachtwoord zelf.', true));
     $('#s-xlsx').onclick = () => accountsExcel(t, out).catch((e) => toast(e.message, true));
@@ -152,13 +152,14 @@
     const ws = wb.addWorksheet('Testaccounts');
     ws.columns = [
       { header: 'Naam', key: 'name', width: 32 },
+      { header: 'Organisatiecode', key: 'org', width: 26 },
       { header: 'Gebruikersnaam', key: 'username', width: 34 },
       { header: 'Rol', key: 'role', width: 16 },
       { header: 'Wachtwoord', key: 'password', width: 30 },
       { header: 'Testomgeving', key: 'env', width: 26 },
     ];
     ws.getRow(1).font = { bold: true };
-    for (const u of out.accounts) ws.addRow({ name: u.displayName, username: u.username, role: Roles.label(u.role), password: out.password, env: t.name });
+    for (const u of out.accounts) ws.addRow({ name: u.displayName, org: t.slug, username: u.username, role: Roles.label(u.role), password: out.password, env: t.name });
     await download(wb, `testaccounts_${t.slug}.xlsx`);
   }
 
@@ -203,15 +204,18 @@
   async function usersDialog(t) {
     let users = [];
     try { users = (await api(`platform/tenants/${encodeURIComponent(t.id)}/users`)).items || []; } catch (e) { toast(e.message, true); return; }
+    const canImpersonate = (u) => u.kind === 'account' && !u.platformAdmin && !u.disabled;
+    const support = (u) => (u.platformAdmin || u.kind !== 'account' || t.environment === 'test' ? '–' : u.support ? `<span class="pill live" title="Supporttoegang voor live">tot ${esc(when(u.support.expiresAt))}</span>` : '<span class="muted">geen</span>');
     const rows = users.map((u) => `<tr data-uid="${esc(u.id)}" class="${u.disabled ? 'off' : ''}">
         <td>${esc(u.displayName)}<br><span class="code">${esc(u.username)}</span></td>
         <td>${u.kind === 'account' ? `<select data-f="role">${roleOptions(u.role)}</select>` : esc(Roles.label(u.role))}${u.platformAdmin ? ' <span class="pill hoofd">hoofdbeheerder</span>' : ''}</td>
         <td>${esc(when(u.lastSeenAt))}</td>
-        <td class="acts">${u.kind === 'account' ? `<button class="btn small" data-f="toggle">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button><button class="btn small" data-f="password">Wachtwoord</button>` : ''}</td>
+        <td>${support(u)}</td>
+        <td class="acts">${canImpersonate(u) ? '<button class="btn small" data-f="impersonate">Inloggen als</button>' : ''}${u.kind === 'account' ? `<button class="btn small" data-f="toggle">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button><button class="btn small" data-f="password">Wachtwoord</button>` : ''}</td>
       </tr>`).join('');
     modal(`<h2>${t.environment === 'test' ? 'Testaccounts' : 'Gebruikers'} van ${esc(t.name)}</h2>
       ${t.environment === 'test' ? '<p class="muted small">Accounts die alleen in deze testomgeving bestaan. Ze verdwijnen bij Leegmaken of Verwijderen.</p>' : ''}
-      <div class="tablewrap"><table class="grid" id="mu-table">${users.length ? `<thead><tr><th>Gebruiker</th><th>Rol</th><th>Laatst gezien</th><th></th></tr></thead><tbody>${rows}</tbody>` : '<tr><td class="empty">Nog geen gebruikers.</td></tr>'}</table></div>
+      <div class="tablewrap"><table class="grid" id="mu-table">${users.length ? `<thead><tr><th>Gebruiker</th><th>Rol</th><th>Laatst gezien</th><th>Support (live)</th><th></th></tr></thead><tbody>${rows}</tbody>` : '<tr><td class="empty">Nog geen gebruikers.</td></tr>'}</table></div>
       <form id="mu-form" class="card-form">
         <h3>Gebruiker toevoegen</h3>
         <div class="row">
@@ -237,6 +241,7 @@
       const tr = ev.target.closest('tr[data-uid]');
       if (!b || !tr) return;
       const u = users.find((x) => x.id === tr.dataset.uid);
+      if (b.dataset.f === 'impersonate') return impersonateDialog(t, u);
       if (b.dataset.f === 'toggle') patch(u.id, { disabled: !u.disabled }, u.disabled ? 'Ingeschakeld' : 'Uitgeschakeld');
       if (b.dataset.f === 'password') {
         const pw = prompt(`Nieuw wachtwoord voor ${u.displayName} (minimaal 12 tekens)`);
@@ -255,6 +260,44 @@
         toast('Gebruiker toegevoegd');
         await load();
         usersDialog(find(t.id) || t);
+      } catch (e) { $('.err', f).textContent = e.message; }
+    };
+  }
+
+  // ---------- Inloggen als een gebruiker (impersonatie) ----------
+  // In een testomgeving zonder goedkeuring; in live alleen als de gebruiker
+  // supporttoegang heeft gegeven. Terug kan altijd met de rode balk onderin.
+  function impersonateDialog(t, u) {
+    // Een testaccount bestaat alleen in zijn eigen testomgeving.
+    if (t.environment === 'test') u = { ...u, support: null };
+    const envs = t.environment === 'test' ? [t] : (find(t.id) || t).environments || [];
+    const opts = t.environment === 'test' ? `<option value="${esc(t.id)}">Test: ${esc(t.name)} (zonder goedkeuring)</option>` : [
+      ...envs.filter((e) => !e.disabled).map((e) => `<option value="${esc(e.id)}">Test: ${esc(e.name)} (zonder goedkeuring)</option>`),
+      `<option value="${esc(t.id)}"${u.support ? '' : ' disabled'}>Live${u.support ? ` (toestemming tot ${esc(when(u.support.expiresAt))})` : ' (geen toestemming)'}</option>`,
+    ].join('');
+    const hint = u.support || t.environment === 'test'
+      ? ''
+      : `<p class="muted small">Voor live is toestemming nodig: ${esc(u.displayName)} geeft die zelf op het dashboard bij <b>Support op afstand</b>, voor een beperkte tijd.${envs.length ? '' : ' Deze tenant heeft nog geen testomgeving.'}</p>`;
+    modal(`<h2>Inloggen als ${esc(u.displayName)}</h2>
+      <p class="muted small">Je werkt dan met de rol en rechten van ${esc(u.displayName)} (${esc(Roles.label(u.role))}). Alles wat je doet komt met jouw naam in het auditlog. Terug naar je eigen account kan altijd met de rode balk onderin.</p>
+      ${hint}
+      <form id="imp-form" class="card-form">
+        <div class="row">
+          <label>Omgeving<select name="tenantId">${opts}</select></label>
+          <label>Reden (optioneel)<input name="reason" maxlength="200" autocomplete="off" placeholder="bijv. vraag over offerte"></label>
+        </div>
+        <div class="row"><button class="btn primary" type="submit">Inloggen als ${esc(u.displayName)}</button></div>
+        <div class="err" role="alert"></div>
+      </form>`);
+    const f = $('#imp-form');
+    const sel = f.tenantId;
+    if (sel.options[sel.selectedIndex]?.disabled) sel.selectedIndex = -1;
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      if (!sel.value) { $('.err', f).textContent = 'Kies een omgeving.'; return; }
+      try {
+        await api('platform/impersonate', { body: { userId: u.id, tenantId: sel.value, reason: f.reason.value.trim() } });
+        location.href = '../';
       } catch (e) { $('.err', f).textContent = e.message; }
     };
   }

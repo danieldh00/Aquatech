@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.25.0
+## 0.26.0
 
 - **Werkorders** (nieuwe module, tegel op het dashboard, voor beheerders en
   installateurs; een klant ziet ze niet): van een offerte met status
@@ -18,6 +18,34 @@
 - Werkbon als PDF (afdrukversie met afvinkvakjes en aftekenregels) en Excel
   (werkorder, zones en materialen op aparte tabbladen); het overzicht is ook
   naar Excel te exporteren. Nummering `WO-<jaar>-0001` per omgeving.
+
+## 0.25.0
+
+- **Gebruikersnamen uniek per organisatie**: de tenant wordt niet meer uit de
+  gebruikersnaam afgeleid. Dezelfde naam (bijvoorbeeld een voornaam) kan in
+  meerdere organisaties bestaan; elke gebruiker heeft zijn eigen id.
+- **Organisatiecode bij het inloggen**: de inlogpagina vraagt de code van de
+  organisatie en onthoudt die in de browser; `login?org=<code>` vult hem in.
+  Leeg = de hoofdorganisatie (hoofdbeheerders). De code van een testomgeving
+  werkt ook. Beheer → Gebruikers toont de code en een inloglink; de Excel met
+  testaccounts heeft een kolom Organisatiecode.
+- Blokkade na tien mislukte pogingen geldt per organisatie en gebruikersnaam.
+- Migratie 8 verwijdert de platformbrede index op gebruikersnaam; bestaande
+  accounts blijven ongewijzigd (ze waren al uniek per tenant).
+
+## 0.24.0
+
+- **Inloggen als een gebruiker (impersonatie)** voor de hoofdbeheerder:
+  vanuit Hoofdbeheer → Gebruikers werk je tijdelijk met de rol en rechten
+  van een gebruiker. In een testomgeving zonder goedkeuring; in live alleen
+  met toestemming die de gebruiker zelf geeft op het dashboard (*Support op
+  afstand*, voor 1 uur tot 3 dagen, altijd in te trekken).
+- Tijdens een impersonatie staat onderin elke pagina een rode balk met
+  **Terug naar eigen account** (één klik); hoogstens 8 uur, en uitloggen
+  stopt hem ook.
+- Auditlog: start, einde (met reden: gestopt, verlopen, toestemming
+  ingetrokken) en elke actie tijdens een impersonatie met de naam van de
+  hoofdbeheerder. De gebruiker ziet zelf wie er heeft meegekeken.
 
 ## 0.23.0
 

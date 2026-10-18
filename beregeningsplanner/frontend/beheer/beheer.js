@@ -20,6 +20,8 @@
     gebruiker_gewijzigd: 'Gebruiker gewijzigd', plan_gewist: 'Plan definitief gewist', backup_gemaakt: 'Back-up gemaakt',
     backup_gedownload: 'Back-up gedownload', sessies_ingetrokken: 'Uitgelogd op alle toestellen', instellingen_gewijzigd: 'Instellingen gewijzigd',
     offerte_akkoord: 'Offerte geaccepteerd door klant', offerte_afgewezen: 'Offerte afgewezen door klant', offerte_gewist: 'Offerte definitief gewist',
+    impersonatie_gestart: 'Hoofdbeheerder werkt als gebruiker', impersonatie_beeindigd: 'Impersonatie beëindigd',
+    support_toegang_verleend: 'Supporttoegang gegeven', support_toegang_ingetrokken: 'Supporttoegang ingetrokken',
   };
 
   function toast(msg, err = false) {
@@ -510,6 +512,11 @@
     // Back-ups bevatten de hele database (alle tenants): alleen voor hoofdbeheerders.
     state.backups = Boolean(me.platformAdmin || (me.via === 'code' && me.tenant && me.tenant.slug === 'default'));
     $('#s-backup').hidden = !state.backups;
+    // Gebruikersnamen zijn uniek per organisatie; inloggen gaat met de organisatiecode.
+    const link = `../login${me.loginCode ? `?org=${encodeURIComponent(me.loginCode)}` : ''}`;
+    $('#u-login').innerHTML = me.loginCode
+      ? `Gebruikersnamen zijn uniek binnen deze organisatie. Gebruikers loggen in met organisatiecode <b>${esc(me.loginCode)}</b> (of via <a href="${esc(link)}">deze inloglink</a>, die de code al invult).`
+      : 'Gebruikersnamen zijn uniek binnen deze organisatie. Gebruikers loggen in met een lege organisatiecode.';
     document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
     let timer;
     $('#h-search').oninput = () => { clearTimeout(timer); timer = setTimeout(() => { state.offset = 0; loadHistory(); }, 250); };
