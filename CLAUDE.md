@@ -77,7 +77,7 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   rehash bij inloggen. Eerste beheerder vereist installatiecode (log,
   `SETUP_CODE`) of toegangscode. Tabel `audit` (`store.audit`, nooit geheimen
   in `detail`), bewaartermijnen via `app.locals.maintenance` (elk uur).
-  Back-ups (`backup.js`, 0.17.0): VACUUM INTO + AES-GCM (`vault.derive('back-ups')`),
+  Back-ups (`backup.js`, 0.19.0): VACUUM INTO + AES-GCM (`vault.derive('back-ups')`),
   `/data/backups` of `BACKUP_DIR`, dagelijks via `app.locals.backupIfDue`,
   `backupKeepDays`; `store.purgePlan` wist plan + historie-inhoud (AVG).
   CSP in server.js: inline scripts alleen in login/setup.html (op hash);

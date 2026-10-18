@@ -68,6 +68,23 @@ function isModule(name) {
   }
 }
 
+// Pagina's krijgen de appversie achter elke lokale stylesheet en elk script
+// (`css/app.css?v=<versie>`). Zo laadt een telefoon na een update gegarandeerd
+// de nieuwe bestanden, ook als de browser of een proxy (Cloudflare) een oude
+// versie in de cache heeft; zonder dit kreeg iOS de nieuwe HTML met oude CSS.
+function versionAssets(html, version) {
+  const v = encodeURIComponent(version);
+  return html.replace(/(<(?:link|script)\b[^>]*?\b(?:href|src)=")([^"?#:]+\.(?:css|js))(")/g, `$1$2?v=${v}$3`);
+}
+
+function sendPage(res, file, version) {
+  fs.readFile(file, 'utf8', (err, html) => {
+    if (err) return res.status(404).end();
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(versionAssets(html, version));
+  });
+}
+
 // accessCode, anthropicApiKey en aiDailyLimit zijn alleen startwaarden (net als
 // env); de actuele waarden komen uit de instellingen.
 function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null }) {
@@ -585,6 +602,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // redirect: false -- express zou `/beregening` absoluut doorsturen naar
   // `/beregening/`, wat achter een proxy met een padprefix buiten de app
   // uitkomt; dat doen we hieronder zelf, relatief.
+  // Pagina's zelf (map met index.html of een .html-bestand) met geversioneerde
+  // verwijzingen naar CSS en JS; overige bestanden via express.static.
+  app.get(/(\/|\.html)$/, (req, res, next) => {
+    const rel = req.path.endsWith('/') ? `${req.path}index.html` : req.path;
+    const file = path.join(FRONTEND_DIR, rel);
+    if (!file.startsWith(FRONTEND_DIR + path.sep)) return next();
+    fs.stat(file, (err, st) => (err || !st.isFile() ? next() : sendPage(res, file, version)));
+  });
   app.use(express.static(FRONTEND_DIR, { index: 'index.html', redirect: false, setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
 
   // Elke map in de frontend met een eigen index.html is een module van het
@@ -599,7 +624,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return res.redirect(302, `${mod}/${qs}`);
     }
     // Elk ander pad dat geen bestand is: de module zelf, of anders het dashboard.
-    res.sendFile(path.join(FRONTEND_DIR, mod || '', 'index.html'));
+    sendPage(res, path.join(FRONTEND_DIR, mod || '', 'index.html'), version);
   });
 
   // eslint-disable-next-line no-unused-vars
@@ -695,4 +720,4 @@ function dropPrivileges(dataDir) {
   }
 }
 
-module.exports = { createApp, FRONTEND_DIR };
+module.exports = { versionAssets, createApp, FRONTEND_DIR };
