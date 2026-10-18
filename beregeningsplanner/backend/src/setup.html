@@ -33,13 +33,14 @@
     <input id="user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required pattern="[a-z0-9][a-z0-9._\-]{2,39}">
     <p class="hint">Kleine letters, cijfers, punt of streepje (3–40 tekens).</p>
     <label for="pw" style="margin-top:12px">Wachtwoord</label>
-    <input id="pw" type="password" autocomplete="new-password" minlength="8" required>
+    <input id="pw" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+    <p class="hint">Minimaal 12 tekens; een zin van een paar woorden werkt goed.</p>
     <label for="pw2" style="margin-top:12px">Wachtwoord herhalen</label>
-    <input id="pw2" type="password" autocomplete="new-password" minlength="8" required>
-    <div id="codewrap" hidden>
-      <label for="code" style="margin-top:12px">Toegangscode</label>
-      <input id="code" type="password" autocomplete="off">
-      <p class="hint">Er is al een toegangscode ingesteld; vul die in ter bevestiging.</p>
+    <input id="pw2" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+    <div id="codewrap">
+      <label for="code" style="margin-top:12px" id="codelabel">Installatiecode</label>
+      <input id="code" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+      <p class="hint" id="codehint">Staat in het serverlog bij het starten (<code>docker compose logs aquatech</code>), zodat alleen de beheerder van de server dit account kan aanmaken.</p>
     </div>
     <button id="b" type="submit">Beheerder aanmaken</button>
     <div class="err" id="e" role="alert"></div>
@@ -51,7 +52,11 @@
     const api = (p) => (base ? base + '/' : '') + 'api/' + p;
     fetch(api('setup'), { cache: 'no-store' }).then((r) => r.json()).then((s) => {
       if (!s.required) { location.reload(); return; }
-      if (s.codeRequired) { $('codewrap').hidden = false; $('code').required = true; }
+      if (s.codeKind === 'toegangscode') {
+        $('codelabel').textContent = 'Toegangscode';
+        $('codehint').textContent = 'Er is al een toegangscode ingesteld; vul die in ter bevestiging.';
+        $('code').type = 'password';
+      }
     }).catch(() => {});
     $('user').addEventListener('input', () => { $('user').value = $('user').value.toLowerCase(); });
     $('f').addEventListener('submit', async (ev) => {

@@ -29,6 +29,7 @@
         <button class="tab" data-tab="plans" role="tab">Plannen</button>
         <button class="tab" data-tab="users" role="tab">Gebruikers</button>
         <button class="tab" data-tab="settings" role="tab">Instellingen</button>
+        <button class="tab" data-tab="audit" role="tab">Auditlog</button>
       </nav>
 
       <section id="tab-history" class="tabpane">
@@ -61,7 +62,7 @@
             <label>Gebruikersnaam<input name="username" required pattern="[a-z0-9][a-z0-9._\-]{2,39}" autocomplete="off" placeholder="bijv. jan.devries"></label>
             <label>Naam<input name="displayName" autocomplete="off" placeholder="Jan de Vries"></label>
             <label>Rol<select name="role"><option value="gebruiker">Gebruiker</option><option value="beheerder">Beheerder</option></select></label>
-            <label>Wachtwoord<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+            <label>Wachtwoord<input name="password" type="password" minlength="12" maxlength="128" required autocomplete="new-password" placeholder="minimaal 12 tekens"></label>
             <button class="btn primary" type="submit">Toevoegen</button>
           </div>
           <div id="u-err" class="err" role="alert"></div>
@@ -115,6 +116,20 @@
           <div class="err" role="alert"></div>
         </form>
 
+        <form id="s-security" class="card-form settings">
+          <h3>Sessies en bewaartermijnen</h3>
+          <p class="muted small">Een sessie (ingelogd toestel) vervalt na de ingestelde dagen zonder gebruik, en hoe dan ook na de maximale duur. IP-adressen in de historie en het auditlog worden na de bewaartermijn gewist (AVG); auditregels daarna verwijderd.</p>
+          <div class="row">
+            <label>Uitloggen na dagen zonder gebruik <span class="src" data-origin="sessionIdleDays"></span><input name="sessionIdleDays" type="number" min="1" max="90" step="1" required></label>
+            <label>Maximale sessieduur (dagen) <span class="src" data-origin="sessionMaxDays"></span><input name="sessionMaxDays" type="number" min="1" max="365" step="1" required></label>
+          </div>
+          <div class="row">
+            <label>IP-adressen bewaren (dagen) <span class="src" data-origin="ipRetentionDays"></span><input name="ipRetentionDays" type="number" min="1" max="3650" step="1" required></label>
+            <label>Auditlog bewaren (dagen) <span class="src" data-origin="auditRetentionDays"></span><input name="auditRetentionDays" type="number" min="30" max="3650" step="1" required></label>
+          </div>
+          <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-modules" class="card-form settings">
           <h3>Modules op het dashboard</h3>
           <p class="muted small">Uitgezette modules verdwijnen van het dashboard. Beheer blijft altijd zichtbaar voor beheerders.</p>
@@ -122,6 +137,11 @@
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
+      </section>
+      <section id="tab-audit" class="tabpane" hidden>
+        <p class="muted small">Beveiligingsgebeurtenissen: inloggen (ook mislukte pogingen), uitloggen, gebruikers en instellingen. Wachtwoorden, codes en sleutels worden nooit vastgelegd.</p>
+        <div class="tablewrap"><table class="grid" id="a-table"></table></div>
+        <div class="pager"><button id="a-prev" class="btn">← Nieuwer</button><span id="a-info" class="muted"></span><button id="a-next" class="btn">Ouder →</button></div>
       </section>
     </div>
   </main>

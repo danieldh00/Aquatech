@@ -6,6 +6,7 @@
 // testomgevingen (eigen tenant met parent_id) maakt een hoofdbeheerder aan.
 // Id's zijn willekeurige UUID's (niet te raden en later zonder hernummeren
 // over te zetten naar een andere database).
+const fs = require('fs');
 const { DatabaseSync } = require('node:sqlite');
 
 // Elke migratie verhoogt PRAGMA user_version met één. Nooit een bestaande
@@ -82,6 +83,35 @@ const MIGRATIONS = [
     PRIMARY KEY (tenant_id, key)
   );
   `,
+  // Sessies op de server (uitloggen en intrekken werkt meteen) en het
+  // auditlog met beveiligingsgebeurtenissen. Van een sessietoken staat alleen
+  // de SHA-256-hash in de database.
+  `
+  CREATE TABLE sessions (
+    id_hash      TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    via          TEXT NOT NULL CHECK (via IN ('user', 'code')),
+    fingerprint  TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    expires_at   TEXT NOT NULL,
+    ip           TEXT NOT NULL DEFAULT '',
+    user_agent   TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX sessions_user ON sessions (tenant_id, user_id);
+
+  CREATE TABLE audit (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    user_id    TEXT REFERENCES users(id),
+    action     TEXT NOT NULL,
+    detail     TEXT NOT NULL DEFAULT '{}',
+    ip         TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX audit_tenant ON audit (tenant_id, created_at);
+  `,
   // Multitenant: tenants met live- en testomgevingen. Een testomgeving is een
   // eigen tenant (eigen plannen, historie en instellingen) met parent_id naar
   // de live-tenant; de gebruikers horen bij de live-tenant. platform_admin =
@@ -102,9 +132,27 @@ const MIGRATIONS = [
 ];
 
 function openDb(file = ':memory:') {
+  const onDisk = file !== ':memory:';
+  if (onDisk) {
+    // Alleen het eigen proces mag de database lezen (ook de journal-bestanden,
+    // die met dezelfde rechten worden aangemaakt).
+    process.umask(0o077);
+    if (!fs.existsSync(file)) fs.closeSync(fs.openSync(file, 'a', 0o600));
+    fs.chmodSync(file, 0o600);
+  }
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON');
   db.exec('PRAGMA busy_timeout = 5000');
+  // Verwijderde gegevens worden overschreven in plaats van alleen vrijgegeven
+  // (wissen volgens de AVG laat zo geen resten achter in het bestand).
+  db.exec('PRAGMA secure_delete = ON');
+  // Geen SQL-functies uit het schema zelf uitvoeren (bescherming tegen een
+  // gemanipuleerd databasebestand).
+  db.exec('PRAGMA trusted_schema = OFF');
+  if (onDisk) {
+    const check = db.prepare('PRAGMA quick_check').all().map((r) => Object.values(r)[0]);
+    if (check.join() !== 'ok') console.error(`Database-controle meldt problemen: ${check.slice(0, 5).join('; ')}`);
+  }
   migrate(db);
   return db;
 }

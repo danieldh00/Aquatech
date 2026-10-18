@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.16.0
+## 0.18.0
 
 - **Multitenant.** De app kan meerdere klanten (tenants) bedienen, elk met
   eigen gebruikers, plannen, historie en instellingen die de andere tenants
@@ -24,6 +24,45 @@
   testomgevingen werken, gewone gebruikers alleen in live.
 - Limieten voor automatisch herkennen (per dag en per IP) gelden nu per
   tenant en per omgeving.
+- Sessies horen bij de eigen tenant van het account; het auditlog en de
+  bewaartermijnen werken per tenant en per testomgeving. Versleutelde
+  geheimen worden bij een nieuwe testomgeving opnieuw versleuteld
+  overgenomen.
+
+## 0.16.0
+
+Beveiliging van de opslag (getoetst aan OWASP ASVS niveau 2 en de AVG).
+
+- **Geheimen versleuteld**: de API-sleutel en de toegangscode staan
+  versleuteld in de database (AES-256-GCM). De hoofdsleutel staat in
+  `/data/master-key` of, beter, los van de data in `AQUATECH_MASTER_KEY_FILE`
+  (Docker-secret). Bestaande waarden worden bij de start vanzelf versleuteld.
+  **Bewaar een kopie van de hoofdsleutel**: zonder die sleutel zijn de
+  opgeslagen geheimen onbruikbaar.
+- **Sessies op de server**: uitloggen, een nieuw wachtwoord, uitschakelen of
+  *Uitloggen* bij een gebruiker (Beheer → Gebruikers) beëindigt een sessie
+  meteen, ook op andere toestellen. Een sessie verloopt na 14 dagen zonder
+  gebruik en uiterlijk na 30 dagen (instelbaar). De cookie bevat alleen een
+  willekeurig token; de database alleen de hash daarvan. **Iedereen moet na
+  deze update één keer opnieuw inloggen.**
+- **Wachtwoorden**: minimaal 12 tekens, niet de gebruikersnaam en geen
+  voorspelbare woorden (zoals *wachtwoord2024*). Sterkere hash (scrypt
+  volgens OWASP); bestaande wachtwoorden blijven werken en krijgen bij de
+  volgende inlog de sterkere hash. Na 10 mislukte pogingen is een account
+  een kwartier geblokkeerd.
+- **Installatiecode**: het eerste beheerdersaccount aanmaken kan alleen met
+  de eenmalige code uit het serverlog (`docker compose logs aquatech`) of
+  met de toegangscode, zodat niemand anders het beheer kan overnemen.
+- **Auditlog** (Beheer → Auditlog): inloggen (ook mislukt), uitloggen,
+  gebruikers- en instellingswijzigingen. Nooit wachtwoorden of sleutels.
+- **Bewaartermijnen (AVG)**: IP-adressen in historie en auditlog worden na
+  90 dagen gewist, auditregels na 365 dagen verwijderd (instelbaar onder
+  Beheer → Instellingen).
+- **Database**: alleen leesbaar voor de app (rechten 0600), verwijderde
+  gegevens worden overschreven (`secure_delete`), integriteitscontrole bij de
+  start. De server draait in de container als gewone gebruiker (niet root).
+- **Beveiligingsheaders**: Content-Security-Policy, geen inbedden in frames,
+  HSTS via https en geen caching van API-antwoorden.
 
 ## 0.15.0
 

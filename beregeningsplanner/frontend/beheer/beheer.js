@@ -10,7 +10,12 @@
   const areaLabel = (t) => (window.Catalog && window.Catalog.areaTypes[t] ? window.Catalog.areaTypes[t].label : t);
   const PAGE = 100;
 
-  const state = { offset: 0, total: 0, users: [] };
+  const state = { offset: 0, total: 0, users: [], auditOffset: 0 };
+  const AUDIT = {
+    ingelogd: 'Ingelogd', uitgelogd: 'Uitgelogd', inloggen_mislukt: 'Inloggen mislukt', inloggen_geblokkeerd: 'Inloggen geblokkeerd',
+    eerste_beheerder: 'Eerste beheerder', installatie_mislukt: 'Installatiecode onjuist', gebruiker_aangemaakt: 'Gebruiker aangemaakt',
+    gebruiker_gewijzigd: 'Gebruiker gewijzigd', sessies_ingetrokken: 'Uitgelogd op alle toestellen', instellingen_gewijzigd: 'Instellingen gewijzigd',
+  };
 
   function toast(msg, err = false) {
     const t = $('#toast');
@@ -235,7 +240,7 @@
     const showGuests = $('#u-guests').checked;
     const items = state.users.filter((u) => showGuests || u.kind !== 'gast');
     const tbl = $('#u-table');
-    tbl.innerHTML = `<thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Soort</th><th>Rol</th><th class="num">Plannen</th><th class="num">Aanvragen</th><th>Laatst actief</th><th></th></tr></thead><tbody>${items.map((u) => {
+    tbl.innerHTML = `<thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Soort</th><th>Rol</th><th class="num">Plannen</th><th class="num">Aanvragen</th><th>Laatst actief</th><th class="num">Sessies</th><th></th></tr></thead><tbody>${items.map((u) => {
       const editable = u.kind === 'account';
       return `<tr class="${u.disabled ? 'off' : ''}">
         <td>${esc(u.displayName)}${u.disabled ? ' <span class="pill">uitgeschakeld</span>' : ''}</td>
@@ -245,7 +250,8 @@
         <td class="num">${u.planCount}</td>
         <td class="num">${u.historyCount}</td>
         <td>${esc(when(u.lastSeenAt))}</td>
-        <td>${editable ? `<button class="btn small" data-pw="${esc(u.id)}">Wachtwoord</button> <button class="btn small" data-toggle="${esc(u.id)}">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button>` : ''}
+        <td class="num">${u.sessionCount || 0}</td>
+        <td>${u.sessionCount ? `<button class="btn small" data-logout="${esc(u.id)}">Uitloggen</button> ` : ''}${editable ? `<button class="btn small" data-pw="${esc(u.id)}">Wachtwoord</button> <button class="btn small" data-toggle="${esc(u.id)}">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button>` : ''}
           ${u.historyCount ? `<button class="btn small" data-hist="${esc(u.id)}">Aanvragen</button>` : ''}</td>
       </tr>`;
     }).join('')}</tbody>`;
@@ -260,8 +266,15 @@
     });
     tbl.querySelectorAll('[data-pw]').forEach((b) => {
       b.onclick = () => {
-        const pw = prompt('Nieuw wachtwoord (minimaal 8 tekens). De gebruiker wordt op alle toestellen uitgelogd.');
+        const pw = prompt('Nieuw wachtwoord (minimaal 12 tekens). De gebruiker wordt op alle toestellen uitgelogd.');
         if (pw) patch(b.dataset.pw, { password: pw }, 'Wachtwoord gewijzigd');
+      };
+    });
+    tbl.querySelectorAll('[data-logout]').forEach((b) => {
+      b.onclick = async () => {
+        if (!confirm('Deze gebruiker op alle toestellen uitloggen?')) return;
+        try { await api(`users/${encodeURIComponent(b.dataset.logout)}/logout`, { method: 'POST' }); toast('Uitgelogd op alle toestellen'); } catch (e) { toast(e.message, true); }
+        loadUsers();
       };
     });
     tbl.querySelectorAll('[data-hist]').forEach((b) => {
@@ -301,6 +314,8 @@
     const code = view.accessCode;
     const codeState = $('[data-state="accessCode"]');
     codeState.textContent = code.set ? 'Ingesteld: inloggen kan ook met de code (als beheerder).' : 'Niet ingesteld: inloggen alleen met een eigen account.';
+    const sec = $('#s-security');
+    for (const k of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays']) sec[k].value = view[k].value;
     const acc = $('#s-access');
     acc.guestAccess.checked = view.guestAccess.value;
     acc.guestAccess.disabled = code.set;
@@ -388,6 +403,13 @@
         }
       };
     });
+    const sec = $('#s-security');
+    sec.onsubmit = (ev) => {
+      ev.preventDefault();
+      const patch = {};
+      for (const k of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays']) patch[k] = Number(sec[k].value);
+      saveSettings(sec, patch, 'Instellingen opgeslagen');
+    };
     const mods = $('#s-modules');
     mods.onsubmit = (ev) => {
       ev.preventDefault();
@@ -397,6 +419,36 @@
     };
   }
 
+  // ---------- Auditlog ----------
+  function auditDetail(a) {
+    const d = a.detail || {};
+    const parts = [];
+    if (d.username) parts.push(`gebruiker ${d.username}`);
+    if (d.via) parts.push(`via ${d.via}`);
+    if (d.role) parts.push(`rol ${d.role}`);
+    if (d.disabled !== undefined) parts.push(d.disabled ? 'uitgeschakeld' : 'ingeschakeld');
+    if (d.fields) parts.push(`velden: ${d.fields.join(', ')}`);
+    if (d.count !== undefined) parts.push(`${d.count} sessie(s)`);
+    return parts.join(' · ');
+  }
+
+  async function loadAudit() {
+    const tbl = $('#a-table');
+    try {
+      const { total, items } = await api(`audit?limit=${PAGE}&offset=${state.auditOffset}`);
+      tbl.innerHTML = !items.length ? '<tr><td class="empty">Nog geen gebeurtenissen.</td></tr>'
+        : `<thead><tr><th>Tijdstip</th><th>Gebeurtenis</th><th>Door</th><th>Details</th><th>IP-adres</th></tr></thead><tbody>${items.map((a) => `
+          <tr><td>${esc(when(a.createdAt))}</td><td>${esc(AUDIT[a.action] || a.action)}</td>
+            <td>${a.user ? esc(a.user.displayName) : '–'}</td><td class="wrap">${esc(auditDetail(a))}</td><td>${esc(a.ip || '–')}</td></tr>`).join('')}</tbody>`;
+      const from = total ? state.auditOffset + 1 : 0;
+      $('#a-info').textContent = `${from}–${Math.min(total, state.auditOffset + PAGE)} van ${total}`;
+      $('#a-prev').disabled = state.auditOffset === 0;
+      $('#a-next').disabled = state.auditOffset + PAGE >= total;
+    } catch (e) {
+      tbl.innerHTML = `<tr><td class="empty">Kan het auditlog niet laden (${esc(e.message)}).</td></tr>`;
+    }
+  }
+
   // ---------- Algemeen ----------
   function showTab(name) {
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
@@ -404,6 +456,7 @@
     if (name === 'plans') loadPlans();
     if (name === 'users') loadUsers();
     if (name === 'settings') loadSettings();
+    if (name === 'audit') loadAudit();
     try { window.history.replaceState(null, '', `#${name}`); } catch (e) { /* file:// */ }
   }
 
@@ -425,6 +478,8 @@
     $('#h-prev').onclick = () => { state.offset = Math.max(0, state.offset - PAGE); loadHistory(); };
     $('#h-next').onclick = () => { state.offset += PAGE; loadHistory(); };
     $('#h-export').onclick = exportHistory;
+    $('#a-prev').onclick = () => { state.auditOffset = Math.max(0, state.auditOffset - PAGE); loadAudit(); };
+    $('#a-next').onclick = () => { state.auditOffset += PAGE; loadAudit(); };
     $('#u-form').onsubmit = addUser;
     $('#u-guests').onchange = renderUsers;
     initSettings();
@@ -434,7 +489,7 @@
     loadHistory();
     // Direct naar een tabblad via beheer/#settings.
     const hash = location.hash.slice(1);
-    if (['plans', 'users', 'settings'].includes(hash)) showTab(hash);
+    if (['plans', 'users', 'settings', 'audit'].includes(hash)) showTab(hash);
   }
 
   init();

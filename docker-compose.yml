@@ -19,14 +19,40 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - AI_DAILY_LIMIT=${AI_DAILY_LIMIT:-}
       - TZ=${TZ:-Europe/Amsterdam}
+      - AQUATECH_MASTER_KEY=${AQUATECH_MASTER_KEY:-}
+      - SETUP_CODE=${SETUP_CODE:-}
+      # Hoofdsleutel als Docker-secret (aanbevolen, zie DOCS.md > Beveiliging):
+      # - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key
     volumes:
       - aquatech-data:/data
+    # secrets:
+    #   - master-key
+    # Hardening: alleen-lezen bestandssysteem (behalve /data en /tmp), geen
+    # extra rechten. De app start als root alleen om /data aan gebruiker
+    # node te geven en gaat daarna als die gebruiker verder.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3300/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       start_period: 15s
       retries: 3
+
+# secrets:
+#   master-key:
+#     file: ./secrets/master-key
 
 volumes:
   # Database (plannen, historie, gebruikers, instellingen) en sessiesleutel.

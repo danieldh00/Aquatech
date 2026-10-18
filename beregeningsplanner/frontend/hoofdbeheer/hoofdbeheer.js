@@ -165,7 +165,7 @@
           <label>Gebruikersnaam<input name="username" required pattern="[a-z0-9][a-z0-9._\\-]{2,39}" autocomplete="off"></label>
           <label>Naam<input name="displayName" autocomplete="off"></label>
           <label>Rol<select name="role"><option value="beheerder">Beheerder</option><option value="gebruiker">Gebruiker</option></select></label>
-          <label>Wachtwoord<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+          <label>Wachtwoord<input name="password" type="password" minlength="12" maxlength="128" required placeholder="minimaal 12 tekens" autocomplete="new-password"></label>
           <button class="btn primary" type="submit">Toevoegen</button>
         </div>
         <div class="err" role="alert"></div>
@@ -186,7 +186,7 @@
       const u = users.find((x) => x.id === tr.dataset.uid);
       if (b.dataset.f === 'toggle') patch(u.id, { disabled: !u.disabled }, u.disabled ? 'Ingeschakeld' : 'Uitgeschakeld');
       if (b.dataset.f === 'password') {
-        const pw = prompt(`Nieuw wachtwoord voor ${u.displayName} (minimaal 8 tekens)`);
+        const pw = prompt(`Nieuw wachtwoord voor ${u.displayName} (minimaal 12 tekens)`);
         if (pw) patch(u.id, { password: pw }, 'Wachtwoord gewijzigd');
       }
     };

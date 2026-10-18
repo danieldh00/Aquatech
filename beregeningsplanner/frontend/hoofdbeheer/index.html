@@ -35,7 +35,7 @@
         <div class="row">
           <label>Gebruikersnaam<input name="adminUsername" pattern="[a-z0-9][a-z0-9._\-]{2,39}" autocomplete="off" placeholder="bijv. piet.groen"></label>
           <label>Naam<input name="adminName" autocomplete="off" placeholder="Piet Groen"></label>
-          <label>Wachtwoord<input name="adminPassword" type="password" minlength="8" autocomplete="new-password"></label>
+          <label>Wachtwoord<input name="adminPassword" type="password" minlength="12" maxlength="128" placeholder="minimaal 12 tekens" autocomplete="new-password"></label>
           <button class="btn primary" type="submit">Tenant aanmaken</button>
         </div>
         <div id="t-err" class="err" role="alert"></div>

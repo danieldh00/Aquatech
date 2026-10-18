@@ -67,6 +67,20 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   `backend/src/settings.js`). Volgorde: database → env → standaard; env is
   alleen een startwaarde. Geheimen gaan nooit volledig naar de
   frontend (`view()` geeft `set` + laatste 4 tekens van de sleutel).
+- **Beveiliging opslag** (0.16.0, ASVS L2 + AVG; overzicht in DOCS.md >
+  *Beveiliging en privacy*): geheimen (`type: 'secret'` in settings.js)
+  versleuteld met `vault.js` (AES-256-GCM, AAD `<tenant>:<veld>`, hoofdsleutel
+  `AQUATECH_MASTER_KEY_FILE` → `AQUATECH_MASTER_KEY` → `/data/master-key`).
+  Sessies in tabel `sessions` (alleen SHA-256 van het token, vingerafdruk van
+  wachtwoord-hash/toegangscode, `sessionIdleDays`/`sessionMaxDays`).
+  Wachtwoorden: async scrypt N=2^17 + `passwordProblem` (min. 12),
+  rehash bij inloggen. Eerste beheerder vereist installatiecode (log,
+  `SETUP_CODE`) of toegangscode. Tabel `audit` (`store.audit`, nooit geheimen
+  in `detail`), bewaartermijnen via `app.locals.maintenance` (elk uur).
+  CSP in server.js: inline scripts alleen in login/setup.html (op hash);
+  nieuwe inline scripts elders werken niet. Proces zakt van root naar uid 1000
+  (`dropPrivileges`, `RUN_AS_ROOT=1` slaat over). Test-wachtwoorden moeten
+  aan het beleid voldoen (bijv. `Tuin-Plan-2026!`).
 - **Plan herkennen** (`backend/src/planAnalyzer.js`): één Claude API-aanroep
   (vision, gestructureerde JSON-uitvoer, fallback "default") die schaal
   (referentiemaat in pixels + lengte in m), vlakken en elementen teruggeeft. De
@@ -111,7 +125,7 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   (`frontend/beheer/`, `role: 'beheerder'` in modules.js) toont historie,
   plannen en gebruikers. De API is ook onder `<module>/api/...` bereikbaar
   (modules gebruiken relatieve `api/...`).
-- **Multitenant** (0.16.0): tenants in `tenants` (`environment` `live`|`test`,
+- **Multitenant** (0.18.0): tenants in `tenants` (`environment` `live`|`test`,
   `parent_id`, `disabled`); een testomgeving is een eigen tenant onder een
   live-tenant (eigen plannen/historie/instellingen, gebruikers van de
   live-tenant). Gebruikersnamen van accounts zijn globaal uniek; inloggen
