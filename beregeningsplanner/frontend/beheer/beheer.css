@@ -6,10 +6,10 @@ a.brand.home { color: inherit; text-decoration: none; }
 .notice { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
 
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
-.tab { font: inherit; padding: 10px 16px; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); cursor: pointer; }
+.tab { font: inherit; font-family: var(--at-font); padding: 10px 16px; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); cursor: pointer; }
 .tab.active { color: var(--primary-dark); border-bottom-color: var(--primary); font-weight: 600; }
 
-.btn { font: inherit; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+.btn { font: inherit; font-family: var(--at-font); padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
 .btn:hover { background: #f1f5f8; }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
 .btn.primary:hover { background: var(--primary-dark); }
@@ -19,7 +19,7 @@ a.brand.home { color: inherit; text-decoration: none; }
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .filters input[type=search] { flex: 1 1 260px; }
-input, select { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+input, select { font: inherit; font-family: var(--at-font); padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 
 .tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 table.grid { width: 100%; border-collapse: collapse; font-size: 14px; }
