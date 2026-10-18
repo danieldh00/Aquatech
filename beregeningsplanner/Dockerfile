@@ -20,4 +20,5 @@ LABEL \
   io.hass.type="app" \
   io.hass.arch="${BUILD_ARCH}"
 
-CMD ["node", "src/server.js"]
+# node:sqlite (de database) meldt in Node 22 nog een ExperimentalWarning.
+CMD ["node", "--disable-warning=ExperimentalWarning", "src/server.js"]

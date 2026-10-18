@@ -234,3 +234,7 @@ td.num, th.num { text-align: right !important; white-space: nowrap; }
   .layout { display: block; }
   .canvas-wrap { height: 95vh; }
 }
+
+/* Mijn plannen */
+#myplans .help-card { width: min(640px, 100%); }
+.myplans-act { text-align: right; white-space: nowrap; }

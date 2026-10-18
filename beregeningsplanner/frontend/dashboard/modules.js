@@ -7,7 +7,8 @@
 // De server serveert elke map met een `index.html` automatisch als module
 // (ook diepe paden en `<id>` zonder slash), dus aan de backend hoeft niets te
 // veranderen. Modules met `status: 'gepland'` staan als "binnenkort" op het
-// dashboard en zijn nog niet aan te klikken.
+// dashboard en zijn nog niet aan te klikken. Met `role: 'beheerder'` is een
+// module alleen voor beheerders zichtbaar (de API controleert dat ook zelf).
 (function (root) {
   const MODULES = [
     {
@@ -17,6 +18,15 @@
       href: 'beregening/',
       icon: 'sprinkler',
       status: 'actief',
+    },
+    {
+      id: 'beheer',
+      title: 'Beheer',
+      description: 'Historie van alle aanvragen, de plannen van alle gebruikers en gebruikersbeheer, met Excel-export.',
+      href: 'beheer/',
+      icon: 'shield',
+      status: 'actief',
+      role: 'beheerder',
     },
     {
       id: 'planning',

@@ -44,7 +44,7 @@ test('zonder inlog: inlogpagina in plaats van de planner, ook voor bestanden', a
       const res = await fetch(base + p);
       assert.strictEqual(res.status, 401, p);
       const html = await res.text();
-      assert.match(html, /Toegangscode/);
+      assert.match(html, /toegangscode/i);
       assert.doesNotMatch(html, /window\.App|class Editor/);
     }
   } finally {

@@ -95,6 +95,18 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   maatlijn, schaal 1:50). Zelfde uitvoerformaat als de AI; bij een AI-fout valt
   `makeConcept` terug op lokaal. Unittests in `backend/test/localrecog.test.js`
   laden de frontendcode in een vm-sandbox.
+- **Database** (`backend/src/db.js`, `node:sqlite`, geen npm-module) in
+  `/data/aquatech.db`; migraties via `PRAGMA user_version` (alleen nieuwe
+  toevoegen). Tenant-klaar: elke tabel heeft `tenant_id`, id's zijn UUID's.
+  `store.js`: users (rol `beheerder`|`gebruiker`, soort `account`|`gast`|
+  `systeem`), plans (alleen eigenaar of beheerder) en `history` (append-only
+  historie van aanvragen, snapshot zonder achtergrond, wijzigingen binnen 30
+  min samengevoegd). Identiteit in `server.js` `identify()`: ingress en
+  toegangscode = systeembeheerder, sessie-cookie met user-id = account,
+  zonder code anders gast per browser (`aquatech_guest`). Module **Beheer**
+  (`frontend/beheer/`, `role: 'beheerder'` in modules.js) toont historie,
+  plannen en gebruikers. De API is ook onder `<module>/api/...` bereikbaar
+  (modules gebruiken relatieve `api/...`).
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - Logs: `ha_get_logs(source="supervisor", slug="c1355dc8_beregeningsplanner")`;

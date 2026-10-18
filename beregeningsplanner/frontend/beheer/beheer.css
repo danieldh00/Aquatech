@@ -1,0 +1,63 @@
+/* Beheerpagina: historie van aanvragen, plannen en gebruikers. */
+.dash.wide { max-width: 1280px; }
+a.brand.home { color: inherit; text-decoration: none; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.notice { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.tab { font: inherit; font-family: var(--at-font); padding: 10px 16px; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); cursor: pointer; }
+.tab.active { color: var(--primary-dark); border-bottom-color: var(--primary); font-weight: 600; }
+
+.btn { font: inherit; font-family: var(--at-font); padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+.btn:hover { background: #f1f5f8; }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn.primary:hover { background: var(--primary-dark); }
+.btn.ghost { background: transparent; border-color: transparent; }
+.btn.small { padding: 3px 8px; font-size: 13px; }
+.btn:disabled { opacity: 0.55; cursor: default; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.filters input[type=search] { flex: 1 1 260px; }
+input, select { font: inherit; font-family: var(--at-font); padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+
+.tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+table.grid { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.grid th, table.grid td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: nowrap; }
+table.grid th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); background: #fafbfc; }
+table.grid td.num, table.grid th.num { text-align: right; }
+table.grid td.wrap { white-space: normal; min-width: 180px; }
+table.grid tr[data-id] { cursor: pointer; }
+table.grid tr[data-id]:hover { background: var(--primary-soft); }
+table.grid tr.off td { color: var(--muted); }
+.empty { padding: 20px; color: var(--muted); }
+
+.pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #eceff1; color: var(--muted); }
+.pill.aangemaakt { background: #e8f5e9; color: #2e7d32; }
+.pill.bijgewerkt { background: var(--primary-soft); color: var(--primary-dark); }
+.pill.verwijderd { background: #ffebee; color: #c62828; }
+.pill.analyse { background: #fff3e0; color: #ef6c00; }
+.pill.beheerder { background: #ede7f6; color: #5e35b1; }
+
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+
+.card-form { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; }
+.card-form h3 { margin: 0 0 10px; font-size: 15px; }
+.card-form .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.card-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.err { color: #c62828; font-size: 14px; min-height: 18px; margin-top: 6px; }
+.chk { display: inline-flex; gap: 6px; align-items: center; margin: 4px 0 10px; font-size: 14px; }
+
+.modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+.modal[hidden] { display: none; }
+.modal-card { position: relative; background: #fff; border-radius: 12px; padding: 20px 24px; width: min(720px, 100%); max-height: 88vh; overflow-y: auto; }
+.modal-card .close { position: absolute; top: 10px; right: 10px; }
+.modal-card h2 { margin: 0 32px 4px 0; font-size: 20px; text-transform: none; letter-spacing: 0; color: var(--text); }
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 14px 0; }
+dl.kv dt { color: var(--muted); }
+dl.kv dd { margin: 0; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #263238; color: #fff; padding: 10px 16px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 20; }
+.toast.show { opacity: 1; }
+.toast.err { background: #c62828; }
