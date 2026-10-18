@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.17.0
+
+- **Na een update altijd de nieuwe opmaak.** Op de iPhone kon de browser (of
+  de Cloudflare-tunnel) na een update nog een oude stylesheet gebruiken bij de
+  nieuwe pagina, waardoor de kopbalk rommelig werd (losse "Menu"/✕-knop en
+  afgesneden knoppen rechtsboven). De server zet nu de appversie achter elke
+  stylesheet en elk script (`css/app.css?v=0.17.0`), zodat elke update ook
+  nieuwe CSS en JS afdwingt.
+
 ## 0.16.0
 
 Beveiliging van de opslag (getoetst aan OWASP ASVS niveau 2 en de AVG).
