@@ -168,6 +168,52 @@ auditlog. Concepten ziet een klant nooit; een verlopen offerte kan hij niet
 meer accepteren. Met de opmaak *totaal per onderdeel* krijgt de klant ook
 via de API geen prijzen per regel.
 
+### Digitale offerte (online akkoord)
+
+In de editor staat het blok **Digitale offerte**:
+
+- **Link maken** geeft een persoonlijke link
+  (`…/openbaar/offerte.html#t=<token>`); de offerte gaat dan naar
+  *Verzonden*. **Kopiëren**, **Bekijken** (telt niet als geopend door de
+  klant) en **Link intrekken** (de oude link werkt daarna niet meer).
+- **Versturen per e-mail** stuurt de klant een bericht met de knop *Offerte
+  bekijken en accorderen*. Zonder ingestelde mailserver opent het bericht in
+  je eigen mailprogramma, met de link erin.
+- Je ziet wanneer de offerte is verstuurd en of, wanneer en hoe vaak de klant
+  hem heeft geopend (ook *bekeken* in het overzicht).
+
+De klant hoeft niet in te loggen. Hij ziet de offerte in de huisstijl, vinkt
+eventuele **opties** aan of uit (het totaal rekent mee), en geeft akkoord met
+zijn naam, een handtekening in het tekenvak en een vinkje voor de offerte en
+voorwaarden; afwijzen kan met een reden. Na het antwoord ziet hij het
+geaccordeerde document met zijn handtekening en kan hij het als PDF opslaan.
+
+Vastgelegd bij het antwoord: naam, tijdstip, IP-adres (plus het door de proxy
+opgegeven adres), browser, handtekening, gekozen opties, totaalbedrag en een
+kenmerk (SHA-256) van de geaccordeerde inhoud. Daarna ligt de offerte vast:
+wijzigen kan alleen via **Kopie maken**. Het akkoord staat in het auditlog en
+onderaan de PDF.
+
+**Opties**: zet bij een regel *Soort* op **Optie** (standaard uit) of
+**Optie (aan)**. Een niet gekozen optie telt niet mee in het totaal, de PDF en
+de Excel-export.
+
+**E-mail** (beheerder, Bedrijfsgegevens → *E-mail*): SMTP-server, poort,
+STARTTLS of SSL/TLS, gebruikersnaam, wachtwoord (versleuteld opgeslagen, nooit
+getoond), afzender en antwoordadres; **Testmail sturen** controleert de
+instellingen. Met een mailserver krijgt de klant na een akkoord een
+bevestiging met een link naar het getekende document, en het bedrijf (het
+e-mailadres bij de bedrijfsgegevens) een bericht bij elk akkoord of elke
+afwijzing.
+
+Beveiliging: het token (192 bits) staat in het fragment van de link en gaat
+alleen als kop `X-Offerte-Token` naar de server, dus niet in logboeken van
+proxy's. In de database staat alleen de SHA-256 ervan doorzoekbaar en het
+token zelf versleuteld (om de link opnieuw te tonen). De openbare pagina laadt
+alleen een vaste lijst bestanden zonder inloggen; de rest van de app blijft
+achter de login. Verzoeken op de openbare API zijn per IP begrensd. Een
+uitgeschakelde organisatie of ingetrokken link geeft *niet beschikbaar*.
+
 ## Gebruikers, rollen en historie van aanvragen
 
 Elke rol ziet op het dashboard alleen de modules die erbij horen; de server
@@ -191,6 +237,24 @@ controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
   eigen plannen.
 - De **laatste actieve beheerder** kan niet worden uitgeschakeld of een
   andere rol krijgen; maak eerst een andere beheerder aan.
+- **Inloggen als een gebruiker (impersonatie)**: een hoofdbeheerder kan in
+  **Hoofdbeheer → Gebruikers → Inloggen als** tijdelijk werken met de rol en
+  rechten van een gebruiker, om mee te kijken of te helpen.
+  - In een **testomgeving** zonder goedkeuring.
+  - In **live** alleen als de gebruiker zelf toestemming heeft gegeven op het
+    dashboard bij **Support op afstand** (1 uur, 4 uur, 1 dag of 3 dagen).
+    De gebruiker kan die toestemming altijd intrekken; een lopende
+    impersonatie stopt dan meteen. Hij ziet daar ook wie er onlangs heeft
+    meegekeken.
+  - Een impersonatie duurt hoogstens 8 uur (in live nooit langer dan de
+    toestemming). Zolang die loopt staat onderin elke pagina een rode balk
+    met **Terug naar eigen account**; uitloggen stopt de impersonatie ook.
+  - Elke start en elk einde staat in het auditlog (van de omgeving én van de
+    hoofdtenant, met de optionele reden), en wat er tijdens een impersonatie
+    gebeurt staat in het auditlog met de naam van de hoofdbeheerder erbij.
+    Een hoofdbeheerder kan niet worden overgenomen, en tijdens een
+    impersonatie kun je niet van omgeving wisselen of toestemming geven
+    namens de gebruiker.
 - **Historie** (**Beheer → Aanvragen**): elke aanvraag krijgt een regel met
   datum, gebruiker, plan, klant, adres, oppervlaktes, sproeiers en zones:
   een nieuw plan, wijzigingen (opeenvolgende wijzigingen van dezelfde
@@ -202,6 +266,35 @@ controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
   (gefilterde) historie als `.xlsx`.
 - Achter de Cloudflare-tunnel toont de historie als IP-adres dat van de
   tunnel, niet dat van de bezoeker.
+
+## Testomgeving vullen met testdata
+
+In **Hoofdbeheer** staat bij elke testomgeving de knop **Vullen met
+testdata** (alleen voor testomgevingen, nooit voor live). Die maakt in één
+keer:
+
+- **Testaccounts** voor elke rol: een beheerder, twee installateurs en drie
+  klanten, met gebruikersnamen als `<code-van-de-omgeving>.klant1`. Alle
+  testaccounts krijgen hetzelfde willekeurige wachtwoord; dat staat alleen
+  in het venster na het vullen (ook als Excel te downloaden) en wordt
+  nergens bewaard.
+- **Nepklanten met tuinen**: zeven plannen met terras, gazon, border, haag,
+  plantenbak, systeemelementen, sproeiers en zones, met een regel in de
+  historie.
+- **Offertes** in alle statussen (concept, verzonden, akkoord, afgewezen),
+  opgebouwd uit die plannen met de bedrijfsgegevens van de omgeving; drie
+  zijn gekoppeld aan de testklanten.
+
+Wat er al in de testomgeving stond (plannen, offertes, historie,
+testaccounts) wordt eerst gewist. Opnieuw vullen geeft een nieuw wachtwoord
+en logt de testaccounts uit; **Leegmaken** en **Verwijderen** ruimen de
+testaccounts mee op.
+
+Testaccounts horen bij de testomgeving zelf: wie ermee inlogt (bijvoorbeeld
+in een privévenster) komt direct in die testomgeving, met de rechten van de
+rol. Een testbeheerder beheert alleen de testaccounts, nooit de gebruikers
+van live. De knop **Testaccounts** toont ze en daar kun je er ook losse bij
+maken.
 
 ## Instellingen
 

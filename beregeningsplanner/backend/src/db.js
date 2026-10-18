@@ -189,6 +189,35 @@ const MIGRATIONS = [
   CREATE INDEX quotes_customer ON quotes (tenant_id, customer_id);
   `,
   },
+  // Impersonatie: een hoofdbeheerder werkt tijdelijk als een gebruiker. In een
+  // testomgeving zonder goedkeuring; in live alleen met een supporttoestemming
+  // die de gebruiker zelf geeft (support_grants, tenant = eigen tenant van de
+  // gebruiker). Een impersonatie hoort bij de omgeving waarin gewerkt wordt.
+  `
+  CREATE TABLE support_grants (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    user_id    TEXT NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT
+  );
+  CREATE INDEX support_grants_user ON support_grants (user_id, expires_at);
+
+  CREATE TABLE impersonations (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    admin_id     TEXT NOT NULL REFERENCES users(id),
+    user_id      TEXT NOT NULL REFERENCES users(id),
+    grant_id     TEXT REFERENCES support_grants(id),
+    reason       TEXT NOT NULL DEFAULT '',
+    started_at   TEXT NOT NULL,
+    expires_at   TEXT NOT NULL,
+    ended_at     TEXT,
+    ended_reason TEXT
+  );
+  CREATE INDEX impersonations_admin ON impersonations (admin_id, started_at);
+  `,
   // Digitale offerte: een openbare link per offerte (alleen de SHA-256 van het
   // token om op te zoeken, het token zelf versleuteld om de link opnieuw te
   // tonen), bijhouden wanneer de klant die opende, en het vastgelegde akkoord

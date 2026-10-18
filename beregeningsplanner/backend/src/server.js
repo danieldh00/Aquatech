@@ -7,12 +7,14 @@ const { createRateLimiter } = require('./rateLimit');
 const { loadOrCreateSecret } = require('./options');
 const { createPlanAnalyzer, AnalyzeError } = require('./planAnalyzer');
 const { openDb } = require('./db');
-const { createStore } = require('./store');
+const { createStore, hashPassword, passwordProblem } = require('./store');
+const testdata = require('./testdata');
 const { createSettings, SettingsError, FIELDS } = require('./settings');
 const { createVault, loadOrCreateMasterKey } = require('./vault');
 const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes } = require('./quotes');
 const { createMailer } = require('./mailer');
+const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -141,8 +143,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const auth = createAuth({ secret, store, tenantId: tenant.id, getAccessCode,
     idleDays: () => settings.get('sessionIdleDays'), maxDays: () => settings.get('sessionMaxDays') });
   // Standaard in het auditlog van de actieve omgeving (zonder inlog de hoofdtenant).
+  // Werkt een hoofdbeheerder als deze gebruiker (impersonatie), dan staat diens
+  // gebruikersnaam erbij.
   const audit = (req, action, detail = {}, userId, tenantId) => store.audit({ tenantId: tenantId || req.tenantId || tenant.id,
-    userId: userId === undefined ? req.user?.id || null : userId, action, detail, ip: remoteIp(req) });
+    userId: userId === undefined ? req.user?.id || null : userId, action,
+    detail: req.user?.impersonator ? { ...detail, impersonatie: req.user.impersonator.username } : detail, ip: remoteIp(req) });
+  const impersonation = createImpersonation({ store, imp: createImpersonationStore(database), auth, audit, mainTenantId: tenant.id });
   // Express 4 vangt geen afgewezen promises: doorgeven aan de foutafhandeling.
   const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
   // De AI-client volgt de API-sleutel uit de instellingen van de tenant (zonder herstart).
@@ -242,6 +248,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         audit(req, 'inloggen_geweigerd', { username, reden: 'tenant_uitgeschakeld' }, user.id, user.tenant_id);
         return res.status(403).json({ error: 'tenant_disabled', message: 'Deze organisatie is uitgeschakeld. Neem contact op met de beheerder van het platform.' });
       }
+      impersonation.stop(req, res, 'opnieuw_ingelogd');
       auth.setCookie(req, res, user.id);
       clearEnvironment(req, res);
       audit(req, 'ingelogd', { via: 'account' }, user.id, user.tenant_id);
@@ -254,6 +261,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       audit(req, 'inloggen_mislukt', { via: 'toegangscode' }, null);
       return res.status(401).json({ error: 'wrong_code', message: 'Onjuiste toegangscode.' });
     }
+    impersonation.stop(req, res, 'opnieuw_ingelogd');
     auth.setCookie(req, res);
     clearEnvironment(req, res);
     audit(req, 'ingelogd', { via: 'toegangscode' }, null);
@@ -261,6 +269,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }));
 
   app.post('/api/auth/logout', (req, res) => {
+    impersonation.stop(req, res, 'uitgelogd');
     const s = auth.session(req);
     if (s) audit(req, 'uitgelogd', {}, s.user?.id || s.row.user_id, s.row.tenant_id);
     auth.clearCookie(req, res);
@@ -306,7 +315,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // tenant_id = de actieve omgeving (live of test), home_tenant_id = de tenant
   // waar het account bij hoort. req.tenantId = de actieve omgeving (zonder
   // inlog de hoofdtenant). Alle gegevens (plannen, historie, instellingen)
-  // gaan via req.tenantId; gebruikersbeheer via homeOf(req.tenantId).
+  // gaan via req.tenantId; gebruikersbeheer via usersTenantOf(req).
   function identify(req) {
     if (req.user !== undefined) return req.user;
     const s = auth.session(req);
@@ -324,7 +333,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
     if (user) {
       store.touchUser(user.id);
-      user = actingUser(req, user);
+      // Een hoofdbeheerder kan tijdelijk als een andere gebruiker werken (zie impersonation.js).
+      const as = s?.via === 'user' && user.platform_admin ? impersonation.resolve(req, user) : null;
+      user = as || actingUser(req, user);
     }
     req.user = user;
     req.tenantId = user ? user.tenant_id : tenant.id;
@@ -428,6 +439,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       if (wanted) auth.setPlain(req, res, ENV_HINT, wanted, { httpOnly: false });
       else auth.clearNamed(res, ENV_HINT);
     }
+    impersonation.syncHint(req, res, user);
+    const imp = user?.impersonation;
     res.json({
       user: user ? store.publicUser(user) : null,
       via,
@@ -435,7 +448,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       platformAdmin: Boolean(user?.platform_admin),
       // Wat deze gebruiker mag (zie roles.js); een nog niet bewaarde gast is een klant.
       rights: user ? Roles.rightsOf(user) : guestsAllowed() ? Roles.rightsOf({ role: 'klant' }) : [],
-      environments: user ? accessibleFor(user).length : 0,
+      // Tijdens een impersonatie wordt er niet gewisseld (eerst terug naar het eigen account).
+      environments: user && !imp ? accessibleFor(user).length : 0,
+      impersonation: imp ? { by: user.impersonator.display_name, expiresAt: imp.expiresAt, live: imp.live, environment: imp.tenantName } : null,
 
       // Staan gasten aan, dan werkt iedereen zonder inloggen als (nieuwe) gast.
       guest: !user && guestsAllowed(),
@@ -460,6 +475,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/environment', requireJson, (req, res) => {
     const user = identify(req);
     if (!user || user.kind === 'gast') return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+    if (user.impersonator) return res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' });
     const tid = String(req.body?.tenantId || '');
     const target = accessibleFor(user).find((t) => t.id === tid);
     if (!target) return res.status(404).json({ error: 'not_found', message: 'Omgeving niet gevonden.' });
@@ -551,13 +567,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   // Gebruikers horen bij de live-tenant; in een testomgeving dezelfde lijst.
+  // Testaccounts (zie testdata.js) horen bij de testomgeving zelf en beheren
+  // alleen de gebruikers daarvan, nooit die van live.
+  const usersTenantOf = (req) => (req.user && req.user.home_tenant_id === req.tenantId ? req.tenantId : homeOf(req.tenantId));
+
   app.get('/api/admin/users', (req, res) => {
-    res.json({ items: store.listUsers(homeOf(req.tenantId)) });
+    res.json({ items: store.listUsers(usersTenantOf(req)) });
   });
 
   app.post('/api/admin/users', requireJson, wrap(async (req, res) => {
     const { username, displayName, role, password } = req.body || {};
-    const home = homeOf(req.tenantId);
+    const home = usersTenantOf(req);
     const out = await store.createAccount(home, { username: String(username || '').trim().toLowerCase(), displayName, role, password });
     if (out.error) return res.status(400).json({ error: 'invalid_user', message: out.error });
     audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role }, undefined, home);
@@ -567,7 +587,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.patch('/api/admin/users/:id', requireJson, wrap(async (req, res) => {
     const input = {};
     for (const k of ['displayName', 'role', 'disabled', 'password', 'username']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
-    const home = homeOf(req.tenantId);
+    const home = usersTenantOf(req);
     const out = await store.updateAccount(home, req.params.id, input);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_user', message: out.error });
     auditUserChange(req, out.user, input, home);
@@ -582,7 +602,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Gebruiker op alle toestellen uitloggen.
   app.post('/api/admin/users/:id/logout', (req, res) => {
-    const home = homeOf(req.tenantId);
+    const home = usersTenantOf(req);
     const u = store.getUser(req.params.id);
     if (!u || u.tenant_id !== home) return res.status(404).json({ error: 'not_found', message: 'Gebruiker niet gevonden.' });
     const n = store.revokeSessions(home, u.id);
@@ -777,8 +797,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return Boolean(t && !t.disabled && live && !live.disabled);
     },
     publicLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: remoteIp }),
-    // Klantaccounts horen bij de live-tenant (ook als er in test gewerkt wordt).
-    customersOf: (req) => store.listCustomers(homeOf(req.tenantId || tenant.id)),
+    // Klantaccounts horen bij de live-tenant (ook als er in test gewerkt
+    // wordt); in een testomgeving komen de testklanten daarvan erbij.
+    customersOf: (req) => {
+      const tid = req.tenantId || tenant.id;
+      const home = homeOf(tid);
+      return home === tid ? store.listCustomers(tid) : [...store.listCustomers(home), ...store.listCustomers(tid)];
+    },
   });
 
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
@@ -874,21 +899,40 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({ ok: true });
   });
 
-  // Gebruikers van een tenant (accounts, zonder gasten) beheren.
-  const liveTenant = (req, res) => {
+  // Testomgeving vullen met testdata: testaccounts per rol (één gedeeld,
+  // willekeurig wachtwoord dat alleen in dit antwoord staat), nepklanten,
+  // plannen en offertes. Wat er al in de testomgeving stond, gaat weg.
+  app.post('/api/platform/tenants/:id/testdata', requireJson, wrap(async (req, res) => {
+    const t = store.getTenant(req.params.id);
+    if (!t) return platformError(res, { error: 'Omgeving niet gevonden.', status: 404 });
+    if (t.environment !== 'test') return platformError(res, { error: 'Testdata kan alleen in een testomgeving.', status: 409 });
+    const profile = settingsFor(t.id).get('quoteProfile');
+    const set = testdata.buildTestData({ slug: t.slug, profile });
+    let password = testdata.newPassword();
+    while (set.accounts.some((a) => passwordProblem(password, a.username))) password = testdata.newPassword();
+    const out = store.seedEnvironment(t.id, set, { passwordHash: await hashPassword(password), numberPrefix: profile.numberPrefix || 'OF-' });
+    if (out.error) return platformError(res, out);
+    console.log(`Testomgeving ${t.name} gevuld met testdata door ${req.user.display_name}`);
+    audit(req, 'testomgeving_gevuld', { tenantId: t.id, ...out.counts }, undefined, tenant.id);
+    res.status(201).json({ accounts: out.users.map(store.publicUser), password, counts: out.counts });
+  }));
+
+  // Gebruikers van een tenant (accounts, zonder gasten) beheren. In een
+  // testomgeving zijn dat de testaccounts van die omgeving.
+  const userTenant = (req, res) => {
     const t = store.getTenant(req.params.id);
     if (!t) { res.status(404).json({ error: 'not_found', message: 'Tenant niet gevonden.' }); return null; }
-    if (t.environment !== 'live') { res.status(409).json({ error: 'invalid_tenant', message: 'Gebruikers horen bij de live-tenant.' }); return null; }
     return t;
   };
 
   app.get('/api/platform/tenants/:id/users', (req, res) => {
-    const t = liveTenant(req, res);
-    if (t) res.json({ items: store.listUsers(t.id, { includeGuests: false }) });
+    const t = userTenant(req, res);
+    // Met de supporttoestemming erbij (nodig om in live als de gebruiker te werken).
+    if (t) res.json({ items: store.listUsers(t.id, { includeGuests: false }).map((u) => ({ ...u, support: impersonation.activeGrant(u.id) })) });
   });
 
   app.post('/api/platform/tenants/:id/users', requireJson, wrap(async (req, res) => {
-    const t = liveTenant(req, res);
+    const t = userTenant(req, res);
     if (!t) return;
     const { username, displayName, role, password } = req.body || {};
     const out = await store.createAccount(t.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password });
@@ -898,7 +942,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }));
 
   app.patch('/api/platform/tenants/:id/users/:uid', requireJson, wrap(async (req, res) => {
-    const t = liveTenant(req, res);
+    const t = userTenant(req, res);
     if (!t) return;
     const input = {};
     for (const k of ['displayName', 'role', 'disabled', 'password']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
@@ -907,6 +951,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     auditUserChange(req, out.user, input, t.id);
     res.json(store.publicUser(out.user));
   }));
+
+  impersonation.register(app, { identify, requireJson, clearEnvironment, wrap });
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 

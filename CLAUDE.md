@@ -141,6 +141,13 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   cookie `aquatech_env` (`<user>:<tenant>`, elke keer opnieuw gecontroleerd)
   en de leesbare `aquatech_env_hint` voor `shared/env.js` (testlabel,
   localStorage-achtervoegsel). Wisselaar in `dashboard/account.js`.
+- **Testdata** (0.23.0, `backend/src/testdata.js`): `POST
+  /api/platform/tenants/:id/testdata` (alleen test-tenants) wist de omgeving
+  en maakt testaccounts per rol (`<slug>.klant1` enz., één gedeeld
+  wachtwoord, alleen in het antwoord), tuinen (zones via de plannerlibs in
+  een vm-sandbox) en offertes (`Core.fromPlan`). Testaccounts hebben
+  `tenant_id` = de testomgeving; gebruikersbeheer gaat via `usersTenantOf(req)`
+  (eigen tenant als het account daar woont, anders `homeOf`).
 - **Rollen** (0.22.0): rechten per rol in `frontend/shared/roles.js` (UMD,
   ook door de server ge-required): `Roles.can(user, recht)`; hoofdbeheerder
   (`platform_admin`) heeft alle rechten. Server: `requireRight(recht)`,
@@ -160,7 +167,17 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   BOM + arbeidsnormen `LABOR`), opslag/routes in `backend/src/quotes.js`
   (tabel `quotes`, migratie 5, nummer `<prefix><jaar>-0001` per tenant),
   bedrijfsprofiel = instelling `quoteProfile` (type `object`). PDF via
-  afdrukversie (`#print`, print-CSS), geen PDF-bibliotheek.
+  afdrukversie (`#print`, print-CSS), geen PDF-bibliotheek. Document +
+  tekenvak/akkoordformulier gedeeld in `offertes/quote-view.js|.css`.
+  **Digitale offerte** (0.25.0): openbare pagina `frontend/openbaar/offerte.html`
+  (token in `#t=`, naar de server alleen als kop `X-Offerte-Token`; API
+  `/api/public/quote[/respond]`); bestanden zonder login via `PUBLIC_FILES`/
+  `isPublicAsset` in server.js (nieuwe afhankelijkheid van die pagina daar
+  toevoegen). Tabel `quotes`: `share_hash` (SHA-256), `share_token` (vault),
+  `acceptance` (JSON-bewijs); met een acceptance geeft PUT 409 `locked`.
+  Regels kunnen `optional`/`selected` zijn (`Core.included`, `chooseOptions`).
+  E-mail via `mailer.js` (nodemailer, eigen SMTP: `mailServer` + geheim
+  `mailPassword`); tests vervangen `mailerFor`.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - Health: `GET /api/health` (versie uit `package.json`).

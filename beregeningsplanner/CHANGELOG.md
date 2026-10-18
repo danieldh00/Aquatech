@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.25.0
+
+- **Digitale offerte**: per offerte een persoonlijke link (*Digitale offerte*
+  in de editor). De klant opent die zonder account, bekijkt de offerte, kiest
+  eventuele opties en geeft akkoord met zijn naam, een handtekening (muis,
+  vinger of pen) en een vinkje voor de voorwaarden, of wijst af met een reden.
+  - Vastgelegd: naam, tijdstip, IP-adres, browser, handtekening, gekozen
+    opties, totaalbedrag en een kenmerk (SHA-256) van de geaccordeerde inhoud.
+    Daarna ligt de offerte vast; wijzigen kan alleen via een kopie.
+  - Je ziet of en hoe vaak de klant de offerte heeft geopend; de link is in
+    te trekken. Alleen een hash van het token staat doorzoekbaar in de
+    database, het token zelf versleuteld.
+  - **Opties**: zet een regel op *Optie* of *Optie (aan)*; de klant vinkt die
+    zelf aan of uit en het totaal rekent mee (ook in PDF en Excel).
+- **E-mail** via de eigen SMTP-server (Bedrijfsgegevens → E-mail, wachtwoord
+  versleuteld): offerte versturen met een knop naar de digitale offerte,
+  bevestiging naar de klant na een akkoord en een bericht naar het bedrijf.
+  Zonder mailserver opent *Versturen* het bericht in je eigen mailprogramma.
+- Klantaccounts geven in *Mijn offertes* op dezelfde manier akkoord (naam,
+  handtekening, voorwaarden).
+
+## 0.24.0
+
+- **Inloggen als een gebruiker (impersonatie)** voor de hoofdbeheerder:
+  vanuit Hoofdbeheer → Gebruikers werk je tijdelijk met de rol en rechten
+  van een gebruiker. In een testomgeving zonder goedkeuring; in live alleen
+  met toestemming die de gebruiker zelf geeft op het dashboard (*Support op
+  afstand*, voor 1 uur tot 3 dagen, altijd in te trekken).
+- Tijdens een impersonatie staat onderin elke pagina een rode balk met
+  **Terug naar eigen account** (één klik); hoogstens 8 uur, en uitloggen
+  stopt hem ook.
+- Auditlog: start, einde (met reden: gestopt, verlopen, toestemming
+  ingetrokken) en elke actie tijdens een impersonatie met de naam van de
+  hoofdbeheerder. De gebruiker ziet zelf wie er heeft meegekeken.
+
+## 0.23.0
+
+- **Testomgeving vullen met testdata** (Hoofdbeheer): één knop maakt
+  testaccounts voor elke rol (beheerder, twee installateurs, drie klanten)
+  met één gedeeld wachtwoord, zeven nepklanten met een volledig getekende
+  tuin (gebieden, sproeiers, systeemelementen en zones) en vijf offertes in
+  alle statussen. De inloggegevens zijn als Excel te downloaden. Alleen in
+  testomgevingen; wat er stond wordt eerst gewist.
+- Testaccounts horen bij de testomgeving zelf: inloggen brengt je direct
+  daar, een testbeheerder beheert alleen de testaccounts en Leegmaken of
+  Verwijderen ruimt ze op. In Hoofdbeheer heeft elke testomgeving een knop
+  **Testaccounts**.
+- Offertes in een testomgeving kun je aan klantaccounts van live én van de
+  testomgeving koppelen.
+
 ## 0.22.0
 
 - **Rollen**: hoofdbeheerder, beheerder, installateur en klant. Elke rol
