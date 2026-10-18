@@ -1,8 +1,15 @@
 # Aquatech Beregeningsplanner — werkgeheugen
 
 Webapp om tuinberegening te ontwerpen (in de lijn van de DVS Beregnungsplaner).
-Draait voorlopig als Home Assistant-add-on (alleen ingress, paneel
-**Beregening**); later op een eigen server via `docker-compose.yml`.
+Groeit uit tot een modulair ERP-achtig pakket: startpagina = **dashboard**
+(`frontend/index.html`, moduleregister `frontend/dashboard/modules.js`), de
+planner is module `frontend/beregening/` (URL `beregening/`). Gepland:
+planning, voorraadbeheer. Een module = map onder `frontend/` met eigen
+`index.html`; de server serveert die generiek (relatieve redirect
+`<id>` → `<id>/`, express.static met `redirect: false` i.v.m. ingress).
+Draait voorlopig als Home Assistant-add-on (paneel **Aquatech**, slug
+ongewijzigd `beregeningsplanner`); later op een eigen server via
+`docker-compose.yml`.
 
 Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 (poort 3200), `danieldh00/Lijstjes` (3100), `danieldh00/Russianlanguageapp`
@@ -41,7 +48,7 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 
 - Repository `https://github.com/danieldh00/Aquatech` (store-slug `c1355dc8`),
   app-slug **`c1355dc8_beregeningsplanner`**, auto_update + watchdog aan.
-- Ingress (paneel **Beregening**, geen login) én gepubliceerde poort 3300
+- Ingress (paneel **Aquatech**, geen login) én gepubliceerde poort 3300
   voor de tunnel **https://aquatech.den-hollander.com**. Op verzoek van de
   gebruiker **openbaar zonder login** zolang `access_code` leeg is; met code
   is inloggen verplicht buiten ingress (sessiesleutel in `/data/session-secret`).
@@ -93,14 +100,14 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 
 - **Alle URL's in de frontend relatief** (`css/app.css`, nooit `/css/...`):
   onder ingress draait de app op `/api/hassio_ingress/<token>/`. Geen CDN's:
-  vendor-bestanden lokaal in `frontend/vendor/` (test controleert dit).
+  vendor-bestanden lokaal in `frontend/<module>/vendor/` (test controleert dit voor alle pagina's).
 - Frontend gebruikt gewone `<script>`-tags (geen ES-modules), zodat
   `index.html` ook via `file://` werkt.
 - Geen native npm-modules (multi-arch: aarch64 + amd64, image wordt op de host gebouwd).
 - UI-teksten, commentaar, changelog en docs in het **Nederlands**.
 - Exports: **Excel (.xlsx), geen CSV**, tenzij expliciet anders gevraagd.
 - Geen modelnamen/-ID's in commits, PR's, code of docs.
-- Prijzen in `frontend/js/catalog.js` zijn indicatieve placeholders.
+- Prijzen in `frontend/beregening/js/catalog.js` zijn indicatieve placeholders.
 - **Nooit `pkill -f`** in de cloud-sandbox; stop een testserver met
   `kill $(lsof -ti tcp:3300)`.
 
