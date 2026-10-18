@@ -1,9 +1,11 @@
 // Gegevenslaag bovenop db.js: gebruikers, plannen en de aanvraaghistorie.
 // Elke functie krijgt de tenant mee; niets leest buiten de eigen tenant.
 const crypto = require('crypto');
+const path = require('path');
 const { transaction } = require('./db');
 
-const ROLES = ['beheerder', 'gebruiker'];
+const Roles = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'roles.js'));
+const ROLES = Object.keys(Roles.ROLES);
 // Opeenvolgende wijzigingen van één gebruiker aan één plan binnen dit venster
 // vormen één regel in de historie (anders levert automatisch opslaan honderden
 // regels per plan op).
@@ -160,8 +162,11 @@ function createStore(db) {
 
   function createGuest(tenantId) {
     const tag = crypto.randomBytes(4).toString('hex');
-    return insertUser(tenantId, { username: `gast-${tag}`, displayName: `Gast ${tag}`, role: 'gebruiker', kind: 'gast' });
+    return insertUser(tenantId, { username: `gast-${tag}`, displayName: `Gast ${tag}`, role: 'klant', kind: 'gast' });
   }
+
+  // Oude rolnamen (zoals 'gebruiker') gaan naar de huidige.
+  const withRole = (input) => (input.role === undefined ? input : { ...input, role: Roles.normalize(input.role) });
 
   function validateAccount({ username, displayName, role, password }, { partial = false } = {}) {
     if (!partial || username !== undefined) {
@@ -176,7 +181,8 @@ function createStore(db) {
 
   // Gebruikersnamen van accounts zijn uniek over alle tenants: inloggen gaat
   // met alleen gebruikersnaam en wachtwoord, de tenant volgt uit het account.
-  async function createAccount(tenantId, input, { platformAdmin = false } = {}) {
+  async function createAccount(tenantId, rawInput, { platformAdmin = false } = {}) {
+    const input = withRole(rawInput);
     const err = validateAccount(input);
     if (err) return { error: err };
     if (usernameTaken(tenantId, input.username)) {
@@ -195,7 +201,8 @@ function createStore(db) {
     return { user: u };
   }
 
-  async function updateAccount(tenantId, id, input) {
+  async function updateAccount(tenantId, id, rawInput) {
+    const input = withRole(rawInput);
     const u = q('SELECT * FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
     if (!u) return { error: 'Gebruiker niet gevonden.', status: 404 };
     if (u.kind !== 'account') return { error: 'Systeem- en gastgebruikers zijn niet aan te passen.', status: 409 };
@@ -392,7 +399,7 @@ function createStore(db) {
   /**
    * Omgevingen waarin deze gebruiker mag werken: een hoofdbeheerder overal,
    * een beheerder in de eigen tenant en de testomgevingen daarvan, een
-   * gebruiker alleen in de eigen tenant. Uitgeschakelde tenants vallen af
+   * installateur of klant alleen in de eigen tenant. Uitgeschakelde tenants vallen af
    * (behalve voor de hoofdbeheerder).
    */
   function accessibleTenants(user) {
@@ -400,7 +407,7 @@ function createStore(db) {
     if (user.platform_admin) return q('SELECT * FROM tenants ORDER BY name COLLATE NOCASE').all();
     const home = getTenant(user.tenant_id);
     if (!home || home.disabled) return [];
-    if (user.role !== 'beheerder') return [home];
+    if (!Roles.can(user, 'beheer')) return [home];
     return [home, ...q("SELECT * FROM tenants WHERE parent_id = ? AND environment = 'test' AND disabled = 0 ORDER BY name COLLATE NOCASE").all(home.id)];
   }
 
@@ -506,6 +513,12 @@ function createStore(db) {
       .map((u) => ({ ...publicUser(u), planCount: u.plan_count, historyCount: u.history_count, sessionCount: u.session_count }));
   }
 
+  // Klantaccounts van een tenant (om een offerte aan te koppelen).
+  function listCustomers(tenantId) {
+    return q("SELECT * FROM users WHERE tenant_id = ? AND kind = 'account' AND role = 'klant' AND disabled = 0 ORDER BY display_name COLLATE NOCASE")
+      .all(tenantId).map((u) => ({ id: u.id, username: u.username, displayName: u.display_name }));
+  }
+
   // ---------- Historie ----------
   function record({ tenantId, userId, planId = null, action, data = null, summary: extra = null, title = '', ip = '', merge = false }) {
     const ts = now();
@@ -600,12 +613,12 @@ function createStore(db) {
     return q(`${sql} ORDER BY p.updated_at DESC`).all(...args).map((p) => planRow(p, false));
   }
 
-  // Een plan is alleen zichtbaar voor de eigenaar; een beheerder ziet alles
-  // binnen de eigen tenant.
+  // Een plan is alleen zichtbaar voor de eigenaar; beheerders en installateurs
+  // (recht plannen.alle) zien en bewerken alles binnen de eigen tenant.
   function findPlan(user, id) {
     const p = q('SELECT * FROM plans WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL').get(user.tenant_id, String(id));
     if (!p) return null;
-    if (p.owner_id !== user.id && user.role !== 'beheerder') return null;
+    if (p.owner_id !== user.id && !Roles.can(user, 'plannen.alle')) return null;
     return p;
   }
 
@@ -661,7 +674,7 @@ function createStore(db) {
 
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment,
-    accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem,
+    accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
     ensureTenant, systemUser, createGuest, createAccount, updateAccount, countAdmins, authenticate, getUser, touchUser, listUsers, publicUser,
     createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,

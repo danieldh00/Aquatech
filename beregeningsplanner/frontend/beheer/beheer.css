@@ -38,6 +38,8 @@ table.grid tr.off td { color: var(--muted); }
 .pill.verwijderd { background: #ffebee; color: #c62828; }
 .pill.analyse { background: #fff3e0; color: #ef6c00; }
 .pill.beheerder { background: #ede7f6; color: #5e35b1; }
+.pill.installateur { background: var(--primary-soft); color: var(--primary-dark); }
+.pill.klant { background: #e0f7fa; color: #00838f; }
 
 .pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
 

@@ -153,6 +153,42 @@ const MIGRATIONS = [
   CREATE INDEX quotes_owner ON quotes (tenant_id, owner_id, updated_at);
   CREATE INDEX quotes_plan ON quotes (tenant_id, plan_id);
   `,
+  // Rollen: beheerder, installateur en klant (zie frontend/shared/roles.js).
+  // De CHECK op users.role is in SQLite niet aan te passen, dus de tabel wordt
+  // opnieuw opgebouwd (met foreign keys tijdelijk uit, anders vallen de
+  // verwijzingen vanuit plannen, sessies enz. om). Een bestaande 'gebruiker'
+  // wordt installateur, een gast klant. Een offerte kan aan een klantaccount
+  // gekoppeld worden (customer_id); die klant ziet de offerte dan zelf.
+  {
+    foreignKeysOff: true,
+    sql: `
+  CREATE TABLE users_new (
+    id             TEXT PRIMARY KEY,
+    tenant_id      TEXT NOT NULL REFERENCES tenants(id),
+    username       TEXT NOT NULL,
+    display_name   TEXT NOT NULL,
+    role           TEXT NOT NULL CHECK (role IN ('beheerder', 'installateur', 'klant')),
+    kind           TEXT NOT NULL CHECK (kind IN ('account', 'gast', 'systeem')),
+    password_hash  TEXT,
+    disabled       INTEGER NOT NULL DEFAULT 0,
+    created_at     TEXT NOT NULL,
+    last_seen_at   TEXT,
+    platform_admin INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (tenant_id, username)
+  );
+  INSERT INTO users_new (id, tenant_id, username, display_name, role, kind, password_hash, disabled, created_at, last_seen_at, platform_admin)
+    SELECT id, tenant_id, username, display_name,
+      CASE WHEN role = 'beheerder' THEN 'beheerder' WHEN kind = 'gast' THEN 'klant' ELSE 'installateur' END,
+      kind, password_hash, disabled, created_at, last_seen_at, platform_admin
+    FROM users;
+  DROP TABLE users;
+  ALTER TABLE users_new RENAME TO users;
+  CREATE INDEX users_username ON users (username);
+
+  ALTER TABLE quotes ADD COLUMN customer_id TEXT REFERENCES users(id);
+  CREATE INDEX quotes_customer ON quotes (tenant_id, customer_id);
+  `,
+  },
 ];
 
 function openDb(file = ':memory:') {
@@ -184,10 +220,23 @@ function openDb(file = ':memory:') {
 function migrate(db) {
   const current = db.prepare('PRAGMA user_version').get().user_version;
   for (let v = current; v < MIGRATIONS.length; v++) {
-    transaction(db, () => {
-      db.exec(MIGRATIONS[v]);
-      db.exec(`PRAGMA user_version = ${v + 1}`);
-    });
+    const m = typeof MIGRATIONS[v] === 'string' ? { sql: MIGRATIONS[v] } : MIGRATIONS[v];
+    // Een tabel opnieuw opbouwen kan alleen met foreign keys uit (en dat kan
+    // niet binnen een transactie). De rijen gaan één op één over, dus de
+    // verwijzingen blijven kloppen; afwijkingen (ook van vroeger) alleen melden.
+    if (m.foreignKeysOff) db.exec('PRAGMA foreign_keys = OFF');
+    try {
+      transaction(db, () => {
+        db.exec(m.sql);
+        if (m.foreignKeysOff) {
+          const broken = db.prepare('PRAGMA foreign_key_check').all();
+          if (broken.length) console.warn(`Migratie ${v + 1}: ${broken.length} verbroken verwijzing(en), eerste in ${broken[0].table}`);
+        }
+        db.exec(`PRAGMA user_version = ${v + 1}`);
+      });
+    } finally {
+      if (m.foreignKeysOff) db.exec('PRAGMA foreign_keys = ON');
+    }
   }
 }
 

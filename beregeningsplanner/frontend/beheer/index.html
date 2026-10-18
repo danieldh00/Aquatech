@@ -61,11 +61,12 @@
           <div class="row">
             <label>Gebruikersnaam<input name="username" required pattern="[a-z0-9][a-z0-9._\-]{2,39}" autocomplete="off" placeholder="bijv. jan.devries"></label>
             <label>Naam<input name="displayName" autocomplete="off" placeholder="Jan de Vries"></label>
-            <label>Rol<select name="role"><option value="gebruiker">Gebruiker</option><option value="beheerder">Beheerder</option></select></label>
+            <label>Rol<select name="role"><option value="installateur">Installateur</option><option value="klant">Klant</option><option value="beheerder">Beheerder</option></select></label>
             <label>Wachtwoord<input name="password" type="password" minlength="12" maxlength="128" required autocomplete="new-password" placeholder="minimaal 12 tekens"></label>
             <button class="btn primary" type="submit">Toevoegen</button>
           </div>
           <div id="u-err" class="err" role="alert"></div>
+          <p class="muted small"><b>Beheerder</b>: alles binnen de organisatie (gebruikers, instellingen, historie, alle plannen en offertes). <b>Installateur</b>: plannen maken en bewerken en offertes opstellen, zonder gebruikers of instellingen. <b>Klant</b>: alleen de eigen plannen en de offertes die voor hem klaarstaan inzien en accepteren.</p>
         </form>
         <label class="chk"><input type="checkbox" id="u-guests"> Gasten tonen (anonieme bezoekers zonder account)</label>
         <div class="tablewrap"><table class="grid" id="u-table"></table></div>
@@ -166,6 +167,7 @@
   <div id="toast" class="toast"></div>
 
   <script src="../shared/env.js"></script>
+  <script src="../shared/roles.js"></script>
   <script src="../beregening/vendor/exceljs.min.js"></script>
   <script src="../beregening/js/catalog.js"></script>
   <script src="../dashboard/modules.js"></script>

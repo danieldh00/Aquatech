@@ -118,7 +118,9 @@ async function setup() {
   const tid = store.ensureTenant().id;
   await store.createAccount(tid, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!' });
   await store.createAccount(tid, { username: 'piet', displayName: 'Piet', role: 'gebruiker', password: 'Tuin-Plan-2026!' });
-  await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'gebruiker', password: 'Tuin-Plan-2026!' });
+  await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: 'Tuin-Plan-2026!' });
+  await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: 'Tuin-Plan-2026!' });
+  await store.createAccount(tid, { username: 'mien', displayName: 'Mien', role: 'klant', password: 'Tuin-Plan-2026!' });
   const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username) => {
@@ -149,10 +151,16 @@ test('API: offertes aanmaken, nummeren, afschermen en verwijderen', async () => 
     assert.strictEqual(b.body.title, 'Offerte');
 
     assert.deepStrictEqual((await piet.get('/api/quotes')).body.items.map((q) => q.id), [a.body.id]);
-    assert.strictEqual((await kees.get(`/api/quotes/${a.body.id}`)).status, 404, 'niet van iemand anders');
-    assert.strictEqual((await kees.put(`/api/quotes/${a.body.id}`, { status: 'akkoord' })).status, 404);
-    assert.strictEqual((await kees.get('/api/quotes?all=1')).body.items.length, 1, 'alleen beheerders zien alles');
+    // Installateurs werken samen: ze zien en bewerken elkaars offertes.
+    assert.strictEqual((await kees.get(`/api/quotes/${a.body.id}`)).status, 200);
+    assert.strictEqual((await kees.get('/api/quotes?all=1')).body.items.length, 2);
     assert.strictEqual((await baas.get('/api/quotes?all=1')).body.items.length, 2);
+    // Een klant maakt geen offertes en ziet geen concepten.
+    const klaas = await as('klaas');
+    assert.strictEqual((await klaas.post('/api/quotes', { data })).status, 403);
+    assert.strictEqual((await klaas.get(`/api/quotes/${a.body.id}`)).status, 404);
+    assert.strictEqual((await klaas.put(`/api/quotes/${a.body.id}`, { status: 'akkoord' })).status, 403);
+    assert.deepStrictEqual((await klaas.get('/api/quotes?all=1')).body.items, []);
     assert.strictEqual((await piet.get('/api/quotes?plan=plan-1')).body.items.length, 1);
 
     const upd = await piet.put(`/api/quotes/${a.body.id}`, { status: 'verzonden', data: { ...data, discountPct: 10 } });
@@ -166,8 +174,57 @@ test('API: offertes aanmaken, nummeren, afschermen en verwijderen', async () => 
     const c = await piet.post('/api/quotes', { data: { date: `${year}-04-01` } });
     assert.strictEqual(c.body.number, `OF-${year}-0003`, 'een nummer komt nooit terug');
 
-    assert.strictEqual((await piet.del(`/api/admin/quotes/${c.body.id}`)).status, 403);
+    assert.strictEqual((await piet.del(`/api/admin/quotes/${c.body.id}`)).status, 403, 'definitief wissen alleen door beheerders');
     assert.strictEqual((await baas.del(`/api/admin/quotes/${c.body.id}`)).status, 200);
+  } finally {
+    server.close();
+  }
+});
+
+test('API: klant ziet alleen verzonden offertes voor zijn account en kan akkoord geven', async () => {
+  const { server, as } = await setup();
+  try {
+    const piet = await as('piet'), klaas = await as('klaas'), mien = await as('mien'), baas = await as('baas');
+    const custs = (await piet.get('/api/quote-customers')).body.items;
+    assert.deepStrictEqual(custs.map((c) => c.displayName), ['Klaas', 'Mien']);
+    assert.strictEqual((await klaas.get('/api/quote-customers')).status, 403);
+    const klaasId = custs.find((c) => c.displayName === 'Klaas').id;
+    const pietId = (await piet.get('/api/me')).body.user.id;
+    assert.strictEqual((await piet.post('/api/quotes', { data: {}, customerId: pietId })).status, 400, 'alleen klantaccounts');
+
+    const year = new Date().getFullYear();
+    const data = { title: 'Beregening', date: `${year}-01-01`, validUntil: `${year + 1}-01-01`, layout: 'totaal',
+      lines: [{ section: 'materiaal', description: 'Sproeier', qty: 4, price: 10, vat: 21 }] };
+    const q = (await piet.post('/api/quotes', { data, customerId: klaasId })).body;
+    assert.strictEqual(q.customerId, klaasId);
+    assert.deepStrictEqual((await klaas.get('/api/quotes')).body.items, [], 'concept blijft intern');
+
+    await piet.put(`/api/quotes/${q.id}`, { status: 'verzonden' });
+    const list = (await klaas.get('/api/quotes')).body.items;
+    assert.deepStrictEqual(list.map((x) => x.id), [q.id]);
+    const seen = (await klaas.get(`/api/quotes/${q.id}`)).body;
+    assert.strictEqual(seen.totals.total, 48.4);
+    assert.strictEqual(seen.data.lines[0].price, undefined, 'geen regelprijzen bij totaal per onderdeel');
+    assert.deepStrictEqual((await mien.get('/api/quotes')).body.items, [], 'andere klant ziet niets');
+    assert.strictEqual((await mien.get(`/api/quotes/${q.id}`)).status, 404);
+    assert.strictEqual((await mien.post(`/api/quotes/${q.id}/respond`, { answer: 'akkoord' })).status, 404);
+    assert.strictEqual((await klaas.del(`/api/quotes/${q.id}`)).status, 403);
+
+    assert.strictEqual((await klaas.post(`/api/quotes/${q.id}/respond`, { answer: 'misschien' })).status, 400);
+    const ok = await klaas.post(`/api/quotes/${q.id}/respond`, { answer: 'akkoord' });
+    assert.strictEqual(ok.status, 200);
+    assert.strictEqual(ok.body.status, 'akkoord');
+    assert.strictEqual((await klaas.post(`/api/quotes/${q.id}/respond`, { answer: 'afgewezen' })).status, 409, 'maar één keer');
+    assert.strictEqual((await piet.get(`/api/quotes/${q.id}`)).body.status, 'akkoord');
+    const audit = (await baas.get('/api/admin/audit')).body.items;
+    assert.ok(audit.some((a) => a.action === 'offerte_akkoord'));
+
+    // Verlopen: geen akkoord meer mogelijk.
+    const old = (await piet.post('/api/quotes', { data: { ...data, validUntil: '2020-01-01' }, customerId: klaasId, status: 'verzonden' })).body;
+    assert.strictEqual((await klaas.post(`/api/quotes/${old.id}/respond`, { answer: 'akkoord' })).status, 409);
+    // Ontkoppelen: de klant ziet de offerte niet meer.
+    await piet.put(`/api/quotes/${old.id}`, { customerId: null });
+    assert.strictEqual((await klaas.get(`/api/quotes/${old.id}`)).status, 404);
   } finally {
     server.close();
   }

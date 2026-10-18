@@ -83,6 +83,37 @@ test('migratie: bestaande beheerders worden hoofdbeheerder, gebruikers niet', ()
   db.close();
 });
 
+test('migratie rollen: gebruiker wordt installateur, gast wordt klant; verwijzingen blijven heel', () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'aq-')), 'aquatech.db');
+  const old = new DatabaseSync(file);
+  old.exec('PRAGMA foreign_keys = ON');
+  for (let v = 0; v < 5; v++) old.exec(MIGRATIONS[v]);
+  old.exec('PRAGMA user_version = 5');
+  const t = new Date().toISOString();
+  old.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES ('t1', 'default', 'Aquatech', ?)").run(t);
+  const user = old.prepare('INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at, platform_admin) VALUES (?, \'t1\', ?, ?, ?, ?, ?, ?)');
+  user.run('u1', 'daniel', 'Daniël', 'beheerder', 'account', t, 1);
+  user.run('u2', 'jan', 'Jan', 'gebruiker', 'account', t, 0);
+  user.run('u3', 'gast-1234', 'Gast 1234', 'gebruiker', 'gast', t, 0);
+  old.prepare("INSERT INTO plans (id, tenant_id, owner_id, title, data, created_at, updated_at) VALUES ('p1', 't1', 'u2', 'Tuin', '{}', ?, ?)").run(t, t);
+  old.prepare("INSERT INTO sessions (id_hash, tenant_id, user_id, via, fingerprint, created_at, last_seen_at, expires_at) VALUES ('h', 't1', 'u2', 'user', 'f', ?, ?, ?)").run(t, t, t);
+  old.prepare("INSERT INTO quotes (id, tenant_id, owner_id, number, data, created_at, updated_at) VALUES ('q1', 't1', 'u2', 'OF-1', '{}', ?, ?)").run(t, t);
+  old.close();
+
+  const db = openDb(file);
+  const store = createStore(db);
+  assert.deepStrictEqual(['u1', 'u2', 'u3'].map((id) => store.getUser(id).role), ['beheerder', 'installateur', 'klant']);
+  assert.strictEqual(store.getUser('u1').platform_admin, 1);
+  assert.strictEqual(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1, 'foreign keys weer aan');
+  assert.deepStrictEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  assert.strictEqual(db.prepare("SELECT owner_id FROM plans WHERE id = 'p1'").get().owner_id, 'u2');
+  assert.strictEqual(db.prepare("SELECT customer_id FROM quotes WHERE id = 'q1'").get().customer_id, null);
+  // De CHECK kent alleen de nieuwe rollen; verwijzingen worden weer bewaakt.
+  assert.throws(() => db.prepare("UPDATE users SET role = 'gebruiker' WHERE id = 'u2'").run());
+  assert.throws(() => db.prepare("INSERT INTO plans (id, tenant_id, owner_id, title, data, created_at, updated_at) VALUES ('p2', 't1', 'niemand', 'x', '{}', ?, ?)").run(t, t));
+  db.close();
+});
+
 test('eerste beheerder via het instelscherm is hoofdbeheerder', async () => {
   const { server, base } = await start(openDb(), { setupCode: 'ABCD-EFGH-JKLM' });
   try {

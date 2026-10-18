@@ -2,6 +2,9 @@
 // (klant, regels, korting, btw, teksten), en exporteren als PDF (afdrukversie
 // via de browser) of Excel. De server bewaart de offertes (/api/quotes) en
 // rekent de totalen voor het overzicht zelf na met dezelfde rekenkern.
+// Rollen (shared/roles.js): beheerders en installateurs stellen offertes op;
+// een klant ziet alleen de verzonden offertes voor zijn account, als
+// document, en geeft akkoord of wijst af.
 (function () {
   const Q = window.QuoteCore;
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -15,7 +18,7 @@
   const statusLabel = (s) => (s === 'verlopen' ? 'Verlopen' : Q.STATUSES[s] || s);
 
   const state = {
-    me: null, admin: false, profile: null, canEdit: false,
+    me: null, admin: false, all: false, klant: false, customers: [], profile: null, canEdit: false,
     items: [], sort: { key: 'updatedAt', dir: -1 },
     quote: null, saveT: null, saving: null, dirty: false, warnings: [],
   };
@@ -56,7 +59,7 @@
     { key: 'validUntil', label: 'Geldig tot', value: (q) => q.validUntil, html: (q) => esc(shortDate(q.validUntil)) },
     { key: 'updatedAt', label: 'Laatst gewijzigd', value: (q) => q.updatedAt, html: (q) => esc(new Date(q.updatedAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })) },
   ];
-  const showAll = () => state.admin && $('#l-all').checked;
+  const showAll = () => state.all && $('#l-all').checked;
   const columns = () => COLUMNS.filter((c) => !c.admin || showAll());
 
   async function loadList() {
@@ -95,7 +98,9 @@
     $('#l-stats').hidden = !state.items.length;
     const tbl = $('#l-table');
     if (!state.items.length) {
-      tbl.innerHTML = '<tr><td class="empty">Nog geen offertes. Kies <b>Nieuwe offerte uit plan</b> om de stuklijst van een beregeningsplan over te nemen.</td></tr>';
+      tbl.innerHTML = state.klant
+        ? '<tr><td class="empty">Er staan nog geen offertes voor u klaar.</td></tr>'
+        : '<tr><td class="empty">Nog geen offertes. Kies <b>Nieuwe offerte uit plan</b> om de stuklijst van een beregeningsplan over te nemen.</td></tr>';
       $('#l-count').textContent = '';
       return;
     }
@@ -177,7 +182,7 @@
     modal.hidden = false;
     let plans = [];
     try {
-      plans = (await api(state.admin ? 'admin/plans' : 'plans')).items || [];
+      plans = (await api(state.all ? 'plans?all=1' : 'plans')).items || [];
     } catch (e) {
       list.innerHTML = `<p class="err">Kan de plannen niet laden (${esc(e.message)}).</p>`;
       return;
@@ -188,7 +193,7 @@
       list.innerHTML = items.map((p) => `
         <button data-plan="${esc(p.id)}"><b>${esc(p.title)}</b>
           <span class="sub">${esc([p.customer, p.address].filter(Boolean).join(' · ') || 'Geen klant ingevuld')}</span>
-          <span class="sub">${p.summary ? `${p.summary.sprinklers} sproeiers · ${p.summary.zones} zones · ${nl(p.summary.totalM2, 0)} m²` : ''}${p.owner && state.admin ? ` · ${esc(p.owner.displayName)}` : ''} · gewijzigd ${esc(shortDate(p.updatedAt))}</span>
+          <span class="sub">${p.summary ? `${p.summary.sprinklers} sproeiers · ${p.summary.zones} zones · ${nl(p.summary.totalM2, 0)} m²` : ''}${p.owner && state.all ? ` · ${esc(p.owner.displayName)}` : ''} · gewijzigd ${esc(shortDate(p.updatedAt))}</span>
         </button>`).join('') || `<p class="muted">${plans.length ? 'Geen plannen gevonden.' : 'Nog geen plannen. Teken eerst een tuin in de <a href="../beregening/">beregeningsplanner</a>.'}</p>`;
       list.querySelectorAll('[data-plan]').forEach((b) => {
         b.onclick = () => { modal.hidden = true; go(`plan=${encodeURIComponent(b.dataset.plan)}`); };
@@ -211,7 +216,9 @@
 
   async function loadQuote(id) {
     try {
-      openQuote(await api(`quotes/${encodeURIComponent(id)}`));
+      const q = await api(`quotes/${encodeURIComponent(id)}`);
+      if (state.klant) return viewQuote(q);
+      openQuote(q);
     } catch (e) {
       toast(`Kan de offerte niet openen: ${e.message}`, true);
       go('');
@@ -228,6 +235,7 @@
     $('#e-number').value = q.number;
     document.title = `Offerte ${q.number} – AquaTech Service`;
     $('#e-status').value = q.status;
+    renderAccount(q);
     $('#e-saved').textContent = '';
     document.querySelectorAll('#edit-view [data-f]').forEach((el) => {
       const v = getPath(q.data, el.dataset.f);
@@ -243,6 +251,58 @@
     renderWarnings();
     renderLines();
     window.scrollTo(0, 0);
+  }
+
+  // Klantaccount waaraan de offerte hangt (de klant ziet hem dan zelf).
+  function renderAccount(q) {
+    const sel = $('#e-account');
+    const opts = state.customers.slice();
+    if (q.customerAccount && !opts.some((c) => c.id === q.customerAccount.id)) opts.push({ ...q.customerAccount, gone: true });
+    sel.innerHTML = '<option value="">Geen (alleen intern)</option>' + opts
+      .map((c) => `<option value="${esc(c.id)}">${esc(c.displayName)}${c.username ? ` (${esc(c.username)})` : ''}${c.gone ? ' – uitgeschakeld' : ''}</option>`).join('');
+    sel.value = q.customerId || '';
+  }
+
+  // ---------- Klant: offerte bekijken en akkoord geven ----------
+  function viewQuote(q) {
+    q.data = Q.sanitize(q.data);
+    state.quote = q;
+    $('#list-view').hidden = true;
+    $('#view-view').hidden = false;
+    document.body.classList.add('view-doc');
+    $('#print').removeAttribute('aria-hidden');
+    $('#v-heading').textContent = `Offerte ${q.number}`;
+    document.title = `Offerte ${q.number} – AquaTech Service`;
+    const st = statusOf(q);
+    $('#v-status').className = `pill ${st}`;
+    $('#v-status').textContent = statusLabel(st);
+    const open = st === 'verzonden';
+    $('#v-accept').hidden = !open;
+    $('#v-reject').hidden = !open;
+    const notice = {
+      verzonden: `Deze offerte is geldig tot ${date(q.data.validUntil)}. Gaat u akkoord, dan nemen wij contact met u op om de werkzaamheden in te plannen.`,
+      akkoord: 'U heeft deze offerte geaccepteerd. Wij nemen contact met u op om de werkzaamheden in te plannen.',
+      afgewezen: 'U heeft deze offerte afgewezen. Neem gerust contact op als u een aangepaste offerte wilt.',
+      verlopen: 'Deze offerte is verlopen. Neem contact op voor een nieuwe offerte.',
+    }[st];
+    $('#v-notice').textContent = notice || '';
+    $('#v-notice').hidden = !notice;
+    renderPrint();
+    window.scrollTo(0, 0);
+  }
+
+  async function respond(answer) {
+    const q = state.quote;
+    const msg = answer === 'akkoord'
+      ? `Akkoord geven op offerte ${q.number} (${eur(q.totalIncl)} incl. btw)?`
+      : `Offerte ${q.number} afwijzen?`;
+    if (!confirm(msg)) return;
+    try {
+      viewQuote(await api(`quotes/${encodeURIComponent(q.id)}/respond`, { method: 'POST', body: { answer } }));
+      toast(answer === 'akkoord' ? 'Bedankt, de offerte is geaccepteerd' : 'De offerte is afgewezen');
+    } catch (e) {
+      toast(e.message, true);
+    }
   }
 
   function renderWarnings() {
@@ -385,6 +445,11 @@
       }
     });
     $('#e-status').onchange = (e) => save({ status: e.target.value });
+    $('#e-account').onchange = async (e) => {
+      const q = state.quote;
+      await save({ customerId: e.target.value || null });
+      if (state.quote === q) q.customerId = e.target.value || null;
+    };
     $('#e-back').onclick = async () => { await save(); go(''); };
     $('#e-pdf').onclick = printQuote;
     $('#e-xlsx').onclick = exportQuoteXlsx;
@@ -454,7 +519,8 @@
     const q = state.quote;
     const d = q.data;
     const p = state.profile;
-    const t = Q.totals(d);
+    // Een klant krijgt de totalen van de server (bij "totaal per onderdeel" zonder regelprijzen).
+    const t = q.totals || Q.totals(d);
     const c = d.customer;
     const company = [p.address, [p.phone, p.email].filter(Boolean).join(' · '), p.website].filter(Boolean).join('\n');
     const to = [c.name, c.contact ? `T.a.v. ${c.contact}` : '', c.address].filter(Boolean).join('\n');
@@ -693,7 +759,10 @@
   function showList() {
     state.quote = null;
     state.warnings = [];
-    document.title = 'Offertes – AquaTech Service';
+    document.title = `${state.klant ? 'Mijn offertes' : 'Offertes'} – AquaTech Service`;
+    document.body.classList.remove('view-doc');
+    $('#print').setAttribute('aria-hidden', 'true');
+    $('#view-view').hidden = true;
     $('#edit-view').hidden = true;
     $('#list-view').hidden = false;
     loadList();
@@ -702,14 +771,17 @@
   async function route() {
     const ps = params();
     if (state.quote && state.dirty) await save();
-    if (ps.get('plan')) return createFromPlan(ps.get('plan'));
+    if (ps.get('plan') && !state.klant) return createFromPlan(ps.get('plan'));
     if (ps.get('id')) return loadQuote(ps.get('id'));
     showList();
   }
 
   async function init() {
     state.me = await window.AquatechAccount.load('../');
-    state.admin = Boolean(state.me.user && state.me.user.role === 'beheerder');
+    const rights = state.me.rights || [];
+    state.admin = rights.includes('beheer');
+    state.all = rights.includes('offertes.alle');
+    state.klant = !rights.includes('offertes') && rights.includes('offertes.klant');
     if (!state.me.user && !state.me.guest) {
       $('#l-table').innerHTML = '<tr><td class="empty">Log eerst in om offertes te maken. <a href="../login">Inloggen</a></td></tr>';
       return;
@@ -725,8 +797,22 @@
     $('#l-status').innerHTML = '<option value="">Alle statussen</option>' + [...Object.keys(Q.STATUSES), 'verlopen']
       .map((s) => `<option value="${s}">${esc(statusLabel(s))}</option>`).join('');
     $('#e-status').innerHTML = Object.entries(Q.STATUSES).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
-    $('#l-all-wrap').hidden = !state.admin;
+    $('#l-all-wrap').hidden = !state.all;
     $('#l-profile').hidden = !state.canEdit;
+    if (state.klant) {
+      $('.brand-name').textContent = 'Mijn offertes';
+      $('#l-heading').textContent = 'Mijn offertes';
+      $('#l-intro').textContent = 'De offertes die voor u klaarstaan. Open een offerte om die te bekijken, af te drukken en akkoord te geven of af te wijzen.';
+      for (const id of ['#l-new-plan', '#l-new-empty', '#l-profile']) $(id).hidden = true;
+      $('#l-status').innerHTML = '<option value="">Alle statussen</option>' + ['verzonden', 'akkoord', 'afgewezen', 'verlopen']
+        .map((s) => `<option value="${s}">${esc(statusLabel(s))}</option>`).join('');
+    } else {
+      try { state.customers = (await api('quote-customers')).items || []; } catch (e) { state.customers = []; }
+    }
+    $('#v-back').onclick = () => go('');
+    $('#v-pdf').onclick = () => window.print();
+    $('#v-accept').onclick = () => respond('akkoord');
+    $('#v-reject').onclick = () => respond('afgewezen');
     let t;
     $('#l-search').oninput = () => { clearTimeout(t); t = setTimeout(renderList, 150); };
     $('#l-status').onchange = renderList;

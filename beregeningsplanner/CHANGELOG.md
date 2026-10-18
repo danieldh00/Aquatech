@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.22.0
+
+- **Rollen**: hoofdbeheerder, beheerder, installateur en klant. Elke rol
+  ziet op het dashboard alleen wat erbij hoort en de API controleert de
+  rechten zelf (één bron: `frontend/shared/roles.js`).
+  - Hoofdbeheerder: alles, in elke tenant.
+  - Beheerder: alles binnen de eigen organisatie.
+  - Installateur: plannen en offertes van de hele organisatie, zonder
+    gebruikers, instellingen of historie.
+  - Klant: alleen de eigen plannen en de offertes die voor hem klaarstaan.
+- Bestaande gebruikers worden installateur, gasten worden klant (migratie
+  van de database; de oude rolnaam *gebruiker* wordt nog geaccepteerd).
+- **Mijn offertes** voor klanten: een offerte koppel je bij *Klantaccount*
+  aan een klant; vanaf de status Verzonden ziet de klant de offerte als
+  document en kan hij akkoord geven of afwijzen (in het auditlog).
+- Plannenoverzicht en offertes: installateurs zien alle plannen en offertes
+  van de organisatie; de knop Offerte maken alleen voor wie offertes opstelt.
+
 ## 0.21.0
 
 - **Offertes** (nieuwe module): een offerte opbouwen uit een

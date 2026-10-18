@@ -1,6 +1,7 @@
 // Plannenoverzicht: een tabel met de plannen en hun projectgegevens.
-// Gebruikers zien hun eigen plannen (/api/plans); beheerders alle plannen
-// van alle gebruikers met per plan de tijdlijn uit de historie
+// Een klant ziet zijn eigen plannen (/api/plans); een installateur alle
+// plannen van de organisatie (/api/plans?all=1); een beheerder daarbij ook
+// verwijderde plannen en per plan de tijdlijn uit de historie
 // (/api/admin/plans). De server bepaalt wat iemand mag zien.
 (function () {
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -11,13 +12,13 @@
   const areaLabel = (t) => (window.Catalog && window.Catalog.areaTypes[t] ? window.Catalog.areaTypes[t].label : t);
   const lawnM2 = (p) => (p.summary && p.summary.m2ByType ? p.summary.m2ByType.lawn || 0 : 0);
 
-  const state = { me: null, admin: false, plans: [], sort: { key: 'updatedAt', dir: -1 } };
+  const state = { me: null, admin: false, team: false, quotes: false, plans: [], sort: { key: 'updatedAt', dir: -1 } };
 
   // Kolommen: key, kop, waarde (voor sorteren/Excel) en weergave.
   const COLUMNS = [
     { key: 'title', label: 'Projectnaam', value: (p) => p.title, html: (p) => `<b>${esc(p.title)}</b>${p.customer ? `<span class="sub">${esc(p.customer)}</span>` : ''}`, cls: 'wrap' },
     { key: 'address', label: 'Adres', value: (p) => p.address, html: (p) => esc(p.address || '–'), cls: 'wrap' },
-    { key: 'owner', label: 'Gebruiker', admin: true, value: (p) => (p.owner ? p.owner.displayName : ''), html: (p) => esc(p.owner ? p.owner.displayName : '–') },
+    { key: 'owner', label: 'Gebruiker', team: true, value: (p) => (p.owner ? p.owner.displayName : ''), html: (p) => esc(p.owner ? p.owner.displayName : '–') },
     { key: 'lawn', label: 'Gazon m²', value: lawnM2, html: (p) => num(lawnM2(p)), cls: 'num' },
     { key: 'totalM2', label: 'Totaal m²', value: (p) => p.summary.totalM2, html: (p) => num(p.summary.totalM2), cls: 'num' },
     { key: 'areas', label: 'Vlakken', value: (p) => p.summary.areas, html: (p) => p.summary.areas, cls: 'num' },
@@ -27,7 +28,7 @@
     { key: 'updatedAt', label: 'Laatst gewijzigd', value: (p) => p.updatedAt, html: (p) => esc(when(p.updatedAt)) },
     { key: 'historyCount', label: 'Aanvragen', admin: true, value: (p) => p.historyCount, html: (p) => p.historyCount ?? '–', cls: 'num' },
   ];
-  const columns = () => COLUMNS.filter((c) => !c.admin || state.admin);
+  const columns = () => COLUMNS.filter((c) => (!c.admin || state.admin) && (!c.team || state.team));
 
   function toast(msg, err = false) {
     const t = $('#toast');
@@ -45,14 +46,14 @@
   }
 
   async function load() {
-    const url = state.admin ? `../api/admin/plans${$('#f-deleted').checked ? '?deleted=1' : ''}` : '../api/plans';
+    const url = state.admin ? `../api/admin/plans${$('#f-deleted').checked ? '?deleted=1' : ''}` : `../api/plans${state.team ? '?all=1' : ''}`;
     try {
       state.plans = (await getJson(url)).items || [];
     } catch (e) {
       $('#p-table').innerHTML = `<tr><td class="empty">Kan de plannen niet laden (${esc(e.message)}).</td></tr>`;
       return;
     }
-    if (state.admin) {
+    if (state.team) {
       const sel = $('#f-owner');
       const cur = sel.value;
       const owners = new Map(state.plans.filter((p) => p.owner).map((p) => [p.owner.id, p.owner.displayName]));
@@ -86,7 +87,7 @@
       [num(sum((p) => p.summary.totalM2), 0), 'm² in totaal'],
       [sum((p) => p.summary.sprinklers), 'sproeiers'],
     ];
-    if (state.admin) tiles.push([owners, owners === 1 ? 'gebruiker' : 'gebruikers']);
+    if (state.team) tiles.push([owners, owners === 1 ? 'gebruiker' : 'gebruikers']);
     $('#stats').innerHTML = tiles.map(([v, l]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join('');
     $('#stats').hidden = !state.plans.length;
   }
@@ -128,13 +129,13 @@
     $('#p-count').textContent = `${items.length} van ${state.plans.length} plannen`;
   }
 
-  // Eigen plan: openen in de planner. Plan van iemand anders (beheerder):
-  // als kopie, zodat het origineel van de gebruiker niet wijzigt.
+  // Eigen plan: openen in de planner. Plan van iemand anders (beheerder,
+  // installateur): als kopie, zodat het origineel van de gebruiker niet wijzigt.
   async function openPlan(p) {
     const own = !p.owner || !state.me.user || p.owner.id === state.me.user.id;
     if (own) { location.href = `../beregening/?plan=${encodeURIComponent(p.id)}`; return; }
     try {
-      const plan = await getJson(`../api/admin/plans/${encodeURIComponent(p.id)}`);
+      const plan = await getJson(`../api/plans/${encodeURIComponent(p.id)}`);
       sessionStorage.setItem('aquatech-open-copy', JSON.stringify(plan.data));
       location.href = '../beregening/?copy=1';
     } catch (e) {
@@ -165,7 +166,7 @@
         ${p.deletedAt ? `<dt>Verwijderd</dt><dd>${esc(when(p.deletedAt))}</dd>` : ''}
       </dl>
       <div class="actions">${p.deletedAt ? '' : `<button class="btn primary" id="d-open">${own ? 'Openen in de planner' : 'Kopie openen in de planner'}</button>
-        <a class="btn" href="../offertes/?plan=${encodeURIComponent(p.id)}">Offerte maken</a>`}
+        ${state.quotes ? `<a class="btn" href="../offertes/?plan=${encodeURIComponent(p.id)}">Offerte maken</a>` : ''}`}
         ${state.admin ? '<button class="btn" id="d-purge">Definitief wissen</button>' : ''}</div>
       ${state.admin ? '<h3>Historie</h3><div id="d-history" class="muted small">Laden…</div>' : ''}`;
     const btn = $('#d-open');
@@ -216,7 +217,7 @@
         { header: 'Projectnaam', key: 'title', width: 30 },
         { header: 'Klant', key: 'customer', width: 24 },
         { header: 'Adres', key: 'address', width: 30 },
-        ...(state.admin ? [{ header: 'Gebruiker', key: 'owner', width: 22 }] : []),
+        ...(state.team ? [{ header: 'Gebruiker', key: 'owner', width: 22 }] : []),
         { header: 'Vlakken', key: 'areas', width: 9 },
         { header: 'Totaal m²', key: 'totalM2', width: 11, style: { numFmt: '0.0' } },
         ...types.map((t) => ({ header: `${areaLabel(t)} m²`, key: `m2_${t}`, width: 14, style: { numFmt: '0.0' } })),
@@ -259,12 +260,17 @@
 
   async function init() {
     state.me = await window.AquatechAccount.load('../');
-    state.admin = Boolean(state.me.user && state.me.user.role === 'beheerder');
-    $('#p-heading').textContent = state.admin ? 'Alle plannen' : 'Mijn plannen';
+    const rights = state.me.rights || [];
+    state.admin = rights.includes('beheer');
+    state.team = rights.includes('plannen.alle');
+    state.quotes = rights.includes('offertes');
+    $('#p-heading').textContent = state.team ? 'Alle plannen' : 'Mijn plannen';
     $('#p-intro').textContent = state.admin
       ? 'Alle plannen van alle gebruikers. Klik op een plan voor de details en de historie van de aanvragen.'
-      : 'Je eigen beregeningsplannen. Klik op een plan voor de details of open het in de planner.';
-    $('#f-owner').hidden = !state.admin;
+      : state.team
+        ? 'Alle plannen van de organisatie. Klik op een plan voor de details, open het in de planner of maak er een offerte van.'
+        : 'Je eigen beregeningsplannen. Klik op een plan voor de details of open het in de planner.';
+    $('#f-owner').hidden = !state.team;
     $('#f-deleted-wrap').hidden = !state.admin;
     let t;
     $('#f-search').oninput = () => { clearTimeout(t); t = setTimeout(render, 150); };

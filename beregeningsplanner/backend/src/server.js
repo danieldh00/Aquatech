@@ -15,6 +15,7 @@ const { createQuoteStore, registerQuoteRoutes } = require('./quotes');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
+const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 const LOGIN_PAGE = path.join(__dirname, 'login.html');
 const SETUP_PAGE = path.join(__dirname, 'setup.html');
 const PKG = require('../package.json');
@@ -368,12 +369,20 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
     next();
   };
-  const requireAdmin = (req, res, next) => {
+  // Rechten per rol staan in frontend/shared/roles.js; een hoofdbeheerder mag alles.
+  const FORBIDDEN = {
+    beheer: 'Alleen voor beheerders.',
+    offertes: 'Alleen voor beheerders en installateurs.',
+    'offertes.alle': 'Alleen voor beheerders en installateurs.',
+    'plannen.alle': 'Alleen voor beheerders en installateurs.',
+  };
+  const requireRight = (right) => (req, res, next) => {
     const user = identify(req);
     if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
-    if (user.role !== 'beheerder') return res.status(403).json({ error: 'forbidden', message: 'Alleen voor beheerders.' });
+    if (!Roles.can(user, right)) return res.status(403).json({ error: 'forbidden', message: FORBIDDEN[right] || 'Geen toegang.' });
     next();
   };
+  const requireAdmin = requireRight('beheer');
   const requirePlatformAdmin = (req, res, next) => {
     const user = identify(req);
     if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
@@ -405,6 +414,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       via,
       tenant: active,
       platformAdmin: Boolean(user?.platform_admin),
+      // Wat deze gebruiker mag (zie roles.js); een nog niet bewaarde gast is een klant.
+      rights: user ? Roles.rightsOf(user) : guestsAllowed() ? Roles.rightsOf({ role: 'klant' }) : [],
       environments: user ? accessibleFor(user).length : 0,
 
       // Staan gasten aan, dan werkt iedereen zonder inloggen als (nieuwe) gast.
@@ -447,17 +458,20 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const planLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 900, keyFn: (req) => req.user?.id || remoteIp(req) });
   const validPlan = (data) => data && typeof data === 'object' && !Array.isArray(data) && Array.isArray(data.areas);
 
+  // Eigen plannen; beheerders en installateurs met ?all=1 alle plannen van
+  // de organisatie (zonder historie: die is alleen voor beheerders).
   app.get('/api/plans', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const user = identify(req);
     if (!user) return res.json({ items: [] });
-    res.json({ items: store.listPlans(req.tenantId, { ownerId: user.id }) });
+    const all = req.query.all === '1' && Roles.can(user, 'plannen.alle');
+    res.json({ items: store.listPlans(req.tenantId, { ownerId: all ? null : user.id }) });
   });
 
   app.get('/api/plans/:id', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const user = identify(req);
-    // Alleen de eigenaar (of een beheerder); anders 404, zodat niet te zien is
+    // Alleen de eigenaar (of beheerder/installateur); anders 404, zodat niet te zien is
     // of een plan van iemand anders bestaat.
     const plan = user && store.getPlan(user, req.params.id);
     if (!plan) return res.status(404).json({ error: 'not_found', message: 'Plan niet gevonden.' });
@@ -734,8 +748,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Offertes (module Offertes, zie quotes.js) ----------
   registerQuoteRoutes(app, {
-    quotes: createQuoteStore(database), identify, requireUser, requireAdmin, requireJson, audit,
+    quotes: createQuoteStore(database), identify, requireUser, requireAdmin, requireRight, requireJson, audit,
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
+    // Klantaccounts horen bij de live-tenant (ook als er in test gewerkt wordt).
+    customersOf: (req) => store.listCustomers(homeOf(req.tenantId || tenant.id)),
   });
 
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).

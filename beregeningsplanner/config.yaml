@@ -4,7 +4,7 @@
 # geen paneel, geen app-opties. Na de overstap mogen config.yaml,
 # apparmor.txt, icon.png, logo.png en ../repository.yaml weg.
 name: "Aquatech"
-version: "0.21.0"
+version: "0.22.0"
 slug: beregeningsplanner
 description: >-
   Aquatech-dashboard met modules (beregeningsplanner, beheer). Draait als
