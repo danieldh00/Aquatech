@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0
+## 0.9.0
 
 - **Nieuw: Aquatech-dashboard als startpagina.** De app is nu de basis van
   een groter pakket: de startpagina toont tegels per module. De
@@ -13,6 +13,24 @@
 - Het HA-zijpaneel heet nu **Aquatech** (was *Beregening*); de app heet
   in de add-on-winkel ook *Aquatech*. De slug blijft gelijk, dus de
   Cloudflare-tunnel en instellingen werken ongewijzigd.
+
+## 0.8.0
+
+- **Intekenen op telefoon en tablet**:
+  - tik om een hoekpunt, element of sproeier te plaatsen (bij loslaten);
+    met één vinger slepen verschuift het plan, knijpen met twee vingers
+    zoomt — een pinch zet nooit per ongeluk een punt neer;
+  - tekenbalk boven het plan met **Punt terug**, **Vorm sluiten** en
+    **Stoppen/Annuleren** (vervangt Backspace, Enter en Esc);
+  - ruimere raakzones voor hoekpunten, randmiddens, sproeiers en het
+    eerste punt (vangzone zichtbaar), grotere grepen en de maat naast in
+    plaats van onder de vinger;
+  - geen 'ghost click' meer op het paneel dat na een tik verschijnt.
+- **Mobiele lay-out**: plan bovenaan, stappenpaneel eronder dat inklapt
+  tijdens tekenen (knop **▾ Paneel**), compacte, scrollbare top- en
+  gereedschapsbalk en grotere knoppen bij touchbediening.
+- Eigenschappen zijn op tablet en telefoon nu bereikbaar als zwevende kaart
+  zodra iets geselecteerd is (voorheen verborgen onder 1100 px breed).
 
 ## 0.7.0
 
