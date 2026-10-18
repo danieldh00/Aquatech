@@ -13,8 +13,7 @@ De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn drie
 
 | Manier | Hoe |
 |---|---|
-| **Home Assistant-add-on** (testen) | Instellingen → Add-ons → Add-on-winkel → ⋮ → Repositories → `https://github.com/danieldh00/Aquatech` toevoegen, daarna **Aquatech** installeren en starten. Openen via het **Aquatech**-paneel in het zijmenu. |
-| **Eigen server** (Docker, los van HA) | `docker compose up -d --build` in de root → `http://<server>:3300`; de eerste toegangscode staat in `docker compose logs aquatech`. Zie *Losse server (Docker)* in `beregeningsplanner/DOCS.md`. |
+| **Eigen server** (Docker) | `docker compose up -d --build` in de root → `http://<server>:3300`; bij de eerste aanmelding maak je het eerste beheerdersaccount aan. Zie *Server (Docker)* in `beregeningsplanner/DOCS.md`. |
 | **Lokaal** | `beregeningsplanner/frontend/index.html` (dashboard) of `beregeningsplanner/frontend/beregening/index.html` direct in de browser openen |
 
 ## Stappen
@@ -55,7 +54,7 @@ Het `.xlsx`-bestand bevat de tabbladen:
 
 API-sleutel, toegangscode, AI-limieten en modules stel je als beheerder in
 onder **Beheer → Instellingen** (opgeslagen in de database, werkt zonder
-herstart). HA-opties en Docker-omgevingsvariabelen zijn alleen startwaarden.
+herstart). Docker-omgevingsvariabelen zijn alleen startwaarden.
 
 ## Opslag
 
@@ -73,15 +72,16 @@ Het project wordt automatisch in de browser (localStorage) bewaard. Met **Opslaa
 ## Structuur
 
 ```
-repository.yaml                     HA add-on-store
-docker-compose.yml, .env.example    draaien buiten HA als losse container (poort 3300)
-beregeningsplanner/                 de add-on
-  config.yaml, Dockerfile, apparmor.txt, CHANGELOG.md, DOCS.md, icon.png, logo.png
+repository.yaml                     tijdelijk: oude Home Assistant-installatie (mag weg na de overstap)
+docker-compose.yml, .env.example    de server als Docker-container (poort 3300)
+beregeningsplanner/                 de app (Dockerfile, backend, frontend)
+  Dockerfile, CHANGELOG.md, DOCS.md
+  config.yaml, apparmor.txt, icon.png, logo.png   tijdelijk: oude HA-installatie (mag weg na de overstap)
   backend/src/server.js             express: dashboard + modules, login, /api/health, /api/plan/*
   backend/src/planAnalyzer.js       plan lezen via de Claude API (schaal, vlakken, elementen)
   backend/src/settings.js           instellingen (Beheer > Instellingen) in de database
   backend/test/                     node --test
-  frontend/                         alle paden relatief, i.v.m. ingress
+  frontend/                         alle paden relatief (werkt ook onder een padprefix)
     frontend/index.html          dashboard (startpagina)
     frontend/dashboard/          opmaak, script en moduleregister (modules.js) van het dashboard
     frontend/shared/             huisstijl voor alle modules: brand.css (kleuren, Montserrat), logo's

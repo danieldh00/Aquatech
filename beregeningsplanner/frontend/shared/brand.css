@@ -1,6 +1,6 @@
 /* Huisstijl AquaTech Service (aquatechservice.nl), gedeeld door het dashboard
    en alle modules: navy voor kopteksten en balken, groen voor acties, teal als
-   accent. Lettertype Montserrat (SIL OFL), lokaal i.v.m. ingress/offline. */
+   accent. Lettertype Montserrat (SIL OFL), lokaal (offline, geen CDN). */
 @font-face { font-family: "Montserrat"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/montserrat-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "Montserrat"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/montserrat-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Montserrat"; font-style: normal; font-weight: 700; font-display: swap; src: url("fonts/montserrat-latin-700-normal.woff2") format("woff2"); }

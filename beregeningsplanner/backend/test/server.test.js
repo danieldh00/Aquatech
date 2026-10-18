@@ -3,7 +3,8 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { createApp, FRONTEND_DIR } = require('../src/server');
-const { isIngress } = require('../src/auth');
+const { openDb } = require('../src/db');
+const { createStore } = require('../src/store');
 
 const SECRET = 'x'.repeat(64);
 
@@ -13,6 +14,14 @@ function start(opts = {}) {
       resolve({ server, base: `http://127.0.0.1:${server.address().port}` });
     });
   });
+}
+
+// Database met al een beheerder (anders verschijnt het instelscherm).
+function dbWithAdmin() {
+  const db = openDb();
+  const store = createStore(db);
+  store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'wachtwoord1' });
+  return db;
 }
 
 async function login(base, code = 'geheim') {
@@ -52,7 +61,7 @@ test('zonder inlog: inlogpagina in plaats van de planner, ook voor bestanden', a
   }
 });
 
-test('X-Ingress-Path vanaf een willekeurig IP geeft geen toegang', async () => {
+test('X-Ingress-Path (oude HA-header) geeft geen toegang', async () => {
   const { server, base } = await start();
   try {
     const res = await fetch(`${base}/`, { headers: { 'X-Ingress-Path': '/api/hassio_ingress/abc' } });
@@ -60,14 +69,6 @@ test('X-Ingress-Path vanaf een willekeurig IP geeft geen toegang', async () => {
   } finally {
     server.close();
   }
-});
-
-test('ingress = header + Supervisor-IP', () => {
-  const req = (ip, header) => ({ socket: { remoteAddress: ip }, headers: header ? { 'x-ingress-path': '/x' } : {} });
-  assert.strictEqual(isIngress(req('172.30.32.2', true)), true);
-  assert.strictEqual(isIngress(req('::ffff:172.30.32.2', true)), true);
-  assert.strictEqual(isIngress(req('172.30.32.2', false)), false);
-  assert.strictEqual(isIngress(req('172.30.33.5', true)), false);
 });
 
 test('verkeerde code faalt, juiste code geeft toegang tot de planner', async () => {
@@ -108,16 +109,16 @@ test('andere toegangscode maakt oude cookies ongeldig', async () => {
   }
 });
 
-test('zonder ingestelde code is de planner openbaar en is inloggen niet nodig', async () => {
-  const { server, base } = await start({ accessCode: '' });
+test('gasten aan en geen code: de planner is openbaar en inloggen is niet nodig', async () => {
+  const { server, base } = await start({ accessCode: '', env: { GUEST_ACCESS: 'true' }, db: dbWithAdmin() });
   try {
     const res = await fetch(`${base}/`);
     assert.strictEqual(res.status, 200);
     assert.match(await res.text(), /id="modules"/);
     assert.match(await (await fetch(`${base}/beregening/`)).text(), /Beregeningsplanner/);
     assert.strictEqual((await fetch(`${base}/beregening/js/app.js`)).status, 200);
-    const { res: login409 } = await login(base, '');
-    assert.strictEqual(login409.status, 409);
+    const { res: noCode } = await login(base, '');
+    assert.strictEqual(noCode.status, 400);
   } finally {
     server.close();
   }
@@ -135,8 +136,8 @@ test('alle scripts en stylesheets uit de pagina\'s bestaan en zijn relatief', ()
     const refs = [...html.matchAll(/(?:src|href)="([^"#]+)"/g)].map((m) => m[1]);
     assert.ok(refs.length >= 2, page);
     for (const ref of refs) {
-      assert.ok(!ref.startsWith('/'), `${page}: ${ref} moet relatief zijn (ingress)`);
-      assert.ok(!/^https?:/.test(ref), `${page}: ${ref} moet lokaal zijn (offline/ingress)`);
+      assert.ok(!ref.startsWith('/'), `${page}: ${ref} moet relatief zijn (padprefix achter een proxy)`);
+      assert.ok(!/^https?:/.test(ref), `${page}: ${ref} moet lokaal zijn (offline, geen CDN)`);
       assert.ok(fs.existsSync(path.join(FRONTEND_DIR, path.dirname(page), ref)), `${page}: ${ref} ontbreekt`);
     }
   }
@@ -162,8 +163,8 @@ test('planner heeft een relatieve link terug naar het dashboard', () => {
   assert.match(html, /href="\.\.\/"/);
 });
 
-test('module zonder slash: relatieve doorverwijzing (ingress), querystring blijft', async () => {
-  const { server, base } = await start({ accessCode: '' });
+test('module zonder slash: relatieve doorverwijzing, querystring blijft', async () => {
+  const { server, base } = await start({ accessCode: '', env: { GUEST_ACCESS: 'true' }, db: dbWithAdmin() });
   try {
     for (const [p, loc] of [['/beregening', 'beregening/'], ['/beregening?x=1', 'beregening/?x=1']]) {
       const res = await fetch(base + p, { redirect: 'manual' });
@@ -174,6 +175,63 @@ test('module zonder slash: relatieve doorverwijzing (ingress), querystring blijf
     const res = await fetch(`${base}/dashboard`, { redirect: 'manual' });
     assert.strictEqual(res.status, 200);
     assert.match(await res.text(), /id="modules"/);
+  } finally {
+    server.close();
+  }
+});
+
+test('eerste start: instelscherm op elk pad, daarna inloggen met het nieuwe account', async () => {
+  const { server, base } = await start({ accessCode: '' });
+  try {
+    for (const p of ['/', '/beregening/', '/login']) {
+      const res = await fetch(base + p);
+      assert.match(await res.text(), /Beheerder aanmaken/, p);
+    }
+    assert.deepStrictEqual(await (await fetch(`${base}/api/setup`)).json(), { required: true, codeRequired: false });
+    const post = (body) => fetch(`${base}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    assert.strictEqual((await post({ username: 'x', displayName: 'X', password: 'kort' })).status, 400);
+    const ok = await post({ username: 'daniel', displayName: 'Daniël', password: 'wachtwoord1' });
+    assert.strictEqual(ok.status, 201);
+    const cookie = ok.headers.get('set-cookie').split(';')[0];
+    const me = await (await fetch(`${base}/api/me`, { headers: { cookie } })).json();
+    assert.strictEqual(me.user.role, 'beheerder');
+    assert.strictEqual(me.user.kind, 'account');
+    assert.strictEqual((await fetch(`${base}/`, { headers: { cookie } })).status, 200);
+    // Daarna kan niemand nog een eerste beheerder aanmaken; anderen krijgen de inlogpagina.
+    assert.strictEqual((await post({ username: 'indringer', displayName: 'I', password: 'wachtwoord1' })).status, 409);
+    const anon = await fetch(`${base}/`);
+    assert.strictEqual(anon.status, 401);
+    assert.match(await anon.text(), /Gebruikersnaam/);
+    assert.doesNotMatch(await (await fetch(`${base}/login`)).text(), /Beheerder aanmaken/);
+  } finally {
+    server.close();
+  }
+});
+
+test('eerste start met toegangscode: de code is nodig om de beheerder aan te maken', async () => {
+  const { server, base } = await start();
+  try {
+    assert.strictEqual((await (await fetch(`${base}/api/setup`)).json()).codeRequired, true);
+    const post = (body) => fetch(`${base}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    assert.strictEqual((await post({ username: 'daniel', password: 'wachtwoord1', code: 'fout' })).status, 401);
+    assert.strictEqual((await post({ username: 'daniel', password: 'wachtwoord1', code: 'geheim' })).status, 201);
+  } finally {
+    server.close();
+  }
+});
+
+test('de laatste actieve beheerder kan niet worden uitgeschakeld of gedegradeerd', async () => {
+  const db = dbWithAdmin();
+  const { server, base } = await start({ db });
+  try {
+    const { cookie } = await login(base);
+    const headers = { cookie, 'Content-Type': 'application/json' };
+    const users = (await (await fetch(`${base}/api/admin/users`, { headers })).json()).items;
+    const baas = users.find((u) => u.username === 'baas');
+    for (const body of [{ disabled: true }, { role: 'gebruiker' }]) {
+      const res = await fetch(`${base}/api/admin/users/${baas.id}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
+      assert.strictEqual(res.status, 409);
+    }
   } finally {
     server.close();
   }

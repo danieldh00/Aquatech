@@ -2,19 +2,19 @@ const { transaction } = require('./db');
 
 // App-instellingen, te beheren door beheerders via Beheer > Instellingen. Ze
 // staan per tenant in de database (tabel settings) en werken zonder herstart.
-// Zo hangt de app niet meer af van de Home Assistant-configuratie en draait hij
-// net zo goed als losse Docker-container.
 //
-// Volgorde per instelling: database -> HA-opties (/data/options.json) ->
-// omgevingsvariabele -> standaardwaarde. HA-opties en omgeving zijn dus alleen
-// nog startwaarden: wat in het instellingenscherm is opgeslagen gaat voor.
+// Volgorde per instelling: database -> omgevingsvariabele -> standaardwaarde.
+// De omgeving (docker-compose/.env) is dus alleen een startwaarde: wat in het
+// instellingenscherm is opgeslagen gaat voor.
 // Geheimen (API-sleutel, toegangscode) gaan nooit volledig terug naar de browser.
 
 const FIELDS = {
-  accessCode: { type: 'secret', option: 'access_code', env: 'ACCESS_CODE', default: '', min: 4 },
-  anthropicApiKey: { type: 'secret', option: 'anthropic_api_key', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
+  accessCode: { type: 'secret', env: 'ACCESS_CODE', default: '', min: 4 },
+  // Zonder toegangscode mogen bezoekers zonder inloggen als gast werken.
+  guestAccess: { type: 'bool', env: 'GUEST_ACCESS', default: false },
+  anthropicApiKey: { type: 'secret', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
   aiEnabled: { type: 'bool', default: true },
-  aiDailyLimit: { type: 'int', option: 'ai_daily_limit', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },
+  aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },
   aiHourlyPerIp: { type: 'int', default: 10, min: 1, max: 100 },
   modules: { type: 'flags', default: {} },
 };
@@ -44,10 +44,9 @@ function coerce(def, raw) {
 /**
  * @param db        database uit db.js
  * @param tenantId  tenant waarvan de instellingen zijn
- * @param options   HA-opties (inhoud van options.json) als startwaarden
  * @param env       omgevingsvariabelen als startwaarden
  */
-function createSettings({ db, tenantId, options = {}, env = {} }) {
+function createSettings({ db, tenantId, env = {} }) {
   // Eén proces per database: de waarden staan ook in het geheugen.
   let stored = {};
   for (const row of db.prepare('SELECT key, value FROM settings WHERE tenant_id = ?').all(tenantId)) {
@@ -61,21 +60,18 @@ function createSettings({ db, tenantId, options = {}, env = {} }) {
   function source(key, ignoreStored = false) {
     const def = FIELDS[key];
     if (!ignoreStored && Object.prototype.hasOwnProperty.call(stored, key)) return 'instellingen';
-    const opt = def.option && options[def.option];
-    if (opt !== undefined && opt !== null && opt !== '') return 'homeassistant';
     const ev = def.env && env[def.env];
     if (ev !== undefined && ev !== '') return 'omgeving';
     return 'standaard';
   }
 
-  // initial = de startwaarde (HA-optie, omgeving of standaard), zonder wat in
+  // initial = de startwaarde (omgeving of standaard), zonder wat in
   // de database staat: daar gaat een veld naartoe bij 'terugzetten'.
   function get(key, initial = false) {
     const def = FIELDS[key];
     if (!def) throw new Error(`Onbekende instelling ${key}`);
     switch (source(key, initial)) {
       case 'instellingen': return coerce(def, stored[key]);
-      case 'homeassistant': return coerce(def, options[def.option]);
       case 'omgeving': return coerce(def, env[def.env]);
       default: return def.type === 'flags' ? {} : def.default;
     }
@@ -97,7 +93,7 @@ function createSettings({ db, tenantId, options = {}, env = {} }) {
   /**
    * Wijzigingen uit het instellingenscherm. Geheimen: weglaten = ongewijzigd,
    * tekst = nieuwe waarde, '' = leegmaken. `reset: ['veld']` zet een veld terug
-   * naar de startwaarde (HA-optie, omgeving of standaard).
+   * naar de startwaarde (omgeving of standaard).
    * @param userId  wie de wijziging doet (voor updated_by)
    * @returns lijst van gewijzigde velden
    */

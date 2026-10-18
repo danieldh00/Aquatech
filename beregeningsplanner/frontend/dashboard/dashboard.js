@@ -1,5 +1,5 @@
 // Startpagina: tegels per module uit modules.js, het laatst bewerkte
-// beregeningsplan en de versie. Alle URL's relatief (ingress).
+// beregeningsplan en de versie. Alle URL's relatief (werkt ook onder een padprefix).
 (function () {
   const $ = (sel) => document.querySelector(sel);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

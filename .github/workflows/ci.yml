@@ -23,9 +23,8 @@ jobs:
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high
 
-  # Home Assistant Supervisor bouwt de image zelf op de host. Deze job bouwt
-  # 'm voor beide architecturen uit config.yaml (amd64 = Intel/Proxmox,
-  # arm64 = Raspberry Pi) en start de container om te zien dat hij antwoordt.
+  # Bouwt de image voor beide architecturen (amd64 = gewone server/VPS,
+  # arm64 = Raspberry Pi e.d.) en start de container om te zien dat hij antwoordt.
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -45,11 +44,11 @@ jobs:
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3300/api/health && exit 0; sleep 2; done
           docker logs hl
           exit 1
-      - name: Smoketest losse server (zonder HA, zonder code)
+      - name: Smoketest eerste start (instelscherm voor de eerste beheerder)
         run: |
           docker run -d --name solo --platform ${{ matrix.platform }} -p 3301:3300 beregeningsplanner:test
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3301/api/health && break; sleep 2; done
           docker logs solo
-          docker logs solo 2>&1 | grep -q 'toegangscode aangemaakt'
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3301/)" = 401
+          docker logs solo 2>&1 | grep -q 'eerste beheerdersaccount'
+          curl -s http://127.0.0.1:3301/ | grep -q 'Beheerder aanmaken'
           docker stop -t 10 solo

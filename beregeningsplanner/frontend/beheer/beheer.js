@@ -284,7 +284,7 @@
   }
 
   // ---------- Instellingen ----------
-  const SOURCES = { instellingen: '', homeassistant: 'uit Home Assistant', omgeving: 'uit Docker-omgeving', standaard: 'standaard' };
+  const SOURCES = { instellingen: '', omgeving: 'uit Docker-omgeving', standaard: 'standaard' };
 
   function renderSettings(view) {
     state.settings = view;
@@ -300,7 +300,10 @@
     keyState.className = `state ${key.set ? 'ok' : 'off'}`;
     const code = view.accessCode;
     const codeState = $('[data-state="accessCode"]');
-    codeState.textContent = code.set ? 'Ingesteld: inloggen is verplicht buiten Home Assistant.' : 'Geen code: de app is openbaar.';
+    codeState.textContent = code.set ? 'Ingesteld: inloggen kan ook met de code (als beheerder).' : 'Niet ingesteld: inloggen alleen met een eigen account.';
+    const acc = $('#s-access');
+    acc.guestAccess.checked = view.guestAccess.value;
+    acc.guestAccess.disabled = code.set;
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
@@ -360,6 +363,9 @@
       }
     };
     const acc = $('#s-access');
+    acc.guestAccess.onchange = () => {
+      saveSettings(acc, { guestAccess: acc.guestAccess.checked }, acc.guestAccess.checked ? 'Gasten toegestaan' : 'Inloggen is nu verplicht');
+    };
     acc.onsubmit = (ev) => {
       ev.preventDefault();
       const v = acc.accessCode.value.trim();
@@ -370,14 +376,14 @@
       b.onclick = () => {
         const field = b.dataset.clear;
         const q = field === 'accessCode'
-          ? 'Toegangscode verwijderen? De app is daarna voor iedereen zonder inloggen bereikbaar.'
+          ? 'Toegangscode verwijderen? Inloggen kan daarna alleen nog met een eigen account.'
           : 'API-sleutel verwijderen? Automatisch herkennen met AI staat daarna uit.';
         if (confirm(q)) saveSettings(b.closest('form'), { [field]: '' }, field === 'accessCode' ? 'Toegangscode verwijderd' : 'API-sleutel verwijderd');
       };
     });
     document.querySelectorAll('[data-reset]').forEach((b) => {
       b.onclick = () => {
-        if (confirm('Terugzetten naar de waarde uit Home Assistant, de Docker-omgeving of de standaardwaarde?')) {
+        if (confirm('Terugzetten naar de waarde uit de Docker-omgeving of de standaardwaarde?')) {
           saveSettings(b.closest('form'), { reset: [b.dataset.reset] }, 'Teruggezet');
         }
       };
@@ -407,7 +413,7 @@
       const d = $('#denied');
       d.innerHTML = me.user && me.user.kind !== 'gast'
         ? '<b>Geen toegang.</b> Deze pagina is alleen voor beheerders. <a href="../">Terug naar het overzicht</a>.'
-        : '<b>Log in als beheerder</b> om de historie te bekijken: via het Home Assistant-paneel, met de toegangscode of met een beheerdersaccount. <a href="../login">Inloggen</a>.';
+        : '<b>Log in als beheerder</b> om de historie te bekijken: met een beheerdersaccount of de toegangscode. <a href="../login">Inloggen</a>.';
       d.hidden = false;
       return;
     }

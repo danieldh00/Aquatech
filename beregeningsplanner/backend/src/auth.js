@@ -3,20 +3,9 @@ const crypto = require('crypto');
 const COOKIE_NAME = 'aquatech_session';
 const COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
-// Vast IP van de Supervisor op het interne hassio-netwerk. De ingress-proxy
-// verbindt altijd vanaf dit adres; verkeer via de Cloudflare-tunnel komt van
-// de Cloudflared-add-on (een ander 172.30.33.x-adres) en een client kan het
-// TCP-bronadres niet vervalsen. Alleen de combinatie header + IP telt dus als
-// ingress -- de header alleen is door iedereen mee te sturen.
-const SUPERVISOR_IPS = new Set(['172.30.32.2']);
-
 function remoteIp(req) {
   const raw = req.socket?.remoteAddress || '';
   return raw.startsWith('::ffff:') ? raw.slice(7) : raw;
-}
-
-function isIngress(req) {
-  return Boolean(req.headers['x-ingress-path']) && SUPERVISOR_IPS.has(remoteIp(req));
 }
 
 function parseCookies(header) {
@@ -98,9 +87,8 @@ function createAuth({ secret, getAccessCode, getUser = () => null }) {
     return safeEqual(hmac(secret, `try:${code}`), hmac(secret, `try:${expected}`));
   }
 
-  // { via: 'ingress' | 'code' | 'user', user? } of null.
+  // { via: 'code' | 'user', user? } of null.
   function session(req) {
-    if (isIngress(req)) return { via: 'ingress' };
     const s = verifySession(parseCookies(req.headers.cookie)[COOKIE_NAME]);
     if (!s) return null;
     return s.subject === 'code' ? { via: 'code' } : { via: 'user', user: s.user };
@@ -160,4 +148,4 @@ function createAuth({ secret, getAccessCode, getUser = () => null }) {
   return { requireAccess, isAuthenticated, session, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie };
 }
 
-module.exports = { createAuth, isIngress, remoteIp, parseCookies, COOKIE_NAME, GUEST_COOKIE };
+module.exports = { createAuth, remoteIp, parseCookies, COOKIE_NAME, GUEST_COOKIE };

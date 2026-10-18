@@ -6,14 +6,17 @@ Groeit uit tot een modulair ERP-achtig pakket: startpagina = **dashboard**
 planner is module `frontend/beregening/` (URL `beregening/`). Gepland:
 planning, voorraadbeheer. Een module = map onder `frontend/` met eigen
 `index.html`; de server serveert die generiek (relatieve redirect
-`<id>` → `<id>/`, express.static met `redirect: false` i.v.m. ingress).
+`<id>` → `<id>/`, express.static met `redirect: false` i.v.m. een padprefix achter een proxy).
 Huisstijl AquaTech Service (aquatechservice.nl) in `frontend/shared/brand.css`:
 navy `#172f5e`, groen `#19924f` (knoppen), teal `#2cb0c0`, Montserrat (lokaal),
 wit logo `shared/logo-white.png` op navy. Inlogpagina heeft het logo inline
 (data-URI), want die wordt zonder toegang tot bestanden geserveerd.
-Draait voorlopig als Home Assistant-add-on (paneel **Aquatech**, slug
-ongewijzigd `beregeningsplanner`); later op een eigen server via
-`docker-compose.yml`.
+Draait als gewone webserver in Docker (`docker-compose.yml` in de root,
+poort 3300). **Niets in de app mag van Home Assistant afhangen** (besluit
+Daniël 2026-10-18): geen ingress, geen HA-opties, geen Supervisor-detectie.
+De HA-verpakking (`config.yaml`, `apparmor.txt`, `icon.png`, `logo.png`,
+`repository.yaml`) staat er alleen nog tijdelijk zodat de oude installatie
+updates krijgt tot de Docker-server draait; daarna mag die weg.
 
 Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 (poort 3200), `danieldh00/Lijstjes` (3100), `danieldh00/Russianlanguageapp`
@@ -42,40 +45,34 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   `git merge origin/master` in je branch, conflicten oplossen, en de versie
   zo nodig opnieuw verhogen (moet hoger zijn dan die op `master`).
 - Elke wijziging in `beregeningsplanner/` op `master` vereist een
-  **versie-bump** in `beregeningsplanner/config.yaml` + entry in `CHANGELOG.md`,
-  anders biedt HA geen update aan. `scripts/check_addon_version.py` (workflow
+  **versie-bump** in `beregeningsplanner/backend/package.json` (en zolang die
+  bestaat dezelfde versie in `config.yaml`) + entry in `CHANGELOG.md`. `scripts/check_addon_version.py` (workflow
   `addon-version.yml`, op PR's naar en pushes op `master`) bewaakt dat.
   Wijzigingen buiten `beregeningsplanner/` (zoals deze `CLAUDE.md`) hebben
   geen bump nodig.
 
-## Home Assistant
+## Server, inloggen en opslag
 
-- Repository `https://github.com/danieldh00/Aquatech` (store-slug `c1355dc8`),
-  app-slug **`c1355dc8_beregeningsplanner`**, auto_update + watchdog aan.
-- Ingress (paneel **Aquatech**, geen login) én gepubliceerde poort 3300
-  voor de tunnel **https://aquatech.den-hollander.com**. Op verzoek van de
-  gebruiker **openbaar zonder login** zolang `access_code` leeg is; met code
-  is inloggen verplicht buiten ingress (sessiesleutel in `/data/session-secret`).
-- **Ingress alleen vertrouwen op header + Supervisor-IP (`172.30.32.2`)**
-  (`backend/src/auth.js`); de header alleen is te vervalsen. Met code en zonder
-  geldige sessie serveert de server op elk pad `backend/src/login.html`.
-- Cloudflared-app (`9074a9fa_cloudflared`) → `additional_hosts`:
-  `aquatech.den-hollander.com → http://c1355dc8-beregeningsplanner:3300`.
+- Publieke URL **https://aquatech.den-hollander.com** via een Cloudflare-tunnel
+  naar poort 3300 (nu nog via de oude HA-installatie, slug
+  `c1355dc8_beregeningsplanner`).
+- **Eerste start**: zolang er geen actieve beheerder met een eigen account is
+  (`store.countAdmins`), krijgt elke niet-ingelogde bezoeker
+  `backend/src/setup.html` (POST `/api/setup`; met een toegangscode is die
+  code nodig). De laatste actieve beheerder kan niet worden uitgeschakeld of
+  gedegradeerd. Daarna is inloggen verplicht (`login.html`), tenzij de
+  instelling `guestAccess` aan staat en er geen toegangscode is.
 - **Nooit secrets in de repo of in chat**: toegangscode en API-sleutel alleen
   in **Beheer → Instellingen** (tabel `settings` in `/data/aquatech.db`,
-  `backend/src/settings.js`). Volgorde: database → HA-opties → env → standaard;
-  HA-opties/env zijn alleen startwaarden. Geheimen gaan nooit volledig naar de
+  `backend/src/settings.js`). Volgorde: database → env → standaard; env is
+  alleen een startwaarde. Geheimen gaan nooit volledig naar de
   frontend (`view()` geeft `set` + laatste 4 tekens van de sleutel).
-- **Los van HA (Docker)**: `docker-compose.yml` + `.env.example` in de root.
-  HA wordt herkend aan `SUPERVISOR_TOKEN` of `/data/options.json`; zonder HA,
-  zonder code en zonder beheerdersaccount maakt de server bij de start een
-  toegangscode aan en logt die.
 - **Plan herkennen** (`backend/src/planAnalyzer.js`): één Claude API-aanroep
   (vision, gestructureerde JSON-uitvoer, fallback "default") die schaal
   (referentiemaat in pixels + lengte in m), vlakken en elementen teruggeeft. De
   frontend (`js/concept.js`) rekent om naar meters en bouwt het concept. Kosten
-  begrensd met `ai_daily_limit` + 10/uur per IP; de route valt achter de login
-  als er een `access_code` is. Tests bootsen de API na (geen echte aanroepen).
+  begrensd met de instellingen `aiDailyLimit` en `aiHourlyPerIp`; de route valt
+  achter de login (behalve met gasten aan). Tests bootsen de API na (geen echte aanroepen).
 - **Beregeningsmethode** per vlak: `Hydraulics.methodOf(state, area)` =
   `area.method` → `settings.methods[type]` → `areaTypes[type].defaultMethod`
   (`dripline` | `drippers` | `sprinklers` | `none`). Sproeiers in beplanting
@@ -108,21 +105,20 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   `store.js`: users (rol `beheerder`|`gebruiker`, soort `account`|`gast`|
   `systeem`), plans (alleen eigenaar of beheerder) en `history` (append-only
   historie van aanvragen, snapshot zonder achtergrond, wijzigingen binnen 30
-  min samengevoegd). Identiteit in `server.js` `identify()`: ingress en
-  toegangscode = systeembeheerder, sessie-cookie met user-id = account,
-  zonder code anders gast per browser (`aquatech_guest`). Module **Beheer**
+  min samengevoegd). Identiteit in `server.js` `identify()`: toegangscode =
+  systeembeheerder, sessie-cookie met user-id = account, met gasten aan
+  anders gast per browser (`aquatech_guest`). Module **Beheer**
   (`frontend/beheer/`, `role: 'beheerder'` in modules.js) toont historie,
   plannen en gebruikers. De API is ook onder `<module>/api/...` bereikbaar
   (modules gebruiken relatieve `api/...`).
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
-- Logs: `ha_get_logs(source="supervisor", slug="c1355dc8_beregeningsplanner")`;
-  health via ingress: `ha_manage_app(slug=..., path="/api/health")`.
+- Health: `GET /api/health` (versie uit `package.json`).
 
 ## Harde regels
 
-- **Alle URL's in de frontend relatief** (`css/app.css`, nooit `/css/...`):
-  onder ingress draait de app op `/api/hassio_ingress/<token>/`. Geen CDN's:
+- **Alle URL's in de frontend relatief** (`css/app.css`, nooit `/css/...`),
+  zodat de app ook onder een padprefix achter een reverse proxy werkt. Geen CDN's:
   vendor-bestanden lokaal in `frontend/<module>/vendor/` (test controleert dit voor alle pagina's).
 - Frontend gebruikt gewone `<script>`-tags (geen ES-modules), zodat
   `index.html` ook via `file://` werkt.
@@ -138,7 +134,7 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 
 ```sh
 cd beregeningsplanner/backend && npm install
-DATA_DIR=/tmp/bp ACCESS_CODE=test PORT=3300 node src/server.js   # http://localhost:3300
+DATA_DIR=/tmp/bp PORT=3300 node src/server.js   # http://localhost:3300 -> eerste beheerder aanmaken
 npm test                          # node --test
 ```
 

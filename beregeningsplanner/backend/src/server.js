@@ -4,7 +4,7 @@ const express = require('express');
 
 const { createAuth, remoteIp } = require('./auth');
 const { createRateLimiter } = require('./rateLimit');
-const { readHaOptions, loadOrCreateSecret } = require('./options');
+const { loadOrCreateSecret } = require('./options');
 const { createPlanAnalyzer, AnalyzeError } = require('./planAnalyzer');
 const { openDb } = require('./db');
 const { createStore } = require('./store');
@@ -12,19 +12,11 @@ const { createSettings, SettingsError } = require('./settings');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
 const LOGIN_PAGE = path.join(__dirname, 'login.html');
+const SETUP_PAGE = path.join(__dirname, 'setup.html');
 const PKG = require('../package.json');
 
-// Versie uit config.yaml van de add-on (als die meegeleverd is), anders uit package.json.
-function readVersion() {
-  try {
-    const cfg = fs.readFileSync(path.join(__dirname, '..', '..', 'config.yaml'), 'utf8');
-    const m = cfg.match(/^version:\s*"?([^"\n]+)"?/m);
-    if (m) return m[1].trim();
-  } catch (err) {
-    // niet aanwezig in de image: valt terug op package.json
-  }
-  return process.env.BUILD_VERSION || PKG.version;
-}
+// De versie van de app staat in package.json.
+const readVersion = () => PKG.version;
 
 // Een module is een map direct onder frontend/ met een eigen index.html.
 function isModule(name) {
@@ -37,19 +29,23 @@ function isModule(name) {
 }
 
 // accessCode, anthropicApiKey en aiDailyLimit zijn alleen startwaarden (net als
-// haOptions en env); de actuele waarden komen uit de instellingen.
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, haOptions = {}, env = {}, homeAssistant = false, createAnalyzer = createPlanAnalyzer }) {
+// env); de actuele waarden komen uit de instellingen.
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
-  // Als add-on één tenant; zie db.js voor de opzet richting multitenant.
+  // Voorlopig één tenant; zie db.js voor de opzet richting multitenant.
   const tenant = store.ensureTenant();
   const startEnv = { ...env };
   if (accessCode) startEnv.ACCESS_CODE = accessCode;
   if (anthropicApiKey) startEnv.ANTHROPIC_API_KEY = anthropicApiKey;
   if (aiDailyLimit !== undefined) startEnv.AI_DAILY_LIMIT = aiDailyLimit;
-  const settings = createSettings({ db: database, tenantId: tenant.id, options: haOptions, env: startEnv });
+  const settings = createSettings({ db: database, tenantId: tenant.id, env: startEnv });
   const getAccessCode = () => settings.get('accessCode');
+  // Gasten (zonder inloggen) alleen als dat aanstaat en er geen code is.
+  const guestsAllowed = () => !getAccessCode() && settings.get('guestAccess');
+  // Nog geen beheerder met een eigen account: eerst het instelscherm.
+  const needsSetup = () => store.countAdmins(tenant.id) === 0;
   const auth = createAuth({ secret, getAccessCode, getUser: (id) => store.getUser(id) });
   // De AI-client volgt de API-sleutel uit de instellingen (zonder herstart).
   let cachedAnalyzer = { key: null, analyzer: null };
@@ -93,7 +89,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.get('/api/auth/status', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ authenticated: auth.isAuthenticated(req), configured: Boolean(getAccessCode()) });
+    res.json({ authenticated: auth.isAuthenticated(req), configured: Boolean(getAccessCode()), loginRequired: !guestsAllowed(), setupRequired: needsSetup() });
   });
 
   app.post('/api/auth/login', loginLimiter, (req, res) => {
@@ -105,7 +101,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return res.json({ ok: true });
     }
     if (!getAccessCode()) {
-      return res.status(409).json({ error: 'not_configured', message: 'Er is nog geen toegangscode ingesteld. Stel die in via de app-configuratie in Home Assistant.' });
+      return res.status(400).json({ error: 'username_required', message: 'Vul je gebruikersnaam en wachtwoord in.' });
     }
     if (!auth.checkCode(String(req.body?.code ?? req.body?.password ?? ''))) {
       return res.status(401).json({ error: 'wrong_code', message: 'Onjuiste toegangscode.' });
@@ -119,19 +115,42 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({ ok: true });
   });
 
+  // ---------- Eerste start: het eerste beheerdersaccount ----------
+  // Zolang er geen beheerder met een eigen account is, krijgt elke bezoeker
+  // die niet is ingelogd het instelscherm (setup.html). Met een ingestelde
+  // toegangscode moet die code erbij, anders kan iedereen met de URL het
+  // eerste account claimen.
+  app.get('/api/setup', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ required: needsSetup(), codeRequired: Boolean(getAccessCode()) });
+  });
+
+  app.post('/api/setup', loginLimiter, (req, res) => {
+    if (!req.is('application/json')) return res.status(415).json({ error: 'json_required', message: 'Verwacht JSON.' });
+    if (!needsSetup()) return res.status(409).json({ error: 'already_setup', message: 'Er is al een beheerder. Log in met je account.' });
+    if (getAccessCode() && !auth.checkCode(String(req.body?.code ?? ''))) {
+      return res.status(401).json({ error: 'wrong_code', message: 'Onjuiste toegangscode.' });
+    }
+    const { username, displayName, password } = req.body || {};
+    const out = store.createAccount(tenant.id, { username: String(username || '').trim().toLowerCase(), displayName, role: 'beheerder', password });
+    if (out.error) return res.status(400).json({ error: 'invalid_user', message: out.error });
+    console.log(`Eerste beheerder aangemaakt: ${out.user.username}`);
+    auth.setCookie(req, res, out.user.id);
+    res.status(201).json({ ok: true, user: store.publicUser(out.user) });
+  });
+
   // ---------- Wie is er ingelogd? ----------
-  // HA-paneel en toegangscode = beheerder; een account = die gebruiker; zonder
-  // toegangscode is iedereen anders een gast met een eigen (anonieme)
-  // gebruiker per browser. Een gast wordt pas aangemaakt bij het eerste
-  // opslaan (ensureUser), niet bij elk bezoek.
+  // Toegangscode = beheerder; een account = die gebruiker; staan gasten aan
+  // (Beheer > Instellingen) en is er geen code, dan is iedereen anders een gast
+  // met een eigen (anonieme) gebruiker per browser. Een gast wordt pas
+  // aangemaakt bij het eerste opslaan (ensureUser), niet bij elk bezoek.
   function identify(req) {
     if (req.user !== undefined) return req.user;
     const s = auth.session(req);
     let user = null;
-    if (s?.via === 'ingress') user = store.systemUser(tenant.id, 'ha-ingress', 'Home Assistant');
-    else if (s?.via === 'code') user = store.systemUser(tenant.id, 'beheerder', 'Beheerder (toegangscode)');
+    if (s?.via === 'code') user = store.systemUser(tenant.id, 'beheerder', 'Beheerder (toegangscode)');
     else if (s?.via === 'user') user = s.user;
-    else if (!getAccessCode()) {
+    else if (guestsAllowed()) {
       const gid = auth.guestId(req);
       const g = gid && store.getUser(gid);
       user = g && g.kind === 'gast' && g.tenant_id === tenant.id && !g.disabled ? g : null;
@@ -144,7 +163,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const guestLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: remoteIp });
   function ensureUser(req, res) {
     const user = identify(req);
-    if (user || getAccessCode()) return user;
+    if (user || !guestsAllowed()) return user;
     // De limiter roept next() direct aan, of beantwoordt zelf met 429.
     let allowed = false;
     guestLimiter(req, res, () => { allowed = true; });
@@ -181,9 +200,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({
       user: user ? store.publicUser(user) : null,
       via,
-      // Zonder toegangscode werkt iedereen zonder inloggen als (nieuwe) gast.
-      guest: !user && !getAccessCode(),
+      // Staan gasten aan, dan werkt iedereen zonder inloggen als (nieuwe) gast.
+      guest: !user && guestsAllowed(),
       accessCodeConfigured: Boolean(getAccessCode()),
+      setupRequired: needsSetup(),
     });
   });
 
@@ -273,15 +293,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Beheer: instellingen ----------
   app.get('/api/admin/settings', (req, res) => {
-    res.json({ settings: settings.view(), via: auth.session(req)?.via || null, homeAssistant });
+    res.json({ settings: settings.view(), via: auth.session(req)?.via || null });
   });
 
   app.put('/api/admin/settings', requireJson, (req, res) => {
     const patch = req.body && typeof req.body === 'object' ? req.body : {};
     const via = auth.session(req)?.via;
     const oldCode = getAccessCode();
-    // Zonder toegangscode kan alleen het HA-paneel of een beheerdersaccount
-    // nog beheren; wie met de code is ingelogd, zou zichzelf buitensluiten.
+    // Wie met de toegangscode is ingelogd, zou zichzelf buitensluiten door die
+    // leeg te maken; met een beheerdersaccount kan het wel.
     const resets = Array.isArray(patch.reset) ? patch.reset : [];
     const codeAfter = patch.accessCode !== undefined ? String(patch.accessCode).trim()
       : resets.includes('accessCode') ? settings.get('accessCode', true) : oldCode;
@@ -320,8 +340,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const daily = { day: '', count: 0 };
   const today = () => new Date().toISOString().slice(0, 10);
   const requireAppAccess = (req, res, next) => {
-    if (!getAccessCode() || auth.isAuthenticated(req)) return next();
-    res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in met de toegangscode.' });
+    if (guestsAllowed() || auth.isAuthenticated(req)) return next();
+    res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
   };
 
   app.get('/api/plan/status', requireAppAccess, (req, res) => {
@@ -353,7 +373,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     try {
       const result = await planAnalyzer.analyze({ mediaType: m[1], data: m[2], width: w, height: h });
       console.log(`Plan geanalyseerd: ${result.areas.length} vlakken, schaal ${result.scale.method || '-'} (${result.scale.confidence || '-'})`);
-      const user = identify(req) || (getAccessCode() ? null : ensureUser(req, res));
+      const user = identify(req) || (guestsAllowed() ? ensureUser(req, res) : null);
       if (res.headersSent) return;
       if (user) {
         store.record({ tenantId: tenant.id, userId: user.id, action: 'analyse', title: 'Plan herkend',
@@ -377,35 +397,37 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
-  // Inlogpagina, ook zonder toegangscode (voor gebruikersaccounts).
+  // Niet ingelogd: eerst het instelscherm zolang er geen beheerder is, anders
+  // de inlogpagina (op elk pad, zodat een herlaad na het inloggen meteen de
+  // gevraagde pagina toont). Alleen met gasten aan is de app zonder inloggen
+  // bereikbaar.
+  const authPage = (req) => (!auth.isAuthenticated(req) && needsSetup() ? SETUP_PAGE : LOGIN_PAGE);
+
   app.get('/login', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.sendFile(LOGIN_PAGE);
+    res.sendFile(authPage(req));
   });
 
-  // Zonder ingestelde toegangscode is de planner openbaar (er staat geen
-  // gevoelige data op de server). Met code: alleen via HA-ingress of met een
-  // geldige sessie-cookie, anders de inlogpagina op elk pad, zodat een herlaad
-  // na het inloggen meteen de planner toont.
   app.use((req, res, next) => {
-    if (!getAccessCode() || auth.isAuthenticated(req)) return next();
+    const authenticated = auth.isAuthenticated(req);
+    if (authenticated || (guestsAllowed() && !needsSetup())) return next();
     if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(401).end();
     res.status(401);
     res.setHeader('Cache-Control', 'no-store');
-    res.sendFile(LOGIN_PAGE);
+    res.sendFile(needsSetup() ? SETUP_PAGE : LOGIN_PAGE);
   });
 
   // no-cache: de browser controleert bij elke start of er een nieuwe versie is
   // (na een update meteen de nieuwe planner, zonder harde refresh).
   // redirect: false -- express zou `/beregening` absoluut doorsturen naar
-  // `/beregening/`, wat onder ingress buiten de app uitkomt; dat doen we
-  // hieronder zelf, relatief.
+  // `/beregening/`, wat achter een proxy met een padprefix buiten de app
+  // uitkomt; dat doen we hieronder zelf, relatief.
   app.use(express.static(FRONTEND_DIR, { index: 'index.html', redirect: false, setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
 
   // Elke map in de frontend met een eigen index.html is een module van het
-  // dashboard (zie frontend/dashboard/modules.js). Onder ingress komt de app
-  // binnen op /api/hassio_ingress/<token>/, dus de doorverwijzing naar de
-  // module-URL met slash moet relatief zijn ("beregening/", niet "/beregening/").
+  // dashboard (zie frontend/dashboard/modules.js). De doorverwijzing naar de
+  // module-URL met slash is relatief ("beregening/", niet "/beregening/"), zodat
+  // de app ook onder een padprefix achter een reverse proxy werkt.
   app.get('*', (req, res) => {
     const segs = req.path.split('/').filter(Boolean);
     const mod = segs.length && isModule(segs[0]) ? segs[0] : null;
@@ -426,41 +448,26 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   app.locals.settings = settings;
-  app.locals.hasAdminAccount = () => store.listUsers(tenant.id, { includeGuests: false })
-    .some((u) => u.kind === 'account' && u.role === 'beheerder' && !u.disabled);
+  app.locals.hasAdminAccount = () => !needsSetup();
   return app;
 }
 
 if (require.main === module) {
   const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', '..', '..', 'data');
   fs.mkdirSync(dataDir, { recursive: true });
-  // Supervisor zet SUPERVISOR_TOKEN en options.json in elke add-on; daarbuiten
-  // draait de app als losse (Docker-)server.
-  const homeAssistant = Boolean(process.env.SUPERVISOR_TOKEN) || fs.existsSync(path.join(dataDir, 'options.json'));
-  const haOptions = readHaOptions(dataDir);
   const secret = loadOrCreateSecret(dataDir);
   const port = Number(process.env.PORT) || 3300;
-  // In /data, dus mee in de back-ups van Home Assistant.
   const db = openDb(path.join(dataDir, 'aquatech.db'));
-  const app = createApp({ secret, db, haOptions, env: process.env, homeAssistant });
+  const app = createApp({ secret, db, env: process.env });
   const { settings } = app.locals;
 
-  // Losse server zonder toegangscode en zonder beheerdersaccount: niemand kan
-  // dan beheren (er is geen HA-paneel). Maak eenmalig een toegangscode aan en
-  // toon die in het log; wijzig hem daarna in Beheer > Instellingen.
-  if (!homeAssistant && !settings.get('accessCode') && !app.locals.hasAdminAccount()) {
-    const code = require('crypto').randomBytes(9).toString('base64url');
-    settings.update({ accessCode: code });
-    console.log(`Eerste start als losse server: toegangscode aangemaakt: ${code}`);
-    console.log('Log hiermee in (dat is beheerderstoegang) en wijzig de code of maak accounts aan via Beheer > Instellingen en Gebruikers.');
-  }
-  if (!settings.get('accessCode')) {
-    console.log('Geen toegangscode ingesteld: de planner is zonder inloggen bereikbaar. Stel een code in via Beheer > Instellingen.');
+  if (!app.locals.hasAdminAccount()) {
+    console.log('Nog geen beheerder: open de app in de browser en maak het eerste beheerdersaccount aan.');
   }
   if (!settings.get('anthropicApiKey')) console.log('Geen API-sleutel ingesteld: automatisch herkennen met AI staat uit (tekenen, lokale herkenning en de toverstaf werken wel).');
 
   const server = app.listen(port, () => {
-    console.log(`Aquatech luistert op poort ${port}${homeAssistant ? ' (Home Assistant-add-on)' : ''}`);
+    console.log(`Aquatech ${readVersion()} luistert op poort ${port}`);
   });
   // Netjes stoppen bij `docker stop` (SIGTERM) in plaats van na 10 s geforceerd.
   for (const sig of ['SIGTERM', 'SIGINT']) {

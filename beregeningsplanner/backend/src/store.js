@@ -107,7 +107,7 @@ function createStore(db) {
     return u;
   }
 
-  // Vaste beheerders: het Home Assistant-paneel en inloggen met de toegangscode.
+  // Vaste beheerder: inloggen met de (optionele) toegangscode.
   function systemUser(tenantId, username, displayName) {
     return q('SELECT * FROM users WHERE tenant_id = ? AND username = ?').get(tenantId, username)
       || insertUser(tenantId, { username, displayName, role: 'beheerder', kind: 'systeem' });
@@ -152,11 +152,22 @@ function createStore(db) {
     const err = validateAccount(input, { partial: true });
     if (err) return { error: err };
     if (input.username !== undefined) return { error: 'De gebruikersnaam is niet te wijzigen.' };
+    // De laatste actieve beheerder blijft beheerder: anders verschijnt het
+    // instelscherm voor een eerste beheerder weer voor iedereen.
+    const losesAdmin = u.role === 'beheerder' && !u.disabled && ((input.role !== undefined && input.role !== 'beheerder') || input.disabled);
+    if (losesAdmin && countAdmins(tenantId) <= 1) {
+      return { error: 'Dit is de enige actieve beheerder. Maak eerst een andere beheerder aan.', status: 409 };
+    }
     if (input.displayName !== undefined) q('UPDATE users SET display_name = ? WHERE id = ?').run(String(input.displayName).trim() || u.username, u.id);
     if (input.role !== undefined) q('UPDATE users SET role = ? WHERE id = ?').run(input.role, u.id);
     if (input.disabled !== undefined) q('UPDATE users SET disabled = ? WHERE id = ?').run(input.disabled ? 1 : 0, u.id);
     if (input.password !== undefined) q('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(input.password), u.id);
     return { user: getUser(u.id) };
+  }
+
+  // Actieve beheerders met een eigen account (geen systeem- of gastgebruikers).
+  function countAdmins(tenantId) {
+    return q("SELECT COUNT(*) AS n FROM users WHERE tenant_id = ? AND kind = 'account' AND role = 'beheerder' AND disabled = 0").get(tenantId).n;
   }
 
   function authenticate(tenantId, username, password) {
@@ -310,7 +321,7 @@ function createStore(db) {
   }
 
   return {
-    ensureTenant, systemUser, createGuest, createAccount, updateAccount, authenticate, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, systemUser, createGuest, createAccount, updateAccount, countAdmins, authenticate, getUser, touchUser, listUsers, publicUser,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan,
   };
 }

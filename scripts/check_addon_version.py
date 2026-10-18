@@ -1,36 +1,50 @@
 #!/usr/bin/env python3
-"""Faalt als de add-on-versie in beregeningsplanner/config.yaml niet omhoog is gegaan
-t.o.v. een eerdere git-ref.
+"""Faalt als de versie van de app (beregeningsplanner/backend/package.json) niet
+omhoog is gegaan t.o.v. een eerdere git-ref.
 
-Voorkomt dat een (per ongeluk lagere of gelijke) versie naar master gepusht
-wordt: Home Assistant biedt zo'n versie nooit aan als update, waardoor een
-echte update onopgemerkt stil blijft staan totdat iemand het toevallig
-ontdekt.
+De versie staat op het dashboard en in /api/health; zo is altijd te zien welke
+build draait. Zolang de tijdelijke Home Assistant-verpakking (config.yaml)
+bestaat, moet de versie daarin gelijk zijn.
 """
+import json
+import os
 import re
 import subprocess
 import sys
 
 ADDON_DIR = "beregeningsplanner"
+PACKAGE_PATH = f"{ADDON_DIR}/backend/package.json"
 CONFIG_PATH = f"{ADDON_DIR}/config.yaml"
 
 
-def read_version(text):
+def parse(version):
+    return tuple(int(p) for p in version.split("."))
+
+
+def package_version(text):
+    return parse(json.loads(text)["version"])
+
+
+def config_version(text):
     match = re.search(r'^version:\s*"?([0-9]+\.[0-9]+\.[0-9]+)"?', text, re.MULTILINE)
-    if not match:
-        raise SystemExit(f"Kon geen 'version:' vinden in {CONFIG_PATH}")
-    return tuple(int(p) for p in match.group(1).split("."))
+    return parse(match.group(1)) if match else None
+
+
+def git_show(ref, path):
+    result = subprocess.run(["git", "show", f"{ref}:{path}"], capture_output=True, text=True)
+    return result.stdout if result.returncode == 0 else None
 
 
 def read_version_at_ref(ref):
-    result = subprocess.run(
-        ["git", "show", f"{ref}:{CONFIG_PATH}"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        return None  # geen vorige versie om mee te vergelijken
-    return read_version(result.stdout)
+    """Versie op ref: config.yaml was tot 0.13.0 de bron, daarna package.json."""
+    versions = []
+    pkg = git_show(ref, PACKAGE_PATH)
+    if pkg:
+        versions.append(package_version(pkg))
+    cfg = git_show(ref, CONFIG_PATH)
+    if cfg and config_version(cfg):
+        versions.append(config_version(cfg))
+    return max(versions) if versions else None
 
 
 def addon_changed_since(ref):
@@ -62,8 +76,13 @@ def main():
         print(f"Niets gewijzigd onder {ADDON_DIR}/ -- geen versie-bump nodig.")
         return
 
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        new_version = read_version(f.read())
+    with open(PACKAGE_PATH, encoding="utf-8") as f:
+        new_version = package_version(f.read())
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            cfg = config_version(f.read())
+        if cfg != new_version:
+            raise SystemExit(f"FOUT: versie in {CONFIG_PATH} wijkt af van {PACKAGE_PATH}.")
 
     old_version = read_version_at_ref(base_ref)
     if old_version is None:
@@ -76,12 +95,9 @@ def main():
     )
     if new_version <= old_version:
         raise SystemExit(
-            "FOUT: de add-on-versie in config.yaml is niet hoger dan de vorige "
-            "commit. Home Assistant biedt een niet-hogere versie nooit aan als "
-            "update. Controleer ook de live installed_version via het "
-            "update.beregeningsplanner_update-entity in Home Assistant -- die kan hoger "
-            "zijn dan wat de git-geschiedenis laat zien -- en verhoog 'version' "
-            "in beregeningsplanner/config.yaml voldoende."
+            f"FOUT: de versie in {PACKAGE_PATH} is niet hoger dan de vorige "
+            "commit. Verhoog 'version' (en zolang die bestaat ook die in "
+            f"{CONFIG_PATH})."
         )
 
 

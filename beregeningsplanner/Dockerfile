@@ -5,20 +5,12 @@ COPY backend/package*.json ./
 RUN npm ci --omit=dev
 COPY backend ./
 COPY frontend ../frontend
-COPY config.yaml ../config.yaml
 
 ENV PORT=3300
 ENV NODE_ENV=production
 EXPOSE 3300
-
-# Supervisor geeft deze mee bij het bouwen van de add-on; onschadelijk
-# (leeg) bij een gewone `docker build`.
-ARG BUILD_VERSION
-ARG BUILD_ARCH
-LABEL \
-  io.hass.version="${BUILD_VERSION}" \
-  io.hass.type="app" \
-  io.hass.arch="${BUILD_ARCH}"
+ENV DATA_DIR=/data
+VOLUME /data
 
 # node:sqlite (de database) meldt in Node 22 nog een ExperimentalWarning.
 CMD ["node", "--disable-warning=ExperimentalWarning", "src/server.js"]

@@ -61,10 +61,11 @@ function freshSettings(opts = {}) {
   return createSettings({ db, tenantId: tenant.id, ...opts });
 }
 
-test('volgorde: database > HA-optie > omgeving > standaard', () => {
-  const s = freshSettings({ options: { ai_daily_limit: 12 }, env: { AI_DAILY_LIMIT: '7', ANTHROPIC_API_KEY: 'uit-env-1234567890abcdef' } });
+test('volgorde: database > omgeving > standaard', () => {
+  const s = freshSettings({ env: { AI_DAILY_LIMIT: '12', ANTHROPIC_API_KEY: 'uit-env-1234567890abcdef' } });
   assert.strictEqual(s.get('aiDailyLimit'), 12);
-  assert.strictEqual(s.view().aiDailyLimit.source, 'homeassistant');
+  assert.strictEqual(s.view().aiDailyLimit.source, 'omgeving');
+  assert.strictEqual(s.get('guestAccess'), false);
   assert.strictEqual(s.get('anthropicApiKey'), 'uit-env-1234567890abcdef');
   assert.strictEqual(s.view().anthropicApiKey.source, 'omgeving');
   assert.strictEqual(s.get('aiHourlyPerIp'), 10);

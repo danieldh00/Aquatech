@@ -1,7 +1,7 @@
-# Aquatech als losse server, zonder Home Assistant:
+# Aquatech-server:
 #   docker compose up -d --build      -> http://<server>:3300
-#   docker compose logs aquatech      -> eerste start: aangemaakte toegangscode
-# Instellingen (API-sleutel, toegangscode, limieten, modules) regel je daarna
+# Bij de eerste aanmelding maak je in de browser het eerste beheerdersaccount
+# aan. Instellingen (API-sleutel, gasten, limieten, modules) regel je daarna
 # in de app onder Beheer > Instellingen. De variabelen hieronder zijn alleen
 # startwaarden (optioneel, via een .env-bestand; zie .env.example).
 services:
@@ -15,6 +15,7 @@ services:
       - PORT=3300
       - DATA_DIR=/data
       - ACCESS_CODE=${ACCESS_CODE:-}
+      - GUEST_ACCESS=${GUEST_ACCESS:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - AI_DAILY_LIMIT=${AI_DAILY_LIMIT:-}
       - TZ=${TZ:-Europe/Amsterdam}
