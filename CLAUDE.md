@@ -111,6 +111,11 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   (`frontend/beheer/`, `role: 'beheerder'` in modules.js) toont historie,
   plannen en gebruikers. De API is ook onder `<module>/api/...` bereikbaar
   (modules gebruiken relatieve `api/...`).
+- **Plannenoverzicht** (`frontend/plannen/`, voor iedereen): tabel uit
+  `/api/plans` (eigen) of `/api/admin/plans` (beheerder, `?deleted=1`,
+  `historyCount`); samenvatting per plan via `summarize()` op
+  `json_remove(data,'$.background')`; tijdlijn via
+  `/api/admin/plans/:id/history`. Hergebruikt `beheer/beheer.css`.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - Health: `GET /api/health` (versie uit `package.json`).

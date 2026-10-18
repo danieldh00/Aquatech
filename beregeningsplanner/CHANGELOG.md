@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.14.0
+## 0.15.0
 
 - **Eerste beheerder in de browser.** Zolang er geen beheerdersaccount is,
   toont de app bij het openen het scherm *Welkom bij Aquatech* om het eerste
@@ -19,6 +19,19 @@
   Beheer → Instellingen of als omgevingsvariabele in Docker. De versie staat
   nu in `package.json`. De Home Assistant-verpakking blijft tijdelijk alleen
   bestaan zodat de huidige installatie deze update nog krijgt.
+
+## 0.14.0
+
+- **Nieuw: Plannenoverzicht** (tegel op het dashboard en *Alle plannen →*
+  bij Mijn plannen): alle plannen in één tabel met projectnaam, klant, adres,
+  gazon- en totale oppervlakte, vlakken, sproeiers, zones en datums.
+  Sorteren door op een kolomkop te klikken, zoeken, totalen bovenaan en
+  export naar Excel. Klik op een plan voor de details of open het in de
+  planner.
+  - Gebruikers zien alleen hun eigen plannen.
+  - Beheerders zien de plannen van iedereen, met de gebruiker, het aantal
+    aanvragen, een filter per gebruiker, eventueel ook verwijderde plannen,
+    en per plan de tijdlijn uit de historie.
 
 ## 0.13.0
 

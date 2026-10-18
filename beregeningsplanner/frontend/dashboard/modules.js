@@ -20,6 +20,14 @@
       status: 'actief',
     },
     {
+      id: 'plannen',
+      title: 'Plannenoverzicht',
+      description: 'Alle beregeningsplannen in één tabel: projectnaam, klant, adres, oppervlaktes, sproeiers en zones, met Excel-export. Beheerders zien de plannen van iedereen met de historie.',
+      href: 'plannen/',
+      icon: 'table',
+      status: 'actief',
+    },
+    {
       id: 'beheer',
       title: 'Beheer',
       description: 'Historie van alle aanvragen, de plannen van alle gebruikers, gebruikersbeheer en de instellingen van de app (API-sleutel, toegangscode, modules).',

@@ -60,6 +60,8 @@ a.tile:hover, a.tile:focus-visible { border-color: var(--primary); box-shadow: 0
 .account a:hover, .account button:hover { background: rgba(255, 255, 255, 0.12); }
 .account .role { opacity: 0.75; }
 .topbar-right { display: flex; align-items: center; gap: 14px; }
+h2 .h2-link { margin-left: 8px; font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--primary); text-decoration: none; font-weight: 600; }
+h2 .h2-link:hover { text-decoration: underline; }
 
 /* Telefoon: kopbalk zonder horizontaal scrollen */
 @media (max-width: 600px) {

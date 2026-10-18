@@ -235,9 +235,10 @@ function createStore(db) {
       u.username, u.display_name, u.role, u.kind,
       EXISTS (SELECT 1 FROM plans p WHERE p.id = h.plan_id AND p.deleted_at IS NULL) AS plan_exists`;
 
-  function listHistory(tenantId, { limit = 100, offset = 0, userId = '', search = '', action = '' } = {}) {
+  function listHistory(tenantId, { limit = 100, offset = 0, userId = '', search = '', action = '', planId = '' } = {}) {
     const where = ['h.tenant_id = ?'];
     const args = [tenantId];
+    if (planId) { where.push('h.plan_id = ?'); args.push(String(planId)); }
     if (userId) { where.push('h.user_id = ?'); args.push(String(userId)); }
     if (action) { where.push('h.action = ?'); args.push(String(action)); }
     if (search) {
@@ -262,15 +263,27 @@ function createStore(db) {
   function planRow(p, withData) {
     const out = { id: p.id, title: p.title, customer: p.customer, address: p.address, createdAt: p.created_at, updatedAt: p.updated_at };
     if (p.owner_name !== undefined) out.owner = { id: p.owner_id, username: p.owner_username, displayName: p.owner_name, kind: p.owner_kind };
+    if (p.lite !== undefined) {
+      let data = null;
+      try { data = JSON.parse(p.lite); } catch { /* beschadigd plan: lege samenvatting */ }
+      out.summary = summarize(data);
+      out.deletedAt = p.deleted_at || null;
+    }
+    if (p.history_count !== undefined) out.historyCount = p.history_count;
     if (withData) out.data = JSON.parse(p.data);
     return out;
   }
 
-  function listPlans(tenantId, { ownerId = null } = {}) {
+  // Met samenvatting (vlakken, m², sproeiers, zones) voor de overzichten; de
+  // achtergrondafbeelding laat SQLite al weg (json_remove), die is groot.
+  // withHistory: aantal historieregels per plan (alleen voor beheerders).
+  function listPlans(tenantId, { ownerId = null, includeDeleted = false, withHistory = false } = {}) {
     const args = [tenantId];
-    let sql = `SELECT p.id, p.title, p.customer, p.address, p.created_at, p.updated_at, p.owner_id,
+    let sql = `SELECT p.id, p.title, p.customer, p.address, p.created_at, p.updated_at, p.deleted_at, p.owner_id,
+        json_remove(p.data, '$.background') AS lite,
+        ${withHistory ? '(SELECT COUNT(*) FROM history h WHERE h.tenant_id = p.tenant_id AND h.plan_id = p.id) AS history_count,' : ''}
         u.username AS owner_username, u.display_name AS owner_name, u.kind AS owner_kind
-      FROM plans p JOIN users u ON u.id = p.owner_id WHERE p.tenant_id = ? AND p.deleted_at IS NULL`;
+      FROM plans p JOIN users u ON u.id = p.owner_id WHERE p.tenant_id = ?${includeDeleted ? '' : ' AND p.deleted_at IS NULL'}`;
     if (ownerId) { sql += ' AND p.owner_id = ?'; args.push(ownerId); }
     return q(`${sql} ORDER BY p.updated_at DESC`).all(...args).map((p) => planRow(p, false));
   }

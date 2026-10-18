@@ -112,6 +112,15 @@ een eerder plan. Iedere gebruiker ziet daar alleen de eigen plannen.
 **Opslaan** downloadt daarnaast nog steeds een `.aquaplan.json`-bestand en
 **Openen** laadt zo'n bestand als nieuw plan.
 
+## Plannenoverzicht
+
+De tegel **Plannenoverzicht** op het dashboard (of *Alle plannen →* bij
+Mijn plannen) toont de plannen als tabel: projectnaam, klant, adres,
+oppervlaktes, sproeiers, zones en datums, met zoeken, sorteren (klik op een
+kolomkop), totalen en **Exporteer naar Excel**. Gebruikers zien hun eigen
+plannen; beheerders zien alle plannen met de gebruiker, kunnen per gebruiker
+filteren en ook verwijderde plannen tonen, en zien per plan de historie.
+
 ## Gebruikers, rollen en historie van aanvragen
 
 Er zijn twee rollen:
