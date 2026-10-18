@@ -12,9 +12,9 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 
 - **`master`** is de productie- en GitHub-default branch; Supervisor kloont
   die. `feature/beregeningsplanner` is de oude startbranch en wordt niet meer
-  gebruikt. Na het omzetten van de default branch de repository in HA
-  verwijderen en opnieuw toevoegen (let op: dan verandert mogelijk de slug —
-  controleer en werk de slugs hieronder bij).
+  gebruikt (mag weg). HA volgt `master` sinds de herinstallatie van
+  2026-10-18 (Supervisor kloont de default branch alleen bij het toevoegen van
+  de repository; de store-slug is een hash van de URL en bleef `c1355dc8`).
 - **Nooit rechtstreeks op `master` werken.** Elke taak in een eigen branch
   `feature/<naam>` of `claude/<naam>` (de door de sessie toegewezen
   `claude/...`-branch telt als zodanig), altijd vers vanaf `master`:

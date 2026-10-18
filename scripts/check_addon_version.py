@@ -11,7 +11,8 @@ import re
 import subprocess
 import sys
 
-CONFIG_PATH = "beregeningsplanner/config.yaml"
+ADDON_DIR = "beregeningsplanner"
+CONFIG_PATH = f"{ADDON_DIR}/config.yaml"
 
 
 def read_version(text):
@@ -32,10 +33,34 @@ def read_version_at_ref(ref):
     return read_version(result.stdout)
 
 
+def addon_changed_since(ref):
+    """Of er iets onder beregeningsplanner/ is gewijzigd sinds het splitspunt met ref.
+
+    Vergelijkt vanaf de merge-base, zodat een PR die achterloopt op master niet
+    de wijzigingen van master als eigen wijzigingen ziet. Bij twijfel (geen
+    merge-base, onbekende ref) geldt de wijziging als aanwezig.
+    """
+    base = subprocess.run(
+        ["git", "merge-base", ref, "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if base.returncode != 0:
+        return True
+    diff = subprocess.run(
+        ["git", "diff", "--quiet", base.stdout.strip(), "HEAD", "--", ADDON_DIR],
+    )
+    return diff.returncode != 0
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("Gebruik: check_addon_version.py <git-ref-om-mee-te-vergelijken>")
     base_ref = sys.argv[1]
+
+    if not addon_changed_since(base_ref):
+        print(f"Niets gewijzigd onder {ADDON_DIR}/ -- geen versie-bump nodig.")
+        return
 
     with open(CONFIG_PATH, encoding="utf-8") as f:
         new_version = read_version(f.read())
