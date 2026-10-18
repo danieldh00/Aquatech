@@ -20,6 +20,12 @@
     const el = document.getElementById('account');
     if (!el || location.protocol === 'file:') return;
     const u = me.user;
+    if (u && u.kind !== 'gast' && me.impersonation) {
+      // Een hoofdbeheerder werkt als deze gebruiker: in plaats van uitloggen terug naar het eigen account.
+      el.innerHTML = `<span title="Namens ${esc(me.impersonation.by)}">${esc(u.displayName)} <span class="role">· ${esc(u.role)} (via ${esc(me.impersonation.by)})</span></span><button type="button" data-stop-imp title="Terug naar je eigen account">Eigen account</button>`;
+      el.querySelector('[data-stop-imp]').onclick = (ev) => window.AquatechEnv.stopImpersonation(ev.currentTarget);
+      return;
+    }
     if (u && u.kind !== 'gast') {
       const role = me.platformAdmin ? 'hoofdbeheerder' : u.role;
       const out = '<button type="button" data-logout>Uitloggen</button>';
