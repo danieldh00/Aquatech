@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.23.0
+## 0.24.0
 
 - **Inloggen als een gebruiker (impersonatie)** voor de hoofdbeheerder:
   vanuit Hoofdbeheer → Gebruikers werk je tijdelijk met de rol en rechten
@@ -13,6 +13,21 @@
 - Auditlog: start, einde (met reden: gestopt, verlopen, toestemming
   ingetrokken) en elke actie tijdens een impersonatie met de naam van de
   hoofdbeheerder. De gebruiker ziet zelf wie er heeft meegekeken.
+
+## 0.23.0
+
+- **Testomgeving vullen met testdata** (Hoofdbeheer): één knop maakt
+  testaccounts voor elke rol (beheerder, twee installateurs, drie klanten)
+  met één gedeeld wachtwoord, zeven nepklanten met een volledig getekende
+  tuin (gebieden, sproeiers, systeemelementen en zones) en vijf offertes in
+  alle statussen. De inloggegevens zijn als Excel te downloaden. Alleen in
+  testomgevingen; wat er stond wordt eerst gewist.
+- Testaccounts horen bij de testomgeving zelf: inloggen brengt je direct
+  daar, een testbeheerder beheert alleen de testaccounts en Leegmaken of
+  Verwijderen ruimt ze op. In Hoofdbeheer heeft elke testomgeving een knop
+  **Testaccounts**.
+- Offertes in een testomgeving kun je aan klantaccounts van live én van de
+  testomgeving koppelen.
 
 ## 0.22.0
 

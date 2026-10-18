@@ -141,6 +141,13 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   cookie `aquatech_env` (`<user>:<tenant>`, elke keer opnieuw gecontroleerd)
   en de leesbare `aquatech_env_hint` voor `shared/env.js` (testlabel,
   localStorage-achtervoegsel). Wisselaar in `dashboard/account.js`.
+- **Testdata** (0.23.0, `backend/src/testdata.js`): `POST
+  /api/platform/tenants/:id/testdata` (alleen test-tenants) wist de omgeving
+  en maakt testaccounts per rol (`<slug>.klant1` enz., één gedeeld
+  wachtwoord, alleen in het antwoord), tuinen (zones via de plannerlibs in
+  een vm-sandbox) en offertes (`Core.fromPlan`). Testaccounts hebben
+  `tenant_id` = de testomgeving; gebruikersbeheer gaat via `usersTenantOf(req)`
+  (eigen tenant als het account daar woont, anders `homeOf`).
 - **Rollen** (0.22.0): rechten per rol in `frontend/shared/roles.js` (UMD,
   ook door de server ge-required): `Roles.can(user, recht)`; hoofdbeheerder
   (`platform_admin`) heeft alle rechten. Server: `requireRight(recht)`,

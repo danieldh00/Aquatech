@@ -221,6 +221,35 @@ controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
 - Achter de Cloudflare-tunnel toont de historie als IP-adres dat van de
   tunnel, niet dat van de bezoeker.
 
+## Testomgeving vullen met testdata
+
+In **Hoofdbeheer** staat bij elke testomgeving de knop **Vullen met
+testdata** (alleen voor testomgevingen, nooit voor live). Die maakt in één
+keer:
+
+- **Testaccounts** voor elke rol: een beheerder, twee installateurs en drie
+  klanten, met gebruikersnamen als `<code-van-de-omgeving>.klant1`. Alle
+  testaccounts krijgen hetzelfde willekeurige wachtwoord; dat staat alleen
+  in het venster na het vullen (ook als Excel te downloaden) en wordt
+  nergens bewaard.
+- **Nepklanten met tuinen**: zeven plannen met terras, gazon, border, haag,
+  plantenbak, systeemelementen, sproeiers en zones, met een regel in de
+  historie.
+- **Offertes** in alle statussen (concept, verzonden, akkoord, afgewezen),
+  opgebouwd uit die plannen met de bedrijfsgegevens van de omgeving; drie
+  zijn gekoppeld aan de testklanten.
+
+Wat er al in de testomgeving stond (plannen, offertes, historie,
+testaccounts) wordt eerst gewist. Opnieuw vullen geeft een nieuw wachtwoord
+en logt de testaccounts uit; **Leegmaken** en **Verwijderen** ruimen de
+testaccounts mee op.
+
+Testaccounts horen bij de testomgeving zelf: wie ermee inlogt (bijvoorbeeld
+in een privévenster) komt direct in die testomgeving, met de rechten van de
+rol. Een testbeheerder beheert alleen de testaccounts, nooit de gebruikers
+van live. De knop **Testaccounts** toont ze en daar kun je er ook losse bij
+maken.
+
 ## Instellingen
 
 Beheerders regelen alles onder **Beheer → Instellingen** (ook direct via

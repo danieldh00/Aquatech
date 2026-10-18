@@ -202,7 +202,18 @@ test('impersonatie: verloopt vanzelf, stopt bij uitloggen en heeft grenzen', asy
     await baas.patch(`/api/platform/tenants/${groen.id}/users/${kees.id}`, { disabled: true });
     assert.strictEqual((await baas.post('/api/platform/impersonate', { userId: kees.id, tenantId: env.id })).status, 409);
 
-    // Testomgeving verwijderen kan ook met impersonaties in de historie.
+    // Een testaccount (bestaat alleen in de testomgeving): zonder toestemming.
+    const tester = await baas.post(`/api/platform/tenants/${env.id}/users`, { username: 'tester', displayName: 'Tester', role: 'klant', password: 'Bloem-Perk-2029!' });
+    assert.strictEqual(tester.status, 201, JSON.stringify(tester.body));
+    const tc = client(base);
+    await tc.login('tester', 'Bloem-Perk-2029!');
+    assert.strictEqual((await tc.get('/api/support')).body.applicable, false);
+    assert.strictEqual((await tc.post('/api/support', { hours: 1 })).status, 409);
+    assert.strictEqual((await baas.post('/api/platform/impersonate', { userId: tester.body.id, tenantId: env.id })).status, 201);
+    assert.strictEqual((await baas.get('/api/me')).body.user.username, 'tester');
+    await baas.post('/api/impersonation/stop');
+
+        // Testomgeving verwijderen kan ook met impersonaties in de historie.
     assert.strictEqual((await baas.del(`/api/platform/tenants/${env.id}`)).status, 200);
   } finally {
     server.close();

@@ -373,6 +373,7 @@ function createStore(db) {
     q('DELETE FROM audit WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM sessions WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM impersonations WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM support_grants WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM quotes WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM plans WHERE tenant_id = ?').run(tenantId);
     q(`DELETE FROM users WHERE tenant_id = ? AND NOT EXISTS (SELECT 1 FROM plans p WHERE p.owner_id = users.id)
@@ -395,6 +396,48 @@ function createStore(db) {
       q('DELETE FROM tenants WHERE id = ?').run(out.tenant.id);
     });
     return { ok: true };
+  }
+
+  /**
+   * Testomgeving vullen met testdata (opgebouwd in testdata.js): eerst
+   * leegmaken, dan de testaccounts (allemaal met dezelfde wachtwoord-hash),
+   * plannen met een regel in de historie en offertes. De accounts horen bij de
+   * testomgeving zelf, dus "Leegmaken" en "Verwijderen" ruimen ze mee op.
+   */
+  function seedEnvironment(id, { accounts, plans, quotes }, { passwordHash, numberPrefix = 'OF-' }) {
+    const out = testEnvironment(id);
+    if (out.error) return out;
+    const tid = out.tenant.id;
+    const clash = accounts.find((a) => q("SELECT 1 FROM users WHERE username = ? AND kind = 'account' AND tenant_id <> ?").get(a.username, tid));
+    if (clash) return { error: `De gebruikersnaam ${clash.username} bestaat al ergens anders op het platform.`, status: 409 };
+    return transaction(db, () => {
+      clearData(tid);
+      const users = {};
+      for (const a of accounts) {
+        users[a.key] = insertUser(tid, { username: a.username, displayName: a.displayName, role: a.role, kind: 'account', passwordHash });
+      }
+      const planIds = {};
+      for (const p of plans) {
+        const pid = newId();
+        const meta = metaOf(p.data);
+        q(`INSERT INTO plans (id, tenant_id, owner_id, title, customer, address, data, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(pid, tid, users[p.owner].id, meta.title, meta.customer, meta.address, JSON.stringify(p.data), p.at, p.at);
+        const hid = record({ tenantId: tid, userId: users[p.owner].id, planId: pid, action: 'aangemaakt', data: p.data });
+        q('UPDATE history SET created_at = ?, updated_at = ? WHERE id = ?').run(p.at, p.at, hid);
+        planIds[p.key] = pid;
+      }
+      const seq = {};
+      for (const o of [...quotes].sort((a, b) => a.at.localeCompare(b.at))) {
+        const year = o.data.date.slice(0, 4);
+        seq[year] = (seq[year] || 0) + 1;
+        const data = { ...o.data, planId: planIds[o.planKey] || '' };
+        q(`INSERT INTO quotes (id, tenant_id, owner_id, plan_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at, customer_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(newId(), tid, users[o.owner].id, data.planId || null, `${numberPrefix}${year}-${String(seq[year]).padStart(4, '0')}`, o.status,
+            data.title, data.customer.name, o.totalExcl, o.totalIncl, JSON.stringify(data), o.at, o.at, o.customerKey ? users[o.customerKey].id : null);
+      }
+      return { tenant: out.tenant, users: Object.values(users), counts: { accounts: accounts.length, plans: plans.length, quotes: quotes.length } };
+    });
   }
 
   /**
@@ -674,7 +717,7 @@ function createStore(db) {
   }
 
   return {
-    getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment,
+    getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, seedEnvironment,
     accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
     ensureTenant, systemUser, createGuest, createAccount, updateAccount, countAdmins, authenticate, getUser, touchUser, listUsers, publicUser,
     createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,

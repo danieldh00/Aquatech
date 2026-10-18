@@ -46,7 +46,8 @@
     const acts = [
       `<button class="btn small" data-act="open">Openen</button>`,
       env ? '' : `<button class="btn small" data-act="env">Testomgeving</button>`,
-      env ? '' : `<button class="btn small" data-act="users">Gebruikers</button>`,
+      `<button class="btn small" data-act="users">${env ? 'Testaccounts' : 'Gebruikers'}</button>`,
+      env ? `<button class="btn small" data-act="seed">Vullen met testdata</button>` : '',
       `<button class="btn small" data-act="rename">Naam</button>`,
       t.id === state.mainId ? '' : `<button class="btn small" data-act="toggle">${t.disabled ? 'Inschakelen' : 'Uitschakelen'}</button>`,
       env ? `<button class="btn small" data-act="reset">Leegmaken</button>` : '',
@@ -55,7 +56,7 @@
     return `<tr class="${env ? 'env' : ''}${t.disabled ? ' off' : ''}" data-tid="${esc(t.id)}">
       <td class="wrap"><b>${esc(t.name)}</b><br><span class="code">${esc(t.slug)}</span></td>
       <td>${pills}</td>
-      <td class="num">${env ? '–' : t.userCount}</td>
+      <td class="num">${t.userCount}</td>
       <td class="num">${t.planCount}</td>
       <td>${esc(when(t.lastActivity))}</td>
       <td>${esc(when(t.createdAt))}</td>
@@ -98,6 +99,7 @@
       if (name === 'open') return openIn(t);
       if (name === 'env') return envDialog(t);
       if (name === 'users') return usersDialog(t);
+      if (name === 'seed') return await seed(t);
       if (name === 'rename') {
         const v = prompt('Nieuwe naam', t.name);
         if (v == null || v.trim() === t.name) return;
@@ -110,7 +112,7 @@
         await api(`platform/tenants/${encodeURIComponent(t.id)}`, { method: 'PATCH', body: { disabled: !t.disabled } });
         toast(t.disabled ? 'Ingeschakeld' : 'Uitgeschakeld');
       } else if (name === 'reset') {
-        if (!confirm(`Testomgeving ${t.name} leegmaken?\n\nAlle plannen en historie in deze testomgeving worden definitief verwijderd. Live blijft ongemoeid.`)) return;
+        if (!confirm(`Testomgeving ${t.name} leegmaken?\n\nAlle plannen, offertes, historie en testaccounts in deze testomgeving worden definitief verwijderd. Live blijft ongemoeid.`)) return;
         await api(`platform/tenants/${encodeURIComponent(t.id)}/reset`, { body: {} });
         toast('Testomgeving leeggemaakt');
       } else if (name === 'delete') {
@@ -120,6 +122,53 @@
       }
       await load();
     } catch (e) { toast(e.message, true); }
+  }
+
+  // ---------- Testdata ----------
+  async function seed(t) {
+    const msg = `${t.name} vullen met testdata?\n\nEr komen testaccounts voor elke rol (beheerder, installateurs, klanten), nepklanten met plannen en offertes in alle statussen. Wat er nu in deze testomgeving staat (plannen, offertes, historie, testaccounts) wordt eerst gewist. Live blijft ongemoeid.`;
+    if (!confirm(msg)) return;
+    toast('Testdata aanmaken…');
+    const out = await api(`platform/tenants/${encodeURIComponent(t.id)}/testdata`, { body: {} });
+    await load();
+    seedResult(t, out);
+  }
+
+  function seedResult(t, out) {
+    const rows = out.accounts.map((u) => `<tr><td>${esc(u.displayName)}</td><td class="code">${esc(u.username)}</td><td>${esc(Roles.label(u.role))}</td></tr>`).join('');
+    modal(`<h2>Testdata in ${esc(t.name)}</h2>
+      <p class="muted small">${out.counts.plans} plannen en ${out.counts.quotes} offertes aangemaakt. Alle testaccounts hebben hetzelfde wachtwoord; dat wordt nergens bewaard en is alleen nu te zien. Opnieuw vullen geeft een nieuw wachtwoord.</p>
+      <p>Wachtwoord: <b class="code" id="s-pw">${esc(out.password)}</b> <button class="btn small" id="s-copy">Kopiëren</button></p>
+      <div class="tablewrap"><table class="grid"><thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Rol</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="muted small">Inloggen met een testaccount (bijvoorbeeld in een privévenster) brengt je direct in deze testomgeving, met de rechten van die rol.</p>
+      <div class="row"><button class="btn" id="s-xlsx">Inloggegevens naar Excel</button></div>`);
+    $('#s-copy').onclick = () => navigator.clipboard.writeText(out.password).then(() => toast('Wachtwoord gekopieerd'), () => toast('Kopiëren lukt niet; selecteer het wachtwoord zelf.', true));
+    $('#s-xlsx').onclick = () => accountsExcel(t, out).catch((e) => toast(e.message, true));
+  }
+
+  async function accountsExcel(t, out) {
+    if (!window.ExcelJS) { toast('Excel-export niet beschikbaar.', true); return; }
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Testaccounts');
+    ws.columns = [
+      { header: 'Naam', key: 'name', width: 32 },
+      { header: 'Gebruikersnaam', key: 'username', width: 34 },
+      { header: 'Rol', key: 'role', width: 16 },
+      { header: 'Wachtwoord', key: 'password', width: 30 },
+      { header: 'Testomgeving', key: 'env', width: 26 },
+    ];
+    ws.getRow(1).font = { bold: true };
+    for (const u of out.accounts) ws.addRow({ name: u.displayName, username: u.username, role: Roles.label(u.role), password: out.password, env: t.name });
+    await download(wb, `testaccounts_${t.slug}.xlsx`);
+  }
+
+  async function download(wb, name) {
+    const buf = await wb.xlsx.writeBuffer();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   function modal(html) {
@@ -155,7 +204,7 @@
     let users = [];
     try { users = (await api(`platform/tenants/${encodeURIComponent(t.id)}/users`)).items || []; } catch (e) { toast(e.message, true); return; }
     const canImpersonate = (u) => u.kind === 'account' && !u.platformAdmin && !u.disabled;
-    const support = (u) => (u.platformAdmin || u.kind !== 'account' ? '–' : u.support ? `<span class="pill live" title="Supporttoegang voor live">tot ${esc(when(u.support.expiresAt))}</span>` : '<span class="muted">geen</span>');
+    const support = (u) => (u.platformAdmin || u.kind !== 'account' || t.environment === 'test' ? '–' : u.support ? `<span class="pill live" title="Supporttoegang voor live">tot ${esc(when(u.support.expiresAt))}</span>` : '<span class="muted">geen</span>');
     const rows = users.map((u) => `<tr data-uid="${esc(u.id)}" class="${u.disabled ? 'off' : ''}">
         <td>${esc(u.displayName)}<br><span class="code">${esc(u.username)}</span></td>
         <td>${u.kind === 'account' ? `<select data-f="role">${roleOptions(u.role)}</select>` : esc(Roles.label(u.role))}${u.platformAdmin ? ' <span class="pill hoofd">hoofdbeheerder</span>' : ''}</td>
@@ -163,7 +212,8 @@
         <td>${support(u)}</td>
         <td class="acts">${canImpersonate(u) ? '<button class="btn small" data-f="impersonate">Inloggen als</button>' : ''}${u.kind === 'account' ? `<button class="btn small" data-f="toggle">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button><button class="btn small" data-f="password">Wachtwoord</button>` : ''}</td>
       </tr>`).join('');
-    modal(`<h2>Gebruikers van ${esc(t.name)}</h2>
+    modal(`<h2>${t.environment === 'test' ? 'Testaccounts' : 'Gebruikers'} van ${esc(t.name)}</h2>
+      ${t.environment === 'test' ? '<p class="muted small">Accounts die alleen in deze testomgeving bestaan. Ze verdwijnen bij Leegmaken of Verwijderen.</p>' : ''}
       <div class="tablewrap"><table class="grid" id="mu-table">${users.length ? `<thead><tr><th>Gebruiker</th><th>Rol</th><th>Laatst gezien</th><th>Support (live)</th><th></th></tr></thead><tbody>${rows}</tbody>` : '<tr><td class="empty">Nog geen gebruikers.</td></tr>'}</table></div>
       <form id="mu-form" class="card-form">
         <h3>Gebruiker toevoegen</h3>
@@ -217,12 +267,14 @@
   // In een testomgeving zonder goedkeuring; in live alleen als de gebruiker
   // supporttoegang heeft gegeven. Terug kan altijd met de rode balk onderin.
   function impersonateDialog(t, u) {
-    const envs = (find(t.id) || t).environments || [];
-    const opts = [
+    // Een testaccount bestaat alleen in zijn eigen testomgeving.
+    if (t.environment === 'test') u = { ...u, support: null };
+    const envs = t.environment === 'test' ? [t] : (find(t.id) || t).environments || [];
+    const opts = t.environment === 'test' ? `<option value="${esc(t.id)}">Test: ${esc(t.name)} (zonder goedkeuring)</option>` : [
       ...envs.filter((e) => !e.disabled).map((e) => `<option value="${esc(e.id)}">Test: ${esc(e.name)} (zonder goedkeuring)</option>`),
       `<option value="${esc(t.id)}"${u.support ? '' : ' disabled'}>Live${u.support ? ` (toestemming tot ${esc(when(u.support.expiresAt))})` : ' (geen toestemming)'}</option>`,
     ].join('');
-    const hint = u.support
+    const hint = u.support || t.environment === 'test'
       ? ''
       : `<p class="muted small">Voor live is toestemming nodig: ${esc(u.displayName)} geeft die zelf op het dashboard bij <b>Support op afstand</b>, voor een beperkte tijd.${envs.length ? '' : ' Deze tenant heeft nog geen testomgeving.'}</p>`;
     modal(`<h2>Inloggen als ${esc(u.displayName)}</h2>
@@ -292,17 +344,12 @@
     for (const t of state.items) {
       for (const e of [t, ...t.environments]) {
         ws.addRow({ tenant: t.name, env: e === t ? 'Live' : `Test: ${e.name}`, slug: e.slug, status: e.disabled ? 'Uitgeschakeld' : 'Actief',
-          users: e === t ? t.userCount : null, plans: e.planCount, last: date(e.lastActivity), created: date(e.createdAt) });
+          users: e.userCount, plans: e.planCount, last: date(e.lastActivity), created: date(e.createdAt) });
       }
     }
     ws.getColumn('last').numFmt = 'dd-mm-yyyy hh:mm';
     ws.getColumn('created').numFmt = 'dd-mm-yyyy hh:mm';
-    const buf = await wb.xlsx.writeBuffer();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-    a.download = `tenants_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    await download(wb, `tenants_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   // ---------- Start ----------

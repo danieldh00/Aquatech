@@ -194,8 +194,9 @@ function createImpersonation({ store, imp, auth, audit, mainTenantId }) {
         grant: publicGrant(imp.activeGrant(user.id)),
         options: GRANT_HOURS,
         defaultHours: DEFAULT_GRANT_HOURS,
-        // Een hoofdbeheerder kan zelf niet worden overgenomen.
-        applicable: !user.platform_admin,
+        // Een hoofdbeheerder kan zelf niet worden overgenomen, en voor een
+        // testaccount is geen toestemming nodig.
+        applicable: !user.platform_admin && isLive(store.getTenant(user.home_tenant_id || user.tenant_id)),
         recent: imp.recentFor(user.id).map((r) => ({
           by: r.admin_name || 'Hoofdbeheerder', environment: r.environment === 'test' ? `test: ${r.tenant_name}` : 'live',
           startedAt: r.started_at, endedAt: r.ended_at, expiresAt: r.expires_at,
@@ -207,6 +208,7 @@ function createImpersonation({ store, imp, auth, audit, mainTenantId }) {
       const user = ownAccount(req, res);
       if (!user) return;
       if (user.platform_admin) return res.status(409).json({ error: 'not_applicable', message: 'Een hoofdbeheerder kan niet worden overgenomen.' });
+      if (!isLive(store.getTenant(user.home_tenant_id || user.tenant_id))) return res.status(409).json({ error: 'not_applicable', message: 'Voor een testaccount is geen toestemming nodig.' });
       const hours = Number(req.body?.hours ?? DEFAULT_GRANT_HOURS);
       if (!GRANT_HOURS.includes(hours)) return res.status(400).json({ error: 'invalid_hours', message: `Kies ${GRANT_HOURS.join(', ')} uur.` });
       const g = imp.grant({ ...user, tenant_id: user.home_tenant_id || user.tenant_id }, hours);
