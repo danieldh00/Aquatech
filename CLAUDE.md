@@ -135,7 +135,9 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   testomgevingen, `familyIds` in store.js), niet globaal (0.25.0); inloggen
   met organisatiecode = tenant-slug (`store.loginTenant`, leeg = hoofdtenant,
   testcode → live-tenant), onthouden in localStorage `aquatech_org`,
-  `login?org=` vult hem in. `users.platform_admin` = hoofdbeheerder (module
+  `login?org=` vult hem in. `users.platform_admin` = hoofdbeheerder (alleen in de
+  hoofdtenant, aan/uit via `platformAdmin` op `/api/platform/tenants/:id/users`,
+  alleen door een hoofdbeheerder te wijzigen; module
   `frontend/hoofdbeheer/`, API `/api/platform/*`); de hoofdtenant kan niet uit.
   In `server.js` zet `identify()` `req.user` (met `tenant_id` = actieve
   omgeving, `home_tenant_id` = eigen tenant) en `req.tenantId`: gegevens via

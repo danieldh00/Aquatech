@@ -295,6 +295,58 @@ test('de laatste hoofdbeheerder kan niet worden uitgeschakeld', async () => {
   }
 });
 
+test('hoofdbeheerders aanmaken, intrekken en beschermen', async () => {
+  const { server, base } = await start(await platformDb());
+  try {
+    const baas = client(base);
+    await baas.login('baas', 'Tuin-Plan-2026!');
+    const { items, mainTenantId } = (await baas.get('/api/platform/tenants')).body;
+    const groen = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen' })).body.tenant;
+    assert.ok(items.length);
+
+    // Nieuwe hoofdbeheerder in de hoofdtenant; altijd met de rol beheerder.
+    const made = await baas.post(`/api/platform/tenants/${mainTenantId}/users`, { username: 'anna', displayName: 'Anna', role: 'klant', password: 'Vijver-Mos-2029!', platformAdmin: true });
+    assert.strictEqual(made.status, 201, JSON.stringify(made.body));
+    assert.strictEqual(made.body.platformAdmin, true);
+    assert.strictEqual(made.body.role, 'beheerder');
+    const anna = client(base);
+    assert.strictEqual((await anna.login('anna', 'Vijver-Mos-2029!')).status, 200);
+    assert.strictEqual((await anna.get('/api/platform/tenants')).status, 200);
+
+    // Alleen in de hoofdtenant.
+    assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'kees', role: 'beheerder', password: 'Vijver-Mos-2029!', platformAdmin: true })).status, 400);
+    const kees = (await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'kees', role: 'beheerder', password: 'Vijver-Mos-2029!' })).body;
+    assert.strictEqual((await baas.patch(`/api/platform/tenants/${groen.id}/users/${kees.id}`, { platformAdmin: true })).status, 400);
+
+    // Een gewone beheerder van de hoofdtenant kan geen hoofdbeheerder wijzigen.
+    const jan = (await baas.post('/api/admin/users', { username: 'jan', role: 'beheerder', password: 'Haag-Slang-2028!' })).body;
+    const janc = client(base);
+    await janc.login('jan', 'Haag-Slang-2028!');
+    assert.strictEqual((await janc.patch(`/api/admin/users/${made.body.id}`, { disabled: true })).status, 403);
+    assert.strictEqual((await janc.patch(`/api/admin/users/${made.body.id}`, { password: 'Bloem-Perk-2029!' })).status, 403);
+    assert.strictEqual((await janc.patch(`/api/admin/users/${made.body.id}`, { platformAdmin: false })).status, 403);
+    assert.strictEqual((await janc.post(`/api/admin/users/${made.body.id}/logout`)).status, 403);
+    // Ook niet zichzelf promoveren via de beheer-API (veld wordt genegeerd).
+    await janc.patch(`/api/admin/users/${jan.id}`, { platformAdmin: true });
+    assert.strictEqual((await janc.get('/api/platform/tenants')).status, 403);
+
+    // Bestaande gebruiker promoveren en weer intrekken.
+    assert.strictEqual((await baas.patch(`/api/platform/tenants/${mainTenantId}/users/${jan.id}`, { platformAdmin: true })).body.platformAdmin, true);
+    assert.strictEqual((await janc.get('/api/platform/tenants')).status, 200);
+    assert.strictEqual((await baas.patch(`/api/platform/tenants/${mainTenantId}/users/${jan.id}`, { platformAdmin: false })).body.platformAdmin, false);
+    assert.strictEqual((await janc.get('/api/platform/tenants')).status, 403);
+
+    // De laatste actieve hoofdbeheerder blijft.
+    const baasId = (await baas.get('/api/me')).body.user.id;
+    assert.strictEqual((await anna.patch(`/api/platform/tenants/${mainTenantId}/users/${baasId}`, { platformAdmin: false })).status, 200);
+    const annaSelf = await anna.patch(`/api/platform/tenants/${mainTenantId}/users/${made.body.id}`, { platformAdmin: false });
+    assert.strictEqual(annaSelf.status, 409);
+    assert.strictEqual((await anna.patch(`/api/platform/tenants/${mainTenantId}/users/${made.body.id}`, { disabled: true })).status, 409);
+  } finally {
+    server.close();
+  }
+});
+
 // Inloggen vanaf een eigen bronadres (127.0.x.y): de limiet per IP (10 per
 // kwartier) hoort niet bij wat deze test controleert.
 const http = require('http');

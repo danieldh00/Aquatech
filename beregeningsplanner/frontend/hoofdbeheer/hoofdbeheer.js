@@ -32,6 +32,44 @@
   const slugify = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 
+  // Gebruikersnaam uit vrije tekst: kleine letters, zonder accenten, spaties
+  // worden een punt ("Piet Groen" -> "piet.groen").
+  const userify = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, '.').replace(/[^a-z0-9._-]/g, '').replace(/^[._-]+/, '').slice(0, 40);
+
+  // Invoerregels met een uitleg in gewone taal, in plaats van de algemene
+  // browsermelding bij een pattern ("Gebruik de gevraagde notatie").
+  const RULES = {
+    slug: (v) => (/^[a-z0-9][a-z0-9-]{1,39}$/.test(v) ? '' : 'Organisatiecode: 2–40 tekens, alleen kleine letters, cijfers en streepjes (bijv. groen-beregening).'),
+    username: (v) => (/^[a-z0-9][a-z0-9._-]{2,39}$/.test(v) ? '' : 'Gebruikersnaam: 3–40 tekens, alleen kleine letters, cijfers, punt, streepje of underscore, zonder spaties (bijv. piet.groen).'),
+    password: (v) => (v.length >= 12 ? '' : 'Wachtwoord: minimaal 12 tekens.'),
+  };
+
+  // Controleert de velden met een regel (data-rule); lege optionele velden
+  // slaat hij over. Geeft de eerste fout of ''.
+  function checkForm(f, { optional = [] } = {}) {
+    let first = '';
+    for (const el of f.querySelectorAll('[data-rule]')) {
+      const v = el.value.trim();
+      const msg = !v && (optional.includes(el.name) || !el.required) ? '' : RULES[el.dataset.rule](el.type === 'password' ? el.value : v);
+      el.classList.toggle('invalid', Boolean(msg));
+      if (msg && !first) { first = msg; el.focus(); }
+    }
+    return first;
+  }
+
+  function wireUsername(input, nameInput) {
+    let touched = false;
+    input.addEventListener('input', () => {
+      touched = Boolean(input.value);
+      const v = userify(input.value);
+      if (v !== input.value) input.value = v;
+      input.classList.remove('invalid');
+    });
+    if (nameInput) nameInput.addEventListener('input', () => { if (!touched) input.value = userify(nameInput.value); input.dispatchEvent(new Event('change')); });
+    return () => { touched = false; };
+  }
+
   // ---------- Overzicht ----------
   const all = () => state.items.flatMap((t) => [t, ...t.environments]);
   const find = (id) => all().find((t) => t.id === id);
@@ -205,26 +243,31 @@
     let users = [];
     try { users = (await api(`platform/tenants/${encodeURIComponent(t.id)}/users`)).items || []; } catch (e) { toast(e.message, true); return; }
     const canImpersonate = (u) => u.kind === 'account' && !u.platformAdmin && !u.disabled;
+    // Hoofdbeheerders wonen in de hoofdtenant en loggen in zonder organisatiecode.
+    const isMain = t.id === state.mainId;
+    const admins = users.filter((u) => u.platformAdmin && !u.disabled).length;
     const support = (u) => (u.platformAdmin || u.kind !== 'account' || t.environment === 'test' ? '–' : u.support ? `<span class="pill live" title="Supporttoegang voor live">tot ${esc(when(u.support.expiresAt))}</span>` : '<span class="muted">geen</span>');
     const rows = users.map((u) => `<tr data-uid="${esc(u.id)}" class="${u.disabled ? 'off' : ''}">
         <td>${esc(u.displayName)}<br><span class="code">${esc(u.username)}</span></td>
-        <td>${u.kind === 'account' ? `<select data-f="role">${roleOptions(u.role)}</select>` : esc(Roles.label(u.role))}${u.platformAdmin ? ' <span class="pill hoofd">hoofdbeheerder</span>' : ''}</td>
+        <td>${u.kind === 'account' && !u.platformAdmin ? `<select data-f="role">${roleOptions(u.role)}</select>` : esc(Roles.label(u.role))}${u.platformAdmin ? ' <span class="pill hoofd">hoofdbeheerder</span>' : ''}</td>
         <td>${esc(when(u.lastSeenAt))}</td>
         <td>${support(u)}</td>
-        <td class="acts">${canImpersonate(u) ? '<button class="btn small" data-f="impersonate">Inloggen als</button>' : ''}${u.kind === 'account' ? `<button class="btn small" data-f="toggle">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button><button class="btn small" data-f="password">Wachtwoord</button>` : ''}</td>
+        <td class="acts">${canImpersonate(u) ? '<button class="btn small" data-f="impersonate">Inloggen als</button>' : ''}${u.kind === 'account' ? `<button class="btn small" data-f="toggle">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button><button class="btn small" data-f="password">Wachtwoord</button>` : ''}${isMain && u.kind === 'account' ? `<button class="btn small" data-f="platform">${u.platformAdmin ? 'Hoofdbeheerder intrekken' : 'Hoofdbeheerder maken'}</button>` : ''}</td>
       </tr>`).join('');
     modal(`<h2>${t.environment === 'test' ? 'Testaccounts' : 'Gebruikers'} van ${esc(t.name)}</h2>
       ${t.environment === 'test' ? '<p class="muted small">Accounts die alleen in deze testomgeving bestaan. Ze verdwijnen bij Leegmaken of Verwijderen.</p>' : ''}
+      ${isMain ? `<p class="muted small">Dit is de hoofdtenant. Hoofdbeheerders kunnen alle tenants beheren en loggen in met een lege organisatiecode. Er is altijd minstens één actieve hoofdbeheerder (nu ${admins}).</p>` : `<p class="muted small">Deze gebruikers loggen in met organisatiecode <b class="code">${esc(t.slug)}</b>.</p>`}
       <div class="tablewrap"><table class="grid" id="mu-table">${users.length ? `<thead><tr><th>Gebruiker</th><th>Rol</th><th>Laatst gezien</th><th>Support (live)</th><th></th></tr></thead><tbody>${rows}</tbody>` : '<tr><td class="empty">Nog geen gebruikers.</td></tr>'}</table></div>
-      <form id="mu-form" class="card-form">
+      <form id="mu-form" class="card-form" novalidate>
         <h3>Gebruiker toevoegen</h3>
         <div class="row">
-          <label>Gebruikersnaam<input name="username" required pattern="[a-z0-9][a-z0-9._\\-]{2,39}" autocomplete="off"></label>
-          <label>Naam<input name="displayName" autocomplete="off"></label>
+          <label>Volledige naam<input name="displayName" maxlength="80" autocomplete="off" placeholder="bijv. Piet Groen"></label>
+          <label>Gebruikersnaam<input name="username" required maxlength="40" autocomplete="off" placeholder="piet.groen" data-rule="username"><span class="hint">3–40 tekens: kleine letters, cijfers, punt, streepje of underscore.</span></label>
           <label>Rol<select name="role">${roleOptions('beheerder')}</select></label>
-          <label>Wachtwoord<input name="password" type="password" minlength="12" maxlength="128" required placeholder="minimaal 12 tekens" autocomplete="new-password"></label>
-          <button class="btn primary" type="submit">Toevoegen</button>
+          <label>Wachtwoord<input name="password" type="password" maxlength="128" required placeholder="minimaal 12 tekens" autocomplete="new-password" data-rule="password"><span class="hint">Minimaal 12 tekens.</span></label>
         </div>
+        ${isMain ? '<label class="chk"><input type="checkbox" name="platformAdmin"> Hoofdbeheerder (alle tenants beheren; altijd met de rol beheerder)</label>' : ''}
+        <div class="row"><button class="btn primary" type="submit">Toevoegen</button></div>
         <div class="err" role="alert"></div>
       </form>`);
     const base = `platform/tenants/${encodeURIComponent(t.id)}/users`;
@@ -243,6 +286,12 @@
       const u = users.find((x) => x.id === tr.dataset.uid);
       if (b.dataset.f === 'impersonate') return impersonateDialog(t, u);
       if (b.dataset.f === 'toggle') patch(u.id, { disabled: !u.disabled }, u.disabled ? 'Ingeschakeld' : 'Uitgeschakeld');
+      if (b.dataset.f === 'platform') {
+        const msg = u.platformAdmin
+          ? `${u.displayName} is dan geen hoofdbeheerder meer en blijft beheerder van ${t.name}. Doorgaan?`
+          : `${u.displayName} hoofdbeheerder maken?\n\nEen hoofdbeheerder kan alle tenants, gebruikers en testomgevingen beheren en wordt beheerder van ${t.name}.`;
+        if (confirm(msg)) patch(u.id, { platformAdmin: !u.platformAdmin }, u.platformAdmin ? 'Hoofdbeheerder ingetrokken' : 'Hoofdbeheerder gemaakt');
+      }
       if (b.dataset.f === 'password') {
         const pw = prompt(`Nieuw wachtwoord voor ${u.displayName} (minimaal 12 tekens)`);
         if (pw) patch(u.id, { password: pw }, 'Wachtwoord gewijzigd');
@@ -252,11 +301,19 @@
       const tr = ev.target.closest('tr[data-uid]');
       if (tr && ev.target.dataset.f === 'role') patch(tr.dataset.uid, { role: ev.target.value }, 'Rol gewijzigd');
     };
-    $('#mu-form').onsubmit = async (ev) => {
+    const mu = $('#mu-form');
+    wireUsername(mu.username, mu.displayName);
+    if (mu.platformAdmin) mu.platformAdmin.onchange = () => { mu.role.disabled = mu.platformAdmin.checked; if (mu.platformAdmin.checked) mu.role.value = 'beheerder'; };
+    mu.onsubmit = async (ev) => {
       ev.preventDefault();
       const f = ev.target;
+      const problem = checkForm(f);
+      $('.err', f).textContent = problem;
+      if (problem) return;
       try {
-        await api(base, { body: { username: f.username.value.trim().toLowerCase(), displayName: f.displayName.value.trim(), role: f.role.value, password: f.password.value } });
+        const body = { username: f.username.value.trim().toLowerCase(), displayName: f.displayName.value.trim(), role: f.role.value, password: f.password.value };
+        if (f.platformAdmin?.checked) body.platformAdmin = true;
+        await api(base, { body });
         toast('Gebruiker toegevoegd');
         await load();
         usersDialog(find(t.id) || t);
@@ -306,20 +363,42 @@
   function wireForm() {
     const f = $('#t-form');
     let slugTouched = false;
-    f.slug.oninput = () => { slugTouched = true; };
-    f.name.oninput = () => { if (!slugTouched) f.slug.value = slugify(f.name.value); };
+    const resetUser = wireUsername(f.adminUsername, f.adminName);
+    const hint = () => {
+      $('#t-login-org').textContent = f.slug.value || '…';
+      $('#t-login-user').textContent = f.adminUsername.value || '…';
+    };
+    f.slug.oninput = () => {
+      slugTouched = Boolean(f.slug.value);
+      const v = slugify(f.slug.value.replace(/-$/, '')) + (f.slug.value.endsWith('-') ? '-' : '');
+      if (v !== f.slug.value) f.slug.value = v;
+      f.slug.classList.remove('invalid');
+      hint();
+    };
+    f.name.oninput = () => { if (!slugTouched) f.slug.value = slugify(f.name.value); hint(); };
+    f.adminUsername.addEventListener('input', hint);
+    f.adminUsername.addEventListener('change', hint);
+    hint();
     f.onsubmit = async (ev) => {
       ev.preventDefault();
-      $('#t-err').textContent = '';
+      const withAdmin = Boolean(f.adminUsername.value.trim() || f.adminPassword.value || f.adminName.value.trim());
+      let problem = f.name.value.trim().length < 2 ? 'Vul de naam van de organisatie in (minimaal 2 tekens).' : '';
+      // Zonder eerste beheerder mogen die velden leeg blijven; met een van
+      // de drie ingevuld zijn gebruikersnaam en wachtwoord verplicht.
+      problem = problem || checkForm(f, { optional: withAdmin ? [] : ['adminUsername', 'adminPassword'] });
+      if (!problem && withAdmin && !f.adminUsername.value.trim()) problem = 'Vul de gebruikersnaam van de eerste beheerder in.';
+      if (!problem && withAdmin && !f.adminPassword.value) problem = 'Vul het wachtwoord van de eerste beheerder in (minimaal 12 tekens).';
+      $('#t-err').textContent = problem;
+      if (problem) return;
       const body = { name: f.name.value.trim(), slug: f.slug.value.trim().toLowerCase() };
-      if (f.adminUsername.value.trim() || f.adminPassword.value) {
-        body.admin = { username: f.adminUsername.value.trim().toLowerCase(), displayName: f.adminName.value.trim(), password: f.adminPassword.value };
-      }
+      if (withAdmin) body.admin = { username: f.adminUsername.value.trim().toLowerCase(), displayName: f.adminName.value.trim(), password: f.adminPassword.value };
       try {
         const out = await api('platform/tenants', { body });
         f.reset();
         slugTouched = false;
-        toast(`Tenant ${out.tenant.name} aangemaakt${out.admin ? ` met beheerder ${out.admin.username}` : ''}`);
+        resetUser();
+        hint();
+        toast(`Tenant ${out.tenant.name} aangemaakt${out.admin ? ` met beheerder ${out.admin.username} (organisatiecode ${out.tenant.slug})` : ''}`);
         await load();
       } catch (e) { $('#t-err').textContent = e.message; }
     };
@@ -358,6 +437,7 @@
   $('#modal').onclick = (ev) => { if (ev.target.id === 'modal') closeModal(); };
   $('#t-search').oninput = render;
   $('#t-export').onclick = exportExcel;
+  $('#t-admins').onclick = () => { const m = find(state.mainId); if (m) usersDialog(m); };
   $('#t-table').onclick = (ev) => {
     const b = ev.target.closest('button[data-act]');
     const tr = ev.target.closest('tr[data-tid]');

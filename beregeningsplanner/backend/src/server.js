@@ -567,6 +567,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // alleen de gebruikers daarvan, nooit die van live.
   const usersTenantOf = (req) => (req.user && req.user.home_tenant_id === req.tenantId ? req.tenantId : homeOf(req.tenantId));
 
+  // Een hoofdbeheerder kan alleen door een (andere) hoofdbeheerder worden
+  // gewijzigd, uitgeschakeld of uitgelogd, niet door een beheerder van de tenant.
+  function guardPlatformAdmin(req, res, userId) {
+    const target = store.getUser(userId);
+    if (!target || !target.platform_admin || req.user.platform_admin) return false;
+    res.status(403).json({ error: 'forbidden', message: 'Alleen een hoofdbeheerder kan een hoofdbeheerder wijzigen.' });
+    return true;
+  }
+
   app.get('/api/admin/users', (req, res) => {
     res.json({ items: store.listUsers(usersTenantOf(req)) });
   });
@@ -584,6 +593,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const input = {};
     for (const k of ['displayName', 'role', 'disabled', 'password', 'username']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
     const home = usersTenantOf(req);
+    if (guardPlatformAdmin(req, res, req.params.id)) return;
     const out = await store.updateAccount(home, req.params.id, input);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_user', message: out.error });
     auditUserChange(req, out.user, input, home);
@@ -593,7 +603,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Welke velden, nooit de waarden van een wachtwoord.
   function auditUserChange(req, user, input, tenantId) {
     audit(req, 'gebruiker_gewijzigd', { userId: user.id, username: user.username, fields: Object.keys(input),
-      ...(input.role !== undefined ? { role: input.role } : {}), ...(input.disabled !== undefined ? { disabled: Boolean(input.disabled) } : {}) }, undefined, tenantId);
+      ...(input.role !== undefined ? { role: input.role } : {}), ...(input.disabled !== undefined ? { disabled: Boolean(input.disabled) } : {}),
+      ...(input.platformAdmin !== undefined ? { hoofdbeheerder: Boolean(input.platformAdmin) } : {}) }, undefined, tenantId);
   }
 
   // Gebruiker op alle toestellen uitloggen.
@@ -601,6 +612,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const home = usersTenantOf(req);
     const u = store.getUser(req.params.id);
     if (!u || u.tenant_id !== home) return res.status(404).json({ error: 'not_found', message: 'Gebruiker niet gevonden.' });
+    if (guardPlatformAdmin(req, res, u.id)) return;
     const n = store.revokeSessions(home, u.id);
     audit(req, 'sessies_ingetrokken', { userId: u.id, username: u.username, count: n }, undefined, home);
     res.json({ ok: true, revoked: n });
@@ -913,6 +925,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     return t;
   };
 
+  // Hoofdbeheerders wonen in de hoofdtenant: ze loggen in zonder organisatiecode.
+  const HOOFD_ONLY = 'Hoofdbeheerders horen bij de hoofdtenant. Maak ze aan bij de gebruikers van de hoofdtenant.';
+
   app.get('/api/platform/tenants/:id/users', (req, res) => {
     const t = userTenant(req, res);
     // Met de supporttoestemming erbij (nodig om in live als de gebruiker te werken).
@@ -922,10 +937,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/platform/tenants/:id/users', requireJson, wrap(async (req, res) => {
     const t = userTenant(req, res);
     if (!t) return;
-    const { username, displayName, role, password } = req.body || {};
-    const out = await store.createAccount(t.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password });
+    const { username, displayName, password } = req.body || {};
+    const platformAdmin = Boolean(req.body?.platformAdmin);
+    if (platformAdmin && t.id !== tenant.id) return res.status(400).json({ error: 'invalid_user', message: HOOFD_ONLY });
+    const role = platformAdmin ? 'beheerder' : req.body?.role;
+    const out = await store.createAccount(t.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password }, { platformAdmin });
     if (out.error) return res.status(400).json({ error: 'invalid_user', message: out.error });
-    audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role, door: 'hoofdbeheer' }, undefined, t.id);
+    audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role, door: 'hoofdbeheer',
+      ...(platformAdmin ? { hoofdbeheerder: true } : {}) }, undefined, t.id);
     res.status(201).json(store.publicUser(out.user));
   }));
 
@@ -934,6 +953,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!t) return;
     const input = {};
     for (const k of ['displayName', 'role', 'disabled', 'password']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
+    if (req.body?.platformAdmin !== undefined) {
+      input.platformAdmin = Boolean(req.body.platformAdmin);
+      if (input.platformAdmin && t.id !== tenant.id) return res.status(400).json({ error: 'invalid_user', message: HOOFD_ONLY });
+    }
     const out = await store.updateAccount(t.id, req.params.uid, input);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_user', message: out.error });
     auditUserChange(req, out.user, input, t.id);
