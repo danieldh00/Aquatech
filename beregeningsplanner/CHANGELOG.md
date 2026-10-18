@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.13.0
+
+- **Mobiele navigatie verbeterd**: geen horizontaal scrollen meer op de
+  telefoon.
+  - Beregeningsplanner: Voorbeeld, Nieuw, Mijn plannen, Openen, Opslaan,
+    Help en Naar het overzicht staan in een **hamburgermenu** (☰) dat als
+    lade van rechts uitschuift; ongedaan maken/opnieuw blijven direct
+    bereikbaar in de kopbalk. Ook op tablets (tot 1100 px) wordt het menu
+    gebruikt, zodat de kopbalk niet meer over meerdere regels loopt.
+  - Gereedschapsbalk op de telefoon: alleen iconen, en raster en lagen in
+    een uitklapmenu **Lagen ▾**.
+  - Dashboard en Beheer: compacte kopbalk (naam ingekort) en de tabbladen
+    van Beheer in twee rijen.
+
 ## 0.12.0
 
 - **Nieuw: instellingenscherm** onder **Beheer → Instellingen** (alleen
