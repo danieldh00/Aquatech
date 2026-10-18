@@ -10,15 +10,32 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 
 ## Branchmodel
 
-- Supervisor kloont de **default branch** van GitHub. Die is nu nog
-  `feature/beregeningsplanner` (eerste push); doel is **`master`** als
-  productiebranch en GitHub-default, met features via `feature/<naam>` of
-  `claude/<naam>`. Na het omzetten van de default branch de repository in HA
-  verwijderen en opnieuw toevoegen (let op: dan verandert de slug).
-- Elke wijziging in `beregeningsplanner/` op de productiebranch vereist een
+- **`master`** is de productie- en GitHub-default branch; Supervisor kloont
+  die. `feature/beregeningsplanner` is de oude startbranch en wordt niet meer
+  gebruikt. Na het omzetten van de default branch de repository in HA
+  verwijderen en opnieuw toevoegen (let op: dan verandert mogelijk de slug —
+  controleer en werk de slugs hieronder bij).
+- **Nooit rechtstreeks op `master` werken.** Elke taak in een eigen branch
+  `feature/<naam>` of `claude/<naam>` (de door de sessie toegewezen
+  `claude/...`-branch telt als zodanig), altijd vers vanaf `master`:
+  ```sh
+  git fetch origin master
+  git checkout -B claude/<naam> origin/master
+  ```
+- Werkwijze per taak: wijzigen → `npm test` → versie-bump + changelog (als
+  `beregeningsplanner/` is gewijzigd) → `git push -u origin <branch>` → PR naar
+  `master` → mergen zodra CI groen is (`ci.yml` + `addon-version.yml`).
+  Daarna de branch verwijderen. Een volgende taak begint opnieuw vanaf
+  `origin/master`, niet vanaf een oude featurebranch.
+- Loopt `master` voor op je branch (andere sessie heeft gemerged): eerst
+  `git merge origin/master` in je branch, conflicten oplossen, en de versie
+  zo nodig opnieuw verhogen (moet hoger zijn dan die op `master`).
+- Elke wijziging in `beregeningsplanner/` op `master` vereist een
   **versie-bump** in `beregeningsplanner/config.yaml` + entry in `CHANGELOG.md`,
   anders biedt HA geen update aan. `scripts/check_addon_version.py` (workflow
-  `addon-version.yml`, op `master`) bewaakt dat.
+  `addon-version.yml`, op PR's naar en pushes op `master`) bewaakt dat.
+  Wijzigingen buiten `beregeningsplanner/` (zoals deze `CLAUDE.md`) hebben
+  geen bump nodig.
 
 ## Home Assistant
 
