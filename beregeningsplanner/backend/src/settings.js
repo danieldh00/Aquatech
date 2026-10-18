@@ -1,4 +1,5 @@
 const { transaction } = require('./db');
+const { createVault } = require('./vault');
 
 // App-instellingen, te beheren door beheerders via Beheer > Instellingen. Ze
 // staan per tenant in de database (tabel settings) en werken zonder herstart.
@@ -6,7 +7,8 @@ const { transaction } = require('./db');
 // Volgorde per instelling: database -> omgevingsvariabele -> standaardwaarde.
 // De omgeving (docker-compose/.env) is dus alleen een startwaarde: wat in het
 // instellingenscherm is opgeslagen gaat voor.
-// Geheimen (API-sleutel, toegangscode) gaan nooit volledig terug naar de browser.
+// Geheimen (API-sleutel, toegangscode) gaan nooit volledig terug naar de browser
+// en staan versleuteld in de database (AES-256-GCM, zie vault.js).
 
 const FIELDS = {
   accessCode: { type: 'secret', env: 'ACCESS_CODE', default: '', min: 4 },
@@ -17,6 +19,14 @@ const FIELDS = {
   aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },
   aiHourlyPerIp: { type: 'int', default: 10, min: 1, max: 100 },
   modules: { type: 'flags', default: {} },
+  // Sessies: uitgelogd na zoveel dagen zonder gebruik, en hoe dan ook na de
+  // maximale duur (opnieuw inloggen).
+  sessionIdleDays: { type: 'int', default: 14, min: 1, max: 90 },
+  sessionMaxDays: { type: 'int', default: 30, min: 1, max: 365 },
+  // Bewaartermijnen (AVG): IP-adressen in historie en auditlog worden na
+  // zoveel dagen gewist; regels in het auditlog na zoveel dagen verwijderd.
+  ipRetentionDays: { type: 'int', default: 90, min: 1, max: 3650 },
+  auditRetentionDays: { type: 'int', default: 365, min: 30, max: 3650 },
 };
 
 class SettingsError extends Error {
@@ -46,14 +56,30 @@ function coerce(def, raw) {
  * @param tenantId  tenant waarvan de instellingen zijn
  * @param env       omgevingsvariabelen als startwaarden
  */
-function createSettings({ db, tenantId, env = {} }) {
+function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
+  // Geheimen staan als { enc: 'v1:…' } in de database; de tenant en de
+  // veldnaam wegen mee, zodat een versleutelde waarde niet naar een ander veld
+  // of een andere tenant te kopiëren is.
+  const ctx = (key) => `${tenantId}:${key}`;
+  const encode = (key, value) => JSON.stringify(FIELDS[key].type === 'secret' ? { enc: vault.seal(value, ctx(key)) } : value);
+
   // Eén proces per database: de waarden staan ook in het geheugen.
   let stored = {};
+  const legacy = [];
   for (const row of db.prepare('SELECT key, value FROM settings WHERE tenant_id = ?').all(tenantId)) {
+    const def = FIELDS[row.key];
+    if (!def) continue;
     try {
-      if (FIELDS[row.key]) stored[row.key] = JSON.parse(row.value);
+      const v = JSON.parse(row.value);
+      if (def.type !== 'secret') stored[row.key] = v;
+      else if (v && typeof v === 'object' && typeof v.enc === 'string') stored[row.key] = vault.open(v.enc, ctx(row.key));
+      else {
+        // Van voor de versleuteling: meteen versleuteld opnieuw opslaan.
+        stored[row.key] = String(v ?? '');
+        legacy.push(row.key);
+      }
     } catch {
-      console.warn(`Instelling ${row.key} is onleesbaar en wordt genegeerd.`);
+      console.warn(`Instelling ${row.key} is onleesbaar (of versleuteld met een andere hoofdsleutel) en wordt genegeerd.`);
     }
   }
 
@@ -84,10 +110,16 @@ function createSettings({ db, tenantId, env = {} }) {
     const at = new Date().toISOString();
     transaction(db, () => {
       for (const key of changed) {
-        if (Object.prototype.hasOwnProperty.call(next, key)) put.run(tenantId, key, JSON.stringify(next[key]), at, userId || null);
+        if (Object.prototype.hasOwnProperty.call(next, key)) put.run(tenantId, key, encode(key, next[key]), at, userId || null);
         else del.run(tenantId, key);
       }
     });
+  }
+
+  if (legacy.length) {
+    const upd = db.prepare('UPDATE settings SET value = ? WHERE tenant_id = ? AND key = ?');
+    transaction(db, () => { for (const key of legacy) upd.run(encode(key, stored[key]), tenantId, key); });
+    console.log(`Geheimen versleuteld opgeslagen: ${legacy.join(', ')}`);
   }
 
   /**

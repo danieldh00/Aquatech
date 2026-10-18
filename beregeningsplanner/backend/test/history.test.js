@@ -115,15 +115,15 @@ test('beheerder maakt gebruikers aan en ziet de historie van alle aanvragen', as
     assert.strictEqual((await admin.get('/api/me')).body.user.role, 'beheerder');
 
     assert.strictEqual((await admin.post('/api/admin/users', { username: 'x', role: 'gebruiker', password: 'kort' })).status, 400);
-    const piet = await admin.post('/api/admin/users', { username: 'piet', displayName: 'Piet', role: 'gebruiker', password: 'wachtwoord1' });
+    const piet = await admin.post('/api/admin/users', { username: 'piet', displayName: 'Piet', role: 'gebruiker', password: 'Tuin-Plan-2026!' });
     assert.strictEqual(piet.status, 201);
-    assert.strictEqual((await admin.post('/api/admin/users', { username: 'piet', role: 'gebruiker', password: 'wachtwoord1' })).status, 400);
-    await admin.post('/api/admin/users', { username: 'kees', role: 'gebruiker', password: 'wachtwoord2' });
+    assert.strictEqual((await admin.post('/api/admin/users', { username: 'piet', role: 'gebruiker', password: 'Tuin-Plan-2026!' })).status, 400);
+    await admin.post('/api/admin/users', { username: 'kees', role: 'gebruiker', password: 'Gras-Pomp-2027!' });
 
     const p = client(base), k = client(base);
     assert.strictEqual((await p.post('/api/auth/login', { username: 'piet', password: 'fout-fout' })).status, 401);
-    assert.strictEqual((await p.post('/api/auth/login', { username: 'Piet', password: 'wachtwoord1' })).status, 200);
-    await k.post('/api/auth/login', { username: 'kees', password: 'wachtwoord2' });
+    assert.strictEqual((await p.post('/api/auth/login', { username: 'Piet', password: 'Tuin-Plan-2026!' })).status, 200);
+    await k.post('/api/auth/login', { username: 'kees', password: 'Gras-Pomp-2027!' });
     assert.strictEqual((await p.get('/api/admin/history')).status, 403);
 
     const bg = { dataUrl: 'data:image/png;base64,AAAA' };
@@ -180,23 +180,23 @@ test('uitgeschakelde gebruiker of nieuw wachtwoord: sessie vervalt', async () =>
   try {
     const admin = client(base);
     await admin.post('/api/auth/login', { code: 'geheim' });
-    const u = (await admin.post('/api/admin/users', { username: 'anna', role: 'gebruiker', password: 'wachtwoord1' })).body;
+    const u = (await admin.post('/api/admin/users', { username: 'anna', role: 'gebruiker', password: 'Tuin-Plan-2026!' })).body;
     const a = client(base);
-    await a.post('/api/auth/login', { username: 'anna', password: 'wachtwoord1' });
+    await a.post('/api/auth/login', { username: 'anna', password: 'Tuin-Plan-2026!' });
     assert.strictEqual((await a.get('/api/me')).body.user.username, 'anna');
 
-    await admin.patch(`/api/admin/users/${u.id}`, { password: 'nieuwwachtwoord' });
+    await admin.patch(`/api/admin/users/${u.id}`, { password: 'Nieuw-Sproei-88' });
     assert.strictEqual((await a.get('/api/me')).body.user, null);
-    await a.post('/api/auth/login', { username: 'anna', password: 'nieuwwachtwoord' });
+    await a.post('/api/auth/login', { username: 'anna', password: 'Nieuw-Sproei-88' });
     assert.strictEqual((await a.get('/api/me')).body.user.username, 'anna');
 
     await admin.patch(`/api/admin/users/${u.id}`, { disabled: true });
     assert.strictEqual((await a.get('/api/me')).body.user, null);
-    assert.strictEqual((await a.post('/api/auth/login', { username: 'anna', password: 'nieuwwachtwoord' })).status, 401);
+    assert.strictEqual((await a.post('/api/auth/login', { username: 'anna', password: 'Nieuw-Sproei-88' })).status, 401);
 
     // Rol wijzigen naar beheerder geeft toegang tot de historie.
     await admin.patch(`/api/admin/users/${u.id}`, { disabled: false, role: 'beheerder' });
-    await a.post('/api/auth/login', { username: 'anna', password: 'nieuwwachtwoord' });
+    await a.post('/api/auth/login', { username: 'anna', password: 'Nieuw-Sproei-88' });
     assert.strictEqual((await a.get('/api/admin/history')).status, 200);
 
     // Systeemgebruikers zijn niet aan te passen.
@@ -207,15 +207,15 @@ test('uitgeschakelde gebruiker of nieuw wachtwoord: sessie vervalt', async () =>
   }
 });
 
-test('oude sessie-cookie (van voor de accounts) blijft geldig als beheerder', async () => {
+test('oude ondertekende sessie-cookie (van voor de serversessies) geeft geen toegang meer', async () => {
   const { server, base } = await start();
   try {
     const hmac = (v) => crypto.createHmac('sha256', SECRET).update(v).digest('base64url');
     const payload = `${Date.now()}.${hmac('code:geheim').slice(0, 16)}`;
     const c = client(base);
     c.jar.set(COOKIE_NAME, `${payload}.${hmac(payload)}`);
-    assert.strictEqual((await c.get('/api/me')).body.user.role, 'beheerder');
-    assert.strictEqual((await c.get('/api/admin/history')).status, 200);
+    assert.strictEqual((await c.get('/api/me')).body.user, null);
+    assert.strictEqual((await c.get('/api/admin/history')).status, 401);
   } finally {
     server.close();
   }
@@ -267,9 +267,9 @@ test('plannenoverzicht: samenvatting per plan; beheerder ziet alles plus histori
   try {
     const admin = client(base);
     await admin.post('/api/auth/login', { code: 'geheim' });
-    await admin.post('/api/admin/users', { username: 'joop', displayName: 'Joop', role: 'gebruiker', password: 'wachtwoord1' });
+    await admin.post('/api/admin/users', { username: 'joop', displayName: 'Joop', role: 'gebruiker', password: 'Tuin-Plan-2026!' });
     const j = client(base);
-    await j.post('/api/auth/login', { username: 'joop', password: 'wachtwoord1' });
+    await j.post('/api/auth/login', { username: 'joop', password: 'Tuin-Plan-2026!' });
     const a = (await j.post('/api/plans', { data: plan('Tuin A', { background: { dataUrl: 'data:image/png;base64,AAAA' } }) })).body;
     const b = (await j.post('/api/plans', { data: plan('Tuin B') })).body;
     await j.del(`/api/plans/${b.id}`);

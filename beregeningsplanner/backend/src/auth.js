@@ -1,7 +1,7 @@
 const crypto = require('crypto');
+const { fingerprintOf } = require('./store');
 
 const COOKIE_NAME = 'aquatech_session';
-const COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
 function remoteIp(req) {
   const raw = req.socket?.remoteAddress || '';
@@ -35,47 +35,52 @@ function safeEqual(a, b) {
 }
 
 const GUEST_COOKIE = 'aquatech_guest';
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Sessie-cookie: `<tijd>.<subject>.<vingerafdruk>.<handtekening>`. Subject is
-// `code` (ingelogd met de toegangscode = beheerder) of een gebruikers-id. De
-// vingerafdruk hangt aan de toegangscode resp. de wachtwoord-hash: een nieuwe
-// code of een nieuw wachtwoord logt alle toestellen van die inlog uit.
-// Oude cookies (`<tijd>.<vingerafdruk>.<handtekening>`, van voor de
-// gebruikersaccounts) gelden nog als inlog met de toegangscode.
-function createAuth({ secret, getAccessCode, getUser = () => null }) {
-  const codeFingerprint = () => hmac(secret, `code:${getAccessCode()}`).slice(0, 16);
-  const userFingerprint = (u) => hmac(secret, `pw:${u.password_hash || ''}`).slice(0, 16);
+// Sessies staan op de server (tabel sessions, zie store.js): de cookie bevat
+// alleen een willekeurig token. Uitloggen, een nieuw wachtwoord, uitschakelen
+// of een nieuwe toegangscode beëindigt een sessie dus meteen. Een sessie
+// verloopt na `idleDays()` zonder gebruik en hoe dan ook na `maxDays()`.
+function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 14, maxDays = () => 30 }) {
+  const codeFingerprint = () => hmac(secret, `code:${getAccessCode()}`).slice(0, 22);
+  const userFingerprint = (u) => fingerprintOf(u.password_hash);
 
-  function issue(subject = 'code') {
-    let fp;
-    if (subject === 'code') fp = codeFingerprint();
-    else {
-      const u = getUser(subject);
+  // Maakt een sessie aan; geeft het token voor de cookie terug.
+  function issue(subject = 'code', req = null) {
+    let userId, fingerprint;
+    if (subject === 'code') {
+      userId = store.systemUser(tenantId, 'beheerder', 'Beheerder (toegangscode)').id;
+      fingerprint = codeFingerprint();
+    } else {
+      const u = store.getUser(subject);
       if (!u) throw new Error('onbekende gebruiker');
-      fp = userFingerprint(u);
+      userId = u.id;
+      fingerprint = userFingerprint(u);
     }
-    const payload = `${Date.now()}.${subject}.${fp}`;
-    return `${payload}.${hmac(secret, payload)}`;
+    return store.createSession({
+      tenantId, userId, via: subject === 'code' ? 'code' : 'user', fingerprint, maxMs: maxDays() * DAY_MS,
+      ip: req ? remoteIp(req) : '', userAgent: req?.headers?.['user-agent'] || '',
+    });
   }
 
-  // Geeft { subject: 'code' } of { subject: 'user', user } terug, of null.
+  // Geeft { subject: 'code', row } of { subject: 'user', user, row } terug, of null.
   function verifySession(token) {
-    if (typeof token !== 'string') return null;
-    const parts = token.split('.');
-    if (parts.length === 3) parts.splice(1, 0, 'code');
-    if (parts.length !== 4) return null;
-    const [issuedAt, subject, fingerprint, signature] = parts;
-    const payload = token.split('.').length === 3 ? `${issuedAt}.${fingerprint}` : `${issuedAt}.${subject}.${fingerprint}`;
-    if (!safeEqual(signature, hmac(secret, payload))) return null;
-    const age = Date.now() - Number(issuedAt);
-    if (!(Number.isFinite(age) && age >= 0 && age < COOKIE_MAX_AGE_MS)) return null;
-    if (subject === 'code') {
-      if (!getAccessCode() || !safeEqual(fingerprint, codeFingerprint())) return null;
-      return { subject: 'code' };
+    const row = store.findSession(token);
+    if (!row || row.tenant_id !== tenantId) return null;
+    const t = Date.now();
+    const expired = Date.parse(row.expires_at) <= t
+      || Date.parse(row.created_at) + maxDays() * DAY_MS <= t
+      || Date.parse(row.last_seen_at) + idleDays() * DAY_MS <= t;
+    if (expired) { store.dropSession(row); return null; }
+    if (row.via === 'code') {
+      if (!getAccessCode() || !safeEqual(row.fingerprint, codeFingerprint())) { store.dropSession(row); return null; }
+      store.touchSession(row);
+      return { subject: 'code', row };
     }
-    const user = getUser(subject);
-    if (!user || user.disabled || user.kind !== 'account' || !safeEqual(fingerprint, userFingerprint(user))) return null;
-    return { subject: 'user', user };
+    const user = store.getUser(row.user_id);
+    if (!user || user.disabled || user.kind !== 'account' || !safeEqual(row.fingerprint, userFingerprint(user))) { store.dropSession(row); return null; }
+    store.touchSession(row);
+    return { subject: 'user', user, row };
   }
 
   const verify = (token) => Boolean(verifySession(token));
@@ -87,11 +92,12 @@ function createAuth({ secret, getAccessCode, getUser = () => null }) {
     return safeEqual(hmac(secret, `try:${code}`), hmac(secret, `try:${expected}`));
   }
 
-  // { via: 'code' | 'user', user? } of null.
+  // Eén keer per verzoek uitrekenen.
   function session(req) {
+    if (req._session !== undefined) return req._session;
     const s = verifySession(parseCookies(req.headers.cookie)[COOKIE_NAME]);
-    if (!s) return null;
-    return s.subject === 'code' ? { via: 'code' } : { via: 'user', user: s.user };
+    req._session = !s ? null : s.subject === 'code' ? { via: 'code', row: s.row } : { via: 'user', user: s.user, row: s.row };
+    return req._session;
   }
 
   function isAuthenticated(req) {
@@ -100,16 +106,16 @@ function createAuth({ secret, getAccessCode, getUser = () => null }) {
 
   function requireAccess(req, res, next) {
     if (isAuthenticated(req)) return next();
-    res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in met de toegangscode.' });
+    res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
   }
 
-  function cookieAttrs(req, name, value) {
+  function cookieAttrs(req, name, value, maxAgeMs) {
     // 'Secure' alleen als het verzoek via https binnenkwam (de tunnel zet
     // X-Forwarded-Proto); lokaal testen via http://ip:3300 moet ook werken.
     const attrs = [
       `${name}=${encodeURIComponent(value)}`,
       'Path=/',
-      `Max-Age=${Math.floor(COOKIE_MAX_AGE_MS / 1000)}`,
+      `Max-Age=${Math.floor(maxAgeMs / 1000)}`,
       'HttpOnly',
       'SameSite=Lax',
     ];
@@ -122,11 +128,19 @@ function createAuth({ secret, getAccessCode, getUser = () => null }) {
     res.setHeader('Set-Cookie', [...(Array.isArray(prev) ? prev : prev ? [prev] : []), cookie]);
   }
 
+  // Nieuwe sessie bij elke inlog (een eventuele oude sessie in dit toestel
+  // vervalt: geen sessie-fixatie).
   function setCookie(req, res, subject = 'code') {
-    appendCookie(res, cookieAttrs(req, COOKIE_NAME, issue(subject)));
+    const old = parseCookies(req.headers.cookie)[COOKIE_NAME];
+    if (old) store.deleteSession(old);
+    req._session = undefined;
+    appendCookie(res, cookieAttrs(req, COOKIE_NAME, issue(subject, req), maxDays() * DAY_MS));
   }
 
-  function clearCookie(res) {
+  // Uitloggen: de sessie verdwijnt ook op de server.
+  function clearCookie(req, res) {
+    const old = parseCookies(req.headers.cookie)[COOKIE_NAME];
+    if (old) store.deleteSession(old);
     appendCookie(res, `${COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
   }
 
@@ -142,10 +156,10 @@ function createAuth({ secret, getAccessCode, getUser = () => null }) {
   }
 
   function setGuestCookie(req, res, id) {
-    appendCookie(res, cookieAttrs(req, GUEST_COOKIE, `${id}.${hmac(secret, `guest:${id}`)}`));
+    appendCookie(res, cookieAttrs(req, GUEST_COOKIE, `${id}.${hmac(secret, `guest:${id}`)}`, 365 * DAY_MS));
   }
 
-  return { requireAccess, isAuthenticated, session, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie };
+  return { requireAccess, isAuthenticated, session, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
 }
 
 module.exports = { createAuth, remoteIp, parseCookies, COOKIE_NAME, GUEST_COOKIE };
