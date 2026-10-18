@@ -7,7 +7,8 @@ const { createRateLimiter } = require('./rateLimit');
 const { loadOrCreateSecret } = require('./options');
 const { createPlanAnalyzer, AnalyzeError } = require('./planAnalyzer');
 const { openDb } = require('./db');
-const { createStore } = require('./store');
+const { createStore, hashPassword, passwordProblem } = require('./store');
+const testdata = require('./testdata');
 const { createSettings, SettingsError, FIELDS } = require('./settings');
 const { createVault, loadOrCreateMasterKey } = require('./vault');
 const backups = require('./backup');
@@ -291,7 +292,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // tenant_id = de actieve omgeving (live of test), home_tenant_id = de tenant
   // waar het account bij hoort. req.tenantId = de actieve omgeving (zonder
   // inlog de hoofdtenant). Alle gegevens (plannen, historie, instellingen)
-  // gaan via req.tenantId; gebruikersbeheer via homeOf(req.tenantId).
+  // gaan via req.tenantId; gebruikersbeheer via usersTenantOf(req).
   function identify(req) {
     if (req.user !== undefined) return req.user;
     const s = auth.session(req);
@@ -544,13 +545,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   // Gebruikers horen bij de live-tenant; in een testomgeving dezelfde lijst.
+  // Testaccounts (zie testdata.js) horen bij de testomgeving zelf en beheren
+  // alleen de gebruikers daarvan, nooit die van live.
+  const usersTenantOf = (req) => (req.user && req.user.home_tenant_id === req.tenantId ? req.tenantId : homeOf(req.tenantId));
+
   app.get('/api/admin/users', (req, res) => {
-    res.json({ items: store.listUsers(homeOf(req.tenantId)) });
+    res.json({ items: store.listUsers(usersTenantOf(req)) });
   });
 
   app.post('/api/admin/users', requireJson, wrap(async (req, res) => {
     const { username, displayName, role, password } = req.body || {};
-    const home = homeOf(req.tenantId);
+    const home = usersTenantOf(req);
     const out = await store.createAccount(home, { username: String(username || '').trim().toLowerCase(), displayName, role, password });
     if (out.error) return res.status(400).json({ error: 'invalid_user', message: out.error });
     audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role }, undefined, home);
@@ -560,7 +565,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.patch('/api/admin/users/:id', requireJson, wrap(async (req, res) => {
     const input = {};
     for (const k of ['displayName', 'role', 'disabled', 'password', 'username']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
-    const home = homeOf(req.tenantId);
+    const home = usersTenantOf(req);
     const out = await store.updateAccount(home, req.params.id, input);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_user', message: out.error });
     auditUserChange(req, out.user, input, home);
@@ -575,7 +580,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Gebruiker op alle toestellen uitloggen.
   app.post('/api/admin/users/:id/logout', (req, res) => {
-    const home = homeOf(req.tenantId);
+    const home = usersTenantOf(req);
     const u = store.getUser(req.params.id);
     if (!u || u.tenant_id !== home) return res.status(404).json({ error: 'not_found', message: 'Gebruiker niet gevonden.' });
     const n = store.revokeSessions(home, u.id);
@@ -762,8 +767,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerQuoteRoutes(app, {
     quotes: createQuoteStore(database), identify, requireUser, requireAdmin, requireRight, requireJson, audit,
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
-    // Klantaccounts horen bij de live-tenant (ook als er in test gewerkt wordt).
-    customersOf: (req) => store.listCustomers(homeOf(req.tenantId || tenant.id)),
+    // Klantaccounts horen bij de live-tenant (ook als er in test gewerkt
+    // wordt); in een testomgeving komen de testklanten daarvan erbij.
+    customersOf: (req) => {
+      const tid = req.tenantId || tenant.id;
+      const home = homeOf(tid);
+      return home === tid ? store.listCustomers(tid) : [...store.listCustomers(home), ...store.listCustomers(tid)];
+    },
   });
 
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
@@ -859,21 +869,39 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({ ok: true });
   });
 
-  // Gebruikers van een tenant (accounts, zonder gasten) beheren.
-  const liveTenant = (req, res) => {
+  // Testomgeving vullen met testdata: testaccounts per rol (één gedeeld,
+  // willekeurig wachtwoord dat alleen in dit antwoord staat), nepklanten,
+  // plannen en offertes. Wat er al in de testomgeving stond, gaat weg.
+  app.post('/api/platform/tenants/:id/testdata', requireJson, wrap(async (req, res) => {
+    const t = store.getTenant(req.params.id);
+    if (!t) return platformError(res, { error: 'Omgeving niet gevonden.', status: 404 });
+    if (t.environment !== 'test') return platformError(res, { error: 'Testdata kan alleen in een testomgeving.', status: 409 });
+    const profile = settingsFor(t.id).get('quoteProfile');
+    const set = testdata.buildTestData({ slug: t.slug, profile });
+    let password = testdata.newPassword();
+    while (set.accounts.some((a) => passwordProblem(password, a.username))) password = testdata.newPassword();
+    const out = store.seedEnvironment(t.id, set, { passwordHash: await hashPassword(password), numberPrefix: profile.numberPrefix || 'OF-' });
+    if (out.error) return platformError(res, out);
+    console.log(`Testomgeving ${t.name} gevuld met testdata door ${req.user.display_name}`);
+    audit(req, 'testomgeving_gevuld', { tenantId: t.id, ...out.counts }, undefined, tenant.id);
+    res.status(201).json({ accounts: out.users.map(store.publicUser), password, counts: out.counts });
+  }));
+
+  // Gebruikers van een tenant (accounts, zonder gasten) beheren. In een
+  // testomgeving zijn dat de testaccounts van die omgeving.
+  const userTenant = (req, res) => {
     const t = store.getTenant(req.params.id);
     if (!t) { res.status(404).json({ error: 'not_found', message: 'Tenant niet gevonden.' }); return null; }
-    if (t.environment !== 'live') { res.status(409).json({ error: 'invalid_tenant', message: 'Gebruikers horen bij de live-tenant.' }); return null; }
     return t;
   };
 
   app.get('/api/platform/tenants/:id/users', (req, res) => {
-    const t = liveTenant(req, res);
+    const t = userTenant(req, res);
     if (t) res.json({ items: store.listUsers(t.id, { includeGuests: false }) });
   });
 
   app.post('/api/platform/tenants/:id/users', requireJson, wrap(async (req, res) => {
-    const t = liveTenant(req, res);
+    const t = userTenant(req, res);
     if (!t) return;
     const { username, displayName, role, password } = req.body || {};
     const out = await store.createAccount(t.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password });
@@ -883,7 +911,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }));
 
   app.patch('/api/platform/tenants/:id/users/:uid', requireJson, wrap(async (req, res) => {
-    const t = liveTenant(req, res);
+    const t = userTenant(req, res);
     if (!t) return;
     const input = {};
     for (const k of ['displayName', 'role', 'disabled', 'password']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
