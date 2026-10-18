@@ -168,6 +168,52 @@ auditlog. Concepten ziet een klant nooit; een verlopen offerte kan hij niet
 meer accepteren. Met de opmaak *totaal per onderdeel* krijgt de klant ook
 via de API geen prijzen per regel.
 
+### Digitale offerte (online akkoord)
+
+In de editor staat het blok **Digitale offerte**:
+
+- **Link maken** geeft een persoonlijke link
+  (`…/openbaar/offerte.html#t=<token>`); de offerte gaat dan naar
+  *Verzonden*. **Kopiëren**, **Bekijken** (telt niet als geopend door de
+  klant) en **Link intrekken** (de oude link werkt daarna niet meer).
+- **Versturen per e-mail** stuurt de klant een bericht met de knop *Offerte
+  bekijken en accorderen*. Zonder ingestelde mailserver opent het bericht in
+  je eigen mailprogramma, met de link erin.
+- Je ziet wanneer de offerte is verstuurd en of, wanneer en hoe vaak de klant
+  hem heeft geopend (ook *bekeken* in het overzicht).
+
+De klant hoeft niet in te loggen. Hij ziet de offerte in de huisstijl, vinkt
+eventuele **opties** aan of uit (het totaal rekent mee), en geeft akkoord met
+zijn naam, een handtekening in het tekenvak en een vinkje voor de offerte en
+voorwaarden; afwijzen kan met een reden. Na het antwoord ziet hij het
+geaccordeerde document met zijn handtekening en kan hij het als PDF opslaan.
+
+Vastgelegd bij het antwoord: naam, tijdstip, IP-adres (plus het door de proxy
+opgegeven adres), browser, handtekening, gekozen opties, totaalbedrag en een
+kenmerk (SHA-256) van de geaccordeerde inhoud. Daarna ligt de offerte vast:
+wijzigen kan alleen via **Kopie maken**. Het akkoord staat in het auditlog en
+onderaan de PDF.
+
+**Opties**: zet bij een regel *Soort* op **Optie** (standaard uit) of
+**Optie (aan)**. Een niet gekozen optie telt niet mee in het totaal, de PDF en
+de Excel-export.
+
+**E-mail** (beheerder, Bedrijfsgegevens → *E-mail*): SMTP-server, poort,
+STARTTLS of SSL/TLS, gebruikersnaam, wachtwoord (versleuteld opgeslagen, nooit
+getoond), afzender en antwoordadres; **Testmail sturen** controleert de
+instellingen. Met een mailserver krijgt de klant na een akkoord een
+bevestiging met een link naar het getekende document, en het bedrijf (het
+e-mailadres bij de bedrijfsgegevens) een bericht bij elk akkoord of elke
+afwijzing.
+
+Beveiliging: het token (192 bits) staat in het fragment van de link en gaat
+alleen als kop `X-Offerte-Token` naar de server, dus niet in logboeken van
+proxy's. In de database staat alleen de SHA-256 ervan doorzoekbaar en het
+token zelf versleuteld (om de link opnieuw te tonen). De openbare pagina laadt
+alleen een vaste lijst bestanden zonder inloggen; de rest van de app blijft
+achter de login. Verzoeken op de openbare API zijn per IP begrensd. Een
+uitgeschakelde organisatie of ingetrokken link geeft *niet beschikbaar*.
+
 ## Gebruikers, rollen en historie van aanvragen
 
 Elke rol ziet op het dashboard alleen de modules die erbij horen; de server

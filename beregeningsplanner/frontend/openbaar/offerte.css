@@ -1,0 +1,26 @@
+/* Openbare offertepagina: de klant bekijkt en accordeert de offerte zonder account. */
+body { margin: 0; background: #eef1f5; font-family: var(--at-font); color: #1d2733; }
+:root { --line: #dfe5ec; }
+body.view-doc .print-doc { margin-top: 20px; }
+.topbar { display: flex; align-items: center; gap: 12px; background: var(--at-navy); color: #fff; padding: 10px 20px; }
+.topbar .brand { display: flex; align-items: center; gap: 12px; }
+.topbar .brand-logo { height: 34px; }
+.topbar .brand-name { font-weight: 600; font-size: 15px; }
+.topbar .spacer { flex: 1; }
+.btn.light { font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,.5); background: transparent; color: #fff; cursor: pointer; }
+.btn.light:hover { background: rgba(255,255,255,.12); }
+.o-message { max-width: 820px; margin: 40px auto; padding: 24px; background: #fff; border-radius: 8px; border: 1px solid #dfe5ec; text-align: center; font-size: 16px; }
+.o-message:empty { display: none; }
+.o-status { max-width: 820px; margin: 20px auto 0; padding: 14px 18px; border-radius: 8px; font-size: 15px; background: #e8f1fb; border: 1px solid #bcd3ee; }
+.o-status.ok { background: #e7f5ec; border-color: #a8d9b9; }
+.o-status.bad { background: #fdecea; border-color: #f2b8b5; }
+.o-status.warn { background: #fff6e0; border-color: #f0d48a; }
+[hidden] { display: none !important; }
+@media print {
+  body { background: #fff; }
+  .screen { display: none !important; }
+}
+@media (max-width: 600px) {
+  .topbar { padding: 8px 12px; }
+  .o-message, .o-status { margin-left: 0; margin-right: 0; border-radius: 0; }
+}

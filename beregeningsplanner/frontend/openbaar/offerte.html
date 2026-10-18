@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Offerte</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../offertes/quote-view.css">
+  <link rel="stylesheet" href="offerte.css">
+</head>
+<body class="view-doc">
+  <header class="topbar screen">
+    <span class="brand">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="">
+      <span class="brand-name" id="o-company">Offerte</span>
+    </span>
+    <span class="spacer"></span>
+    <button id="o-print" class="btn light" hidden>PDF / afdrukken</button>
+  </header>
+
+  <div id="o-status" class="o-status screen" hidden></div>
+  <div id="o-message" class="o-message screen">Offerte laden…</div>
+
+  <!-- Het document zelf; ook de afdrukversie -->
+  <article id="print" class="print-doc" hidden></article>
+
+  <section id="o-sign" class="screen" hidden></section>
+
+  <script src="../offertes/quote-core.js"></script>
+  <script src="../offertes/quote-view.js"></script>
+  <script src="offerte.js"></script>
+</body>
+</html>

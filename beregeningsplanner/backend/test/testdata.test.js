@@ -119,7 +119,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.strictEqual(me.user.role, 'klant');
     const mine = (await klant.get('/api/quotes')).body.items;
     assert.deepStrictEqual(mine.map((q) => q.status), ['verzonden']);
-    assert.strictEqual((await klant.post(`/api/quotes/${mine[0].id}/respond`, { answer: 'akkoord' })).status, 200);
+    assert.strictEqual((await klant.post(`/api/quotes/${mine[0].id}/respond`, { answer: 'afgewezen', name: 'Testklant', reason: 'test' })).status, 200, 'akkoord vraagt een handtekening; afwijzen niet');
     assert.strictEqual((await klant.get('/api/admin/users')).status, 403);
 
     // De installateur ziet alle plannen en offertes van de testomgeving.
