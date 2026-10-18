@@ -179,8 +179,9 @@ function createStore(db) {
     return null;
   }
 
-  // Gebruikersnamen van accounts zijn uniek over alle tenants: inloggen gaat
-  // met alleen gebruikersnaam en wachtwoord, de tenant volgt uit het account.
+  // Gebruikersnamen zijn uniek binnen een tenant (dezelfde voornaam kan in
+  // twee organisaties voorkomen). Een gebruiker wordt overal aangeduid met zijn
+  // eigen id; bij het inloggen bepaalt de organisatiecode de tenant.
   async function createAccount(tenantId, rawInput, { platformAdmin = false } = {}) {
     const input = withRole(rawInput);
     const err = validateAccount(input);
@@ -233,7 +234,18 @@ function createStore(db) {
     return q("SELECT COUNT(*) AS n FROM users WHERE tenant_id = ? AND kind = 'account' AND role = 'beheerder' AND disabled = 0").get(tenantId).n;
   }
 
-  const usernameTaken = (tenantId, username) => Boolean(q("SELECT 1 FROM users WHERE username = ? AND (tenant_id = ? OR kind = 'account')").get(username, tenantId));
+  // Een organisatie = de live-tenant plus zijn testomgevingen (die eigen
+  // testaccounts kunnen hebben). Binnen die familie is een gebruikersnaam
+  // uniek, zodat inloggen met de organisatiecode altijd één account vindt.
+  function familyIds(tenantId) {
+    const t = tenantId && getTenant(tenantId);
+    if (!t) return [];
+    const root = t.environment === 'test' && t.parent_id ? t.parent_id : t.id;
+    return [root, ...q('SELECT id FROM tenants WHERE parent_id = ? ORDER BY created_at').all(root).map((r) => r.id)];
+  }
+
+  const usernameTaken = (tenantId, username, { except = null } = {}) => familyIds(tenantId)
+    .some((id) => id !== except && q('SELECT 1 FROM users WHERE tenant_id = ? AND username = ?').get(id, username));
 
   function countPlatformAdmins() {
     return q("SELECT COUNT(*) AS n FROM users WHERE kind = 'account' AND platform_admin = 1 AND disabled = 0").get().n;
@@ -408,8 +420,8 @@ function createStore(db) {
     const out = testEnvironment(id);
     if (out.error) return out;
     const tid = out.tenant.id;
-    const clash = accounts.find((a) => q("SELECT 1 FROM users WHERE username = ? AND kind = 'account' AND tenant_id <> ?").get(a.username, tid));
-    if (clash) return { error: `De gebruikersnaam ${clash.username} bestaat al ergens anders op het platform.`, status: 409 };
+    const clash = accounts.find((a) => usernameTaken(tid, a.username, { except: tid }));
+    if (clash) return { error: `De gebruikersnaam ${clash.username} bestaat al binnen deze organisatie.`, status: 409 };
     return transaction(db, () => {
       clearData(tid);
       const users = {};
@@ -455,12 +467,29 @@ function createStore(db) {
     return [home, ...q("SELECT * FROM tenants WHERE parent_id = ? AND environment = 'test' AND disabled = 0 ORDER BY name COLLATE NOCASE").all(home.id)];
   }
 
+  /**
+   * De tenant waarin met een organisatiecode wordt ingelogd. Leeg = de
+   * hoofdtenant (daar staan de hoofdbeheerders). De code van een testomgeving
+   * leidt naar de live-tenant, want daar horen de gebruikers bij. Onbekend =
+   * null.
+   */
+  function loginTenant(code) {
+    const slug = String(code ?? '').trim().toLowerCase();
+    const t = slug ? getTenantBySlug(slug) : getTenantBySlug('default');
+    if (!t) return null;
+    return t.environment === 'test' && t.parent_id ? getTenant(t.parent_id) : getTenant(t.id);
+  }
+
   async function authenticate(tenantId, username, password) {
-    // Zonder tenantId: zoeken over alle tenants (gebruikersnamen zijn uniek).
+    // Alleen binnen de organisatie zoeken (live-tenant en zijn testomgevingen):
+    // dezelfde gebruikersnaam kan in andere organisaties voorkomen. Zonder
+    // tenant (onbekende code) wordt niemand gevonden.
     const name = String(username || '').trim().toLowerCase();
-    const u = tenantId
-      ? q("SELECT * FROM users WHERE tenant_id = ? AND username = ? AND kind = 'account'").get(tenantId, name)
-      : q("SELECT * FROM users WHERE username = ? AND kind = 'account' ORDER BY created_at LIMIT 1").get(name);
+    const ids = familyIds(tenantId);
+    const u = ids.length
+      ? q(`SELECT * FROM users WHERE username = ? AND kind = 'account' AND tenant_id IN (${ids.map(() => '?').join(', ')})
+          ORDER BY tenant_id = ? DESC LIMIT 1`).get(name, ...ids, ids[0])
+      : null;
     // Ook zonder gebruiker een hash uitrekenen: gelijke looptijd.
     const ok = await verifyPassword(password, u?.password_hash || await getDummyHash());
     if (!(ok && u && !u.disabled)) return null;
@@ -719,7 +748,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, seedEnvironment,
     accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, systemUser, createGuest, createAccount, updateAccount, countAdmins, authenticate, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, systemUser, createGuest, createAccount, updateAccount, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
     createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
   };

@@ -140,7 +140,7 @@
       <p class="muted small">${out.counts.plans} plannen en ${out.counts.quotes} offertes aangemaakt. Alle testaccounts hebben hetzelfde wachtwoord; dat wordt nergens bewaard en is alleen nu te zien. Opnieuw vullen geeft een nieuw wachtwoord.</p>
       <p>Wachtwoord: <b class="code" id="s-pw">${esc(out.password)}</b> <button class="btn small" id="s-copy">Kopiëren</button></p>
       <div class="tablewrap"><table class="grid"><thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Rol</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="muted small">Inloggen met een testaccount (bijvoorbeeld in een privévenster) brengt je direct in deze testomgeving, met de rechten van die rol.</p>
+      <p class="muted small">Inloggen met een testaccount (bijvoorbeeld in een privévenster) brengt je direct in deze testomgeving, met de rechten van die rol. Organisatiecode: <b class="code">${esc(t.slug)}</b>.</p>
       <div class="row"><button class="btn" id="s-xlsx">Inloggegevens naar Excel</button></div>`);
     $('#s-copy').onclick = () => navigator.clipboard.writeText(out.password).then(() => toast('Wachtwoord gekopieerd'), () => toast('Kopiëren lukt niet; selecteer het wachtwoord zelf.', true));
     $('#s-xlsx').onclick = () => accountsExcel(t, out).catch((e) => toast(e.message, true));
@@ -152,13 +152,14 @@
     const ws = wb.addWorksheet('Testaccounts');
     ws.columns = [
       { header: 'Naam', key: 'name', width: 32 },
+      { header: 'Organisatiecode', key: 'org', width: 26 },
       { header: 'Gebruikersnaam', key: 'username', width: 34 },
       { header: 'Rol', key: 'role', width: 16 },
       { header: 'Wachtwoord', key: 'password', width: 30 },
       { header: 'Testomgeving', key: 'env', width: 26 },
     ];
     ws.getRow(1).font = { bold: true };
-    for (const u of out.accounts) ws.addRow({ name: u.displayName, username: u.username, role: Roles.label(u.role), password: out.password, env: t.name });
+    for (const u of out.accounts) ws.addRow({ name: u.displayName, org: t.slug, username: u.username, role: Roles.label(u.role), password: out.password, env: t.name });
     await download(wb, `testaccounts_${t.slug}.xlsx`);
   }
 

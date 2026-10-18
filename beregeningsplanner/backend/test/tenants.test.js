@@ -44,7 +44,7 @@ function client(base) {
     put: (p, b) => call('PUT', p, b),
     patch: (p, b) => call('PATCH', p, b),
     del: (p) => call('DELETE', p),
-    login: (username, password) => call('POST', '/api/auth/login', { username, password }),
+    login: (username, password, tenant) => call('POST', '/api/auth/login', { username, password, tenant }),
   };
 }
 
@@ -138,15 +138,15 @@ test('hoofdbeheerder maakt een tenant met beheerder; tenants zien elkaars data n
     assert.strictEqual(made.status, 201, JSON.stringify(made.body));
     assert.strictEqual(made.body.admin.username, 'piet');
 
-    // Dubbele code of gebruikersnaam: geweigerd, en dan ook geen halve tenant.
+    // Dubbele code: geweigerd. Een ongeldig account: dan ook geen halve tenant.
     assert.strictEqual((await baas.post('/api/platform/tenants', { name: 'Groen 2', slug: 'groen' })).status, 400);
-    const dup = await baas.post('/api/platform/tenants', { name: 'Blauw BV', slug: 'blauw', admin: { username: 'baas', password: 'Haag-Slang-2028!' } });
-    assert.strictEqual(dup.status, 400);
+    const bad = await baas.post('/api/platform/tenants', { name: 'Blauw BV', slug: 'blauw', admin: { username: 'x', password: 'Haag-Slang-2028!' } });
+    assert.strictEqual(bad.status, 400);
     assert.ok(!(await baas.get('/api/platform/tenants')).body.items.some((t) => t.slug === 'blauw'));
 
-    // Piet logt in op dezelfde URL met alleen gebruikersnaam en wachtwoord.
+    // Piet logt in op dezelfde URL met de organisatiecode van Groen.
     const piet = client(base);
-    assert.strictEqual((await piet.login('piet', 'Gras-Pomp-2027!')).status, 200);
+    assert.strictEqual((await piet.login('piet', 'Gras-Pomp-2027!', 'groen')).status, 200);
     const me = (await piet.get('/api/me')).body;
     assert.strictEqual(me.tenant.slug, 'groen');
     assert.strictEqual(me.platformAdmin, false);
@@ -175,18 +175,18 @@ test('uitgeschakelde tenant: inloggen geweigerd en bestaande sessie vervalt; hoo
     await baas.login('baas', 'Tuin-Plan-2026!');
     const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!' } })).body.tenant;
     const piet = client(base);
-    await piet.login('piet', 'Gras-Pomp-2027!');
+    await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
     assert.ok((await piet.get('/api/me')).body.user);
 
     assert.strictEqual((await baas.patch(`/api/platform/tenants/${t.id}`, { disabled: true })).status, 200);
     assert.strictEqual((await piet.get('/api/me')).body.user, null);
-    assert.strictEqual((await client(base).login('piet', 'Gras-Pomp-2027!')).status, 403);
+    assert.strictEqual((await client(base).login('piet', 'Gras-Pomp-2027!', 'groen')).status, 403);
 
     const main = (await baas.get('/api/platform/tenants')).body.mainTenantId;
     assert.strictEqual((await baas.patch(`/api/platform/tenants/${main}`, { disabled: true })).status, 409);
 
     await baas.patch(`/api/platform/tenants/${t.id}`, { disabled: false, name: 'Groen Beregening' });
-    assert.strictEqual((await client(base).login('piet', 'Gras-Pomp-2027!')).status, 200);
+    assert.strictEqual((await client(base).login('piet', 'Gras-Pomp-2027!', 'groen')).status, 200);
   } finally {
     server.close();
   }
@@ -201,7 +201,7 @@ test('testomgeving: los van live, wisselen zonder opnieuw inloggen', async () =>
     await baas.post(`/api/platform/tenants/${t.id}/users`, { username: 'jan', role: 'gebruiker', password: 'Haag-Slang-2028!' });
 
     const piet = client(base);
-    await piet.login('piet', 'Gras-Pomp-2027!');
+    await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
     await piet.post('/api/plans', { data: plan('Live plan') });
     assert.strictEqual((await piet.put('/api/admin/settings', { aiDailyLimit: 7, anthropicApiKey: `sk-ant-${'k'.repeat(30)}` })).status, 200);
 
@@ -238,7 +238,7 @@ test('testomgeving: los van live, wisselen zonder opnieuw inloggen', async () =>
 
     // Een gewone gebruiker komt niet in de testomgeving, ook niet met een gekopieerde cookie.
     const jan = client(base);
-    await jan.login('jan', 'Haag-Slang-2028!');
+    await jan.login('jan', 'Haag-Slang-2028!', 'groen');
     assert.strictEqual((await jan.get('/api/environments')).body.items.length, 1);
     assert.strictEqual((await jan.post('/api/environment', { tenantId: env.body.tenant.id })).status, 404);
     await piet.post('/api/environment', { tenantId: env.body.tenant.id });
@@ -272,7 +272,7 @@ test('hoofdbeheerder opent een andere tenant en werkt daar als beheerder', async
     assert.deepStrictEqual((await baas.get('/api/admin/users')).body.items.map((u) => u.username), ['piet']);
     // Een gewone beheerder kan een andere tenant niet openen.
     const piet = client(base);
-    await piet.login('piet', 'Gras-Pomp-2027!');
+    await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
     const main = (await baas.get('/api/platform/tenants')).body.mainTenantId;
     assert.strictEqual((await piet.post('/api/environment', { tenantId: main })).status, 404);
   } finally {
@@ -293,4 +293,101 @@ test('de laatste hoofdbeheerder kan niet worden uitgeschakeld', async () => {
   } finally {
     server.close();
   }
+});
+
+// Inloggen vanaf een eigen bronadres (127.0.x.y): de limiet per IP (10 per
+// kwartier) hoort niet bij wat deze test controleert.
+const http = require('http');
+function loginFrom(base, ip, username, password, tenant) {
+  const url = new URL('/api/auth/login', base);
+  const body = JSON.stringify({ username, password, tenant });
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: url.hostname, port: url.port, path: url.pathname, method: 'POST', localAddress: ip,
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, (res) => {
+      let text = '';
+      res.on('data', (c) => { text += c; });
+      res.on('end', () => {
+        const cookie = (res.headers['set-cookie'] || []).map((c) => c.split(';')[0]).join('; ');
+        let json = null;
+        try { json = JSON.parse(text); } catch { /* geen JSON */ }
+        resolve({ status: res.statusCode, body: json, cookie });
+      });
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+test('gebruikersnamen zijn uniek per tenant; de organisatiecode kiest de tenant', async () => {
+  const { server, base } = await start(await platformDb());
+  let n = 1;
+  const nextIp = () => `127.0.1.${n++}`;
+  // Ingelogde client: de sessiecookie uit een inlog vanaf een eigen adres.
+  const as = async (username, password, tenant) => {
+    const r = await loginFrom(base, nextIp(), username, password, tenant);
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    const c = client(base);
+    for (const kv of r.cookie.split('; ').filter(Boolean)) { const k = kv.indexOf('='); c.jar.set(kv.slice(0, k), kv.slice(k + 1)); }
+    return Object.assign(c, { loginBody: r.body });
+  };
+  try {
+    const baas = await as('baas', 'Tuin-Plan-2026!');
+    assert.strictEqual(baas.loginBody.tenant, '');
+    const groen = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!' } })).body.tenant;
+    // Dezelfde voornaam in een andere tenant (ook gelijk aan de hoofdbeheerder) mag.
+    const blauw = await baas.post('/api/platform/tenants', { name: 'Blauw BV', slug: 'blauw', admin: { username: 'piet', password: 'Haag-Slang-2028!' } });
+    assert.strictEqual(blauw.status, 201, JSON.stringify(blauw.body));
+    assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'baas', role: 'installateur', password: 'Bloem-Perk-2029!' })).status, 201);
+    // Binnen één tenant blijft een gebruikersnaam uniek.
+    assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'piet', role: 'installateur', password: 'Bloem-Perk-2029!' })).status, 400);
+
+    // Twee Pieten met elk een eigen id, elk in de eigen tenant.
+    const a = await as('piet', 'Gras-Pomp-2027!', 'groen');
+    const b = await as('piet', 'Haag-Slang-2028!', ' Blauw ');
+    assert.strictEqual(b.loginBody.tenant, 'blauw');
+    const ma = (await a.get('/api/me')).body;
+    const mb = (await b.get('/api/me')).body;
+    assert.notStrictEqual(ma.user.id, mb.user.id);
+    assert.deepStrictEqual([ma.tenant.slug, mb.tenant.slug, ma.loginCode, mb.loginCode], ['groen', 'blauw', 'groen', 'blauw']);
+
+    // Verkeerde code of geen code: niet ingelogd (zonder code = de hoofdtenant).
+    for (const code of ['blauw', undefined, '', 'bestaatniet']) {
+      assert.strictEqual((await loginFrom(base, nextIp(), 'piet', 'Gras-Pomp-2027!', code)).status, 401, String(code));
+    }
+
+    // De hoofdbeheerder logt in zonder code; 'baas' van Groen met de code.
+    assert.strictEqual((await baas.get('/api/me')).body.platformAdmin, true);
+    const g = await as('baas', 'Bloem-Perk-2029!', 'groen');
+    assert.strictEqual((await g.get('/api/me')).body.platformAdmin, false);
+
+    // De code van een testomgeving logt in bij de live-tenant.
+    const env = (await baas.post(`/api/platform/tenants/${groen.id}/environments`, { name: 'Acceptatie' })).body.tenant;
+    const c = await as('piet', 'Gras-Pomp-2027!', env.slug);
+    assert.strictEqual((await c.get('/api/me')).body.tenant.slug, 'groen');
+
+    // Binnen de organisatie (live plus testomgevingen) is een naam uniek.
+    assert.strictEqual((await baas.post(`/api/platform/tenants/${env.id}/users`, { username: 'tester', role: 'klant', password: 'Bloem-Perk-2029!' })).status, 201);
+    assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'tester', role: 'klant', password: 'Bloem-Perk-2029!' })).status, 400);
+    const tester = await as('tester', 'Bloem-Perk-2029!', 'groen');
+    assert.strictEqual((await tester.get('/api/me')).body.tenant.id, env.id);
+
+    // Blokkade na te veel fouten geldt per tenant: de Piet van Blauw kan nog in.
+    for (let i = 0; i < 10; i++) assert.strictEqual((await loginFrom(base, '127.0.2.1', 'piet', 'fout', 'groen')).status, 401);
+    assert.strictEqual((await loginFrom(base, nextIp(), 'piet', 'Gras-Pomp-2027!', 'groen')).status, 429);
+    assert.strictEqual((await loginFrom(base, nextIp(), 'piet', 'Haag-Slang-2028!', 'blauw')).status, 200);
+  } finally {
+    server.close();
+  }
+});
+
+test('migratie: de globale index op gebruikersnaam vervalt, uniek per tenant blijft', () => {
+  const db = openDb();
+  const idx = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'users'").all().map((r) => r.name);
+  assert.ok(!idx.includes('users_username'));
+  const store = createStore(db);
+  const t1 = store.ensureTenant().id;
+  const t2 = store.createTenant({ name: 'Groen', slug: 'groen' }).tenant.id;
+  db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u1', ?, 'jan', 'Jan', 'klant', 'account', '')").run(t1);
+  db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u2', ?, 'jan', 'Jan', 'klant', 'account', '')").run(t2);
+  assert.throws(() => db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u3', ?, 'jan', 'Jan', 'klant', 'account', '')").run(t2));
 });

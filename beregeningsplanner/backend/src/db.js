@@ -218,6 +218,12 @@ const MIGRATIONS = [
   );
   CREATE INDEX impersonations_admin ON impersonations (admin_id, started_at);
   `,
+  // Gebruikersnamen zijn uniek per tenant (UNIQUE (tenant_id, username) staat
+  // al op de tabel); bij het inloggen kiest de organisatiecode de tenant. De
+  // index voor zoeken op alleen de gebruikersnaam (over alle tenants) vervalt.
+  `
+  DROP INDEX IF EXISTS users_username;
+  `,
   // Digitale offerte: een openbare link per offerte (alleen de SHA-256 van het
   // token om op te zoeken, het token zelf versleuteld om de link opnieuw te
   // tonen), bijhouden wanneer de klant die opende, en het vastgelegde akkoord

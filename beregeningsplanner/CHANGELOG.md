@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.25.0
+## 0.26.0
 
 - **Digitale offerte**: per offerte een persoonlijke link (*Digitale offerte*
   in de editor). De klant opent die zonder account, bekijkt de offerte, kiest
@@ -20,6 +20,20 @@
   Zonder mailserver opent *Versturen* het bericht in je eigen mailprogramma.
 - Klantaccounts geven in *Mijn offertes* op dezelfde manier akkoord (naam,
   handtekening, voorwaarden).
+
+## 0.25.0
+
+- **Gebruikersnamen uniek per organisatie**: de tenant wordt niet meer uit de
+  gebruikersnaam afgeleid. Dezelfde naam (bijvoorbeeld een voornaam) kan in
+  meerdere organisaties bestaan; elke gebruiker heeft zijn eigen id.
+- **Organisatiecode bij het inloggen**: de inlogpagina vraagt de code van de
+  organisatie en onthoudt die in de browser; `login?org=<code>` vult hem in.
+  Leeg = de hoofdorganisatie (hoofdbeheerders). De code van een testomgeving
+  werkt ook. Beheer → Gebruikers toont de code en een inloglink; de Excel met
+  testaccounts heeft een kolom Organisatiecode.
+- Blokkade na tien mislukte pogingen geldt per organisatie en gebruikersnaam.
+- Migratie 8 verwijdert de platformbrede index op gebruikersnaam; bestaande
+  accounts blijven ongewijzigd (ze waren al uniek per tenant).
 
 ## 0.24.0
 
