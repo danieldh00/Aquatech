@@ -60,3 +60,16 @@ a.tile:hover, a.tile:focus-visible { border-color: var(--primary); box-shadow: 0
 .account a:hover, .account button:hover { background: rgba(255, 255, 255, 0.12); }
 .account .role { opacity: 0.75; }
 .topbar-right { display: flex; align-items: center; gap: 14px; }
+
+/* Telefoon: kopbalk zonder horizontaal scrollen */
+@media (max-width: 600px) {
+  .topbar { padding: 8px 12px; gap: 8px; padding-top: max(8px, env(safe-area-inset-top)); }
+  .brand { min-width: 0; flex: none; }
+  .brand-logo { height: 24px; }
+  .topbar-right { min-width: 0; gap: 8px; }
+  .version { display: none; }
+  .account { min-width: 0; gap: 8px; font-size: 12px; }
+  .account > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34vw; }
+  .account > span:first-child .role { display: none; }
+  .account a, .account button { flex: none; padding: 6px 10px; }
+}

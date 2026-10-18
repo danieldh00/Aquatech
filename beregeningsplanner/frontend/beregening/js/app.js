@@ -714,8 +714,31 @@
           else this.editor.cancelDraw();
         };
       });
+      // Mobiel: projectmenu (hamburger) en uitklapmenu voor raster en lagen
+      $('#btn-menu').onclick = () => this._setMenu(!document.body.classList.contains('menu-open'));
+      $('#menu-close').onclick = () => this._setMenu(false);
+      $('#menu-backdrop').onclick = () => this._setMenu(false);
+      $('#menu').addEventListener('click', (e) => { if (e.target.closest('button')) this._setMenu(false); });
+      $('#btn-layers').onclick = (e) => { e.stopPropagation(); this._setLayers(!document.body.classList.contains('layers-open')); };
+      document.addEventListener('pointerdown', (e) => {
+        if (document.body.classList.contains('layers-open') && !e.target.closest('#view-opts, #btn-layers')) this._setLayers(false);
+      });
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { this._setMenu(false); this._setLayers(false); }
+      });
       $('#btn-sheet').onclick = () => this._setSheet(document.body.classList.contains('sheet-collapsed'));
       $('#props-close').onclick = () => { this.editor.selection = null; this.onSelectionChanged(); this.renderStepPanel(); this.editor.render(); };
+    },
+
+    /** Mobiel: projectmenu (lade van rechts) openen of sluiten. */
+    _setMenu(open) {
+      document.body.classList.toggle('menu-open', open);
+      $('#btn-menu').setAttribute('aria-expanded', String(open));
+    },
+    /** Mobiel: uitklapmenu met raster en lagen openen of sluiten. */
+    _setLayers(open) {
+      document.body.classList.toggle('layers-open', open);
+      $('#btn-layers').setAttribute('aria-expanded', String(open));
     },
 
     /** Mobiel: stappenpaneel in- of uitklappen voor meer tekenruimte. */

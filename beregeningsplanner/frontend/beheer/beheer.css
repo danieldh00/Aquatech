@@ -79,3 +79,10 @@ dl.kv dd { margin: 0; }
 .src:empty { display: none; }
 .checks { display: flex; flex-direction: column; gap: 4px; }
 .card-form.settings label.chk { flex-direction: row; color: var(--text); font-size: 14px; }
+
+/* Telefoon: tabbladen in twee rijen in plaats van horizontaal scrollen */
+@media (max-width: 600px) {
+  .brand-name { font-size: 15px; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; overflow: visible; }
+  .tab { padding: 10px 8px; text-align: center; }
+}

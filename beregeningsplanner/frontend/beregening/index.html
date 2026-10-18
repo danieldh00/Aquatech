@@ -21,17 +21,28 @@
       <span class="brand-name">Beregeningsplanner</span>
     </div>
     <div id="project-title" class="project-title"></div>
-    <div class="actions">
-      <button id="btn-demo" class="btn ghost" title="Laad een voorbeeldtuin">Voorbeeld</button>
-      <button id="btn-new" class="btn ghost">Nieuw</button>
-      <button id="btn-myplans" class="btn ghost" title="Je eigen plannen op de server">Mijn plannen</button>
-      <button id="btn-open" class="btn ghost" title="Project openen uit een bestand">Openen</button>
-      <input type="file" id="file-open" accept=".json,application/json" hidden>
-      <button id="btn-save" class="btn ghost" title="Project opslaan als bestand">Opslaan</button>
-      <button id="btn-undo" class="btn ghost" title="Ongedaan maken (Ctrl+Z)">↶</button>
-      <button id="btn-redo" class="btn ghost" title="Opnieuw (Ctrl+Y)">↷</button>
-      <button id="btn-help" class="btn ghost" title="Help">?</button>
+    <div class="quick">
+      <button id="btn-undo" class="btn ghost icon" title="Ongedaan maken (Ctrl+Z)" aria-label="Ongedaan maken">↶</button>
+      <button id="btn-redo" class="btn ghost icon" title="Opnieuw (Ctrl+Y)" aria-label="Opnieuw">↷</button>
     </div>
+    <button id="btn-menu" class="btn ghost icon menu-toggle" title="Menu" aria-label="Menu" aria-expanded="false" aria-controls="menu">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <nav id="menu" class="actions" aria-label="Projectmenu">
+      <div class="menu-head">
+        <span>Menu</span>
+        <button id="menu-close" class="btn ghost icon" title="Menu sluiten" aria-label="Menu sluiten">✕</button>
+      </div>
+      <button id="btn-demo" class="btn ghost" title="Laad een voorbeeldtuin"><span class="mi" aria-hidden="true">🌱</span>Voorbeeld</button>
+      <button id="btn-new" class="btn ghost"><span class="mi" aria-hidden="true">＋</span>Nieuw</button>
+      <button id="btn-myplans" class="btn ghost" title="Je eigen plannen op de server"><span class="mi" aria-hidden="true">🗂</span>Mijn plannen</button>
+      <button id="btn-open" class="btn ghost" title="Project openen uit een bestand"><span class="mi" aria-hidden="true">📂</span>Openen</button>
+      <input type="file" id="file-open" accept=".json,application/json" hidden>
+      <button id="btn-save" class="btn ghost" title="Project opslaan als bestand"><span class="mi" aria-hidden="true">💾</span>Opslaan</button>
+      <button id="btn-help" class="btn ghost" title="Help"><span class="mi" aria-hidden="true">?</span><span class="menu-only">Help</span></button>
+      <a class="btn ghost menu-only" href="../"><span class="mi" aria-hidden="true">▦</span>Naar het overzicht</a>
+    </nav>
+    <div id="menu-backdrop" class="menu-backdrop"></div>
   </header>
 
   <main class="layout">
@@ -47,21 +58,24 @@
 
     <section class="stage">
       <div class="toolbar">
-        <button id="tool-select" data-t="select" class="tbtn active" title="Selecteren (Esc)">⬉ Selecteren</button>
+        <button id="tool-select" data-t="select" class="tbtn active" title="Selecteren (Esc)">⬉<span class="tlbl"> Selecteren</span></button>
         <button id="tool-pan" data-t="pan" class="tbtn" title="Schuiven (of spatie ingedrukt houden)">✋</button>
         <button id="tool-measure" data-t="measure" class="tbtn" title="Meten">📏</button>
         <button id="tool-zoomin" class="tbtn" title="Inzoomen">＋</button>
         <button id="tool-zoomout" class="tbtn" title="Uitzoomen">－</button>
         <button id="tool-fit" class="tbtn" title="Passend maken">⤢</button>
         <span class="sep"></span>
-        <label class="chk"><input type="checkbox" id="snap"> Raster 0,5 m</label>
-        <span class="sep"></span>
-        <span class="lbl">Lagen:</span>
-        <label class="chk"><input type="checkbox" id="layer-background"> Ondergrond</label>
-        <label class="chk"><input type="checkbox" id="layer-coverage"> Sproeibereik</label>
-        <label class="chk"><input type="checkbox" id="layer-heatmap"> Neerslagkaart</label>
-        <label class="chk"><input type="checkbox" id="layer-pipes"> Leidingen</label>
-        <label class="chk"><input type="checkbox" id="layer-labels"> Maten</label>
+        <button id="btn-layers" class="tbtn layers-toggle" title="Raster en lagen" aria-expanded="false" aria-controls="view-opts">Lagen ▾</button>
+        <div id="view-opts" class="view-opts">
+          <label class="chk"><input type="checkbox" id="snap"> Raster 0,5 m</label>
+          <span class="sep"></span>
+          <span class="lbl">Lagen:</span>
+          <label class="chk"><input type="checkbox" id="layer-background"> Ondergrond</label>
+          <label class="chk"><input type="checkbox" id="layer-coverage"> Sproeibereik</label>
+          <label class="chk"><input type="checkbox" id="layer-heatmap"> Neerslagkaart</label>
+          <label class="chk"><input type="checkbox" id="layer-pipes"> Leidingen</label>
+          <label class="chk"><input type="checkbox" id="layer-labels"> Maten</label>
+        </div>
       </div>
       <div class="canvas-wrap">
         <canvas id="canvas"></canvas>
@@ -99,7 +113,7 @@
         <li>Scrollen = in- en uitzoomen; rechtermuisknop, middelste muisknop of spatiebalk + slepen = verschuiven.</li>
         <li>Delete-toets = selectie verwijderen; Ctrl+Z / Ctrl+Y = ongedaan maken / opnieuw.</li>
         <li>Tekenen: Enter = vorm sluiten, Backspace = laatste punt weg, Shift = hoeken van 45°, Alt = niet op het raster uitlijnen.</li>
-        <li>Telefoon of tablet: tik om te selecteren of een punt te zetten, sleep met één vinger om te verschuiven, knijp met twee vingers om te zoomen. Tijdens het tekenen staan <b>Punt terug</b>, <b>Vorm sluiten</b> en <b>Stoppen</b> boven in beeld; met <b>▾ Paneel</b> klap je het stappenpaneel in voor meer tekenruimte.</li>
+        <li>Telefoon of tablet: tik om te selecteren of een punt te zetten, sleep met één vinger om te verschuiven, knijp met twee vingers om te zoomen. Tijdens het tekenen staan <b>Punt terug</b>, <b>Vorm sluiten</b> en <b>Stoppen</b> boven in beeld; met <b>▾ Paneel</b> klap je het stappenpaneel in voor meer tekenruimte. Voorbeeld, Nieuw, Mijn plannen, Openen, Opslaan en Help staan onder het menu (☰) rechtsboven; raster en lagen onder <b>Lagen ▾</b>.</li>
         <li>Het project wordt automatisch in de browser en in <b>Mijn plannen</b> op de server bewaard. Gebruik <b>Opslaan</b> voor een bestand.</li>
       </ul>
       <p class="hint">Berekeningen zijn indicatief (Hazen-Williams, PE PN6, geen hoogteverschillen). Controleer altijd de werkelijke druk en het debiet ter plaatse.</p>
