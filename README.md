@@ -58,7 +58,7 @@ Het project wordt automatisch in de browser (localStorage) bewaard. Met **Opslaa
 ## Nieuwe module toevoegen
 
 1. Maak `beregeningsplanner/frontend/<id>/index.html` met eigen css/js in die
-   map. Alle URL's relatief; terug naar het dashboard met `href="../"`.
+   map en laad `../shared/brand.css` voor de huisstijl. Alle URL's relatief; terug naar het dashboard met `href="../"`.
 2. Zet de module in `beregeningsplanner/frontend/dashboard/modules.js` op
    `status: 'actief'` met `href: '<id>/'`.
 3. Klaar: de server serveert elke map met een `index.html` als module (ook
@@ -77,6 +77,7 @@ beregeningsplanner/                 de add-on
   frontend/                         alle paden relatief, i.v.m. ingress
     frontend/index.html          dashboard (startpagina)
     frontend/dashboard/          opmaak, script en moduleregister (modules.js) van het dashboard
+    frontend/shared/             huisstijl voor alle modules: brand.css (kleuren, Montserrat), logo's
   frontend/beregening/              module beregeningsplanner (bereikbaar op beregening/)
     frontend/index.html          UI-opbouw
     frontend/css/app.css         Opmaak
