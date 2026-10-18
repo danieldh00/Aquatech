@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="../dashboard/dashboard.css">
   <link rel="stylesheet" href="../beheer/beheer.css">
   <link rel="stylesheet" href="../plannen/plannen.css">
+  <link rel="stylesheet" href="quote-view.css">
   <link rel="stylesheet" href="offertes.css">
 </head>
 <body>
@@ -62,6 +63,12 @@
       </div>
     </div>
     <div id="e-warnings" class="notice warn" hidden></div>
+    <div id="e-locked" class="notice ok" hidden></div>
+
+    <section id="e-share" class="card-form share">
+      <h3>Digitale offerte</h3>
+      <div id="sh-body"></div>
+    </section>
 
     <div class="cols">
       <section class="card-form">
@@ -74,7 +81,7 @@
           <label>Telefoon<input data-f="customer.phone" maxlength="40"></label>
         </div>
         <label>Klantaccount<select id="e-account"><option value="">Geen (alleen intern)</option></select></label>
-        <p class="muted small">Met een klantaccount ziet de klant de offerte zelf zodra de status <b>Verzonden</b> is, en kan hij akkoord geven of afwijzen.</p>
+        <p class="muted small">Met een klantaccount ziet de klant de offerte ook in de app zodra de status <b>Verzonden</b> is. Zonder account werkt de link onder <b>Digitale offerte</b>.</p>
       </section>
       <section class="card-form">
         <h3>Offerte</h3>
@@ -167,6 +174,29 @@
         <p class="muted small">De materiaalprijzen komen uit de artikellijst van de beregeningsplanner; met de opslag reken je ze om naar verkoopprijzen.</p>
         <div class="actions"><button class="btn primary" type="submit">Opslaan</button></div>
       </form>
+      <form id="mf" class="card-form plain">
+        <h3>E-mail (eigen mailserver)</h3>
+        <p class="muted small">Hiermee verstuurt de module offertes en bevestigingen na een akkoord. Gebruik de SMTP-gegevens van je eigen e-mailprovider. Het wachtwoord wordt versleuteld opgeslagen en nooit getoond.</p>
+        <div class="row3">
+          <label>SMTP-server<input name="host" maxlength="200" placeholder="smtp.voorbeeld.nl" autocomplete="off"></label>
+          <label>Poort<input name="port" type="number" min="1" max="65535" placeholder="587"></label>
+          <label>Beveiliging<select name="secure"><option value="false">STARTTLS (587)</option><option value="true">SSL/TLS (465)</option></select></label>
+        </div>
+        <div class="row2">
+          <label>Gebruikersnaam<input name="user" maxlength="200" autocomplete="off"></label>
+          <label>Wachtwoord<input name="password" type="password" maxlength="500" autocomplete="new-password"></label>
+        </div>
+        <div class="row2">
+          <label>Afzender<input name="from" maxlength="200" placeholder="AquaTech Service &lt;offerte@voorbeeld.nl&gt;"></label>
+          <label>Antwoorden naar<input name="replyTo" maxlength="200" placeholder="info@voorbeeld.nl"></label>
+        </div>
+        <p id="mf-state" class="muted small"></p>
+        <div class="actions">
+          <input name="testTo" type="email" maxlength="200" placeholder="Testadres" class="narrow-wide">
+          <button class="btn" type="button" id="mf-test">Testmail sturen</button>
+          <button class="btn primary" type="submit">E-mail opslaan</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -177,8 +207,6 @@
       <h1 id="v-heading">Offerte</h1>
       <span id="v-status" class="pill"></span>
       <span class="spacer"></span>
-      <button id="v-accept" class="btn primary" hidden>Akkoord geven</button>
-      <button id="v-reject" class="btn" hidden>Afwijzen</button>
       <button id="v-pdf" class="btn">PDF / afdrukken</button>
     </div>
     <div id="v-notice" class="notice" hidden></div>
@@ -186,6 +214,23 @@
 
   <!-- Afdrukversie (PDF); voor een klant ook op het scherm -->
   <article id="print" class="print-doc" aria-hidden="true"></article>
+  <section id="v-sign" class="screen" hidden></section>
+
+  <!-- Versturen per e-mail -->
+  <div id="send" class="modal screen" hidden>
+    <div class="modal-card">
+      <button class="btn ghost close" data-close title="Sluiten">✕</button>
+      <h2>Offerte versturen</h2>
+      <p class="muted small">De klant krijgt een e-mail met een knop naar de digitale offerte. Daar bekijkt hij de offerte, kiest hij eventuele opties en geeft hij akkoord met zijn naam en handtekening.</p>
+      <form id="sf" class="card-form plain">
+        <label>Aan<input name="to" maxlength="400" placeholder="klant@voorbeeld.nl" required></label>
+        <label>Onderwerp<input name="subject" maxlength="300"></label>
+        <label>Bericht<textarea name="message" rows="7" maxlength="5000"></textarea></label>
+        <p class="muted small">Onder het bericht komt de knop <b>Offerte bekijken en accorderen</b>.</p>
+        <div class="actions"><button class="btn primary" type="submit">Versturen</button></div>
+      </form>
+    </div>
+  </div>
 
   <div id="toast" class="toast screen"></div>
 
@@ -197,6 +242,7 @@
   <script src="../beregening/js/bom.js"></script>
   <script src="../dashboard/account.js"></script>
   <script src="quote-core.js"></script>
+  <script src="quote-view.js"></script>
   <script src="offertes.js"></script>
 </body>
 </html>
