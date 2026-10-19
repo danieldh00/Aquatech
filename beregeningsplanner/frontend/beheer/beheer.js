@@ -17,7 +17,7 @@
   const AUDIT = {
     ingelogd: 'Ingelogd', uitgelogd: 'Uitgelogd', inloggen_mislukt: 'Inloggen mislukt', inloggen_geblokkeerd: 'Inloggen geblokkeerd',
     eerste_beheerder: 'Eerste beheerder', installatie_mislukt: 'Installatiecode onjuist', gebruiker_aangemaakt: 'Gebruiker aangemaakt',
-    gebruiker_gewijzigd: 'Gebruiker gewijzigd', plan_gewist: 'Plan definitief gewist', backup_gemaakt: 'Back-up gemaakt',
+    gebruiker_gewijzigd: 'Gebruiker gewijzigd', gebruiker_verwijderd: 'Gebruiker verwijderd', plan_gewist: 'Plan definitief gewist', backup_gemaakt: 'Back-up gemaakt',
     backup_gedownload: 'Back-up gedownload', sessies_ingetrokken: 'Uitgelogd op alle toestellen', instellingen_gewijzigd: 'Instellingen gewijzigd',
     offerte_akkoord: 'Offerte geaccepteerd door klant', offerte_afgewezen: 'Offerte afgewezen door klant', offerte_gewist: 'Offerte definitief gewist',
     impersonatie_gestart: 'Hoofdbeheerder werkt als gebruiker', impersonatie_beeindigd: 'Impersonatie beëindigd',
@@ -259,7 +259,8 @@
         <td>${esc(when(u.lastSeenAt))}</td>
         <td class="num">${u.sessionCount || 0}</td>
         <td>${u.sessionCount ? `<button class="btn small" data-logout="${esc(u.id)}">Uitloggen</button> ` : ''}${editable ? `<button class="btn small" data-pw="${esc(u.id)}">Wachtwoord</button> <button class="btn small" data-toggle="${esc(u.id)}">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button>` : ''}
-          ${u.historyCount ? `<button class="btn small" data-hist="${esc(u.id)}">Aanvragen</button>` : ''}</td>
+          ${u.historyCount ? `<button class="btn small" data-hist="${esc(u.id)}">Aanvragen</button>` : ''}
+          ${u.kind !== 'systeem' && u.id !== state.meId ? `<button class="btn small danger" data-del="${esc(u.id)}">Verwijderen</button>` : ''}</td>
       </tr>`;
     }).join('')}</tbody>`;
     const patch = async (id, body, msg) => {
@@ -284,9 +285,22 @@
         loadUsers();
       };
     });
+    tbl.querySelectorAll('[data-del]').forEach((b) => {
+      const u = state.users.find((x) => x.id === b.dataset.del);
+      b.onclick = async () => {
+        if (!confirm(deleteQuestion(u))) return;
+        try { await api(`users/${encodeURIComponent(u.id)}`, { method: 'DELETE' }); toast('Gebruiker verwijderd'); } catch (e) { toast(e.message, true); }
+        loadUsers();
+      };
+    });
     tbl.querySelectorAll('[data-hist]').forEach((b) => {
       b.onclick = () => { $('#h-user').value = b.dataset.hist; state.offset = 0; showTab('history'); loadHistory(); };
     });
+  }
+
+  function deleteQuestion(u) {
+    const keep = u.planCount ? `\n\nDe ${u.planCount} plan(nen), offertes en werkorders van deze gebruiker blijven bewaard onder "Verwijderde gebruiker".` : '';
+    return `${u.displayName} (${u.username}) definitief verwijderen?\n\nHet account en alle sessies verdwijnen; dit kan niet ongedaan worden gemaakt. Wil je de toegang alleen tijdelijk blokkeren, gebruik dan Uitschakelen.${keep}`;
   }
 
   async function addUser(ev) {
@@ -501,6 +515,7 @@
 
   async function init() {
     const me = await window.AquatechAccount.load('../');
+    state.meId = me.user ? me.user.id : null;
     if (!me.user || me.user.role !== 'beheerder') {
       const d = $('#denied');
       d.innerHTML = me.user && me.user.kind !== 'gast'

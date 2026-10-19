@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.30.0
+
+- **Gebruikers verwijderen**: knop *Verwijderen* (met bevestiging) in Beheer →
+  Gebruikers en Hoofdbeheer → Gebruikers, API `DELETE /api/admin/users/:id`
+  en `DELETE /api/platform/tenants/:id/users/:uid`. Plannen, offertes en
+  werkorders gaan naar de systeemgebruiker *Verwijderde gebruiker*; sessies,
+  supporttoestemmingen en impersonaties van het account verdwijnen. Niet
+  mogelijk voor het eigen account, de laatste actieve beheerder van een tenant
+  en de laatste actieve hoofdbeheerder. Auditregel `gebruiker_verwijderd`.
+
 ## 0.29.2
 
 - **Hoofdbeheerder kon niet inloggen** als er nog een organisatiecode in het
