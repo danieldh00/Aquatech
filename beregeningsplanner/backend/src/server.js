@@ -649,6 +649,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({ ok: true, revoked: n });
   });
 
+  // Gebruiker definitief verwijderen. Niet jezelf (dan zit je zonder account),
+  // en een hoofdbeheerder alleen door een andere hoofdbeheerder.
+  function deleteUser(req, res, tenantId, userId, extra = {}) {
+    if (req.user && (req.user.id === userId || req.user.impersonator?.id === userId)) {
+      return res.status(409).json({ error: 'invalid_user', message: 'Je kunt je eigen account niet verwijderen.' });
+    }
+    const out = store.deleteAccount(tenantId, userId);
+    if (out.error) return res.status(out.status || 400).json({ error: out.status === 404 ? 'not_found' : 'invalid_user', message: out.error });
+    audit(req, 'gebruiker_verwijderd', { userId: out.user.id, username: out.user.username, role: out.user.role, ...extra,
+      ...(out.user.platform_admin ? { hoofdbeheerder: true } : {}), overgedragen: out.moved }, undefined, tenantId);
+    res.json({ ok: true, moved: out.moved });
+  }
+
+  app.delete('/api/admin/users/:id', (req, res) => {
+    if (guardPlatformAdmin(req, res, req.params.id)) return;
+    deleteUser(req, res, usersTenantOf(req), req.params.id);
+  });
+
   // Plan definitief wissen, inclusief de inhoud van de historie (AVG).
   app.delete('/api/admin/plans/:id', (req, res) => {
     const out = store.purgePlan(req.tenantId, req.params.id);
@@ -1019,6 +1037,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     auditUserChange(req, out.user, input, t.id);
     res.json(store.publicUser(out.user));
   }));
+
+  app.delete('/api/platform/tenants/:id/users/:uid', (req, res) => {
+    const t = userTenant(req, res);
+    if (t) deleteUser(req, res, t.id, req.params.uid, { door: 'hoofdbeheer' });
+  });
 
   impersonation.register(app, { identify, requireJson, clearEnvironment, wrap });
 

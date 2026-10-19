@@ -252,7 +252,7 @@
         <td>${u.kind === 'account' && !u.platformAdmin ? `<select data-f="role">${roleOptions(u.role)}</select>` : esc(Roles.label(u.role))}${u.platformAdmin ? ' <span class="pill hoofd">hoofdbeheerder</span>' : ''}</td>
         <td>${esc(when(u.lastSeenAt))}</td>
         <td>${support(u)}</td>
-        <td class="acts">${canImpersonate(u) ? '<button class="btn small" data-f="impersonate">Inloggen als</button>' : ''}${u.kind === 'account' ? `<button class="btn small" data-f="toggle">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button><button class="btn small" data-f="password">Wachtwoord</button>` : ''}${isMain && u.kind === 'account' ? `<button class="btn small" data-f="platform">${u.platformAdmin ? 'Hoofdbeheerder intrekken' : 'Hoofdbeheerder maken'}</button>` : ''}</td>
+        <td class="acts">${canImpersonate(u) ? '<button class="btn small" data-f="impersonate">Inloggen als</button>' : ''}${u.kind === 'account' ? `<button class="btn small" data-f="toggle">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button><button class="btn small" data-f="password">Wachtwoord</button>` : ''}${isMain && u.kind === 'account' ? `<button class="btn small" data-f="platform">${u.platformAdmin ? 'Hoofdbeheerder intrekken' : 'Hoofdbeheerder maken'}</button>` : ''}${u.kind === 'account' && u.id !== state.meId ? '<button class="btn small danger" data-f="delete">Verwijderen</button>' : ''}</td>
       </tr>`).join('');
     modal(`<h2>${t.environment === 'test' ? 'Testaccounts' : 'Gebruikers'} van ${esc(t.name)}</h2>
       ${t.environment === 'test' ? '<p class="muted small">Accounts die alleen in deze testomgeving bestaan. Ze verdwijnen bij Leegmaken of Verwijderen.</p>' : ''}
@@ -279,6 +279,14 @@
         usersDialog(find(t.id) || t);
       } catch (e) { toast(e.message, true); usersDialog(find(t.id) || t); }
     };
+    const remove = async (uid) => {
+      try {
+        await api(`${base}/${encodeURIComponent(uid)}`, { method: 'DELETE' });
+        toast('Gebruiker verwijderd');
+        await load();
+      } catch (e) { toast(e.message, true); }
+      usersDialog(find(t.id) || t);
+    };
     $('#mu-table').onclick = (ev) => {
       const b = ev.target.closest('button[data-f]');
       const tr = ev.target.closest('tr[data-uid]');
@@ -291,6 +299,10 @@
           ? `${u.displayName} is dan geen hoofdbeheerder meer en blijft beheerder van ${t.name}. Doorgaan?`
           : `${u.displayName} hoofdbeheerder maken?\n\nEen hoofdbeheerder kan alle tenants, gebruikers en testomgevingen beheren en wordt beheerder van ${t.name}.`;
         if (confirm(msg)) patch(u.id, { platformAdmin: !u.platformAdmin }, u.platformAdmin ? 'Hoofdbeheerder ingetrokken' : 'Hoofdbeheerder gemaakt');
+      }
+      if (b.dataset.f === 'delete') {
+        const msg = `${u.displayName} (${u.username}) definitief verwijderen uit ${t.name}?\n\nHet account en alle sessies verdwijnen; dit kan niet ongedaan worden gemaakt. Plannen, offertes en werkorders blijven bewaard onder "Verwijderde gebruiker". Wil je de toegang alleen tijdelijk blokkeren, gebruik dan Uitschakelen.`;
+        if (confirm(msg)) remove(u.id);
       }
       if (b.dataset.f === 'password') {
         const pw = prompt(`Nieuw wachtwoord voor ${u.displayName} (minimaal 12 tekens)`);
@@ -451,6 +463,7 @@
       $('#denied').hidden = false;
       return;
     }
+    state.meId = me.user.id;
     $('#app').hidden = false;
     wireForm();
     try { await load(); } catch (e) { toast(e.message, true); }
