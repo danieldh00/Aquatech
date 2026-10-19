@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.30.0
+## 0.31.0
 
 - **Testdata vult alle features**: naast accounts, plannen en offertes nu ook
   klantlinks (verstuurd en bekeken), opties, digitaal akkoord met naam en
@@ -13,6 +13,16 @@
   adres dat de klant krijgt, met **Kopiëren** en **Openen** (openen telt niet
   als bekeken door de klant). Een verstuurde offerte zonder link zegt dat
   ook; het verzendvenster toont de link die in de e-mail komt.
+
+## 0.30.0
+
+- **Gebruikers verwijderen**: knop *Verwijderen* (met bevestiging) in Beheer →
+  Gebruikers en Hoofdbeheer → Gebruikers, API `DELETE /api/admin/users/:id`
+  en `DELETE /api/platform/tenants/:id/users/:uid`. Plannen, offertes en
+  werkorders gaan naar de systeemgebruiker *Verwijderde gebruiker*; sessies,
+  supporttoestemmingen en impersonaties van het account verdwijnen. Niet
+  mogelijk voor het eigen account, de laatste actieve beheerder van een tenant
+  en de laatste actieve hoofdbeheerder. Auditregel `gebruiker_verwijderd`.
 
 ## 0.29.2
 

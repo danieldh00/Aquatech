@@ -155,6 +155,10 @@ function createStore(db) {
   }
 
   // Vaste beheerder: inloggen met de (optionele) toegangscode.
+  // Eigenaar van plannen, offertes en werkorders van verwijderde gebruikers; de
+  // tilde kan niet in een gebruikersnaam van een account voorkomen.
+  const DELETED_USER = 'verwijderd~';
+
   function systemUser(tenantId, username, displayName) {
     return q('SELECT * FROM users WHERE tenant_id = ? AND username = ?').get(tenantId, username)
       || insertUser(tenantId, { username, displayName, role: 'beheerder', kind: 'systeem' });
@@ -235,6 +239,45 @@ function createStore(db) {
     // Nieuw wachtwoord of uitgeschakeld: op alle toestellen uitgelogd.
     if (newHash || input.disabled) revokeSessions(tenantId, u.id);
     return { user: getUser(u.id) };
+  }
+
+  // Gebruiker definitief verwijderen (AVG). Het account, de sessies en de
+  // supporttoestemmingen verdwijnen; plannen, offertes en werkorders blijven
+  // (bedrijfsadministratie) en gaan naar de systeemgebruiker "Verwijderde
+  // gebruiker" van de tenant waarin ze staan. Verwijzingen in historie en
+  // auditlog worden leeg (de regels zelf blijven). Niet voor de laatste actieve
+  // beheerder van de tenant of de laatste actieve hoofdbeheerder.
+  function deleteAccount(tenantId, id) {
+    const u = q('SELECT * FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+    if (!u) return { error: 'Gebruiker niet gevonden.', status: 404 };
+    if (u.kind === 'systeem') return { error: 'Systeemgebruikers zijn niet te verwijderen.', status: 409 };
+    if (u.kind === 'account' && u.role === 'beheerder' && !u.disabled && countAdmins(tenantId) <= 1) {
+      return { error: 'Dit is de enige actieve beheerder. Maak eerst een andere beheerder aan.', status: 409 };
+    }
+    if (u.platform_admin && !u.disabled && countPlatformAdmins() <= 1) {
+      return { error: 'Dit is de enige actieve hoofdbeheerder. Maak eerst een andere hoofdbeheerder aan.', status: 409 };
+    }
+    return transaction(db, () => {
+      const moved = {};
+      for (const table of ['plans', 'quotes', 'work_orders']) {
+        const tenants = q(`SELECT DISTINCT tenant_id FROM ${table} WHERE owner_id = ?`).all(u.id).map((r) => r.tenant_id);
+        moved[table] = 0;
+        for (const t of tenants) {
+          const heir = systemUser(t, DELETED_USER, 'Verwijderde gebruiker');
+          moved[table] += q(`UPDATE ${table} SET owner_id = ? WHERE tenant_id = ? AND owner_id = ?`).run(heir.id, t, u.id).changes;
+        }
+      }
+      q('UPDATE quotes SET customer_id = NULL WHERE customer_id = ?').run(u.id);
+      q('UPDATE work_orders SET assignee_id = NULL WHERE assignee_id = ?').run(u.id);
+      q('UPDATE settings SET updated_by = NULL WHERE updated_by = ?').run(u.id);
+      q('UPDATE history SET user_id = NULL WHERE user_id = ?').run(u.id);
+      q('UPDATE audit SET user_id = NULL WHERE user_id = ?').run(u.id);
+      q('DELETE FROM impersonations WHERE admin_id = ? OR user_id = ?').run(u.id, u.id);
+      q('DELETE FROM support_grants WHERE user_id = ?').run(u.id);
+      q('DELETE FROM sessions WHERE user_id = ?').run(u.id);
+      q('DELETE FROM users WHERE id = ?').run(u.id);
+      return { user: u, moved };
+    });
   }
 
   // Actieve beheerders met een eigen account (geen systeem- of gastgebruikers).
@@ -769,7 +812,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, seedEnvironment,
     accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, systemUser, createGuest, createAccount, updateAccount, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
     createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
   };
