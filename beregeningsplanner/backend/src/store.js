@@ -452,16 +452,24 @@ function createStore(db) {
         planIds[p.key] = pid;
       }
       const seq = {};
+      const quoteIds = new Map();
       for (const o of [...quotes].sort((a, b) => a.at.localeCompare(b.at))) {
         const year = o.data.date.slice(0, 4);
         seq[year] = (seq[year] || 0) + 1;
         const data = { ...o.data, planId: planIds[o.planKey] || '' };
+        const qid = newId();
+        quoteIds.set(o, qid);
+        // Een offerte met een reactie van de klant staat eerst op verzonden;
+        // de reactie zelf loopt daarna via de offerteopslag (testdata.seedFeatures).
         q(`INSERT INTO quotes (id, tenant_id, owner_id, plan_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at, customer_id)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .run(newId(), tid, users[o.owner].id, data.planId || null, `${numberPrefix}${year}-${String(seq[year]).padStart(4, '0')}`, o.status,
+          .run(qid, tid, users[o.owner].id, data.planId || null, `${numberPrefix}${year}-${String(seq[year]).padStart(4, '0')}`, o.response ? 'verzonden' : o.status,
             data.title, data.customer.name, o.totalExcl, o.totalIncl, JSON.stringify(data), o.at, o.at, o.customerKey ? users[o.customerKey].id : null);
       }
-      return { tenant: out.tenant, users: Object.values(users), counts: { accounts: accounts.length, plans: plans.length, quotes: quotes.length } };
+      return {
+        tenant: out.tenant, users: Object.values(users), byKey: users, planIds, quoteIds: quotes.map((o) => quoteIds.get(o)),
+        counts: { accounts: accounts.length, plans: plans.length, quotes: quotes.length },
+      };
     });
   }
 

@@ -293,7 +293,10 @@
     const body = $('#sh-body');
     const answered = locked();
     if (!s.active) {
-      body.innerHTML = `<p class="muted small">Maak een link waarmee de klant de offerte online bekijkt, eventuele opties kiest en digitaal akkoord geeft met naam, handtekening en akkoord op de voorwaarden. Tijdstip en IP-adres worden vastgelegd${state.mail ? ' en de klant krijgt een bevestiging per e-mail' : ''}.</p>
+      // Verstuurd zonder link (bijv. alleen via het klantaccount): zeggen
+      // waarom er geen adres staat.
+      const noLink = q.status !== 'concept' ? '<p class="notice warn small">Deze offerte heeft nog geen klantlink. Maak er een om de offerte zelf te openen zoals de klant hem ziet, of om het adres te delen.</p>' : '';
+      body.innerHTML = `${noLink}<p class="muted small">Maak een link waarmee de klant de offerte online bekijkt, eventuele opties kiest en digitaal akkoord geeft met naam, handtekening en akkoord op de voorwaarden. Tijdstip en IP-adres worden vastgelegd${state.mail ? ' en de klant krijgt een bevestiging per e-mail' : ''}.</p>
         <div class="actions">${answered ? '' : `<button class="btn primary" data-sh="send">Versturen per e-mail</button>`}
         <button class="btn" data-sh="create">Link maken</button></div>
         ${q.status === 'concept' && !answered ? '<p class="muted small">Met de link gaat de status naar <b>Verzonden</b>.</p>' : ''}`;
@@ -305,10 +308,11 @@
       s.viewCount ? `<b>${s.viewCount}× bekeken</b>, eerst ${esc(V.dateTime(s.viewedAt))}${s.viewCount > 1 ? `, laatst ${esc(V.dateTime(s.lastViewedAt))}` : ''}` : 'nog niet bekeken',
     ].filter(Boolean).join(' · ');
     body.innerHTML = `
+      <label class="link-label" for="sh-url">Klantlink <span class="muted">(dit adres krijgt de klant${s.sentTo ? ' in de e-mail' : ''})</span></label>
       <div class="link-row">
         <input id="sh-url" readonly value="${esc(s.url || '')}" aria-label="Link naar de digitale offerte">
         <button class="btn" data-sh="copy">Kopiëren</button>
-        <button class="btn" data-sh="preview">Bekijken</button>
+        <button class="btn" data-sh="preview" title="Openen zoals de klant hem ziet; telt niet als bekeken door de klant">Openen</button>
       </div>
       <div class="actions">
         ${answered ? '' : '<button class="btn primary" data-sh="send">Versturen per e-mail</button>'}
@@ -366,6 +370,9 @@
     const p = state.profile;
     const f = $('#sf');
     f.to.value = d.customer.email || '';
+    const link = $('#sf-link');
+    link.hidden = !(q.share && q.share.url);
+    link.innerHTML = link.hidden ? '' : `Link in de e-mail: <a href="${esc(`${q.share.url}&voorbeeld=1`)}" target="_blank" rel="noopener">${esc(q.share.url)}</a>`;
     f.subject.value = `Offerte ${q.number}${d.title ? ` – ${d.title}` : ''}`;
     f.message.value = [
       `Beste ${d.customer.contact || d.customer.name || 'klant'},`,

@@ -325,9 +325,19 @@ keer:
   historie.
 - **Offertes** in alle statussen (concept, verzonden, akkoord, afgewezen),
   opgebouwd uit die plannen met de bedrijfsgegevens van de omgeving; drie
-  zijn gekoppeld aan de testklanten.
+  zijn gekoppeld aan de testklanten. Verstuurde offertes hebben een
+  **klantlink** (met verzend- en bekijkgegevens) en opties die de klant zelf
+  kiest; drie zijn **digitaal geaccordeerd** (naam, handtekening, gekozen
+  opties, via het klantaccount of de link) en één is afgewezen met een reden.
+- **Werkorders** bij de geaccordeerde offertes: gepland, in uitvoering
+  (deels afgevinkt) en gereed (met opleverrapport), toegewezen aan de
+  testinstallateurs, met zone-indeling en materiaallijst.
+- **Webshop**: een nepwinkel (`webshop.voorbeeld.test`) met producten en
+  prijzen voor de catalogus, gekoppeld via sku, het productveld
+  `aquatech_code` en handmatige koppelingen; een paar artikelen ontbreken
+  bewust. Heeft de testomgeving al een eigen webshop, dan blijft die staan.
 
-Wat er al in de testomgeving stond (plannen, offertes, historie,
+Wat er al in de testomgeving stond (plannen, offertes, werkorders, historie,
 testaccounts) wordt eerst gewist. Opnieuw vullen geeft een nieuw wachtwoord
 en logt de testaccounts uit; **Leegmaken** en **Verwijderen** ruimen de
 testaccounts mee op.

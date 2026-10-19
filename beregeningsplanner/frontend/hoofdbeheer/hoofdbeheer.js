@@ -164,10 +164,12 @@
 
   // ---------- Testdata ----------
   async function seed(t) {
-    const msg = `${t.name} vullen met testdata?\n\nEr komen testaccounts voor elke rol (beheerder, installateurs, klanten), nepklanten met plannen en offertes in alle statussen. Wat er nu in deze testomgeving staat (plannen, offertes, historie, testaccounts) wordt eerst gewist. Live blijft ongemoeid.`;
+    const msg = `${t.name} vullen met testdata?\n\nEr komen testaccounts voor elke rol (beheerder, installateurs, klanten), nepklanten met plannen, offertes in alle statussen (met klantlinks, opties en digitaal akkoord), werkorders en een nepwebshop met prijzen. Wat er nu in deze testomgeving staat (plannen, offertes, historie, testaccounts) wordt eerst gewist. Live blijft ongemoeid.`;
     if (!confirm(msg)) return;
     toast('Testdata aanmaken…');
-    const out = await api(`platform/tenants/${encodeURIComponent(t.id)}/testdata`, { body: {} });
+    // De klantlinks van de offertes wijzen naar de openbare pagina op dit adres.
+    const shareBase = new URL('../openbaar/offerte.html', location.href).href;
+    const out = await api(`platform/tenants/${encodeURIComponent(t.id)}/testdata`, { body: { shareBase } });
     await load();
     seedResult(t, out);
   }
@@ -175,7 +177,7 @@
   function seedResult(t, out) {
     const rows = out.accounts.map((u) => `<tr><td>${esc(u.displayName)}</td><td class="code">${esc(u.username)}</td><td>${esc(Roles.label(u.role))}</td></tr>`).join('');
     modal(`<h2>Testdata in ${esc(t.name)}</h2>
-      <p class="muted small">${out.counts.plans} plannen en ${out.counts.quotes} offertes aangemaakt. Alle testaccounts hebben hetzelfde wachtwoord; dat wordt nergens bewaard en is alleen nu te zien. Opnieuw vullen geeft een nieuw wachtwoord.</p>
+      <p class="muted small">${out.counts.plans} plannen, ${out.counts.quotes} offertes (${out.counts.links || 0} met klantlink), ${out.counts.workOrders || 0} werkorders${out.counts.products ? ` en ${out.counts.products} webshopproducten` : ''} aangemaakt. Alle testaccounts hebben hetzelfde wachtwoord; dat wordt nergens bewaard en is alleen nu te zien. Opnieuw vullen geeft een nieuw wachtwoord.</p>
       <p>Wachtwoord: <b class="code" id="s-pw">${esc(out.password)}</b> <button class="btn small" id="s-copy">Kopiëren</button></p>
       <div class="tablewrap"><table class="grid"><thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Rol</th></tr></thead><tbody>${rows}</tbody></table></div>
       <p class="muted small">Inloggen met een testaccount (bijvoorbeeld in een privévenster) brengt je direct in deze testomgeving, met de rechten van die rol. Organisatiecode: <b class="code">${esc(t.slug)}</b>.</p>

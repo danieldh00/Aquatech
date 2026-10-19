@@ -77,6 +77,9 @@ table.totals tr.grand td { font-weight: 700; font-size: 16px; border-top: 2px so
 .notice.ok { background: #e7f5ec; border-color: #a8d9b9; margin-bottom: 14px; padding: 12px 16px; font-size: 14px; }
 .notice.ok.rejected { background: #fdecea; border-color: #f2b8b5; }
 .notice.ok img { display: block; max-height: 70px; margin-top: 8px; background: #fff; border: 1px solid #dfe5ec; border-radius: 4px; }
+.share .link-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.share .link-label .muted { font-weight: 400; }
+.sf-link { word-break: break-all; }
 .share .link-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
 .share .link-row input { flex: 1; min-width: 220px; font-family: ui-monospace, monospace; font-size: 12px; }
 .share .stats-line { font-size: 13px; color: #5b6673; margin: 4px 0 0; }
