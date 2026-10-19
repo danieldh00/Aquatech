@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.29.1
+
+- **Home Assistant-verpakking verwijderd**: `config.yaml`, `apparmor.txt`,
+  `icon.png`, `logo.png` en `repository.yaml` zijn weg. De app draait alleen
+  nog als Docker-container (Cloudflare-tunnel, automatische uitrol via CI/CD).
+- Versiecheck (`scripts/check_version.py`, workflow `version.yml`) kijkt alleen
+  nog naar `backend/package.json`.
+
 ## 0.29.0
 
 - **Webshopkoppeling** (prototype, WooCommerce): in **Beheer → Webshop**

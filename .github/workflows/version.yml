@@ -23,4 +23,4 @@ jobs:
           else
             ref="${{ github.event.before }}"
           fi
-          python3 scripts/check_addon_version.py "$ref"
+          python3 scripts/check_version.py "$ref"

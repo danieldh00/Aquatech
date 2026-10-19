@@ -72,11 +72,9 @@ Het project wordt automatisch in de browser (localStorage) bewaard. Met **Opslaa
 ## Structuur
 
 ```
-repository.yaml                     tijdelijk: oude Home Assistant-installatie (mag weg na de overstap)
 docker-compose.yml, .env.example    de server als Docker-container (poort 3300)
 beregeningsplanner/                 de app (Dockerfile, backend, frontend)
   Dockerfile, CHANGELOG.md, DOCS.md
-  config.yaml, apparmor.txt, icon.png, logo.png   tijdelijk: oude HA-installatie (mag weg na de overstap)
   backend/src/server.js             express: dashboard + modules, login, /api/health, /api/plan/*
   backend/src/planAnalyzer.js       plan lezen via de Claude API (schaal, vlakken, elementen)
   backend/src/settings.js           instellingen (Beheer > Instellingen) in de database

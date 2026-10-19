@@ -14,21 +14,16 @@ wit logo `shared/logo-white.png` op navy. Inlogpagina heeft het logo inline
 Draait als gewone webserver in Docker (`docker-compose.yml` in de root,
 poort 3300). **Niets in de app mag van Home Assistant afhangen** (besluit
 Daniël 2026-10-18): geen ingress, geen HA-opties, geen Supervisor-detectie.
-De HA-verpakking (`config.yaml`, `apparmor.txt`, `icon.png`, `logo.png`,
-`repository.yaml`) staat er alleen nog tijdelijk zodat de oude installatie
-updates krijgt tot de Docker-server draait; daarna mag die weg.
+De HA-verpakking is in 0.29.1 verwijderd; Home Assistant speelt geen rol meer.
 
-Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
-(poort 3200), `danieldh00/Lijstjes` (3100), `danieldh00/Russianlanguageapp`
-(3000). Deze add-on gebruikt **poort 3300**.
+Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
+(3100), `danieldh00/Russianlanguageapp` (3000). Deze app gebruikt **poort 3300**.
 
 ## Branchmodel
 
-- **`master`** is de productie- en GitHub-default branch; Supervisor kloont
-  die. `feature/beregeningsplanner` is de oude startbranch en wordt niet meer
-  gebruikt (mag weg). HA volgt `master` sinds de herinstallatie van
-  2026-10-18 (Supervisor kloont de default branch alleen bij het toevoegen van
-  de repository; de store-slug is een hash van de URL en bleef `c1355dc8`).
+- **`master`** is de productie- en GitHub-default branch; `release.yml` bouwt
+  daaruit het image. `feature/beregeningsplanner` is de oude startbranch en
+  wordt niet meer gebruikt (mag weg).
 - **Nooit rechtstreeks op `master` werken.** Elke taak in een eigen branch
   `feature/<naam>` of `claude/<naam>` (de door de sessie toegewezen
   `claude/...`-branch telt als zodanig), altijd vers vanaf `master`:
@@ -38,16 +33,16 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
   ```
 - Werkwijze per taak: wijzigen → `npm test` → versie-bump + changelog (als
   `beregeningsplanner/` is gewijzigd) → `git push -u origin <branch>` → PR naar
-  `master` → mergen zodra CI groen is (`ci.yml` + `addon-version.yml`).
+  `master` → mergen zodra CI groen is (`ci.yml` + `version.yml`).
   Daarna de branch verwijderen. Een volgende taak begint opnieuw vanaf
   `origin/master`, niet vanaf een oude featurebranch.
 - Loopt `master` voor op je branch (andere sessie heeft gemerged): eerst
   `git merge origin/master` in je branch, conflicten oplossen, en de versie
   zo nodig opnieuw verhogen (moet hoger zijn dan die op `master`).
 - Elke wijziging in `beregeningsplanner/` op `master` vereist een
-  **versie-bump** in `beregeningsplanner/backend/package.json` (en zolang die
-  bestaat dezelfde versie in `config.yaml`) + entry in `CHANGELOG.md`. `scripts/check_addon_version.py` (workflow
-  `addon-version.yml`, op PR's naar en pushes op `master`) bewaakt dat.
+  **versie-bump** in `beregeningsplanner/backend/package.json` + entry in
+  `CHANGELOG.md`. `scripts/check_version.py` (workflow `version.yml`, op PR's
+  naar en pushes op `master`) bewaakt dat.
   Wijzigingen buiten `beregeningsplanner/` (zoals deze `CLAUDE.md`) hebben
   geen bump nodig.
 
@@ -55,7 +50,7 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 
 - Publieke URL **https://aquatech.den-hollander.com** via Cloudflare-tunnel
   `apps01` naar de Docker-server (Proxmox-VM `apps01`, `/opt/apps/aquatech`,
-  zie `deploy/apps01/README.md`). De HA-add-on is sinds 2026-10-19 weg.
+  zie `deploy/apps01/README.md`).
 - **CI/CD**: `release.yml` bouwt bij een versie-bump op `master` na tests en
   smoketest het image `ghcr.io/danieldh00/aquatech:<versie>` + `:latest`; de
   server rolt dat binnen 15 min uit (`deploy/apps01/update.sh`, met rollback).
