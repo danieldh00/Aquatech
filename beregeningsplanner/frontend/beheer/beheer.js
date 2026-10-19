@@ -247,7 +247,7 @@
     const showGuests = $('#u-guests').checked;
     const items = state.users.filter((u) => showGuests || u.kind !== 'gast');
     const tbl = $('#u-table');
-    tbl.innerHTML = `<thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Soort</th><th>Rol</th><th class="num">Plannen</th><th class="num">Aanvragen</th><th>Laatst actief</th><th class="num">Sessies</th><th></th></tr></thead><tbody>${items.map((u) => {
+    tbl.innerHTML = `<thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Soort</th><th>Rol</th><th class="num">Plannen</th><th class="num">Aanvragen</th><th>Laatst actief</th><th class="num">Sessies</th><th title="De gebruiker moet bij de volgende aanmelding zelf een nieuw wachtwoord kiezen">Nieuw ww. verplicht</th><th></th></tr></thead><tbody>${items.map((u) => {
       const editable = u.kind === 'account';
       return `<tr class="${u.disabled ? 'off' : ''}">
         <td>${esc(u.displayName)}${u.disabled ? ' <span class="pill">uitgeschakeld</span>' : ''}</td>
@@ -258,6 +258,7 @@
         <td class="num">${u.historyCount}</td>
         <td>${esc(when(u.lastSeenAt))}</td>
         <td class="num">${u.sessionCount || 0}</td>
+        <td>${editable ? `<input type="checkbox" data-mustchange="${esc(u.id)}"${u.mustChangePassword ? ' checked' : ''} aria-label="Wachtwoord wijzigen bij volgende aanmelding">` : ''}</td>
         <td>${u.sessionCount ? `<button class="btn small" data-logout="${esc(u.id)}">Uitloggen</button> ` : ''}${editable ? `<button class="btn small" data-pw="${esc(u.id)}">Wachtwoord</button> <button class="btn small" data-toggle="${esc(u.id)}">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button>` : ''}
           ${u.historyCount ? `<button class="btn small" data-hist="${esc(u.id)}">Aanvragen</button>` : ''}</td>
       </tr>`;
@@ -274,8 +275,13 @@
     tbl.querySelectorAll('[data-pw]').forEach((b) => {
       b.onclick = () => {
         const pw = prompt('Nieuw wachtwoord (minimaal 12 tekens). De gebruiker wordt op alle toestellen uitgelogd.');
-        if (pw) patch(b.dataset.pw, { password: pw }, 'Wachtwoord gewijzigd');
+        if (!pw) return;
+        const mustChangePassword = confirm('Moet de gebruiker na de eerste aanmelding met dit wachtwoord zelf een nieuw wachtwoord kiezen?\n\nOK = ja (aanbevolen), Annuleren = nee');
+        patch(b.dataset.pw, { password: pw, mustChangePassword }, 'Wachtwoord gewijzigd');
       };
+    });
+    tbl.querySelectorAll('[data-mustchange]').forEach((c) => {
+      c.onchange = () => patch(c.dataset.mustchange, { mustChangePassword: c.checked }, c.checked ? 'Moet bij de volgende aanmelding een nieuw wachtwoord kiezen' : 'Wachtwoord wijzigen niet meer verplicht');
     });
     tbl.querySelectorAll('[data-logout]').forEach((b) => {
       b.onclick = async () => {
@@ -294,7 +300,7 @@
     const f = ev.target;
     $('#u-err').textContent = '';
     try {
-      await api('users', { method: 'POST', body: { username: f.username.value.trim().toLowerCase(), displayName: f.displayName.value, role: f.role.value, password: f.password.value } });
+      await api('users', { method: 'POST', body: { username: f.username.value.trim().toLowerCase(), displayName: f.displayName.value, role: f.role.value, password: f.password.value, mustChangePassword: f.mustChangePassword.checked } });
       f.reset();
       toast('Gebruiker toegevoegd');
       loadUsers();

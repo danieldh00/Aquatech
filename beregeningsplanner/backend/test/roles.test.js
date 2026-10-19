@@ -102,7 +102,7 @@ test('API: elke rol ziet alleen wat bij die rol hoort', async () => {
     assert.strictEqual((await ivo.get('/api/plans?all=1')).body.items.length, 0, 'rechten gelden meteen');
     assert.strictEqual((await baas.patch(`/api/admin/users/${ivoId}`, { role: 'gebruiker' })).body.role, 'installateur');
     assert.strictEqual((await baas.patch(`/api/admin/users/${ivoId}`, { role: 'koning' })).status, 400);
-    assert.strictEqual((await baas.post('/api/admin/users', { username: 'kim', role: 'klant', password: PW })).body.role, 'klant');
+    assert.strictEqual((await baas.post('/api/admin/users', { username: 'kim', role: 'klant', password: PW, mustChangePassword: false })).body.role, 'klant');
   } finally {
     server.close();
   }

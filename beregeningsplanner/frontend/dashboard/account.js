@@ -28,7 +28,9 @@
     }
     if (u && u.kind !== 'gast') {
       const role = me.platformAdmin ? 'hoofdbeheerder' : u.role;
-      const out = '<button type="button" data-logout>Uitloggen</button>';
+      // Eigen wachtwoord wijzigen kan alleen met een account (niet met de toegangscode).
+      const pw = u.kind === 'account' ? `<a href="${esc(base)}wachtwoord" title="Eigen wachtwoord wijzigen">Wachtwoord</a>` : '';
+      const out = `${pw}<button type="button" data-logout>Uitloggen</button>`;
       el.innerHTML = `<span>${esc(u.displayName)} <span class="role">· ${role}</span></span>${out}`;
     } else {
       el.innerHTML = `<span class="role">Gast</span><a href="${esc(base)}login">Inloggen</a>`;
