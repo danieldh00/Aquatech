@@ -5,6 +5,8 @@ const os = require('os');
 const path = require('path');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/db');
+const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
+
 const { createStore } = require('../src/store');
 const { createSettings, SettingsError } = require('../src/settings');
 const { createVault } = require('../src/vault');
@@ -111,9 +113,10 @@ test('instellingen blijven bewaard na een herstart', () => {
     let db = openDb(file);
     let tenant = createStore(db).ensureTenant();
     createSettings({ db, tenantId: tenant.id, vault }).update({ anthropicApiKey: KEY, modules: { planning: false } });
+    // De sleutel staat versleuteld in de database, niet als leesbare tekst.
+    assert.ok(!db.prepare('SELECT value FROM settings').all().some((r) => r.value.includes(KEY)));
     db.close();
-    // De sleutel staat versleuteld in het bestand, niet als leesbare tekst.
-    assert.ok(!fs.readFileSync(file).includes(KEY));
+    if (!PG) assert.ok(!fs.readFileSync(file).includes(KEY));
     db = openDb(file);
     tenant = createStore(db).ensureTenant();
     // Met een andere hoofdsleutel is het geheim onbruikbaar (en wordt het genegeerd).

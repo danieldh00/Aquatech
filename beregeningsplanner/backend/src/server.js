@@ -6,7 +6,7 @@ const { createAuth, remoteIp, parseCookies } = require('./auth');
 const { createRateLimiter } = require('./rateLimit');
 const { loadOrCreateSecret } = require('./options');
 const { createPlanAnalyzer, AnalyzeError } = require('./planAnalyzer');
-const { openDb } = require('./db');
+const { openDb, openDatabase, isPg } = require('./db');
 const { createStore, hashPassword, passwordProblem } = require('./store');
 const testdata = require('./testdata');
 const { createSettings, SettingsError, FIELDS } = require('./settings');
@@ -1231,7 +1231,8 @@ if (require.main === module) {
   const master = loadOrCreateMasterKey(dataDir);
   console.log(`Hoofdsleutel voor versleuteling: ${master.source}`);
   const port = Number(process.env.PORT) || 3300;
-  const db = openDb(path.join(dataDir, 'aquatech.db'));
+  const db = openDatabase(dataDir);
+  console.log(isPg(db) ? `Database: PostgreSQL (schema ${db.schema})` : 'Database: SQLite (aquatech.db in de datamap)');
   const backupDir = process.env.BACKUP_DIR || path.join(dataDir, 'backups');
   const app = createApp({ secret, db, env: process.env, vault: createVault(master.key), backupDir });
   const { settings } = app.locals;

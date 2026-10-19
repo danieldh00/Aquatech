@@ -3,7 +3,7 @@
 // frontend/offertes/quote-core.js en is gedeeld met de browser.
 const path = require('path');
 const crypto = require('crypto');
-const { transaction } = require('./db');
+const { transaction, jsonField } = require('./db');
 const { createVault } = require('./vault');
 const { createMailer, validEmail } = require('./mailer');
 
@@ -136,7 +136,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   function list(tenantId, { ownerId = null, planId = null, customerId = null } = {}) {
     const args = [tenantId];
     let sql = `SELECT q.id, q.number, q.status, q.title, q.customer, q.plan_id, q.total_excl, q.total_incl, q.created_at, q.updated_at,
-        json_extract(q.data, '$.validUntil') AS valid_until, q.owner_id, u.username AS owner_username, u.display_name AS owner_name,
+        ${jsonField(db, 'q.data', 'validUntil')} AS valid_until, q.owner_id, u.username AS owner_username, u.display_name AS owner_name,
         q.customer_id, c.display_name AS customer_name, q.view_count, q.viewed_at, q.responded_at
       FROM quotes q JOIN users u ON u.id = q.owner_id LEFT JOIN users c ON c.id = q.customer_id
       WHERE q.tenant_id = ? AND q.deleted_at IS NULL`;

@@ -1,12 +1,16 @@
-// SQLite-database van de app (node:sqlite, ingebouwd in Node 22: geen native
-// npm-module nodig, dus geen multi-arch-bouwproblemen).
+// Database van de app. Standaard SQLite (node:sqlite, ingebouwd in Node 22:
+// geen native npm-module nodig, dus geen multi-arch-bouwproblemen); met
+// DATABASE_URL PostgreSQL, bijv. Supabase (pgdb.js, schema in pgschema.js).
+// Beide werken via dezelfde synchrone interface (prepare/get/all/run/exec).
 //
 // Multitenant: elke tabel heeft een tenant_id en elke query filtert daarop.
 // De hoofdtenant ("default") bestaat altijd; andere tenants en hun
 // testomgevingen (eigen tenant met parent_id) maakt een hoofdbeheerder aan.
-// Id's zijn willekeurige UUID's (niet te raden en later zonder hernummeren
-// over te zetten naar een andere database).
+// Id's zijn willekeurige UUID's (niet te raden en zonder hernummeren over te
+// zetten naar een andere database, zie dbcopy.js).
 const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
 
 // Elke migratie verhoogt PRAGMA user_version met één. Nooit een bestaande
@@ -299,6 +303,14 @@ const MIGRATIONS = [
 ];
 
 function openDb(file = ':memory:') {
+  // Testsuite tegen PostgreSQL (TEST_DATABASE_URL): elke database wordt een
+  // eigen schema, een bestand steeds hetzelfde schema.
+  if (process.env.TEST_DATABASE_URL) return openTestPg(process.env.TEST_DATABASE_URL, file);
+  return openSqlite(file);
+}
+
+/** Altijd SQLite (bestand of :memory:), ook in de testsuite tegen PostgreSQL. */
+function openSqlite(file = ':memory:') {
   const onDisk = file !== ':memory:';
   if (onDisk) {
     // Alleen het eigen proces mag de database lezen (ook de journal-bestanden,
@@ -308,6 +320,7 @@ function openDb(file = ':memory:') {
     fs.chmodSync(file, 0o600);
   }
   const db = new DatabaseSync(file);
+  db.dialect = 'sqlite';
   db.exec('PRAGMA foreign_keys = ON');
   db.exec('PRAGMA busy_timeout = 5000');
   // Verwijderde gegevens worden overschreven in plaats van alleen vrijgegeven
@@ -322,6 +335,27 @@ function openDb(file = ':memory:') {
   }
   migrate(db);
   return db;
+}
+
+function openTestPg(url, file) {
+  const { openPg } = require('./pgdb');
+  const id = file === ':memory:' ? crypto.randomUUID() : path.resolve(file);
+  return openPg(url, { schema: `aqt_test_${crypto.createHash('sha256').update(id).digest('hex').slice(0, 20)}` });
+}
+
+/**
+ * De database van de server: PostgreSQL (bijv. Supabase) als DATABASE_URL of
+ * DATABASE_URL_FILE gezet is, anders het SQLite-bestand in de datamap.
+ */
+function databaseUrl(env = process.env) {
+  if (env.DATABASE_URL_FILE) return fs.readFileSync(env.DATABASE_URL_FILE, 'utf8').trim();
+  return String(env.DATABASE_URL || '').trim();
+}
+
+function openDatabase(dataDir, env = process.env) {
+  const url = databaseUrl(env);
+  if (url) return require('./pgdb').openPg(url, { schema: env.DATABASE_SCHEMA || 'aquatech' });
+  return openDb(path.join(dataDir, 'aquatech.db'));
 }
 
 function migrate(db) {
@@ -348,7 +382,7 @@ function migrate(db) {
 }
 
 function transaction(db, fn) {
-  db.exec('BEGIN IMMEDIATE');
+  db.exec(isPg(db) ? 'BEGIN' : 'BEGIN IMMEDIATE');
   try {
     const out = fn();
     db.exec('COMMIT');
@@ -359,4 +393,68 @@ function transaction(db, fn) {
   }
 }
 
-module.exports = { openDb, transaction, MIGRATIONS };
+// ---------- Verschillen tussen SQLite en PostgreSQL ----------
+// De rest van de code schrijft SQL die in beide werkt (?-parameters, lower()
+// i.p.v. COLLATE NOCASE); waar dat niet kan, helpen deze functies.
+const isPg = (db) => db.dialect === 'postgres';
+
+/** Schemaversie: aantal uitgevoerde migraties. */
+function schemaVersion(db) {
+  if (isPg(db)) return require('./pgdb').pgVersion(db);
+  return db.prepare('PRAGMA user_version').get().user_version;
+}
+
+/** Namen van de tabellen van de app. */
+function listTables(db) {
+  if (isPg(db)) {
+    return db.prepare("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' AND table_name <> 'schema_version' ORDER BY table_name")
+      .all().map((r) => r.name);
+  }
+  return db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((r) => r.name);
+}
+
+const SAFE_NAME = /^[a-z_][a-z0-9_]*$/;
+const checkName = (n) => { if (!SAFE_NAME.test(n)) throw new Error(`Ongeldige tabelnaam: ${n}`); return n; };
+
+/** Kolommen van een tabel in volgorde: { name, notnull, pk }. */
+function tableColumns(db, table) {
+  if (isPg(db)) {
+    return db.prepare(`SELECT c.column_name AS name, c.is_nullable = 'NO' AS notnull,
+        EXISTS (SELECT 1 FROM information_schema.key_column_usage k JOIN information_schema.table_constraints tc
+          ON tc.constraint_name = k.constraint_name AND tc.table_schema = k.table_schema
+          WHERE tc.constraint_type = 'PRIMARY KEY' AND k.table_schema = c.table_schema AND k.table_name = c.table_name AND k.column_name = c.column_name) AS pk
+      FROM information_schema.columns c WHERE c.table_schema = current_schema() AND c.table_name = ? ORDER BY c.ordinal_position`)
+      .all(table).map((c) => ({ name: c.name, notnull: Boolean(c.notnull), pk: Boolean(c.pk) }));
+  }
+  return db.prepare(`PRAGMA table_info(${checkName(table)})`).all().map((c) => ({ name: c.name, notnull: Boolean(c.notnull), pk: c.pk > 0 }));
+}
+
+/** Foreign keys van een tabel: { from (kolom), table (doeltabel) }. */
+function foreignKeys(db, table) {
+  if (isPg(db)) {
+    return db.prepare(`SELECT a.attname AS "from", cf.relname AS "table"
+      FROM pg_constraint c
+      JOIN pg_class cl ON cl.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = cl.relnamespace
+      JOIN pg_class cf ON cf.oid = c.confrelid
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+      WHERE c.contype = 'f' AND n.nspname = current_schema() AND cl.relname = ?`).all(table);
+  }
+  return db.prepare(`PRAGMA foreign_key_list(${checkName(table)})`).all().map((f) => ({ from: f.from, table: f.table }));
+}
+
+/** Foreign keys binnen de lopende transactie pas bij COMMIT controleren. */
+function deferForeignKeys(db) {
+  db.exec(isPg(db) ? 'SET CONSTRAINTS ALL DEFERRED' : 'PRAGMA defer_foreign_keys = ON');
+}
+
+/** SQL-expressie: tekstwaarde van een veld uit een JSON-kolom. */
+const jsonField = (db, expr, key) => (isPg(db) ? `((${expr})::jsonb ->> '${key}')` : `json_extract(${expr}, '$.${key}')`);
+
+/** SQL-expressie: de JSON-kolom zonder dit veld (als tekst). */
+const jsonWithout = (db, expr, key) => (isPg(db) ? `(((${expr})::jsonb - '${key}')::text)` : `json_remove(${expr}, '$.${key}')`);
+
+module.exports = {
+  openDb, openSqlite, openDatabase, databaseUrl, transaction, MIGRATIONS,
+  isPg, schemaVersion, listTables, tableColumns, foreignKeys, deferForeignKeys, jsonField, jsonWithout,
+};

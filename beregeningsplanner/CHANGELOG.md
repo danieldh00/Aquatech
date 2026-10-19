@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.34.0
+
+- **Supabase (PostgreSQL) als database**: met `DATABASE_URL` (of
+  `DATABASE_URL_FILE` als Docker-secret) gebruikt de app PostgreSQL, bijv.
+  Supabase, in plaats van het SQLite-bestand. Zonder die instelling blijft
+  alles zoals het was. Het schema in PostgreSQL is gelijk aan dat in SQLite
+  (zelfde tabellen, kolommen, controles, foreign keys en indexen), in een
+  eigen schema `aquatech` met row level security, zodat de REST-API van
+  Supabase er niet bij kan. Verbinding altijd via TLS met controle van het
+  certificaat (de root-CA van Supabase zit in de app).
+- **Overstap één op één**: `node src/migrate-to-postgres.js` kopieert alle
+  gegevens (tenants, gebruikers, sessies, plannen, historie, offertes,
+  werkorders, instellingen, webshop, auditlog) ongewijzigd en controleert
+  daarna per tabel het aantal rijen en een SHA-256 over alle waarden.
+  Versleutelde geheimen blijven met dezelfde hoofdsleutel leesbaar en
+  ingelogde gebruikers blijven ingelogd. Stappen in DOCS.md > *Database:
+  Supabase (PostgreSQL)*.
+- **Back-ups** werken ook met PostgreSQL: de versleutelde back-up is dan een
+  kopie van alle rijen als SQLite-bestand (zelfde formaat, zelfde
+  terugzetopdracht).
+- De hele testsuite draait in CI ook tegen PostgreSQL.
+
 ## 0.33.0
 
 - **Tenants verwijderen**: in **Hoofdbeheer** heeft elke live-tenant (behalve

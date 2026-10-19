@@ -78,7 +78,7 @@ function createWorkOrderStore(db) {
   function staff(tenantIds) {
     const ids = [...new Set(tenantIds)];
     return q(`SELECT id, username, display_name, role FROM users WHERE tenant_id IN (${ids.map(() => '?').join(',')})
-      AND kind = 'account' AND role IN ('beheerder', 'installateur') AND disabled = 0 ORDER BY display_name COLLATE NOCASE`)
+      AND kind = 'account' AND role IN ('beheerder', 'installateur') AND disabled = 0 ORDER BY lower(display_name)`)
       .all(...ids).map((u) => ({ id: u.id, username: u.username, displayName: u.display_name, role: u.role }));
   }
 

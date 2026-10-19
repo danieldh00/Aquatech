@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
+const { openDb, isPg, listTables, tableColumns } = require('../src/db');
 const { createStore } = require('../src/store');
 
 const SECRET = 'z'.repeat(64);
@@ -57,8 +57,7 @@ async function platformDb() {
   return db;
 }
 
-const tenantTables = (db) => db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name)
-  .filter((n) => db.prepare(`PRAGMA table_info(${n})`).all().some((c) => c.name === 'tenant_id'));
+const tenantTables = (db) => listTables(db).filter((n) => tableColumns(db, n).some((c) => c.name === 'tenant_id'));
 
 test('hoofdbeheerder verwijdert een tenant met testomgevingen en al zijn gegevens', async () => {
   const db = await platformDb();
@@ -90,8 +89,11 @@ test('hoofdbeheerder verwijdert een tenant met testomgevingen en al zijn gegeven
       assert.strictEqual(c, 0, `${n} is leeg na verwijderen`);
     }
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM tenants WHERE id IN (?, ?)').get(t.id, env.id).n, 0);
-    assert.deepStrictEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
-    assert.strictEqual(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
+    // PostgreSQL controleert foreign keys altijd (een fout had de COMMIT laten mislukken).
+    if (!isPg(db)) {
+      assert.deepStrictEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+      assert.strictEqual(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
+    }
 
     // Gebruikers en sessies zijn weg; de hoofdtenant is ongemoeid.
     assert.deepStrictEqual((await piet.get('/api/plans')).body.items, []);

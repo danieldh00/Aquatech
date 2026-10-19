@@ -6,6 +6,8 @@ const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 const { createApp } = require('../src/server');
 const { openDb, MIGRATIONS } = require('../src/db');
+const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
+
 const { createStore } = require('../src/store');
 
 const SECRET = 'z'.repeat(64);
@@ -62,7 +64,7 @@ async function platformDb() {
   return db;
 }
 
-test('migratie: bestaande beheerders worden hoofdbeheerder, gebruikers niet', () => {
+test('migratie: bestaande beheerders worden hoofdbeheerder, gebruikers niet', { skip: PG && 'SQLite-migraties' }, () => {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'aq-')), 'aquatech.db');
   const old = new DatabaseSync(file);
   old.exec(MIGRATIONS[0]);
@@ -83,7 +85,7 @@ test('migratie: bestaande beheerders worden hoofdbeheerder, gebruikers niet', ()
   db.close();
 });
 
-test('migratie rollen: gebruiker wordt installateur, gast wordt klant; verwijzingen blijven heel', () => {
+test('migratie rollen: gebruiker wordt installateur, gast wordt klant; verwijzingen blijven heel', { skip: PG && 'SQLite-migraties' }, () => {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'aq-')), 'aquatech.db');
   const old = new DatabaseSync(file);
   old.exec('PRAGMA foreign_keys = ON');
@@ -445,7 +447,8 @@ test('gebruikersnamen zijn uniek per tenant; de organisatiecode kiest de tenant'
 
 test('migratie: de globale index op gebruikersnaam vervalt, uniek per tenant blijft', () => {
   const db = openDb();
-  const idx = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'users'").all().map((r) => r.name);
+  const idx = (PG ? db.prepare("SELECT indexname AS name FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'users'")
+    : db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'users'")).all().map((r) => r.name);
   assert.ok(!idx.includes('users_username'));
   const store = createStore(db);
   const t1 = store.ensureTenant().id;
