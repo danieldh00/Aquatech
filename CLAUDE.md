@@ -53,9 +53,13 @@ Zusterprojecten met hetzelfde add-on-patroon: `danieldh00/Hardlooptool`
 
 ## Server, inloggen en opslag
 
-- Publieke URL **https://aquatech.den-hollander.com** via een Cloudflare-tunnel
-  naar poort 3300 (nu nog via de oude HA-installatie, slug
-  `c1355dc8_beregeningsplanner`).
+- Publieke URL **https://aquatech.den-hollander.com** via Cloudflare-tunnel
+  `apps01` naar de Docker-server (Proxmox-VM `apps01`, `/opt/apps/aquatech`,
+  zie `deploy/apps01/README.md`). De HA-add-on is sinds 2026-10-19 weg.
+- **CI/CD**: `release.yml` bouwt bij een versie-bump op `master` na tests en
+  smoketest het image `ghcr.io/danieldh00/aquatech:<versie>` + `:latest`; de
+  server rolt dat binnen 15 min uit (`deploy/apps01/update.sh`, met rollback).
+  Zonder versie-bump geen nieuw image en dus geen uitrol.
 - **Eerste start**: zolang er geen actieve beheerder met een eigen account is
   (`store.countAdmins`), krijgt elke niet-ingelogde bezoeker
   `backend/src/setup.html` (POST `/api/setup`; met een toegangscode is die

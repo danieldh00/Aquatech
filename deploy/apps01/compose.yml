@@ -1,0 +1,64 @@
+# Aquatech op de app-VM (apps01, Proxmox). Staat op de server in
+# /opt/apps/aquatech/compose.yml; .env, data/ en secrets/ staan alleen daar.
+#
+# Het image komt uit GHCR (gebouwd en getest door .github/workflows/release.yml).
+# Welke versie draait staat in .env (AQUATECH_TAG); update.sh past die aan.
+name: aquatech
+
+services:
+  aquatech:
+    image: ghcr.io/danieldh00/aquatech:${AQUATECH_TAG:?AQUATECH_TAG ontbreekt in .env}
+    container_name: aquatech
+    restart: unless-stopped
+    # Alleen voor beheer via Tailscale; LAN-inbound blokkeert de Proxmox-firewall.
+    ports:
+      - "3300:3300"
+    environment:
+      - PORT=3300
+      - DATA_DIR=/data
+      - TZ=${TZ:-Europe/Amsterdam}
+      - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key
+    volumes:
+      - ./data:/data
+    secrets:
+      - master-key
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3300/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: aquatech-cloudflared
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    depends_on:
+      aquatech:
+        condition: service_healthy
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+secrets:
+  master-key:
+    file: ./secrets/master-key
