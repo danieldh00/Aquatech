@@ -258,6 +258,12 @@ controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
   (gebruikersnaam, naam, rol, wachtwoord van minimaal 8 tekens). Inloggen
   via `.../login` of de knop **Inloggen** rechtsboven. Een nieuw wachtwoord
   of uitschakelen logt de gebruiker op alle toestellen uit.
+- **Eigen wachtwoord**: elke gebruiker met een account wijzigt zijn wachtwoord
+  via de knop **Wachtwoord** rechtsboven. Met het vinkje **Wachtwoord wijzigen
+  na eerste aanmelding** (standaard aan bij een nieuw account en bij een
+  nieuw wachtwoord van de beheerder; per gebruiker aan/uit in de kolom
+  *Nieuw ww. verplicht*) moet de gebruiker eerst zelf een wachtwoord kiezen
+  voordat de rest van de app opent.
 - **Organisatiecode**: een gebruikersnaam is uniek binnen een organisatie
   (de live-tenant met zijn testomgevingen), niet over het hele platform. Twee
   organisaties kunnen dus allebei een *jan* hebben; elke gebruiker heeft in
@@ -272,6 +278,16 @@ controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
   eigen plannen.
 - De **laatste actieve beheerder** kan niet worden uitgeschakeld of een
   andere rol krijgen; maak eerst een andere beheerder aan.
+- **Gebruikers verwijderen** (0.30.0): knop **Verwijderen** in **Beheer →
+  Gebruikers** (eigen organisatie) en in **Hoofdbeheer → Gebruikers** (elke
+  tenant), altijd na bevestiging. Het account, de sessies en
+  supporttoestemmingen verdwijnen definitief. Plannen, offertes en
+  werkorders blijven bewaard en staan daarna op naam van de systeemgebruiker
+  *Verwijderde gebruiker*; in historie en auditlog blijft de regel staan
+  zonder koppeling aan het account. Je kunt je eigen account, de laatste
+  actieve beheerder van een tenant en de laatste actieve hoofdbeheerder niet
+  verwijderen; een hoofdbeheerder alleen door een andere hoofdbeheerder.
+  Tijdelijk blokkeren = **Uitschakelen**.
 - **Hoofdbeheerders** beheer je in **Hoofdbeheer → Hoofdbeheerders** (de
   gebruikers van de hoofdtenant): vink *Hoofdbeheerder* aan bij een nieuwe
   gebruiker, of gebruik *Hoofdbeheerder maken* / *intrekken* bij een
