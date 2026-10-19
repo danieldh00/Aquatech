@@ -95,7 +95,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
   try {
     const baas = client(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
-    const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!' } })).body.tenant;
+    const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
     const env = (await baas.post(`/api/platform/tenants/${t.id}/environments`, { name: 'Test' })).body.tenant;
 
     // Nooit in live, en alleen voor hoofdbeheerders.

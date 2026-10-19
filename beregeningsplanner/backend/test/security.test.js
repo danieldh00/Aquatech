@@ -139,7 +139,7 @@ test('sessies staan op de server: uitloggen en intrekken werkt meteen; token all
     // Beheerder logt iemand op alle toestellen uit.
     const admin = client(base);
     await admin.post('/api/auth/login', { username: 'baas', password: PW });
-    const jan = (await admin.post('/api/admin/users', { username: 'jan', role: 'gebruiker', password: 'Gras-Pomp-2027!' })).body;
+    const jan = (await admin.post('/api/admin/users', { username: 'jan', role: 'gebruiker', password: 'Gras-Pomp-2027!', mustChangePassword: false })).body;
     const j = client(base);
     await j.post('/api/auth/login', { username: 'jan', password: 'Gras-Pomp-2027!' });
     assert.ok((await j.get('/api/me')).body.user);

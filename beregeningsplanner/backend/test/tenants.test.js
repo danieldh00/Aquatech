@@ -134,13 +134,13 @@ test('hoofdbeheerder maakt een tenant met beheerder; tenants zien elkaars data n
     assert.strictEqual((await baas.login('baas', 'Tuin-Plan-2026!')).status, 200);
     assert.strictEqual((await baas.post('/api/plans', { data: plan('Plan van Aquatech') })).status, 201);
 
-    const made = await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: 'Gras-Pomp-2027!' } });
+    const made = await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } });
     assert.strictEqual(made.status, 201, JSON.stringify(made.body));
     assert.strictEqual(made.body.admin.username, 'piet');
 
     // Dubbele code: geweigerd. Een ongeldig account: dan ook geen halve tenant.
     assert.strictEqual((await baas.post('/api/platform/tenants', { name: 'Groen 2', slug: 'groen' })).status, 400);
-    const bad = await baas.post('/api/platform/tenants', { name: 'Blauw BV', slug: 'blauw', admin: { username: 'x', password: 'Haag-Slang-2028!' } });
+    const bad = await baas.post('/api/platform/tenants', { name: 'Blauw BV', slug: 'blauw', admin: { username: 'x', password: 'Haag-Slang-2028!', mustChangePassword: false } });
     assert.strictEqual(bad.status, 400);
     assert.ok(!(await baas.get('/api/platform/tenants')).body.items.some((t) => t.slug === 'blauw'));
 
@@ -173,7 +173,7 @@ test('uitgeschakelde tenant: inloggen geweigerd en bestaande sessie vervalt; hoo
   try {
     const baas = client(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
-    const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!' } })).body.tenant;
+    const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
     const piet = client(base);
     await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
     assert.ok((await piet.get('/api/me')).body.user);
@@ -197,8 +197,8 @@ test('testomgeving: los van live, wisselen zonder opnieuw inloggen', async () =>
   try {
     const baas = client(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
-    const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!' } })).body.tenant;
-    await baas.post(`/api/platform/tenants/${t.id}/users`, { username: 'jan', role: 'gebruiker', password: 'Haag-Slang-2028!' });
+    const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
+    await baas.post(`/api/platform/tenants/${t.id}/users`, { username: 'jan', role: 'gebruiker', password: 'Haag-Slang-2028!', mustChangePassword: false });
 
     const piet = client(base);
     await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
@@ -266,7 +266,7 @@ test('hoofdbeheerder opent een andere tenant en werkt daar als beheerder', async
   try {
     const baas = client(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
-    const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!' } })).body.tenant;
+    const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
     assert.strictEqual((await baas.post('/api/environment', { tenantId: t.id })).status, 200);
     assert.strictEqual((await baas.get('/api/me')).body.tenant.slug, 'groen');
     assert.deepStrictEqual((await baas.get('/api/admin/users')).body.items.map((u) => u.username), ['piet']);
@@ -286,7 +286,7 @@ test('de laatste hoofdbeheerder kan niet worden uitgeschakeld', async () => {
   try {
     const baas = client(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
-    await baas.post('/api/admin/users', { username: 'tweede', role: 'beheerder', password: 'Vijver-Mos-2029!' });
+    await baas.post('/api/admin/users', { username: 'tweede', role: 'beheerder', password: 'Vijver-Mos-2029!', mustChangePassword: false });
     const users = (await baas.get('/api/admin/users')).body.items;
     const me = users.find((u) => u.username === 'baas');
     assert.strictEqual((await baas.patch(`/api/admin/users/${me.id}`, { disabled: true })).status, 409);
@@ -305,7 +305,7 @@ test('hoofdbeheerders aanmaken, intrekken en beschermen', async () => {
     assert.ok(items.length);
 
     // Nieuwe hoofdbeheerder in de hoofdtenant; altijd met de rol beheerder.
-    const made = await baas.post(`/api/platform/tenants/${mainTenantId}/users`, { username: 'anna', displayName: 'Anna', role: 'klant', password: 'Vijver-Mos-2029!', platformAdmin: true });
+    const made = await baas.post(`/api/platform/tenants/${mainTenantId}/users`, { username: 'anna', displayName: 'Anna', role: 'klant', password: 'Vijver-Mos-2029!', platformAdmin: true, mustChangePassword: false });
     assert.strictEqual(made.status, 201, JSON.stringify(made.body));
     assert.strictEqual(made.body.platformAdmin, true);
     assert.strictEqual(made.body.role, 'beheerder');
@@ -323,17 +323,17 @@ test('hoofdbeheerders aanmaken, intrekken en beschermen', async () => {
 
     // Alleen in de hoofdtenant.
     assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'kees', role: 'beheerder', password: 'Vijver-Mos-2029!', platformAdmin: true })).status, 400);
-    const kees = (await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'kees', role: 'beheerder', password: 'Vijver-Mos-2029!' })).body;
+    const kees = (await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'kees', role: 'beheerder', password: 'Vijver-Mos-2029!', mustChangePassword: false })).body;
     assert.strictEqual((await baas.patch(`/api/platform/tenants/${groen.id}/users/${kees.id}`, { platformAdmin: true })).status, 400);
 
     // Een gewone beheerder van de hoofdtenant kan geen hoofdbeheerder wijzigen.
-    const jan = (await baas.post('/api/admin/users', { username: 'jan', role: 'beheerder', password: 'Haag-Slang-2028!' })).body;
+    const jan = (await baas.post('/api/admin/users', { username: 'jan', role: 'beheerder', password: 'Haag-Slang-2028!', mustChangePassword: false })).body;
     const janc = client(base);
     // Een gewone gebruiker van de hoofdtenant komt niet binnen met een andere code.
     assert.strictEqual((await client(base).login('jan', 'Haag-Slang-2028!', 'groen')).status, 401);
     await janc.login('jan', 'Haag-Slang-2028!');
     assert.strictEqual((await janc.patch(`/api/admin/users/${made.body.id}`, { disabled: true })).status, 403);
-    assert.strictEqual((await janc.patch(`/api/admin/users/${made.body.id}`, { password: 'Bloem-Perk-2029!' })).status, 403);
+    assert.strictEqual((await janc.patch(`/api/admin/users/${made.body.id}`, { password: 'Bloem-Perk-2029!', mustChangePassword: false })).status, 403);
     assert.strictEqual((await janc.patch(`/api/admin/users/${made.body.id}`, { platformAdmin: false })).status, 403);
     assert.strictEqual((await janc.post(`/api/admin/users/${made.body.id}/logout`)).status, 403);
     // Ook niet zichzelf promoveren via de beheer-API (veld wordt genegeerd).
@@ -395,13 +395,13 @@ test('gebruikersnamen zijn uniek per tenant; de organisatiecode kiest de tenant'
   try {
     const baas = await as('baas', 'Tuin-Plan-2026!');
     assert.strictEqual(baas.loginBody.tenant, '');
-    const groen = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!' } })).body.tenant;
+    const groen = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
     // Dezelfde voornaam in een andere tenant (ook gelijk aan de hoofdbeheerder) mag.
-    const blauw = await baas.post('/api/platform/tenants', { name: 'Blauw BV', slug: 'blauw', admin: { username: 'piet', password: 'Haag-Slang-2028!' } });
+    const blauw = await baas.post('/api/platform/tenants', { name: 'Blauw BV', slug: 'blauw', admin: { username: 'piet', password: 'Haag-Slang-2028!', mustChangePassword: false } });
     assert.strictEqual(blauw.status, 201, JSON.stringify(blauw.body));
-    assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'baas', role: 'installateur', password: 'Bloem-Perk-2029!' })).status, 201);
+    assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'baas', role: 'installateur', password: 'Bloem-Perk-2029!', mustChangePassword: false })).status, 201);
     // Binnen één tenant blijft een gebruikersnaam uniek.
-    assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'piet', role: 'installateur', password: 'Bloem-Perk-2029!' })).status, 400);
+    assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'piet', role: 'installateur', password: 'Bloem-Perk-2029!', mustChangePassword: false })).status, 400);
 
     // Twee Pieten met elk een eigen id, elk in de eigen tenant.
     const a = await as('piet', 'Gras-Pomp-2027!', 'groen');
@@ -428,8 +428,8 @@ test('gebruikersnamen zijn uniek per tenant; de organisatiecode kiest de tenant'
     assert.strictEqual((await c.get('/api/me')).body.tenant.slug, 'groen');
 
     // Binnen de organisatie (live plus testomgevingen) is een naam uniek.
-    assert.strictEqual((await baas.post(`/api/platform/tenants/${env.id}/users`, { username: 'tester', role: 'klant', password: 'Bloem-Perk-2029!' })).status, 201);
-    assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'tester', role: 'klant', password: 'Bloem-Perk-2029!' })).status, 400);
+    assert.strictEqual((await baas.post(`/api/platform/tenants/${env.id}/users`, { username: 'tester', role: 'klant', password: 'Bloem-Perk-2029!', mustChangePassword: false })).status, 201);
+    assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'tester', role: 'klant', password: 'Bloem-Perk-2029!', mustChangePassword: false })).status, 400);
     const tester = await as('tester', 'Bloem-Perk-2029!', 'groen');
     assert.strictEqual((await tester.get('/api/me')).body.tenant.id, env.id);
 

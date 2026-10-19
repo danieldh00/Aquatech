@@ -68,8 +68,8 @@ async function setup() {
   const { server, base } = await start(db);
   const baas = client(base);
   await baas.login('baas', 'Tuin-Plan-2026!');
-  const groen = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: 'Gras-Pomp-2027!' } })).body.tenant;
-  const kees = (await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'kees', displayName: 'Kees', role: 'klant', password: 'Haag-Slang-2028!' })).body;
+  const groen = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
+  const kees = (await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'kees', displayName: 'Kees', role: 'klant', password: 'Haag-Slang-2028!', mustChangePassword: false })).body;
   const test = (await baas.post(`/api/platform/tenants/${groen.id}/environments`, { name: 'Acceptatie' })).body.tenant;
   const users = (await baas.get(`/api/platform/tenants/${groen.id}/users`)).body.items;
   const piet = users.find((u) => u.username === 'piet');
@@ -145,7 +145,7 @@ test('impersonatie in live: alleen met toestemming van de gebruiker, intrekken s
     assert.strictEqual((await baas.get('/api/me')).body.user.username, 'piet');
 
     // Acties tijdens de impersonatie krijgen de hoofdbeheerder in het auditlog.
-    await baas.post('/api/admin/users', { username: 'nieuw', displayName: 'Nieuw', role: 'installateur', password: 'Bloem-Perk-2029!' });
+    await baas.post('/api/admin/users', { username: 'nieuw', displayName: 'Nieuw', role: 'installateur', password: 'Bloem-Perk-2029!', mustChangePassword: false });
     assert.strictEqual(auditRows(db, 'gebruiker_aangemaakt').at(-1).detail.impersonatie, 'baas');
 
     // De gebruiker ziet wie er heeft meegekeken en trekt de toestemming in.
@@ -203,7 +203,7 @@ test('impersonatie: verloopt vanzelf, stopt bij uitloggen en heeft grenzen', asy
     assert.strictEqual((await baas.post('/api/platform/impersonate', { userId: kees.id, tenantId: env.id })).status, 409);
 
     // Een testaccount (bestaat alleen in de testomgeving): zonder toestemming.
-    const tester = await baas.post(`/api/platform/tenants/${env.id}/users`, { username: 'tester', displayName: 'Tester', role: 'klant', password: 'Bloem-Perk-2029!' });
+    const tester = await baas.post(`/api/platform/tenants/${env.id}/users`, { username: 'tester', displayName: 'Tester', role: 'klant', password: 'Bloem-Perk-2029!', mustChangePassword: false });
     assert.strictEqual(tester.status, 201, JSON.stringify(tester.body));
     const tc = client(base);
     await tc.login('tester', 'Bloem-Perk-2029!', 'groen');

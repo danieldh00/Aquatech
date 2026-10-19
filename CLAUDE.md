@@ -196,6 +196,13 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `WO-<jaar>-0001`). Alleen uit een offerte met status `akkoord`; koppeling
   met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
   de offerte-editor.
+- **Wachtwoord** (0.31.0): eigen wijzigen via `POST /api/account/password`
+  (pagina `backend/src/password.html`, route `/wachtwoord`, inline script op
+  CSP-hash). `users.must_change_password` (migratie 12): zolang aan toont
+  elke pagina het wachtwoordscherm en geeft de API 403
+  `password_change_required` (behalve me/health/auth). Standaard aan bij
+  aanmaken door een beheerder en bij een reset (`withMustChange` in server.js);
+  tests die met zo'n account inloggen geven `mustChangePassword: false` mee.
 - **Webshopkoppeling** (0.29.0, prototype WooCommerce): `backend/src/woocommerce.js`
   (adapter Store API/REST v3, `sanitizeShop`, alleen openbare https tenzij
   `SHOP_ALLOW_INSECURE=1` voor tests) en `backend/src/shop.js` (tabellen

@@ -135,7 +135,7 @@ test('instellingen-API alleen voor beheerders', async () => {
     assert.strictEqual((await anon.put('/api/admin/settings', { aiEnabled: false })).status, 401);
     const a = await admin(base);
     // Een gewoon gebruikersaccount mag het niet.
-    const u = await a.post('/api/admin/users', { username: 'jan', displayName: 'Jan', role: 'gebruiker', password: 'Tuin-Plan-2026!' });
+    const u = await a.post('/api/admin/users', { username: 'jan', displayName: 'Jan', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false });
     assert.strictEqual(u.status, 201);
     const jan = client(base);
     assert.strictEqual((await jan.post('/api/auth/login', { username: 'jan', password: 'Tuin-Plan-2026!' })).status, 200);
@@ -223,7 +223,7 @@ test('wie met de toegangscode beheert, kan die niet leegmaken', async () => {
     // Startwaarde is 'geheim' (uit de opstartparameters), dus terugzetten mag.
     assert.strictEqual(reset.status, 200);
     // Met een beheerdersaccount mag het wel.
-    await a.post('/api/admin/users', { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!' });
+    await a.post('/api/admin/users', { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!', mustChangePassword: false });
     const baas = client(base);
     await baas.post('/api/auth/login', { username: 'baas', password: 'Tuin-Plan-2026!' });
     assert.strictEqual((await baas.put('/api/admin/settings', { accessCode: '' })).status, 200);

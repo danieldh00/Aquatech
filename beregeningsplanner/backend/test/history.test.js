@@ -114,11 +114,11 @@ test('beheerder maakt gebruikers aan en ziet de historie van alle aanvragen', as
     assert.strictEqual((await admin.post('/api/auth/login', { code: 'geheim' })).status, 200);
     assert.strictEqual((await admin.get('/api/me')).body.user.role, 'beheerder');
 
-    assert.strictEqual((await admin.post('/api/admin/users', { username: 'x', role: 'gebruiker', password: 'kort' })).status, 400);
-    const piet = await admin.post('/api/admin/users', { username: 'piet', displayName: 'Piet', role: 'gebruiker', password: 'Tuin-Plan-2026!' });
+    assert.strictEqual((await admin.post('/api/admin/users', { username: 'x', role: 'gebruiker', password: 'kort', mustChangePassword: false })).status, 400);
+    const piet = await admin.post('/api/admin/users', { username: 'piet', displayName: 'Piet', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false });
     assert.strictEqual(piet.status, 201);
-    assert.strictEqual((await admin.post('/api/admin/users', { username: 'piet', role: 'gebruiker', password: 'Tuin-Plan-2026!' })).status, 400);
-    await admin.post('/api/admin/users', { username: 'kees', role: 'klant', password: 'Gras-Pomp-2027!' });
+    assert.strictEqual((await admin.post('/api/admin/users', { username: 'piet', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false })).status, 400);
+    await admin.post('/api/admin/users', { username: 'kees', role: 'klant', password: 'Gras-Pomp-2027!', mustChangePassword: false });
 
     const p = client(base), k = client(base);
     assert.strictEqual((await p.post('/api/auth/login', { username: 'piet', password: 'fout-fout' })).status, 401);
@@ -180,12 +180,12 @@ test('uitgeschakelde gebruiker of nieuw wachtwoord: sessie vervalt', async () =>
   try {
     const admin = client(base);
     await admin.post('/api/auth/login', { code: 'geheim' });
-    const u = (await admin.post('/api/admin/users', { username: 'anna', role: 'gebruiker', password: 'Tuin-Plan-2026!' })).body;
+    const u = (await admin.post('/api/admin/users', { username: 'anna', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false })).body;
     const a = client(base);
     await a.post('/api/auth/login', { username: 'anna', password: 'Tuin-Plan-2026!' });
     assert.strictEqual((await a.get('/api/me')).body.user.username, 'anna');
 
-    await admin.patch(`/api/admin/users/${u.id}`, { password: 'Nieuw-Sproei-88' });
+    await admin.patch(`/api/admin/users/${u.id}`, { password: 'Nieuw-Sproei-88', mustChangePassword: false });
     assert.strictEqual((await a.get('/api/me')).body.user, null);
     await a.post('/api/auth/login', { username: 'anna', password: 'Nieuw-Sproei-88' });
     assert.strictEqual((await a.get('/api/me')).body.user.username, 'anna');
@@ -267,7 +267,7 @@ test('plannenoverzicht: samenvatting per plan; beheerder ziet alles plus histori
   try {
     const admin = client(base);
     await admin.post('/api/auth/login', { code: 'geheim' });
-    await admin.post('/api/admin/users', { username: 'joop', displayName: 'Joop', role: 'gebruiker', password: 'Tuin-Plan-2026!' });
+    await admin.post('/api/admin/users', { username: 'joop', displayName: 'Joop', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false });
     const j = client(base);
     await j.post('/api/auth/login', { username: 'joop', password: 'Tuin-Plan-2026!' });
     const a = (await j.post('/api/plans', { data: plan('Tuin A', { background: { dataUrl: 'data:image/png;base64,AAAA' } }) })).body;
