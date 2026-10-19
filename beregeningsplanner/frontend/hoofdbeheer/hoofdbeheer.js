@@ -89,7 +89,7 @@
       `<button class="btn small" data-act="rename">Naam</button>`,
       t.id === state.mainId ? '' : `<button class="btn small" data-act="toggle">${t.disabled ? 'Inschakelen' : 'Uitschakelen'}</button>`,
       env ? `<button class="btn small" data-act="reset">Leegmaken</button>` : '',
-      env ? `<button class="btn small" data-act="delete">Verwijderen</button>` : '',
+      env || t.id !== state.mainId ? `<button class="btn small danger" data-act="delete">Verwijderen</button>` : '',
     ].join('');
     return `<tr class="${env ? 'env' : ''}${t.disabled ? ' off' : ''}" data-tid="${esc(t.id)}">
       <td class="wrap"><b>${esc(t.name)}</b><br><span class="code">${esc(t.slug)}</span></td>
@@ -153,6 +153,15 @@
         if (!confirm(`Testomgeving ${t.name} leegmaken?\n\nAlle plannen, offertes, historie en testaccounts in deze testomgeving worden definitief verwijderd. Live blijft ongemoeid.`)) return;
         await api(`platform/tenants/${encodeURIComponent(t.id)}/reset`, { body: {} });
         toast('Testomgeving leeggemaakt');
+      } else if (name === 'delete' && t.environment === 'live') {
+        const envs = t.environments?.length ? ` en ${t.environments.length} testomgeving(en)` : '';
+        const typed = prompt(`Tenant ${t.name} definitief verwijderen?\n\nDe tenant${envs} worden met alle gebruikers (${t.userCount}), plannen (${t.planCount}), offertes, werkorders, historie, instellingen en webshopgegevens gewist. Dit kan niet ongedaan worden gemaakt (oude back-ups bevatten de gegevens nog tot ze verlopen). Wil je alleen de toegang blokkeren, gebruik dan Uitschakelen.\n\nTyp ter bevestiging de tenantcode "${t.slug}":`);
+        if (typed == null) return;
+        if (typed.trim().toLowerCase() !== t.slug) { toast('De tenantcode klopt niet; er is niets verwijderd.', true); return; }
+        await api(`platform/tenants/${encodeURIComponent(t.id)}`, { method: 'DELETE', body: { confirm: typed.trim().toLowerCase() } });
+        toast(`Tenant ${t.name} verwijderd`);
+        // Werkte je zelf in deze tenant, dan is die omgeving er niet meer.
+        if ([t, ...(t.environments || [])].some((x) => x.id === state.current)) { location.reload(); return; }
       } else if (name === 'delete') {
         if (!confirm(`Testomgeving ${t.name} verwijderen?\n\nDe omgeving en alle plannen, historie en instellingen daarin worden definitief verwijderd. Live blijft ongemoeid.`)) return;
         await api(`platform/tenants/${encodeURIComponent(t.id)}`, { method: 'DELETE' });

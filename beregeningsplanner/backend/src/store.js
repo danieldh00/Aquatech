@@ -470,6 +470,49 @@ function createStore(db) {
   }
 
   /**
+   * Live-tenant definitief verwijderen, met al zijn testomgevingen: alle rijen
+   * met een tenant_id van die omgevingen (gebruikers, plannen, offertes,
+   * werkorders, instellingen, sessies, auditlog, webshop, ...) gaan weg. De
+   * tabellen worden uit het schema gelezen, zodat een nieuwe tabel vanzelf
+   * meegaat. Verwijzingen elders naar de gewiste gebruikers (bijv. in de
+   * auditlog van de hoofdtenant) worden leeggemaakt. De hoofdtenant kan niet.
+   */
+  function deleteTenant(id, mainTenantId) {
+    const t = getTenant(id);
+    if (!t) return { error: 'Tenant niet gevonden.', status: 404 };
+    if (t.environment !== 'live') return { error: 'Verwijder een testomgeving via de testomgeving zelf.', status: 409 };
+    if (t.id === mainTenantId || t.slug === 'default') return { error: 'De hoofdtenant kan niet worden verwijderd.', status: 409 };
+    const ids = [t.id, ...q('SELECT id FROM tenants WHERE parent_id = ?').all(t.id).map((r) => r.id)];
+    const tables = q("SELECT name FROM sqlite_master WHERE type = 'table' AND name <> 'tenants' AND name NOT LIKE 'sqlite_%'").all().map((r) => r.name);
+    const columns = (n) => q(`PRAGMA table_info(${n})`).all();
+    const marks = ids.map(() => '?').join(', ');
+    const counts = {};
+    transaction(db, () => {
+      // Pas bij COMMIT controleren: de volgorde van wissen doet er dan niet toe.
+      db.exec('PRAGMA defer_foreign_keys = ON');
+      const users = q(`SELECT id FROM users WHERE tenant_id IN (${marks})`).all(...ids).map((r) => r.id);
+      for (const n of tables) {
+        if (!columns(n).some((c) => c.name === 'tenant_id')) continue;
+        const changes = q(`DELETE FROM ${n} WHERE tenant_id IN (${marks})`).run(...ids).changes;
+        if (changes) counts[n] = changes;
+      }
+      if (users.length) {
+        const um = users.map(() => '?').join(', ');
+        for (const n of tables) {
+          const cols = columns(n);
+          for (const fk of q(`PRAGMA foreign_key_list(${n})`).all()) {
+            if (fk.table !== 'users' || cols.find((c) => c.name === fk.from)?.notnull) continue;
+            q(`UPDATE ${n} SET ${fk.from} = NULL WHERE ${fk.from} IN (${um})`).run(...users);
+          }
+        }
+      }
+      q(`DELETE FROM tenants WHERE parent_id = ?`).run(t.id);
+      q('DELETE FROM tenants WHERE id = ?').run(t.id);
+    });
+    return { tenant: t, ids, counts };
+  }
+
+  /**
    * Testomgeving vullen met testdata (opgebouwd in testdata.js): eerst
    * leegmaken, dan de testaccounts (allemaal met dezelfde wachtwoord-hash),
    * plannen met een regel in de historie en offertes. De accounts horen bij de
@@ -828,7 +871,7 @@ function createStore(db) {
   }
 
   return {
-    getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, seedEnvironment,
+    getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
     ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, changeOwnPassword, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
     createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,

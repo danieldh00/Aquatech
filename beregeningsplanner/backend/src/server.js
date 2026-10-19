@@ -768,6 +768,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.download(path.join(backupDir, name), name);
   });
 
+  app.delete('/api/admin/backups/:name', (req, res) => {
+    const name = req.params.name;
+    if (!backupDir || !backups.isBackupName(name) || !fs.existsSync(path.join(backupDir, name))) {
+      return res.status(404).json({ error: 'not_found', message: 'Back-up niet gevonden.' });
+    }
+    fs.rmSync(path.join(backupDir, name), { force: true });
+    console.log(`Back-up ${name} verwijderd door ${req.user.display_name}`);
+    audit(req, 'backup_verwijderd', { name }, undefined, tenant.id);
+    res.json({ ok: true });
+  });
+
   // Auditlog: beveiligingsgebeurtenissen.
   app.get('/api/admin/audit', (req, res) => {
     const { limit, offset, action } = req.query;
@@ -1015,7 +1026,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({ ok: true });
   });
 
+  // Testomgeving of live-tenant verwijderen. Een live-tenant gaat weg met al
+  // zijn gegevens, gebruikers en testomgevingen; ter bevestiging moet de
+  // tenantcode (slug) worden meegestuurd als { confirm }.
   app.delete('/api/platform/tenants/:id', (req, res) => {
+    const t = store.getTenant(req.params.id);
+    if (t && t.environment === 'live') {
+      if (t.id !== tenant.id && String(req.body?.confirm ?? req.query.confirm ?? '').trim().toLowerCase() !== t.slug) {
+        return res.status(400).json({ error: 'confirm_required', message: `Typ ter bevestiging de tenantcode "${t.slug}" over.` });
+      }
+      const out = store.deleteTenant(t.id, tenant.id);
+      if (out.error) return platformError(res, out);
+      for (const id of out.ids) { settingsCache.delete(id); dailyCounts.delete(id); }
+      console.log(`Tenant ${t.name} (${t.slug}) verwijderd door ${req.user.display_name}, met ${out.ids.length - 1} testomgeving(en)`);
+      audit(req, 'tenant_verwijderd', { tenantId: t.id, slug: t.slug, name: t.name, environments: out.ids.length - 1, rows: out.counts }, undefined, tenant.id);
+      return res.json({ ok: true, environments: out.ids.length - 1 });
+    }
     const out = store.deleteEnvironment(req.params.id);
     if (out.error) return platformError(res, out);
     settingsCache.delete(req.params.id);
