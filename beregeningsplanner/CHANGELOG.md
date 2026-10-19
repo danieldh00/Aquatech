@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.29.1
+
+- **Hoofdbeheerder kon niet inloggen** als er nog een organisatiecode in het
+  inlogveld stond (de browser onthoudt de code van de vorige inlog) of als
+  de naam van de hoofdtenant werd ingevuld. Hoofdbeheerders horen bij de
+  hoofdtenant en loggen nu in met elke organisatiecode; gewone gebruikers
+  blijven gebonden aan de code van hun eigen organisatie.
+
 ## 0.29.0
 
 - **Webshopkoppeling** (prototype, WooCommerce): in **Beheer → Webshop**

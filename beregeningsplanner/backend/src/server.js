@@ -238,14 +238,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // gebruikersnaam kan in meer organisaties bestaan. Testaccounts van een
       // testomgeving loggen in met de code van de organisatie of van die omgeving.
       const orgCode = String(req.body?.tenant ?? '').trim().toLowerCase().slice(0, 60);
-      const home = store.loginTenant(orgCode);
+      let home = store.loginTenant(orgCode);
       const key = `${home?.id || orgCode}:${username}`;
       if (lockedOut(key)) {
         audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, home?.id);
         return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
       }
       // Ook bij een onbekende code een wachtwoord controleren (gelijke looptijd).
-      const user = await store.authenticate(home?.id || null, username, String(req.body?.password ?? '').slice(0, 1024));
+      const password = String(req.body?.password ?? '').slice(0, 1024);
+      let user = await store.authenticate(home?.id || null, username, password);
+      // Hoofdbeheerders horen bij de hoofdtenant, maar loggen ook in als er
+      // nog een andere organisatiecode in het veld staat (de browser onthoudt
+      // de vorige) of als ze de naam van de hoofdtenant intypen.
+      if (!user && home?.id !== tenant.id) {
+        const admin = await store.authenticate(tenant.id, username, password);
+        if (admin?.platform_admin) { user = admin; home = tenant; }
+      }
       if (!user) {
         failed(key);
         audit(req, 'inloggen_mislukt', { username, organisatie: orgCode }, null, home?.id);

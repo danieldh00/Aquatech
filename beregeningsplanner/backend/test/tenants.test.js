@@ -312,6 +312,14 @@ test('hoofdbeheerders aanmaken, intrekken en beschermen', async () => {
     const anna = client(base);
     assert.strictEqual((await anna.login('anna', 'Vijver-Mos-2029!')).status, 200);
     assert.strictEqual((await anna.get('/api/platform/tenants')).status, 200);
+    // Ook met een andere (onthouden) organisatiecode of de naam van de hoofdtenant.
+    for (const org of ['groen', 'aquatech']) {
+      const c = client(base);
+      const r = await c.login('anna', 'Vijver-Mos-2029!', org);
+      assert.strictEqual(r.status, 200, org);
+      assert.strictEqual(r.body.tenant, '');
+      assert.strictEqual((await c.get('/api/platform/tenants')).status, 200);
+    }
 
     // Alleen in de hoofdtenant.
     assert.strictEqual((await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'kees', role: 'beheerder', password: 'Vijver-Mos-2029!', platformAdmin: true })).status, 400);
@@ -321,6 +329,8 @@ test('hoofdbeheerders aanmaken, intrekken en beschermen', async () => {
     // Een gewone beheerder van de hoofdtenant kan geen hoofdbeheerder wijzigen.
     const jan = (await baas.post('/api/admin/users', { username: 'jan', role: 'beheerder', password: 'Haag-Slang-2028!' })).body;
     const janc = client(base);
+    // Een gewone gebruiker van de hoofdtenant komt niet binnen met een andere code.
+    assert.strictEqual((await client(base).login('jan', 'Haag-Slang-2028!', 'groen')).status, 401);
     await janc.login('jan', 'Haag-Slang-2028!');
     assert.strictEqual((await janc.patch(`/api/admin/users/${made.body.id}`, { disabled: true })).status, 403);
     assert.strictEqual((await janc.patch(`/api/admin/users/${made.body.id}`, { password: 'Bloem-Perk-2029!' })).status, 403);
