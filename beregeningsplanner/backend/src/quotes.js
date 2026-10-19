@@ -333,12 +333,19 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     return true;
   }
 
+  // Nummer van een geaccordeerde offerte (null als die niet akkoord is):
+  // verwijderen daarvan vraagt een extra bevestiging met het offertenummer.
+  function acceptedNumber(tenantId, id) {
+    const r = q('SELECT number, status FROM quotes WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+    return r && r.status === 'akkoord' ? r.number : null;
+  }
+
   // Definitief wissen (AVG-verzoek): ook al verwijderde offertes.
   function purge(tenantId, id) {
     return q('DELETE FROM quotes WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
   }
 
-  return { list, get, create, update, respond, decide, share, unshare, markSent, byToken, markViewed, publicView, shareLink, remove, purge, nextNumber };
+  return { list, get, create, update, respond, decide, share, unshare, markSent, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, nextNumber };
 }
 
 const wrapAsync = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -628,12 +635,24 @@ function registerQuoteRoutes(app, ctx) {
     res.json({ ok: true });
   }));
 
+  // Een geaccordeerde offerte is een afspraak met de klant: verwijderen of
+  // wissen alleen als het offertenummer als { confirm } is meegestuurd.
+  const acceptedGuard = (req, res, tenantId) => {
+    const number = quotes.acceptedNumber(tenantId, req.params.id);
+    if (!number || String(req.body?.confirm ?? '').trim() === number) return false;
+    res.status(409).json({ error: 'confirm_required', number, message: `Offerte ${number} is geaccordeerd door de klant. Typ ter bevestiging het offertenummer over.` });
+    return true;
+  };
+
   app.delete('/api/quotes/:id', requireQuotes, (req, res) => {
+    if (acceptedGuard(req, res, req.user.tenant_id)) return;
     if (!quotes.remove(req.user, req.params.id)) return notFound(res);
+    audit(req, 'offerte_verwijderd', { quoteId: req.params.id });
     res.json({ ok: true });
   });
 
   app.delete('/api/admin/quotes/:id', requireAdmin, (req, res) => {
+    if (acceptedGuard(req, res, ctx.tenantOf(req))) return;
     if (!quotes.purge(ctx.tenantOf(req), req.params.id)) return notFound(res);
     audit(req, 'offerte_gewist', { quoteId: req.params.id });
     res.json({ ok: true });

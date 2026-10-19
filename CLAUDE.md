@@ -145,6 +145,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   cookie `aquatech_env` (`<user>:<tenant>`, elke keer opnieuw gecontroleerd)
   en de leesbare `aquatech_env_hint` voor `shared/env.js` (testlabel,
   localStorage-achtervoegsel). Wisselaar in `dashboard/account.js`.
+- **Verwijderen** (0.33.0): live-tenant via `DELETE /api/platform/tenants/:id`
+  met `{ confirm: <slug> }` (`store.deleteTenant`: wist elke tabel met
+  `tenant_id` voor de tenant + testomgevingen, uit het schema gelezen, met
+  `defer_foreign_keys`; verwijzingen naar gewiste gebruikers elders → NULL).
+  Geaccordeerde offerte weg alleen met `{ confirm: <offertenummer> }` (409
+  `confirm_required`). Back-ups: `DELETE /api/admin/backups/:name`.
 - **Testdata beweegt mee met elke feature** (wens Daniël 2026-10-19): een
   nieuwe feature (tabel, status, koppeling) krijgt in dezelfde PR testdata in
   `backend/src/testdata.js` (`buildTestData` voor de opbouw, `seedFeatures`

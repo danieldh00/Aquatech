@@ -19,7 +19,8 @@
     eerste_beheerder: 'Eerste beheerder', installatie_mislukt: 'Installatiecode onjuist', gebruiker_aangemaakt: 'Gebruiker aangemaakt',
     gebruiker_gewijzigd: 'Gebruiker gewijzigd', gebruiker_verwijderd: 'Gebruiker verwijderd', plan_gewist: 'Plan definitief gewist', backup_gemaakt: 'Back-up gemaakt',
     backup_gedownload: 'Back-up gedownload', sessies_ingetrokken: 'Uitgelogd op alle toestellen', instellingen_gewijzigd: 'Instellingen gewijzigd',
-    offerte_akkoord: 'Offerte geaccepteerd door klant', offerte_afgewezen: 'Offerte afgewezen door klant', offerte_gewist: 'Offerte definitief gewist',
+    offerte_akkoord: 'Offerte geaccepteerd door klant', offerte_afgewezen: 'Offerte afgewezen door klant', offerte_gewist: 'Offerte definitief gewist', offerte_verwijderd: 'Offerte verwijderd', backup_verwijderd: 'Back-up verwijderd',
+    tenant_verwijderd: 'Tenant verwijderd', testomgeving_verwijderd: 'Testomgeving verwijderd', werkorder_verwijderd: 'Werkorder verwijderd', werkorder_gewist: 'Werkorder definitief gewist',
     impersonatie_gestart: 'Hoofdbeheerder werkt als gebruiker', impersonatie_beeindigd: 'Impersonatie beëindigd',
     webshop_gesynchroniseerd: 'Webshopproducten opgehaald', support_toegang_verleend: 'Supporttoegang gegeven', support_toegang_ingetrokken: 'Supporttoegang ingetrokken',
   };
@@ -364,7 +365,16 @@
       $('#b-now').disabled = !enabled;
       el.innerHTML = !enabled ? 'Back-ups zijn op deze server niet beschikbaar.'
         : !items.length ? 'Nog geen back-ups.'
-          : `<ul class="timeline">${items.map((b) => `<li><a href="../api/admin/backups/${encodeURIComponent(b.name)}" download>${esc(b.name)}</a> · ${esc(when(b.createdAt))} · ${esc(size(b.size))}</li>`).join('')}</ul>`;
+          : `<ul class="timeline">${items.map((b) => `<li><a href="../api/admin/backups/${encodeURIComponent(b.name)}" download>${esc(b.name)}</a> · ${esc(when(b.createdAt))} · ${esc(size(b.size))}
+            <button class="btn small danger" data-backup-del="${esc(b.name)}">Verwijderen</button></li>`).join('')}</ul>`;
+      el.querySelectorAll('[data-backup-del]').forEach((btn) => {
+        btn.onclick = async () => {
+          const name = btn.dataset.backupDel;
+          if (!confirm(`Back-up ${name} verwijderen?\n\nHet bestand wordt definitief gewist van de server.`)) return;
+          try { await api(`backups/${encodeURIComponent(name)}`, { method: 'DELETE' }); toast('Back-up verwijderd'); } catch (e) { toast(e.message, true); }
+          loadBackups();
+        };
+      });
     } catch (e) {
       el.textContent = `Kan de back-ups niet laden (${e.message}).`;
     }

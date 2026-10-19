@@ -710,9 +710,11 @@
       const d = Q.today();
       createEmpty({ ...JSON.parse(JSON.stringify(q.data)), date: d, validUntil: Q.addDays(d, state.profile.validDays || 30) });
     } else if (act === 'delete') {
-      if (!confirm(`Offerte ${q.number} verwijderen?`)) return;
+      const body = acceptedConfirm(q, 'verwijderen');
+      if (body === null) return;
+      if (!body && !confirm(`Offerte ${q.number} verwijderen?`)) return;
       try {
-        await api(`quotes/${encodeURIComponent(q.id)}`, { method: 'DELETE' });
+        await api(`quotes/${encodeURIComponent(q.id)}`, { method: 'DELETE', body: body || undefined });
         state.dirty = false;
         toast(`Offerte ${q.number} verwijderd`);
         go('');
@@ -720,9 +722,11 @@
         toast(`Verwijderen mislukt: ${e.message}`, true);
       }
     } else if (act === 'purge') {
-      if (!confirm(`Offerte ${q.number} definitief wissen, inclusief klantgegevens? Dit kan niet ongedaan worden gemaakt.`)) return;
+      const body = acceptedConfirm(q, 'definitief wissen');
+      if (body === null) return;
+      if (!body && !confirm(`Offerte ${q.number} definitief wissen, inclusief klantgegevens? Dit kan niet ongedaan worden gemaakt.`)) return;
       try {
-        await api(`admin/quotes/${encodeURIComponent(q.id)}`, { method: 'DELETE' });
+        await api(`admin/quotes/${encodeURIComponent(q.id)}`, { method: 'DELETE', body: body || undefined });
         state.dirty = false;
         toast(`Offerte ${q.number} gewist`);
         go('');
@@ -730,6 +734,17 @@
         toast(`Wissen mislukt: ${e.message}`, true);
       }
     }
+  }
+
+  // Een geaccordeerde offerte alleen weg na het overtypen van het nummer.
+  // Geeft { confirm } terug, false als er geen extra bevestiging nodig is en
+  // null als de gebruiker afbreekt of zich vertypt.
+  function acceptedConfirm(q, what) {
+    if (q.status !== 'akkoord') return false;
+    const typed = prompt(`Offerte ${q.number} is geaccordeerd door de klant${q.acceptance?.name ? ` (${q.acceptance.name})` : ''}.\n\nWeet je zeker dat je deze offerte wilt ${what}? Gekoppelde werkorders blijven bestaan. Dit kan niet ongedaan worden gemaakt.\n\nTyp ter bevestiging het offertenummer "${q.number}":`);
+    if (typed == null) return null;
+    if (typed.trim() !== q.number) { toast('Het offertenummer klopt niet; er is niets verwijderd.', true); return null; }
+    return { confirm: typed.trim() };
   }
 
   // ---------- PDF (afdrukversie) ----------

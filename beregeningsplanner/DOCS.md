@@ -288,6 +288,19 @@ controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
   actieve beheerder van een tenant en de laatste actieve hoofdbeheerder niet
   verwijderen; een hoofdbeheerder alleen door een andere hoofdbeheerder.
   Tijdelijk blokkeren = **Uitschakelen**.
+- **Tenants verwijderen** (0.33.0): **Hoofdbeheer → Verwijderen** bij een
+  live-tenant, na het overtypen van de tenantcode. Alles van die tenant en
+  zijn testomgevingen wordt definitief gewist (gebruikers, plannen, offertes,
+  werkorders, historie, instellingen, webshop, auditlog). De hoofdtenant kan
+  niet weg. Oude back-ups bevatten de gegevens nog tot ze verlopen of je ze
+  verwijdert. Tijdelijk blokkeren = **Uitschakelen**.
+- **Wat kan weg**: plannen (planner; beheerder: definitief wissen in
+  Plannen), offertes en werkorders (verwijderen; beheerder: definitief
+  wissen), gebruikers, testomgevingen, tenants, back-ups en de
+  webshopkoppeling. Een geaccordeerde offerte vraagt het offertenummer ter
+  bevestiging. Historie en auditlog zijn bewust niet los te verwijderen
+  (sporen voor beveiliging); definitief wissen van een plan haalt wel de
+  inhoud uit de historie.
 - **Hoofdbeheerders** beheer je in **Hoofdbeheer → Hoofdbeheerders** (de
   gebruikers van de hoofdtenant): vink *Hoofdbeheerder* aan bij een nieuwe
   gebruiker, of gebruik *Hoofdbeheerder maken* / *intrekken* bij een

@@ -250,7 +250,8 @@ test('testomgeving: los van live, wisselen zonder opnieuw inloggen', async () =>
     assert.strictEqual((await baas.post(`/api/platform/tenants/${env.body.tenant.id}/reset`)).status, 200);
     assert.deepStrictEqual((await piet.get('/api/plans')).body.items, []);
     assert.strictEqual((await baas.post(`/api/platform/tenants/${t.id}/reset`)).status, 409);
-    assert.strictEqual((await baas.del(`/api/platform/tenants/${t.id}`)).status, 409);
+    // Een live-tenant verwijderen vraagt de tenantcode (zie tenants-delete.test.js).
+    assert.strictEqual((await baas.del(`/api/platform/tenants/${t.id}`)).body.error, 'confirm_required');
     assert.strictEqual((await baas.del(`/api/platform/tenants/${env.body.tenant.id}`)).status, 200);
     const back = (await piet.get('/api/me')).body;
     assert.strictEqual(back.tenant.environment, 'live');

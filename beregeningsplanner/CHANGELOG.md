@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.33.0
+
+- **Tenants verwijderen**: in **Hoofdbeheer** heeft elke live-tenant (behalve
+  de hoofdtenant) een knop **Verwijderen**. Ter bevestiging typ je de
+  tenantcode over. De tenant gaat definitief weg met al zijn testomgevingen,
+  gebruikers, sessies, plannen, historie, offertes, werkorders, instellingen,
+  webshopgegevens en auditlog; in de auditlog van de hoofdtenant blijft een
+  regel *Tenant verwijderd* staan. Alleen voor hoofdbeheerders.
+- **Back-ups verwijderen**: knop **Verwijderen** per back-up in **Beheer →
+  Instellingen** (alleen hoofdbeheerders).
+- **Geaccordeerde offertes** verwijderen of definitief wissen kan alleen na
+  het overtypen van het offertenummer (ook in de API: `{ confirm: nummer }`).
+  Verwijderen van een offerte komt nu ook in de auditlog.
+
 ## 0.32.0
 
 - **Testdata vult alle features**: naast accounts, plannen en offertes nu ook
