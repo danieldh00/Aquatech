@@ -12,7 +12,7 @@ const testdata = require('./testdata');
 const { createSettings, SettingsError, FIELDS } = require('./settings');
 const { createVault, loadOrCreateMasterKey } = require('./vault');
 const backups = require('./backup');
-const { createQuoteStore, registerQuoteRoutes } = require('./quotes');
+const { createQuoteStore, registerQuoteRoutes, validShareBase } = require('./quotes');
 const { createMailer } = require('./mailer');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
@@ -888,9 +888,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
   });
 
+  // Opslag van offertes, werkorders en webshop (ook gebruikt door de testdata).
+  const quoteStore = createQuoteStore(database, { vault });
+  const workOrderStore = createWorkOrderStore(database);
+  const shopStore = createShopStore(database);
+
   // ---------- Offertes (module Offertes, zie quotes.js) ----------
   registerQuoteRoutes(app, {
-    quotes: createQuoteStore(database, { vault }), identify, requireUser, requireAdmin, requireRight, requireJson, audit,
+    quotes: quoteStore, identify, requireUser, requireAdmin, requireRight, requireJson, audit,
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     // Openbare offertelink: zonder inlog, dus de tenant volgt uit de offerte.
     settingsForTenant: (id) => settingsFor(id), remoteIp, mailerFor,
@@ -911,7 +916,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Werkorders (module Werkorders, zie workorders.js) ----------
   registerWorkOrderRoutes(app, {
-    workorders: createWorkOrderStore(database), requireRight, requireAdmin, requireJson, audit,
+    workorders: workOrderStore, requireRight, requireAdmin, requireJson, audit,
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
     // testaccounts daarvan erbij (net als bij de klantaccounts hierboven).
     staffTenantsOf: (req) => {
@@ -922,7 +927,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Webshopkoppeling (zie shop.js) ----------
   registerShopRoutes(app, {
-    shop: createShopStore(database), requireUser, requireJson, audit, fetchImpl: shopFetch,
+    shop: shopStore, requireUser, requireJson, audit, fetchImpl: shopFetch,
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }),
   });
@@ -1033,9 +1038,18 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     while (set.accounts.some((a) => passwordProblem(password, a.username))) password = testdata.newPassword();
     const out = store.seedEnvironment(t.id, set, { passwordHash: await hashPassword(password), numberPrefix: profile.numberPrefix || 'OF-' });
     if (out.error) return platformError(res, out);
+    // Klantlinks, reacties, werkorders en webshop via de echte opslaglogica.
+    // De klantlink heeft het adres van de openbare pagina nodig; dat kent
+    // alleen de browser (padprefix achter een proxy).
+    const extra = testdata.seedFeatures(
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, settings: settingsFor(t.id) },
+      set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
+      { shareBase: validShareBase(req.body?.shareBase) },
+    );
+    const counts = { ...out.counts, ...extra };
     console.log(`Testomgeving ${t.name} gevuld met testdata door ${req.user.display_name}`);
-    audit(req, 'testomgeving_gevuld', { tenantId: t.id, ...out.counts }, undefined, tenant.id);
-    res.status(201).json({ accounts: out.users.map(store.publicUser), password, counts: out.counts });
+    audit(req, 'testomgeving_gevuld', { tenantId: t.id, ...counts }, undefined, tenant.id);
+    res.status(201).json({ accounts: out.users.map(store.publicUser), password, counts });
   }));
 
   // Gebruikers van een tenant (accounts, zonder gasten) beheren. In een

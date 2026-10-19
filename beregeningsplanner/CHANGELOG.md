@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.32.0
+
+- **Testdata vult alle features**: naast accounts, plannen en offertes nu ook
+  klantlinks (verstuurd en bekeken), opties, digitaal akkoord met naam en
+  handtekening, een afwijzing met reden, werkorders (gepland, in uitvoering,
+  gereed) en een nepwebshop met prijzen. Klantlinks, reacties en werkorders
+  lopen via dezelfde opslaglogica als in de app. Een test controleert dat
+  elke tabel met gegevens per tenant testdata krijgt, zodat een nieuwe
+  feature de testdata meeneemt.
+- **Klantlink zichtbaar bij de offerte**: onder *Digitale offerte* staat het
+  adres dat de klant krijgt, met **Kopiëren** en **Openen** (openen telt niet
+  als bekeken door de klant). Een verstuurde offerte zonder link zegt dat
+  ook; het verzendvenster toont de link die in de e-mail komt.
+
 ## 0.31.0
 
 - **Eigen wachtwoord wijzigen**: knop *Wachtwoord* rechtsboven (naast

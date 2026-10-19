@@ -108,7 +108,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.strictEqual(out.status, 201);
     const { password, accounts, counts } = out.body;
     assert.strictEqual(accounts.length, 6);
-    assert.ok(counts.plans >= 6 && counts.quotes === 5);
+    assert.ok(counts.plans >= 6 && counts.quotes === 6);
     const name = (suffix) => accounts.find((a) => a.username.endsWith(`.${suffix}`)).username;
 
     // Een testklant komt direct in de testomgeving en ziet alleen het eigene.
@@ -126,7 +126,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     const inst = client(base);
     await inst.login(name('installateur'), password, env.slug);
     assert.strictEqual((await inst.get('/api/plans?all=1')).body.items.length, counts.plans);
-    assert.strictEqual((await inst.get('/api/quotes?all=1')).body.items.length, 5);
+    assert.strictEqual((await inst.get('/api/quotes?all=1')).body.items.length, 6);
     const customers = (await inst.get('/api/quote-customers')).body.items;
     assert.strictEqual(customers.length, 3, 'de testklanten om een offerte aan te koppelen');
 
@@ -159,6 +159,78 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.strictEqual((await baas.post(`/api/platform/tenants/${env.id}/reset`)).status, 200);
     assert.strictEqual((await client(base).login(name('klant2'), again.body.password, 'groen')).status, 401);
     assert.strictEqual((await baas.get('/api/platform/tenants')).body.items.find((x) => x.id === t.id).environments[0].planCount, 0);
+  } finally {
+    server.close();
+  }
+});
+
+test('testdata vult alle features: klantlinks, akkoord met handtekening, werkorders en webshop', async () => {
+  const db = await platformDb();
+  const { server, base } = await start(db);
+  try {
+    const baas = client(base);
+    await baas.login('baas', 'Tuin-Plan-2026!');
+    const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!' } })).body.tenant;
+    const env = (await baas.post(`/api/platform/tenants/${t.id}/environments`, { name: 'Test' })).body.tenant;
+    const out = await baas.post(`/api/platform/tenants/${env.id}/testdata`, { shareBase: 'https://app.voorbeeld.nl/openbaar/offerte.html' });
+    assert.strictEqual(out.status, 201);
+    const { password, accounts, counts } = out.body;
+    assert.strictEqual(counts.links, 5);
+    assert.strictEqual(counts.responses, 4);
+    assert.strictEqual(counts.workOrders, 3);
+    assert.ok(counts.products > 40);
+
+    const inst = client(base);
+    await inst.login(accounts.find((a) => a.username.endsWith('.installateur')).username, password, 'groen');
+    const list = (await inst.get('/api/quotes?all=1')).body.items;
+    assert.deepStrictEqual([...new Set(list.map((q) => q.status))].sort(), ['afgewezen', 'akkoord', 'concept', 'verzonden']);
+    for (const item of list) {
+      const q = (await inst.get(`/api/quotes/${item.id}`)).body;
+      if (q.status === 'concept') { assert.strictEqual(q.share.active, false); continue; }
+      // De klantlink is zichtbaar voor de installateur en werkt zonder inlog.
+      assert.match(q.share.url, /^https:\/\/app\.voorbeeld\.nl\/openbaar\/offerte\.html#t=[A-Za-z0-9_-]{20,}$/);
+      assert.ok(q.share.viewCount > 0 && q.share.sentAt);
+      const pub = await fetch(`${base}/api/public/quote`, { headers: { 'X-Offerte-Token': q.share.url.split('#t=')[1] } });
+      assert.strictEqual(pub.status, 200);
+      if (q.status === 'akkoord') {
+        assert.ok(q.acceptance.signature.startsWith('data:image/png;base64,') && q.acceptance.termsAccepted);
+        assert.strictEqual((await inst.put(`/api/quotes/${q.id}`, { data: q.data })).status, 409, 'geaccordeerd = vast');
+      }
+      if (q.status === 'afgewezen') assert.ok(q.acceptance.reason);
+    }
+    assert.ok(list.length === 6);
+
+    const wos = (await inst.get('/api/workorders')).body.items;
+    assert.deepStrictEqual(wos.map((w) => w.status).sort(), ['bezig', 'gepland', 'gereed']);
+    for (const w of wos) {
+      const full = (await inst.get(`/api/workorders/${w.id}`)).body;
+      assert.ok(full.assignee && full.plannedDate && full.data.zones.length > 0 && full.data.materials.length > 0);
+      if (w.status === 'gereed') assert.strictEqual(full.progress.pct, 100);
+      if (w.status === 'bezig') assert.ok(full.progress.pct > 0 && full.progress.pct < 100);
+    }
+
+    const cat = (await inst.get('/api/catalog')).body;
+    assert.ok(cat.configured && cat.syncedAt);
+    assert.ok(Object.values(cat.articles).some((a) => a.via === 'mapping') && Object.values(cat.articles).some((a) => a.via === 'code'));
+    assert.ok(cat.unmatched.length > 0, 'een paar artikelen staan niet in de nepwebshop');
+
+    // Elke tabel met gegevens per tenant heeft testdata. Een nieuwe tabel?
+    // Dan hoort die in testdata.js (of, als het echt geen testdata is, hier
+    // in de uitzonderingen met de reden).
+    const NO_TESTDATA = {
+      sessions: 'ontstaan bij inloggen',
+      audit: 'ontstaat vanzelf bij handelingen',
+      settings: 'instellingen kiest de beheerder zelf (alleen de nepwebshop wordt gezet)',
+      support_grants: 'meekijken is een handeling, geen data',
+      impersonations: 'meekijken is een handeling, geen data',
+    };
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name)
+      .filter((n) => db.prepare(`PRAGMA table_info(${n})`).all().some((c) => c.name === 'tenant_id'));
+    for (const n of tables) {
+      if (NO_TESTDATA[n]) continue;
+      const c = db.prepare(`SELECT COUNT(*) AS n FROM ${n} WHERE tenant_id = ?`).get(env.id).n;
+      assert.ok(c > 0, `tabel ${n} heeft geen testdata: vul hem in testdata.js`);
+    }
   } finally {
     server.close();
   }

@@ -7,7 +7,11 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
+const zlib = require('zlib');
+
 const Core = require(path.join(__dirname, '..', '..', 'frontend', 'offertes', 'quote-core.js'));
+const WoCore = require(path.join(__dirname, '..', '..', 'frontend', 'werkorders', 'workorder-core.js'));
+const { loadArticles } = require('./shop');
 
 // De plannerbibliotheken (zones indelen, stuklijst) in een sandbox, zoals de
 // offertemodule ze in de browser laadt. Pas bij het eerste gebruik laden.
@@ -159,20 +163,41 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
     })() },
   ];
 
+  // Offertes in alle statussen, met de digitale offerte erbij: share = klantlink
+  // (verstuurd/bekeken), response = reactie van de klant (akkoord met naam,
+  // handtekening en gekozen opties, of afgewezen met reden), workorder =
+  // werkorder bij een geaccordeerde offerte. Dagen zijn "zoveel dagen geleden".
   const quotes = [
-    { planKey: 'devries', owner: 'inst1', customerKey: 'klant1', customer: c.klant1, status: 'akkoord', at: 30, discountPct: 5 },
-    { planKey: 'bakker', owner: 'inst1', customerKey: 'klant2', customer: c.klant2, status: 'verzonden', at: 3 },
-    { planKey: 'visser', owner: 'inst2', customerKey: 'klant3', customer: c.klant3, status: 'afgewezen', at: 14, layout: 'totaal' },
-    { planKey: 'mulder', owner: 'inst2', customerKey: null, customer: c.mulder, status: 'verzonden', at: 6 },
-    { planKey: 'bos', owner: 'inst1', customerKey: null, customer: c.bos, status: 'concept', at: 1, discountPct: 10 },
+    { planKey: 'devries', owner: 'inst1', customerKey: 'klant1', customer: c.klant1, status: 'akkoord', at: 34, discountPct: 5,
+      options: ['rain', 'service'],
+      share: { sent: 33, views: 4, lastView: 31 },
+      response: { answer: 'akkoord', name: 'Petra de Vries', at: 31, via: 'account', options: ['rain'] },
+      workorder: { status: 'gereed', assignee: 'inst1', planned: -24, done: 1, picked: 1, notes: 'Opgeleverd en met de klant doorgelopen; computer ingesteld op 3 beurten per week.' } },
+    { planKey: 'bakker', owner: 'inst1', customerKey: 'klant2', customer: c.klant2, status: 'verzonden', at: 3,
+      options: ['rain', 'soil', 'service'], share: { sent: 3, views: 2, lastView: 1 } },
+    { planKey: 'visser', owner: 'inst2', customerKey: 'klant3', customer: c.klant3, status: 'afgewezen', at: 17, layout: 'totaal',
+      share: { sent: 16, views: 3, lastView: 14 },
+      response: { answer: 'afgewezen', name: 'Anne Visser', at: 14, via: 'link', reason: 'We kiezen dit jaar voor alleen een druppelslang in de border.' } },
+    { planKey: 'mulder', owner: 'inst2', customerKey: null, customer: c.mulder, status: 'akkoord', at: 9,
+      options: ['service'], share: { sent: 9, views: 2, lastView: 7 },
+      response: { answer: 'akkoord', name: 'Jeroen Mulder', at: 7, via: 'link', options: ['service'] },
+      workorder: { status: 'bezig', assignee: 'inst2', planned: 0, done: 0.4, picked: 0.8, notes: 'Hond loopt los in de tuin; poort aan de zijkant gebruiken.' } },
+    { planKey: 'vanberg', owner: 'beheerder', customerKey: null, customer: c.vanberg, status: 'akkoord', at: 5,
+      share: { sent: 5, views: 1, lastView: 4 },
+      response: { answer: 'akkoord', name: 'Sanne van den Berg', at: 4, via: 'link' },
+      workorder: { status: 'gepland', assignee: 'inst1', planned: 8, done: 0, picked: 0 } },
+    { planKey: 'bos', owner: 'inst1', customerKey: null, customer: c.bos, status: 'concept', at: 1, discountPct: 10, options: ['soil'] },
   ].map((qd) => {
     const plan = plans.find((x) => x.key === qd.planKey);
     const { lines, summary } = plain(Core.fromPlan(plan.data, plannerLib(), profile));
+    for (const key of qd.options || []) lines.push({ ...OPTIONS[key], id: `opt-${key}`, optional: true, selected: false });
     const date = day(qd.at).slice(0, 10);
+    // Geaccordeerde offertes moeten op het moment van akkoord nog geldig zijn.
+    const validDays = Math.max(Number(profile.validDays) || 30, qd.at + 14);
     const data = Core.sanitize({
       title: `Automatische beregening ${plan.data.meta.customer}`,
       date,
-      validUntil: Core.addDays(date, Number(profile.validDays) || 30),
+      validUntil: Core.addDays(date, validDays),
       reference: plan.data.meta.name,
       customer: qd.customer,
       intro: profile.intro || '',
@@ -187,7 +212,144 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
     return { ...qd, at: day(qd.at), data, totalExcl: t.net, totalIncl: t.total };
   });
 
-  return { accounts, plans, quotes };
+  // Webshop: een nep-WooCommerce-winkel met de artikelen van de catalogus.
+  // De meeste koppelen via sku = code, een paar via het productveld
+  // aquatech_code of een handmatige koppeling, een paar staan niet in de shop.
+  const shop = testShop();
+
+  return { accounts, plans, quotes, shop, day };
 }
 
-module.exports = { buildTestData, newPassword, prefixOf, garden, lawnHeads };
+// Opties die de klant zelf kan aanvinken.
+const OPTIONS = {
+  rain: { section: 'materiaal', code: 'SEN-RAIN', description: 'Regensensor (beregening slaat over bij regen)', qty: 1, unit: 'st', price: 39, vat: 21 },
+  soil: { section: 'materiaal', code: 'SEN-SOIL', description: 'Bodemvochtsensor voor het gazon', qty: 1, unit: 'st', price: 119, vat: 21 },
+  service: { section: 'arbeid', code: '', description: 'Onderhoudsbeurt voorjaar en winterklaar maken (eerste jaar)', qty: 1, unit: 'post', price: 145, vat: 21 },
+};
+
+const SHOP_URL = 'https://webshop.voorbeeld.test';
+function testShop() {
+  const arts = loadArticles();
+  const codes = Object.keys(arts);
+  const mapping = {};
+  const products = [];
+  codes.forEach((code, i) => {
+    if (i % 11 === 10) return; // niet in de webshop
+    const a = arts[code];
+    // Webshopprijs (excl. btw) iets anders dan de catalogusprijs.
+    const price = Math.round(a.price * (1.08 + (i % 5) * 0.03) * 100) / 100;
+    const slug = code.toLowerCase();
+    const p = { id: String(1000 + i), sku: code, name: a.name, price, currency: 'EUR', url: `${SHOP_URL}/product/${slug}/`, image: '',
+      inStock: i % 9 !== 4, code: '', categories: [code.split('-')[0]] };
+    if (i % 7 === 3) { p.sku = `AQ-${1000 + i}`; p.code = code; } // via aquatech_code
+    else if (i % 7 === 5) { p.sku = `WS${2000 + i}`; mapping[code] = p.sku; } // handmatig gekoppeld
+    products.push(p);
+  });
+  return { source: { url: SHOP_URL, mode: 'store', pricesIncludeTax: true, vatRate: 21, mapping }, products };
+}
+
+// Een handgeschreven handtekening als PNG (data-URL), zonder bibliotheek.
+function signaturePng(seed = 1) {
+  const w = 240, h = 70;
+  const px = Buffer.alloc((w * 4 + 1) * h);
+  const dot = (x, y) => {
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = Math.round(x) + dx, yy = Math.round(y) + dy;
+      if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+      const o = yy * (w * 4 + 1) + 1 + xx * 4;
+      px[o] = 0x17; px[o + 1] = 0x2f; px[o + 2] = 0x5e; px[o + 3] = 255;
+    }
+  };
+  for (let t = 0; t < 1; t += 0.0008) {
+    const x = 12 + t * (w - 24);
+    const y = h / 2 + Math.sin(t * (18 + seed * 3)) * 16 * (1 - t * 0.5) + Math.sin(t * 5 + seed) * 6;
+    dot(x, y);
+  }
+  for (let t = 0; t < 1; t += 0.002) dot(30 + t * 170, h - 12 + Math.sin(t * 3) * 2);
+  const crc = (buf) => zlib.crc32(buf) >>> 0;
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type), data]);
+    const c = Buffer.alloc(4); c.writeUInt32BE(crc(td));
+    return Buffer.concat([len, td, c]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6;
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(px)), chunk('IEND', Buffer.alloc(0))]);
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+
+/**
+ * Het deel van de testdata dat via de echte opslaglogica loopt (zodat het
+ * precies zo is als wanneer iemand het in de app doet): klantlinks, reacties
+ * van klanten, werkorders en de webshop. Draait na store.seedEnvironment.
+ * stores = { db, quotes, workorders, shop, settings } (settings van de
+ * testomgeving); seeded = { users, quoteIds } uit seedEnvironment.
+ * shareBase = adres van openbaar/offerte.html (uit de browser); zonder komen
+ * er geen klantlinks.
+ */
+function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
+  const { db, quotes, workorders, shop, settings } = stores;
+  const q = (sql) => db.prepare(sql);
+  const counts = { links: 0, responses: 0, workOrders: 0, products: 0 };
+  const today = new Date().toISOString().slice(0, 10);
+  const dateIn = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  set.quotes.forEach((spec, i) => {
+    const id = seeded.quoteIds[i];
+    const owner = seeded.users[spec.owner];
+    if (spec.share) {
+      if (shareBase && !quotes.share(owner, id, shareBase).error) counts.links++;
+      const s = spec.share;
+      q('UPDATE quotes SET shared_at = ?, sent_at = ?, sent_to = ?, view_count = ?, viewed_at = ?, last_viewed_at = ? WHERE id = ?')
+        .run(shareBase ? set.day(s.sent) : null, set.day(s.sent), spec.customer.email || '', s.views || 0,
+          s.views ? set.day(Math.max(s.lastView, s.sent - 1)) : null, s.views ? set.day(s.lastView) : null, id);
+    }
+    if (spec.response) {
+      const r = spec.response;
+      const row = q('SELECT * FROM quotes WHERE id = ?').get(id);
+      const customer = spec.customerKey ? seeded.users[spec.customerKey] : null;
+      const out = quotes.decide(row, r.answer, {
+        name: r.name, terms: true, signature: signaturePng(i), reason: r.reason || '',
+        options: (r.options || []).map((k) => `opt-${k}`),
+      }, { via: r.via === 'account' && customer ? 'account' : 'link', userId: r.via === 'account' && customer ? customer.id : null,
+        ip: '192.0.2.10', userAgent: 'Testdata (geen echte browser)' });
+      if (out.error) throw new Error(`Testdata: reactie op offerte ${row.number} mislukt (${out.error})`);
+      const acc = JSON.parse(q('SELECT acceptance FROM quotes WHERE id = ?').get(id).acceptance);
+      acc.at = set.day(r.at);
+      q('UPDATE quotes SET acceptance = ?, responded_at = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(acc), acc.at, acc.at, id);
+      counts.responses++;
+    }
+    if (spec.workorder) {
+      const w = spec.workorder;
+      const quote = workorders.quoteOf(owner.tenant_id, id);
+      const plan = set.plans.find((p) => p.key === spec.planKey);
+      const data = plain(WoCore.fromQuote(quote, plan.data, plannerLib()).data);
+      data.plannedDate = dateIn(w.planned);
+      data.startTime = '08:00';
+      data.crew = seeded.users[w.assignee].display_name;
+      data.instructions = 'Graag voor aanvang even aanbellen. Water en stroom zijn beschikbaar bij de achterdeur.';
+      data.siteNotes = w.notes || '';
+      const nDone = Math.round(data.steps.length * w.done);
+      data.steps.forEach((st, k) => { if (k < nDone) { st.done = true; st.actualHours = st.hours ? Math.round(st.hours * 1.1 * 4) / 4 : null; } });
+      const nPicked = Math.round(data.materials.length * w.picked);
+      data.materials.forEach((m, k) => { m.picked = k < nPicked; });
+      if (w.status === 'gereed') data.report = { notes: w.notes || '', completedOn: dateIn(w.planned + 1), signedBy: spec.response.name };
+      const wo = workorders.create(owner, quote, data, { assigneeId: seeded.users[w.assignee].id });
+      workorders.update(owner.tenant_id, wo.id, undefined, w.status);
+      const at = set.day(Math.max(0, spec.response.at - 1));
+      q('UPDATE work_orders SET created_at = ?, updated_at = ? WHERE id = ?').run(at, w.status === 'gereed' ? set.day(-w.planned - 1) : at, wo.id);
+      counts.workOrders++;
+    }
+  });
+  // Webshop alleen als de testomgeving geen eigen webshop heeft (de nepwinkel
+  // van een vorige keer vullen we opnieuw).
+  const url = settings.get('shopSource').url;
+  if (!url || url === SHOP_URL) {
+    settings.update({ shopSource: set.shop.source });
+    shop.replaceProducts(seeded.tenantId, set.shop.products, `${today}T07:00:00.000Z`);
+    counts.products = set.shop.products.length;
+  }
+  return counts;
+}
+
+module.exports = { buildTestData, seedFeatures, signaturePng, newPassword, prefixOf, garden, lawnHeads, SHOP_URL };
