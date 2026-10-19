@@ -1,0 +1,114 @@
+name: Release
+
+# Bouwt bij elke nieuwe app-versie op master een image en zet die in GHCR:
+#   ghcr.io/danieldh00/aquatech:<versie>  en  :latest
+# Volgorde: tests -> bouwen -> smoketest -> pushen. Faalt een stap, dan komt er
+# geen nieuw image en rolt de server (deploy/apps01/update.sh) niets uit.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "beregeningsplanner/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/danieldh00/aquatech
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: beregeningsplanner/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: beregeningsplanner/backend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versie bepalen
+        id: version
+        run: |
+          v=$(jq -r .version beregeningsplanner/backend/package.json)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Versie: $v"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bestaat deze versie al?
+        id: exists
+        run: |
+          if docker manifest inspect "$IMAGE:${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Image $IMAGE:${{ steps.version.outputs.version }} bestaat al; niets te doen."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.exists.outputs.skip == 'false'
+
+      - name: Bouwen (lokaal laden voor de smoketest)
+        if: steps.exists.outputs.skip == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: beregeningsplanner
+          platforms: linux/amd64
+          load: true
+          tags: aquatech:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoketest
+        if: steps.exists.outputs.skip == 'false'
+        run: |
+          docker run -d --name smoke -p 3300:3300 aquatech:smoke
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3300/api/health && exit 0; sleep 2; done
+          docker logs smoke
+          exit 1
+
+      # Pas na een geslaagde smoketest naar GHCR: :latest wijst nooit naar een kapot image.
+      - name: Pushen naar GHCR
+        if: steps.exists.outputs.skip == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: beregeningsplanner
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+          cache-from: type=gha
