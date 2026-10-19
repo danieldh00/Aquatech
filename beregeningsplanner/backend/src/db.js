@@ -292,6 +292,10 @@ const MIGRATIONS = [
     last_error      TEXT
   );
   `,
+  // 12: gebruiker moet bij de volgende aanmelding zelf een nieuw wachtwoord kiezen.
+  `
+  ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 function openDb(file = ':memory:') {

@@ -23,6 +23,7 @@ const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 const LOGIN_PAGE = path.join(__dirname, 'login.html');
 const SETUP_PAGE = path.join(__dirname, 'setup.html');
+const PASSWORD_PAGE = path.join(__dirname, 'password.html');
 const PKG = require('../package.json');
 
 // De versie van de app staat in package.json.
@@ -43,7 +44,7 @@ function inlineScriptHashes(files) {
 }
 const CSP = [
   "default-src 'self'",
-  `script-src 'self' 'wasm-unsafe-eval' ${inlineScriptHashes([LOGIN_PAGE, SETUP_PAGE]).join(' ')}`,
+  `script-src 'self' 'wasm-unsafe-eval' ${inlineScriptHashes([LOGIN_PAGE, SETUP_PAGE, PASSWORD_PAGE]).join(' ')}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
@@ -200,6 +201,20 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // API-antwoorden bevatten persoonsgegevens: nooit in een (proxy)cache.
     if (req.url.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
     next();
+  });
+
+  // Moet de gebruiker eerst zelf een nieuw wachtwoord kiezen (nieuw account of
+  // reset door een beheerder), dan is alleen de wachtwoordpagina bereikbaar:
+  // elke pagina toont die, de API weigert alles behalve wat die pagina nodig heeft.
+  const PASSWORD_OPEN = /^\/api\/(me|health|auth\/[a-z]+|account\/password)$/;
+  app.use((req, res, next) => {
+    const s = auth.session(req);
+    if (s?.via !== 'user' || !s.user.must_change_password || PASSWORD_OPEN.test(req.path)) return next();
+    if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'password_change_required', message: 'Kies eerst een nieuw wachtwoord.' });
+    const page = !/\.[a-z0-9]+$/i.test(req.path) || req.path.endsWith('.html');
+    if (!page || (req.method !== 'GET' && req.method !== 'HEAD')) return next();
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(PASSWORD_PAGE);
   });
 
   // Inloggen: streng begrensd per IP (achter de tunnel is dat het
@@ -450,6 +465,26 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     return !t || t.slug === 'default' ? '' : t.slug;
   };
 
+  // ---------- Eigen wachtwoord wijzigen ----------
+  // Met het huidige wachtwoord ter controle; daarna is de gebruiker op alle
+  // andere toestellen uitgelogd en krijgt dit toestel een nieuwe sessie.
+  app.post('/api/account/password', requireJson, wrap(async (req, res) => {
+    const s = auth.session(req);
+    if (s?.via !== 'user') return res.status(400).json({ error: 'no_account', message: 'Log in met je eigen account om je wachtwoord te wijzigen.' });
+    if (identify(req)?.impersonation) return res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' });
+    const key = `wachtwoord:${s.user.id}`;
+    if (lockedOut(key)) return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen. Probeer het over een kwartier opnieuw.' });
+    const out = await store.changeOwnPassword(s.user.id, String(req.body?.currentPassword ?? '').slice(0, 1024), String(req.body?.newPassword ?? '').slice(0, 1024));
+    if (out.error) {
+      if (out.wrong) failed(key);
+      return res.status(out.status || 400).json({ error: out.wrong ? 'wrong_password' : 'invalid_password', message: out.error });
+    }
+    failures.delete(key);
+    auth.setCookie(req, res, out.user.id);
+    audit(req, 'wachtwoord_gewijzigd', { door: 'gebruiker' }, out.user.id, out.user.tenant_id);
+    res.json({ ok: true, user: store.publicUser(out.user) });
+  }));
+
   app.get('/api/me', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const user = identify(req);
@@ -614,7 +649,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/admin/users', requireJson, wrap(async (req, res) => {
     const { username, displayName, role, password } = req.body || {};
     const home = usersTenantOf(req);
-    const out = await store.createAccount(home, { username: String(username || '').trim().toLowerCase(), displayName, role, password });
+    const out = await store.createAccount(home, { username: String(username || '').trim().toLowerCase(), displayName, role, password },
+      { mustChangePassword: req.body?.mustChangePassword !== false });
     if (out.error) return res.status(400).json({ error: 'invalid_user', message: out.error });
     audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role }, undefined, home);
     res.status(201).json(store.publicUser(out.user));
@@ -623,6 +659,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.patch('/api/admin/users/:id', requireJson, wrap(async (req, res) => {
     const input = {};
     for (const k of ['displayName', 'role', 'disabled', 'password', 'username']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
+    withMustChange(input, req.body);
     const home = usersTenantOf(req);
     if (guardPlatformAdmin(req, res, req.params.id)) return;
     const out = await store.updateAccount(home, req.params.id, input);
@@ -631,11 +668,20 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json(store.publicUser(out.user));
   }));
 
+  // Wachtwoord wijzigen na de eerste aanmelding: aan/uit te zetten, en standaard
+  // aan als een beheerder een nieuw wachtwoord instelt.
+  function withMustChange(input, body) {
+    if (body?.mustChangePassword !== undefined) input.mustChangePassword = Boolean(body.mustChangePassword);
+    else if (input.password !== undefined) input.mustChangePassword = true;
+    return input;
+  }
+
   // Welke velden, nooit de waarden van een wachtwoord.
   function auditUserChange(req, user, input, tenantId) {
     audit(req, 'gebruiker_gewijzigd', { userId: user.id, username: user.username, fields: Object.keys(input),
       ...(input.role !== undefined ? { role: input.role } : {}), ...(input.disabled !== undefined ? { disabled: Boolean(input.disabled) } : {}),
-      ...(input.platformAdmin !== undefined ? { hoofdbeheerder: Boolean(input.platformAdmin) } : {}) }, undefined, tenantId);
+      ...(input.platformAdmin !== undefined ? { hoofdbeheerder: Boolean(input.platformAdmin) } : {}),
+      ...(input.mustChangePassword !== undefined ? { wachtwoordWijzigen: input.mustChangePassword } : {}) }, undefined, tenantId);
   }
 
   // Gebruiker op alle toestellen uitloggen.
@@ -917,7 +963,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (out.error) return platformError(res, out);
     let user = null;
     if (account) {
-      const acc = await store.createAccount(out.tenant.id, account);
+      const acc = await store.createAccount(out.tenant.id, account, { mustChangePassword: admin.mustChangePassword !== false });
       if (acc.error) {
         store.dropEmptyTenant(out.tenant.id);
         return platformError(res, { error: `Eerste beheerder: ${acc.error}` });
@@ -1016,7 +1062,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const platformAdmin = Boolean(req.body?.platformAdmin);
     if (platformAdmin && t.id !== tenant.id) return res.status(400).json({ error: 'invalid_user', message: HOOFD_ONLY });
     const role = platformAdmin ? 'beheerder' : req.body?.role;
-    const out = await store.createAccount(t.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password }, { platformAdmin });
+    const out = await store.createAccount(t.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password },
+      { platformAdmin, mustChangePassword: req.body?.mustChangePassword !== false });
     if (out.error) return res.status(400).json({ error: 'invalid_user', message: out.error });
     audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role, door: 'hoofdbeheer',
       ...(platformAdmin ? { hoofdbeheerder: true } : {}) }, undefined, t.id);
@@ -1028,6 +1075,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!t) return;
     const input = {};
     for (const k of ['displayName', 'role', 'disabled', 'password']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
+    withMustChange(input, req.body);
     if (req.body?.platformAdmin !== undefined) {
       input.platformAdmin = Boolean(req.body.platformAdmin);
       if (input.platformAdmin && t.id !== tenant.id) return res.status(400).json({ error: 'invalid_user', message: HOOFD_ONLY });
@@ -1065,6 +1113,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.status(401);
     res.setHeader('Cache-Control', 'no-store');
     res.sendFile(needsSetup() ? SETUP_PAGE : LOGIN_PAGE);
+  });
+
+  // Eigen wachtwoord wijzigen (ingelogd met een account).
+  app.get('/wachtwoord', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(PASSWORD_PAGE);
   });
 
   // no-cache: de browser controleert bij elke start of er een nieuwe versie is

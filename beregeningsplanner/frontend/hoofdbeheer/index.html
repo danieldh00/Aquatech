@@ -40,6 +40,7 @@
           <label>Wachtwoord<input name="adminPassword" type="password" maxlength="128" autocomplete="new-password" placeholder="minimaal 12 tekens"
             data-rule="password"><span class="hint">Minimaal 12 tekens, niet de gebruikersnaam.</span></label>
         </div>
+        <label class="chk"><input type="checkbox" name="adminMustChange" checked> Wachtwoord wijzigen na eerste aanmelding</label>
         <p class="muted small" id="t-login-hint">De beheerder logt in met organisatiecode <b class="code" id="t-login-org">…</b>, gebruikersnaam <b class="code" id="t-login-user">…</b> en het wachtwoord.</p>
         <div class="row"><button class="btn primary" type="submit">Tenant aanmaken</button></div>
         <div id="t-err" class="err" role="alert"></div>

@@ -83,7 +83,7 @@ dl.kv dd { margin: 0; }
 .src { font-weight: 400; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #eceff1; color: var(--muted); margin-left: 4px; }
 .src:empty { display: none; }
 .checks { display: flex; flex-direction: column; gap: 4px; }
-.card-form.settings label.chk { flex-direction: row; color: var(--text); font-size: 14px; }
+.card-form label.chk { flex-direction: row; color: var(--text); font-size: 14px; }
 
 /* Telefoon: tabbladen in twee rijen in plaats van horizontaal scrollen */
 @media (max-width: 600px) {

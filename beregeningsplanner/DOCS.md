@@ -258,6 +258,12 @@ controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
   (gebruikersnaam, naam, rol, wachtwoord van minimaal 8 tekens). Inloggen
   via `.../login` of de knop **Inloggen** rechtsboven. Een nieuw wachtwoord
   of uitschakelen logt de gebruiker op alle toestellen uit.
+- **Eigen wachtwoord**: elke gebruiker met een account wijzigt zijn wachtwoord
+  via de knop **Wachtwoord** rechtsboven. Met het vinkje **Wachtwoord wijzigen
+  na eerste aanmelding** (standaard aan bij een nieuw account en bij een
+  nieuw wachtwoord van de beheerder; per gebruiker aan/uit in de kolom
+  *Nieuw ww. verplicht*) moet de gebruiker eerst zelf een wachtwoord kiezen
+  voordat de rest van de app opent.
 - **Organisatiecode**: een gebruikersnaam is uniek binnen een organisatie
   (de live-tenant met zijn testomgevingen), niet over het hele platform. Twee
   organisaties kunnen dus allebei een *jan* hebben; elke gebruiker heeft in

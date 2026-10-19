@@ -252,12 +252,13 @@
         <td>${u.kind === 'account' && !u.platformAdmin ? `<select data-f="role">${roleOptions(u.role)}</select>` : esc(Roles.label(u.role))}${u.platformAdmin ? ' <span class="pill hoofd">hoofdbeheerder</span>' : ''}</td>
         <td>${esc(when(u.lastSeenAt))}</td>
         <td>${support(u)}</td>
+        <td>${u.kind === 'account' ? `<input type="checkbox" data-f="mustchange"${u.mustChangePassword ? ' checked' : ''} aria-label="Wachtwoord wijzigen bij volgende aanmelding">` : ''}</td>
         <td class="acts">${canImpersonate(u) ? '<button class="btn small" data-f="impersonate">Inloggen als</button>' : ''}${u.kind === 'account' ? `<button class="btn small" data-f="toggle">${u.disabled ? 'Inschakelen' : 'Uitschakelen'}</button><button class="btn small" data-f="password">Wachtwoord</button>` : ''}${isMain && u.kind === 'account' ? `<button class="btn small" data-f="platform">${u.platformAdmin ? 'Hoofdbeheerder intrekken' : 'Hoofdbeheerder maken'}</button>` : ''}${u.kind === 'account' && u.id !== state.meId ? '<button class="btn small danger" data-f="delete">Verwijderen</button>' : ''}</td>
       </tr>`).join('');
     modal(`<h2>${t.environment === 'test' ? 'Testaccounts' : 'Gebruikers'} van ${esc(t.name)}</h2>
       ${t.environment === 'test' ? '<p class="muted small">Accounts die alleen in deze testomgeving bestaan. Ze verdwijnen bij Leegmaken of Verwijderen.</p>' : ''}
       ${isMain ? `<p class="muted small">Dit is de hoofdtenant. Hoofdbeheerders kunnen alle tenants beheren en loggen in met een lege organisatiecode. Er is altijd minstens één actieve hoofdbeheerder (nu ${admins}).</p>` : `<p class="muted small">Deze gebruikers loggen in met organisatiecode <b class="code">${esc(t.slug)}</b>.</p>`}
-      <div class="tablewrap"><table class="grid" id="mu-table">${users.length ? `<thead><tr><th>Gebruiker</th><th>Rol</th><th>Laatst gezien</th><th>Support (live)</th><th></th></tr></thead><tbody>${rows}</tbody>` : '<tr><td class="empty">Nog geen gebruikers.</td></tr>'}</table></div>
+      <div class="tablewrap"><table class="grid" id="mu-table">${users.length ? `<thead><tr><th>Gebruiker</th><th>Rol</th><th>Laatst gezien</th><th>Support (live)</th><th title="De gebruiker moet bij de volgende aanmelding zelf een nieuw wachtwoord kiezen">Nieuw ww. verplicht</th><th></th></tr></thead><tbody>${rows}</tbody>` : '<tr><td class="empty">Nog geen gebruikers.</td></tr>'}</table></div>
       <form id="mu-form" class="card-form" novalidate>
         <h3>Gebruiker toevoegen</h3>
         <div class="row">
@@ -266,6 +267,7 @@
           <label>Rol<select name="role">${roleOptions('beheerder')}</select></label>
           <label>Wachtwoord<input name="password" type="password" maxlength="128" required placeholder="minimaal 12 tekens" autocomplete="new-password" data-rule="password"><span class="hint">Minimaal 12 tekens.</span></label>
         </div>
+        <label class="chk"><input type="checkbox" name="mustChangePassword" checked> Wachtwoord wijzigen na eerste aanmelding</label>
         ${isMain ? '<label class="chk"><input type="checkbox" name="platformAdmin"> Hoofdbeheerder (alle tenants beheren; altijd met de rol beheerder)</label>' : ''}
         <div class="row"><button class="btn primary" type="submit">Toevoegen</button></div>
         <div class="err" role="alert"></div>
@@ -306,12 +308,15 @@
       }
       if (b.dataset.f === 'password') {
         const pw = prompt(`Nieuw wachtwoord voor ${u.displayName} (minimaal 12 tekens)`);
-        if (pw) patch(u.id, { password: pw }, 'Wachtwoord gewijzigd');
+        if (!pw) return;
+        const mustChangePassword = confirm(`Moet ${u.displayName} na de eerste aanmelding met dit wachtwoord zelf een nieuw wachtwoord kiezen?\n\nOK = ja (aanbevolen), Annuleren = nee`);
+        patch(u.id, { password: pw, mustChangePassword }, 'Wachtwoord gewijzigd');
       }
     };
     $('#mu-table').onchange = (ev) => {
       const tr = ev.target.closest('tr[data-uid]');
       if (tr && ev.target.dataset.f === 'role') patch(tr.dataset.uid, { role: ev.target.value }, 'Rol gewijzigd');
+      if (tr && ev.target.dataset.f === 'mustchange') patch(tr.dataset.uid, { mustChangePassword: ev.target.checked }, ev.target.checked ? 'Moet bij de volgende aanmelding een nieuw wachtwoord kiezen' : 'Wachtwoord wijzigen niet meer verplicht');
     };
     const mu = $('#mu-form');
     wireUsername(mu.username, mu.displayName);
@@ -323,7 +328,7 @@
       $('.err', f).textContent = problem;
       if (problem) return;
       try {
-        const body = { username: f.username.value.trim().toLowerCase(), displayName: f.displayName.value.trim(), role: f.role.value, password: f.password.value };
+        const body = { username: f.username.value.trim().toLowerCase(), displayName: f.displayName.value.trim(), role: f.role.value, password: f.password.value, mustChangePassword: f.mustChangePassword.checked };
         if (f.platformAdmin?.checked) body.platformAdmin = true;
         await api(base, { body });
         toast('Gebruiker toegevoegd');
@@ -403,7 +408,7 @@
       $('#t-err').textContent = problem;
       if (problem) return;
       const body = { name: f.name.value.trim(), slug: f.slug.value.trim().toLowerCase() };
-      if (withAdmin) body.admin = { username: f.adminUsername.value.trim().toLowerCase(), displayName: f.adminName.value.trim(), password: f.adminPassword.value };
+      if (withAdmin) body.admin = { username: f.adminUsername.value.trim().toLowerCase(), displayName: f.adminName.value.trim(), password: f.adminPassword.value, mustChangePassword: f.adminMustChange.checked };
       try {
         const out = await api('platform/tenants', { body });
         f.reset();

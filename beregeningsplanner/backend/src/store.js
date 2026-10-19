@@ -139,18 +139,18 @@ function createStore(db) {
   function publicUser(u) {
     if (!u) return null;
     return { id: u.id, tenantId: u.tenant_id, username: u.username, displayName: u.display_name, role: u.role, kind: u.kind,
-      disabled: Boolean(u.disabled), platformAdmin: Boolean(u.platform_admin), createdAt: u.created_at, lastSeenAt: u.last_seen_at };
+      disabled: Boolean(u.disabled), platformAdmin: Boolean(u.platform_admin), mustChangePassword: Boolean(u.must_change_password), createdAt: u.created_at, lastSeenAt: u.last_seen_at };
   }
 
   function getUser(id) {
     return q('SELECT * FROM users WHERE id = ?').get(String(id)) || null;
   }
 
-  function insertUser(tenantId, { username, displayName, role, kind, passwordHash = null, platformAdmin = false }) {
+  function insertUser(tenantId, { username, displayName, role, kind, passwordHash = null, platformAdmin = false, mustChangePassword = false }) {
     const u = { id: newId(), tenant_id: tenantId, username, display_name: displayName, role, kind, password_hash: passwordHash, disabled: 0,
-      platform_admin: platformAdmin ? 1 : 0, created_at: now(), last_seen_at: null };
-    q(`INSERT INTO users (id, tenant_id, username, display_name, role, kind, password_hash, disabled, platform_admin, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`).run(u.id, tenantId, username, displayName, role, kind, passwordHash, u.platform_admin, u.created_at);
+      platform_admin: platformAdmin ? 1 : 0, must_change_password: mustChangePassword ? 1 : 0, created_at: now(), last_seen_at: null };
+    q(`INSERT INTO users (id, tenant_id, username, display_name, role, kind, password_hash, disabled, platform_admin, must_change_password, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`).run(u.id, tenantId, username, displayName, role, kind, passwordHash, u.platform_admin, u.must_change_password, u.created_at);
     return u;
   }
 
@@ -186,7 +186,8 @@ function createStore(db) {
   // Gebruikersnamen zijn uniek binnen een tenant (dezelfde voornaam kan in
   // twee organisaties voorkomen). Een gebruiker wordt overal aangeduid met zijn
   // eigen id; bij het inloggen bepaalt de organisatiecode de tenant.
-  async function createAccount(tenantId, rawInput, { platformAdmin = false } = {}) {
+  // mustChangePassword: bij de eerste aanmelding eerst zelf een wachtwoord kiezen.
+  async function createAccount(tenantId, rawInput, { platformAdmin = false, mustChangePassword = false } = {}) {
     const input = withRole(rawInput);
     const err = validateAccount(input);
     if (err) return { error: err };
@@ -202,6 +203,7 @@ function createStore(db) {
       kind: 'account',
       passwordHash,
       platformAdmin,
+      mustChangePassword,
     });
     return { user: u };
   }
@@ -234,6 +236,7 @@ function createStore(db) {
       q('UPDATE users SET platform_admin = ? WHERE id = ?').run(input.platformAdmin ? 1 : 0, u.id);
       if (input.platformAdmin) q("UPDATE users SET role = 'beheerder' WHERE id = ?").run(u.id);
     }
+    if (input.mustChangePassword !== undefined) q('UPDATE users SET must_change_password = ? WHERE id = ?').run(input.mustChangePassword ? 1 : 0, u.id);
     const newHash = input.password !== undefined ? await hashPassword(input.password) : null;
     if (newHash) q('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, u.id);
     // Nieuw wachtwoord of uitgeschakeld: op alle toestellen uitgelogd.
@@ -559,6 +562,21 @@ function createStore(db) {
     return u;
   }
 
+  // De gebruiker kiest zelf een nieuw wachtwoord (met het huidige ter controle).
+  // Daarna vervallen alle sessies; de aanroeper geeft dit toestel een nieuwe.
+  async function changeOwnPassword(id, current, next) {
+    const u = getUser(id);
+    if (!u || u.kind !== 'account' || u.disabled) return { error: 'Alleen een eigen account kan het wachtwoord wijzigen.', status: 400 };
+    if (!(await verifyPassword(String(current ?? ''), u.password_hash))) return { error: 'Je huidige wachtwoord klopt niet.', status: 401, wrong: true };
+    if (String(next ?? '') === String(current ?? '')) return { error: 'Kies een ander wachtwoord dan je huidige.', status: 400 };
+    const problem = passwordProblem(next, u.username);
+    if (problem) return { error: problem, status: 400 };
+    const hash = await hashPassword(next);
+    q('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(hash, u.id);
+    revokeSessions(u.tenant_id, u.id);
+    return { user: getUser(u.id) };
+  }
+
   // ---------- Sessies ----------
   // Het token (32 willekeurige bytes) staat alleen in de cookie; de database
   // kent alleen de hash. De vingerafdruk hoort bij het wachtwoord (accounts)
@@ -804,7 +822,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, seedEnvironment,
     accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, changeOwnPassword, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
     createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
   };

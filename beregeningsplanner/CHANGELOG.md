@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.31.0
+
+- **Eigen wachtwoord wijzigen**: knop *Wachtwoord* rechtsboven (naast
+  Uitloggen) opent de pagina `wachtwoord`. Met het huidige wachtwoord ter
+  controle; daarna is de gebruiker op zijn andere toestellen uitgelogd. Na
+  10 foute pogingen 15 minuten geblokkeerd; vastgelegd in de auditlog.
+- **Wachtwoord wijzigen na eerste aanmelding**: beheerders (Beheer →
+  Gebruikers) en hoofdbeheerders (Hoofdbeheer → Gebruikers, nieuwe tenant)
+  kunnen per gebruiker afdwingen dat die bij de volgende aanmelding eerst
+  zelf een wachtwoord kiest. Standaard aan bij een nieuw account en bij een
+  nieuw wachtwoord van een beheerder; aan/uit via de kolom *Nieuw ww.
+  verplicht*. Zolang het aan staat toont elke pagina alleen het
+  wachtwoordscherm en weigert de API de rest (`password_change_required`).
+  Database-migratie 12 (`users.must_change_password`).
+
 ## 0.30.0
 
 - **Gebruikers verwijderen**: knop *Verwijderen* (met bevestiging) in Beheer →
