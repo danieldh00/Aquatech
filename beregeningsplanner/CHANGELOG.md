@@ -1,12 +1,20 @@
 # Changelog
 
-## 0.29.1
+## 0.29.2
 
 - **Hoofdbeheerder kon niet inloggen** als er nog een organisatiecode in het
   inlogveld stond (de browser onthoudt de code van de vorige inlog) of als
   de naam van de hoofdtenant werd ingevuld. Hoofdbeheerders horen bij de
   hoofdtenant en loggen nu in met elke organisatiecode; gewone gebruikers
   blijven gebonden aan de code van hun eigen organisatie.
+
+## 0.29.1
+
+- **Home Assistant-verpakking verwijderd**: `config.yaml`, `apparmor.txt`,
+  `icon.png`, `logo.png` en `repository.yaml` zijn weg. De app draait alleen
+  nog als Docker-container (Cloudflare-tunnel, automatische uitrol via CI/CD).
+- Versiecheck (`scripts/check_version.py`, workflow `version.yml`) kijkt alleen
+  nog naar `backend/package.json`.
 
 ## 0.29.0
 

@@ -21,7 +21,7 @@ const MIGRATIONS = [
   );
 
   -- kind: 'account' (gebruikersnaam + wachtwoord), 'gast' (anoniem, per
-  -- browser) of 'systeem' (Home Assistant-paneel, toegangscode).
+  -- browser) of 'systeem' (toegangscode).
   CREATE TABLE users (
     id            TEXT PRIMARY KEY,
     tenant_id     TEXT NOT NULL REFERENCES tenants(id),
