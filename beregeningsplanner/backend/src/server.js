@@ -71,6 +71,7 @@ const normCode = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 // ../-trucs: het pad moet na decoderen en normaliseren hetzelfde blijven.
 const PUBLIC_FILES = new Set([
   '/openbaar/offerte.html', '/openbaar/offerte.js', '/openbaar/offerte.css',
+  '/openbaar/afspraak.html', '/openbaar/afspraak.js', '/openbaar/afspraak.css', '/werkorders/workorder-core.js',
   '/shared/brand.css', '/shared/logo-white.png',
   '/offertes/quote-core.js', '/offertes/quote-view.js', '/offertes/quote-view.css',
 ]);
@@ -901,21 +902,23 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Opslag van offertes, werkorders en webshop (ook gebruikt door de testdata).
   const quoteStore = createQuoteStore(database, { vault });
-  const workOrderStore = createWorkOrderStore(database);
+  const workOrderStore = createWorkOrderStore(database, { vault });
   const shopStore = createShopStore(database);
+
+  // Openbare links (offerte, afspraak): zonder inlog, dus de tenant volgt uit
+  // de offerte of werkorder, en een uitgeschakelde tenant geeft niets prijs.
+  const tenantActive = (id) => {
+    const t = store.getTenant(id);
+    const live = t && t.parent_id ? store.getTenant(t.parent_id) : t;
+    return Boolean(t && !t.disabled && live && !live.disabled);
+  };
+  const publicLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: remoteIp });
 
   // ---------- Offertes (module Offertes, zie quotes.js) ----------
   registerQuoteRoutes(app, {
     quotes: quoteStore, identify, requireUser, requireAdmin, requireRight, requireJson, audit,
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
-    // Openbare offertelink: zonder inlog, dus de tenant volgt uit de offerte.
-    settingsForTenant: (id) => settingsFor(id), remoteIp, mailerFor,
-    tenantActive: (id) => {
-      const t = store.getTenant(id);
-      const live = t && t.parent_id ? store.getTenant(t.parent_id) : t;
-      return Boolean(t && !t.disabled && live && !live.disabled);
-    },
-    publicLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: remoteIp }),
+    settingsForTenant: (id) => settingsFor(id), remoteIp, mailerFor, tenantActive, publicLimiter,
     // Klantaccounts horen bij de live-tenant (ook als er in test gewerkt
     // wordt); in een testomgeving komen de testklanten daarvan erbij.
     customersOf: (req) => {
@@ -928,6 +931,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // ---------- Werkorders (module Werkorders, zie workorders.js) ----------
   registerWorkOrderRoutes(app, {
     workorders: workOrderStore, requireRight, requireAdmin, requireJson, audit,
+    settingsOf: (req) => settingsFor(req.tenantId || tenant.id), settingsForTenant: (id) => settingsFor(id),
+    remoteIp, mailerFor, tenantActive, publicLimiter,
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
     // testaccounts daarvan erbij (net als bij de klantaccounts hierboven).
     staffTenantsOf: (req) => {

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.35.0
+
+- **Planning** (nieuwe module, tegel op het dashboard, voor beheerders en
+  installateurs): weekagenda van alle werkorders, met een rij per uitvoerder
+  en een kolom per dag (weekend optioneel). Inplannen of verplaatsen door een
+  werkorder naar een dag en uitvoerder te slepen; op een telefoon tik je eerst
+  op de werkorder en dan op de dag. Ernaast staan de werkorders die nog
+  ingepland moeten worden en de klanten die om een ander moment vragen (met
+  hun toelichting). Kerncijfers per week en export van de weekplanning naar
+  Excel.
+- **Werkorders** hebben naast datum en starttijd nu een eindtijd en een
+  aantal **werkdagen** (een klus van meer dagen staat op elke werkdag,
+  weekenden overgeslagen).
+- **Afspraak bevestigen via een link**: vanuit de werkorder stuur je de klant
+  de afspraak per e-mail (eigen mailserver), via het eigen mailprogramma of
+  als gekopieerde link. Op de openbare pagina (zonder account, ook op de
+  telefoon) ziet de klant datum, tijden, werkdagen en adres, zet hij de
+  afspraak in zijn agenda (.ics) en **bevestigt** hij met zijn naam, of
+  **vraagt hij een ander moment** met een toelichting. Tijdstip, naam en
+  IP-adres worden vastgelegd en het bedrijf krijgt een e-mail. Verschuift de
+  planning daarna, dan staat de afspraak weer op *wacht op klant* tot de
+  klant het nieuwe moment bevestigt. Stand van de afspraak zichtbaar in de
+  werkorder, het overzicht en de planning.
+- Testdata: de werkorders hebben een afspraaklink en een reactie van de
+  klant (bevestigd of ander moment gevraagd).
+
 ## 0.34.0
 
 - **Supabase (PostgreSQL) als database**: met `DATABASE_URL` (of

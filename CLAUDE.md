@@ -216,6 +216,16 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `WO-<jaar>-0001`). Alleen uit een offerte met status `akkoord`; koppeling
   met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
   de offerte-editor.
+- **Planning + afspraaklink** (0.35.0): module `frontend/planning/` (recht
+  `werkorders`, weekagenda per uitvoerder, slepen → `POST
+  /api/workorders/:id/schedule`). Werkorder heeft `endTime` en `days`
+  (werkdagen, `Core.workDays`). Klantlink zoals de digitale offerte:
+  kolommen `share_*`/`viewed_at`/`sent_*` op `work_orders` (migratie 13),
+  pagina `frontend/openbaar/afspraak.html` (kop `X-Afspraak-Token`, API
+  `/api/public/appointment[/respond]`). Reacties als JSON-logboek in
+  `work_orders.appointment`; stand berekend in `appointmentOf` (reactie telt
+  alleen voor hetzelfde `Core.momentKey`). `workorders.respond(row, …, { via:
+  'account', userId })` is ook bruikbaar voor een klantportaal.
 - **Wachtwoord** (0.31.0): eigen wijzigen via `POST /api/account/password`
   (pagina `backend/src/password.html`, route `/wachtwoord`, inline script op
   CSP-hash). `users.must_change_password` (migratie 12): zolang aan toont

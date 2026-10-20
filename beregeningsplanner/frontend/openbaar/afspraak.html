@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Afspraak</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="offerte.css">
+  <link rel="stylesheet" href="afspraak.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="">
+      <span class="brand-name" id="a-company">Afspraak</span>
+    </span>
+  </header>
+
+  <div id="a-status" class="o-status" hidden></div>
+  <div id="a-message" class="o-message">Afspraak laden…</div>
+
+  <!-- De afspraak -->
+  <section id="a-card" class="a-card" hidden></section>
+
+  <!-- Bevestigen of een ander moment vragen -->
+  <section id="a-form" class="a-card a-form" hidden>
+    <h2>Past dit moment?</h2>
+    <label class="f">Uw naam<input type="text" id="a-name" maxlength="120" autocomplete="name" placeholder="Voor- en achternaam"></label>
+    <div class="row">
+      <button type="button" class="btn primary" id="a-confirm">Afspraak bevestigen</button>
+      <button type="button" class="btn" id="a-other-open">Ander moment vragen</button>
+    </div>
+    <div id="a-other" class="other-box" hidden>
+      <label class="f">Welk moment komt u beter uit?<textarea id="a-reason" rows="3" maxlength="1000" placeholder="Bijvoorbeeld: liever in de week van 10 november, 's ochtends."></textarea></label>
+      <div class="row"><button type="button" class="btn" id="a-other-send">Verzoek versturen</button></div>
+    </div>
+    <p class="err" id="a-err"></p>
+  </section>
+
+  <script src="../werkorders/workorder-core.js"></script>
+  <script src="afspraak.js"></script>
+</body>
+</html>
