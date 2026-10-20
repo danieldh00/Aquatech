@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.35.0
+## 0.37.0
 
 - **Klantportaal** (module *Mijn portaal*, voor klanten): één overzicht met
   wat er voor de klant klaarstaat (offertes om te beantwoorden, afspraken om
@@ -14,6 +14,48 @@
 - Nieuw recht `portaal` voor de rol klant; API `/api/portal`.
 - Testdata: een vierde testklant (`klant4`) met een ingeplande werkorder,
   zodat het portaal een afspraak toont.
+## 0.36.0
+
+- **Planning** (nieuwe module, tegel op het dashboard en in de zijbalk, voor beheerders en
+  installateurs): weekagenda van alle werkorders, met een rij per uitvoerder
+  en een kolom per dag (weekend optioneel). Inplannen of verplaatsen door een
+  werkorder naar een dag en uitvoerder te slepen; op een telefoon tik je eerst
+  op de werkorder en dan op de dag. Ernaast staan de werkorders die nog
+  ingepland moeten worden en de klanten die om een ander moment vragen (met
+  hun toelichting). Kerncijfers per week en export van de weekplanning naar
+  Excel.
+- **Werkorders** hebben naast datum en starttijd nu een eindtijd en een
+  aantal **werkdagen** (een klus van meer dagen staat op elke werkdag,
+  weekenden overgeslagen).
+- **Afspraak bevestigen via een link**: vanuit de werkorder stuur je de klant
+  de afspraak per e-mail (eigen mailserver), via het eigen mailprogramma of
+  als gekopieerde link. Op de openbare pagina (zonder account, ook op de
+  telefoon) ziet de klant datum, tijden, werkdagen en adres, zet hij de
+  afspraak in zijn agenda (.ics) en **bevestigt** hij met zijn naam, of
+  **vraagt hij een ander moment** met een toelichting. Tijdstip, naam en
+  IP-adres worden vastgelegd en het bedrijf krijgt een e-mail. Verschuift de
+  planning daarna, dan staat de afspraak weer op *wacht op klant* tot de
+  klant het nieuwe moment bevestigt. Stand van de afspraak zichtbaar in de
+  werkorder, het overzicht en de planning.
+- Testdata: de werkorders hebben een afspraaklink en een reactie van de
+  klant (bevestigd of ander moment gevraagd).
+
+## 0.35.0
+
+- **Zijbalk voor beheerders**: beheerders en hoofdbeheerders krijgen op elke
+  pagina een vaste zijbalk met alle modules (Overzicht, Beregeningsplanner,
+  Plannenoverzicht, Offertes, Werkorders, onder *Beheer* Beheer en
+  Hoofdbeheer, en de geplande modules onder *Binnenkort*) in plaats van het
+  tegeldashboard. De actieve module is gemarkeerd. Welke modules erin staan
+  volgt uit de rechten en uit de modules die bij Beheer > Instellingen zijn
+  uitgezet, net als bij de tegels; een nieuwe module in
+  `dashboard/modules.js` verschijnt er vanzelf in.
+- De zijbalk is in te klappen tot een smalle iconenbalk (per browser
+  onthouden); de planner begint ingeklapt, zodat de tekening de ruimte houdt.
+  Op een smal scherm (telefoon, kleine tablet) is de zijbalk een lade die
+  opent met de menuknop links in de kopbalk; het projectmenu van de planner
+  blijft rechts.
+- Installateurs en klanten houden voorlopig het tegeldashboard.
 
 ## 0.34.0
 

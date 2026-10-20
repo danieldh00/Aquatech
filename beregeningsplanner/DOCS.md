@@ -231,7 +231,7 @@ die), of in de module met **Nieuwe werkorder uit offerte**.
   in het plan: menu ⋯ → *Zone-indeling opnieuw uit het plan*.
 - **Materialen**: de materiaalregels van de offerte zonder prijzen, af te
   vinken bij het verzamelen (⋯ → *Materialen opnieuw uit de offerte*).
-- **Planning**: datum, starttijd, uitvoerder (beheerder of installateur),
+- **Planning**: datum, van/tot-tijd, aantal werkdagen, uitvoerder (beheerder of installateur),
   ploeg, werkinstructies en bijzonderheden van de locatie. Status: nieuw,
   gepland, in uitvoering, gereed of geannuleerd; een datum zet een nieuwe
   werkorder op gepland, de eerste afgevinkte stap op in uitvoering.
@@ -241,6 +241,35 @@ die), of in de module met **Nieuwe werkorder uit offerte**.
 
 Nummering `WO-<jaar>-0001` per tenant en omgeving; een beheerder kan een
 werkorder definitief wissen (AVG).
+
+### Planning en afspraak met de klant
+
+Module **Planning** (tegel op het dashboard, zelfde rechten als Werkorders):
+een weekagenda met een rij per uitvoerder en een kolom per dag. Sleep een
+werkorder naar een dag en uitvoerder om hem in te plannen of te verplaatsen;
+terugslepen naar *In te plannen* haalt de datum weg. Op een telefoon: tik op
+een werkorder uit *In te plannen* en dan op de dag. Een klus van meer
+werkdagen staat op elke werkdag (zaterdag en zondag tellen niet mee). Een
+gekleurde stip toont de stand van de afspraak; **Exporteer naar Excel**
+geeft de planning van de week.
+
+In de werkorder staat onder *Planning* het blok **Afspraak met de klant**.
+**Afspraak naar de klant** maakt een link naar de openbare pagina
+`openbaar/afspraak.html#t=<token>` (net als de digitale offerte: het token
+gaat alleen in een kop naar de server; in de database staan alleen de
+SHA-256 en een versleutelde kopie) en verstuurt die per e-mail, of zet het
+bericht klaar in je eigen mailprogramma. De klant ziet datum, tijden,
+werkdagen en adres (geen werkstappen, materialen of namen van medewerkers),
+kan de afspraak in zijn agenda zetten en **bevestigt** met zijn naam of
+**vraagt een ander moment** met een toelichting. Het bedrijfsadres uit de
+bedrijfsgegevens krijgt daarvan een e-mail.
+
+Een reactie hoort bij het moment (datum, tijden, werkdagen) waarop hij
+gegeven is: verschuif je de afspraak, dan staat hij weer op *wacht op
+klant* en stuur je de klant de nieuwe afspraak. Standen: geen datum, niet
+naar de klant, wacht op klant, bevestigd, klant vraagt ander moment. Een
+geannuleerde of uitgevoerde klus en een datum in het verleden zijn niet
+meer te bevestigen. **Link intrekken** maakt de oude link ongeldig.
 
 ## Gebruikers, rollen en historie van aanvragen
 
@@ -361,7 +390,8 @@ keer:
   opties, via het klantaccount of de link) en één is afgewezen met een reden.
 - **Werkorders** bij de geaccordeerde offertes: gepland, in uitvoering
   (deels afgevinkt) en gereed (met opleverrapport), toegewezen aan de
-  testinstallateurs, met zone-indeling en materiaallijst.
+  testinstallateurs, met zone-indeling en materiaallijst, en een
+  afspraaklink met een reactie van de klant (bevestigd of ander moment).
 - **Webshop**: een nepwinkel (`webshop.voorbeeld.test`) met producten en
   prijzen voor de catalogus, gekoppeld via sku, het productveld
   `aquatech_code` en handmatige koppelingen; een paar artikelen ontbreken

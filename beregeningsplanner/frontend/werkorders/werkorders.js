@@ -21,7 +21,7 @@
   const FINISHED = ['gereed', 'geannuleerd'];
 
   const state = {
-    me: null, admin: false, staff: [], profile: null,
+    me: null, admin: false, staff: [], profile: null, mail: false,
     items: [], sort: { key: 'plannedDate', dir: 1 },
     wo: null, saveT: null, saving: null, dirty: false, warnings: [],
   };
@@ -41,7 +41,7 @@
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const out = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(out.message || `HTTP ${res.status}`);
+    if (!res.ok) throw Object.assign(new Error(out.message || `HTTP ${res.status}`), { code: out.error });
     return out;
   }
 
@@ -56,7 +56,7 @@
   const COLUMNS = [
     { key: 'number', label: 'Nummer', value: (w) => w.number, html: (w) => `<b>${esc(w.number)}</b>${w.quoteNumber ? `<span class="sub">${esc(w.quoteNumber)}</span>` : ''}` },
     { key: 'title', label: 'Klant en klus', value: (w) => w.customer || w.title, html: (w) => `${esc(w.customer || '–')}<span class="sub">${esc(w.address || w.title)}</span>`, cls: 'wrap' },
-    { key: 'plannedDate', label: 'Gepland', value: (w) => (w.plannedDate ? `${w.plannedDate} ${w.startTime}` : '9999'), html: (w) => (w.plannedDate ? `${esc(shortDate(w.plannedDate))}${w.startTime ? `<span class="sub">${esc(w.startTime)} uur</span>` : ''}` : '<span class="muted">Nog niet</span>') },
+    { key: 'plannedDate', label: 'Gepland', value: (w) => (w.plannedDate ? `${w.plannedDate} ${w.startTime}` : '9999'), html: (w) => (w.plannedDate ? `${esc(shortDate(w.plannedDate))}${w.startTime ? `<span class="sub">${esc(w.startTime)}${w.endTime ? `–${esc(w.endTime)}` : ''} uur${w.days > 1 ? ` · ${w.days} dagen` : ''}</span>` : ''}${w.appointment && ['wacht', 'bevestigd', 'ander_moment'].includes(w.appointment.state) ? `<span class="sub"><span class="pill appt-${esc(w.appointment.state)}">${esc(W.APPOINTMENT[w.appointment.state])}</span></span>` : ''}` : '<span class="muted">Nog niet</span>') },
     { key: 'assignee', label: 'Uitvoerder', value: (w) => (w.assignee ? w.assignee.displayName : ''), html: (w) => esc(w.assignee ? w.assignee.displayName : '–') },
     { key: 'status', label: 'Status', value: (w) => w.status, html: (w) => `<span class="pill wo-${esc(w.status)}">${esc(W.STATUSES[w.status] || w.status)}</span>` },
     { key: 'progress', label: 'Voortgang', value: (w) => w.progress.pct, html: (w) => progressBar(w.progress) },
@@ -249,6 +249,7 @@
     $('#e-menu [data-act=rematerials]').hidden = !d.quoteId;
     $('#e-menu [data-act=purge]').hidden = !state.admin;
     renderRoute();
+    renderAppt();
     renderWarnings();
     renderDesign();
     renderSteps();
@@ -270,6 +271,135 @@
     sel.innerHTML = '<option value="">Nog niet toegewezen</option>' + opts
       .map((u) => `<option value="${esc(u.id)}">${esc(u.displayName)}${u.gone ? ' – uitgeschakeld' : ''}</option>`).join('');
     sel.value = wo.assigneeId || '';
+  }
+
+  // ---------- Afspraak met de klant (klantlink) ----------
+  const dateTime = (iso) => new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' });
+  const apptPill = (a) => `<span class="pill appt-${esc(a.state)}">${esc(W.APPOINTMENT[a.state] || a.state)}</span>`;
+  // Het adres van de openbare pagina volgt uit waar deze module draait (ook
+  // achter een padprefix); de server kent dat zelf niet.
+  const shareBase = () => new URL('../openbaar/afspraak.html', location.href).href;
+
+  function renderAppt() {
+    const wo = state.wo;
+    const box = $('#e-appt');
+    const a = wo.appointment || { state: 'geen', response: null };
+    const s = wo.share || { active: false };
+    const r = a.response;
+    const resp = r ? `<p class="small">${r.answer === 'bevestigd' ? 'Bevestigd' : 'Ander moment gevraagd'} door <b>${esc(r.name)}</b> op ${esc(dateTime(r.at))}${r.current ? '' : ' <span class="muted">(voor een eerder moment)</span>'}${r.reason ? `<br><span class="quote-reason">“${esc(r.reason)}”</span>` : ''}</p>` : '';
+    const stats = [s.sharedAt ? `Link gemaakt ${esc(dateTime(s.sharedAt))}` : '', s.sentAt ? `verstuurd naar <b>${esc(s.sentTo)}</b> op ${esc(dateTime(s.sentAt))}` : '',
+      s.active ? (s.viewedAt ? `geopend ${esc(dateTime(s.viewedAt))}` : 'nog niet geopend') : ''].filter(Boolean).join(' · ');
+    const planned = Boolean(wo.data.plannedDate);
+    box.innerHTML = `<h4>Afspraak met de klant ${apptPill(a)}</h4>${resp}
+      ${s.active && s.url ? `<div class="link-row"><input id="ap-url" readonly value="${esc(s.url)}" aria-label="Link naar de afspraak">
+        <button class="btn small" data-ap="copy">Kopiëren</button><button class="btn small" data-ap="preview" title="Openen zoals de klant hem ziet">Openen</button></div>` : ''}
+      <div class="actions">${planned ? `<button class="btn small primary" data-ap="send">${s.sentAt || r ? 'Opnieuw naar de klant' : 'Afspraak naar de klant'}</button>` : '<span class="muted small">Plan eerst een datum in; daarna kan de klant de afspraak via een link bevestigen.</span>'}
+        ${s.active ? '<button class="btn small" data-ap="revoke">Link intrekken</button>' : ''}</div>
+      ${stats ? `<p class="muted small">${stats}</p>` : ''}`;
+  }
+
+  async function apptAction(act) {
+    const wo = state.wo;
+    try {
+      if (act === 'copy') {
+        const input = $('#ap-url');
+        try { await navigator.clipboard.writeText(input.value); } catch (e) { input.select(); document.execCommand('copy'); }
+        toast('Link gekopieerd');
+      } else if (act === 'preview') {
+        window.open(`${wo.share.url}&voorbeeld=1`, '_blank', 'noopener');
+      } else if (act === 'revoke') {
+        if (!confirm('De link intrekken? De klant kan de afspraak dan niet meer openen; een nieuwe link is een ander adres.')) return;
+        applyAppt(await api(`workorders/${encodeURIComponent(wo.id)}/share`, { method: 'DELETE' }));
+        toast('Link ingetrokken');
+      } else if (act === 'send') {
+        await save();
+        openApptSend();
+      }
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }
+
+  function applyAppt(out) {
+    if (!state.wo || out.id !== state.wo.id) return;
+    state.wo.share = out.share;
+    state.wo.appointment = out.appointment;
+    renderAppt();
+  }
+
+  const longDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const momentLine = (d) => {
+    const days = W.workDays(d.plannedDate, d.days);
+    return `${longDate(d.plannedDate)}${d.startTime ? `, ${d.startTime}${d.endTime ? `–${d.endTime}` : ''} uur` : ''}${days.length > 1 ? ` (${days.length} werkdagen, t/m ${longDate(days[days.length - 1])})` : ''}`;
+  };
+
+  function openApptSend() {
+    const wo = state.wo;
+    const d = wo.data;
+    const p = state.profile || {};
+    $('#as-to').value = d.customer.email || '';
+    $('#as-subject').value = `Afspraak ${d.title ? `${d.title.toLowerCase()} ` : ''}op ${longDate(d.plannedDate)}`;
+    $('#as-message').value = [
+      `Beste ${d.customer.contact || d.customer.name || 'klant'},`,
+      `Wij hebben de werkzaamheden${d.title ? ` (${d.title})` : ''} ingepland op ${momentLine(d)}${d.customer.address ? `, op ${d.customer.address.replace(/\n/g, ', ')}` : ''}.`,
+      'Wilt u via de knop hieronder laten weten of dit moment u past? Komt het niet goed uit, dan kunt u daar ook een ander moment voorstellen.',
+      `Met vriendelijke groet,\n${p.companyName || ''}`,
+    ].join('\n\n');
+    $('#as-err').textContent = '';
+    $('#as-send').hidden = !state.mail;
+    $('#appt-send').hidden = false;
+    $('#as-to').focus();
+  }
+
+  async function ensureShare() {
+    const wo = state.wo;
+    if (!wo.share || !wo.share.active || !wo.share.url) applyAppt(await api(`workorders/${encodeURIComponent(wo.id)}/share`, { method: 'POST', body: { url: shareBase() } }));
+    return wo.share.url;
+  }
+
+  function bindApptSend() {
+    $('#e-appt').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ap]');
+      if (b) apptAction(b.dataset.ap);
+    });
+    $('#as-send').onclick = async () => {
+      const wo = state.wo;
+      const btn = $('#as-send');
+      btn.disabled = true;
+      try {
+        applyAppt(await api(`workorders/${encodeURIComponent(wo.id)}/send`, {
+          method: 'POST', body: { to: $('#as-to').value, subject: $('#as-subject').value, message: $('#as-message').value, url: shareBase() },
+        }));
+        $('#appt-send').hidden = true;
+        toast(`Afspraak verstuurd naar ${$('#as-to').value}`);
+      } catch (err) {
+        if (err.code === 'not_configured') { state.mail = false; $('#as-send').hidden = true; }
+        $('#as-err').textContent = err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    // Zonder eigen mailserver: link maken en het bericht in het eigen mailprogramma openen.
+    $('#as-mailto').onclick = async () => {
+      try {
+        const url = await ensureShare();
+        const body = `${$('#as-message').value}\n\nAfspraak bekijken en bevestigen:\n${url}`;
+        location.href = `mailto:${encodeURIComponent($('#as-to').value.trim()).replace(/%40/g, '@').replace(/%2C/g, ',')}?subject=${encodeURIComponent($('#as-subject').value)}&body=${encodeURIComponent(body)}`;
+        $('#appt-send').hidden = true;
+      } catch (err) {
+        $('#as-err').textContent = err.message;
+      }
+    };
+    $('#as-copy').onclick = async () => {
+      try {
+        const url = await ensureShare();
+        try { await navigator.clipboard.writeText(url); } catch (e) { /* link staat ook in de werkorder */ }
+        $('#appt-send').hidden = true;
+        toast('Link gemaakt en gekopieerd');
+      } catch (err) {
+        $('#as-err').textContent = err.message;
+      }
+    };
   }
 
   function renderWarnings() {
@@ -372,6 +502,9 @@
           wo.status = out.status;
           wo.assigneeId = out.assigneeId;
           wo.assignee = out.assignee;
+          wo.appointment = out.appointment;
+          wo.share = out.share;
+          renderAppt();
           $('#e-status').value = out.status;
           $('#e-saved').textContent = `Opgeslagen ${new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`;
         }
@@ -395,7 +528,7 @@
       if (!wo) return;
       const t = e.target;
       if (t.dataset.f) {
-        setPath(wo.data, t.dataset.f, t.value);
+        setPath(wo.data, t.dataset.f, t.dataset.f === 'days' ? Math.max(1, Math.min(W.MAX_DAYS, Math.round(Number(t.value) || 1))) : t.value);
         if (t.dataset.f === 'customer.address') renderRoute();
         // Een datum geven aan een nieuwe werkorder = ingepland.
         if (t.dataset.f === 'plannedDate' && t.value && wo.status === 'open') {
@@ -791,7 +924,11 @@
         : '<tr><td class="empty">Log eerst in om werkorders te bekijken. <a href="../login">Inloggen</a></td></tr>';
       return;
     }
-    try { state.profile = (await api('quote-profile')).profile; } catch (e) { state.profile = { companyName: 'AquaTech Service' }; }
+    try {
+      const out = await api('quote-profile');
+      state.profile = out.profile;
+      state.mail = Boolean(out.mail);
+    } catch (e) { state.profile = { companyName: 'AquaTech Service' }; }
     try { state.staff = (await api('workorder-staff')).items || []; } catch (e) { state.staff = []; }
     $('#l-status').innerHTML = '<option value="">Openstaand</option>' + Object.entries(W.STATUSES)
       .map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
@@ -807,6 +944,7 @@
       m.onclick = (e) => { if (e.target === m || e.target.closest('[data-close]')) m.hidden = true; };
     });
     bindEditor();
+    bindApptSend();
     window.addEventListener('popstate', route);
     route();
   }

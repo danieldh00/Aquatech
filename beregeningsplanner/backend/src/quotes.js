@@ -48,11 +48,12 @@ const parseJson = (v) => {
 
 // De openbare link: <basis>/openbaar/offerte.html#t=<token>. De basis komt van
 // de browser van de installateur (de server kent zijn eigen adres achter een
-// proxy met padprefix niet) en moet precies naar die pagina wijzen.
-function validShareBase(url) {
+// proxy met padprefix niet) en moet precies naar die pagina wijzen. page =
+// een andere openbare pagina (afspraak.html voor de werkorders).
+function validShareBase(url, page = 'offerte.html') {
   try {
     const u = new URL(String(url));
-    return (u.protocol === 'https:' || u.protocol === 'http:') && !u.username && !u.password && u.pathname.endsWith('/openbaar/offerte.html')
+    return (u.protocol === 'https:' || u.protocol === 'http:') && !u.username && !u.password && u.pathname.endsWith(`/openbaar/${page}`)
       ? `${u.origin}${u.pathname}` : null;
   } catch {
     return null;

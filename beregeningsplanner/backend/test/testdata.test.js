@@ -134,6 +134,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     const p4 = (await vanberg.get('/api/portal')).body;
     assert.deepStrictEqual(p4.workorders.map((w) => w.status), ['gepland']);
     assert.ok(p4.workorders[0].plannedDate > new Date().toISOString().slice(0, 10), 'afspraak in de toekomst');
+    assert.strictEqual(p4.workorders[0].appointment.state, 'ander_moment', 'reactie uit de planning zichtbaar');
 
     // De installateur ziet alle plannen en offertes van de testomgeving.
     const inst = client(base);
@@ -191,6 +192,8 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
     assert.strictEqual(counts.links, 5);
     assert.strictEqual(counts.responses, 4);
     assert.strictEqual(counts.workOrders, 3);
+    assert.strictEqual(counts.appointmentLinks, 3);
+    assert.strictEqual(counts.appointments, 3);
     assert.ok(counts.products > 40);
 
     const inst = client(base);
@@ -220,7 +223,13 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
       assert.ok(full.assignee && full.plannedDate && full.data.zones.length > 0 && full.data.materials.length > 0);
       if (w.status === 'gereed') assert.strictEqual(full.progress.pct, 100);
       if (w.status === 'bezig') assert.ok(full.progress.pct > 0 && full.progress.pct < 100);
+      // Afspraaklink met een reactie van de klant op het geplande moment.
+      assert.match(full.share.url, /^https:\/\/app\.voorbeeld\.nl\/openbaar\/afspraak\.html#t=[A-Za-z0-9_-]{20,}$/);
+      assert.strictEqual(full.appointment.response.current, true);
+      const pub = await fetch(`${base}/api/public/appointment?preview=1`, { headers: { 'X-Afspraak-Token': full.share.url.split('#t=')[1] } });
+      assert.strictEqual(pub.status, 200);
     }
+    assert.deepStrictEqual(wos.map((w) => w.appointment.state).sort(), ['ander_moment', 'bevestigd', 'bevestigd']);
 
     const cat = (await inst.get('/api/catalog')).body;
     assert.ok(cat.configured && cat.syncedAt);

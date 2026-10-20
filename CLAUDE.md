@@ -4,7 +4,10 @@ Webapp om tuinberegening te ontwerpen (in de lijn van de DVS Beregnungsplaner).
 Groeit uit tot een modulair ERP-achtig pakket: startpagina = **dashboard**
 (`frontend/index.html`, moduleregister `frontend/dashboard/modules.js`), de
 planner is module `frontend/beregening/` (URL `beregening/`). Gepland:
-planning, voorraadbeheer. Een module = map onder `frontend/` met eigen
+planning, voorraadbeheer. Beheerders/hoofdbeheerders (`usesSidebar` in
+modules.js) krijgen op elke pagina een zijbalk (`shared/sidebar.js|.css`,
+0.35.0) i.p.v. de tegels; een nieuwe modulepagina laadt `dashboard/modules.js`
+en daarna `shared/sidebar.js` (test bewaakt dat). Een module = map onder `frontend/` met eigen
 `index.html`; de server serveert die generiek (relatieve redirect
 `<id>` → `<id>/`, express.static met `redirect: false` i.v.m. een padprefix achter een proxy).
 Huisstijl AquaTech Service (aquatechservice.nl) in `frontend/shared/brand.css`:
@@ -216,7 +219,17 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `WO-<jaar>-0001`). Alleen uit een offerte met status `akkoord`; koppeling
   met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
   de offerte-editor.
-- **Klantportaal** (`frontend/portaal/`, 0.35.0, recht `portaal`: alleen
+- **Planning + afspraaklink** (0.36.0): module `frontend/planning/` (recht
+  `werkorders`, weekagenda per uitvoerder, slepen → `POST
+  /api/workorders/:id/schedule`). Werkorder heeft `endTime` en `days`
+  (werkdagen, `Core.workDays`). Klantlink zoals de digitale offerte:
+  kolommen `share_*`/`viewed_at`/`sent_*` op `work_orders` (migratie 13),
+  pagina `frontend/openbaar/afspraak.html` (kop `X-Afspraak-Token`, API
+  `/api/public/appointment[/respond]`). Reacties als JSON-logboek in
+  `work_orders.appointment`; stand berekend in `appointmentOf` (reactie telt
+  alleen voor hetzelfde `Core.momentKey`). `workorders.respond(row, …, { via:
+  'account', userId })` is ook bruikbaar voor een klantportaal.
+- **Klantportaal** (`frontend/portaal/`, 0.37.0, recht `portaal`: alleen
   klant): `backend/src/portal.js`, `GET /api/portal` (plannen, offertes,
   werkorders, contact) en `/api/portal/workorders/:id` (opleverdossier via
   `customerWorkOrder`, zonder uren/instructies/notities). Werkorder zichtbaar

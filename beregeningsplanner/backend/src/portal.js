@@ -44,10 +44,13 @@ function customerWorkOrder(wo, { detail = false } = {}) {
     completedOn: d.report ? d.report.completedOn || '' : '',
     updatedAt: wo.updatedAt,
   };
-  // Afspraakstatus (planning): alleen de staat en het eigen antwoord.
+  // Afspraakstatus (planning): alleen de staat en het eigen antwoord. Of de
+  // klantlink al gedeeld is, doet er in het portaal niet toe: een ingeplande
+  // afspraak zonder reactie wacht op de klant.
   if (wo.appointment && typeof wo.appointment === 'object') {
     const r = wo.appointment.response;
-    out.appointment = { state: wo.appointment.state, response: r ? { answer: r.answer, name: r.name || '', reason: r.reason || '', at: r.at } : null };
+    const st = wo.appointment.state === 'niet_gedeeld' ? 'wacht' : wo.appointment.state;
+    out.appointment = { state: st, response: r ? { answer: r.answer, name: r.name || '', reason: r.reason || '', at: r.at } : null };
   }
   if (!detail) return out;
   out.design = d.design || null;

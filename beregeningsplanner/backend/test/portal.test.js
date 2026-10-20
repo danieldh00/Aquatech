@@ -111,6 +111,12 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
     assert.strictEqual(p.workorders[0].plannedDate, '2026-11-03');
     assert.strictEqual(p.workorders[0].startTime, '08:00');
     assert.ok(!JSON.stringify(p).includes('Sleutel'), 'geen interne instructies');
+    assert.strictEqual(p.workorders[0].appointment.state, 'wacht', 'ingepland zonder reactie: wacht op de klant');
+    assert.strictEqual((await piet.post(`/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' })).status, 404);
+    const r = await klaas.post(`/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' });
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual([r.body.appointment.state, r.body.appointment.response.name], ['bevestigd', 'Klaas Jansen']);
+    assert.strictEqual((await klaas.post(`/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' })).status, 409);
 
     const d = await klaas.get(`/api/portal/workorders/${wo.id}`);
     assert.strictEqual(d.status, 200);
