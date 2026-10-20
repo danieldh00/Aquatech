@@ -639,7 +639,7 @@
       save({ status: e.target.value });
     };
     $('#e-assignee').onchange = (e) => save({ assigneeId: e.target.value || null });
-    $('#e-back').onclick = async () => { await save(); go(''); };
+    $('#e-back').onclick = async () => { await save(); if (state.back) location.href = state.back; else go(''); };
     $('#e-pdf').onclick = printWorkOrder;
     $('#e-xlsx').onclick = exportWorkOrderXlsx;
     $('#e-more').onclick = (e) => { e.stopPropagation(); $('#e-menu').hidden = !$('#e-menu').hidden; };
@@ -927,10 +927,23 @@
   }
 
   async function init() {
+    // Rechtstreeks naar een werkorder (vanuit planning, startscherm, dossier):
+    // het overzicht niet eerst laten zien terwijl de rest laadt.
+    const direct = params().get('id') || params().get('quote');
+    if (direct) $('#list-view').hidden = true;
+    // Terugknop gaat terug naar waar je vandaan kwam (bijv. de planning).
+    try {
+      const ref = document.referrer ? new URL(document.referrer) : null;
+      if (direct && ref && ref.origin === location.origin && !/\/werkorders\/?$/.test(ref.pathname)) {
+        state.back = ref.href;
+        $('#e-back').textContent = /\/planning\/?$/.test(ref.pathname) ? '← Planning' : '← Terug';
+      }
+    } catch (e) { /* geen geldige referrer */ }
     state.me = await window.AquatechAccount.load('../');
     const rights = state.me.rights || [];
     state.admin = rights.includes('beheer');
     if (!state.me.user || !rights.includes('werkorders')) {
+      $('#list-view').hidden = false;
       $('#l-new').hidden = true;
       $('#l-export').hidden = true;
       $('#l-table').innerHTML = state.me.user && state.me.user.kind !== 'gast'

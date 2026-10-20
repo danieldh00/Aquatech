@@ -112,6 +112,26 @@
     };
   }
 
+  /**
+   * Korte omschrijving van het werk voor de planning: de eerste regel van de
+   * instructies, anders de omvang (zones, sproeiers, gazon) plus de
+   * uitvoeringsstappen. Ingekort tot max tekens.
+   */
+  function summary(data, max = 160) {
+    const d = sanitize(data);
+    const cut = (t) => (t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t);
+    const first = d.instructions.split(/\n+/).map((l) => l.trim()).find(Boolean);
+    if (first) return cut(first);
+    const g = d.design;
+    const facts = g ? [
+      g.zones ? `${g.zones} zone${g.zones === 1 ? '' : 's'}` : '',
+      g.sprinklers ? `${g.sprinklers} sproeier${g.sprinklers === 1 ? '' : 's'}` : '',
+      g.lawnM2 ? `${Math.round(g.lawnM2)} m² gazon` : '',
+    ].filter(Boolean).join(', ') : '';
+    const work = d.steps.filter((s) => s.phase === 'uitvoering' && s.title).map((s) => s.title);
+    return cut([facts, [...new Set(work)].join(', ')].filter(Boolean).join(': '));
+  }
+
   // ---------- Planning ----------
   const pad = (n) => String(n).padStart(2, '0');
   const isoOf = (dt) => `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
@@ -334,7 +354,7 @@
     };
   }
 
-  const api = { STATUSES, PHASES, APPOINTMENT, MAX_ITEMS, MAX_DAYS, WORKDAY_HOURS, addDays, workDays, moment, momentKey, fitHours, isDate, isTime, sanitize, sanitizeStep, sanitizeMaterial, progress, fromQuote, zonesFromPlan, round2 };
+  const api = { STATUSES, PHASES, APPOINTMENT, MAX_ITEMS, MAX_DAYS, WORKDAY_HOURS, addDays, workDays, moment, momentKey, fitHours, isDate, isTime, sanitize, summary, sanitizeStep, sanitizeMaterial, progress, fromQuote, zonesFromPlan, round2 };
   root.WorkOrderCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -38,7 +38,7 @@
       w.totalDays > 1 ? `dag ${w.dayNumber} van ${w.totalDays}` : '',
       state.all ? esc(w.assignee ? w.assignee.displayName : 'Nog niet toegewezen') : '',
     ].filter(Boolean).join(' · ');
-    const notes = [w.siteNotes, w.instructions].filter(Boolean);
+    const notes = [w.siteNotes, w.instructions || w.summary].filter(Boolean);
     return `
       <article class="job st-${esc(w.status)}">
         <div class="job-head">
