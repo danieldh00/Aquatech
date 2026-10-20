@@ -106,8 +106,8 @@ kleuren mogen afwijken.
 
 Plannen worden automatisch op twee plekken bewaard: in de browser van het
 toestel en, een paar seconden na elke wijziging, in **Mijn plannen** op de
-server (database `/data/aquatech.db`, of PostgreSQL/Supabase, zie *Database:
-Supabase (PostgreSQL)*). Via **Mijn plannen** in de planner (of op het dashboard) open je
+server (database in Supabase/PostgreSQL, zie *Database: Supabase
+(PostgreSQL)*; zonder databaseverbinding het bestand `/data/aquatech.db`). Via **Mijn plannen** in de planner (of op het dashboard) open je
 een eerder plan. Iedere gebruiker ziet daar alleen de eigen plannen.
 **Opslaan** downloadt daarnaast nog steeds een `.aquaplan.json`-bestand en
 **Openen** laadt zo'n bestand als nieuw plan.
@@ -469,9 +469,15 @@ docker compose up -d --build        # http://<server>:3300
 
 ## Database: Supabase (PostgreSQL)
 
-Standaard staat alles in het SQLite-bestand `/data/aquatech.db`. Met
-`DATABASE_URL` (of beter `DATABASE_URL_FILE`, een Docker-secret met de URL)
-gebruikt de app PostgreSQL, bijvoorbeeld Supabase.
+De productieserver draait op Supabase (PostgreSQL), via `DATABASE_URL_FILE`
+(een Docker-secret met de URL) of `DATABASE_URL`. Zonder die instelling
+gebruikt de app het SQLite-bestand `/data/aquatech.db`: handig voor lokaal
+ontwikkelen, de tests en als noodterugval. Beide databases hebben hetzelfde
+schema en elke wijziging wordt in CI op beide getest.
+
+- **Back-up nu maken** (ook terwijl de app draait):
+  `docker compose exec -u 1000 aquatech node src/backup.js create`. Zo doet
+  `update.sh` het ook vóór elke update.
 
 - **Schema** `aquatech` (instelbaar met `DATABASE_SCHEMA`), niet `public`:
   dat schema stelt Supabase open via zijn REST-API. Op elke tabel staat row

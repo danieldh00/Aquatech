@@ -18,13 +18,14 @@ services:
       - DATA_DIR=/data
       - TZ=${TZ:-Europe/Amsterdam}
       - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key
-      # Supabase (PostgreSQL) i.p.v. SQLite, zie DOCS.md > Database: Supabase:
-      # - DATABASE_URL_FILE=/run/secrets/database-url
+      # Database in Supabase (PostgreSQL), zie DOCS.md > Database: Supabase.
+      # Zonder deze regel valt de app terug op SQLite in data/aquatech.db.
+      - DATABASE_URL_FILE=/run/secrets/database-url
     volumes:
       - ./data:/data
     secrets:
       - master-key
-      # - database-url
+      - database-url
     read_only: true
     tmpfs:
       - /tmp
@@ -65,5 +66,5 @@ services:
 secrets:
   master-key:
     file: ./secrets/master-key
-  # database-url:
-  #   file: ./secrets/database-url
+  database-url:
+    file: ./secrets/database-url

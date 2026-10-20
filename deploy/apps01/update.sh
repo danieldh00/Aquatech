@@ -2,9 +2,15 @@
 # Auto-update van Aquatech op apps01 (systemd-timer aquatech-update.timer).
 #
 # Kijkt welke versie :latest in GHCR heeft. Is die nieuwer dan AQUATECH_TAG in
-# .env, dan: image ophalen, database kopiëren, container vervangen en wachten
-# op healthy. Lukt dat niet, dan terug naar de vorige versie + database, en
-# wordt die versie overgeslagen tot er een nieuwere is.
+# .env, dan: image ophalen, back-up van de database, container vervangen en
+# wachten op healthy. Lukt dat niet, dan terug naar de vorige versie, en wordt
+# die versie overgeslagen tot er een nieuwere is.
+#
+# Database in Supabase (DATABASE_URL_FILE in compose.yml): vooraf een
+# versleutelde back-up in data/backups (zichtbaar in Beheer -> Instellingen);
+# bij terugvallen wordt alleen de image teruggezet (migraties zijn alleen
+# toevoegingen, de vorige versie werkt met het nieuwere schema). Database in
+# SQLite: zoals vroeger een kopie in pre-update/ die bij terugvallen terugkomt.
 #
 # GHCR krijgt alleen images die de tests en smoketest in release.yml doorstaan.
 set -euo pipefail
@@ -49,9 +55,18 @@ fi
 log "Update ${CUR_VER:-geen} -> $NEW_VER"
 docker pull -q "$IMAGE:$NEW_VER" >/dev/null
 
+PG=0
+grep -qE '^\s*- DATABASE_URL_FILE=' compose.yml && PG=1
+if [[ "$PG" == 1 ]]; then
+  # Terwijl de app nog draait (consistente momentopname); oudere versies
+  # kennen 'create' nog niet, dan alleen een waarschuwing.
+  docker compose exec -T -u 1000 aquatech node src/backup.js create \
+    || log "Waarschuwing: geen back-up vóór de update (versie ${CUR_VER:-?} kent 'backup.js create' nog niet?)"
+fi
+
 mkdir -p pre-update
 docker compose stop aquatech
-if [[ -f data/aquatech.db ]]; then
+if [[ "$PG" == 0 && -f data/aquatech.db ]]; then
   cp -a data/aquatech.db "pre-update/aquatech-${CUR_VER:-onbekend}-$(date +%Y%m%d%H%M).db"
   ls -1t pre-update/*.db 2>/dev/null | tail -n +$((KEEP_DB_COPIES + 1)) | xargs -r rm -f
 fi
@@ -64,7 +79,7 @@ if ! wait_healthy; then
   docker compose logs --tail 40 aquatech || true
   docker compose stop aquatech
   LAST="$(ls -1t pre-update/*.db 2>/dev/null | head -n1 || true)"
-  if [[ -n "$LAST" ]]; then
+  if [[ "$PG" == 0 && -n "$LAST" ]]; then
     cp -a "$LAST" data/aquatech.db
     rm -f data/aquatech.db-wal data/aquatech.db-shm
     chown 1000:1000 data/aquatech.db
