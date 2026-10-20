@@ -292,7 +292,10 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
 
   // Definitief wissen (AVG-verzoek): ook al verwijderde werkorders.
   function purge(tenantId, id) {
-    return q('DELETE FROM work_orders WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
+    return transaction(db, () => {
+      q('DELETE FROM work_order_photos WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
+      return q('DELETE FROM work_orders WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
+    });
   }
 
   return { list, get, quoteOf, staff, create, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber };
