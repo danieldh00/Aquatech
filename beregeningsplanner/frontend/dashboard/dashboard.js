@@ -86,36 +86,33 @@
     $('#intro-text').textContent = document.body.classList.contains('has-nav') ? 'Dit staat er gepland. Kies links een onderdeel om mee te werken.' : 'Dit staat er gepland.';
   }
 
+  // Zelfde verzoek als de zijbalk (shared/common.js).
   function loadConfig() {
     if (location.protocol === 'file:') return Promise.resolve();
-    return fetch('api/config', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((c) => { if (c && c.modules) disabledModules = c.modules; })
-      .catch(() => {});
+    const common = window.AquatechCommon;
+    const req = common ? common.getJson('api/config') : fetch('api/config', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    return req.then((c) => { if (c && c.modules) disabledModules = c.modules; });
   }
+
+  // Startpagina uit Mijn profiel: de server zet die in de pagina en
+  // shared/common.js gaat er de eerste keer in dit tabblad meteen heen,
+  // zonder het overzicht eerst op te bouwen.
+  if (window.AquatechCommon && window.AquatechCommon.leaving) return;
 
   renderModules(null);
   renderRecent();
-  // Startpagina uit Mijn profiel: alleen bij het openen van de app (eerste
-  // keer het overzicht in dit tabblad, ook na inloggen), daarna blijft het
-  // overzicht gewoon bereikbaar.
-  const STARTED = 'aquatech_started';
-  function openStartPage(me) {
-    let first = false;
-    try { first = !sessionStorage.getItem(STARTED); sessionStorage.setItem(STARTED, '1'); } catch (e) { /* geen opslag */ }
-    const id = first && me && me.preferences && me.preferences.startPage;
-    if (!id) return false;
-    const m = window.AquatechModuleTools.visible(me.rights, disabledModules).find((x) => x.id === id && x.status === 'actief' && x.href);
-    if (!m) return false;
-    location.replace(m.href);
-    return true;
-  }
 
   Promise.all([window.AquatechAccount.load(''), loadConfig()]).then(([me]) => {
-    if (openStartPage(me)) return;
     renderModules(me);
     if (window.AquatechToday && window.AquatechToday.start(me)) greet(me);
     renderMyPlans(me);
     window.AquatechSupport.load(me);
+    // Terug op het overzicht via de knop Terug: dagoverzicht en plannen bijwerken.
+    if (window.AquatechCommon) {
+      window.AquatechCommon.onReturn(() => {
+        if (window.AquatechToday && window.AquatechToday.refresh) window.AquatechToday.refresh();
+        renderMyPlans(me);
+      });
+    }
   });
 })();

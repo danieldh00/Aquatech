@@ -142,7 +142,7 @@
 
   async function exportHistory() {
     const btn = $('#h-export');
-    if (!window.ExcelJS) { toast('Excel-export niet beschikbaar.', true); return; }
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     btn.disabled = true;
     btn.textContent = 'Bezig…';
     try {

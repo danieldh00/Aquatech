@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.46.0
+
+- **Geen tussenstappen meer**: een offerte die u vanuit het portaal, een
+  klantdossier, een werkorder of de planner opent, verschijnt meteen (zonder
+  eerst het overzicht), net als werkorders. De terugknop brengt u terug naar
+  waar u vandaan kwam (bijv. **← Mijn portaal**, **← Klantdossiers**,
+  **← Werkorders**), via de echte terugstap van de browser.
+- **Startpagina zonder omweg**: met een startpagina in Mijn profiel gaat de
+  app daar direct heen; het dashboard wordt niet eerst opgebouwd (de server
+  zet de startpagina in de pagina, `shared/common.js` volgt hem meteen).
+- **Sneller laden**: kopbalk, zijbalk en module delen één verzoek voor
+  `api/me` en `api/config` (was twee tot vier per pagina); werkorders,
+  offertes, profiel, portaal en klantdossier halen hun gegevens tegelijk op
+  in plaats van na elkaar. Scripts en stylesheets met versienummer blijven
+  in de browsercache (`immutable`), dus geen controle meer bij elke klik. De
+  Excel-bibliotheek (bijna 1 MB) laadt pas bij de eerste export.
+- Terug op de planning, het dashboard, het portaal of een dossier via de
+  knop Terug: de gegevens worden opnieuw opgehaald, zodat een gewijzigde
+  status meteen klopt.
+- Planner: **Nieuw project** vraagt alleen nog om bevestiging als er
+  werkelijk iets verloren kan gaan.
+
 ## 0.45.0
 
 - **Rechtstreeks naar de werkorder**: een klik op een afspraak in de planning

@@ -145,7 +145,10 @@
   if (cached && tools.usesSidebar(cached.rights)) render(cached);
 
   // 2. Opnieuw met de echte rechten en instellingen.
-  const getJson = (url) => fetch(base + url, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  // Via shared/common.js: dezelfde verzoeken als de kopbalk en de module.
+  const common = root.AquatechCommon;
+  if (common && common.leaving) return;
+  const getJson = (url) => (common ? common.getJson(url) : fetch(base + url, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null));
   Promise.all([getJson('api/me'), getJson('api/config')]).then(([me, config]) => {
     if (!me) return; // offline: laat de laatste stand staan
     // Mijn profiel alleen met een eigen account (niet met de toegangscode).
