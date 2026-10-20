@@ -387,7 +387,7 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
     }
     if (spec.response) {
       const r = spec.response;
-      const row = q('SELECT * FROM quotes WHERE id = ?').get(id);
+      const row = q('SELECT id, tenant_id, number, status, data, acceptance FROM quotes WHERE id = ?').get(id);
       const customer = spec.customerKey ? seeded.users[spec.customerKey] : null;
       const out = quotes.decide(row, r.answer, {
         name: r.name, terms: true, signature: signaturePng(i), reason: r.reason || '',
@@ -423,7 +423,7 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
       if (apptBase && !workorders.share(owner.tenant_id, wo.id, apptBase).error) counts.appointmentLinks++;
       if (w.appointment) {
         const a = w.appointment;
-        const row = q('SELECT * FROM work_orders WHERE id = ?').get(wo.id);
+        const row = { id: wo.id };
         const who = { ip: '192.0.2.10', userAgent: 'Testdata (geen echte browser)', via: 'link' };
         const out = workorders.respond(row, a.answer, { name: a.name, reason: a.reason || '' }, who);
         if (out.error === 'past') {

@@ -346,7 +346,17 @@ const MIGRATIONS = [
   ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT '';
   ALTER TABLE users ADD COLUMN preferences TEXT NOT NULL DEFAULT '{}';
   `,
-  // 16: rollen per organisatie (Beheer > Rollen, zie roles.js): aanpassingen
+  // 16: indexen voor wat zonder tenant of op andere kolommen zoekt: historie
+  // en plannen per gebruiker (gebruikersbeheer, verwijderen), het startscherm
+  // per uitvoerder, verlopen sessies (elk uur) en impersonaties per gebruiker.
+  `
+  CREATE INDEX history_user ON history (user_id);
+  CREATE INDEX plans_owner_only ON plans (owner_id);
+  CREATE INDEX work_orders_assignee ON work_orders (tenant_id, assignee_id, planned_date);
+  CREATE INDEX sessions_expires ON sessions (expires_at);
+  CREATE INDEX impersonations_user ON impersonations (user_id);
+  `,
+  // 17: rollen per organisatie (Beheer > Rollen, zie roles.js): aanpassingen
   // van de standaardrollen en eigen rollen, bij de live-tenant. users.role is
   // daarmee een vrije sleutel; de CHECK erop kan in SQLite alleen weg door de
   // tabel opnieuw op te bouwen (kolommen in dezelfde volgorde).
@@ -543,7 +553,30 @@ const jsonField = (db, expr, key) => (isPg(db) ? `((${expr})::jsonb ->> '${key}'
 /** SQL-expressie: de JSON-kolom zonder dit veld (als tekst). */
 const jsonWithout = (db, expr, key) => (isPg(db) ? `(((${expr})::jsonb - '${key}')::text)` : `json_remove(${expr}, '$.${key}')`);
 
+/**
+ * SQL-expressie: een klein JSON-object (als tekst) uit een grote JSON-kolom,
+ * zodat een overzicht niet het hele document ophaalt. values = velden die
+ * meegaan zoals ze zijn, counts = arrays waarvan alleen de lengte meegaat
+ * (0 als het veld geen array is). Sleutels zijn vaste namen uit de code.
+ */
+function jsonDigest(db, expr, { values = [], counts = [] } = {}) {
+  if (isPg(db)) {
+    const parts = [
+      ...values.map((k) => `'${k}', j -> '${k}'`),
+      ...counts.map((k) => `'${k}', CASE WHEN jsonb_typeof(j -> '${k}') = 'array' THEN jsonb_array_length(j -> '${k}') ELSE 0 END`),
+    ];
+    // OFFSET 0: anders vouwt PostgreSQL de subquery in en zet hij de kolom per
+    // veld opnieuw om naar jsonb (bij een plan met achtergrond: megabytes).
+    return `(SELECT jsonb_build_object(${parts.join(', ')})::text FROM (SELECT (${expr})::jsonb AS j OFFSET 0) AS digest)`;
+  }
+  const parts = [
+    ...values.map((k) => `'${k}', json_extract(${expr}, '$.${k}')`),
+    ...counts.map((k) => `'${k}', CASE WHEN json_type(${expr}, '$.${k}') = 'array' THEN json_array_length(${expr}, '$.${k}') ELSE 0 END`),
+  ];
+  return `json_object(${parts.join(', ')})`;
+}
+
 module.exports = {
   openDb, openSqlite, openDatabase, databaseUrl, transaction, MIGRATIONS,
-  isPg, schemaVersion, listTables, tableColumns, foreignKeys, deferForeignKeys, jsonField, jsonWithout,
+  isPg, schemaVersion, listTables, tableColumns, foreignKeys, deferForeignKeys, jsonField, jsonWithout, jsonDigest,
 };

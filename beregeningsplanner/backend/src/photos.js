@@ -13,6 +13,7 @@
 // klant hoort bij een dossier via zijn account (quotes.customer_id) of, zonder
 // account, via de klantnaam op de werkorder.
 const crypto = require('crypto');
+const { jsonDigest } = require('./db');
 const Roles = require('../../frontend/shared/roles.js');
 
 const KINDS = { voor: 'Voor', tijdens: 'Tijdens', oplevering: 'Oplevering' };
@@ -116,10 +117,25 @@ function createPhotoStore(db, { vault }) {
     });
   }
 
-  /** Aantal foto's per werkorder van de tenant. */
-  function counts(tenantId) {
+  /** Aantal foto's per werkorder van de tenant; ids: alleen die werkorders. */
+  function counts(tenantId, ids = null) {
     const out = {};
-    for (const r of q('SELECT work_order_id, COUNT(*) AS n FROM work_order_photos WHERE tenant_id = ? GROUP BY work_order_id').all(tenantId)) out[r.work_order_id] = Number(r.n);
+    if (ids && !ids.length) return out;
+    const only = ids ? ` AND work_order_id IN (${ids.map(() => '?').join(', ')})` : '';
+    for (const r of q(`SELECT work_order_id, COUNT(*) AS n FROM work_order_photos WHERE tenant_id = ?${only} GROUP BY work_order_id`)
+      .all(tenantId, ...(ids || []).map(String))) out[r.work_order_id] = Number(r.n);
+    return out;
+  }
+
+  /** Foto's van meerdere werkorders in één query: { werkorder-id: [foto, ...] }. */
+  function listMany(tenantId, workOrderIds) {
+    const out = {};
+    for (const id of workOrderIds) out[id] = [];
+    if (!workOrderIds.length) return out;
+    const rows = q(`SELECT ${META}, u.display_name AS uploader_name FROM work_order_photos p LEFT JOIN users u ON u.id = p.uploaded_by
+      WHERE p.tenant_id = ? AND p.work_order_id IN (${workOrderIds.map(() => '?').join(', ')}) ORDER BY p.created_at, p.id`)
+      .all(tenantId, ...workOrderIds.map(String));
+    for (const r of rows) out[r.work_order_id].push(meta(r, staffUrl));
     return out;
   }
 
@@ -152,7 +168,7 @@ function createPhotoStore(db, { vault }) {
   }
 
   function update(tenantId, workOrderId, id, input) {
-    const r = q('SELECT * FROM work_order_photos WHERE tenant_id = ? AND work_order_id = ? AND id = ?').get(tenantId, String(workOrderId), String(id));
+    const r = q('SELECT id, work_order_id, kind, caption, customer_visible FROM work_order_photos WHERE tenant_id = ? AND work_order_id = ? AND id = ?').get(tenantId, String(workOrderId), String(id));
     if (!r) return null;
     const kind = KINDS[input.kind] ? input.kind : r.kind;
     const caption = input.caption === undefined ? r.caption : String(input.caption || '').trim().slice(0, 300);
@@ -182,7 +198,7 @@ function createPhotoStore(db, { vault }) {
       WHERE p.tenant_id = ? AND p.id = ? AND p.customer_visible = 1 AND o.customer_id = ?`).get(tenantId, String(id), String(userId)));
   }
 
-  return { list, counts, add, update, remove, removeAll, file, customerOwns, KINDS, MAX_PER_WORK_ORDER };
+  return { list, listMany, counts, add, update, remove, removeAll, file, customerOwns, KINDS, MAX_PER_WORK_ORDER };
 }
 
 // ---------- Klantdossier ----------
@@ -193,13 +209,24 @@ const nameKey = (s) => `n-${crypto.createHash('sha256').update(normName(s)).dige
 function createDossierStore(db, { photos }) {
   const q = (sql) => db.prepare(sql);
 
-  function rows(tenantId) {
-    return q(`SELECT w.id, w.number, w.status, w.title, w.customer, w.address, w.planned_date, w.data, w.created_at, w.updated_at,
-        w.quote_id, o.customer_id, c.display_name AS account_name, a.display_name AS assignee_name
-      FROM work_orders w LEFT JOIN quotes o ON o.id = w.quote_id AND o.tenant_id = w.tenant_id
+  const FROM = `FROM work_orders w LEFT JOIN quotes o ON o.id = w.quote_id AND o.tenant_id = w.tenant_id
       LEFT JOIN users c ON c.id = o.customer_id LEFT JOIN users a ON a.id = w.assignee_id
-      WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.status <> 'geannuleerd'`).all(tenantId)
-      .map((r) => ({ ...r, data: JSON.parse(r.data), key: r.customer_id ? `a-${r.customer_id}` : nameKey(r.customer) }));
+      WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.status <> 'geannuleerd'`;
+  const COLS = `w.id, w.number, w.status, w.title, w.customer, w.address, w.planned_date, w.created_at, w.updated_at,
+        w.quote_id, o.customer_id, c.display_name AS account_name, a.display_name AS assignee_name`;
+  const withKey = (r) => ({ ...r, data: JSON.parse(r.data), key: r.customer_id ? `a-${r.customer_id}` : nameKey(r.customer) });
+
+  // Overzicht: van de werkorderdata alleen het opleververslag (datum gereed).
+  const listRows = (tenantId) => q(`SELECT ${COLS}, ${jsonDigest(db, 'w.data', { values: ['report'] })} AS data ${FROM}`).all(tenantId).map(withKey);
+
+  // Eén dossier: met een klantaccount direct op dat account; anders eerst de
+  // namen (de sleutel is een hash van de naam), dan alleen die werkorders volledig.
+  function dossierRows(tenantId, key) {
+    if (key.startsWith('a-')) return q(`SELECT ${COLS}, w.data ${FROM} AND o.customer_id = ?`).all(tenantId, key.slice(2)).map(withKey);
+    const ids = q(`SELECT w.id, w.customer ${FROM} AND o.customer_id IS NULL`).all(tenantId)
+      .filter((r) => nameKey(r.customer) === key).map((r) => r.id);
+    if (!ids.length) return [];
+    return q(`SELECT ${COLS}, w.data ${FROM} AND o.customer_id IS NULL AND w.id IN (${ids.map(() => '?').join(', ')})`).all(tenantId, ...ids).map(withKey);
   }
 
   const completedOf = (r) => r.data.report?.completedOn || (r.status === 'gereed' ? r.updated_at.slice(0, 10) : '');
@@ -208,7 +235,7 @@ function createDossierStore(db, { photos }) {
   function list(tenantId) {
     const pc = photos.counts(tenantId);
     const map = new Map();
-    for (const r of rows(tenantId)) {
+    for (const r of listRows(tenantId)) {
       let d = map.get(r.key);
       if (!d) {
         d = { key: r.key, name: r.customer || r.account_name || 'Onbekende klant', account: r.customer_id ? { id: r.customer_id, displayName: r.account_name || '' } : null,
@@ -228,8 +255,9 @@ function createDossierStore(db, { photos }) {
 
   /** Eén dossier: klantgegevens, installaties (nieuwste eerst) met foto's, en de offertes. */
   function get(tenantId, key) {
-    const mine = rows(tenantId).filter((r) => r.key === String(key));
+    const mine = dossierRows(tenantId, String(key));
     if (!mine.length) return null;
+    const photosOf = photos.listMany(tenantId, mine.map((r) => r.id));
     mine.sort((a, b) => (completedOf(b) || b.planned_date || b.created_at).localeCompare(completedOf(a) || a.planned_date || a.created_at));
     const latest = [...mine].sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
     const c = latest.data.customer || {};
@@ -245,7 +273,7 @@ function createDossierStore(db, { photos }) {
         design: d.design || null, zones: d.zones || [],
         materials: (d.materials || []).map((m) => ({ code: m.code, description: m.description, qty: m.qty, unit: m.unit })),
         steps: { total: (d.steps || []).length, done: (d.steps || []).filter((s) => s.done).length },
-        photos: photos.list(tenantId, r.id),
+        photos: photosOf[r.id],
       };
     });
     const quoteIds = [...new Set(mine.map((r) => r.quote_id).filter(Boolean))];

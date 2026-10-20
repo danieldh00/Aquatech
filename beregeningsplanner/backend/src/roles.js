@@ -45,7 +45,7 @@ function createRoleStore(db) {
   function rowsOf(root) {
     const hit = cache.get(root);
     if (hit && Date.now() - hit.at < CACHE_MS) return hit.rows;
-    const rows = new Map(q('SELECT * FROM roles WHERE tenant_id = ?').all(root).map((r) => [r.role_key, r]));
+    const rows = new Map(q('SELECT role_key, label, description, kind, rights FROM roles WHERE tenant_id = ?').all(root).map((r) => [r.role_key, r]));
     cache.set(root, { at: Date.now(), rows });
     return rows;
   }
