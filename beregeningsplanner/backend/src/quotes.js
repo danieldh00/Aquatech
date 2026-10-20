@@ -152,32 +152,34 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     return q(`${sql} ORDER BY q.updated_at DESC`).all(...args).map((r) => row(r, false));
   }
 
+  const canEdit = (user, r) => Roles.can(user, 'offertes') && (r.owner_id === user.id || Roles.can(user, 'offertes.alle'));
+
   // Bewerken: de eigenaar, of iedereen met offertes.alle (beheerder,
-  // installateur) binnen de tenant. Een klant bewerkt nooit.
+  // installateur) binnen de tenant. Een klant bewerkt nooit. Alleen de
+  // kolommen voor de controle en het bijwerken; de inhoud (data) en het
+  // akkoord (met handtekening) blijven in de database tot ze nodig zijn.
   function findEditable(user, id) {
     if (!Roles.can(user, 'offertes')) return null;
-    const r = q('SELECT * FROM quotes WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL').get(user.tenant_id, String(id));
-    if (!r || (r.owner_id !== user.id && !Roles.can(user, 'offertes.alle'))) return null;
-    return r;
+    const r = q(`SELECT id, tenant_id, owner_id, status, customer_id, share_hash, CASE WHEN acceptance IS NULL THEN 0 ELSE 1 END AS accepted
+      FROM quotes WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL`).get(user.tenant_id, String(id));
+    return r && canEdit(user, r) ? r : null;
   }
+
+  // De volledige rij (met de naam van het klantaccount) in één query.
+  const FULL_SQL = `SELECT q.id, q.tenant_id, q.owner_id, q.plan_id, q.number, q.status, q.title, q.customer, q.total_excl, q.total_incl,
+      q.data, q.created_at, q.updated_at, q.customer_id, q.share_hash, q.share_token, q.share_url, q.shared_at, q.viewed_at,
+      q.last_viewed_at, q.view_count, q.sent_at, q.sent_to, q.responded_at, q.acceptance, c.display_name AS customer_name
+    FROM quotes q LEFT JOIN users c ON c.id = q.customer_id`;
+  const fullRaw = (id) => q(`${FULL_SQL} WHERE q.id = ?`).get(id);
+  const fullRow = (id) => row(fullRaw(id), true);
 
   // Inzien: wie mag bewerken, plus de gekoppelde klant zodra de offerte
-  // verzonden is (concepten blijven intern).
-  function findVisible(user, id) {
-    const r = findEditable(user, id);
-    if (r) return { r, asCustomer: false };
-    const c = q("SELECT * FROM quotes WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL AND customer_id = ? AND status <> 'concept'")
-      .get(user.tenant_id, String(id), user.id);
-    return c ? { r: c, asCustomer: true } : null;
-  }
-
-  const fullRow = (id) => row(q(`SELECT q.*, c.display_name AS customer_name FROM quotes q LEFT JOIN users c ON c.id = q.customer_id WHERE q.id = ?`).get(id), true);
-
+  // verzonden is (concepten blijven intern). Eén query; de rechten in JS.
   const get = (user, id) => {
-    const f = findVisible(user, id);
-    if (!f) return null;
-    const quote = fullRow(f.r.id);
-    return f.asCustomer ? forCustomer(quote) : quote;
+    const r = q(`${FULL_SQL} WHERE q.tenant_id = ? AND q.id = ? AND q.deleted_at IS NULL`).get(user.tenant_id, String(id));
+    if (!r) return null;
+    if (canEdit(user, r)) return row(r, true);
+    return r.customer_id === user.id && r.status !== 'concept' ? forCustomer(row(r, true)) : null;
   };
 
   // Offertenummer per tenant en jaar: <voorvoegsel><jaar>-0001, oplopend (ook
@@ -224,8 +226,8 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
       if (!r) return null;
       // Na een vastgelegd akkoord ligt de offerte vast (bewijs van wat er is
       // geaccordeerd); wijzigen kan alleen in een kopie.
-      if (r.acceptance && (rawData !== undefined || (status !== undefined && status !== r.status))) return { locked: true };
-      const data = rawData === undefined ? JSON.parse(r.data) : Core.sanitize(rawData);
+      if (Number(r.accepted) && (rawData !== undefined || (status !== undefined && status !== r.status))) return { locked: true };
+      const data = rawData === undefined ? JSON.parse(q('SELECT data FROM quotes WHERE id = ?').get(r.id).data) : Core.sanitize(rawData);
       const f = fields(data);
       const st = STATUSES.includes(status) ? status : r.status;
       const cid = customerId === undefined ? r.customer_id : customerId || null;
@@ -243,7 +245,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   function decide(r, answer, input, who) {
     if (!r || r.status === 'concept') return { error: 'not_found' };
-    if (r.status !== 'verzonden' || r.acceptance) return { error: 'answered', status: r.status };
+    if (r.status !== 'verzonden' || r.acceptance || Number(r.accepted)) return { error: 'answered', status: r.status };
     let data = JSON.parse(r.data);
     if (answer === 'akkoord' && data.validUntil && data.validUntil < Core.today()) return { error: 'expired' };
     const name = String(input.name || '').trim().slice(0, 120);
@@ -266,18 +268,19 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
       contentHash: sha256(JSON.stringify({ number: r.number, data, totals })),
     };
     return transaction(db, () => {
-      const cur = q('SELECT status, acceptance FROM quotes WHERE id = ?').get(r.id);
-      if (cur.status !== 'verzonden' || cur.acceptance) return { error: 'answered', status: cur.status };
+      const cur = q('SELECT status, CASE WHEN acceptance IS NULL THEN 0 ELSE 1 END AS accepted FROM quotes WHERE id = ?').get(r.id);
+      if (cur.status !== 'verzonden' || Number(cur.accepted)) return { error: 'answered', status: cur.status };
       const f = fields(data);
       q('UPDATE quotes SET status = ?, data = ?, total_excl = ?, total_incl = ?, acceptance = ?, responded_at = ?, updated_at = ? WHERE id = ?')
         .run(answer, JSON.stringify(data), f.totalExcl, f.totalIncl, JSON.stringify(acceptance), at, at, r.id);
-      return { quote: fullRow(r.id), row: q('SELECT * FROM quotes WHERE id = ?').get(r.id) };
+      const raw = fullRaw(r.id);
+      return { quote: row(raw, true), row: raw };
     });
   }
 
   // Klantaccount (in de app).
   function respond(user, id, answer, input = {}, who = {}) {
-    const r = q('SELECT * FROM quotes WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL AND customer_id = ?').get(user.tenant_id, String(id), user.id);
+    const r = q('SELECT id, tenant_id, number, status, data, CASE WHEN acceptance IS NULL THEN 0 ELSE 1 END AS accepted FROM quotes WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL AND customer_id = ?').get(user.tenant_id, String(id), user.id);
     const out = decide(r, answer, input, { ...who, via: 'account', userId: user.id });
     return out.quote ? { ...out, quote: forCustomer(out.quote) } : out;
   }
@@ -313,10 +316,11 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     q("UPDATE quotes SET sent_at = ?, sent_to = ?, status = CASE WHEN status = 'concept' THEN 'verzonden' ELSE status END WHERE id = ?").run(now(), String(to).slice(0, 400), id);
   }
 
-  // Zoeken op token (over alle tenants; het token is het enige geheim).
+  // Zoeken op token (over alle tenants; het token is het enige geheim). De
+  // volledige rij, zodat publicView en decide niet opnieuw hoeven te lezen.
   function byToken(token) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
-    return q('SELECT * FROM quotes WHERE share_hash = ? AND deleted_at IS NULL').get(sha256(token)) || null;
+    return q(`${FULL_SQL} WHERE q.share_hash = ? AND q.deleted_at IS NULL`).get(sha256(token)) || null;
   }
 
   function markViewed(r) {
@@ -325,8 +329,10 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   }
 
   // Wat de klant via de link ziet: zoals een klantaccount, zonder interne velden.
+  // r: een volledige rij (byToken, decide) of alleen een id.
   function publicView(r) {
-    const { owner, customerId, customerAccount, planId, viewedAt, respondedAt, ...rest } = forCustomer(fullRow(r.id));
+    const raw = r.customer_name !== undefined && r.data !== undefined ? r : fullRaw(r.id);
+    const { owner, customerId, customerAccount, planId, viewedAt, respondedAt, ...rest } = forCustomer(row(raw, true));
     return rest;
   }
 

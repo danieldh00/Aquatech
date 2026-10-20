@@ -146,11 +146,12 @@ test('API: foto\'s en afspraak bevestigen via de optionele koppelingen', async (
   app.use(express.json());
   app.use((req, res, next) => { req.user = user; req.tenantId = 't1'; next(); });
   registerPortalRoutes(app, {
-    portal: { workOrderIds: () => ['w1'], ownRow: (t, u, id) => (t === 't1' && u === 'u1' && id === 'w1' ? raw : null) },
+    portal: { ownRow: (t, u, id) => (t === 't1' && u === 'u1' && id === 'w1' ? raw : null) },
     store: { listPlans: () => [] },
     quotes: { list: () => [] },
     workorders: {
-      get: () => wo,
+      list: (t, { customerId }) => (t === 't1' && customerId === 'u1' ? [wo] : []),
+      get: (t, id, opts = {}) => (t === 't1' && id === 'w1' && (!opts.customerId || opts.customerId === 'u1') ? wo : null),
       respond: (row, answer, input, meta) => {
         calls.push({ row, answer, input, meta });
         if (wo.appointment.state !== 'wacht') return { error: 'answered' };

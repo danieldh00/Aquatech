@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.47.0
+
+- **Snellere database (Supabase)**: elk verzoek kost minder rondgangen naar
+  de database en haalt alleen op wat het toont. Sessie, gebruiker en tenant
+  in één query (was 4 per verzoek); de laatste-activiteit wordt alleen nog
+  geschreven als die ouder is dan 5 minuten; scripts en stylesheets van een
+  pagina controleren de sessie één keer per 30 seconden.
+- **Plannen opslaan** leest het plan (met de achtergrondafbeelding van
+  megabytes) niet meer terug uit de database; het plannenoverzicht haalt
+  alleen de vlakken en aantallen op. Verwijderen leest het plan zonder
+  achtergrond.
+- **Eén query in plaats van twee of meer**: offerte en werkorder openen,
+  klantportaal (was één query per werkorder), klantdossier (foto's per
+  installatie), supporttoestemmingen in Hoofdbeheer, klantaccounts bij een
+  offerte, het startscherm (foto's alleen van de klussen van die dag).
+- **Geen overbodige kolommen**: gebruikersbeheer zonder wachtwoord-hashes,
+  werkorderlijsten zonder versleutelde klantlink, controles bij bewerken
+  zonder offerte-inhoud en handtekening.
+- **Nieuwe indexen** (migratie 16, SQLite en PostgreSQL): historie en plannen
+  per gebruiker, werkorders per uitvoerder en datum, verlopen sessies,
+  impersonaties per gebruiker.
+- **Nergens meer `SELECT *`**: elke query noemt de kolommen die hij nodig
+  heeft, zodat een nieuwe (grote) kolom nooit ongemerkt meekomt.
+- `test/queries.test.js` bewaakt het aantal queries, de hoeveelheid data en
+  dat er geen `SELECT *` in de backend staat.
+
 ## 0.46.1
 
 Beveiligingscontrole.

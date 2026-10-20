@@ -261,6 +261,14 @@ const PG_MIGRATIONS = [
   ALTER TABLE users ADD COLUMN phone ${T} NOT NULL DEFAULT '';
   ALTER TABLE users ADD COLUMN preferences ${T} NOT NULL DEFAULT '{}';
   `,
+  // 16: indexen (zie db.js).
+  `
+  CREATE INDEX history_user ON history (user_id);
+  CREATE INDEX plans_owner_only ON plans (owner_id);
+  CREATE INDEX work_orders_assignee ON work_orders (tenant_id, assignee_id, planned_date);
+  CREATE INDEX sessions_expires ON sessions (expires_at);
+  CREATE INDEX impersonations_user ON impersonations (user_id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
