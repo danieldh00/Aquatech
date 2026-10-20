@@ -21,7 +21,10 @@
 - **Nieuwe indexen** (migratie 16, SQLite en PostgreSQL): historie en plannen
   per gebruiker, werkorders per uitvoerder en datum, verlopen sessies,
   impersonaties per gebruiker.
-- `test/queries.test.js` bewaakt het aantal queries en de hoeveelheid data.
+- **Nergens meer `SELECT *`**: elke query noemt de kolommen die hij nodig
+  heeft, zodat een nieuwe (grote) kolom nooit ongemerkt meekomt.
+- `test/queries.test.js` bewaakt het aantal queries, de hoeveelheid data en
+  dat er geen `SELECT *` in de backend staat.
 
 ## 0.46.1
 

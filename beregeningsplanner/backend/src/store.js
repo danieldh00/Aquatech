@@ -18,6 +18,9 @@ const withRequestCache = (fn) => requestCache.run(new Map(), fn);
 const USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'password_hash', 'disabled', 'created_at',
   'last_seen_at', 'platform_admin', 'must_change_password', 'email', 'phone', 'preferences'];
 const TENANT_COLUMNS = ['id', 'slug', 'name', 'created_at', 'environment', 'parent_id', 'disabled', 'updated_at'];
+// Nergens SELECT *: een nieuwe (grote) kolom komt zo nooit ongemerkt mee.
+const USER_COLS = USER_COLUMNS.join(', ');
+const TENANT_COLS = TENANT_COLUMNS.join(', ');
 
 const Roles = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'roles.js'));
 const ROLES = Object.keys(Roles.ROLES);
@@ -166,7 +169,7 @@ function createStore(db) {
   const q = (sql) => db.prepare(sql);
 
   function ensureTenant(slug = 'default', name = 'Aquatech') {
-    const row = q('SELECT * FROM tenants WHERE slug = ?').get(slug);
+    const row = q(`SELECT ${TENANT_COLS} FROM tenants WHERE slug = ?`).get(slug);
     if (row) return row;
     const t = { id: newId(), slug, name, created_at: now() };
     q('INSERT INTO tenants (id, slug, name, created_at) VALUES (?, ?, ?, ?)').run(t.id, t.slug, t.name, t.created_at);
@@ -215,7 +218,7 @@ function createStore(db) {
   }
 
   function getUser(id) {
-    return q('SELECT * FROM users WHERE id = ?').get(String(id)) || null;
+    return q(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(String(id)) || null;
   }
 
   function insertUser(tenantId, { username, displayName, role, kind, passwordHash = null, platformAdmin = false, mustChangePassword = false }) {
@@ -232,7 +235,7 @@ function createStore(db) {
   const DELETED_USER = 'verwijderd~';
 
   function systemUser(tenantId, username, displayName) {
-    return q('SELECT * FROM users WHERE tenant_id = ? AND username = ?').get(tenantId, username)
+    return q(`SELECT ${USER_COLS} FROM users WHERE tenant_id = ? AND username = ?`).get(tenantId, username)
       || insertUser(tenantId, { username, displayName, role: 'beheerder', kind: 'systeem' });
   }
 
@@ -282,7 +285,7 @@ function createStore(db) {
 
   async function updateAccount(tenantId, id, rawInput) {
     const input = withRole(rawInput);
-    const u = q('SELECT * FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+    const u = q('SELECT id, username, role, kind, disabled, platform_admin FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
     if (!u) return { error: 'Gebruiker niet gevonden.', status: 404 };
     if (u.kind !== 'account') return { error: 'Systeem- en gastgebruikers zijn niet aan te passen.', status: 409 };
     const err = validateAccount({ ...input, username: input.username ?? (input.password !== undefined ? u.username : undefined) }, { partial: true });
@@ -323,7 +326,7 @@ function createStore(db) {
   // auditlog worden leeg (de regels zelf blijven). Niet voor de laatste actieve
   // beheerder van de tenant of de laatste actieve hoofdbeheerder.
   function deleteAccount(tenantId, id) {
-    const u = q('SELECT * FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+    const u = q('SELECT id, tenant_id, username, role, kind, disabled, platform_admin FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
     if (!u) return { error: 'Gebruiker niet gevonden.', status: 404 };
     if (u.kind === 'systeem') return { error: 'Systeemgebruikers zijn niet te verwijderen.', status: 409 };
     if (u.kind === 'account' && u.role === 'beheerder' && !u.disabled && countAdmins(tenantId) <= 1) {
@@ -393,15 +396,15 @@ function createStore(db) {
     const memo = requestCache.getStore();
     const key = `tenant:${id}`;
     if (memo && memo.has(key)) return memo.get(key);
-    const t = q('SELECT * FROM tenants WHERE id = ?').get(String(id)) || null;
+    const t = q(`SELECT ${TENANT_COLS} FROM tenants WHERE id = ?`).get(String(id)) || null;
     if (memo) memo.set(key, t);
     return t;
   }
   const forgetTenants = () => requestCache.getStore()?.clear();
-  const getTenantBySlug = (slug) => q('SELECT * FROM tenants WHERE slug = ?').get(String(slug)) || null;
+  const getTenantBySlug = (slug) => q(`SELECT ${TENANT_COLS} FROM tenants WHERE slug = ?`).get(String(slug)) || null;
 
   function listTenants() {
-    const rows = q(`SELECT t.*,
+    const rows = q(`SELECT ${TENANT_COLUMNS.map((c) => `t.${c}`).join(', ')},
         (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id AND u.kind = 'account') AS user_count,
         (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id AND u.kind = 'account' AND u.role = 'beheerder' AND u.disabled = 0) AS admin_count,
         (SELECT COUNT(*) FROM plans p WHERE p.tenant_id = t.id AND p.deleted_at IS NULL) AS plan_count,
@@ -481,7 +484,7 @@ function createStore(db) {
       }
       let copied = 0;
       if (copyPlans) {
-        for (const p of q('SELECT * FROM plans WHERE tenant_id = ? AND deleted_at IS NULL').all(parent.id)) {
+        for (const p of q('SELECT owner_id, title, customer, address, data, created_at, updated_at FROM plans WHERE tenant_id = ? AND deleted_at IS NULL').all(parent.id)) {
           q(`INSERT INTO plans (id, tenant_id, owner_id, title, customer, address, data, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(newId(), id, p.owner_id, p.title, p.customer, p.address, p.data, p.created_at, p.updated_at);
           copied++;
@@ -661,11 +664,11 @@ function createStore(db) {
    */
   function accessibleTenants(user) {
     if (!user) return [];
-    if (user.platform_admin) return q('SELECT * FROM tenants ORDER BY lower(name)').all();
+    if (user.platform_admin) return q(`SELECT ${TENANT_COLS} FROM tenants ORDER BY lower(name)`).all();
     const home = getTenant(user.tenant_id);
     if (!home || home.disabled) return [];
     if (!Roles.can(user, 'beheer')) return [home];
-    return [home, ...q("SELECT * FROM tenants WHERE parent_id = ? AND environment = 'test' AND disabled = 0 ORDER BY lower(name)").all(home.id)];
+    return [home, ...q(`SELECT ${TENANT_COLS} FROM tenants WHERE parent_id = ? AND environment = 'test' AND disabled = 0 ORDER BY lower(name)`).all(home.id)];
   }
 
   /**
@@ -688,7 +691,7 @@ function createStore(db) {
     const name = String(username || '').trim().toLowerCase();
     const ids = familyIds(tenantId);
     const u = ids.length
-      ? q(`SELECT * FROM users WHERE username = ? AND kind = 'account' AND tenant_id IN (${ids.map(() => '?').join(', ')})
+      ? q(`SELECT ${USER_COLS} FROM users WHERE username = ? AND kind = 'account' AND tenant_id IN (${ids.map(() => '?').join(', ')})
           ORDER BY tenant_id = ? DESC LIMIT 1`).get(name, ...ids, ids[0])
       : null;
     // Ook zonder gebruiker een hash uitrekenen: gelijke looptijd.
@@ -732,11 +735,6 @@ function createStore(db) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(tokenHash(token), tenantId, userId, via, fingerprint,
       new Date(ts).toISOString(), new Date(ts).toISOString(), new Date(ts + maxMs).toISOString(), String(ip).slice(0, 64), String(userAgent).slice(0, 200));
     return token;
-  }
-
-  function findSession(token) {
-    if (typeof token !== 'string' || !/^[\w-]{40,60}$/.test(token)) return null;
-    return q('SELECT * FROM sessions WHERE id_hash = ?').get(tokenHash(token)) || null;
   }
 
   // Sessie met de gebruiker en diens tenant in één query (bij elk verzoek):
@@ -785,7 +783,7 @@ function createStore(db) {
     const total = q(`SELECT COUNT(*) AS n ${from}`).get(...args).n;
     const lim = Math.max(1, Math.min(1000, Math.floor(Number(limit)) || 100));
     const off = Math.max(0, Math.floor(Number(offset)) || 0);
-    const items = q(`SELECT a.*, u.username, u.display_name ${from} ORDER BY a.created_at DESC, a.id LIMIT ? OFFSET ?`).all(...args, lim, off)
+    const items = q(`SELECT a.id, a.user_id, a.action, a.detail, a.ip, a.created_at, u.username, u.display_name ${from} ORDER BY a.created_at DESC, a.id LIMIT ? OFFSET ?`).all(...args, lim, off)
       .map((a) => ({ id: a.id, action: a.action, detail: JSON.parse(a.detail || '{}'), ip: a.ip, createdAt: a.created_at,
         user: a.user_id ? { id: a.user_id, username: a.username, displayName: a.display_name } : null }));
     return { total, items };
@@ -998,7 +996,7 @@ function createStore(db) {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
     ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
-    createSession, findSession, findSessionWithUser, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
+    createSession, findSessionWithUser, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
   };
 }

@@ -166,7 +166,10 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   }
 
   // De volledige rij (met de naam van het klantaccount) in één query.
-  const FULL_SQL = 'SELECT q.*, c.display_name AS customer_name FROM quotes q LEFT JOIN users c ON c.id = q.customer_id';
+  const FULL_SQL = `SELECT q.id, q.tenant_id, q.owner_id, q.plan_id, q.number, q.status, q.title, q.customer, q.total_excl, q.total_incl,
+      q.data, q.created_at, q.updated_at, q.customer_id, q.share_hash, q.share_token, q.share_url, q.shared_at, q.viewed_at,
+      q.last_viewed_at, q.view_count, q.sent_at, q.sent_to, q.responded_at, q.acceptance, c.display_name AS customer_name
+    FROM quotes q LEFT JOIN users c ON c.id = q.customer_id`;
   const fullRaw = (id) => q(`${FULL_SQL} WHERE q.id = ?`).get(id);
   const fullRow = (id) => row(fullRaw(id), true);
 

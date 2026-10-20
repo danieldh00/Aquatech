@@ -320,6 +320,8 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - Exports: **Excel (.xlsx), geen CSV**, tenzij expliciet anders gevraagd.
 - Geen modelnamen/-ID's in commits, PR's, code of docs.
 - Prijzen in `frontend/beregening/js/catalog.js` zijn indicatieve placeholders.
+- **Geen `SELECT *` of `t.*`** in de backend (wens Daniël): elke query noemt
+  alleen de kolommen die nodig zijn; `test/queries.test.js` controleert dat.
 - **Nooit `pkill -f`** in de cloud-sandbox; stop een testserver met
   `kill $(lsof -ti tcp:3300)`.
 

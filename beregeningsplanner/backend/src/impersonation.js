@@ -29,7 +29,7 @@ function createImpersonationStore(db) {
   const q = (sql) => db.prepare(sql);
 
   function activeGrant(userId) {
-    return q('SELECT * FROM support_grants WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY expires_at DESC LIMIT 1')
+    return q('SELECT id, tenant_id, user_id, created_at, expires_at, revoked_at FROM support_grants WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY expires_at DESC LIMIT 1')
       .get(String(userId), now()) || null;
   }
 
@@ -37,7 +37,7 @@ function createImpersonationStore(db) {
   function activeGrants(userIds) {
     const out = {};
     if (!userIds.length) return out;
-    const rows = q(`SELECT * FROM support_grants WHERE user_id IN (${userIds.map(() => '?').join(', ')}) AND revoked_at IS NULL AND expires_at > ?
+    const rows = q(`SELECT id, user_id, created_at, expires_at FROM support_grants WHERE user_id IN (${userIds.map(() => '?').join(', ')}) AND revoked_at IS NULL AND expires_at > ?
       ORDER BY expires_at`).all(...userIds.map(String), now());
     for (const r of rows) out[r.user_id] = r; // de laatst verlopende wint, zoals in activeGrant
     return out;
@@ -66,18 +66,19 @@ function createImpersonationStore(db) {
     return row;
   }
 
-  const get = (id) => q('SELECT * FROM impersonations WHERE id = ?').get(String(id)) || null;
+  const IMP_COLS = 'id, tenant_id, admin_id, user_id, grant_id, started_at, expires_at, ended_at';
+  const get = (id) => q(`SELECT ${IMP_COLS} FROM impersonations WHERE id = ?`).get(String(id)) || null;
 
   function end(id, reason) {
     return q('UPDATE impersonations SET ended_at = ?, ended_reason = ? WHERE id = ? AND ended_at IS NULL').run(now(), reason, id).changes > 0;
   }
 
   // Lopende impersonaties van een gebruiker (bijv. om ze te beëindigen bij het intrekken).
-  const openFor = (userId) => q('SELECT * FROM impersonations WHERE user_id = ? AND ended_at IS NULL').all(String(userId));
+  const openFor = (userId) => q(`SELECT ${IMP_COLS} FROM impersonations WHERE user_id = ? AND ended_at IS NULL`).all(String(userId));
 
   // Wie heeft er (onlangs) als deze gebruiker gewerkt? Voor de gebruiker zelf.
   function recentFor(userId, limit = 10) {
-    return q(`SELECT i.*, a.display_name AS admin_name, t.name AS tenant_name, t.environment AS environment
+    return q(`SELECT i.started_at, i.expires_at, i.ended_at, a.display_name AS admin_name, t.name AS tenant_name, t.environment AS environment
       FROM impersonations i LEFT JOIN users a ON a.id = i.admin_id LEFT JOIN tenants t ON t.id = i.tenant_id
       WHERE i.user_id = ? ORDER BY i.started_at DESC LIMIT ?`).all(String(userId), limit);
   }

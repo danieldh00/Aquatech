@@ -168,7 +168,7 @@ function createPhotoStore(db, { vault }) {
   }
 
   function update(tenantId, workOrderId, id, input) {
-    const r = q('SELECT * FROM work_order_photos WHERE tenant_id = ? AND work_order_id = ? AND id = ?').get(tenantId, String(workOrderId), String(id));
+    const r = q('SELECT id, work_order_id, kind, caption, customer_visible FROM work_order_photos WHERE tenant_id = ? AND work_order_id = ? AND id = ?').get(tenantId, String(workOrderId), String(id));
     if (!r) return null;
     const kind = KINDS[input.kind] ? input.kind : r.kind;
     const caption = input.caption === undefined ? r.caption : String(input.caption || '').trim().slice(0, 300);

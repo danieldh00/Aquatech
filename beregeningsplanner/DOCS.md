@@ -560,9 +560,8 @@ schema en elke wijziging wordt in CI op beide getest.
   alleen de kolommen die ze tonen (plannen: alleen vlakken en aantallen, nooit
   de achtergrond; geen versleutelde links, foto's of wachtwoord-hashes in
   lijsten); geen query per regel (portaal, dossiers, supporttoestemmingen).
-  `test/queries.test.js` bewaakt dat. Nieuwe code: noem de kolommen in plaats
-  van `SELECT *` waar grote kolommen (`data`, `acceptance`, `image`,
-  `snapshot`) niet nodig zijn.
+  `test/queries.test.js` bewaakt dat, en dat er nergens `SELECT *` staat:
+  elke query noemt zijn kolommen.
 - **Hoofdsleutel blijft nodig**: geheimen staan versleuteld in de database
   met de hoofdsleutel van de app; die sleutel gaat niet naar Supabase.
 - **Back-ups**: de dagelijkse versleutelde back-up van de app werkt ook met

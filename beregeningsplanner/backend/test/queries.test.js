@@ -111,3 +111,20 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     server.close();
   }
 });
+
+// Wens Daniël (2026-10-20): nergens SELECT * of t.*; elke query noemt de
+// kolommen die hij nodig heeft (COUNT(*) mag).
+test('queries: geen SELECT * in de backend', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const dir = path.join(__dirname, '..', 'src');
+  const hits = [];
+  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.js'))) {
+    fs.readFileSync(path.join(dir, f), 'utf8').split('\n').forEach((line, i) => {
+      const code = line.replace(/COUNT\(\*\)/gi, '');
+      if (/^\s*\/\//.test(line)) return;
+      if (/SELECT\s+\*|\b[a-z]\.\*(\s|,)/i.test(code)) hits.push(`${f}:${i + 1}: ${line.trim()}`);
+    });
+  }
+  assert.deepStrictEqual(hits, []);
+});

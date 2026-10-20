@@ -86,7 +86,11 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
   const FROM = 'FROM work_orders w JOIN users o ON o.id = w.owner_id LEFT JOIN users a ON a.id = w.assignee_id';
   // Volledig (detail, met de klantlink) en voor overzichten: zonder de
   // versleutelde link en de verzendgegevens, die alleen het detail toont.
-  const SELECT = `SELECT w.*, o.display_name AS owner_name, a.display_name AS assignee_name ${FROM}`;
+  const SELECT = `SELECT w.id, w.tenant_id, w.owner_id, w.quote_id, w.plan_id, w.number, w.status, w.title, w.customer, w.address,
+      w.planned_date, w.assignee_id, w.data, w.created_at, w.updated_at, w.share_hash, w.share_token, w.share_url, w.shared_at,
+      w.viewed_at, w.sent_at, w.sent_to, w.appointment, o.display_name AS owner_name, a.display_name AS assignee_name ${FROM}`;
+  // Wat de openbare afspraakpagina en de reactie van de klant nodig hebben.
+  const PUBLIC_COLS = 'id, tenant_id, number, status, data, appointment, share_hash';
   const LIST_SELECT = `SELECT w.id, w.tenant_id, w.owner_id, w.quote_id, w.plan_id, w.number, w.status, w.title, w.customer, w.address,
       w.planned_date, w.assignee_id, w.data, w.created_at, w.updated_at, w.share_hash, w.appointment,
       o.display_name AS owner_name, a.display_name AS assignee_name ${FROM}`;
@@ -301,7 +305,7 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
   // Zoeken op token (over alle tenants; het token is het enige geheim).
   function byToken(token) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
-    return q('SELECT * FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL').get(sha256(token)) || null;
+    return q(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL`).get(sha256(token)) || null;
   }
 
   function markViewed(r) {
@@ -335,7 +339,7 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
     if (name.length < 2) return { error: 'invalid', message: 'Vul uw naam in.' };
     if (answer === 'ander_moment' && reason.length < 3) return { error: 'invalid', message: 'Laat weten welk moment u beter uitkomt.' };
     return transaction(db, () => {
-      const cur = q('SELECT * FROM work_orders WHERE id = ? AND deleted_at IS NULL').get(r.id);
+      const cur = q(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE id = ? AND deleted_at IS NULL`).get(r.id);
       if (!cur) return { error: 'not_found' };
       const data = JSON.parse(cur.data);
       const m = Core.moment(data);
@@ -348,7 +352,7 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
         ip: who.ip || '', forwardedFor: String(who.forwardedFor || '').slice(0, 100), userAgent: String(who.userAgent || '').slice(0, 300),
       });
       q('UPDATE work_orders SET appointment = ? WHERE id = ?').run(JSON.stringify(log), cur.id);
-      return { row: q('SELECT * FROM work_orders WHERE id = ?').get(cur.id) };
+      return { row: q(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE id = ?`).get(cur.id) };
     });
   }
 
