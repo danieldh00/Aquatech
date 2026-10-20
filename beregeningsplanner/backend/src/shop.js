@@ -82,11 +82,11 @@ function createShopStore(db) {
   }
 
   const status = (tenantId) => {
-    const r = q('SELECT * FROM shop_sync WHERE tenant_id = ?').get(tenantId);
+    const r = q('SELECT synced_at, product_count, last_attempt_at, last_error FROM shop_sync WHERE tenant_id = ?').get(tenantId);
     return r ? { syncedAt: r.synced_at, productCount: r.product_count || 0, lastAttemptAt: r.last_attempt_at, lastError: r.last_error } : null;
   };
 
-  const products = (tenantId) => q('SELECT * FROM shop_products WHERE tenant_id = ?').all(tenantId).map((r) => ({
+  const products = (tenantId) => q('SELECT id, sku, name, price, currency, url, image, in_stock, code, categories FROM shop_products WHERE tenant_id = ?').all(tenantId).map((r) => ({
     id: r.id, sku: r.sku, name: r.name, price: r.price, currency: r.currency, url: r.url, image: r.image,
     inStock: Boolean(r.in_stock), code: r.code, categories: JSON.parse(r.categories || '[]'),
   }));

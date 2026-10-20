@@ -83,22 +83,48 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
     return out;
   }
 
-  const SELECT = `SELECT w.*, o.display_name AS owner_name, a.display_name AS assignee_name
-    FROM work_orders w JOIN users o ON o.id = w.owner_id LEFT JOIN users a ON a.id = w.assignee_id`;
+  const FROM = 'FROM work_orders w JOIN users o ON o.id = w.owner_id LEFT JOIN users a ON a.id = w.assignee_id';
+  // Volledig (detail, met de klantlink) en voor overzichten: zonder de
+  // versleutelde link en de verzendgegevens, die alleen het detail toont.
+  const SELECT = `SELECT w.id, w.tenant_id, w.owner_id, w.quote_id, w.plan_id, w.number, w.status, w.title, w.customer, w.address,
+      w.planned_date, w.assignee_id, w.data, w.created_at, w.updated_at, w.share_hash, w.share_token, w.share_url, w.shared_at,
+      w.viewed_at, w.sent_at, w.sent_to, w.appointment, o.display_name AS owner_name, a.display_name AS assignee_name ${FROM}`;
+  // Wat de openbare afspraakpagina en de reactie van de klant nodig hebben.
+  const PUBLIC_COLS = 'id, tenant_id, number, status, data, appointment, share_hash';
+  const LIST_SELECT = `SELECT w.id, w.tenant_id, w.owner_id, w.quote_id, w.plan_id, w.number, w.status, w.title, w.customer, w.address,
+      w.planned_date, w.assignee_id, w.data, w.created_at, w.updated_at, w.share_hash, w.appointment,
+      o.display_name AS owner_name, a.display_name AS assignee_name ${FROM}`;
+  // Werkorders van een klantaccount: via een niet-concept-offerte aan dat account.
+  const OF_CUSTOMER = ` AND EXISTS (SELECT 1 FROM quotes qu WHERE qu.id = w.quote_id AND qu.tenant_id = w.tenant_id
+    AND qu.deleted_at IS NULL AND qu.customer_id = ? AND qu.status <> 'concept')`;
 
-  function list(tenantId, { quoteId = null } = {}) {
+  // customerId: alleen de werkorders van dat klantaccount, met de data erbij
+  // (het klantportaal toont daaruit de oplevering).
+  function list(tenantId, { quoteId = null, customerId = null } = {}) {
     const args = [tenantId];
-    let sql = `${SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL`;
+    let sql = `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL`;
     if (quoteId) { sql += ' AND w.quote_id = ?'; args.push(String(quoteId)); }
-    return q(`${sql} ORDER BY w.updated_at DESC`).all(...args).map((r) => row(r, false));
+    if (customerId) { sql += OF_CUSTOMER; args.push(String(customerId)); }
+    return q(`${sql} ORDER BY w.updated_at DESC`).all(...args).map((r) => {
+      const out = row(r, false);
+      if (customerId) out.data = JSON.parse(r.data);
+      return out;
+    });
   }
 
-  const find = (tenantId, id) => q('SELECT * FROM work_orders WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL').get(tenantId, String(id));
+  // Controle vooraf (bestaat, deze omgeving, niet verwijderd): alleen de
+  // kolommen die de aanroeper nodig heeft.
+  const find = (tenantId, id, cols = 'id, tenant_id, status, assignee_id, share_hash') =>
+    q(`SELECT ${cols} FROM work_orders WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL`).get(tenantId, String(id));
   const fullRow = (id) => row(q(`${SELECT} WHERE w.id = ?`).get(id), true);
 
-  function get(tenantId, id) {
-    const r = find(tenantId, id);
-    return r ? fullRow(r.id) : null;
+  // Eén query; customerId: alleen als de werkorder bij dat klantaccount hoort.
+  function get(tenantId, id, { customerId = null } = {}) {
+    const args = [tenantId, String(id)];
+    let sql = `${SELECT} WHERE w.tenant_id = ? AND w.id = ? AND w.deleted_at IS NULL`;
+    if (customerId) { sql += OF_CUSTOMER; args.push(String(customerId)); }
+    const r = q(sql).get(...args);
+    return r ? row(r, true) : null;
   }
 
   // De offerte waaruit een werkorder ontstaat: bestaand, niet verwijderd, in deze omgeving.
@@ -113,11 +139,13 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
    * userId alleen de klussen van die uitvoerder; `next` is dan diens
    * eerstvolgende klus na deze dag. Geannuleerde werkorders vallen weg.
    */
+  // photoCounts: { werkorder-id: aantal } of een functie (ids) => dat object,
+  // zodat alleen de foto's van de klussen van deze dag geteld worden.
   function day(tenantId, date, { userId = null, photoCounts = {} } = {}) {
     // Een klus van MAX_DAYS werkdagen beslaat hooguit zoveel kalenderdagen.
     const from = Core.addDays(date, -(Math.ceil(Core.MAX_DAYS * 7 / 5) + 2));
     const args = [tenantId, from, date];
-    let sql = `${SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.status <> 'geannuleerd'
+    let sql = `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.status <> 'geannuleerd'
       AND w.planned_date IS NOT NULL AND w.planned_date >= ? AND w.planned_date <= ?`;
     if (userId) { sql += ' AND w.assignee_id = ?'; args.push(String(userId)); }
     const items = [];
@@ -131,13 +159,14 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
         ...row(r, false), dayNumber: idx + 1, totalDays: days.length,
         contact: c.contact || '', phone: c.phone || '',
         instructions: data.instructions || '', siteNotes: data.siteNotes || '',
-        photos: photoCounts[r.id] || 0,
       });
     }
+    const counts = typeof photoCounts === 'function' ? (items.length ? photoCounts(items.map((i) => i.id)) : {}) : photoCounts;
+    for (const i of items) i.photos = counts[i.id] || 0;
     items.sort((a, b) => (a.startTime || '99').localeCompare(b.startTime || '99') || a.number.localeCompare(b.number));
     let next = null;
     if (userId) {
-      const n = q(`${SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.status IN ('open', 'gepland', 'bezig')
+      const n = q(`${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.status IN ('open', 'gepland', 'bezig')
         AND w.assignee_id = ? AND w.planned_date > ? ORDER BY w.planned_date, w.number LIMIT 1`).get(tenantId, String(userId), date);
       if (n) next = row(n, false);
     }
@@ -223,7 +252,7 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
   // assigneeId: undefined = ongewijzigd, null = niemand.
   function update(tenantId, id, rawData, status, assigneeId) {
     return transaction(db, () => {
-      const r = find(tenantId, id);
+      const r = find(tenantId, id, 'id, status, assignee_id, data');
       if (!r) return null;
       const old = JSON.parse(r.data);
       const data = rawData === undefined ? old : Core.sanitize(rawData);
@@ -249,7 +278,7 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
    */
   function schedule(tenantId, id, patch, assigneeId) {
     return transaction(db, () => {
-      const r = find(tenantId, id);
+      const r = find(tenantId, id, 'id, status, assignee_id, data');
       if (!r) return null;
       const data = JSON.parse(r.data);
       for (const k of ['plannedDate', 'startTime', 'endTime', 'days']) if (patch[k] !== undefined) data[k] = patch[k];
@@ -298,7 +327,7 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
   // Zoeken op token (over alle tenants; het token is het enige geheim).
   function byToken(token) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
-    return q('SELECT * FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL').get(sha256(token)) || null;
+    return q(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL`).get(sha256(token)) || null;
   }
 
   function markViewed(r) {
@@ -308,9 +337,10 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
   const shareLink = (r) => shareOf(r).url;
 
   // Wat de klant via de link ziet: de afspraak, niet het uitvoeringsplan.
+  // r: de volledige rij (byToken, respond), dus niet opnieuw lezen.
   function publicView(r) {
-    const w = fullRow(r.id);
-    const d = w.data;
+    const w = row(r, false);
+    const d = JSON.parse(r.data);
     return {
       number: w.number, status: w.status, title: d.title, customer: d.customer.name, address: d.customer.address,
       plannedDate: d.plannedDate, startTime: d.startTime, endTime: d.endTime, days: d.days, dates: Core.workDays(d.plannedDate, d.days),
@@ -331,7 +361,7 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
     if (name.length < 2) return { error: 'invalid', message: 'Vul uw naam in.' };
     if (answer === 'ander_moment' && reason.length < 3) return { error: 'invalid', message: 'Laat weten welk moment u beter uitkomt.' };
     return transaction(db, () => {
-      const cur = q('SELECT * FROM work_orders WHERE id = ? AND deleted_at IS NULL').get(r.id);
+      const cur = q(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE id = ? AND deleted_at IS NULL`).get(r.id);
       if (!cur) return { error: 'not_found' };
       const data = JSON.parse(cur.data);
       const m = Core.moment(data);
@@ -344,7 +374,7 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
         ip: who.ip || '', forwardedFor: String(who.forwardedFor || '').slice(0, 100), userAgent: String(who.userAgent || '').slice(0, 300),
       });
       q('UPDATE work_orders SET appointment = ? WHERE id = ?').run(JSON.stringify(log), cur.id);
-      return { row: q('SELECT * FROM work_orders WHERE id = ?').get(cur.id) };
+      return { row: q(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE id = ?`).get(cur.id) };
     });
   }
 
@@ -424,7 +454,8 @@ function registerWorkOrderRoutes(app, ctx) {
     const date = req.query.date === undefined || req.query.date === '' ? today() : String(req.query.date);
     if (!Core.isDate(date)) return res.status(400).json({ error: 'invalid_date', message: 'Ongeldige datum.' });
     const all = req.query.all === '1';
-    const photoCounts = ctx.photoCounts ? ctx.photoCounts(tid(req)) : {};
+    // Alleen de foto's van de klussen die op deze dag staan tellen.
+    const photoCounts = ctx.photoCounts ? (ids) => ctx.photoCounts(tid(req), ids) : {};
     res.json({ ...workorders.day(tid(req), date, { userId: all ? null : req.user.id, photoCounts }), today: today(), all });
   });
 

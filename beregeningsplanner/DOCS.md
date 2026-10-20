@@ -574,6 +574,16 @@ schema en elke wijziging wordt in CI op beide getest.
   (*Supabase Root 2021 CA*, SHA-256 `80:70:25:AD:…:CA:FA`) zit in de app.
   Een eigen CA kan met `DATABASE_CA_FILE`. Kies een EU-regio (Frankfurt):
   elke query wacht op de database, dus een korte afstand houdt de app snel.
+- **Zuinig met queries** (0.47.0): met PostgreSQL is elke query een
+  rondgang over het netwerk. Daarom: sessie, gebruiker en tenant in één
+  query per verzoek; `last_seen_at` alleen schrijven als het nodig is;
+  statische bestanden van een pagina na een geslaagde controle 30 seconden
+  zonder nieuwe sessiequery; detailpagina's in één query; overzichten met
+  alleen de kolommen die ze tonen (plannen: alleen vlakken en aantallen, nooit
+  de achtergrond; geen versleutelde links, foto's of wachtwoord-hashes in
+  lijsten); geen query per regel (portaal, dossiers, supporttoestemmingen).
+  `test/queries.test.js` bewaakt dat, en dat er nergens `SELECT *` staat:
+  elke query noemt zijn kolommen.
 - **Hoofdsleutel blijft nodig**: geheimen staan versleuteld in de database
   met de hoofdsleutel van de app; die sleutel gaat niet naar Supabase.
 - **Back-ups**: de dagelijkse versleutelde back-up van de app werkt ook met

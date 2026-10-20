@@ -22,13 +22,11 @@ function createPortalStore(db) {
     WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND qu.deleted_at IS NULL
       AND qu.customer_id = ? AND qu.status <> 'concept'`;
 
-  const workOrderIds = (tenantId, customerId) =>
-    q(`SELECT w.id ${OWN} ORDER BY w.updated_at DESC`).all(tenantId, customerId).map((r) => r.id);
+  // Alleen het id (workorders.respond leest de rij zelf opnieuw), en alleen
+  // als de werkorder bij deze klant hoort.
+  const ownRow = (tenantId, customerId, id) => q(`SELECT w.id ${OWN} AND w.id = ?`).get(tenantId, customerId, String(id)) || null;
 
-  // De ruwe rij, alleen als hij bij deze klant hoort.
-  const ownRow = (tenantId, customerId, id) => q(`SELECT w.* ${OWN} AND w.id = ?`).get(tenantId, customerId, String(id)) || null;
-
-  return { workOrderIds, ownRow };
+  return { ownRow };
 }
 
 // Wat een klant van een werkorder ziet. `wo` komt uit workorders.get.
@@ -83,11 +81,9 @@ function registerPortalRoutes(app, ctx) {
     return ctx.photos.list(tenantId, id, { customerOnly: true });
   };
 
+  // Eén query voor alle werkorders van de klant (niet één per werkorder).
   function workOrdersOf(req) {
-    return portal.workOrderIds(tid(req), req.user.id)
-      .map((id) => workorders.get(tid(req), id))
-      .filter(Boolean)
-      .map((wo) => customerWorkOrder(wo));
+    return workorders.list(tid(req), { customerId: req.user.id }).map((wo) => customerWorkOrder(wo));
   }
 
   // Het hele overzicht in één keer.
@@ -108,8 +104,7 @@ function registerPortalRoutes(app, ctx) {
   // Eén werkorder als opleverdossier.
   app.get('/api/portal/workorders/:id', requirePortal, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    const row = portal.ownRow(tid(req), req.user.id, req.params.id);
-    const wo = row && workorders.get(tid(req), row.id);
+    const wo = workorders.get(tid(req), req.params.id, { customerId: req.user.id });
     if (!wo) return notFound(res);
     res.json({ ...customerWorkOrder(wo, { detail: true }), photos: photosOf(tid(req), wo.id) });
   });

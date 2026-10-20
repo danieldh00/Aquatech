@@ -84,9 +84,13 @@ function handoverOf(raw) {
   });
 }
 
+// Kolommen van een aanbod die de weergaven gebruiken (elke query noemt zijn kolommen).
+const COLS = 'id, tenant_id, work_order_id, to_tenant_id, status, message, fee, preview, from_name, created_by_name, declined, receiver_tenant_id, receiver_name, received_work_order_id, responded_by_name, responded_at, reason, created_at';
+const F_COLS = COLS.split(', ').map((c) => `f.${c}`).join(', ');
+
 function createOutsourcingStore(db, { workorders }) {
   const q = (sql) => db.prepare(sql);
-  const find = (id) => q('SELECT * FROM work_order_offers WHERE id = ?').get(String(id)) || null;
+  const find = (id) => q(`SELECT ${COLS} FROM work_order_offers WHERE id = ?`).get(String(id)) || null;
   const declinedOf = (r) => parse(r.declined, []);
 
   // Stand van het werk bij de ontvanger (voor de uitbesteder).
@@ -124,8 +128,8 @@ function createOutsourcingStore(db, { workorders }) {
     };
   }
 
-  const offerable = (tenantId, woId) => q(`SELECT * FROM work_orders WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL`).get(tenantId, String(woId)) || null;
-  const activeFor = (tenantId, woId) => q(`SELECT * FROM work_order_offers WHERE tenant_id = ? AND work_order_id = ?
+  const offerable = (tenantId, woId) => q('SELECT id, status, data FROM work_orders WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL').get(tenantId, String(woId)) || null;
+  const activeFor = (tenantId, woId) => q(`SELECT id FROM work_order_offers WHERE tenant_id = ? AND work_order_id = ?
     AND status IN ('aangeboden', 'geaccepteerd') ORDER BY created_at DESC LIMIT 1`).get(tenantId, String(woId)) || null;
 
   /**
@@ -149,7 +153,7 @@ function createOutsourcingStore(db, { workorders }) {
   }
 
   function outgoing(tenantId) {
-    return q('SELECT * FROM work_order_offers WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 200').all(tenantId).map(outgoingView);
+    return q(`SELECT ${COLS} FROM work_order_offers WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 200`).all(tenantId).map(outgoingView);
   }
 
   /**
@@ -158,7 +162,7 @@ function createOutsourcingStore(db, { workorders }) {
    * active(tenantId) filtert uitgeschakelde organisaties weg.
    */
   function incoming(tenantId, environment, { active = () => true } = {}) {
-    const rows = q(`SELECT f.* FROM work_order_offers f JOIN tenants s ON s.id = f.tenant_id
+    const rows = q(`SELECT ${F_COLS} FROM work_order_offers f JOIN tenants s ON s.id = f.tenant_id
       WHERE f.tenant_id <> ? AND s.environment = ?
         AND ((f.status = 'aangeboden' AND (f.to_tenant_id = ? OR f.to_tenant_id IS NULL))
           OR f.receiver_tenant_id = ? OR (f.status = 'afgewezen' AND f.to_tenant_id = ?))
@@ -169,10 +173,10 @@ function createOutsourcingStore(db, { workorders }) {
   // Per werkorder-id: uitbesteed (bij de uitbesteder) of aangenomen (bij de ontvanger).
   function marks(tenantId) {
     const out = {};
-    for (const r of q(`SELECT * FROM work_order_offers WHERE tenant_id = ? AND status IN ('aangeboden', 'geaccepteerd')`).all(tenantId)) {
+    for (const r of q(`SELECT ${COLS} FROM work_order_offers WHERE tenant_id = ? AND status IN ('aangeboden', 'geaccepteerd')`).all(tenantId)) {
       out[r.work_order_id] = { role: 'uitbesteed', offerId: r.id, status: r.status, partner: r.receiver_name || '', direct: Boolean(r.to_tenant_id), execution: execution(r) };
     }
-    for (const r of q('SELECT * FROM work_order_offers WHERE receiver_tenant_id = ? AND received_work_order_id IS NOT NULL').all(tenantId)) {
+    for (const r of q(`SELECT ${COLS} FROM work_order_offers WHERE receiver_tenant_id = ? AND received_work_order_id IS NOT NULL`).all(tenantId)) {
       out[r.received_work_order_id] = { role: 'aangenomen', offerId: r.id, status: r.status, partner: r.from_name, fee: r.fee, message: r.message };
     }
     return out;
