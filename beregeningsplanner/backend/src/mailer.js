@@ -3,6 +3,7 @@
 // server stuurt de app niets; de offertemodule biedt dan een link om zelf te
 // versturen. nodemailer is puur JavaScript (geen native module).
 const nodemailer = require('nodemailer');
+const { publicAddress, privateAllowed } = require('./netguard');
 
 const MAIL_TEXT = { host: 200, user: 200, from: 200, replyTo: 200 };
 const MAIL_DEFAULTS = { host: '', port: 587, secure: false, user: '', from: '', replyTo: '' };
@@ -24,10 +25,12 @@ const EMAIL = /^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[^\s@<>()",;:]+$/;
 const validEmail = (v) => typeof v === 'string' && v.length <= 200 && EMAIL.test(v.trim());
 
 /**
- * settings: instellingen van de tenant. createTransport is te vervangen in
- * tests. Geeft { configured(), send({ to, subject, text, html, replyTo }) }.
+ * settings: instellingen van de tenant. createTransport en resolveHost zijn te
+ * vervangen in tests. Geeft { configured(), send({ to, subject, text, html, replyTo }) }.
+ * resolveHost: de mailserver moet een openbaar adres hebben (zie netguard.js);
+ * er wordt verbonden met het gevonden adres, het certificaat blijft op naam gecontroleerd.
  */
-function createMailer(settings, { createTransport = nodemailer.createTransport } = {}) {
+function createMailer(settings, { createTransport = nodemailer.createTransport, resolveHost = publicAddress } = {}) {
   const config = () => settings.get('mailServer');
   const configured = () => {
     const c = config();
@@ -39,8 +42,16 @@ function createMailer(settings, { createTransport = nodemailer.createTransport }
     if (!list.length) throw Object.assign(new Error('Geen geldig e-mailadres.'), { code: 'invalid_to' });
     const c = config();
     const password = settings.get('mailPassword');
+    let address = c.host;
+    if (!privateAllowed()) {
+      try {
+        address = await resolveHost(c.host);
+      } catch (err) {
+        throw Object.assign(new Error(err.code === 'private_host' ? 'De mailserver moet een openbaar adres hebben.' : 'De mailserver is niet gevonden.'), { code: 'invalid_host' });
+      }
+    }
     const transport = createTransport({
-      host: c.host, port: c.port, secure: c.secure,
+      host: address, servername: c.host, port: c.port, secure: c.secure,
       auth: c.user ? { user: c.user, pass: password } : undefined,
       // Nooit zonder geldig certificaat; de verbinding loopt niet eindeloos.
       tls: { rejectUnauthorized: true },
