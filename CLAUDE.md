@@ -4,7 +4,10 @@ Webapp om tuinberegening te ontwerpen (in de lijn van de DVS Beregnungsplaner).
 Groeit uit tot een modulair ERP-achtig pakket: startpagina = **dashboard**
 (`frontend/index.html`, moduleregister `frontend/dashboard/modules.js`), de
 planner is module `frontend/beregening/` (URL `beregening/`). Gepland:
-planning, voorraadbeheer. Een module = map onder `frontend/` met eigen
+planning, voorraadbeheer. Beheerders/hoofdbeheerders (`usesSidebar` in
+modules.js) krijgen op elke pagina een zijbalk (`shared/sidebar.js|.css`,
+0.35.0) i.p.v. de tegels; een nieuwe modulepagina laadt `dashboard/modules.js`
+en daarna `shared/sidebar.js` (test bewaakt dat). Een module = map onder `frontend/` met eigen
 `index.html`; de server serveert die generiek (relatieve redirect
 `<id>` → `<id>/`, express.static met `redirect: false` i.v.m. een padprefix achter een proxy).
 Huisstijl AquaTech Service (aquatechservice.nl) in `frontend/shared/brand.css`:

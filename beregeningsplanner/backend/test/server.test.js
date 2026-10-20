@@ -260,3 +260,27 @@ test('versionAssets: alleen lokale css/js, geen externe of data-URL\'s', () => {
     '<link rel="stylesheet" href="css/app.css?v=1.2.3"><script src="../shared/x.js?v=1.2.3"></script>'
     + '<img src="logo.png"><a href="x.js">x</a><script src="https://cdn/x.js"></script><link href="a.css?x=1">');
 });
+
+test('zijbalk: alleen voor beheerders, op elke modulepagina, met de juiste modules', () => {
+  require(path.join(FRONTEND_DIR, 'dashboard', 'modules.js'));
+  const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
+  const tools = globalThis.AquatechModuleTools;
+  const rights = (u) => Roles.rightsOf(u);
+  assert.ok(tools.usesSidebar(rights({ role: 'beheerder' })));
+  assert.ok(tools.usesSidebar(rights({ role: 'klant', platformAdmin: true })));
+  assert.ok(!tools.usesSidebar(rights({ role: 'installateur' })));
+  assert.ok(!tools.usesSidebar(rights({ role: 'klant' })));
+  const ids = (list) => list.map((m) => m.id);
+  assert.ok(ids(tools.visible(rights({ role: 'beheerder' }))).includes('beheer'));
+  assert.ok(!ids(tools.visible(rights({ role: 'beheerder' }))).includes('hoofdbeheer'));
+  // Uitgezette modules vallen weg, beheer blijft altijd staan.
+  const off = ids(tools.visible(rights({ role: 'beheerder' }), { offertes: false, beheer: false }));
+  assert.ok(!off.includes('offertes') && off.includes('beheer'));
+  for (const page of PAGES.filter((p) => p !== 'openbaar/offerte.html')) {
+    const html = fs.readFileSync(path.join(FRONTEND_DIR, page), 'utf8');
+    const mod = html.indexOf('dashboard/modules.js');
+    const nav = html.indexOf('shared/sidebar.js');
+    assert.ok(nav > 0 && mod > 0 && mod < nav, `${page}: modules.js en daarna shared/sidebar.js laden`);
+    assert.match(html, /shared\/sidebar\.css/, `${page}: shared/sidebar.css ontbreekt`);
+  }
+});

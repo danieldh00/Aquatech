@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#172f5e">
   <title>AquaTech Service</title>
   <link rel="stylesheet" href="shared/brand.css">
+  <link rel="stylesheet" href="shared/sidebar.css">
   <link rel="stylesheet" href="dashboard/dashboard.css">
 </head>
 <body>
@@ -22,7 +23,7 @@
   <main class="dash">
     <section class="intro">
       <h1>Overzicht</h1>
-      <p>Kies een onderdeel om mee te werken.</p>
+      <p id="intro-text">Kies een onderdeel om mee te werken.</p>
     </section>
 
     <section id="recent" class="recent" hidden></section>
@@ -32,7 +33,7 @@
       <div id="myplans-list" class="tiles"></div>
     </section>
 
-    <section>
+    <section id="modules-section">
       <h2>Modules</h2>
       <div id="modules" class="tiles"></div>
     </section>
@@ -42,6 +43,7 @@
 
   <script src="shared/env.js"></script>
   <script src="dashboard/modules.js"></script>
+  <script src="shared/sidebar.js"></script>
   <script src="dashboard/account.js"></script>
   <script src="dashboard/support.js"></script>
   <script src="dashboard/dashboard.js"></script>
