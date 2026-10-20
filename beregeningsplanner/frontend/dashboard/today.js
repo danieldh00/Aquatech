@@ -152,9 +152,13 @@
     try { saved = localStorage.getItem(ALL_KEY); } catch (e) { /* geen opslag */ }
     state.all = saved === null ? rights.includes('beheer') : saved === '1';
     bind();
+    state.bound = true;
     load();
     return true;
   }
 
-  window.AquatechToday = { start };
+  // Opnieuw laden (terug op het dashboard via de knop Terug van de browser).
+  const refresh = () => { if (state.el && state.bound) load(); };
+
+  window.AquatechToday = { start, refresh };
 })();

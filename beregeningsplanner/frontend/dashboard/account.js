@@ -4,13 +4,20 @@
 (function (root) {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  async function load(base = '') {
+  // `fresh`: opnieuw ophalen (bijv. na het opslaan van het profiel); anders
+  // hetzelfde verzoek als de zijbalk (shared/common.js).
+  async function load(base = '', { fresh = false } = {}) {
     let me = { user: null, via: null, guest: true };
     if (location.protocol !== 'file:') {
-      try {
-        const res = await fetch(`${base}api/me`, { cache: 'no-store' });
-        if (res.ok) me = await res.json();
-      } catch (e) { /* offline: als gast tonen */ }
+      const common = window.AquatechCommon;
+      if (common) {
+        me = (await common.getJson('api/me', { fresh })) || me;
+      } else {
+        try {
+          const res = await fetch(`${base}api/me`, { cache: 'no-store' });
+          if (res.ok) me = await res.json();
+        } catch (e) { /* offline: als gast tonen */ }
+      }
     }
     render(me, base);
     return me;

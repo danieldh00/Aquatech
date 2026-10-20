@@ -23,6 +23,7 @@ const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
+const MODULES = require(path.join(FRONTEND_DIR, 'dashboard', 'modules.js'));
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
 const LOGIN_PAGE = path.join(__dirname, 'login.html');
 const SETUP_PAGE = path.join(__dirname, 'setup.html');
@@ -105,12 +106,28 @@ function versionAssets(html, version) {
   return html.replace(/(<(?:link|script)\b[^>]*?\b(?:href|src)=")([^"?#:]+\.(?:css|js))(")/g, `$1$2?v=${v}$3`);
 }
 
-function sendPage(res, file, version) {
+// `head`: extra regels direct na <head> (bijv. de startpagina, zie startPageOf).
+function sendPage(res, file, version, head = '') {
   fs.readFile(file, 'utf8', (err, html) => {
     if (err) return res.status(404).end();
     res.setHeader('Cache-Control', 'no-cache');
-    res.type('html').send(versionAssets(html, version));
+    const out = versionAssets(html, version);
+    res.type('html').send(head ? out.replace(/<head>/i, `<head>\n  ${head}`) : out);
   });
+}
+
+// Scripts en stylesheets met de huidige versie (`?v=<versie>`, zie
+// versionAssets) veranderen nooit meer: de browser mag ze bewaren zonder bij
+// elke paginawissel opnieuw te vragen of ze nog kloppen. Een nieuwe versie
+// heeft een ander adres. `private`: alleen de browser, geen proxy (Cloudflare),
+// want de bestanden vallen achter de login.
+function staticHeaders(version) {
+  const v = `v=${encodeURIComponent(version)}`;
+  return (res, file) => {
+    const q = res.req && res.req.originalUrl ? res.req.originalUrl.split('?')[1] : '';
+    const fixed = q === v && /\.(css|js)$/.test(file);
+    res.setHeader('Cache-Control', fixed ? 'private, max-age=31536000, immutable' : 'no-cache');
+  };
 }
 
 // accessCode, anthropicApiKey en aiDailyLimit zijn alleen startwaarden (net als
@@ -1271,6 +1288,23 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.type('css').send(`/* Kleurthema (Hoofdbeheer > Kleuren). */\n${Theme.css(themeFor(req.tenantId))}`);
   });
 
+  // Startpagina uit Mijn profiel (voorkeur startPage) als module-URL
+  // ('planning/'), alleen als die module er voor deze gebruiker is. Het
+  // dashboard krijgt hem mee in de pagina; shared/common.js gaat er de eerste
+  // keer in een tabblad meteen heen, zonder het overzicht eerst op te bouwen.
+  function startPageOf(req) {
+    const user = identify(req);
+    if (!user || user.kind !== 'account' || user.impersonation) return null;
+    const id = preferencesOf(user).startPage;
+    const m = id && MODULES.find((x) => x.id === id && x.status === 'actief' && x.href);
+    if (!m || !/^[a-z0-9-]+\/$/.test(m.href)) return null;
+    const rights = Roles.rightsOf(user);
+    if (m.right && ![].concat(m.right).some((r) => rights.includes(r))) return null;
+    const off = settingsFor(req.tenantId).get('modules') || {};
+    if (m.id !== 'beheer' && m.id !== 'hoofdbeheer' && off[m.id] === false) return null;
+    return m.href;
+  }
+
   // Eigen wachtwoord wijzigen (ingelogd met een account).
   app.get('/wachtwoord', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -1289,9 +1323,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const rel = req.path.endsWith('/') ? `${req.path}index.html` : req.path;
     const file = path.join(FRONTEND_DIR, rel);
     if (!file.startsWith(FRONTEND_DIR + path.sep)) return next();
-    fs.stat(file, (err, st) => (err || !st.isFile() ? next() : sendPage(res, file, version)));
+    const start = rel === '/index.html' ? startPageOf(req) : null;
+    const head = start ? `<meta name="aquatech-start" content="${start}">` : '';
+    fs.stat(file, (err, st) => (err || !st.isFile() ? next() : sendPage(res, file, version, head)));
   });
-  app.use(express.static(FRONTEND_DIR, { index: 'index.html', redirect: false, setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
+  app.use(express.static(FRONTEND_DIR, { index: 'index.html', redirect: false, setHeaders: staticHeaders(version) }));
 
   // Elke map in de frontend met een eigen index.html is een module van het
   // dashboard (zie frontend/dashboard/modules.js). De doorverwijzing naar de

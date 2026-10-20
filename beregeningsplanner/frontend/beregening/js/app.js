@@ -200,6 +200,12 @@
     // Rechten van de gebruiker (shared/roles.js): een klant maakt geen offertes.
     async _loadRights() {
       if (!this._serverAvailable()) return;
+      // Zelfde verzoek als de zijbalk (shared/common.js).
+      if (window.AquatechCommon) {
+        const me = await window.AquatechCommon.getJson('api/me');
+        if (me) this.rights = me.rights || [];
+        return;
+      }
       try {
         const res = await fetch('api/me', { cache: 'no-store' });
         if (res.ok) this.rights = (await res.json()).rights || [];
@@ -664,7 +670,12 @@
       reader.readAsText(file);
     },
     newProject() {
-      if (!confirm('Nieuw project starten? Niet-opgeslagen wijzigingen gaan verloren.')) return;
+      // Alleen vragen als er echt iets verloren kan gaan: een leeg plan of een
+      // plan dat al in Mijn plannen staat (en terug te halen is) niet.
+      const st = this.state;
+      const content = st.areas.length || st.elements.length || st.sprinklers.length || st.background;
+      const saved = st.serverId && !this._syncPending && !this._syncing;
+      if (content && !saved && !confirm('Nieuw project starten? Niet-opgeslagen wijzigingen gaan verloren.')) return;
       this.checkpoint();
       this.state = emptyState();
       this.conceptWarnings = [];

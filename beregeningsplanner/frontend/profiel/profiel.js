@@ -96,7 +96,7 @@
       }
       fill();
       // Naam en initialen in de kopbalk bijwerken.
-      window.AquatechAccount.load('../');
+      window.AquatechAccount.load('../', { fresh: true });
       say(form, 'Opgeslagen.', 'ok');
     });
   });
@@ -132,11 +132,14 @@
     if (!me.user || me.user.kind === 'gast') return blocked('Log in met je eigen account om je profiel te bekijken.');
     if (me.impersonation) return blocked('Je werkt namens een andere gebruiker. Ga eerst terug naar je eigen account om je profiel te wijzigen.');
     if (me.user.kind !== 'account') return blocked('Met de toegangscode heb je geen eigen profiel. Maak een eigen account aan in Beheer.');
-    let disabled = {};
-    try { const c = await api('config'); disabled = c.modules || {}; } catch (e) { /* zonder instellingen */ }
+    // Instellingen (zelfde verzoek als de zijbalk) en profiel tegelijk ophalen.
+    const config = window.AquatechCommon ? window.AquatechCommon.getJson('api/config') : api('config').catch(() => null);
+    const loading = api('account/profile');
+    loading.catch(() => {});
+    const disabled = ((await config) || {}).modules || {};
     modules = tools ? tools.visible(me.rights, disabled).filter((m) => m.status === 'actief' && m.href).map((m) => ({ id: m.id, title: m.title })) : [];
     try {
-      profile = await api('account/profile');
+      profile = await loading;
     } catch (e) {
       return blocked(e.message);
     }

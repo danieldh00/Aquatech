@@ -122,3 +122,21 @@ test('Mijn profiel: niet zonder eigen account, pagina bereikbaar', async () => {
     server.close();
   }
 });
+
+test('startpagina: het dashboard krijgt hem mee, alleen als de module er voor de gebruiker is', async () => {
+  const { server, base } = await start();
+  try {
+    const klaas = await login(base, 'klaas');
+    const meta = (html) => (/<meta name="aquatech-start" content="([^"]*)">/.exec(html) || [])[1] || null;
+    assert.strictEqual(meta((await klaas.get('/')).text), null);
+    await klaas.put('/api/account/profile', { preferences: { startPage: 'portaal' } });
+    assert.strictEqual(meta((await klaas.get('/')).text), 'portaal/');
+    // Alleen op het dashboard, niet op andere pagina's.
+    assert.strictEqual(meta((await klaas.get('/plannen/')).text), null);
+    // Een module waar de klant geen recht op heeft: geen doorverwijzing.
+    await klaas.put('/api/account/profile', { preferences: { startPage: 'planning' } });
+    assert.strictEqual(meta((await klaas.get('/')).text), null);
+  } finally {
+    server.close();
+  }
+});

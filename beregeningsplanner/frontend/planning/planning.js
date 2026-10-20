@@ -469,7 +469,7 @@
 
   // ---------- Excel: de planning in beeld ----------
   async function exportRange() {
-    if (!window.ExcelJS) { toast('Excel-export niet beschikbaar.', true); return; }
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     const ds = visibleDays();
     try {
       const wb = new ExcelJS.Workbook();
@@ -551,6 +551,16 @@
     }
     fillWho();
     render();
+    // Terug uit een werkorder via de knop Terug: de planning opnieuw ophalen,
+    // zodat een gewijzigde status of tijd meteen klopt.
+    if (window.AquatechCommon) {
+      window.AquatechCommon.onReturn(async () => {
+        try {
+          state.items = (await api('workorders')).items || [];
+          render();
+        } catch (e) { /* laat de laatste stand staan */ }
+      });
+    }
   }
 
   init();

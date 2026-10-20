@@ -292,6 +292,14 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (planner + offertes, vóór `fromPlan`); beheer in `beheer/webshop.js`.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
+- **Snelheid/navigatie** (0.46.0): `shared/common.js` in de `<head>` van elke
+  pagina (vóór sidebar.js): `getJson('api/me'|'api/config')` deelt één verzoek
+  per pagina, `excel()` laadt ExcelJS pas bij export (geen exceljs-scripttag
+  in pagina's, test bewaakt dat), `origin()` = terugknop naar de herkomst
+  (referrer), `onReturn()` = herladen na bfcache. Bestanden met `?v=<versie>`
+  krijgen `private, max-age=31536000, immutable` (`staticHeaders`). Startpagina:
+  server zet `<meta name="aquatech-start">` op het dashboard (`startPageOf`).
+  Links naar een item altijd direct (`?id=`), nooit via een overzicht.
 - Health: `GET /api/health` (versie uit `package.json`).
 
 ## Harde regels
