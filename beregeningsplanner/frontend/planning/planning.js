@@ -524,9 +524,9 @@
   async function init() {
     state.me = await window.AquatechAccount.load('../');
     const rights = state.me.rights || [];
-    if (!state.me.user || !rights.includes('werkorders')) {
+    if (!state.me.user || !rights.includes('planning')) {
       $('.p-layout').innerHTML = state.me.user && state.me.user.kind !== 'gast'
-        ? '<p class="notice">De planning is alleen voor beheerders en installateurs. <a href="../">Terug naar het overzicht</a></p>'
+        ? '<p class="notice">Je rol heeft geen toegang tot de planning. <a href="../">Terug naar het overzicht</a></p>'
         : '<p class="notice">Log eerst in om de planning te bekijken. <a href="../login">Inloggen</a></p>';
       $('.p-toolbar').hidden = true;
       return;

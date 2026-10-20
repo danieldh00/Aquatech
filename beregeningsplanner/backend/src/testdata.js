@@ -118,6 +118,8 @@ const ACCOUNTS = [
   { key: 'beheerder', suffix: 'beheerder', displayName: 'Bea Beheer (test)', role: 'beheerder' },
   { key: 'inst1', suffix: 'installateur', displayName: 'Ivo Installateur (test)', role: 'installateur' },
   { key: 'inst2', suffix: 'installateur2', displayName: 'Iris Installateur (test)', role: 'installateur' },
+  // Planner: plant werkorders in en regelt de afspraak, voert zelf niets uit.
+  { key: 'planner', suffix: 'planner', displayName: 'Pim Planner (test)', role: 'planner' },
   { key: 'klant1', suffix: 'klant1', displayName: 'Fam. de Vries (test)', role: 'klant' },
   { key: 'klant2', suffix: 'klant2', displayName: 'Fam. Bakker (test)', role: 'klant' },
   { key: 'klant3', suffix: 'klant3', displayName: 'Dhr. en mevr. Visser (test)', role: 'klant' },
@@ -151,7 +153,7 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
     username: `${p}.${a.suffix}`,
     email: `${p}.${a.suffix}@voorbeeld.test`,
     phone: `06 0000 ${String(1000 + i * 111).slice(-4)}`,
-    preferences: a.key === 'beheerder' ? { startPage: 'planning', mailCopy: true } : a.key === 'klant1' ? { startPage: 'portaal' } : {},
+    preferences: a.key === 'beheerder' ? { startPage: 'planning', mailCopy: true } : a.key === 'planner' ? { startPage: 'planning' } : a.key === 'klant1' ? { startPage: 'portaal' } : {},
   }));
   const day = (offset) => {
     const d = new Date(today.getTime() - offset * 86400000);

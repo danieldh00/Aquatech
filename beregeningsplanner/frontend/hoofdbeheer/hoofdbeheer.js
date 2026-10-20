@@ -6,8 +6,11 @@
   const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : '–');
   const state = { items: [], mainId: null, current: null };
   const Roles = window.AquatechRoles;
-  const roleOptions = (current) => Object.entries(Roles.ROLES)
-    .map(([k, r]) => `<option value="${k}"${k === current ? ' selected' : ''}>${esc(r.label)}</option>`).join('');
+  // Rollen van de getoonde tenant (zijn eigen rollen, zie Beheer > Rollen).
+  let tenantRoles = Object.entries(Roles.ROLES).map(([key, r]) => ({ key, ...r }));
+  const roleLabel = (key) => { const r = tenantRoles.find((x) => x.key === key); return r ? r.label : Roles.label(key); };
+  const roleOptions = (current) => tenantRoles.concat(tenantRoles.some((r) => r.key === current) ? [] : [{ key: current, label: current }])
+    .map((r) => `<option value="${esc(r.key)}"${r.key === current ? ' selected' : ''}>${esc(r.label)}</option>`).join('');
 
   function toast(msg, err = false) {
     const t = $('#toast');
@@ -252,7 +255,11 @@
 
   async function usersDialog(t) {
     let users = [];
-    try { users = (await api(`platform/tenants/${encodeURIComponent(t.id)}/users`)).items || []; } catch (e) { toast(e.message, true); return; }
+    try {
+      const out = await api(`platform/tenants/${encodeURIComponent(t.id)}/users`);
+      users = out.items || [];
+      if (out.roles) tenantRoles = out.roles;
+    } catch (e) { toast(e.message, true); return; }
     const canImpersonate = (u) => u.kind === 'account' && !u.platformAdmin && !u.disabled;
     // Hoofdbeheerders wonen in de hoofdtenant en loggen in zonder organisatiecode.
     const isMain = t.id === state.mainId;
@@ -260,7 +267,7 @@
     const support = (u) => (u.platformAdmin || u.kind !== 'account' || t.environment === 'test' ? '–' : u.support ? `<span class="pill live" title="Supporttoegang voor live">tot ${esc(when(u.support.expiresAt))}</span>` : '<span class="muted">geen</span>');
     const rows = users.map((u) => `<tr data-uid="${esc(u.id)}" class="${u.disabled ? 'off' : ''}">
         <td>${esc(u.displayName)}<br><span class="code">${esc(u.username)}</span></td>
-        <td>${u.kind === 'account' && !u.platformAdmin ? `<select data-f="role">${roleOptions(u.role)}</select>` : esc(Roles.label(u.role))}${u.platformAdmin ? ' <span class="pill hoofd">hoofdbeheerder</span>' : ''}</td>
+        <td>${u.kind === 'account' && !u.platformAdmin ? `<select data-f="role">${roleOptions(u.role)}</select>` : esc(roleLabel(u.role))}${u.platformAdmin ? ' <span class="pill hoofd">hoofdbeheerder</span>' : ''}</td>
         <td>${esc(when(u.lastSeenAt))}</td>
         <td>${support(u)}</td>
         <td>${u.kind === 'account' ? `<input type="checkbox" data-f="mustchange"${u.mustChangePassword ? ' checked' : ''} aria-label="Wachtwoord wijzigen bij volgende aanmelding">` : ''}</td>
@@ -364,7 +371,7 @@
       ? ''
       : `<p class="muted small">Voor live is toestemming nodig: ${esc(u.displayName)} geeft die zelf op het dashboard bij <b>Support op afstand</b>, voor een beperkte tijd.${envs.length ? '' : ' Deze tenant heeft nog geen testomgeving.'}</p>`;
     modal(`<h2>Inloggen als ${esc(u.displayName)}</h2>
-      <p class="muted small">Je werkt dan met de rol en rechten van ${esc(u.displayName)} (${esc(Roles.label(u.role))}). Alles wat je doet komt met jouw naam in het auditlog. Terug naar je eigen account kan altijd met de rode balk onderin.</p>
+      <p class="muted small">Je werkt dan met de rol en rechten van ${esc(u.displayName)} (${esc(roleLabel(u.role))}). Alles wat je doet komt met jouw naam in het auditlog. Terug naar je eigen account kan altijd met de rode balk onderin.</p>
       ${hint}
       <form id="imp-form" class="card-form">
         <div class="row">

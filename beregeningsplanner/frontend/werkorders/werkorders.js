@@ -333,8 +333,8 @@
     box.innerHTML = `<h4>Afspraak met de klant ${apptPill(a)}</h4>${resp}
       ${s.active && s.url ? `<div class="link-row"><input id="ap-url" readonly value="${esc(s.url)}" aria-label="Link naar de afspraak">
         <button class="btn small" data-ap="copy">Kopiëren</button><button class="btn small" data-ap="preview" title="Openen zoals de klant hem ziet">Openen</button></div>` : ''}
-      <div class="actions">${planned ? `<button class="btn small primary" data-ap="send">${s.sentAt || r ? 'Opnieuw naar de klant' : 'Afspraak naar de klant'}</button>` : '<span class="muted small">Plan eerst een datum in; daarna kan de klant de afspraak via een link bevestigen.</span>'}
-        ${s.active ? '<button class="btn small" data-ap="revoke">Link intrekken</button>' : ''}</div>
+      ${state.planning ? `<div class="actions">${planned ? `<button class="btn small primary" data-ap="send">${s.sentAt || r ? 'Opnieuw naar de klant' : 'Afspraak naar de klant'}</button>` : '<span class="muted small">Plan eerst een datum in; daarna kan de klant de afspraak via een link bevestigen.</span>'}
+        ${s.active ? '<button class="btn small" data-ap="revoke">Link intrekken</button>' : ''}</div>` : ''}
       ${stats ? `<p class="muted small">${stats}</p>` : ''}`;
   }
 
@@ -988,13 +988,15 @@
     state.me = await window.AquatechAccount.load('../');
     const rights = state.me.rights || [];
     state.admin = rights.includes('beheer');
+    // Afspraak met de klant regelen hoort bij het recht planning.
+    state.planning = rights.includes('planning');
     state.outsource = rights.includes('uitbesteden');
     if (!state.me.user || !rights.includes('werkorders')) {
       $('#list-view').hidden = false;
       $('#l-new').hidden = true;
       $('#l-export').hidden = true;
       $('#l-table').innerHTML = state.me.user && state.me.user.kind !== 'gast'
-        ? '<tr><td class="empty">Werkorders zijn alleen voor beheerders en installateurs. <a href="../">Terug naar het overzicht</a></td></tr>'
+        ? '<tr><td class="empty">Je rol heeft geen toegang tot werkorders. <a href="../">Terug naar het overzicht</a></td></tr>'
         : '<tr><td class="empty">Log eerst in om werkorders te bekijken. <a href="../login">Inloggen</a></td></tr>';
       return;
     }

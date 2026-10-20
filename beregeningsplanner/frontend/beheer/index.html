@@ -31,6 +31,7 @@
         <button class="tab active" data-tab="history" role="tab">Aanvragen</button>
         <button class="tab" data-tab="plans" role="tab">Plannen</button>
         <button class="tab" data-tab="users" role="tab">Gebruikers</button>
+        <button class="tab" data-tab="roles" role="tab">Rollen</button>
         <button class="tab" data-tab="settings" role="tab">Instellingen</button>
         <button class="tab" data-tab="webshop" role="tab">Webshop</button>
         <button class="tab" data-tab="audit" role="tab">Auditlog</button>
@@ -66,17 +67,36 @@
             <label>Gebruikersnaam<input name="username" required pattern="[a-z0-9][a-z0-9._\-]{2,39}" autocomplete="off" placeholder="bijv. jan.devries"
               title="3–40 tekens: kleine letters, cijfers, punt, streepje of underscore, zonder spaties (bijv. jan.devries)"><span class="hint">3–40 tekens: kleine letters, cijfers, punt, streepje of underscore.</span></label>
             <label>Naam<input name="displayName" autocomplete="off" placeholder="Jan de Vries"></label>
-            <label>Rol<select name="role"><option value="installateur">Installateur</option><option value="klant">Klant</option><option value="beheerder">Beheerder</option></select></label>
+            <label>Rol<select name="role"><option value="installateur">Installateur</option><option value="planner">Planner</option><option value="klant">Klant</option><option value="beheerder">Beheerder</option></select></label>
             <label>Wachtwoord<input name="password" type="password" minlength="12" maxlength="128" required autocomplete="new-password" placeholder="minimaal 12 tekens"></label>
             <button class="btn primary" type="submit">Toevoegen</button>
           </div>
           <label class="chk"><input type="checkbox" name="mustChangePassword" checked> Wachtwoord wijzigen na eerste aanmelding</label>
           <div id="u-err" class="err" role="alert"></div>
-          <p class="muted small"><b>Beheerder</b>: alles binnen de organisatie (gebruikers, instellingen, historie, alle plannen en offertes). <b>Installateur</b>: plannen maken en bewerken en offertes opstellen, zonder gebruikers of instellingen. <b>Klant</b>: alleen de eigen plannen en de offertes die voor hem klaarstaan inzien en accepteren.</p>
+          <p id="u-roles" class="muted small"></p>
         </form>
         <p id="u-login" class="muted small"></p>
         <label class="chk"><input type="checkbox" id="u-guests"> Gasten tonen (anonieme bezoekers zonder account)</label>
         <div class="tablewrap"><table class="grid" id="u-table"></table></div>
+      </section>
+
+      <section id="tab-roles" class="tabpane" hidden>
+        <p class="muted small">Wat elke rol mag. Een vinkje slaat direct op en geldt bij het volgende verzoek van de gebruikers met die rol. Rollen gelden voor de hele organisatie, ook in de testomgevingen. De beheerder heeft vaste rechten, zodat er altijd iemand kan beheren.</p>
+        <p id="r-readonly" class="notice small" hidden>Je werkt met een testaccount: de rollen gelden voor de hele organisatie en zijn alleen met een account van live te wijzigen.</p>
+        <div class="tablewrap"><table class="grid matrix" id="r-matrix"></table></div>
+        <form id="r-form" class="card-form" style="margin-top:14px">
+          <h3>Rol toevoegen</h3>
+          <div class="row">
+            <label>Naam<input name="label" maxlength="40" required autocomplete="off" placeholder="bijv. Werkvoorbereider"></label>
+            <label>Soort<select name="kind"><option value="medewerker">Medewerker</option><option value="klant">Klant</option></select></label>
+            <label>Rechten overnemen van<select name="copyOf"></select></label>
+            <label class="grow">Omschrijving<input name="description" maxlength="300" autocomplete="off" placeholder="Wat doet iemand met deze rol?"></label>
+            <button class="btn primary" type="submit">Toevoegen</button>
+          </div>
+          <div id="r-err" class="err" role="alert"></div>
+          <p class="muted small">Een <b>klantrol</b> kan alleen klantrechten krijgen (eigen plannen, eigen offertes, klantportaal); accounts met zo'n rol zijn aan een offerte te koppelen.</p>
+        </form>
+        <div id="r-list"></div>
       </section>
 
       <section id="tab-settings" class="tabpane" hidden>
@@ -228,6 +248,7 @@
   <script src="../shared/sidebar.js"></script>
   <script src="../dashboard/account.js"></script>
   <script src="webshop.js"></script>
+  <script src="rollen.js"></script>
   <script src="beheer.js"></script>
 </body>
 </html>

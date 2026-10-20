@@ -110,8 +110,8 @@ test('migratie rollen: gebruiker wordt installateur, gast wordt klant; verwijzin
   assert.deepStrictEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
   assert.strictEqual(db.prepare("SELECT owner_id FROM plans WHERE id = 'p1'").get().owner_id, 'u2');
   assert.strictEqual(db.prepare("SELECT customer_id FROM quotes WHERE id = 'q1'").get().customer_id, null);
-  // De CHECK kent alleen de nieuwe rollen; verwijzingen worden weer bewaakt.
-  assert.throws(() => db.prepare("UPDATE users SET role = 'gebruiker' WHERE id = 'u2'").run());
+  // Sinds migratie 16 (rollen per organisatie) is de rol een vrije sleutel;
+  // verwijzingen worden weer bewaakt.
   assert.throws(() => db.prepare("INSERT INTO plans (id, tenant_id, owner_id, title, data, created_at, updated_at) VALUES ('p2', 't1', 'niemand', 'x', '{}', ?, ?)").run(t, t));
   db.close();
 });

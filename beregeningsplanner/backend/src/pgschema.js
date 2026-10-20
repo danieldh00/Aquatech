@@ -297,6 +297,21 @@ const PG_MIGRATIONS = [
   CREATE INDEX work_order_offers_open ON work_order_offers (status, to_tenant_id);
   CREATE INDEX work_order_offers_receiver ON work_order_offers (receiver_tenant_id, received_work_order_id);
   `,
+  // 18: rollen per organisatie; users.role wordt een vrije sleutel.
+  `
+  CREATE TABLE roles (
+    tenant_id   ${T} NOT NULL ${FK('tenants(id)')},
+    role_key    ${T} NOT NULL,
+    label       ${T} NOT NULL,
+    description ${T} NOT NULL DEFAULT '',
+    kind        ${T} NOT NULL CHECK (kind IN ('medewerker', 'klant')),
+    rights      ${T} NOT NULL DEFAULT '[]',
+    created_at  ${T} NOT NULL,
+    updated_at  ${T} NOT NULL,
+    PRIMARY KEY (tenant_id, role_key)
+  );
+  ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

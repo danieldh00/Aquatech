@@ -51,7 +51,7 @@ function appointmentOf(r, data) {
   return { state, response };
 }
 
-function createWorkOrderStore(db, { vault = createVault() } = {}) {
+function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['beheerder', 'installateur'] } = {}) {
   const q = (sql) => db.prepare(sql);
   const tokenCtx = (r) => `${r.tenant_id}:afspraaklink:${r.id}`;
 
@@ -191,13 +191,16 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
     plannedDate: data.plannedDate || null,
   });
 
-  // Medewerkers aan wie een werkorder kan worden toegewezen (beheerders en
-  // installateurs van de opgegeven tenants).
+  // Medewerkers aan wie een werkorder kan worden toegewezen: accounts met een
+  // rol met het recht 'uitvoerder' (staffRoles, zie roles.js), in de
+  // opgegeven tenants (één organisatie).
   function staff(tenantIds) {
     const ids = [...new Set(tenantIds)];
+    const keys = staffRoles(ids[0]);
+    if (!keys.length) return [];
     return q(`SELECT id, username, display_name, role FROM users WHERE tenant_id IN (${ids.map(() => '?').join(',')})
-      AND kind = 'account' AND role IN ('beheerder', 'installateur') AND disabled = 0 ORDER BY lower(display_name)`)
-      .all(...ids).map((u) => ({ id: u.id, username: u.username, displayName: u.display_name, role: u.role }));
+      AND kind = 'account' AND role IN (${keys.map(() => '?').join(',')}) AND disabled = 0 ORDER BY lower(display_name)`)
+      .all(...ids, ...keys).map((u) => ({ id: u.id, username: u.username, displayName: u.display_name, role: u.role }));
   }
 
   /**
@@ -429,6 +432,8 @@ function registerWorkOrderRoutes(app, ctx) {
   // Uitbesteed of aangenomen (outsourcing.js): per werkorder-id.
   const outsourcingOf = ctx.outsourcingOf || (() => ({}));
   const requireWo = requireRight('werkorders');
+  // Inplannen en de afspraak met de klant (planning of de werkorder zelf).
+  const requirePlanning = requireRight('planning');
   const tid = (req) => req.tenantId || req.user.tenant_id;
   const notFound = (res) => res.status(404).json({ error: 'not_found', message: 'Werkorder niet gevonden.' });
   const validData = (d) => d && typeof d === 'object' && !Array.isArray(d);
@@ -498,7 +503,7 @@ function registerWorkOrderRoutes(app, ctx) {
   });
 
   // Inplannen vanuit de planning (alleen datum, tijden, dagen en uitvoerder).
-  app.post('/api/workorders/:id/schedule', requireJson, requireWo, (req, res) => {
+  app.post('/api/workorders/:id/schedule', requireJson, requireWo, requirePlanning, (req, res) => {
     const b = req.body || {};
     const bad = (b.plannedDate !== undefined && b.plannedDate !== '' && !Core.isDate(b.plannedDate))
       || (b.startTime !== undefined && b.startTime !== '' && !Core.isTime(b.startTime))
@@ -513,7 +518,7 @@ function registerWorkOrderRoutes(app, ctx) {
   });
 
   // ---------- Klantlink: de klant ziet en bevestigt de afspraak ----------
-  app.post('/api/workorders/:id/share', requireJson, requireWo, (req, res) => {
+  app.post('/api/workorders/:id/share', requireJson, requireWo, requirePlanning, (req, res) => {
     const out = workorders.share(tid(req), req.params.id, req.body?.url);
     if (out.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (out.error) return notFound(res);
@@ -521,7 +526,7 @@ function registerWorkOrderRoutes(app, ctx) {
     res.json(out.workOrder);
   });
 
-  app.delete('/api/workorders/:id/share', requireWo, (req, res) => {
+  app.delete('/api/workorders/:id/share', requireWo, requirePlanning, (req, res) => {
     const wo = workorders.unshare(tid(req), req.params.id);
     if (!wo) return notFound(res);
     audit(req, 'afspraaklink_ingetrokken', { workOrderId: wo.id, number: wo.number });
@@ -529,7 +534,7 @@ function registerWorkOrderRoutes(app, ctx) {
   });
 
   // Afspraak per e-mail naar de klant, met de link (maakt die zo nodig aan).
-  app.post('/api/workorders/:id/send', requireJson, requireWo, wrapAsync(async (req, res) => {
+  app.post('/api/workorders/:id/send', requireJson, requireWo, requirePlanning, wrapAsync(async (req, res) => {
     const { to, subject, message, url } = req.body || {};
     const list = String(to || '').split(/[,;\s]+/).filter(Boolean);
     if (!list.length || list.length > 5 || !list.every(validEmail)) return res.status(400).json({ error: 'invalid_to', message: 'Vul een of meer geldige e-mailadressen in.' });

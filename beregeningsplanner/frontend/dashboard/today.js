@@ -150,7 +150,8 @@
     if (!state.el || !me || !me.user || !rights.includes('werkorders') || location.protocol === 'file:') return false;
     let saved = null;
     try { saved = localStorage.getItem(ALL_KEY); } catch (e) { /* geen opslag */ }
-    state.all = saved === null ? rights.includes('beheer') : saved === '1';
+    // Wie zelf niet uitvoert (zoals een planner) ziet standaard de hele ploeg.
+    state.all = saved === null ? rights.includes('beheer') || !rights.includes('uitvoerder') : saved === '1';
     bind();
     state.bound = true;
     load();
