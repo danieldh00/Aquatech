@@ -531,6 +531,17 @@
       if (t.dataset.f) {
         setPath(wo.data, t.dataset.f, t.dataset.f === 'days' ? Math.max(1, Math.min(W.MAX_DAYS, Math.round(Number(t.value) || 1))) : t.value);
         if (t.dataset.f === 'customer.address') renderRoute();
+        // Starttijd zonder eindtijd: het blok volgt uit de geplande uren
+        // (meer dan een werkdag = verdeeld over meer werkdagen).
+        if (t.dataset.f === 'startTime' && t.value && !wo.data.endTime) {
+          const fit = W.fitHours(t.value, W.progress(wo.data).hours);
+          if (fit) {
+            wo.data.endTime = fit.endTime;
+            wo.data.days = fit.days;
+            $('[data-f="endTime"]').value = fit.endTime;
+            $('[data-f="days"]').value = fit.days;
+          }
+        }
         // Een datum geven aan een nieuwe werkorder = ingepland.
         if (t.dataset.f === 'plannedDate' && t.value && wo.status === 'open') {
           $('#e-status').value = 'gepland';
