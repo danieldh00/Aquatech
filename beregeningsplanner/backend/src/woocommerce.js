@@ -5,6 +5,8 @@
 //    secret (alleen-lezen volstaat); geeft ook meta_data (aquatech_code).
 // Variaties van variabele producten worden in dit prototype niet opgehaald.
 
+const { publicAddress } = require('./netguard');
+
 const PER_PAGE = 100;
 const MAX_PAGES = 50;
 const TIMEOUT_MS = 15000;
@@ -19,7 +21,8 @@ class SourceError extends Error {
 }
 
 // Interne en lokale adressen zijn geen webshop: voorkomt dat de server als
-// doorgeefluik naar het eigen netwerk dient (best effort, geen DNS-controle).
+// doorgeefluik naar het eigen netwerk dient. Snelle controle op de naam bij
+// het opslaan; bij het ophalen wordt de naam ook opgezocht (netguard.js).
 const PRIVATE_HOST = /^(localhost|.*\.local|.*\.internal|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|\[?::1\]?$|\[?f[cd][0-9a-f]{2}:)/i;
 
 // SHOP_ALLOW_INSECURE=1 staat ook http en lokale adressen toe: alleen voor
@@ -108,8 +111,17 @@ function fromRestV3(p, cfg) {
  * Haalt alle gepubliceerde producten op en zet ze om naar het eigen formaat.
  * @param cfg {url, mode: 'store'|'rest', consumerKey, consumerSecret, pricesIncludeTax, vatRate}
  */
-async function fetchProducts(cfg, { fetchImpl = fetch, allowInsecure = insecureAllowed() } = {}) {
+async function fetchProducts(cfg, { fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
   const base = normalizeBaseUrl(cfg.url, { allowInsecure });
+  if (!allowInsecure) {
+    try {
+      await resolveHost(new URL(base).hostname);
+    } catch (err) {
+      throw err.code === 'private_host'
+        ? new SourceError('invalid_url', 'Dit is geen openbaar webadres.', 400)
+        : new SourceError('unreachable', 'De webshop is niet gevonden: controleer het webadres.');
+    }
+  }
   const rest = cfg.mode === 'rest';
   const headers = {};
   if (rest) {

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.46.1
+
+Beveiligingscontrole.
+
+- **Limieten per bezoeker**: achter de Cloudflare-tunnel kwam elk verzoek van
+  hetzelfde adres (de tunnel), dus golden de inloglimiet (10 per kwartier) en
+  de limiet op openbare offerte- en afspraaklinks voor alle bezoekers samen:
+  één persoon kon zo het inloggen voor iedereen blokkeren. De app gebruikt nu
+  het echte bezoekers-IP (`CF-Connecting-IP`), maar alleen als het verzoek van
+  een proxy in het eigen netwerk komt. Ook het auditlog toont nu dat adres.
+- **Geen toegang tot het eigen netwerk**: de mailserver en de webshop die een
+  organisatie invult, moeten een openbaar adres hebben. De naam wordt eerst
+  opgezocht; interne adressen (LAN, Docker, Tailscale, localhost) worden
+  geweigerd. De mail gaat naar het gecontroleerde adres, het certificaat
+  blijft op naam gecontroleerd.
+- **Verzoeken van andere subdomeinen** die iets wijzigen worden geweigerd
+  (`Sec-Fetch-Site`); SameSite-cookies houden andere sites al buiten, maar
+  niet de andere apps onder hetzelfde domein.
+
 ## 0.46.0
 
 - **Geen tussenstappen meer**: een offerte die u vanuit het portaal, een

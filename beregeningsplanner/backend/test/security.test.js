@@ -327,3 +327,67 @@ test('plan definitief wissen haalt ook klantgegevens uit de historie', async () 
     server.close();
   }
 });
+
+test('bezoekers-IP achter de tunnel: doorgegeven adres alleen van een proxy in het eigen netwerk', () => {
+  const { remoteIp } = require('../src/auth');
+  const req = (sock, headers = {}) => ({ socket: { remoteAddress: sock }, headers });
+  assert.strictEqual(remoteIp(req('::ffff:172.18.0.3', { 'cf-connecting-ip': '203.0.114.7' })), '203.0.114.7');
+  assert.strictEqual(remoteIp(req('172.18.0.3', { 'x-forwarded-for': '1.1.1.1, 8.8.4.4' })), '8.8.4.4', 'laatste hop, niet te vervalsen');
+  assert.strictEqual(remoteIp(req('172.18.0.3', { 'cf-connecting-ip': 'geen-ip' })), '172.18.0.3');
+  assert.strictEqual(remoteIp(req('8.8.8.8', { 'cf-connecting-ip': '1.2.3.4' })), '8.8.8.8', 'openbaar socketadres: koppen genegeerd');
+});
+
+test('inlogblokkade per IP geldt per bezoeker, niet voor iedereen achter de tunnel', async () => {
+  const { server, base } = await start();
+  try {
+    const login = (ip) => fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+      body: JSON.stringify({ username: `x${ip}`, password: 'fout-fout-fout' }) }).then((r) => r.status);
+    for (let i = 0; i < 10; i++) await login('198.51.99.1');
+    assert.strictEqual(await login('198.51.99.1'), 429);
+    assert.strictEqual(await login('198.51.99.2'), 401, 'andere bezoeker kan nog inloggen');
+  } finally {
+    server.close();
+  }
+});
+
+test('wijzigingen via de API vanaf een andere (sub)site worden geweigerd', async () => {
+  const { server, base } = await start();
+  try {
+    const post = (site) => fetch(`${base}/api/auth/logout`, { method: 'POST', headers: site ? { 'Sec-Fetch-Site': site } : {} }).then((r) => r.status);
+    assert.strictEqual(await post('same-site'), 403);
+    assert.strictEqual(await post('cross-site'), 403);
+    assert.strictEqual(await post('same-origin'), 200);
+    assert.strictEqual(await post(null), 200);
+    const get = await fetch(`${base}/api/health`, { headers: { 'Sec-Fetch-Site': 'cross-site' } });
+    assert.strictEqual(get.status, 200, 'lezen blijft mogelijk');
+  } finally {
+    server.close();
+  }
+});
+
+test('mailserver en webshop alleen op een openbaar adres (geen toegang tot het eigen netwerk)', async () => {
+  const { publicAddress, isPublicAddress } = require('../src/netguard');
+  for (const ip of ['10.1.2.3', '192.168.2.251', '172.18.0.2', '127.0.0.1', '169.254.169.254', '100.100.1.1', '::1', 'fd00::1', '::ffff:192.168.1.1']) {
+    assert.strictEqual(isPublicAddress(ip), false, ip);
+  }
+  assert.ok(isPublicAddress('8.8.8.8') && isPublicAddress('2606:4700::1111'));
+  const lookup = (addrs) => async () => addrs.map((address) => ({ address }));
+  await assert.rejects(publicAddress('intern.example', { lookup: lookup(['93.184.215.14', '192.168.2.251']) }), { code: 'private_host' });
+  assert.strictEqual(await publicAddress('smtp.example', { lookup: lookup(['93.184.215.14']) }), '93.184.215.14');
+
+  const { createMailer } = require('../src/mailer');
+  const settings = { get: (k) => (k === 'mailServer' ? { host: 'mail.intern', port: 25, from: 'a@b.nl' } : '') };
+  let used = null;
+  const mailer = createMailer(settings, { resolveHost: async () => { throw Object.assign(new Error('x'), { code: 'private_host' }); },
+    createTransport: (o) => { used = o; return { sendMail: async () => ({}) }; } });
+  await assert.rejects(mailer.send({ to: 'klant@example.nl', subject: 's', text: 't' }), /openbaar adres/);
+  assert.strictEqual(used, null, 'geen verbinding gemaakt');
+  const ok = createMailer(settings, { resolveHost: async () => '93.184.215.14', createTransport: (o) => { used = o; return { sendMail: async () => ({}) }; } });
+  await ok.send({ to: 'klant@example.nl', subject: 's', text: 't' });
+  assert.strictEqual(used.host, '93.184.215.14');
+  assert.strictEqual(used.servername, 'mail.intern', 'certificaat op naam gecontroleerd');
+
+  const { fetchProducts } = require('../src/woocommerce');
+  await assert.rejects(fetchProducts({ url: 'https://shop.example', mode: 'store' }, { allowInsecure: false, fetchImpl: async () => { throw new Error('niet ophalen'); },
+    resolveHost: async () => { throw Object.assign(new Error('x'), { code: 'private_host' }); } }), { code: 'invalid_url' });
+});

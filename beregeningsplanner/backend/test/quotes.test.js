@@ -313,7 +313,7 @@ test('testomgeving leegmaken en verwijderen neemt de offertes mee; offertes zijn
 test('digitale offerte: link, openbare pagina, opties, tekenen, vastleggen en e-mail', async () => {
   const { createMailer } = require('../src/mailer');
   const sent = [];
-  const mailerFor = (settings) => createMailer(settings, { createTransport: () => ({ sendMail: async (m) => { sent.push(m); return {}; } }) });
+  const mailerFor = (settings) => createMailer(settings, { resolveHost: async (h) => h, createTransport: () => ({ sendMail: async (m) => { sent.push(m); return {}; } }) });
   const { server, base, as, tid, db } = await setup({ mailerFor });
   try {
     const piet = await as('piet'), baas = await as('baas'), anon = client(base);

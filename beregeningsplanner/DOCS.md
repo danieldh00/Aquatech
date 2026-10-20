@@ -595,7 +595,9 @@ Getoetst aan OWASP ASVS (niveau 2) en de AVG.
 | Geheimen (API-sleutel, toegangscode) | AES-256-GCM in de database, sleutel per doel afgeleid (HKDF) van de hoofdsleutel |
 | Wachtwoorden | scrypt (N=2^17, r=8, p=1), minimaal 12 tekens, geen voorspelbare woorden of gebruikersnaam |
 | Sessies | op de server, token alleen als SHA-256-hash opgeslagen; verloopt na 14 dagen zonder gebruik, uiterlijk na 30 dagen |
-| Inloggen | max. 10 pogingen per kwartier per IP en per gebruikersnaam (per organisatie) |
+| Inloggen | max. 10 pogingen per kwartier per IP en per gebruikersnaam (per organisatie); achter de Cloudflare-tunnel telt het IP van de bezoeker (`CF-Connecting-IP`, alleen vertrouwd van een proxy in het eigen netwerk) |
+| Verzoeken van andere sites | SameSite=Lax-cookies, schrijven alleen met JSON, en wijzigingen met `Sec-Fetch-Site: same-site/cross-site` (ook andere subdomeinen) worden geweigerd |
+| Webshop en mailserver | alleen openbare adressen: de naam wordt opgezocht en lokale/interne adressen (LAN, Docker, Tailscale, localhost) worden geweigerd, zodat een organisatie het netwerk van de server niet kan aftasten (`ALLOW_PRIVATE_HOSTS=1` alleen voor ontwikkelen) |
 | Eerste beheerder | alleen met de installatiecode uit het serverlog of de toegangscode |
 | Auditlog | inloggen, uitloggen, gebruikers en instellingen (Beheer → Auditlog) |
 | Bewaartermijnen | IP-adressen 90 dagen, auditlog 365 dagen (instelbaar) |
