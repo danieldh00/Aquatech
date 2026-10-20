@@ -300,6 +300,29 @@ const MIGRATIONS = [
   `
   ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;
   `,
+  // 13: foto's bij werkorders (klantdossier: hoe een installatie is
+  // opgeleverd). Afbeelding en miniatuur versleuteld (vault.sealBytes, AAD
+  // tenant + foto-id); geen BLOB, zodat SQLite en PostgreSQL gelijk blijven.
+  `
+  CREATE TABLE work_order_photos (
+    id               TEXT PRIMARY KEY,
+    tenant_id        TEXT NOT NULL REFERENCES tenants(id),
+    work_order_id    TEXT NOT NULL REFERENCES work_orders(id),
+    uploaded_by      TEXT REFERENCES users(id),
+    kind             TEXT NOT NULL DEFAULT 'oplevering' CHECK (kind IN ('voor', 'tijdens', 'oplevering')),
+    caption          TEXT NOT NULL DEFAULT '',
+    customer_visible INTEGER NOT NULL DEFAULT 1,
+    mime             TEXT NOT NULL,
+    width            INTEGER,
+    height           INTEGER,
+    size             INTEGER NOT NULL,
+    taken_at         TEXT,
+    image            TEXT NOT NULL,
+    thumb            TEXT NOT NULL,
+    created_at       TEXT NOT NULL
+  );
+  CREATE INDEX work_order_photos_wo ON work_order_photos (tenant_id, work_order_id, created_at);
+  `,
 ];
 
 function openDb(file = ':memory:') {

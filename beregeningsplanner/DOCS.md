@@ -242,6 +242,28 @@ die), of in de module met **Nieuwe werkorder uit offerte**.
 Nummering `WO-<jaar>-0001` per tenant en omgeving; een beheerder kan een
 werkorder definitief wissen (AVG).
 
+### Foto's en klantdossier
+
+In de werkorder legt de ploeg met de kaart **Foto's van de installatie**
+vast hoe de installatie is aangelegd en opgeleverd:
+
+- **Foto maken** opent op een telefoon of tablet direct de camera; **Foto's
+  kiezen** pakt er meerdere uit de galerij (of sleep ze op de kaart).
+- Kies vooraf de **fase** (voor, tijdens, oplevering; standaard volgens de
+  status van de werkorder) en of de foto **zichtbaar voor de klant** is.
+  Achteraf per foto aan te passen, met een bijschrift.
+- Foto's worden in de browser verkleind tot max. 2048 px; locatie (GPS) en
+  andere EXIF-gegevens gaan er daarbij af. Max. 100 foto's per werkorder.
+- Opslag versleuteld in de database (AES-256-GCM), dus mee in de back-ups.
+  Definitief wissen van een werkorder wist ook de foto's.
+
+De module **Klantdossiers** (beheerder en installateur) bundelt per klant
+alle werkorders: opleverdatum, afgetekend door, uitvoerder, opmerkingen,
+ontwerp en zones, geplaatste materialen, foto's per fase en de offertes.
+**Opleverrapport / PDF** drukt het dossier af (vink *Ook interne foto's* uit
+voor een versie voor de klant). Klanten met een klantaccount (gekoppeld aan
+de offerte) zien hun zichtbaar gezette foto's in het klantportaal.
+
 ## Gebruikers, rollen en historie van aanvragen
 
 Elke rol ziet op het dashboard alleen de modules die erbij horen; de server
@@ -503,6 +525,7 @@ Getoetst aan OWASP ASVS (niveau 2) en de AVG.
 | Auditlog | inloggen, uitloggen, gebruikers en instellingen (Beheer → Auditlog) |
 | Bewaartermijnen | IP-adressen 90 dagen, auditlog 365 dagen (instelbaar) |
 | Back-ups | dagelijks, AES-256-GCM, 14 dagen bewaard (instelbaar), downloadbaar voor opslag elders |
+| Foto's | verkleind zonder EXIF/GPS, AES-256-GCM in de database (eigen afgeleide sleutel, tenant + foto-id als AAD), alleen JPEG/PNG/WebP |
 | Recht op vergetelheid | Plannenoverzicht → plan → *Definitief wissen* (plan + inhoud van de historie) |
 | Database | SQLite: rechten 0600, `secure_delete`, integriteitscontrole bij de start; PostgreSQL: TLS met certificaatcontrole, eigen schema met row level security |
 | Proces | draait als gewone gebruiker (uid 1000), niet als root |

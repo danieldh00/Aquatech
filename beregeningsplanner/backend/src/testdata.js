@@ -172,7 +172,13 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
       options: ['rain', 'service'],
       share: { sent: 33, views: 4, lastView: 31 },
       response: { answer: 'akkoord', name: 'Petra de Vries', at: 31, via: 'account', options: ['rain'] },
-      workorder: { status: 'gereed', assignee: 'inst1', planned: -24, done: 1, picked: 1, notes: 'Opgeleverd en met de klant doorgelopen; computer ingesteld op 3 beurten per week.' } },
+      workorder: { status: 'gereed', assignee: 'inst1', planned: -24, done: 1, picked: 1, notes: 'Opgeleverd en met de klant doorgelopen; computer ingesteld op 3 beurten per week.',
+        photos: [
+          { kind: 'voor', caption: 'Uitgezet: sleuven en sproeierposities gemarkeerd' },
+          { kind: 'tijdens', caption: 'Leidingen gelegd, sleuven nog open', visible: false },
+          { kind: 'oplevering', caption: 'Gazon met alle sproeiers, bereik getest' },
+          { kind: 'oplevering', caption: 'Ventielkast dicht en op niveau' },
+        ] } },
     { planKey: 'bakker', owner: 'inst1', customerKey: 'klant2', customer: c.klant2, status: 'verzonden', at: 3,
       options: ['rain', 'soil', 'service'], share: { sent: 3, views: 2, lastView: 1 } },
     { planKey: 'visser', owner: 'inst2', customerKey: 'klant3', customer: c.klant3, status: 'afgewezen', at: 17, layout: 'totaal',
@@ -181,7 +187,8 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
     { planKey: 'mulder', owner: 'inst2', customerKey: null, customer: c.mulder, status: 'akkoord', at: 9,
       options: ['service'], share: { sent: 9, views: 2, lastView: 7 },
       response: { answer: 'akkoord', name: 'Jeroen Mulder', at: 7, via: 'link', options: ['service'] },
-      workorder: { status: 'bezig', assignee: 'inst2', planned: 0, done: 0.4, picked: 0.8, notes: 'Hond loopt los in de tuin; poort aan de zijkant gebruiken.' } },
+      workorder: { status: 'bezig', assignee: 'inst2', planned: 0, done: 0.4, picked: 0.8, notes: 'Hond loopt los in de tuin; poort aan de zijkant gebruiken.',
+        photos: [{ kind: 'voor', caption: 'Situatie bij aankomst' }, { kind: 'tijdens', caption: 'Hoofdleiding ligt, zijtakken volgen' }] } },
     { planKey: 'vanberg', owner: 'beheerder', customerKey: null, customer: c.vanberg, status: 'akkoord', at: 5,
       share: { sent: 5, views: 1, lastView: 4 },
       response: { answer: 'akkoord', name: 'Sanne van den Berg', at: 4, via: 'link' },
@@ -279,6 +286,62 @@ function signaturePng(seed = 1) {
   return `data:image/png;base64,${png.toString('base64')}`;
 }
 
+// Testfoto van een tuin (PNG) per fase: kale grond met uitgezette lijnen
+// (voor), open sleuven met blauwe leiding (tijdens) of gazon met sproeiers en
+// hun bereik (oplevering). Eenvoudige vormen, dus klein en echt te tonen.
+function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
+  const px = Buffer.alloc((w * 3 + 1) * h);
+  const set = (x, y, [r, g, b], a = 1) => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const o = y * (w * 3 + 1) + 1 + x * 3;
+    px[o] = Math.round(px[o] * (1 - a) + r * a); px[o + 1] = Math.round(px[o + 1] * (1 - a) + g * a); px[o + 2] = Math.round(px[o + 2] * (1 - a) + b * a);
+  };
+  const noise = (x, y) => (Math.sin(x * 12.9898 + y * 78.233 + seed * 3.1) * 43758.5453) % 1;
+  const ground = kind === 'voor' ? [139, 105, 72] : [86, 150, 70];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const n = Math.abs(noise(x, y)) * 22 - 11;
+    if (y < h * 0.22) set(x, y, [205 - y / 3, 200 - y / 3, 196 - y / 3]); // gevel
+    else if (x > w * 0.78) set(x, y, [176 + n / 2, 172 + n / 2, 166 + n / 2]); // pad
+    else set(x, y, ground.map((c) => c + n + (kind === 'voor' ? 0 : ((x + y) % 18 < 9 ? 6 : -4))));
+  }
+  const line = (x0, y0, x1, y1, col, width) => {
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    for (let t = 0; t <= len; t += 0.5) {
+      const x = x0 + ((x1 - x0) * t) / len, y = y0 + ((y1 - y0) * t) / len;
+      for (let dy = -width; dy <= width; dy++) for (let dx = -width; dx <= width; dx++) if (dx * dx + dy * dy <= width * width) set(Math.round(x + dx), Math.round(y + dy), col);
+    }
+  };
+  const disc = (cx, cy, r, col, a = 1) => {
+    for (let y = Math.floor(cy - r); y <= cy + r; y++) for (let x = Math.floor(cx - r); x <= cx + r; x++) if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r) set(x, y, col, a);
+  };
+  const heads = [[40, 90], [w * 0.38, 90], [w * 0.74, 90], [40, h - 20], [w * 0.38, h - 20], [w * 0.74, h - 20]];
+  const trench = [[40, 90, w * 0.74, 90], [40, h - 20, w * 0.74, h - 20], [w * 0.38, 90, w * 0.38, h - 20], [w * 0.74, 90, w * 0.74, h - 20]];
+  if (kind === 'voor') {
+    for (const [x0, y0, x1, y1] of trench) for (let t = 0; t < 1; t += 0.04) line(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, x0 + (x1 - x0) * (t + 0.02), y0 + (y1 - y0) * (t + 0.02), [250, 250, 250], 1);
+    for (const [x, y] of heads) line(x, y - 14, x, y + 2, [230, 120, 30], 2);
+  } else if (kind === 'tijdens') {
+    for (const [x0, y0, x1, y1] of trench) line(x0, y0, x1, y1, [110, 80, 52], 9);
+    for (const [x0, y0, x1, y1] of trench) line(x0, y0, x1, y1, [30, 90, 200], 2);
+    for (const [x, y] of heads) disc(x, y, 6, [40, 40, 40]);
+    disc(w * 0.86, h * 0.5, 22, [40, 70, 50]); // ventielkast
+  } else {
+    for (const [x, y] of heads) disc(x, y, 86, [150, 210, 255], 0.22);
+    for (const [x, y] of heads) { disc(x, y, 7, [35, 35, 35]); disc(x, y, 3, [120, 120, 120]); }
+    disc(w * 0.86, h * 0.5, 22, [40, 70, 50]);
+    disc(w * 0.86, h * 0.5, 16, [60, 95, 70]);
+  }
+  const crc = (buf) => zlib.crc32(buf) >>> 0;
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type), data]);
+    const c = Buffer.alloc(4); c.writeUInt32BE(crc(td));
+    return Buffer.concat([len, td, c]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(px, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
+}
+
 /**
  * Het deel van de testdata dat via de echte opslaglogica loopt (zodat het
  * precies zo is als wanneer iemand het in de app doet): klantlinks, reacties
@@ -289,9 +352,9 @@ function signaturePng(seed = 1) {
  * er geen klantlinks.
  */
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings } = stores;
+  const { db, quotes, workorders, shop, settings, photos } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, products: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, photos: 0, products: 0 };
   const today = new Date().toISOString().slice(0, 10);
   const dateIn = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
   set.quotes.forEach((spec, i) => {
@@ -339,6 +402,16 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
       const at = set.day(Math.max(0, spec.response.at - 1));
       q('UPDATE work_orders SET created_at = ?, updated_at = ? WHERE id = ?').run(at, w.status === 'gereed' ? set.day(-w.planned - 1) : at, wo.id);
       counts.workOrders++;
+      // Foto's: voor/tijdens bij werk in uitvoering, plus de oplevering als hij gereed is.
+      if (photos && w.photos) {
+        w.photos.forEach((p, k) => {
+          const img = sitePhotoPng(p.kind, i * 10 + k);
+          const out = photos.add(owner, owner.tenant_id, wo.id, { image: img.toString('base64'), thumb: sitePhotoPng(p.kind, i * 10 + k, 240, 160).toString('base64'),
+            kind: p.kind, caption: p.caption, customerVisible: p.visible !== false, takenAt: `${dateIn(w.planned + (p.kind === 'oplevering' ? 1 : 0))}T${String(9 + k).padStart(2, '0')}:15:00.000Z` });
+          if (out.error) throw new Error(`Testdata: foto bij werkorder ${wo.number} mislukt (${out.error})`);
+          counts.photos++;
+        });
+      }
     }
   });
   // Webshop alleen als de testomgeving geen eigen webshop heeft (de nepwinkel
@@ -352,4 +425,4 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
   return counts;
 }
 
-module.exports = { buildTestData, seedFeatures, signaturePng, newPassword, prefixOf, garden, lawnHeads, SHOP_URL };
+module.exports = { buildTestData, seedFeatures, signaturePng, sitePhotoPng, newPassword, prefixOf, garden, lawnHeads, SHOP_URL };

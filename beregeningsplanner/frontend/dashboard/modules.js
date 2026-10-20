@@ -55,6 +55,15 @@
       right: 'werkorders',
     },
     {
+      id: 'klantdossier',
+      title: 'Klantdossiers',
+      description: "Per klant alle installaties: oplevering, ontwerp en zones, geplaatste materialen en de foto's van voor, tijdens en na de aanleg. Af te drukken als opleverrapport (PDF).",
+      href: 'klantdossier/',
+      icon: 'folder',
+      status: 'actief',
+      right: 'werkorders',
+    },
+    {
       id: 'beheer',
       title: 'Beheer',
       description: 'Historie van alle aanvragen, de plannen van alle gebruikers, gebruikersbeheer en de instellingen van de app (API-sleutel, toegangscode, modules).',

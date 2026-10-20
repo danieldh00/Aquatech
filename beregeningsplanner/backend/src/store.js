@@ -272,6 +272,7 @@ function createStore(db) {
       }
       q('UPDATE quotes SET customer_id = NULL WHERE customer_id = ?').run(u.id);
       q('UPDATE work_orders SET assignee_id = NULL WHERE assignee_id = ?').run(u.id);
+      q('UPDATE work_order_photos SET uploaded_by = NULL WHERE uploaded_by = ?').run(u.id);
       q('UPDATE settings SET updated_by = NULL WHERE updated_by = ?').run(u.id);
       q('UPDATE history SET user_id = NULL WHERE user_id = ?').run(u.id);
       q('UPDATE audit SET user_id = NULL WHERE user_id = ?').run(u.id);
@@ -440,6 +441,7 @@ function createStore(db) {
     q('DELETE FROM history WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM audit WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM sessions WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM work_order_photos WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM work_orders WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM impersonations WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM support_grants WHERE tenant_id = ?').run(tenantId);

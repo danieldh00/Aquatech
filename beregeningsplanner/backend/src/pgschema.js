@@ -220,6 +220,28 @@ CREATE TABLE shop_sync (
 
 // Migraties na het basisschema: PG_MIGRATIONS[0] hoort bij SQLite-migratie
 // PG_BASE_VERSION + 1, enzovoort. Alleen toevoegen, nooit aanpassen.
-const PG_MIGRATIONS = [];
+const PG_MIGRATIONS = [
+  // 13: foto's bij werkorders.
+  `
+  CREATE TABLE work_order_photos (
+    id               ${T} PRIMARY KEY,
+    tenant_id        ${T} NOT NULL ${FK('tenants(id)')},
+    work_order_id    ${T} NOT NULL ${FK('work_orders(id)')},
+    uploaded_by      ${T} ${FK('users(id)')},
+    kind             ${T} NOT NULL DEFAULT 'oplevering' CHECK (kind IN ('voor', 'tijdens', 'oplevering')),
+    caption          ${T} NOT NULL DEFAULT '',
+    customer_visible BIGINT NOT NULL DEFAULT 1,
+    mime             ${T} NOT NULL,
+    width            BIGINT,
+    height           BIGINT,
+    size             BIGINT NOT NULL,
+    taken_at         ${T},
+    image            ${T} NOT NULL,
+    thumb            ${T} NOT NULL,
+    created_at       ${T} NOT NULL
+  );
+  CREATE INDEX work_order_photos_wo ON work_order_photos (tenant_id, work_order_id, created_at);
+  `,
+];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

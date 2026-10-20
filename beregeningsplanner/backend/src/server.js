@@ -15,6 +15,7 @@ const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase } = require('./quotes');
 const { createMailer } = require('./mailer');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders');
+const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('./photos');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const { createShopStore, registerShopRoutes } = require('./shop');
 const crypto = require('crypto');
@@ -186,6 +187,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/quotes', express.json({ limit: '1mb' }));
   // Akkoord via de openbare link: met handtekening (PNG).
   app.use('/api/public', express.json({ limit: '512kb' }));
+  // Foto's bij een werkorder (base64, verkleind in de browser): vóór de 1 MB hieronder.
+  app.use(/^\/api\/workorders\/[^/]+\/photos$/, express.json({ limit: '8mb' }));
   app.use('/api/workorders', express.json({ limit: '1mb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
@@ -903,6 +906,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const quoteStore = createQuoteStore(database, { vault });
   const workOrderStore = createWorkOrderStore(database);
   const shopStore = createShopStore(database);
+  const photoStore = createPhotoStore(database, { vault });
+  const dossierStore = createDossierStore(database, { photos: photoStore });
 
   // ---------- Offertes (module Offertes, zie quotes.js) ----------
   registerQuoteRoutes(app, {
@@ -935,6 +940,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return [homeOf(tid), tid];
     },
   });
+
+  // ---------- Foto's bij werkorders en klantdossiers (zie photos.js) ----------
+  registerPhotoRoutes(app, { photos: photoStore, dossiers: dossierStore, requireRight, requireUser, requireJson, identify, audit });
 
   // ---------- Webshopkoppeling (zie shop.js) ----------
   registerShopRoutes(app, {
@@ -1068,7 +1076,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, settings: settingsFor(t.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, settings: settingsFor(t.id) },
       set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );

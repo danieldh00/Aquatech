@@ -11,6 +11,8 @@ const crypto = require('crypto');
 const { transaction, listTables, tableColumns, deferForeignKeys, schemaVersion, isPg } = require('./db');
 
 const BATCH = 200;
+// Tabellen met grote rijen (foto's) in kleinere porties, zodat het geheugen klein blijft.
+const BATCH_OF = { work_order_photos: 10 };
 
 function describe(db) {
   const tables = {};
@@ -25,10 +27,11 @@ function describe(db) {
 function* rowsOf(db, table, { columns, order }) {
   const sql = `SELECT ${columns.join(', ')} FROM ${table} ORDER BY ${order.join(', ')} LIMIT ? OFFSET ?`;
   const stmt = db.prepare(sql);
-  for (let off = 0; ; off += BATCH) {
-    const batch = stmt.all(BATCH, off);
+  const size = BATCH_OF[table] || BATCH;
+  for (let off = 0; ; off += size) {
+    const batch = stmt.all(size, off);
     for (const r of batch) yield r;
-    if (batch.length < BATCH) return;
+    if (batch.length < size) return;
   }
 }
 
