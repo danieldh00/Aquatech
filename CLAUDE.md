@@ -227,8 +227,9 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
   de offerte-editor.
 - **Planning + afspraaklink** (0.36.0): module `frontend/planning/` (recht
-  `werkorders`, weekagenda per uitvoerder, slepen → `POST
-  /api/workorders/:id/schedule`). Werkorder heeft `endTime` en `days`
+  `werkorders`; 0.40.0: agenda dag (installateurs als kolommen) / werkweek /
+  maand, slepen naar tijdstip → `POST /api/workorders/:id/schedule`; zonder
+  eindtijd blok uit geplande uren via `Core.fitHours`, 8 u per werkdag). Werkorder heeft `endTime` en `days`
   (werkdagen, `Core.workDays`). Klantlink zoals de digitale offerte:
   kolommen `share_*`/`viewed_at`/`sent_*` op `work_orders` (migratie 13),
   pagina `frontend/openbaar/afspraak.html` (kop `X-Afspraak-Token`, API
@@ -252,7 +253,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (`/api/dossiers[/:key]`, key `a-<klant-id>` of `n-<hash naam>`).
   Klantportaal: `photos.list(..., { customerOnly: true })` en
   `GET /api/portal/photos/:id`.
-- **Kleurthema** (0.40.0): `frontend/shared/theme.js` (UMD: `sanitize`,
+- **Kleurthema** (0.44.0): `frontend/shared/theme.js` (UMD: `sanitize`,
   `problems` = contrast met wit, `derive`, `vars`, `css`, `apply`). Instelling
   `theme` (`platform: true`, Beheer > Instellingen weigert hem), alleen via
   `GET|PUT /api/platform/theme`. Hoofdtenant = standaard voor iedereen, live-tenant
