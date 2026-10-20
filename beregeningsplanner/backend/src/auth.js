@@ -3,9 +3,30 @@ const { fingerprintOf } = require('./store');
 
 const COOKIE_NAME = 'aquatech_session';
 
+const net = require('net');
+const { isPublicAddress } = require('./netguard');
+
+const plainIp = (raw) => (raw.startsWith('::ffff:') && net.isIPv4(raw.slice(7)) ? raw.slice(7) : raw);
+
+// Het IP-adres van de bezoeker. Komt het verzoek van een proxy in het eigen
+// netwerk (de Cloudflare-tunnel draait als container naast de app), dan is
+// het socketadres voor iedereen hetzelfde: gebruik dan het adres dat de proxy
+// doorgeeft (CF-Connecting-IP, anders het laatste X-Forwarded-For). Zo gelden
+// de limieten (inloggen, openbare links) per bezoeker in plaats van voor
+// iedereen samen. Van een openbaar socketadres worden die koppen genegeerd
+// (niet te vervalsen door rechtstreeks met de app te praten).
 function remoteIp(req) {
-  const raw = req.socket?.remoteAddress || '';
-  return raw.startsWith('::ffff:') ? raw.slice(7) : raw;
+  if (req._remoteIp !== undefined) return req._remoteIp;
+  const sock = plainIp(req.socket?.remoteAddress || '');
+  let ip = sock;
+  if (sock && !isPublicAddress(sock)) {
+    const cf = String(req.headers?.['cf-connecting-ip'] || '').trim();
+    const xff = String(req.headers?.['x-forwarded-for'] || '').split(',').map((s) => s.trim()).filter(Boolean).pop() || '';
+    const fwd = net.isIP(cf) ? cf : net.isIP(xff) ? xff : '';
+    if (fwd) ip = plainIp(fwd);
+  }
+  if (req && typeof req === 'object') req._remoteIp = ip;
+  return ip;
 }
 
 function parseCookies(header) {

@@ -252,6 +252,18 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     next();
   });
 
+  // Wijzigingen via de API alleen vanaf de eigen site. SameSite=Lax houdt
+  // andere sites buiten, maar niet andere subdomeinen van hetzelfde domein
+  // (die tellen als "same-site"); de browser zegt in Sec-Fetch-Site waar een
+  // verzoek vandaan komt. Zonder die kop (oudere browsers, scripts) geldt de
+  // rest van de beveiliging gewoon.
+  app.use('/api', (req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+    const site = req.headers['sec-fetch-site'];
+    if (site === 'cross-site' || site === 'same-site') return res.status(403).json({ error: 'cross_site', message: 'Verzoek van een andere site geweigerd.' });
+    next();
+  });
+
   // Moet de gebruiker eerst zelf een nieuw wachtwoord kiezen (nieuw account of
   // reset door een beheerder), dan is alleen de wachtwoordpagina bereikbaar:
   // elke pagina toont die, de API weigert alles behalve wat die pagina nodig heeft.
