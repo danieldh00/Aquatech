@@ -144,7 +144,15 @@ const oneLine = (c) => `${c.address.replace(/\n/g, ', ')}`;
  */
 function buildTestData({ slug, profile = {}, today = new Date() }) {
   const p = prefixOf(slug);
-  const accounts = ACCOUNTS.map((a) => ({ ...a, username: `${p}.${a.suffix}` }));
+  // Mijn profiel: e-mail (voorbeeld.test bestaat niet), telefoon en voorkeuren;
+  // de beheerder krijgt een kopie van verstuurde mail en start in de planning.
+  const accounts = ACCOUNTS.map((a, i) => ({
+    ...a,
+    username: `${p}.${a.suffix}`,
+    email: `${p}.${a.suffix}@voorbeeld.test`,
+    phone: `06 0000 ${String(1000 + i * 111).slice(-4)}`,
+    preferences: a.key === 'beheerder' ? { startPage: 'planning', mailCopy: true } : a.key === 'klant1' ? { startPage: 'portaal' } : {},
+  }));
   const day = (offset) => {
     const d = new Date(today.getTime() - offset * 86400000);
     d.setUTCHours(9 + (offset % 7), (offset * 13) % 60, 0, 0);

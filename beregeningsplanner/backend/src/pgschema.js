@@ -255,6 +255,12 @@ const PG_MIGRATIONS = [
   );
   CREATE INDEX work_order_photos_wo ON work_order_photos (tenant_id, work_order_id, created_at);
   `,
+  // 15: Mijn profiel (contactgegevens en voorkeuren).
+  `
+  ALTER TABLE users ADD COLUMN email ${T} NOT NULL DEFAULT '';
+  ALTER TABLE users ADD COLUMN phone ${T} NOT NULL DEFAULT '';
+  ALTER TABLE users ADD COLUMN preferences ${T} NOT NULL DEFAULT '{}';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

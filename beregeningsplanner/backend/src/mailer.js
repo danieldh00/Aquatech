@@ -33,7 +33,7 @@ function createMailer(settings, { createTransport = nodemailer.createTransport }
     const c = config();
     return Boolean(c.host && c.from);
   };
-  async function send({ to, subject, text, html, replyTo }) {
+  async function send({ to, subject, text, html, replyTo, bcc }) {
     if (!configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld.'), { code: 'not_configured' });
     const list = (Array.isArray(to) ? to : [to]).filter(validEmail);
     if (!list.length) throw Object.assign(new Error('Geen geldig e-mailadres.'), { code: 'invalid_to' });
@@ -47,7 +47,7 @@ function createMailer(settings, { createTransport = nodemailer.createTransport }
       connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 20000,
     });
     return transport.sendMail({
-      from: c.from, to: list.join(', '), replyTo: replyTo && validEmail(replyTo) ? replyTo : c.replyTo || undefined,
+      from: c.from, to: list.join(', '), bcc: bcc && validEmail(bcc) ? bcc.trim() : undefined, replyTo: replyTo && validEmail(replyTo) ? replyTo : c.replyTo || undefined,
       subject: String(subject || '').replace(/[\r\n]/g, ' ').slice(0, 300), text, html,
     });
   }

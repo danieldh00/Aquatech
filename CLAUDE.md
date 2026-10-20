@@ -273,6 +273,14 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `password_change_required` (behalve me/health/auth). Standaard aan bij
   aanmaken door een beheerder en bij een reset (`withMustChange` in server.js);
   tests die met zo'n account inloggen geven `mustChangePassword: false` mee.
+- **Mijn profiel** (0.43.0): pagina `frontend/profiel/` (geen tegel in
+  modules.js; link in het gebruikersmenu van `dashboard/account.js` en
+  onderaan `shared/sidebar.js`). API `GET/PUT /api/account/profile`
+  (`store.updateProfile`), kolommen `users.email|phone|preferences`
+  (migratie 15). Voorkeuren alleen de sleutels uit `PREFERENCES` in store.js
+  (`preferencesOf`): `startPage` (dashboard.js stuurt bij de eerste keer per
+  tabblad door) en `mailCopy` (bcc via `copyTo` in quotes/workorders.js).
+  Versienummer staat niet meer in de kopbalk, alleen voor beheerders op het profiel.
 - **Webshopkoppeling** (0.29.0, prototype WooCommerce): `backend/src/woocommerce.js`
   (adapter Store API/REST v3, `sanitizeShop`, alleen openbare https tenzij
   `SHOP_ALLOW_INSECURE=1` voor tests) en `backend/src/shop.js` (tabellen

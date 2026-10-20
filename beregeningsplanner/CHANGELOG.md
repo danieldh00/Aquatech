@@ -13,6 +13,28 @@
   worden afgeleid en blijven leesbaar.
 - Vensters in Beheer/Hoofdbeheer en de hulp in de planner vallen niet meer
   half achter de zijbalk.
+## 0.43.0
+
+- **Mijn profiel** (nieuwe pagina `profiel/`, voor elke rol met een eigen
+  account): naam, e-mailadres en telefoonnummer wijzigen, persoonlijke
+  voorkeuren en het wachtwoord wijzigen op één plek. Bereikbaar via het
+  gebruikersmenu rechtsboven en onderaan de zijbalk.
+- **Gebruikersmenu in de kopbalk**: de losse knoppen *Wachtwoord* en
+  *Uitloggen* zijn vervangen door een rondje met initialen (met de naam op
+  een breed scherm) dat een menu opent met *Mijn profiel* en *Uitloggen*.
+  Zo past de kopbalk ook op de telefoon.
+- **Voorkeuren**: *Startpagina* (de app opent na het starten of inloggen in
+  een gekozen module) en *kopie van verstuurde offertes en afspraken* (bcc
+  naar het eigen e-mailadres).
+- **Versienummer** staat niet meer in de kopbalk; beheerders zien het op
+  Mijn profiel.
+- Database: kolommen `email`, `phone` en `preferences` (JSON) op `users`
+  (migratie 15, SQLite en PostgreSQL). API `GET`/`PUT /api/account/profile`;
+  het logboek legt vast welke velden zijn gewijzigd, nooit de waarden.
+  Beheerders zien e-mail en telefoon in het gebruikersoverzicht (API).
+- Testdata: testaccounts hebben een e-mailadres, telefoonnummer en
+  voorkeuren.
+
 ## 0.42.0
 
 - **Startscherm voor installateurs**: het overzicht begint met *Vandaag*:
