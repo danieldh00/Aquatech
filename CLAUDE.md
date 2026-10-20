@@ -116,7 +116,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `makeConcept` terug op lokaal. Unittests in `backend/test/localrecog.test.js`
   laden de frontendcode in een vm-sandbox.
 - **Database** (`backend/src/db.js`, `node:sqlite`, geen npm-module) in
-  `/data/aquatech.db`; migraties via `PRAGMA user_version` (alleen nieuwe
+  `/data/aquatech.db` (of PostgreSQL, zie hieronder); migraties via `PRAGMA user_version` (alleen nieuwe
   toevoegen). Tenant-klaar: elke tabel heeft `tenant_id`, id's zijn UUID's.
   `store.js`: users (rol `beheerder`|`installateur`|`klant`, soort `account`|`gast`|
   `systeem`), plans (alleen eigenaar of beheerder) en `history` (append-only
@@ -127,6 +127,20 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (`frontend/beheer/`, `role: 'beheerder'` in modules.js) toont historie,
   plannen en gebruikers. De API is ook onder `<module>/api/...` bereikbaar
   (modules gebruiken relatieve `api/...`).
+- **PostgreSQL/Supabase** (0.34.0): `DATABASE_URL`/`DATABASE_URL_FILE` →
+  `pgdb.js` (zelfde synchrone interface als node:sqlite via werkthread +
+  `Atomics.wait`, `?` → `$n`), schema in `pgschema.js` (eigen schema
+  `aquatech`, RLS aan, `COLLATE "C"`, BIGINT, DEFERRABLE FK's). Zonder URL
+  SQLite. SQL in de code moet in beide werken (`lower()` i.p.v. `COLLATE
+  NOCASE`, `lower(x) LIKE lower(?)`); verschillen via helpers in db.js
+  (`jsonField`, `jsonWithout`, `listTables`, `tableColumns`, `foreignKeys`,
+  `deferForeignKeys`, `schemaVersion`). **Nieuwe migratie: in `MIGRATIONS`
+  (db.js) én `PG_MIGRATIONS` (pgschema.js)**; `test/postgres.test.js`
+  vergelijkt de schema's. Overstap: `src/migrate-to-postgres.js` (dbcopy.js,
+  aantallen + SHA-256 per tabel). Testsuite tegen PG: `TEST_DATABASE_URL`
+  (elke `openDb()` een eigen schema `aqt_test_*`; CI-job `test-postgres`).
+  Lokaal: `/usr/lib/postgresql/16/bin` staat in de sandbox (initdb als
+  gebruiker postgres, poort 5433).
 - **Multitenant** (0.20.0): tenants in `tenants` (`environment` `live`|`test`,
   `parent_id`, `disabled`); een testomgeving is een eigen tenant onder een
   live-tenant (eigen plannen/historie/instellingen, gebruikers van de

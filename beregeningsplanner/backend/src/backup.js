@@ -1,6 +1,7 @@
 // Versleutelde back-ups van de database.
 //
-// Een back-up is een consistente kopie (VACUUM INTO, werkt terwijl de app
+// Een back-up is een consistente kopie als SQLite-bestand (VACUUM INTO, of
+// bij PostgreSQL een kopie van alle rijen via dbcopy.js; werkt terwijl de app
 // draait), versleuteld met AES-256-GCM met een eigen, van de hoofdsleutel
 // afgeleide sleutel. Formaat: "AQBK" + versie (1 byte) + IV (12) +
 // versleutelde database + authenticatietag (16). Zonder de hoofdsleutel is een
@@ -14,6 +15,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { pipeline } = require('stream/promises');
+const { isPg, openSqlite } = require('./db');
+const { copyDatabase } = require('./dbcopy');
 
 const MAGIC = Buffer.from('AQBK');
 const VERSION = 1;
@@ -72,7 +75,14 @@ async function createBackup({ db, dir, vault }) {
   const tmp = path.join(dir, `.tmp-${crypto.randomUUID()}.db`);
   const part = path.join(dir, `${name}.part`);
   try {
-    db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
+    if (isPg(db)) {
+      // PostgreSQL: alle rijen naar een nieuw SQLite-bestand (zelfde schema),
+      // zodat een back-up altijd hetzelfde formaat heeft en terug te zetten is.
+      const copy = openSqlite(tmp);
+      try { copyDatabase(db, copy); } finally { copy.close(); }
+    } else {
+      db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
+    }
     await encryptFile(tmp, part, keyOf(vault));
     fs.renameSync(part, path.join(dir, name));
   } finally {

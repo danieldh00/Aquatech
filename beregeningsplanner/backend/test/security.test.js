@@ -7,7 +7,9 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
+const { openDb, openSqlite } = require('../src/db');
+const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
+
 const { createStore, passwordProblem, hashPassword, verifyPassword, needsRehash } = require('../src/store');
 const { createSettings } = require('../src/settings');
 const { createVault, loadOrCreateMasterKey } = require('../src/vault');
@@ -86,7 +88,7 @@ test('onversleutelde geheimen van een oudere versie worden bij de start versleut
   assert.ok(vault.isSealed(JSON.parse(raw).enc));
 });
 
-test('databasebestand alleen leesbaar voor de eigenaar', () => {
+test('databasebestand alleen leesbaar voor de eigenaar', { skip: PG && 'alleen SQLite' }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-perm-'));
   try {
     const file = path.join(dir, 'aquatech.db');
@@ -259,7 +261,7 @@ test('versleutelde back-up: onleesbaar zonder sleutel, terug te zetten met sleut
 
     const out = path.join(dir, 'terug.db');
     await decryptFile(path.join(dir, b.name), out, keyOf(vault));
-    const restored = openDb(out);
+    const restored = openSqlite(out);
     assert.strictEqual(restored.prepare('SELECT customer FROM plans').get().customer, 'Familie Jansen');
     restored.close();
 

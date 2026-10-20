@@ -2,7 +2,7 @@
 // Elke functie krijgt de tenant mee; niets leest buiten de eigen tenant.
 const crypto = require('crypto');
 const path = require('path');
-const { transaction } = require('./db');
+const { transaction, listTables, tableColumns, foreignKeys, deferForeignKeys, jsonWithout } = require('./db');
 
 const Roles = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'roles.js'));
 const ROLES = Object.keys(Roles.ROLES);
@@ -325,7 +325,7 @@ function createStore(db) {
         (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id AND u.kind = 'account' AND u.role = 'beheerder' AND u.disabled = 0) AS admin_count,
         (SELECT COUNT(*) FROM plans p WHERE p.tenant_id = t.id AND p.deleted_at IS NULL) AS plan_count,
         (SELECT MAX(h.updated_at) FROM history h WHERE h.tenant_id = t.id) AS last_activity
-      FROM tenants t ORDER BY t.name COLLATE NOCASE, t.created_at`).all();
+      FROM tenants t ORDER BY lower(t.name), t.created_at`).all();
     const withStats = (t) => ({ ...tenantRow(t), userCount: t.user_count, adminCount: t.admin_count, planCount: t.plan_count, lastActivity: t.last_activity });
     const live = rows.filter((t) => (t.environment || 'live') === 'live').map((t) => ({ ...withStats(t), environments: [] }));
     const byId = new Map(live.map((t) => [t.id, t]));
@@ -483,13 +483,13 @@ function createStore(db) {
     if (t.environment !== 'live') return { error: 'Verwijder een testomgeving via de testomgeving zelf.', status: 409 };
     if (t.id === mainTenantId || t.slug === 'default') return { error: 'De hoofdtenant kan niet worden verwijderd.', status: 409 };
     const ids = [t.id, ...q('SELECT id FROM tenants WHERE parent_id = ?').all(t.id).map((r) => r.id)];
-    const tables = q("SELECT name FROM sqlite_master WHERE type = 'table' AND name <> 'tenants' AND name NOT LIKE 'sqlite_%'").all().map((r) => r.name);
-    const columns = (n) => q(`PRAGMA table_info(${n})`).all();
+    const tables = listTables(db).filter((n) => n !== 'tenants');
+    const columns = (n) => tableColumns(db, n);
     const marks = ids.map(() => '?').join(', ');
     const counts = {};
     transaction(db, () => {
       // Pas bij COMMIT controleren: de volgorde van wissen doet er dan niet toe.
-      db.exec('PRAGMA defer_foreign_keys = ON');
+      deferForeignKeys(db);
       const users = q(`SELECT id FROM users WHERE tenant_id IN (${marks})`).all(...ids).map((r) => r.id);
       for (const n of tables) {
         if (!columns(n).some((c) => c.name === 'tenant_id')) continue;
@@ -500,7 +500,7 @@ function createStore(db) {
         const um = users.map(() => '?').join(', ');
         for (const n of tables) {
           const cols = columns(n);
-          for (const fk of q(`PRAGMA foreign_key_list(${n})`).all()) {
+          for (const fk of foreignKeys(db, n)) {
             if (fk.table !== 'users' || cols.find((c) => c.name === fk.from)?.notnull) continue;
             q(`UPDATE ${n} SET ${fk.from} = NULL WHERE ${fk.from} IN (${um})`).run(...users);
           }
@@ -570,11 +570,11 @@ function createStore(db) {
    */
   function accessibleTenants(user) {
     if (!user) return [];
-    if (user.platform_admin) return q('SELECT * FROM tenants ORDER BY name COLLATE NOCASE').all();
+    if (user.platform_admin) return q('SELECT * FROM tenants ORDER BY lower(name)').all();
     const home = getTenant(user.tenant_id);
     if (!home || home.disabled) return [];
     if (!Roles.can(user, 'beheer')) return [home];
-    return [home, ...q("SELECT * FROM tenants WHERE parent_id = ? AND environment = 'test' AND disabled = 0 ORDER BY name COLLATE NOCASE").all(home.id)];
+    return [home, ...q("SELECT * FROM tenants WHERE parent_id = ? AND environment = 'test' AND disabled = 0 ORDER BY lower(name)").all(home.id)];
   }
 
   /**
@@ -706,14 +706,14 @@ function createStore(db) {
         (SELECT COUNT(*) FROM history h WHERE h.user_id = u.id) AS history_count,
         (SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id AND s.expires_at > ?) AS session_count
       FROM users u WHERE u.tenant_id = ? ${includeGuests ? '' : "AND u.kind <> 'gast'"}
-      ORDER BY CASE u.kind WHEN 'systeem' THEN 0 WHEN 'account' THEN 1 ELSE 2 END, u.display_name COLLATE NOCASE`)
+      ORDER BY CASE u.kind WHEN 'systeem' THEN 0 WHEN 'account' THEN 1 ELSE 2 END, lower(u.display_name)`)
       .all(now(), tenantId)
       .map((u) => ({ ...publicUser(u), planCount: u.plan_count, historyCount: u.history_count, sessionCount: u.session_count }));
   }
 
   // Klantaccounts van een tenant (om een offerte aan te koppelen).
   function listCustomers(tenantId) {
-    return q("SELECT * FROM users WHERE tenant_id = ? AND kind = 'account' AND role = 'klant' AND disabled = 0 ORDER BY display_name COLLATE NOCASE")
+    return q("SELECT * FROM users WHERE tenant_id = ? AND kind = 'account' AND role = 'klant' AND disabled = 0 ORDER BY lower(display_name)")
       .all(tenantId).map((u) => ({ id: u.id, username: u.username, displayName: u.display_name }));
   }
 
@@ -765,7 +765,9 @@ function createStore(db) {
     if (userId) { where.push('h.user_id = ?'); args.push(String(userId)); }
     if (action) { where.push('h.action = ?'); args.push(String(action)); }
     if (search) {
-      where.push("(h.title LIKE ? ESCAPE '\\' OR h.customer LIKE ? ESCAPE '\\' OR h.address LIKE ? ESCAPE '\\' OR u.display_name LIKE ? ESCAPE '\\' OR u.username LIKE ? ESCAPE '\\')");
+      // lower(): LIKE is in SQLite hoofdletterongevoelig, in PostgreSQL niet.
+      const cols = ['h.title', 'h.customer', 'h.address', 'u.display_name', 'u.username'];
+      where.push(`(${cols.map((c) => `lower(${c}) LIKE lower(?) ESCAPE '\\'`).join(' OR ')})`);
       const like = `%${String(search).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
       args.push(like, like, like, like, like);
     }
@@ -803,7 +805,7 @@ function createStore(db) {
   function listPlans(tenantId, { ownerId = null, includeDeleted = false, withHistory = false } = {}) {
     const args = [tenantId];
     let sql = `SELECT p.id, p.title, p.customer, p.address, p.created_at, p.updated_at, p.deleted_at, p.owner_id,
-        json_remove(p.data, '$.background') AS lite,
+        ${jsonWithout(db, 'p.data', 'background')} AS lite,
         ${withHistory ? '(SELECT COUNT(*) FROM history h WHERE h.tenant_id = p.tenant_id AND h.plan_id = p.id) AS history_count,' : ''}
         u.username AS owner_username, u.display_name AS owner_name, u.kind AS owner_kind
       FROM plans p JOIN users u ON u.id = p.owner_id WHERE p.tenant_id = ?${includeDeleted ? '' : ' AND p.deleted_at IS NULL'}`;

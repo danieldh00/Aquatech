@@ -21,6 +21,9 @@ services:
       - TZ=${TZ:-Europe/Amsterdam}
       - AQUATECH_MASTER_KEY=${AQUATECH_MASTER_KEY:-}
       - SETUP_CODE=${SETUP_CODE:-}
+      # PostgreSQL/Supabase i.p.v. SQLite (leeg = SQLite in /data); beter als
+      # Docker-secret via DATABASE_URL_FILE, zie DOCS.md > Database: Supabase.
+      - DATABASE_URL=${DATABASE_URL:-}
       # Hoofdsleutel als Docker-secret (aanbevolen, zie DOCS.md > Beveiliging):
       # - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key
     volumes:

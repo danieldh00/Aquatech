@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { createApp } = require('../src/server');
-const { openDb, MIGRATIONS } = require('../src/db');
+const { openDb, MIGRATIONS, schemaVersion } = require('../src/db');
 const { COOKIE_NAME } = require('../src/auth');
 
 const SECRET = 'y'.repeat(64);
@@ -240,7 +240,7 @@ test('database blijft bewaard na herstart en migreert niet dubbel', () => {
     db.close();
     db = openDb(file);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM tenants').get().n, 1);
-    assert.strictEqual(db.prepare('PRAGMA user_version').get().user_version, MIGRATIONS.length);
+    assert.strictEqual(schemaVersion(db), MIGRATIONS.length);
     db.close();
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

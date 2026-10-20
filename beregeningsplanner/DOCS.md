@@ -106,8 +106,8 @@ kleuren mogen afwijken.
 
 Plannen worden automatisch op twee plekken bewaard: in de browser van het
 toestel en, een paar seconden na elke wijziging, in **Mijn plannen** op de
-server (database `/data/aquatech.db`, zit in de back-ups van Home
-Assistant). Via **Mijn plannen** in de planner (of op het dashboard) open je
+server (database `/data/aquatech.db`, of PostgreSQL/Supabase, zie *Database:
+Supabase (PostgreSQL)*). Via **Mijn plannen** in de planner (of op het dashboard) open je
 een eerder plan. Iedere gebruiker ziet daar alleen de eigen plannen.
 **Opslaan** downloadt daarnaast nog steeds een `.aquaplan.json`-bestand en
 **Openen** laadt zo'n bestand als nieuw plan.
@@ -436,6 +436,59 @@ docker compose up -d --build        # http://<server>:3300
   (of naar de containernaam `aquatech:3300` als cloudflared in hetzelfde
   Docker-netwerk draait).
 
+## Database: Supabase (PostgreSQL)
+
+Standaard staat alles in het SQLite-bestand `/data/aquatech.db`. Met
+`DATABASE_URL` (of beter `DATABASE_URL_FILE`, een Docker-secret met de URL)
+gebruikt de app PostgreSQL, bijvoorbeeld Supabase.
+
+- **Schema** `aquatech` (instelbaar met `DATABASE_SCHEMA`), niet `public`:
+  dat schema stelt Supabase open via zijn REST-API. Op elke tabel staat row
+  level security aan zonder policies, en de rollen `anon` en `authenticated`
+  hebben geen rechten; alleen de app (eigenaar) leest en schrijft.
+- **Gelijk aan SQLite**: dezelfde tabellen, kolommen, controles, foreign
+  keys en indexen; tekst met bytevolgorde (`COLLATE "C"`), gehele getallen
+  64-bits. De app maakt het schema bij de eerste start zelf aan.
+- **Verbinding**: gebruik in Supabase *Connect → Session pooler* (poort
+  5432, werkt via IPv4). De *Transaction pooler* (6543) weigert de app. TLS
+  is verplicht met controle van het certificaat; de root-CA van Supabase
+  (*Supabase Root 2021 CA*, SHA-256 `80:70:25:AD:…:CA:FA`) zit in de app.
+  Een eigen CA kan met `DATABASE_CA_FILE`. Kies een EU-regio (Frankfurt):
+  elke query wacht op de database, dus een korte afstand houdt de app snel.
+- **Hoofdsleutel blijft nodig**: geheimen staan versleuteld in de database
+  met de hoofdsleutel van de app; die sleutel gaat niet naar Supabase.
+- **Back-ups**: de dagelijkse versleutelde back-up van de app werkt ook met
+  PostgreSQL (een SQLite-bestand met alle rijen). Supabase maakt daarnaast
+  eigen back-ups (afhankelijk van het abonnement).
+
+**Overstappen (één op één).** Eerst moet de server deze versie draaien. Dan,
+in `/opt/apps/aquatech` (of de map met `docker-compose.yml`):
+
+```sh
+# 1. URL van Supabase (Connect -> Session pooler) als secret, met het wachtwoord erin
+printf '%s' 'postgresql://postgres.<project>:<wachtwoord>@aws-0-eu-central-1.pooler.supabase.com:5432/postgres' > secrets/database-url
+sudo chown 1000:1000 secrets/database-url && sudo chmod 400 secrets/database-url
+# 2. In compose.yml de regels voor database-url aanzetten (environment + secrets)
+# 3. App stoppen en alles kopiëren + controleren
+docker compose stop aquatech
+docker compose run --rm --no-deps aquatech node src/migrate-to-postgres.js
+# 4. Zegt het script "Alles is één op één gelijk", dan starten
+docker compose up -d aquatech
+docker compose logs aquatech | grep Database     # Database: PostgreSQL (schema aquatech)
+```
+
+Het script vergelijkt na het kopiëren per tabel het aantal rijen en een
+SHA-256 over alle waarden; bij een verschil stopt het en blijft de app op
+SQLite. Het kopieert alleen naar een leeg schema. Later opnieuw controleren:
+`node src/migrate-to-postgres.js --check`. **Terug naar SQLite**: de
+`DATABASE_URL_FILE`-regel weer uitzetten en herstarten; `/data/aquatech.db`
+blijft ongewijzigd staan (zonder wat er daarna in PostgreSQL is veranderd).
+
+**Back-up terugzetten naar PostgreSQL**: ontsleutel de back-up (zie
+*Beveiliging en privacy*) en kopieer hem met
+`node src/migrate-to-postgres.js --from /data/terug.db --schema <nieuw_schema>`
+naar een leeg schema; zet daarna `DATABASE_SCHEMA` op dat schema.
+
 ## Beveiliging en privacy
 
 Getoetst aan OWASP ASVS (niveau 2) en de AVG.
@@ -451,7 +504,7 @@ Getoetst aan OWASP ASVS (niveau 2) en de AVG.
 | Bewaartermijnen | IP-adressen 90 dagen, auditlog 365 dagen (instelbaar) |
 | Back-ups | dagelijks, AES-256-GCM, 14 dagen bewaard (instelbaar), downloadbaar voor opslag elders |
 | Recht op vergetelheid | Plannenoverzicht → plan → *Definitief wissen* (plan + inhoud van de historie) |
-| Database | rechten 0600, `secure_delete`, integriteitscontrole bij de start |
+| Database | SQLite: rechten 0600, `secure_delete`, integriteitscontrole bij de start; PostgreSQL: TLS met certificaatcontrole, eigen schema met row level security |
 | Proces | draait als gewone gebruiker (uid 1000), niet als root |
 | Browser | Content-Security-Policy, X-Frame-Options, HSTS via https, `no-store` op de API |
 

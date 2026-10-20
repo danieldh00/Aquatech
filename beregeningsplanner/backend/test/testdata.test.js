@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
+const { openDb, listTables, tableColumns } = require('../src/db');
 const { createStore } = require('../src/store');
 
 const SECRET = 'z'.repeat(64);
@@ -224,8 +224,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
       support_grants: 'meekijken is een handeling, geen data',
       impersonations: 'meekijken is een handeling, geen data',
     };
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name)
-      .filter((n) => db.prepare(`PRAGMA table_info(${n})`).all().some((c) => c.name === 'tenant_id'));
+    const tables = listTables(db).filter((n) => tableColumns(db, n).some((c) => c.name === 'tenant_id'));
     for (const n of tables) {
       if (NO_TESTDATA[n]) continue;
       const c = db.prepare(`SELECT COUNT(*) AS n FROM ${n} WHERE tenant_id = ?`).get(env.id).n;
