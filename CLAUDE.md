@@ -300,6 +300,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   krijgen `private, max-age=31536000, immutable` (`staticHeaders`). Startpagina:
   server zet `<meta name="aquatech-start">` op het dashboard (`startPageOf`).
   Links naar een item altijd direct (`?id=`), nooit via een overzicht.
+- **Queries** (0.47.0): per verzoek één query voor sessie+gebruiker+tenant
+  (`store.findSessionWithUser`), tenant per verzoek onthouden
+  (`withRequestCache`, AsyncLocalStorage), statische bestanden 30 s zonder
+  sessiequery (`auth.isAuthenticatedForAsset`). Geen `SELECT *` als grote
+  kolommen niet nodig zijn; overzichten via `jsonDigest` (db.js); geen query
+  per regel. `test/queries.test.js` bewaakt dat.
 - Health: `GET /api/health` (versie uit `package.json`).
 
 ## Harde regels

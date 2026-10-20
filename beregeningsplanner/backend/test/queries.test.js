@@ -76,6 +76,17 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     assert.strictEqual((await c.get('/api/account/profile')).status, 200);
     assert.strictEqual(probe.stats.queries, 1, probe.stats.sql.join('\n'));
 
+    // Statische bestanden van een pagina: één sessiecontrole, daarna even geen query.
+    probe.reset();
+    for (const f of ['/shared/brand.css', '/dashboard/modules.js', '/shared/sidebar.js']) assert.strictEqual((await c.get(f)).status, 200, f);
+    assert.ok(probe.stats.queries <= 1, probe.stats.sql.join('\n'));
+    // Na uitloggen geen bestanden meer.
+    const other = client(`http://127.0.0.1:${server.address().port}`);
+    assert.strictEqual((await other.post('/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
+    assert.strictEqual((await other.get('/shared/sidebar.js')).status, 200);
+    await other.post('/api/auth/logout');
+    assert.strictEqual((await other.get('/shared/sidebar.js')).status, 401);
+
     // Een plan met een grote achtergrond (foto van de tekening).
     const background = { src: `data:image/png;base64,${'A'.repeat(400000)}` };
     const id = (await c.post('/api/plans', { data: plan({ background }) })).body.id;

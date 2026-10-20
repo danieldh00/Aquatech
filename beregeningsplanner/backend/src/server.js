@@ -257,11 +257,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // elke pagina toont die, de API weigert alles behalve wat die pagina nodig heeft.
   const PASSWORD_OPEN = /^\/api\/(me|health|auth\/[a-z]+|account\/password)$/;
   app.use((req, res, next) => {
+    // Scripts, stylesheets en afbeeldingen blijven bereikbaar (de
+    // wachtwoordpagina gebruikt ze); daarvoor hoeft de sessie hier niet uit de database.
+    const api = req.path.startsWith('/api/');
+    const page = !/\.[a-z0-9]+$/i.test(req.path) || req.path.endsWith('.html');
+    if (!api && (!page || (req.method !== 'GET' && req.method !== 'HEAD'))) return next();
     const s = auth.session(req);
     if (s?.via !== 'user' || !s.user.must_change_password || PASSWORD_OPEN.test(req.path)) return next();
-    if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'password_change_required', message: 'Kies eerst een nieuw wachtwoord.' });
-    const page = !/\.[a-z0-9]+$/i.test(req.path) || req.path.endsWith('.html');
-    if (!page || (req.method !== 'GET' && req.method !== 'HEAD')) return next();
+    if (api) return res.status(403).json({ error: 'password_change_required', message: 'Kies eerst een nieuw wachtwoord.' });
     res.setHeader('Cache-Control', 'no-store');
     sendAuthPage(res, PASSWORD_PAGE, s.user.tenant_id);
   });
@@ -1285,8 +1288,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     sendAuthPage(res, authPage(req));
   });
 
+  // Scripts, stylesheets, lettertypen en afbeeldingen (geen HTML, geen API).
+  const STATIC_ASSET = /\.(js|css|png|jpe?g|svg|webp|gif|ico|woff2?|map|json|traineddata(\.gz)?|wasm)$/i;
   app.use((req, res, next) => {
-    const authenticated = auth.isAuthenticated(req);
+    const asset = (req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api/') && STATIC_ASSET.test(req.path);
+    const authenticated = asset ? auth.isAuthenticatedForAsset(req) : auth.isAuthenticated(req);
     if (authenticated || (guestsAllowed() && !needsSetup()) || isPublicAsset(req)) return next();
     if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(401).end();
     res.status(401);

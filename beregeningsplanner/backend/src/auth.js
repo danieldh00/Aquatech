@@ -110,6 +110,31 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
     return Boolean(session(req));
   }
 
+  // Statische bestanden (scripts, stylesheets, afbeeldingen) achter de login:
+  // een pagina laadt er tientallen tegelijk, en elke controle is een query
+  // (met PostgreSQL een rondgang). Een sessie die net volledig is
+  // gecontroleerd, geldt daarom ASSET_TTL_MS lang voor zulke bestanden zonder
+  // nieuwe query. Alleen voor bestanden zonder gegevens; de API controleert
+  // altijd tegen de database. Uitloggen wist het meteen.
+  const ASSET_TTL_MS = 30 * 1000;
+  const assetSessions = new Map();
+  const assetKey = (token) => crypto.createHash('sha256').update(`asset:${token}`).digest('base64url');
+  function isAuthenticatedForAsset(req) {
+    const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
+    if (!token) return isAuthenticated(req);
+    const key = assetKey(token);
+    if ((assetSessions.get(key) || 0) > Date.now()) return true;
+    const ok = isAuthenticated(req);
+    if (ok) {
+      if (assetSessions.size > 5000) {
+        for (const [k, until] of assetSessions) if (until <= Date.now()) assetSessions.delete(k);
+        if (assetSessions.size > 5000) assetSessions.clear();
+      }
+      assetSessions.set(key, Date.now() + ASSET_TTL_MS);
+    } else assetSessions.delete(key);
+    return ok;
+  }
+
   function requireAccess(req, res, next) {
     if (isAuthenticated(req)) return next();
     res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
@@ -138,7 +163,7 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
   // vervalt: geen sessie-fixatie).
   function setCookie(req, res, subject = 'code') {
     const old = parseCookies(req.headers.cookie)[COOKIE_NAME];
-    if (old) store.deleteSession(old);
+    if (old) { store.deleteSession(old); assetSessions.delete(assetKey(old)); }
     req._session = undefined;
     appendCookie(res, cookieAttrs(req, COOKIE_NAME, issue(subject, req), maxDays() * DAY_MS));
   }
@@ -146,7 +171,7 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
   // Uitloggen: de sessie verdwijnt ook op de server.
   function clearCookie(req, res) {
     const old = parseCookies(req.headers.cookie)[COOKIE_NAME];
-    if (old) store.deleteSession(old);
+    if (old) { store.deleteSession(old); assetSessions.delete(assetKey(old)); }
     appendCookie(res, `${COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
   }
 
@@ -189,7 +214,7 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
     appendCookie(res, `${name}=; Path=/; Max-Age=0; SameSite=Lax`);
   }
 
-  return { readSigned, setSigned, setPlain, clearNamed, requireAccess, isAuthenticated, session, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
+  return { readSigned, setSigned, setPlain, clearNamed, requireAccess, isAuthenticated, isAuthenticatedForAsset, session, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
 }
 
 module.exports = { createAuth, remoteIp, parseCookies, COOKIE_NAME, GUEST_COOKIE };
