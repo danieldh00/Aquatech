@@ -19,6 +19,7 @@ const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('.
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const { createShopStore, registerShopRoutes } = require('./shop');
 const { createPortalStore, registerPortalRoutes } = require('./portal');
+const { createOutsourcingStore, registerOutsourcingRoutes } = require('./outsourcing');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -490,6 +491,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     'offertes.alle': 'Alleen voor beheerders en installateurs.',
     'plannen.alle': 'Alleen voor beheerders en installateurs.',
     werkorders: 'Alleen voor beheerders en installateurs.',
+    uitbesteden: 'Alleen voor beheerders.',
     portaal: 'Het klantportaal is er voor klanten.',
   };
   const requireRight = (right) => (req, res, next) => {
@@ -990,6 +992,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopStore = createShopStore(database);
   const photoStore = createPhotoStore(database, { vault });
   const dossierStore = createDossierStore(database, { photos: photoStore });
+  const outsourcingStore = createOutsourcingStore(database, { workorders: workOrderStore });
 
   // Openbare links (offerte, afspraak): zonder inlog, dus de tenant volgt uit
   // de offerte of werkorder, en een uitgeschakelde tenant geeft niets prijs.
@@ -1022,12 +1025,19 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     remoteIp, mailerFor, tenantActive, publicLimiter,
     themeOf: (id) => Theme.vars(themeFor(id)),
     photoCounts: (tid) => photoStore.counts(tid),
+    outsourcingOf: (tid) => outsourcingStore.marks(tid),
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
     // testaccounts daarvan erbij (net als bij de klantaccounts hierboven).
     staffTenantsOf: (req) => {
       const tid = req.tenantId || tenant.id;
       return [homeOf(tid), tid];
     },
+  });
+
+  // ---------- Opdrachten uitbesteden aan andere organisaties (zie outsourcing.js) ----------
+  registerOutsourcingRoutes(app, {
+    outsourcing: outsourcingStore, store, requireRight, requireJson, audit, mailerFor, tenantActive,
+    settingsForTenant: (id) => settingsFor(id),
   });
 
   // ---------- Foto's bij werkorders en klantdossiers (zie photos.js) ----------
@@ -1205,7 +1215,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, settings: settingsFor(t.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, outsourcing: outsourcingStore, settings: settingsFor(t.id) },
       set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );

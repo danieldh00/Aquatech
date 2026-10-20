@@ -493,6 +493,7 @@ function createStore(db) {
     q('DELETE FROM audit WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM sessions WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM work_order_photos WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM work_order_offers WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM work_orders WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM impersonations WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM support_grants WHERE tenant_id = ?').run(tenantId);

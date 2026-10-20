@@ -148,6 +148,17 @@
           <div id="b-list" class="muted small"></div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-outsourcing" class="card-form settings">
+          <h3>Uitbesteden</h3>
+          <p class="muted small">Werk uitbesteden aan andere organisaties op dit platform als je het zelf niet redt, of opdrachten van andere organisaties aannemen. Beide staan standaard uit. Vóór het aannemen ziet een andere organisatie alleen de omschrijving, de plaats (zonder straat), de gewenste planning, de werkstappen en de materialen; klantgegevens pas als hij de opdracht aanneemt. Een testomgeving werkt alleen met andere testomgevingen.</p>
+          <label class="chk"><input type="checkbox" name="send"> Werkorders uitbesteden aan andere organisaties</label>
+          <label class="chk"><input type="checkbox" name="receive"> Opdrachten van andere organisaties ontvangen</label>
+          <div class="row">
+            <label>Werkgebied (zien andere organisaties)<input name="region" maxlength="200" placeholder="Bijv. Veluwe en Flevoland"></label>
+          </div>
+          <div class="row"><button class="btn primary" type="submit">Opslaan</button><a class="btn" href="../uitbesteden/">Naar Uitbesteden</a></div>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-modules" class="card-form settings">
           <h3>Modules</h3>
           <p class="muted small">Zet hier modules aan of uit. Uitgezette modules verdwijnen uit de zijbalk en van het dashboard. Beheer blijft altijd zichtbaar voor beheerders.</p>

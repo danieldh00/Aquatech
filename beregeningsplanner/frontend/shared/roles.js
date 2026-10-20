@@ -3,7 +3,9 @@
 // om te tonen wat iemand mag (tegels, knoppen, keuzelijsten).
 //
 // - beheerder:    alles binnen de eigen organisatie (tenant): gebruikers,
-//                 instellingen, historie, alle plannen, offertes en werkorders.
+//                 instellingen, historie, alle plannen, offertes en werkorders,
+//                 en opdrachten uitbesteden aan of aannemen van een andere
+//                 organisatie (als dat in de instellingen aan staat).
 // - installateur: plannen maken en bewerken, offertes opstellen en
 //                 werkorders uitvoeren voor de hele organisatie; geen
 //                 gebruikers, instellingen of historie.
@@ -16,8 +18,8 @@
   const ROLES = {
     beheerder: {
       label: 'Beheerder',
-      description: 'Alles binnen de organisatie: gebruikers, instellingen, historie, alle plannen, offertes en werkorders.',
-      rights: ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'werkorders', 'beheer'],
+      description: 'Alles binnen de organisatie: gebruikers, instellingen, historie, alle plannen, offertes en werkorders, en opdrachten uitbesteden.',
+      rights: ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'werkorders', 'uitbesteden', 'beheer'],
     },
     installateur: {
       label: 'Installateur',
@@ -31,7 +33,7 @@
     },
   };
   // Alle rechten; een hoofdbeheerder heeft ze allemaal plus 'hoofdbeheer'.
-  const RIGHTS = ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'offertes.klant', 'portaal', 'werkorders', 'beheer', 'hoofdbeheer'];
+  const RIGHTS = ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'offertes.klant', 'portaal', 'werkorders', 'uitbesteden', 'beheer', 'hoofdbeheer'];
   // Oude rolnaam (tot 0.22.0): een 'gebruiker' is nu een installateur.
   const ALIASES = { gebruiker: 'installateur' };
 

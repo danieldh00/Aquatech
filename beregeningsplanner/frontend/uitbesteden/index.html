@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Uitbesteden – AquaTech Service</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="../plannen/plannen.css">
+  <link rel="stylesheet" href="../werkorders/werkorders.css">
+  <link rel="stylesheet" href="uitbesteden.css">
+  <script src="../shared/common.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Uitbesteden</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash wide">
+    <section class="intro">
+      <h1>Uitbesteden</h1>
+      <p class="muted">Te veel werk? Bied een werkorder aan bij een andere organisatie op het platform. Die ziet eerst alleen de omschrijving, de plaats, de planning, de werkstappen en de materialen; pas als hij de opdracht aanneemt krijgt hij een eigen werkorder met de klantgegevens. Jij volgt daarna de voortgang.</p>
+    </section>
+    <div id="u-denied" class="notice" hidden></div>
+    <div id="u-off" class="notice" hidden></div>
+
+    <!-- Nieuwe uitbesteding (vanuit een werkorder: ?wo=<id>) -->
+    <form id="u-new" class="card-form" hidden novalidate>
+      <h3 id="n-heading">Werkorder uitbesteden</h3>
+      <div id="n-wo" class="n-wo"></div>
+      <p class="muted small">Vóór het aannemen ziet de andere organisatie alleen: omschrijving, plaats (postcodecijfers en woonplaats, geen straat), gewenste planning, werkstappen met uren en de materiaallijst. Klantnaam, adres, contactgegevens en werkinstructies pas na het aannemen. Offerte, prijzen, foto's en jullie ploeg gaan nooit mee.</p>
+      <div class="row">
+        <label class="grow">Aanbieden aan<select name="to"></select></label>
+        <label>Vergoeding (€, excl. btw, optioneel)<input name="fee" type="number" min="0" step="0.01" inputmode="decimal"></label>
+      </div>
+      <label>Bericht<textarea name="message" rows="3" maxlength="2000" placeholder="Bijv. waarom je uitbesteedt, wanneer het klaar moet zijn, waar het materiaal ligt."></textarea></label>
+      <div class="row">
+        <button class="btn primary" type="submit">Aanbieden</button>
+        <a id="n-cancel" class="btn" href="./">Annuleren</a>
+      </div>
+      <div class="err" role="alert"></div>
+    </form>
+
+    <div id="u-app" hidden>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="incoming" role="tab">Aangeboden aan ons <span id="t-incoming" class="count"></span></button>
+        <button class="tab" data-tab="outgoing" role="tab">Door ons uitbesteed <span id="t-outgoing" class="count"></span></button>
+      </nav>
+      <section id="tab-incoming" class="tabpane">
+        <div class="filters">
+          <label class="chk"><input type="checkbox" id="i-all"> Ook aangenomen en afgewezen</label>
+        </div>
+        <div id="i-list"></div>
+      </section>
+      <section id="tab-outgoing" class="tabpane" hidden>
+        <p class="muted small">Uitbesteden doe je vanuit een werkorder (menu ⋯ → Uitbesteden), zolang die nog niet in uitvoering is.</p>
+        <div class="tablewrap"><table class="grid" id="o-table"></table></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="../werkorders/workorder-core.js"></script>
+  <script src="uitbesteden.js"></script>
+</body>
+</html>

@@ -242,6 +242,28 @@ die), of in de module met **Nieuwe werkorder uit offerte**.
 Nummering `WO-<jaar>-0001` per tenant en omgeving; een beheerder kan een
 werkorder definitief wissen (AVG).
 
+### Uitbesteden aan andere organisaties
+
+Module **Uitbesteden**, alleen voor beheerders (recht `uitbesteden`). Staat
+pas aan als de beheerder het aanzet in Beheer → Instellingen → Uitbesteden:
+*versturen* (zelf werk uitbesteden) en *ontvangen* (opdrachten van anderen
+aannemen) apart, plus een werkgebied dat andere organisaties zien. Een
+testomgeving werkt alleen met andere testomgevingen.
+
+- **Aanbieden**: in een werkorder met status Nieuw of Gepland menu ⋯ →
+  *Uitbesteden aan andere organisatie*. Kies één organisatie of iedereen die
+  opdrachten ontvangt, met een bericht en eventueel een vergoeding. Intrekken
+  kan zolang niemand het heeft aangenomen.
+- **Aannemen**: in Uitbesteden → *Aangeboden aan ons*. De organisatie ziet
+  vooraf alleen omschrijving, plaats (postcodecijfers en woonplaats),
+  gewenste planning, werkstappen met uren en materialen. Na aannemen krijgt
+  zij een eigen werkorder met klantgegevens, instructies, zones, stappen en
+  materialen (zonder offerte, prijzen, foto's of ploeg). Afwijzen kan met een
+  toelichting; bij een open aanbod blijft het dan voor de anderen staan.
+- **Voortgang**: de uitbesteder ziet bij de werkorder en in *Door ons
+  uitbesteed* de status, planning, afgevinkte stappen en opleverdatum bij de
+  ontvanger, niets meer.
+
 ### Planning en afspraak met de klant
 
 Module **Planning** (tegel op het dashboard en in de zijbalk, zelfde rechten
