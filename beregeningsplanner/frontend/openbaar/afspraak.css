@@ -1,0 +1,30 @@
+/* Openbare afspraakpagina: de klant ziet wanneer de werkzaamheden gepland staan en bevestigt. */
+.a-card { max-width: 820px; margin: 20px auto; background: #fff; border: 1px solid #dfe5ec; border-radius: 8px; padding: 20px 24px; box-sizing: border-box; }
+.a-card h1 { margin: 0 0 4px; font-size: 20px; color: var(--at-navy); }
+.a-card h2 { margin: 0 0 12px; font-size: 18px; color: var(--at-navy); }
+.a-card .sub { margin: 0 0 16px; color: #5b6673; font-size: 14px; }
+.a-when { display: flex; gap: 16px; align-items: center; padding: 14px 16px; background: var(--at-green-soft); border-left: 4px solid var(--at-green); border-radius: 6px; margin-bottom: 16px; }
+.a-when .cal { flex: none; width: 58px; text-align: center; background: #fff; border: 1px solid #cfe3d7; border-radius: 6px; overflow: hidden; }
+.a-when .cal .m { display: block; background: var(--at-navy); color: #fff; font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 2px 0; }
+.a-when .cal .d { display: block; font-size: 24px; font-weight: 700; color: var(--at-navy); padding: 2px 0 4px; }
+.a-when .txt b { display: block; font-size: 17px; color: #1d2733; }
+.a-when .txt span { display: block; font-size: 14px; color: #3d4a57; margin-top: 2px; }
+.a-facts { width: 100%; border-collapse: collapse; font-size: 15px; }
+.a-facts td { padding: 6px 0; vertical-align: top; border-top: 1px solid #eef1f5; }
+.a-facts td:first-child { width: 150px; color: #5b6673; }
+.a-days { margin: 4px 0 0; padding-left: 18px; }
+.a-actions { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 10px; }
+.a-contact { margin-top: 16px; font-size: 14px; color: #5b6673; }
+.a-contact a { color: var(--at-navy); }
+.a-form label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #5b6673; margin-bottom: 12px; }
+.a-form input[type=text], .a-form textarea { font: inherit; padding: 9px 11px; border: 1px solid #cfd6de; border-radius: 6px; font-size: 15px; color: #1d2733; box-sizing: border-box; width: 100%; }
+.a-card .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.a-card .btn { font: inherit; font-family: var(--at-font); padding: 10px 16px; border-radius: 6px; border: 1px solid #cfd6de; background: #fff; color: #1d2733; cursor: pointer; font-size: 15px; text-decoration: none; display: inline-block; }
+.a-card .btn.primary { background: var(--at-green); border-color: var(--at-green); color: #fff; font-weight: 600; }
+.a-card .btn:disabled { opacity: 0.55; cursor: default; }
+.a-form .err { color: #c62828; font-size: 14px; min-height: 18px; margin: 8px 0 0; }
+.a-form .other-box { margin-top: 14px; padding-top: 14px; border-top: 1px solid #e3e7ec; }
+@media (max-width: 600px) {
+  .a-card { margin: 12px 0; border-radius: 0; border-left: 0; border-right: 0; padding: 16px; }
+  .a-facts td:first-child { width: 110px; }
+}

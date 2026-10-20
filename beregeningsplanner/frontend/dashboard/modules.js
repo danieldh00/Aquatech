@@ -58,6 +58,15 @@
       right: 'werkorders',
     },
     {
+      id: 'planning',
+      title: 'Planning',
+      description: 'Weekagenda van de werkorders per uitvoerder: inplannen door te slepen, en de klant bevestigt de afspraak via een link.',
+      href: 'planning/',
+      icon: 'calendar',
+      status: 'actief',
+      right: 'werkorders',
+    },
+    {
       id: 'beheer',
       title: 'Beheer',
       description: 'Historie van alle aanvragen, de plannen van alle gebruikers, gebruikersbeheer en de instellingen van de app (API-sleutel, toegangscode, modules).',
@@ -77,14 +86,7 @@
       right: 'hoofdbeheer',
       group: 'beheer',
     },
-    {
-      id: 'planning',
-      title: 'Planning',
-      description: 'Werkzaamheden en ploegen inplannen, gekoppeld aan projecten uit de beregeningsplanner.',
-      icon: 'calendar',
-      status: 'gepland',
-      right: 'offertes',
-    },
+
     {
       id: 'voorraad',
       title: 'Voorraadbeheer',

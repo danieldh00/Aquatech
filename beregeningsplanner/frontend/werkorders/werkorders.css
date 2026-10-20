@@ -39,3 +39,18 @@ table.lines tr.done input[data-s=title], table.lines tr.done input[data-m=descri
 .print-doc table.p-zones td { font-size: 8.5pt; }
 .print-doc table.p-zones tr.bad td { color: #c62828; }
 .print-doc .p-notes { min-height: 48px; border: 1px solid #d5dbe3; border-radius: 4px; padding: 6px 8px; }
+
+/* ---------- Afspraak met de klant ---------- */
+.appt-box { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.appt-box h4 { margin: 0 0 6px; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.appt-box .link-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 6px 0; }
+.appt-box .link-row input { flex: 1; min-width: 200px; font-family: ui-monospace, monospace; font-size: 12px; }
+.appt-box .actions { margin-top: 6px; }
+.appt-box .quote-reason { font-style: italic; color: #3d4a57; }
+.pill.appt-geen, .pill.appt-niet_gedeeld { background: #eceff1; color: #455a64; }
+.pill.appt-wacht { background: #fff3e0; color: #ef6c00; }
+.pill.appt-bevestigd { background: #e8f5e9; color: #2e7d32; }
+.pill.appt-ander_moment { background: #ffebee; color: #c62828; }
+.modal-card label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin: 10px 0; }
+.modal-card label .full, .modal-card input.full, .modal-card textarea.full { width: 100%; box-sizing: border-box; }
+.modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }

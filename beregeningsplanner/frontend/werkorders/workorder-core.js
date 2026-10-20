@@ -7,6 +7,13 @@
 (function (root) {
   const STATUSES = { open: 'Nieuw', gepland: 'Gepland', bezig: 'In uitvoering', gereed: 'Gereed', geannuleerd: 'Geannuleerd' };
   const PHASES = { voorbereiding: 'Voorbereiding', uitvoering: 'Uitvoering', oplevering: 'Oplevering' };
+  // Stand van de afspraak met de klant (klantlink): geen datum, nog niet
+  // gedeeld, wacht op de klant, bevestigd of klant vraagt een ander moment.
+  const APPOINTMENT = {
+    geen: 'Geen datum', niet_gedeeld: 'Niet naar de klant', wacht: 'Wacht op klant',
+    bevestigd: 'Bevestigd door klant', ander_moment: 'Klant vraagt ander moment',
+  };
+  const MAX_DAYS = 20;
   const MAX_ITEMS = 400;
 
   const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
@@ -80,6 +87,8 @@
       },
       plannedDate: isDate(d.plannedDate) ? d.plannedDate : '',
       startTime: isTime(d.startTime) ? d.startTime : '',
+      endTime: isTime(d.endTime) ? d.endTime : '',
+      days: Math.round(numIn(d.days, 1, MAX_DAYS, 1)),
       crew: str(d.crew, 200),
       instructions: str(d.instructions, 4000),
       siteNotes: str(d.siteNotes, 2000),
@@ -102,6 +111,42 @@
       },
     };
   }
+
+  // ---------- Planning ----------
+  const pad = (n) => String(n).padStart(2, '0');
+  const isoOf = (dt) => `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+  /** Datum (JJJJ-MM-DD) plus n kalenderdagen. */
+  function addDays(date, n) {
+    const dt = new Date(`${date}T00:00:00Z`);
+    dt.setUTCDate(dt.getUTCDate() + n);
+    return isoOf(dt);
+  }
+  const weekday = (date) => new Date(`${date}T00:00:00Z`).getUTCDay();
+
+  /**
+   * De werkdagen van een klus: vanaf de geplande datum `days` werkdagen
+   * (maandag t/m vrijdag; een start in het weekend telt zelf wel mee).
+   */
+  function workDays(date, days = 1) {
+    if (!isDate(date)) return [];
+    const n = Math.round(numIn(days, 1, MAX_DAYS, 1));
+    const out = [date];
+    let d = date;
+    while (out.length < n) {
+      d = addDays(d, 1);
+      const wd = weekday(d);
+      if (wd !== 0 && wd !== 6) out.push(d);
+    }
+    return out;
+  }
+
+  /** Het afgesproken moment: wat de klant bevestigt. Gelijk moment = gelijke sleutel. */
+  function moment(d) {
+    d = d || {};
+    return { date: isDate(d.plannedDate) ? d.plannedDate : '', startTime: isTime(d.startTime) ? d.startTime : '',
+      endTime: isTime(d.endTime) ? d.endTime : '', days: Math.round(numIn(d.days, 1, MAX_DAYS, 1)) };
+  }
+  const momentKey = (m) => [m.date, m.startTime, m.endTime, m.days].join('|');
 
   /** Voortgang: afgevinkte stappen, uren gepland/werkelijk, verzamelde materialen. */
   function progress(d) {
@@ -268,7 +313,7 @@
     };
   }
 
-  const api = { STATUSES, PHASES, MAX_ITEMS, sanitize, sanitizeStep, sanitizeMaterial, progress, fromQuote, zonesFromPlan, round2 };
+  const api = { STATUSES, PHASES, APPOINTMENT, MAX_ITEMS, MAX_DAYS, addDays, workDays, moment, momentKey, isDate, isTime, sanitize, sanitizeStep, sanitizeMaterial, progress, fromQuote, zonesFromPlan, round2 };
   root.WorkOrderCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
