@@ -252,6 +252,15 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (`/api/dossiers[/:key]`, key `a-<klant-id>` of `n-<hash naam>`).
   Klantportaal: `photos.list(..., { customerOnly: true })` en
   `GET /api/portal/photos/:id`.
+- **Kleurthema** (0.40.0): `frontend/shared/theme.js` (UMD: `sanitize`,
+  `problems` = contrast met wit, `derive`, `vars`, `css`, `apply`). Instelling
+  `theme` (`platform: true`, Beheer > Instellingen weigert hem), alleen via
+  `GET|PUT /api/platform/theme`. Hoofdtenant = standaard voor iedereen, live-tenant
+  optioneel eigen thema (`themeFor` in server.js, testomgeving volgt
+  live-tenant). Server levert `shared/theme.css` (openbaar, na brand.css op
+  elke pagina, statisch leeg bestand voor file://), injecteert het in
+  login/setup/wachtwoord, en openbare API's geven `theme` (vars) mee.
+  **Nieuwe kleuren in CSS altijd via `--at-*`-variabelen**, nooit hardcoded.
 - **Wachtwoord** (0.31.0): eigen wijzigen via `POST /api/account/password`
   (pagina `backend/src/password.html`, route `/wachtwoord`, inline script op
   CSP-hash). `users.must_change_password` (migratie 12): zolang aan toont

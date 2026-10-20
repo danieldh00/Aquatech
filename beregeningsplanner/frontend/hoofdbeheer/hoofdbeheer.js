@@ -460,12 +460,123 @@
     await download(wb, `tenants_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
+  // ---------- Kleuren ----------
+  // Standaardthema voor alle organisaties (hoofdtenant) en optioneel een eigen
+  // thema per tenant. De server weigert te lichte kleuren voor witte tekst.
+  const Theme = window.AquatechTheme;
+  const ratio = (a, b) => Theme.contrast(a, b).toFixed(1).replace('.', ',');
+
+  async function themeDialog(startId) {
+    let data;
+    try { data = await api('platform/theme'); } catch (e) { toast(e.message, true); return; }
+    const scopes = [{ id: data.mainTenantId, name: 'Alle organisaties (standaard)', theme: data.global }, ...data.tenants];
+    const stored = (id) => (scopes.find((x) => x.id === id) || scopes[0]).theme || {};
+    // Wat een tenant zonder eigen thema ziet: het standaardthema.
+    const shown = (id) => (Object.keys(stored(id)).length ? stored(id) : stored(data.mainTenantId));
+    let scope = scopes.some((x) => x.id === startId) ? startId : data.mainTenantId;
+    const fields = Object.entries(Theme.FIELDS).map(([k, f]) => `
+      <label class="th-field">${esc(f.label)}
+        <span class="th-pick"><input type="color" data-color="${k}"><input type="text" data-hex="${k}" maxlength="7" spellcheck="false" autocomplete="off"></span>
+        <span class="hint">${esc(f.help)}</span><span class="th-ratio" data-ratio="${k}"></span>
+      </label>`).join('');
+    modal(`<h2>Kleuren</h2>
+      <p class="muted small">Kies de kleuren van de app. Zonder keuze geldt de huisstijl van AquaTech Service. Een organisatie kan een eigen thema krijgen; testomgevingen volgen hun organisatie.</p>
+      <form id="th-form" class="card-form" novalidate>
+        <div class="row"><label>Voor<select id="th-scope">${scopes.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}${x.id !== data.mainTenantId && Object.keys(x.theme || {}).length ? ' · eigen thema' : ''}</option>`).join('')}</select></label></div>
+        <p class="muted small" id="th-note"></p>
+        <div class="row th-fields">${fields}</div>
+        <div class="th-preview" id="th-preview" aria-label="Voorbeeld">
+          <div class="th-bar"><b>AquaTech</b><span>Dashboard</span></div>
+          <div class="th-body">
+            <h4>Voorbeeld van een pagina</h4>
+            <p class="th-soft">Een licht vlak met <b>donkere actietekst</b>.</p>
+            <div class="th-card">Kaart met accentrand</div>
+            <span class="th-btn">Opslaan</span> <span class="th-btn dark">Knop bij aanwijzen</span>
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn primary" type="submit">Opslaan</button>
+          <button class="btn" type="button" id="th-reset"></button>
+        </div>
+        <div id="th-err" class="err" role="alert"></div>
+      </form>`);
+    const f = $('#th-form');
+    const current = () => {
+      const out = {};
+      for (const el of f.querySelectorAll('[data-hex]')) out[el.dataset.hex] = Theme.hex(el.value) || el.value.trim();
+      return out;
+    };
+    function preview() {
+      const c = current();
+      const valid = Object.values(c).every((v) => Theme.hex(v));
+      const bad = valid ? Theme.problems(c) : [];
+      for (const [k, def] of Object.entries(Theme.FIELDS)) {
+        const el = f.querySelector(`[data-ratio="${k}"]`);
+        const hexInput = f.querySelector(`[data-hex="${k}"]`);
+        const ok = Boolean(Theme.hex(c[k]));
+        hexInput.classList.toggle('invalid', !ok);
+        if (!ok) { el.textContent = 'Geef een kleur als #rrggbb.'; el.className = 'th-ratio bad'; continue; }
+        const r = Theme.contrast(c[k], '#ffffff');
+        const fail = bad.some((p) => p.field === k);
+        el.textContent = def.min
+          ? `Contrast met wit ${ratio(c[k], '#ffffff')}:1 ${fail ? `– te licht, minimaal ${String(def.min).replace('.', ',')}:1` : r >= 4.5 ? '– goed leesbaar' : '– voldoende voor vette tekst'}`
+          : `Contrast met wit ${ratio(c[k], '#ffffff')}:1 (alleen accent)`;
+        el.className = `th-ratio${fail ? ' bad' : r >= 4.5 || !def.min ? ' ok' : ' warn'}`;
+      }
+      if (valid) for (const [k, v] of Object.entries(Theme.vars(c))) $('#th-preview').style.setProperty(k, v);
+      $('#th-err').textContent = !valid ? 'Niet alle kleuren zijn geldig.' : bad.length ? bad[0].message : '';
+      return valid && !bad.length;
+    }
+    function fill() {
+      const c = Theme.resolve(shown(scope));
+      for (const [k, v] of Object.entries(c)) {
+        f.querySelector(`[data-color="${k}"]`).value = v;
+        f.querySelector(`[data-hex="${k}"]`).value = v;
+      }
+      const main = scope === data.mainTenantId;
+      const own = Object.keys(stored(scope)).length > 0;
+      $('#th-note').textContent = main
+        ? (own ? 'Eigen standaardthema voor alle organisaties zonder eigen thema.' : 'Nu de huisstijl van AquaTech Service.')
+        : (own ? 'Deze organisatie heeft een eigen thema.' : 'Deze organisatie volgt nu het standaardthema; opslaan geeft hem een eigen thema.');
+      $('#th-reset').textContent = main ? 'Standaardkleuren terugzetten' : 'Eigen thema verwijderen';
+      $('#th-reset').disabled = !own;
+      preview();
+    }
+    f.oninput = (ev) => {
+      const k = ev.target.dataset.color || ev.target.dataset.hex;
+      if (!k) return;
+      if (ev.target.dataset.color) f.querySelector(`[data-hex="${k}"]`).value = ev.target.value;
+      else if (Theme.hex(ev.target.value)) f.querySelector(`[data-color="${k}"]`).value = Theme.hex(ev.target.value);
+      preview();
+    };
+    $('#th-scope').value = scope;
+    $('#th-scope').onchange = () => { scope = $('#th-scope').value; fill(); };
+    async function save(colors) {
+      try {
+        const out = await api('platform/theme', { method: 'PUT', body: { tenantId: scope, colors } });
+        scopes.find((x) => x.id === scope).theme = out.theme;
+        const opt = $('#th-scope').selectedOptions[0];
+        const sc = scopes.find((x) => x.id === scope);
+        if (scope !== data.mainTenantId) opt.textContent = `${sc.name}${Object.keys(out.theme).length ? ' · eigen thema' : ''}`;
+        // Deze pagina opnieuw in het actieve thema.
+        const link = document.querySelector('link[href*="shared/theme.css"]');
+        if (link) link.href = `../shared/theme.css?t=${Date.now()}`;
+        fill();
+        toast(colors ? 'Kleuren opgeslagen' : 'Standaardkleuren teruggezet');
+      } catch (e) { $('#th-err').textContent = e.message; }
+    }
+    f.onsubmit = (ev) => { ev.preventDefault(); if (preview()) save(current()); };
+    $('#th-reset').onclick = () => save(null);
+    fill();
+  }
+
   // ---------- Start ----------
   $('#modal-close').onclick = closeModal;
   $('#modal').onclick = (ev) => { if (ev.target.id === 'modal') closeModal(); };
   $('#t-search').oninput = render;
   $('#t-export').onclick = exportExcel;
   $('#t-admins').onclick = () => { const m = find(state.mainId); if (m) usersDialog(m); };
+  $('#t-theme').onclick = () => themeDialog(state.mainId);
   $('#t-table').onclick = (ev) => {
     const b = ev.target.closest('button[data-act]');
     const tr = ev.target.closest('tr[data-tid]');

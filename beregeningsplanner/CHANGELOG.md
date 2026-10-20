@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.40.0
+
+- **Kleuren kiezen**: een hoofdbeheerder kiest onder **Hoofdbeheer → Kleuren**
+  de hoofd-, actie- en accentkleur van de app, met een live voorbeeld. Het
+  standaardthema geldt voor alle organisaties (ook inloggen en de openbare
+  offerte- en afspraakpagina); een organisatie kan een eigen thema krijgen,
+  dat haar testomgevingen volgen. Zonder keuze blijft de huisstijl van
+  AquaTech Service, met een knop om die terug te zetten.
+- **Leesbaar**: kleuren die te licht zijn voor witte tekst worden geweigerd
+  (hoofdkleur minimaal 4,5:1, actiekleur 3:1); de donkere en lichte tinten
+  worden afgeleid en blijven leesbaar.
+- Vensters in Beheer/Hoofdbeheer en de hulp in de planner vallen niet meer
+  half achter de zijbalk.
+
 ## 0.39.0
 
 - **Supabase is de standaard in productie**: de productie-compose gebruikt

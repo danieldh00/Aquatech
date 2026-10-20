@@ -23,6 +23,7 @@ const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
+const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
 const LOGIN_PAGE = path.join(__dirname, 'login.html');
 const SETUP_PAGE = path.join(__dirname, 'setup.html');
 const PASSWORD_PAGE = path.join(__dirname, 'password.html');
@@ -74,7 +75,7 @@ const normCode = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const PUBLIC_FILES = new Set([
   '/openbaar/offerte.html', '/openbaar/offerte.js', '/openbaar/offerte.css',
   '/openbaar/afspraak.html', '/openbaar/afspraak.js', '/openbaar/afspraak.css', '/werkorders/workorder-core.js',
-  '/shared/brand.css', '/shared/logo-white.png',
+  '/shared/brand.css', '/shared/theme.css', '/shared/theme.js', '/shared/logo-white.png',
   '/offertes/quote-core.js', '/offertes/quote-view.js', '/offertes/quote-view.css',
 ]);
 function isPublicAsset(req) {
@@ -140,6 +141,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     return s;
   }
   const settings = settingsFor(tenant.id);
+  // Kleurthema (shared/theme.js): het eigen thema van de live-tenant (ook voor
+  // diens testomgevingen), anders het thema van de hoofdtenant voor iedereen.
+  function themeFor(tenantId) {
+    const home = tenantId ? homeOf(tenantId) : tenant.id;
+    const own = home !== tenant.id ? settingsFor(home).get('theme') : {};
+    return Object.keys(own).length ? own : settings.get('theme');
+  }
+  // Inlog-, instel- en wachtwoordpagina: alles inline (geen toegang tot
+  // bestanden), dus het thema als <style> in de kop.
+  const authHtml = new Map();
+  function sendAuthPage(res, file, tenantId) {
+    if (!authHtml.has(file)) authHtml.set(file, fs.readFileSync(file, 'utf8'));
+    const css = Theme.css(themeFor(tenantId));
+    const html = authHtml.get(file);
+    res.type('html').send(css ? html.replace('</head>', `  <style>${css}</style>\n</head>`) : html);
+  }
   const installCode = setupCode || env.SETUP_CODE || newSetupCode();
   const getAccessCode = () => settings.get('accessCode');
   // Gasten (zonder inloggen) alleen als dat aanstaat en er geen code is.
@@ -219,7 +236,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const page = !/\.[a-z0-9]+$/i.test(req.path) || req.path.endsWith('.html');
     if (!page || (req.method !== 'GET' && req.method !== 'HEAD')) return next();
     res.setHeader('Cache-Control', 'no-store');
-    res.sendFile(PASSWORD_PAGE);
+    sendAuthPage(res, PASSWORD_PAGE, s.user.tenant_id);
   });
 
   // Inloggen: streng begrensd per IP (achter de tunnel is dat het
@@ -805,6 +822,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // Wie met de toegangscode is ingelogd, zou zichzelf buitensluiten door die
     // leeg te maken; met een beheerdersaccount kan het wel.
     const resets = Array.isArray(patch.reset) ? patch.reset : [];
+    const platformField = [...Object.keys(patch), ...resets].find((k) => FIELDS[k]?.platform);
+    if (platformField) return res.status(400).json({ error: 'invalid_setting', field: platformField, message: 'Deze instelling wijzig je in Hoofdbeheer.' });
     const codeAfter = patch.accessCode !== undefined ? String(patch.accessCode).trim()
       : resets.includes('accessCode') ? settings.get('accessCode', true) : oldCode;
     if (via === 'code' && !codeAfter) {
@@ -926,6 +945,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     quotes: quoteStore, identify, requireUser, requireAdmin, requireRight, requireJson, audit,
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     settingsForTenant: (id) => settingsFor(id), remoteIp, mailerFor, tenantActive, publicLimiter,
+    themeOf: (id) => Theme.vars(themeFor(id)),
     // Klantaccounts horen bij de live-tenant (ook als er in test gewerkt
     // wordt); in een testomgeving komen de testklanten daarvan erbij.
     customersOf: (req) => {
@@ -940,6 +960,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     workorders: workOrderStore, requireRight, requireAdmin, requireJson, audit,
     settingsOf: (req) => settingsFor(req.tenantId || tenant.id), settingsForTenant: (id) => settingsFor(id),
     remoteIp, mailerFor, tenantActive, publicLimiter,
+    themeOf: (id) => Theme.vars(themeFor(id)),
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
     // testaccounts daarvan erbij (net als bij de klantaccounts hierboven).
     staffTenantsOf: (req) => {
@@ -1075,6 +1096,40 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Testomgeving vullen met testdata: testaccounts per rol (één gedeeld,
   // willekeurig wachtwoord dat alleen in dit antwoord staat), nepklanten,
   // plannen en offertes. Wat er al in de testomgeving stond, gaat weg.
+  // Kleurthema: standaard voor alle organisaties (hoofdtenant) en optioneel een
+  // eigen thema per live-tenant. Leeg = huisstijl van AquaTech Service.
+  app.get('/api/platform/theme', (req, res) => {
+    const tenants = store.listTenants().filter((t) => t.id !== tenant.id)
+      .map((t) => ({ id: t.id, name: t.name, slug: t.slug, theme: settingsFor(t.id).get('theme') }));
+    res.json({ defaults: Theme.DEFAULTS, global: settings.get('theme'), mainTenantId: tenant.id, tenants });
+  });
+
+  app.put('/api/platform/theme', requireJson, (req, res) => {
+    const tid = req.body?.tenantId || tenant.id;
+    const t = store.getTenant(tid);
+    if (!t || t.environment !== 'live') return res.status(404).json({ error: 'not_found', message: 'Organisatie niet gevonden (een testomgeving volgt het thema van zijn tenant).' });
+    const raw = req.body?.colors;
+    const target = settingsFor(tid);
+    if (raw == null || (typeof raw === 'object' && !Object.keys(raw).length)) {
+      target.update({ reset: ['theme'] }, req.user.id);
+    } else {
+      if (typeof raw !== 'object' || Array.isArray(raw)) return res.status(400).json({ error: 'invalid_theme', message: 'Ongeldige kleuren.' });
+      for (const [k, v] of Object.entries(raw)) {
+        if (!Theme.FIELDS[k]) return res.status(400).json({ error: 'invalid_theme', field: k, message: `Onbekende kleur: ${k}` });
+        if (!Theme.hex(v)) return res.status(400).json({ error: 'invalid_theme', field: k, message: `${Theme.FIELDS[k].label}: geef een kleur als #rrggbb.` });
+      }
+      const problem = Theme.problems(raw)[0];
+      if (problem) return res.status(400).json({ error: 'invalid_theme', field: problem.field, message: problem.message });
+      const colors = Theme.resolve(raw);
+      if (tid === tenant.id && Theme.isDefault(colors)) target.update({ reset: ['theme'] }, req.user.id);
+      else target.update({ theme: colors }, req.user.id);
+    }
+    const theme = target.get('theme');
+    console.log(`Kleurthema van ${t.name} gewijzigd door ${req.user.display_name}: ${Object.keys(theme).length ? Object.values(theme).join(' ') : 'standaard'}`);
+    audit(req, 'thema_gewijzigd', { tenantId: tid, theme }, undefined, tenant.id);
+    res.json({ tenantId: tid, theme });
+  });
+
   app.post('/api/platform/tenants/:id/testdata', requireJson, wrap(async (req, res) => {
     const t = store.getTenant(req.params.id);
     if (!t) return platformError(res, { error: 'Omgeving niet gevonden.', status: 404 });
@@ -1164,7 +1219,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.get('/login', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.sendFile(authPage(req));
+    sendAuthPage(res, authPage(req));
   });
 
   app.use((req, res, next) => {
@@ -1173,13 +1228,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(401).end();
     res.status(401);
     res.setHeader('Cache-Control', 'no-store');
-    res.sendFile(needsSetup() ? SETUP_PAGE : LOGIN_PAGE);
+    sendAuthPage(res, needsSetup() ? SETUP_PAGE : LOGIN_PAGE);
+  });
+
+  // Het actieve kleurthema als stylesheet (na brand.css op elke pagina). Ook
+  // zonder inloggen bereikbaar: dan het thema van de hoofdtenant.
+  app.get('/shared/theme.css', (req, res) => {
+    identify(req);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('css').send(`/* Kleurthema (Hoofdbeheer > Kleuren). */\n${Theme.css(themeFor(req.tenantId))}`);
   });
 
   // Eigen wachtwoord wijzigen (ingelogd met een account).
   app.get('/wachtwoord', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.sendFile(PASSWORD_PAGE);
+    identify(req);
+    sendAuthPage(res, PASSWORD_PAGE, req.tenantId);
   });
 
   // no-cache: de browser controleert bij elke start of er een nieuwe versie is

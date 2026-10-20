@@ -137,6 +137,7 @@
       const out = await api('appointment');
       state.a = out.appointment;
       state.profile = out.profile;
+      if (window.AquatechTheme) window.AquatechTheme.apply(out.theme);
       render();
     } catch (e) {
       message(e.status === 429 ? 'Te veel verzoeken. Probeer het later opnieuw.' : e.message);

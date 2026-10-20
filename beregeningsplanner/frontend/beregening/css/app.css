@@ -153,7 +153,7 @@ td.num, th.num { text-align: right !important; white-space: nowrap; }
 .panel code { font-size: 12px; background: #f1f5f8; padding: 1px 4px; border-radius: 3px; }
 
 /* Help & toast */
-.help { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 10; }
+.help { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 50; }
 .help.open { display: flex; }
 .help-card { background: #fff; border-radius: 12px; padding: 20px 24px; max-width: 640px; max-height: 85vh; overflow-y: auto; position: relative; }
 .help-card .close { position: absolute; top: 10px; right: 10px; color: var(--text); }
