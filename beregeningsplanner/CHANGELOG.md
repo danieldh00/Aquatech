@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.40.0
+
+- **Startscherm voor installateurs**: het overzicht begint met *Vandaag*:
+  de klussen die vandaag op je naam staan (ook elke werkdag van een
+  meerdaagse klus, met "dag 2 van 3"), op starttijd. Per klus de tijd,
+  status, klant, adres met **Route**, **Bellen**, de werkplekafspraken en
+  instructies, de voortgang van de werkstappen en directe knoppen naar de
+  werkorder en de foto's. Bladeren per dag, **Hele ploeg** toont de klussen
+  van iedereen (standaard voor beheerders), en staat er niets gepland dan
+  zie je de eerstvolgende klus. Gemaakt voor de telefoon.
+- API `GET /api/my-day?date=JJJJ-MM-DD[&all=1]` (recht werkorders).
+
 ## 0.39.0
 
 - **Supabase is de standaard in productie**: de productie-compose gebruikt

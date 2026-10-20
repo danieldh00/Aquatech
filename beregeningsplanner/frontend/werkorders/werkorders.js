@@ -256,7 +256,9 @@
     renderMaterials();
     renderProgress();
     if (window.WorkOrderPhotos) window.WorkOrderPhotos.open(wo, { toast, statusOf: () => $('#e-status').value });
-    window.scrollTo(0, 0);
+    // ?id=…#fotos (startscherm): meteen naar de foto's.
+    if (location.hash === '#fotos') $('#ph-card').scrollIntoView();
+    else window.scrollTo(0, 0);
   }
 
   // Route naar het adres (opent de kaart van het apparaat).
