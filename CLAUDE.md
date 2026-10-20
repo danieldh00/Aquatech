@@ -216,6 +216,13 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `WO-<jaar>-0001`). Alleen uit een offerte met status `akkoord`; koppeling
   met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
   de offerte-editor.
+- **Klantportaal** (`frontend/portaal/`, 0.35.0, recht `portaal`: alleen
+  klant): `backend/src/portal.js`, `GET /api/portal` (plannen, offertes,
+  werkorders, contact) en `/api/portal/workorders/:id` (opleverdossier via
+  `customerWorkOrder`, zonder uren/instructies/notities). Werkorder zichtbaar
+  als `quotes.customer_id` = klant en offerte ≠ concept. Optioneel:
+  `ctx.photos.list(tid, woId, { customerOnly })` en `workorders.respond`
+  (afspraak bevestigen, `POST .../appointment`).
 - **Wachtwoord** (0.31.0): eigen wijzigen via `POST /api/account/password`
   (pagina `backend/src/password.html`, route `/wachtwoord`, inline script op
   CSP-hash). `users.must_change_password` (migratie 12): zolang aan toont

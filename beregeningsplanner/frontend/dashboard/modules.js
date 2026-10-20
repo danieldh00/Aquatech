@@ -16,6 +16,15 @@
 (function (root) {
   const MODULES = [
     {
+      id: 'portaal',
+      title: 'Mijn portaal',
+      description: 'Alles over uw tuinberegening op één plek: offertes, geplande afspraken, de voortgang van de aanleg en het opleverdossier met foto\'s.',
+      href: 'portaal/',
+      icon: 'home',
+      status: 'actief',
+      right: 'portaal',
+    },
+    {
       id: 'beregening',
       title: 'Beregeningsplanner',
       description: 'Tuinberegening ontwerpen: vlakken tekenen of een plan laten herkennen, sproeiers, zones en leidingen, en een stuklijst met Excel-export.',

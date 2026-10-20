@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Mijn portaal – AquaTech Service</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="portaal.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Mijn portaal</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash portal">
+    <section class="intro">
+      <h1 id="p-welcome">Mijn portaal</h1>
+      <p class="muted">Alles over uw tuinberegening op één plek: offertes, afspraken, de voortgang van de aanleg en het opleverdossier.</p>
+    </section>
+
+    <div id="p-message" class="notice" hidden></div>
+
+    <section id="s-todo" hidden>
+      <h2>Actie nodig</h2>
+      <div id="todo" class="cards"></div>
+    </section>
+
+    <section id="s-work" hidden>
+      <h2>Afspraken en werkzaamheden</h2>
+      <div id="work" class="cards"></div>
+    </section>
+
+    <section id="s-quotes" hidden>
+      <h2>Offertes</h2>
+      <div class="tablewrap"><table class="grid" id="quotes"></table></div>
+    </section>
+
+    <section id="s-plans" hidden>
+      <h2>Mijn plannen <a class="h2-link" href="../plannen/">Alle plannen →</a></h2>
+      <div id="plans" class="tiles"></div>
+    </section>
+
+    <section id="s-contact" hidden>
+      <h2>Contact</h2>
+      <div id="contact" class="contact"></div>
+    </section>
+  </main>
+
+  <div id="detail" class="modal" hidden>
+    <div class="modal-card wide">
+      <button class="btn ghost close no-print" id="detail-close" title="Sluiten">✕</button>
+      <div id="detail-body"></div>
+    </div>
+  </div>
+
+  <div id="photo" class="modal photo-view" hidden>
+    <figure>
+      <img id="photo-img" alt="">
+      <figcaption id="photo-cap"></figcaption>
+    </figure>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="portaal.js"></script>
+</body>
+</html>
