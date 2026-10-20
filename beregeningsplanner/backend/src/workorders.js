@@ -101,6 +101,43 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
     return r ? { id: r.id, number: r.number, status: r.status, planId: r.plan_id, data: JSON.parse(r.data) } : null;
   }
 
+  /**
+   * Wat er op een dag gepland staat (startscherm van de installateur): elke
+   * werkdag van een meerdaagse klus telt mee, gesorteerd op starttijd. Met
+   * userId alleen de klussen van die uitvoerder; `next` is dan diens
+   * eerstvolgende klus na deze dag. Geannuleerde werkorders vallen weg.
+   */
+  function day(tenantId, date, { userId = null, photoCounts = {} } = {}) {
+    // Een klus van MAX_DAYS werkdagen beslaat hooguit zoveel kalenderdagen.
+    const from = Core.addDays(date, -(Math.ceil(Core.MAX_DAYS * 7 / 5) + 2));
+    const args = [tenantId, from, date];
+    let sql = `${SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.status <> 'geannuleerd'
+      AND w.planned_date IS NOT NULL AND w.planned_date >= ? AND w.planned_date <= ?`;
+    if (userId) { sql += ' AND w.assignee_id = ?'; args.push(String(userId)); }
+    const items = [];
+    for (const r of q(sql).all(...args)) {
+      const data = JSON.parse(r.data);
+      const days = Core.workDays(r.planned_date, data.days || 1);
+      const idx = days.indexOf(date);
+      if (idx < 0) continue;
+      const c = data.customer || {};
+      items.push({
+        ...row(r, false), dayNumber: idx + 1, totalDays: days.length,
+        contact: c.contact || '', phone: c.phone || '',
+        instructions: data.instructions || '', siteNotes: data.siteNotes || '',
+        photos: photoCounts[r.id] || 0,
+      });
+    }
+    items.sort((a, b) => (a.startTime || '99').localeCompare(b.startTime || '99') || a.number.localeCompare(b.number));
+    let next = null;
+    if (userId) {
+      const n = q(`${SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.status IN ('open', 'gepland', 'bezig')
+        AND w.assignee_id = ? AND w.planned_date > ? ORDER BY w.planned_date, w.number LIMIT 1`).get(tenantId, String(userId), date);
+      if (n) next = row(n, false);
+    }
+    return { date, items, next };
+  }
+
   // Werkordernummer per tenant en jaar: WO-<jaar>-0001, oplopend; een nummer komt nooit terug.
   function nextNumber(tenantId, year) {
     const head = `${PREFIX}${year}-`;
@@ -298,7 +335,7 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
     });
   }
 
-  return { list, get, quoteOf, staff, create, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber };
+  return { list, get, day, quoteOf, staff, create, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber };
 }
 
 const wrapAsync = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -347,6 +384,17 @@ function registerWorkOrderRoutes(app, ctx) {
   app.get('/api/workorder-staff', requireWo, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json({ items: workorders.staff(staffTenantsOf(req)) });
+  });
+
+  // Startscherm: wat er vandaag (of ?date=JJJJ-MM-DD) gepland staat voor de
+  // ingelogde medewerker; ?all=1 voor de hele ploeg.
+  app.get('/api/my-day', requireWo, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const date = req.query.date === undefined || req.query.date === '' ? today() : String(req.query.date);
+    if (!Core.isDate(date)) return res.status(400).json({ error: 'invalid_date', message: 'Ongeldige datum.' });
+    const all = req.query.all === '1';
+    const photoCounts = ctx.photoCounts ? ctx.photoCounts(tid(req)) : {};
+    res.json({ ...workorders.day(tid(req), date, { userId: all ? null : req.user.id, photoCounts }), today: today(), all });
   });
 
   // Alle werkorders van de omgeving (de ploeg werkt samen); ?quote=<id> voor één offerte.
