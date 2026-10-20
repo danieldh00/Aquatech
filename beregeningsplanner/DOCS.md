@@ -320,8 +320,13 @@ controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
   (gebruikersnaam, naam, rol, wachtwoord van minimaal 8 tekens). Inloggen
   via `.../login` of de knop **Inloggen** rechtsboven. Een nieuw wachtwoord
   of uitschakelen logt de gebruiker op alle toestellen uit.
+- **Mijn profiel**: via het gebruikersmenu rechtsboven (rondje met
+  initialen) of onderaan de zijbalk. Elke gebruiker met een eigen account
+  wijzigt daar naam, e-mailadres, telefoonnummer, voorkeuren (startpagina,
+  kopie van verstuurde offertes/afspraken) en het wachtwoord. Beheerders
+  zien er ook het versienummer van de app.
 - **Eigen wachtwoord**: elke gebruiker met een account wijzigt zijn wachtwoord
-  via de knop **Wachtwoord** rechtsboven. Met het vinkje **Wachtwoord wijzigen
+  op **Mijn profiel**. Met het vinkje **Wachtwoord wijzigen
   na eerste aanmelding** (standaard aan bij een nieuw account en bij een
   nieuw wachtwoord van de beheerder; per gebruiker aan/uit in de kolom
   *Nieuw ww. verplicht*) moet de gebruiker eerst zelf een wachtwoord kiezen

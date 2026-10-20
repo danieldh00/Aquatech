@@ -381,6 +381,12 @@ test('digitale offerte: link, openbare pagina, opties, tekenen, vastleggen en e-
     assert.strictEqual(sent.length, 1);
     assert.strictEqual(sent[0].to, 'jansen@klant.test');
     assert.ok(sent[0].html.includes(shared.share.url.replace(/&/g, '&amp;')) && sent[0].text.includes(shared.share.url), 'link in de e-mail');
+    assert.strictEqual(sent[0].bcc, undefined, 'zonder voorkeur geen kopie');
+    // Mijn profiel: kopie van verstuurde mail naar het eigen adres.
+    assert.strictEqual((await piet.put('/api/account/profile', { email: 'piet@aquatech.test', preferences: { mailCopy: true } })).status, 200);
+    assert.strictEqual((await piet.post(`/api/quotes/${q.id}/send`, { to: 'jansen@klant.test', url: URL_OK })).status, 200);
+    assert.strictEqual(sent[1].bcc, 'piet@aquatech.test');
+    sent.splice(1);
 
     // Akkoord via de link: naam, handtekening en voorwaarden verplicht.
     assert.strictEqual((await pub(token, 'POST', { answer: 'akkoord', name: 'J. Jansen', terms: true })).status, 400);

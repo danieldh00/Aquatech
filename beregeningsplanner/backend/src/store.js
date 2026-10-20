@@ -124,6 +124,28 @@ function withoutBackground(data) {
   return rest;
 }
 
+// ---------- Mijn profiel ----------
+// Persoonlijke voorkeuren staan als JSON in users.preferences; alleen deze
+// sleutels (met hun standaardwaarde) worden bewaard.
+const PREFERENCES = { startPage: '', mailCopy: false };
+const EMAIL = /^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[^\s@<>()",;:]+$/;
+const PHONE = /^\+?[0-9 ()./-]{6,25}$/;
+
+function cleanPreferences(input, base = PREFERENCES) {
+  const src = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const out = { ...PREFERENCES, ...base };
+  if (src.startPage !== undefined) out.startPage = /^[a-z0-9-]{0,40}$/.test(String(src.startPage)) ? String(src.startPage) : '';
+  if (src.mailCopy !== undefined) out.mailCopy = src.mailCopy === true;
+  return out;
+}
+
+/** De voorkeuren van een gebruiker (rij uit users), altijd compleet. */
+function preferencesOf(u) {
+  let raw = {};
+  try { raw = JSON.parse(u?.preferences || '{}'); } catch (e) { /* kapot: standaard */ }
+  return cleanPreferences(raw);
+}
+
 function createStore(db) {
   const q = (sql) => db.prepare(sql);
 
@@ -139,7 +161,36 @@ function createStore(db) {
   function publicUser(u) {
     if (!u) return null;
     return { id: u.id, tenantId: u.tenant_id, username: u.username, displayName: u.display_name, role: u.role, kind: u.kind,
-      disabled: Boolean(u.disabled), platformAdmin: Boolean(u.platform_admin), mustChangePassword: Boolean(u.must_change_password), createdAt: u.created_at, lastSeenAt: u.last_seen_at };
+      disabled: Boolean(u.disabled), platformAdmin: Boolean(u.platform_admin), mustChangePassword: Boolean(u.must_change_password), createdAt: u.created_at, lastSeenAt: u.last_seen_at,
+      email: u.email || '', phone: u.phone || '' };
+  }
+
+  // De gebruiker wijzigt zijn eigen naam, contactgegevens en voorkeuren.
+  // Alleen meegegeven velden veranderen; geeft { user } of { error, field }.
+  function updateProfile(id, input = {}) {
+    const u = getUser(id);
+    if (!u || u.kind !== 'account' || u.disabled) return { error: 'Alleen een eigen account heeft een profiel.', field: null };
+    const next = { display_name: u.display_name, email: u.email || '', phone: u.phone || '' };
+    if (input.displayName !== undefined) {
+      const name = String(input.displayName ?? '').replace(/\s+/g, ' ').trim();
+      if (!name) return { error: 'Vul je naam in.', field: 'displayName' };
+      if (name.length > 80) return { error: 'Je naam mag maximaal 80 tekens hebben.', field: 'displayName' };
+      next.display_name = name;
+    }
+    if (input.email !== undefined) {
+      const email = String(input.email ?? '').trim().toLowerCase();
+      if (email && (email.length > 200 || !EMAIL.test(email))) return { error: 'Vul een geldig e-mailadres in.', field: 'email' };
+      next.email = email;
+    }
+    if (input.phone !== undefined) {
+      const phone = String(input.phone ?? '').replace(/\s+/g, ' ').trim();
+      if (phone && !PHONE.test(phone)) return { error: 'Vul een geldig telefoonnummer in (cijfers, spaties, +, - en haakjes).', field: 'phone' };
+      next.phone = phone;
+    }
+    const prefs = input.preferences !== undefined ? cleanPreferences(input.preferences, preferencesOf(u)) : preferencesOf(u);
+    q('UPDATE users SET display_name = ?, email = ?, phone = ?, preferences = ? WHERE id = ?')
+      .run(next.display_name, next.email, next.phone, JSON.stringify(prefs), u.id);
+    return { user: getUser(u.id) };
   }
 
   function getUser(id) {
@@ -531,6 +582,9 @@ function createStore(db) {
       const users = {};
       for (const a of accounts) {
         users[a.key] = insertUser(tid, { username: a.username, displayName: a.displayName, role: a.role, kind: 'account', passwordHash });
+        q('UPDATE users SET email = ?, phone = ?, preferences = ? WHERE id = ?')
+          .run(a.email || '', a.phone || '', JSON.stringify(cleanPreferences(a.preferences)), users[a.key].id);
+        Object.assign(users[a.key], { email: a.email || '', phone: a.phone || '' });
       }
       const planIds = {};
       for (const p of plans) {
@@ -877,7 +931,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, changeOwnPassword, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
     createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
   };
@@ -887,4 +941,4 @@ function createStore(db) {
 // uniek per wachtwoord): een nieuw wachtwoord maakt oude sessies ongeldig.
 const fingerprintOf = (value) => crypto.createHash('sha256').update(`fp:${value || ''}`).digest('base64url').slice(0, 22);
 
-module.exports = { createStore, hashPassword, verifyPassword, needsRehash, passwordProblem, fingerprintOf, summarize, ROLES };
+module.exports = { createStore, preferencesOf, PREFERENCES, hashPassword, verifyPassword, needsRehash, passwordProblem, fingerprintOf, summarize, ROLES };

@@ -86,14 +86,6 @@
     $('#intro-text').textContent = document.body.classList.contains('has-nav') ? 'Dit staat er gepland. Kies links een onderdeel om mee te werken.' : 'Dit staat er gepland.';
   }
 
-  function showVersion() {
-    if (location.protocol === 'file:') return;
-    fetch('api/health', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d && d.version) $('#version').textContent = `versie ${d.version}`; })
-      .catch(() => {});
-  }
-
   function loadConfig() {
     if (location.protocol === 'file:') return Promise.resolve();
     return fetch('api/config', { cache: 'no-store' })
@@ -104,8 +96,23 @@
 
   renderModules(null);
   renderRecent();
-  showVersion();
+  // Startpagina uit Mijn profiel: alleen bij het openen van de app (eerste
+  // keer het overzicht in dit tabblad, ook na inloggen), daarna blijft het
+  // overzicht gewoon bereikbaar.
+  const STARTED = 'aquatech_started';
+  function openStartPage(me) {
+    let first = false;
+    try { first = !sessionStorage.getItem(STARTED); sessionStorage.setItem(STARTED, '1'); } catch (e) { /* geen opslag */ }
+    const id = first && me && me.preferences && me.preferences.startPage;
+    if (!id) return false;
+    const m = window.AquatechModuleTools.visible(me.rights, disabledModules).find((x) => x.id === id && x.status === 'actief' && x.href);
+    if (!m) return false;
+    location.replace(m.href);
+    return true;
+  }
+
   Promise.all([window.AquatechAccount.load(''), loadConfig()]).then(([me]) => {
+    if (openStartPage(me)) return;
     renderModules(me);
     if (window.AquatechToday && window.AquatechToday.start(me)) greet(me);
     renderMyPlans(me);

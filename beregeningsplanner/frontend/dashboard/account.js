@@ -28,10 +28,19 @@
     }
     if (u && u.kind !== 'gast') {
       const role = me.platformAdmin ? 'hoofdbeheerder' : u.role;
-      // Eigen wachtwoord wijzigen kan alleen met een account (niet met de toegangscode).
-      const pw = u.kind === 'account' ? `<a href="${esc(base)}wachtwoord" title="Eigen wachtwoord wijzigen">Wachtwoord</a>` : '';
-      const out = `${pw}<button type="button" data-logout>Uitloggen</button>`;
-      el.innerHTML = `<span>${esc(u.displayName)} <span class="role">· ${role}</span></span>${out}`;
+      // Gebruikersmenu: Mijn profiel (alleen met een eigen account, niet met
+      // de toegangscode) en uitloggen.
+      const profile = u.kind === 'account' ? `<a role="menuitem" href="${esc(base)}profiel/">Mijn profiel</a>` : '';
+      el.innerHTML = `<div class="user-menu">
+          <button type="button" class="user-btn" aria-haspopup="true" aria-expanded="false" title="${esc(u.displayName)} · ${esc(role)}">
+            <span class="avatar" aria-hidden="true">${esc(initials(u.displayName))}</span><span class="user-name">${esc(u.displayName)}</span>
+          </button>
+          <div class="user-pop" role="menu" hidden>
+            <div class="user-head"><strong>${esc(u.displayName)}</strong><span>${esc(role)}${u.email ? ` · ${esc(u.email)}` : ''}</span></div>
+            ${profile}<button type="button" role="menuitem" data-logout>Uitloggen</button>
+          </div>
+        </div>`;
+      wireMenu(el.querySelector('.user-menu'));
     } else {
       el.innerHTML = `<span class="role">Gast</span><a href="${esc(base)}login">Inloggen</a>`;
     }
@@ -40,9 +49,28 @@
     if (btn) {
       btn.onclick = async () => {
         try { await fetch(`${base}api/auth/logout`, { method: 'POST' }); } catch (e) { /* negeren */ }
+        // Na opnieuw inloggen weer naar de eigen startpagina (zie dashboard.js).
+        try { sessionStorage.removeItem('aquatech_started'); } catch (e) { /* geen opslag */ }
         location.href = base || './';
       };
     }
+  }
+
+  // Initialen voor het rondje in de kopbalk ("Bea Beheer (test)" -> "BB").
+  function initials(name) {
+    const words = String(name || '').replace(/\(.*?\)/g, ' ').split(/\s+/).filter((w) => /^[\p{L}\p{N}]/u.test(w));
+    const pick = words.length > 1 ? [words[0], words[words.length - 1]] : words;
+    return pick.map((w) => w[0]).join('').toUpperCase() || '?';
+  }
+
+  // Openen/sluiten van het gebruikersmenu (klik buiten het menu of Escape sluit).
+  function wireMenu(menu) {
+    const toggle = menu.querySelector('.user-btn');
+    const pop = menu.querySelector('.user-pop');
+    const set = (open) => { pop.hidden = !open; toggle.setAttribute('aria-expanded', String(open)); };
+    toggle.onclick = (e) => { e.stopPropagation(); set(pop.hidden); };
+    document.addEventListener('click', (e) => { if (!menu.contains(e.target)) set(false); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden) { set(false); toggle.focus(); } });
   }
 
   // Wisselen tussen live en testomgevingen (en voor een hoofdbeheerder tussen
