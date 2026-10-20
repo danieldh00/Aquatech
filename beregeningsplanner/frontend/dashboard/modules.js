@@ -85,6 +85,15 @@
       right: 'planning',
     },
     {
+      id: 'uitbesteden',
+      title: 'Uitbesteden',
+      description: 'Te veel werk? Bied een werkorder aan bij een andere organisatie op het platform, of neem opdrachten van anderen aan. Staat aan als de beheerder het in de instellingen aanzet.',
+      href: 'uitbesteden/',
+      icon: 'handshake',
+      status: 'actief',
+      right: 'uitbesteden',
+    },
+    {
       id: 'beheer',
       title: 'Beheer',
       description: 'Historie van alle aanvragen, de plannen van alle gebruikers, gebruikersbeheer en de instellingen van de app (API-sleutel, toegangscode, modules).',
@@ -117,6 +126,7 @@
 
   // Iconen (SVG-paden, 24x24) voor de tegels en de zijbalk.
   const ICONS = {
+    handshake: '<path d="M3 8h4l5 4 5-4h4"/><path d="M7 8v7l5 4 5-4V8"/><path d="m10 13 2 2 2-2"/>',
     home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
     sprinkler: '<path d="M12 21v-6"/><path d="M8 21h8"/><circle cx="12" cy="12" r="3"/><path d="M5 9c1.5-2 4-3.5 7-3.5S17.5 7 19 9"/><path d="M2.5 6C5 3.5 8.3 2 12 2s7 1.5 9.5 4"/>',

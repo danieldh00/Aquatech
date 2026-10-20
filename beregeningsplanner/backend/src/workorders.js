@@ -230,6 +230,28 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     });
   }
 
+  /**
+   * Werkorder zonder offerte: de kopie van een uitbestede opdracht in de
+   * omgeving van de organisatie die hem heeft aangenomen (outsourcing.js).
+   * Draait binnen de transactie van de aanroeper (acceptatie).
+   */
+  function createReceived(user, rawData) {
+    const data = Core.sanitize(rawData);
+    data.quoteId = '';
+    data.quoteNumber = '';
+    data.planId = '';
+    data.planTitle = '';
+    const f = fields(data);
+    const id = crypto.randomUUID();
+    const ts = now();
+    const number = nextNumber(user.tenant_id, ts.slice(0, 4));
+    q(`INSERT INTO work_orders (id, tenant_id, owner_id, quote_id, plan_id, number, status, title, customer, address, planned_date, assignee_id, data, created_at, updated_at)
+       VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`)
+      .run(id, user.tenant_id, user.id, number, data.plannedDate ? 'gepland' : 'open',
+        f.title, f.customer, f.address, f.plannedDate, JSON.stringify(data), ts, ts);
+    return fullRow(id);
+  }
+
   // assigneeId: undefined = ongewijzigd, null = niemand.
   function update(tenantId, id, rawData, status, assigneeId) {
     return transaction(db, () => {
@@ -370,11 +392,12 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
   function purge(tenantId, id) {
     return transaction(db, () => {
       q('DELETE FROM work_order_photos WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
+      q('DELETE FROM work_order_offers WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
       return q('DELETE FROM work_orders WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
     });
   }
 
-  return { list, get, day, quoteOf, staff, create, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber };
+  return { list, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber };
 }
 
 const wrapAsync = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -406,6 +429,8 @@ function registerWorkOrderRoutes(app, ctx) {
   const mailerFor = ctx.mailerFor || ((settings) => createMailer(settings));
   const remoteIp = ctx.remoteIp || ((req) => req.socket?.remoteAddress || '');
   const publicLimiter = ctx.publicLimiter || ((req, res, next) => next());
+  // Uitbesteed of aangenomen (outsourcing.js): per werkorder-id.
+  const outsourcingOf = ctx.outsourcingOf || (() => ({}));
   const requireWo = requireRight('werkorders');
   // Inplannen en de afspraak met de klant (planning of de werkorder zelf).
   const requirePlanning = requireRight('planning');
@@ -442,14 +467,15 @@ function registerWorkOrderRoutes(app, ctx) {
   // Alle werkorders van de omgeving (de ploeg werkt samen); ?quote=<id> voor één offerte.
   app.get('/api/workorders', requireWo, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ items: workorders.list(tid(req), { quoteId: req.query.quote || null }) });
+    const marks = outsourcingOf(tid(req));
+    res.json({ items: workorders.list(tid(req), { quoteId: req.query.quote || null }).map((w) => ({ ...w, outsourcing: marks[w.id] || null })) });
   });
 
   app.get('/api/workorders/:id', requireWo, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const wo = workorders.get(tid(req), req.params.id);
     if (!wo) return notFound(res);
-    res.json(wo);
+    res.json({ ...wo, outsourcing: outsourcingOf(tid(req))[wo.id] || null });
   });
 
   // Alleen vanuit een offerte met status akkoord.

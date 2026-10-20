@@ -197,8 +197,8 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `quotes.customer_id` = zijn id en status ≠ concept (`POST
   /api/quotes/:id/respond`). Gast = klant. Migratie 6 bouwt `users` opnieuw
   (CHECK op rol) met `foreignKeysOff: true` in `db.js`.
-- **Rollenbeheer** (0.48.0): rollen per organisatie in tabel `roles`
-  (migratie 17, bij de live-tenant via `rootOf`; test volgt live), store
+- **Rollenbeheer** (0.49.0): rollen per organisatie in tabel `roles`
+  (migratie 18, bij de live-tenant via `rootOf`; test volgt live), store
   `backend/src/roles.js` (`store.roles`: `list`, `rightsFor`, `keysWith`,
   `keysOfKind`, `create/update/remove`, cache 30 s). Tabel bewaart alleen
   afwijkingen van de standaardrollen in roles.js plus eigen rollen;
@@ -303,6 +303,16 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   API `GET /api/catalog` (ingelogd), `/api/admin/shop[/sync]` (beheerder).
   Frontend `beregening/js/shopcatalog.js` legt de prijzen over de catalogus
   (planner + offertes, vóór `fromPlan`); beheer in `beheer/webshop.js`.
+- **Uitbesteden** (0.48.0, module `frontend/uitbesteden/`, recht `uitbesteden`:
+  beheerder): `backend/src/outsourcing.js`, tabel `work_order_offers`
+  (migratie 17; `tenant_id` = uitbesteder, `to_tenant_id` leeg = iedereen,
+  na aannemen `receiver_tenant_id` + `received_work_order_id`, geen FK's naar
+  de andere organisatie). Opt-in via instelling `outsourcing` {send, receive,
+  region}; alleen tussen omgevingen van hetzelfde soort (live/test). Vóór
+  aannemen alleen `previewOf` (geen klantgegevens/instructies), daarna
+  `handoverOf` → `workorders.createReceived` (werkorder zonder offerte). De
+  uitbesteder ziet alleen `execution` (status, planning, stappen). Werkorder-API
+  geeft `outsourcing` mee (`ctx.outsourcingOf`).
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - **Snelheid/navigatie** (0.46.0): `shared/common.js` in de `<head>` van elke

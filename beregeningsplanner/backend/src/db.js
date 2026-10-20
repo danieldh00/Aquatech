@@ -356,7 +356,39 @@ const MIGRATIONS = [
   CREATE INDEX sessions_expires ON sessions (expires_at);
   CREATE INDEX impersonations_user ON impersonations (user_id);
   `,
-  // 17: rollen per organisatie (Beheer > Rollen, zie roles.js): aanpassingen
+  // 17: opdrachten uitbesteden aan een andere organisatie op het platform.
+  // tenant_id = de uitbestedende omgeving; to_tenant_id leeg = aan iedereen
+  // die opdrachten ontvangt. Na acceptatie staat de kopie in de omgeving van
+  // de ontvanger (receiver_tenant_id, received_work_order_id). Geen foreign
+  // keys naar de andere organisatie: die kan los worden gewist.
+  `
+  CREATE TABLE work_order_offers (
+    id                     TEXT PRIMARY KEY,
+    tenant_id              TEXT NOT NULL REFERENCES tenants(id),
+    work_order_id          TEXT NOT NULL,
+    to_tenant_id           TEXT,
+    status                 TEXT NOT NULL DEFAULT 'aangeboden' CHECK (status IN ('aangeboden', 'geaccepteerd', 'afgewezen', 'ingetrokken')),
+    message                TEXT NOT NULL DEFAULT '',
+    fee                    REAL,
+    preview                TEXT NOT NULL,
+    from_name              TEXT NOT NULL DEFAULT '',
+    created_by             TEXT,
+    created_by_name        TEXT NOT NULL DEFAULT '',
+    declined               TEXT NOT NULL DEFAULT '[]',
+    receiver_tenant_id     TEXT,
+    receiver_name          TEXT NOT NULL DEFAULT '',
+    received_work_order_id TEXT,
+    responded_by_name      TEXT NOT NULL DEFAULT '',
+    responded_at           TEXT,
+    reason                 TEXT NOT NULL DEFAULT '',
+    created_at             TEXT NOT NULL,
+    updated_at             TEXT NOT NULL
+  );
+  CREATE INDEX work_order_offers_wo ON work_order_offers (tenant_id, work_order_id);
+  CREATE INDEX work_order_offers_open ON work_order_offers (status, to_tenant_id);
+  CREATE INDEX work_order_offers_receiver ON work_order_offers (receiver_tenant_id, received_work_order_id);
+  `,
+  // 18: rollen per organisatie (Beheer > Rollen, zie roles.js): aanpassingen
   // van de standaardrollen en eigen rollen, bij de live-tenant. users.role is
   // daarmee een vrije sleutel; de CHECK erop kan in SQLite alleen weg door de
   // tabel opnieuw op te bouwen (kolommen in dezelfde volgorde).

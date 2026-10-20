@@ -10,6 +10,8 @@
 //
 // - beheerder:    alles binnen de eigen organisatie (tenant): gebruikers,
 //                 instellingen, historie, alle plannen, offertes en werkorders.
+//                 Ook opdrachten uitbesteden aan of aannemen van een andere
+//                 organisatie (als dat in de instellingen aan staat).
 //                 De rechten van deze rol liggen vast.
 // - installateur: plannen maken en bewerken, offertes opstellen en
 //                 werkorders uitvoeren voor de hele organisatie; geen
@@ -37,6 +39,7 @@
     werkorders: { label: 'Werkorders en klantdossiers', description: 'Werkorders inzien en bijwerken, foto\'s toevoegen, klantdossiers bekijken en het blok Vandaag.', kind: ['medewerker'] },
     planning: { label: 'Planning', description: 'Werkorders inplannen in de agenda en de afspraaklink naar de klant sturen.', kind: ['medewerker'], needs: ['werkorders'] },
     uitvoerder: { label: 'Uitvoerder', description: 'Kan als uitvoerder aan een werkorder worden toegewezen en staat als kolom in de planning.', kind: ['medewerker'], needs: ['werkorders'] },
+    uitbesteden: { label: 'Uitbesteden', description: 'Opdrachten uitbesteden aan of aannemen van een andere organisatie (als dat in de instellingen aan staat).', kind: ['medewerker'], needs: ['werkorders'] },
     'offertes.klant': { label: 'Eigen offertes (klant)', description: 'De offertes die voor dit account klaarstaan inzien en accorderen of afwijzen.', kind: ['klant'] },
     portaal: { label: 'Klantportaal', description: 'Mijn portaal: offertes, afspraken, voortgang en het opleverdossier.', kind: ['klant'] },
     beheer: { label: 'Beheer', description: 'Gebruikers, rollen, instellingen en historie van de organisatie.', kind: [], locked: true },
@@ -49,8 +52,8 @@
       label: 'Beheerder',
       kind: 'medewerker',
       locked: true,
-      description: 'Alles binnen de organisatie: gebruikers, rollen, instellingen, historie, alle plannen, offertes en werkorders.',
-      rights: ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder', 'beheer'],
+      description: 'Alles binnen de organisatie: gebruikers, rollen, instellingen, historie, alle plannen, offertes en werkorders, en opdrachten uitbesteden.',
+      rights: ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder', 'uitbesteden', 'beheer'],
     },
     installateur: {
       label: 'Installateur',

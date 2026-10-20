@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.48.0
+## 0.49.0
 
 - **Rollen aanpassen** (**Beheer → Rollen**): per rol de rechten aan- en
   uitzetten in één tabel, naam en omschrijving wijzigen en eigen rollen
@@ -17,8 +17,38 @@
   uitvoerder kan worden ingepland, bepaalt het recht Uitvoerder (standaard
   beheerder en installateur, zoals voorheen).
 - Testdata: een testplanner (`<code>.planner`) die in de planning start.
-- Database: migratie 17 (tabel `roles`, rol van een gebruiker is een vrije
+- Database: migratie 18 (tabel `roles`, rol van een gebruiker is een vrije
   sleutel), voor SQLite en PostgreSQL.
+
+## 0.48.0
+
+Opdrachten uitbesteden aan andere organisaties op het platform.
+
+- **Uitbesteden**: te veel werk? Een beheerder biedt een werkorder (status
+  Nieuw of Gepland) aan bij één andere organisatie of bij iedereen die
+  opdrachten ontvangt, met een bericht en eventueel een vergoeding. Vanuit de
+  werkorder via menu ⋯ → *Uitbesteden aan andere organisatie*, en terug te
+  zien in de nieuwe module **Uitbesteden**.
+- **Aannemen of afwijzen**: de ontvangende organisatie ziet het aanbod in
+  Uitbesteden → *Aangeboden aan ons* en neemt het aan of wijst het af (met
+  toelichting). Wie aanneemt krijgt een eigen werkorder (eigen nummer) met de
+  klantgegevens, werkstappen, zones en materialen. Bij een open aanbod krijgt
+  de eerste die aanneemt de opdracht.
+- **Alleen met opt-in**: versturen en ontvangen staan standaard uit en zet de
+  beheerder van de organisatie aan in Beheer → Instellingen → Uitbesteden,
+  met een werkgebied dat andere organisaties zien. Recht `uitbesteden`
+  (beheerder). Een testomgeving werkt alleen met andere testomgevingen.
+- **Alleen delen wat nodig is**: vóór het aannemen ziet een andere organisatie
+  geen klantnaam, adres, contactgegevens of instructies, alleen omschrijving,
+  plaats (postcodecijfers en woonplaats), planning, werkstappen met uren en
+  materialen. Offerte, prijzen, foto's en de eigen ploeg gaan nooit mee. De
+  uitbesteder ziet daarna alleen de voortgang (status, planning, afgevinkte
+  stappen, opleverdatum), bij de werkorder en in Uitbesteden.
+- Berichten per e-mail (als er een mailserver is ingesteld) bij een nieuw
+  aanbod, aannemen en afwijzen; alles in het auditlog.
+- Tabel `work_order_offers` (migratie 17, SQLite en PostgreSQL); testdata
+  biedt een geplande werkorder aan andere testomgevingen aan.
+
 ## 0.47.0
 
 - **Snellere database (Supabase)**: elk verzoek kost minder rondgangen naar

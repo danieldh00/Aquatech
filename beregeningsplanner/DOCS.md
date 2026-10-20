@@ -242,6 +242,28 @@ die), of in de module met **Nieuwe werkorder uit offerte**.
 Nummering `WO-<jaar>-0001` per tenant en omgeving; een beheerder kan een
 werkorder definitief wissen (AVG).
 
+### Uitbesteden aan andere organisaties
+
+Module **Uitbesteden**, alleen voor beheerders (recht `uitbesteden`). Staat
+pas aan als de beheerder het aanzet in Beheer → Instellingen → Uitbesteden:
+*versturen* (zelf werk uitbesteden) en *ontvangen* (opdrachten van anderen
+aannemen) apart, plus een werkgebied dat andere organisaties zien. Een
+testomgeving werkt alleen met andere testomgevingen.
+
+- **Aanbieden**: in een werkorder met status Nieuw of Gepland menu ⋯ →
+  *Uitbesteden aan andere organisatie*. Kies één organisatie of iedereen die
+  opdrachten ontvangt, met een bericht en eventueel een vergoeding. Intrekken
+  kan zolang niemand het heeft aangenomen.
+- **Aannemen**: in Uitbesteden → *Aangeboden aan ons*. De organisatie ziet
+  vooraf alleen omschrijving, plaats (postcodecijfers en woonplaats),
+  gewenste planning, werkstappen met uren en materialen. Na aannemen krijgt
+  zij een eigen werkorder met klantgegevens, instructies, zones, stappen en
+  materialen (zonder offerte, prijzen, foto's of ploeg). Afwijzen kan met een
+  toelichting; bij een open aanbod blijft het dan voor de anderen staan.
+- **Voortgang**: de uitbesteder ziet bij de werkorder en in *Door ons
+  uitbesteed* de status, planning, afgevinkte stappen en opleverdatum bij de
+  ontvanger, niets meer.
+
 ### Planning en afspraak met de klant
 
 Module **Planning** (tegel op het dashboard en in de zijbalk, zelfde rechten
@@ -316,14 +338,14 @@ controleert de rechten zelf. De standaardrollen staan in
 | **Hoofdbeheerder** | alles, in elke tenant, plus **Hoofdbeheer** (tenants en testomgevingen) | de eerste beheerder van het platform |
 | **Beheerder** | alles binnen de eigen organisatie: gebruikers, instellingen, historie, auditlog, alle plannen en offertes, bedrijfsgegevens, testomgevingen | accounts met rol beheerder, en inloggen met de (optionele) toegangscode |
 | **Installateur** | plannen maken en bewerken, alle plannen en offertes van de organisatie, offertes opstellen en aan een klant koppelen; geen gebruikers, instellingen of historie | accounts met rol installateur (vóór 0.22.0: *gebruiker*) |
-| **Planner** | werkorders inzien en bijwerken, inplannen in de planning, de afspraaklink naar de klant sturen en klantdossiers bekijken; geen offertes, plannen of beheer, en zelf geen uitvoerder | accounts met rol planner (sinds 0.48.0) |
+| **Planner** | werkorders inzien en bijwerken, inplannen in de planning, de afspraaklink naar de klant sturen en klantdossiers bekijken; geen offertes, plannen of beheer, en zelf geen uitvoerder | accounts met rol planner (sinds 0.49.0) |
 | **Klant** | alleen de eigen plannen, en de verzonden offertes voor zijn account inzien, afdrukken en accepteren of afwijzen | accounts met rol klant, en gasten |
 
 - **Rollen aanpassen** (**Beheer → Rollen**): een tabel met de rechten als
   rijen en de rollen als kolommen; een vinkje slaat direct op en geldt bij
   het volgende verzoek. Rechten: Beregeningsplanner, Alle plannen, Offertes
   opstellen, Alle offertes, Werkorders en klantdossiers, Planning, Uitvoerder
-  (kan worden toegewezen en is een kolom in de planning), en voor klantrollen
+  (kan worden toegewezen en is een kolom in de planning), Uitbesteden, en voor klantrollen
   Eigen offertes en Klantportaal. Een recht dat een ander nodig heeft (bijv.
   Planning → Werkorders) gaat automatisch mee aan; uitzetten neemt de
   afhankelijke rechten mee. Naam en omschrijving van elke rol zijn aan te
