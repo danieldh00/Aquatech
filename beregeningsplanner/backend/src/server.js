@@ -7,7 +7,7 @@ const { createRateLimiter } = require('./rateLimit');
 const { loadOrCreateSecret } = require('./options');
 const { createPlanAnalyzer, AnalyzeError } = require('./planAnalyzer');
 const { openDb, openDatabase, isPg } = require('./db');
-const { createStore, hashPassword, passwordProblem } = require('./store');
+const { createStore, hashPassword, passwordProblem, preferencesOf } = require('./store');
 const testdata = require('./testdata');
 const { createSettings, SettingsError, FIELDS } = require('./settings');
 const { createVault, loadOrCreateMasterKey } = require('./vault');
@@ -491,6 +491,35 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({ ok: true, user: store.publicUser(out.user) });
   }));
 
+  // ---------- Mijn profiel ----------
+  // Naam, e-mail, telefoon en persoonlijke voorkeuren van het eigen account
+  // (niet met de toegangscode, niet tijdens een impersonatie).
+  function profileOwner(req, res) {
+    const s = auth.session(req);
+    if (s?.via !== 'user') { res.status(400).json({ error: 'no_account', message: 'Log in met je eigen account om je profiel te bekijken.' }); return null; }
+    if (identify(req)?.impersonation) { res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' }); return null; }
+    return s.user;
+  }
+  const profileOf = (u) => ({ user: store.publicUser(u), preferences: preferencesOf(u) });
+
+  app.get('/api/account/profile', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const u = profileOwner(req, res);
+    if (u) res.json(profileOf(store.getUser(u.id)));
+  });
+
+  app.put('/api/account/profile', requireJson, (req, res) => {
+    const u = profileOwner(req, res);
+    if (!u) return;
+    const input = {};
+    for (const k of ['displayName', 'email', 'phone', 'preferences']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
+    const out = store.updateProfile(u.id, input);
+    if (out.error) return res.status(400).json({ error: 'invalid_profile', field: out.field, message: out.error });
+    // Welke velden, nooit de waarden (persoonsgegevens horen niet in het logboek).
+    audit(req, 'profiel_gewijzigd', { velden: Object.keys(input) }, u.id, u.tenant_id);
+    res.json(profileOf(out.user));
+  });
+
   app.get('/api/me', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const user = identify(req);
@@ -509,6 +538,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({
       user: user ? store.publicUser(user) : null,
       via,
+      // Persoonlijke voorkeuren (Mijn profiel), alleen voor een eigen account.
+      preferences: user?.kind === 'account' && !user.impersonation ? preferencesOf(user) : null,
       tenant: active,
       platformAdmin: Boolean(user?.platform_admin),
       // Organisatiecode waarmee de gebruikers van deze organisatie inloggen

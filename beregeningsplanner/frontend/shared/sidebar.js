@@ -47,7 +47,8 @@
   function render(data) {
     const items = [{ id: '', title: 'Overzicht', icon: 'home', status: 'actief', href: base || './' }]
       .concat(tools.visible(data.rights, data.disabled).map((m) => ({ ...m, href: m.href ? base + m.href : '' })));
-    const active = currentId(items.filter((m) => m.href));
+    const profile = { id: 'profiel', href: `${base}profiel/` };
+    const active = currentId(items.filter((m) => m.href).concat(data.profile ? [profile] : []));
     const link = (m) => {
       const label = `<span class="at-nav-ico">${tools.icon(m.icon)}</span><span class="at-nav-label">${esc(m.title)}</span>`;
       if (m.status !== 'actief' || !m.href) {
@@ -83,6 +84,7 @@
       ${section('', items.filter((m) => m.status === 'actief' && m.group !== 'beheer'))}
       ${section('Beheer', items.filter((m) => m.status === 'actief' && m.group === 'beheer'))}
       ${section('Binnenkort', items.filter((m) => m.status !== 'actief'))}
+      ${data.profile ? `<div class="at-nav-list at-nav-foot">${link({ id: 'profiel', title: 'Mijn profiel', icon: 'user', status: 'actief', href: `${base}profiel/` })}</div>` : ''}
       <button type="button" class="at-nav-collapse" title="Zijbalk in- of uitklappen" aria-label="Zijbalk in- of uitklappen">
         <span class="at-nav-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></span><span class="at-nav-label">Inklappen</span>
       </button>`;
@@ -136,7 +138,8 @@
   const getJson = (url) => fetch(base + url, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   Promise.all([getJson('api/me'), getJson('api/config')]).then(([me, config]) => {
     if (!me) return; // offline: laat de laatste stand staan
-    const data = { rights: me.rights || [], disabled: (config && config.modules) || {} };
+    // Mijn profiel alleen met een eigen account (niet met de toegangscode).
+    const data = { rights: me.rights || [], disabled: (config && config.modules) || {}, profile: Boolean(me.preferences) };
     if (tools.usesSidebar(data.rights)) {
       store.set(CACHE, JSON.stringify(data));
       render(data);

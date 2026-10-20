@@ -12,6 +12,11 @@ const crypto = require('crypto');
 const { transaction } = require('./db');
 const { createVault } = require('./vault');
 const { createMailer, validEmail } = require('./mailer');
+const { preferencesOf } = require('./store');
+
+// Kopie (bcc) van een verstuurde mail naar de afzender, als die dat in Mijn
+// profiel heeft aangezet en een e-mailadres heeft.
+const copyTo = (user) => (user && preferencesOf(user).mailCopy && validEmail(user.email) ? user.email : undefined);
 const { validShareBase, mailBody } = require('./quotes');
 
 const Core = require(path.join(__dirname, '..', '..', 'frontend', 'werkorders', 'workorder-core.js'));
@@ -434,7 +439,7 @@ function registerWorkOrderRoutes(app, ctx) {
     const text = String(message || '').slice(0, 5000);
     try {
       await mailer.send({
-        to: list, replyTo: p.email,
+        to: list, replyTo: p.email, bcc: copyTo(req.user),
         subject: String(subject || `Uw afspraak met ${p.companyName}`).slice(0, 300),
         ...mailBody(p, text.split(/\n{2,}/), { label: 'Afspraak bekijken en bevestigen', href: wo.share.url }),
       });

@@ -1,0 +1,27 @@
+/* Mijn profiel: kaarten met formulieren. Basis uit dashboard.css en beheer.css. */
+.profile { max-width: 860px; }
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; align-items: start; }
+.profile-grid[hidden] { display: none; }
+.pcard { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; min-width: 0; }
+.pcard h2 { margin: 0 0 6px; font-size: 17px; color: var(--primary-dark); }
+#f-details { grid-row: span 2; }
+.pcard input[type=text], .pcard input[type=email], .pcard input[type=tel], .pcard input[type=password], .pcard select {
+  font: inherit; font-family: var(--at-font); padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; width: 100%; min-width: 0;
+}
+.pcard input:focus, .pcard select:focus { outline: 2px solid var(--at-teal); outline-offset: 0; border-color: transparent; }
+.pcard input.invalid { border-color: #c62828; }
+.hint { color: var(--muted); font-size: 13px; margin: 2px 0 6px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 14px 0; font-size: 14px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.kv [hidden] { display: none; }
+.form-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
+.form-msg { font-size: 14px; color: var(--muted); }
+.form-msg.ok { color: var(--primary); }
+.form-msg.err { color: #c62828; }
+.panel-note { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+@media (max-width: 600px) {
+  .profile-grid { grid-template-columns: 1fr; }
+  #f-details { grid-row: auto; }
+}
+.pcard [hidden] { display: none; }

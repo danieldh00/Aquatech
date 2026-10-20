@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Mijn profiel – AquaTech Service</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="profiel.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Mijn profiel</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash profile">
+    <section class="intro">
+      <h1>Mijn profiel</h1>
+      <p class="muted">Je eigen gegevens, voorkeuren en wachtwoord.</p>
+    </section>
+
+    <p id="p-blocked" class="panel-note" hidden></p>
+
+    <div id="p-content" class="profile-grid" hidden>
+      <form id="f-details" class="pcard" novalidate>
+        <h2>Persoonlijke gegevens</h2>
+        <label class="field"><span class="label">Naam</span>
+          <input id="d-name" type="text" autocomplete="name" maxlength="80" required></label>
+        <label class="field"><span class="label">E-mailadres</span>
+          <input id="d-email" type="email" autocomplete="email" maxlength="200" placeholder="naam@voorbeeld.nl"></label>
+        <label class="field"><span class="label">Telefoonnummer</span>
+          <input id="d-phone" type="tel" autocomplete="tel" maxlength="25" placeholder="06 12345678"></label>
+        <dl class="kv">
+          <dt>Gebruikersnaam</dt><dd id="d-username"></dd>
+          <dt id="d-org-label" hidden>Organisatiecode</dt><dd id="d-org" hidden></dd>
+          <dt>Rol</dt><dd id="d-role"></dd>
+          <dt>Account sinds</dt><dd id="d-created"></dd>
+          <dt id="d-version-label" hidden>Versie van de app</dt><dd id="d-version" hidden></dd>
+        </dl>
+        <div class="form-foot">
+          <button class="btn primary" type="submit">Gegevens opslaan</button>
+          <span class="form-msg" role="status"></span>
+        </div>
+      </form>
+
+      <form id="f-prefs" class="pcard" novalidate>
+        <h2>Voorkeuren</h2>
+        <label class="field"><span class="label">Startpagina</span>
+          <select id="pr-start"></select>
+          <span class="hint">Waar de app opent als je hem start of na het inloggen.</span></label>
+        <label class="chk" id="pr-mail-wrap" hidden><input type="checkbox" id="pr-mail"> Stuur mij een kopie van offertes en afspraken die ik per e-mail verstuur</label>
+        <p class="hint" id="pr-mail-hint" hidden>Vul eerst je e-mailadres in bij Persoonlijke gegevens.</p>
+        <div class="form-foot">
+          <button class="btn primary" type="submit">Voorkeuren opslaan</button>
+          <span class="form-msg" role="status"></span>
+        </div>
+      </form>
+
+      <form id="f-password" class="pcard" novalidate>
+        <h2>Wachtwoord</h2>
+        <p class="hint">Minimaal 12 tekens. Na het wijzigen word je op je andere toestellen uitgelogd.</p>
+        <input type="text" id="pw-user" autocomplete="username" hidden>
+        <label class="field"><span class="label">Huidig wachtwoord</span>
+          <input id="pw-cur" type="password" autocomplete="current-password" maxlength="1024"></label>
+        <label class="field"><span class="label">Nieuw wachtwoord</span>
+          <input id="pw-new1" type="password" autocomplete="new-password" minlength="12" maxlength="128"></label>
+        <label class="field"><span class="label">Nieuw wachtwoord herhalen</span>
+          <input id="pw-new2" type="password" autocomplete="new-password" maxlength="128"></label>
+        <div class="form-foot">
+          <button class="btn primary" type="submit">Wachtwoord wijzigen</button>
+          <span class="form-msg" role="status"></span>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <script src="../shared/env.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="profiel.js"></script>
+</body>
+</html>

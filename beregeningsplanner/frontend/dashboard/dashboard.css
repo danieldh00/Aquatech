@@ -24,7 +24,6 @@ body {
   padding: 10px 16px; background: var(--primary-dark); color: #fff;
 }
 .brand { display: flex; align-items: center; gap: 8px; }
-.version { font-size: 12px; opacity: 0.75; }
 
 .dash { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
 .intro h1 { margin: 0 0 4px; font-size: 26px; font-weight: 700; color: var(--primary-dark); }
@@ -69,7 +68,6 @@ h2 .h2-link:hover { text-decoration: underline; }
   .brand { min-width: 0; flex: none; }
   .brand-logo { height: 24px; }
   .topbar-right { min-width: 0; gap: 8px; }
-  .version { display: none; }
   .account { min-width: 0; gap: 8px; font-size: 12px; }
   .account > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34vw; }
   .account > span:first-child .role { display: none; }
@@ -96,3 +94,27 @@ h2 .h2-link:hover { text-decoration: underline; }
 .support-card .err:empty { display: none; }
 .support-recent { margin-top: 12px; font-size: 13px; color: var(--muted); }
 .support-recent ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* Gebruikersmenu rechtsboven: rondje met initialen + naam, met daaronder
+   Mijn profiel en Uitloggen. */
+.user-menu { position: relative; min-width: 0; }
+.account .user-btn { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 260px; padding: 3px 10px 3px 3px; border-radius: 999px; }
+.user-btn .avatar { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--at-teal); color: #fff; font-weight: 700; font-size: 11px; letter-spacing: 0.02em; }
+.user-btn .user-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-pop {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; min-width: 220px; max-width: 300px;
+  background: #fff; color: #1f2a33; border-radius: 10px; box-shadow: 0 10px 30px rgba(23, 47, 94, 0.22); padding: 6px; font-size: 14px;
+}
+.user-pop[hidden] { display: none; }
+.user-head { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 10px; border-bottom: 1px solid #e6eaee; margin-bottom: 4px; }
+.user-head strong { color: #172f5e; overflow-wrap: anywhere; }
+.user-head span { color: #6b7a86; font-size: 12px; overflow-wrap: anywhere; }
+.account .user-pop a, .account .user-pop button {
+  display: block; width: 100%; text-align: left; color: #172f5e; border: 0; border-radius: 6px; padding: 8px 10px; background: none;
+}
+.account .user-pop a:hover, .account .user-pop button:hover { background: #eef3f8; }
+@media (max-width: 600px) {
+  .account .user-btn { padding: 3px; }
+  .user-btn .user-name { display: none; }
+  .user-btn .avatar { width: 30px; height: 30px; font-size: 12px; }
+}

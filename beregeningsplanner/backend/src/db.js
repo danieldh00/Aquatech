@@ -339,6 +339,13 @@ const MIGRATIONS = [
   );
   CREATE INDEX work_order_photos_wo ON work_order_photos (tenant_id, work_order_id, created_at);
   `,
+  // 15: Mijn profiel: contactgegevens en persoonlijke voorkeuren (JSON) per
+  // gebruiker.
+  `
+  ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT '';
+  ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT '';
+  ALTER TABLE users ADD COLUMN preferences TEXT NOT NULL DEFAULT '{}';
+  `,
 ];
 
 function openDb(file = ':memory:') {
