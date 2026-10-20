@@ -260,7 +260,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `password_change_required` (behalve me/health/auth). Standaard aan bij
   aanmaken door een beheerder en bij een reset (`withMustChange` in server.js);
   tests die met zo'n account inloggen geven `mustChangePassword: false` mee.
-- **Mijn profiel** (0.41.0): pagina `frontend/profiel/` (geen tegel in
+- **Mijn profiel** (0.43.0): pagina `frontend/profiel/` (geen tegel in
   modules.js; link in het gebruikersmenu van `dashboard/account.js` en
   onderaan `shared/sidebar.js`). API `GET/PUT /api/account/profile`
   (`store.updateProfile`), kolommen `users.email|phone|preferences`
