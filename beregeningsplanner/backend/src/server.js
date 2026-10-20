@@ -971,6 +971,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     workorders: workOrderStore, requireRight, requireAdmin, requireJson, audit,
     settingsOf: (req) => settingsFor(req.tenantId || tenant.id), settingsForTenant: (id) => settingsFor(id),
     remoteIp, mailerFor, tenantActive, publicLimiter,
+    photoCounts: (tid) => photoStore.counts(tid),
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
     // testaccounts daarvan erbij (net als bij de klantaccounts hierboven).
     staffTenantsOf: (req) => {

@@ -118,3 +118,63 @@ h2 .h2-link:hover { text-decoration: underline; }
   .user-btn .user-name { display: none; }
   .user-btn .avatar { width: 30px; height: 30px; font-size: 12px; }
 }
+
+/* Startscherm "Vandaag" (dashboard/today.js), mobiel-eerst */
+.today { margin-bottom: 8px; }
+.today-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.today-head h2 { margin: 0; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--primary-dark); }
+.today-date { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 6px; }
+.today-nav { display: flex; gap: 6px; }
+.today .btn {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 8px 14px;
+  font: inherit; font-weight: 600; font-size: 14px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--primary-dark); text-decoration: none; cursor: pointer;
+}
+.today .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.today .btn:disabled { opacity: 0.5; cursor: default; }
+.today-nav .btn[data-day="-1"], .today-nav .btn[data-day="1"] { min-width: 44px; font-size: 20px; padding: 4px 10px; }
+.today-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0 12px; font-size: 14px; }
+.today-tools .chk { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.today-tools .chk input { width: 18px; height: 18px; accent-color: var(--primary); }
+.today-tools .muted, .today .muted { color: var(--muted); }
+.today-link { margin-left: auto; color: var(--primary); font-weight: 600; text-decoration: none; }
+.jobs { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.job {
+  display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; background: var(--panel);
+  border: 1px solid var(--line); border-left: 5px solid var(--primary); border-radius: var(--radius);
+}
+.job.st-bezig { border-left-color: #ef6c00; }
+.job.st-gereed { border-left-color: #2e7d32; opacity: 0.85; }
+.job.st-open { border-left-color: #90a4ae; }
+.job-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.job-time { font-size: 20px; font-weight: 700; color: var(--primary-dark); font-variant-numeric: tabular-nums; }
+.job-title { font-size: 17px; font-weight: 700; color: var(--primary-dark); }
+.job-sub { font-size: 13px; color: var(--muted); }
+.job-addr { color: var(--text); font-weight: 600; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.job-contact { font-size: 14px; }
+.job-contact a { color: var(--primary); font-weight: 600; }
+.job-note { margin: 0; padding: 8px 10px; font-size: 14px; background: #fff8e1; border-radius: 6px; white-space: pre-line; }
+.job-progress { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.job-progress .bar { flex: 1; height: 6px; border-radius: 999px; background: #eceff1; overflow: hidden; }
+.job-progress .bar > span { display: block; height: 100%; background: var(--primary); }
+.job-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.job-actions .btn.primary { flex: 1 1 100%; }
+.job-actions .btn:not(.primary) { flex: 1 1 0; }
+.job-empty { padding: 16px; background: var(--panel); border: 1px dashed var(--line); border-radius: var(--radius); }
+.job-empty p { margin: 0 0 10px; color: var(--muted); }
+.job-empty p:last-child { margin: 0; }
+.job-next { max-width: 520px; }
+.today .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.wo-open { background: #eceff1; color: #455a64; }
+.pill.wo-gepland { background: var(--primary-soft); color: var(--primary-dark); }
+.pill.wo-bezig { background: #fff3e0; color: #ef6c00; }
+.pill.wo-gereed { background: #e8f5e9; color: #2e7d32; }
+.pill.appt-wacht { background: #fff3e0; color: #ef6c00; }
+.pill.appt-bevestigd { background: #e8f5e9; color: #2e7d32; }
+.pill.appt-ander_moment { background: #ffebee; color: #c62828; }
+@media (max-width: 600px) {
+  .dash { padding-top: 16px; }
+  .jobs { grid-template-columns: 1fr; }
+  .today-head h2 { font-size: 17px; }
+  .today-date { display: block; margin: 2px 0 0; }
+}
