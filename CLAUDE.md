@@ -227,8 +227,9 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
   de offerte-editor.
 - **Planning + afspraaklink** (0.36.0): module `frontend/planning/` (recht
-  `werkorders`, weekagenda per uitvoerder, slepen → `POST
-  /api/workorders/:id/schedule`). Werkorder heeft `endTime` en `days`
+  `werkorders`; 0.40.0: agenda dag (installateurs als kolommen) / werkweek /
+  maand, slepen naar tijdstip → `POST /api/workorders/:id/schedule`; zonder
+  eindtijd blok uit geplande uren via `Core.fitHours`, 8 u per werkdag). Werkorder heeft `endTime` en `days`
   (werkdagen, `Core.workDays`). Klantlink zoals de digitale offerte:
   kolommen `share_*`/`viewed_at`/`sent_*` op `work_orders` (migratie 13),
   pagina `frontend/openbaar/afspraak.html` (kop `X-Afspraak-Token`, API
@@ -236,7 +237,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `work_orders.appointment`; stand berekend in `appointmentOf` (reactie telt
   alleen voor hetzelfde `Core.momentKey`). `workorders.respond(row, …, { via:
   'account', userId })` is ook bruikbaar voor een klantportaal.
-- **Startscherm installateur** (0.40.0): blok *Vandaag* op het dashboard
+- **Startscherm installateur** (0.41.0): blok *Vandaag* op het dashboard
   (`dashboard/today.js`, recht `werkorders`), API `GET /api/my-day`
   (`workorders.day`: elke werkdag via `Core.workDays`, `next`, fototelling
   via `ctx.photoCounts`). `werkorders/?id=…#fotos` springt naar de foto's.
