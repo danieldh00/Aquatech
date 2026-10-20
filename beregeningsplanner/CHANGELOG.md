@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.35.0
+## 0.36.0
 
-- **Planning** (nieuwe module, tegel op het dashboard, voor beheerders en
+- **Planning** (nieuwe module, tegel op het dashboard en in de zijbalk, voor beheerders en
   installateurs): weekagenda van alle werkorders, met een rij per uitvoerder
   en een kolom per dag (weekend optioneel). Inplannen of verplaatsen door een
   werkorder naar een dag en uitvoerder te slepen; op een telefoon tik je eerst
@@ -25,6 +25,23 @@
   werkorder, het overzicht en de planning.
 - Testdata: de werkorders hebben een afspraaklink en een reactie van de
   klant (bevestigd of ander moment gevraagd).
+
+## 0.35.0
+
+- **Zijbalk voor beheerders**: beheerders en hoofdbeheerders krijgen op elke
+  pagina een vaste zijbalk met alle modules (Overzicht, Beregeningsplanner,
+  Plannenoverzicht, Offertes, Werkorders, onder *Beheer* Beheer en
+  Hoofdbeheer, en de geplande modules onder *Binnenkort*) in plaats van het
+  tegeldashboard. De actieve module is gemarkeerd. Welke modules erin staan
+  volgt uit de rechten en uit de modules die bij Beheer > Instellingen zijn
+  uitgezet, net als bij de tegels; een nieuwe module in
+  `dashboard/modules.js` verschijnt er vanzelf in.
+- De zijbalk is in te klappen tot een smalle iconenbalk (per browser
+  onthouden); de planner begint ingeklapt, zodat de tekening de ruimte houdt.
+  Op een smal scherm (telefoon, kleine tablet) is de zijbalk een lade die
+  opent met de menuknop links in de kopbalk; het projectmenu van de planner
+  blijft rechts.
+- Installateurs en klanten houden voorlopig het tegeldashboard.
 
 ## 0.34.0
 
