@@ -1,53 +1,103 @@
-/* Planning: weekagenda van de werkorders per uitvoerder. Basis uit beheer.css, plannen.css en werkorders.css. */
+/* Planning: agenda van de werkorders (dag, werkweek, maand). Basis uit beheer.css, plannen.css en werkorders.css. */
 .p-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-.p-toolbar h2 { margin: 0 6px; font-size: 18px; color: var(--primary-dark); text-transform: none; letter-spacing: 0; }
+.p-toolbar h2 { margin: 0 4px; font-size: 18px; color: var(--primary-dark); text-transform: none; letter-spacing: 0; }
 .p-toolbar .spacer { flex: 1; }
 .p-toolbar .chk { margin: 0; }
 .p-toolbar a.btn { text-decoration: none; }
-.p-toolbar input[type=date] { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+.p-toolbar input[type=date], .p-toolbar select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.p-nav, .p-opts { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+.seg button { font: inherit; border: 0; background: transparent; padding: 7px 14px; cursor: pointer; color: var(--text); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--primary-dark); color: #fff; font-weight: 600; }
 #p-pick { padding: 10px 14px; margin-bottom: 10px; background: var(--primary-soft); }
 
-.p-layout { display: grid; grid-template-columns: 1fr 280px; gap: 14px; align-items: start; }
-.p-gridwrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
-table.p-grid { border-collapse: collapse; width: 100%; min-width: 760px; table-layout: fixed; }
-.p-grid th, .p-grid td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); vertical-align: top; }
-.p-grid th { padding: 8px 6px; font-size: 13px; text-align: left; background: #f6f8fa; color: var(--primary-dark); }
-.p-grid th .d { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
-.p-grid th.today, .p-grid td.today { background: #f1faf4; }
-.p-grid th.who, .p-grid td.who { width: 140px; }
-.p-grid td.who { padding: 8px 6px; font-weight: 600; font-size: 13px; background: #fafbfc; }
-.p-grid td.who .sub { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
-.p-grid td.cell { padding: 4px; height: 70px; }
-.p-drop.over { outline: 2px dashed var(--primary); outline-offset: -3px; background: var(--primary-soft); }
-.p-pickmode .p-grid td.cell { cursor: copy; }
-.p-pickmode .p-grid td.cell:hover { background: var(--primary-soft); }
+.p-layout { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 14px; align-items: start; }
+.p-cal { min-width: 0; }
+.p-drop.over { outline: 2px dashed var(--primary); outline-offset: -3px; background: var(--primary-soft) !important; }
 
-.p-card { display: block; margin: 0 0 4px; padding: 5px 7px; border-radius: 6px; background: #fff; border: 1px solid var(--line); border-left: 4px solid #90a4ae;
-  font-size: 12px; line-height: 1.3; cursor: grab; color: var(--text); text-decoration: none; overflow: hidden; }
-.p-card:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+/* ---------- Kaartje van een werkorder ---------- */
+.p-card { display: block; box-sizing: border-box; padding: 4px 6px; border-radius: 6px; background: #fff; border: 1px solid var(--line);
+  border-left: 4px solid var(--who, #90a4ae); font-size: 12px; line-height: 1.25; cursor: grab; color: var(--text); text-decoration: none; overflow: hidden; }
+.p-card:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14); z-index: 3; }
 .p-card b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
 .p-card .sub { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .p-card .t { font-weight: 600; color: var(--primary-dark); }
-.p-card.st-gepland { border-left-color: var(--at-teal); }
-.p-card.st-bezig { border-left-color: #ef6c00; }
-.p-card.st-gereed { border-left-color: #2e7d32; opacity: 0.7; }
-.p-card.st-geannuleerd { border-left-color: #c62828; opacity: 0.55; text-decoration: line-through; }
+.p-card.st-gereed { opacity: 0.6; }
+.p-card.st-geannuleerd { opacity: 0.5; text-decoration: line-through; }
 .p-card.picked { outline: 2px solid var(--primary); }
 .p-card.dragging { opacity: 0.4; }
 .p-card .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; background: #b0bec5; }
 .p-card .dot.appt-wacht { background: #ef6c00; }
 .p-card .dot.appt-bevestigd { background: #2e7d32; }
 .p-card .dot.appt-ander_moment { background: #c62828; }
+.p-side .p-card, .tg-allday .p-card { margin: 0 0 4px; }
+
+/* ---------- Tijdrooster (dag en werkweek) ---------- */
+.tg-scroll { overflow: auto; max-height: calc(100vh - 230px); min-height: 360px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); -webkit-overflow-scrolling: touch; }
+.tg { display: grid; grid-template-columns: 52px repeat(var(--cols), minmax(var(--colmin, 150px), 1fr)); min-width: min-content; }
+.tg > * { border-right: 1px solid var(--line); }
+.tg-h { position: sticky; top: 0; z-index: 6; background: #f6f8fa; border-bottom: 1px solid var(--line); padding: 7px 6px; font-size: 13px; font-weight: 600; color: var(--primary-dark); min-width: 0; }
+.tg-h .d { display: block; font-size: 12px; color: var(--muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tg-h .n { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tg-h .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; background: var(--who); vertical-align: middle; }
+.tg-h.today { color: var(--at-green-dark); background: #eaf6ef; }
+.tg-corner { position: sticky; left: 0; z-index: 7; }
+.tg-lbl { position: sticky; left: 0; z-index: 4; background: #fafbfc; font-size: 11px; color: var(--muted); padding: 4px; text-align: right; }
+.tg-allday { min-height: 34px; padding: 3px; border-bottom: 2px solid var(--line); background: #fbfcfd; min-width: 0; }
+.tg-times { position: sticky; left: 0; z-index: 4; background: #fafbfc; }
+.tg-times span { position: absolute; right: 6px; font-size: 11px; color: var(--muted); transform: translateY(-50%); }
+.tg-times span:first-child { transform: none; }
+.tg-col { position: relative; min-width: 0;
+  background-image: linear-gradient(to bottom, var(--line) 1px, transparent 1px), linear-gradient(to bottom, #f0f3f6 1px, transparent 1px);
+  background-size: 100% var(--hour), 100% calc(var(--hour) / 2); }
+.tg-col.today { background-color: #f7fcf9; }
+.tg-col .p-card { position: absolute; left: calc(2px + var(--lane, 0) * (100% - 4px) / var(--lanes, 1)); width: calc((100% - 4px) / var(--lanes, 1) - 2px); }
+.tg-col .p-card.notime { border-style: dashed; border-left-style: solid; }
+.tg-now { position: absolute; left: 0; right: 0; height: 2px; background: #d9363e; z-index: 2; pointer-events: none; }
+.tg-now::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #d9363e; }
+.p-pickmode .tg-col, .p-pickmode .tg-allday, .p-pickmode .mg-day { cursor: copy; }
+
+/* ---------- Maand ---------- */
+.mg { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.mg-h { padding: 6px; font-size: 12px; font-weight: 600; color: var(--primary-dark); background: #f6f8fa; border-bottom: 1px solid var(--line); text-align: center; }
+.mg-day { min-height: 104px; padding: 3px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; cursor: pointer; }
+.mg-day:nth-child(7n) { border-right: 0; }
+.mg-day.out { background: #f7f9fb; }
+.mg-day.out .num { color: #b0bac4; }
+.mg-day.wkend { background: #fafbfc; }
+.mg-day .num { display: inline-block; font-size: 12px; font-weight: 600; color: var(--primary-dark); padding: 1px 5px; border-radius: 999px; margin-bottom: 2px; }
+.mg-day.today .num { background: var(--primary); color: #fff; }
+.mg-day .p-card { padding: 1px 5px; margin: 0 0 2px; font-size: 11.5px; white-space: nowrap; text-overflow: ellipsis; border-left-width: 3px; }
+.mg-day .more { font-size: 11px; color: var(--muted); padding-left: 4px; }
+.mg-day .mdots { display: flex; flex-wrap: wrap; gap: 3px; padding: 2px 3px; }
+.mg-day .mdot { width: 9px; height: 9px; border-radius: 50%; background: var(--who); }
 
 .p-side { display: flex; flex-direction: column; gap: 14px; }
 .p-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
 .p-panel h3 { margin: 0 0 4px; font-size: 15px; color: var(--primary-dark); }
 .p-panel .p-drop { min-height: 60px; padding: 4px; border-radius: 6px; }
 .p-panel.attention { border-color: #f2b8b5; background: #fff8f7; }
-.p-panel .reason { font-style: italic; color: #3d4a57; font-size: 12px; white-space: normal; }
-.p-legend { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.p-panel .reason { font-style: italic; color: #3d4a57; font-size: 12px; margin: 0 0 8px; }
+.p-legend { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
 
-@media (max-width: 980px) {
-  .p-layout { grid-template-columns: 1fr; }
-  .p-side { order: -1; }
+@media (max-width: 1000px) {
+  .p-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .p-main .intro .p-help, .p-main #p-stats { display: none; }
+  .p-toolbar { gap: 6px; }
+  .p-toolbar .seg { order: 1; width: 100%; }
+  .p-toolbar .seg button { flex: 1; padding: 9px 4px; }
+  .p-toolbar .p-nav { order: 2; }
+  .p-toolbar h2 { order: 3; font-size: 15px; flex: 1; min-width: 0; }
+  .p-toolbar .spacer { display: none; }
+  .p-toolbar .p-opts { order: 4; width: 100%; }
+  .p-toolbar .p-opts select { flex: 1; min-width: 0; }
+  .p-toolbar .p-opts input[type=date] { width: 9.5em; min-width: 0; }
+  .p-toolbar .p-opts a.btn, .p-toolbar #p-export { display: none; }
+  .tg { --colmin: 128px; }
+  .tg-scroll { max-height: calc(100vh - 190px); border-radius: 8px; }
+  .mg-day { min-height: 64px; }
+  .mg-h { font-size: 11px; padding: 4px 0; }
 }

@@ -148,6 +148,27 @@
   }
   const momentKey = (m) => [m.date, m.startTime, m.endTime, m.days].join('|');
 
+  // Lengte van een werkdag op de bouwplaats (uren), voor het verdelen van de
+  // geplande uren uit de offerte over de dagen.
+  const WORKDAY_HOURS = 8;
+  const minOf = (t) => (isTime(t) ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3)) : null);
+  const timeOf = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+
+  /**
+   * Blok uit de geplande uren: vanaf de starttijd zoveel uur, en meer dan een
+   * werkdag verdeeld over zoveel werkdagen dat elke dag even lang is (12 uur
+   * vanaf 08:00 = 2 dagen 08:00–14:00). Geeft { endTime, days } of null
+   * (geen starttijd of geen uren).
+   */
+  function fitHours(startTime, hours, dayHours = WORKDAY_HOURS) {
+    const s = minOf(startTime);
+    const h = Number(hours) || 0;
+    if (s == null || h <= 0) return null;
+    const days = Math.min(MAX_DAYS, Math.max(1, Math.ceil(h / dayHours - 1e-9)));
+    const per = Math.max(15, Math.round(((h / days) * 60) / 15) * 15);
+    return { endTime: timeOf(Math.min(24 * 60 - 1, s + per)), days };
+  }
+
   /** Voortgang: afgevinkte stappen, uren gepland/werkelijk, verzamelde materialen. */
   function progress(d) {
     const steps = (d && d.steps) || [];
@@ -313,7 +334,7 @@
     };
   }
 
-  const api = { STATUSES, PHASES, APPOINTMENT, MAX_ITEMS, MAX_DAYS, addDays, workDays, moment, momentKey, isDate, isTime, sanitize, sanitizeStep, sanitizeMaterial, progress, fromQuote, zonesFromPlan, round2 };
+  const api = { STATUSES, PHASES, APPOINTMENT, MAX_ITEMS, MAX_DAYS, WORKDAY_HOURS, addDays, workDays, moment, momentKey, fitHours, isDate, isTime, sanitize, sanitizeStep, sanitizeMaterial, progress, fromQuote, zonesFromPlan, round2 };
   root.WorkOrderCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
