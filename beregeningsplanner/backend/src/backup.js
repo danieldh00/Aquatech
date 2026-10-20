@@ -7,6 +7,8 @@
 // versleutelde database + authenticatietag (16). Zonder de hoofdsleutel is een
 // back-up dus waardeloos; kopieën buiten de server zijn veilig te bewaren.
 //
+// Maken (ook terwijl de app draait; SQLite of PostgreSQL volgens DATABASE_URL):
+//   node src/backup.js create [map]        (standaard BACKUP_DIR of DATA_DIR/backups)
 // Terugzetten (met de app gestopt):
 //   node src/backup.js decrypt <back-up.db.enc> <aquatech.db>
 // De hoofdsleutel komt net als in de app uit AQUATECH_MASTER_KEY_FILE,
@@ -126,21 +128,30 @@ module.exports = { createBackup, listBackups, pruneBackups, decryptFile, isBacku
 
 if (require.main === module) {
   const [cmd, src, dest] = process.argv.slice(2);
-  if (cmd !== 'decrypt' || !src || !dest) {
-    console.error('Gebruik: node src/backup.js decrypt <back-up.db.enc> <doelbestand.db>');
+  if (!(cmd === 'decrypt' && src && dest) && cmd !== 'create') {
+    console.error('Gebruik: node src/backup.js create [map]\n       node src/backup.js decrypt <back-up.db.enc> <doelbestand.db>');
     process.exit(2);
   }
   const { createVault, loadOrCreateMasterKey } = require('./vault');
   const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', '..', '..', 'data');
-  if (fs.existsSync(dest)) {
-    console.error(`${dest} bestaat al; kies een ander doel of verplaats het eerst.`);
-    process.exit(1);
-  }
+  // Nooit een nieuwe hoofdsleutel maken: dan is de back-up met de echte sleutel niet te lezen.
   if (!process.env.AQUATECH_MASTER_KEY_FILE && !process.env.AQUATECH_MASTER_KEY && !fs.existsSync(path.join(dataDir, 'master-key'))) {
     console.error('Geen hoofdsleutel gevonden (AQUATECH_MASTER_KEY_FILE, AQUATECH_MASTER_KEY of DATA_DIR/master-key).');
     process.exit(1);
   }
-  decryptFile(src, dest, keyOf(createVault(loadOrCreateMasterKey(dataDir).key)))
-    .then(() => console.log(`Teruggezet naar ${dest}. Zet dit bestand als aquatech.db in de datamap (app gestopt).`))
-    .catch((err) => { console.error(err.message); process.exit(1); });
+  const vault = createVault(loadOrCreateMasterKey(dataDir).key);
+  if (cmd === 'create') {
+    const { openDatabase } = require('./db');
+    const dir = src || process.env.BACKUP_DIR || path.join(dataDir, 'backups');
+    createBackup({ db: openDatabase(dataDir), dir, vault })
+      .then((b) => { console.log(`Back-up gemaakt: ${path.join(dir, b.name)} (${b.size} bytes)`); process.exit(0); })
+      .catch((err) => { console.error(`Back-up mislukt: ${err.message}`); process.exit(1); });
+  } else if (fs.existsSync(dest)) {
+    console.error(`${dest} bestaat al; kies een ander doel of verplaats het eerst.`);
+    process.exit(1);
+  } else {
+    decryptFile(src, dest, keyOf(vault))
+      .then(() => console.log(`Teruggezet naar ${dest}. Zet dit bestand als aquatech.db in de datamap (app gestopt), of kopieer het met migrate-to-postgres.js naar PostgreSQL.`))
+      .catch((err) => { console.error(err.message); process.exit(1); });
+  }
 }

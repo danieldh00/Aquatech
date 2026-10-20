@@ -65,7 +65,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   gedegradeerd. Daarna is inloggen verplicht (`login.html`), tenzij de
   instelling `guestAccess` aan staat en er geen toegangscode is.
 - **Nooit secrets in de repo of in chat**: toegangscode en API-sleutel alleen
-  in **Beheer → Instellingen** (tabel `settings` in `/data/aquatech.db`,
+  in **Beheer → Instellingen** (tabel `settings` in de database,
   `backend/src/settings.js`). Volgorde: database → env → standaard; env is
   alleen een startwaarde. Geheimen gaan nooit volledig naar de
   frontend (`view()` geeft `set` + laatste 4 tekens van de sleutel).
@@ -79,7 +79,8 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   rehash bij inloggen. Eerste beheerder vereist installatiecode (log,
   `SETUP_CODE`) of toegangscode. Tabel `audit` (`store.audit`, nooit geheimen
   in `detail`), bewaartermijnen via `app.locals.maintenance` (elk uur).
-  Back-ups (`backup.js`, 0.19.0): VACUUM INTO + AES-GCM (`vault.derive('back-ups')`),
+  Back-ups (`backup.js`, 0.19.0): VACUUM INTO (PostgreSQL: kopie naar SQLite) + AES-GCM (`vault.derive('back-ups')`),
+  ook via `node src/backup.js create` (update.sh doet dat vóór elke update),
   `/data/backups` of `BACKUP_DIR`, dagelijks via `app.locals.backupIfDue`,
   `backupKeepDays`; `store.purgePlan` wist plan + historie-inhoud (AVG).
   CSP in server.js: inline scripts alleen in login/setup.html (op hash);
@@ -130,6 +131,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (`frontend/beheer/`, `role: 'beheerder'` in modules.js) toont historie,
   plannen en gebruikers. De API is ook onder `<module>/api/...` bereikbaar
   (modules gebruiken relatieve `api/...`).
+- **Productie draait op Supabase** (sinds 2026-10-20, schema `aquatech`,
+  Session pooler, secret `secrets/database-url` op apps01). Elke feature moet
+  op PostgreSQL werken: CI (`test-postgres`) en `release.yml` draaien de hele
+  suite ook tegen PostgreSQL. SQLite blijft de terugval zonder URL (lokaal,
+  tests, noodgeval) en het formaat van de back-ups. Opslag in de database
+  telt mee voor de Supabase-limiet (gratis: 500 MB), denk aan grote blobs.
 - **PostgreSQL/Supabase** (0.34.0): `DATABASE_URL`/`DATABASE_URL_FILE` →
   `pgdb.js` (zelfde synchrone interface als node:sqlite via werkthread +
   `Atomics.wait`, `?` → `$n`), schema in `pgschema.js` (eigen schema

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.39.0
+
+- **Supabase is de standaard in productie**: de productie-compose gebruikt
+  `DATABASE_URL_FILE`; de release-pipeline test elke versie ook tegen
+  PostgreSQL voordat er een image komt. SQLite blijft de terugval zonder
+  databaseverbinding (lokaal, tests, noodgeval) en het formaat van de
+  versleutelde back-ups.
+- **Back-up op commando**: `node src/backup.js create` maakt een versleutelde
+  back-up, ook van PostgreSQL en terwijl de app draait. `update.sh` doet dat
+  vóór elke update (bij Supabase in plaats van de oude kopie van
+  `aquatech.db`) en zet bij een mislukte update alleen de image terug.
+
 ## 0.38.0
 
 - **Foto's bij werkorders**: in de werkorder de kaart *Foto's van de
