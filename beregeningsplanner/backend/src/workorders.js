@@ -364,6 +364,8 @@ function momentText(m) {
  */
 function registerWorkOrderRoutes(app, ctx) {
   const { workorders, requireRight, requireAdmin, requireJson, staffTenantsOf, audit } = ctx;
+  // Kleurthema van de tenant voor de openbare pagina (CSS-variabelen).
+  const themeOf = ctx.themeOf || (() => null);
   const settingsOf = ctx.settingsOf;
   const settingsForTenant = ctx.settingsForTenant;
   const tenantActive = ctx.tenantActive || (() => true);
@@ -520,7 +522,7 @@ function registerWorkOrderRoutes(app, ctx) {
     if (!r) return;
     res.setHeader('Cache-Control', 'no-store');
     if (req.query.preview !== '1') workorders.markViewed(r);
-    res.json({ appointment: workorders.publicView(r), profile: publicProfile(r.tenant_id) });
+    res.json({ appointment: workorders.publicView(r), profile: publicProfile(r.tenant_id), theme: themeOf(r.tenant_id) });
   });
 
   app.post('/api/public/appointment/respond', publicLimiter, requireJson, (req, res) => {

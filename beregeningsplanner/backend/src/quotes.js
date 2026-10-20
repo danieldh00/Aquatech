@@ -388,6 +388,8 @@ function registerQuoteRoutes(app, ctx) {
   // Openbare link: instellingen van de tenant van de offerte, en geen
   // uitgeschakelde tenants. mailerFor is te vervangen in tests.
   const settingsForTenant = ctx.settingsForTenant;
+  // Kleurthema van de tenant voor de openbare pagina (CSS-variabelen).
+  const themeOf = ctx.themeOf || (() => null);
   const tenantActive = ctx.tenantActive || (() => true);
   const mailerFor = ctx.mailerFor || ((settings) => createMailer(settings));
   const remoteIp = ctx.remoteIp || ((req) => req.socket?.remoteAddress || '');
@@ -594,7 +596,7 @@ function registerQuoteRoutes(app, ctx) {
     if (!r) return;
     if (req.query.preview !== '1') quotes.markViewed(r);
     const settings = settingsForTenant(r.tenant_id);
-    res.json({ quote: quotes.publicView(r), profile: settings.get('quoteProfile') });
+    res.json({ quote: quotes.publicView(r), profile: settings.get('quoteProfile'), theme: themeOf(r.tenant_id) });
   });
 
   app.post('/api/public/quote/respond', publicLimiter, requireJson, (req, res) => {

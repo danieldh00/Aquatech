@@ -90,7 +90,14 @@
     stopImpersonation,
   };
 
-  const ready = () => { mark(); markImpersonation(); };
+  // Kleur van de browserbalk (mobiel) volgt het kleurthema (shared/theme.css).
+  function themeColor() {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const navy = getComputedStyle(document.documentElement).getPropertyValue('--at-navy').trim();
+    if (meta && /^#[0-9a-f]{6}$/i.test(navy)) meta.setAttribute('content', navy);
+  }
+
+  const ready = () => { mark(); markImpersonation(); themeColor(); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready);
   else ready();
 })(window);

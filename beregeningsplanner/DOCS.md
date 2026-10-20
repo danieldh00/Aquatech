@@ -473,6 +473,28 @@ Beheerders regelen alles onder **Beheer → Instellingen** (ook direct via
 - Wie met de toegangscode is ingelogd kan die niet leegmaken (dan zou je
   jezelf buitensluiten); maak daarvoor eerst een beheerdersaccount aan.
 
+### Kleuren (hoofdbeheerder)
+
+Een hoofdbeheerder kiest de kleuren van de app onder **Hoofdbeheer →
+Kleuren**: hoofdkleur (kopbalk, zijbalk, koppen), actiekleur (knoppen,
+voortgang) en accentkleur (randen, focusrand). De lichte en donkere tinten
+van de actiekleur rekent de app zelf uit. Een voorbeeld toont het resultaat
+meteen.
+
+- **Voor**: *Alle organisaties (standaard)* geldt overal, ook op de
+  inlogpagina en de openbare offerte- en afspraakpagina. Een organisatie kan
+  een **eigen thema** krijgen (handig voor de eigen huisstijl van een klant
+  van het platform); haar testomgevingen volgen dat.
+- **Leesbaarheid**: op de hoofd- en actiekleur staat witte tekst. De app
+  weigert een hoofdkleur onder 4,5:1 en een actiekleur onder 3:1 contrast met
+  wit (WCAG 2.1 AA) en toont per kleur de verhouding.
+- **Standaardkleuren terugzetten** zet de huisstijl van AquaTech Service
+  terug (navy `#172f5e`, groen `#19924f`, teal `#2cb0c0`); bij een
+  organisatie verwijdert **Eigen thema verwijderen** het eigen thema.
+- Technisch: instelling `theme` (alleen via `/api/platform/theme`), de
+  server levert `shared/theme.css` met de CSS-variabelen `--at-*` uit
+  `shared/brand.css`. E-mails gebruiken nog de vaste huisstijl.
+
 ## Server (Docker)
 
 De app is een gewone webserver in een Docker-container

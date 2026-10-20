@@ -53,7 +53,7 @@ table.grid tr.off td { color: var(--muted); }
 .err { color: #c62828; font-size: 14px; min-height: 18px; margin-top: 6px; }
 .chk { display: inline-flex; gap: 6px; align-items: center; margin: 4px 0 10px; font-size: 14px; }
 
-.modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+.modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
 .modal[hidden] { display: none; }
 .modal-card { position: relative; background: #fff; border-radius: 12px; padding: 20px 24px; width: min(720px, 100%); max-height: 88vh; overflow-y: auto; }
 .modal-card .close { position: absolute; top: 10px; right: 10px; }

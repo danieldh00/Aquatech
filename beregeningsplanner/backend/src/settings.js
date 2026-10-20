@@ -3,6 +3,8 @@ const { createVault } = require('./vault');
 const { sanitizeProfile } = require('./quotes');
 const { sanitizeMail } = require('./mailer');
 const { sanitizeShop } = require('./woocommerce');
+const path = require('path');
+const Theme = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'theme.js'));
 
 // App-instellingen, te beheren door beheerders via Beheer > Instellingen. Ze
 // staan per tenant in de database (tabel settings) en werken zonder herstart.
@@ -44,6 +46,10 @@ const FIELDS = {
   shopSource: { type: 'object', default: {}, sanitize: sanitizeShop },
   shopConsumerKey: { type: 'secret', default: '', min: 10, hint: true },
   shopConsumerSecret: { type: 'secret', default: '', min: 10 },
+  // Kleurthema (shared/theme.js): alleen door een hoofdbeheerder te kiezen via
+  // Hoofdbeheer (platform: niet via Beheer > Instellingen). In de hoofdtenant
+  // geldt het voor alle organisaties, in een live-tenant als eigen thema.
+  theme: { type: 'object', default: {}, sanitize: Theme.sanitize, platform: true },
 };
 
 class SettingsError extends Error {
