@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.38.0
+## 0.39.0
 
 - **Supabase is de standaard in productie**: de productie-compose gebruikt
   `DATABASE_URL_FILE`; de release-pipeline test elke versie ook tegen
@@ -11,6 +11,34 @@
   back-up, ook van PostgreSQL en terwijl de app draait. `update.sh` doet dat
   vóór elke update (bij Supabase in plaats van de oude kopie van
   `aquatech.db`) en zet bij een mislukte update alleen de image terug.
+
+## 0.38.0
+
+- **Foto's bij werkorders**: in de werkorder de kaart *Foto's van de
+  installatie*. Op de telefoon opent **Foto maken** direct de camera,
+  **Foto's kiezen** neemt er meerdere tegelijk uit de galerij (op de
+  computer ook slepen). Per foto de fase (voor, tijdens, oplevering), een
+  bijschrift en of de klant hem mag zien; vergroten met vorige/volgende (ook
+  vegen). De browser verkleint foto's naar max. 2048 px (JPEG), waarmee ook
+  EXIF en GPS-locatie wegvallen; de server haalt bij JPEG alsnog EXIF/XMP
+  weg, accepteert alleen JPEG, PNG en WebP (op inhoud gecontroleerd) en
+  max. 100 foto's per werkorder.
+- **Veilige opslag**: foto en miniatuur staan versleuteld (AES-256-GCM, eigen
+  van de hoofdsleutel afgeleide sleutel, tenant + foto-id als AAD) in de
+  database (nieuwe tabel `work_order_photos`, migratie 14). Ze gaan dus mee
+  in de versleutelde back-ups en in Supabase, en verdwijnen met het
+  definitief wissen van de werkorder, de testomgeving of de tenant.
+- **Klantdossiers** (nieuwe module, beheerder en installateur): per klant
+  alle installaties met opleverdatum, wie heeft afgetekend en uitgevoerd,
+  opmerkingen, ontwerp, zone-indeling, geplaatste materialen, foto's per
+  fase en de offertes. Af te drukken als **opleverrapport** (PDF via het
+  printvenster), met of zonder interne foto's. Overzicht van alle klanten
+  met Excel-export. Een klant hoort bij een dossier via zijn klantaccount of,
+  zonder account, via de naam op de werkorder.
+- Voor het klantportaal: `GET /api/portal/photos/:id` geeft een klant alleen
+  de zichtbaar gezette foto's van zijn eigen werkorders.
+- Testdata: foto's bij de opgeleverde werkorder en de werkorder in
+  uitvoering.
 
 ## 0.37.0
 
@@ -26,6 +54,7 @@
 - Nieuw recht `portaal` voor de rol klant; API `/api/portal`.
 - Testdata: een vierde testklant (`klant4`) met een ingeplande werkorder,
   zodat het portaal een afspraak toont.
+
 ## 0.36.0
 
 - **Planning** (nieuwe module, tegel op het dashboard en in de zijbalk, voor beheerders en

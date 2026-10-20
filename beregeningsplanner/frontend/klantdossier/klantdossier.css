@@ -1,0 +1,51 @@
+/* Klantdossiers: overzicht per klant en het dossier zelf (ook als opleverrapport afdrukbaar). */
+.edit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+.edit-bar .spacer { flex: 1; }
+.edit-bar .chk { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.badge-acc { display: inline-block; margin-left: 6px; font-size: 11px; padding: 0 7px; border-radius: 999px; background: #e0f7fa; color: #00838f; vertical-align: middle; }
+
+.d-head { display: flex; align-items: center; gap: 16px; background: var(--at-navy, #172f5e); color: #fff; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 14px; }
+.d-head img { height: 34px; }
+.d-head .d-title { flex: 1; }
+.d-head h1 { margin: 0; font-size: 22px; color: #fff; }
+.d-head .sub { color: #c9d4e3; font-size: 13px; }
+.d-head .d-company { text-align: right; font-size: 12px; color: #c9d4e3; white-space: pre-line; }
+
+.d-cust { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 18px; font-size: 14px; }
+.d-cust .lbl { display: block; font-size: 12px; color: var(--muted); }
+
+.inst { border-left: 4px solid var(--at-green, #19924f); }
+.inst.st-bezig, .inst.st-gepland, .inst.st-open { border-left-color: #b0bec5; }
+.inst-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+.inst-head h2 { margin: 0; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--primary-dark); }
+.inst-head .spacer { flex: 1; }
+.inst-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px 18px; font-size: 14px; margin-bottom: 10px; }
+.inst-info .lbl { display: block; font-size: 12px; color: var(--muted); }
+.inst h3 { font-size: 14px; margin: 14px 0 6px; }
+.inst .notes { white-space: pre-line; background: #fafbfc; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 14px; }
+.inst details summary { cursor: pointer; font-weight: 600; font-size: 14px; margin: 12px 0 6px; }
+.inst table.mini { border-collapse: collapse; width: 100%; font-size: 13px; }
+.inst table.mini th, .inst table.mini td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.inst table.mini th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.inst table.mini td.num, .inst table.mini th.num { text-align: right; }
+.inst table.mini tr.bad td { color: #c62828; }
+.d-foot { color: var(--muted); font-size: 12px; margin-top: 16px; }
+
+@media (max-width: 760px) {
+  .d-head { flex-wrap: wrap; }
+  .d-head .d-company { display: none; }
+}
+
+@media print {
+  @page { margin: 14mm 12mm; }
+  body { background: #fff; }
+  .topbar, .no-print, #list-view { display: none !important; }
+  .dash { padding: 0; max-width: none; }
+  .card-form { border: 0; padding: 0; margin: 0 0 12px; }
+  .inst { border-left: 0; }
+  .inst + .inst { break-before: page; }
+  .inst h3, .inst .ph-group { break-after: avoid; }
+  .d-head { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .inst details summary::marker { content: ""; }
+  a { color: inherit; text-decoration: none; }
+}

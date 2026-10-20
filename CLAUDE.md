@@ -243,6 +243,15 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   als `quotes.customer_id` = klant en offerte ≠ concept. Optioneel:
   `ctx.photos.list(tid, woId, { customerOnly })` en `workorders.respond`
   (afspraak bevestigen, `POST .../appointment`).
+- **Foto's + klantdossier** (0.38.0): `backend/src/photos.js` (tabel
+  `work_order_photos`, migratie 14; afbeelding + miniatuur via
+  `vault.sealBytes` met AAD `<tenant>:foto:<id>:beeld|mini`, als tekst in de
+  db zodat ze in back-ups/Supabase meegaan; server controleert JPEG/PNG/WebP
+  op inhoud en stript EXIF). Frontend `werkorders/photos.js|.css` (upload,
+  camera via `capture`, `PhotoViewer`), module `frontend/klantdossier/`
+  (`/api/dossiers[/:key]`, key `a-<klant-id>` of `n-<hash naam>`).
+  Klantportaal: `photos.list(..., { customerOnly: true })` en
+  `GET /api/portal/photos/:id`.
 - **Wachtwoord** (0.31.0): eigen wijzigen via `POST /api/account/password`
   (pagina `backend/src/password.html`, route `/wachtwoord`, inline script op
   CSP-hash). `users.must_change_password` (migratie 12): zolang aan toont

@@ -1,0 +1,48 @@
+/* Foto's bij werkorders en in het klantdossier: uploadbalk, galerij en vergroting. */
+.ph-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.ph-bar select { width: auto; }
+.ph-bar .chk { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 14px; color: var(--text); }
+.ph-bar .btn.cam { background: var(--primary); border-color: var(--primary); color: #fff; }
+.ph-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.ph-status { font-size: 13px; color: var(--muted); }
+.ph-empty { color: var(--muted); font-size: 14px; margin: 4px 0; }
+
+.ph-group { margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.ph-tile { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+.ph-tile .ph-img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #e6eaef; cursor: zoom-in; border: 0; padding: 0; }
+.ph-tile .ph-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ph-tile .ph-meta { padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.ph-tile .ph-meta input { font-size: 13px; padding: 4px 6px; }
+.ph-tile .ph-row { display: flex; gap: 6px; align-items: center; justify-content: space-between; }
+.ph-tile .ph-row select { font-size: 12px; padding: 3px 4px; flex: 1 1 auto; min-width: 0; }
+.ph-tile label.ph-vis { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 12px; color: var(--text); cursor: pointer; }
+.ph-tile .ph-cap { color: var(--text); font-size: 13px; }
+.ph-tile.hidden-for-customer .ph-img img { opacity: 0.8; }
+.ph-badge { position: absolute; z-index: 1; top: 6px; left: 6px; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: rgba(23, 47, 94, 0.85); color: #fff; }
+.ph-badge.off { background: #6b7785; }
+.ph-tile.pending { opacity: 0.6; }
+
+.ph-viewer { position: fixed; inset: 0; z-index: 50; background: rgba(10, 18, 34, 0.92); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px; }
+.ph-viewer[hidden] { display: none; }
+.ph-viewer img { max-width: 100%; max-height: calc(100vh - 110px); object-fit: contain; border-radius: 4px; background: #222; }
+.ph-viewer .ph-vcap { color: #fff; margin-top: 10px; text-align: center; font-size: 14px; max-width: 900px; }
+.ph-viewer .ph-vcap .sub { color: #b7c2d0; display: block; font-size: 12px; }
+.ph-viewer button { position: absolute; background: rgba(255, 255, 255, 0.12); border: 0; color: #fff; font-size: 26px; width: 46px; height: 46px; border-radius: 50%; cursor: pointer; }
+.ph-viewer button:hover { background: rgba(255, 255, 255, 0.25); }
+.ph-viewer .ph-close { top: 12px; right: 12px; font-size: 20px; }
+.ph-viewer .ph-prev { left: 12px; top: 50%; }
+.ph-viewer .ph-next { right: 12px; top: 50%; }
+.ph-viewer a.ph-open { position: absolute; top: 18px; left: 16px; color: #fff; font-size: 13px; }
+
+@media (max-width: 760px) {
+  .ph-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .ph-bar .btn { flex: 1 1 auto; }
+}
+
+@media print {
+  .ph-bar, .ph-viewer, .ph-tile select, .ph-tile button.del, .ph-tile .ph-vis { display: none !important; }
+  .ph-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .ph-tile { break-inside: avoid; border-color: #ccc; }
+  .ph-badge { display: none; }
+}

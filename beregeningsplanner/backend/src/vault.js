@@ -68,9 +68,32 @@ function createVault(masterKey) {
     return Buffer.concat([d.update(Buffer.from(ct, 'base64url')), d.final()]).toString('utf8');
   }
 
+  // Bestanden (foto's): eigen afgeleide sleutel, binaire inhoud, als tekst
+  // ("f1:iv:tag:inhoud" in base64url) zodat het in elke database past.
+  const fileKey = derive('bestanden');
+
+  /** Versleutelt een Buffer; `context` (bijv. tenant + bestands-id) als AAD. */
+  function sealBytes(buf, context = '') {
+    const iv = crypto.randomBytes(12);
+    const c = crypto.createCipheriv('aes-256-gcm', fileKey, iv);
+    c.setAAD(Buffer.from(String(context)));
+    const ct = Buffer.concat([c.update(buf), c.final()]);
+    return ['f1', iv.toString('base64url'), c.getAuthTag().toString('base64url'), ct.toString('base64url')].join(':');
+  }
+
+  /** Ontsleutelt naar een Buffer; gooit een fout bij een verkeerde sleutel, context of geknoei. */
+  function openBytes(sealed, context = '') {
+    const [v, iv, tag, ct] = String(sealed).split(':');
+    if (v !== 'f1' || !iv || !tag || ct === undefined) throw new Error('Onbekend versleutelingsformaat.');
+    const d = crypto.createDecipheriv('aes-256-gcm', fileKey, Buffer.from(iv, 'base64url'));
+    d.setAAD(Buffer.from(String(context)));
+    d.setAuthTag(Buffer.from(tag, 'base64url'));
+    return Buffer.concat([d.update(Buffer.from(ct, 'base64url')), d.final()]);
+  }
+
   const isSealed = (v) => typeof v === 'string' && /^v1:[\w-]+:[\w-]+:[\w-]*$/.test(v);
 
-  return { seal, open, isSealed, derive };
+  return { seal, open, isSealed, derive, sealBytes, openBytes };
 }
 
 module.exports = { createVault, loadOrCreateMasterKey, parseKey, KEY_FILE };

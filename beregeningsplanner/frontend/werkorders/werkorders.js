@@ -255,6 +255,7 @@
     renderSteps();
     renderMaterials();
     renderProgress();
+    if (window.WorkOrderPhotos) window.WorkOrderPhotos.open(wo, { toast, statusOf: () => $('#e-status').value });
     window.scrollTo(0, 0);
   }
 

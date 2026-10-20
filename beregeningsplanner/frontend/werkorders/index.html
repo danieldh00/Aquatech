@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="../plannen/plannen.css">
   <link rel="stylesheet" href="../offertes/offertes.css">
   <link rel="stylesheet" href="werkorders.css">
+  <link rel="stylesheet" href="photos.css">
 </head>
 <body>
   <header class="topbar">
@@ -139,6 +140,24 @@
         <label>Afgetekend door (klant)<input data-f="report.signedBy" maxlength="200"></label>
       </div>
     </section>
+
+    <section class="card-form" id="ph-card">
+      <div class="lines-head">
+        <h3>Foto's van de installatie</h3>
+        <span id="ph-count" class="muted small"></span>
+      </div>
+      <p class="muted small">Leg vast hoe de installatie is aangelegd en opgeleverd; de foto's komen in het klantdossier. Foto's worden verkleind en zonder locatiegegevens versleuteld opgeslagen.</p>
+      <div class="ph-bar">
+        <button id="ph-camera" class="btn cam" type="button">📷 Foto maken</button>
+        <button id="ph-pick" class="btn" type="button">Foto's kiezen</button>
+        <label class="inline">Fase <select id="ph-kind"></select></label>
+        <label class="chk"><input type="checkbox" id="ph-visible" checked> Zichtbaar voor de klant</label>
+        <span id="ph-status" class="ph-status"></span>
+        <input id="ph-file-camera" class="ph-file" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+        <input id="ph-file-pick" class="ph-file" type="file" accept="image/*" multiple tabindex="-1" aria-hidden="true">
+      </div>
+      <div id="ph-gallery"></div>
+    </section>
   </main>
 
   <!-- Offerte kiezen -->
@@ -184,6 +203,7 @@
   <script src="../beregening/js/hydraulics.js"></script>
   <script src="../dashboard/account.js"></script>
   <script src="workorder-core.js"></script>
+  <script src="photos.js"></script>
   <script src="werkorders.js"></script>
 </body>
 </html>

@@ -234,6 +234,27 @@ const PG_MIGRATIONS = [
   CREATE UNIQUE INDEX work_orders_share ON work_orders (share_hash) WHERE share_hash IS NOT NULL;
   CREATE INDEX work_orders_planned ON work_orders (tenant_id, planned_date);
   `,
+  // 14: foto's bij werkorders.
+  `
+  CREATE TABLE work_order_photos (
+    id               ${T} PRIMARY KEY,
+    tenant_id        ${T} NOT NULL ${FK('tenants(id)')},
+    work_order_id    ${T} NOT NULL ${FK('work_orders(id)')},
+    uploaded_by      ${T} ${FK('users(id)')},
+    kind             ${T} NOT NULL DEFAULT 'oplevering' CHECK (kind IN ('voor', 'tijdens', 'oplevering')),
+    caption          ${T} NOT NULL DEFAULT '',
+    customer_visible BIGINT NOT NULL DEFAULT 1,
+    mime             ${T} NOT NULL,
+    width            BIGINT,
+    height           BIGINT,
+    size             BIGINT NOT NULL,
+    taken_at         ${T},
+    image            ${T} NOT NULL,
+    thumb            ${T} NOT NULL,
+    created_at       ${T} NOT NULL
+  );
+  CREATE INDEX work_order_photos_wo ON work_order_photos (tenant_id, work_order_id, created_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
