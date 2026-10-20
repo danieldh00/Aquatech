@@ -197,6 +197,19 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `quotes.customer_id` = zijn id en status ≠ concept (`POST
   /api/quotes/:id/respond`). Gast = klant. Migratie 6 bouwt `users` opnieuw
   (CHECK op rol) met `foreignKeysOff: true` in `db.js`.
+- **Rollenbeheer** (0.48.0): rollen per organisatie in tabel `roles`
+  (migratie 16, bij de live-tenant via `rootOf`; test volgt live), store
+  `backend/src/roles.js` (`store.roles`: `list`, `rightsFor`, `keysWith`,
+  `keysOfKind`, `create/update/remove`, cache 30 s). Tabel bewaart alleen
+  afwijkingen van de standaardrollen in roles.js plus eigen rollen;
+  `users.role` is een vrije sleutel (geen CHECK meer). `identify()` zet
+  `user.rights` (`withRights`), `Roles.rightsOf` gebruikt die. Soort
+  `medewerker`|`klant` (`Roles.rightsForKind`), `needs` tussen rechten
+  (`withNeeds`). Beheerder heeft vaste rechten en als enige `beheer`.
+  Standaardrol **planner** (`werkorders` + `planning`). Rechten `planning`
+  (planningmodule, `/schedule`, `/share`, `/send`) en `uitvoerder`
+  (`workorders.staff`). Klantenlijsten via `keysOfKind('klant')`, nooit
+  `role = 'klant'`. API `/api/admin/roles[/:key]`, UI `beheer/rollen.js`.
 - **Plannenoverzicht** (`frontend/plannen/`, voor iedereen): tabel uit
   `/api/plans` (eigen) of `/api/admin/plans` (beheerder, `?deleted=1`,
   `historyCount`); samenvatting per plan via `summarize()` op

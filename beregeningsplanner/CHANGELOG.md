@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.48.0
+
+- **Rollen aanpassen** (**Beheer → Rollen**): per rol de rechten aan- en
+  uitzetten in één tabel, naam en omschrijving wijzigen en eigen rollen
+  toevoegen (medewerker of klant, eventueel met de rechten van een bestaande
+  rol als start). Wijzigingen gelden direct en staan in het auditlog. De
+  beheerder houdt vaste rechten; een eigen rol kan pas weg als niemand hem
+  meer heeft. Rollen gelden voor de hele organisatie, ook in test.
+- **Nieuwe rol Planner**: plant werkorders in de agenda, stuurt de
+  afspraaklink naar de klant en ziet werkorders en klantdossiers, zonder
+  offertes, plannen of beheer. Een planner is zelf geen uitvoerder en ziet
+  op het startscherm standaard de hele ploeg.
+- **Nieuwe rechten** Planning en Uitvoerder: de planning en het inplannen
+  of versturen van een afspraak vragen nu het recht Planning; wie als
+  uitvoerder kan worden ingepland, bepaalt het recht Uitvoerder (standaard
+  beheerder en installateur, zoals voorheen).
+- Testdata: een testplanner (`<code>.planner`) die in de planning start.
+- Database: migratie 16 (tabel `roles`, rol van een gebruiker is een vrije
+  sleutel), voor SQLite en PostgreSQL.
+
 ## 0.46.1
 
 Beveiligingscontrole.

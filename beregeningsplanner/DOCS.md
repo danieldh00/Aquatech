@@ -307,15 +307,36 @@ de offerte) zien hun zichtbaar gezette foto's in het klantportaal.
 ## Gebruikers, rollen en historie van aanvragen
 
 Elke rol ziet op het dashboard alleen de modules die erbij horen; de server
-controleert de rechten zelf (vastgelegd in `frontend/shared/roles.js`).
+controleert de rechten zelf. De standaardrollen staan in
+`frontend/shared/roles.js`; een beheerder past ze aan onder **Beheer → Rollen**
+(zie hieronder).
 
 | Rol | Mag | Wie |
 | --- | --- | --- |
 | **Hoofdbeheerder** | alles, in elke tenant, plus **Hoofdbeheer** (tenants en testomgevingen) | de eerste beheerder van het platform |
 | **Beheerder** | alles binnen de eigen organisatie: gebruikers, instellingen, historie, auditlog, alle plannen en offertes, bedrijfsgegevens, testomgevingen | accounts met rol beheerder, en inloggen met de (optionele) toegangscode |
 | **Installateur** | plannen maken en bewerken, alle plannen en offertes van de organisatie, offertes opstellen en aan een klant koppelen; geen gebruikers, instellingen of historie | accounts met rol installateur (vóór 0.22.0: *gebruiker*) |
+| **Planner** | werkorders inzien en bijwerken, inplannen in de planning, de afspraaklink naar de klant sturen en klantdossiers bekijken; geen offertes, plannen of beheer, en zelf geen uitvoerder | accounts met rol planner (sinds 0.48.0) |
 | **Klant** | alleen de eigen plannen, en de verzonden offertes voor zijn account inzien, afdrukken en accepteren of afwijzen | accounts met rol klant, en gasten |
 
+- **Rollen aanpassen** (**Beheer → Rollen**): een tabel met de rechten als
+  rijen en de rollen als kolommen; een vinkje slaat direct op en geldt bij
+  het volgende verzoek. Rechten: Beregeningsplanner, Alle plannen, Offertes
+  opstellen, Alle offertes, Werkorders en klantdossiers, Planning, Uitvoerder
+  (kan worden toegewezen en is een kolom in de planning), en voor klantrollen
+  Eigen offertes en Klantportaal. Een recht dat een ander nodig heeft (bijv.
+  Planning → Werkorders) gaat automatisch mee aan; uitzetten neemt de
+  afhankelijke rechten mee. Naam en omschrijving van elke rol zijn aan te
+  passen; een aangepaste standaardrol kan terug naar de standaard.
+- **Eigen rollen**: onder **Rol toevoegen** met een naam, de soort
+  (medewerker of klant) en eventueel de rechten van een bestaande rol als
+  start. Een klantrol kan alleen klantrechten krijgen; accounts met een
+  klantrol zijn aan een offerte te koppelen. Een eigen rol is alleen te
+  verwijderen als er geen gebruikers meer mee werken.
+- **Vaste regels**: de beheerder heeft altijd alle rechten (anders kan
+  niemand meer beheren) en alleen die rol heeft **Beheer**. Rollen gelden
+  voor de hele organisatie, ook in de testomgevingen; een testaccount kan ze
+  niet wijzigen. Elke wijziging staat in het auditlog.
 - **Accounts** maak je als beheerder aan onder **Beheer → Gebruikers**
   (gebruikersnaam, naam, rol, wachtwoord van minimaal 8 tekens). Inloggen
   via `.../login` of de knop **Inloggen** rechtsboven. Een nieuw wachtwoord
@@ -411,7 +432,7 @@ In **Hoofdbeheer** staat bij elke testomgeving de knop **Vullen met
 testdata** (alleen voor testomgevingen, nooit voor live). Die maakt in één
 keer:
 
-- **Testaccounts** voor elke rol: een beheerder, twee installateurs en vier
+- **Testaccounts** voor elke rol: een beheerder, twee installateurs, een planner en vier
   klanten (`klant1` met een opgeleverde werkorder en `klant4` met een
   ingeplande, om het klantportaal te bekijken), met gebruikersnamen als `<code-van-de-omgeving>.klant1`. Alle
   testaccounts krijgen hetzelfde willekeurige wachtwoord; dat staat alleen

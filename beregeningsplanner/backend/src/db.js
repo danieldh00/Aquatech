@@ -346,6 +346,49 @@ const MIGRATIONS = [
   ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT '';
   ALTER TABLE users ADD COLUMN preferences TEXT NOT NULL DEFAULT '{}';
   `,
+  // 16: rollen per organisatie (Beheer > Rollen, zie roles.js): aanpassingen
+  // van de standaardrollen en eigen rollen, bij de live-tenant. users.role is
+  // daarmee een vrije sleutel; de CHECK erop kan in SQLite alleen weg door de
+  // tabel opnieuw op te bouwen (kolommen in dezelfde volgorde).
+  {
+    foreignKeysOff: true,
+    sql: `
+  CREATE TABLE roles (
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    role_key    TEXT NOT NULL,
+    label       TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    kind        TEXT NOT NULL CHECK (kind IN ('medewerker', 'klant')),
+    rights      TEXT NOT NULL DEFAULT '[]',
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, role_key)
+  );
+
+  CREATE TABLE users_new (
+    id                   TEXT PRIMARY KEY,
+    tenant_id            TEXT NOT NULL REFERENCES tenants(id),
+    username             TEXT NOT NULL,
+    display_name         TEXT NOT NULL,
+    role                 TEXT NOT NULL,
+    kind                 TEXT NOT NULL CHECK (kind IN ('account', 'gast', 'systeem')),
+    password_hash        TEXT,
+    disabled             INTEGER NOT NULL DEFAULT 0,
+    created_at           TEXT NOT NULL,
+    last_seen_at         TEXT,
+    platform_admin       INTEGER NOT NULL DEFAULT 0,
+    must_change_password INTEGER NOT NULL DEFAULT 0,
+    email                TEXT NOT NULL DEFAULT '',
+    phone                TEXT NOT NULL DEFAULT '',
+    preferences          TEXT NOT NULL DEFAULT '{}',
+    UNIQUE (tenant_id, username)
+  );
+  INSERT INTO users_new SELECT id, tenant_id, username, display_name, role, kind, password_hash, disabled, created_at, last_seen_at,
+    platform_admin, must_change_password, email, phone, preferences FROM users;
+  DROP TABLE users;
+  ALTER TABLE users_new RENAME TO users;
+  `,
+  },
 ];
 
 function openDb(file = ':memory:') {

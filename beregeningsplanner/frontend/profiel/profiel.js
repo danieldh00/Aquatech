@@ -39,7 +39,7 @@
     $('d-phone').value = u.phone || '';
     $('d-username').textContent = u.username;
     $('pw-user').value = u.username;
-    $('d-role').textContent = me.platformAdmin ? 'hoofdbeheerder' : u.role;
+    $('d-role').textContent = me.platformAdmin ? 'hoofdbeheerder' : (u.roleLabel || u.role).toLowerCase();
     $('d-created').textContent = fmtDate(u.createdAt);
     const org = me.loginCode || '';
     $('d-org').textContent = org;

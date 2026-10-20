@@ -67,7 +67,7 @@ const { summarize } = require('../src/store');
 
 test('testdata: tuinen met zones, offertes met regels en geldige gebruikersnamen', () => {
   const set = buildTestData({ slug: 'groen-test', profile: { hourlyRate: 55, vatRate: 21, validDays: 30 }, today: new Date('2026-10-18T12:00:00Z') });
-  assert.deepStrictEqual(set.accounts.map((a) => a.role).sort(), ['beheerder', 'installateur', 'installateur', 'klant', 'klant', 'klant', 'klant']);
+  assert.deepStrictEqual(set.accounts.map((a) => a.role).sort(), ['beheerder', 'installateur', 'installateur', 'klant', 'klant', 'klant', 'klant', 'planner']);
   for (const a of set.accounts) assert.match(a.username, /^groen-test\.[a-z0-9]+$/);
   assert.ok(set.plans.length >= 6);
   for (const p of set.plans) {
@@ -107,7 +107,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     const out = await baas.post(`/api/platform/tenants/${env.id}/testdata`);
     assert.strictEqual(out.status, 201);
     const { password, accounts, counts } = out.body;
-    assert.strictEqual(accounts.length, 7);
+    assert.strictEqual(accounts.length, 8);
     assert.ok(counts.plans >= 6 && counts.quotes === 6);
     const name = (suffix) => accounts.find((a) => a.username.endsWith(`.${suffix}`)).username;
 
@@ -148,8 +148,11 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     const bea = client(base);
     await bea.login(name('beheerder'), password, 'groen');
     const users = (await bea.get('/api/admin/users')).body.items.map((u) => u.username);
-    assert.strictEqual(users.length, 7);
+    assert.strictEqual(users.length, 8);
     assert.ok(!users.includes('piet'));
+    // Rollen gelden voor de hele organisatie: een testaccount kan ze niet wijzigen.
+    assert.strictEqual((await bea.get('/api/admin/roles')).body.editable, false);
+    assert.strictEqual((await bea.patch('/api/admin/roles/planner', { label: 'X' })).status, 403);
     const pietId = (await baas.get(`/api/platform/tenants/${t.id}/users`)).body.items[0].id;
     assert.strictEqual((await bea.patch(`/api/admin/users/${pietId}`, { disabled: true })).status, 404);
     assert.deepStrictEqual((await bea.get('/api/environments')).body.items.map((e) => e.id), [env.id]);
@@ -159,8 +162,8 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.deepStrictEqual((await piet.get('/api/admin/plans')).body.items, []);
     const list = (await baas.get('/api/platform/tenants')).body.items.find((x) => x.id === t.id);
     assert.strictEqual(list.userCount, 1);
-    assert.strictEqual(list.environments[0].userCount, 7);
-    assert.strictEqual((await baas.get(`/api/platform/tenants/${env.id}/users`)).body.items.length, 7);
+    assert.strictEqual(list.environments[0].userCount, 8);
+    assert.strictEqual((await baas.get(`/api/platform/tenants/${env.id}/users`)).body.items.length, 8);
 
     // Opnieuw vullen: zelfde gebruikersnamen, nieuw wachtwoord, oude sessies weg.
     const again = await baas.post(`/api/platform/tenants/${env.id}/testdata`);
@@ -245,6 +248,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
       settings: 'instellingen kiest de beheerder zelf (alleen de nepwebshop wordt gezet)',
       support_grants: 'meekijken is een handeling, geen data',
       impersonations: 'meekijken is een handeling, geen data',
+      roles: 'rollen horen bij de organisatie (live-tenant); een testomgeving gebruikt die van live',
     };
     const tables = listTables(db).filter((n) => tableColumns(db, n).some((c) => c.name === 'tenant_id'));
     for (const n of tables) {

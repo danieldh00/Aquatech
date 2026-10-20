@@ -261,6 +261,21 @@ const PG_MIGRATIONS = [
   ALTER TABLE users ADD COLUMN phone ${T} NOT NULL DEFAULT '';
   ALTER TABLE users ADD COLUMN preferences ${T} NOT NULL DEFAULT '{}';
   `,
+  // 16: rollen per organisatie; users.role wordt een vrije sleutel.
+  `
+  CREATE TABLE roles (
+    tenant_id   ${T} NOT NULL ${FK('tenants(id)')},
+    role_key    ${T} NOT NULL,
+    label       ${T} NOT NULL,
+    description ${T} NOT NULL DEFAULT '',
+    kind        ${T} NOT NULL CHECK (kind IN ('medewerker', 'klant')),
+    rights      ${T} NOT NULL DEFAULT '[]',
+    created_at  ${T} NOT NULL,
+    updated_at  ${T} NOT NULL,
+    PRIMARY KEY (tenant_id, role_key)
+  );
+  ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

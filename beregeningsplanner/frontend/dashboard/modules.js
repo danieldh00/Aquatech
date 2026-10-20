@@ -82,7 +82,7 @@
       href: 'planning/',
       icon: 'calendar',
       status: 'actief',
-      right: 'werkorders',
+      right: 'planning',
     },
     {
       id: 'beheer',

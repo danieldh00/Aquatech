@@ -10,16 +10,19 @@
   const areaLabel = (t) => (window.Catalog && window.Catalog.areaTypes[t] ? window.Catalog.areaTypes[t].label : t);
   const PAGE = 100;
   const Roles = window.AquatechRoles;
-  const roleOptions = (current) => Object.entries(Roles.ROLES)
-    .map(([k, r]) => `<option value="${k}"${k === current ? ' selected' : ''}>${esc(r.label)}</option>`).join('');
-
-  const state = { offset: 0, total: 0, users: [], auditOffset: 0 };
+  // Rollen van de organisatie (Beheer > Rollen); tot ze geladen zijn de standaard.
+  const state = { offset: 0, total: 0, users: [], auditOffset: 0, roles: Object.entries(Roles.ROLES).map(([key, r]) => ({ key, ...r })) };
+  const roleOf = (key) => state.roles.find((r) => r.key === key);
+  const roleLabel = (key) => (roleOf(key) ? roleOf(key).label : Roles.label(key));
+  const roleOptions = (current) => state.roles.concat(roleOf(current) || !current ? [] : [{ key: current, label: current }])
+    .map((r) => `<option value="${esc(r.key)}"${r.key === current ? ' selected' : ''}>${esc(r.label)}</option>`).join('');
   const AUDIT = {
     ingelogd: 'Ingelogd', uitgelogd: 'Uitgelogd', inloggen_mislukt: 'Inloggen mislukt', inloggen_geblokkeerd: 'Inloggen geblokkeerd',
     eerste_beheerder: 'Eerste beheerder', installatie_mislukt: 'Installatiecode onjuist', gebruiker_aangemaakt: 'Gebruiker aangemaakt',
     gebruiker_gewijzigd: 'Gebruiker gewijzigd', gebruiker_verwijderd: 'Gebruiker verwijderd', plan_gewist: 'Plan definitief gewist', backup_gemaakt: 'Back-up gemaakt',
     backup_gedownload: 'Back-up gedownload', sessies_ingetrokken: 'Uitgelogd op alle toestellen', instellingen_gewijzigd: 'Instellingen gewijzigd',
     offerte_akkoord: 'Offerte geaccepteerd door klant', offerte_afgewezen: 'Offerte afgewezen door klant', offerte_gewist: 'Offerte definitief gewist', offerte_verwijderd: 'Offerte verwijderd', backup_verwijderd: 'Back-up verwijderd',
+    rol_aangemaakt: 'Rol aangemaakt', rol_gewijzigd: 'Rol gewijzigd', rol_verwijderd: 'Rol verwijderd', rol_teruggezet: 'Rol teruggezet naar standaard',
     tenant_verwijderd: 'Tenant verwijderd', testomgeving_verwijderd: 'Testomgeving verwijderd', werkorder_verwijderd: 'Werkorder verwijderd', werkorder_gewist: 'Werkorder definitief gewist',
     impersonatie_gestart: 'Hoofdbeheerder werkt als gebruiker', impersonatie_beeindigd: 'Impersonatie beëindigd',
     webshop_gesynchroniseerd: 'Webshopproducten opgehaald', support_toegang_verleend: 'Supporttoegang gegeven', support_toegang_ingetrokken: 'Supporttoegang ingetrokken',
@@ -67,7 +70,7 @@
           <th class="num">Vlakken</th><th class="num">m²</th><th class="num">Sproeiers</th><th class="num">Zones</th></tr></thead><tbody>${items.map((h) => `
           <tr data-id="${esc(h.id)}">
             <td>${esc(when(h.updatedAt))}</td>
-            <td>${h.user ? esc(h.user.displayName) : '–'}${h.user && h.user.role !== 'installateur' ? ` <span class="pill ${esc(h.user.role)}">${esc(Roles.label(h.user.role).toLowerCase())}</span>` : ''}</td>
+            <td>${h.user ? esc(h.user.displayName) : '–'}${h.user && h.user.role !== 'installateur' ? ` <span class="pill ${esc(h.user.role)}">${esc(roleLabel(h.user.role).toLowerCase())}</span>` : ''}</td>
             <td><span class="pill ${esc(h.action)}">${esc(ACTIONS[h.action] || h.action)}</span></td>
             <td class="wrap">${esc(h.title)}${h.planDeleted && h.action !== 'analyse' ? ' <span class="pill verwijderd">plan verwijderd</span>' : ''}</td>
             <td class="wrap">${esc(h.customer)}</td>
@@ -233,8 +236,9 @@
 
   // ---------- Gebruikers ----------
   async function loadUsers() {
-    const { items } = await api('users');
+    const { items, roles } = await api('users');
     state.users = items;
+    if (roles) setRoles(roles);
     const sel = $('#h-user');
     const cur = sel.value;
     sel.innerHTML = '<option value="">Alle gebruikers</option>' + items
@@ -242,6 +246,18 @@
       .map((u) => `<option value="${esc(u.id)}">${esc(u.displayName)}${u.kind === 'gast' ? ' (gast)' : ''}</option>`).join('');
     sel.value = cur;
     renderUsers();
+  }
+
+  // Keuzelijst bij Gebruiker toevoegen en de uitleg per rol.
+  function setRoles(roles) {
+    state.roles = roles;
+    const sel = $('#u-form').role;
+    const cur = sel.value || 'installateur';
+    sel.innerHTML = roleOptions(cur);
+    $('#u-roles').innerHTML = roles.map((r) => `<b>${esc(r.label)}</b>: ${esc(r.description || 'geen omschrijving')}`).join(' ')
+      + ' Rechten per rol pas je aan onder <a href="#roles" data-goto="roles">Rollen</a>.';
+    const go = $('#u-roles [data-goto]');
+    if (go) go.onclick = (e) => { e.preventDefault(); showTab('roles'); };
   }
 
   function renderUsers() {
@@ -254,7 +270,7 @@
         <td>${esc(u.displayName)}${u.disabled ? ' <span class="pill">uitgeschakeld</span>' : ''}</td>
         <td>${esc(u.username)}</td>
         <td>${esc(KINDS[u.kind] || u.kind)}</td>
-        <td>${editable ? `<select data-role="${esc(u.id)}" title="${esc(Roles.ROLES[u.role] ? Roles.ROLES[u.role].description : '')}">${roleOptions(u.role)}</select>` : `<span class="pill ${esc(u.role)}">${esc(Roles.label(u.role))}</span>`}</td>
+        <td>${editable ? `<select data-role="${esc(u.id)}" title="${esc(roleOf(u.role) ? roleOf(u.role).description : '')}">${roleOptions(u.role)}</select>` : `<span class="pill ${esc(u.role)}">${esc(roleLabel(u.role))}</span>`}</td>
         <td class="num">${u.planCount}</td>
         <td class="num">${u.historyCount}</td>
         <td>${esc(when(u.lastSeenAt))}</td>
@@ -523,6 +539,7 @@
     document.querySelectorAll('.tabpane').forEach((p) => { p.hidden = p.id !== `tab-${name}`; });
     if (name === 'plans') loadPlans();
     if (name === 'users') loadUsers();
+    if (name === 'roles') window.BeheerRollen.load();
     if (name === 'settings') loadSettings();
     if (name === 'webshop') window.BeheerWebshop.load();
     if (name === 'audit') loadAudit();
@@ -532,7 +549,7 @@
   async function init() {
     const me = await window.AquatechAccount.load('../');
     state.meId = me.user ? me.user.id : null;
-    if (!me.user || me.user.role !== 'beheerder') {
+    if (!me.user || !(me.rights || []).includes('beheer')) {
       const d = $('#denied');
       d.innerHTML = me.user && me.user.kind !== 'gast'
         ? '<b>Geen toegang.</b> Deze pagina is alleen voor beheerders. <a href="../">Terug naar het overzicht</a>.'
@@ -562,13 +579,14 @@
     $('#u-guests').onchange = renderUsers;
     initSettings();
     window.BeheerWebshop.init({ toast });
+    window.BeheerRollen.init({ toast, onChange: setRoles });
     $('#detail-close').onclick = () => { $('#detail').hidden = true; };
     $('#detail').onclick = (e) => { if (e.target.id === 'detail') $('#detail').hidden = true; };
     await loadUsers().catch(() => {});
     loadHistory();
     // Direct naar een tabblad via beheer/#settings.
     const hash = location.hash.slice(1);
-    if (['plans', 'users', 'settings', 'webshop', 'audit'].includes(hash)) showTab(hash);
+    if (['plans', 'users', 'roles', 'settings', 'webshop', 'audit'].includes(hash)) showTab(hash);
   }
 
   init();

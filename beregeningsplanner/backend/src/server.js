@@ -420,6 +420,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // Een hoofdbeheerder kan tijdelijk als een andere gebruiker werken (zie impersonation.js).
       const as = s?.via === 'user' && user.platform_admin ? impersonation.resolve(req, user) : null;
       user = as || actingUser(req, user);
+      user = withRights(user);
     }
     req.user = user;
     req.tenantId = user ? user.tenant_id : tenant.id;
@@ -434,6 +435,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // concept van de planner per omgeving.
   const ENV_COOKIE = 'aquatech_env';
   const ENV_HINT = 'aquatech_env_hint';
+
+  // Rechten van de eigen rol zoals de organisatie die heeft ingesteld (Beheer
+  // > Rollen); roles.js valt terug op de standaard.
+  function withRights(user) {
+    if (user.platform_admin) return user;
+    return { ...user, rights: store.roles.rightsFor(user.home_tenant_id || user.tenant_id, user.role) };
+  }
 
   function actingUser(req, user) {
     const base = { ...user, home_tenant_id: user.tenant_id };
@@ -473,8 +481,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!allowed) return undefined;
     const guest = store.createGuest(tenant.id);
     auth.setGuestCookie(req, res, guest.id);
-    req.user = guest;
-    return guest;
+    req.user = withRights(guest);
+    return req.user;
   }
 
   const requireUser = (req, res, next) => {
@@ -489,7 +497,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     offertes: 'Alleen voor beheerders en installateurs.',
     'offertes.alle': 'Alleen voor beheerders en installateurs.',
     'plannen.alle': 'Alleen voor beheerders en installateurs.',
-    werkorders: 'Alleen voor beheerders en installateurs.',
+    werkorders: 'Alleen voor medewerkers met toegang tot werkorders.',
+    planning: 'Alleen voor medewerkers met toegang tot de planning.',
     portaal: 'Het klantportaal is er voor klanten.',
   };
   const requireRight = (right) => (req, res, next) => {
@@ -592,7 +601,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // (leeg voor de hoofdtenant).
       loginCode: loginCodeOf(user),
       // Wat deze gebruiker mag (zie roles.js); een nog niet bewaarde gast is een klant.
-      rights: user ? Roles.rightsOf(user) : guestsAllowed() ? Roles.rightsOf({ role: 'klant' }) : [],
+      rights: user ? Roles.rightsOf(user) : guestsAllowed() ? store.roles.rightsFor(tenant.id, 'klant') : [],
       // Tijdens een impersonatie wordt er niet gewisseld (eerst terug naar het eigen account).
       environments: user && !imp ? accessibleFor(user).length : 0,
       impersonation: imp ? { by: user.impersonator.display_name, expiresAt: imp.expiresAt, live: imp.live, environment: imp.tenantName } : null,
@@ -726,7 +735,61 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }
 
   app.get('/api/admin/users', (req, res) => {
-    res.json({ items: store.listUsers(usersTenantOf(req)) });
+    const home = usersTenantOf(req);
+    res.json({ items: store.listUsers(home), roles: store.roles.list(home) });
+  });
+
+  // ---------- Rollen (Beheer > Rollen, zie roles.js) ----------
+  // Rollen gelden voor de hele organisatie (live en testomgevingen). Een
+  // testaccount (dat in een testomgeving woont) kan ze zien maar niet wijzigen.
+  function rolesEditable(req, res) {
+    const home = store.getTenant(req.user.home_tenant_id || req.user.tenant_id);
+    if (req.user.platform_admin || !home || home.environment !== 'test') return true;
+    res.status(403).json({ error: 'forbidden', message: 'Rollen gelden voor de hele organisatie; wijzig ze met een account van live.' });
+    return false;
+  }
+  const rolesView = (tid) => {
+    const counts = store.roles.userCounts(tid);
+    return store.roles.list(tid).map((r) => ({ ...r, userCount: counts[r.key] || 0 }));
+  };
+  const roleError = (res, out) => res.status(out.status || 400).json({ error: out.code || (out.status === 404 ? 'not_found' : 'invalid_role'), message: out.error, field: out.field || null });
+
+  app.get('/api/admin/roles', (req, res) => {
+    const home = store.getTenant(req.user.home_tenant_id || req.user.tenant_id);
+    res.json({ items: rolesView(req.tenantId), editable: Boolean(req.user.platform_admin || !home || home.environment !== 'test') });
+  });
+
+  app.post('/api/admin/roles', requireJson, (req, res) => {
+    if (!rolesEditable(req, res)) return;
+    const { label, description, kind, rights, copyOf } = req.body || {};
+    // Een nieuwe rol kan de rechten van een bestaande rol overnemen.
+    const from = copyOf ? store.roles.get(req.tenantId, copyOf) : null;
+    const out = store.roles.create(req.tenantId, { label, description, kind: kind ?? from?.kind, rights: rights ?? from?.rights ?? [] });
+    if (out.error) return roleError(res, out);
+    audit(req, 'rol_aangemaakt', { rol: out.role.key, naam: out.role.label, rechten: out.role.rights }, undefined, store.roles.rootOf(req.tenantId));
+    res.status(201).json(out.role);
+  });
+
+  app.patch('/api/admin/roles/:key', requireJson, (req, res) => {
+    if (!rolesEditable(req, res)) return;
+    const input = {};
+    for (const k of ['label', 'description', 'rights', 'kind']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
+    const out = store.roles.update(req.tenantId, req.params.key, input);
+    if (out.error) return roleError(res, out);
+    const added = out.role.rights.filter((r) => !out.before.rights.includes(r));
+    const removed = out.before.rights.filter((r) => !out.role.rights.includes(r));
+    audit(req, 'rol_gewijzigd', { rol: out.role.key, fields: Object.keys(input), ...(added.length ? { aan: added } : {}), ...(removed.length ? { uit: removed } : {}) },
+      undefined, store.roles.rootOf(req.tenantId));
+    res.json(out.role);
+  });
+
+  // Eigen rol verwijderen (zonder gebruikers) of een standaardrol terugzetten.
+  app.delete('/api/admin/roles/:key', (req, res) => {
+    if (!rolesEditable(req, res)) return;
+    const out = store.roles.remove(req.tenantId, req.params.key);
+    if (out.error) return roleError(res, out);
+    audit(req, out.reset ? 'rol_teruggezet' : 'rol_verwijderd', { rol: out.role.key, naam: out.role.label }, undefined, store.roles.rootOf(req.tenantId));
+    res.json({ ok: true, reset: out.reset, role: out.reset ? store.roles.get(req.tenantId, out.role.key) : null });
   });
 
   app.post('/api/admin/users', requireJson, wrap(async (req, res) => {
@@ -986,7 +1049,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Opslag van offertes, werkorders en webshop (ook gebruikt door de testdata).
   const quoteStore = createQuoteStore(database, { vault });
-  const workOrderStore = createWorkOrderStore(database, { vault });
+  const workOrderStore = createWorkOrderStore(database, { vault, staffRoles: (tid) => store.roles.keysWith(tid, 'uitvoerder') });
   const shopStore = createShopStore(database);
   const photoStore = createPhotoStore(database, { vault });
   const dossierStore = createDossierStore(database, { photos: photoStore });
@@ -1229,7 +1292,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/api/platform/tenants/:id/users', (req, res) => {
     const t = userTenant(req, res);
     // Met de supporttoestemming erbij (nodig om in live als de gebruiker te werken).
-    if (t) res.json({ items: store.listUsers(t.id, { includeGuests: false }).map((u) => ({ ...u, support: impersonation.activeGrant(u.id) })) });
+    if (t) res.json({ items: store.listUsers(t.id, { includeGuests: false }).map((u) => ({ ...u, support: impersonation.activeGrant(u.id) })), roles: store.roles.list(t.id) });
   });
 
   app.post('/api/platform/tenants/:id/users', requireJson, wrap(async (req, res) => {

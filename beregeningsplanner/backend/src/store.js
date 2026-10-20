@@ -5,6 +5,7 @@ const path = require('path');
 const { transaction, listTables, tableColumns, foreignKeys, deferForeignKeys, jsonWithout } = require('./db');
 
 const Roles = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'roles.js'));
+const { createRoleStore } = require('./roles');
 const ROLES = Object.keys(Roles.ROLES);
 // Opeenvolgende wijzigingen van één gebruiker aan één plan binnen dit venster
 // vormen één regel in de historie (anders levert automatisch opslaan honderden
@@ -148,6 +149,8 @@ function preferencesOf(u) {
 
 function createStore(db) {
   const q = (sql) => db.prepare(sql);
+  // Rollen per organisatie (Beheer > Rollen).
+  const roles = createRoleStore(db);
 
   function ensureTenant(slug = 'default', name = 'Aquatech') {
     const row = q('SELECT * FROM tenants WHERE slug = ?').get(slug);
@@ -161,6 +164,7 @@ function createStore(db) {
   function publicUser(u) {
     if (!u) return null;
     return { id: u.id, tenantId: u.tenant_id, username: u.username, displayName: u.display_name, role: u.role, kind: u.kind,
+      roleLabel: u.platform_admin ? 'Hoofdbeheerder' : roles.label(u.tenant_id, u.role),
       disabled: Boolean(u.disabled), platformAdmin: Boolean(u.platform_admin), mustChangePassword: Boolean(u.must_change_password), createdAt: u.created_at, lastSeenAt: u.last_seen_at,
       email: u.email || '', phone: u.phone || '' };
   }
@@ -223,13 +227,13 @@ function createStore(db) {
   // Oude rolnamen (zoals 'gebruiker') gaan naar de huidige.
   const withRole = (input) => (input.role === undefined ? input : { ...input, role: Roles.normalize(input.role) });
 
-  function validateAccount({ username, displayName, role, password }, { partial = false } = {}) {
+  function validateAccount(tenantId, { username, displayName, role, password }, { partial = false } = {}) {
     if (!partial || username !== undefined) {
       if (!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(String(username || ''))) return 'Gebruikersnaam: 3–40 tekens, kleine letters, cijfers, punt, streepje of underscore.';
       if (/^(gast-|ha-|beheerder$)/.test(username)) return 'Deze gebruikersnaam is gereserveerd.';
     }
     if (displayName !== undefined && String(displayName).trim().length > 80) return 'Naam is te lang.';
-    if ((!partial || role !== undefined) && !ROLES.includes(role)) return 'Ongeldige rol.';
+    if ((!partial || role !== undefined) && !roles.exists(tenantId, role)) return 'Ongeldige rol.';
     if (!partial || password !== undefined) return passwordProblem(password, username);
     return null;
   }
@@ -240,7 +244,7 @@ function createStore(db) {
   // mustChangePassword: bij de eerste aanmelding eerst zelf een wachtwoord kiezen.
   async function createAccount(tenantId, rawInput, { platformAdmin = false, mustChangePassword = false } = {}) {
     const input = withRole(rawInput);
-    const err = validateAccount(input);
+    const err = validateAccount(tenantId, input);
     if (err) return { error: err };
     if (usernameTaken(tenantId, input.username)) {
       return { error: 'Deze gebruikersnaam bestaat al.' };
@@ -264,7 +268,7 @@ function createStore(db) {
     const u = q('SELECT * FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
     if (!u) return { error: 'Gebruiker niet gevonden.', status: 404 };
     if (u.kind !== 'account') return { error: 'Systeem- en gastgebruikers zijn niet aan te passen.', status: 409 };
-    const err = validateAccount({ ...input, username: input.username ?? (input.password !== undefined ? u.username : undefined) }, { partial: true });
+    const err = validateAccount(tenantId, { ...input, username: input.username ?? (input.password !== undefined ? u.username : undefined) }, { partial: true });
     if (err) return { error: err };
     if (input.username !== undefined) return { error: 'De gebruikersnaam is niet te wijzigen.' };
     // De laatste actieve beheerder blijft beheerder: anders verschijnt het
@@ -476,7 +480,7 @@ function createStore(db) {
 
   // Controle van een nieuw account zonder het aan te maken.
   function accountProblem(tenantId, input) {
-    return validateAccount(input) || (usernameTaken(tenantId, input.username) ? 'Deze gebruikersnaam bestaat al.' : null);
+    return validateAccount(tenantId, input) || (usernameTaken(tenantId, input.username) ? 'Deze gebruikersnaam bestaat al.' : null);
   }
 
   function testEnvironment(id) {
@@ -769,8 +773,9 @@ function createStore(db) {
 
   // Klantaccounts van een tenant (om een offerte aan te koppelen).
   function listCustomers(tenantId) {
-    return q("SELECT * FROM users WHERE tenant_id = ? AND kind = 'account' AND role = 'klant' AND disabled = 0 ORDER BY lower(display_name)")
-      .all(tenantId).map((u) => ({ id: u.id, username: u.username, displayName: u.display_name }));
+    const keys = roles.keysOfKind(tenantId, 'klant');
+    return q(`SELECT * FROM users WHERE tenant_id = ? AND kind = 'account' AND role IN (${keys.map(() => '?').join(', ')}) AND disabled = 0 ORDER BY lower(display_name)`)
+      .all(tenantId, ...keys).map((u) => ({ id: u.id, username: u.username, displayName: u.display_name }));
   }
 
   // ---------- Historie ----------
@@ -930,7 +935,7 @@ function createStore(db) {
 
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
-    accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
+    roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
     ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
     createSession, findSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
