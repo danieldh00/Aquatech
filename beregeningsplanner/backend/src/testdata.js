@@ -121,6 +121,8 @@ const ACCOUNTS = [
   { key: 'klant1', suffix: 'klant1', displayName: 'Fam. de Vries (test)', role: 'klant' },
   { key: 'klant2', suffix: 'klant2', displayName: 'Fam. Bakker (test)', role: 'klant' },
   { key: 'klant3', suffix: 'klant3', displayName: 'Dhr. en mevr. Visser (test)', role: 'klant' },
+  // Klant met een ingeplande werkorder: zo toont het klantportaal een afspraak.
+  { key: 'klant4', suffix: 'klant4', displayName: 'Fam. van den Berg (test)', role: 'klant' },
 ];
 
 const CUSTOMERS = {
@@ -186,7 +188,7 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
       response: { answer: 'akkoord', name: 'Jeroen Mulder', at: 7, via: 'link', options: ['service'] },
       workorder: { status: 'bezig', assignee: 'inst2', planned: 0, days: 2, endTime: '16:30', done: 0.4, picked: 0.8, notes: 'Hond loopt los in de tuin; poort aan de zijkant gebruiken.',
         appointment: { answer: 'bevestigd', name: 'Jeroen Mulder' } } },
-    { planKey: 'vanberg', owner: 'beheerder', customerKey: null, customer: c.vanberg, status: 'akkoord', at: 5,
+    { planKey: 'vanberg', owner: 'beheerder', customerKey: 'klant4', customer: c.vanberg, status: 'akkoord', at: 5,
       share: { sent: 5, views: 1, lastView: 4 },
       response: { answer: 'akkoord', name: 'Sanne van den Berg', at: 4, via: 'link' },
       workorder: { status: 'gepland', assignee: 'inst1', planned: 8, endTime: '12:00', done: 0, picked: 0,

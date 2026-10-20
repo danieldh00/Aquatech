@@ -229,6 +229,13 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `work_orders.appointment`; stand berekend in `appointmentOf` (reactie telt
   alleen voor hetzelfde `Core.momentKey`). `workorders.respond(row, …, { via:
   'account', userId })` is ook bruikbaar voor een klantportaal.
+- **Klantportaal** (`frontend/portaal/`, 0.37.0, recht `portaal`: alleen
+  klant): `backend/src/portal.js`, `GET /api/portal` (plannen, offertes,
+  werkorders, contact) en `/api/portal/workorders/:id` (opleverdossier via
+  `customerWorkOrder`, zonder uren/instructies/notities). Werkorder zichtbaar
+  als `quotes.customer_id` = klant en offerte ≠ concept. Optioneel:
+  `ctx.photos.list(tid, woId, { customerOnly })` en `workorders.respond`
+  (afspraak bevestigen, `POST .../appointment`).
 - **Wachtwoord** (0.31.0): eigen wijzigen via `POST /api/account/password`
   (pagina `backend/src/password.html`, route `/wachtwoord`, inline script op
   CSP-hash). `users.must_change_password` (migratie 12): zolang aan toont

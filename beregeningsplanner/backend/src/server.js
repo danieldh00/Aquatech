@@ -17,6 +17,7 @@ const { createMailer } = require('./mailer');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const { createShopStore, registerShopRoutes } = require('./shop');
+const { createPortalStore, registerPortalRoutes } = require('./portal');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -440,6 +441,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     'offertes.alle': 'Alleen voor beheerders en installateurs.',
     'plannen.alle': 'Alleen voor beheerders en installateurs.',
     werkorders: 'Alleen voor beheerders en installateurs.',
+    portaal: 'Het klantportaal is er voor klanten.',
   };
   const requireRight = (right) => (req, res, next) => {
     const user = identify(req);
@@ -939,6 +941,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const tid = req.tenantId || tenant.id;
       return [homeOf(tid), tid];
     },
+  });
+
+  // ---------- Klantportaal (module Portaal, zie portal.js) ----------
+  registerPortalRoutes(app, {
+    portal: createPortalStore(database), store, quotes: quoteStore, workorders: workOrderStore,
+    requireRight, requireJson, audit, remoteIp, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
   });
 
   // ---------- Webshopkoppeling (zie shop.js) ----------
