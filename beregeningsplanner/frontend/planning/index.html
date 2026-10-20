@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Planning – AquaTech Service</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="../plannen/plannen.css">
+  <link rel="stylesheet" href="../werkorders/werkorders.css">
+  <link rel="stylesheet" href="planning.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Planning</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash wide">
+    <section class="intro">
+      <h1>Planning</h1>
+      <p class="muted">Alle werkorders per week en per uitvoerder. Sleep een werkorder naar een dag en een uitvoerder om hem in te plannen of te verplaatsen (op een telefoon: tik op de werkorder en daarna op de dag). Vanuit de werkorder stuurt u de klant een link waarmee hij de afspraak bevestigt.</p>
+    </section>
+    <div id="p-stats" class="stats" hidden></div>
+    <div class="p-toolbar">
+      <button id="p-prev" class="btn" title="Vorige week">‹</button>
+      <button id="p-today" class="btn">Deze week</button>
+      <button id="p-next" class="btn" title="Volgende week">›</button>
+      <input id="p-date" type="date" aria-label="Ga naar datum">
+      <h2 id="p-week"></h2>
+      <span class="spacer"></span>
+      <label class="chk"><input type="checkbox" id="p-weekend"> Weekend</label>
+      <label class="chk"><input type="checkbox" id="p-mine"> Alleen mijn klussen</label>
+      <button id="p-export" class="btn">Exporteer naar Excel</button>
+      <a class="btn" href="../werkorders/">Werkorders</a>
+    </div>
+    <div id="p-pick" class="notice" hidden></div>
+    <div class="p-layout">
+      <div class="p-gridwrap"><table id="p-grid" class="p-grid"></table></div>
+      <aside class="p-side">
+        <section id="p-attention" class="p-panel" hidden></section>
+        <section class="p-panel">
+          <h3>In te plannen</h3>
+          <p class="muted small">Werkorders zonder datum. Sleep er een naar de planning.</p>
+          <div id="p-unplanned" class="p-drop" data-date=""></div>
+        </section>
+      </aside>
+    </div>
+    <p class="muted small p-legend">
+      <span class="pill appt-wacht">Wacht op klant</span>
+      <span class="pill appt-bevestigd">Bevestigd door klant</span>
+      <span class="pill appt-ander_moment">Klant vraagt ander moment</span>
+      <span class="pill appt-niet_gedeeld">Niet naar de klant</span>
+    </p>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
+  <script src="../beregening/vendor/exceljs.min.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="../werkorders/workorder-core.js"></script>
+  <script src="planning.js"></script>
+</body>
+</html>

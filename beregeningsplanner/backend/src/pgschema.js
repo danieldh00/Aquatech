@@ -221,7 +221,20 @@ CREATE TABLE shop_sync (
 // Migraties na het basisschema: PG_MIGRATIONS[0] hoort bij SQLite-migratie
 // PG_BASE_VERSION + 1, enzovoort. Alleen toevoegen, nooit aanpassen.
 const PG_MIGRATIONS = [
-  // 13: foto's bij werkorders.
+  // 13: planning en klantlink van werkorders.
+  `
+  ALTER TABLE work_orders ADD COLUMN share_hash ${T};
+  ALTER TABLE work_orders ADD COLUMN share_token ${T};
+  ALTER TABLE work_orders ADD COLUMN share_url ${T};
+  ALTER TABLE work_orders ADD COLUMN shared_at ${T};
+  ALTER TABLE work_orders ADD COLUMN viewed_at ${T};
+  ALTER TABLE work_orders ADD COLUMN sent_at ${T};
+  ALTER TABLE work_orders ADD COLUMN sent_to ${T};
+  ALTER TABLE work_orders ADD COLUMN appointment ${T};
+  CREATE UNIQUE INDEX work_orders_share ON work_orders (share_hash) WHERE share_hash IS NOT NULL;
+  CREATE INDEX work_orders_planned ON work_orders (tenant_id, planned_date);
+  `,
+  // 14: foto's bij werkorders.
   `
   CREATE TABLE work_order_photos (
     id               ${T} PRIMARY KEY,

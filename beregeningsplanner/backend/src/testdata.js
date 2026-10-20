@@ -166,7 +166,9 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
   // Offertes in alle statussen, met de digitale offerte erbij: share = klantlink
   // (verstuurd/bekeken), response = reactie van de klant (akkoord met naam,
   // handtekening en gekozen opties, of afgewezen met reden), workorder =
-  // werkorder bij een geaccordeerde offerte. Dagen zijn "zoveel dagen geleden".
+  // werkorder bij een geaccordeerde offerte (planned = over zoveel dagen,
+  // appointment = reactie van de klant op de afspraaklink). Dagen zijn
+  // verder "zoveel dagen geleden".
   const quotes = [
     { planKey: 'devries', owner: 'inst1', customerKey: 'klant1', customer: c.klant1, status: 'akkoord', at: 34, discountPct: 5,
       options: ['rain', 'service'],
@@ -178,7 +180,8 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
           { kind: 'tijdens', caption: 'Leidingen gelegd, sleuven nog open', visible: false },
           { kind: 'oplevering', caption: 'Gazon met alle sproeiers, bereik getest' },
           { kind: 'oplevering', caption: 'Ventielkast dicht en op niveau' },
-        ] } },
+        ],
+        appointment: { answer: 'bevestigd', name: 'Petra de Vries', at: 27 } } },
     { planKey: 'bakker', owner: 'inst1', customerKey: 'klant2', customer: c.klant2, status: 'verzonden', at: 3,
       options: ['rain', 'soil', 'service'], share: { sent: 3, views: 2, lastView: 1 } },
     { planKey: 'visser', owner: 'inst2', customerKey: 'klant3', customer: c.klant3, status: 'afgewezen', at: 17, layout: 'totaal',
@@ -187,12 +190,14 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
     { planKey: 'mulder', owner: 'inst2', customerKey: null, customer: c.mulder, status: 'akkoord', at: 9,
       options: ['service'], share: { sent: 9, views: 2, lastView: 7 },
       response: { answer: 'akkoord', name: 'Jeroen Mulder', at: 7, via: 'link', options: ['service'] },
-      workorder: { status: 'bezig', assignee: 'inst2', planned: 0, done: 0.4, picked: 0.8, notes: 'Hond loopt los in de tuin; poort aan de zijkant gebruiken.',
-        photos: [{ kind: 'voor', caption: 'Situatie bij aankomst' }, { kind: 'tijdens', caption: 'Hoofdleiding ligt, zijtakken volgen' }] } },
+      workorder: { status: 'bezig', assignee: 'inst2', planned: 0, days: 2, endTime: '16:30', done: 0.4, picked: 0.8, notes: 'Hond loopt los in de tuin; poort aan de zijkant gebruiken.',
+        photos: [{ kind: 'voor', caption: 'Situatie bij aankomst' }, { kind: 'tijdens', caption: 'Hoofdleiding ligt, zijtakken volgen' }],
+        appointment: { answer: 'bevestigd', name: 'Jeroen Mulder' } } },
     { planKey: 'vanberg', owner: 'beheerder', customerKey: null, customer: c.vanberg, status: 'akkoord', at: 5,
       share: { sent: 5, views: 1, lastView: 4 },
       response: { answer: 'akkoord', name: 'Sanne van den Berg', at: 4, via: 'link' },
-      workorder: { status: 'gepland', assignee: 'inst1', planned: 8, done: 0, picked: 0 } },
+      workorder: { status: 'gepland', assignee: 'inst1', planned: 8, endTime: '12:00', done: 0, picked: 0,
+        appointment: { answer: 'ander_moment', name: 'Sanne van den Berg', reason: 'Die week zijn wij op vakantie; de week erna kan elke ochtend.' } } },
     { planKey: 'bos', owner: 'inst1', customerKey: null, customer: c.bos, status: 'concept', at: 1, discountPct: 10, options: ['soil'] },
   ].map((qd) => {
     const plan = plans.find((x) => x.key === qd.planKey);
@@ -349,12 +354,13 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
  * stores = { db, quotes, workorders, shop, settings } (settings van de
  * testomgeving); seeded = { users, quoteIds } uit seedEnvironment.
  * shareBase = adres van openbaar/offerte.html (uit de browser); zonder komen
- * er geen klantlinks.
+ * er geen klantlinks (de afspraaklink staat ernaast: openbaar/afspraak.html).
  */
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
   const { db, quotes, workorders, shop, settings, photos } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, photos: 0, products: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0 };
+  const apptBase = shareBase ? shareBase.replace(/offerte\.html$/, 'afspraak.html') : null;
   const today = new Date().toISOString().slice(0, 10);
   const dateIn = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
   set.quotes.forEach((spec, i) => {
@@ -389,6 +395,8 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
       const data = plain(WoCore.fromQuote(quote, plan.data, plannerLib()).data);
       data.plannedDate = dateIn(w.planned);
       data.startTime = '08:00';
+      data.endTime = w.endTime || '';
+      data.days = w.days || 1;
       data.crew = seeded.users[w.assignee].display_name;
       data.instructions = 'Graag voor aanvang even aanbellen. Water en stroom zijn beschikbaar bij de achterdeur.';
       data.siteNotes = w.notes || '';
@@ -398,6 +406,23 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
       data.materials.forEach((m, k) => { m.picked = k < nPicked; });
       if (w.status === 'gereed') data.report = { notes: w.notes || '', completedOn: dateIn(w.planned + 1), signedBy: spec.response.name };
       const wo = workorders.create(owner, quote, data, { assigneeId: seeded.users[w.assignee].id });
+      // Afspraaklink en de reactie van de klant (vóór de status verder gaat:
+      // reageren kan alleen op een geplande klus die niet voorbij is).
+      if (apptBase && !workorders.share(owner.tenant_id, wo.id, apptBase).error) counts.appointmentLinks++;
+      if (w.appointment) {
+        const a = w.appointment;
+        const row = q('SELECT * FROM work_orders WHERE id = ?').get(wo.id);
+        const who = { ip: '192.0.2.10', userAgent: 'Testdata (geen echte browser)', via: 'link' };
+        const out = workorders.respond(row, a.answer, { name: a.name, reason: a.reason || '' }, who);
+        if (out.error === 'past') {
+          // Een afspraak in het verleden is toen bevestigd: zelf vastleggen.
+          q('UPDATE work_orders SET appointment = ? WHERE id = ?').run(JSON.stringify([{ answer: a.answer, name: a.name, reason: a.reason || '', at: set.day(a.at),
+            moment: WoCore.moment(data), ...who, forwardedFor: '', userId: null }]), wo.id);
+        } else if (out.error) {
+          throw new Error(`Testdata: reactie op afspraak ${wo.number} mislukt (${out.error})`);
+        }
+        counts.appointments++;
+      }
       workorders.update(owner.tenant_id, wo.id, undefined, w.status);
       const at = set.day(Math.max(0, spec.response.at - 1));
       q('UPDATE work_orders SET created_at = ?, updated_at = ? WHERE id = ?').run(at, w.status === 'gereed' ? set.day(-w.planned - 1) : at, wo.id);

@@ -300,7 +300,23 @@ const MIGRATIONS = [
   `
   ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;
   `,
-  // 13: foto's bij werkorders (klantdossier: hoe een installatie is
+  // 13: planning en klantlink van werkorders. De klant ziet via een openbare
+  // link (net als de digitale offerte: SHA-256 van het token om op te zoeken,
+  // het token versleuteld) wanneer de afspraak staat en bevestigt die of
+  // vraagt een ander moment. appointment = JSON-logboek van die reacties.
+  `
+  ALTER TABLE work_orders ADD COLUMN share_hash TEXT;
+  ALTER TABLE work_orders ADD COLUMN share_token TEXT;
+  ALTER TABLE work_orders ADD COLUMN share_url TEXT;
+  ALTER TABLE work_orders ADD COLUMN shared_at TEXT;
+  ALTER TABLE work_orders ADD COLUMN viewed_at TEXT;
+  ALTER TABLE work_orders ADD COLUMN sent_at TEXT;
+  ALTER TABLE work_orders ADD COLUMN sent_to TEXT;
+  ALTER TABLE work_orders ADD COLUMN appointment TEXT;
+  CREATE UNIQUE INDEX work_orders_share ON work_orders (share_hash) WHERE share_hash IS NOT NULL;
+  CREATE INDEX work_orders_planned ON work_orders (tenant_id, planned_date);
+  `,
+  // 14: foto's bij werkorders (klantdossier: hoe een installatie is
   // opgeleverd). Afbeelding en miniatuur versleuteld (vault.sealBytes, AAD
   // tenant + foto-id); geen BLOB, zodat SQLite en PostgreSQL gelijk blijven.
   `

@@ -7,6 +7,7 @@
   <meta name="robots" content="noindex">
   <title>Werkorders – AquaTech Service</title>
   <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
   <link rel="stylesheet" href="../dashboard/dashboard.css">
   <link rel="stylesheet" href="../beheer/beheer.css">
   <link rel="stylesheet" href="../plannen/plannen.css">
@@ -38,6 +39,7 @@
       <label class="chk"><input type="checkbox" id="l-done"> Ook gereed en geannuleerd</label>
       <button id="l-new" class="btn primary">Nieuwe werkorder uit offerte</button>
       <button id="l-export" class="btn">Exporteer naar Excel</button>
+      <a id="l-planning" class="btn" href="../planning/">Planning</a>
     </div>
     <div class="tablewrap"><table class="grid sortable" id="l-table"></table></div>
     <p id="l-count" class="muted small"></p>
@@ -82,7 +84,11 @@
         <label>Omschrijving<input data-f="title" maxlength="200"></label>
         <div class="row2">
           <label>Datum<input data-f="plannedDate" type="date"></label>
-          <label>Starttijd<input data-f="startTime" type="time"></label>
+          <label>Werkdagen<input data-f="days" type="number" min="1" max="20" step="1"></label>
+        </div>
+        <div class="row2">
+          <label>Van<input data-f="startTime" type="time"></label>
+          <label>Tot<input data-f="endTime" type="time"></label>
         </div>
         <div class="row2">
           <label>Uitvoerder<select id="e-assignee"><option value="">Nog niet toegewezen</option></select></label>
@@ -90,6 +96,7 @@
         </div>
         <p id="e-links" class="muted small"></p>
         <div id="e-progress" class="progress-box"></div>
+        <div id="e-appt" class="appt-box"></div>
       </section>
     </div>
 
@@ -164,12 +171,32 @@
     </div>
   </div>
 
+  <!-- Afspraak naar de klant sturen -->
+  <div id="appt-send" class="modal screen" hidden>
+    <div class="modal-card">
+      <button class="btn ghost close" data-close title="Sluiten">✕</button>
+      <h2>Afspraak naar de klant</h2>
+      <p class="muted small">De klant krijgt een link waarmee hij de afspraak ziet en bevestigt, of om een ander moment vraagt. Verschuift u de planning daarna, stuur de afspraak dan opnieuw: de klant moet het nieuwe moment opnieuw bevestigen.</p>
+      <label>Aan<input id="as-to" type="text" maxlength="400" placeholder="klant@voorbeeld.nl" class="full"></label>
+      <label>Onderwerp<input id="as-subject" type="text" maxlength="300" class="full"></label>
+      <label>Bericht<textarea id="as-message" rows="8" maxlength="5000" class="full"></textarea></label>
+      <p id="as-err" class="err"></p>
+      <div class="modal-actions">
+        <button id="as-send" class="btn primary">Versturen</button>
+        <button id="as-mailto" class="btn">Via eigen e-mailprogramma</button>
+        <button id="as-copy" class="btn">Alleen link kopiëren</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Afdrukversie (werkbon) -->
   <article id="print" class="print-doc" aria-hidden="true"></article>
 
   <div id="toast" class="toast screen"></div>
 
   <script src="../shared/env.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
   <script src="../beregening/vendor/exceljs.min.js"></script>
   <script src="../beregening/js/geometry.js"></script>
   <script src="../beregening/js/catalog.js"></script>

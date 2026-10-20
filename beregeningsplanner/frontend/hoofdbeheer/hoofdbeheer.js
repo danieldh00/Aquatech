@@ -186,7 +186,7 @@
   function seedResult(t, out) {
     const rows = out.accounts.map((u) => `<tr><td>${esc(u.displayName)}</td><td class="code">${esc(u.username)}</td><td>${esc(Roles.label(u.role))}</td></tr>`).join('');
     modal(`<h2>Testdata in ${esc(t.name)}</h2>
-      <p class="muted small">${out.counts.plans} plannen, ${out.counts.quotes} offertes (${out.counts.links || 0} met klantlink), ${out.counts.workOrders || 0} werkorders${out.counts.products ? ` en ${out.counts.products} webshopproducten` : ''} aangemaakt. Alle testaccounts hebben hetzelfde wachtwoord; dat wordt nergens bewaard en is alleen nu te zien. Opnieuw vullen geeft een nieuw wachtwoord.</p>
+      <p class="muted small">${out.counts.plans} plannen, ${out.counts.quotes} offertes (${out.counts.links || 0} met klantlink), ${out.counts.workOrders || 0} werkorders (${out.counts.appointments || 0} met reactie op de afspraak)${out.counts.products ? ` en ${out.counts.products} webshopproducten` : ''} aangemaakt. Alle testaccounts hebben hetzelfde wachtwoord; dat wordt nergens bewaard en is alleen nu te zien. Opnieuw vullen geeft een nieuw wachtwoord.</p>
       <p>Wachtwoord: <b class="code" id="s-pw">${esc(out.password)}</b> <button class="btn small" id="s-copy">Kopiëren</button></p>
       <div class="tablewrap"><table class="grid"><thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Rol</th></tr></thead><tbody>${rows}</tbody></table></div>
       <p class="muted small">Inloggen met een testaccount (bijvoorbeeld in een privévenster) brengt je direct in deze testomgeving, met de rechten van die rol. Organisatiecode: <b class="code">${esc(t.slug)}</b>.</p>

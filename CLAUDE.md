@@ -4,7 +4,10 @@ Webapp om tuinberegening te ontwerpen (in de lijn van de DVS Beregnungsplaner).
 Groeit uit tot een modulair ERP-achtig pakket: startpagina = **dashboard**
 (`frontend/index.html`, moduleregister `frontend/dashboard/modules.js`), de
 planner is module `frontend/beregening/` (URL `beregening/`). Gepland:
-planning, voorraadbeheer. Een module = map onder `frontend/` met eigen
+planning, voorraadbeheer. Beheerders/hoofdbeheerders (`usesSidebar` in
+modules.js) krijgen op elke pagina een zijbalk (`shared/sidebar.js|.css`,
+0.35.0) i.p.v. de tegels; een nieuwe modulepagina laadt `dashboard/modules.js`
+en daarna `shared/sidebar.js` (test bewaakt dat). Een module = map onder `frontend/` met eigen
 `index.html`; de server serveert die generiek (relatieve redirect
 `<id>` → `<id>/`, express.static met `redirect: false` i.v.m. een padprefix achter een proxy).
 Huisstijl AquaTech Service (aquatechservice.nl) in `frontend/shared/brand.css`:
@@ -216,6 +219,25 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `WO-<jaar>-0001`). Alleen uit een offerte met status `akkoord`; koppeling
   met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
   de offerte-editor.
+- **Planning + afspraaklink** (0.36.0): module `frontend/planning/` (recht
+  `werkorders`, weekagenda per uitvoerder, slepen → `POST
+  /api/workorders/:id/schedule`). Werkorder heeft `endTime` en `days`
+  (werkdagen, `Core.workDays`). Klantlink zoals de digitale offerte:
+  kolommen `share_*`/`viewed_at`/`sent_*` op `work_orders` (migratie 13),
+  pagina `frontend/openbaar/afspraak.html` (kop `X-Afspraak-Token`, API
+  `/api/public/appointment[/respond]`). Reacties als JSON-logboek in
+  `work_orders.appointment`; stand berekend in `appointmentOf` (reactie telt
+  alleen voor hetzelfde `Core.momentKey`). `workorders.respond(row, …, { via:
+  'account', userId })` is ook bruikbaar voor een klantportaal.
+- **Foto's + klantdossier** (0.37.0): `backend/src/photos.js` (tabel
+  `work_order_photos`, migratie 14; afbeelding + miniatuur via
+  `vault.sealBytes` met AAD `<tenant>:foto:<id>:beeld|mini`, als tekst in de
+  db zodat ze in back-ups/Supabase meegaan; server controleert JPEG/PNG/WebP
+  op inhoud en stript EXIF). Frontend `werkorders/photos.js|.css` (upload,
+  camera via `capture`, `PhotoViewer`), module `frontend/klantdossier/`
+  (`/api/dossiers[/:key]`, key `a-<klant-id>` of `n-<hash naam>`).
+  Klantportaal: `photos.list(..., { customerOnly: true })` en
+  `GET /api/portal/photos/:id`.
 - **Wachtwoord** (0.31.0): eigen wijzigen via `POST /api/account/password`
   (pagina `backend/src/password.html`, route `/wachtwoord`, inline script op
   CSP-hash). `users.must_change_password` (migratie 12): zolang aan toont
