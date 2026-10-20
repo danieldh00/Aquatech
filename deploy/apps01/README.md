@@ -30,7 +30,14 @@ Een specifieke versie terugzetten: `AQUATECH_TAG=<versie>` in `.env`,
 
 ## Supabase (PostgreSQL)
 
-Overstappen: zie `beregeningsplanner/DOCS.md` > *Database: Supabase
+Overstappen in één keer, vanaf de Proxmox-host (vraagt host van de Session
+pooler en het wachtwoord, verborgen; draait terug naar SQLite als iets misgaat):
+
+```sh
+ssh -t root@apps01 'curl -fsSL https://raw.githubusercontent.com/danieldh00/Aquatech/master/deploy/apps01/switch-to-supabase.sh -o /tmp/aquatech-supabase.sh && bash /tmp/aquatech-supabase.sh'
+```
+
+Handmatig: zie `beregeningsplanner/DOCS.md` > *Database: Supabase
 (PostgreSQL)*. Daarna staat de database niet meer in `data/`: de
 databasekopie in `pre-update/` van `update.sh` geldt alleen voor SQLite; een
 terugval na een mislukte update zet dan alleen de vorige image terug. De
