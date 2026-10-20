@@ -237,7 +237,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `work_orders.appointment`; stand berekend in `appointmentOf` (reactie telt
   alleen voor hetzelfde `Core.momentKey`). `workorders.respond(row, …, { via:
   'account', userId })` is ook bruikbaar voor een klantportaal.
-- **Startscherm installateur** (0.41.0): blok *Vandaag* op het dashboard
+- **Startscherm installateur** (0.42.0): blok *Vandaag* op het dashboard
   (`dashboard/today.js`, recht `werkorders`), API `GET /api/my-day`
   (`workorders.day`: elke werkdag via `Core.workDays`, `next`, fototelling
   via `ctx.photoCounts`). `werkorders/?id=…#fotos` springt naar de foto's.

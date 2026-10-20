@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.41.0
+## 0.42.0
 
 - **Startscherm voor installateurs**: het overzicht begint met *Vandaag*:
   de klussen die vandaag op je naam staan (ook elke werkdag van een
@@ -11,6 +11,18 @@
   van iedereen (standaard voor beheerders), en staat er niets gepland dan
   zie je de eerstvolgende klus. Gemaakt voor de telefoon.
 - API `GET /api/my-day?date=JJJJ-MM-DD[&all=1]` (recht werkorders).
+
+## 0.41.0
+
+- **Zijbalk netjes uitgelijnd**: de lijn onder het logo in de zijbalk ligt nu
+  precies op de onderkant van de kopbalk, op elke pagina (de hoogte van de
+  kopbalk wordt gemeten, ook in de planner waar die hoger is).
+- **Mijn portaal** heeft een eigen icoon (persoon) in plaats van het huisje,
+  zodat het niet meer op een dubbel *Overzicht* lijkt.
+- **Geen "Binnenkort" meer in de zijbalk**: de zijbalk toont alleen modules
+  die er zijn en aan staan. Aan- en uitzetten gaat bij Beheer > Instellingen >
+  *Modules* (geldt voor zijbalk en dashboard); geplande modules staan daar
+  als "binnenkort" en zijn aan te zetten zodra ze klaar zijn.
 
 ## 0.40.0
 
