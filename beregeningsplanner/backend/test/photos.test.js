@@ -157,6 +157,10 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
     assert.strictEqual((await client(base).get(`/api/portal/photos/${up.body.id}`)).status, 401);
     assert.strictEqual((await baas.get(`/api/portal/photos/${hidden.id}`)).status, 200, 'medewerker ziet alles');
     assert.strictEqual((await klaas.get(`/api/workorders/${wo.id}/photos`)).status, 403);
+    // Het opleverdossier in het portaal toont alleen de zichtbare foto's, met de portaal-URL.
+    const pw = (await klaas.get(`/api/portal/workorders/${wo.id}`)).body;
+    assert.deepStrictEqual(pw.photos.map((p) => [p.id, p.url]), [[up.body.id, `api/portal/photos/${up.body.id}`]]);
+    assert.ok(!('uploadedBy' in pw.photos[0]), 'geen medewerkersnaam naar de klant');
 
     // Wijzigen: zichtbaar zetten, bijschrift, soort.
     const ch = await kees.patch(`/api/workorders/${wo.id}/photos/${hidden.id}`, { customerVisible: true, caption: 'Leidingwerk', kind: 'onzin' });

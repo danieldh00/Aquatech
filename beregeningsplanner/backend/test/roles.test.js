@@ -54,7 +54,7 @@ test('rechten per rol; een hoofdbeheerder mag alles', () => {
   assert.ok(!Roles.can({ role: 'beheerder' }, 'hoofdbeheer'));
   assert.ok(Roles.can({ role: 'installateur' }, 'offertes'));
   assert.ok(!Roles.can({ role: 'installateur' }, 'beheer'));
-  assert.deepStrictEqual(Roles.rightsOf({ role: 'klant' }), ['plannen', 'offertes.klant']);
+  assert.deepStrictEqual(Roles.rightsOf({ role: 'klant' }), ['plannen', 'offertes.klant', 'portaal']);
   assert.ok(Roles.can({ role: 'gebruiker' }, 'offertes'), 'oude rolnaam = installateur');
   assert.deepStrictEqual(Roles.rightsOf({ role: 'onbekend' }), []);
 });
@@ -64,7 +64,7 @@ test('API: elke rol ziet alleen wat bij die rol hoort', async () => {
   try {
     const hoofd = await as('hoofd'), baas = await as('baas'), ina = await as('ina'), ivo = await as('ivo'), klaas = await as('klaas');
     assert.ok((await hoofd.get('/api/me')).body.rights.includes('hoofdbeheer'));
-    assert.deepStrictEqual((await klaas.get('/api/me')).body.rights, ['plannen', 'offertes.klant']);
+    assert.deepStrictEqual((await klaas.get('/api/me')).body.rights, ['plannen', 'offertes.klant', 'portaal']);
     assert.ok(!(await ina.get('/api/me')).body.rights.includes('beheer'));
 
     // Plannen: iedereen maakt eigen plannen; installateurs zien die van de organisatie.

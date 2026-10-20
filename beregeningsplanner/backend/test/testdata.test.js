@@ -67,7 +67,7 @@ const { summarize } = require('../src/store');
 
 test('testdata: tuinen met zones, offertes met regels en geldige gebruikersnamen', () => {
   const set = buildTestData({ slug: 'groen-test', profile: { hourlyRate: 55, vatRate: 21, validDays: 30 }, today: new Date('2026-10-18T12:00:00Z') });
-  assert.deepStrictEqual(set.accounts.map((a) => a.role).sort(), ['beheerder', 'installateur', 'installateur', 'klant', 'klant', 'klant']);
+  assert.deepStrictEqual(set.accounts.map((a) => a.role).sort(), ['beheerder', 'installateur', 'installateur', 'klant', 'klant', 'klant', 'klant']);
   for (const a of set.accounts) assert.match(a.username, /^groen-test\.[a-z0-9]+$/);
   assert.ok(set.plans.length >= 6);
   for (const p of set.plans) {
@@ -107,7 +107,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     const out = await baas.post(`/api/platform/tenants/${env.id}/testdata`);
     assert.strictEqual(out.status, 201);
     const { password, accounts, counts } = out.body;
-    assert.strictEqual(accounts.length, 6);
+    assert.strictEqual(accounts.length, 7);
     assert.ok(counts.plans >= 6 && counts.quotes === 6);
     const name = (suffix) => accounts.find((a) => a.username.endsWith(`.${suffix}`)).username;
 
@@ -122,19 +122,33 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.strictEqual((await klant.post(`/api/quotes/${mine[0].id}/respond`, { answer: 'afgewezen', name: 'Testklant', reason: 'test' })).status, 200, 'akkoord vraagt een handtekening; afwijzen niet');
     assert.strictEqual((await klant.get('/api/admin/users')).status, 403);
 
+    // Klantportaal: klant1 heeft een opgeleverde werkorder, klant4 een ingeplande.
+    const devries = client(base);
+    await devries.login(name('klant1'), password, 'groen');
+    const p1 = (await devries.get('/api/portal')).body;
+    assert.deepStrictEqual(p1.workorders.map((w) => w.status), ['gereed']);
+    const dossier = (await devries.get(`/api/portal/workorders/${p1.workorders[0].id}`)).body;
+    assert.ok(dossier.report.notes && dossier.report.completedOn && dossier.steps.every((st) => st.done));
+    const vanberg = client(base);
+    await vanberg.login(name('klant4'), password, 'groen');
+    const p4 = (await vanberg.get('/api/portal')).body;
+    assert.deepStrictEqual(p4.workorders.map((w) => w.status), ['gepland']);
+    assert.ok(p4.workorders[0].plannedDate > new Date().toISOString().slice(0, 10), 'afspraak in de toekomst');
+    assert.strictEqual(p4.workorders[0].appointment.state, 'ander_moment', 'reactie uit de planning zichtbaar');
+
     // De installateur ziet alle plannen en offertes van de testomgeving.
     const inst = client(base);
     await inst.login(name('installateur'), password, env.slug);
     assert.strictEqual((await inst.get('/api/plans?all=1')).body.items.length, counts.plans);
     assert.strictEqual((await inst.get('/api/quotes?all=1')).body.items.length, 6);
     const customers = (await inst.get('/api/quote-customers')).body.items;
-    assert.strictEqual(customers.length, 3, 'de testklanten om een offerte aan te koppelen');
+    assert.strictEqual(customers.length, 4, 'de testklanten om een offerte aan te koppelen');
 
     // De testbeheerder beheert alleen de testaccounts, nooit live.
     const bea = client(base);
     await bea.login(name('beheerder'), password, 'groen');
     const users = (await bea.get('/api/admin/users')).body.items.map((u) => u.username);
-    assert.strictEqual(users.length, 6);
+    assert.strictEqual(users.length, 7);
     assert.ok(!users.includes('piet'));
     const pietId = (await baas.get(`/api/platform/tenants/${t.id}/users`)).body.items[0].id;
     assert.strictEqual((await bea.patch(`/api/admin/users/${pietId}`, { disabled: true })).status, 404);
@@ -145,8 +159,8 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.deepStrictEqual((await piet.get('/api/admin/plans')).body.items, []);
     const list = (await baas.get('/api/platform/tenants')).body.items.find((x) => x.id === t.id);
     assert.strictEqual(list.userCount, 1);
-    assert.strictEqual(list.environments[0].userCount, 6);
-    assert.strictEqual((await baas.get(`/api/platform/tenants/${env.id}/users`)).body.items.length, 6);
+    assert.strictEqual(list.environments[0].userCount, 7);
+    assert.strictEqual((await baas.get(`/api/platform/tenants/${env.id}/users`)).body.items.length, 7);
 
     // Opnieuw vullen: zelfde gebruikersnamen, nieuw wachtwoord, oude sessies weg.
     const again = await baas.post(`/api/platform/tenants/${env.id}/testdata`);

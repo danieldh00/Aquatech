@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.37.0
+## 0.38.0
 
 - **Foto's bij werkorders**: in de werkorder de kaart *Foto's van de
   installatie*. Op de telefoon opent **Foto maken** direct de camera,
@@ -27,6 +27,21 @@
   de zichtbaar gezette foto's van zijn eigen werkorders.
 - Testdata: foto's bij de opgeleverde werkorder en de werkorder in
   uitvoering.
+
+## 0.37.0
+
+- **Klantportaal** (module *Mijn portaal*, voor klanten): één overzicht met
+  wat er voor de klant klaarstaat (offertes om te beantwoorden, afspraken om
+  te bevestigen), de werkzaamheden uit zijn offertes met datum, monteur en
+  voortgang, zijn offertes en plannen, en de contactgegevens van het bedrijf.
+- **Opleverdossier** per werkorder in het portaal: afgevinkte werkzaamheden,
+  zones, gebruikte materialen (zonder prijzen), opmerkingen bij de
+  oplevering en de foto's voor de klant; af te drukken of op te slaan als
+  PDF. Interne gegevens (uren, werkinstructies, locatienotities, ploeg)
+  blijven bij de medewerkers.
+- Nieuw recht `portaal` voor de rol klant; API `/api/portal`.
+- Testdata: een vierde testklant (`klant4`) met een ingeplande werkorder,
+  zodat het portaal een afspraak toont.
 
 ## 0.36.0
 

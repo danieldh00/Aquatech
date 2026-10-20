@@ -8,7 +8,9 @@
 //                 werkorders uitvoeren voor de hele organisatie; geen
 //                 gebruikers, instellingen of historie.
 // - klant:        alleen de eigen plannen, en de offertes die voor hem zijn
-//                 klaargezet inzien en accepteren of afwijzen.
+//                 klaargezet inzien en accepteren of afwijzen; in het
+//                 klantportaal ook de werkorders uit zijn offertes (afspraak,
+//                 voortgang, opleverdossier).
 // Een hoofdbeheerder (users.platform_admin) mag alles, in elke tenant.
 (function (root) {
   const ROLES = {
@@ -24,12 +26,12 @@
     },
     klant: {
       label: 'Klant',
-      description: 'Alleen de eigen plannen en de eigen offertes inzien en accepteren.',
-      rights: ['plannen', 'offertes.klant'],
+      description: 'Alleen de eigen plannen en de eigen offertes inzien en accepteren; klantportaal met afspraken en opleverdossier.',
+      rights: ['plannen', 'offertes.klant', 'portaal'],
     },
   };
   // Alle rechten; een hoofdbeheerder heeft ze allemaal plus 'hoofdbeheer'.
-  const RIGHTS = ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'offertes.klant', 'werkorders', 'beheer', 'hoofdbeheer'];
+  const RIGHTS = ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'offertes.klant', 'portaal', 'werkorders', 'beheer', 'hoofdbeheer'];
   // Oude rolnaam (tot 0.22.0): een 'gebruiker' is nu een installateur.
   const ALIASES = { gebruiker: 'installateur' };
 

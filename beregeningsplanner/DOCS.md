@@ -395,8 +395,9 @@ In **Hoofdbeheer** staat bij elke testomgeving de knop **Vullen met
 testdata** (alleen voor testomgevingen, nooit voor live). Die maakt in één
 keer:
 
-- **Testaccounts** voor elke rol: een beheerder, twee installateurs en drie
-  klanten, met gebruikersnamen als `<code-van-de-omgeving>.klant1`. Alle
+- **Testaccounts** voor elke rol: een beheerder, twee installateurs en vier
+  klanten (`klant1` met een opgeleverde werkorder en `klant4` met een
+  ingeplande, om het klantportaal te bekijken), met gebruikersnamen als `<code-van-de-omgeving>.klant1`. Alle
   testaccounts krijgen hetzelfde willekeurige wachtwoord; dat staat alleen
   in het venster na het vullen (ook als Excel te downloaden) en wordt
   nergens bewaard.
@@ -404,7 +405,7 @@ keer:
   plantenbak, systeemelementen, sproeiers en zones, met een regel in de
   historie.
 - **Offertes** in alle statussen (concept, verzonden, akkoord, afgewezen),
-  opgebouwd uit die plannen met de bedrijfsgegevens van de omgeving; drie
+  opgebouwd uit die plannen met de bedrijfsgegevens van de omgeving; vier
   zijn gekoppeld aan de testklanten. Verstuurde offertes hebben een
   **klantlink** (met verzend- en bekijkgegevens) en opties die de klant zelf
   kiest; drie zijn **digitaal geaccordeerd** (naam, handtekening, gekozen

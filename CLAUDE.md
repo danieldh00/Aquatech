@@ -229,7 +229,14 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `work_orders.appointment`; stand berekend in `appointmentOf` (reactie telt
   alleen voor hetzelfde `Core.momentKey`). `workorders.respond(row, …, { via:
   'account', userId })` is ook bruikbaar voor een klantportaal.
-- **Foto's + klantdossier** (0.37.0): `backend/src/photos.js` (tabel
+- **Klantportaal** (`frontend/portaal/`, 0.37.0, recht `portaal`: alleen
+  klant): `backend/src/portal.js`, `GET /api/portal` (plannen, offertes,
+  werkorders, contact) en `/api/portal/workorders/:id` (opleverdossier via
+  `customerWorkOrder`, zonder uren/instructies/notities). Werkorder zichtbaar
+  als `quotes.customer_id` = klant en offerte ≠ concept. Optioneel:
+  `ctx.photos.list(tid, woId, { customerOnly })` en `workorders.respond`
+  (afspraak bevestigen, `POST .../appointment`).
+- **Foto's + klantdossier** (0.38.0): `backend/src/photos.js` (tabel
   `work_order_photos`, migratie 14; afbeelding + miniatuur via
   `vault.sealBytes` met AAD `<tenant>:foto:<id>:beeld|mini`, als tekst in de
   db zodat ze in back-ups/Supabase meegaan; server controleert JPEG/PNG/WebP

@@ -18,6 +18,7 @@ const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders'
 const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('./photos');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const { createShopStore, registerShopRoutes } = require('./shop');
+const { createPortalStore, registerPortalRoutes } = require('./portal');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -443,6 +444,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     'offertes.alle': 'Alleen voor beheerders en installateurs.',
     'plannen.alle': 'Alleen voor beheerders en installateurs.',
     werkorders: 'Alleen voor beheerders en installateurs.',
+    portaal: 'Het klantportaal is er voor klanten.',
   };
   const requireRight = (right) => (req, res, next) => {
     const user = identify(req);
@@ -948,6 +950,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Foto's bij werkorders en klantdossiers (zie photos.js) ----------
   registerPhotoRoutes(app, { photos: photoStore, dossiers: dossierStore, requireRight, requireUser, requireJson, identify, audit });
+
+  // ---------- Klantportaal (module Portaal, zie portal.js) ----------
+  registerPortalRoutes(app, {
+    portal: createPortalStore(database), store, quotes: quoteStore, workorders: workOrderStore, photos: photoStore,
+    requireRight, requireJson, audit, remoteIp, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
+  });
 
   // ---------- Webshopkoppeling (zie shop.js) ----------
   registerShopRoutes(app, {
