@@ -227,8 +227,9 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
   de offerte-editor.
 - **Planning + afspraaklink** (0.36.0): module `frontend/planning/` (recht
-  `werkorders`, weekagenda per uitvoerder, slepen → `POST
-  /api/workorders/:id/schedule`). Werkorder heeft `endTime` en `days`
+  `werkorders`; 0.40.0: agenda dag (installateurs als kolommen) / werkweek /
+  maand, slepen naar tijdstip → `POST /api/workorders/:id/schedule`; zonder
+  eindtijd blok uit geplande uren via `Core.fitHours`, 8 u per werkdag). Werkorder heeft `endTime` en `days`
   (werkdagen, `Core.workDays`). Klantlink zoals de digitale offerte:
   kolommen `share_*`/`viewed_at`/`sent_*` op `work_orders` (migratie 13),
   pagina `frontend/openbaar/afspraak.html` (kop `X-Afspraak-Token`, API
@@ -259,7 +260,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `password_change_required` (behalve me/health/auth). Standaard aan bij
   aanmaken door een beheerder en bij een reset (`withMustChange` in server.js);
   tests die met zo'n account inloggen geven `mustChangePassword: false` mee.
-- **Mijn profiel** (0.40.0): pagina `frontend/profiel/` (geen tegel in
+- **Mijn profiel** (0.41.0): pagina `frontend/profiel/` (geen tegel in
   modules.js; link in het gebruikersmenu van `dashboard/account.js` en
   onderaan `shared/sidebar.js`). API `GET/PUT /api/account/profile`
   (`store.updateProfile`), kolommen `users.email|phone|preferences`

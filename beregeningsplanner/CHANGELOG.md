@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.40.0
+## 0.41.0
 
 - **Mijn profiel** (nieuwe pagina `profiel/`, voor elke rol met een eigen
   account): naam, e-mailadres en telefoonnummer wijzigen, persoonlijke
@@ -21,6 +21,27 @@
   Beheerders zien e-mail en telefoon in het gebruikersoverzicht (API).
 - Testdata: testaccounts hebben een e-mailadres, telefoonnummer en
   voorkeuren.
+
+## 0.40.0
+
+- **Planning als agenda** met drie weergaven, te wisselen bovenaan:
+  - **Dag**: de tijd verticaal en de installateurs naast elkaar als kolommen
+    (Outlook-achtig), met een rode lijn op het huidige tijdstip. Op een
+    telefoon scroll je horizontaal langs de installateurs.
+  - **Werkweek**: de tijd verticaal en de dagen als kolommen; de kleur van
+    een blok is de uitvoerder.
+  - **Maand**: maandrooster met de klussen per dag (op een telefoon als
+    gekleurde stippen); een dag aantikken opent de dagweergave.
+- **Plannen op tijdstip**: sleep een werkorder naar een tijd (per kwartier)
+  in de dag- of werkweekweergave. Heeft de werkorder nog geen eindtijd, dan
+  volgt het blok meteen uit de **geplande uren uit de offerte** (de
+  werkstappen); meer dan een werkdag van 8 uur wordt verdeeld over gelijke
+  werkdagen (12 uur vanaf 08:00 = 2 dagen 08:00–14:00). Een blok dat al een
+  eindtijd heeft houdt zijn lengte. Hetzelfde gebeurt in de werkorder als je
+  een starttijd invult zonder eindtijd. De geplande uren staan op elk blok.
+- Filter op uitvoerder (of *Mijn klussen*), weekend aan/uit, naar een datum
+  springen, en Excel-export van wat in beeld is. De gekozen weergave wordt
+  onthouden; op een telefoon begint de planning in de dagweergave.
 
 ## 0.39.0
 

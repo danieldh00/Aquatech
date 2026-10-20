@@ -102,6 +102,13 @@ test('planning: werkdagen, moment en opschonen van tijden en dagen', () => {
   assert.deepStrictEqual([d.endTime, d.days], ['16:30', W.MAX_DAYS]);
   assert.strictEqual(W.sanitize({ days: 'x' }).days, 1);
   assert.notStrictEqual(W.momentKey(W.moment(d)), W.momentKey(W.moment({ ...d, endTime: '17:00' })), 'andere eindtijd = ander moment');
+  // Blok uit de geplande uren: meer dan een werkdag = verdeeld over gelijke dagen.
+  assert.deepStrictEqual(W.fitHours('10:00', 5), { endTime: '15:00', days: 1 });
+  assert.deepStrictEqual(W.fitHours('08:00', 8), { endTime: '16:00', days: 1 });
+  assert.deepStrictEqual(W.fitHours('08:00', 12), { endTime: '14:00', days: 2 });
+  assert.deepStrictEqual(W.fitHours('08:00', 6.4), { endTime: '14:30', days: 1 }, 'afgerond op een kwartier');
+  assert.strictEqual(W.fitHours('', 4), null);
+  assert.strictEqual(W.fitHours('08:00', 0), null);
 });
 
 test('opschonen en voortgang', () => {

@@ -244,14 +244,25 @@ werkorder definitief wissen (AVG).
 
 ### Planning en afspraak met de klant
 
-Module **Planning** (tegel op het dashboard, zelfde rechten als Werkorders):
-een weekagenda met een rij per uitvoerder en een kolom per dag. Sleep een
-werkorder naar een dag en uitvoerder om hem in te plannen of te verplaatsen;
-terugslepen naar *In te plannen* haalt de datum weg. Op een telefoon: tik op
-een werkorder uit *In te plannen* en dan op de dag. Een klus van meer
-werkdagen staat op elke werkdag (zaterdag en zondag tellen niet mee). Een
-gekleurde stip toont de stand van de afspraak; **Exporteer naar Excel**
-geeft de planning van de week.
+Module **Planning** (tegel op het dashboard en in de zijbalk, zelfde rechten
+als Werkorders): een agenda met drie weergaven.
+
+- **Dag**: tijd verticaal, de installateurs als kolommen naast elkaar; op een
+  telefoon scroll je horizontaal. Bovenaan per kolom de rij *Geen tijd* voor
+  klussen zonder starttijd.
+- **Werkweek**: tijd verticaal, de dagen als kolommen (weekend optioneel);
+  de kleur van een blok is de uitvoerder.
+- **Maand**: maandrooster; tik op een dag voor de dagweergave.
+
+Sleep een werkorder naar een tijdstip (per kwartier) om hem in te plannen of
+te verplaatsen; in de dagweergave bepaalt de kolom ook de uitvoerder. Naar
+*Geen tijd* slepen haalt de tijden weg, naar *In te plannen* de datum. Op
+een telefoon: tik op een werkorder uit *In te plannen* en dan op het
+tijdstip. Zonder eindtijd volgt de lengte van het blok uit de **geplande
+uren** (de werkstappen uit de offerte): tot 8 uur op één dag, daarboven
+verdeeld over gelijke werkdagen. Een klus van meer werkdagen staat op elke
+werkdag (zaterdag en zondag tellen niet mee). Een gekleurde stip toont de
+stand van de afspraak met de klant; **Excel** exporteert wat in beeld is.
 
 In de werkorder staat onder *Planning* het blok **Afspraak met de klant**.
 **Afspraak naar de klant** maakt een link naar de openbare pagina

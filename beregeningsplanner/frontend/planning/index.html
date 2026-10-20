@@ -24,37 +24,47 @@
     <span id="account" class="account"></span>
   </header>
 
-  <main class="dash wide">
+  <main class="dash wide p-main">
     <section class="intro">
       <h1>Planning</h1>
-      <p class="muted">Alle werkorders per week en per uitvoerder. Sleep een werkorder naar een dag en een uitvoerder om hem in te plannen of te verplaatsen (op een telefoon: tik op de werkorder en daarna op de dag). Vanuit de werkorder stuurt u de klant een link waarmee hij de afspraak bevestigt.</p>
+      <p class="muted p-help">De agenda van alle werkorders, per dag (installateurs naast elkaar), per werkweek of per maand. Sleep een werkorder naar een tijdstip of dag om hem in te plannen of te verplaatsen; op een telefoon tikt u eerst op een werkorder uit <i>In te plannen</i> en dan op het tijdstip. Vanuit de werkorder stuurt u de klant een link waarmee hij de afspraak bevestigt.</p>
     </section>
     <div id="p-stats" class="stats" hidden></div>
     <div class="p-toolbar">
-      <button id="p-prev" class="btn" title="Vorige week">‹</button>
-      <button id="p-today" class="btn">Deze week</button>
-      <button id="p-next" class="btn" title="Volgende week">›</button>
-      <input id="p-date" type="date" aria-label="Ga naar datum">
-      <h2 id="p-week"></h2>
+      <div class="seg" role="group" aria-label="Weergave">
+        <button type="button" data-view="dag">Dag</button>
+        <button type="button" data-view="week">Werkweek</button>
+        <button type="button" data-view="maand">Maand</button>
+      </div>
+      <div class="p-nav">
+        <button id="p-prev" class="btn" title="Vorige" aria-label="Vorige">‹</button>
+        <button id="p-today" class="btn">Vandaag</button>
+        <button id="p-next" class="btn" title="Volgende" aria-label="Volgende">›</button>
+      </div>
+      <h2 id="p-title"></h2>
       <span class="spacer"></span>
-      <label class="chk"><input type="checkbox" id="p-weekend"> Weekend</label>
-      <label class="chk"><input type="checkbox" id="p-mine"> Alleen mijn klussen</label>
-      <button id="p-export" class="btn">Exporteer naar Excel</button>
-      <a class="btn" href="../werkorders/">Werkorders</a>
+      <div class="p-opts">
+        <input id="p-date" type="date" aria-label="Ga naar datum">
+        <select id="p-who" aria-label="Uitvoerder"><option value="*">Alle uitvoerders</option></select>
+        <label class="chk"><input type="checkbox" id="p-weekend"> Weekend</label>
+        <button id="p-export" class="btn">Excel</button>
+        <a class="btn" href="../werkorders/">Werkorders</a>
+      </div>
     </div>
     <div id="p-pick" class="notice" hidden></div>
     <div class="p-layout">
-      <div class="p-gridwrap"><table id="p-grid" class="p-grid"></table></div>
+      <div id="p-cal" class="p-cal"></div>
       <aside class="p-side">
-        <section id="p-attention" class="p-panel" hidden></section>
+        <section id="p-attention" class="p-panel attention" hidden></section>
         <section class="p-panel">
           <h3>In te plannen</h3>
-          <p class="muted small">Werkorders zonder datum. Sleep er een naar de planning.</p>
+          <p class="muted small">Werkorders zonder datum. Sleep er een naar de agenda.</p>
           <div id="p-unplanned" class="p-drop" data-date=""></div>
         </section>
       </aside>
     </div>
     <p class="muted small p-legend">
+      Afspraak met de klant:
       <span class="pill appt-wacht">Wacht op klant</span>
       <span class="pill appt-bevestigd">Bevestigd door klant</span>
       <span class="pill appt-ander_moment">Klant vraagt ander moment</span>
