@@ -325,3 +325,51 @@ test('API: inplannen en klantlink: de klant ziet de afspraak en bevestigt of vra
     server.close();
   }
 });
+
+test('API: startscherm (my-day): klussen van de dag per uitvoerder, meerdaagse klussen per werkdag', async () => {
+  const { server, base, as } = await setup();
+  try {
+    const kees = await as('kees'), baas = await as('baas'), klaas = await as('klaas');
+    const quote = quoteFromGarden();
+    const q = (await kees.post('/api/quotes', { data: { ...quote.data, customer: { ...quote.data.customer, phone: '06 12345678', contact: 'Jan Jansen' } } })).body;
+    await kees.put(`/api/quotes/${q.id}`, { status: 'akkoord' });
+    const mk = async () => (await kees.post('/api/workorders', { quoteId: q.id })).body;
+    const keesId = (await kees.get('/api/me')).body.user.id;
+    const baasId = (await baas.get('/api/me')).body.user.id;
+    const [a, b, c, d] = [await mk(), await mk(), await mk(), await mk()];
+    // Vrijdag 11 jan 2030, 2 werkdagen: vrijdag en maandag 14 jan.
+    await kees.post(`/api/workorders/${a.id}/schedule`, { plannedDate: '2030-01-11', startTime: '10:00', endTime: '16:00', days: 2, assigneeId: keesId });
+    await kees.post(`/api/workorders/${b.id}/schedule`, { plannedDate: '2030-01-14', startTime: '08:00', assigneeId: keesId });
+    await kees.post(`/api/workorders/${c.id}/schedule`, { plannedDate: '2030-01-14', startTime: '09:00', assigneeId: baasId });
+    await kees.post(`/api/workorders/${d.id}/schedule`, { plannedDate: '2030-01-21', assigneeId: keesId });
+
+    assert.strictEqual((await klaas.get('/api/my-day')).status, 403, 'klant heeft geen startscherm');
+    assert.strictEqual((await kees.get('/api/my-day?date=morgen')).status, 400);
+    const now = (await kees.get('/api/my-day')).body;
+    assert.match(now.date, /^\d{4}-\d{2}-\d{2}$/);
+    assert.strictEqual(now.date, now.today, 'zonder datum: vandaag');
+
+    let r = (await kees.get('/api/my-day?date=2030-01-14')).body;
+    assert.deepStrictEqual(r.items.map((w) => w.number), [b.number, a.number], 'op starttijd');
+    const second = r.items.find((w) => w.id === a.id);
+    assert.strictEqual(second.dayNumber, 2);
+    assert.strictEqual(second.totalDays, 2);
+    assert.strictEqual(second.phone, '06 12345678');
+    assert.strictEqual(second.contact, 'Jan Jansen');
+    assert.strictEqual(second.address, 'Dorpsstraat 1, Nunspeet');
+    assert.strictEqual(second.photos, 0);
+    assert.strictEqual(r.next.id, d.id, 'eerstvolgende klus na deze dag');
+
+    assert.deepStrictEqual((await kees.get('/api/my-day?date=2030-01-12')).body.items, [], 'zaterdag telt niet als werkdag');
+    r = (await kees.get('/api/my-day?date=2030-01-14&all=1')).body;
+    assert.deepStrictEqual(r.items.map((w) => w.number), [b.number, c.number, a.number], 'hele ploeg, op starttijd');
+    assert.strictEqual(r.next, null);
+    assert.deepStrictEqual((await baas.get('/api/my-day?date=2030-01-14')).body.items.map((w) => w.id), [c.id]);
+
+    // Geannuleerd valt weg.
+    await kees.put(`/api/workorders/${b.id}`, { status: 'geannuleerd' });
+    assert.deepStrictEqual((await kees.get('/api/my-day?date=2030-01-14')).body.items.map((w) => w.id), [a.id]);
+  } finally {
+    server.close();
+  }
+});

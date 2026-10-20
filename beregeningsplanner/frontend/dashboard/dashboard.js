@@ -77,6 +77,15 @@
     $('#myplans').hidden = false;
   }
 
+  // Begroeting boven het dagoverzicht (installateurs, beheerders).
+  function greet(me) {
+    const h = Number(new Date().toLocaleString('nl-NL', { hour: 'numeric', hour12: false, timeZone: 'Europe/Amsterdam' }));
+    const part = h < 12 ? 'Goedemorgen' : h < 18 ? 'Goedemiddag' : 'Goedenavond';
+    const name = String(me.user.displayName || '').split(' ')[0];
+    $('.intro h1').textContent = name ? `${part}, ${name}` : part;
+    $('#intro-text').textContent = document.body.classList.contains('has-nav') ? 'Dit staat er gepland. Kies links een onderdeel om mee te werken.' : 'Dit staat er gepland.';
+  }
+
   function showVersion() {
     if (location.protocol === 'file:') return;
     fetch('api/health', { cache: 'no-store' })
@@ -98,6 +107,7 @@
   showVersion();
   Promise.all([window.AquatechAccount.load(''), loadConfig()]).then(([me]) => {
     renderModules(me);
+    if (window.AquatechToday && window.AquatechToday.start(me)) greet(me);
     renderMyPlans(me);
     window.AquatechSupport.load(me);
   });
