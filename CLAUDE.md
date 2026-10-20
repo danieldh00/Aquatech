@@ -318,6 +318,51 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   per regel. `test/queries.test.js` bewaakt dat.
 - Health: `GET /api/health` (versie uit `package.json`).
 
+## Checklist voor elke nieuwe feature (zonder dat Daniël erom vraagt)
+
+Database-, navigatie- en beveiligingsregels (PR #45, #46, #47) gelden
+standaard voor alle nieuwe code. Controleer ze zelf vóór de PR en noem in
+de PR-beschrijving kort hoe eraan voldaan is.
+
+**Queries** (productie = Supabase over het netwerk, elke query is een rondgang):
+- Geen `SELECT *`/`t.*`: alleen de kolommen die nodig zijn; grote kolommen
+  (`data`, beelden, blobs) niet in overzichten, gebruik `jsonDigest`.
+- Geen query per regel (N+1): één query met `IN (...)`/JOIN of een map vooraf.
+- Een nieuwe `WHERE`/`ORDER BY` op een groeiende tabel krijgt een index met
+  `tenant_id` vooraan (migratie in `MIGRATIONS` én `PG_MIGRATIONS`).
+- Gebruiker/tenant per verzoek niet opnieuw opvragen (`req.user`,
+  `withRequestCache`). Breid `test/queries.test.js` uit voor nieuwe routes.
+
+**Navigatie en laden** (frontend):
+- Links naar een item direct (`?id=…`), nooit via een overzicht; terugknop
+  via `origin()` uit `shared/common.js`.
+- `api/me`/`api/config` alleen via `getJson` (één verzoek per pagina);
+  onafhankelijke verzoeken parallel (`Promise.all`), het item zelf al
+  ophalen terwijl de login-check loopt. Na terugkeer verversen met `onReturn()`.
+- Scripts/CSS met `?v=<versie>`; zware bibliotheken pas laden bij gebruik
+  (zoals `excel()`). Geen bevestigingsvraag als er niets verloren gaat.
+
+**Beveiliging** (ASVS L2 + AVG):
+- Tenant-isolatie: elke query filtert op `tenant_id = req.tenantId`
+  (gebruikersbeheer via `homeOf`/`usersTenantOf`); id's uit de URL altijd
+  samen met de tenant opzoeken, nooit alleen op id.
+- Rechten op de server met `requireRight(recht)` (rechten in
+  `shared/roles.js`, `Roles.can`); de frontend verbergt alleen. Klant ziet
+  alleen eigen gegevens (`customer_id`), nooit uren/notities/interne velden.
+- Limieten per bezoeker via `remoteIp(req)` (CF-Connecting-IP achter de
+  tunnel) en `createRateLimiter`; elk openbaar of duur endpoint krijgt er één.
+- Uitgaande verbindingen naar door een tenant ingevulde hosts altijd via
+  `netguard.publicAddress` (geen SSRF naar het eigen netwerk).
+- Schrijvende `/api`-verzoeken: de `Sec-Fetch-Site`-controle niet omzeilen;
+  nieuwe body-routes krijgen een eigen `express.json({ limit })`.
+- Uploads: type op inhoud controleren (niet op naam/MIME), grootte begrenzen,
+  EXIF strippen, opslaan via `vault.sealBytes`. Openbare links: token alleen
+  als SHA-256 opslaan, via een kop (niet in de URL-query) versturen.
+- Geheimen als `type: 'secret'` in settings.js, nooit in logs, `audit`-detail
+  of frontend. Invoer server-side saneren (`sanitize`), parameters altijd
+  via `?`, nooit tekst in SQL plakken.
+- Tests voor elke nieuwe route: andere tenant → 404, ontbrekend recht → 403.
+
 ## Harde regels
 
 - **Alle URL's in de frontend relatief** (`css/app.css`, nooit `/css/...`),
@@ -330,8 +375,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - Exports: **Excel (.xlsx), geen CSV**, tenzij expliciet anders gevraagd.
 - Geen modelnamen/-ID's in commits, PR's, code of docs.
 - Prijzen in `frontend/beregening/js/catalog.js` zijn indicatieve placeholders.
-- **Geen `SELECT *` of `t.*`** in de backend (wens Daniël): elke query noemt
-  alleen de kolommen die nodig zijn; `test/queries.test.js` controleert dat.
+- **Geen `SELECT *` of `t.*`** in de backend; `test/queries.test.js` controleert dat.
 - **Nooit `pkill -f`** in de cloud-sandbox; stop een testserver met
   `kill $(lsof -ti tcp:3300)`.
 
