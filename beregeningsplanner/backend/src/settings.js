@@ -3,6 +3,7 @@ const { createVault } = require('./vault');
 const { sanitizeProfile } = require('./quotes');
 const { sanitizeMail } = require('./mailer');
 const { sanitizeShop } = require('./woocommerce');
+const { sanitizeOutsourcing } = require('./outsourcing');
 const path = require('path');
 const Theme = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'theme.js'));
 
@@ -46,6 +47,10 @@ const FIELDS = {
   shopSource: { type: 'object', default: {}, sanitize: sanitizeShop },
   shopConsumerKey: { type: 'secret', default: '', min: 10, hint: true },
   shopConsumerSecret: { type: 'secret', default: '', min: 10 },
+  // Opdrachten uitbesteden aan andere organisaties op het platform
+  // (outsourcing.js): versturen en ontvangen staan standaard uit en zet de
+  // beheerder zelf aan; region = werkgebied dat andere organisaties zien.
+  outsourcing: { type: 'object', default: {}, sanitize: sanitizeOutsourcing },
   // Kleurthema (shared/theme.js): alleen door een hoofdbeheerder te kiezen via
   // Hoofdbeheer (platform: niet via Beheer > Instellingen). In de hoofdtenant
   // geldt het voor alle organisaties, in een live-tenant als eigen thema.

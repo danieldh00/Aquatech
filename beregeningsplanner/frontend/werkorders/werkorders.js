@@ -58,11 +58,19 @@
     { key: 'title', label: 'Klant en klus', value: (w) => w.customer || w.title, html: (w) => `${esc(w.customer || '–')}<span class="sub">${esc(w.address || w.title)}</span>`, cls: 'wrap' },
     { key: 'plannedDate', label: 'Gepland', value: (w) => (w.plannedDate ? `${w.plannedDate} ${w.startTime}` : '9999'), html: (w) => (w.plannedDate ? `${esc(shortDate(w.plannedDate))}${w.startTime ? `<span class="sub">${esc(w.startTime)}${w.endTime ? `–${esc(w.endTime)}` : ''} uur${w.days > 1 ? ` · ${w.days} dagen` : ''}</span>` : ''}${w.appointment && ['wacht', 'bevestigd', 'ander_moment'].includes(w.appointment.state) ? `<span class="sub"><span class="pill appt-${esc(w.appointment.state)}">${esc(W.APPOINTMENT[w.appointment.state])}</span></span>` : ''}` : '<span class="muted">Nog niet</span>') },
     { key: 'assignee', label: 'Uitvoerder', value: (w) => (w.assignee ? w.assignee.displayName : ''), html: (w) => esc(w.assignee ? w.assignee.displayName : '–') },
-    { key: 'status', label: 'Status', value: (w) => w.status, html: (w) => `<span class="pill wo-${esc(w.status)}">${esc(W.STATUSES[w.status] || w.status)}</span>` },
+    { key: 'status', label: 'Status', value: (w) => w.status, html: (w) => `<span class="pill wo-${esc(w.status)}">${esc(W.STATUSES[w.status] || w.status)}</span>${outsourcedLabel(w)}` },
     { key: 'progress', label: 'Voortgang', value: (w) => w.progress.pct, html: (w) => progressBar(w.progress) },
     { key: 'hours', label: 'Uren', value: (w) => w.progress.hours, html: (w) => esc(hours(w.progress.hours)), cls: 'num' },
     { key: 'updatedAt', label: 'Laatst gewijzigd', value: (w) => w.updatedAt, html: (w) => esc(new Date(w.updatedAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })) },
   ];
+
+  // Uitbesteed of aangenomen: korte regel onder de status.
+  function outsourcedLabel(w) {
+    const o = w.outsourcing;
+    if (!o) return '';
+    const text = o.role === 'aangenomen' ? `Van ${o.partner}` : o.status === 'geaccepteerd' ? `Uitbesteed aan ${o.partner}` : 'Aangeboden aan anderen';
+    return `<span class="sub">${esc(text)}</span>`;
+  }
 
   // Verzoek dat init() al vooruit heeft gestart (tegelijk met api/me), anders nu.
   function take(key, url) {
@@ -230,6 +238,27 @@
     }
   }
 
+  // Uitbesteed aan of aangenomen van een andere organisatie (zie ../uitbesteden/).
+  function renderOutsourcing() {
+    const wo = state.wo;
+    const o = wo.outsourcing;
+    const el = $('#e-outsourced');
+    const link = state.outsource ? ' <a href="../uitbesteden/">Naar Uitbesteden</a>' : '';
+    let html = '';
+    if (o && o.role === 'aangenomen') {
+      html = `<b>Aangenomen van ${esc(o.partner)}.</b> ${esc(o.partner)} ziet de status, de planning en de afgevinkte stappen van deze werkorder.${o.fee != null ? ` Afgesproken vergoeding: ${esc(eur(o.fee))} excl. btw.` : ''}${o.message ? `<br><span class="muted">“${esc(o.message)}”</span>` : ''}${link}`;
+    } else if (o && o.status === 'geaccepteerd') {
+      const x = o.execution;
+      const stand = !x ? '' : x.removed ? ' De werkorder is daar verwijderd.' : ` Daar: ${esc(W.STATUSES[x.status] || x.status)}${x.plannedDate ? `, gepland ${esc(date(x.plannedDate))}` : ''}, ${x.progress.done}/${x.progress.steps} stappen klaar${x.completedOn ? `, opgeleverd ${esc(date(x.completedOn))}` : ''}.`;
+      html = `<b>Uitbesteed aan ${esc(o.partner)}.</b>${stand}${link}`;
+    } else if (o) {
+      html = `<b>Aangeboden${o.direct && o.partner ? ` aan ${esc(o.partner)}` : ' aan andere organisaties'}</b>, nog niet aangenomen.${link}`;
+    }
+    el.innerHTML = html;
+    el.hidden = !html;
+    $('#e-menu [data-act=outsource]').hidden = !state.outsource || Boolean(o) || !['open', 'gepland'].includes(wo.status);
+  }
+
   function openWorkOrder(wo) {
     wo.data = W.sanitize(wo.data);
     state.wo = wo;
@@ -255,6 +284,7 @@
     $('#e-menu [data-act=rezones]').hidden = !d.planId;
     $('#e-menu [data-act=rematerials]').hidden = !d.quoteId;
     $('#e-menu [data-act=purge]').hidden = !state.admin;
+    renderOutsourcing();
     renderRoute();
     renderAppt();
     renderWarnings();
@@ -698,6 +728,9 @@
       } catch (e) {
         toast(`Kan de offerte niet laden: ${e.message}`, true);
       }
+    } else if (act === 'outsource') {
+      await save();
+      location.href = `../uitbesteden/?wo=${encodeURIComponent(wo.id)}`;
     } else if (act === 'delete') {
       if (!confirm(`Werkorder ${wo.number} verwijderen?`)) return;
       try {
@@ -955,6 +988,7 @@
     state.me = await window.AquatechAccount.load('../');
     const rights = state.me.rights || [];
     state.admin = rights.includes('beheer');
+    state.outsource = rights.includes('uitbesteden');
     if (!state.me.user || !rights.includes('werkorders')) {
       $('#list-view').hidden = false;
       $('#l-new').hidden = true;

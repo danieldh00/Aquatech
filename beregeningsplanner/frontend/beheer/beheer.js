@@ -23,6 +23,7 @@
     tenant_verwijderd: 'Tenant verwijderd', testomgeving_verwijderd: 'Testomgeving verwijderd', werkorder_verwijderd: 'Werkorder verwijderd', werkorder_gewist: 'Werkorder definitief gewist',
     impersonatie_gestart: 'Hoofdbeheerder werkt als gebruiker', impersonatie_beeindigd: 'Impersonatie beëindigd',
     webshop_gesynchroniseerd: 'Webshopproducten opgehaald', support_toegang_verleend: 'Supporttoegang gegeven', support_toegang_ingetrokken: 'Supporttoegang ingetrokken',
+    opdracht_aangeboden: 'Opdracht uitbesteed (aangeboden)', opdracht_ingetrokken: 'Uitbesteding ingetrokken', opdracht_aangenomen: 'Opdracht aangenomen', opdracht_afgewezen: 'Opdracht afgewezen',
   };
 
   function toast(msg, err = false) {
@@ -351,6 +352,11 @@
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
+    const out = $('#s-outsourcing');
+    const o = view.outsourcing.value;
+    out.send.checked = o.send;
+    out.receive.checked = o.receive;
+    out.region.value = o.region || '';
     const mods = (window.AquatechModules || []).filter((m) => m.id !== 'beheer' && m.id !== 'hoofdbeheer');
     $('#s-module-list').innerHTML = mods.map((m) => `
       <label class="chk"><input type="checkbox" data-module="${esc(m.id)}"${m.status === 'gepland' ? ' disabled' : view.modules.value[m.id] === false ? '' : ' checked'}>
@@ -476,6 +482,11 @@
       for (const k of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays']) patch[k] = Number(sec[k].value);
       saveSettings(sec, patch, 'Instellingen opgeslagen');
     };
+    const out = $('#s-outsourcing');
+    out.onsubmit = (ev) => {
+      ev.preventDefault();
+      saveSettings(out, { outsourcing: { send: out.send.checked, receive: out.receive.checked, region: out.region.value.trim() } }, 'Uitbesteden opgeslagen');
+    };
     const mods = $('#s-modules');
     mods.onsubmit = (ev) => {
       ev.preventDefault();
@@ -496,6 +507,9 @@
     if (d.fields) parts.push(`velden: ${d.fields.join(', ')}`);
     if (d.count !== undefined) parts.push(`${d.count} sessie(s)`);
     if (d.name) parts.push(d.name);
+    if (d.aan) parts.push(`aan ${d.aan}`);
+    if (d.van) parts.push(`van ${d.van}`);
+    if (d.door) parts.push(`door ${d.door}`);
     if (d.automatisch) parts.push('automatisch');
     return parts.join(' · ');
   }

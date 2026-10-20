@@ -1,0 +1,30 @@
+/* Uitbesteden: aanbiedingen van andere organisaties en wat wij uitbesteden. */
+.tab .count:not(:empty) { display: inline-block; min-width: 18px; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--at-green); color: #fff; font-size: 12px; line-height: 18px; text-align: center; }
+#u-off, #u-denied { margin-bottom: 14px; }
+
+#u-new { border-left: 4px solid var(--at-teal); }
+#u-new .row { margin: 8px 0; }
+#u-new label.grow { flex: 1 1 280px; }
+#u-new select, #u-new textarea { width: 100%; }
+#u-new .err:not(:empty) { margin-top: 6px; }
+.n-wo { margin-bottom: 8px; }
+.n-wo .sub, td .sub { display: block; font-size: 12px; color: var(--muted); }
+
+.offer { border-left: 4px solid var(--at-teal); }
+.offer.st-geaccepteerd { border-left-color: var(--at-green); }
+.offer.st-afgewezen, .offer.st-ingetrokken { border-left-color: var(--line); opacity: 0.8; }
+.offer-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+.offer-head h2 { margin: 0; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--primary-dark); }
+.offer-head .spacer { flex: 1; }
+.offer-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px 18px; font-size: 14px; margin-bottom: 10px; }
+.offer-info .lbl { display: block; font-size: 12px; color: var(--muted); }
+.offer-msg { white-space: pre-line; background: var(--at-green-soft); border-radius: 6px; padding: 8px 10px; font-size: 14px; margin: 0 0 8px; }
+.offer details summary { cursor: pointer; font-weight: 600; font-size: 14px; margin: 10px 0 6px; }
+.offer table.mini { border-collapse: collapse; width: 100%; font-size: 13px; }
+.offer table.mini td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.offer table.mini td.num { text-align: right; white-space: nowrap; }
+.offer-actions { margin-top: 12px; }
+
+.pill.of-aangeboden { background: var(--primary-soft); color: var(--primary-dark); }
+.pill.of-geaccepteerd { background: var(--at-green-soft); color: var(--at-green-dark); }
+.pill.of-afgewezen, .pill.of-ingetrokken { background: var(--line); color: var(--muted); }

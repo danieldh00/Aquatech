@@ -54,3 +54,6 @@ table.lines tr.done input[data-s=title], table.lines tr.done input[data-m=descri
 .modal-card label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin: 10px 0; }
 .modal-card label .full, .modal-card input.full, .modal-card textarea.full { width: 100%; box-sizing: border-box; }
 .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+/* Uitbesteed aan of aangenomen van een andere organisatie. */
+.notice.outsourced { border-left: 4px solid var(--at-teal); margin-bottom: 14px; padding: 10px 14px; font-size: 14px; }

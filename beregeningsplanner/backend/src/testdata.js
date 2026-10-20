@@ -207,7 +207,9 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
       share: { sent: 5, views: 1, lastView: 4 },
       response: { answer: 'akkoord', name: 'Sanne van den Berg', at: 4, via: 'link' },
       workorder: { status: 'gepland', assignee: 'inst1', planned: 8, endTime: '12:00', done: 0, picked: 0,
-        appointment: { answer: 'ander_moment', name: 'Sanne van den Berg', reason: 'Die week zijn wij op vakantie; de week erna kan elke ochtend.' } } },
+        appointment: { answer: 'ander_moment', name: 'Sanne van den Berg', reason: 'Die week zijn wij op vakantie; de week erna kan elke ochtend.' },
+        // Uitbesteed aan iedereen die opdrachten ontvangt (andere testomgevingen).
+        outsource: { message: 'Wij zitten die weken vol. Wie kan deze klus overnemen? Materiaal kan bij ons worden opgehaald.', fee: 395 } } },
     { planKey: 'bos', owner: 'inst1', customerKey: null, customer: c.bos, status: 'concept', at: 1, discountPct: 10, options: ['soil'] },
   ].map((qd) => {
     const plan = plans.find((x) => x.key === qd.planKey);
@@ -367,9 +369,9 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
  * er geen klantlinks (de afspraaklink staat ernaast: openbaar/afspraak.html).
  */
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos } = stores;
+  const { db, quotes, workorders, shop, settings, photos, outsourcing } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0, offers: 0 };
   const apptBase = shareBase ? shareBase.replace(/offerte\.html$/, 'afspraak.html') : null;
   const today = new Date().toISOString().slice(0, 10);
   const dateIn = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
@@ -437,6 +439,14 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
       const at = set.day(Math.max(0, spec.response.at - 1));
       q('UPDATE work_orders SET created_at = ?, updated_at = ? WHERE id = ?').run(at, w.status === 'gereed' ? set.day(-w.planned - 1) : at, wo.id);
       counts.workOrders++;
+      // Uitbesteden: versturen en ontvangen aan in de testomgeving, en deze klus aangeboden.
+      if (outsourcing && w.outsource) {
+        settings.update({ outsourcing: { ...settings.get('outsourcing'), send: true, receive: true } });
+        const out = outsourcing.offer(owner, owner.tenant_id, wo.id, { ...w.outsource, toTenantId: null, fromName: q('SELECT name FROM tenants WHERE id = ?').get(owner.tenant_id).name });
+        if (out.error) throw new Error(`Testdata: werkorder ${wo.number} uitbesteden mislukt (${out.error})`);
+        q('UPDATE work_order_offers SET created_at = ?, updated_at = ? WHERE id = ?').run(set.day(1), set.day(1), out.offer.id);
+        counts.offers++;
+      }
       // Foto's: voor/tijdens bij werk in uitvoering, plus de oplevering als hij gereed is.
       if (photos && w.photos) {
         w.photos.forEach((p, k) => {

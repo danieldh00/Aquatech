@@ -269,6 +269,34 @@ const PG_MIGRATIONS = [
   CREATE INDEX sessions_expires ON sessions (expires_at);
   CREATE INDEX impersonations_user ON impersonations (user_id);
   `,
+  // 17: opdrachten uitbesteden aan een andere organisatie.
+  `
+  CREATE TABLE work_order_offers (
+    id                     ${T} PRIMARY KEY,
+    tenant_id              ${T} NOT NULL ${FK('tenants(id)')},
+    work_order_id          ${T} NOT NULL,
+    to_tenant_id           ${T},
+    status                 ${T} NOT NULL DEFAULT 'aangeboden' CHECK (status IN ('aangeboden', 'geaccepteerd', 'afgewezen', 'ingetrokken')),
+    message                ${T} NOT NULL DEFAULT '',
+    fee                    DOUBLE PRECISION,
+    preview                ${T} NOT NULL,
+    from_name              ${T} NOT NULL DEFAULT '',
+    created_by             ${T},
+    created_by_name        ${T} NOT NULL DEFAULT '',
+    declined               ${T} NOT NULL DEFAULT '[]',
+    receiver_tenant_id     ${T},
+    receiver_name          ${T} NOT NULL DEFAULT '',
+    received_work_order_id ${T},
+    responded_by_name      ${T} NOT NULL DEFAULT '',
+    responded_at           ${T},
+    reason                 ${T} NOT NULL DEFAULT '',
+    created_at             ${T} NOT NULL,
+    updated_at             ${T} NOT NULL
+  );
+  CREATE INDEX work_order_offers_wo ON work_order_offers (tenant_id, work_order_id);
+  CREATE INDEX work_order_offers_open ON work_order_offers (status, to_tenant_id);
+  CREATE INDEX work_order_offers_receiver ON work_order_offers (receiver_tenant_id, received_work_order_id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
