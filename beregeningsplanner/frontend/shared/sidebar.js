@@ -70,6 +70,7 @@
       backdrop.onclick = () => setOpen(false);
       body.insertBefore(backdrop, nav.nextSibling);
       addToggle();
+      syncTopbarHeight();
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && body.classList.contains('nav-open')) setOpen(false); });
     }
     nav.innerHTML = `
@@ -96,6 +97,17 @@
     };
     body.classList.add('has-nav');
     body.classList.toggle('nav-compact', isCompact());
+  }
+
+  // De kop van de zijbalk volgt de hoogte van de kopbalk (die verschilt per
+  // pagina en verandert bij een andere schermbreedte).
+  function syncTopbarHeight() {
+    const bar = document.querySelector('.topbar');
+    if (!bar) return;
+    const apply = () => document.documentElement.style.setProperty('--at-topbar-h', `${bar.getBoundingClientRect().height}px`);
+    apply();
+    if (root.ResizeObserver) new ResizeObserver(apply).observe(bar);
+    else root.addEventListener('resize', apply);
   }
 
   // Menuknop vooraan in de kopbalk (alleen zichtbaar op een smal scherm).

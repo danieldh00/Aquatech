@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.40.0
+
+- **Zijbalk netjes uitgelijnd**: de lijn onder het logo in de zijbalk ligt nu
+  precies op de onderkant van de kopbalk, op elke pagina (de hoogte van de
+  kopbalk wordt gemeten, ook in de planner waar die hoger is).
+- **Mijn portaal** heeft een eigen icoon (persoon) in plaats van het huisje,
+  zodat het niet meer op een dubbel *Overzicht* lijkt.
+
 ## 0.39.0
 
 - **Supabase is de standaard in productie**: de productie-compose gebruikt
