@@ -33,6 +33,16 @@ function createImpersonationStore(db) {
       .get(String(userId), now()) || null;
   }
 
+  // De lopende toestemming van meerdere gebruikers in één query: { user-id: rij }.
+  function activeGrants(userIds) {
+    const out = {};
+    if (!userIds.length) return out;
+    const rows = q(`SELECT * FROM support_grants WHERE user_id IN (${userIds.map(() => '?').join(', ')}) AND revoked_at IS NULL AND expires_at > ?
+      ORDER BY expires_at`).all(...userIds.map(String), now());
+    for (const r of rows) out[r.user_id] = r; // de laatst verlopende wint, zoals in activeGrant
+    return out;
+  }
+
   // Een nieuwe toestemming vervangt de vorige.
   function grant(user, hours) {
     const ts = now();
@@ -72,7 +82,7 @@ function createImpersonationStore(db) {
       WHERE i.user_id = ? ORDER BY i.started_at DESC LIMIT ?`).all(String(userId), limit);
   }
 
-  return { activeGrant, grant, revoke, start, get, end, openFor, recentFor };
+  return { activeGrant, activeGrants, grant, revoke, start, get, end, openFor, recentFor };
 }
 
 /**
@@ -276,7 +286,10 @@ function createImpersonation({ store, imp, auth, audit, mainTenantId }) {
     });
   }
 
-  return { resolve, stop, syncHint, register, activeGrant: (id) => publicGrant(imp.activeGrant(id)) };
+  return {
+    resolve, stop, syncHint, register, activeGrant: (id) => publicGrant(imp.activeGrant(id)),
+    activeGrants: (ids) => Object.fromEntries(Object.entries(imp.activeGrants(ids)).map(([k, g]) => [k, publicGrant(g)])),
+  };
 }
 
 module.exports = { createImpersonationStore, createImpersonation, IMP_COOKIE, IMP_HINT, GRANT_HOURS, MAX_IMPERSONATION_MS };

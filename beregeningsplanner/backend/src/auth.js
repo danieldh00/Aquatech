@@ -67,8 +67,10 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
 
   // Geeft { subject: 'code', row } of { subject: 'user', user, row } terug, of null.
   function verifySession(token) {
-    const row = store.findSession(token);
-    if (!row) return null;
+    // Sessie, gebruiker en tenant in één query (dit gebeurt bij elk verzoek).
+    const found = store.findSessionWithUser(token);
+    if (!found) return null;
+    const { row } = found;
     // Toegangscode: alleen de hoofdtenant; een account: alleen de eigen tenant.
     if (row.via === 'code' && row.tenant_id !== tenantId) return null;
     const t = Date.now();
@@ -81,7 +83,7 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
       store.touchSession(row);
       return { subject: 'code', row };
     }
-    const user = store.getUser(row.user_id);
+    const user = found.user;
     if (!user || user.disabled || user.kind !== 'account' || user.tenant_id !== row.tenant_id || !safeEqual(row.fingerprint, userFingerprint(user))) { store.dropSession(row); return null; }
     store.touchSession(row);
     return { subject: 'user', user, row };

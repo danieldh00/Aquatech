@@ -7,7 +7,7 @@ const { createRateLimiter } = require('./rateLimit');
 const { loadOrCreateSecret } = require('./options');
 const { createPlanAnalyzer, AnalyzeError } = require('./planAnalyzer');
 const { openDb, openDatabase, isPg } = require('./db');
-const { createStore, hashPassword, passwordProblem, preferencesOf } = require('./store');
+const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf } = require('./store');
 const testdata = require('./testdata');
 const { createSettings, SettingsError, FIELDS } = require('./settings');
 const { createVault, loadOrCreateMasterKey } = require('./vault');
@@ -162,7 +162,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Gasten (zonder inloggen) alleen als dat aanstaat en er geen code is.
   const guestsAllowed = () => !getAccessCode() && settings.get('guestAccess');
   // Nog geen beheerder met een eigen account: eerst het instelscherm.
-  const needsSetup = () => store.countAdmins(tenant.id) === 0;
+  // Is er eenmaal een actieve beheerder, dan blijft dat zo (de laatste
+  // beheerder is niet uit te schakelen of te verwijderen): daarna niet bij elk
+  // verzoek opnieuw tellen.
+  let hasAdmin = false;
+  const needsSetup = () => {
+    if (!hasAdmin) hasAdmin = store.countAdmins(tenant.id) > 0;
+    return !hasAdmin;
+  };
   const auth = createAuth({ secret, store, tenantId: tenant.id, getAccessCode,
     idleDays: () => settings.get('sessionIdleDays'), maxDays: () => settings.get('sessionMaxDays') });
   // Standaard in het auditlog van de actieve omgeving (zonder inlog de hoofdtenant).
@@ -191,6 +198,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const app = express();
 
   app.disable('x-powered-by');
+  // Per verzoek een eigen geheugen voor gegevens die binnen één verzoek
+  // meermaals nodig zijn (zoals de tenant); zie withRequestCache in store.js.
+  app.use((req, res, next) => withRequestCache(next));
   // Modules roepen de API relatief aan ('api/...'), dus vanuit beregening/
   // komt dat binnen als /beregening/api/...: zelfde API, prefix eraf.
   app.use((req, res, next) => {
@@ -387,7 +397,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       if (!home || (home.disabled && !user.platform_admin)) user = null;
     }
     if (user) {
-      store.touchUser(user.id);
+      store.touchUser(user);
       // Een hoofdbeheerder kan tijdelijk als een andere gebruiker werken (zie impersonation.js).
       const as = s?.via === 'user' && user.platform_admin ? impersonation.resolve(req, user) : null;
       user = as || actingUser(req, user);
@@ -522,7 +532,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/api/account/profile', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const u = profileOwner(req, res);
-    if (u) res.json(profileOf(store.getUser(u.id)));
+    // s.user is in dit verzoek net uit de database gelezen.
+    if (u) res.json(profileOf(u));
   });
 
   app.put('/api/account/profile', requireJson, (req, res) => {
@@ -982,7 +993,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     customersOf: (req) => {
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
-      return home === tid ? store.listCustomers(tid) : [...store.listCustomers(home), ...store.listCustomers(tid)];
+      return store.listCustomers(home === tid ? [tid] : [home, tid]);
     },
   });
 
@@ -992,7 +1003,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     settingsOf: (req) => settingsFor(req.tenantId || tenant.id), settingsForTenant: (id) => settingsFor(id),
     remoteIp, mailerFor, tenantActive, publicLimiter,
     themeOf: (id) => Theme.vars(themeFor(id)),
-    photoCounts: (tid) => photoStore.counts(tid),
+    photoCounts: (tid, ids) => photoStore.counts(tid, ids),
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
     // testaccounts daarvan erbij (net als bij de klantaccounts hierboven).
     staffTenantsOf: (req) => {
@@ -1200,7 +1211,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/api/platform/tenants/:id/users', (req, res) => {
     const t = userTenant(req, res);
     // Met de supporttoestemming erbij (nodig om in live als de gebruiker te werken).
-    if (t) res.json({ items: store.listUsers(t.id, { includeGuests: false }).map((u) => ({ ...u, support: impersonation.activeGrant(u.id) })) });
+    if (!t) return;
+    const users = store.listUsers(t.id, { includeGuests: false });
+    const grants = impersonation.activeGrants(users.map((u) => u.id));
+    res.json({ items: users.map((u) => ({ ...u, support: grants[u.id] || null })) });
   });
 
   app.post('/api/platform/tenants/:id/users', requireJson, wrap(async (req, res) => {
