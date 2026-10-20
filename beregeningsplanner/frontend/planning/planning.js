@@ -118,12 +118,13 @@
     const n = date ? ds.indexOf(date) + 1 : 0;
     const appt = w.appointment || { state: 'geen' };
     const label = W.APPOINTMENT[appt.state] || '';
-    const title = `${w.number} · ${w.title}\n${w.customer || ''}${w.address ? `, ${w.address}` : ''}\n${timeText(w) ? `${timeText(w)} uur · ` : ''}${hoursText(w) ? `${hoursText(w)} gepland · ` : ''}${w.assignee ? w.assignee.displayName : 'Niet toegewezen'}\n${W.STATUSES[w.status] || w.status} · ${label}${appt.response && appt.response.reason && appt.state === 'ander_moment' ? `\n“${appt.response.reason}”` : ''}`;
+    const title = `${w.number} · ${w.title}${w.summary ? `\n${w.summary}` : ''}\n${w.customer || ''}${w.address ? `, ${w.address}` : ''}\n${timeText(w) ? `${timeText(w)} uur · ` : ''}${hoursText(w) ? `${hoursText(w)} gepland · ` : ''}${w.assignee ? w.assignee.displayName : 'Niet toegewezen'}\n${W.STATUSES[w.status] || w.status} · ${label}${appt.response && appt.response.reason && appt.state === 'ander_moment' ? `\n“${appt.response.reason}”` : ''}`;
     const head = `<span class="dot appt-${esc(appt.state)}"></span>`;
     const inner = compact
       ? `${head}${w.startTime ? `<span class="t ct">${esc(w.startTime)}</span> ` : ''}${esc(w.customer || w.title || w.number)}`
       : `<span class="sub">${head}${timeText(w) ? `<span class="t">${esc(timeText(w))}</span> · ` : ''}${esc(w.number)}${ds.length > 1 && n ? ` · dag ${n}/${ds.length}` : ''}${hoursText(w) ? ` · ${hoursText(w)}` : ''}</span>
         <b>${esc(w.customer || w.title || 'Werkorder')}</b>
+        ${w.summary ? `<span class="desc">${esc(w.summary)}</span>` : ''}
         ${place(w) ? `<span class="sub">${esc(place(w))}${state.view !== 'dag' && w.assignee ? ` · ${esc(w.assignee.displayName)}` : ''}</span>` : ''}`;
     return `<a class="p-card st-${esc(w.status)}${state.picked === w.id ? ' picked' : ''}${cls ? ` ${cls}` : ''}" draggable="true" data-id="${esc(w.id)}"
       href="../werkorders/?id=${encodeURIComponent(w.id)}" title="${esc(title)}" style="--who:${colorOf(w.assigneeId)};${style}">${inner}</a>`;

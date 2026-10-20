@@ -111,6 +111,20 @@ test('planning: werkdagen, moment en opschonen van tijden en dagen', () => {
   assert.strictEqual(W.fitHours('08:00', 0), null);
 });
 
+test('korte omschrijving voor de planning', () => {
+  const steps = [
+    { phase: 'voorbereiding', title: 'Materialen laden' },
+    { phase: 'uitvoering', title: 'Sleuven graven' },
+    { phase: 'uitvoering', title: 'Sproeiers plaatsen' },
+    { phase: 'oplevering', title: 'Opruimen' },
+  ];
+  assert.strictEqual(W.summary({ design: { zones: 3, sprinklers: 1, lawnM2: 120.4 }, steps }),
+    '3 zones, 1 sproeier, 120 m² gazon: Sleuven graven, Sproeiers plaatsen');
+  assert.strictEqual(W.summary({ instructions: '\n  Alleen de achtertuin aanleggen.\nSleutel bij de buren.', steps }), 'Alleen de achtertuin aanleggen.', 'instructies gaan voor');
+  assert.strictEqual(W.summary({ instructions: 'x'.repeat(300) }, 20).length, 20);
+  assert.strictEqual(W.summary({}), '');
+});
+
 test('opschonen en voortgang', () => {
   const d = W.sanitize({ plannedDate: 'morgen', startTime: '25:00', steps: [{ phase: 'x', hours: -3, done: 1, actualHours: '2.5' }, { done: false, hours: 1 }], materials: [{ qty: 'a', picked: 'ja' }] });
   assert.strictEqual(d.plannedDate, '');

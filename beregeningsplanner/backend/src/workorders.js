@@ -70,6 +70,7 @@ function createWorkOrderStore(db, { vault = createVault() } = {}) {
       quoteId: r.quote_id || null, quoteNumber: data.quoteNumber || '', planId: r.plan_id || null,
       plannedDate: r.planned_date || '', startTime: data.startTime || '', endTime: data.endTime || '', days: data.days || 1,
       crew: data.crew || '',
+      summary: Core.summary(data),
       assigneeId: r.assignee_id || null, assignee: r.assignee_id ? { id: r.assignee_id, displayName: r.assignee_name || '' } : null,
       appointment: appointmentOf(r, data),
       progress: Core.progress(data), createdAt: r.created_at, updatedAt: r.updated_at,

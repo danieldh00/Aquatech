@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.45.0
+
+- **Rechtstreeks naar de werkorder**: een klik op een afspraak in de planning
+  (of op het startscherm, in een klantdossier of vanuit een offerte) opent
+  meteen de werkorder, zonder eerst het werkorderoverzicht te tonen. De
+  terugknop gaat terug naar waar u vandaan kwam (bijv. **← Planning**).
+- **Korte omschrijving op de afspraak**: elke afspraak in de planning toont
+  wat er gedaan moet worden: de eerste regel van de instructies, anders de
+  omvang (zones, sproeiers, m² gazon) en de uitvoeringsstappen uit de offerte
+  (`Core.summary`, veld `summary` in de werkorder-API). Ook op het startscherm
+  van de installateur als er geen instructies zijn.
+
 ## 0.44.0
 
 - **Kleuren kiezen**: een hoofdbeheerder kiest onder **Hoofdbeheer → Kleuren**
