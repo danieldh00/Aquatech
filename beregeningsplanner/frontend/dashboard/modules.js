@@ -23,7 +23,7 @@
       title: 'Mijn portaal',
       description: 'Alles over uw tuinberegening op één plek: offertes, geplande afspraken, de voortgang van de aanleg en het opleverdossier met foto\'s.',
       href: 'portaal/',
-      icon: 'home',
+      icon: 'user',
       status: 'actief',
       right: 'portaal',
     },
@@ -118,6 +118,7 @@
   // Iconen (SVG-paden, 24x24) voor de tegels en de zijbalk.
   const ICONS = {
     home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
     sprinkler: '<path d="M12 21v-6"/><path d="M8 21h8"/><circle cx="12" cy="12" r="3"/><path d="M5 9c1.5-2 4-3.5 7-3.5S17.5 7 19 9"/><path d="M2.5 6C5 3.5 8.3 2 12 2s7 1.5 9.5 4"/>',
     calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4"/><path d="M16 3v4"/>',
     box: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5"/><path d="M12 12v9"/>',
