@@ -45,14 +45,13 @@
   }
 
   function render(data) {
+    // Alleen modules die er al zijn; geplande modules staan in Beheer >
+    // Instellingen en komen pas in de zijbalk als ze klaar zijn.
     const items = [{ id: '', title: 'Overzicht', icon: 'home', status: 'actief', href: base || './' }]
-      .concat(tools.visible(data.rights, data.disabled).map((m) => ({ ...m, href: m.href ? base + m.href : '' })));
+      .concat(tools.visible(data.rights, data.disabled).filter((m) => m.status === 'actief' && m.href).map((m) => ({ ...m, href: m.href ? base + m.href : '' })));
     const active = currentId(items.filter((m) => m.href));
     const link = (m) => {
       const label = `<span class="at-nav-ico">${tools.icon(m.icon)}</span><span class="at-nav-label">${esc(m.title)}</span>`;
-      if (m.status !== 'actief' || !m.href) {
-        return `<span class="at-nav-item disabled" aria-disabled="true" title="${esc(m.title)} (binnenkort)">${label}</span>`;
-      }
       const cur = m.id === active ? ' aria-current="page"' : '';
       return `<a class="at-nav-item" href="${esc(m.href)}" title="${esc(m.title)}"${cur}>${label}</a>`;
     };
@@ -83,7 +82,6 @@
       </div>
       ${section('', items.filter((m) => m.status === 'actief' && m.group !== 'beheer'))}
       ${section('Beheer', items.filter((m) => m.status === 'actief' && m.group === 'beheer'))}
-      ${section('Binnenkort', items.filter((m) => m.status !== 'actief'))}
       <button type="button" class="at-nav-collapse" title="Zijbalk in- of uitklappen" aria-label="Zijbalk in- of uitklappen">
         <span class="at-nav-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></span><span class="at-nav-label">Inklappen</span>
       </button>`;

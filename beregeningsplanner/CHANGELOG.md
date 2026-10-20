@@ -7,6 +7,10 @@
   kopbalk wordt gemeten, ook in de planner waar die hoger is).
 - **Mijn portaal** heeft een eigen icoon (persoon) in plaats van het huisje,
   zodat het niet meer op een dubbel *Overzicht* lijkt.
+- **Geen "Binnenkort" meer in de zijbalk**: de zijbalk toont alleen modules
+  die er zijn en aan staan. Aan- en uitzetten gaat bij Beheer > Instellingen >
+  *Modules* (geldt voor zijbalk en dashboard); geplande modules staan daar
+  als "binnenkort" en zijn aan te zetten zodra ze klaar zijn.
 
 ## 0.39.0
 

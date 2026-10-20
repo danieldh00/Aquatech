@@ -32,7 +32,6 @@ a.at-nav-item:hover, .at-nav-collapse:hover { background: rgba(255, 255, 255, 0.
 a.at-nav-item:focus-visible, .at-nav-collapse:focus-visible, .at-nav-toggle:focus-visible { outline: 2px solid var(--at-teal); outline-offset: 1px; }
 .at-nav-item[aria-current="page"] { background: rgba(255, 255, 255, 0.12); color: #fff; box-shadow: inset 3px 0 0 var(--at-green); }
 .at-nav-item[aria-current="page"] .at-nav-ico { color: #5fd08f; }
-.at-nav-item.disabled { cursor: default; color: rgba(255, 255, 255, 0.45); }
 .at-nav-ico { flex: none; display: grid; place-items: center; width: 24px; }
 .at-nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .at-nav-group { margin: 12px 10px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.5); white-space: nowrap; }

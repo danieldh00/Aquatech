@@ -353,8 +353,8 @@
     $('[data-clear="accessCode"]').disabled = !code.set;
     const mods = (window.AquatechModules || []).filter((m) => m.id !== 'beheer' && m.id !== 'hoofdbeheer');
     $('#s-module-list').innerHTML = mods.map((m) => `
-      <label class="chk"><input type="checkbox" data-module="${esc(m.id)}"${view.modules.value[m.id] === false ? '' : ' checked'}>
-        ${esc(m.title)}${m.status === 'gepland' ? ' <span class="muted small">(binnenkort)</span>' : ''}</label>`).join('');
+      <label class="chk"><input type="checkbox" data-module="${esc(m.id)}"${m.status === 'gepland' ? ' disabled' : view.modules.value[m.id] === false ? '' : ' checked'}>
+        ${esc(m.title)}${m.status === 'gepland' ? ' <span class="muted small">(binnenkort: aan te zetten zodra de module klaar is)</span>' : ''}</label>`).join('');
   }
 
   const size = (n) => (n >= 1048576 ? `${num(n / 1048576)} MB` : `${num(n / 1024, 0)} kB`);
@@ -480,7 +480,7 @@
     mods.onsubmit = (ev) => {
       ev.preventDefault();
       const modules = {};
-      mods.querySelectorAll('[data-module]').forEach((c) => { modules[c.dataset.module] = c.checked; });
+      mods.querySelectorAll('[data-module]:not(:disabled)').forEach((c) => { modules[c.dataset.module] = c.checked; });
       saveSettings(mods, { modules }, 'Modules opgeslagen');
     };
   }
