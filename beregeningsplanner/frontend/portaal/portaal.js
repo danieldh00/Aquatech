@@ -237,7 +237,8 @@
   }
 
   async function init() {
-    await window.AquatechAccount.load('../');
+    // Kopbalk en portaal tegelijk laden (het portaal meldt zelf als je niet mag).
+    const account = window.AquatechAccount.load('../');
     $('#detail-close').onclick = () => { $('#detail').hidden = true; };
     $('#detail').onclick = (e) => { if (e.target.id === 'detail') $('#detail').hidden = true; };
     $('#photo').onclick = () => { $('#photo').hidden = true; };
@@ -250,7 +251,9 @@
       const b = e.target.closest('main [data-open]');
       if (b) openDetail(b.dataset.open);
     });
-    await load();
+    await Promise.all([account, load()]);
+    // Terug via de knop Terug van de browser: opnieuw laden.
+    if (window.AquatechCommon) window.AquatechCommon.onReturn(load);
     // Direct naar een werkorder: portaal/#wo=<id> (bijv. vanuit een e-mail).
     const m = /^#wo=([\w-]+)$/.exec(location.hash);
     if (m && state.data) openDetail(m[1]);

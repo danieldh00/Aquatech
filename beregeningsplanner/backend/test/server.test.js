@@ -284,3 +284,26 @@ test('zijbalk: alleen voor beheerders, op elke modulepagina, met de juiste modul
     assert.match(html, /shared\/sidebar\.css/, `${page}: shared/sidebar.css ontbreekt`);
   }
 });
+
+test('snelheid: scripts met versie blijven in de browsercache, Excel pas bij export', async () => {
+  const { server, base } = await start({ db: await dbWithAdmin() });
+  try {
+    const { cookie } = await login(base);
+    const get = (p) => fetch(`${base}${p}`, { headers: { cookie } });
+    const v = encodeURIComponent(PKG.version);
+    assert.match((await get(`/shared/common.js?v=${v}`)).headers.get('cache-control'), /private, max-age=31536000, immutable/);
+    // Zonder (of met een oude) versie: elke keer controleren.
+    assert.strictEqual((await get('/shared/common.js')).headers.get('cache-control'), 'no-cache');
+    assert.strictEqual((await get('/shared/common.js?v=0.0.1')).headers.get('cache-control'), 'no-cache');
+    // Het kleurthema kan wijzigen zonder nieuwe versie.
+    assert.strictEqual((await get(`/shared/theme.css?v=${v}`)).headers.get('cache-control'), 'no-cache');
+  } finally {
+    server.close();
+  }
+  for (const page of PAGES.filter((p) => !p.startsWith('openbaar/'))) {
+    const html = fs.readFileSync(path.join(FRONTEND_DIR, page), 'utf8');
+    assert.doesNotMatch(html, /exceljs\.min\.js/, `${page}: Excel via AquatechCommon.excel() laden`);
+    const common = html.indexOf('shared/common.js');
+    assert.ok(common > 0 && common < html.indexOf('shared/sidebar.js') && common < html.indexOf('</head>'), `${page}: shared/common.js in de kop, vóór de zijbalk`);
+  }
+});

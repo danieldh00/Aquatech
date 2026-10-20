@@ -64,9 +64,16 @@
     { key: 'updatedAt', label: 'Laatst gewijzigd', value: (w) => w.updatedAt, html: (w) => esc(new Date(w.updatedAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })) },
   ];
 
+  // Verzoek dat init() al vooruit heeft gestart (tegelijk met api/me), anders nu.
+  function take(key, url) {
+    const pre = state.pre && state.pre[key];
+    if (pre) { delete state.pre[key]; return pre; }
+    return api(url);
+  }
+
   async function loadList() {
     try {
-      state.items = (await api('workorders')).items || [];
+      state.items = (await take('list', 'workorders')).items || [];
     } catch (e) {
       $('#l-table').innerHTML = `<tr><td class="empty">Kan de werkorders niet laden (${esc(e.message)}).</td></tr>`;
       return;
@@ -216,7 +223,7 @@
 
   async function loadWorkOrder(id) {
     try {
-      openWorkOrder(await api(`workorders/${encodeURIComponent(id)}`));
+      openWorkOrder(await take(`wo:${id}`, `workorders/${encodeURIComponent(id)}`));
     } catch (e) {
       toast(`Kan de werkorder niet openen: ${e.message}`, true);
       go('');
@@ -639,7 +646,7 @@
       save({ status: e.target.value });
     };
     $('#e-assignee').onchange = (e) => save({ assigneeId: e.target.value || null });
-    $('#e-back').onclick = async () => { await save(); if (state.back) location.href = state.back; else go(''); };
+    $('#e-back').onclick = async () => { await save(); if (state.back) state.back.go(); else go(''); };
     $('#e-pdf').onclick = printWorkOrder;
     $('#e-xlsx').onclick = exportWorkOrderXlsx;
     $('#e-more').onclick = (e) => { e.stopPropagation(); $('#e-menu').hidden = !$('#e-menu').hidden; };
@@ -808,7 +815,7 @@
   const asDate = (iso) => (iso ? new Date(`${iso}T12:00:00`) : null);
 
   async function exportWorkOrderXlsx() {
-    if (!window.ExcelJS) { toast('Excel-export niet beschikbaar.', true); return; }
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     await save();
     const wo = state.wo;
     const d = wo.data;
@@ -869,7 +876,7 @@
   }
 
   async function exportListXlsx() {
-    if (!window.ExcelJS) { toast('Excel-export niet beschikbaar.', true); return; }
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     const items = visible();
     try {
       const wb = new ExcelJS.Workbook();
@@ -929,16 +936,22 @@
   async function init() {
     // Rechtstreeks naar een werkorder (vanuit planning, startscherm, dossier):
     // het overzicht niet eerst laten zien terwijl de rest laadt.
-    const direct = params().get('id') || params().get('quote');
+    const ps = params();
+    const direct = ps.get('id') || ps.get('quote');
     if (direct) $('#list-view').hidden = true;
-    // Terugknop gaat terug naar waar je vandaan kwam (bijv. de planning).
-    try {
-      const ref = document.referrer ? new URL(document.referrer) : null;
-      if (direct && ref && ref.origin === location.origin && !/\/werkorders\/?$/.test(ref.pathname)) {
-        state.back = ref.href;
-        $('#e-back').textContent = /\/planning\/?$/.test(ref.pathname) ? '← Planning' : '← Terug';
-      }
-    } catch (e) { /* geen geldige referrer */ }
+    // Terugknop gaat terug naar waar je vandaan kwam (planning, dossier, startscherm).
+    const from = direct && window.AquatechCommon ? window.AquatechCommon.origin() : null;
+    if (from) {
+      state.back = from;
+      $('#e-back').textContent = from.label;
+    }
+    // De werkorder (of het overzicht) alvast ophalen, tegelijk met api/me.
+    const first = ps.get('quote') ? null : ps.get('id') ? [`wo:${ps.get('id')}`, `workorders/${encodeURIComponent(ps.get('id'))}`] : ['list', 'workorders'];
+    if (first && location.protocol !== 'file:') {
+      const req = api(first[1]);
+      req.catch(() => {});
+      state.pre = { [first[0]]: req };
+    }
     state.me = await window.AquatechAccount.load('../');
     const rights = state.me.rights || [];
     state.admin = rights.includes('beheer');
@@ -951,12 +964,10 @@
         : '<tr><td class="empty">Log eerst in om werkorders te bekijken. <a href="../login">Inloggen</a></td></tr>';
       return;
     }
-    try {
-      const out = await api('quote-profile');
-      state.profile = out.profile;
-      state.mail = Boolean(out.mail);
-    } catch (e) { state.profile = { companyName: 'AquaTech Service' }; }
-    try { state.staff = (await api('workorder-staff')).items || []; } catch (e) { state.staff = []; }
+    const [out, staff] = await Promise.all([api('quote-profile').catch(() => null), api('workorder-staff').catch(() => null)]);
+    state.profile = out ? out.profile : { companyName: 'AquaTech Service' };
+    state.mail = Boolean(out && out.mail);
+    state.staff = (staff && staff.items) || [];
     $('#l-status').innerHTML = '<option value="">Openstaand</option>' + Object.entries(W.STATUSES)
       .map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
     $('#e-status').innerHTML = Object.entries(W.STATUSES).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
@@ -973,6 +984,8 @@
     bindEditor();
     bindApptSend();
     window.addEventListener('popstate', route);
+    // Terug via de knop Terug van de browser: het overzicht opnieuw laden.
+    if (window.AquatechCommon) window.AquatechCommon.onReturn(() => { if (!state.wo) loadList(); });
     route();
   }
 

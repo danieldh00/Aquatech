@@ -202,7 +202,7 @@
   }
 
   async function exportXlsx() {
-    if (!window.ExcelJS) { toast('Excel-export niet beschikbaar.', true); return; }
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     const items = visible();
     const btn = $('#f-export');
     btn.disabled = true;

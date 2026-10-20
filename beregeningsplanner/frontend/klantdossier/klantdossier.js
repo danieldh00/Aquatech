@@ -87,7 +87,7 @@
   }
 
   async function exportXlsx() {
-    if (!window.ExcelJS) { toast('Excel-export niet beschikbaar.', true); return; }
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     const items = visible();
     try {
       const wb = new ExcelJS.Workbook();
@@ -277,7 +277,13 @@
         : '<tr><td class="empty">Log eerst in om de klantdossiers te bekijken. <a href="../login">Inloggen</a></td></tr>';
       return;
     }
-    try { state.profile = (await api('quote-profile')).profile; } catch (e) { state.profile = { companyName: 'AquaTech Service' }; }
+    // Bedrijfsprofiel (alleen voor de afdrukversie) op de achtergrond.
+    state.profile = { companyName: 'AquaTech Service' };
+    api('quote-profile').then((o) => {
+      if (!o || !o.profile) return;
+      state.profile = o.profile;
+      if (state.dossier) renderDossier();
+    }).catch(() => {});
     let t;
     $('#l-search').oninput = () => { clearTimeout(t); t = setTimeout(renderList, 150); };
     $('#l-done').onchange = renderList;
@@ -304,6 +310,8 @@
         list.findIndex((p) => p.id === tile.dataset.photo));
     });
     window.addEventListener('popstate', route);
+    // Terug via de knop Terug van de browser (bijv. uit een werkorder): opnieuw laden.
+    if (window.AquatechCommon) window.AquatechCommon.onReturn(route);
     route();
   }
 

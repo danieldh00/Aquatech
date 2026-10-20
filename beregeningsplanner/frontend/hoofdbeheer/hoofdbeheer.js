@@ -196,7 +196,7 @@
   }
 
   async function accountsExcel(t, out) {
-    if (!window.ExcelJS) { toast('Excel-export niet beschikbaar.', true); return; }
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Testaccounts');
     ws.columns = [
@@ -434,7 +434,7 @@
 
   // ---------- Excel-export ----------
   async function exportExcel() {
-    if (!window.ExcelJS) { toast('Excel-export niet beschikbaar.', true); return; }
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Tenants');
     ws.columns = [

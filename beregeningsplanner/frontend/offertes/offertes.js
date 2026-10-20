@@ -220,7 +220,9 @@
 
   async function loadQuote(id) {
     try {
-      const q = await api(`quotes/${encodeURIComponent(id)}`);
+      const pre = state.pre && state.pre.id === id ? state.pre.req : null;
+      state.pre = null;
+      const q = await (pre || api(`quotes/${encodeURIComponent(id)}`));
       if (state.klant) return viewQuote(q);
       openQuote(q);
     } catch (e) {
@@ -668,7 +670,7 @@
       await save({ customerId: e.target.value || null });
       if (state.quote === q) q.customerId = e.target.value || null;
     };
-    $('#e-back').onclick = async () => { await save(); go(''); };
+    $('#e-back').onclick = async () => { await save(); if (state.back) state.back.go(); else go(''); };
     $('#e-pdf').onclick = printQuote;
     $('#e-xlsx').onclick = exportQuoteXlsx;
     $('#e-more').onclick = (e) => { e.stopPropagation(); $('#e-menu').hidden = !$('#e-menu').hidden; };
@@ -780,7 +782,7 @@
   const NAVY = 'FF172F5E';
 
   async function exportQuoteXlsx() {
-    if (!window.ExcelJS) { toast('Excel-export niet beschikbaar.', true); return; }
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     await save();
     const q = state.quote;
     const d = q.data;
@@ -877,7 +879,7 @@
   }
 
   async function exportListXlsx() {
-    if (!window.ExcelJS) { toast('Excel-export niet beschikbaar.', true); return; }
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     const items = visible();
     try {
       const wb = new ExcelJS.Workbook();
@@ -1004,25 +1006,48 @@
   }
 
   async function init() {
+    const ps = params();
+    const direct = ps.get('id') || ps.get('plan');
+    // Rechtstreeks naar een offerte (vanuit portaal, dossier, werkorder of
+    // planner): het overzicht niet eerst laten zien, en de terugknop gaat
+    // terug naar waar je vandaan kwam.
+    if (direct) $('#list-view').hidden = true;
+    const from = direct && window.AquatechCommon ? window.AquatechCommon.origin() : null;
+    if (from) {
+      state.back = from;
+      $('#e-back').textContent = from.label;
+      $('#v-back').textContent = from.label;
+    }
+    // De offerte alvast ophalen, tegelijk met api/me.
+    if (ps.get('id') && !ps.get('plan') && location.protocol !== 'file:') {
+      const req = api(`quotes/${encodeURIComponent(ps.get('id'))}`);
+      req.catch(() => {});
+      state.pre = { id: ps.get('id'), req };
+    }
     // Webshopprijzen (als de organisatie een webshop heeft gekoppeld) vóór het opbouwen uit een plan.
     const shop = window.ShopCatalog ? window.ShopCatalog.load() : null;
     state.me = await window.AquatechAccount.load('../');
-    await shop;
     const rights = state.me.rights || [];
     state.admin = rights.includes('beheer');
     state.all = rights.includes('offertes.alle');
     state.klant = !rights.includes('offertes') && rights.includes('offertes.klant');
     state.werkorders = rights.includes('werkorders');
     if (!state.me.user && !state.me.guest) {
+      $('#list-view').hidden = false;
       $('#l-table').innerHTML = '<tr><td class="empty">Log eerst in om offertes te maken. <a href="../login">Inloggen</a></td></tr>';
       return;
     }
-    try {
-      const out = await api('quote-profile');
+    // Bedrijfsprofiel, klanten en webshopprijzen tegelijk.
+    const [out, customers] = await Promise.all([
+      api('quote-profile').catch(() => null),
+      state.klant ? null : api('quote-customers').catch(() => null),
+      shop,
+    ]);
+    if (out) {
       state.profile = out.profile;
       state.canEdit = out.canEdit;
       state.mail = Boolean(out.mail);
-    } catch (e) {
+    } else {
       // Gast zonder account (nog niets bewaard): standaardwaarden van de server ontbreken.
       state.profile = { companyName: 'AquaTech Service', hourlyRate: 55, validDays: 30, vatRate: 21, markupPct: 0, callOutFee: 0, intro: '', terms: '' };
     }
@@ -1039,9 +1064,9 @@
       $('#l-status').innerHTML = '<option value="">Alle statussen</option>' + ['verzonden', 'akkoord', 'afgewezen', 'verlopen']
         .map((s) => `<option value="${s}">${esc(statusLabel(s))}</option>`).join('');
     } else {
-      try { state.customers = (await api('quote-customers')).items || []; } catch (e) { state.customers = []; }
+      state.customers = (customers && customers.items) || [];
     }
-    $('#v-back').onclick = () => go('');
+    $('#v-back').onclick = () => { if (state.back) state.back.go(); else go(''); };
     $('#v-pdf').onclick = () => window.print();
     let t;
     $('#l-search').oninput = () => { clearTimeout(t); t = setTimeout(renderList, 150); };
@@ -1062,6 +1087,8 @@
     });
     bindEditor();
     window.addEventListener('popstate', route);
+    // Terug via de knop Terug van de browser: het overzicht opnieuw laden.
+    if (window.AquatechCommon) window.AquatechCommon.onReturn(() => { if (!state.quote) loadList(); });
     route();
   }
 

@@ -170,7 +170,7 @@
 
   /** Exporteert planning + stuklijst naar een Excel-werkmap. */
   async function exportXlsx(state, planImageDataUrl) {
-    if (!window.ExcelJS) throw new Error('ExcelJS niet geladen');
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) throw new Error('ExcelJS niet geladen');
     const calc = Hy.calculate(state);
     const rows = build(state);
     const sched = schedule(state);
