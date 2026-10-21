@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.55.0',
+      date: '2026-10-21',
+      title: 'Legenda in de tekening',
+      items: [
+        { text: 'De beregeningsplanner toont nu in elke stap een **legenda** rechtsboven in de tekening: welk vlak wat is (met oppervlak), druppelslang en druppelaars, sproeiers, zones en de systeemelementen. In te klappen met een klik.' },
+        { text: 'De legenda staat ook naast de tekening bij **Plan als PNG**, in de Excel-export en op de afdruk.' },
+      ],
+    },
+    {
       version: '0.54.0',
       date: '2026-10-21',
       title: 'AI-kosten in beeld en modelkeuze',

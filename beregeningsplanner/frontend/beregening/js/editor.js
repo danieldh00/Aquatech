@@ -514,6 +514,7 @@
     // ---------- Rendering ----------
     render() {
       if (this.app.updateDrawBar) this.app.updateDrawBar();
+      if (this.app.updateLegend) this.app.updateLegend();
       if (this._raf) return;
       this._raf = requestAnimationFrame(() => { this._raf = null; this.draw(this.ctx, this.w, this.h, this.dpr); });
     }
@@ -871,14 +872,134 @@
       ctx.fillText(`${G.nlShort(len, 1)} m`, x + len * S + 6, y + 4);
     }
 
-    /** Exporteert het plan als PNG (dataURL), passend gezoomd. */
+    /**
+     * Legenda van wat er in het plan staat: vlaktypes (met oppervlak),
+     * beregeningswijze in beplanting, zones en systeemelementen. Zonder
+     * vlakken alle vlaktypes, als sleutel bij het tekenen.
+     */
+    legend() {
+      const st = this.state;
+      const fmt = (v) => Number(v).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      const sections = [];
+      const areas = st.areas.filter((a) => a.pts.length >= 3 && C.areaTypes[a.type]);
+      const total = {};
+      for (const a of areas) total[a.type] = (total[a.type] || 0) + G.area(a.pts);
+      const types = Object.keys(C.areaTypes).filter((k) => !areas.length || total[k] != null);
+      sections.push({
+        title: 'Vlakken',
+        items: types.map((k) => {
+          const t = C.areaTypes[k];
+          return { swatch: 'area', fill: t.fill, stroke: t.stroke, dashed: k === 'wet', label: t.label, sub: total[k] != null ? `${fmt(total[k])} m²` : '' };
+        }),
+      });
+      const methods = new Set(areas.map((a) => window.Hydraulics.methodOf(st, a)));
+      const irr = [];
+      if (methods.has('dripline')) irr.push({ swatch: 'dripline', label: C.methods.dripline.label });
+      if (methods.has('drippers')) irr.push({ swatch: 'drippers', label: C.methods.drippers.label });
+      if (st.sprinklers.length) irr.push({ swatch: 'sprinkler', color: '#455a64', label: 'Sproeier met bereik' });
+      if (irr.length) sections.push({ title: 'Beregening', items: irr });
+      const zones = st.zones.filter((z) => st.sprinklers.some((s) => s.zone === z.id) || st.areas.some((a) => a.zone === z.id));
+      if (zones.length) {
+        sections.push({
+          title: 'Zones',
+          items: zones.map((z) => ({ swatch: 'zone', color: z.color, label: z.name, sub: C.groups[z.group] ? C.groups[z.group].label : '' })),
+        });
+      }
+      const kinds = Object.keys(C.elementTypes).filter((k) => st.elements.some((e) => e.kind === k));
+      if (kinds.length) {
+        sections.push({
+          title: 'Elementen',
+          items: kinds.map((k) => ({ swatch: 'element', kind: k, color: C.elementTypes[k].color, short: C.elementTypes[k].short, label: C.elementTypes[k].label })),
+        });
+      }
+      return sections;
+    }
+
+    /** Tekent een legendasymbool (ook gebruikt door de export). */
+    _legendSwatch(ctx, it, x, y, w, h) {
+      ctx.save();
+      if (it.swatch === 'area' || it.swatch === 'dripline' || it.swatch === 'drippers') {
+        const at = it.swatch === 'area' ? it : C.areaTypes.bed;
+        ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = at.fill; ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = at.stroke; ctx.lineWidth = 1.25;
+        if (it.dashed) ctx.setLineDash([4, 3]);
+        ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+        ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(62,39,35,0.55)'; ctx.fillStyle = 'rgba(62,39,35,0.7)';
+        if (it.swatch === 'dripline') {
+          ctx.setLineDash([2, 3]);
+          for (const yy of [y + h * 0.33, y + h * 0.67]) { ctx.beginPath(); ctx.moveTo(x + 2, yy); ctx.lineTo(x + w - 2, yy); ctx.stroke(); }
+        } else if (it.swatch === 'drippers') {
+          for (const xx of [x + w * 0.25, x + w * 0.5, x + w * 0.75]) { ctx.beginPath(); ctx.arc(xx, y + h / 2, 1.8, 0, Math.PI * 2); ctx.fill(); }
+        }
+      } else if (it.swatch === 'zone' || it.swatch === 'sprinkler') {
+        const cx = x + w / 2, cy = y + h / 2;
+        if (it.swatch === 'sprinkler') {
+          ctx.strokeStyle = it.color; ctx.lineWidth = 1; ctx.setLineDash([3, 2]);
+          ctx.beginPath(); ctx.arc(cx, cy, h / 2, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+        }
+        ctx.fillStyle = it.swatch === 'zone' ? it.color : '#fff';
+        ctx.strokeStyle = it.color; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(cx, cy, it.swatch === 'zone' ? h / 2 - 1 : 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      } else if (it.swatch === 'element') {
+        ctx.translate(x + w / 2 - this.toScreen({ x: 0, y: 0 }).x, y + h / 2 - this.toScreen({ x: 0, y: 0 }).y);
+        this._element(ctx, { kind: it.kind, x: 0, y: 0 });
+      }
+      ctx.restore();
+    }
+
+    /** Legenda als vak rechts van de tekening (PNG/Excel-export). */
+    _legendPanel(ctx, x, y, w) {
+      const sections = this.legend();
+      const pad = 14, row = 22;
+      let h = pad + 20;
+      for (const sec of sections) h += 22 + sec.items.length * row + 6;
+      h += pad - 6;
+      ctx.fillStyle = 'rgba(255,255,255,0.96)';
+      ctx.strokeStyle = '#cfd8dc'; ctx.lineWidth = 1;
+      ctx.fillRect(x, y, w, h); ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#172f5e';
+      ctx.font = 'bold 15px system-ui, sans-serif';
+      let cy = y + pad + 8;
+      ctx.fillText('Legenda', x + pad, cy);
+      cy += 20;
+      for (const sec of sections) {
+        ctx.fillStyle = '#607d8b';
+        ctx.font = 'bold 11px system-ui, sans-serif';
+        ctx.fillText(sec.title.toUpperCase(), x + pad, cy + 6);
+        cy += 22;
+        for (const it of sec.items) {
+          this._legendSwatch(ctx, it, x + pad, cy - 7, 26, 16);
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#263238';
+          ctx.font = '13px system-ui, sans-serif';
+          ctx.fillText(it.label, x + pad + 36, cy + 1, w - pad * 2 - 36 - (it.sub ? 70 : 0));
+          if (it.sub) {
+            ctx.fillStyle = '#607d8b';
+            ctx.textAlign = 'end';
+            ctx.fillText(it.sub, x + w - pad, cy + 1);
+            ctx.textAlign = 'start';
+          }
+          cy += row;
+        }
+        cy += 6;
+      }
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    /** Exporteert het plan als PNG (dataURL), passend gezoomd, met legenda rechts. */
     exportPng(width = 1500, height = 1000) {
       const saved = { ...this.view }, sw = this.w, sh = this.h, sel = this.selection;
-      this.w = width; this.h = height; this.selection = null;
+      const lw = Math.round(Math.max(260, Math.min(360, width * 0.2)));
+      this.w = width - lw; this.h = height; this.selection = null;
       this.fit();
       const cv = document.createElement('canvas');
       cv.width = width; cv.height = height;
-      this.draw(cv.getContext('2d'), width, height, 1, { noGrid: false });
+      const ctx = cv.getContext('2d');
+      this.draw(ctx, width, height, 1, { noGrid: false });
+      this._legendPanel(ctx, width - lw + 8, 16, lw - 24);
       this.view = saved; this.w = sw; this.h = sh; this.selection = sel;
       this.render();
       return cv.toDataURL('image/png');

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.55.0
+
+Legenda in de tekening van de beregeningsplanner.
+
+- **Legenda over het canvas** (rechtsboven, in elke stap): vlaktypes met
+  totaal oppervlak, beregeningswijze in beplanting (druppelslang,
+  druppelaars), sproeiers, zones met hun type en de systeemelementen. Alleen
+  wat in het plan staat; zonder vlakken alle vlaktypes als sleutel.
+  Inklapbaar, stand per browser onthouden (`localStorage`
+  `aquatech-legenda-open`, op een smal scherm standaard dicht). Schuift
+  onder de tekenbalk als die zichtbaar is.
+- Symbolen getekend met dezelfde canvascode als de tekening
+  (`Editor.legend()` + `_legendSwatch`), dus altijd gelijk aan het plan.
+- **Export**: *Plan als PNG* en de afbeelding in de Excel-export hebben de
+  legenda als vak rechts naast de tekening; *Afdrukken* neemt de legenda mee
+  als die open staat.
+
 ## 0.54.0
 
 Inzicht in de kosten van AI, modelkeuze en een eigen sleutel per organisatie.

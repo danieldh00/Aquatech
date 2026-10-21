@@ -173,6 +173,28 @@ td.num, th.num { text-align: right !important; white-space: nowrap; }
   box-shadow: 0 2px 10px rgba(0,0,0,0.15);
 }
 .drawbar[hidden] { display: none; }
+
+/* Legenda over de tekening (rechtsboven, inklapbaar; schuift onder de tekenbalk) */
+.plan-legend {
+  position: absolute; top: 8px; right: 8px; z-index: 2; max-width: min(280px, calc(100% - 16px));
+  max-height: calc(100% - 60px); overflow: auto; font-size: 12px;
+  background: rgba(255,255,255,0.94); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+}
+.plan-legend summary {
+  cursor: pointer; padding: 6px 10px; font-weight: 700; color: var(--at-navy); list-style: none; user-select: none;
+}
+.plan-legend summary::-webkit-details-marker { display: none; }
+.plan-legend summary::before { content: '▸ '; color: var(--muted); }
+.plan-legend[open] summary::before { content: '▾ '; }
+.drawbar:not([hidden]) ~ .plan-legend { top: 64px; }
+.plan-legend-body { padding: 0 10px 8px; }
+.plan-legend .lg-sec + .lg-sec { margin-top: 6px; }
+.plan-legend .lg-title { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin: 2px 0; }
+.plan-legend .lg-item { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.plan-legend .lg-sw { width: 26px; height: 16px; flex: none; }
+.plan-legend .lg-lbl { flex: 1; min-width: 0; color: var(--text); }
+.plan-legend .lg-sub { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .drawbar .btn { white-space: nowrap; }
 .drawbar-label { font-size: 13px; color: var(--muted); padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sheet-toggle, .props-close { display: none; }
@@ -274,6 +296,8 @@ td.num, th.num { text-align: right !important; white-space: nowrap; }
   .topbar, .sidebar, .inspector, .toolbar, .statusbar { display: none !important; }
   .layout { display: block; }
   .canvas-wrap { height: 95vh; }
+  .plan-legend { box-shadow: none; }
+  .plan-legend:not([open]) { display: none; }
 }
 
 /* Mijn plannen */
