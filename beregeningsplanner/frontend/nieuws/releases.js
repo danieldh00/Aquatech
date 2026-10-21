@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.63.1',
+      date: '2026-10-21',
+      title: 'Kopbalk past weer op de telefoon',
+      items: [
+        { text: 'Op de telefoon staat bovenin nu alleen de paginanaam naast het menu, zodat de organisatiekiezer en je profielrondje altijd volledig in beeld zijn. Het logo zie je in het menu en op het overzicht.' },
+      ],
+    },
+    {
       version: '0.63.0',
       date: '2026-10-21',
       title: 'Webshopbestellingen worden facturen, en facturen gaan vanzelf per mail',
