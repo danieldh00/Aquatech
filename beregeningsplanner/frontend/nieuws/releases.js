@@ -13,7 +13,7 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '0.65.0',
+      version: '0.66.0',
       date: '2026-10-21',
       title: 'Sproeiers kiezen uit een bibliotheek, en minder koppen met een grotere worp',
       items: [
@@ -21,6 +21,24 @@
         { text: 'Kies zelf een **behuizing** (bijv. Rain Bird 1800 of Hunter Pro-Spray van 10, 15 of 30 cm, of een Rain Bird 5004/5012) en een passende **nozzle** (MP Rotator, HE-VAN, Rain Curtain) en plaats die in de tekening. Worp en sproeihoek stel je in binnen wat die nozzle kan; debiet, neerslag, druk en stuklijst rekenen met de echte gegevens.', for: ['plannen'] },
         { text: 'Bij automatisch plaatsen kies je ook de behuizing voor gazon en beplanting; de werkbon toont per kop de behuizing.', for: ['plannen'] },
         { text: 'Nieuw in **Beheer → Sproeiers**: download de sproeierbibliotheek als Excel, vul aan met je eigen sproeiers en nozzles (worp, sproeihoeken, druk en debiet uit de tabel van de fabrikant) en lees hem weer in.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '0.65.0',
+      date: '2026-10-21',
+      title: 'Facturen gaan rechtstreeks naar Visma eAccounting',
+      items: [
+        { text: 'Verbind je eigen **Visma eAccounting**-administratie in **Facturen → Visma**. Een definitieve factuur gaat dan als verkoopfactuur naar Visma, en een nieuwe debiteur wordt daar een klant met hetzelfde nummer. Per omzetcategorie kies je het Visma-artikel, dat de grootboekrekening en btw bepaalt.', for: ['facturen'] },
+        { text: 'Zelf de controle houden: doorsturen gaat met de knop **Naar Visma** op een factuur of **Nu doorsturen**. Automatisch doorsturen zet je aan als je wilt, vanaf een datum die je kiest, zodat facturen die al in Visma staan er niet dubbel in komen.', for: ['facturen'] },
+      ],
+    },
+    {
+      version: '0.64.2',
+      date: '2026-10-21',
+      title: 'Inzoomen: tekening en vlakken scherp en op hun plek',
+      items: [
+        { text: 'Bij het automatisch herkennen van een plan volgen de vlakken nu ook **bochten** in de tekening. Eerder werden randen te hard rechtgetrokken, waardoor ze ingezoomd tot een halve meter naast de tekening lagen. De randen van vlakken zijn ook beter zichtbaar.' },
+        { text: 'Ingezoomd op de **iPhone** blijft de tekening scherp en op zijn plek: fijne lijnen vallen niet meer weg en vlakken verspringen niet meer ten opzichte van de tekening.' },
       ],
     },
     {

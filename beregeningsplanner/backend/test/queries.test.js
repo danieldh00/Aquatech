@@ -171,6 +171,10 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.strictEqual((await c.get('/api/sprinkler-library')).body.own.nozzles.length, own.nozzles.length);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
+    // Visma-status: wachtende facturen in één telling.
+    probe.reset();
+    assert.strictEqual((await c.get('/api/visma')).body.connected, false);
+    assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
   } finally {
     server.close();
   }

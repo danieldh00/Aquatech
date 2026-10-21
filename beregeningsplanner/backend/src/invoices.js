@@ -32,7 +32,7 @@ const Core = require(path.join(__dirname, '..', '..', 'frontend', 'facturen', 'i
 
 const LIST_COLS = `id, number, status, kind, credit_of, customer_id, customer_name, work_order_id, quote_id, invoice_date, due_date,
   subtotal, vat_total, total, stock_booked, finalized_at, paid_at, credited_at, exported_at, created_at, updated_at,
-  debtor_id, shop_order_id, sent_at, sent_to, send_error`;
+  debtor_id, shop_order_id, sent_at, sent_to, send_error, visma_invoice_id, visma_number, visma_synced_at, visma_error`;
 // Debiteurnummer erbij (één query, geen opzoeking per factuur).
 const DEBTOR_NUMBER = '(SELECT d.number FROM debtors d WHERE d.tenant_id = invoices.tenant_id AND d.id = invoices.debtor_id) AS debtor_number';
 const LIST_LIMIT = 1000;
@@ -55,6 +55,7 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
     debtorId: r.debtor_id || null, shopOrderId: r.shop_order_id || null,
     source: r.shop_order_id ? 'webshop' : r.work_order_id ? 'werkorder' : 'los',
     sentAt: r.sent_at || null, sentTo: r.sent_to || null, sendError: r.send_error || '',
+    vismaInvoiceId: r.visma_invoice_id || null, vismaNumber: r.visma_number || null, vismaSyncedAt: r.visma_synced_at || null, vismaError: r.visma_error || '',
     ...(r.debtor_number !== undefined ? { debtorNumber: r.debtor_number == null ? null : Number(r.debtor_number) } : {}),
     overdue: r.status === 'definitief' && r.kind === 'factuur' && r.due_date < Core.today(),
   });
@@ -130,7 +131,19 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
    * de voorraad. skipStock: niet afboeken (webshopbestelling waarvan de
    * voorraad al via de webshopsynchronisatie is afgeboekt).
    */
-  function finalize(tenantId, user, id, settings, { skipStock = false } = {}) {
+  // Na definitief (buiten de transactie), bijv. doorsturen naar Visma.
+  const finalizedHooks = [];
+  const onFinalized = (fn) => { finalizedHooks.push(fn); };
+  function finalize(tenantId, user, id, settings, opts) {
+    const out = finalizeTx(tenantId, user, id, settings, opts);
+    if (out && out.invoice) {
+      for (const fn of finalizedHooks) {
+        try { fn(tenantId, out.invoice); } catch (err) { console.warn(`Na definitief: ${err.message}`); }
+      }
+    }
+    return out;
+  }
+  function finalizeTx(tenantId, user, id, settings, { skipStock = false } = {}) {
     return transaction(db, () => {
       const r = find(tenantId, id, `${LIST_COLS}, data`);
       if (!r) return null;
@@ -242,7 +255,7 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
     return r ? { id: r.id, number: r.number, status: r.status, customerId: r.customer_id || null, data: JSON.parse(r.data) } : null;
   }
 
-  return { list, get, create, update, finalize, setPaid, credit, remove, exportList, markExported, nextNumber, workOrder, quote, byShopOrders, markSent };
+  return { list, get, create, update, finalize, onFinalized, setPaid, credit, remove, exportList, markExported, nextNumber, workOrder, quote, byShopOrders, markSent };
 }
 
 /**

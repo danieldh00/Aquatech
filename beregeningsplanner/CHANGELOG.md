@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.65.0
+## 0.66.0
 
 Sproeierbibliotheek (behuizing + nozzle) en grotere worp bij automatisch
 plaatsen.
@@ -38,7 +38,7 @@ plaatsen.
   nozzle → volle worp), eigenschappenpaneel met behuizing, nozzle en bereik
   voor alle typen.
 - **Per omgeving** (`backend/src/sprinklers.js`, tabel `sprinkler_library`,
-  migratie 28): `GET /api/sprinkler-library` (ingelogd), `PUT` (Excel als
+  migratie 29): `GET /api/sprinkler-library` (ingelogd), `PUT` (Excel als
   JSON, recht `beheer`, server controleert opnieuw, alleen afwijkingen van de
   standaard), `DELETE` (terug naar standaard); audit
   `sproeierbibliotheek_ingelezen|_standaard`. `shopcatalog.js` laadt hem samen
@@ -47,6 +47,54 @@ plaatsen.
   downloaden (sjabloon met uitleg) en inlezen.
 - Testdata: eigen behuizing (pop-up 20 cm) en eigen MP3000-prijs; tuinen met
   Hunter Pro-Spray PRS40 en Rain Bird 5004.
+
+## 0.65.0
+
+Brincr vervangen (deel 3): koppeling met Visma eAccounting.
+
+- **Visma** (`backend/src/visma.js`): OAuth2 (authorization code, scopes
+  `ea:api offline_access ea:sales`) per omgeving. De app-registratie
+  (instelling `vismaApp` + geheim `vismaClientSecret`, `platform: true`) staat
+  in de hoofdtenant en vul je in via **Hoofdbeheer → Visma**
+  (`GET|PUT /api/platform/visma`). Per omgeving: refresh token als geheim
+  `vismaRefreshToken` (versleuteld), keuzes in instelling `visma`
+  (`internal`: niet via Beheer > Instellingen); access token alleen in het
+  geheugen, bij 401 vernieuwd. Vaste hosts (sandbox/productie), geen SSRF.
+- **Doorsturen**: definitieve factuur → verkoopfactuur (`POST
+  /customerinvoices`), debiteur → klant met het debiteurnummer (`POST
+  /customers`; bestaat het nummer al voor een andere naam: 409
+  `number_taken`). Elke regel op het Visma-artikel van zijn omzetcategorie
+  (`visma.articles`); ontbreekt er een, dan `visma_error` op de factuur.
+  Creditfactuur met `IsCreditInvoice` en `CreditedInvoiceId`.
+- **Wanneer**: knop op de factuur (`POST /api/visma/invoices/:id`), *Nu
+  doorsturen* (`POST /api/visma/sync`, max. 50 per keer, oudste eerst) of
+  automatisch (`visma.autoSync`, standaard uit): 5 s na definitief
+  (`invoices.onFinalized`) en elke 10 minuten (`app.locals.vismaAll`). Alleen
+  facturen vanaf `visma.since` (automatisch aan zonder datum = vandaag).
+- Migratie 28: `debtors.visma_customer_id`, `invoices.visma_invoice_id|
+  visma_number|visma_synced_at|visma_error` + index `invoices_visma`.
+- **Facturen**: tabblad *Visma* (verbinden/verbreken, status, artikel per
+  omzetcategorie, betalingstermijn, automatisch + datum), knop *Naar Visma* en
+  status/fout op de factuur, kolom *Boekhouding* in de lijst.
+- Settings: `max` per geheim (refresh token tot 4000 tekens).
+
+## 0.64.2
+
+Planner: ingezoomd blijven tekening en vlakken scherp en op hun plek.
+
+- `Concept.straighten` trok lokaal herkende vlakken zo hard recht dat bochten
+  verdwenen en randen tot ca. 0,5 m naast de tekening kwamen (zichtbaar bij
+  inzoomen). Nu: vereenvoudigen met hooguit 0,15 m tolerantie en
+  `G.regularize(..., { maxShift })`: een schuine rand wordt alleen recht gezet
+  als de uiteinden hooguit 0,15 m opschuiven, en de uitkomst mag nergens verder
+  dan dat van de invoer liggen (`G.deviation`), anders blijft de invoer.
+  De sproeierplaatsing (planner.js) gebruikt regularize ongewijzigd.
+- Ondergrond: `Editor._bgSource` tekent alleen het zichtbare deel van het
+  beeld (bronrechthoek, `imageSmoothingQuality: 'high'`) in plaats van het
+  hele beeld vele malen groter dan het canvas. Safari op iOS verloor
+  ingezoomd fijne lijnen en zette de tekening soms verschoven neer.
+- Randen van vlakken 2 px in plaats van 1,25 px (geselecteerd 3 px), zodat ze
+  op een drukke tekening zichtbaar blijven.
 
 ## 0.64.1
 

@@ -597,7 +597,16 @@ const PG_MIGRATIONS = [
   ALTER TABLE shop_sync ADD COLUMN orders_synced_at ${T};
   ALTER TABLE shop_sync ADD COLUMN orders_error ${T};
   `,
-  // 28: sproeierbibliotheek per omgeving (zie db.js).
+  // 28: koppeling met Visma eAccounting (zie db.js).
+  `
+  ALTER TABLE debtors ADD COLUMN visma_customer_id ${T};
+  ALTER TABLE invoices ADD COLUMN visma_invoice_id ${T};
+  ALTER TABLE invoices ADD COLUMN visma_number ${T};
+  ALTER TABLE invoices ADD COLUMN visma_synced_at ${T};
+  ALTER TABLE invoices ADD COLUMN visma_error ${T} NOT NULL DEFAULT '';
+  CREATE INDEX invoices_visma ON invoices (tenant_id, visma_invoice_id, invoice_date);
+  `,
+  // 29: sproeierbibliotheek per omgeving (zie db.js).
   `
   CREATE TABLE sprinkler_library (
     id         ${T} PRIMARY KEY,

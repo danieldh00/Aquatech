@@ -751,7 +751,17 @@ const MIGRATIONS = [
   ALTER TABLE shop_sync ADD COLUMN orders_synced_at TEXT;
   ALTER TABLE shop_sync ADD COLUMN orders_error TEXT;
   `,
-  // 28: sproeierbibliotheek per omgeving (sprinklers.js): eigen behuizingen en
+  // 28: koppeling met Visma eAccounting (visma.js): de klant en de factuur
+  // in Visma bij een debiteur en een factuur, en wanneer/fout bij het doorsturen.
+  `
+  ALTER TABLE debtors ADD COLUMN visma_customer_id TEXT;
+  ALTER TABLE invoices ADD COLUMN visma_invoice_id TEXT;
+  ALTER TABLE invoices ADD COLUMN visma_number TEXT;
+  ALTER TABLE invoices ADD COLUMN visma_synced_at TEXT;
+  ALTER TABLE invoices ADD COLUMN visma_error TEXT NOT NULL DEFAULT '';
+  CREATE INDEX invoices_visma ON invoices (tenant_id, visma_invoice_id, invoice_date);
+  `,
+  // 29: sproeierbibliotheek per omgeving (sprinklers.js): eigen behuizingen en
   // nozzles bovenop de standaard uit frontend/beregening/js/sprinklerlib.js.
   `
   CREATE TABLE sprinkler_library (

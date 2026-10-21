@@ -2,7 +2,7 @@
 // standaardbibliotheek in frontend/beregening/js/sprinklerlib.js (Rain Bird
 // 1800/5004/5012, Hunter Pro-Spray, MP Rotator, HE-VAN, Rain Curtain).
 //
-// - Tabel `sprinkler_library` (migratie 28): één rij per behuizing of nozzle
+// - Tabel `sprinkler_library` (migratie 29): één rij per behuizing of nozzle
 //   (kind 'body' | 'nozzle', sleutel uniek per omgeving), de gecontroleerde
 //   gegevens als JSON in `data`. Een testomgeving heeft een eigen bibliotheek.
 // - Inlezen (Beheer > Sproeiers, Excel in de browser omgezet naar JSON)

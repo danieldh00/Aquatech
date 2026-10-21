@@ -26,6 +26,7 @@ const { createShopOrders } = require('./shoporders');
 const { createDebtorStore, registerDebtorRoutes } = require('./debtors');
 const { createInvoiceSender } = require('./invoicemail');
 const { createInvoiceStore, registerInvoiceRoutes } = require('./invoices');
+const { createVisma, registerVismaRoutes } = require('./visma');
 const { createPortalStore, registerPortalRoutes } = require('./portal');
 const { createServiceRequestStore, registerServiceRequestRoutes } = require('./servicerequests');
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./outsourcing');
@@ -168,7 +169,7 @@ function staticHeaders(version) {
 
 // accessCode, anthropicApiKey en aiDailyLimit zijn alleen startwaarden (net als
 // env); de actuele waarden komen uit de instellingen.
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, wanIp = createWanIp() }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, wanIp = createWanIp() }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -304,6 +305,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/stock', express.json({ limit: '256kb' }));
   app.use('/api/invoices', express.json({ limit: '1mb' }));
   app.use('/api/debtors', express.json({ limit: '16kb' }));
+  app.use(['/api/visma', '/api/platform/visma'], express.json({ limit: '32kb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -1048,8 +1050,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // Wie met de toegangscode is ingelogd, zou zichzelf buitensluiten door die
     // leeg te maken; met een beheerdersaccount kan het wel.
     const resets = Array.isArray(patch.reset) ? patch.reset : [];
-    const platformField = [...Object.keys(patch), ...resets].find((k) => FIELDS[k]?.platform);
-    if (platformField) return res.status(400).json({ error: 'invalid_setting', field: platformField, message: 'Deze instelling wijzig je in Hoofdbeheer.' });
+    const platformField = [...Object.keys(patch), ...resets].find((k) => FIELDS[k]?.platform || FIELDS[k]?.internal);
+    if (platformField) {
+      return res.status(400).json({ error: 'invalid_setting', field: platformField,
+        message: FIELDS[platformField].internal ? 'Deze instelling wijzig je in de module zelf.' : 'Deze instelling wijzig je in Hoofdbeheer.' });
+    }
     const codeAfter = patch.accessCode !== undefined ? String(patch.accessCode).trim()
       : resets.includes('accessCode') ? settings.get('accessCode', true) : oldCode;
     if (via === 'code' && !codeAfter) {
@@ -1285,6 +1290,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     db: database, invoices: invoiceStore, debtors: debtorStore, stock: stockStore, sender: invoiceSender,
     settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch,
   });
+  // Definitieve facturen als verkoopfactuur naar Visma eAccounting (visma.js).
+  const visma = createVisma({
+    db: database, settingsFor: (id) => settingsFor(id), mainTenantId: tenant.id,
+    debtors: debtorStore, invoices: invoiceStore, ...(vismaFetch ? { fetchImpl: vismaFetch } : {}),
+  });
+  invoiceStore.onFinalized((tid) => visma.schedule(tid));
   // Materiaalverbruik op de werkorder boekt de voorraad af, in dezelfde
   // transactie als de verbruiksregel (zie stock.syncUsage).
   workLogStore.hook((tid, row, user) => stockStore.syncUsage(tid, {
@@ -1557,6 +1568,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({ tenantId: tid, theme });
   });
 
+  // ---------- Visma eAccounting: koppeling per omgeving, app-registratie in Hoofdbeheer ----------
+  // Na de /api/platform-controle, zodat /api/platform/visma alleen voor hoofdbeheerders is.
+  registerVismaRoutes(app, {
+    visma, requireRight, requireJson, audit, settingsFor: (id) => settingsFor(id), mainTenantId: tenant.id,
+    syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => req.tenantId || tenant.id }),
+  });
+
   app.post('/api/platform/tenants/:id/testdata', requireJson, wrap(async (req, res) => {
     const t = store.getTenant(req.params.id);
     if (!t) return platformError(res, { error: 'Omgeving niet gevonden.', status: 404 });
@@ -1757,6 +1775,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Webshopbestellingen als factuur: alle omgevingen waar dat aan staat.
   app.locals.shopOrdersAll = () => shopOrders.runAll(store.listTenants().flatMap((l) => [l, ...l.environments]).map((t) => t.id));
   app.locals.shopOrders = shopOrders;
+  // Visma: omgevingen met automatisch doorsturen aan (vangnet naast het doorsturen direct na definitief).
+  app.locals.vismaAll = () => visma.runAll(store.listTenants().flatMap((l) => [l, ...l.environments]).map((t) => t.id));
+  app.locals.visma = visma;
   // Automatische back-up als de nieuwste ouder is dan een dag.
   app.locals.backupIfDue = async () => {
     if (!backupDir || settings.get('backupKeepDays') === 0) return null;
@@ -1803,7 +1824,9 @@ if (require.main === module) {
   setInterval(() => app.locals.shopSyncAll()
     .catch((err) => console.error('Webshopsynchronisatie mislukt:', err.message))
     .then(() => app.locals.shopOrdersAll())
-    .catch((err) => console.error('Webshopbestellingen ophalen mislukt:', err.message)), 10 * 60 * 1000).unref();
+    .catch((err) => console.error('Webshopbestellingen ophalen mislukt:', err.message))
+    .then(() => app.locals.vismaAll())
+    .catch((err) => console.error('Doorsturen naar Visma mislukt:', err.message)), 10 * 60 * 1000).unref();
   if (!settings.get('anthropicApiKey')) console.log('Geen API-sleutel ingesteld: automatisch herkennen met AI staat uit (tekenen, lokale herkenning en de toverstaf werken wel).');
 
   const server = app.listen(port, () => {

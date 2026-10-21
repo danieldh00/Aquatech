@@ -211,6 +211,9 @@
    * Trekt een polygoon recht: randen die minder dan `tolDeg` van de hoofdrichting (of haaks
    * daarop) afwijken worden precies evenwijdig of haaks; bijna-gelijke evenwijdige randen
    * worden één rand. Valt het resultaat te ver af (oppervlak), dan blijft de invoer.
+   * Met `maxShift` (m) verschuift geen rand verder dan dat: een schuine rand wordt alleen recht
+   * gezet als de uiteinden daarbij hooguit `maxShift` opschuiven, en de uitkomst mag nergens
+   * verder dan `maxShift` van de invoer liggen. Zo blijven bochten bochten.
    */
   G.regularize = (pts, angleDeg, opts = {}) => {
     const tolDeg = opts.tolDeg == null ? 12 : opts.tolDeg;
@@ -228,7 +231,9 @@
       let snapped = false;
       for (const ax of axes) {
         const c = G.dot(d, ax);
-        if (Math.abs(c) >= cosTol) { d = c > 0 ? ax : G.mul(ax, -1); snapped = true; }
+        if (Math.abs(c) < cosTol) continue;
+        if (opts.maxShift != null && (len / 2) * Math.sqrt(Math.max(0, 1 - c * c)) > opts.maxShift) continue;
+        d = c > 0 ? ax : G.mul(ax, -1); snapped = true;
       }
       lines.push({ p: G.mul(G.add(A, B), 0.5), d, len, start: A, snapped });
     }
@@ -284,7 +289,16 @@
     });
     const A0 = G.area(pts), A1 = clean.length >= 3 ? G.area(clean) : 0;
     if (clean.length < 3 || Math.abs(A1 - A0) > 0.12 * A0) return pts.slice();
+    if (opts.maxShift != null && G.deviation(pts, clean) > opts.maxShift) return pts.slice();
     return clean;
+  };
+
+  /** Grootste afstand (m) tussen de randen van twee polygonen, in beide richtingen gemeten langs de hoekpunten. */
+  G.deviation = (a, b) => {
+    let m = 0;
+    for (const p of a) m = Math.max(m, G.closestOnPolygon(p, b).d);
+    for (const p of b) m = Math.max(m, G.closestOnPolygon(p, a).d);
+    return m;
   };
 
   /** Hoek (graden) van vector, 0 = +x, positief richting +y (met de klok mee op scherm). */

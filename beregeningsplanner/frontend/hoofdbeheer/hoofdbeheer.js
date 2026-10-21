@@ -577,6 +577,45 @@
     fill();
   }
 
+  // ---------- Visma eAccounting: de app-registratie voor het hele platform ----------
+  // Elke organisatie verbindt daarna haar eigen administratie in Facturen → Visma.
+  // Het secret gaat alleen heen; de server geeft alleen terug of het is ingevuld.
+  async function vismaDialog() {
+    let data;
+    try { data = await api('platform/visma'); } catch (e) { toast(e.message, true); return; }
+    const a = data.app;
+    modal(`<h2>Visma eAccounting</h2>
+      <p class="muted small">De gegevens van de app die bij Visma (Visma Developer Portal) is geregistreerd. Ze gelden voor alle organisaties; elke organisatie verbindt daarna haar eigen administratie via Facturen → Visma.</p>
+      <form id="vi-form" class="card-form" novalidate>
+        <div class="row">
+          <label>Client ID<input name="clientId" maxlength="120" autocomplete="off" spellcheck="false" value="${esc(a.clientId)}"></label>
+          <label>Omgeving<select name="environment">
+            <option value="sandbox"${a.environment === 'sandbox' ? ' selected' : ''}>Sandbox (testen)</option>
+            <option value="production"${a.environment === 'production' ? ' selected' : ''}>Productie</option>
+          </select></label>
+        </div>
+        <label>Client secret<input name="clientSecret" type="password" maxlength="500" autocomplete="new-password"
+          placeholder="${data.secretSet ? 'Ingevuld; laat leeg om te behouden' : 'Nog niet ingevuld'}"></label>
+        ${data.secretSet ? '<label class="chk"><input type="checkbox" name="clearSecret"> Secret wissen</label>' : ''}
+        <label>Redirect URI<input name="redirectUri" maxlength="300" spellcheck="false" value="${esc(a.redirectUri)}"></label>
+        <p class="muted small">Registreer precies deze redirect URI bij Visma. Standaard: <span class="code">${esc(data.defaultRedirect)}</span>. Andere adressen moeten met https beginnen en op <span class="code">/api/visma/callback</span> eindigen.</p>
+        <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
+        <div class="err" role="alert"></div>
+      </form>`);
+    const f = $('#vi-form');
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('platform/visma', { method: 'PUT', body: {
+          clientId: f.clientId.value.trim(), environment: f.environment.value, redirectUri: f.redirectUri.value.trim(),
+          clientSecret: f.clientSecret.value, clearSecret: Boolean(f.clearSecret && f.clearSecret.checked),
+        } });
+        closeModal();
+        toast('Visma-gegevens opgeslagen');
+      } catch (e) { $('.err', f).textContent = e.message; }
+    };
+  }
+
   // ---------- Start ----------
   $('#modal-close').onclick = closeModal;
   $('#modal').onclick = (ev) => { if (ev.target.id === 'modal') closeModal(); };
@@ -584,6 +623,7 @@
   $('#t-export').onclick = exportExcel;
   $('#t-admins').onclick = () => { const m = find(state.mainId); if (m) usersDialog(m); };
   $('#t-theme').onclick = () => themeDialog(state.mainId);
+  $('#t-visma').onclick = vismaDialog;
   $('#t-table').onclick = (ev) => {
     const b = ev.target.closest('button[data-act]');
     const tr = ev.target.closest('tr[data-tid]');
