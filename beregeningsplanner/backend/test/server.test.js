@@ -50,7 +50,9 @@ test('health is openbaar en geeft versie', async () => {
 test('zonder inlog: inlogpagina in plaats van de planner, ook voor bestanden', async () => {
   const { server, base } = await start();
   try {
-    for (const p of ['/', '/beregening/', '/beregening/js/app.js', '/dashboard/modules.js', '/een/pad']) {
+    // De planner zelf (code, geen data) is openbaar voor een tekening zonder
+    // account, maar alleen met ?tekenen; zonder dat de inlogpagina.
+    for (const p of ['/', '/beregening/', '/beheer/', '/beheer/beheer.js', '/offertes/offertes.js', '/een/pad']) {
       const res = await fetch(base + p);
       assert.strictEqual(res.status, 401, p);
       const html = await res.text();

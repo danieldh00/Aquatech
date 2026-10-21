@@ -468,6 +468,10 @@ function registerQuoteRoutes(app, ctx) {
     if (!validData(data) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
     const cid = customerIdOf(req, req.body.customerId);
     if (cid.error) return badCustomer(res);
+    // Uit een plan dat (nog) niet is goedgekeurd geen offerte (een verwijderd
+    // plan blokkeert niet: de offerte blijft los daarvan bestaan).
+    const review = data.planId && ctx.planReviewOf ? ctx.planReviewOf(req.user.tenant_id, data.planId) : null;
+    if (review && review !== 'goedgekeurd') return res.status(409).json({ error: 'plan_not_approved', message: 'Dit plan is nog niet goedgekeurd. Laat het eerst controleren en goedkeuren door een installateur.' });
     const prefix = settingsOf(req).get('quoteProfile').numberPrefix;
     res.status(201).json(quotes.create(req.user, data, { status, prefix, customerId: cid.value }));
   });

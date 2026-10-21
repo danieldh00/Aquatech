@@ -9,7 +9,12 @@
   const BOM = window.BOM;
 
   // Per omgeving (live/test) een eigen lokaal concept, zie shared/env.js.
-  const STORAGE_KEY = `aquatech-beregeningsplanner-v1${window.AquatechEnv ? window.AquatechEnv.storageSuffix() : ''}`;
+  // Tekenen zonder account (beregening/?tekenen, knop op de inlogpagina): het
+  // plan blijft in deze browser (eigen opslag) tot het wordt ingediend.
+  const PARAMS = new URLSearchParams(location.search);
+  const ANON = PARAMS.has('tekenen');
+  const STORAGE_KEY = `aquatech-beregeningsplanner-v1${window.AquatechEnv ? window.AquatechEnv.storageSuffix() : ''}${ANON ? '-tekenen' : ''}`;
+  const REVIEW_LABEL = { concept: 'Concept', ter_controle: 'Ter controle', goedgekeurd: 'Goedgekeurd' };
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = (v, d = 1) => (v == null || !isFinite(v) ? '–' : Number(v).toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -58,10 +63,11 @@
       this.recalc();
       this.refreshBackground().then(() => this.editor.fit());
       this.refreshAiStatus();
-      if (window.ShopCatalog) {
+      // Zonder account geen AI-herkenning en geen webshopprijzen (lokale herkenning werkt wel).
+      if (window.ShopCatalog && !ANON) {
         window.ShopCatalog.load().then((info) => { if (info) { this.recalc(); if (STEPS[this.step].id === 'bom') this.renderStepPanel(); } });
       }
-      this._loadRights();
+      this._loadRights().then(() => this._initReview());
       this._openFromUrl();
       window.addEventListener('beforeunload', () => this._flushSync());
     },
@@ -158,7 +164,7 @@
     // server bewaard. Alleen de eigenaar ziet het terug; de beheerder ziet het
     // in de historie van aanvragen. Via file:// is er geen server.
     _serverAvailable() {
-      return location.protocol !== 'file:';
+      return location.protocol !== 'file:' && !ANON;
     },
     _serverData() {
       const { calc, serverId, ...data } = this.state;
@@ -187,6 +193,12 @@
         if (this.state.serverId !== plan.id) {
           this.state.serverId = plan.id;
           this._saveLocal();
+          this.review = { status: plan.reviewStatus || 'concept' };
+          this._renderReview();
+        } else if (plan.reviewStatus && this.review && plan.reviewStatus !== this.review.status) {
+          // Een klant wijzigde een goedgekeurd plan: opnieuw ter controle.
+          this.review = { ...this.review, status: plan.reviewStatus };
+          this._renderReview();
         }
         this._syncFailed = false;
       } catch (e) {
@@ -199,13 +211,17 @@
     },
     // Rechten van de gebruiker (shared/roles.js): een klant maakt geen offertes.
     async _loadRights() {
-      if (!this._serverAvailable()) return;
+      if (location.protocol === 'file:') return;
       // Zelfde verzoek als de zijbalk (shared/common.js).
       if (window.AquatechCommon) {
         const me = await window.AquatechCommon.getJson('api/me');
         if (me) this.rights = me.rights || [];
+        this.me = me;
+        // Ingelogd met ?tekenen: gewoon de planner met Mijn plannen.
+        if (ANON && me && me.user) location.replace(location.pathname);
         return;
       }
+      if (ANON) return;
       try {
         const res = await fetch('api/me', { cache: 'no-store' });
         if (res.ok) this.rights = (await res.json()).rights || [];
@@ -268,6 +284,8 @@
         this.checkpoint();
         this._apply(plan.data);
         this.state.serverId = plan.id;
+        this.review = plan.review || null;
+        this._renderReview();
         this.editor.selection = null;
         this.editor.bgImg = null;
         await this.refreshBackground();
@@ -321,6 +339,168 @@
         });
       } catch (e) {
         list.innerHTML = `<p class="hint">Kan de plannen niet laden (${esc(e.message)}).</p>`;
+      }
+    },
+
+    // ---------- Controle en indienen ----------
+    // Een plan van een klant is nooit meteen definitief: een installateur
+    // (recht plannen.goedkeuren) keurt het goed. Zonder account dient de
+    // bezoeker de tekening in met contactgegevens (api/public/drawing).
+    async _initReview() {
+      this._bindReview();
+      if (ANON) {
+        this.org = PARAMS.get('org') || '';
+        try {
+          const res = await fetch(`api/public/drawing?org=${encodeURIComponent(this.org)}`, { cache: 'no-store' });
+          this.drawing = res.ok ? await res.json() : { enabled: false };
+        } catch (e) {
+          this.drawing = { enabled: false };
+        }
+        document.body.classList.add('anon');
+      } else if (this.state.serverId && !this.review) {
+        // Plan uit de browser dat al op de server staat: status ophalen.
+        try {
+          const res = await fetch(`api/plans/${encodeURIComponent(this.state.serverId)}`, { cache: 'no-store' });
+          if (res.ok) this.review = (await res.json()).review || null;
+        } catch (e) { /* offline */ }
+      }
+      this._renderReview();
+    },
+    _loginHref() {
+      return `../login${this.org ? `?org=${encodeURIComponent(this.org)}` : ''}`;
+    },
+    _renderReview() {
+      const bar = $('#review-bar');
+      if (!bar) return;
+      if (ANON) {
+        const d = this.drawing;
+        if (!d) { bar.hidden = true; return; }
+        bar.hidden = false;
+        bar.className = 'review-bar anon';
+        bar.innerHTML = d.enabled
+          ? `<div class="rv-text"><b>Tekenen zonder account</b><span>Teken je tuin en dien hem in: een installateur${d.company ? ` van ${esc(d.company)}` : ''} controleert hem. Tot dan blijft de tekening alleen in deze browser.</span></div>
+             <div class="rv-act"><button id="rv-submit" class="btn primary">Tekening indienen</button><a class="rv-login" href="${esc(this._loginHref())}">Inloggen</a></div>`
+          : `<div class="rv-text"><b>Tekenen zonder account</b><span>Bij deze organisatie kun je geen tekening indienen zonder account. Log in om je plan te bewaren.</span></div>
+             <div class="rv-act"><a class="btn" href="${esc(this._loginHref())}">Inloggen</a></div>`;
+        return;
+      }
+      const r = this.review;
+      if (!this.state.serverId || !r || !this.rights) { bar.hidden = true; return; }
+      const approver = this._can('plannen.goedkeuren');
+      const when = (iso) => (iso ? new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) : '');
+      let info = '';
+      let act = '';
+      if (r.status === 'goedgekeurd') {
+        info = `Goedgekeurd${r.reviewedBy ? ` door ${esc(r.reviewedBy)}` : ''}${r.reviewedAt ? ` op ${when(r.reviewedAt)}` : ''}.${approver ? '' : ' Pas je iets aan, dan gaat het plan opnieuw ter controle.'}`;
+        if (approver) act = '<button id="rv-reopen" class="btn ghost">Goedkeuring intrekken</button>';
+      } else if (r.status === 'ter_controle') {
+        info = approver
+          ? `${r.via === 'openbaar' ? 'Ingediend zonder account' : 'Aangeboden ter controle'}${r.requestedAt ? ` op ${when(r.requestedAt)}` : ''}.${r.question ? ` Vraag: “${esc(r.question)}”` : ''}`
+          : 'Een installateur controleert dit plan. Je hoort het als het is goedgekeurd.';
+        if (approver) act = '<button id="rv-approve" class="btn primary">Goedkeuren</button>';
+      } else {
+        info = approver ? 'Nog niet goedgekeurd. Pas na goedkeuring is het plan definitief (en kan er een offerte van).' : 'Klaar met tekenen? Laat het plan controleren door een installateur.';
+        act = approver ? '<button id="rv-approve" class="btn primary">Goedkeuren</button>' : '<button id="rv-request" class="btn primary">Ter controle aanbieden</button>';
+      }
+      bar.hidden = false;
+      bar.className = `review-bar st-${r.status}`;
+      bar.innerHTML = `<div class="rv-text"><span class="rv-chip">${REVIEW_LABEL[r.status] || esc(r.status)}</span><span>${info}</span></div>${act ? `<div class="rv-act">${act}</div>` : ''}`;
+    },
+    _bindReview() {
+      const bar = $('#review-bar');
+      if (!bar) return;
+      bar.onclick = (ev) => {
+        const b = ev.target.closest('button');
+        if (!b) return;
+        if (b.id === 'rv-submit' || b.id === 'rv-request') this.openSubmit();
+        if (b.id === 'rv-approve') this.reviewPlan('approve');
+        if (b.id === 'rv-reopen') this.reviewPlan('reopen');
+      };
+      const dlg = $('#submit-dlg');
+      const form = $('#submit-form');
+      $('#submit-close').onclick = () => dlg.classList.remove('open');
+      form.onsubmit = (ev) => { ev.preventDefault(); this.submitDrawing(); };
+      $('#submit-new').onclick = () => { dlg.classList.remove('open'); this.newProject(); };
+      $('#submit-done').onclick = () => dlg.classList.remove('open');
+    },
+    openSubmit() {
+      const st = this.state;
+      if (!st.areas.length) { this.toast('Teken eerst minstens één vlak van je tuin (stap 2).', true); return; }
+      const form = $('#submit-form');
+      form.hidden = false;
+      $('#submit-ok').hidden = true;
+      // Zonder account: contactgegevens erbij; ingelogd alleen de vraag.
+      form.querySelectorAll('[data-anon]').forEach((el) => { el.hidden = !ANON; });
+      form.querySelectorAll('[data-anon] input').forEach((el) => { el.required = ANON && el.dataset.req === '1'; });
+      if (ANON) {
+        if (!form.address.value) form.address.value = st.meta.address || '';
+        if (!form.name.value) form.name.value = st.meta.customer || '';
+        $('#submit-company').textContent = (this.drawing && this.drawing.company) || 'het installatiebedrijf';
+      }
+      $('#submit-title').textContent = ANON ? 'Tekening indienen' : 'Ter controle aanbieden';
+      $('.err', form).textContent = '';
+      $('#submit-dlg').classList.add('open');
+      (ANON ? form.name : form.question).focus();
+    },
+    async submitDrawing() {
+      const form = $('#submit-form');
+      const err = $('.err', form);
+      const btn = $('button[type=submit]', form);
+      if (!form.reportValidity()) return;
+      err.textContent = '';
+      btn.disabled = true;
+      try {
+        let res;
+        if (ANON) {
+          const { calc, serverId, ...data } = this.state;
+          res = await fetch('api/public/drawing', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              org: this.org, name: form.name.value, email: form.email.value, phone: form.phone.value, address: form.address.value,
+              question: form.question.value, consent: form.consent.checked, website: form.website.value, data,
+            }),
+          });
+        } else {
+          clearTimeout(this._syncT);
+          if (this._syncPending || !this.state.serverId) await this._sync();
+          if (!this.state.serverId) throw new Error('Het plan kon niet op de server worden bewaard; probeer het zo opnieuw.');
+          res = await fetch(`api/plans/${encodeURIComponent(this.state.serverId)}/review-request`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: form.question.value }),
+          });
+        }
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.message || `Indienen mislukt (HTTP ${res.status}).`);
+        if (ANON) {
+          form.hidden = true;
+          $('#submit-ref').textContent = body.reference || '';
+          $('#submit-ok').hidden = false;
+        } else {
+          this.review = body.review;
+          this._renderReview();
+          $('#submit-dlg').classList.remove('open');
+          this.toast('Plan ter controle aangeboden');
+        }
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    },
+    async reviewPlan(action) {
+      clearTimeout(this._syncT);
+      if (this._syncPending) await this._sync();
+      try {
+        const res = await fetch(`api/plans/${encodeURIComponent(this.state.serverId)}/review`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
+        this.review = body.review;
+        this._renderReview();
+        if (STEPS[this.step].id === 'bom') this.renderStepPanel();
+        this.toast(action === 'approve' ? 'Plan goedgekeurd' : 'Goedkeuring ingetrokken');
+      } catch (e) {
+        this.toast(`Lukt niet: ${e.message}`, true);
       }
     },
 
@@ -611,7 +791,7 @@
     },
 
     async refreshAiStatus() {
-      this.aiStatus = await window.Concept.status();
+      this.aiStatus = ANON ? { available: false } : await window.Concept.status();
       if (STEPS[this.step].id === 'project') this.renderStepPanel();
     },
 
@@ -678,6 +858,8 @@
       if (content && !saved && !confirm('Nieuw project starten? Niet-opgeslagen wijzigingen gaan verloren.')) return;
       this.checkpoint();
       this.state = emptyState();
+      this.review = null;
+      this._renderReview();
       this.conceptWarnings = [];
       this._analyzeImage = null;
       this.editor.selection = null;
@@ -1077,7 +1259,9 @@
           <button id="btn-export-png" class="btn">Plan als PNG</button>
           <button id="btn-print" class="btn">Afdrukken</button>
         </div>
-        ${this._serverAvailable() && this._can('offertes') ? '<button id="btn-quote" class="btn">Offerte maken van dit plan</button>' : ''}
+        ${this._serverAvailable() && this._can('offertes') ? (this.review && this.review.status !== 'goedgekeurd'
+          ? '<button id="btn-quote" class="btn" disabled>Offerte maken van dit plan</button><p class="hint small">Een offerte kan pas als het plan is goedgekeurd (knop bovenaan het paneel).</p>'
+          : '<button id="btn-quote" class="btn">Offerte maken van dit plan</button>') : ''}
         <h3>Beregeningsschema</h3>
         <div class="row">
           <label>Weekgift (mm)<input id="t-mm" type="number" min="5" max="50" value="${s.targetMm}"></label>

@@ -312,6 +312,18 @@ const PG_MIGRATIONS = [
   );
   ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
   `,
+  // 19: controle van plannen (zie db.js).
+  `
+  ALTER TABLE plans ADD COLUMN review_status ${T} NOT NULL DEFAULT 'concept';
+  ALTER TABLE plans ADD COLUMN review_question ${T} NOT NULL DEFAULT '';
+  ALTER TABLE plans ADD COLUMN review_requested_at ${T};
+  ALTER TABLE plans ADD COLUMN reviewed_by ${T};
+  ALTER TABLE plans ADD COLUMN reviewed_at ${T};
+  ALTER TABLE plans ADD COLUMN submitted_via ${T} NOT NULL DEFAULT '';
+  UPDATE plans SET review_status = 'goedgekeurd', reviewed_at = updated_at
+    WHERE owner_id IN (SELECT id FROM users WHERE kind IN ('account', 'systeem') AND role IN ('beheerder', 'installateur'));
+  CREATE INDEX plans_review ON plans (tenant_id, review_status, updated_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

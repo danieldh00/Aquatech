@@ -73,7 +73,8 @@ test('testdata: tuinen met zones, offertes met regels en geldige gebruikersnamen
   for (const p of set.plans) {
     const s = summarize(p.data);
     assert.ok(s.totalM2 > 50 && s.sprinklers > 0, p.data.meta.name);
-    assert.ok(set.accounts.some((a) => a.key === p.owner));
+    assert.ok(p.guest || set.accounts.some((a) => a.key === p.owner));
+    assert.ok(p.review && ['concept', 'ter_controle', 'goedgekeurd'].includes(p.review.status));
   }
   assert.ok(set.plans.filter((p) => p.owner !== 'klant1').every((p) => p.data.zones.length > 0 && p.data.sprinklers.every((s) => s.zone)), 'zones ingedeeld');
   assert.deepStrictEqual([...new Set(set.quotes.map((q) => q.status))].sort(), ['afgewezen', 'akkoord', 'concept', 'verzonden']);
@@ -140,6 +141,12 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     const inst = client(base);
     await inst.login(name('installateur'), password, env.slug);
     assert.strictEqual((await inst.get('/api/plans?all=1')).body.items.length, counts.plans);
+    // Ter controle: de tekening zonder account en het plan van klant1; elk plan met een offerte is goedgekeurd.
+    const review = (await inst.get('/api/plans?all=1&review=ter_controle')).body.items;
+    assert.deepStrictEqual(review.map((p) => p.review.via).sort(), ['account', 'openbaar']);
+    assert.strictEqual(review.find((p) => p.review.via === 'openbaar').owner.email, 'jansen@voorbeeld.test');
+    const quoted = new Set((await inst.get('/api/quotes?all=1')).body.items.map((q) => q.planId));
+    assert.ok((await inst.get('/api/plans?all=1')).body.items.filter((p) => quoted.has(p.id)).every((p) => p.review.status === 'goedgekeurd'));
     assert.strictEqual((await inst.get('/api/quotes?all=1')).body.items.length, 6);
     const customers = (await inst.get('/api/quote-customers')).body.items;
     assert.strictEqual(customers.length, 4, 'de testklanten om een offerte aan te koppelen');
@@ -147,7 +154,10 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     // De testbeheerder beheert alleen de testaccounts, nooit live.
     const bea = client(base);
     await bea.login(name('beheerder'), password, 'groen');
-    const users = (await bea.get('/api/admin/users')).body.items.map((u) => u.username);
+    const all = (await bea.get('/api/admin/users')).body.items;
+    // Plus de gast die zonder account een tekening indiende.
+    assert.deepStrictEqual(all.filter((u) => u.kind === 'gast').map((u) => u.displayName), ['Mark Jansen']);
+    const users = all.filter((u) => u.kind !== 'gast').map((u) => u.username);
     assert.strictEqual(users.length, 8);
     assert.ok(!users.includes('piet'));
     // Rollen gelden voor de hele organisatie: een testaccount kan ze niet wijzigen.

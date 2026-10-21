@@ -279,3 +279,24 @@ td.num, th.num { text-align: right !important; white-space: nowrap; }
 /* Mijn plannen */
 #myplans .help-card { width: min(640px, 100%); }
 .myplans-act { text-align: right; white-space: nowrap; }
+
+/* Controle van het plan en tekenen zonder account (boven de stappen) */
+.review-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--at-green-soft); font-size: 13px; }
+.review-bar[hidden] { display: none; }
+.review-bar .rv-text { flex: 1 1 200px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.review-bar .rv-act { display: flex; gap: 8px; align-items: center; }
+.review-bar .rv-chip { align-self: flex-start; font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--at-navy); color: #fff; }
+.review-bar.st-ter_controle .rv-chip { background: var(--at-teal); }
+.review-bar.st-goedgekeurd .rv-chip { background: var(--at-green); }
+.review-bar.anon { background: var(--at-navy); color: #fff; }
+.review-bar.anon .rv-login { color: #fff; }
+.review-bar.anon .btn:not(.primary) { color: var(--text); }
+body.anon #btn-myplans, body.anon .home-link, body.anon a.menu-only[href="../"] { display: none; }
+.submit-card { width: min(480px, 100%); }
+.submit-card label { display: block; margin: 8px 0; font-size: 13px; color: var(--muted); }
+.submit-card label[hidden], .submit-card p[hidden] { display: none; }
+.submit-card input:not([type=checkbox]), .submit-card textarea { display: block; width: 100%; margin-top: 3px; padding: 8px 10px; font: inherit; color: var(--text); border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.submit-card label.chk { display: flex; gap: 8px; align-items: flex-start; color: var(--text); }
+.submit-card .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.submit-card .err { color: var(--danger); min-height: 18px; font-size: 13px; }
+.submit-card .row { display: flex; gap: 8px; flex-wrap: wrap; }

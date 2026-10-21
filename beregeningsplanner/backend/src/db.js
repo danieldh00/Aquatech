@@ -431,6 +431,22 @@ const MIGRATIONS = [
   ALTER TABLE users_new RENAME TO users;
   `,
   },
+  // 19: controle van plannen. Een plan van een klant (ook een tekening die
+  // zonder inloggen is ingediend, submitted_via 'openbaar') is nooit meteen
+  // definitief: een installateur keurt het goed. review_status = concept |
+  // ter_controle | goedgekeurd; bestaande plannen van medewerkers gelden als
+  // goedgekeurd. reviewed_by zonder foreign key (gebruiker kan weg).
+  `
+  ALTER TABLE plans ADD COLUMN review_status TEXT NOT NULL DEFAULT 'concept';
+  ALTER TABLE plans ADD COLUMN review_question TEXT NOT NULL DEFAULT '';
+  ALTER TABLE plans ADD COLUMN review_requested_at TEXT;
+  ALTER TABLE plans ADD COLUMN reviewed_by TEXT;
+  ALTER TABLE plans ADD COLUMN reviewed_at TEXT;
+  ALTER TABLE plans ADD COLUMN submitted_via TEXT NOT NULL DEFAULT '';
+  UPDATE plans SET review_status = 'goedgekeurd', reviewed_at = updated_at
+    WHERE owner_id IN (SELECT id FROM users WHERE kind IN ('account', 'systeem') AND role IN ('beheerder', 'installateur'));
+  CREATE INDEX plans_review ON plans (tenant_id, review_status, updated_at);
+  `,
 ];
 
 function openDb(file = ':memory:') {

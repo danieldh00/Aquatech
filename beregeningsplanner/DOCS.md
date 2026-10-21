@@ -123,6 +123,42 @@ plannen van de organisatie met de gebruiker en kunnen per gebruiker
 filteren; beheerders kunnen ook verwijderde plannen tonen en zien per plan
 de historie.
 
+### Tekening indienen en controle van plannen
+
+Op de inlogpagina staat **Direct een tekening maken**: een klant zonder
+account opent de planner (`beregening/?tekenen&org=<organisatiecode>`),
+tekent de tuin en klikt op **Tekening indienen**. Daarbij vult hij naam,
+e-mailadres, eventueel telefoon en adres en een vraag in, en geeft hij
+toestemming om de gegevens voor de aanvraag te gebruiken. Tot het indienen
+blijft de tekening alleen in de browser; er wordt geen account aangemaakt.
+De knop staat er alleen als de organisatie dat toestaat (**Beheer →
+Instellingen → Toegang**, standaard aan).
+
+Elk plan heeft een status:
+
+| Status | Betekenis |
+|---|---|
+| Concept | nog niet aangeboden of goedgekeurd |
+| Ter controle | een klant heeft het aangeboden (ingelogd via *Ter controle aanbieden*, of zonder account ingediend) |
+| Goedgekeurd | een installateur (recht *Plannen goedkeuren*) heeft het goedgekeurd |
+
+Een plan van een klant is nooit meteen definitief. Een installateur keurt
+een eigen plan in één keer goed (balk boven de stappen in de planner, of in
+het Plannenoverzicht). Wijzigt een klant een goedgekeurd plan, dan gaat het
+opnieuw ter controle. Een **offerte** kan alleen uit een goedgekeurd plan.
+
+Aanvragen staan in het Plannenoverzicht onder het filter *Ter controle*
+(direct: `plannen/?review=ter_controle`), met de vraag en de
+contactgegevens. Met een mailserver en een e-mailadres in het
+bedrijfsprofiel krijgt het bedrijf bij elke aanvraag een e-mail.
+
+Beveiliging: zonder inloggen zijn alleen de code van de planner (geen
+gegevens) en één schrijvend endpoint bereikbaar (`POST
+/api/public/drawing`): maximaal 10 pogingen per uur per IP-adres en 30
+aanvragen per dag per organisatie, 7 MB per tekening, een verborgen veld
+tegen bots, invoer op de server gecontroleerd, geen persoonsgegevens in
+het auditlog en geen mail naar het opgegeven adres.
+
 ## Offertes
 
 De module **Offertes** bouwt een offerte op uit een beregeningsplan. Start
@@ -501,6 +537,7 @@ Beheerders regelen alles onder **Beheer → Instellingen** (ook direct via
 | Maximaal aantal AI-analyses per dag (hele app) | 30 |
 | Maximaal aantal AI-analyses per uur per IP-adres | 10 |
 | Gasten zonder inloggen toestaan | uit |
+| Tekening indienen zonder account (knop op de inlogpagina) | aan |
 | Toegangscode (optioneel, gedeelde beheerderscode) | leeg |
 | Modules op het dashboard aan/uit | alle aan |
 

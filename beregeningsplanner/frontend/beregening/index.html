@@ -50,6 +50,7 @@
 
   <main class="layout">
     <aside class="sidebar">
+      <div id="review-bar" class="review-bar" hidden></div>
       <nav id="steps" class="steps"></nav>
       <section id="step-panel" class="panel"></section>
       <div class="step-nav">
@@ -130,6 +131,31 @@
       <p class="hint">Je plannen worden automatisch op de server bewaard. Alleen jij ziet ze hier.</p>
       <div id="myplans-list"></div>
       <p><button id="myplans-new" class="btn primary">Nieuw plan</button></p>
+    </div>
+  </div>
+
+  <div id="submit-dlg" class="help">
+    <div class="help-card submit-card">
+      <button id="submit-close" class="btn ghost close" title="Sluiten">✕</button>
+      <form id="submit-form" novalidate>
+        <h2 id="submit-title">Tekening indienen</h2>
+        <p class="hint" data-anon>Je tekening gaat naar <b id="submit-company">het installatiebedrijf</b>. Een installateur controleert hem en neemt contact met je op. Er wordt geen account voor je aangemaakt.</p>
+        <label data-anon>Naam<input name="name" maxlength="80" autocomplete="name" data-req="1"></label>
+        <label data-anon>E-mailadres<input name="email" type="email" maxlength="120" autocomplete="email" data-req="1"></label>
+        <label data-anon>Telefoon (optioneel)<input name="phone" type="tel" maxlength="30" autocomplete="tel"></label>
+        <label data-anon>Adres van de tuin (optioneel)<input name="address" maxlength="300" autocomplete="street-address"></label>
+        <label>Je vraag aan de installateur<textarea name="question" rows="3" maxlength="2000">Kan dit gecontroleerd worden?</textarea></label>
+        <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+        <label class="chk" data-anon><input type="checkbox" name="consent" data-req="1"> <span>Mijn gegevens en de tekening mogen worden gebruikt om deze aanvraag te beoordelen en contact met mij op te nemen.</span></label>
+        <div class="err" role="alert"></div>
+        <button class="btn primary" type="submit">Indienen</button>
+      </form>
+      <div id="submit-ok" hidden>
+        <h2>Tekening ingediend</h2>
+        <p>Bedankt! Een installateur bekijkt je tekening en neemt contact met je op. Je referentie is <b id="submit-ref"></b>.</p>
+        <p class="hint">Een tekening van een klant is nooit meteen definitief: pas na goedkeuring door de installateur wordt er een offerte van gemaakt.</p>
+        <div class="row"><button id="submit-done" class="btn">Sluiten</button><button id="submit-new" class="btn primary">Nieuwe tekening</button></div>
+      </div>
     </div>
   </div>
 
