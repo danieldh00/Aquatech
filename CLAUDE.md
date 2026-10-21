@@ -336,7 +336,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `mailServer.mode` `smtp` | `connector` (Exchange Online op IP: geen auth,
   `requireTLS`). WAN-IP via `backend/src/wanip.js` (ipify e.a., IPv4, 1 u
   cache, `WAN_IP` gaat voor), route `GET /api/admin/wan-ip`.
-- **Meldingen** (0.58.0, `backend/src/servicerequests.js`, tabellen
+- **Meldingen** (0.59.0, `backend/src/servicerequests.js`, tabellen
   `service_requests` + `service_request_photos`, migratie 24): klant meldt in
   het portaal een storing/onderhoud met foto's (`/api/portal/requests…`,
   recht `portaal`, foto's via `vault.sealBytes` AAD
@@ -379,6 +379,15 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `for: [rechten]`). **Bij elke versie-bump een regel bovenaan releases.js**
   (test eist dat). `api/me` geeft `news` (aantal nieuw, cache 30 s);
   gezien-stand in voorkeuren `newsSeenAt`/`seenRelease` (`POST /api/news/seen`).
+- **Offline/PWA** (0.58.0): `frontend/sw.js` (geregistreerd door
+  `shared/common.js`, ook manifest), regels in `shared/offline-core.js`
+  (UMD, getest), pagina-API + paneel `shared/offline.js|.css`. Gegevens alleen
+  voor de lijst `CACHEABLE` en een eigen account met `werkorders`; gewist bij
+  uitloggen/andere gebruiker. **Schrijfactie offline-geschikt maken**: kop via
+  `AquatechOffline.headers({ key, label, base, patch })`, 202 `{ queued }`
+  afhandelen; server: `Idempotency-Key` werkt generiek (`idempotency.js`),
+  conflictcontrole met `ifBaseOf(req)` → 409 `conflict`. Nieuwe GET die offline
+  moet werken: in `CACHEABLE`. Nieuwe pagina offline: `PRECACHE_PAGES` in sw.js.
 - Health: `GET /api/health` (versie uit `package.json`).
 
 ## Checklist voor elke nieuwe feature (zonder dat Daniël erom vraagt)

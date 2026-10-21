@@ -13,12 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '0.58.0',
+      version: '0.59.0',
       date: '2026-10-21',
       title: 'Storing of onderhoud melden via het portaal',
       items: [
         { text: 'Werkt er iets niet of wilt u onderhoud? In **Mijn portaal** meldt u nu zelf een storing of onderhoudsverzoek, met een omschrijving en foto\'s. U ziet daar ook onze reactie en wanneer we komen.', for: ['portaal'] },
         { text: 'Nieuwe module **Meldingen**: storingen en onderhoudsverzoeken van klanten met hun foto\'s. Stuur de klant een reactie of maak er met één klik een werkorder van; de gegevens van de installatie en de foto\'s gaan mee, en de klant ziet de afspraak in zijn portaal.', for: ['werkorders'] },
+      ],
+    },
+    {
+      version: '0.58.0',
+      date: '2026-10-21',
+      title: 'Werken zonder bereik op locatie',
+      items: [
+        { text: 'AquaTech is nu als **app op je telefoon** te zetten: kies in de browser *Toevoegen aan beginscherm* (iPhone: deelknop) of *App installeren* (Android).', for: ['werkorders'] },
+        { text: 'Geen bereik op locatie? Je **startscherm en werkorders blijven werken**. De klussen van vandaag staan al op je toestel zodra je het overzicht met verbinding hebt geopend. Afvinken, uren, notities en **foto\'s** worden bewaard en vanzelf verstuurd zodra er weer verbinding is. Rechtsonder zie je wat er nog wacht.', for: ['werkorders'] },
+        { text: 'Heeft kantoor dezelfde werkorder intussen ook gewijzigd, dan worden beide wijzigingen samengevoegd. Alleen als jullie hetzelfde veld anders invulden, kies je zelf welke versie blijft.', for: ['werkorders'] },
       ],
     },
     {

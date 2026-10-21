@@ -1,0 +1,21 @@
+{
+  "name": "AquaTech Service",
+  "short_name": "AquaTech",
+  "description": "Beregening ontwerpen, offertes, planning en werkorders – ook op locatie zonder verbinding.",
+  "lang": "nl",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#172f5e",
+  "icons": [
+    { "src": "shared/icons/app-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "shared/icons/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "shared/icons/app-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Werkorders", "url": "werkorders/", "icons": [{ "src": "shared/icons/app-192.png", "sizes": "192x192" }] }
+  ]
+}
