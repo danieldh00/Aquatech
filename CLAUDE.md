@@ -353,6 +353,14 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `invoicepdf.js`, `invoicemail.js` (`send`/`autoSend`, PDF als bijlage,
   `invoicing.autoSend`). Routes `/api/invoices/:id/pdf|mail|send`,
   `/api/invoices/shop-orders/sync`, `/api/debtors[/:id]`.
+- **Eigen assortiment in de planner** (0.64.0): `/api/catalog` geeft
+  `assortment` (catalogus-codes die als niet-gearchiveerd voorraadartikel of
+  gekoppeld webshopproduct bestaan). Niet leeg → `Catalog.setAssortment`
+  (via `shopcatalog.js`): planner kiest alleen beschikbare artikelen
+  (`C.available`/`C.pick`/`C.typeAvailable`, buizen gefilterd in `C.pipes`,
+  rotatorkop via `autoRotatorModel`); `BOM.build` zet de rest in
+  `rows.missing` (niet in stuklijst/offerte). Leeg = standaardcatalogus.
+  Nieuwe artikelcodes in bom.js altijd via `add()` (en zo mogelijk `pick()`).
 - **Tekening indienen + controle** (0.52.0, `backend/src/drawings.js`):
   knop *Direct een tekening maken* op login.html → `beregening/?tekenen&org=`
   (`isPublicPlanner` in server.js: pagina alleen met `?tekenen`, code van

@@ -11,10 +11,20 @@
     const calc = state.calc || Hy.calculate(state);
     const level = state.settings.level || 'expert';
     const items = new Map();
+    // Met een eigen assortiment (Catalog.setAssortment) alleen artikelen die
+    // erin staan; wat ontbreekt komt in rows.missing (niet in de stuklijst).
+    const missing = new Map();
+    const pick = C.pick || ((...codes) => codes[0]);
     const add = (code, qty, note) => {
       if (!qty || qty <= 0) return;
       const a = C.articles[code];
       if (!a) throw new Error(`Onbekend artikel ${code}`);
+      if (C.available && !C.available(code)) {
+        const m = missing.get(code) || { code, name: a.name, unit: a.unit, qty: 0 };
+        m.qty += qty;
+        missing.set(code, m);
+        return;
+      }
       const cur = items.get(code) || { code, name: a.name, unit: a.unit, price: a.price, sku: a.sku || '', url: a.url || '', shop: Boolean(a.shop), qty: 0, notes: new Set() };
       cur.qty += qty;
       if (note) cur.notes.add(note);
@@ -25,16 +35,16 @@
     for (const s of state.sprinklers) {
       const bed = Boolean(s.areaId); // in beplanting: hoger sproeierhuis (30 cm)
       if (s.type === 'spray') {
-        add(bed ? 'SPR-POP30-PRS' : level === 'eco' ? 'SPR-POP10' : 'SPR-POP10-PRS', 1, bed ? 'beplanting' : '');
+        add(bed ? pick('SPR-POP30-PRS', 'SPR-POP10-PRS', 'SPR-POP10') : level === 'eco' ? pick('SPR-POP10', 'SPR-POP10-PRS') : pick('SPR-POP10-PRS', 'SPR-POP10'), 1, bed ? 'beplanting' : '');
         add('SPR-VAN', 1);
-        add(level === 'eco' ? 'CON-ECO' : 'CON-FLEX', 1);
+        add(level === 'eco' ? pick('CON-ECO', 'CON-FLEX') : pick('CON-FLEX', 'CON-ECO'), 1);
       } else if (s.type === 'rotator' || s.type === 'strip') {
-        add(bed ? 'ROT-POP30-PRS' : 'ROT-POP10-PRS', 1, bed ? 'beplanting' : '');
+        add(bed ? pick('ROT-POP30-PRS', 'ROT-POP10-PRS') : 'ROT-POP10-PRS', 1, bed ? 'beplanting' : '');
         add(s.type === 'strip' ? 'ROT-STRIP' : C.rotatorModels[C.rotatorModelOf(s)].code, 1);
-        add(level === 'eco' ? 'CON-ECO' : 'CON-FLEX', 1);
+        add(level === 'eco' ? pick('CON-ECO', 'CON-FLEX') : pick('CON-FLEX', 'CON-ECO'), 1);
       } else if (s.type === 'rotor') {
-        add(level === 'premium' ? 'TURB-10-PRO' : 'TURB-10', 1);
-        add(level === 'eco' ? 'CON-ECO' : 'CON-FLEX-TURB', 1);
+        add(level === 'premium' ? pick('TURB-10-PRO', 'TURB-10') : pick('TURB-10', 'TURB-10-PRO'), 1);
+        add(level === 'eco' ? pick('CON-ECO', 'CON-FLEX-TURB') : pick('CON-FLEX-TURB', 'CON-ECO'), 1);
       }
     }
 
@@ -110,13 +120,16 @@
     // Ventielen, kast, besturing
     const zoneCount = calc.zones.filter((z) => !z.empty).length;
     if (zoneCount) {
-      add(level === 'premium' ? 'VAL-24V-FC' : 'VAL-24V', zoneCount);
+      add(level === 'premium' ? pick('VAL-24V-FC', 'VAL-24V') : pick('VAL-24V', 'VAL-24V-FC'), zoneCount);
       add('VAL-MANIFOLD', zoneCount);
+      // Ventielkasten: zonder jumbo alleen standaardkasten (en andersom).
+      const jumbo = C.available ? C.available('BOX-JUMBO') : true;
+      const std = C.available ? C.available('BOX-STD') : true;
       let left = zoneCount;
       while (left > 0) {
-        if (left > 3) { add('BOX-JUMBO', 1); left -= 6; } else { add('BOX-STD', 1); left -= 3; }
+        if ((left > 3 && jumbo) || !std) { add('BOX-JUMBO', 1); left -= 6; } else { add('BOX-STD', 1); left -= 3; }
       }
-      add(level === 'eco' ? 'CTRL-ECO' : 'CTRL-WIFI', 1, `${zoneCount} stations nodig`);
+      add(level === 'eco' ? pick('CTRL-ECO', 'CTRL-WIFI') : pick('CTRL-WIFI', 'CTRL-ECO'), 1, `${zoneCount} stations nodig`);
       if (level !== 'eco') add('SEN-RAIN', 1);
       if (level === 'premium') add('SEN-SOIL', 1);
 
@@ -124,7 +137,8 @@
       const cableLen = ctrl ? Math.ceil(G.dist(ctrl, calc.vb) * 1.2 + 3) : 10;
       const cores = zoneCount + 1;
       const cables = Math.ceil(cores / 13);
-      add(cores <= 7 ? 'CAB-7' : 'CAB-13', cableLen * (cores <= 7 ? 1 : cables));
+      const cab = cores <= 7 ? pick('CAB-7', 'CAB-13') : 'CAB-13';
+      add(cab, cableLen * (cab === 'CAB-7' ? 1 : cables));
       add('CAB-CON', cores * 2);
       add('MAIN-VALVE', 1);
       add('BACKFLOW', 1);
@@ -139,9 +153,12 @@
     }
 
     const order = Object.keys(C.articles);
-    return Array.from(items.values())
-      .sort((a, b) => order.indexOf(a.code) - order.indexOf(b.code))
+    const byOrder = (a, b) => order.indexOf(a.code) - order.indexOf(b.code);
+    const rows = Array.from(items.values())
+      .sort(byOrder)
       .map((it) => ({ ...it, notes: Array.from(it.notes).join('; '), total: it.qty * it.price }));
+    rows.missing = Array.from(missing.values()).sort(byOrder);
+    return rows;
   }
 
   /** Beregeningsschema: looptijd per zone voor de gewenste weekgift. */
@@ -259,6 +276,18 @@
       ? `Prijzen excl. btw uit de webshop (${shop.shop}), bijgewerkt ${fmtDate(new Date(shop.syncedAt))}; regels zonder artikelnummer webshop hebben een indicatieve prijs.`
       : 'Prijzen indicatief, excl. btw. Pas kolom E aan naar actuele prijzen.';
     ws.getCell(`B${sumRow + 4}`).font = { italic: true, color: { argb: 'FF757575' } };
+    if (rows.missing && rows.missing.length) {
+      let n = sumRow + 6;
+      ws.getCell(`A${n}`).value = 'Niet in het eigen assortiment (niet meegeteld)';
+      ws.getCell(`A${n}`).font = { bold: true, color: { argb: 'FFC62828' } };
+      for (const m of rows.missing) {
+        n++;
+        ws.getCell(`A${n}`).value = m.code;
+        ws.getCell(`B${n}`).value = m.name;
+        ws.getCell(`C${n}`).value = m.qty;
+        ws.getCell(`D${n}`).value = m.unit;
+      }
+    }
     ws.autoFilter = { from: 'A1', to: `I${last}` };
 
     // 3. Zones

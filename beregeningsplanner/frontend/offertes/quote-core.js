@@ -170,6 +170,10 @@
       Hy.calculate(st);
       rows = BOM.build(st);
       for (const w of st.calc.warnings || []) warnings.push(w);
+      // Eigen assortiment: onderdelen zonder artikel staan niet in de offerte.
+      if (rows.missing && rows.missing.length) {
+        warnings.push(`Niet in het eigen assortiment en dus niet in de offerte: ${rows.missing.map((m) => `${m.name} (${m.qty} ${m.unit})`).join(', ')}.`);
+      }
     } else {
       warnings.push('Het plan heeft nog geen sproeiers of druppelvlakken: er zijn geen materialen overgenomen.');
     }
