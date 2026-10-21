@@ -429,7 +429,54 @@ const PG_MIGRATIONS = [
   CREATE INDEX work_order_materials_date ON work_order_materials (tenant_id, used_on);
   CREATE UNIQUE INDEX work_order_materials_client ON work_order_materials (tenant_id, client_id);
   `,
-  // 24: meldingen van klanten (zie db.js).
+  // 24: voorraadbeheer (zie db.js).
+  `
+  CREATE TABLE stock_items (
+    id          ${T} PRIMARY KEY,
+    tenant_id   ${T} NOT NULL ${FK('tenants(id)')},
+    code        ${T} NOT NULL,
+    name        ${T} NOT NULL,
+    unit        ${T} NOT NULL DEFAULT 'st',
+    location    ${T} NOT NULL DEFAULT '',
+    min_qty     DOUBLE PRECISION NOT NULL DEFAULT 0,
+    on_hand     DOUBLE PRECISION NOT NULL DEFAULT 0,
+    cost_price  DOUBLE PRECISION,
+    notes       ${T} NOT NULL DEFAULT '',
+    archived    BIGINT NOT NULL DEFAULT 0,
+    created_at  ${T} NOT NULL,
+    updated_at  ${T} NOT NULL,
+    UNIQUE (tenant_id, code)
+  );
+  CREATE TABLE stock_movements (
+    id                ${T} PRIMARY KEY,
+    tenant_id         ${T} NOT NULL ${FK('tenants(id)')},
+    item_id           ${T} NOT NULL ${FK('stock_items(id)')},
+    kind              ${T} NOT NULL CHECK (kind IN ('ontvangst', 'afboeking', 'retour', 'correctie', 'telling')),
+    qty               DOUBLE PRECISION NOT NULL,
+    balance           DOUBLE PRECISION NOT NULL,
+    work_order_id     ${T},
+    work_order_number ${T} NOT NULL DEFAULT '',
+    source            ${T} NOT NULL DEFAULT '',
+    note              ${T} NOT NULL DEFAULT '',
+    user_id           ${T},
+    user_name         ${T} NOT NULL DEFAULT '',
+    created_at        ${T} NOT NULL
+  );
+  CREATE INDEX stock_movements_item ON stock_movements (tenant_id, item_id, created_at);
+  CREATE INDEX stock_movements_created ON stock_movements (tenant_id, created_at);
+  CREATE INDEX stock_movements_wo ON stock_movements (tenant_id, work_order_id);
+  CREATE INDEX stock_movements_source ON stock_movements (tenant_id, source);
+  CREATE TABLE stock_reservations (
+    tenant_id     ${T} NOT NULL ${FK('tenants(id)')},
+    work_order_id ${T} NOT NULL,
+    item_id       ${T} NOT NULL ${FK('stock_items(id)')},
+    qty           DOUBLE PRECISION NOT NULL,
+    updated_at    ${T} NOT NULL,
+    PRIMARY KEY (tenant_id, work_order_id, item_id)
+  );
+  CREATE INDEX stock_reservations_item ON stock_reservations (tenant_id, item_id);
+  `,
+  // 25: meldingen van klanten (zie db.js).
   `
   CREATE TABLE service_requests (
     id              ${T} PRIMARY KEY,

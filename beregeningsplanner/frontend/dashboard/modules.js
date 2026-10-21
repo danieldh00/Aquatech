@@ -102,6 +102,15 @@
       right: 'planning',
     },
     {
+      id: 'voorraad',
+      title: 'Voorraadbeheer',
+      description: 'Artikelen op voorraad met stand, locatie en minimumvoorraad. Werkorders reserveren hun materialen en boeken ze af bij verbruik of oplevering; ontvangsten, tellingen en correcties, met Excel-export.',
+      href: 'voorraad/',
+      icon: 'box',
+      status: 'actief',
+      right: 'voorraad',
+    },
+    {
       id: 'uitbesteden',
       title: 'Uitbesteden',
       description: 'Te veel werk? Bied een werkorder aan bij een andere organisatie op het platform, of neem opdrachten van anderen aan. Staat aan als de beheerder het in de instellingen aanzet.',
@@ -129,15 +138,6 @@
       status: 'actief',
       right: 'hoofdbeheer',
       group: 'beheer',
-    },
-
-    {
-      id: 'voorraad',
-      title: 'Voorraadbeheer',
-      description: 'Artikelen, voorraad per locatie en bestellingen, met reservering vanuit de stuklijst.',
-      icon: 'box',
-      status: 'gepland',
-      right: 'offertes',
     },
   ];
 

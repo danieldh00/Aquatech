@@ -566,7 +566,58 @@ const MIGRATIONS = [
   CREATE INDEX work_order_materials_date ON work_order_materials (tenant_id, used_on);
   CREATE UNIQUE INDEX work_order_materials_client ON work_order_materials (tenant_id, client_id);
   `,
-  // 24: meldingen van klanten (storing of onderhoudsverzoek) via het
+  // 24: voorraadbeheer (zie stock.js). Artikelen per omgeving met de stand
+  // (on_hand, bijgehouden bij elke mutatie), het logboek van mutaties
+  // (ontvangst, afboeking op een werkorder, retour, correctie, telling) en de
+  // reserveringen per werkorder (afgeleid van de materiaallijst). Geen
+  // foreign key naar werkorders of gebruikers: het logboek blijft staan.
+  `
+  CREATE TABLE stock_items (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    code        TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    unit        TEXT NOT NULL DEFAULT 'st',
+    location    TEXT NOT NULL DEFAULT '',
+    min_qty     REAL NOT NULL DEFAULT 0,
+    on_hand     REAL NOT NULL DEFAULT 0,
+    cost_price  REAL,
+    notes       TEXT NOT NULL DEFAULT '',
+    archived    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    UNIQUE (tenant_id, code)
+  );
+  CREATE TABLE stock_movements (
+    id                TEXT PRIMARY KEY,
+    tenant_id         TEXT NOT NULL REFERENCES tenants(id),
+    item_id           TEXT NOT NULL REFERENCES stock_items(id),
+    kind              TEXT NOT NULL CHECK (kind IN ('ontvangst', 'afboeking', 'retour', 'correctie', 'telling')),
+    qty               REAL NOT NULL,
+    balance           REAL NOT NULL,
+    work_order_id     TEXT,
+    work_order_number TEXT NOT NULL DEFAULT '',
+    source            TEXT NOT NULL DEFAULT '',
+    note              TEXT NOT NULL DEFAULT '',
+    user_id           TEXT,
+    user_name         TEXT NOT NULL DEFAULT '',
+    created_at        TEXT NOT NULL
+  );
+  CREATE INDEX stock_movements_item ON stock_movements (tenant_id, item_id, created_at);
+  CREATE INDEX stock_movements_created ON stock_movements (tenant_id, created_at);
+  CREATE INDEX stock_movements_wo ON stock_movements (tenant_id, work_order_id);
+  CREATE INDEX stock_movements_source ON stock_movements (tenant_id, source);
+  CREATE TABLE stock_reservations (
+    tenant_id     TEXT NOT NULL REFERENCES tenants(id),
+    work_order_id TEXT NOT NULL,
+    item_id       TEXT NOT NULL REFERENCES stock_items(id),
+    qty           REAL NOT NULL,
+    updated_at    TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, work_order_id, item_id)
+  );
+  CREATE INDEX stock_reservations_item ON stock_reservations (tenant_id, item_id);
+  `,
+  // 25: meldingen van klanten (storing of onderhoudsverzoek) via het
   // klantportaal, zie servicerequests.js. customer_id, handled_by en
   // work_order_id zonder foreign key: de melding blijft staan als het account
   // of de werkorder verdwijnt. installation_id = de werkorder van de

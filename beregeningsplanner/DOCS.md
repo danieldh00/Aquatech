@@ -461,6 +461,36 @@ omschrijving als instructie, het ontwerp en de zones van de gekozen
 installatie en de foto's van de klant. De klant ziet die werkorder daarna in
 zijn portaal en kan de afspraak daar bevestigen.
 
+## Voorraadbeheer
+
+Module **Voorraadbeheer** (recht *Voorraadbeheer*: standaard beheerder en
+installateur). Een voorraadartikel heeft een **artikelcode**: dezelfde codes
+als de catalogus, de stuklijst van de planner, de offerte en de materiaallijst
+van de werkorder. Daardoor is alles vanzelf gekoppeld.
+
+- **Artikelen**: *Uit catalogus* neemt artikelen uit de stuklijst op voorraad
+  (omschrijving en eenheid uit de catalogus), *+ Artikel* maakt een eigen
+  artikel (met beginvoorraad). Per artikel: locatie, minimumvoorraad,
+  inkoopprijs (voor de voorraadwaarde) en notities. Een artikel met mutaties
+  wordt bij verwijderen gearchiveerd; het logboek blijft.
+- **Mutaties** per artikel: *Ontvangst* (erbij), *Telling* (de stand wordt
+  het getelde aantal) en *Correctie* (+ of −, met reden). Elke mutatie komt
+  in het logboek met de stand erna, wie en wanneer.
+- **Reserveren**: een werkorder met status Nieuw, Gepland of In uitvoering
+  reserveert per voorraadartikel uit zijn materiaallijst wat nog niet is
+  afgeboekt. Dat volgt elke wijziging van de werkorder (materialen, status,
+  verwijderen). *Beschikbaar* = op voorraad − gereserveerd; onder de
+  minimumvoorraad staat *Bijbestellen*.
+- **Afboeken**: op de werkorder staat het blok **Voorraad** (nodig,
+  afgeboekt, gereserveerd, op voorraad, tekort). Afboeken kan daar per regel
+  (ook *Retour*) of in één keer voor alles wat gereserveerd staat. Wordt de
+  werkorder **Gereed**, dan wordt de rest van de reservering vanzelf
+  afgeboekt. Is er op de werkorder materiaalverbruik geregistreerd, dan boekt
+  dat verbruik de voorraad af en vervalt bij Gereed alleen de rest van de
+  reservering.
+- **Excel-export**: de voorraadlijst (met een tabblad Gereserveerd) en de
+  mutaties over een gekozen periode.
+
 ## Gebruikers, rollen en historie van aanvragen
 
 Elke rol ziet op het dashboard alleen de modules die erbij horen; de server
@@ -480,7 +510,7 @@ controleert de rechten zelf. De standaardrollen staan in
   rijen en de rollen als kolommen; een vinkje slaat direct op en geldt bij
   het volgende verzoek. Rechten: Beregeningsplanner, Alle plannen, Offertes
   opstellen, Alle offertes, Werkorders en klantdossiers, Planning, Uitvoerder
-  (kan worden toegewezen en is een kolom in de planning), Uitbesteden, en voor klantrollen
+  (kan worden toegewezen en is een kolom in de planning), Voorraadbeheer, Uitbesteden, en voor klantrollen
   Eigen offertes en Klantportaal. Een recht dat een ander nodig heeft (bijv.
   Planning → Werkorders) gaat automatisch mee aan; uitzetten neemt de
   afhankelijke rechten mee. Naam en omschrijving van elke rol zijn aan te
@@ -608,6 +638,11 @@ keer:
   (deels afgevinkt) en gereed (met opleverrapport), toegewezen aan de
   testinstallateurs, met zone-indeling en materiaallijst, en een
   afspraaklink met een reactie van de klant (bevestigd of ander moment).
+- **Voorraad**: de artikelen van de werkorders op voorraad (op één na, die
+  laat zien hoe een artikel zonder voorraadbeheer eruitziet) plus een eigen
+  artikel, met ontvangsten, een telling en een correctie. De gereede
+  werkorder heeft zijn materialen afgeboekt, die in uitvoering deels, de
+  open werkorders reserveren de rest; één artikel komt tekort.
 - **Webshop**: een nepwinkel (`webshop.voorbeeld.test`) met producten en
   prijzen voor de catalogus, gekoppeld via sku, het productveld
   `aquatech_code` en handmatige koppelingen; een paar artikelen ontbreken

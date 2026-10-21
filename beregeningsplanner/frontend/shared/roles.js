@@ -11,12 +11,14 @@
 // - beheerder:    alles binnen de eigen organisatie (tenant): gebruikers,
 //                 instellingen, historie, alle plannen, offertes en werkorders.
 //                 Plaatst nieuwsberichten voor de collega's (pagina Nieuws).
+//                 Beheert de voorraad (ook installateurs).
 //                 Ook opdrachten uitbesteden aan of aannemen van een andere
 //                 organisatie (als dat in de instellingen aan staat).
 //                 De rechten van deze rol liggen vast.
 // - installateur: plannen maken, bewerken en goedkeuren, offertes opstellen en
-//                 werkorders uitvoeren voor de hele organisatie; geen
-//                 gebruikers, instellingen of historie.
+//                 werkorders uitvoeren voor de hele organisatie en de
+//                 voorraad bijhouden; geen gebruikers, instellingen of
+//                 historie.
 // - planner:      werkorders inplannen in de agenda en de afspraaklink naar de
 //                 klant sturen; werkorders en klantdossiers inzien.
 // - klant:        alleen de eigen plannen, en de offertes die voor hem zijn
@@ -42,6 +44,7 @@
     planning: { label: 'Planning', description: 'Werkorders inplannen in de agenda en de afspraaklink naar de klant sturen.', kind: ['medewerker'], needs: ['werkorders'] },
     uitvoerder: { label: 'Uitvoerder', description: 'Kan als uitvoerder aan een werkorder worden toegewezen en staat als kolom in de planning.', kind: ['medewerker'], needs: ['werkorders'] },
     nieuws: { label: 'Nieuwsberichten plaatsen', description: 'Berichten plaatsen op de pagina Nieuws voor de collega\'s (of ook voor klanten), eventueel ook per e-mail.', kind: ['medewerker'] },
+    voorraad: { label: 'Voorraadbeheer', description: 'De voorraad beheren: artikelen, ontvangsten, tellingen, correcties en wat er op werkorders gereserveerd en afgeboekt is.', kind: ['medewerker'] },
     uitbesteden: { label: 'Uitbesteden', description: 'Opdrachten uitbesteden aan of aannemen van een andere organisatie (als dat in de instellingen aan staat).', kind: ['medewerker'], needs: ['werkorders'] },
     'offertes.klant': { label: 'Eigen offertes (klant)', description: 'De offertes die voor dit account klaarstaan inzien en accorderen of afwijzen.', kind: ['klant'] },
     portaal: { label: 'Klantportaal', description: 'Mijn portaal: offertes, afspraken, voortgang en het opleverdossier.', kind: ['klant'] },
@@ -56,13 +59,13 @@
       kind: 'medewerker',
       locked: true,
       description: 'Alles binnen de organisatie: gebruikers, rollen, instellingen, historie, alle plannen, offertes en werkorders, en opdrachten uitbesteden.',
-      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder', 'nieuws', 'uitbesteden', 'beheer'],
+      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder', 'nieuws', 'voorraad', 'uitbesteden', 'beheer'],
     },
     installateur: {
       label: 'Installateur',
       kind: 'medewerker',
-      description: 'Plannen maken en bewerken, offertes opstellen en werkorders uitvoeren; geen gebruikers of instellingen.',
-      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder'],
+      description: 'Plannen maken en bewerken, offertes opstellen, werkorders uitvoeren en de voorraad bijhouden; geen gebruikers of instellingen.',
+      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder', 'voorraad'],
     },
     planner: {
       label: 'Planner',
