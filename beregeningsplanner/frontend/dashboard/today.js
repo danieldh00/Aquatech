@@ -116,6 +116,22 @@
     state.today = data.today;
     if (!state.date) state.date = data.date;
     render(data);
+    keepOffline(data, qs);
+  }
+
+  // Klussen van vandaag (en de volgende) alvast op het toestel zetten, zodat
+  // de installateur ze op locatie ook zonder bereik kan openen (shared/offline.js).
+  function keepOffline(data, qs) {
+    const off = window.AquatechOffline;
+    if (!off || !off.supported || state.kept === data.date) return;
+    state.kept = data.date;
+    const ids = (data.items || []).map((w) => w.id).concat(data.next ? [data.next.id] : []);
+    const next = new URLSearchParams(qs);
+    next.set('date', addDays(data.date, 1));
+    off.prefetch([
+      'api/workorders', 'api/workorder-staff', 'api/quote-profile', `api/my-day?${next}`,
+      ...ids.flatMap((id) => [`api/workorders/${encodeURIComponent(id)}`, `api/workorders/${encodeURIComponent(id)}/photos`]),
+    ]);
   }
 
   function bind() {

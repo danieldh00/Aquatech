@@ -25,6 +25,7 @@ const { createOutsourcingStore, registerOutsourcingRoutes } = require('./outsour
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./news');
 const { registerDrawingRoutes } = require('./drawings');
 const { createAiUsageStore } = require('./aiusage');
+const { createIdempotency, ifBaseOf } = require('./idempotency');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -84,6 +85,11 @@ const PUBLIC_FILES = new Set([
   '/openbaar/afspraak.html', '/openbaar/afspraak.js', '/openbaar/afspraak.css', '/werkorders/workorder-core.js',
   '/shared/brand.css', '/shared/theme.css', '/shared/theme.js', '/shared/logo-white.png',
   '/offertes/quote-core.js', '/offertes/quote-view.js', '/offertes/quote-view.css',
+  // Installeerbare app en offline werken: geen gegevens, wel nodig voordat
+  // (en nadat) iemand is ingelogd (manifest en service worker worden zonder
+  // cookies of buiten de sessie opgehaald).
+  '/sw.js', '/manifest.json', '/shared/offline-core.js',
+  '/shared/icons/app-192.png', '/shared/icons/app-512.png', '/shared/icons/app-maskable-512.png', '/shared/icons/apple-touch-icon.png',
 ]);
 function isPublicAsset(req) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
@@ -306,6 +312,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (site === 'cross-site' || site === 'same-site') return res.status(403).json({ error: 'cross_site', message: 'Verzoek van een andere site geweigerd.' });
     next();
   });
+
+  // Offline wachtrij (frontend/sw.js): een herhaald verzoek met dezelfde
+  // Idempotency-Key wordt niet nog eens uitgevoerd (zie idempotency.js).
+  const idempotency = createIdempotency();
+  app.use('/api', idempotency.middleware((req) => {
+    const user = identify(req);
+    return user ? `${user.id}@${req.tenantId}` : null;
+  }));
 
   // Moet de gebruiker eerst zelf een nieuw wachtwoord kiezen (nieuw account of
   // reset door een beheerder), dan is alleen de wachtwoordpagina bereikbaar:

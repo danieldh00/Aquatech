@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.57.0
+
+Installeerbare app (PWA) die op locatie ook zonder verbinding werkt, voor
+installateurs: startscherm, werkorders en foto's.
+
+- **App**: `frontend/manifest.json` (relatief, standalone, iconen in
+  `shared/icons/`), ingevoegd door `shared/common.js` op elke pagina, die ook
+  de service worker `sw.js?v=<versie>` registreert. Manifest, `sw.js`,
+  `shared/offline-core.js` en iconen staan in `PUBLIC_FILES` (geen gegevens).
+- **Service worker** (`frontend/sw.js`): pagina's eerst van de server, bij geen
+  verbinding uit `aquatech-shell-<versie>` (vooraf: dashboard en werkorders met
+  scripts/CSS); onveranderlijke bestanden (`?v=`, immutable) eerst uit de
+  cache. Gegevens alleen voor de lijst in `offline-core.js` (api/me, my-day,
+  werkorders, foto-lijsten en miniaturen, medewerkers, bedrijfsprofiel) en
+  alleen voor een eigen account met recht `werkorders`, niet tijdens
+  impersonatie. Cache `aquatech-data` wordt gewist bij uitloggen, een andere
+  gebruiker/omgeving, een 401 en na 14 dagen per item.
+- **Generieke wachtrij** (IndexedDB): een verzoek met `X-Aquatech-Offline: 1`
+  gaat bij geen verbinding of een onbereikbare server (502/503/504/52x) in de
+  wachtrij en geeft 202 `{ queued: true }`. Optioneel `-Key` (samenvoegen),
+  `-Label`, `-Patch: merge` (bewaarde GET bijwerken, zodat de pagina offline de
+  eigen wijziging terugziet) en `X-Aquatech-Base`. Versturen bij openen van een
+  pagina, `online`, Background Sync en elke 30 s; per item een
+  `Idempotency-Key`. Bruikbaar voor elke module (uren, materiaal).
+- **Conflicten**: `X-Aquatech-If-Base` op `PUT /api/workorders/:id` geeft 409
+  `conflict` als de werkorder intussen is gewijzigd. De service worker voegt
+  dan per veld en per werkstap/materiaalregel samen (`merge3`); alleen als
+  beide kanten hetzelfde veld wijzigden kiest de gebruiker (toch opslaan of
+  weggooien) in het offline-paneel (`shared/offline.js|.css`).
+- **Server**: `backend/src/idempotency.js` (Idempotency-Key per gebruiker +
+  omgeving + methode + pad, 24 u in het geheugen, begrensd; 409 `in_progress`).
+- **Werkorders/foto's/startscherm**: autosave en foto-upload/-wijziging via de
+  wachtrij; foto's die nog wachten staan in de galerij; het startscherm zet de
+  klussen van vandaag en de volgende alvast op het toestel. Uitloggen
+  waarschuwt bij niet-verstuurde wijzigingen en wist alles.
+- Tests: `test/offline.test.js`.
+
 ## 0.56.0
 
 Plan herkennen: vaste AI-uitkomst per tekening, betere herkenning zonder AI

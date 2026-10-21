@@ -60,7 +60,14 @@
     const btn = el.querySelector('[data-logout]');
     if (btn) {
       btn.onclick = async () => {
+        // Nog niet verstuurde wijzigingen (offline gemaakt) gaan bij uitloggen
+        // verloren: de offline gegevens worden op dit toestel gewist.
+        const common = window.AquatechCommon;
+        const st = common && common.offline ? await common.offline({ type: 'status' }, 1500) : null;
+        const waiting = st && st.items ? st.items.length : 0;
+        if (waiting && !confirm(`Er ${waiting === 1 ? 'staat nog 1 wijziging' : `staan nog ${waiting} wijzigingen`} op dit toestel die nog niet ${waiting === 1 ? 'is' : 'zijn'} verstuurd. Bij uitloggen ${waiting === 1 ? 'gaat die' : 'gaan die'} verloren. Toch uitloggen?`)) return;
         try { await fetch(`${base}api/auth/logout`, { method: 'POST' }); } catch (e) { /* negeren */ }
+        if (common && common.offline) await common.offline({ type: 'wipe' }, 1500);
         // Na opnieuw inloggen weer naar de eigen startpagina (zie dashboard.js).
         try { sessionStorage.removeItem('aquatech_started'); } catch (e) { /* geen opslag */ }
         location.href = base || './';

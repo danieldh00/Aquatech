@@ -13,6 +13,7 @@ const { transaction } = require('./db');
 const { createVault } = require('./vault');
 const { createMailer, validEmail } = require('./mailer');
 const { preferencesOf } = require('./store');
+const { ifBaseOf } = require('./idempotency');
 
 // Kopie (bcc) van een verstuurde mail naar de afzender, als die dat in Mijn
 // profiel heeft aangezet en een e-mailadres heeft.
@@ -253,10 +254,13 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
   }
 
   // assigneeId: undefined = ongewijzigd, null = niemand.
-  function update(tenantId, id, rawData, status, assigneeId) {
+  // ifBase: alleen opslaan als de werkorder nog op die updatedAt staat (een
+  // offline wijziging uit de wachtrij); anders { conflict: true, current }.
+  function update(tenantId, id, rawData, status, assigneeId, { ifBase = null } = {}) {
     return transaction(db, () => {
-      const r = find(tenantId, id, 'id, status, assignee_id, data');
+      const r = find(tenantId, id, 'id, status, assignee_id, data, updated_at');
       if (!r) return null;
+      if (ifBase && r.updated_at !== ifBase) return { conflict: true, current: fullRow(r.id) };
       const old = JSON.parse(r.data);
       const data = rawData === undefined ? old : Core.sanitize(rawData);
       // De koppeling met offerte en plan ligt vast.
@@ -497,8 +501,10 @@ function registerWorkOrderRoutes(app, ctx) {
     if ((data !== undefined && !validData(data)) || !validStatus(status)) return res.status(400).json({ error: 'invalid_workorder', message: 'Ongeldige werkorder.' });
     const aid = assigneeOf(req, req.body.assigneeId);
     if (aid.error) return badAssignee(res);
-    const wo = workorders.update(tid(req), req.params.id, data, status, aid.value);
+    const wo = workorders.update(tid(req), req.params.id, data, status, aid.value, { ifBase: ifBaseOf(req) });
     if (!wo) return notFound(res);
+    // Offline gemaakt terwijl een ander de werkorder wijzigde: de gebruiker kiest.
+    if (wo.conflict) return res.status(409).json({ error: 'conflict', message: `Werkorder ${wo.current.number} is intussen door iemand anders gewijzigd.`, updatedAt: wo.current.updatedAt });
     res.json(wo);
   });
 

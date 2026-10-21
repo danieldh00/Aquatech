@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.57.0',
+      date: '2026-10-21',
+      title: 'Werken zonder bereik op locatie',
+      items: [
+        { text: 'AquaTech is nu als **app op je telefoon** te zetten: kies in de browser *Toevoegen aan beginscherm* (iPhone: deelknop) of *App installeren* (Android).', for: ['werkorders'] },
+        { text: 'Geen bereik op locatie? Je **startscherm en werkorders blijven werken**. De klussen van vandaag staan al op je toestel zodra je het overzicht met verbinding hebt geopend. Afvinken, uren, notities en **foto\'s** worden bewaard en vanzelf verstuurd zodra er weer verbinding is. Rechtsonder zie je wat er nog wacht.', for: ['werkorders'] },
+        { text: 'Heeft kantoor dezelfde werkorder intussen ook gewijzigd, dan worden beide wijzigingen samengevoegd. Alleen als jullie hetzelfde veld anders invulden, kies je zelf welke versie blijft.', for: ['werkorders'] },
+      ],
+    },
+    {
       version: '0.56.0',
       date: '2026-10-21',
       title: 'Herkennen zonder AI leert van de AI',

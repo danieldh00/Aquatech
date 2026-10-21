@@ -34,16 +34,23 @@
     toast.t = setTimeout(() => { t.className = 'toast screen'; }, 3500);
   }
 
-  async function api(url, { method = 'GET', body } = {}) {
+  // `offline`: de wijziging mag zonder verbinding in de wachtrij (zie
+  // shared/offline.js); het antwoord is dan { queued: true }.
+  async function api(url, { method = 'GET', body, offline } = {}) {
+    const extra = offline && window.AquatechOffline ? window.AquatechOffline.headers(offline) : {};
     const res = await fetch(`../api/${url}`, {
       method, cache: 'no-store',
-      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+      headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extra },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const out = await res.json().catch(() => ({}));
     if (!res.ok) throw Object.assign(new Error(out.message || `HTTP ${res.status}`), { code: out.error });
+    // Zonder verbinding uit de offline cache: van wanneer de gegevens zijn.
+    const cachedAt = res.headers.get('X-Aquatech-Cached-At');
+    if (cachedAt && out && typeof out === 'object') Object.defineProperty(out, 'cachedAt', { value: cachedAt, enumerable: false });
     return out;
   }
+  const clock = (iso) => new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 
   const params = () => new URLSearchParams(location.search);
   function go(query) {
@@ -268,7 +275,7 @@
     $('#e-heading').textContent = `Werkorder ${wo.number}`;
     document.title = `Werkorder ${wo.number} – AquaTech Service`;
     $('#e-status').value = wo.status;
-    $('#e-saved').textContent = '';
+    $('#e-saved').textContent = wo.cachedAt ? `Offline · gegevens van ${new Date(wo.cachedAt).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })}` : '';
     renderAssignee(wo);
     document.querySelectorAll('#edit-view [data-f]').forEach((el) => {
       const v = getPath(wo.data, el.dataset.f);
@@ -547,8 +554,20 @@
     $('#e-saved').textContent = 'Opslaan…';
     state.saving = (async () => {
       try {
-        const out = await api(`workorders/${encodeURIComponent(wo.id)}`, { method: 'PUT', body: { data: wo.data, ...extra } });
+        const out = await api(`workorders/${encodeURIComponent(wo.id)}`, {
+          method: 'PUT', body: { data: wo.data, ...extra },
+          // Op locatie zonder bereik: bewaren op het toestel en later versturen.
+          offline: { key: `wo:${wo.id}`, label: `Werkorder ${wo.number}`, base: wo.updatedAt, patch: true },
+        });
+        if (out.queued) {
+          if (state.wo === wo) {
+            if (extra.status) wo.status = extra.status;
+            $('#e-saved').textContent = 'Bewaard op dit toestel · wordt verstuurd zodra er verbinding is';
+          }
+          return;
+        }
         if (state.wo === wo) {
+          wo.updatedAt = out.updatedAt;
           wo.status = out.status;
           wo.assigneeId = out.assigneeId;
           wo.assignee = out.assignee;
@@ -556,7 +575,7 @@
           wo.share = out.share;
           renderAppt();
           $('#e-status').value = out.status;
-          $('#e-saved').textContent = `Opgeslagen ${new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`;
+          $('#e-saved').textContent = `Opgeslagen ${clock(new Date().toISOString())}`;
         }
       } catch (e) {
         state.dirty = true;
@@ -972,6 +991,28 @@
   }
 
   // ---------- Navigatie ----------
+  // Offline gemaakte wijzigingen die later zijn verstuurd: de open werkorder
+  // bijwerken (nieuwe basis voor de volgende wijziging). Weggegooid of een
+  // conflict opgelost: opnieuw laden van de server.
+  function bindOffline() {
+    const off = window.AquatechOffline;
+    if (!off) return;
+    off.on('synced', (msg) => {
+      const wo = state.wo;
+      if (!wo) { if (!msg.discarded) loadList(); return; }
+      if (msg.discarded) { if (!state.dirty) loadWorkOrder(wo.id); return; }
+      if (!msg.item || msg.item.key !== `wo:${wo.id}` || !msg.body) return;
+      wo.updatedAt = msg.body.updatedAt;
+      wo.appointment = msg.body.appointment;
+      renderAppt();
+      if (!state.dirty) {
+        wo.status = msg.body.status;
+        $('#e-status').value = msg.body.status;
+        $('#e-saved').textContent = `Verstuurd ${clock(new Date().toISOString())}`;
+      }
+    });
+  }
+
   function showList() {
     state.wo = null;
     state.warnings = [];
@@ -1043,6 +1084,7 @@
     bindEditor();
     bindApptSend();
     window.addEventListener('popstate', route);
+    bindOffline();
     // Terug via de knop Terug van de browser: het overzicht opnieuw laden.
     if (window.AquatechCommon) window.AquatechCommon.onReturn(() => { if (!state.wo) loadList(); });
     route();
