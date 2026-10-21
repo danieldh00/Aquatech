@@ -130,7 +130,7 @@
     next.set('date', addDays(data.date, 1));
     off.prefetch([
       'api/workorders', 'api/workorder-staff', 'api/quote-profile', `api/my-day?${next}`,
-      ...ids.flatMap((id) => [`api/workorders/${encodeURIComponent(id)}`, `api/workorders/${encodeURIComponent(id)}/photos`]),
+      ...ids.flatMap((id) => [`api/workorders/${encodeURIComponent(id)}`, `api/workorders/${encodeURIComponent(id)}/photos`, `api/workorders/${encodeURIComponent(id)}/worklog`]),
     ]);
   }
 

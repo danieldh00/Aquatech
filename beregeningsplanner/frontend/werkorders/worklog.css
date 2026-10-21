@@ -1,0 +1,44 @@
+/* Uren en materiaalverbruik op een werkorder (worklog.js). Kleuren via --at-*. */
+#wl-card .wl-stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 6px; }
+#wl-card .wl-stats .stat { flex: 1 1 160px; padding: 8px 12px; border-radius: 8px; background: var(--at-green-soft); display: flex; flex-direction: column; }
+#wl-card .wl-stats .stat b { font-size: 20px; color: var(--at-navy); }
+#wl-card .wl-stats .stat span { font-size: 13px; color: var(--muted); }
+#wl-card .wl-note { margin: 8px 0; padding: 8px 12px; font-size: 14px; }
+
+.wl-tabs { display: flex; gap: 0; margin: 12px 0 10px; border-bottom: 2px solid var(--line); }
+.wl-tabs button { appearance: none; border: 0; background: none; padding: 8px 16px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+.wl-tabs button.on { color: var(--at-navy); border-bottom-color: var(--at-green); }
+
+.wl-form { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; background: var(--at-green-soft); }
+.wl-form label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.wl-form input, .wl-form select { width: 100%; box-sizing: border-box; min-height: 40px; }
+.wl-form label.chk { flex-direction: row; align-items: center; gap: 6px; align-self: end; min-height: 40px; }
+.wl-form label.chk input { width: 20px; min-height: 0; height: 20px; }
+.wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.wl-grid.two { grid-template-columns: minmax(180px, 1fr) 2fr; }
+.wl-grid .wide { grid-column: span 2; }
+.wl-grid[hidden] { display: none; }
+.wl-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; margin-top: 8px; }
+.wl-actions .wl-calc { margin-right: auto; font-weight: 600; color: var(--at-navy); }
+
+.wl-table td.c-act { white-space: nowrap; text-align: right; width: 1%; }
+.wl-table td.neg b { color: var(--at-teal); }
+.wl-table .sub { display: block; font-size: 12px; color: var(--muted); }
+.wl-compare tr.over td:last-child { color: var(--at-navy); font-weight: 600; }
+.wl-sub { margin: 14px 0 6px; font-size: 14px; }
+.pill.wl-pending { background: var(--at-teal); color: #fff; }
+.pill.wl-extra { background: var(--at-navy); color: #fff; }
+
+@media (max-width: 760px) {
+  .wl-grid.two { grid-template-columns: 1fr; }
+  .wl-grid { grid-template-columns: 1fr 1fr; }
+  .wl-actions .btn.primary { flex: 1 1 100%; min-height: 44px; }
+  /* Regels als kaartjes onder elkaar, zonder horizontaal scrollen. */
+  .wl-table thead { display: none; }
+  .wl-table, .wl-table tbody { display: block; }
+  .wl-table tr { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  table.grid.wl-table td { display: block; border: 0; padding: 0; text-align: left; }
+  table.grid.wl-table td.num { text-align: right; }
+  table.grid.wl-table td.c-act { grid-column: 1 / -1; text-align: right; }
+  .wl-table td.wrap:empty, .wl-table td.c-act:empty { display: none; }
+}

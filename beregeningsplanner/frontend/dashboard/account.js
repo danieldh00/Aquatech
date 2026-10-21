@@ -64,10 +64,14 @@
         // verloren: de offline gegevens worden op dit toestel gewist.
         const common = window.AquatechCommon;
         const st = common && common.offline ? await common.offline({ type: 'status' }, 1500) : null;
-        const waiting = st && st.items ? st.items.length : 0;
+        let old = 0;
+        try { old = Object.keys(localStorage).filter((k) => k.startsWith('aquatech_worklog_queue')).reduce((n, k) => n + (JSON.parse(localStorage.getItem(k) || '[]').length || 0), 0); } catch (e) { /* geen opslag */ }
+        const waiting = (st && st.items ? st.items.length : 0) + old;
         if (waiting && !confirm(`Er ${waiting === 1 ? 'staat nog 1 wijziging' : `staan nog ${waiting} wijzigingen`} op dit toestel die nog niet ${waiting === 1 ? 'is' : 'zijn'} verstuurd. Bij uitloggen ${waiting === 1 ? 'gaat die' : 'gaan die'} verloren. Toch uitloggen?`)) return;
         try { await fetch(`${base}api/auth/logout`, { method: 'POST' }); } catch (e) { /* negeren */ }
         if (common && common.offline) await common.offline({ type: 'wipe' }, 1500);
+        // Ook de oude wachtrij van de urenregistratie (zonder service worker).
+        try { Object.keys(localStorage).filter((k) => k.startsWith('aquatech_worklog_queue')).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* geen opslag */ }
         // Na opnieuw inloggen weer naar de eigen startpagina (zie dashboard.js).
         try { sessionStorage.removeItem('aquatech_started'); } catch (e) { /* geen opslag */ }
         location.href = base || './';

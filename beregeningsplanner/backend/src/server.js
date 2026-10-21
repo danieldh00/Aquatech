@@ -18,6 +18,7 @@ const { createMailer } = require('./mailer');
 const { createWanIp } = require('./wanip');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders');
 const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('./photos');
+const { createWorkLogStore, registerWorkLogRoutes } = require('./worklog');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const { createShopStore, registerShopRoutes } = require('./shop');
 const { createPortalStore, registerPortalRoutes } = require('./portal');
@@ -283,6 +284,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/public', express.json({ limit: '512kb' }));
   // Foto's bij een werkorder (base64, verkleind in de browser): vóór de 1 MB hieronder.
   app.use(/^\/api\/workorders\/[^/]+\/photos$/, express.json({ limit: '8mb' }));
+  // Uren en materiaal boeken (worklog.js): kleine regels.
+  app.use(/^\/api\/workorders\/[^/]+\/(hours|materials)(\/[^/]+)?$/, express.json({ limit: '32kb' }));
   app.use('/api/workorders', express.json({ limit: '1mb' }));
   app.use('/api/news', express.json({ limit: '64kb' }));
   app.use(express.json({ limit: '16kb' }));
@@ -1240,6 +1243,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const workOrderStore = createWorkOrderStore(database, { vault, staffRoles: (tid) => store.roles.keysWith(tid, 'uitvoerder') });
   const shopStore = createShopStore(database);
   const photoStore = createPhotoStore(database, { vault });
+  // Uren en materiaalverbruik op werkorders; voorraadbeheer haakt in via workLogStore.hook().
+  const workLogStore = createWorkLogStore(database);
   const dossierStore = createDossierStore(database, { photos: photoStore });
   const outsourcingStore = createOutsourcingStore(database, { workorders: workOrderStore });
   const newsStore = createNewsStore(database);
@@ -1285,6 +1290,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     remoteIp, mailerFor, tenantActive, publicLimiter,
     themeOf: (id) => Theme.vars(themeFor(id)),
     photoCounts: (tid, ids) => photoStore.counts(tid, ids),
+    loggedOf: (tid, ids) => workLogStore.counts(tid, ids),
     outsourcingOf: (tid) => outsourcingStore.marks(tid),
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
     // testaccounts daarvan erbij (net als bij de klantaccounts hierboven).
@@ -1305,6 +1311,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     news: newsStore, store, requireUser, requireRight, requireJson, audit, isCustomer, mailerFor,
     settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     staffTenantsOf: (req) => { const tid = req.tenantId || tenant.id; return [homeOf(tid), tid]; },
+  });
+
+  // ---------- Uren en materiaalverbruik op werkorders (zie worklog.js) ----------
+  registerWorkLogRoutes(app, {
+    worklog: workLogStore, requireRight, requireJson, audit,
+    canManage: (user) => Roles.can(user, 'planning'),
+    staffOf: (req) => { const tid = req.tenantId || tenant.id; return workOrderStore.staff([homeOf(tid), tid]); },
   });
 
   // ---------- Foto's bij werkorders en klantdossiers (zie photos.js) ----------
@@ -1482,7 +1495,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, settings: settingsFor(t.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, settings: settingsFor(t.id) },
       set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );

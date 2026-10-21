@@ -48,6 +48,7 @@
     /^api\/workorders$/,
     /^api\/workorders\/[A-Za-z0-9-]{1,64}$/,
     /^api\/workorders\/[A-Za-z0-9-]{1,64}\/photos$/,
+    /^api\/workorders\/[A-Za-z0-9-]{1,64}\/worklog$/,
     /^api\/workorders\/[A-Za-z0-9-]{1,64}\/photos\/[A-Za-z0-9-]{1,64}\?thumb=1$/,
     /^api\/workorder-staff$/,
     /^api\/quote-profile$/,

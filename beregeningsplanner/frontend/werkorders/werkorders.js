@@ -67,7 +67,8 @@
     { key: 'assignee', label: 'Uitvoerder', value: (w) => (w.assignee ? w.assignee.displayName : ''), html: (w) => esc(w.assignee ? w.assignee.displayName : '–') },
     { key: 'status', label: 'Status', value: (w) => w.status, html: (w) => `<span class="pill wo-${esc(w.status)}">${esc(W.STATUSES[w.status] || w.status)}</span>${outsourcedLabel(w)}` },
     { key: 'progress', label: 'Voortgang', value: (w) => w.progress.pct, html: (w) => progressBar(w.progress) },
-    { key: 'hours', label: 'Uren', value: (w) => w.progress.hours, html: (w) => esc(hours(w.progress.hours)), cls: 'num' },
+    { key: 'hours', label: 'Uren', value: (w) => w.progress.hours, cls: 'num',
+      html: (w) => `${esc(hours(w.progress.hours))}${w.logged && w.logged.minutes ? `<span class="sub" title="Geboekt door de ploeg">${esc(nl(w.logged.minutes / 60))} u geboekt</span>` : ''}` },
     { key: 'updatedAt', label: 'Laatst gewijzigd', value: (w) => w.updatedAt, html: (w) => esc(new Date(w.updatedAt).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })) },
   ];
 
@@ -300,6 +301,7 @@
     renderMaterials();
     renderProgress();
     if (window.WorkOrderPhotos) window.WorkOrderPhotos.open(wo, { toast, statusOf: () => $('#e-status').value });
+    if (window.WorkLog) window.WorkLog.open(wo, { toast, staff: () => state.staff });
     // ?id=…#fotos (startscherm): meteen naar de foto's.
     if (location.hash === '#fotos') $('#ph-card').scrollIntoView();
     else window.scrollTo(0, 0);
@@ -943,6 +945,8 @@
       for (const m of d.materials) ms.addRow({ code: m.code, description: m.description, qty: m.qty, unit: m.unit, picked: m.picked ? 'ja' : 'nee' });
       headStyle(ms.getRow(1));
       ms.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 5 } };
+      // Geboekte uren en materiaalverbruik (worklog.js).
+      if (window.WorkLog) await window.WorkLog.addSheets(wb, { headStyle });
       download(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_TYPE }), `werkorder_${safeName(wo.number)}${d.customer.name ? `_${safeName(d.customer.name)}` : ''}.xlsx`);
     } catch (e) {
       console.error(e);
@@ -1013,6 +1017,39 @@
     });
   }
 
+  // ---------- Urenstaat (worklog.js) ----------
+  function openHoursExport() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    if (!$('#he-from').value) $('#he-from').value = `${d.getFullYear()}-${p(d.getMonth() + 1)}-01`;
+    if (!$('#he-to').value) $('#he-to').value = today();
+    // Met het recht planning: de urenstaat van iedereen of één medewerker; anders alleen je eigen uren.
+    $('#he-user-row').hidden = !state.planning;
+    if (state.planning) {
+      const cur = $('#he-user').value;
+      $('#he-user').innerHTML = '<option value="">Iedereen</option>' + state.staff.map((u) => `<option value="${esc(u.id)}"${u.id === cur ? ' selected' : ''}>${esc(u.displayName)}</option>`).join('');
+    }
+    $('#he-err').textContent = '';
+    $('#hours-export').hidden = false;
+  }
+
+  async function runHoursExport() {
+    const from = $('#he-from').value;
+    const to = $('#he-to').value;
+    if (!from || !to || from > to) { $('#he-err').textContent = 'Kies een geldige periode.'; return; }
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
+    $('#he-go').disabled = true;
+    try {
+      const n = await window.WorkLog.exportPeriod({ from, to, userId: state.planning ? $('#he-user').value : '', headStyle, download, companyName: state.profile && state.profile.companyName });
+      $('#hours-export').hidden = true;
+      toast(`Urenstaat met ${n.hours} urenregel${n.hours === 1 ? '' : 's'} en ${n.materials} materiaalregel${n.materials === 1 ? '' : 's'}`);
+    } catch (e) {
+      $('#he-err').textContent = `Export mislukt: ${e.message}`;
+    } finally {
+      $('#he-go').disabled = false;
+    }
+  }
+
   function showList() {
     state.wo = null;
     state.warnings = [];
@@ -1059,6 +1096,7 @@
       $('#list-view').hidden = false;
       $('#l-new').hidden = true;
       $('#l-export').hidden = true;
+      $('#l-hours').hidden = true;
       $('#l-table').innerHTML = state.me.user && state.me.user.kind !== 'gast'
         ? '<tr><td class="empty">Je rol heeft geen toegang tot werkorders. <a href="../">Terug naar het overzicht</a></td></tr>'
         : '<tr><td class="empty">Log eerst in om werkorders te bekijken. <a href="../login">Inloggen</a></td></tr>';
@@ -1078,6 +1116,8 @@
     $('#l-done').onchange = renderList;
     $('#l-new').onclick = pickQuote;
     $('#l-export').onclick = exportListXlsx;
+    $('#l-hours').onclick = openHoursExport;
+    $('#he-go').onclick = runHoursExport;
     document.querySelectorAll('.modal').forEach((m) => {
       m.onclick = (e) => { if (e.target === m || e.target.closest('[data-close]')) m.hidden = true; };
     });

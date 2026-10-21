@@ -250,6 +250,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `work_orders.appointment`; stand berekend in `appointmentOf` (reactie telt
   alleen voor hetzelfde `Core.momentKey`). `workorders.respond(row, …, { via:
   'account', userId })` is ook bruikbaar voor een klantportaal.
+- **Uren en materiaalverbruik** (0.57.0, `backend/src/worklog.js`, kern
+  `werkorders/worklog-core.js`, tabellen `work_order_hours`/`work_order_materials`,
+  migratie 23): boeken per werkorder (eigen regels; recht `planning` = ook
+  voor collega's en na Gereed), `client_id` maakt POST idempotent (offline
+  wachtrij in `worklog.js`), urenstaat `GET /api/worklog` → Excel.
+  Voorraad haakt in via `workLogStore.hook(fn)` → `stock_movement_id`.
 - **Startscherm installateur** (0.42.0): blok *Vandaag* op het dashboard
   (`dashboard/today.js`, recht `werkorders`), API `GET /api/my-day`
   (`workorders.day`: elke werkdag via `Core.workDays`, `next`, fototelling
@@ -364,7 +370,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `for: [rechten]`). **Bij elke versie-bump een regel bovenaan releases.js**
   (test eist dat). `api/me` geeft `news` (aantal nieuw, cache 30 s);
   gezien-stand in voorkeuren `newsSeenAt`/`seenRelease` (`POST /api/news/seen`).
-- **Offline/PWA** (0.57.0): `frontend/sw.js` (geregistreerd door
+- **Offline/PWA** (0.58.0): `frontend/sw.js` (geregistreerd door
   `shared/common.js`, ook manifest), regels in `shared/offline-core.js`
   (UMD, getest), pagina-API + paneel `shared/offline.js|.css`. Gegevens alleen
   voor de lijst `CACHEABLE` en een eigen account met `werkorders`; gewist bij

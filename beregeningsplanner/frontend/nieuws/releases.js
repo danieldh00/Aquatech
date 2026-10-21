@@ -13,13 +13,23 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '0.57.0',
+      version: '0.58.0',
       date: '2026-10-21',
       title: 'Werken zonder bereik op locatie',
       items: [
         { text: 'AquaTech is nu als **app op je telefoon** te zetten: kies in de browser *Toevoegen aan beginscherm* (iPhone: deelknop) of *App installeren* (Android).', for: ['werkorders'] },
         { text: 'Geen bereik op locatie? Je **startscherm en werkorders blijven werken**. De klussen van vandaag staan al op je toestel zodra je het overzicht met verbinding hebt geopend. Afvinken, uren, notities en **foto\'s** worden bewaard en vanzelf verstuurd zodra er weer verbinding is. Rechtsonder zie je wat er nog wacht.', for: ['werkorders'] },
         { text: 'Heeft kantoor dezelfde werkorder intussen ook gewijzigd, dan worden beide wijzigingen samengevoegd. Alleen als jullie hetzelfde veld anders invulden, kies je zelf welke versie blijft.', for: ['werkorders'] },
+      ],
+    },
+    {
+      version: '0.57.0',
+      date: '2026-10-21',
+      title: 'Uren en materiaal boeken op de werkorder',
+      items: [
+        { text: 'In elke werkorder staat nu **Uren en materiaalverbruik**: boek per dag je gewerkte uren (begin, eind en pauze, of gewoon een aantal uren), reistijd en meerwerk, en het materiaal dat je hebt gebruikt of retour neemt. Je ziet meteen hoeveel er geboekt is tegenover de planning.', for: ['werkorders'] },
+        { text: 'Geen bereik op de klus? Wat je boekt, blijft op je telefoon bewaard en wordt vanzelf verstuurd zodra je weer verbinding hebt.', for: ['werkorders'] },
+        { text: 'Met de knop **Urenstaat** in Werkorders exporteer je de uren en het materiaalverbruik over een periode naar Excel, per medewerker en per dag. Planners en beheerders boeken ook voor een collega en zien de uren van iedereen.', for: ['werkorders'] },
       ],
     },
     {
