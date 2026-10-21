@@ -7,7 +7,9 @@
 // Op locatie is er niet altijd netwerk: een nieuwe regel die niet verstuurd
 // kan worden, blijft in een wachtrij op dit toestel (localStorage) en gaat
 // alsnog mee zodra er weer verbinding is. Elke regel heeft een clientId, dus
-// opnieuw versturen boekt nooit dubbel.
+// opnieuw versturen boekt nooit dubbel. Met de service worker (shared/offline.js)
+// gaat de regel in de algemene offline wachtrij (zelfde knopje rechtsonder,
+// gewist bij uitloggen); localStorage blijft de terugval zonder service worker.
 (function () {
   const L = window.WorkLogCore;
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -25,17 +27,21 @@
 
   const state = {
     opts: {}, wo: null, log: null, tab: 'hours', edit: null, flushing: false,
+    // Regels in de wachtrij van de service worker: { woId, type, body, queueId }.
+    swPending: [],
   };
+  const Off = () => (window.AquatechOffline && window.AquatechOffline.supported ? window.AquatechOffline : null);
   const toast = (msg, err) => (state.opts.toast ? state.opts.toast(msg, err) : null);
 
   // ---------- Server ----------
   class Offline extends Error {}
-  async function call(url, { method = 'GET', body } = {}) {
+  async function call(url, { method = 'GET', body, offline } = {}) {
     let res;
+    const extra = offline && Off() ? Off().headers(offline) : {};
     try {
       res = await fetch(`../${url}`, {
         method, cache: 'no-store',
-        headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+        headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extra },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (e) {
@@ -53,7 +59,26 @@
   function writeQueue(list) {
     try { localStorage.setItem(queueKey(), JSON.stringify(list)); return true; } catch (e) { return false; }
   }
-  const pendingFor = (woId, type) => readQueue().filter((x) => x.woId === woId && x.type === type);
+  const pendingFor = (woId, type) => readQueue().concat(state.swPending).filter((x) => x.woId === woId && x.type === type);
+
+  // Wachtende regels van deze werkorder uit de wachtrij van de service worker.
+  async function loadSwPending(wo) {
+    if (!Off()) return;
+    const prefix = `api/workorders/${encodeURIComponent(wo.id)}/`;
+    const items = await Off().list({ prefix, method: 'POST' });
+    if (state.wo !== wo) return;
+    state.swPending = items.map((q) => {
+      const type = q.url.slice(prefix.length);
+      if (type !== 'hours' && type !== 'materials') return null;
+      try { return { woId: wo.id, type, body: JSON.parse(q.body), queueId: q.id }; } catch (e) { return null; }
+    }).filter(Boolean);
+  }
+  if (window.AquatechOffline) {
+    window.AquatechOffline.on('synced', (msg) => {
+      const id = msg.item ? msg.item.id : msg.id;
+      if (state.wo && state.swPending.some((p) => p.queueId === id)) load();
+    });
+  }
 
   /** Wachtende regels versturen; stopt bij de eerste netwerkfout. */
   async function flush() {
@@ -86,6 +111,7 @@
   // ---------- Laden en tekenen ----------
   async function load() {
     const wo = state.wo;
+    await loadSwPending(wo).catch(() => {});
     try {
       const out = await call(`api/workorders/${encodeURIComponent(wo.id)}/worklog`);
       if (state.wo !== wo) return;
@@ -228,6 +254,7 @@
   function render() {
     const card = $('#wl-card');
     if (!card || !state.wo || !state.log) return;
+    // Wat in de wachtrij van de service worker staat, toont het knopje rechtsonder.
     const queue = readQueue().filter((x) => x.woId === state.wo.id).length;
     const s = summary();
     $('#wl-sum').textContent = s.t.minutes ? `${L.hoursText(s.t.minutes)} uur geboekt` : '';
@@ -292,8 +319,16 @@
     }
     body.clientId = uuid();
     try {
-      const out = await call(`api/workorders/${encodeURIComponent(wo.id)}/${type}`, { method: 'POST', body });
+      const out = await call(`api/workorders/${encodeURIComponent(wo.id)}/${type}`, {
+        method: 'POST', body, offline: { label: `${type === 'hours' ? 'Uren' : 'Materiaal'} bij ${wo.number || 'werkorder'}` },
+      });
       if (state.wo !== wo) return;
+      if (out.queued) {
+        state.swPending.push({ woId: wo.id, type, body, queueId: out.id });
+        toast('Geen verbinding: op dit toestel bewaard, wordt later verstuurd.');
+        render();
+        return;
+      }
       state.log[type].push(out);
       toast(type === 'hours' ? `${L.hoursText(out.minutes)} uur geboekt` : 'Materiaal geboekt');
       render();
@@ -365,6 +400,7 @@
     if (!$('#wl-card')) return;
     state.opts = opts;
     state.wo = wo;
+    state.swPending = [];
     state.log = null;
     state.edit = null;
     bind();

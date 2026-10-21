@@ -8,6 +8,10 @@
 // - AquatechCommon.origin(): kwam je via een link uit een ander deel van de app
 //   rechtstreeks op een item (planning, dossier, startscherm, portaal), dan
 //   brengt de terugknop je daar terug in plaats van naar het overzicht.
+// - Offline: registreert de service worker (../sw.js, zie shared/offline.js)
+//   en het app-manifest, zodat de app op een telefoon te installeren is en
+//   werkorders op locatie ook zonder verbinding werken.
+//   AquatechCommon.offline(msg) stelt de service worker een vraag (null zonder).
 // - Startpagina uit Mijn profiel: de server zet die op het dashboard in
 //   <meta name="aquatech-start">; de eerste keer in een tabblad gaan we er
 //   meteen heen, zonder eerst het dashboard op te bouwen.
@@ -95,5 +99,36 @@
     }
   }
 
-  root.AquatechCommon = { getJson, excel, origin, onReturn, leaving };
+  // ---------- Installeerbare app en offline ----------
+  // Manifest en iconen voor "Zet op beginscherm" (in de kop, ook op pagina's
+  // die ze niet zelf noemen).
+  if (src && location.protocol !== 'file:') {
+    const add = (tag, attrs) => {
+      const el = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+      document.head.appendChild(el);
+    };
+    if (!document.querySelector('link[rel="manifest"]')) add('link', { rel: 'manifest', href: fromApp('manifest.json') });
+    add('link', { rel: 'apple-touch-icon', href: fromApp('shared/icons/apple-touch-icon.png') });
+    add('meta', { name: 'apple-mobile-web-app-capable', content: 'yes' });
+    add('meta', { name: 'mobile-web-app-capable', content: 'yes' });
+    add('meta', { name: 'apple-mobile-web-app-title', content: 'AquaTech' });
+    if ('serviceWorker' in navigator && root.isSecureContext) {
+      navigator.serviceWorker.register(fromApp(`sw.js${version}`)).catch(() => { /* geen offline */ });
+    }
+  }
+
+  // Vraag aan de service worker ({ type: 'status' } enz.); null zonder.
+  function offline(msg, timeout = 4000) {
+    const sw = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!sw) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const ch = new MessageChannel();
+      const t = setTimeout(() => resolve(null), timeout);
+      ch.port1.onmessage = (e) => { clearTimeout(t); resolve(e.data); };
+      sw.postMessage(msg, [ch.port2]);
+    });
+  }
+
+  root.AquatechCommon = { getJson, excel, origin, onReturn, leaving, offline };
 })(window);
