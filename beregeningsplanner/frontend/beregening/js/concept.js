@@ -102,14 +102,17 @@
   /**
    * Herkende vlakken rechttrekken: pixelranden en kartels eruit, randen die bijna in de
    * hoofdrichting van het plan lopen precies recht of haaks. Zo krijgt de sproeierplaatsing
-   * nette randen en hoeken in plaats van tientallen kleine knikken.
+   * nette randen en hoeken in plaats van tientallen kleine knikken. Een rand schuift daarbij
+   * hooguit `SHIFT_MAX` op en bochten blijven gevolgd, zodat de vlakken ook ingezoomd op de
+   * tekening blijven liggen.
    */
+  const SHIFT_MAX = 0.15;
   function straighten(areas) {
     if (!areas.length) return;
-    const simple = areas.map((a) => G.simplifyClosed(a.pts, Math.max(0.08, Math.min(0.25, 0.03 * Math.sqrt(G.area(a.pts))))));
+    const simple = areas.map((a) => G.simplifyClosed(a.pts, Math.max(0.08, Math.min(0.15, 0.03 * Math.sqrt(G.area(a.pts))))));
     const angle = G.dominantAngle(simple);
     areas.forEach((a, i) => {
-      const pts = G.regularize(simple[i], angle, { tolDeg: 12, merge: 0.2 });
+      const pts = G.regularize(simple[i], angle, { tolDeg: 12, merge: 0.2, maxShift: SHIFT_MAX });
       if (pts.length >= 3) a.pts = pts.map((p) => ({ x: +p.x.toFixed(3), y: +p.y.toFixed(3) }));
     });
   }

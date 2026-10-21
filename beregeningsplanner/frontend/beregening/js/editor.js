@@ -624,10 +624,14 @@
       // Achtergrond
       if (this.layers.background && st.background && st.background.dataUrl && this.bgImg && this.bgImg.complete) {
         const bg = st.background;
-        const p = T({ x: bg.x, y: bg.y });
-        ctx.globalAlpha = bg.opacity != null ? bg.opacity : 0.6;
-        ctx.drawImage(this.bgImg, p.x, p.y, this.bgImg.width * bg.scale * S, this.bgImg.height * bg.scale * S);
-        ctx.globalAlpha = 1;
+        const r = this._bgSource(bg, w, h);
+        if (r) {
+          ctx.globalAlpha = bg.opacity != null ? bg.opacity : 0.6;
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(this.bgImg, r.sx, r.sy, r.sw, r.sh, r.dx, r.dy, r.dw, r.dh);
+          ctx.globalAlpha = 1;
+        }
       }
 
       if (!opts.noGrid) this._grid(ctx, w, h);
@@ -644,7 +648,8 @@
         const sel = this.selection && this.selection.kind === 'area' && this.selection.id === a.id;
         const hov = this.hover && this.hover.kind === 'area' && this.hover.id === a.id;
         ctx.strokeStyle = sel ? '#ff6f00' : at.stroke;
-        ctx.lineWidth = sel ? 2.5 : hov ? 2 : 1.25;
+        // rand op elk zoomniveau goed zichtbaar op een drukke tekening
+        ctx.lineWidth = sel ? 3 : hov ? 2.5 : 2;
         if (a.type === 'wet') ctx.setLineDash([6, 4]);
         ctx.stroke();
         ctx.setLineDash([]);
@@ -765,6 +770,21 @@
       }
 
       if (!opts.noScale) this._scaleBar(ctx, w, h);
+    }
+
+    /**
+     * Alleen het zichtbare deel van de ondergrond (bronrechthoek in beeldpixels + doel op het scherm).
+     * Ingezoomd zou het hele beeld vele malen groter dan het canvas getekend worden; Safari op de
+     * iPhone verliest dan fijne lijnen en zet de tekening soms verschoven neer.
+     */
+    _bgSource(bg, w, h) {
+      const img = this.bgImg, S = this.view.scale, k = bg.scale * S; // schermpx per beeldpx
+      if (!(k > 0)) return null;
+      const o = this.toScreen({ x: bg.x, y: bg.y });
+      const sx = Math.max(0, Math.floor(-o.x / k)), sy = Math.max(0, Math.floor(-o.y / k));
+      const ex = Math.min(img.width, Math.ceil((w - o.x) / k)), ey = Math.min(img.height, Math.ceil((h - o.y) / k));
+      if (ex <= sx || ey <= sy) return null;
+      return { sx, sy, sw: ex - sx, sh: ey - sy, dx: o.x + sx * k, dy: o.y + sy * k, dw: (ex - sx) * k, dh: (ey - sy) * k };
     }
 
     _grid(ctx, w, h) {

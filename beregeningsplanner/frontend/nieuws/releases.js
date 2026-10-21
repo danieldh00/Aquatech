@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.63.1',
+      date: '2026-10-21',
+      title: 'Inzoomen: tekening en vlakken scherp en op hun plek',
+      items: [
+        { text: 'Bij het automatisch herkennen van een plan volgen de vlakken nu ook **bochten** in de tekening. Eerder werden randen te hard rechtgetrokken, waardoor ze ingezoomd tot een halve meter naast de tekening lagen. De randen van vlakken zijn ook beter zichtbaar.' },
+        { text: 'Ingezoomd op de **iPhone** blijft de tekening scherp en op zijn plek: fijne lijnen vallen niet meer weg en vlakken verspringen niet meer ten opzichte van de tekening.' },
+      ],
+    },
+    {
       version: '0.63.0',
       date: '2026-10-21',
       title: 'Webshopbestellingen worden facturen, en facturen gaan vanzelf per mail',

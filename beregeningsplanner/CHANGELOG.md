@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.63.1
+
+Planner: ingezoomd blijven tekening en vlakken scherp en op hun plek.
+
+- `Concept.straighten` trok lokaal herkende vlakken zo hard recht dat bochten
+  verdwenen en randen tot ca. 0,5 m naast de tekening kwamen (zichtbaar bij
+  inzoomen). Nu: vereenvoudigen met hooguit 0,15 m tolerantie en
+  `G.regularize(..., { maxShift })`: een schuine rand wordt alleen recht gezet
+  als de uiteinden hooguit 0,15 m opschuiven, en de uitkomst mag nergens verder
+  dan dat van de invoer liggen (`G.deviation`), anders blijft de invoer.
+  De sproeierplaatsing (planner.js) gebruikt regularize ongewijzigd.
+- Ondergrond: `Editor._bgSource` tekent alleen het zichtbare deel van het
+  beeld (bronrechthoek, `imageSmoothingQuality: 'high'`) in plaats van het
+  hele beeld vele malen groter dan het canvas. Safari op iOS verloor
+  ingezoomd fijne lijnen en zette de tekening soms verschoven neer.
+- Randen van vlakken 2 px in plaats van 1,25 px (geselecteerd 3 px), zodat ze
+  op een drukke tekening zichtbaar blijven.
+
 ## 0.63.0
 
 Brincr vervangen (deel 2): webshopbestellingen als factuur, debiteuren en

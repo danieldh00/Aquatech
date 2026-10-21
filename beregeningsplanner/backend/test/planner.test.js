@@ -8,7 +8,7 @@ const vm = require('vm');
 const FRONT = path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js');
 const sandbox = { window: {}, console };
 vm.createContext(sandbox);
-for (const f of ['geometry.js', 'catalog.js', 'simulation.js', 'planner.js', 'concept.js', 'hydraulics.js', 'bom.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox);
+for (const f of ['geometry.js', 'catalog.js', 'simulation.js', 'planner.js', 'concept.js', 'hydraulics.js', 'bom.js', 'editor.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox);
 const { Geo: G, Catalog: C, Planner: P, Simulation: S, Concept } = sandbox.window;
 
 const rect = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
@@ -122,6 +122,41 @@ test('herkenning: lokaal herkende vlakken worden rechtgetrokken', () => {
   );
   const lawn = res.areas.find((a) => a.type === 'lawn');
   assert.ok(lawn.pts.length <= 6, `${lawn.pts.length} hoekpunten`);
+});
+
+test('herkenning: rechttrekken volgt bochten (ingezoomd blijft een vlak op de tekening)', () => {
+  // gebogen gazonband, pixelranden van 5 cm, in een paar draaiingen
+  for (const rot of [0, 10, 25, 45]) {
+    const t = (rot * Math.PI) / 180, ring = [];
+    for (let a = 0; a <= 90; a++) ring.push({ r: 14, a });
+    for (let a = 90; a >= 0; a--) ring.push({ r: 9, a });
+    const orig = ring.map(({ r, a }) => {
+      const x = r * Math.cos((a * Math.PI) / 180), y = r * Math.sin((a * Math.PI) / 180);
+      return { x: Math.round((x * Math.cos(t) - y * Math.sin(t)) * 20) / 20, y: Math.round((x * Math.sin(t) + y * Math.cos(t)) * 20) / 20 };
+    });
+    const areas = [{ type: 'lawn', pts: orig.map((p) => ({ ...p })) }, { type: 'bed', pts: rect(0, 0, 20, 1.5) }];
+    Concept.straighten(areas);
+    const dev = G.deviation(orig, areas[0].pts);
+    assert.ok(dev <= 0.17, `draaiing ${rot}°: rand ${dev.toFixed(2)} m naast de tekening`);
+    assert.ok(areas[0].pts.length <= 30, `${areas[0].pts.length} hoekpunten`);
+  }
+});
+
+test('weergave: ingezoomd wordt alleen het zichtbare deel van de ondergrond getekend, op dezelfde plek', () => {
+  const ed = Object.create(sandbox.window.Editor.prototype);
+  ed.bgImg = { width: 2400, height: 1600 };
+  const bg = { x: 1, y: 2, scale: 0.01 }; // 24 × 16 m
+  for (const view of [{ x: 0, y: 0, scale: 40 }, { x: 10, y: 8, scale: 400 }, { x: 23.5, y: 17, scale: 200 }, { x: -50, y: -50, scale: 2 }]) {
+    ed.view = view;
+    const r = ed._bgSource(bg, 390, 600);
+    if (!r) { assert.ok(view.x > 24, 'alleen leeg als de ondergrond buiten beeld is'); continue; }
+    assert.ok(r.sx >= 0 && r.sy >= 0 && r.sx + r.sw <= 2400 && r.sy + r.sh <= 1600, 'binnen het beeld');
+    assert.ok(r.dw <= 390 + 2 * 0.01 * view.scale + 1e-6 && r.dh <= 600 + 2 * 0.01 * view.scale + 1e-6, 'niet (veel) groter dan het canvas');
+    // een beeldpixel komt op dezelfde schermplek als met het hele beeld
+    const k = bg.scale * view.scale, o = ed.toScreen({ x: bg.x, y: bg.y });
+    assert.ok(Math.abs(r.dx - (o.x + r.sx * k)) < 1e-6 && Math.abs(r.dy - (o.y + r.sy * k)) < 1e-6);
+    assert.ok(Math.abs(r.dw / r.sw - k) < 1e-9 && Math.abs(r.dh / r.sh - k) < 1e-9);
+  }
 });
 
 test('afstellen: te ruim ingestelde koppen worden bijgesteld, positie blijft', () => {
