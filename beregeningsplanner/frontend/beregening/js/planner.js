@@ -20,6 +20,13 @@
   const MIN_EDGE = 0.6; // m; kortere randjes van de vorm worden weggewerkt
   const SNAP = 0.5; // rasterpunten binnen deze fractie van de afstand tot de rand komen óp de rand
 
+  /**
+   * Weging van de kosten van een indeling. Een kop telt zwaar (huis, nozzle, aansluiting en
+   * graafwerk): liever minder koppen met volle worp dan veel kleine. Gelijkmatigheid telt
+   * pas onder de streefwaarde mee; droge plekken en water buiten het vlak blijven zwaar.
+   */
+  const W = { head: 2.5, outside: 40, du: 60, duTarget: 0.85, dry: 1.5 };
+
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const round1 = (v) => Math.round(v * 10) / 10;
 
@@ -31,10 +38,11 @@
     return clamp(width / k, t.rMin, t.rMax);
   }
 
-  function makeRadial(type, p, r, start, arc) {
+  function makeRadial(type, p, r, start, arc, body) {
     const s = {
       id: G.uid('s'),
       type,
+      ...(body ? { body } : {}),
       x: p.x,
       y: p.y,
       r: round1(r),
@@ -121,7 +129,7 @@
    * Eén indeling: raster in richting `angle` (graden), afstand `s`, patroon vierkant of driehoek.
    * @returns sproeiers
    */
-  function layout(shape, type, s, angle, pattern) {
+  function layout(shape, type, s, angle, pattern, sAcross = s, body = null) {
     const t = C.sprinklerTypes[type];
     const a = G.rad(angle);
     const u = { x: Math.cos(a), y: Math.sin(a) };
@@ -134,7 +142,7 @@
     const tri = pattern === 'triangle';
     const nu = Math.max(1, Math.ceil((u1 - u0) / s - 1e-6));
     const su = (u1 - u0) / nu;
-    const rowStep = tri ? s * Math.sqrt(3) / 2 : s;
+    const rowStep = tri ? sAcross * Math.sqrt(3) / 2 : sAcross;
     const nv = Math.max(1, Math.ceil((v1 - v0) / rowStep - 1e-6));
     const sv = (v1 - v0) / nv;
     const spacing = Math.min(su, sv) || s;
@@ -198,14 +206,15 @@
     // hoekpunten zonder hoek (rechte doorloop) maar met een gat ervoor: een halve cirkel volstaat
     for (const h of boundary) if (h.arc > 180 - CORNER_DEVIATION && h.arc < 180 + CORNER_DEVIATION) h.arc = 180;
 
-    const heads = boundary.map((h) => makeRadial(type, h.p, h.r || s, h.start, h.arc));
+    const heads = boundary.map((h) => makeRadial(type, h.p, h.r || s, h.start, h.arc, body));
     for (const h of inner) {
       if (near(boundary, h.p, 0.45 * spacing)) continue;
       // binnenkop dicht bij de rand: worpwijdte inkorten (stelschroef) om overspray te beperken
-      const r = h.d < s ? clamp(h.d, Math.max(t.rMin, 0.7 * s), s) : s;
-      heads.push(makeRadial(type, h.p, r, 0, 360));
+      const r = h.d < s ? clamp(h.d, Math.max(t.rMin, 0.55 * s), s) : s;
+      heads.push(makeRadial(type, h.p, r, 0, 360, body));
     }
     heads.key = `${nu}x${nv}`;
+    heads.spacing = s;
     return heads;
   }
 
@@ -219,7 +228,7 @@
       const reach = s.type === 'strip' ? Math.hypot(s.len / 2, s.width) : s.r;
       return { x: s.x, y: s.y, reach, f: (p) => (window.Simulation ? window.Simulation.precipAt(s, p) : 0) };
     }
-    const r = s.r, k = (3 * t.pr) / Math.PI;
+    const r = s.r, k = (3 * C.headPr(s)) / Math.PI;
     const full = s.arc >= 359.9;
     const a0 = G.rad(s.start), arc = G.rad(s.arc) + 1e-6;
     const f = (p) => {
@@ -298,7 +307,7 @@
     let outsideWet = 0;
     for (const w of acc.wet) if (w > 0) outsideWet++;
     const outsideM2 = outsideWet * ev.cell * ev.cell;
-    const cost = count + (outsideM2 / Math.max(ev.area, 1)) * 40 + (1 - du) * 40 + dryPct * 1.5;
+    const cost = W.head * count + (outsideM2 / Math.max(ev.area, 1)) * W.outside + Math.max(0, W.duTarget - du) * W.du + dryPct * W.dry;
     return { cost, outsideM2, du, dryPct };
   }
 
@@ -309,9 +318,9 @@
 
   /** Varianten van één kop om te proberen: worp korter/langer, sproeihoek kleiner/groter, richting draaien. */
   function variantsOf(h) {
-    const t = C.sprinklerTypes[h.type];
+    const t = C.headRange ? C.headRange(h) : C.sprinklerTypes[h.type];
     const out = [];
-    for (const f of [0.9, 0.8, 0.7, 1.1]) {
+    for (const f of [0.9, 0.8, 0.7, 0.6, 1.1]) {
       const r = round1(clamp(h.r * f, t.rMin, t.rMax));
       if (r !== h.r) out.push({ ...h, r });
     }
@@ -375,25 +384,32 @@
     return score(evaluator(G.orientCW(pts), reach), heads);
   }
 
-  /** Afstanden om te proberen: die het vlak in gelijke stukken delen, plus een reeks binnen het bereik. */
-  function spacings(type, shape, angles) {
+  /** Haalt een kop van dit type deze worpwijdte (rotators: alleen afstanden die een kop uit de bibliotheek haalt)? */
+  function feasible(type, r) {
+    const t = C.sprinklerTypes[type];
+    if (r < t.rMin - 1e-9 || r > t.rMax + 1e-9) return false;
+    if (type === 'rotator' && C.rotatorModels) return Object.values(C.rotatorModels).some((m) => r >= m.rMin - 1e-9 && r <= m.rMax + 1e-9);
+    return true;
+  }
+
+  /**
+   * Afstanden om te proberen, per richting: de lengte in gelijke stukken verdeeld, van zo groot
+   * mogelijk (volle worp) tot een paar stappen kleiner. Meer koppen dan dat wint nooit.
+   */
+  function spacingsAlong(type, L) {
     const t = C.sprinklerTypes[type];
     const out = new Set();
-    const ok = (r) => {
-      if (r < t.rMin - 1e-9 || r > t.rMax + 1e-9) return;
-      // rotators: alleen afstanden die een MP-kop haalt
-      if (type === 'rotator' && C.rotatorModels && !Object.values(C.rotatorModels).some((m) => r >= m.rMin - 1e-9 && r <= m.rMax + 1e-9)) return;
-      out.add(round1(r));
-    };
-    for (const ang of angles) {
-      const a = G.rad(ang);
-      const u = { x: Math.cos(a), y: Math.sin(a) }, v = { x: -u.y, y: u.x };
-      const pu = shape.map((p) => G.dot(p, u)), pv = shape.map((p) => G.dot(p, v));
-      for (const L of [Math.max(...pu) - Math.min(...pu), Math.max(...pv) - Math.min(...pv)]) {
-        for (let k = Math.max(1, Math.ceil(L / t.rMax)); k <= Math.ceil(L / t.rMin) && k <= 12; k++) ok(L / k);
+    const k0 = Math.max(1, Math.ceil(L / t.rMax - 1e-6));
+    for (let k = k0; k <= Math.ceil(L / t.rMin) && k <= 12 && k <= k0 + 4; k++) {
+      const r = round1(L / k);
+      if (feasible(type, r)) out.add(r);
+      else if (type === 'rotator' && C.rotatorModels) {
+        // valt in een gat tussen twee koppen: de grootste kop die er net onder blijft
+        const below = Object.values(C.rotatorModels).map((m) => m.rMax).filter((m) => m < r).sort((x, y) => y - x)[0];
+        if (below) out.add(round1(below));
       }
     }
-    for (let i = 0; i <= 8; i++) ok(t.rMin + ((t.rMax - t.rMin) * i) / 8);
+    if (!out.size) out.add(round1(clamp(L, t.rMin, t.rMax)));
     return [...out];
   }
 
@@ -415,23 +431,40 @@
     const angles = [G.dominantAngle([shape])];
     const ra = G.normDeg(G.angleOf(rect.u)) % 90;
     if (Math.abs(ra - angles[0]) > 2 && Math.abs(ra - angles[0]) < 88) angles.push(ra);
-    const radii = opts.r ? [clamp(opts.r, t.rMin, t.rMax)] : spacings(type, shape, angles);
-    const ev = evaluator(pts, Math.max(...radii));
-    let best = null;
+    const fixed = opts.r ? clamp(opts.r, t.rMin, t.rMax) : null;
+    const ev = evaluator(pts, fixed || t.rMax);
+    const cands = [];
     for (const angle of angles) {
+      const a = G.rad(angle);
+      const u = { x: Math.cos(a), y: Math.sin(a) }, v = { x: -u.y, y: u.x };
+      const pu = shape.map((p) => G.dot(p, u)), pv = shape.map((p) => G.dot(p, v));
+      const Lu = Math.max(...pu) - Math.min(...pu), Lv = Math.max(...pv) - Math.min(...pv);
+      const alongU = fixed ? [fixed] : spacingsAlong(type, Lu);
+      const alongV = fixed ? [fixed] : spacingsAlong(type, Lv);
       for (const pattern of ['square', 'triangle']) {
         const seen = new Set();
-        for (const r of radii) {
-          const heads = layout(shape, type, r, angle, pattern);
-          if (seen.has(heads.key)) continue;
-          seen.add(heads.key);
-          const sc = score(ev, heads);
-          if (!best || sc.cost < best.score.cost) best = { heads, score: sc };
+        for (const su of alongU) {
+          for (const sv of alongV) {
+            // rechthoekig verband mag, maar niet extreem langgerekt (dan valt er midden tussen te weinig)
+            if (Math.max(su, sv) > 2 * Math.min(su, sv)) continue;
+            const heads = layout(shape, type, su, angle, pattern, sv, opts.body || null);
+            if (seen.has(heads.key)) continue;
+            seen.add(heads.key);
+            cands.push({ heads, score: score(ev, heads) });
+          }
         }
       }
     }
-    if (!best) return [];
-    refine(ev, best.heads, best.score);
+    if (!cands.length) return [];
+    // de beste paar indelingen eerst afstellen en dan pas kiezen: een ruim verband met grote
+    // koppen wint vaak pas als randkoppen zijn ingekort
+    cands.sort((x, y) => x.score.cost - y.score.cost);
+    let best = null;
+    for (const c of cands.slice(0, 3)) {
+      c.score = refine(ev, c.heads, c.score, 2);
+      if (!best || c.score.cost < best.score.cost) best = c;
+    }
+    refine(ev, best.heads, best.score, 2);
     return best.heads;
   }
 

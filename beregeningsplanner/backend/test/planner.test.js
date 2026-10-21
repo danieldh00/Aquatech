@@ -8,7 +8,7 @@ const vm = require('vm');
 const FRONT = path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js');
 const sandbox = { window: {}, console };
 vm.createContext(sandbox);
-for (const f of ['geometry.js', 'catalog.js', 'simulation.js', 'planner.js', 'concept.js', 'hydraulics.js', 'bom.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox);
+for (const f of ['geometry.js', 'sprinklerlib.js', 'catalog.js', 'simulation.js', 'planner.js', 'concept.js', 'hydraulics.js', 'bom.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox);
 const { Geo: G, Catalog: C, Planner: P, Simulation: S, Concept } = sandbox.window;
 
 const rect = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];

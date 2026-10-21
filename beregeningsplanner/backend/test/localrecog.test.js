@@ -8,7 +8,7 @@ const vm = require('vm');
 const FRONT = path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js');
 const sandbox = { window: {}, console };
 vm.createContext(sandbox);
-for (const f of ['geometry.js', 'catalog.js', 'autotrace.js', 'planimport.js', 'concept.js', 'localrecog.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox);
+for (const f of ['geometry.js', 'sprinklerlib.js', 'catalog.js', 'autotrace.js', 'planimport.js', 'concept.js', 'localrecog.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox);
 const L = sandbox.window.LocalRecognizer;
 
 test('maten lezen: eenheden en notaties', () => {
@@ -236,7 +236,7 @@ test('schaal: meeste en zekerste lezingen winnen, tegenstrijdigheid verlaagt bet
 const { readPng } = require('./png');
 const sandbox2 = { window: {}, console };
 vm.createContext(sandbox2);
-for (const f of ['geometry.js', 'catalog.js', 'autotrace.js', 'simulation.js', 'planner.js', 'planimport.js', 'concept.js', 'localrecog.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox2);
+for (const f of ['geometry.js', 'sprinklerlib.js', 'catalog.js', 'autotrace.js', 'simulation.js', 'planner.js', 'planimport.js', 'concept.js', 'localrecog.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox2);
 const W2 = sandbox2.window;
 
 test('tuinontwerp met watermerk, boom en logo: één gazon, rustige plaatsing', () => {

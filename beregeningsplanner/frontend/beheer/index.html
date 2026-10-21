@@ -34,6 +34,7 @@
         <button class="tab" data-tab="roles" role="tab">Rollen</button>
         <button class="tab" data-tab="settings" role="tab">Instellingen</button>
         <button class="tab" data-tab="webshop" role="tab">Webshop</button>
+        <button class="tab" data-tab="sproeiers" role="tab">Sproeiers</button>
         <button class="tab" data-tab="aikosten" role="tab">AI-kosten</button>
         <button class="tab" data-tab="audit" role="tab">Auditlog</button>
       </nav>
@@ -284,6 +285,25 @@
           <div id="w-status" class="muted">Laden…</div>
         </div>
       </section>
+      <section id="tab-sproeiers" class="tabpane" hidden>
+        <p class="muted small">De sproeierbibliotheek van de planner: behuizingen (sproeierhuizen, rotors) en nozzles met hun worp, sproeihoeken, drukbereik en debiet. De planner en het automatisch plaatsen rekenen hiermee. Download het Excel-bestand (meteen het sjabloon met de huidige gegevens), pas het aan of vul het aan met gegevens van de fabrikant en lees het weer in. Een testomgeving heeft een eigen bibliotheek.</p>
+        <div class="card-form settings">
+          <h3>Bibliotheek</h3>
+          <p id="sp-status" class="muted">Laden…</p>
+          <div class="row">
+            <button class="btn primary" type="button" id="sp-export">Downloaden als Excel</button>
+            <button class="btn" type="button" id="sp-import">Excel inlezen…</button>
+            <button class="btn ghost" type="button" id="sp-reset">Terug naar standaard</button>
+            <input type="file" id="sp-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+          </div>
+          <div id="sp-result" class="small"></div>
+          <p class="muted small">De standaardgegevens zijn afgerond uit de prestatietabellen van Rain Bird en Hunter; controleer ze met de actuele documentatie van de fabrikant. Prijzen zijn indicatief; een gekoppelde webshop gaat voor.</p>
+        </div>
+        <h3>Behuizingen</h3>
+        <div class="tablewrap"><table class="grid" id="sp-bodies"></table></div>
+        <h3>Nozzles</h3>
+        <div class="tablewrap"><table class="grid" id="sp-nozzles"></table></div>
+      </section>
       <section id="tab-aikosten" class="tabpane" hidden>
         <div class="filters">
           <select id="ai-range" aria-label="Periode">
@@ -335,11 +355,13 @@
   <script src="../shared/env.js"></script>
   <script src="../shared/roles.js"></script>
   <script src="../shared/ai-models.js"></script>
+  <script src="../beregening/js/sprinklerlib.js"></script>
   <script src="../beregening/js/catalog.js"></script>
   <script src="../dashboard/modules.js"></script>
   <script src="../shared/sidebar.js"></script>
   <script src="../dashboard/account.js"></script>
   <script src="webshop.js"></script>
+  <script src="sproeiers.js"></script>
   <script src="rollen.js"></script>
   <script src="aikosten.js"></script>
   <script src="beheer.js"></script>

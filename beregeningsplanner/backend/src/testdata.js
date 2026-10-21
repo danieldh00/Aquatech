@@ -18,12 +18,14 @@ const { loadArticles } = require('./shop');
 // De plannerbibliotheken (zones indelen, stuklijst) in een sandbox, zoals de
 // offertemodule ze in de browser laadt. Pas bij het eerste gebruik laden.
 let lib = null;
+const SprinklerLib = require(path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js', 'sprinklerlib.js'));
+
 function plannerLib() {
   if (lib) return lib;
   const dir = path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js');
   const sandbox = { window: {}, console };
   vm.createContext(sandbox);
-  for (const f of ['geometry.js', 'catalog.js', 'hydraulics.js', 'bom.js']) vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), sandbox);
+  for (const f of ['geometry.js', 'sprinklerlib.js', 'catalog.js', 'hydraulics.js', 'bom.js']) vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), sandbox);
   lib = { Catalog: sandbox.window.Catalog, Hydraulics: sandbox.window.Hydraulics, BOM: sandbox.window.BOM };
   return lib;
 }
@@ -82,9 +84,12 @@ function garden({ name, customer, address, w, h, border = true, hedge = false, p
   if (type === 'rotator') {
     // rotators met een vaste MP-kop; de eerste hoekkop is met de stelschroef iets ingekort
     const Cat = plannerLib().Catalog;
-    for (const s of sprinklers) Cat.fitRotator(Object.assign(s, { model: Cat.autoRotatorModel(s.r, s.arc) }));
+    // sproeierhuis Hunter Pro-Spray PRS40 (10 cm, 2,8 bar) uit de sproeierbibliotheek
+    for (const s of sprinklers) Cat.fitRotator(Object.assign(s, { body: 'HU-PROS04-PRS40', model: Cat.autoRotatorModel(s.r, s.arc) }));
     sprinklers[0].r = round1(Math.max(Cat.rotatorModels[sprinklers[0].model].rMin, sprinklers[0].r * 0.9));
   }
+  // turbinesproeiers: Rain Bird 5004 met een Rain Curtain-nozzle die bij worp en hoek past
+  if (turbine) for (const s of sprinklers) plannerLib().Catalog.fitHead(Object.assign(s, { body: 'RB-5004-PC' }));
   const elements = [
     { id: 'e1', kind: 'source', x: 0.6, y: 3.2 },
     { id: 'e2', kind: 'controller', x: 1.6, y: 0.3 },
@@ -314,7 +319,13 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
       subject: 'Lekt water bij de buitenkraan', description: 'Bij de buitenkraan aan de achterkant staat steeds een plas water, ook als de beregening uit staat.',
       reply: 'Dit zat in de kraan zelf en niet in de beregening; de pakking is vervangen. Laat het weten als het weer gebeurt.' },
   ];
-  return { accounts, plans, quotes, shop, news, aiUsage, recognitions, requests, day };
+  // Eigen sproeierbibliotheek (Beheer > Sproeiers): wat een organisatie zelf inleest.
+  const sprinklerLibrary = {
+    bodies: [{ key: 'EIGEN-POP20-PRS', brand: 'Eigen', name: 'Pop-up 20 cm met drukregeling 2,8 bar', code: 'EIGEN-POP20-PRS', popup: 20, mount: 'sproeikop', regBar: 2.8, minBar: 2.1, maxBar: 4.8, price: 11.5 }],
+    nozzles: [{ ...SprinklerLib.DEFAULTS.nozzles.find((n) => n.key === 'MP3000'), price: 10.25 }],
+  };
+
+  return { accounts, plans, quotes, shop, news, aiUsage, recognitions, requests, sprinklerLibrary, day };
 }
 
 // Opties die de klant zelf kan aanvinken.
@@ -442,9 +453,9 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
  * er geen klantlinks (de afspraaklink staat ernaast: openbaar/afspraak.html).
  */
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, requests, invoices } = stores;
+  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, requests, invoices, sprinklers } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0 };
   const seededWos = [];
   // Werkorder per plan (voor meldingen over die installatie).
   const woByPlan = {};
@@ -600,6 +611,12 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
       q('UPDATE service_request_photos SET created_at = ? WHERE request_id = ?').run(set.day(r.at), id);
       counts.requests++;
     });
+  }
+  // Eigen sproeierbibliotheek: een eigen behuizing (pop-up 20 cm) en een eigen prijs voor de MP3000.
+  if (sprinklers && set.sprinklerLibrary) {
+    const out = sprinklers.replace(seeded.tenantId, seeded.users.beheerder, set.sprinklerLibrary);
+    if (out.error) throw new Error(`Testdata: sproeierbibliotheek mislukt (${out.error})`);
+    counts.sprinklerParts = out.counts.bodies + out.counts.nozzles;
   }
   // Nieuwsberichten van de testbeheerder, via de echte opslag.
   if (news && set.news) {

@@ -199,7 +199,7 @@
 
     /** Slepen aan een greep: worp of sproeihoek aanpassen (rotators binnen het bereik van hun kop). */
     _dragHandle(s, which, w, free) {
-      const t = C.sprinklerTypes[s.type];
+      const t = C.headRange(s);
       const snapDeg = (a) => (free ? Math.round(a) : Math.round(a / 5) * 5);
       if (which === 'r') {
         const r = G.dist(s, w);
@@ -326,7 +326,7 @@
         return;
       }
       if (t === 'sprinkler') {
-        this.app.placeSprinkler(this.toolOpts.type, w);
+        this.app.placeSprinkler(this.toolOpts.type, w, this.toolOpts);
         return;
       }
       // select
@@ -507,7 +507,7 @@
         else this.draft.push(w);
       } else if (t === 'element') this.app.placeElement(this.toolOpts.kind, w);
       else if (t === 'wand') this.app.wandAt(w, this.toolOpts.areaType);
-      else if (t === 'sprinkler') this.app.placeSprinkler(this.toolOpts.type, w);
+      else if (t === 'sprinkler') this.app.placeSprinkler(this.toolOpts.type, w, this.toolOpts);
     }
 
     // ---------- Pinch (twee vingers: zoomen en verschuiven) ----------
@@ -899,7 +899,7 @@
       }
       const d = this.drag;
       if (d && d.mode === 'handle' && d.id === s.id) {
-        const txt = s.type === 'rotator' ? C.rotatorSetting(s) : `${G.nl(s.r, 1)} m · ${s.arc}°`;
+        const txt = C.nozzleOf(s) ? C.headSetting(s) : `${G.nl(s.r, 1)} m · ${s.arc}°`;
         this._label(ctx, txt, p.x, p.y - 22, '#e65100', '#fff', this.touch ? 13 : 11);
       }
     }

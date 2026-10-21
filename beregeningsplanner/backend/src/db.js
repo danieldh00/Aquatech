@@ -751,6 +751,20 @@ const MIGRATIONS = [
   ALTER TABLE shop_sync ADD COLUMN orders_synced_at TEXT;
   ALTER TABLE shop_sync ADD COLUMN orders_error TEXT;
   `,
+  // 28: sproeierbibliotheek per omgeving (sprinklers.js): eigen behuizingen en
+  // nozzles bovenop de standaard uit frontend/beregening/js/sprinklerlib.js.
+  `
+  CREATE TABLE sprinkler_library (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    kind       TEXT NOT NULL CHECK (kind IN ('body', 'nozzle')),
+    key        TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT,
+    UNIQUE (tenant_id, kind, key)
+  );
+  `,
 ];
 
 function openDb(file = ':memory:') {

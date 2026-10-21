@@ -24,6 +24,7 @@ function loadArticles() {
   if (!articles) {
     const sandbox = { window: {} };
     vm.createContext(sandbox);
+    vm.runInContext(fs.readFileSync(path.join(path.dirname(CATALOG_FILE), 'sprinklerlib.js'), 'utf8'), sandbox);
     vm.runInContext(fs.readFileSync(CATALOG_FILE, 'utf8'), sandbox);
     articles = JSON.parse(JSON.stringify(sandbox.window.Catalog.articles));
   }

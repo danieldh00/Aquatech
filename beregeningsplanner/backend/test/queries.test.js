@@ -164,6 +164,13 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.strictEqual((await c.get('/api/debtors')).body.items.length, 4);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
+    // Sproeierbibliotheek: alle eigen regels in één query (sessie + bibliotheek).
+    const Lib = require('../../frontend/beregening/js/sprinklerlib.js');
+    const own = { bodies: Lib.DEFAULTS.bodies.map((b) => ({ ...b, key: `X-${b.key}` })), nozzles: Lib.DEFAULTS.nozzles.map((n) => ({ ...n, key: `X-${n.key}` })) };
+    assert.strictEqual((await c.put('/api/sprinkler-library', own)).status, 200);
+    probe.reset();
+    assert.strictEqual((await c.get('/api/sprinkler-library')).body.own.nozzles.length, own.nozzles.length);
+    assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
   } finally {
     server.close();
   }

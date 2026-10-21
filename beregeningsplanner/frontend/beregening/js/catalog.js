@@ -205,75 +205,221 @@
     'TAPE': { name: 'Teflontape', unit: 'rol', price: 1.2 },
   };
 
-  /**
-   * Meerstraalsrotators (MP-type): per kop het instelbare bereik. De worpwijdte
-   * is met de stelschroef in te korten, de sproeihoek is binnen een sector
-   * (bijv. 90–210°) traploos in te stellen; 360° is een vaste kop.
+  /*
+   * Sproeierbibliotheek (sprinklerlib.js): behuizingen en nozzles met hun prestaties.
+   * C.setLibrary(eigen) zet de bibliotheek van de organisatie (standaard + eigen regels);
+   * daaruit volgen de nozzles per sproeiergroep, de MP-rotatormodellen en de artikelen.
    */
-  C.rotatorModels = {
-    MP1000: { code: 'ROT-MP1000', label: 'MP1000', rMin: 2.5, rMax: 4.5, arcs: [[90, 210], [210, 270], [360, 360]] },
-    MP2000: { code: 'ROT-MP2000', label: 'MP2000', rMin: 4.0, rMax: 6.4, arcs: [[90, 210], [210, 270], [360, 360]] },
-    MP3000: { code: 'ROT-MP3000', label: 'MP3000', rMin: 6.7, rMax: 9.1, arcs: [[90, 210], [210, 270], [360, 360]] },
-    MP3500: { code: 'ROT-MP3500', label: 'MP3500', rMin: 9.4, rMax: 10.7, arcs: [[90, 210]] },
-    MPCORNER: { code: 'ROT-MPCORNER', label: 'MP Corner', rMin: 2.5, rMax: 4.5, arcs: [[45, 105]] },
+  const Lib = window.SprinklerLib;
+  C.Lib = Lib;
+  C.bodies = {};
+  C.nozzles = {};
+  C.rotatorModels = {};
+  const BASE_RANGE = Object.fromEntries(Object.entries(C.sprinklerTypes).map(([k, t]) => [k, { rMin: t.rMin, rMax: t.rMax }]));
+
+  /** Bibliotheek instellen (eigen = { bodies, nozzles } van de organisatie, of leeg voor de standaard). */
+  C.setLibrary = (own) => {
+    const lib = Lib ? Lib.merge(own && Lib.sanitize(own)) : { bodies: [], nozzles: [] };
+    C.library = lib;
+    autoCache.clear();
+    C.bodies = Object.fromEntries(lib.bodies.map((b) => [b.key, b]));
+    C.nozzles = {};
+    for (const n of lib.nozzles) {
+      const range = Lib.radiusRange(n, n.bar);
+      C.nozzles[n.key] = { ...n, rMin: range.rMin, rMax: range.rMax, label: n.name };
+    }
+    // MP-rotators (en andere rotatornozzles voor een sproeierhuis): bereik bij de werkdruk
+    C.rotatorModels = {};
+    for (const n of Object.values(C.nozzles)) {
+      if (n.group === 'rotator') C.rotatorModels[n.key] = { code: n.code, label: n.name, rMin: n.rMin, rMax: n.rMax, arcs: n.arcs };
+    }
+    // bereik per sproeiertype volgt de bibliotheek (automatisch plaatsen kiest daarbinnen)
+    for (const [type, base] of Object.entries(BASE_RANGE)) {
+      const t = C.sprinklerTypes[type];
+      const list = Object.values(C.nozzles).filter((n) => n.group === type);
+      if (type === 'strip' || !list.length) { Object.assign(t, base); continue; }
+      t.rMin = Math.min(...list.map((n) => n.rMin));
+      t.rMax = Math.max(...list.map((n) => n.rMax));
+      t.rDefault = Math.max(t.rMin, Math.min(t.rMax, t.rDefault));
+    }
+    C.libraryArticles();
+    return lib;
   };
 
-  /** Rotatorkop die automatisch bij worpwijdte en sproeihoek hoort. */
-  C.autoRotatorModel = (r, arc = 360) => {
-    if (arc < 90 && r <= 4.5) return 'MPCORNER';
-    if (r <= 4.5) return 'MP1000';
-    if (r <= 6.55) return 'MP2000';
-    if (r <= 9.25 || arc > 210) return 'MP3000';
-    return 'MP3500';
+  /**
+   * Artikelen van de bibliotheek in de catalogus: codes die de catalogus nog niet kent,
+   * en een eigen prijs uit de bibliotheek van de organisatie.
+   */
+  C.libraryArticles = () => {
+    for (const x of [...(C.library ? C.library.bodies : []), ...(C.library ? C.library.nozzles : [])]) {
+      if (!x.code) continue;
+      const cur = C.articles[x.code];
+      if (cur && !cur.library) { if (x.source === 'eigen' && x.price != null) cur.price = x.price; continue; }
+      C.articles[x.code] = { name: `${x.brand ? `${x.brand} ` : ''}${x.name}`, unit: 'st', price: x.price || 0, library: true };
+    }
   };
 
-  /** Gekozen (of automatische) rotatorkop van een sproeier. */
-  C.rotatorModelOf = (s) => (s.model && C.rotatorModels[s.model] ? s.model : C.autoRotatorModel(s.r, s.arc));
+  /** Nozzles van een sproeiergroep die op een behuizing (aansluiting) passen. */
+  C.nozzlesFor = (group, bodyKey) => {
+    const b = bodyKey && C.bodies[bodyKey];
+    return Object.values(C.nozzles).filter((n) => n.group === group && (!b || n.mount === b.mount));
+  };
 
-  /** Sector [van, tot] van de kop waarin de sproeihoek valt (of de dichtstbijzijnde). */
-  C.rotatorArcSet = (model, arc) => {
-    const m = C.rotatorModels[model];
-    let best = m.arcs[0], bestD = Infinity;
-    for (const set of m.arcs) {
+  /** Behuizingen waar nozzles van deze groep op passen. */
+  C.bodiesFor = (group) => {
+    const mounts = new Set(Object.values(C.nozzles).filter((n) => n.group === group).map((n) => n.mount));
+    return Object.values(C.bodies).filter((b) => mounts.has(b.mount));
+  };
+
+  /** Gekozen behuizing van een sproeier (of null). */
+  C.bodyOf = (s) => (s && s.body && C.bodies[s.body]) || null;
+
+  /** Werkdruk van een kop: de drukregeling van het huis, anders de werkdruk van de nozzle. */
+  C.headBar = (s, n = C.nozzleOf(s)) => {
+    const b = C.bodyOf(s);
+    if (b && b.regBar) return b.regBar;
+    return n ? n.bar : null;
+  };
+
+  /** Sector [van, tot] van een nozzle waarin de sproeihoek valt (of de dichtstbijzijnde). */
+  const arcSetOf = (arcs, arc) => {
+    let best = arcs[0], bestD = Infinity;
+    for (const set of arcs) {
       const d = arc < set[0] ? set[0] - arc : arc > set[1] ? arc - set[1] : 0;
       if (d < bestD) { best = set; bestD = d; }
     }
     return best;
   };
+  const arcDist = (arcs, arc) => { const set = arcSetOf(arcs, arc); return arc < set[0] ? set[0] - arc : arc > set[1] ? arc - set[1] : 0; };
+
+  /** Worpbereik van een nozzle op een kop (bij de werkdruk van die kop). */
+  C.nozzleRange = (n, s) => {
+    const bar = C.headBar(s, n);
+    return Lib.radiusRange(n, bar);
+  };
 
   /**
-   * Zet worpwijdte en sproeihoek van een rotator binnen het bereik van zijn kop
-   * (zonder gekozen kop: de kop die erbij past). Andere sproeiers blijven gelijk.
-   * @returns de sproeier (aangepast)
+   * Nozzle die automatisch bij een kop hoort: de sector moet de sproeihoek bevatten, de worp
+   * binnen het bereik vallen; daarna de kleinste die de worp haalt. Rotornozzles (debiet per
+   * nozzle) zo kiezen dat de neerslag het dichtst bij die van het sproeiertype ligt.
    */
-  C.fitRotator = (s) => {
-    if (!s || s.type !== 'rotator') return s;
-    const m = C.rotatorModels[C.rotatorModelOf(s)];
-    s.r = Math.round(Math.max(m.rMin, Math.min(m.rMax, s.r || m.rMax)) * 10) / 10;
-    const set = C.rotatorArcSet(C.rotatorModelOf(s), s.arc);
-    s.arc = Math.round(Math.max(set[0], Math.min(set[1], s.arc)));
-    return s;
+  const autoCache = new Map();
+  C.autoNozzle = (type, r, arc = 360, bodyKey = null) => {
+    const ck = `${type}|${r}|${arc}|${bodyKey || ''}`;
+    if (autoCache.has(ck)) return autoCache.get(ck);
+    if (autoCache.size > 5000) autoCache.clear();
+    const best = pickNozzle(type, r, arc, bodyKey);
+    autoCache.set(ck, best);
+    return best;
+  };
+  function pickNozzle(type, r, arc, bodyKey) {
+    const list = C.nozzlesFor(type, bodyKey);
+    if (!list.length) return null;
+    const t = C.sprinklerTypes[type];
+    let best = null, bestScore = Infinity;
+    for (const n of list) {
+      const range = C.nozzleRange(n, { body: bodyKey });
+      const out = r < range.rMin ? range.rMin - r : r > range.rMax ? r - range.rMax : 0;
+      let score = arcDist(n.arcs, arc) * 10 + out * 100 + (out ? 0 : range.rMax - r);
+      if (!n.matched && r > 0 && arc > 0) {
+        const q = Lib.flowLph(n, r, arc, C.headBar({ body: bodyKey }, n));
+        score += Math.abs(q / (r * r * (arc / 360)) - t.pr) * 2;
+      }
+      if (score < bestScore - 1e-9) { best = n; bestScore = score; }
+    }
+    return best;
+  }
+
+  /** Nozzle van een kop: de gekozen (als die bij het type past) of de automatische. */
+  C.nozzleOf = (s) => {
+    if (!s || s.type === 'strip') return null;
+    const own = s.model && C.nozzles[s.model];
+    if (own && own.group === s.type) return own;
+    // met een gekozen behuizing altijd een nozzle uit de bibliotheek; zonder behuizing alleen
+    // rotators (MP), sproeiers en rotors blijven dan generiek
+    const body = s.body && C.bodies[s.body] ? s.body : null;
+    if (s.type !== 'rotator' && !body) return null;
+    return C.autoNozzle(s.type, s.r, s.arc, body);
   };
 
-  /** Omschrijving van de instelling, bijv. "MP2000 (90–210°) op 135° en 5,2 m". */
-  C.rotatorSetting = (s) => {
-    const key = C.rotatorModelOf(s);
-    const m = C.rotatorModels[key];
-    const set = C.rotatorArcSet(key, s.arc);
-    const sector = set[0] === set[1] ? `${set[0]}°` : `${set[0]}–${set[1]}°`;
-    return `${m.label} (${sector}) op ${s.arc}° en ${String(s.r).replace('.', ',')} m`;
+  /** Rotatorkop die automatisch bij worpwijdte en sproeihoek hoort (sleutel). */
+  C.autoRotatorModel = (r, arc = 360) => { const n = C.autoNozzle('rotator', r, arc); return n ? n.key : null; };
+
+  /** Gekozen (of automatische) rotatorkop van een sproeier (sleutel). */
+  C.rotatorModelOf = (s) => (s.model && C.rotatorModels[s.model] ? s.model : C.autoRotatorModel(s.r, s.arc));
+
+  /** Sector [van, tot] van de kop waarin de sproeihoek valt (of de dichtstbijzijnde). */
+  C.rotatorArcSet = (model, arc) => arcSetOf((C.nozzles[model] || C.rotatorModels[model]).arcs, arc);
+
+  /** Instelbereik van een kop: worp, sectoren en de nozzle (null = generiek type). */
+  C.headRange = (s) => {
+    const t = C.sprinklerTypes[s.type];
+    const n = C.nozzleOf(s);
+    if (!n) return { rMin: t.rMin, rMax: t.rMax, arcs: [[10, 360]], nozzle: null };
+    const range = C.nozzleRange(n, s);
+    return { rMin: range.rMin, rMax: range.rMax, arcs: n.arcs, nozzle: n };
   };
+
+  /**
+   * Zet worpwijdte en sproeihoek van een kop binnen het bereik van zijn nozzle (zonder
+   * gekozen nozzle bij een rotator: de nozzle die erbij past). Generieke sproeiers blijven gelijk.
+   * @returns de sproeier (aangepast)
+   */
+  C.fitHead = (s) => {
+    if (!s || s.type === 'strip') return s;
+    const n = C.nozzleOf(s);
+    if (!n) return s;
+    const range = C.nozzleRange(n, s);
+    s.r = Math.round(Math.max(range.rMin, Math.min(range.rMax, s.r || range.rMax)) * 10) / 10;
+    const set = arcSetOf(n.arcs, s.arc);
+    s.arc = Math.round(Math.max(Math.max(10, set[0]), Math.min(set[1], s.arc)));
+    return s;
+  };
+  C.fitRotator = C.fitHead;
+
+  /** Omschrijving van de instelling, bijv. "MP2000 (90–210°) op 135° en 5,2 m". */
+  C.headSetting = (s) => {
+    const n = C.nozzleOf(s);
+    const r = String(s.r).replace('.', ',');
+    if (!n) return `${r} m · ${s.arc}°`;
+    const set = arcSetOf(n.arcs, s.arc);
+    const sector = set[0] === set[1] ? `${set[0]}°` : `${set[0]}–${set[1]}°`;
+    return `${n.name} (${sector}) op ${s.arc}° en ${r} m`;
+  };
+  C.rotatorSetting = C.headSetting;
 
   /** Rotator-kop (artikel) op basis van worpwijdte (en sproeihoek). */
   C.rotatorNozzle = (r, arc = 360) => C.rotatorModels[C.autoRotatorModel(r, arc)].code;
 
-  /** Debiet van een sproeier in l/u. */
+  /** Debiet van een sproeier in l/u (met nozzle: uit de prestatietabel bij de werkdruk). */
   C.sprinklerFlowLph = (s) => {
     const t = C.sprinklerTypes[s.type];
     if (!t) return 0;
     if (s.type === 'strip') return t.pr * s.len * s.width;
+    const n = C.nozzleOf(s);
+    if (n) return Lib.flowLph(n, s.r, s.arc, C.headBar(s, n));
     return t.pr * s.r * s.r * (s.arc / 360);
   };
+
+  /** Neerslag (mm/u) bij kop-tot-kop: debiet gedeeld door r² × hoek/360. */
+  C.headPr = (s) => {
+    const t = C.sprinklerTypes[s.type];
+    if (!t) return 0;
+    if (s.type === 'strip' || !(s.r > 0) || !(s.arc > 0)) return t.pr;
+    if (!C.nozzleOf(s)) return t.pr;
+    return C.sprinklerFlowLph(s) / (s.r * s.r * (s.arc / 360));
+  };
+
+  /** Minimaal benodigde druk aan de kop (bar). */
+  C.headMinBar = (s) => {
+    const t = C.sprinklerTypes[s.type];
+    const b = C.bodyOf(s);
+    if (b && b.regBar) return b.regBar;
+    if (s.model && C.nozzles[s.model]) return C.nozzles[s.model].bar;
+    return t ? t.minBar : 0;
+  };
+
+  C.setLibrary(null);
 
   window.Catalog = C;
 })();

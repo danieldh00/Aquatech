@@ -553,6 +553,7 @@ function createStore(db) {
     q('DELETE FROM work_order_materials WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM work_order_offers WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM news WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM sprinkler_library WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM ai_usage WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM plan_recognitions WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM invoices WHERE tenant_id = ?').run(tenantId);

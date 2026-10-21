@@ -72,6 +72,7 @@
       zone: str(h.zone, 60),
       kind: str(h.kind, 60),
       nozzle: str(h.nozzle, 60),
+      body: str(h.body, 120),
       sector: str(h.sector, 20),
       arc: Math.round(numIn(h.arc, 0, 360)),
       r: round2(numIn(h.r, 0, 100)),
@@ -328,13 +329,14 @@
         Object.assign(h, { nozzle: 'Strook', sector: '', arc: 0, r: sp.len, left: sp.start, leftText: `${nl(sp.width, 1)} × ${nl(sp.len, 1)} m` });
       } else {
         let nozzle = '', sector = '';
-        if (sp.type === 'rotator' && C.rotatorModelOf) {
-          C.fitRotator(sp);
-          const key = C.rotatorModelOf(sp);
-          const set = C.rotatorArcSet(key, sp.arc);
-          nozzle = C.rotatorModels[key].label;
+        const n = C.nozzleOf ? (C.fitHead(sp), C.nozzleOf(sp)) : null;
+        if (n) {
+          const set = C.rotatorArcSet(n.key, sp.arc);
+          nozzle = n.name;
           sector = set[0] === set[1] ? `${set[0]}°` : `${set[0]}–${set[1]}°`;
         }
+        const body = C.bodyOf ? C.bodyOf(sp) : null;
+        if (body) h.body = body.name;
         Object.assign(h, { nozzle, sector, arc: sp.arc, r: sp.r, left: sp.arc >= 360 ? 0 : sp.start, leftText: sp.arc >= 360 ? 'rondom' : dirText(sp.start) });
       }
       heads.push(h);

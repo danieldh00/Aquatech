@@ -21,19 +21,28 @@
       items.set(code, cur);
     };
 
-    // Sproeiers
+    // Sproeiers: gekozen behuizing en nozzle uit de bibliotheek, anders de generieke artikelen
     for (const s of state.sprinklers) {
       const bed = Boolean(s.areaId); // in beplanting: hoger sproeierhuis (30 cm)
+      // artikel van de bibliotheek alleen als de catalogus het kent (anders generiek)
+      const known = (x) => (x && x.code && C.articles[x.code] ? x : null);
+      const body = known(C.bodyOf(s));
+      const noz = known(C.nozzleOf(s));
       if (s.type === 'spray') {
-        add(bed ? 'SPR-POP30-PRS' : level === 'eco' ? 'SPR-POP10' : 'SPR-POP10-PRS', 1, bed ? 'beplanting' : '');
-        add('SPR-VAN', 1);
+        if (body && body.code) add(body.code, 1, bed ? 'beplanting' : '');
+        else add(bed ? 'SPR-POP30-PRS' : level === 'eco' ? 'SPR-POP10' : 'SPR-POP10-PRS', 1, bed ? 'beplanting' : '');
+        add(noz && noz.code ? noz.code : 'SPR-VAN', 1);
         add(level === 'eco' ? 'CON-ECO' : 'CON-FLEX', 1);
       } else if (s.type === 'rotator' || s.type === 'strip') {
-        add(bed ? 'ROT-POP30-PRS' : 'ROT-POP10-PRS', 1, bed ? 'beplanting' : '');
-        add(s.type === 'strip' ? 'ROT-STRIP' : C.rotatorModels[C.rotatorModelOf(s)].code, 1);
+        if (body && body.code) add(body.code, 1, bed ? 'beplanting' : '');
+        else add(bed ? 'ROT-POP30-PRS' : 'ROT-POP10-PRS', 1, bed ? 'beplanting' : '');
+        add(s.type === 'strip' ? 'ROT-STRIP' : (noz && noz.code) || 'ROT-MP2000', 1);
         add(level === 'eco' ? 'CON-ECO' : 'CON-FLEX', 1);
       } else if (s.type === 'rotor') {
-        add(level === 'premium' ? 'TURB-10-PRO' : 'TURB-10', 1);
+        // een rotor wordt geleverd met nozzleset; de gekozen nozzle staat in de instelling
+        if (body && body.code) add(body.code, 1, noz ? `nozzle ${noz.name}` : '');
+        else add(level === 'premium' ? 'TURB-10-PRO' : 'TURB-10', 1);
+        if (noz && noz.code) add(noz.code, 1);
         add(level === 'eco' ? 'CON-ECO' : 'CON-FLEX-TURB', 1);
       }
     }
@@ -331,7 +340,7 @@
         start: s.start,
         q: +(C.sprinklerFlowLph(s) / 60).toFixed(2),
         p: pressureById.has(s.id) ? +pressureById.get(s.id).toFixed(2) : '',
-        noz: s.type === 'rotator' ? C.rotatorSetting(s) : s.type === 'strip' ? 'ROT-STRIP' : s.type === 'spray' ? 'SPR-VAN' : 'TURB-10',
+        noz: s.type === 'strip' ? 'ROT-STRIP' : C.nozzleOf(s) ? `${C.bodyOf(s) ? `${C.bodyOf(s).name} · ` : ''}${C.headSetting(s)}` : s.type === 'spray' ? 'SPR-VAN' : 'TURB-10',
       });
     });
 

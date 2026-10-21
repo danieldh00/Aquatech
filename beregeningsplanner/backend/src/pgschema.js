@@ -597,6 +597,19 @@ const PG_MIGRATIONS = [
   ALTER TABLE shop_sync ADD COLUMN orders_synced_at ${T};
   ALTER TABLE shop_sync ADD COLUMN orders_error ${T};
   `,
+  // 28: sproeierbibliotheek per omgeving (zie db.js).
+  `
+  CREATE TABLE sprinkler_library (
+    id         ${T} PRIMARY KEY,
+    tenant_id  ${T} NOT NULL ${FK('tenants(id)')},
+    kind       ${T} NOT NULL CHECK (kind IN ('body', 'nozzle')),
+    key        ${T} NOT NULL,
+    data       ${T} NOT NULL,
+    updated_at ${T} NOT NULL,
+    updated_by ${T},
+    UNIQUE (tenant_id, kind, key)
+  );
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
