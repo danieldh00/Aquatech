@@ -7,6 +7,11 @@
  * (voorraadartikelen of gekoppelde producten), dan gebruikt de planner alleen
  * die artikelen (Catalog.setAssortment). Zonder server (file://) of zonder
  * koppeling en artikelen blijft de standaardcatalogus staan.
+ *
+ * Tegelijk komt de sproeierbibliotheek van de organisatie binnen
+ * (api/sprinkler-library, Beheer > Sproeiers): eigen behuizingen en nozzles
+ * gaan vóór de webshopprijzen in de catalogus, zodat ook hun prijs uit de
+ * webshop kan komen.
  */
 (function () {
   'use strict';
@@ -27,6 +32,7 @@
       this.unknownCodes = (info && info.unknownCodes) || 0;
       if (C.setAssortment) C.setAssortment(this.assortment);
       for (const [code, a] of Object.entries(base)) C.articles[code] = { ...a };
+      if (C.libraryArticles) C.libraryArticles();
       // Ook zonder webshop: verkoopprijzen uit voorraadbeheer.
       for (const [code, p] of Object.entries((info && info.articles) || {})) {
         if (!C.articles[code]) continue;
@@ -37,10 +43,14 @@
     /** Geeft de gegevens als er webshopprijzen of een eigen assortiment zijn, anders null. */
     load() {
       if (!this.loading) {
-        this.loading = fetch('api/catalog', { cache: 'no-store' })
-          .then((res) => (res.ok ? res.json() : null))
-          .then((info) => { this.apply(info); return this.info || (this.assortment || (info && Object.keys(info.articles || {}).length) ? info : null); })
-          .catch(() => null);
+        const json = (url) => fetch(url, { cache: 'no-store' }).then((res) => (res.ok ? res.json() : null)).catch(() => null);
+        this.loading = Promise.all([json('api/catalog'), json('api/sprinkler-library')])
+          .then(([info, lib]) => {
+            this.library = lib;
+            if (lib && lib.own && C.setLibrary) C.setLibrary(lib.own);
+            this.apply(info);
+            return this.info || (this.assortment || (info && Object.keys(info.articles || {}).length) ? info : null);
+          });
       }
       return this.loading;
     },

@@ -32,6 +32,7 @@ const { createServiceRequestStore, registerServiceRequestRoutes } = require('./s
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./outsourcing');
 const { createStockStore, registerStockRoutes } = require('./stock');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./news');
+const { createSprinklerStore, registerSprinklerRoutes } = require('./sprinklers');
 const { registerDrawingRoutes } = require('./drawings');
 const { createAiUsageStore } = require('./aiusage');
 const { createIdempotency, ifBaseOf } = require('./idempotency');
@@ -299,6 +300,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use(/^\/api\/portal\/requests\/[^/]+\/photos$/, express.json({ limit: '8mb' }));
   app.use(['/api/portal/requests', '/api/service-requests'], express.json({ limit: '64kb' }));
   app.use('/api/news', express.json({ limit: '64kb' }));
+  // Sproeierbibliotheek uit Excel (sprinklers.js): max. 300 behuizingen en 1000 nozzles.
+  app.use('/api/sprinkler-library', express.json({ limit: '2mb' }));
   app.use('/api/stock', express.json({ limit: '256kb' }));
   app.use('/api/invoices', express.json({ limit: '1mb' }));
   app.use('/api/debtors', express.json({ limit: '16kb' }));
@@ -1267,6 +1270,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const dossierStore = createDossierStore(database, { photos: photoStore });
   const outsourcingStore = createOutsourcingStore(database, { workorders: workOrderStore });
   const newsStore = createNewsStore(database);
+  const sprinklerStore = createSprinklerStore(database);
   const stockStore = createStockStore(database);
   // Prijs en voorraad in twee richtingen met de webshop (shopsync.js); na een
   // wijziging gaan de gewijzigde artikelen enkele seconden later mee.
@@ -1382,6 +1386,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     staffTenantsOf: (req) => { const tid = req.tenantId || tenant.id; return [homeOf(tid), tid]; },
   });
 
+  // ---------- Sproeierbibliotheek: eigen behuizingen en nozzles (zie sprinklers.js) ----------
+  registerSprinklerRoutes(app, { sprinklers: sprinklerStore, requireUser, requireRight, requireJson, audit });
+
   // ---------- Uren en materiaalverbruik op werkorders (zie worklog.js) ----------
   registerWorkLogRoutes(app, {
     worklog: workLogStore, requireRight, requireJson, audit,
@@ -1411,6 +1418,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     shop: shopStore, requireUser, requireJson, audit, fetchImpl: shopFetch,
     sync: (tid, user) => shopSync.run(tid, { full: true, user }),
     salePrices: (tid) => stockStore.saleInfo(tid),
+    libraryCodes: (tid) => { const own = sprinklerStore.get(tid).own; return own ? [...own.bodies, ...own.nozzles].map((x) => x.code).filter(Boolean) : []; },
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }),
   });
@@ -1581,7 +1589,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, requests: serviceRequestStore, invoices: invoiceStore, settings: settingsFor(t.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, settings: settingsFor(t.id) },
       set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );

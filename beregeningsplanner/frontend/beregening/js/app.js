@@ -66,7 +66,11 @@
       this.refreshAiStatus();
       // Zonder account geen AI-herkenning en geen webshopprijzen (lokale herkenning werkt wel).
       if (window.ShopCatalog && !ANON) {
-        window.ShopCatalog.load().then((info) => { if (info) { this.recalc(); if (STEPS[this.step].id === 'bom') this.renderStepPanel(); } });
+        window.ShopCatalog.load().then((info) => {
+          if (!info && !window.ShopCatalog.library) return;
+          this.recalc();
+          if (['bom', 'sprinklers'].includes(STEPS[this.step].id)) this.renderStepPanel();
+        });
       }
       this._loadRights().then(() => this._initReview());
       this._openFromUrl();
@@ -571,11 +575,16 @@
       this.commit();
       if (et.single) this.editor.setTool('select');
     },
-    placeSprinkler(type, w) {
+    placeSprinkler(type, w, opts = {}) {
       const t = C.sprinklerTypes[type];
       this.checkpoint();
-      const r = this.state.settings.radius || t.rDefault;
-      const s = { id: G.uid('s'), type, x: w.x, y: w.y, r, start: 0, arc: 360, zone: null };
+      const s = { id: G.uid('s'), type, x: w.x, y: w.y, r: this.state.settings.radius || t.rDefault, start: 0, arc: 360, zone: null };
+      // zelf gekozen behuizing en nozzle (Zelf een kop plaatsen): worp = volle worp van de nozzle
+      if (opts.body && C.bodies[opts.body]) s.body = opts.body;
+      if (opts.model && C.nozzles[opts.model]) {
+        s.model = opts.model;
+        s.r = C.headRange(s).rMax;
+      }
       if (type === 'strip') { s.r = 0; s.arc = 0; s.width = 1.5; s.len = 4.6; }
       const best = this._boundaryFit(w, Math.max(0.5, 10 / this.editor.view.scale));
       if (best) {
@@ -583,9 +592,10 @@
         s.start = Math.round(best.start);
         if (type !== 'strip') s.arc = Math.round(best.arc);
       }
-      C.fitRotator(s);
+      C.fitHead(s);
       this.state.sprinklers.push(s);
-      this.tuneHeads([s.id]);
+      // een zelf gekozen nozzle met zijn volle worp laten staan; alleen hoek en richting volgen de plek
+      if (!s.model) this.tuneHeads([s.id]);
       this.editor.selection = { kind: 'sprinkler', id: s.id };
       this.commit();
     },
@@ -700,7 +710,8 @@
         if (want && has && !force) continue;
         st.sprinklers = st.sprinklers.filter((s) => s.areaId !== a.id);
         if (!want) continue;
-        const heads = window.Planner.autoPlace(a.pts, C.usableType(st.settings.bedSprinklerType || 'spray', ['spray', 'rotator']));
+        const bedType = C.usableType(st.settings.bedSprinklerType || 'spray', ['spray', 'rotator']);
+        const heads = window.Planner.autoPlace(a.pts, bedType, { body: this._bodyFor(`bed-${bedType}`) });
         heads.forEach((h) => { h.areaId = a.id; });
         st.sprinklers.push(...heads);
         placed += heads.length;
@@ -716,13 +727,19 @@
       this._syncBedSprinklers(false, onlyArea);
       if (hadZones && Hy.hasIrrigation(this.state)) Hy.autoZones(this.state);
     },
+    /** Gekozen behuizing voor automatisch plaatsen (sleutel `rotator`, `bed-spray`, …), als die (nog) bestaat. */
+    _bodyFor(key) {
+      const k = (this.state.settings.bodies || {})[key];
+      const type = key.replace(/^bed-/, '');
+      return k && C.bodies[k] && C.bodiesFor(type).some((b) => b.key === k) ? k : null;
+    },
     _placeSprinklers(lawns, type) {
       const st = this.state;
       let count = 0;
       for (const a of lawns) {
         // verwijder bestaande sproeiers binnen of op de rand van dit vlak
         st.sprinklers = st.sprinklers.filter((s) => s.areaId || !(G.pointInPolygon(s, a.pts) || G.closestOnPolygon(s, a.pts).d < 0.05));
-        const heads = window.Planner.autoPlace(a.pts, type, { r: st.settings.radius || null });
+        const heads = window.Planner.autoPlace(a.pts, type, { r: st.settings.radius || null, body: this._bodyFor(type) });
         st.sprinklers.push(...heads);
         count += heads.length;
       }
@@ -1300,13 +1317,17 @@
       return `
         <h3>Sproeiertype</h3>
         ${types}
+        ${this._bodySelect('body-lawn', 'Behuizing gazon', s.sprinklerType)}
+        ${this._bodySelect('body-bed', 'Behuizing beplanting', `bed-${s.bedSprinklerType || 'spray'}`)}
         <label class="inline"><input type="checkbox" id="r-auto" ${s.radius ? '' : 'checked'}> Worpwijdte automatisch</label>
         ${s.radius ? `<label>Worpwijdte (m)<input id="r-val" type="number" step="0.1" value="${s.radius}"></label>` : ''}
         <button id="auto-place" class="btn primary">Automatisch plaatsen</button>
         <p class="hint small">Plaatst sproeiers op alle gazons en in beplanting waarvoor <b>Sproeiers</b> als methode gekozen is (stap 1). Kop (MP-model), worp, sproeihoek en richting worden daarbij automatisch optimaal afgesteld, ook bij handmatig plaatsen en verslepen.</p>
         <button id="tune-spr" class="btn">Alle koppen opnieuw afstellen</button>
+        <h3>Zelf een kop plaatsen</h3>
+        ${this._manualPick()}
         <div class="row">
-          <button class="btn" id="manual-place">Handmatig plaatsen</button>
+          <button class="btn" id="manual-place">Plaatsen</button>
           <button class="btn" id="manual-strip">Strooksproeier</button>
         </div>
         <button class="btn danger" id="clear-spr">Alle sproeiers verwijderen</button>
@@ -1338,7 +1359,22 @@
         this.commit();
         this.toast(n ? `${n} kop${n === 1 ? '' : 'pen'} bijgesteld. Controleer de neerslagkaart.` : 'Alle koppen staan al optimaal afgesteld.');
       };
-      $('#manual-place', el).onclick = () => this.editor.setTool('sprinkler', { type: C.usableType(s.sprinklerType) });
+      $('#manual-place', el).onclick = () => {
+        const m = this._manualChoice();
+        this.editor.setTool('sprinkler', { type: m.type, body: m.body, model: m.model });
+      };
+      ['body-lawn', 'body-bed'].forEach((id) => {
+        const sel = $(`#${id}`, el);
+        if (!sel) return;
+        sel.onchange = () => {
+          s.bodies = { ...(s.bodies || {}) };
+          if (sel.value) s.bodies[sel.dataset.key] = sel.value; else delete s.bodies[sel.dataset.key];
+          this._save();
+        };
+      });
+      const mb = $('#m-body', el), mn = $('#m-noz', el);
+      if (mb) mb.onchange = () => { this.manual = { body: mb.value || null, model: null }; this.renderStepPanel(); };
+      if (mn) mn.onchange = () => { this.manual = { ...(this.manual || {}), model: mn.value || null }; this.renderStepPanel(); };
       $('#manual-strip', el).onclick = () => this.editor.setTool('sprinkler', { type: 'strip' });
       $('#clear-spr', el).onclick = () => {
         if (!this.state.sprinklers.length || !confirm('Alle sproeiers verwijderen?')) return;
@@ -1511,11 +1547,8 @@
       const geom = s.type === 'strip'
         ? `<label>Breedte (m)<input data-f="width" type="number" step="0.1" min="${t.wMin}" max="${t.wMax}" value="${s.width}"></label>
            <label>Lengte (m)<input data-f="len" type="number" step="0.1" min="${t.lMin}" max="${t.lMax}" value="${s.len}"></label>`
-        : s.type === 'rotator' ? this._propsRotator(s)
-        : `<label>Worpwijdte (m) <span class="small">${G.nlShort(t.rMin, 1)}–${G.nlShort(t.rMax, 1)}</span><input data-f="r" type="number" step="0.1" min="${t.rMin}" max="${t.rMax}" value="${s.r}"></label>
-           <label>Sproeihoek (°)<input data-f="arc" type="number" step="5" min="10" max="360" value="${s.arc}"></label>
-           <div class="row"><button class="btn sm" data-arc="90">90°</button><button class="btn sm" data-arc="180">180°</button><button class="btn sm" data-arc="270">270°</button><button class="btn sm" data-arc="360">360°</button></div>
-           <p class="hint small">Of sleep in de tekening aan de grepen van het sproeibereik.</p>`;
+        : this._propsHead(s);
+      const minBar = C.headMinBar(s);
       return `
         <h3>Sproeier</h3>
         <label>Type<select data-f="type">${typeOpts}</select></label>
@@ -1525,27 +1558,74 @@
         <label>Zone<select data-f="zone">${zoneOpts}</select></label>
         <table class="kv">
           <tr><td>Debiet</td><td>${fmt(C.sprinklerFlowLph(s) / 60, 2)} l/min</td></tr>
-          <tr><td>Neerslag</td><td>${t.pr} mm/u</td></tr>
-          <tr><td>Min. druk</td><td>${G.nlShort(t.minBar, 1)} bar</td></tr>
-          ${p != null ? `<tr><td>Berekende druk</td><td class="${p >= t.minBar ? 'good' : 'bad'}">${fmt(p, 2)} bar</td></tr>` : ''}
+          <tr><td>Neerslag</td><td>${fmt(C.headPr(s), 1)} mm/u</td></tr>
+          <tr><td>Min. druk</td><td>${G.nlShort(minBar, 1)} bar</td></tr>
+          ${p != null ? `<tr><td>Berekende druk</td><td class="${p >= minBar ? 'good' : 'bad'}">${fmt(p, 2)} bar</td></tr>` : ''}
         </table>
         <button class="btn danger" data-act="delete">Verwijderen</button>`;
     },
-    /** Meerstraalsrotator: kop (MP-model) met zijn instelbereik voor worp en sproeihoek. */
-    _propsRotator(s) {
-      const key = C.rotatorModelOf(s);
-      const m = C.rotatorModels[key];
-      const set = C.rotatorArcSet(key, s.arc);
+    /** Keuzelijst met behuizingen voor automatisch plaatsen (`key` = sproeiertype of bed-<type>). */
+    _bodySelect(id, label, key) {
+      const type = key.replace(/^bed-/, '');
+      const list = C.bodiesFor(type);
+      if (!list.length) return '';
+      const cur = this._bodyFor(key);
+      return `<label>${esc(label)}<select id="${id}" data-key="${esc(key)}"><option value="">Generiek (stuklijst)</option>${list.map((b) =>
+        `<option value="${esc(b.key)}" ${cur === b.key ? 'selected' : ''}>${esc(`${b.brand} ${b.name}`.trim())}</option>`).join('')}</select></label>`;
+    },
+    /** Keuze voor Zelf een kop plaatsen: behuizing, nozzle en daaruit het sproeiertype. */
+    _manualChoice() {
+      const m = this.manual || {};
+      const body = m.body && C.bodies[m.body] && C.available(C.bodies[m.body].code) ? C.bodies[m.body] : null;
+      const nozzles = Object.values(C.nozzles).filter((n) => (!body || n.mount === body.mount) && C.available(n.code));
+      const noz = m.model && nozzles.find((n) => n.key === m.model);
+      const groups = [...new Set(nozzles.map((n) => n.group))];
+      const st = C.usableType(this.state.settings.sprinklerType);
+      const type = noz ? noz.group : !body || groups.includes(st) ? st : groups[0] || st;
+      return { body: body ? body.key : null, model: noz ? noz.key : null, type, nozzles };
+    },
+    _manualPick() {
+      const m = this._manualChoice();
+      const bodyOpts = Object.values(C.bodies).filter((b) => C.available(b.code)).map((b) => `<option value="${esc(b.key)}" ${m.body === b.key ? 'selected' : ''}>${esc(`${b.brand} ${b.name}`.trim())}</option>`).join('');
       const range = (lo, hi) => (lo === hi ? `${lo}°` : `${lo}–${hi}°`);
-      const auto = C.rotatorModels[C.autoRotatorModel(s.r, s.arc)];
-      const modelOpts = `<option value="">Automatisch (${esc(auto.label)})</option>` + Object.entries(C.rotatorModelsAvailable()).map(([k, mm]) =>
-        `<option value="${k}" ${s.model === k ? 'selected' : ''}>${esc(mm.label)} · ${G.nlShort(mm.rMin, 1)}–${G.nlShort(mm.rMax, 1)} m · ${mm.arcs.map((a) => range(a[0], a[1])).join(' / ')}</option>`).join('');
-      const presets = [...new Set(m.arcs.flatMap((a) => [a[0], a[1]]))].map((a) => `<button class="btn sm" data-arc="${a}">${a}°</button>`).join('');
-      return `<label>Kop (MP-model)<select data-f="model">${modelOpts}</select></label>
-           <label>Worpwijdte (m) <span class="small">${G.nlShort(m.rMin, 1)}–${G.nlShort(m.rMax, 1)} (stelschroef)</span><input data-f="r" type="number" step="0.1" min="${m.rMin}" max="${m.rMax}" value="${s.r}"></label>
-           <label>Sproeihoek (°) <span class="small">sector ${range(set[0], set[1])}</span><input data-f="arc" type="number" step="5" min="${m.arcs[0][0]}" max="${m.arcs[m.arcs.length - 1][1]}" value="${s.arc}"></label>
-           <div class="row">${presets}</div>
-           <p class="hint small">Instelling: ${esc(C.rotatorSetting(s))}. Sleep in de tekening aan de grepen om worp en sproeihoek binnen dit bereik in te regelen.</p>`;
+      const byGroup = {};
+      m.nozzles.forEach((n) => { (byGroup[n.group] = byGroup[n.group] || []).push(n); });
+      const nozOpts = Object.entries(byGroup).map(([g, list]) => `<optgroup label="${esc(C.sprinklerTypes[g] ? C.sprinklerTypes[g].short : g)}">${list.map((n) => {
+        const rr = C.nozzleRange(n, { body: m.body });
+        return `<option value="${esc(n.key)}" ${m.model === n.key ? 'selected' : ''}>${esc(n.name)} · ${G.nlShort(rr.rMin, 1)}–${G.nlShort(rr.rMax, 1)} m · ${n.arcs.map((a) => range(a[0], a[1])).join(' / ')}</option>`;
+      }).join('')}</optgroup>`).join('');
+      return `<label>Behuizing<select id="m-body"><option value="">Generiek (${esc(C.sprinklerTypes[m.type].short)})</option>${bodyOpts}</select></label>
+        <label>Nozzle<select id="m-noz"><option value="">Automatisch (past zich aan de plek aan)</option>${nozOpts}</select></label>
+        <p class="hint small">Kies een behuizing (pop-uphoogte) en nozzle en tik op <b>Plaatsen</b>: op een hoek of rand stelt de sproeihoek zich in, de worp staat op de volle worp van de nozzle. Daarna in te stellen in het eigenschappenpaneel of met de grepen in de tekening.</p>`;
+    },
+    /** Kop met nozzle uit de bibliotheek: behuizing, nozzle en het instelbereik voor worp en sproeihoek. */
+    _propsHead(s) {
+      const range = (lo, hi) => (lo === hi ? `${lo}°` : `${lo}–${hi}°`);
+      const bodies = C.bodiesFor(s.type);
+      const body = C.bodyOf(s);
+      const hr = C.headRange(s);
+      const n = hr.nozzle;
+      const bodyOpts = `<option value="">Generiek</option>` + bodies.map((b) => `<option value="${esc(b.key)}" ${s.body === b.key ? 'selected' : ''}>${esc(`${b.brand} ${b.name}`.trim())}</option>`).join('');
+      const auto = C.autoNozzle(s.type, s.r, s.arc, body ? body.key : null);
+      const nozOpts = (s.type === 'rotator' || body ? `<option value="">Automatisch${auto ? ` (${esc(auto.name)})` : ''}</option>` : '<option value="">Generiek</option>')
+        + C.nozzlesFor(s.type, body ? body.key : null).map((x) => {
+          const rr = C.nozzleRange(x, s);
+          return `<option value="${esc(x.key)}" ${s.model === x.key ? 'selected' : ''}>${esc(x.name)} · ${G.nlShort(rr.rMin, 1)}–${G.nlShort(rr.rMax, 1)} m · ${x.arcs.map((a) => range(a[0], a[1])).join(' / ')}</option>`;
+        }).join('');
+      const set = n ? C.rotatorArcSet(n.key, s.arc) : [10, 360];
+      const presets = n ? [...new Set(n.arcs.flatMap((a) => [Math.max(10, a[0]), a[1]]))] : [90, 180, 270, 360];
+      return `${bodies.length ? `<label>Behuizing<select data-f="body">${bodyOpts}</select></label>` : ''}
+           <label>Nozzle<select data-f="model">${nozOpts}</select></label>
+           <label>Worpwijdte (m) <span class="small">${G.nlShort(hr.rMin, 1)}–${G.nlShort(hr.rMax, 1)}${n ? ' (stelschroef)' : ''}</span><input data-f="r" type="number" step="0.1" min="${hr.rMin}" max="${hr.rMax}" value="${s.r}"></label>
+           <label>Sproeihoek (°)${n ? ` <span class="small">sector ${range(set[0], set[1])}</span>` : ''}<input data-f="arc" type="number" step="5" min="${n ? Math.max(10, n.arcs[0][0]) : 10}" max="${n ? n.arcs[n.arcs.length - 1][1] : 360}" value="${s.arc}"></label>
+           <div class="row">${presets.map((a) => `<button class="btn sm" data-arc="${a}">${a}°</button>`).join('')}</div>
+           <p class="hint small">${n ? `Instelling: ${esc(C.headSetting(s))}${body ? ` op ${esc(body.name)}` : ''}. ` : ''}Sleep in de tekening aan de grepen om worp en sproeihoek${n ? ' binnen dit bereik' : ''} in te regelen.</p>`;
+    },
+    _toolLabel(opts) {
+      const n = opts.model && C.nozzles[opts.model];
+      const b = opts.body && C.bodies[opts.body];
+      if (n || b) return [b && b.name, n && n.name].filter(Boolean).join(' + ');
+      return opts.type ? C.sprinklerTypes[opts.type].label : '';
     },
     _propsElement(e) {
       const et = C.elementTypes[e.kind];
@@ -1575,16 +1655,23 @@
               else obj.r = Math.max(nt.rMin, Math.min(nt.rMax, obj.r || nt.rDefault));
               if (v !== 'strip' && !obj.arc) obj.arc = 180;
               delete obj.model;
+              if (obj.body && !C.bodiesFor(v).some((b) => b.key === obj.body)) delete obj.body;
               const z = this.state.zones.find((zz) => zz.id === obj.zone);
               if (z && z.group !== nt.group) obj.zone = null;
-            } else if (f === 'r') obj.r = Math.max(t0.rMin, Math.min(t0.rMax, v || t0.rDefault));
+            } else if (f === 'r') { const hr = C.headRange(obj); obj.r = Math.max(hr.rMin, Math.min(hr.rMax, v || t0.rDefault)); }
             else if (f === 'arc') obj.arc = Math.max(10, Math.min(360, v || 180));
-            else if (f === 'model') { if (v) obj.model = v; else delete obj.model; }
+            else if (f === 'model') {
+              if (v) { obj.model = v; obj.r = C.headRange(obj).rMax; } else delete obj.model;
+            } else if (f === 'body') {
+              if (v) obj.body = v; else delete obj.body;
+              const n = obj.model && C.nozzles[obj.model];
+              if (n && C.bodyOf(obj) && n.mount !== C.bodyOf(obj).mount) delete obj.model;
+            }
             else if (f === 'start') obj.start = G.normDeg(v || 0);
             else if (f === 'width') obj.width = Math.max(t0.wMin, Math.min(t0.wMax, v || 1.5));
             else if (f === 'len') obj.len = Math.max(t0.lMin, Math.min(t0.lMax, v || 4.6));
             else obj[f] = v;
-            C.fitRotator(obj);
+            C.fitHead(obj);
           } else if (sel.kind === 'area') {
             if (f === 'method') obj.method = v || null;
             else obj[f] = v;
@@ -1628,7 +1715,7 @@
         pan: 'Sleep om het plan te verschuiven · knijpen = zoomen',
         polygon: `Tekenen: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – tik de hoekpunten aan; tik op het eerste punt of op Vorm sluiten · slepen of ✋ = verschuiven · knijpen = zoomen`,
         element: `Plaats: ${opts.kind ? C.elementTypes[opts.kind].label : ''} – tik op het plan`,
-        sprinkler: `Plaats: ${opts.type ? C.sprinklerTypes[opts.type].label : ''} – tik in of op de rand van het gazon`,
+        sprinkler: `Plaats: ${this._toolLabel(opts)} – tik in of op de rand van het gazon`,
         wand: `Toverstaf: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – tik midden in het vlak op het plan`,
       };
       const hints = {
@@ -1637,7 +1724,7 @@
         polygon: `Tekenen: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – klik de hoekpunten aan, sluit af op het eerste punt of met Enter · scrollen, spatie + slepen of ✋ = verschuiven · Ctrl + scrollen = zoomen · Esc = annuleren`,
         rect: `Rechthoek: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – sleep van hoek naar hoek`,
         element: `Plaats: ${opts.kind ? C.elementTypes[opts.kind].label : ''} – klik op het plan`,
-        sprinkler: `Plaats: ${opts.type ? C.sprinklerTypes[opts.type].label : ''} – klik in of op de rand van het gazon · Esc = stoppen`,
+        sprinkler: `Plaats: ${this._toolLabel(opts)} – klik in of op de rand van het gazon · Esc = stoppen`,
         calibrate: 'Kalibreren: sleep een lijn over een bekende maat',
         wand: `Toverstaf: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – klik midden in het vlak op het plan · Esc = stoppen`,
         measure: 'Meten: sleep een lijn',

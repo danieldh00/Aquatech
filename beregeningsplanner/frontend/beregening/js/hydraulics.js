@@ -277,7 +277,7 @@
       let required = 0;
       let critical = Infinity;
       ms.forEach((m, k) => {
-        const req = m.kind === 'drip' ? C.drip.regBar + 0.3 : C.sprinklerTypes[m.ref.type].minBar;
+        const req = m.kind === 'drip' ? C.drip.regBar + 0.3 : C.headMinBar(m.ref);
         required = Math.max(required, req);
         critical = Math.min(critical, pressure[k + 1]);
         m.pressure = pressure[k + 1];

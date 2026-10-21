@@ -25,7 +25,7 @@
     rol_aangemaakt: 'Rol aangemaakt', rol_gewijzigd: 'Rol gewijzigd', rol_verwijderd: 'Rol verwijderd', rol_teruggezet: 'Rol teruggezet naar standaard',
     tenant_verwijderd: 'Tenant verwijderd', testomgeving_verwijderd: 'Testomgeving verwijderd', werkorder_verwijderd: 'Werkorder verwijderd', werkorder_gewist: 'Werkorder definitief gewist',
     impersonatie_gestart: 'Hoofdbeheerder werkt als gebruiker', impersonatie_beeindigd: 'Impersonatie beëindigd',
-    webshop_gesynchroniseerd: 'Webshopproducten opgehaald', support_toegang_verleend: 'Supporttoegang gegeven', support_toegang_ingetrokken: 'Supporttoegang ingetrokken',
+    webshop_gesynchroniseerd: 'Webshopproducten opgehaald', sproeierbibliotheek_ingelezen: 'Sproeierbibliotheek ingelezen', sproeierbibliotheek_standaard: 'Sproeierbibliotheek naar standaard', support_toegang_verleend: 'Supporttoegang gegeven', support_toegang_ingetrokken: 'Supporttoegang ingetrokken',
     opdracht_aangeboden: 'Opdracht uitbesteed (aangeboden)', opdracht_ingetrokken: 'Uitbesteding ingetrokken', opdracht_aangenomen: 'Opdracht aangenomen', opdracht_afgewezen: 'Opdracht afgewezen',
   };
 
@@ -672,6 +672,7 @@
     if (name === 'roles') window.BeheerRollen.load();
     if (name === 'settings') loadSettings();
     if (name === 'webshop') window.BeheerWebshop.load();
+    if (name === 'sproeiers') window.BeheerSproeiers.load();
     if (name === 'aikosten') window.BeheerAiKosten.load();
     if (name === 'audit') loadAudit();
     try { window.history.replaceState(null, '', `#${name}`); } catch (e) { /* file:// */ }
@@ -711,6 +712,7 @@
     initSettings();
     initMail();
     window.BeheerWebshop.init({ toast });
+    window.BeheerSproeiers.init({ toast });
     window.BeheerRollen.init({ toast, onChange: setRoles });
     window.BeheerAiKosten.init({ toast });
     $('#detail-close').onclick = () => { $('#detail').hidden = true; };
@@ -719,7 +721,7 @@
     loadHistory();
     // Direct naar een tabblad via beheer/#settings.
     const hash = location.hash.slice(1);
-    if (['plans', 'users', 'roles', 'settings', 'webshop', 'aikosten', 'audit'].includes(hash)) showTab(hash);
+    if (['plans', 'users', 'roles', 'settings', 'webshop', 'sproeiers', 'aikosten', 'audit'].includes(hash)) showTab(hash);
   }
 
   init();

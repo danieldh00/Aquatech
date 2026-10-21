@@ -45,11 +45,16 @@ andere methode. Iedere methode krijgt eigen zones, omdat de neerslag verschilt.
    binnenin, altijd **kop-tot-kop** (worp = afstand tot de buurkop).
 3. De neerslagsimulatie kiest de beste: zo min mogelijk koppen, zo min
    mogelijk water buiten het gazon, gelijkmatige neerslag (DU) en geen droge
-   plekken. Tot slot wordt per kop gekeken of een iets kortere worp
+   plekken. Een kop telt zwaar mee (huis, nozzle, aansluiting en graafwerk):
+   waar het kan, werpen de koppen over de **volle breedte** van het gazon
+   (bijv. MP3000/MP3500 langs beide randen in plaats van een raster kleine
+   koppen). Het verband mag rechthoekig zijn (langs het gazon een grotere
+   afstand dan dwars erop). De beste paar indelingen worden eerst afgesteld en
+   dan pas vergeleken. Tot slot wordt per kop gekeken of een iets kortere worp
    (stelschroef) minder water op het terras geeft.
 
 **Meerstraalsrotators** worden altijd binnen het bereik van een echte kop
-gezet:
+gezet (standaardbibliotheek, bij 2,8 bar):
 
 | Kop | Worp | Sproeihoek |
 |---|---|---|
@@ -67,6 +72,43 @@ het bereik van de kop. Tekening, sproeibereik, neerslagkaart, debiet en
 stuklijst rekenen met de ingestelde waarden; de Excel-export toont per kop de
 instelling (bijv. *MP2000 (90–210°) op 135° en 5,2 m*).
 
+### Sproeierbibliotheek: behuizing en nozzle kiezen
+
+De planner kent **behuizingen** (sproeierhuizen en rotors) en **nozzles**,
+met worp, sproeihoeken, drukbereik en debiet per druk:
+
+| Behuizing | Pop-up | Drukregeling | Nozzles |
+|---|---|---|---|
+| Rain Bird 1804 / 1806 / 1812 PRS | 10 / 15 / 30 cm | 2,1 bar | HE-VAN, MP Rotator |
+| Rain Bird 1804 / 1806 / 1812 SAM-P45 | 10 / 15 / 30 cm | 3,1 bar | MP Rotator, HE-VAN |
+| Hunter Pro-Spray PRS40 | 10 / 15 / 30 cm | 2,8 bar | MP Rotator, HE-VAN |
+| Rain Bird 5004 PC / 5004 PRS / 5012 PC | 10 / 10 / 30 cm | – / 3,1 / – bar | Rain Curtain 1,5–8,0 |
+
+In stap 4 kies je per sproeiertype de **behuizing** voor automatisch plaatsen
+(gazon en beplanting; *Generiek* = de algemene artikelen in de stuklijst). Bij
+**Zelf een kop plaatsen** kies je een behuizing en een nozzle (of
+*Automatisch*) en tik je op **Plaatsen**: op een hoek of rand stelt de
+sproeihoek zich in en de worp staat op de volle worp van de nozzle. In het
+eigenschappenpaneel wissel je behuizing en nozzle en stel je worp en hoek in
+binnen het bereik van die nozzle bij de werkdruk van het huis (drukregeling)
+of de werkdruk van de nozzle.
+
+De planner rekent met de gegevens van de nozzle: **debiet** uit de
+prestatietabel (bij MP Rotator en HE-VAN schaalt het mee met hoek en worp,
+gelijke neerslag; bij een rotornozzle is het debiet per nozzle, dus kiest de
+planner automatisch de nozzle die bij worp en hoek de juiste neerslag geeft),
+**neerslag** in de simulatie en **minimale druk** voor de zones. De stuklijst
+neemt het gekozen huis en de nozzle over, de werkorder toont per kop ook de
+behuizing.
+
+Eigen gegevens: **Beheer → Sproeiers** → *Downloaden als Excel* geeft de hele
+bibliotheek (bladen Uitleg, Behuizingen, Nozzles, Prestaties); vul aan of pas
+aan met de tabellen van de fabrikant en lees het bestand weer in. Alleen
+regels die afwijken van de standaard worden opgeslagen (per omgeving); *Actief
+= nee* verbergt een regel. *Terug naar standaard* wist de eigen regels. Met
+een eigen assortiment (voorraad of webshop) toont de planner alleen
+behuizingen en nozzles waarvan de artikelcode in het assortiment staat.
+
 **Automatisch afstellen** gebeurt altijd: bij automatisch en handmatig
 plaatsen en na het verslepen van een kop zoekt de planner per kop de worp,
 sproeihoek en richting (en daarmee de kop) met de beste neerslagverdeling en
@@ -74,7 +116,7 @@ de minste overspray. Wat je zelf met de grepen of in het paneel instelt, blijft
 staan; **Alle koppen opnieuw afstellen** zet alles weer optimaal.
 
 De **werkorder** neemt de afstelling over: per kop nummer (zoals in de
-stuklijst), zone, kop, sector, sproeihoek, worp, **linkerrand** (begin van de
+stuklijst), zone, kop (nozzle en behuizing), sector, sproeihoek, worp, **linkerrand** (begin van de
 sproeihoek op de tekening; 0° = rechts, met de klok mee) en plek. Dat staat op
 het scherm, op de afgedrukte werkbon en in de Excel-export.
 

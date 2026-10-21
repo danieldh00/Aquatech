@@ -478,7 +478,7 @@
   function headsTable(heads, cls) {
     if (!heads || !heads.length) return '';
     return `<table class="${cls}"><thead><tr><th class="num">Nr</th><th>Zone</th><th>Kop</th><th>Sector</th><th class="num">Sproeihoek</th><th class="num">Worp</th><th>Linkerrand</th><th class="num">Plek (x, y)</th></tr></thead>
-      <tbody>${heads.map((h) => `<tr><td class="num">${h.nr}</td><td>${esc(h.zone)}</td><td>${esc(h.nozzle || h.kind)}</td><td>${esc(h.sector)}</td>
+      <tbody>${heads.map((h) => `<tr><td class="num">${h.nr}</td><td>${esc(h.zone)}</td><td>${esc(h.nozzle || h.kind)}${h.body ? `<br><span class="small">${esc(h.body)}</span>` : ''}</td><td>${esc(h.sector)}</td>
         <td class="num">${h.kind === 'Strook' || !h.arc ? '' : `${h.arc}°`}</td><td class="num">${h.nozzle === 'Strook' ? '' : `${nl(h.r, 1)} m`}</td><td>${esc(h.leftText)}</td>
         <td class="num">${nl(h.x, 1)}; ${nl(h.y, 1)} m</td></tr>`).join('')}</tbody></table>`;
   }
@@ -953,11 +953,11 @@
         const hs = wb.addWorksheet('Afstelling koppen', { views: [{ state: 'frozen', ySplit: 1 }] });
         hs.columns = [
           { header: 'Nr', key: 'nr', width: 6 }, { header: 'Zone', key: 'zone', width: 12 }, { header: 'Kop', key: 'nozzle', width: 14 },
-          { header: 'Sector', key: 'sector', width: 10 }, { header: 'Sproeihoek (°)', key: 'arc', width: 14 },
+          { header: 'Behuizing', key: 'body', width: 30 }, { header: 'Sector', key: 'sector', width: 10 }, { header: 'Sproeihoek (°)', key: 'arc', width: 14 },
           { header: 'Worp (m)', key: 'r', width: 10, style: { numFmt: '0.0' } }, { header: 'Linkerrand', key: 'left', width: 20 },
           { header: 'X (m)', key: 'x', width: 9, style: { numFmt: '0.00' } }, { header: 'Y (m)', key: 'y', width: 9, style: { numFmt: '0.00' } },
         ];
-        for (const h of d.heads) hs.addRow({ nr: h.nr, zone: h.zone, nozzle: h.nozzle || h.kind, sector: h.sector, arc: h.arc || null, r: h.r, left: h.leftText, x: h.x, y: h.y });
+        for (const h of d.heads) hs.addRow({ nr: h.nr, zone: h.zone, nozzle: h.nozzle || h.kind, body: h.body || '', sector: h.sector, arc: h.arc || null, r: h.r, left: h.leftText, x: h.x, y: h.y });
         headStyle(hs.getRow(1));
       }
       const ms = wb.addWorksheet('Materialen', { views: [{ state: 'frozen', ySplit: 1 }] });

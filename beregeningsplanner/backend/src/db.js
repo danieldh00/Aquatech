@@ -761,6 +761,20 @@ const MIGRATIONS = [
   ALTER TABLE invoices ADD COLUMN visma_error TEXT NOT NULL DEFAULT '';
   CREATE INDEX invoices_visma ON invoices (tenant_id, visma_invoice_id, invoice_date);
   `,
+  // 29: sproeierbibliotheek per omgeving (sprinklers.js): eigen behuizingen en
+  // nozzles bovenop de standaard uit frontend/beregening/js/sprinklerlib.js.
+  `
+  CREATE TABLE sprinkler_library (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    kind       TEXT NOT NULL CHECK (kind IN ('body', 'nozzle')),
+    key        TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT,
+    UNIQUE (tenant_id, kind, key)
+  );
+  `,
 ];
 
 function openDb(file = ':memory:') {

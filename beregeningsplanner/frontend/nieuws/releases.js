@@ -13,6 +13,17 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.66.0',
+      date: '2026-10-21',
+      title: 'Sproeiers kiezen uit een bibliotheek, en minder koppen met een grotere worp',
+      items: [
+        { text: '**Automatisch plaatsen** benut nu waar het kan de volle breedte van het gazon: grote rotators (bijv. MP3000/MP3500) langs de randen in plaats van een raster kleine koppen. Op een gemiddeld gazon scheelt dat een derde van de koppen.', for: ['plannen'] },
+        { text: 'Kies zelf een **behuizing** (bijv. Rain Bird 1800 of Hunter Pro-Spray van 10, 15 of 30 cm, of een Rain Bird 5004/5012) en een passende **nozzle** (MP Rotator, HE-VAN, Rain Curtain) en plaats die in de tekening. Worp en sproeihoek stel je in binnen wat die nozzle kan; debiet, neerslag, druk en stuklijst rekenen met de echte gegevens.', for: ['plannen'] },
+        { text: 'Bij automatisch plaatsen kies je ook de behuizing voor gazon en beplanting; de werkbon toont per kop de behuizing.', for: ['plannen'] },
+        { text: 'Nieuw in **Beheer → Sproeiers**: download de sproeierbibliotheek als Excel, vul aan met je eigen sproeiers en nozzles (worp, sproeihoeken, druk en debiet uit de tabel van de fabrikant) en lees hem weer in.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '0.65.0',
       date: '2026-10-21',
       title: 'Facturen gaan rechtstreeks naar Visma eAccounting',

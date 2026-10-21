@@ -5,6 +5,17 @@
   const G = window.Geo;
   const C = window.Catalog;
 
+  // Neerslag per kop (uit de nozzle van de bibliotheek) onthouden zolang de instelling gelijk blijft.
+  const prCache = new WeakMap();
+  function prOf(s) {
+    const sig = `${s.type}|${s.r}|${s.arc}|${s.model || ''}|${s.body || ''}`;
+    const hit = prCache.get(s);
+    if (hit && hit.sig === sig) return hit.pr;
+    const pr = C.headPr ? C.headPr(s) : C.sprinklerTypes[s.type].pr;
+    prCache.set(s, { sig, pr });
+    return pr;
+  }
+
   /** Neerslag [mm/h] van één sproeier op punt p. */
   function precipAt(s, p) {
     const t = C.sprinklerTypes[s.type];
@@ -21,7 +32,7 @@
     if (d > s.r) return 0;
     if (s.arc < 359.9 && d > 1e-6 && !G.inArc(G.angleOf({ x: dx, y: dy }), s.start, s.arc)) return 0;
     // Driehoeksprofiel; volume-equivalent met PR bij kop-tot-kop vierkantsverband
-    return ((3 * t.pr) / Math.PI) * (1 - d / s.r);
+    return ((3 * prOf(s)) / Math.PI) * (1 - d / s.r);
   }
 
   function reach(s) {

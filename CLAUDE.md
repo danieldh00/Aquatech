@@ -408,6 +408,17 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `classMap` gebruikt een vakje vóór de vaste regels. Andere vakjesindeling =
   `FEATURE_VERSION` ophogen (in localrecog.js én recognitions.js). Vaste test op
   Daniëls voorbeeldplan `test/fixtures/tuinontwerp-voorbeeld.png`.
+- **Sproeierbibliotheek** (0.66.0): `beregening/js/sprinklerlib.js` (UMD,
+  `window.SprinklerLib`; elke pagina/sandbox laadt hem vóór catalog.js) met
+  behuizingen (`mount`, `regBar`) en nozzles (`group`, `arcs`, `rMin`,
+  `matched`, `perf` [{bar, r, q l/u}]). `Catalog.setLibrary(eigen)` leidt
+  `rotatorModels`, bereik per sproeiertype en artikelen af; sproeier heeft
+  `body` + `model` (nozzle-sleutel, MP-sleutels als voorheen). Rekenen via
+  `C.nozzleOf`/`headRange`/`fitHead`/`headPr`/`headMinBar`/`sprinklerFlowLph`.
+  Eigen regels per omgeving in tabel `sprinkler_library` (migratie 29,
+  `backend/src/sprinklers.js`, alleen afwijkingen van de standaard), Excel via
+  Beheer → Sproeiers (`beheer/sproeiers.js`). Automatisch plaatsen: kostenweging
+  `W` in planner.js (kop zwaar, DU pas onder 0,85), rechthoekig verband.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - **Snelheid/navigatie** (0.46.0): `shared/common.js` in de `<head>` van elke
