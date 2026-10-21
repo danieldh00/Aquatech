@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.53.0
+
+Betere automatische sproeierplaatsing en instelbare meerstraalsrotators.
+
+- **Automatisch plaatsen** opnieuw opgezet (`planner.js`): de vorm wordt eerst
+  vereenvoudigd (Douglas-Peucker) en rechtgetrokken op de hoofdrichting
+  (`Geo.simplifyClosed`, `Geo.dominantAngle`, `Geo.regularize`). Daarna
+  worden varianten doorgerekend (vierkant/driehoek, twee richtingen,
+  afstanden die het vlak in gelijke stukken delen) met koppen op hoeken,
+  randen (zonder gaten) en binnenin, kop-tot-kop. Een snelle eigen beoordeling
+  (vaste meetpunten per vlak) kiest de beste; daarna kort een greedy stap per
+  kop de worp in als dat minder overspray geeft. Op gekartelde vlakken uit de
+  lokale herkenning: 4–8 koppen in plaats van 27–39, DU van 65–77% naar
+  86–93%, veel minder water buiten het gazon.
+- **Lokaal herkende vlakken worden rechtgetrokken** (`Concept.straighten`),
+  zodat ze niet meer uit tientallen kleine knikken bestaan.
+- **Meerstraalsrotator per kop instelbaar**: `Catalog.rotatorModels` (MP1000,
+  MP2000, MP3000, MP3500, MP Corner met worp- en sectorbereik),
+  `fitRotator`, `rotatorModelOf`, `rotatorSetting`. Sproeier krijgt optioneel
+  `model`; zonder model kiest de planner de kop bij worp en sproeihoek.
+  Eigenschappenpaneel: kop kiezen, worp en sproeihoek binnen het bereik.
+- **Grepen in de tekening** voor worp en begin/einde van de sproeihoek van
+  de geselecteerde sproeier (alle cirkelsproeiers; rotators binnen het
+  bereik van hun kop).
+- Stuklijst: sproeikop volgt de gekozen kop (nieuw artikel `ROT-MPCORNER`);
+  Excel-blad *Sproeiers* toont de instelling per kop.
+- **Koppen automatisch optimaal afstellen** (`Planner.tune`): per kop worp,
+  sproeihoek, richting en daarmee de MP-kop kiezen op de neerslagsimulatie
+  (incrementeel, snel). Gebeurt altijd: bij automatisch plaatsen, handmatig
+  plaatsen en na verslepen (sproeihoek volgt de nieuwe plek); knop *Alle
+  koppen opnieuw afstellen*. Met de grepen of het paneel ingestelde waarden
+  blijven staan tot je opnieuw afstelt.
+- **Werkorder: afstelling per kop** (`heads` in de werkorder, `zonesFromPlan`):
+  nr, zone, kop, sector, sproeihoek, worp, linkerrand en plek. Op het scherm,
+  op de werkbon (afdrukken) en als Excel-blad *Afstelling koppen*. *Zones en
+  afstelling opnieuw uit het plan* ververst ze.
+- Testdata: rotators met vaste MP-kop, één ingeregeld met de stelschroef.
+
 ## 0.52.0
 
 Klanten tekenen zelf, een installateur controleert.

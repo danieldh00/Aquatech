@@ -123,6 +123,11 @@
       for (const e of [...this.state.elements].reverse()) {
         if (G.dist(e, w) < Math.max(tol * 1.5, 0.35)) return { kind: 'element', id: e.id };
       }
+      // grepen van de geselecteerde sproeier (worp en sproeihoek)
+      if (this.selection && this.selection.kind === 'sprinkler') {
+        const s = this.state.sprinklers.find((x) => x.id === this.selection.id);
+        if (s) for (const h of this.sprinklerHandles(s)) if (G.dist(h, w) < tol * 1.4) return { kind: 'handle', id: s.id, which: h.which };
+      }
       for (const s of [...this.state.sprinklers].reverse()) {
         if (G.dist(s, w) < Math.max(tol, 0.25)) return { kind: 'sprinkler', id: s.id };
       }
@@ -143,6 +148,37 @@
       hits.sort((a, b) => G.area(a.pts) - G.area(b.pts));
       if (hits.length) return { kind: 'area', id: hits[0].id };
       return null;
+    }
+
+    /** Grepen van een sproeier: worp (midden van de boog) en begin/einde van de sproeihoek. */
+    sprinklerHandles(s) {
+      if (s.type === 'strip' || !(s.r > 0)) return [];
+      const at = (deg, which) => ({ x: s.x + Math.cos(G.rad(deg)) * s.r, y: s.y + Math.sin(G.rad(deg)) * s.r, which });
+      if (s.arc >= 359.9) return [at(s.start, 'r')];
+      return [at(s.start + s.arc / 2, 'r'), at(s.start, 'a0'), at(s.start + s.arc, 'a1')];
+    }
+
+    /** Slepen aan een greep: worp of sproeihoek aanpassen (rotators binnen het bereik van hun kop). */
+    _dragHandle(s, which, w, free) {
+      const t = C.sprinklerTypes[s.type];
+      const snapDeg = (a) => (free ? Math.round(a) : Math.round(a / 5) * 5);
+      if (which === 'r') {
+        const r = G.dist(s, w);
+        s.r = Math.max(t.rMin, Math.min(t.rMax, free ? Math.round(r * 100) / 100 : Math.round(r * 10) / 10));
+        C.fitRotator(s);
+        return;
+      }
+      const ang = snapDeg(G.angleOf(G.sub(w, s)));
+      if (which === 'a1') {
+        s.arc = Math.max(10, G.normDeg(ang - s.start) || 360);
+        C.fitRotator(s);
+      } else {
+        const end = s.start + s.arc;
+        s.start = G.normDeg(ang);
+        s.arc = Math.max(10, G.normDeg(end - s.start) || 360);
+        C.fitRotator(s);
+        s.start = Math.round(G.normDeg(end - s.arc)); // einde blijft staan, ook als de sector de hoek begrenst
+      }
     }
 
     // ---------- Events ----------
@@ -239,6 +275,10 @@
       }
       // select
       const hit = this.hitTest(w);
+      if (hit && hit.kind === 'handle') {
+        this.drag = { mode: 'handle', id: hit.id, which: hit.which, moved: false, sx, sy };
+        return;
+      }
       if (hit && hit.kind === 'vertex') {
         this.drag = { mode: 'vertex', id: hit.id, index: hit.index, moved: false, sx, sy };
         return;
@@ -296,6 +336,13 @@
           const a = this.state.areas.find((x) => x.id === d.id);
           a.pts[d.index] = this.snapPoint(w, e);
           this.app.invalidate();
+        } else if (d.mode === 'handle') {
+          if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < (this.touch ? 6 : 1)) return;
+          if (!d.moved) this.app.checkpoint();
+          d.moved = true;
+          const s = this.state.sprinklers.find((x) => x.id === d.id);
+          if (s) this._dragHandle(s, d.which, w, e.altKey);
+          this.app.invalidate();
         } else if (d.mode === 'move') {
           const dx = w.x - d.start.x, dy = w.y - d.start.y;
           if (!d.moved && Math.hypot(dx, dy) * this.view.scale < this._tol(3)) return;
@@ -328,7 +375,7 @@
       const hov = this.hitTest(w);
       const changed = JSON.stringify(hov) !== JSON.stringify(this.hover);
       this.hover = hov;
-      this.cv.style.cursor = hov ? (hov.kind === 'vertex' || hov.kind === 'midpoint' ? 'pointer' : 'move') : 'default';
+      this.cv.style.cursor = hov ? (hov.kind === 'vertex' || hov.kind === 'midpoint' ? 'pointer' : hov.kind === 'handle' ? 'crosshair' : 'move') : 'default';
       if (changed) this.render();
     }
 
@@ -370,7 +417,8 @@
         this.render();
         return;
       }
-      if ((d.mode === 'move' || d.mode === 'vertex') && d.moved) {
+      if ((d.mode === 'move' || d.mode === 'vertex' || d.mode === 'handle') && d.moved) {
+        if (d.mode === 'move' && d.hit.kind === 'sprinkler') this.app.afterSprinklerMoved(d.hit.id);
         this.app.commit();
       }
     }
@@ -387,7 +435,7 @@
     _abortDrag() {
       const d = this.drag;
       this.drag = null;
-      if (d && (d.mode === 'move' || d.mode === 'vertex') && d.moved) this.app.commit();
+      if (d && (d.mode === 'move' || d.mode === 'vertex' || d.mode === 'handle') && d.moved) this.app.commit();
     }
 
     /** Tik met de vinger in een teken- of plaatsgereedschap. */
@@ -547,6 +595,12 @@
 
       // Sproeierkoppen
       for (const s of st.sprinklers) this._head(ctx, s);
+
+      // Grepen van de geselecteerde sproeier
+      if (this.selection && this.selection.kind === 'sprinkler') {
+        const s = st.sprinklers.find((x) => x.id === this.selection.id);
+        if (s) this._sprinklerGrips(ctx, s);
+      }
 
       // Systeemelementen
       for (const e of st.elements) this._element(ctx, e);
@@ -724,6 +778,27 @@
         ctx.fillStyle = '#263238';
         ctx.fillText(txt, p.x + 7, p.y - 6);
         void t;
+      }
+    }
+
+    _sprinklerGrips(ctx, s) {
+      const p = this.toScreen(s);
+      const hs = this.touch ? 8 : 5;
+      for (const h of this.sprinklerHandles(s)) {
+        const q = this.toScreen(h);
+        ctx.strokeStyle = '#ff6f00';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = h.which === 'r' ? '#ff6f00' : '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(q.x, q.y, hs, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
+      const d = this.drag;
+      if (d && d.mode === 'handle' && d.id === s.id) {
+        const txt = s.type === 'rotator' ? C.rotatorSetting(s) : `${G.nl(s.r, 1)} m · ${s.arc}°`;
+        this._label(ctx, txt, p.x, p.y - 22, '#e65100', '#fff', this.touch ? 13 : 11);
       }
     }
 

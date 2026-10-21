@@ -463,11 +463,21 @@
         <td class="num">${nl(z.pressureBar, 1)} bar${z.ok ? '' : ` (min. ${nl(z.requiredBar, 1)})`}</td></tr>`).join('')}</tbody></table>`;
   }
 
+  /** Afstelling per sproeikop: zo regelt de installateur elke kop in zoals ontworpen. */
+  function headsTable(heads, cls) {
+    if (!heads || !heads.length) return '';
+    return `<table class="${cls}"><thead><tr><th class="num">Nr</th><th>Zone</th><th>Kop</th><th>Sector</th><th class="num">Sproeihoek</th><th class="num">Worp</th><th>Linkerrand</th><th class="num">Plek (x, y)</th></tr></thead>
+      <tbody>${heads.map((h) => `<tr><td class="num">${h.nr}</td><td>${esc(h.zone)}</td><td>${esc(h.nozzle || h.kind)}</td><td>${esc(h.sector)}</td>
+        <td class="num">${h.kind === 'Strook' || !h.arc ? '' : `${h.arc}°`}</td><td class="num">${h.nozzle === 'Strook' ? '' : `${nl(h.r, 1)} m`}</td><td>${esc(h.leftText)}</td>
+        <td class="num">${nl(h.x, 1)}; ${nl(h.y, 1)} m</td></tr>`).join('')}</tbody></table>`;
+  }
+
   function renderDesign() {
     const d = state.wo.data;
     const line = designLine(d.design);
-    $('#e-design-card').hidden = !line && !d.zones.length;
-    $('#e-design').innerHTML = `${line ? `<p class="design-line">${esc(line)}</p>` : ''}${zonesTable(d.zones, 'lines zones')}`;
+    $('#e-design-card').hidden = !line && !d.zones.length && !(d.heads || []).length;
+    $('#e-design').innerHTML = `${line ? `<p class="design-line">${esc(line)}</p>` : ''}${zonesTable(d.zones, 'lines zones')}`
+      + ((d.heads || []).length ? `<h3>Afstelling sproeikoppen</h3><p class="hint small">Linkerrand = begin van de sproeihoek op de tekening (0° = rechts, met de klok mee); de sector loopt vandaar met de klok mee. Nummers zoals in de stuklijst van het plan.</p>${headsTable(d.heads, 'lines heads')}` : '');
   }
 
   function stepRow(s) {
@@ -706,6 +716,7 @@
       try {
         const z = JSON.parse(JSON.stringify(W.zonesFromPlan(plan.data, LIB())));
         d.zones = z.zones;
+        d.heads = z.heads || [];
         d.design = z.design || d.design;
         d.planTitle = plan.title;
         state.warnings = z.warnings;
@@ -798,6 +809,7 @@
       ${text('Werkinstructies', d.instructions)}
       ${text('Bijzonderheden locatie', d.siteNotes)}
       ${d.zones.length ? `<h2>Zone-indeling</h2>${zonesTable(d.zones, 'p-lines p-zones')}` : ''}
+      ${(d.heads || []).length ? `<h2>Afstelling sproeikoppen</h2><p class="p-note">Linkerrand = begin van de sproeihoek op de tekening (0° = rechts, met de klok mee).</p>${headsTable(d.heads, 'p-lines p-heads')}` : ''}
       <h2>Werkstappen</h2>
       <table class="p-lines p-check">
         <thead><tr><th></th><th>Werkstap</th><th class="num">Gepland</th><th class="num">Werkelijk</th></tr></thead>
@@ -892,6 +904,17 @@
         ];
         for (const z of d.zones) zs.addRow({ name: z.name, kind: z.kind, parts: z.parts, flow: z.flowLph / 1000, pipe: z.pipeM, p: z.pressureBar });
         headStyle(zs.getRow(1));
+      }
+      if ((d.heads || []).length) {
+        const hs = wb.addWorksheet('Afstelling koppen', { views: [{ state: 'frozen', ySplit: 1 }] });
+        hs.columns = [
+          { header: 'Nr', key: 'nr', width: 6 }, { header: 'Zone', key: 'zone', width: 12 }, { header: 'Kop', key: 'nozzle', width: 14 },
+          { header: 'Sector', key: 'sector', width: 10 }, { header: 'Sproeihoek (°)', key: 'arc', width: 14 },
+          { header: 'Worp (m)', key: 'r', width: 10, style: { numFmt: '0.0' } }, { header: 'Linkerrand', key: 'left', width: 20 },
+          { header: 'X (m)', key: 'x', width: 9, style: { numFmt: '0.00' } }, { header: 'Y (m)', key: 'y', width: 9, style: { numFmt: '0.00' } },
+        ];
+        for (const h of d.heads) hs.addRow({ nr: h.nr, zone: h.zone, nozzle: h.nozzle || h.kind, sector: h.sector, arc: h.arc || null, r: h.r, left: h.leftText, x: h.x, y: h.y });
+        headStyle(hs.getRow(1));
       }
       const ms = wb.addWorksheet('Materialen', { views: [{ state: 'frozen', ySplit: 1 }] });
       ms.columns = [
