@@ -123,3 +123,23 @@ test('herkenning: lokaal herkende vlakken worden rechtgetrokken', () => {
   const lawn = res.areas.find((a) => a.type === 'lawn');
   assert.ok(lawn.pts.length <= 6, `${lawn.pts.length} hoekpunten`);
 });
+
+test('afstellen: te ruim ingestelde koppen worden bijgesteld, positie blijft', () => {
+  const pts = rect(0, 0, 8, 6);
+  const heads = [
+    { id: 'h1', type: 'rotator', x: 0, y: 0, r: 9, start: 340, arc: 120 },
+    { id: 'h2', type: 'rotator', x: 8, y: 0, r: 9, start: 90, arc: 90 },
+    { id: 'h3', type: 'rotator', x: 8, y: 6, r: 9, start: 180, arc: 90 },
+    { id: 'h4', type: 'rotator', x: 0, y: 6, r: 9, start: 270, arc: 90 },
+  ];
+  const res = P.tune(pts, heads);
+  assert.ok(res.after.cost < res.before.cost, 'beter dan voorheen');
+  assert.ok(res.after.outsideM2 < res.before.outsideM2, 'minder water buiten het gazon');
+  res.heads.forEach((h, i) => {
+    assert.deepStrictEqual([h.id, h.x, h.y], [heads[i].id, heads[i].x, heads[i].y]);
+    assert.ok(validRotator(h));
+  });
+  const only = P.tune(pts, heads, ['h1']);
+  assert.deepStrictEqual(only.heads.slice(1).map((h) => [h.r, h.arc, h.start]), heads.slice(1).map((h) => [h.r, h.arc, h.start]), 'alleen de gekozen kop wijzigt');
+  assert.notDeepStrictEqual([only.heads[0].r, only.heads[0].arc, only.heads[0].start], [9, 120, 340]);
+});

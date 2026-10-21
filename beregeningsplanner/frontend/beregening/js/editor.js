@@ -418,6 +418,7 @@
         return;
       }
       if ((d.mode === 'move' || d.mode === 'vertex' || d.mode === 'handle') && d.moved) {
+        if (d.mode === 'move' && d.hit.kind === 'sprinkler') this.app.afterSprinklerMoved(d.hit.id);
         this.app.commit();
       }
     }

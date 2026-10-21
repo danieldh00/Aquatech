@@ -537,32 +537,10 @@
     placeSprinkler(type, w) {
       const t = C.sprinklerTypes[type];
       this.checkpoint();
-      const lawns = this.state.areas.filter((a) => a.type === 'lawn' && a.pts.length >= 3);
       const r = this.state.settings.radius || t.rDefault;
       const s = { id: G.uid('s'), type, x: w.x, y: w.y, r, start: 0, arc: 360, zone: null };
       if (type === 'strip') { s.r = 0; s.arc = 0; s.width = 1.5; s.len = 4.6; }
-      const tol = Math.max(0.5, 10 / this.editor.view.scale);
-      let best = null;
-      for (const a of lawns) {
-        const pts = G.orientCW(a.pts);
-        // hoekpunt?
-        for (let i = 0; i < pts.length; i++) {
-          if (G.dist(pts[i], w) < tol) {
-            const prev = pts[(i - 1 + pts.length) % pts.length], next = pts[(i + 1) % pts.length];
-            const start = G.angleOf(G.sub(next, pts[i]));
-            const interior = G.normDeg(G.angleOf(G.sub(prev, pts[i])) - start) || 360;
-            best = { pt: pts[i], start, arc: interior, edgeDir: G.sub(next, pts[i]) };
-            break;
-          }
-        }
-        if (best) break;
-        const c = G.closestOnPolygon(w, pts);
-        if (c.d < tol) {
-          const a0 = pts[c.edge], b0 = pts[(c.edge + 1) % pts.length];
-          best = { pt: c.pt, start: G.angleOf(G.sub(b0, a0)), arc: 180, edgeDir: G.sub(b0, a0) };
-          break;
-        }
-      }
+      const best = this._boundaryFit(w, Math.max(0.5, 10 / this.editor.view.scale));
       if (best) {
         s.x = best.pt.x; s.y = best.pt.y;
         s.start = Math.round(best.start);
@@ -570,8 +548,64 @@
       }
       C.fitRotator(s);
       this.state.sprinklers.push(s);
+      this.tuneHeads([s.id]);
       this.editor.selection = { kind: 'sprinkler', id: s.id };
       this.commit();
+    },
+    /** Hoekpunt of rand van een gazon binnen `tol` van punt w: plek, beginrichting en sproeihoek. */
+    _boundaryFit(w, tol) {
+      for (const a of this.state.areas.filter((x) => x.type === 'lawn' && x.pts.length >= 3)) {
+        const pts = G.orientCW(a.pts);
+        for (let i = 0; i < pts.length; i++) {
+          if (G.dist(pts[i], w) < tol) {
+            const prev = pts[(i - 1 + pts.length) % pts.length], next = pts[(i + 1) % pts.length];
+            const start = G.angleOf(G.sub(next, pts[i]));
+            const interior = G.normDeg(G.angleOf(G.sub(prev, pts[i])) - start) || 360;
+            return { pt: pts[i], start, arc: interior };
+          }
+        }
+        const c = G.closestOnPolygon(w, pts);
+        if (c.d < tol) {
+          const a0 = pts[c.edge], b0 = pts[(c.edge + 1) % pts.length];
+          return { pt: c.pt, start: G.angleOf(G.sub(b0, a0)), arc: 180 };
+        }
+      }
+      return null;
+    },
+    /** Na verslepen: sproeihoek volgt de nieuwe plek (hoek, rand of binnenin), daarna afstellen. */
+    afterSprinklerMoved(id) {
+      const s = this.state.sprinklers.find((x) => x.id === id);
+      if (!s || s.type === 'strip') return;
+      const best = this._boundaryFit(s, 0.05);
+      if (best) { s.start = Math.round(best.start); s.arc = Math.round(best.arc); }
+      else if (this.state.areas.some((a) => a.type === 'lawn' && a.pts.length >= 3 && G.pointInPolygon(s, a.pts))) s.arc = 360;
+      C.fitRotator(s);
+      this.tuneHeads([id]);
+    },
+    /**
+     * Koppen optimaal afstellen (worp, sproeihoek, richting en kop) op de neerslagsimulatie
+     * van hun vlak. Positie blijft gelijk.
+     * @param ids alleen deze koppen (de rest telt mee maar blijft staan), of null voor alle
+     * @returns aantal aangepaste koppen
+     */
+    tuneHeads(ids = null) {
+      const st = this.state;
+      let changed = 0;
+      for (const a of st.areas) {
+        if (a.pts.length < 3) continue;
+        const own = a.type === 'lawn'
+          ? st.sprinklers.filter((s) => !s.areaId && (G.pointInPolygon(s, a.pts) || G.closestOnPolygon(s, a.pts).d < 0.1))
+          : st.sprinklers.filter((s) => s.areaId === a.id);
+        if (!own.length || (ids && !own.some((s) => ids.includes(s.id)))) continue;
+        const res = window.Planner.tune(a.pts, own, ids);
+        for (const h of res.heads) {
+          const s = st.sprinklers.find((x) => x.id === h.id);
+          if (!s || (ids && !ids.includes(s.id))) continue;
+          if (s.r !== h.r || s.arc !== h.arc || s.start !== h.start) changed++;
+          Object.assign(s, { r: h.r, arc: h.arc, start: h.start });
+        }
+      }
+      return changed;
     },
     deleteSelection() {
       const sel = this.editor.selection;
@@ -1168,7 +1202,8 @@
         <label class="inline"><input type="checkbox" id="r-auto" ${s.radius ? '' : 'checked'}> Worpwijdte automatisch</label>
         ${s.radius ? `<label>Worpwijdte (m)<input id="r-val" type="number" step="0.1" value="${s.radius}"></label>` : ''}
         <button id="auto-place" class="btn primary">Automatisch plaatsen</button>
-        <p class="hint small">Plaatst sproeiers op alle gazons en in beplanting waarvoor <b>Sproeiers</b> als methode gekozen is (stap 1).</p>
+        <p class="hint small">Plaatst sproeiers op alle gazons en in beplanting waarvoor <b>Sproeiers</b> als methode gekozen is (stap 1). Kop (MP-model), worp, sproeihoek en richting worden daarbij automatisch optimaal afgesteld, ook bij handmatig plaatsen en verslepen.</p>
+        <button id="tune-spr" class="btn">Alle koppen opnieuw afstellen</button>
         <div class="row">
           <button class="btn" id="manual-place">Handmatig plaatsen</button>
           <button class="btn" id="manual-strip">Strooksproeier</button>
@@ -1195,6 +1230,13 @@
       $('#r-auto', el).onchange = (e) => { s.radius = e.target.checked ? null : C.sprinklerTypes[s.sprinklerType].rDefault; this._save(); this.renderStepPanel(); };
       if ($('#r-val', el)) $('#r-val', el).onchange = (e) => { const t = C.sprinklerTypes[s.sprinklerType]; s.radius = Math.max(t.rMin, Math.min(t.rMax, +e.target.value || t.rDefault)); this._save(); this.renderStepPanel(); };
       $('#auto-place', el).onclick = () => this.autoPlace();
+      $('#tune-spr', el).onclick = () => {
+        if (!this.state.sprinklers.length) { this.toast('Plaats eerst sproeiers.', true); return; }
+        this.checkpoint();
+        const n = this.tuneHeads();
+        this.commit();
+        this.toast(n ? `${n} kop${n === 1 ? '' : 'pen'} bijgesteld. Controleer de neerslagkaart.` : 'Alle koppen staan al optimaal afgesteld.');
+      };
       $('#manual-place', el).onclick = () => this.editor.setTool('sprinkler', { type: s.sprinklerType });
       $('#manual-strip', el).onclick = () => this.editor.setTool('sprinkler', { type: 'strip' });
       $('#clear-spr', el).onclick = () => {

@@ -26,6 +26,16 @@ Betere automatische sproeierplaatsing en instelbare meerstraalsrotators.
   bereik van hun kop).
 - Stuklijst: sproeikop volgt de gekozen kop (nieuw artikel `ROT-MPCORNER`);
   Excel-blad *Sproeiers* toont de instelling per kop.
+- **Koppen automatisch optimaal afstellen** (`Planner.tune`): per kop worp,
+  sproeihoek, richting en daarmee de MP-kop kiezen op de neerslagsimulatie
+  (incrementeel, snel). Gebeurt altijd: bij automatisch plaatsen, handmatig
+  plaatsen en na verslepen (sproeihoek volgt de nieuwe plek); knop *Alle
+  koppen opnieuw afstellen*. Met de grepen of het paneel ingestelde waarden
+  blijven staan tot je opnieuw afstelt.
+- **Werkorder: afstelling per kop** (`heads` in de werkorder, `zonesFromPlan`):
+  nr, zone, kop, sector, sproeihoek, worp, linkerrand en plek. Op het scherm,
+  op de werkbon (afdrukken) en als Excel-blad *Afstelling koppen*. *Zones en
+  afstelling opnieuw uit het plan* ververst ze.
 - Testdata: rotators met vaste MP-kop, één ingeregeld met de stelschroef.
 
 ## 0.52.0

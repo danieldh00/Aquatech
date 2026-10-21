@@ -216,72 +216,130 @@
     const cell = clamp(Math.sqrt(area) / 30, 0.2, 0.6);
     reach = Math.min(reach, 3); // overspray vlak langs de rand telt; verder weg komt alleen bij grote koppen
     const bb = G.bbox(pts);
+    const x0 = bb.minX - reach, y0 = bb.minY - reach;
+    const nx = Math.ceil((bb.w + 2 * reach) / cell) + 1, ny = Math.ceil((bb.h + 2 * reach) / cell) + 1;
+    // per rastercel: index in inside (>= 0), in outside (-2 - index) of -1 (niet meetellen)
+    const cellIdx = new Int32Array(nx * ny).fill(-1);
     const inside = [], outside = [];
-    for (let y = bb.minY - reach; y <= bb.maxY + reach; y += cell) {
-      for (let x = bb.minX - reach; x <= bb.maxX + reach; x += cell) {
-        const p = { x, y };
-        if (G.pointInPolygon(p, pts)) inside.push(p);
-        else if (x >= bb.minX - reach && G.closestOnPolygon(p, pts).d <= reach) outside.push(p);
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        const p = { x: x0 + i * cell, y: y0 + j * cell };
+        if (G.pointInPolygon(p, pts)) { cellIdx[j * nx + i] = inside.length; inside.push(p); }
+        else if (G.closestOnPolygon(p, pts).d <= reach) { cellIdx[j * nx + i] = -2 - outside.length; outside.push(p); }
       }
     }
-    return { pts, area, cell, inside, outside };
+    return { pts, area, cell, inside, outside, x0, y0, nx, ny, cellIdx };
   }
 
   /** Kosten van een indeling: aantal koppen, water buiten het vlak, ongelijkmatigheid en droge plekken. */
-  function score(ev, heads) {
-    if (!heads.length || !ev.inside.length) return { cost: Infinity };
-    const fns = heads.map(headFn).filter(Boolean);
-    const vals = new Float64Array(ev.inside.length);
+  /** Bijdrage van één kop optellen (sign = 1) of aftrekken (sign = -1) bij de meetpunten. */
+  function apply(ev, acc, h, sign) {
+    const fn = headFn(h);
+    if (!fn) return;
+    const i0 = Math.max(0, Math.floor((fn.x - fn.reach - ev.x0) / ev.cell));
+    const i1 = Math.min(ev.nx - 1, Math.ceil((fn.x + fn.reach - ev.x0) / ev.cell));
+    const j0 = Math.max(0, Math.floor((fn.y - fn.reach - ev.y0) / ev.cell));
+    const j1 = Math.min(ev.ny - 1, Math.ceil((fn.y + fn.reach - ev.y0) / ev.cell));
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const k = ev.cellIdx[j * ev.nx + i];
+        if (k === -1) continue;
+        if (k >= 0) acc.vals[k] += sign * fn.f(ev.inside[k]);
+        else if (fn.f(ev.outside[-2 - k]) > 0) acc.wet[-2 - k] += sign;
+      }
+    }
+  }
+
+  function accumulate(ev, heads) {
+    const acc = { vals: new Float64Array(ev.inside.length), wet: new Int16Array(ev.outside.length) };
+    for (const h of heads) apply(ev, acc, h, 1);
+    return acc;
+  }
+
+  function costOf(ev, acc, count) {
+    const arr = Float64Array.from(acc.vals).sort();
+    let sum = 0;
+    for (const x of arr) sum += x;
+    const mean = sum / arr.length;
+    const nq = Math.max(1, Math.floor(arr.length / 4));
+    let lq = 0;
+    for (let k = 0; k < nq; k++) lq += arr[k];
+    const du = mean > 0 ? lq / nq / mean : 0;
+    let dry = 0;
+    for (const x of arr) { if (x < 0.3 * mean) dry++; else break; }
+    const dryPct = (dry / arr.length) * 100;
     let outsideWet = 0;
-    for (const h of fns) {
-      for (let k = 0; k < ev.inside.length; k++) {
-        const p = ev.inside[k];
-        if (Math.abs(p.x - h.x) > h.reach || Math.abs(p.y - h.y) > h.reach) continue;
-        vals[k] += h.f(p);
-      }
-    }
-    for (const p of ev.outside) {
-      for (const h of fns) {
-        if (Math.abs(p.x - h.x) > h.reach || Math.abs(p.y - h.y) > h.reach) continue;
-        if (h.f(p) > 0) { outsideWet++; break; }
-      }
-    }
-    const arr = Array.from(vals).sort((x, y) => x - y);
-    const mean = arr.reduce((s, x) => s + x, 0) / arr.length;
-    const q = arr.slice(0, Math.max(1, Math.floor(arr.length / 4)));
-    const du = mean > 0 ? q.reduce((s, x) => s + x, 0) / q.length / mean : 0;
-    const dryPct = (arr.filter((x) => x < 0.3 * mean).length / arr.length) * 100;
+    for (const w of acc.wet) if (w > 0) outsideWet++;
     const outsideM2 = outsideWet * ev.cell * ev.cell;
-    const cost = heads.length + (outsideM2 / Math.max(ev.area, 1)) * 40 + (1 - du) * 40 + dryPct * 1.5;
+    const cost = count + (outsideM2 / Math.max(ev.area, 1)) * 40 + (1 - du) * 40 + dryPct * 1.5;
     return { cost, outsideM2, du, dryPct };
   }
 
+  function score(ev, heads) {
+    if (!heads.length || !ev.inside.length) return { cost: Infinity };
+    return costOf(ev, accumulate(ev, heads), heads.length);
+  }
+
+  /** Varianten van één kop om te proberen: worp korter/langer, sproeihoek kleiner/groter, richting draaien. */
+  function variantsOf(h) {
+    const t = C.sprinklerTypes[h.type];
+    const out = [];
+    for (const f of [0.9, 0.8, 0.7, 1.1]) {
+      const r = round1(clamp(h.r * f, t.rMin, t.rMax));
+      if (r !== h.r) out.push({ ...h, r });
+    }
+    if (h.arc < 359.9) {
+      for (const da of [-20, -10, 10, 20]) out.push({ ...h, arc: h.arc + da });
+      for (const ds of [-10, -5, 5, 10]) out.push({ ...h, start: Math.round(G.normDeg(h.start + ds)) });
+      // beide randen iets naar binnen (hoek kleiner, midden gelijk)
+      out.push({ ...h, start: Math.round(G.normDeg(h.start + 5)), arc: h.arc - 10 });
+    }
+    return out.map((c) => C.fitRotator(c)).filter((c) => c.r !== h.r || c.arc !== h.arc || c.start !== h.start);
+  }
+
   /**
-   * Fijnregelen: per kop de worp inkorten (stelschroef) als dat minder water buiten
-   * het vlak geeft zonder de verdeling te bederven. Hebzuchtig, twee rondes.
+   * Afstellen: per kop worp (stelschroef), sproeihoek en richting zo kiezen dat er
+   * minder water buiten het vlak valt en de verdeling gelijkmatiger wordt.
+   * Hebzuchtig: per kop de beste verbetering, rondes tot er niets meer te winnen is.
    */
-  function refine(ev, heads, sc) {
+  function refine(ev, heads, sc, rounds = 3, only = null) {
     let best = sc;
-    for (let round = 0; round < 2; round++) {
+    if (!ev.inside.length) return best;
+    const acc = accumulate(ev, heads);
+    for (let round = 0; round < rounds; round++) {
       let improved = false;
       for (let i = 0; i < heads.length; i++) {
-        const h = heads[i];
-        if (h.type === 'strip') continue;
-        const t = C.sprinklerTypes[h.type];
-        for (const f of [0.9, 0.8, 0.7]) {
-          const r = round1(Math.max(t.rMin, h.r * f));
-          if (r >= h.r) continue;
-          const cand = C.fitRotator({ ...h, r });
-          if (cand.r >= h.r) continue;
-          const trial = heads.slice();
-          trial[i] = cand;
-          const tsc = score(ev, trial);
-          if (tsc.cost < best.cost - 1e-6) { heads[i] = cand; best = tsc; improved = true; break; }
+        if (heads[i].type === 'strip' || (only && !only.has(heads[i].id))) continue;
+        let pick = null;
+        apply(ev, acc, heads[i], -1);
+        for (const cand of variantsOf(heads[i])) {
+          apply(ev, acc, cand, 1);
+          const tsc = costOf(ev, acc, heads.length);
+          apply(ev, acc, cand, -1);
+          if (tsc.cost < (pick ? pick.sc.cost : best.cost) - 1e-6) pick = { cand, sc: tsc };
         }
+        if (pick) { heads[i] = pick.cand; best = pick.sc; improved = true; }
+        apply(ev, acc, heads[i], 1);
       }
       if (!improved) break;
     }
     return best;
+  }
+
+  /**
+   * Stelt bestaande koppen in een vlak optimaal af (positie blijft gelijk).
+   * @param onlyIds alleen deze koppen afstellen (de rest blijft staan), of null voor alle
+   * @returns {{heads, before, after}} nieuwe objecten (zelfde id's), plus de beoordeling voor en na
+   */
+  function tune(rawPts, heads, onlyIds = null) {
+    const pts = G.orientCW(rawPts);
+    const list = heads.map((h) => C.fitRotator({ ...h }));
+    if (!list.length || pts.length < 3) return { heads: list, before: null, after: null };
+    const reach = Math.max(0.5, ...list.map((h) => (h.type === 'strip' ? Math.hypot(h.len / 2, h.width) : h.r * 1.1)));
+    const ev = evaluator(pts, reach);
+    const before = score(ev, list);
+    const after = refine(ev, list, before, 3, onlyIds ? new Set(onlyIds) : null);
+    return { heads: list, before, after };
   }
 
   /** Kosten van een indeling (los aan te roepen). */
@@ -355,5 +413,5 @@
     return autoPlace(rawPts, type, r ? { r } : {});
   }
 
-  window.Planner = { autoPlace, placeWithRadius, evaluate, autoRadius, placementShape, NARROW_WIDTH };
+  window.Planner = { autoPlace, placeWithRadius, evaluate, tune, autoRadius, placementShape, NARROW_WIDTH };
 })();

@@ -65,6 +65,30 @@
     };
   }
 
+  function sanitizeHead(h) {
+    h = h && typeof h === 'object' ? h : {};
+    return {
+      nr: Math.round(numIn(h.nr, 0, 1e5)),
+      zone: str(h.zone, 60),
+      kind: str(h.kind, 60),
+      nozzle: str(h.nozzle, 60),
+      sector: str(h.sector, 20),
+      arc: Math.round(numIn(h.arc, 0, 360)),
+      r: round2(numIn(h.r, 0, 100)),
+      left: Math.round(numIn(h.left, 0, 360)),
+      leftText: str(h.leftText, 40),
+      x: round2(numIn(h.x, -1e5, 1e5)),
+      y: round2(numIn(h.y, -1e5, 1e5)),
+    };
+  }
+
+  const DIRS = ['rechts', 'rechtsonder', 'onder', 'linksonder', 'links', 'linksboven', 'boven', 'rechtsboven'];
+  /** Richting op de tekening (0° = rechts, met de klok mee). */
+  function dirText(deg) {
+    const d = ((Math.round(deg) % 360) + 360) % 360;
+    return `${d}° (${DIRS[Math.round(d / 45) % 8]})`;
+  }
+
   /** Maakt van willekeurige invoer een geldige werkorder. */
   function sanitize(data) {
     const d = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
@@ -102,6 +126,7 @@
         level: str(g.level, 40),
       } : null,
       zones: list(d.zones, sanitizeZone).slice(0, 100),
+      heads: (Array.isArray(d.heads) ? d.heads : []).slice(0, 1000).map(sanitizeHead),
       steps: list(d.steps, sanitizeStep),
       materials: list(d.materials, sanitizeMaterial),
       report: {
@@ -241,7 +266,7 @@
     st.settings.methods = { ...PLAN_DEFAULTS.methods, ...(st.settings.methods || {}) };
     for (const k of ['areas', 'elements', 'sprinklers', 'zones']) if (!Array.isArray(st[k])) st[k] = [];
     if (!st.zones.length && Hy.hasIrrigation(st)) Hy.autoZones(st);
-    if (!st.zones.length) return { zones: [], design: null, warnings: [] };
+    if (!st.zones.length) return { zones: [], design: null, heads: [], warnings: [] };
     const calc = Hy.calculate(st);
     const zones = [];
     for (const zr of calc.zones) {
@@ -290,7 +315,32 @@
       mainPipe: calc.mainPipe ? `PE ${calc.mainPipe.dn} mm, ${nl(calc.mainLen, 1)} m` : '',
       level: level ? level.label : '',
     };
-    return { zones, design, warnings: (calc.warnings || []).slice() };
+    // Afstelling per kop, zodat de installateur elke kop kan inregelen zoals ontworpen.
+    // Nr = volgorde in het plan (gelijk aan de stuklijst); linkerrand = begin van de sproeihoek,
+    // de sector loopt vandaar met de klok mee.
+    const zoneName = new Map(calc.zones.map((zr, i) => [zr.zone.id, zr.zone.name || `Zone ${i + 1}`]));
+    const heads = [];
+    st.sprinklers.forEach((sp, i) => {
+      const t = C.sprinklerTypes[sp.type];
+      if (!t) return;
+      const h = { nr: i + 1, zone: zoneName.get(sp.zone) || '', kind: t.short || t.label, x: sp.x, y: sp.y };
+      if (sp.type === 'strip') {
+        Object.assign(h, { nozzle: 'Strook', sector: '', arc: 0, r: sp.len, left: sp.start, leftText: `${nl(sp.width, 1)} × ${nl(sp.len, 1)} m` });
+      } else {
+        let nozzle = '', sector = '';
+        if (sp.type === 'rotator' && C.rotatorModelOf) {
+          C.fitRotator(sp);
+          const key = C.rotatorModelOf(sp);
+          const set = C.rotatorArcSet(key, sp.arc);
+          nozzle = C.rotatorModels[key].label;
+          sector = set[0] === set[1] ? `${set[0]}°` : `${set[0]}–${set[1]}°`;
+        }
+        Object.assign(h, { nozzle, sector, arc: sp.arc, r: sp.r, left: sp.arc >= 360 ? 0 : sp.start, leftText: sp.arc >= 360 ? 'rondom' : dirText(sp.start) });
+      }
+      heads.push(h);
+    });
+    heads.sort((a, b) => a.zone.localeCompare(b.zone, 'nl', { numeric: true }) || a.nr - b.nr);
+    return { zones, design, heads, warnings: (calc.warnings || []).slice() };
   }
 
   /**
@@ -329,12 +379,13 @@
     steps.push({ id: id('s'), phase: 'oplevering', title: 'Werkplek opruimen en de werkbon laten aftekenen', details: '', hours: 0 });
 
     const warnings = [];
-    let zones = [], design = null;
+    let zones = [], design = null, heads = [];
     if (plan && lib) {
       try {
         const z = zonesFromPlan(plan, lib);
         zones = z.zones;
         design = z.design;
+        heads = z.heads || [];
         warnings.push(...z.warnings);
       } catch (e) {
         warnings.push(`De zone-indeling kon niet uit het plan worden gehaald (${e.message}).`);
@@ -348,13 +399,13 @@
         title: d.title || `Werkorder ${q.number || ''}`.trim(),
         quoteId: q.id, quoteNumber: q.number, planId: d.planId, planTitle: d.planTitle,
         customer: { name: c.name, contact: c.contact, address: c.address, email: c.email, phone: c.phone },
-        instructions: '', siteNotes: '', design, zones, steps, materials,
+        instructions: '', siteNotes: '', design, zones, heads, steps, materials,
       }),
       warnings,
     };
   }
 
-  const api = { STATUSES, PHASES, APPOINTMENT, MAX_ITEMS, MAX_DAYS, WORKDAY_HOURS, addDays, workDays, moment, momentKey, fitHours, isDate, isTime, sanitize, summary, sanitizeStep, sanitizeMaterial, progress, fromQuote, zonesFromPlan, round2 };
+  const api = { STATUSES, PHASES, APPOINTMENT, MAX_ITEMS, MAX_DAYS, WORKDAY_HOURS, addDays, workDays, moment, momentKey, fitHours, isDate, isTime, sanitize, summary, sanitizeStep, sanitizeHead, dirText, sanitizeMaterial, progress, fromQuote, zonesFromPlan, round2 };
   root.WorkOrderCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

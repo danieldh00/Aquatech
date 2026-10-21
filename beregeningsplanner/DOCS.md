@@ -67,6 +67,17 @@ het bereik van de kop. Tekening, sproeibereik, neerslagkaart, debiet en
 stuklijst rekenen met de ingestelde waarden; de Excel-export toont per kop de
 instelling (bijv. *MP2000 (90–210°) op 135° en 5,2 m*).
 
+**Automatisch afstellen** gebeurt altijd: bij automatisch en handmatig
+plaatsen en na het verslepen van een kop zoekt de planner per kop de worp,
+sproeihoek en richting (en daarmee de kop) met de beste neerslagverdeling en
+de minste overspray. Wat je zelf met de grepen of in het paneel instelt, blijft
+staan; **Alle koppen opnieuw afstellen** zet alles weer optimaal.
+
+De **werkorder** neemt de afstelling over: per kop nummer (zoals in de
+stuklijst), zone, kop, sector, sproeihoek, worp, **linkerrand** (begin van de
+sproeihoek op de tekening; 0° = rechts, met de klok mee) en plek. Dat staat op
+het scherm, op de afgedrukte werkbon en in de Excel-export.
+
 ## Plan laden en concept maken
 
 Herkennen kan **lokaal** (standaard, zonder AI, gratis) of met **AI** (als er
