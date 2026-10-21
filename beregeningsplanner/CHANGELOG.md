@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.50.0
+## 0.51.0
 
 Nieuws: berichten van de organisatie en wat is nieuw in de app.
 
@@ -24,7 +24,7 @@ Nieuws: berichten van de organisatie en wat is nieuw in de app.
 - **Versielogboek** in `frontend/nieuws/releases.js`, per punt te beperken
   tot rechten (een klant ziet alleen wat voor hem geldt). Een test eist dat
   de versie uit `package.json` erin staat: bij elke versie-bump een regel
-  toevoegen. Gevuld met de versies 0.36.0 tot en met 0.50.0.
+  toevoegen. Gevuld met de versies 0.36.0 tot en met 0.51.0.
 - API `GET /api/news`, `POST /api/news`, `PUT|DELETE /api/news/:id` (recht
   `nieuws`), `POST /api/news/seen`; `api/me` geeft `news` (aantal nieuwe
   items, uit een cache van 30 s per omgeving, dus geen extra query per
@@ -32,6 +32,19 @@ Nieuws: berichten van de organisatie en wat is nieuw in de app.
 - Database: tabel `news` (migratie 19, SQLite en PostgreSQL, index op
   tenant + datum). Testdata: drie berichten van de testbeheerder, één ook
   voor klanten en vastgezet.
+
+## 0.50.0
+
+- **E-mailinstellingen in Beheer → Instellingen** (verplaatst uit Offertes →
+  Bedrijfsgegevens). Nieuw: soort **Exchange Online-connector (op IP)**,
+  zonder gebruikersnaam en wachtwoord, via poort 25 met verplichte STARTTLS.
+  De SMTP-server wordt voorgesteld uit het domein van de afzender.
+- Het scherm toont het **WAN-IP van de server** (het openbare uitgaande
+  adres, niet dat van Cloudflare) om vrij te geven in de connector, met
+  knoppen Kopiëren en Opnieuw bepalen, plus een korte handleiding voor
+  Office 365. Vast in te stellen met `WAN_IP` in de Docker-omgeving.
+- API: `/api/admin/mail[/test]` en `/api/admin/wan-ip` (alleen beheerders);
+  het wachtwoord gaat nooit terug naar de browser.
 
 ## 0.49.0
 

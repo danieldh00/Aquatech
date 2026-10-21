@@ -13,12 +13,20 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '0.50.0',
+      version: '0.51.0',
       date: '2026-10-21',
       title: 'Nieuws en wat is nieuw',
       items: [
         { text: 'Nieuwe pagina **Nieuws**: berichten van je organisatie en een overzicht van wat er in de app is veranderd. Een stip bij Nieuws laat zien dat er iets nieuws is sinds je vorige bezoek.' },
         { text: 'Beheerders plaatsen zelf **nieuwsberichten** voor alle collega\'s (of ook voor klanten), kunnen een bericht bovenaan vastzetten en het desgewenst ook per e-mail versturen.', for: ['nieuws'] },
+      ],
+    },
+    {
+      version: '0.50.0',
+      date: '2026-10-21',
+      title: 'E-mailinstellingen in Beheer',
+      items: [
+        { text: 'De instellingen voor het versturen van e-mail staan nu in **Beheer → Instellingen**, met ondersteuning voor een Exchange Online-connector (Office 365) en een korte handleiding.', for: ['beheer'] },
       ],
     },
     {

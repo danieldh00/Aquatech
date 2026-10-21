@@ -91,7 +91,9 @@ test('nieuw sinds het vorige bezoek: telling', () => {
   assert.strictEqual(unreadCount({ marks, prefs: seenAll, user, rights: ['portaal'], customer: true }), 1, 'klant: alleen berichten voor iedereen');
   // Eigen berichten tellen niet; zonder vorig bezoek alleen de laatste versie.
   assert.strictEqual(unreadCount({ marks, prefs: { newsSeenAt: '', seenRelease: '' }, user, rights: [], customer: false }), 3);
-  assert.strictEqual(unreadCount({ marks: [], prefs: { newsSeenAt: '', seenRelease: '0.48.0' }, user, rights: ['beheer'], customer: false }), 2);
+  const since48 = Releases.visibleFor(['beheer']).filter((r) => Releases.compare(r.version, '0.48.0') > 0).length;
+  assert.ok(since48 >= 2);
+  assert.strictEqual(unreadCount({ marks: [], prefs: { newsSeenAt: '', seenRelease: '0.48.0' }, user, rights: ['beheer'], customer: false }), since48);
 });
 
 test('nieuws: beheerder plaatst, collega en klant lezen, melding en gezien', async () => {

@@ -14,6 +14,7 @@ const { createVault, loadOrCreateMasterKey } = require('./vault');
 const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase } = require('./quotes');
 const { createMailer } = require('./mailer');
+const { createWanIp } = require('./wanip');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders');
 const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('./photos');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
@@ -134,7 +135,7 @@ function staticHeaders(version) {
 
 // accessCode, anthropicApiKey en aiDailyLimit zijn alleen startwaarden (net als
 // env); de actuele waarden komen uit de instellingen.
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, wanIp = createWanIp() }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -1001,6 +1002,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     } catch (err) {
       if (err instanceof AnalyzeError) return res.status(err.status === 502 ? 400 : err.status).json({ error: err.code, message: err.message });
       next(err);
+    }
+  });
+
+  // WAN-IP van de server, voor een Exchange Online-connector op IP-basis
+  // (Instellingen > E-mail). Voor alle tenants gelijk; een uur onthouden.
+  app.get('/api/admin/wan-ip', async (req, res) => {
+    try {
+      res.json(await wanIp.get({ refresh: req.query.refresh === '1' }));
+    } catch (err) {
+      res.status(502).json({ error: 'unavailable', message: 'Het WAN-IP kon niet worden bepaald. Controleer of de server naar buiten kan, of zet WAN_IP in de Docker-omgeving.' });
     }
   });
 
