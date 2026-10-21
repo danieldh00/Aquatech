@@ -196,6 +196,9 @@ td.num, th.num { text-align: right !important; white-space: nowrap; }
 .plan-legend .lg-lbl { flex: 1; min-width: 0; color: var(--text); }
 .plan-legend .lg-sub { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .drawbar .btn { white-space: nowrap; }
+.drawbar .btn.active { background: var(--primary-soft); border-color: var(--primary); }
+.shape-edit { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.shape-edit .hint { flex-basis: 100%; margin: 0; }
 .drawbar-label { font-size: 13px; color: var(--muted); padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sheet-toggle, .props-close { display: none; }
 
@@ -288,6 +291,7 @@ td.num, th.num { text-align: right !important; white-space: nowrap; }
   .drawbar { top: 6px; gap: 4px; padding: 4px; }
   .drawbar .btn { padding: 6px 9px; }
   .drawbar-label { display: none; }
+  .drawbar [data-db="pan"] span { display: none; }
   .help-card { margin: 10px; padding: 16px; max-height: 90vh; }
   .toast { bottom: 90px; }
 }

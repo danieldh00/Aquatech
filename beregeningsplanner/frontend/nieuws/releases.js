@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.62.0',
+      date: '2026-10-21',
+      title: 'Vlakken corrigeren en verschuiven tijdens het tekenen',
+      items: [
+        { text: 'Een getekend vlak (bijv. het gazon) pas je achteraf aan: selecteer het, sleep een hoekpunt, sleep een middenstip voor een extra punt, of tik een hoekpunt aan en kies **Punt verwijderen**. Met **Opnieuw tekenen** teken je de vorm opnieuw; naam en type blijven. Sproeiers op de rand zitten daarbij niet meer in de weg.' },
+        { text: 'Tijdens het tekenen kun je het plan verschuiven zonder je vorm kwijt te raken: met **✋ Schuiven** in de tekenbalk, het scrollwiel of touchpad, de spatiebalk of de pijltjestoetsen. Zoomen doe je met Ctrl + scrollen of door te knijpen.' },
+        { text: 'Leidingen hebben duidelijkere kleuren (geen groen meer op het gazon) en een witte rand, zodat ze op elke ondergrond zichtbaar zijn.' },
+      ],
+    },
+    {
       version: '0.61.0',
       date: '2026-10-21',
       title: 'Facturen, verkoopprijzen en de webshop vanuit AquaTech',

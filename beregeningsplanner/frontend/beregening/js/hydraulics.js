@@ -6,8 +6,21 @@
   const C = window.Catalog;
   const H = C.hydraulics;
 
-  const ZONE_COLORS = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#9a6324',
+  // Zonekleuren: verzadigd en zonder groen- of bruintinten, zodat leidingen op
+  // gazon, beplanting en de ingeladen tekening goed zichtbaar blijven.
+  const ZONE_COLORS = ['#d50000', '#2962ff', '#ff6d00', '#aa00ff', '#00b8d4', '#ffd600', '#e91e63', '#212121',
+    '#1a237e', '#ff8a80', '#7c4dff', '#ffab00', '#880e4f', '#18ffff', '#bf360c', '#f50057'];
+  // Vorig palet (met groen); bewaarde plannen krijgen de nieuwe kleur op dezelfde plek
+  const OLD_ZONE_COLORS = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#9a6324',
     '#469990', '#800000', '#808000', '#000075', '#bfef45', '#fabed4', '#dcbeff', '#aaffc3'];
+
+  /** Zet zonekleuren uit het oude palet om naar het contrastrijke palet. */
+  function refreshZoneColors(state) {
+    for (const z of state.zones || []) {
+      const i = OLD_ZONE_COLORS.indexOf(String(z.color || '').toLowerCase());
+      if (i >= 0) z.color = ZONE_COLORS[i];
+    }
+  }
 
   /** Drukverlies in bar voor lengte L [m], debiet q [l/h], binnendiameter d [mm]. */
   function lossBar(L, qLph, dMm) {
@@ -195,6 +208,7 @@
    * Berekent leidingen en drukken voor alle zones. Resultaat in state.calc (niet opgeslagen).
    */
   function calculate(state) {
+    refreshZoneColors(state);
     const vb = valveBoxPos(state);
     const src = element(state, 'source');
     const srcPos = src ? { x: src.x, y: src.y } : vb;
@@ -291,5 +305,5 @@
     return state.calc;
   }
 
-  window.Hydraulics = { lossBar, velocity, pickPipe, dripInfo, methodOf, dripAreas, hasIrrigation, isDripMethod, autoZones, calculate, members, valveBoxPos, maxZoneLph, ZONE_COLORS };
+  window.Hydraulics = { lossBar, velocity, pickPipe, dripInfo, methodOf, dripAreas, hasIrrigation, isDripMethod, autoZones, calculate, members, valveBoxPos, maxZoneLph, ZONE_COLORS, refreshZoneColors };
 })();
