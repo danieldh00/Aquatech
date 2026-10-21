@@ -16,7 +16,7 @@
 .pill.gepland, .pill.bevestigd { background: var(--primary-soft); color: var(--primary-dark); }
 .pill.bezig { background: #e0f7fa; color: #00838f; }
 .pill.gereed, .pill.akkoord { background: #e8f5e9; color: #2e7d32; }
-.pill.geannuleerd, .pill.afgewezen, .pill.ander_moment { background: #ffebee; color: #c62828; }
+.pill.geannuleerd, .pill.afgewezen, .pill.ander_moment, .pill.spoed { background: #ffebee; color: #c62828; }
 
 .contact { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 4px; }
 .contact a { color: var(--primary); }
@@ -44,6 +44,20 @@
 .photo-view figure { margin: 0; max-width: 96vw; max-height: 92vh; text-align: center; }
 .photo-view img { max-width: 96vw; max-height: 84vh; border-radius: 8px; }
 .photo-view figcaption { color: #fff; margin-top: 8px; }
+
+/* Meldingen (storing, onderhoud). */
+.req-intro { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.req-intro p { margin: 0; flex: 1 1 280px; }
+.req-form { border: 0; padding: 0; margin: 12px 0 0; display: grid; gap: 10px; }
+.req-form input:not([type="radio"]):not([type="checkbox"]):not([type="file"]), .req-form select, .req-form textarea { font: inherit; font-family: var(--at-font); padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); }
+.req-form .row .grow { flex: 1 1 240px; }
+.req-form .kinds { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.req-form .kinds legend { font-size: 13px; color: var(--muted); margin-bottom: 4px; padding: 0; }
+.req-form label.chk { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
+.req-form .err:empty { display: none; }
+.small-photos { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
+.small-photos:empty { display: none; }
+.reply { background: var(--primary-soft); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; }
 
 @media (max-width: 600px) {
   .dossier .kv { grid-template-columns: 1fr; }

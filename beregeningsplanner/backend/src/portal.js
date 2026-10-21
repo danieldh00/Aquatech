@@ -9,8 +9,10 @@
 //
 // Optioneel (komen uit andere onderdelen, het portaal werkt ook zonder):
 // - ctx.photos: opleverfoto's per werkorder (photos.list met customerOnly);
-// - workorders.respond: een afspraak bevestigen of om een ander moment vragen.
+// - workorders.respond: een afspraak bevestigen of om een ander moment vragen;
+// - ctx.requests: eigen meldingen (storing, onderhoud; servicerequests.js).
 const path = require('path');
+const { forCustomer } = require('./servicerequests');
 
 const Core = require(path.join(__dirname, '..', '..', 'frontend', 'werkorders', 'workorder-core.js'));
 
@@ -18,13 +20,15 @@ function createPortalStore(db) {
   const q = (sql) => db.prepare(sql);
 
   // Werkorders van een klant: via een niet-concept-offerte aan zijn account.
-  const OWN = `FROM work_orders w JOIN quotes qu ON qu.id = w.quote_id AND qu.tenant_id = w.tenant_id
-    WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND qu.deleted_at IS NULL
-      AND qu.customer_id = ? AND qu.status <> 'concept'`;
+  // Of uit een melding van de klant (servicerequests.js).
+  const OWN = `FROM work_orders w WHERE w.tenant_id = ? AND w.id = ? AND w.deleted_at IS NULL
+    AND (EXISTS (SELECT 1 FROM quotes qu WHERE qu.id = w.quote_id AND qu.tenant_id = w.tenant_id
+      AND qu.deleted_at IS NULL AND qu.customer_id = ? AND qu.status <> 'concept')
+    OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?))`;
 
   // Alleen het id (workorders.respond leest de rij zelf opnieuw), en alleen
   // als de werkorder bij deze klant hoort.
-  const ownRow = (tenantId, customerId, id) => q(`SELECT w.id ${OWN} AND w.id = ?`).get(tenantId, customerId, String(id)) || null;
+  const ownRow = (tenantId, customerId, id) => q(`SELECT w.id ${OWN}`).get(tenantId, String(id), String(customerId), String(customerId)) || null;
 
   return { ownRow };
 }
@@ -66,7 +70,7 @@ function contactOf(profile) {
 }
 
 /**
- * API-routes. ctx: { portal, store, quotes, workorders, photos?, requireRight,
+ * API-routes. ctx: { portal, store, quotes, workorders, photos?, requests?, requireRight,
  * requireJson, settingsOf, audit, remoteIp }. Alles achter het recht
  * 'portaal'; gegevens van de actieve omgeving (req.tenantId), net als offertes.
  */
@@ -92,12 +96,14 @@ function registerPortalRoutes(app, ctx) {
     const t = tid(req);
     const user = req.user;
     res.json({
-      user: { displayName: user.display_name || user.displayName || '', kind: user.kind },
+      user: { displayName: user.display_name || user.displayName || '', kind: user.kind, phone: user.phone || '' },
       contact: contactOf(settingsOf(req).get('quoteProfile')),
       plans: store.listPlans(t, { ownerId: user.id }),
       quotes: quotes.list(t, { customerId: user.id }),
       workorders: workOrdersOf(req),
-      features: { photos: Boolean(ctx.photos), appointments: typeof workorders.respond === 'function' },
+      // Eigen meldingen (storing, onderhoud), zie servicerequests.js.
+      requests: ctx.requests ? ctx.requests.list(t, { customerId: user.id }).map(forCustomer) : [],
+      features: { photos: Boolean(ctx.photos), appointments: typeof workorders.respond === 'function', requests: Boolean(ctx.requests) },
     });
   });
 

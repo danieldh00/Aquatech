@@ -169,7 +169,7 @@ test('API: foto\'s en afspraak bevestigen via de optionele koppelingen', async (
   const c = client(`http://127.0.0.1:${server.address().port}`);
   try {
     const p = (await c.get('/api/portal')).body;
-    assert.deepStrictEqual(p.features, { photos: true, appointments: true });
+    assert.deepStrictEqual(p.features, { photos: true, appointments: true, requests: false });
     assert.strictEqual(p.workorders[0].appointment.state, 'wacht');
     assert.ok(!JSON.stringify(p.contact).includes('GEHEIM'), 'alleen contactgegevens');
     assert.deepStrictEqual((await c.get('/api/portal/workorders/w1')).body.photos.map((f) => f.id), ['f1']);

@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.57.0
+
+Klantportaal: storing of onderhoud melden, met foto's; medewerkers maken er
+een werkorder van.
+
+- **Melden** (`frontend/portaal/`): blok *Storingen en onderhoud* met een
+  formulier (soort storing/onderhoud/vraag, spoed, installatie uit de eigen
+  werkorders, onderwerp, omschrijving, adres, telefoon, voorkeursmoment) en
+  tot 6 foto's (verkleind in de browser via `WorkOrderPhotos.prepare`).
+  Overzicht van de eigen meldingen met status, reactie en de werkorder; de
+  klant kan foto's toevoegen/verwijderen of de melding intrekken zolang hij
+  loopt. `portaal/#melden` opent het formulier, `#melding=<id>` een melding.
+- **Opslag** (`backend/src/servicerequests.js`): tabellen `service_requests`
+  en `service_request_photos` (migratie 23, SQLite en PostgreSQL), nummer
+  `M-<jaar>-0001` per omgeving. Foto's op inhoud gecontroleerd en zonder
+  EXIF (`photos.inspectImage`), versleuteld met `vault.sealBytes` (AAD
+  `<tenant>:melding-foto:<id>:beeld|mini`). `customer_id`, `handled_by`,
+  `work_order_id` zonder foreign key; bij het verwijderen van een account
+  worden ze leeg.
+- **API klant** (recht `portaal`): `GET|POST /api/portal/requests`,
+  `GET /api/portal/requests/:id`, `POST|DELETE .../photos[/:pid]`,
+  `GET .../photos/:pid`, `POST .../withdraw`. `/api/portal` geeft
+  `requests` mee (zonder interne notitie). Limiet 10 meldingen en 60 foto's
+  per uur per klant.
+- **Module Meldingen** (`frontend/meldingen/`, recht `werkorders`): overzicht
+  (lopend of alles), detail via `?id=`, reactie aan de klant (ook per mail),
+  interne notitie, status. API `GET /api/service-requests[/:id]`,
+  `PUT /api/service-requests/:id`, `GET .../photos/:pid`.
+- **Werkorder maken**: `POST /api/service-requests/:id/workorder`
+  (`workorders.createReceived`, nu met `assigneeId`): klantgegevens,
+  omschrijving als instructie, ontwerp/zones/koppen van de gekozen
+  installatie en de foto's van de klant (als foto's *voor*) gaan mee. De
+  klant ziet die werkorder in zijn portaal (afspraak bevestigen, voortgang,
+  foto's): werkorder-, portaal- en fotoquery's tellen naast
+  `quotes.customer_id` ook `service_requests.customer_id` mee.
+- **E-mail** (als er een mailserver is): nieuwe melding naar het e-mailadres
+  van het bedrijfsprofiel, een nieuwe reactie naar de klant.
+- **Testdata**: vier meldingen (nieuw met foto's, in behandeling, afgehandeld
+  en één omgezet in een ingeplande werkorder).
+
 ## 0.56.0
 
 Plan herkennen: vaste AI-uitkomst per tekening, betere herkenning zonder AI

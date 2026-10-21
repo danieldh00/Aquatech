@@ -330,6 +330,15 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `mailServer.mode` `smtp` | `connector` (Exchange Online op IP: geen auth,
   `requireTLS`). WAN-IP via `backend/src/wanip.js` (ipify e.a., IPv4, 1 u
   cache, `WAN_IP` gaat voor), route `GET /api/admin/wan-ip`.
+- **Meldingen** (0.57.0, `backend/src/servicerequests.js`, tabellen
+  `service_requests` + `service_request_photos`, migratie 23): klant meldt in
+  het portaal een storing/onderhoud met foto's (`/api/portal/requests…`,
+  recht `portaal`, foto's via `vault.sealBytes` AAD
+  `<tenant>:melding-foto:<id>:…`); medewerkers in module `frontend/meldingen/`
+  (recht `werkorders`, `/api/service-requests…`). Omzetten via
+  `workorders.createReceived` (werkorder zonder offerte); de klant ziet een
+  werkorder als `quotes.customer_id` **of** `service_requests.customer_id` =
+  klant (`OF_CUSTOMER` in workorders.js, `portal.ownRow`, `photos.customerOwns`).
 - **Vaste AI-uitkomst + leren** (0.56.0, `backend/src/recognitions.js`, tabel
   `plan_recognitions`, migratie 22): `/api/plan/analyze` bewaart per omgeving
   onder SHA-256 van de afbeelding + model + `PROMPT_VERSION` (planAnalyzer.js)

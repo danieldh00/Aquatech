@@ -94,9 +94,12 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
   const LIST_SELECT = `SELECT w.id, w.tenant_id, w.owner_id, w.quote_id, w.plan_id, w.number, w.status, w.title, w.customer, w.address,
       w.planned_date, w.assignee_id, w.data, w.created_at, w.updated_at, w.share_hash, w.appointment,
       o.display_name AS owner_name, a.display_name AS assignee_name ${FROM}`;
-  // Werkorders van een klantaccount: via een niet-concept-offerte aan dat account.
-  const OF_CUSTOMER = ` AND EXISTS (SELECT 1 FROM quotes qu WHERE qu.id = w.quote_id AND qu.tenant_id = w.tenant_id
-    AND qu.deleted_at IS NULL AND qu.customer_id = ? AND qu.status <> 'concept')`;
+  // Werkorders van een klantaccount: via een niet-concept-offerte aan dat
+  // account, of gemaakt uit een melding van dat account (servicerequests.js).
+  // Twee parameters: twee keer het klant-id.
+  const OF_CUSTOMER = ` AND (EXISTS (SELECT 1 FROM quotes qu WHERE qu.id = w.quote_id AND qu.tenant_id = w.tenant_id
+    AND qu.deleted_at IS NULL AND qu.customer_id = ? AND qu.status <> 'concept')
+    OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?))`;
 
   // customerId: alleen de werkorders van dat klantaccount, met de data erbij
   // (het klantportaal toont daaruit de oplevering).
@@ -104,7 +107,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     const args = [tenantId];
     let sql = `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL`;
     if (quoteId) { sql += ' AND w.quote_id = ?'; args.push(String(quoteId)); }
-    if (customerId) { sql += OF_CUSTOMER; args.push(String(customerId)); }
+    if (customerId) { sql += OF_CUSTOMER; args.push(String(customerId), String(customerId)); }
     return q(`${sql} ORDER BY w.updated_at DESC`).all(...args).map((r) => {
       const out = row(r, false);
       if (customerId) out.data = JSON.parse(r.data);
@@ -122,7 +125,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
   function get(tenantId, id, { customerId = null } = {}) {
     const args = [tenantId, String(id)];
     let sql = `${SELECT} WHERE w.tenant_id = ? AND w.id = ? AND w.deleted_at IS NULL`;
-    if (customerId) { sql += OF_CUSTOMER; args.push(String(customerId)); }
+    if (customerId) { sql += OF_CUSTOMER; args.push(String(customerId), String(customerId)); }
     const r = q(sql).get(...args);
     return r ? row(r, true) : null;
   }
@@ -232,10 +235,11 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
 
   /**
    * Werkorder zonder offerte: de kopie van een uitbestede opdracht in de
-   * omgeving van de organisatie die hem heeft aangenomen (outsourcing.js).
-   * Draait binnen de transactie van de aanroeper (acceptatie).
+   * omgeving van de organisatie die hem heeft aangenomen (outsourcing.js), of
+   * een klus uit een melding van een klant (servicerequests.js). Draait
+   * binnen de transactie van de aanroeper.
    */
-  function createReceived(user, rawData) {
+  function createReceived(user, rawData, { assigneeId = null } = {}) {
     const data = Core.sanitize(rawData);
     data.quoteId = '';
     data.quoteNumber = '';
@@ -246,9 +250,9 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     const ts = now();
     const number = nextNumber(user.tenant_id, ts.slice(0, 4));
     q(`INSERT INTO work_orders (id, tenant_id, owner_id, quote_id, plan_id, number, status, title, customer, address, planned_date, assignee_id, data, created_at, updated_at)
-       VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`)
+       VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(id, user.tenant_id, user.id, number, data.plannedDate ? 'gepland' : 'open',
-        f.title, f.customer, f.address, f.plannedDate, JSON.stringify(data), ts, ts);
+        f.title, f.customer, f.address, f.plannedDate, assigneeId || null, JSON.stringify(data), ts, ts);
     return fullRow(id);
   }
 
