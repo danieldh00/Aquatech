@@ -313,6 +313,11 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `handoverOf` → `workorders.createReceived` (werkorder zonder offerte). De
   uitbesteder ziet alleen `execution` (status, planning, stappen). Werkorder-API
   geeft `outsourcing` mee (`ctx.outsourcingOf`).
+- **E-mail** (0.50.0): formulier in Beheer → Instellingen (`#s-mail`), API
+  `/api/admin/mail[/test]` (alias van `/api/quote-mail`, in quotes.js).
+  `mailServer.mode` `smtp` | `connector` (Exchange Online op IP: geen auth,
+  `requireTLS`). WAN-IP via `backend/src/wanip.js` (ipify e.a., IPv4, 1 u
+  cache, `WAN_IP` gaat voor), route `GET /api/admin/wan-ip`.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - **Snelheid/navigatie** (0.46.0): `shared/common.js` in de `<head>` van elke

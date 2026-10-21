@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.50.0
+
+- **E-mailinstellingen in Beheer → Instellingen** (verplaatst uit Offertes →
+  Bedrijfsgegevens). Nieuw: soort **Exchange Online-connector (op IP)**,
+  zonder gebruikersnaam en wachtwoord, via poort 25 met verplichte STARTTLS.
+  De SMTP-server wordt voorgesteld uit het domein van de afzender.
+- Het scherm toont het **WAN-IP van de server** (het openbare uitgaande
+  adres, niet dat van Cloudflare) om vrij te geven in de connector, met
+  knoppen Kopiëren en Opnieuw bepalen, plus een korte handleiding voor
+  Office 365. Vast in te stellen met `WAN_IP` in de Docker-omgeving.
+- API: `/api/admin/mail[/test]` en `/api/admin/wan-ip` (alleen beheerders);
+  het wachtwoord gaat nooit terug naar de browser.
+
 ## 0.49.0
 
 - **Rollen aanpassen** (**Beheer → Rollen**): per rol de rechten aan- en

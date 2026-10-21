@@ -178,29 +178,7 @@
         <p class="muted small">De materiaalprijzen komen uit de artikellijst van de beregeningsplanner; met de opslag reken je ze om naar verkoopprijzen.</p>
         <div class="actions"><button class="btn primary" type="submit">Opslaan</button></div>
       </form>
-      <form id="mf" class="card-form plain">
-        <h3>E-mail (eigen mailserver)</h3>
-        <p class="muted small">Hiermee verstuurt de module offertes en bevestigingen na een akkoord. Gebruik de SMTP-gegevens van je eigen e-mailprovider. Het wachtwoord wordt versleuteld opgeslagen en nooit getoond.</p>
-        <div class="row3">
-          <label>SMTP-server<input name="host" maxlength="200" placeholder="smtp.voorbeeld.nl" autocomplete="off"></label>
-          <label>Poort<input name="port" type="number" min="1" max="65535" placeholder="587"></label>
-          <label>Beveiliging<select name="secure"><option value="false">STARTTLS (587)</option><option value="true">SSL/TLS (465)</option></select></label>
-        </div>
-        <div class="row2">
-          <label>Gebruikersnaam<input name="user" maxlength="200" autocomplete="off"></label>
-          <label>Wachtwoord<input name="password" type="password" maxlength="500" autocomplete="new-password"></label>
-        </div>
-        <div class="row2">
-          <label>Afzender<input name="from" maxlength="200" placeholder="AquaTech Service &lt;offerte@voorbeeld.nl&gt;"></label>
-          <label>Antwoorden naar<input name="replyTo" maxlength="200" placeholder="info@voorbeeld.nl"></label>
-        </div>
-        <p id="mf-state" class="muted small"></p>
-        <div class="actions">
-          <input name="testTo" type="email" maxlength="200" placeholder="Testadres" class="narrow-wide">
-          <button class="btn" type="button" id="mf-test">Testmail sturen</button>
-          <button class="btn primary" type="submit">E-mail opslaan</button>
-        </div>
-      </form>
+      <p id="mf-note" class="muted small">E-mail versturen (SMTP of Exchange-connector) stel je in bij <a href="../beheer/#settings">Beheer → Instellingen → E-mail</a>.</p>
     </div>
   </div>
 
