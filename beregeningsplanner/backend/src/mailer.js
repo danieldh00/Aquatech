@@ -30,7 +30,8 @@ const validEmail = (v) => typeof v === 'string' && v.length <= 200 && EMAIL.test
 
 /**
  * settings: instellingen van de tenant. createTransport en resolveHost zijn te
- * vervangen in tests. Geeft { configured(), send({ to, subject, text, html, replyTo }) }.
+ * vervangen in tests. Geeft { configured(), send({ to, subject, text, html, replyTo, bcc, attachments }) };
+ * attachments: [{ filename, content (Buffer), contentType }] (bijv. de factuur als PDF).
  * resolveHost: de mailserver moet een openbaar adres hebben (zie netguard.js);
  * er wordt verbonden met het gevonden adres, het certificaat blijft op naam gecontroleerd.
  */
@@ -40,7 +41,7 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
     const c = config();
     return Boolean(c.host && c.from);
   };
-  async function send({ to, subject, text, html, replyTo, bcc }) {
+  async function send({ to, subject, text, html, replyTo, bcc, attachments }) {
     if (!configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld.'), { code: 'not_configured' });
     const list = (Array.isArray(to) ? to : [to]).filter(validEmail);
     if (!list.length) throw Object.assign(new Error('Geen geldig e-mailadres.'), { code: 'invalid_to' });
@@ -66,6 +67,9 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
     return transport.sendMail({
       from: c.from, to: list.join(', '), bcc: bcc && validEmail(bcc) ? bcc.trim() : undefined, replyTo: replyTo && validEmail(replyTo) ? replyTo : c.replyTo || undefined,
       subject: String(subject || '').replace(/[\r\n]/g, ' ').slice(0, 300), text, html,
+      attachments: Array.isArray(attachments) && attachments.length ? attachments.slice(0, 5).map((a) => ({
+        filename: String(a.filename || 'bijlage').replace(/[\r\n"\\/]/g, '').slice(0, 120), content: a.content, contentType: a.contentType,
+      })) : undefined,
     });
   }
   return { configured, send, config };

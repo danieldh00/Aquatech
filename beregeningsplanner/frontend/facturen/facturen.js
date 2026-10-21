@@ -1,9 +1,10 @@
-// Facturen: overzicht (status, periode, zoeken), de factuur zelf (?id=) met
-// klant, regels, btw en omzetcategorieën, definitief maken, betaald,
-// crediteren, afdrukken als PDF, de export voor de boekhouding (Excel per
-// omzetcategorie, Visma eAccounting) en de factuurinstellingen. Gegevens uit
-// /api/invoices (recht 'facturen'); rekenwerk in invoice-core.js (gedeeld
-// met de server).
+// Facturen: overzicht (status, periode, zoeken), webshopbestellingen ophalen,
+// de factuur zelf (?id=) met klant, regels, btw en omzetcategorieën,
+// definitief maken, betaald, crediteren, PDF (gemaakt door de server) en
+// versturen per e-mail, de debiteuren, de export voor de boekhouding (Excel
+// per omzetcategorie, Visma eAccounting) en de factuurinstellingen. Gegevens
+// uit /api/invoices en /api/debtors (recht 'facturen'); rekenwerk in
+// invoice-core.js (gedeeld met de server).
 (function () {
   const C = window.InvoiceCore;
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -12,7 +13,8 @@
   const day = (iso) => (iso ? new Date(`${String(iso).slice(0, 10)}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
   const num = (v) => (String(v).trim() === '' ? 0 : Number(String(v).replace(',', '.')) || 0);
 
-  const state = { items: [], tab: 'list', inv: null, settings: null, profile: {}, articles: {}, dirty: false };
+  const state = { items: [], tab: 'list', inv: null, settings: null, profile: {}, articles: {}, dirty: false, conf: {}, debtors: [], debtor: null };
+  const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 
   function toast(msg, err = false) {
     const t = $('#toast');
@@ -37,7 +39,8 @@
     if (i.overdue) return '<span class="pill overdue">Over de vervaldatum</span>';
     return `<span class="pill st-${esc(i.status)}">${esc(C.STATUSES[i.status] || i.status)}</span>`;
   };
-  const kindPill = (i) => (i.kind === 'credit' ? ' <span class="pill credit">Credit</span>' : '');
+  const kindPill = (i) => (i.kind === 'credit' ? ' <span class="pill credit">Credit</span>' : '') + (i.source === 'webshop' ? ' <span class="pill src">Webshop</span>' : '');
+  const sentCell = (i) => (i.sentAt ? esc(day(i.sentAt)) : i.sendError ? '<span class="fail" title="' + esc(i.sendError) + '">mislukt</span>' : '<span class="muted">–</span>');
 
   // ---------- Overzicht ----------
   function visible() {
@@ -67,7 +70,7 @@
       return;
     }
     const items = visible();
-    t.innerHTML = `<thead><tr><th>Nummer</th><th>Datum</th><th>Klant</th><th>Status</th><th>Vervalt</th><th class="num">Excl. btw</th><th class="num">Totaal</th><th>Geëxporteerd</th></tr></thead>
+    t.innerHTML = `<thead><tr><th>Nummer</th><th>Datum</th><th>Klant</th><th>Status</th><th>Vervalt</th><th class="num">Excl. btw</th><th class="num">Totaal</th><th>Verstuurd</th><th>Geëxporteerd</th></tr></thead>
       <tbody>${items.map((i) => `<tr data-id="${esc(i.id)}">
         <td><b>${esc(i.number || 'Concept')}</b>${kindPill(i)}</td>
         <td>${esc(day(i.date))}</td>
@@ -76,8 +79,9 @@
         <td>${esc(day(i.dueDate))}</td>
         <td class="num${i.subtotal < 0 ? ' neg' : ''}">${esc(eur(i.subtotal))}</td>
         <td class="num${i.total < 0 ? ' neg' : ''}"><b>${esc(eur(i.total))}</b></td>
+        <td>${sentCell(i)}</td>
         <td>${i.exportedAt ? esc(day(i.exportedAt)) : '<span class="muted">–</span>'}</td>
-      </tr>`).join('') || '<tr><td colspan="8" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
+      </tr>`).join('') || '<tr><td colspan="9" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
     t.querySelectorAll('tr[data-id]').forEach((tr) => { tr.onclick = () => openInvoice(tr.dataset.id, true); });
   }
 
@@ -87,13 +91,108 @@
     state.items = (await api(`invoices?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)).items;
     renderStats();
     renderList();
+    renderOrders();
+  }
+
+  // ---------- Webshopbestellingen ----------
+  function renderOrders() {
+    const so = state.settings && state.settings.shopOrders;
+    const on = Boolean(so && so.enabled && state.conf.shop && state.conf.shop.url);
+    $('#b-orders').hidden = !on;
+    const p = $('#l-orders');
+    const st = state.conf.shop && state.conf.shop.orders;
+    p.hidden = !on;
+    if (!on) return;
+    p.innerHTML = `Webshopbestellingen met status <b>${esc(C.SHOP_STATUSES[so.status])}</b> worden elke 10 minuten gefactureerd${st && st.syncedAt ? ` (laatst opgehaald ${esc(when(st.syncedAt))})` : ''}.`
+      + (st && st.error ? ` <span class="fail">${esc(st.error)}</span>` : '');
+  }
+
+  async function fetchOrders() {
+    const btn = $('#b-orders');
+    btn.disabled = true;
+    try {
+      const out = await api('invoices/shop-orders/sync', { method: 'POST', body: {} });
+      state.conf.shop.orders = out.status;
+      const parts = [`${out.imported} nieuwe ${out.imported === 1 ? 'factuur' : 'facturen'}`];
+      if (out.sent) parts.push(`${out.sent} verstuurd`);
+      if (out.paid) parts.push(`${out.paid} al betaald`);
+      toast(`Webshop: ${parts.join(', ')}`);
+      await load();
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ---------- Debiteuren ----------
+  async function loadDebtors() {
+    const q = $('#d-search').value.trim();
+    state.debtors = (await api(`debtors?q=${encodeURIComponent(q)}`)).items;
+    renderDebtors();
+  }
+
+  function renderDebtors() {
+    const t = $('#d-table');
+    if (!state.debtors.length) {
+      t.innerHTML = `<tbody><tr><td class="empty">${$('#d-search').value.trim() ? 'Niets gevonden.' : 'Nog geen debiteuren. Een debiteur ontstaat vanzelf als een factuur definitief wordt of uit een webshopbestelling komt.'}</td></tr></tbody>`;
+      return;
+    }
+    t.innerHTML = `<thead><tr><th>Nummer</th><th>Naam</th><th>E-mail</th><th>Plaats</th><th>Bron</th><th class="num">Facturen</th><th class="num">Openstaand</th><th>Laatste factuur</th></tr></thead>
+      <tbody>${state.debtors.map((d) => {
+        const place = (d.address.split('\n').slice(-1)[0] || '').replace(/^\d{4}\s?[A-Z]{2}\s+/, '');
+        return `<tr data-id="${esc(d.id)}">
+          <td><b>${esc(d.number)}</b></td>
+          <td class="wrap">${esc(d.name)}${d.contact ? `<span class="sub">t.a.v. ${esc(d.contact)}</span>` : ''}</td>
+          <td>${esc(d.email || '–')}</td>
+          <td>${esc(place || '–')}</td>
+          <td>${d.source === 'webshop' ? '<span class="pill src">Webshop</span>' : esc(d.source === 'handmatig' ? 'Handmatig' : 'Factuur')}</td>
+          <td class="num">${esc(d.invoiceCount)}</td>
+          <td class="num">${d.openTotal ? `<b>${esc(eur(d.openTotal))}</b>` : '<span class="muted">–</span>'}</td>
+          <td>${esc(day(d.lastInvoice) || '–')}</td>
+        </tr>`;
+      }).join('')}</tbody>`;
+    t.querySelectorAll('tr[data-id]').forEach((tr) => { tr.onclick = () => editDebtor(tr.dataset.id); });
+  }
+
+  function editDebtor(id) {
+    const d = state.debtors.find((x) => x.id === id);
+    if (!d) return;
+    state.debtor = d;
+    const f = $('#d-form');
+    $('#d-title').textContent = `Debiteur ${d.number}`;
+    for (const k of ['name', 'contact', 'address', 'email', 'phone', 'vatNumber']) f[k].value = d[k] || '';
+    $('.err', f).textContent = '';
+    f.hidden = false;
+    f.name.focus();
+  }
+
+  function setupDebtors() {
+    let timer = null;
+    $('#d-search').oninput = () => { clearTimeout(timer); timer = setTimeout(() => loadDebtors().catch((e) => toast(e.message, true)), 250); };
+    const f = $('#d-form');
+    $('#d-cancel').onclick = () => { f.hidden = true; state.debtor = null; };
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const body = {};
+      for (const k of ['name', 'contact', 'address', 'email', 'phone', 'vatNumber']) body[k] = f[k].value;
+      try {
+        await api(`debtors/${encodeURIComponent(state.debtor.id)}`, { method: 'PUT', body });
+        f.hidden = true;
+        toast('Debiteur opgeslagen');
+        await loadDebtors();
+      } catch (e) {
+        $('.err', f).textContent = e.message;
+      }
+    };
   }
 
   function showTab(name) {
     state.tab = name;
     document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
-    for (const n of ['list', 'export', 'settings']) $(`#tab-${n}`).hidden = n !== name;
+    for (const n of ['list', 'debtors', 'export', 'settings']) $(`#tab-${n}`).hidden = n !== name;
     if (name === 'settings') renderSettings();
+    if (name === 'debtors') loadDebtors().catch((e) => toast(e.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
   }
 
@@ -106,6 +205,22 @@
     f.paymentDays.value = s.paymentDays;
     f.paymentText.value = s.paymentText;
     f.footer.value = s.footer;
+    f.debtorStart.value = s.debtorStart;
+    f.autoSend.checked = s.autoSend;
+    f.mailSubject.value = s.mailSubject;
+    f.mailText.value = s.mailText;
+    $('#s-mailwarn').hidden = state.conf.mail !== false;
+    const shop = state.conf.shop || {};
+    f.ordersStatus.innerHTML = Object.entries(C.SHOP_STATUSES).map(([k, l]) => `<option value="${esc(k)}"${k === s.shopOrders.status ? ' selected' : ''}>${esc(l)}</option>`).join('');
+    f.ordersEnabled.checked = s.shopOrders.enabled;
+    f.ordersSince.value = s.shopOrders.since;
+    f.ordersFinalize.checked = s.shopOrders.finalize;
+    const noShop = !shop.url || !shop.rest;
+    f.ordersEnabled.disabled = noShop && !s.shopOrders.enabled;
+    $('#s-shopinfo').innerHTML = !shop.url ? 'Er is nog geen webshop gekoppeld (Beheer → Webshop).'
+      : !shop.rest ? 'Bestellingen ophalen kan alleen met de REST API van WooCommerce (Beheer → Webshop, met API-sleutels).'
+        : shop.stockSynced ? 'De voorraad van webshopverkopen wordt al afgeboekt via de webshopkoppeling; de factuur boekt niets extra af.'
+          : 'De voorraad gaat niet naar de webshop, dus een definitieve webshopfactuur boekt de artikelen af van de voorraad.';
     const example = () => { $('#s-example').textContent = `Volgende nummers zien eruit als ${f.prefix.value.trim()}${C.today().slice(0, 4)}-0001.`; };
     f.prefix.oninput = example;
     example();
@@ -128,8 +243,11 @@
       try {
         state.settings = (await api('invoices/settings', { method: 'PUT', body: {
           prefix: f.prefix.value.trim(), paymentDays: Number(f.paymentDays.value), paymentText: f.paymentText.value, footer: f.footer.value, categories,
+          debtorStart: Number(f.debtorStart.value) || undefined, autoSend: f.autoSend.checked, mailSubject: f.mailSubject.value, mailText: f.mailText.value,
+          shopOrders: { enabled: f.ordersEnabled.checked, status: f.ordersStatus.value, since: f.ordersSince.value, finalize: f.ordersFinalize.checked },
         } })).settings;
         renderSettings();
+        renderOrders();
         toast('Instellingen opgeslagen');
       } catch (e) {
         err.textContent = e.message;
@@ -197,13 +315,19 @@
     $('#e-paid').hidden = i.status === 'concept';
     $('#e-paid').textContent = i.status === 'betaald' ? 'Toch niet betaald' : 'Betaald';
     $('#e-credit').hidden = i.status === 'concept' || i.kind === 'credit';
+    $('#e-send').hidden = i.status === 'concept';
+    $('#e-send').textContent = i.sentAt ? 'Opnieuw versturen' : 'Versturen';
+    $('#e-sendform').hidden = true;
     const links = [];
     if (i.workOrderId) links.push(`Werkorder <a href="../werkorders/?id=${encodeURIComponent(i.workOrderId)}">${esc(d.workOrderNumber || 'openen')}</a>`);
     if (i.quoteId) links.push(`offerte <a href="../offertes/?id=${encodeURIComponent(i.quoteId)}">${esc(d.quoteNumber || 'openen')}</a>`);
     if (i.creditOf) links.push(`credit van <a href="./?id=${encodeURIComponent(i.creditOf)}">${esc(d.creditOfNumber || 'factuur')}</a>`);
+    if (i.source === 'webshop') links.push(esc(d.reference || 'webshopbestelling'));
+    if (i.debtorNumber) links.push(`debiteur ${esc(i.debtorNumber)}`);
     if (i.paidAt) links.push(`betaald op ${esc(day(i.paidAt))}`);
-    if (!i.workOrderId && i.status !== 'concept') links.push(i.stockBooked ? 'artikelen van de voorraad afgeboekt' : 'geen voorraad geboekt');
-    if (!i.workOrderId && i.status === 'concept') links.push('losse verkoop: bij definitief worden artikelen met een voorraadcode afgeboekt');
+    if (i.sentAt) links.push(`verstuurd naar ${esc(i.sentTo)} op ${esc(when(i.sentAt))}`);
+    if (!i.workOrderId && i.status !== 'concept') links.push(i.stockBooked ? 'artikelen van de voorraad afgeboekt' : i.source === 'webshop' ? 'voorraad via de webshop' : 'geen voorraad geboekt');
+    if (!i.workOrderId && i.source !== 'webshop' && i.status === 'concept') links.push('losse verkoop: bij definitief worden artikelen met een voorraadcode afgeboekt');
     $('#e-links').innerHTML = links.join(' · ');
     const cf = $('#c-form');
     for (const k of ['name', 'contact', 'address', 'email', 'vatNumber']) { cf[k].value = d.customer[k] || ''; cf[k].disabled = ro; }
@@ -216,9 +340,10 @@
   }
 
   function warn(list) {
+    const all = [...(list || []), ...(state.inv && state.inv.sendError && !state.inv.sentAt ? [state.inv.sendError] : [])];
     const el = $('#e-warn');
-    el.hidden = !(list && list.length);
-    el.innerHTML = (list || []).map(esc).join('<br>');
+    el.hidden = !all.length;
+    el.innerHTML = all.map(esc).join('<br>');
   }
 
   // Formulier -> state.inv.data
@@ -318,7 +443,8 @@
       try {
         state.inv = await api(`invoices/${encodeURIComponent(state.inv.id)}/finalize`, { method: 'POST', body: {} });
         renderInvoice();
-        toast(`Factuur ${state.inv.number} is definitief`);
+        warn([]);
+        toast(`Factuur ${state.inv.number} is definitief${state.inv.autoSent ? ` en verstuurd naar ${state.inv.sentTo}` : ''}`);
       } catch (e) {
         toast(e.message, true);
       }
@@ -349,70 +475,47 @@
         load().catch(() => {});
       } catch (e) { toast(e.message, true); }
     };
-    $('#e-pdf').onclick = printInvoice;
+    $('#e-pdf').onclick = async () => {
+      // Eerst opslaan, dan de PDF van de server in een nieuw tabblad.
+      const win = window.open('', '_blank');
+      await save();
+      const url = `../api/invoices/${encodeURIComponent(state.inv.id)}/pdf`;
+      if (win) win.location.href = url; else location.href = `${url}?download=1`;
+    };
+    const sf = $('#e-sendform');
+    $('#e-send').onclick = async () => {
+      try {
+        const d = await api(`invoices/${encodeURIComponent(state.inv.id)}/mail`);
+        if (!d.configured) { toast('Er is geen mailserver ingesteld (Beheer → Instellingen → E-mail).', true); return; }
+        sf.to.value = d.to;
+        sf.subject.value = d.subject;
+        sf.message.value = d.message;
+        $('.err', sf).textContent = '';
+        sf.hidden = false;
+        const field = d.to ? sf.message : sf.to;
+        field.focus();
+        if (field === sf.message) { sf.message.setSelectionRange(0, 0); sf.message.scrollTop = 0; }
+      } catch (e) { toast(e.message, true); }
+    };
+    $('#e-sendcancel').onclick = () => { sf.hidden = true; };
+    sf.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const btn = $('button[type=submit]', sf);
+      btn.disabled = true;
+      try {
+        state.inv = await api(`invoices/${encodeURIComponent(state.inv.id)}/send`, { method: 'POST', body: { to: sf.to.value, subject: sf.subject.value, message: sf.message.value } });
+        renderInvoice();
+        warn([]);
+        toast(`Verstuurd naar ${state.inv.sentTo}`);
+      } catch (e) {
+        $('.err', sf).textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    };
     window.addEventListener('beforeunload', (e) => {
       if (state.dirty) { save(); e.preventDefault(); e.returnValue = ''; }
     });
-  }
-
-  // ---------- Afdrukversie (PDF via de browser) ----------
-  function documentHtml(inv) {
-    const p = state.profile || {};
-    const d = inv.data;
-    const t = C.totals(d, state.settings);
-    const credit = inv.kind === 'credit';
-    const company = [p.address, [p.phone, p.email].filter(Boolean).join(' · '), p.website].filter(Boolean).join('\n');
-    const info = [
-      [credit ? 'Creditnummer' : 'Factuurnummer', inv.number || 'CONCEPT'],
-      ['Factuurdatum', day(d.date)],
-      ...(credit ? [['Credit van', d.creditOfNumber]] : [['Vervaldatum', day(d.dueDate)]]),
-      ...(d.workOrderNumber ? [['Werkorder', d.workOrderNumber]] : []),
-      ...(d.reference ? [['Betreft', d.reference]] : []),
-      ...(d.customer.vatNumber ? [['Btw-nummer klant', d.customer.vatNumber]] : []),
-    ];
-    const foot = [p.companyName, p.kvk ? `KvK ${p.kvk}` : '', p.vatNumber ? `Btw ${p.vatNumber}` : '', p.iban ? `IBAN ${p.iban}` : ''].filter(Boolean).join(' · ');
-    return `
-      <header class="p-head">
-        <img src="../shared/logo-white.png" alt="${esc(p.companyName)}">
-        <div class="p-company"><b>${esc(p.companyName)}</b>\n${esc(company)}</div>
-      </header>
-      <div class="p-meta">
-        <div class="p-to"><span class="lbl">Aan</span>\n<b>${esc(d.customer.name)}</b>${d.customer.contact ? `\nt.a.v. ${esc(d.customer.contact)}` : ''}\n${esc(d.customer.address)}</div>
-        <div class="p-info"><table>${info.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table></div>
-      </div>
-      <h1 class="${credit ? 'p-credit' : ''}">${credit ? 'Creditfactuur' : 'Factuur'}${inv.number ? ` ${esc(inv.number)}` : ' (concept)'}</h1>
-      ${d.intro ? `<p class="p-text">${esc(d.intro)}</p>` : ''}
-      <table class="p-lines">
-        <thead><tr><th>Omschrijving</th><th class="num">Aantal</th><th>Eenh.</th><th class="num">Prijs</th><th class="num">Btw</th><th class="num">Bedrag</th></tr></thead>
-        <tbody>${d.lines.map((l) => `<tr><td>${esc(l.description)}${l.code ? ` <span class="muted">(${esc(l.code)})</span>` : ''}</td>
-          <td class="num">${esc(String(l.qty).replace('.', ','))}</td><td>${esc(l.unit)}</td><td class="num">${esc(eur(l.price))}</td><td class="num">${l.vat}%</td>
-          <td class="num">${esc(eur(C.lineTotal(l)))}</td></tr>`).join('')}</tbody>
-      </table>
-      <div class="p-end">
-        <table class="p-totals">
-          <tr><td>Subtotaal</td><td class="num">${esc(eur(t.subtotal))}</td></tr>
-          ${t.discount ? `<tr><td>Korting ${esc(t.discountPct)}%</td><td class="num">− ${esc(eur(t.discount))}</td></tr>` : ''}
-          ${t.vat.map((v) => `<tr><td>Btw ${v.rate}% over ${esc(eur(v.base))}</td><td class="num">${esc(eur(v.amount))}</td></tr>`).join('')}
-          <tr class="grand"><td>Totaal</td><td class="num">${esc(eur(t.total))}</td></tr>
-        </table>
-        ${d.notes ? `<p class="p-text">${esc(d.notes)}</p>` : ''}
-        ${!credit && inv.status !== 'betaald' ? `<div class="p-pay">${esc(C.paymentText(state.settings, { number: inv.number, iban: p.iban, dueDate: day(d.dueDate) }))}</div>` : ''}
-        ${inv.status === 'betaald' ? `<div class="p-pay">Deze factuur is voldaan${inv.paidAt ? ` op ${esc(day(inv.paidAt))}` : ''}. Dank u wel.</div>` : ''}
-        ${state.settings.footer ? `<p class="p-text small">${esc(state.settings.footer)}</p>` : ''}
-      </div>
-      <footer class="p-foot">${esc(foot)}</footer>`;
-  }
-
-  async function printInvoice() {
-    await save();
-    $('#print').innerHTML = documentHtml(state.inv);
-    const old = document.title;
-    const c = state.inv.data.customer.name;
-    document.title = `${state.inv.kind === 'credit' ? 'Creditfactuur' : 'Factuur'} ${state.inv.number || 'concept'}${c ? ` ${c}` : ''}`;
-    const img = $('#print img');
-    if (img && !img.complete) await new Promise((r) => { img.onload = r; img.onerror = r; });
-    window.print();
-    setTimeout(() => { document.title = old; }, 500);
   }
 
   async function openInvoice(id, push = false, pending = null) {
@@ -465,20 +568,20 @@
       ws.columns = [
         { header: 'Factuurnummer', key: 'number', width: 15 }, { header: 'Soort', key: 'kind', width: 13 },
         { header: 'Factuurdatum', key: 'date', width: 13, style: { numFmt: 'dd-mm-yyyy' } }, { header: 'Vervaldatum', key: 'dueDate', width: 13, style: { numFmt: 'dd-mm-yyyy' } },
-        { header: 'Debiteur', key: 'customer', width: 30 }, { header: 'Omschrijving', key: 'reference', width: 30 },
+        { header: 'Debiteurnummer', key: 'debtorNumber', width: 15 }, { header: 'Debiteur', key: 'customer', width: 30 }, { header: 'Omschrijving', key: 'reference', width: 30 },
         { header: 'Omzetcategorie', key: 'category', width: 30 }, { header: 'Grootboekrekening', key: 'account', width: 18 },
         { header: 'Btw-tarief', key: 'rate', width: 10 }, { header: 'Bedrag excl. btw', key: 'base', width: 16, style: money },
         { header: 'Btw', key: 'vat', width: 12, style: money }, { header: 'Bedrag incl. btw', key: 'total', width: 16, style: money },
       ];
       for (const r of rows) ws.addRow({ ...r, kind: C.KINDS[r.kind] || r.kind, date: date(r.date), dueDate: date(r.dueDate), rate: `${r.rate}%` });
-      bold(ws, 12);
+      bold(ws, 13);
 
       // 2. Facturen: één regel per factuur.
       const fs = wb.addWorksheet('Facturen', { views: [{ state: 'frozen', ySplit: 1 }] });
       fs.columns = [
         { header: 'Factuurnummer', key: 'number', width: 15 }, { header: 'Soort', key: 'kind', width: 13 },
         { header: 'Factuurdatum', key: 'date', width: 13, style: { numFmt: 'dd-mm-yyyy' } }, { header: 'Vervaldatum', key: 'dueDate', width: 13, style: { numFmt: 'dd-mm-yyyy' } },
-        { header: 'Debiteur', key: 'customer', width: 30 }, { header: 'Status', key: 'status', width: 12 },
+        { header: 'Debiteurnummer', key: 'debtorNumber', width: 15 }, { header: 'Debiteur', key: 'customer', width: 30 }, { header: 'Status', key: 'status', width: 12 },
         { header: 'Excl. btw', key: 'net', width: 14, style: money }, { header: 'Btw 21%', key: 'v21', width: 12, style: money },
         { header: 'Btw 9%', key: 'v9', width: 12, style: money }, { header: 'Totaal', key: 'total', width: 14, style: money },
         { header: 'Werkorder', key: 'wo', width: 14 }, { header: 'Betaald op', key: 'paid', width: 13, style: { numFmt: 'dd-mm-yyyy' } },
@@ -486,10 +589,10 @@
       for (const i of out.items) {
         const t = C.totals(i.data, out.settings);
         const v = (rate) => (t.vat.find((x) => x.rate === rate) || {}).amount || 0;
-        fs.addRow({ number: i.number, kind: C.KINDS[i.kind], date: date(i.data.date), dueDate: date(i.data.dueDate), customer: i.data.customer.name,
+        fs.addRow({ number: i.number, kind: C.KINDS[i.kind], date: date(i.data.date), dueDate: date(i.data.dueDate), debtorNumber: i.debtorNumber || '', customer: i.data.customer.name,
           status: C.STATUSES[i.status], net: t.net, v21: v(21), v9: v(9), total: t.total, wo: i.data.workOrderNumber, paid: i.paidAt ? date(i.paidAt.slice(0, 10)) : null });
       }
-      bold(fs, 12);
+      bold(fs, 13);
 
       // 3. Totalen per omzetcategorie (controle tegen de boekhouding).
       const ts = wb.addWorksheet('Totalen per categorie');
@@ -510,15 +613,15 @@
 
       // 4. Debiteuren (om in Visma aan te maken of te controleren).
       const ds = wb.addWorksheet('Debiteuren');
-      ds.columns = [{ header: 'Naam', key: 'name', width: 32 }, { header: 'T.a.v.', key: 'contact', width: 22 }, { header: 'Adres', key: 'address', width: 40 },
+      ds.columns = [{ header: 'Debiteurnummer', key: 'debtorNumber', width: 15 }, { header: 'Naam', key: 'name', width: 32 }, { header: 'T.a.v.', key: 'contact', width: 22 }, { header: 'Adres', key: 'address', width: 40 },
         { header: 'E-mail', key: 'email', width: 28 }, { header: 'Telefoon', key: 'phone', width: 14 }, { header: 'Btw-nummer', key: 'vatNumber', width: 18 }];
       const seen = new Set();
       for (const i of out.items) {
         const c = i.data.customer;
-        const k = c.name.trim().toLowerCase();
+        const k = i.debtorNumber || c.name.trim().toLowerCase();
         if (!k || seen.has(k)) continue;
         seen.add(k);
-        ds.addRow({ ...c, address: c.address.replace(/\n/g, ', ') });
+        ds.addRow({ ...c, debtorNumber: i.debtorNumber || '', address: c.address.replace(/\n/g, ', ') });
       }
       ds.getRow(1).font = { bold: true };
 
@@ -567,6 +670,7 @@
       const [conf, arts] = await Promise.all([pendingConf, pendingArts]);
       state.settings = conf.settings;
       state.profile = conf.profile || {};
+      state.conf = conf;
       state.articles = arts.articles || {};
     } catch (e) {
       toast(e.message, true);
@@ -584,7 +688,9 @@
       } catch (e) { toast(e.message, true); }
     };
     $('#x-form').onsubmit = exportExcel;
+    $('#b-orders').onclick = fetchOrders;
     setupSettings();
+    setupDebtors();
     setupEditor();
     window.addEventListener('popstate', () => {
       const pid = new URLSearchParams(location.search).get('id');
@@ -596,7 +702,7 @@
       $('#v-list').hidden = false;
       try { await load(); } catch (e) { toast(e.message, true); }
       const hash = location.hash.slice(1);
-      if (['list', 'export', 'settings'].includes(hash)) showTab(hash);
+      if (['list', 'debtors', 'export', 'settings'].includes(hash)) showTab(hash);
     }
     if (window.AquatechCommon) {
       window.AquatechCommon.onReturn(() => {

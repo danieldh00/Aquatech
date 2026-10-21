@@ -13,7 +13,7 @@ const testdata = require('./testdata');
 const { createSettings, SettingsError, FIELDS } = require('./settings');
 const { createVault, loadOrCreateMasterKey } = require('./vault');
 const backups = require('./backup');
-const { createQuoteStore, registerQuoteRoutes, validShareBase } = require('./quotes');
+const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody } = require('./quotes');
 const { createMailer } = require('./mailer');
 const { createWanIp } = require('./wanip');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders');
@@ -22,6 +22,9 @@ const { createWorkLogStore, registerWorkLogRoutes } = require('./worklog');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./shop');
 const { createShopSync } = require('./shopsync');
+const { createShopOrders } = require('./shoporders');
+const { createDebtorStore, registerDebtorRoutes } = require('./debtors');
+const { createInvoiceSender } = require('./invoicemail');
 const { createInvoiceStore, registerInvoiceRoutes } = require('./invoices');
 const { createPortalStore, registerPortalRoutes } = require('./portal');
 const { createServiceRequestStore, registerServiceRequestRoutes } = require('./servicerequests');
@@ -297,6 +300,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/news', express.json({ limit: '64kb' }));
   app.use('/api/stock', express.json({ limit: '256kb' }));
   app.use('/api/invoices', express.json({ limit: '1mb' }));
+  app.use('/api/debtors', express.json({ limit: '16kb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -1263,7 +1267,20 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // wijziging gaan de gewijzigde artikelen enkele seconden later mee.
   const shopSync = createShopSync({ db: database, shop: shopStore, stock: stockStore, settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch });
   stockStore.onDirty((tid) => shopSync.schedule(tid));
-  const invoiceStore = createInvoiceStore(database, { stock: stockStore });
+  const debtorStore = createDebtorStore(database);
+  const invoiceStore = createInvoiceStore(database, { stock: stockStore, debtors: debtorStore });
+  // Facturen per e-mail met PDF (invoicemail.js) en webshopbestellingen als factuur (shoporders.js).
+  const invoiceSender = createInvoiceSender({
+    invoices: invoiceStore, settingsFor: (id) => settingsFor(id), mailerFor, mailBody,
+    colorsOf: (id) => {
+      const v = Theme.vars(themeFor(id));
+      return { navy: v['--at-navy'], green: v['--at-green'], greenSoft: v['--at-green-soft'], teal: v['--at-teal'] };
+    },
+  });
+  const shopOrders = createShopOrders({
+    db: database, invoices: invoiceStore, debtors: debtorStore, stock: stockStore, sender: invoiceSender,
+    settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch,
+  });
   // Materiaalverbruik op de werkorder boekt de voorraad af, in dezelfde
   // transactie als de verbruiksregel (zie stock.syncUsage).
   workLogStore.hook((tid, row, user) => stockStore.syncUsage(tid, {
@@ -1334,7 +1351,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     loggedOf: (tid, woId) => workLogStore.list(tid, woId),
     articlesOf: (tid) => stockStore.saleInfo(tid),
     catalog: () => loadArticles(),
+    sender: invoiceSender, shopOrders,
+    mailConfigured: (req) => mailerFor(settingsFor(req.tenantId || tenant.id)).configured(),
+    shopOf: (req) => settingsFor(req.tenantId || tenant.id).get('shopSource'),
+    syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => req.tenantId || tenant.id }),
   });
+  registerDebtorRoutes(app, { debtors: debtorStore, requireRight, requireJson, audit });
 
   // ---------- Opdrachten uitbesteden aan andere organisaties (zie outsourcing.js) ----------
   registerOutsourcingRoutes(app, {
@@ -1724,6 +1746,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Webshop: alle omgevingen met terugschrijven aan (elke 10 minuten vanuit main).
   app.locals.shopSyncAll = () => shopSync.runAll(store.listTenants().flatMap((l) => [l, ...l.environments]).map((t) => t.id));
   app.locals.shopSync = shopSync;
+  // Webshopbestellingen als factuur: alle omgevingen waar dat aan staat.
+  app.locals.shopOrdersAll = () => shopOrders.runAll(store.listTenants().flatMap((l) => [l, ...l.environments]).map((t) => t.id));
+  app.locals.shopOrders = shopOrders;
   // Automatische back-up als de nieuwste ouder is dan een dag.
   app.locals.backupIfDue = async () => {
     if (!backupDir || settings.get('backupKeepDays') === 0) return null;
@@ -1766,7 +1791,11 @@ if (require.main === module) {
   };
   runMaintenance();
   setInterval(runMaintenance, 60 * 60 * 1000).unref();
-  setInterval(() => app.locals.shopSyncAll().catch((err) => console.error('Webshopsynchronisatie mislukt:', err.message)), 10 * 60 * 1000).unref();
+  // Eerst prijs en voorraad, daarna de bestellingen (dan is de verkoop al afgeboekt).
+  setInterval(() => app.locals.shopSyncAll()
+    .catch((err) => console.error('Webshopsynchronisatie mislukt:', err.message))
+    .then(() => app.locals.shopOrdersAll())
+    .catch((err) => console.error('Webshopbestellingen ophalen mislukt:', err.message)), 10 * 60 * 1000).unref();
   if (!settings.get('anthropicApiKey')) console.log('Geen API-sleutel ingesteld: automatisch herkennen met AI staat uit (tekenen, lokale herkenning en de toverstaf werken wel).');
 
   const server = app.listen(port, () => {
