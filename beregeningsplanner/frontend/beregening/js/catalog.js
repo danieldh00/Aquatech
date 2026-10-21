@@ -218,17 +218,72 @@
     MPCORNER: { code: 'ROT-MPCORNER', label: 'MP Corner', rMin: 2.5, rMax: 4.5, arcs: [[45, 105]] },
   };
 
+  /*
+   * Eigen assortiment van de organisatie (voorraadartikelen en gekoppelde
+   * webshopproducten, via shopcatalog.js). Zolang er geen is (null) gebruikt de
+   * planner de hele standaardcatalogus. Met een assortiment kiest hij alleen
+   * artikelen die erin staan: sproeiertypes, rotatorkoppen en buisdiameters
+   * zonder artikel vallen af, en de stuklijst neemt een alternatief of meldt
+   * het artikel als ontbrekend.
+   */
+  C.assortment = null;
+  const ALL_PIPES = C.pipes.slice();
+
+  /** Staat dit artikel in het assortiment (of is er geen assortiment)? */
+  C.available = (code) => !C.assortment || C.assortment.has(code);
+
+  /** Eerste artikel uit de lijst dat beschikbaar is (anders het eerste). */
+  C.pick = (...codes) => codes.find((c) => C.available(c)) || codes[0];
+
+  /** Assortiment instellen (lijst met codes) of wissen (null/leeg). */
+  C.setAssortment = (codes) => {
+    const list = Array.isArray(codes) ? codes.map((c) => String(c).trim().toUpperCase()).filter((c) => C.articles[c]) : [];
+    C.assortment = list.length ? new Set(list) : null;
+    // Alleen buisdiameters die er zijn; zonder enige PE-buis de hele reeks
+    // (dan meldt de stuklijst de buis als ontbrekend).
+    const pipes = ALL_PIPES.filter((p) => C.available(`PE-${p.dn}`));
+    C.pipes.splice(0, C.pipes.length, ...(pipes.length ? pipes : ALL_PIPES));
+  };
+
+  /** Sproeiertype bruikbaar: het kenmerkende artikel (kop) is er. */
+  C.typeAvailable = (type) => {
+    if (!C.assortment) return true;
+    if (type === 'spray') return C.available('SPR-VAN');
+    if (type === 'rotator') return Object.values(C.rotatorModels).some((m) => C.available(m.code));
+    if (type === 'rotor') return C.available('TURB-10') || C.available('TURB-10-PRO');
+    if (type === 'strip') return C.available('ROT-STRIP');
+    return true;
+  };
+
+  /** Het gewenste type als dat bruikbaar is, anders het eerste bruikbare gazontype. */
+  C.usableType = (type, order = ['rotator', 'spray', 'rotor']) => (C.typeAvailable(type) ? type : order.find((t) => C.typeAvailable(t)) || type);
+
   /** Rotatorkop die automatisch bij worpwijdte en sproeihoek hoort. */
-  C.autoRotatorModel = (r, arc = 360) => {
+  const idealRotator = (r, arc) => {
     if (arc < 90 && r <= 4.5) return 'MPCORNER';
     if (r <= 4.5) return 'MP1000';
     if (r <= 6.55) return 'MP2000';
     if (r <= 9.25 || arc > 210) return 'MP3000';
     return 'MP3500';
   };
+  C.autoRotatorModel = (r, arc = 360) => {
+    const best = idealRotator(r, arc);
+    if (C.available(C.rotatorModels[best].code)) return best;
+    // Niet in het assortiment: de beschikbare kop die het dichtst bij de worp ligt.
+    let pick = best, bestD = Infinity;
+    for (const [k, m] of Object.entries(C.rotatorModels)) {
+      if (!C.available(m.code)) continue;
+      const d = (r < m.rMin ? m.rMin - r : r > m.rMax ? r - m.rMax : 0) + (k === 'MPCORNER' && arc >= 90 ? 100 : 0);
+      if (d < bestD) { bestD = d; pick = k; }
+    }
+    return pick;
+  };
+
+  /** Rotatorkoppen die de planner mag kiezen. */
+  C.rotatorModelsAvailable = () => Object.fromEntries(Object.entries(C.rotatorModels).filter(([, m]) => C.available(m.code)));
 
   /** Gekozen (of automatische) rotatorkop van een sproeier. */
-  C.rotatorModelOf = (s) => (s.model && C.rotatorModels[s.model] ? s.model : C.autoRotatorModel(s.r, s.arc));
+  C.rotatorModelOf = (s) => (s.model && C.rotatorModels[s.model] && C.available(C.rotatorModels[s.model].code) ? s.model : C.autoRotatorModel(s.r, s.arc));
 
   /** Sector [van, tot] van de kop waarin de sproeihoek valt (of de dichtstbijzijnde). */
   C.rotatorArcSet = (model, arc) => {

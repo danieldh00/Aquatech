@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.63.1
+## 0.64.1
 
 Kopbalk op de telefoon past weer op elke pagina.
 
@@ -11,6 +11,31 @@ Kopbalk op de telefoon past weer op elke pagina.
   gebruikersmenu krimpen niet meer, zodat de avatar altijd zichtbaar is. Onder
   360px wordt het logo op het overzicht iets kleiner. Getest op 320, 375, 390
   en 430px voor alle modulepagina's, met organisatiekiezer.
+
+## 0.64.0
+
+Planner gebruikt alleen artikelen uit het eigen assortiment.
+
+- **Eigen assortiment** (`backend/src/shop.js`): `GET /api/catalog` geeft
+  `assortment` (plannercodes die de organisatie als voorraadartikel of
+  gekoppeld webshopproduct heeft, niet-gearchiveerd) en `unknownCodes`
+  (voorraadartikelen met een code die de planner niet kent). Leeg = de
+  standaardcatalogus blijft de terugval.
+- **Catalogus** (`js/catalog.js`): `setAssortment`, `available`, `pick`,
+  `typeAvailable`, `usableType`, `rotatorModelsAvailable`. Buisdiameters
+  zonder artikel vallen af (`C.pipes`), `autoRotatorModel`/`rotatorModelOf`
+  kiezen een beschikbare kop (dichtstbijzijnde worp), `planner.js` plaatst
+  rotators alleen op afstanden die een beschikbare kop haalt.
+- **Stuklijst** (`js/bom.js`): alternatieven waar dat technisch kan
+  (bijv. CON-FLEX ↔ CON-ECO, VAL-24V-FC ↔ VAL-24V, BOX-JUMBO ↔ BOX-STD,
+  CTRL-WIFI ↔ CTRL-ECO, CAB-7 → CAB-13); wat dan nog ontbreekt staat in
+  `rows.missing` en niet in de stuklijst, offerte (`fromPlan` geeft een
+  waarschuwing) of totalen. Planner toont een blok *Niet in je assortiment*,
+  Excel een aparte lijst.
+- **Planner** (`js/app.js`): sproeiertypes zonder artikel zijn uitgeschakeld
+  (stap 1, stap 4, eigenschappen), MP-koppen alleen uit het assortiment.
+- `shopcatalog.js`: verkoopprijzen uit Voorraadbeheer werden zonder
+  webshopkoppeling niet toegepast (alleen met `syncedAt`); nu wel.
 
 ## 0.63.0
 

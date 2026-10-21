@@ -675,7 +675,7 @@
 
     autoPlace(areaIds) {
       const st = this.state;
-      const type = st.settings.sprinklerType;
+      const type = C.usableType(st.settings.sprinklerType);
       const lawns = st.areas.filter((a) => a.type === 'lawn' && a.pts.length >= 3 && (!areaIds || areaIds.includes(a.id)));
       if (!lawns.length) { this.toast('Teken eerst een gazonvlak (stap 2).', true); return; }
       this.checkpoint();
@@ -700,7 +700,7 @@
         if (want && has && !force) continue;
         st.sprinklers = st.sprinklers.filter((s) => s.areaId !== a.id);
         if (!want) continue;
-        const heads = window.Planner.autoPlace(a.pts, st.settings.bedSprinklerType || 'spray');
+        const heads = window.Planner.autoPlace(a.pts, C.usableType(st.settings.bedSprinklerType || 'spray', ['spray', 'rotator']));
         heads.forEach((h) => { h.areaId = a.id; });
         st.sprinklers.push(...heads);
         placed += heads.length;
@@ -1163,7 +1163,7 @@
         <label>Adres<input id="m-address" value="${esc(m.address)}"></label>
         <h3>Beregeningsmethode</h3>
         <p class="hint small">Kies per soort vlak hoe het water krijgt. Per vlak kun je hier later van afwijken (eigenschappenpaneel).</p>
-        <label>Gazon<select id="mth-lawn">${['rotator', 'spray', 'rotor'].map((k) => `<option value="${k}" ${s.sprinklerType === k ? 'selected' : ''}>${esc(C.sprinklerTypes[k].label)}</option>`).join('')}</select></label>
+        <label>Gazon<select id="mth-lawn">${['rotator', 'spray', 'rotor'].map((k) => `<option value="${k}" ${s.sprinklerType === k ? 'selected' : ''}${C.typeAvailable(k) ? '' : ' disabled'}>${esc(C.sprinklerTypes[k].label)}${C.typeAvailable(k) ? '' : ' (niet in assortiment)'}</option>`).join('')}</select></label>
         ${['bed', 'hedge', 'planter'].map((type) => {
           const at = C.areaTypes[type];
           const cur = (s.methods && s.methods[type]) || at.defaultMethod;
@@ -1288,8 +1288,9 @@
       const s = this.state.settings;
       const types = ['rotator', 'spray', 'rotor'].map((k) => {
         const t = C.sprinklerTypes[k];
-        return `<label class="radio"><input type="radio" name="stype" value="${k}" ${s.sprinklerType === k ? 'checked' : ''}>
-          <span><b>${esc(t.label)}</b><br><span class="small">${G.nlShort(t.rMin, 1)}–${G.nlShort(t.rMax, 1)} m · ${t.pr} mm/u · min. ${G.nlShort(t.minBar, 1)} bar. ${esc(t.note)}</span></span></label>`;
+        const ok = C.typeAvailable(k);
+        return `<label class="radio${ok ? '' : ' off'}"><input type="radio" name="stype" value="${k}" ${C.usableType(s.sprinklerType) === k ? 'checked' : ''}${ok ? '' : ' disabled'}>
+          <span><b>${esc(t.label)}</b>${ok ? '' : ' <span class="small">(niet in je assortiment)</span>'}<br><span class="small">${G.nlShort(t.rMin, 1)}–${G.nlShort(t.rMax, 1)} m · ${t.pr} mm/u · min. ${G.nlShort(t.minBar, 1)} bar. ${esc(t.note)}</span></span></label>`;
       }).join('');
       const sim = this.editor.layers.heatmap ? this.sim : null;
       const st = sim && sim.stats;
@@ -1337,7 +1338,7 @@
         this.commit();
         this.toast(n ? `${n} kop${n === 1 ? '' : 'pen'} bijgesteld. Controleer de neerslagkaart.` : 'Alle koppen staan al optimaal afgesteld.');
       };
-      $('#manual-place', el).onclick = () => this.editor.setTool('sprinkler', { type: s.sprinklerType });
+      $('#manual-place', el).onclick = () => this.editor.setTool('sprinkler', { type: C.usableType(s.sprinklerType) });
       $('#manual-strip', el).onclick = () => this.editor.setTool('sprinkler', { type: 'strip' });
       $('#clear-spr', el).onclick = () => {
         if (!this.state.sprinklers.length || !confirm('Alle sproeiers verwijderen?')) return;
@@ -1390,6 +1391,7 @@
       }
       let rows = [];
       try { rows = this.state.calc ? BOM.build(this.state) : []; } catch (e) { console.error(e); }
+      const missing = rows.missing || [];
       const total = rows.reduce((t, r) => t + r.total, 0);
       const sched = this.state.calc ? BOM.schedule(this.state) : [];
       const levels = Object.entries(C.levels).map(([k, l]) => `
@@ -1418,15 +1420,20 @@
           ${rows.map((r) => `<tr title="${esc(r.code)}${r.sku ? ' / ' + esc(r.sku) : ''}${r.notes ? ' – ' + esc(r.notes) : ''}"><td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>` : esc(r.name)}</td><td class="num">${r.qty} ${esc(r.unit)}</td><td class="num">${eur(r.total)}</td></tr>`).join('')}
           <tr class="total"><td>Totaal excl. btw${rows.every((r) => r.url) ? '' : ' (indicatief)'}</td><td></td><td class="num">${eur(total)}</td></tr>
         </table>` : '<p class="hint">Nog geen onderdelen – plaats sproeiers en deel zones in.</p>'}
+        ${missing.length && (this._can('offertes') || this._can('voorraad')) ? `<h3>Niet in je assortiment (${missing.length})</h3>
+          <p class="hint small">Deze onderdelen zijn nodig, maar staan niet als artikel in Voorraadbeheer of de webshop. Ze tellen niet mee in de stuklijst en de offerte.${this._can('voorraad') ? ' <a href="../voorraad/">Artikel toevoegen</a>' : ''}</p>
+          <table class="list bom missing">${missing.map((r) => `<tr title="${esc(r.code)}"><td>${esc(r.name)} <span class="small">(${esc(r.code)})</span></td><td class="num">${r.qty} ${esc(r.unit)}</td></tr>`).join('')}</table>` : ''}
         ${this._shopStatus(rows)}
       `;
     },
     _shopStatus(rows) {
       const info = window.ShopCatalog && window.ShopCatalog.info;
       const admin = this._can('beheer') ? ' <a href="../beheer/#webshop">Webshop koppelen</a>' : '';
-      if (!info) return this._serverAvailable() ? `<p class="hint small">Prijzen zijn indicatief.${admin}</p>` : '';
+      const own = window.ShopCatalog && window.ShopCatalog.assortment && (this._can('offertes') || this._can('voorraad'));
+      const ownTxt = own ? `<p class="hint small">De planner gebruikt alleen de ${window.ShopCatalog.assortment.length} artikelen uit je eigen assortiment (Voorraadbeheer en webshop).${window.ShopCatalog.unknownCodes ? ` ${window.ShopCatalog.unknownCodes} artikelen hebben een code die de planner niet kent en worden niet gebruikt.` : ''}</p>` : '';
+      if (!info) return ownTxt || (this._serverAvailable() ? `<p class="hint small">Prijzen zijn indicatief.${admin}</p>` : '');
       const linked = rows.filter((r) => r.url).length;
-      return `<p class="hint small">Prijzen uit de webshop (${esc(info.shop.replace(/^https?:\/\//, ''))}), bijgewerkt ${new Date(info.syncedAt).toLocaleDateString('nl-NL')}: ${linked} van ${rows.length} regels gekoppeld.${admin.replace('Webshop koppelen', 'Koppeling beheren')}</p>`;
+      return `${ownTxt}<p class="hint small">Prijzen uit de webshop (${esc(info.shop.replace(/^https?:\/\//, ''))}), bijgewerkt ${new Date(info.syncedAt).toLocaleDateString('nl-NL')}: ${linked} van ${rows.length} regels gekoppeld.${admin.replace('Webshop koppelen', 'Koppeling beheren')}</p>`;
     },
     _bind_bom(el) {
       const s = this.state.settings;
@@ -1497,7 +1504,7 @@
     },
     _propsSprinkler(s) {
       const t = C.sprinklerTypes[s.type];
-      const typeOpts = Object.entries(C.sprinklerTypes).map(([k, tt]) => `<option value="${k}" ${s.type === k ? 'selected' : ''}>${esc(tt.label)}</option>`).join('');
+      const typeOpts = Object.entries(C.sprinklerTypes).map(([k, tt]) => `<option value="${k}" ${s.type === k ? 'selected' : ''}${C.typeAvailable(k) || s.type === k ? '' : ' disabled'}>${esc(tt.label)}${C.typeAvailable(k) ? '' : ' (niet in assortiment)'}</option>`).join('');
       const zoneOpts = `<option value="">– geen –</option>` + this.state.zones.map((z) => `<option value="${z.id}" ${s.zone === z.id ? 'selected' : ''}>${esc(z.name)} (${esc(C.groups[z.group].label)})</option>`).join('');
       let p = null;
       if (this.state.calc) this.state.calc.zones.forEach((zr) => (zr.members || []).forEach((m) => { if (m.ref === s) p = m.pressure; }));
@@ -1531,7 +1538,7 @@
       const set = C.rotatorArcSet(key, s.arc);
       const range = (lo, hi) => (lo === hi ? `${lo}°` : `${lo}–${hi}°`);
       const auto = C.rotatorModels[C.autoRotatorModel(s.r, s.arc)];
-      const modelOpts = `<option value="">Automatisch (${esc(auto.label)})</option>` + Object.entries(C.rotatorModels).map(([k, mm]) =>
+      const modelOpts = `<option value="">Automatisch (${esc(auto.label)})</option>` + Object.entries(C.rotatorModelsAvailable()).map(([k, mm]) =>
         `<option value="${k}" ${s.model === k ? 'selected' : ''}>${esc(mm.label)} · ${G.nlShort(mm.rMin, 1)}–${G.nlShort(mm.rMax, 1)} m · ${mm.arcs.map((a) => range(a[0], a[1])).join(' / ')}</option>`).join('');
       const presets = [...new Set(m.arcs.flatMap((a) => [a[0], a[1]]))].map((a) => `<button class="btn sm" data-arc="${a}">${a}°</button>`).join('');
       return `<label>Kop (MP-model)<select data-f="model">${modelOpts}</select></label>

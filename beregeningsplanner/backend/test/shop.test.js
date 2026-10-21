@@ -127,6 +127,7 @@ test('API: beheerder stelt in en haalt op, catalogus per tenant, rechten', async
     assert.strictEqual((await kees.get('/api/admin/shop')).status, 403);
     assert.strictEqual((await kees.post('/api/admin/shop/sync')).status, 403);
     assert.deepStrictEqual((await kees.get('/api/catalog')).body.articles, {});
+    assert.deepStrictEqual((await kees.get('/api/catalog')).body.assortment, [], 'zonder artikelen: standaardcatalogus');
 
     let r = await baas.put('/api/admin/shop', { url: shop.url, mode: 'rest', consumerKey: 'ck_1234567890', consumerSecret: 'cs_geheim_1234', mapping: { 'VAL-24V': 'VAL24' } });
     assert.strictEqual(r.status, 200, JSON.stringify(r.body));
@@ -149,10 +150,20 @@ test('API: beheerder stelt in en haalt op, catalogus per tenant, rechten', async
     assert.strictEqual(cat.articles['PE-25'].price, 1);
     assert.strictEqual(cat.articles['VAL-24V'].price, 30);
     assert.strictEqual(cat.articles['VAL-24V'].via, 'mapping');
+    // Eigen assortiment = gekoppelde producten (de planner gebruikt alleen die).
+    assert.deepStrictEqual(cat.assortment, ['PE-25', 'VAL-24V']);
+
+    // Voorraadartikelen tellen mee; een code die de planner niet kent niet.
+    assert.strictEqual((await baas.post('/api/stock/items', { code: 'FILTER', name: 'Filter 1"', unit: 'st' })).status, 201);
+    assert.strictEqual((await baas.post('/api/stock/items', { code: 'EIGEN-1', name: 'Eigen artikel', unit: 'st' })).status, 201);
+    const cat2 = (await kees.get('/api/catalog')).body;
+    assert.deepStrictEqual(cat2.assortment, ['FILTER', 'PE-25', 'VAL-24V']);
+    assert.strictEqual(cat2.unknownCodes, 1);
 
     // Andere organisatie: eigen (lege) catalogus.
     const groen = await as('groenbaas', 'groen');
     assert.deepStrictEqual((await groen.get('/api/catalog')).body.articles, {});
+    assert.deepStrictEqual((await groen.get('/api/catalog')).body.assortment, [], 'assortiment per organisatie');
     assert.strictEqual((await groen.get('/api/admin/shop')).body.source.url, '');
 
     // Ongeldig adres en een onbereikbare shop: duidelijke melding, status bewaard.
