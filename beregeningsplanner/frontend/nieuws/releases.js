@@ -13,6 +13,34 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.65.0',
+      date: '2026-10-21',
+      title: 'Sproeiers kiezen uit een bibliotheek, en minder koppen met een grotere worp',
+      items: [
+        { text: '**Automatisch plaatsen** benut nu waar het kan de volle breedte van het gazon: grote rotators (bijv. MP3000/MP3500) langs de randen in plaats van een raster kleine koppen. Op een gemiddeld gazon scheelt dat een derde van de koppen.', for: ['plannen'] },
+        { text: 'Kies zelf een **behuizing** (bijv. Rain Bird 1800 of Hunter Pro-Spray van 10, 15 of 30 cm, of een Rain Bird 5004/5012) en een passende **nozzle** (MP Rotator, HE-VAN, Rain Curtain) en plaats die in de tekening. Worp en sproeihoek stel je in binnen wat die nozzle kan; debiet, neerslag, druk en stuklijst rekenen met de echte gegevens.', for: ['plannen'] },
+        { text: 'Bij automatisch plaatsen kies je ook de behuizing voor gazon en beplanting; de werkbon toont per kop de behuizing.', for: ['plannen'] },
+        { text: 'Nieuw in **Beheer → Sproeiers**: download de sproeierbibliotheek als Excel, vul aan met je eigen sproeiers en nozzles (worp, sproeihoeken, druk en debiet uit de tabel van de fabrikant) en lees hem weer in.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '0.64.1',
+      date: '2026-10-21',
+      title: 'Kopbalk past weer op de telefoon',
+      items: [
+        { text: 'Op de telefoon staat bovenin nu alleen de paginanaam naast het menu, zodat de organisatiekiezer en je profielrondje altijd volledig in beeld zijn. Het logo zie je in het menu en op het overzicht.' },
+      ],
+    },
+    {
+      version: '0.64.0',
+      date: '2026-10-21',
+      title: 'De planner werkt met je eigen artikelen',
+      items: [
+        { text: 'Staan er artikelen in **Voorraadbeheer** of zijn er webshopproducten gekoppeld, dan gebruikt de planner alleen die artikelen: sproeiers, rotatorkoppen, buisdiameters en hulpstukken. Ontbreekt een onderdeel, dan kiest de planner een alternatief dat je wel hebt of toont het onder **Niet in je assortiment**, zodat het niet ongemerkt in de stuklijst of offerte komt. Organisaties zonder eigen artikelen houden de standaardcatalogus.', for: ['offertes', 'voorraad'] },
+        { text: 'Verkoopprijzen uit Voorraadbeheer gelden nu ook in de planner en offertes als er geen webshop is gekoppeld.', for: ['offertes', 'voorraad'] },
+      ],
+    },
+    {
       version: '0.63.0',
       date: '2026-10-21',
       title: 'Webshopbestellingen worden facturen, en facturen gaan vanzelf per mail',

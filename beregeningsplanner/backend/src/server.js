@@ -1407,6 +1407,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     shop: shopStore, requireUser, requireJson, audit, fetchImpl: shopFetch,
     sync: (tid, user) => shopSync.run(tid, { full: true, user }),
     salePrices: (tid) => stockStore.saleInfo(tid),
+    libraryCodes: (tid) => { const own = sprinklerStore.get(tid).own; return own ? [...own.bodies, ...own.nozzles].map((x) => x.code).filter(Boolean) : []; },
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }),
   });

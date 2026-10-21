@@ -259,16 +259,61 @@
     }
   };
 
-  /** Nozzles van een sproeiergroep die op een behuizing (aansluiting) passen. */
-  C.nozzlesFor = (group, bodyKey) => {
-    const b = bodyKey && C.bodies[bodyKey];
-    return Object.values(C.nozzles).filter((n) => n.group === group && (!b || n.mount === b.mount));
+  /*
+   * Eigen assortiment van de organisatie (voorraadartikelen en gekoppelde
+   * webshopproducten, via shopcatalog.js). Zolang er geen is (null) gebruikt de
+   * planner de hele standaardcatalogus. Met een assortiment kiest hij alleen
+   * artikelen die erin staan: sproeiertypes, behuizingen, nozzles en buisdiameters
+   * zonder artikel vallen af, en de stuklijst neemt een alternatief of meldt
+   * het artikel als ontbrekend. Een nozzle zonder artikelcode (rotornozzle, zit
+   * bij de rotor) telt als beschikbaar.
+   */
+  C.assortment = null;
+  const ALL_PIPES = C.pipes.slice();
+
+  /** Staat dit artikel in het assortiment (of is er geen assortiment)? */
+  C.available = (code) => !C.assortment || !code || C.assortment.has(code);
+
+  /** Eerste artikel uit de lijst dat beschikbaar is (anders het eerste). */
+  C.pick = (...codes) => codes.find((c) => C.available(c)) || codes[0];
+
+  /** Assortiment instellen (lijst met codes) of wissen (null/leeg). */
+  C.setAssortment = (codes) => {
+    const list = Array.isArray(codes) ? codes.map((c) => String(c).trim().toUpperCase()).filter((c) => C.articles[c]) : [];
+    C.assortment = list.length ? new Set(list) : null;
+    autoCache.clear();
+    // Alleen buisdiameters die er zijn; zonder enige PE-buis de hele reeks
+    // (dan meldt de stuklijst de buis als ontbrekend).
+    const pipes = ALL_PIPES.filter((p) => C.available(`PE-${p.dn}`));
+    C.pipes.splice(0, C.pipes.length, ...(pipes.length ? pipes : ALL_PIPES));
   };
 
-  /** Behuizingen waar nozzles van deze groep op passen. */
+  /** Sproeiertype bruikbaar: het kenmerkende artikel (kop) is er. */
+  C.typeAvailable = (type) => {
+    if (!C.assortment) return true;
+    if (type === 'spray') return C.available('SPR-VAN') || C.nozzlesFor('spray').some((n) => n.code);
+    if (type === 'rotator') return Object.values(C.rotatorModels).some((m) => C.available(m.code));
+    if (type === 'rotor') return C.available('TURB-10') || C.available('TURB-10-PRO') || C.bodiesFor('rotor').some((b) => b.code);
+    if (type === 'strip') return C.available('ROT-STRIP');
+    return true;
+  };
+
+  /** Het gewenste type als dat bruikbaar is, anders het eerste bruikbare gazontype. */
+  C.usableType = (type, order = ['rotator', 'spray', 'rotor']) => (C.typeAvailable(type) ? type : order.find((t) => C.typeAvailable(t)) || type);
+
+  /** Rotatorkoppen die de planner mag kiezen. */
+  C.rotatorModelsAvailable = () => Object.fromEntries(Object.entries(C.rotatorModels).filter(([, m]) => C.available(m.code)));
+
+  /** Nozzles van een sproeiergroep die op een behuizing (aansluiting) passen en in het assortiment staan. */
+  C.nozzlesFor = (group, bodyKey) => {
+    const b = bodyKey && C.bodies[bodyKey];
+    return Object.values(C.nozzles).filter((n) => n.group === group && (!b || n.mount === b.mount) && C.available(n.code));
+  };
+
+  /** Behuizingen (in het assortiment) waar nozzles van deze groep op passen. */
   C.bodiesFor = (group) => {
     const mounts = new Set(Object.values(C.nozzles).filter((n) => n.group === group).map((n) => n.mount));
-    return Object.values(C.bodies).filter((b) => mounts.has(b.mount));
+    return Object.values(C.bodies).filter((b) => mounts.has(b.mount) && C.available(b.code));
   };
 
   /** Gekozen behuizing van een sproeier (of null). */
@@ -334,7 +379,7 @@
   C.nozzleOf = (s) => {
     if (!s || s.type === 'strip') return null;
     const own = s.model && C.nozzles[s.model];
-    if (own && own.group === s.type) return own;
+    if (own && own.group === s.type && C.available(own.code)) return own;
     // met een gekozen behuizing altijd een nozzle uit de bibliotheek; zonder behuizing alleen
     // rotators (MP), sproeiers en rotors blijven dan generiek
     const body = s.body && C.bodies[s.body] ? s.body : null;
@@ -343,10 +388,17 @@
   };
 
   /** Rotatorkop die automatisch bij worpwijdte en sproeihoek hoort (sleutel). */
-  C.autoRotatorModel = (r, arc = 360) => { const n = C.autoNozzle('rotator', r, arc); return n ? n.key : null; };
+  C.autoRotatorModel = (r, arc = 360) => {
+    const n = C.autoNozzle('rotator', r, arc);
+    if (n) return n.key;
+    // geen enkele rotatorkop in het assortiment: de passende kop (de stuklijst meldt hem als ontbrekend)
+    const all = Object.values(C.nozzles).filter((x) => x.group === 'rotator').sort((a, b) => a.rMax - b.rMax);
+    const fit = all.find((x) => r <= x.rMax + 1e-9) || all[all.length - 1];
+    return fit ? fit.key : null;
+  };
 
   /** Gekozen (of automatische) rotatorkop van een sproeier (sleutel). */
-  C.rotatorModelOf = (s) => (s.model && C.rotatorModels[s.model] ? s.model : C.autoRotatorModel(s.r, s.arc));
+  C.rotatorModelOf = (s) => (s.model && C.rotatorModels[s.model] && C.available(C.rotatorModels[s.model].code) ? s.model : C.autoRotatorModel(s.r, s.arc));
 
   /** Sector [van, tot] van de kop waarin de sproeihoek valt (of de dichtstbijzijnde). */
   C.rotatorArcSet = (model, arc) => arcSetOf((C.nozzles[model] || C.rotatorModels[model]).arcs, arc);

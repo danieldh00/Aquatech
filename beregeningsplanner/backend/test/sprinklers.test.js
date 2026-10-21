@@ -109,6 +109,21 @@ test('planner: eigen bibliotheek van de organisatie (setLibrary)', () => {
   assert.strictEqual(C.rotatorModels.MP3000.rMax, 9.1);
 });
 
+test('planner: eigen assortiment beperkt behuizingen en nozzles', () => {
+  C.setLibrary(null);
+  C.setAssortment(['ROT-MP3000', 'HU-PROS04-PRS40', 'PE-25']);
+  try {
+    assert.strictEqual(C.bodiesFor('rotator').map((b) => b.key).join(), 'HU-PROS04-PRS40');
+    assert.strictEqual(C.nozzlesFor('rotator').map((n) => n.key).join(), 'MP3000');
+    assert.strictEqual(C.nozzleOf({ type: 'rotator', r: 5, arc: 180 }).key, 'MP3000');
+    assert.strictEqual(C.nozzleOf({ type: 'rotator', model: 'MP2000', r: 5, arc: 180 }).key, 'MP3000', 'gekozen kop niet in assortiment: automatisch');
+    const heads = P.autoPlace(rect(0, 0, 12, 9), 'rotator');
+    assert.ok(heads.every((h) => C.rotatorModelOf(h) === 'MP3000'));
+  } finally {
+    C.setAssortment(null);
+  }
+});
+
 test('automatisch plaatsen: volle worp over de breedte van het gazon', () => {
   C.setLibrary(null);
   const stats = (pts, heads) => S.simulate({ areas: [{ type: 'lawn', pts }], sprinklers: heads }, 0.2).stats;

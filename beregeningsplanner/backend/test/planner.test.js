@@ -143,3 +143,51 @@ test('afstellen: te ruim ingestelde koppen worden bijgesteld, positie blijft', (
   assert.deepStrictEqual(only.heads.slice(1).map((h) => [h.r, h.arc, h.start]), heads.slice(1).map((h) => [h.r, h.arc, h.start]), 'alleen de gekozen kop wijzigt');
   assert.notDeepStrictEqual([only.heads[0].r, only.heads[0].arc, only.heads[0].start], [9, 120, 340]);
 });
+
+test('eigen assortiment: alleen artikelen die de organisatie heeft', () => {
+  const Hy = sandbox.window.Hydraulics;
+  const BOM = sandbox.window.BOM;
+  try {
+    // Zonder assortiment: alles beschikbaar.
+    C.setAssortment(null);
+    assert.ok(C.available('ROT-MP3500') && C.typeAvailable('rotor'));
+    assert.strictEqual(C.pipes.length, 4);
+
+    C.setAssortment(['ROT-MP2000', 'ROT-POP10-PRS', 'CON-ECO', 'PE-32', 'onbekend']);
+    assert.strictEqual(C.assortment.size, 4, 'onbekende codes vallen af');
+    // Buis: alleen de diameters die er zijn.
+    assert.deepStrictEqual(Array.from(C.pipes, (p) => p.dn), [32]);
+    // Sproeiertypes en rotatorkoppen.
+    assert.ok(C.typeAvailable('rotator'));
+    assert.ok(!C.typeAvailable('spray') && !C.typeAvailable('rotor'));
+    assert.strictEqual(C.usableType('spray'), 'rotator');
+    assert.strictEqual(C.autoRotatorModel(3, 180), 'MP2000', 'kop die er is, in plaats van MP1000');
+    assert.strictEqual(C.rotatorModelOf({ type: 'rotator', r: 8, arc: 90, model: 'MP3000' }), 'MP2000');
+    assert.deepStrictEqual(Object.keys(C.rotatorModelsAvailable()), ['MP2000']);
+    // Planner plaatst alleen afstanden die de beschikbare kop haalt.
+    const heads = P.autoPlace(rect(0, 0, 12, 8), 'rotator');
+    assert.ok(heads.length > 0);
+    for (const h of heads) assert.ok(h.r >= 4.0 - 1e-9 && h.r <= 6.4 + 1e-9, `worp ${h.r}`);
+
+    // Stuklijst: alternatief waar dat kan (CON-FLEX -> CON-ECO), de rest ontbreekt.
+    const st = {
+      settings: { pressure: 3.5, flow: 2, level: 'expert', targetMm: 20, sessions: 3, methods: {} },
+      areas: [{ id: 'a1', type: 'lawn', pts: rect(0, 0, 12, 8) }],
+      elements: [{ id: 'e1', kind: 'source', x: -1, y: 4 }, { id: 'e2', kind: 'valvebox', x: 0, y: 4 }, { id: 'e3', kind: 'controller', x: 0, y: 5 }],
+      sprinklers: heads, zones: [],
+    };
+    Hy.autoZones(st);
+    Hy.calculate(st);
+    const rows = BOM.build(st);
+    const codes = rows.map((r) => r.code);
+    for (const c of codes) assert.ok(C.available(c), `${c} hoort in het assortiment`);
+    assert.ok(codes.includes('CON-ECO') && !codes.includes('CON-FLEX'));
+    assert.ok(codes.includes('ROT-MP2000') && codes.includes('PE-32'));
+    const missing = rows.missing.map((m) => m.code);
+    assert.ok(missing.includes('VAL-24V') && missing.includes('FIT-T-32'), missing.join(','));
+    assert.ok(!missing.includes('CON-FLEX'));
+  } finally {
+    C.setAssortment(null);
+  }
+  assert.strictEqual(C.pipes.length, 4, 'terug naar de standaardcatalogus');
+});

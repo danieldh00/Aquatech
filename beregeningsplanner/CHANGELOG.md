@@ -1,5 +1,90 @@
 # Changelog
 
+## 0.65.0
+
+Sproeierbibliotheek (behuizing + nozzle) en grotere worp bij automatisch
+plaatsen.
+
+- **Automatisch plaatsen** (`js/planner.js`): kostenweging `W` (kop 2,5,
+  gelijkmatigheid pas onder DU 0,85), rechthoekig verband (afstand langs en
+  dwars apart, `spacingsAlong`, verhouding max. 2), worp tot de volle worp van
+  de grootste kop die past (gat tussen twee koppen: de grootste eronder),
+  binnenkoppen langs de rand korter (tot 0,55 × afstand), de beste drie
+  indelingen eerst afstellen (2 rondes, ook 0,6 × worp) en dan kiezen.
+  Voorbeelden: 30 × 12 m van 18 naar 12 koppen, 20 × 15 m van 12 naar 9,
+  onregelmatig gazon van 22 naar 14.
+- **Sproeierbibliotheek** (`js/sprinklerlib.js`, UMD): behuizingen (`mount`,
+  pop-up, drukregeling) en nozzles (groep spray/rotator/rotor, sectoren,
+  min. worp/inkorten, werkdruk, `matched`, prestatiepunten druk/worp/debiet)
+  met `perfAt`, `radiusRange`, `flowLph`, `sanitize`, `merge`,
+  `toSheets`/`fromSheets`. Standaard: Rain Bird 1804/1806/1812 PRS en SAM-P45,
+  Hunter Pro-Spray PRS40 (10/15/30 cm), Rain Bird 5004 PC/PRS en 5012 PC,
+  Hunter MP1000/2000/3000/3500/Corner (sleutels als voorheen), Rain Bird
+  HE-VAN-08/10/12/15 en Rain Curtain 1,5–8,0 (afgerond uit de
+  fabrikanttabellen).
+- **Catalogus** (`js/catalog.js`): `setLibrary`, `bodies`, `nozzles`,
+  `nozzlesFor`, `bodiesFor`, `bodyOf`, `nozzleOf`, `autoNozzle` (rotornozzle op
+  neerslag), `headRange`, `fitHead` (= `fitRotator`), `headSetting`,
+  `headPr`, `headMinBar`, `libraryArticles`; `rotatorModels` en het bereik per
+  sproeiertype volgen uit de bibliotheek. Sproeier: `body` (behuizing) en
+  `model` (nozzle, voor elk type). Met eigen assortiment alleen behuizingen
+  en nozzles waarvan de code erin staat.
+- **Simulatie/hydraulica/stuklijst**: neerslag per kop uit de nozzle
+  (`headPr`), min. druk uit drukregeling van het huis, stuklijst met
+  huis- en nozzlecode (anders generiek), Excel-kolom *Sproeikop / instelling*
+  met behuizing. Werkorder: kolom *Behuizing* (`heads[].body`).
+- **Planner** (`js/app.js`): behuizing gazon/beplanting voor automatisch
+  plaatsen (`settings.bodies`), blok *Zelf een kop plaatsen* (behuizing +
+  nozzle → volle worp), eigenschappenpaneel met behuizing, nozzle en bereik
+  voor alle typen.
+- **Per omgeving** (`backend/src/sprinklers.js`, tabel `sprinkler_library`,
+  migratie 28): `GET /api/sprinkler-library` (ingelogd), `PUT` (Excel als
+  JSON, recht `beheer`, server controleert opnieuw, alleen afwijkingen van de
+  standaard), `DELETE` (terug naar standaard); audit
+  `sproeierbibliotheek_ingelezen|_standaard`. `shopcatalog.js` laadt hem samen
+  met `api/catalog`; eigen codes tellen mee in het assortiment
+  (`libraryCodes` in shop.js). **Beheer → Sproeiers**: overzicht, Excel
+  downloaden (sjabloon met uitleg) en inlezen.
+- Testdata: eigen behuizing (pop-up 20 cm) en eigen MP3000-prijs; tuinen met
+  Hunter Pro-Spray PRS40 en Rain Bird 5004.
+
+## 0.64.1
+
+Kopbalk op de telefoon past weer op elke pagina.
+
+- **Kopbalk smal scherm** (`dashboard/dashboard.css`, ≤ 600px): op een
+  modulepagina met paginatitel (`.brand-name`) vallen het logo en de
+  scheidingslijn weg (logo staat in de zijbalk en op het overzicht); de titel
+  staat links en kort zo nodig in met een beletselteken. Organisatiekiezer en
+  gebruikersmenu krimpen niet meer, zodat de avatar altijd zichtbaar is. Onder
+  360px wordt het logo op het overzicht iets kleiner. Getest op 320, 375, 390
+  en 430px voor alle modulepagina's, met organisatiekiezer.
+
+## 0.64.0
+
+Planner gebruikt alleen artikelen uit het eigen assortiment.
+
+- **Eigen assortiment** (`backend/src/shop.js`): `GET /api/catalog` geeft
+  `assortment` (plannercodes die de organisatie als voorraadartikel of
+  gekoppeld webshopproduct heeft, niet-gearchiveerd) en `unknownCodes`
+  (voorraadartikelen met een code die de planner niet kent). Leeg = de
+  standaardcatalogus blijft de terugval.
+- **Catalogus** (`js/catalog.js`): `setAssortment`, `available`, `pick`,
+  `typeAvailable`, `usableType`, `rotatorModelsAvailable`. Buisdiameters
+  zonder artikel vallen af (`C.pipes`), `autoRotatorModel`/`rotatorModelOf`
+  kiezen een beschikbare kop (dichtstbijzijnde worp), `planner.js` plaatst
+  rotators alleen op afstanden die een beschikbare kop haalt.
+- **Stuklijst** (`js/bom.js`): alternatieven waar dat technisch kan
+  (bijv. CON-FLEX ↔ CON-ECO, VAL-24V-FC ↔ VAL-24V, BOX-JUMBO ↔ BOX-STD,
+  CTRL-WIFI ↔ CTRL-ECO, CAB-7 → CAB-13); wat dan nog ontbreekt staat in
+  `rows.missing` en niet in de stuklijst, offerte (`fromPlan` geeft een
+  waarschuwing) of totalen. Planner toont een blok *Niet in je assortiment*,
+  Excel een aparte lijst.
+- **Planner** (`js/app.js`): sproeiertypes zonder artikel zijn uitgeschakeld
+  (stap 1, stap 4, eigenschappen), MP-koppen alleen uit het assortiment.
+- `shopcatalog.js`: verkoopprijzen uit Voorraadbeheer werden zonder
+  webshopkoppeling niet toegepast (alleen met `syncedAt`); nu wel.
+
 ## 0.63.0
 
 Brincr vervangen (deel 2): webshopbestellingen als factuur, debiteuren en

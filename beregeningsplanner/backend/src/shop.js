@@ -102,32 +102,63 @@ function createShopStore(db) {
 
 /**
  * Routes:
- *   GET  /api/catalog          artikelen met webshopprijs (planner en offertes, iedereen die is ingelogd)
+ *   GET  /api/catalog          artikelen met webshopprijs en eigen assortiment (planner en offertes, iedereen die is ingelogd)
  *   GET  /api/admin/shop       koppeling en status (beheerder)
  *   PUT  /api/admin/shop       koppeling instellen
  *   POST /api/admin/shop/sync  producten nu ophalen
  * /api/admin/* staat in server.js al achter requireAdmin.
  */
-function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, tenantOf, audit, syncLimiter, fetchImpl, sync = null, salePrices = () => ({}) }) {
+function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, tenantOf, audit, syncLimiter, fetchImpl, sync = null, salePrices = () => ({}), libraryCodes = () => [] }) {
   const configured = (s) => Boolean(s.get('shopSource').url);
+
+  // Plannercode? Ook de eigen behuizingen en nozzles uit de sproeierbibliotheek
+  // (sprinklers.js) tellen mee; die alleen opvragen als er een onbekende code is.
+  function knownCodes(tenantId, sale) {
+    const arts = loadArticles();
+    let extra = null;
+    return (code) => {
+      if (arts[code]) return true;
+      if (!extra) extra = new Set(Object.keys(sale).some((c) => !arts[c]) ? libraryCodes(tenantId) : []);
+      return extra.has(code);
+    };
+  }
 
   // Verkoopprijzen uit voorraadbeheer gaan voor (Aquatech is de bron); de
   // webshopprijs alleen voor artikelen zonder eigen verkoopprijs.
-  function withSalePrices(tenantId, articles) {
+  function withSalePrices(tenantId, articles, sale = salePrices(tenantId), known = knownCodes(tenantId, sale)) {
     const out = { ...articles };
-    const arts = loadArticles();
-    for (const [code, v] of Object.entries(salePrices(tenantId))) {
-      if (v.salePrice == null || !arts[code]) continue;
+    for (const [code, v] of Object.entries(sale)) {
+      if (v.salePrice == null || !known(code)) continue;
       out[code] = { ...(out[code] || { sku: code, name: v.name, url: '', inStock: true }), price: v.salePrice, via: 'voorraad' };
     }
     return out;
   }
 
+  // Eigen assortiment: de plannercodes die de organisatie als product heeft
+  // (voorraadartikel of gekoppeld webshopproduct). Met een assortiment
+  // gebruikt de planner alleen die artikelen; zonder (leeg) de standaardcatalogus.
+  function assortmentOf(sale, matched, known) {
+    const codes = new Set(Object.keys(matched));
+    let unknown = 0;
+    for (const code of Object.keys(sale)) {
+      if (known(code)) codes.add(code);
+      else unknown++;
+    }
+    return { assortment: [...codes].sort(), unknownCodes: unknown };
+  }
+
   function catalogOf(tenantId, settings) {
     const st = shop.status(tenantId);
-    if (!configured(settings) || !st || !st.syncedAt) return { configured: configured(settings), syncedAt: null, articles: withSalePrices(tenantId, {}), unmatched: [] };
+    const sale = salePrices(tenantId);
+    const known = knownCodes(tenantId, sale);
+    if (!configured(settings) || !st || !st.syncedAt) {
+      return { configured: configured(settings), syncedAt: null, articles: withSalePrices(tenantId, {}, sale, known), unmatched: [], ...assortmentOf(sale, {}, known) };
+    }
     const { matched, unmatched } = matchProducts(shop.products(tenantId), loadArticles(), settings.get('shopSource').mapping);
-    return { configured: true, shop: settings.get('shopSource').url, syncedAt: st.syncedAt, productCount: st.productCount, articles: withSalePrices(tenantId, matched), unmatched };
+    return {
+      configured: true, shop: settings.get('shopSource').url, syncedAt: st.syncedAt, productCount: st.productCount,
+      articles: withSalePrices(tenantId, matched, sale, known), unmatched, ...assortmentOf(sale, matched, known),
+    };
   }
 
   app.get('/api/catalog', requireUser, (req, res) => {

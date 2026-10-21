@@ -685,7 +685,7 @@
 
     autoPlace(areaIds) {
       const st = this.state;
-      const type = st.settings.sprinklerType;
+      const type = C.usableType(st.settings.sprinklerType);
       const lawns = st.areas.filter((a) => a.type === 'lawn' && a.pts.length >= 3 && (!areaIds || areaIds.includes(a.id)));
       if (!lawns.length) { this.toast('Teken eerst een gazonvlak (stap 2).', true); return; }
       this.checkpoint();
@@ -710,7 +710,7 @@
         if (want && has && !force) continue;
         st.sprinklers = st.sprinklers.filter((s) => s.areaId !== a.id);
         if (!want) continue;
-        const bedType = st.settings.bedSprinklerType || 'spray';
+        const bedType = C.usableType(st.settings.bedSprinklerType || 'spray', ['spray', 'rotator']);
         const heads = window.Planner.autoPlace(a.pts, bedType, { body: this._bodyFor(`bed-${bedType}`) });
         heads.forEach((h) => { h.areaId = a.id; });
         st.sprinklers.push(...heads);
@@ -1180,7 +1180,7 @@
         <label>Adres<input id="m-address" value="${esc(m.address)}"></label>
         <h3>Beregeningsmethode</h3>
         <p class="hint small">Kies per soort vlak hoe het water krijgt. Per vlak kun je hier later van afwijken (eigenschappenpaneel).</p>
-        <label>Gazon<select id="mth-lawn">${['rotator', 'spray', 'rotor'].map((k) => `<option value="${k}" ${s.sprinklerType === k ? 'selected' : ''}>${esc(C.sprinklerTypes[k].label)}</option>`).join('')}</select></label>
+        <label>Gazon<select id="mth-lawn">${['rotator', 'spray', 'rotor'].map((k) => `<option value="${k}" ${s.sprinklerType === k ? 'selected' : ''}${C.typeAvailable(k) ? '' : ' disabled'}>${esc(C.sprinklerTypes[k].label)}${C.typeAvailable(k) ? '' : ' (niet in assortiment)'}</option>`).join('')}</select></label>
         ${['bed', 'hedge', 'planter'].map((type) => {
           const at = C.areaTypes[type];
           const cur = (s.methods && s.methods[type]) || at.defaultMethod;
@@ -1305,8 +1305,9 @@
       const s = this.state.settings;
       const types = ['rotator', 'spray', 'rotor'].map((k) => {
         const t = C.sprinklerTypes[k];
-        return `<label class="radio"><input type="radio" name="stype" value="${k}" ${s.sprinklerType === k ? 'checked' : ''}>
-          <span><b>${esc(t.label)}</b><br><span class="small">${G.nlShort(t.rMin, 1)}–${G.nlShort(t.rMax, 1)} m · ${t.pr} mm/u · min. ${G.nlShort(t.minBar, 1)} bar. ${esc(t.note)}</span></span></label>`;
+        const ok = C.typeAvailable(k);
+        return `<label class="radio${ok ? '' : ' off'}"><input type="radio" name="stype" value="${k}" ${C.usableType(s.sprinklerType) === k ? 'checked' : ''}${ok ? '' : ' disabled'}>
+          <span><b>${esc(t.label)}</b>${ok ? '' : ' <span class="small">(niet in je assortiment)</span>'}<br><span class="small">${G.nlShort(t.rMin, 1)}–${G.nlShort(t.rMax, 1)} m · ${t.pr} mm/u · min. ${G.nlShort(t.minBar, 1)} bar. ${esc(t.note)}</span></span></label>`;
       }).join('');
       const sim = this.editor.layers.heatmap ? this.sim : null;
       const st = sim && sim.stats;
@@ -1426,6 +1427,7 @@
       }
       let rows = [];
       try { rows = this.state.calc ? BOM.build(this.state) : []; } catch (e) { console.error(e); }
+      const missing = rows.missing || [];
       const total = rows.reduce((t, r) => t + r.total, 0);
       const sched = this.state.calc ? BOM.schedule(this.state) : [];
       const levels = Object.entries(C.levels).map(([k, l]) => `
@@ -1454,15 +1456,20 @@
           ${rows.map((r) => `<tr title="${esc(r.code)}${r.sku ? ' / ' + esc(r.sku) : ''}${r.notes ? ' – ' + esc(r.notes) : ''}"><td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>` : esc(r.name)}</td><td class="num">${r.qty} ${esc(r.unit)}</td><td class="num">${eur(r.total)}</td></tr>`).join('')}
           <tr class="total"><td>Totaal excl. btw${rows.every((r) => r.url) ? '' : ' (indicatief)'}</td><td></td><td class="num">${eur(total)}</td></tr>
         </table>` : '<p class="hint">Nog geen onderdelen – plaats sproeiers en deel zones in.</p>'}
+        ${missing.length && (this._can('offertes') || this._can('voorraad')) ? `<h3>Niet in je assortiment (${missing.length})</h3>
+          <p class="hint small">Deze onderdelen zijn nodig, maar staan niet als artikel in Voorraadbeheer of de webshop. Ze tellen niet mee in de stuklijst en de offerte.${this._can('voorraad') ? ' <a href="../voorraad/">Artikel toevoegen</a>' : ''}</p>
+          <table class="list bom missing">${missing.map((r) => `<tr title="${esc(r.code)}"><td>${esc(r.name)} <span class="small">(${esc(r.code)})</span></td><td class="num">${r.qty} ${esc(r.unit)}</td></tr>`).join('')}</table>` : ''}
         ${this._shopStatus(rows)}
       `;
     },
     _shopStatus(rows) {
       const info = window.ShopCatalog && window.ShopCatalog.info;
       const admin = this._can('beheer') ? ' <a href="../beheer/#webshop">Webshop koppelen</a>' : '';
-      if (!info) return this._serverAvailable() ? `<p class="hint small">Prijzen zijn indicatief.${admin}</p>` : '';
+      const own = window.ShopCatalog && window.ShopCatalog.assortment && (this._can('offertes') || this._can('voorraad'));
+      const ownTxt = own ? `<p class="hint small">De planner gebruikt alleen de ${window.ShopCatalog.assortment.length} artikelen uit je eigen assortiment (Voorraadbeheer en webshop).${window.ShopCatalog.unknownCodes ? ` ${window.ShopCatalog.unknownCodes} artikelen hebben een code die de planner niet kent en worden niet gebruikt.` : ''}</p>` : '';
+      if (!info) return ownTxt || (this._serverAvailable() ? `<p class="hint small">Prijzen zijn indicatief.${admin}</p>` : '');
       const linked = rows.filter((r) => r.url).length;
-      return `<p class="hint small">Prijzen uit de webshop (${esc(info.shop.replace(/^https?:\/\//, ''))}), bijgewerkt ${new Date(info.syncedAt).toLocaleDateString('nl-NL')}: ${linked} van ${rows.length} regels gekoppeld.${admin.replace('Webshop koppelen', 'Koppeling beheren')}</p>`;
+      return `${ownTxt}<p class="hint small">Prijzen uit de webshop (${esc(info.shop.replace(/^https?:\/\//, ''))}), bijgewerkt ${new Date(info.syncedAt).toLocaleDateString('nl-NL')}: ${linked} van ${rows.length} regels gekoppeld.${admin.replace('Webshop koppelen', 'Koppeling beheren')}</p>`;
     },
     _bind_bom(el) {
       const s = this.state.settings;
@@ -1533,7 +1540,7 @@
     },
     _propsSprinkler(s) {
       const t = C.sprinklerTypes[s.type];
-      const typeOpts = Object.entries(C.sprinklerTypes).map(([k, tt]) => `<option value="${k}" ${s.type === k ? 'selected' : ''}>${esc(tt.label)}</option>`).join('');
+      const typeOpts = Object.entries(C.sprinklerTypes).map(([k, tt]) => `<option value="${k}" ${s.type === k ? 'selected' : ''}${C.typeAvailable(k) || s.type === k ? '' : ' disabled'}>${esc(tt.label)}${C.typeAvailable(k) ? '' : ' (niet in assortiment)'}</option>`).join('');
       const zoneOpts = `<option value="">– geen –</option>` + this.state.zones.map((z) => `<option value="${z.id}" ${s.zone === z.id ? 'selected' : ''}>${esc(z.name)} (${esc(C.groups[z.group].label)})</option>`).join('');
       let p = null;
       if (this.state.calc) this.state.calc.zones.forEach((zr) => (zr.members || []).forEach((m) => { if (m.ref === s) p = m.pressure; }));
@@ -1569,17 +1576,17 @@
     /** Keuze voor Zelf een kop plaatsen: behuizing, nozzle en daaruit het sproeiertype. */
     _manualChoice() {
       const m = this.manual || {};
-      const body = m.body && C.bodies[m.body] ? C.bodies[m.body] : null;
-      const nozzles = Object.values(C.nozzles).filter((n) => !body || n.mount === body.mount);
+      const body = m.body && C.bodies[m.body] && C.available(C.bodies[m.body].code) ? C.bodies[m.body] : null;
+      const nozzles = Object.values(C.nozzles).filter((n) => (!body || n.mount === body.mount) && C.available(n.code));
       const noz = m.model && nozzles.find((n) => n.key === m.model);
       const groups = [...new Set(nozzles.map((n) => n.group))];
-      const st = this.state.settings.sprinklerType;
+      const st = C.usableType(this.state.settings.sprinklerType);
       const type = noz ? noz.group : !body || groups.includes(st) ? st : groups[0] || st;
       return { body: body ? body.key : null, model: noz ? noz.key : null, type, nozzles };
     },
     _manualPick() {
       const m = this._manualChoice();
-      const bodyOpts = Object.values(C.bodies).map((b) => `<option value="${esc(b.key)}" ${m.body === b.key ? 'selected' : ''}>${esc(`${b.brand} ${b.name}`.trim())}</option>`).join('');
+      const bodyOpts = Object.values(C.bodies).filter((b) => C.available(b.code)).map((b) => `<option value="${esc(b.key)}" ${m.body === b.key ? 'selected' : ''}>${esc(`${b.brand} ${b.name}`.trim())}</option>`).join('');
       const range = (lo, hi) => (lo === hi ? `${lo}°` : `${lo}–${hi}°`);
       const byGroup = {};
       m.nozzles.forEach((n) => { (byGroup[n.group] = byGroup[n.group] || []).push(n); });

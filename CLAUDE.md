@@ -353,6 +353,14 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `invoicepdf.js`, `invoicemail.js` (`send`/`autoSend`, PDF als bijlage,
   `invoicing.autoSend`). Routes `/api/invoices/:id/pdf|mail|send`,
   `/api/invoices/shop-orders/sync`, `/api/debtors[/:id]`.
+- **Eigen assortiment in de planner** (0.64.0): `/api/catalog` geeft
+  `assortment` (catalogus-codes die als niet-gearchiveerd voorraadartikel of
+  gekoppeld webshopproduct bestaan). Niet leeg → `Catalog.setAssortment`
+  (via `shopcatalog.js`): planner kiest alleen beschikbare artikelen
+  (`C.available`/`C.pick`/`C.typeAvailable`, buizen gefilterd in `C.pipes`,
+  rotatorkop via `autoRotatorModel`); `BOM.build` zet de rest in
+  `rows.missing` (niet in stuklijst/offerte). Leeg = standaardcatalogus.
+  Nieuwe artikelcodes in bom.js altijd via `add()` (en zo mogelijk `pick()`).
 - **Tekening indienen + controle** (0.52.0, `backend/src/drawings.js`):
   knop *Direct een tekening maken* op login.html → `beregening/?tekenen&org=`
   (`isPublicPlanner` in server.js: pagina alleen met `?tekenen`, code van
@@ -390,6 +398,17 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `classMap` gebruikt een vakje vóór de vaste regels. Andere vakjesindeling =
   `FEATURE_VERSION` ophogen (in localrecog.js én recognitions.js). Vaste test op
   Daniëls voorbeeldplan `test/fixtures/tuinontwerp-voorbeeld.png`.
+- **Sproeierbibliotheek** (0.65.0): `beregening/js/sprinklerlib.js` (UMD,
+  `window.SprinklerLib`; elke pagina/sandbox laadt hem vóór catalog.js) met
+  behuizingen (`mount`, `regBar`) en nozzles (`group`, `arcs`, `rMin`,
+  `matched`, `perf` [{bar, r, q l/u}]). `Catalog.setLibrary(eigen)` leidt
+  `rotatorModels`, bereik per sproeiertype en artikelen af; sproeier heeft
+  `body` + `model` (nozzle-sleutel, MP-sleutels als voorheen). Rekenen via
+  `C.nozzleOf`/`headRange`/`fitHead`/`headPr`/`headMinBar`/`sprinklerFlowLph`.
+  Eigen regels per omgeving in tabel `sprinkler_library` (migratie 28,
+  `backend/src/sprinklers.js`, alleen afwijkingen van de standaard), Excel via
+  Beheer → Sproeiers (`beheer/sproeiers.js`). Automatisch plaatsen: kostenweging
+  `W` in planner.js (kop zwaar, DU pas onder 0,85), rechthoekig verband.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - **Snelheid/navigatie** (0.46.0): `shared/common.js` in de `<head>` van elke

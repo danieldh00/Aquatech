@@ -388,7 +388,10 @@
   function feasible(type, r) {
     const t = C.sprinklerTypes[type];
     if (r < t.rMin - 1e-9 || r > t.rMax + 1e-9) return false;
-    if (type === 'rotator' && C.rotatorModels) return Object.values(C.rotatorModels).some((m) => r >= m.rMin - 1e-9 && r <= m.rMax + 1e-9);
+    if (type === 'rotator' && C.rotatorModels) {
+      const models = Object.values(C.rotatorModelsAvailable ? C.rotatorModelsAvailable() : C.rotatorModels);
+      return models.some((m) => r >= m.rMin - 1e-9 && r <= m.rMax + 1e-9);
+    }
     return true;
   }
 
@@ -399,13 +402,14 @@
   function spacingsAlong(type, L) {
     const t = C.sprinklerTypes[type];
     const out = new Set();
+    const models = () => Object.values(C.rotatorModelsAvailable ? C.rotatorModelsAvailable() : C.rotatorModels);
     const k0 = Math.max(1, Math.ceil(L / t.rMax - 1e-6));
     for (let k = k0; k <= Math.ceil(L / t.rMin) && k <= 12 && k <= k0 + 4; k++) {
       const r = round1(L / k);
       if (feasible(type, r)) out.add(r);
       else if (type === 'rotator' && C.rotatorModels) {
         // valt in een gat tussen twee koppen: de grootste kop die er net onder blijft
-        const below = Object.values(C.rotatorModels).map((m) => m.rMax).filter((m) => m < r).sort((x, y) => y - x)[0];
+        const below = models().map((m) => m.rMax).filter((m) => m < r).sort((x, y) => y - x)[0];
         if (below) out.add(round1(below));
       }
     }
