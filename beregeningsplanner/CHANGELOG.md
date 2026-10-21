@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.65.0
+
+Brincr vervangen (deel 3): koppeling met Visma eAccounting.
+
+- **Visma** (`backend/src/visma.js`): OAuth2 (authorization code, scopes
+  `ea:api offline_access ea:sales`) per omgeving. De app-registratie
+  (instelling `vismaApp` + geheim `vismaClientSecret`, `platform: true`) staat
+  in de hoofdtenant en vul je in via **Hoofdbeheer → Visma**
+  (`GET|PUT /api/platform/visma`). Per omgeving: refresh token als geheim
+  `vismaRefreshToken` (versleuteld), keuzes in instelling `visma`
+  (`internal`: niet via Beheer > Instellingen); access token alleen in het
+  geheugen, bij 401 vernieuwd. Vaste hosts (sandbox/productie), geen SSRF.
+- **Doorsturen**: definitieve factuur → verkoopfactuur (`POST
+  /customerinvoices`), debiteur → klant met het debiteurnummer (`POST
+  /customers`; bestaat het nummer al voor een andere naam: 409
+  `number_taken`). Elke regel op het Visma-artikel van zijn omzetcategorie
+  (`visma.articles`); ontbreekt er een, dan `visma_error` op de factuur.
+  Creditfactuur met `IsCreditInvoice` en `CreditedInvoiceId`.
+- **Wanneer**: knop op de factuur (`POST /api/visma/invoices/:id`), *Nu
+  doorsturen* (`POST /api/visma/sync`, max. 50 per keer, oudste eerst) of
+  automatisch (`visma.autoSync`, standaard uit): 5 s na definitief
+  (`invoices.onFinalized`) en elke 10 minuten (`app.locals.vismaAll`). Alleen
+  facturen vanaf `visma.since` (automatisch aan zonder datum = vandaag).
+- Migratie 28: `debtors.visma_customer_id`, `invoices.visma_invoice_id|
+  visma_number|visma_synced_at|visma_error` + index `invoices_visma`.
+- **Facturen**: tabblad *Visma* (verbinden/verbreken, status, artikel per
+  omzetcategorie, betalingstermijn, automatisch + datum), knop *Naar Visma* en
+  status/fout op de factuur, kolom *Boekhouding* in de lijst.
+- Settings: `max` per geheim (refresh token tot 4000 tekens).
+
 ## 0.64.2
 
 Planner: ingezoomd blijven tekening en vlakken scherp en op hun plek.

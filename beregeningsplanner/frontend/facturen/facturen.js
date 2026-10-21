@@ -2,9 +2,9 @@
 // de factuur zelf (?id=) met klant, regels, btw en omzetcategorieën,
 // definitief maken, betaald, crediteren, PDF (gemaakt door de server) en
 // versturen per e-mail, de debiteuren, de export voor de boekhouding (Excel
-// per omzetcategorie, Visma eAccounting) en de factuurinstellingen. Gegevens
-// uit /api/invoices en /api/debtors (recht 'facturen'); rekenwerk in
-// invoice-core.js (gedeeld met de server).
+// per omzetcategorie), de koppeling met Visma eAccounting en de
+// factuurinstellingen. Gegevens uit /api/invoices, /api/debtors en /api/visma
+// (recht 'facturen'); rekenwerk in invoice-core.js (gedeeld met de server).
 (function () {
   const C = window.InvoiceCore;
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -13,7 +13,7 @@
   const day = (iso) => (iso ? new Date(`${String(iso).slice(0, 10)}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
   const num = (v) => (String(v).trim() === '' ? 0 : Number(String(v).replace(',', '.')) || 0);
 
-  const state = { items: [], tab: 'list', inv: null, settings: null, profile: {}, articles: {}, dirty: false, conf: {}, debtors: [], debtor: null };
+  const state = { items: [], tab: 'list', inv: null, settings: null, profile: {}, articles: {}, dirty: false, conf: {}, debtors: [], debtor: null, visma: null, vismaOpts: null };
   const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 
   function toast(msg, err = false) {
@@ -40,6 +40,10 @@
     return `<span class="pill st-${esc(i.status)}">${esc(C.STATUSES[i.status] || i.status)}</span>`;
   };
   const kindPill = (i) => (i.kind === 'credit' ? ' <span class="pill credit">Credit</span>' : '') + (i.source === 'webshop' ? ' <span class="pill src">Webshop</span>' : '');
+  // Boekhouding: in Visma (met het Visma-nummer), mislukt, geëxporteerd of nog niet.
+  const bookCell = (i) => (i.vismaInvoiceId ? `Visma ${esc(i.vismaNumber || '')}`
+    : i.vismaError ? `<span class="fail" title="${esc(i.vismaError)}">Visma mislukt</span>`
+      : i.exportedAt ? esc(day(i.exportedAt)) : '<span class="muted">–</span>');
   const sentCell = (i) => (i.sentAt ? esc(day(i.sentAt)) : i.sendError ? '<span class="fail" title="' + esc(i.sendError) + '">mislukt</span>' : '<span class="muted">–</span>');
 
   // ---------- Overzicht ----------
@@ -70,7 +74,7 @@
       return;
     }
     const items = visible();
-    t.innerHTML = `<thead><tr><th>Nummer</th><th>Datum</th><th>Klant</th><th>Status</th><th>Vervalt</th><th class="num">Excl. btw</th><th class="num">Totaal</th><th>Verstuurd</th><th>Geëxporteerd</th></tr></thead>
+    t.innerHTML = `<thead><tr><th>Nummer</th><th>Datum</th><th>Klant</th><th>Status</th><th>Vervalt</th><th class="num">Excl. btw</th><th class="num">Totaal</th><th>Verstuurd</th><th>Boekhouding</th></tr></thead>
       <tbody>${items.map((i) => `<tr data-id="${esc(i.id)}">
         <td><b>${esc(i.number || 'Concept')}</b>${kindPill(i)}</td>
         <td>${esc(day(i.date))}</td>
@@ -80,7 +84,7 @@
         <td class="num${i.subtotal < 0 ? ' neg' : ''}">${esc(eur(i.subtotal))}</td>
         <td class="num${i.total < 0 ? ' neg' : ''}"><b>${esc(eur(i.total))}</b></td>
         <td>${sentCell(i)}</td>
-        <td>${i.exportedAt ? esc(day(i.exportedAt)) : '<span class="muted">–</span>'}</td>
+        <td>${bookCell(i)}</td>
       </tr>`).join('') || '<tr><td colspan="9" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
     t.querySelectorAll('tr[data-id]').forEach((tr) => { tr.onclick = () => openInvoice(tr.dataset.id, true); });
   }
@@ -187,11 +191,13 @@
     };
   }
 
+  const TABS = ['list', 'debtors', 'visma', 'export', 'settings'];
   function showTab(name) {
     state.tab = name;
     document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
-    for (const n of ['list', 'debtors', 'export', 'settings']) $(`#tab-${n}`).hidden = n !== name;
+    for (const n of TABS) $(`#tab-${n}`).hidden = n !== name;
     if (name === 'settings') renderSettings();
+    if (name === 'visma') loadVisma(true).catch((e) => toast(e.message, true));
     if (name === 'debtors') loadDebtors().catch((e) => toast(e.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
   }
@@ -253,6 +259,136 @@
         err.textContent = e.message;
       }
     };
+  }
+
+  // ---------- Visma eAccounting ----------
+  const ENVS = { sandbox: 'sandbox', production: 'productie' };
+
+  async function loadVisma(withOptions = false) {
+    state.visma = await api('visma');
+    renderVisma();
+    if (withOptions && state.visma.connected && !state.vismaOpts) await loadVismaOptions();
+  }
+
+  async function loadVismaOptions() {
+    try {
+      state.vismaOpts = await api('visma/options');
+    } catch (e) {
+      state.vismaOpts = null;
+      $('.err', $('#vi-form')).textContent = e.message;
+      return;
+    }
+    renderVismaForm();
+  }
+
+  function renderVisma() {
+    const v = state.visma;
+    if (!v) return;
+    const s = v.settings;
+    let html;
+    if (!v.configured) html = '<p class="notice warn">De koppeling met Visma is nog niet ingesteld door de beheerder van het platform. Zodra dat is gebeurd, kun je hier je administratie verbinden.</p>';
+    else if (!v.connected) html = `<p>Nog niet verbonden. Met <b>Verbinden met Visma</b> log je in bij Visma (${esc(ENVS[v.environment])}) en kies je de administratie.</p>`;
+    else {
+      html = `<p><span class="pill st-betaald">Verbonden</span> ${esc(s.companyName || 'Visma-administratie')}${s.environment === 'sandbox' ? ' <span class="pill">sandbox</span>' : ''}`
+        + `${s.connectedAt ? ` <span class="muted small">sinds ${esc(when(s.connectedAt))}${s.connectedBy ? ` door ${esc(s.connectedBy)}` : ''}</span>` : ''}</p>`
+        + `<p class="muted small">${s.autoSync ? 'Automatisch doorsturen staat aan' : 'Automatisch doorsturen staat uit; gebruik <b>Nu doorsturen</b> of de knop op een factuur'}${s.since ? `, facturen vanaf ${esc(day(s.since))}` : ''}. `
+        + `${v.pending ? `<b>${esc(v.pending)}</b> ${v.pending === 1 ? 'factuur wacht' : 'facturen wachten'}${v.failed ? `, waarvan <span class="fail">${esc(v.failed)} met een fout</span> (zie de factuur)` : ''}.` : 'Alles is doorgestuurd.'}</p>`;
+    }
+    $('#vi-status').innerHTML = html;
+    $('#vi-connect').hidden = !v.configured || v.connected;
+    $('#vi-sync').hidden = !v.connected;
+    $('#vi-disconnect').hidden = !v.connected;
+    $('#vi-form').hidden = !v.connected;
+    if (v.connected) renderVismaForm();
+  }
+
+  function renderVismaForm() {
+    const v = state.visma;
+    const s = v.settings;
+    const o = state.vismaOpts || { articles: [], terms: [] };
+    const f = $('#vi-form');
+    const known = new Set(o.articles.map((a) => a.id));
+    const artOptions = (cur) => `<option value="">– geen –</option>${o.articles.map((a) => `<option value="${esc(a.id)}"${a.id === cur ? ' selected' : ''}>${esc(a.number)} · ${esc(a.name)}</option>`).join('')}`
+      + (cur && !known.has(cur) ? `<option value="${esc(cur)}" selected>(gekozen artikel${state.vismaOpts ? ' bestaat niet meer' : ''})</option>` : '');
+    const cats = state.settings ? state.settings.categories : {};
+    $('#vi-arts').innerHTML = `<thead><tr><th>Omzetcategorie</th><th>Grootboek (export)</th><th>Artikel in Visma</th></tr></thead><tbody>${
+      Object.keys(C.GROUPS).flatMap((g) => C.VAT_RATES.map((r) => {
+        const k = C.catKey(g, r);
+        const c = cats[k] || {};
+        return `<tr><td>${esc(c.name || k)}</td><td>${esc(c.account || '–')}</td><td><select data-k="${esc(k)}" aria-label="Artikel voor ${esc(c.name || k)}">${artOptions(s.articles[k])}</select></td></tr>`;
+      })).join('')}</tbody>`;
+    const knownTerm = o.terms.some((t) => t.id === s.termsOfPaymentId);
+    f.terms.innerHTML = `<option value="">– kies –</option>${o.terms.map((t) => `<option value="${esc(t.id)}"${t.id === s.termsOfPaymentId ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}`
+      + (s.termsOfPaymentId && !knownTerm ? `<option value="${esc(s.termsOfPaymentId)}" selected>(gekozen termijn)</option>` : '');
+    f.autoSync.checked = s.autoSync;
+    f.since.value = s.since;
+  }
+
+  function setupVisma() {
+    const f = $('#vi-form');
+    $('#vi-connect').onclick = async () => {
+      try {
+        const out = await api('visma/connect', { method: 'POST', body: {} });
+        location.href = out.url;
+      } catch (e) { toast(e.message, true); }
+    };
+    $('#vi-disconnect').onclick = async () => {
+      if (!confirm('De verbinding met Visma verbreken? Facturen gaan dan niet meer naar Visma tot je opnieuw verbindt. Wat al in Visma staat, blijft daar.')) return;
+      try {
+        state.visma = await api('visma/disconnect', { method: 'POST', body: {} });
+        state.vismaOpts = null;
+        renderVisma();
+        toast('Verbinding met Visma verbroken');
+      } catch (e) { toast(e.message, true); }
+    };
+    $('#vi-sync').onclick = async () => {
+      const btn = $('#vi-sync');
+      btn.disabled = true;
+      try {
+        const out = await api('visma/sync', { method: 'POST', body: {} });
+        state.visma = out.status;
+        renderVisma();
+        const msg = `${out.sent} ${out.sent === 1 ? 'factuur' : 'facturen'} naar Visma${out.failed ? `, ${out.failed} mislukt: ${out.errors[0] || ''}` : ''}`;
+        toast(msg, Boolean(out.failed));
+        load().catch(() => {});
+      } catch (e) {
+        toast(e.message, true);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    $('#vi-reload').onclick = () => { state.vismaOpts = null; $('.err', f).textContent = ''; loadVismaOptions(); };
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const err = $('.err', f);
+      err.textContent = '';
+      const articles = {};
+      f.querySelectorAll('#vi-arts select').forEach((sel) => { if (sel.value) articles[sel.dataset.k] = sel.value; });
+      try {
+        state.visma = await api('visma/settings', { method: 'PUT', body: { articles, termsOfPaymentId: f.terms.value, autoSync: f.autoSync.checked, since: f.since.value } });
+        renderVisma();
+        toast('Visma-instellingen opgeslagen');
+      } catch (e) {
+        err.textContent = e.message;
+      }
+    };
+  }
+
+  // Terug van Visma na het verbinden (?visma=…): melding, adres opschonen.
+  function vismaReturn(params) {
+    const r = params.get('visma');
+    if (!r) return false;
+    const reasons = {
+      invalid_state: 'de aanmelding was verlopen; probeer het opnieuw',
+      token_failed: 'Visma weigerde de aanmelding (controleer de app-gegevens in Hoofdbeheer)',
+      not_configured: 'de koppeling is nog niet ingesteld',
+      unreachable: 'Visma was niet bereikbaar',
+    };
+    if (r === 'verbonden') toast('Verbonden met Visma');
+    else if (r === 'geweigerd') toast('Verbinden met Visma is afgebroken.', true);
+    else toast(`Verbinden met Visma mislukt: ${reasons[params.get('reden')] || 'onbekende fout'}.`, true);
+    try { history.replaceState(null, '', './#visma'); } catch { /* file:// */ }
+    return true;
   }
 
   // ---------- Factuur ----------
@@ -317,6 +453,7 @@
     $('#e-credit').hidden = i.status === 'concept' || i.kind === 'credit';
     $('#e-send').hidden = i.status === 'concept';
     $('#e-send').textContent = i.sentAt ? 'Opnieuw versturen' : 'Versturen';
+    $('#e-visma').hidden = i.status === 'concept' || Boolean(i.vismaInvoiceId) || !(state.visma && state.visma.connected);
     $('#e-sendform').hidden = true;
     const links = [];
     if (i.workOrderId) links.push(`Werkorder <a href="../werkorders/?id=${encodeURIComponent(i.workOrderId)}">${esc(d.workOrderNumber || 'openen')}</a>`);
@@ -326,6 +463,7 @@
     if (i.debtorNumber) links.push(`debiteur ${esc(i.debtorNumber)}`);
     if (i.paidAt) links.push(`betaald op ${esc(day(i.paidAt))}`);
     if (i.sentAt) links.push(`verstuurd naar ${esc(i.sentTo)} op ${esc(when(i.sentAt))}`);
+    if (i.vismaInvoiceId) links.push(`in Visma als factuur ${esc(i.vismaNumber || '')} (${esc(when(i.vismaSyncedAt))})`);
     if (!i.workOrderId && i.status !== 'concept') links.push(i.stockBooked ? 'artikelen van de voorraad afgeboekt' : i.source === 'webshop' ? 'voorraad via de webshop' : 'geen voorraad geboekt');
     if (!i.workOrderId && i.source !== 'webshop' && i.status === 'concept') links.push('losse verkoop: bij definitief worden artikelen met een voorraadcode afgeboekt');
     $('#e-links').innerHTML = links.join(' · ');
@@ -340,7 +478,9 @@
   }
 
   function warn(list) {
-    const all = [...(list || []), ...(state.inv && state.inv.sendError && !state.inv.sentAt ? [state.inv.sendError] : [])];
+    const i = state.inv;
+    const all = [...(list || []), ...(i && i.sendError && !i.sentAt ? [i.sendError] : []),
+      ...(i && i.vismaError && !i.vismaInvoiceId ? [`Visma: ${i.vismaError}`] : [])];
     const el = $('#e-warn');
     el.hidden = !all.length;
     el.innerHTML = all.map(esc).join('<br>');
@@ -498,6 +638,22 @@
       } catch (e) { toast(e.message, true); }
     };
     $('#e-sendcancel').onclick = () => { sf.hidden = true; };
+    $('#e-visma').onclick = async () => {
+      const btn = $('#e-visma');
+      btn.disabled = true;
+      try {
+        state.inv = await api(`visma/invoices/${encodeURIComponent(state.inv.id)}`, { method: 'POST', body: {} });
+        renderInvoice();
+        warn([]);
+        toast(`In Visma als factuur ${state.inv.vismaNumber || ''}`);
+      } catch (e) {
+        // De fout staat nu ook bij de factuur.
+        try { state.inv = await api(`invoices/${encodeURIComponent(state.inv.id)}`); renderInvoice(); warn([]); } catch { /* niet erg */ }
+        toast(e.message, true);
+      } finally {
+        btn.disabled = false;
+      }
+    };
     sf.onsubmit = async (ev) => {
       ev.preventDefault();
       const btn = $('button[type=submit]', sf);
@@ -654,6 +810,8 @@
     if (pending) pending.catch(() => {});
     const pendingConf = api('invoices/settings');
     const pendingArts = api('invoices/articles');
+    const pendingVisma = api('visma');
+    pendingVisma.catch(() => {});
     pendingConf.catch(() => {});
     pendingArts.catch(() => {});
     const me = await window.AquatechAccount.load('../');
@@ -672,6 +830,7 @@
       state.profile = conf.profile || {};
       state.conf = conf;
       state.articles = arts.articles || {};
+      state.visma = await pendingVisma.catch(() => null);
     } catch (e) {
       toast(e.message, true);
       state.settings = C.sanitizeSettings({});
@@ -691,6 +850,7 @@
     $('#b-orders').onclick = fetchOrders;
     setupSettings();
     setupDebtors();
+    setupVisma();
     setupEditor();
     window.addEventListener('popstate', () => {
       const pid = new URLSearchParams(location.search).get('id');
@@ -701,8 +861,8 @@
     } else {
       $('#v-list').hidden = false;
       try { await load(); } catch (e) { toast(e.message, true); }
-      const hash = location.hash.slice(1);
-      if (['list', 'debtors', 'export', 'settings'].includes(hash)) showTab(hash);
+      const hash = vismaReturn(params) ? 'visma' : location.hash.slice(1);
+      if (TABS.includes(hash)) showTab(hash);
     }
     if (window.AquatechCommon) {
       window.AquatechCommon.onReturn(() => {
