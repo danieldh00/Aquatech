@@ -101,7 +101,7 @@ function createShopStore(db) {
 
 /**
  * Routes:
- *   GET  /api/catalog          artikelen met webshopprijs (planner en offertes, iedereen die is ingelogd)
+ *   GET  /api/catalog          artikelen met webshopprijs en eigen assortiment (planner en offertes, iedereen die is ingelogd)
  *   GET  /api/admin/shop       koppeling en status (beheerder)
  *   PUT  /api/admin/shop       koppeling instellen
  *   POST /api/admin/shop/sync  producten nu ophalen
@@ -112,21 +112,41 @@ function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, t
 
   // Verkoopprijzen uit voorraadbeheer gaan voor (Aquatech is de bron); de
   // webshopprijs alleen voor artikelen zonder eigen verkoopprijs.
-  function withSalePrices(tenantId, articles) {
+  function withSalePrices(tenantId, articles, sale = salePrices(tenantId)) {
     const out = { ...articles };
     const arts = loadArticles();
-    for (const [code, v] of Object.entries(salePrices(tenantId))) {
+    for (const [code, v] of Object.entries(sale)) {
       if (v.salePrice == null || !arts[code]) continue;
       out[code] = { ...(out[code] || { sku: code, name: v.name, url: '', inStock: true }), price: v.salePrice, via: 'voorraad' };
     }
     return out;
   }
 
+  // Eigen assortiment: de plannercodes die de organisatie als product heeft
+  // (voorraadartikel of gekoppeld webshopproduct). Met een assortiment
+  // gebruikt de planner alleen die artikelen; zonder (leeg) de standaardcatalogus.
+  function assortmentOf(sale, matched) {
+    const arts = loadArticles();
+    const codes = new Set(Object.keys(matched));
+    let unknown = 0;
+    for (const code of Object.keys(sale)) {
+      if (arts[code]) codes.add(code);
+      else unknown++;
+    }
+    return { assortment: [...codes].sort(), unknownCodes: unknown };
+  }
+
   function catalogOf(tenantId, settings) {
     const st = shop.status(tenantId);
-    if (!configured(settings) || !st || !st.syncedAt) return { configured: configured(settings), syncedAt: null, articles: withSalePrices(tenantId, {}), unmatched: [] };
+    const sale = salePrices(tenantId);
+    if (!configured(settings) || !st || !st.syncedAt) {
+      return { configured: configured(settings), syncedAt: null, articles: withSalePrices(tenantId, {}, sale), unmatched: [], ...assortmentOf(sale, {}) };
+    }
     const { matched, unmatched } = matchProducts(shop.products(tenantId), loadArticles(), settings.get('shopSource').mapping);
-    return { configured: true, shop: settings.get('shopSource').url, syncedAt: st.syncedAt, productCount: st.productCount, articles: withSalePrices(tenantId, matched), unmatched };
+    return {
+      configured: true, shop: settings.get('shopSource').url, syncedAt: st.syncedAt, productCount: st.productCount,
+      articles: withSalePrices(tenantId, matched, sale), unmatched, ...assortmentOf(sale, matched),
+    };
   }
 
   app.get('/api/catalog', requireUser, (req, res) => {

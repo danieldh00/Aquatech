@@ -382,7 +382,7 @@
     const ok = (r) => {
       if (r < t.rMin - 1e-9 || r > t.rMax + 1e-9) return;
       // rotators: alleen afstanden die een MP-kop haalt
-      if (type === 'rotator' && C.rotatorModels && !Object.values(C.rotatorModels).some((m) => r >= m.rMin - 1e-9 && r <= m.rMax + 1e-9)) return;
+      if (type === 'rotator' && C.rotatorModels && !Object.values(C.rotatorModelsAvailable ? C.rotatorModelsAvailable() : C.rotatorModels).some((m) => r >= m.rMin - 1e-9 && r <= m.rMax + 1e-9)) return;
       out.add(round1(r));
     };
     for (const ang of angles) {

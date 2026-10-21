@@ -13,12 +13,21 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '0.63.1',
+      version: '0.64.1',
       date: '2026-10-21',
       title: 'Inzoomen: tekening en vlakken scherp en op hun plek',
       items: [
         { text: 'Bij het automatisch herkennen van een plan volgen de vlakken nu ook **bochten** in de tekening. Eerder werden randen te hard rechtgetrokken, waardoor ze ingezoomd tot een halve meter naast de tekening lagen. De randen van vlakken zijn ook beter zichtbaar.' },
         { text: 'Ingezoomd op de **iPhone** blijft de tekening scherp en op zijn plek: fijne lijnen vallen niet meer weg en vlakken verspringen niet meer ten opzichte van de tekening.' },
+      ],
+    },
+    {
+      version: '0.64.0',
+      date: '2026-10-21',
+      title: 'De planner werkt met je eigen artikelen',
+      items: [
+        { text: 'Staan er artikelen in **Voorraadbeheer** of zijn er webshopproducten gekoppeld, dan gebruikt de planner alleen die artikelen: sproeiers, rotatorkoppen, buisdiameters en hulpstukken. Ontbreekt een onderdeel, dan kiest de planner een alternatief dat je wel hebt of toont het onder **Niet in je assortiment**, zodat het niet ongemerkt in de stuklijst of offerte komt. Organisaties zonder eigen artikelen houden de standaardcatalogus.', for: ['offertes', 'voorraad'] },
+        { text: 'Verkoopprijzen uit Voorraadbeheer gelden nu ook in de planner en offertes als er geen webshop is gekoppeld.', for: ['offertes', 'voorraad'] },
       ],
     },
     {
