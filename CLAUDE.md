@@ -313,6 +313,17 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `handoverOf` → `workorders.createReceived` (werkorder zonder offerte). De
   uitbesteder ziet alleen `execution` (status, planning, stappen). Werkorder-API
   geeft `outsourcing` mee (`ctx.outsourcingOf`).
+- **Voorraadbeheer** (0.57.0, module `frontend/voorraad/`, recht `voorraad`:
+  beheerder + installateur): `backend/src/stock.js`, tabellen `stock_items`
+  (code uniek per tenant = catalogus-/stuklijstcode, `on_hand`),
+  `stock_movements` (logboek met `balance`, `source` `gereed`|`handmatig`|
+  `verbruik:<id>`) en `stock_reservations` (migratie 23). Reserveren =
+  benodigd − afgeboekt voor open werkorders, via `ctx.onChange` in
+  workorders.js (na POST/PUT/DELETE). Gereed boekt de reservering af, tenzij
+  er verbruik is (`syncUsage`, idempotent per verbruiksregel; niet binnen een
+  andere transactie aanroepen, `transaction` nest niet). Blok Voorraad op de
+  werkorder: `werkorders/stock-panel.js`, API `/api/stock/workorders/:id`
+  (recht `werkorders`).
 - **Tekening indienen + controle** (0.52.0, `backend/src/drawings.js`):
   knop *Direct een tekening maken* op login.html → `beregening/?tekenen&org=`
   (`isPublicPlanner` in server.js: pagina alleen met `?tekenen`, code van

@@ -393,6 +393,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     return transaction(db, () => {
       q('DELETE FROM work_order_photos WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
       q('DELETE FROM work_order_offers WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
+      q('DELETE FROM stock_reservations WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
       return q('DELETE FROM work_orders WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
     });
   }
@@ -431,6 +432,12 @@ function registerWorkOrderRoutes(app, ctx) {
   const publicLimiter = ctx.publicLimiter || ((req, res, next) => next());
   // Uitbesteed of aangenomen (outsourcing.js): per werkorder-id.
   const outsourcingOf = ctx.outsourcingOf || (() => ({}));
+  // Na aanmaken, opslaan of verwijderen (voorraad: reserveren en afboeken).
+  // Een fout daar mag het opslaan van de werkorder niet tegenhouden.
+  const changed = (req, id) => {
+    if (!ctx.onChange) return;
+    try { ctx.onChange(tid(req), id, req.user); } catch (err) { console.warn(`Voorraad bij werkorder ${id} niet bijgewerkt: ${err.message}`); }
+  };
   const requireWo = requireRight('werkorders');
   // Inplannen en de afspraak met de klant (planning of de werkorder zelf).
   const requirePlanning = requireRight('planning');
@@ -489,6 +496,7 @@ function registerWorkOrderRoutes(app, ctx) {
     if (aid.error) return badAssignee(res);
     const wo = workorders.create(req.user, quote, data, { assigneeId: aid.value });
     audit(req, 'werkorder_aangemaakt', { workOrderId: wo.id, number: wo.number, quoteId: quote.id });
+    changed(req, wo.id);
     res.status(201).json(wo);
   });
 
@@ -499,6 +507,7 @@ function registerWorkOrderRoutes(app, ctx) {
     if (aid.error) return badAssignee(res);
     const wo = workorders.update(tid(req), req.params.id, data, status, aid.value);
     if (!wo) return notFound(res);
+    changed(req, wo.id);
     res.json(wo);
   });
 
@@ -627,6 +636,7 @@ function registerWorkOrderRoutes(app, ctx) {
 
   app.delete('/api/workorders/:id', requireWo, (req, res) => {
     if (!workorders.remove(tid(req), req.params.id)) return notFound(res);
+    changed(req, req.params.id);
     audit(req, 'werkorder_verwijderd', { workOrderId: req.params.id });
     res.json({ ok: true });
   });

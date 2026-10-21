@@ -421,9 +421,10 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
  * er geen klantlinks (de afspraaklink staat ernaast: openbaar/afspraak.html).
  */
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, outsourcing, news, aiUsage, recognitions } = stores;
+  const { db, quotes, workorders, shop, settings, photos, outsourcing, news, aiUsage, recognitions, stock } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0 };
+  const seededWos = [];
   const apptBase = shareBase ? shareBase.replace(/offerte\.html$/, 'afspraak.html') : null;
   const today = new Date().toISOString().slice(0, 10);
   const dateIn = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
@@ -488,6 +489,7 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
         counts.appointments++;
       }
       workorders.update(owner.tenant_id, wo.id, undefined, w.status);
+      seededWos.push({ id: wo.id, status: w.status, owner, materials: data.materials, planned: w.planned });
       const at = set.day(Math.max(0, spec.response.at - 1));
       q('UPDATE work_orders SET created_at = ?, updated_at = ? WHERE id = ?').run(at, w.status === 'gereed' ? set.day(-w.planned - 1) : at, wo.id);
       counts.workOrders++;
@@ -543,6 +545,58 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
       q('UPDATE plan_recognitions SET created_at = ?, updated_at = ? WHERE id = ?').run(set.day(r.at), set.day(r.at), id);
       counts.recognitions++;
     }
+  }
+  // Voorraad: de artikelen van de werkorders op voorraad (op één na, die laat
+  // zien hoe een artikel zonder voorraadbeheer eruitziet), een eigen artikel,
+  // ontvangsten, een telling en een correctie. Een gereede werkorder heeft
+  // zijn materialen afgeboekt, een werkorder in uitvoering deels; de open
+  // werkorders reserveren de rest. Eén artikel komt tekort.
+  if (stock && seededWos.length) {
+    const tid = seeded.tenantId;
+    const admin = seeded.users.beheerder;
+    const need = new Map();
+    for (const w of seededWos) for (const m of w.materials) if (m.code && m.qty > 0) need.set(m.code.toUpperCase(), (need.get(m.code.toUpperCase()) || 0) + m.qty);
+    const codes = [...need.keys()].sort();
+    const skip = codes[codes.length - 1];
+    const short = codes[0];
+    const imported = stock.importCatalog(tid, admin, codes.filter((c) => c !== skip));
+    if (imported.error) throw new Error(`Testdata: voorraad mislukt (${imported.error})`);
+    const own = stock.create(tid, admin, { code: 'EIGEN-ZAND', name: 'Straatzand (big bag, eigen inkoop)', unit: 'zak', location: 'Buitenterrein', minQty: 2, costPrice: 42.5, onHand: 5 }, { resync: false });
+    if (own.error) throw new Error(`Testdata: voorraadartikel mislukt (${own.error})`);
+    const items = stock.list(tid);
+    items.forEach((it, k) => {
+      const want = need.get(it.code) || 0;
+      if (it.code === 'EIGEN-ZAND') return;
+      const meta = { location: k % 2 ? 'Bus 1' : `Magazijn ${String.fromCharCode(65 + (k % 4))}${1 + (k % 5)}`, minQty: Math.ceil(want / 2), costPrice: Math.round((2 + (k % 9) * 3.15) * 100) / 100 };
+      stock.update(tid, it.id, meta);
+      // Genoeg voor alles, behalve het tekortartikel (half zoveel).
+      const qty = it.code === short ? Math.max(1, Math.floor(want / 2)) : Math.ceil(want * 1.5) + 2;
+      stock.move(tid, admin, it.id, { kind: 'ontvangst', qty, note: `Pakbon ${1000 + k}` });
+    });
+    const first = items.find((it) => it.code !== 'EIGEN-ZAND' && it.code !== short);
+    if (first) {
+      stock.move(tid, admin, first.id, { kind: 'telling', qty: Math.ceil((need.get(first.code) || 1) * 1.5) + 1, note: 'Kwartaaltelling' });
+      stock.move(tid, admin, first.id, { kind: 'correctie', qty: -1, note: 'Beschadigd bij het laden' });
+    }
+    // Werkorders: gereed = alles afgeboekt, bezig = de helft, open = reserveren.
+    for (const w of seededWos) {
+      const lines = [...new Map(w.materials.filter((m) => m.code && m.qty > 0 && m.code.toUpperCase() !== skip)
+        .map((m) => [m.code.toUpperCase(), m.qty])).entries()];
+      if (w.status === 'gereed') {
+        if (lines.length) stock.issue(tid, w.owner, w.id, lines.map(([code, qty]) => ({ code, qty })), 'Materiaal van de werkorder');
+      } else if (w.status === 'bezig') {
+        const half = lines.slice(0, Math.ceil(lines.length / 2));
+        if (half.length) stock.issue(tid, w.owner, w.id, half.map(([code, qty]) => ({ code, qty })), 'Meegenomen naar de klus');
+      }
+      stock.onWorkOrderChange(tid, w.id, w.owner);
+    }
+    // Spreiden in de tijd: ontvangsten een maand terug, de rest rond de klus.
+    q("UPDATE stock_movements SET created_at = ? WHERE tenant_id = ? AND kind = 'ontvangst'").run(set.day(30), tid);
+    q("UPDATE stock_movements SET created_at = ? WHERE tenant_id = ? AND kind IN ('telling', 'correctie')").run(set.day(10), tid);
+    for (const w of seededWos) q('UPDATE stock_movements SET created_at = ? WHERE tenant_id = ? AND work_order_id = ?').run(set.day(Math.max(0, -w.planned)), tid, w.id);
+    counts.stockItems = stock.list(tid).length;
+    counts.stockMovements = q('SELECT COUNT(*) AS n FROM stock_movements WHERE tenant_id = ?').get(tid).n;
+    counts.stockReservations = q('SELECT COUNT(*) AS n FROM stock_reservations WHERE tenant_id = ?').get(tid).n;
   }
   // Webshop alleen als de testomgeving geen eigen webshop heeft (de nepwinkel
   // van een vorige keer vullen we opnieuw).

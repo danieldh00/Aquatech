@@ -22,6 +22,7 @@ const { createImpersonationStore, createImpersonation } = require('./impersonati
 const { createShopStore, registerShopRoutes } = require('./shop');
 const { createPortalStore, registerPortalRoutes } = require('./portal');
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./outsourcing');
+const { createStockStore, registerStockRoutes } = require('./stock');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./news');
 const { registerDrawingRoutes } = require('./drawings');
 const { createAiUsageStore } = require('./aiusage');
@@ -279,6 +280,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use(/^\/api\/workorders\/[^/]+\/photos$/, express.json({ limit: '8mb' }));
   app.use('/api/workorders', express.json({ limit: '1mb' }));
   app.use('/api/news', express.json({ limit: '64kb' }));
+  app.use('/api/stock', express.json({ limit: '256kb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -557,6 +559,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     planning: 'Alleen voor medewerkers met toegang tot de planning.',
     uitbesteden: 'Je rol heeft geen toegang tot uitbesteden.',
     nieuws: 'Je rol mag geen nieuwsberichten plaatsen.',
+    voorraad: 'Je rol heeft geen toegang tot voorraadbeheer.',
     portaal: 'Het klantportaal is er voor klanten.',
   };
   const requireRight = (right) => (req, res, next) => {
@@ -1229,6 +1232,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const dossierStore = createDossierStore(database, { photos: photoStore });
   const outsourcingStore = createOutsourcingStore(database, { workorders: workOrderStore });
   const newsStore = createNewsStore(database);
+  const stockStore = createStockStore(database);
   // Klant (of gast): ziet alleen berichten voor iedereen.
   const isCustomer = (req, user) => !user || user.kind === 'gast' || (!user.platform_admin && store.roles.get(req.tenantId || user.tenant_id, user.role)?.kind === 'klant');
 
@@ -1272,6 +1276,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     themeOf: (id) => Theme.vars(themeFor(id)),
     photoCounts: (tid, ids) => photoStore.counts(tid, ids),
     outsourcingOf: (tid) => outsourcingStore.marks(tid),
+    // Voorraad: reserveren na elke wijziging, afboeken bij Gereed (zie stock.js).
+    onChange: (tid, id, user) => stockStore.onWorkOrderChange(tid, id, user),
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
     // testaccounts daarvan erbij (net als bij de klantaccounts hierboven).
     staffTenantsOf: (req) => {
@@ -1279,6 +1285,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return [homeOf(tid), tid];
     },
   });
+
+  // ---------- Voorraadbeheer: reserveren en afboeken op werkorders (zie stock.js) ----------
+  registerStockRoutes(app, { stock: stockStore, requireRight, requireJson, audit });
 
   // ---------- Opdrachten uitbesteden aan andere organisaties (zie outsourcing.js) ----------
   registerOutsourcingRoutes(app, {
@@ -1468,7 +1477,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, settings: settingsFor(t.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, settings: settingsFor(t.id) },
       set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );

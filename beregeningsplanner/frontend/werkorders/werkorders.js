@@ -293,6 +293,7 @@
     renderMaterials();
     renderProgress();
     if (window.WorkOrderPhotos) window.WorkOrderPhotos.open(wo, { toast, statusOf: () => $('#e-status').value });
+    if (window.WorkOrderStock) window.WorkOrderStock.open(wo, { toast, manage: (state.me.rights || []).includes('voorraad') });
     // ?id=…#fotos (startscherm): meteen naar de foto's.
     if (location.hash === '#fotos') $('#ph-card').scrollIntoView();
     else window.scrollTo(0, 0);
@@ -556,6 +557,8 @@
           wo.share = out.share;
           renderAppt();
           $('#e-status').value = out.status;
+          // Reservering en afboeking volgen de materiaallijst en de status.
+          if (window.WorkOrderStock) window.WorkOrderStock.refresh(wo);
           $('#e-saved').textContent = `Opgeslagen ${new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`;
         }
       } catch (e) {

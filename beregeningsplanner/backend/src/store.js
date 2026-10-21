@@ -535,7 +535,7 @@ function createStore(db) {
     return { tenant: t };
   }
 
-  // Leegmaken: plannen, offertes, werkorders, historie, auditlog, sessies en gasten weg;
+  // Leegmaken: plannen, offertes, werkorders, voorraad, historie, auditlog, sessies en gasten weg;
   // instellingen blijven.
   function clearData(tenantId) {
     q('DELETE FROM history WHERE tenant_id = ?').run(tenantId);
@@ -546,6 +546,9 @@ function createStore(db) {
     q('DELETE FROM news WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM ai_usage WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM plan_recognitions WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM stock_reservations WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM stock_movements WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM stock_items WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM work_orders WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM impersonations WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM support_grants WHERE tenant_id = ?').run(tenantId);
