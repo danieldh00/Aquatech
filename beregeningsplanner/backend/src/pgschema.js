@@ -520,6 +520,50 @@ const PG_MIGRATIONS = [
   );
   CREATE INDEX service_request_photos_req ON service_request_photos (tenant_id, request_id, created_at);
   `,
+  // 26: artikelen met verkoopprijs en webshopstand, facturen (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN sale_price DOUBLE PRECISION;
+  ALTER TABLE stock_items ADD COLUMN vat_rate BIGINT NOT NULL DEFAULT 21;
+  ALTER TABLE stock_items ADD COLUMN revenue_group ${T} NOT NULL DEFAULT 'producten';
+  ALTER TABLE stock_items ADD COLUMN shop_sync BIGINT NOT NULL DEFAULT 1;
+  ALTER TABLE stock_items ADD COLUMN shop_product_id ${T};
+  ALTER TABLE stock_items ADD COLUMN shop_dirty BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE stock_items ADD COLUMN shop_price_seen DOUBLE PRECISION;
+  ALTER TABLE stock_items ADD COLUMN shop_stock_seen DOUBLE PRECISION;
+  ALTER TABLE stock_items ADD COLUMN shop_synced_at ${T};
+  ALTER TABLE stock_items ADD COLUMN shop_error ${T} NOT NULL DEFAULT '';
+  CREATE INDEX stock_items_dirty ON stock_items (tenant_id, shop_dirty);
+  CREATE TABLE invoices (
+    id            ${T} PRIMARY KEY,
+    tenant_id     ${T} NOT NULL ${FK('tenants(id)')},
+    number        ${T},
+    status        ${T} NOT NULL DEFAULT 'concept' CHECK (status IN ('concept', 'definitief', 'betaald')),
+    kind          ${T} NOT NULL DEFAULT 'factuur' CHECK (kind IN ('factuur', 'credit')),
+    credit_of     ${T},
+    customer_id   ${T},
+    customer_name ${T} NOT NULL DEFAULT '',
+    work_order_id ${T},
+    quote_id      ${T},
+    invoice_date  ${T} NOT NULL,
+    due_date      ${T} NOT NULL,
+    subtotal      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    vat_total     DOUBLE PRECISION NOT NULL DEFAULT 0,
+    total         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    data          ${T} NOT NULL,
+    stock_booked  BIGINT NOT NULL DEFAULT 0,
+    finalized_at  ${T},
+    paid_at       ${T},
+    credited_at   ${T},
+    exported_at   ${T},
+    created_by    ${T},
+    created_at    ${T} NOT NULL,
+    updated_at    ${T} NOT NULL,
+    UNIQUE (tenant_id, number)
+  );
+  CREATE INDEX invoices_date ON invoices (tenant_id, invoice_date);
+  CREATE INDEX invoices_status ON invoices (tenant_id, status, invoice_date);
+  CREATE INDEX invoices_wo ON invoices (tenant_id, work_order_id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

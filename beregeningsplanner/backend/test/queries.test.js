@@ -148,6 +148,18 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.strictEqual((await c.get('/api/workorders')).body.items[0].logged.minutes, 300);
     assert.ok(probe.stats.queries <= 5, probe.stats.sql.join('\n'));
+    // Facturen: overzicht en export in een vast aantal queries, ongeacht het
+    // aantal facturen (geen query per factuur of regel).
+    for (let i = 0; i < 4; i++) {
+      const inv = (await c.post('/api/invoices', { data: { customer: { name: `Klant ${i}` }, lines: [{ description: 'Sproeier', qty: 2, price: 10 }] } })).body;
+      assert.strictEqual((await c.post(`/api/invoices/${inv.id}/finalize`, {})).status, 200);
+    }
+    probe.reset();
+    assert.strictEqual((await c.get('/api/invoices')).body.items.length, 4);
+    assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
+    probe.reset();
+    assert.strictEqual((await c.get('/api/invoices/export')).body.items.length, 4);
+    assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
   } finally {
     server.close();
   }

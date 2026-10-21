@@ -288,6 +288,7 @@
       d.planId ? `plan <a href="../beregening/?plan=${encodeURIComponent(d.planId)}">${esc(d.planTitle || 'beregeningsplan')}</a>` : '',
     ].filter(Boolean).join(' · ');
     $('#e-menu [data-act=openquote]').hidden = !d.quoteId;
+    $('#e-menu [data-act=invoice]').hidden = !state.invoices || wo.status === 'geannuleerd';
     $('#e-menu [data-act=openplan]').hidden = !d.planId;
     $('#e-menu [data-act=rezones]').hidden = !d.planId;
     $('#e-menu [data-act=rematerials]').hidden = !d.quoteId;
@@ -728,7 +729,26 @@
     const wo = state.wo;
     if (!wo) return;
     const d = wo.data;
-    if (act === 'openquote') {
+    if (act === 'invoice') {
+      // Factuur uit deze werkorder (offerteregels + meerwerk, of geboekt materiaal en uren).
+      await save();
+      const post = (force) => fetch('../api/invoices', { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workOrderId: wo.id, force }) })
+        .then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+      try {
+        let r = await post(false);
+        if (r.status === 409 && r.body.invoiceId) {
+          if (!confirm(`${r.body.message}\n\nOK = nog een factuur maken, Annuleren = de bestaande openen.`)) {
+            location.href = `../facturen/?id=${encodeURIComponent(r.body.invoiceId)}`;
+            return;
+          }
+          r = await post(true);
+        }
+        if (r.status !== 201) return toast(r.body.message || `Factuur maken mislukt (HTTP ${r.status})`, true);
+        location.href = `../facturen/?id=${encodeURIComponent(r.body.id)}`;
+      } catch (e) {
+        toast(`Factuur maken mislukt: ${e.message}`, true);
+      }
+    } else if (act === 'openquote') {
       await save();
       location.href = `../offertes/?id=${encodeURIComponent(d.quoteId)}`;
     } else if (act === 'openplan') {
@@ -1095,6 +1115,7 @@
     // Afspraak met de klant regelen hoort bij het recht planning.
     state.planning = rights.includes('planning');
     state.outsource = rights.includes('uitbesteden');
+    state.invoices = rights.includes('facturen');
     if (!state.me.user || !rights.includes('werkorders')) {
       $('#list-view').hidden = false;
       $('#l-new').hidden = true;

@@ -18,6 +18,11 @@
 //   verbruiksregel) of vanzelf als de werkorder Gereed wordt: dan wordt wat
 //   nog gereserveerd staat afgeboekt, tenzij er verbruik is geregistreerd (dat
 //   is dan de werkelijkheid en de rest van de reservering vervalt).
+// - Verkoop (migratie 26): een artikel heeft een verkoopprijs (excl. btw),
+//   btw-tarief en omzetgroep (voor de facturen en de Visma-export). Aquatech
+//   is de bron: prijs en voorraad gaan naar de webshop (shopsync.js). Elke
+//   wijziging van prijs of stand zet shop_dirty, onDirty start dan het
+//   terugschrijven.
 const crypto = require('crypto');
 const { transaction } = require('./db');
 const { loadArticles } = require('./shop');
@@ -28,6 +33,10 @@ const MANUAL = ['ontvangst', 'correctie', 'telling'];
 const OPEN = ['open', 'gepland', 'bezig'];
 const MAX_QTY = 1e6;
 const LIST_LIMIT = 200;
+// Omzetgroepen: samen met het btw-tarief de omzetcategorie op de factuur en
+// in de export naar de boekhouding (invoices.js).
+const GROUPS = { producten: 'Producten', arbeid: 'Arbeid', overig: 'Overig' };
+const VAT_RATES = [21, 9, 0];
 const EXPORT_LIMIT = 10000;
 
 const now = () => new Date().toISOString();
@@ -65,6 +74,22 @@ function sanitizeItem(raw, { partial = false } = {}) {
     if (n !== null && (!Number.isFinite(n) || n < 0 || n > MAX_QTY)) return { error: 'Ongeldige inkoopprijs.', field: 'costPrice' };
     out.costPrice = n === null ? null : Math.round(n * 100) / 100;
   }
+  if (!partial || r.salePrice !== undefined) {
+    const n = r.salePrice === '' || r.salePrice == null ? null : Number(r.salePrice);
+    if (n !== null && (!Number.isFinite(n) || n < 0 || n > MAX_QTY)) return { error: 'Ongeldige verkoopprijs.', field: 'salePrice' };
+    out.salePrice = n === null ? null : Math.round(n * 100) / 100;
+  }
+  if (!partial || r.vatRate !== undefined) {
+    const n = r.vatRate === undefined || r.vatRate === '' || r.vatRate === null ? 21 : Number(r.vatRate);
+    if (!VAT_RATES.includes(n)) return { error: 'Kies een btw-tarief van 21, 9 of 0%.', field: 'vatRate' };
+    out.vatRate = n;
+  }
+  if (!partial || r.revenueGroup !== undefined) {
+    const g = r.revenueGroup === undefined || r.revenueGroup === '' ? 'producten' : String(r.revenueGroup);
+    if (!GROUPS[g]) return { error: 'Onbekende omzetgroep.', field: 'revenueGroup' };
+    out.revenueGroup = g;
+  }
+  if (!partial || r.shopSync !== undefined) out.shopSync = r.shopSync !== false;
   return { value: out };
 }
 
@@ -84,9 +109,13 @@ function needsOf(materials) {
   return need;
 }
 
-function createStockStore(db, { articles = loadArticles } = {}) {
+function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) {
   const q = (sql) => db.prepare(sql);
-  const ITEM_COLS = 'id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at';
+  // Webshop: na een wijziging van prijs of stand (shopsync.js meldt zich aan via onDirty()).
+  let dirtyHook = onDirty;
+  const dirty = (tenantId) => { if (dirtyHook) dirtyHook(tenantId); };
+  const SALE_COLS = 'sale_price, vat_rate, revenue_group, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error';
+  const ITEM_COLS = `id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}`;
   const MOVE_COLS = 'm.id, m.item_id, m.kind, m.qty, m.balance, m.work_order_id, m.work_order_number, m.source, m.note, m.user_name, m.created_at';
 
   const shapeItem = (r, reserved = 0, orders = 0) => {
@@ -98,6 +127,9 @@ function createStockStore(db, { articles = loadArticles } = {}) {
       costPrice: r.cost_price == null ? null : Number(r.cost_price),
       value: r.cost_price == null ? null : Math.round(onHand * r.cost_price * 100) / 100,
       low: r.min_qty > 0 && onHand - res < r.min_qty, notes: r.notes, archived: Boolean(r.archived),
+      salePrice: r.sale_price == null ? null : Number(r.sale_price), vatRate: Number(r.vat_rate ?? 21), revenueGroup: r.revenue_group || 'producten',
+      shopSync: r.shop_sync === undefined ? true : Boolean(Number(r.shop_sync)),
+      shop: { productId: r.shop_product_id || null, pending: Boolean(Number(r.shop_dirty)), syncedAt: r.shop_synced_at || null, error: r.shop_error || '' },
       createdAt: r.created_at, updatedAt: r.updated_at,
     };
   };
@@ -111,6 +143,7 @@ function createStockStore(db, { articles = loadArticles } = {}) {
   // Overzicht in één query: stand plus gereserveerd (som over open werkorders).
   function list(tenantId, { archived = false } = {}) {
     return q(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
+        i.sale_price, i.vat_rate, i.revenue_group, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders
       FROM stock_items i
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
@@ -149,7 +182,12 @@ function createStockStore(db, { articles = loadArticles } = {}) {
   // Een mutatie boeken: stand bijwerken en het logboek aanvullen. Binnen de
   // transactie van de aanroeper.
   function book(tenantId, itemId, delta, { kind, workOrder = null, source = '', note = '', user = null, at = now() }) {
-    q('UPDATE stock_items SET on_hand = on_hand + ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(r3(delta), at, tenantId, itemId);
+    // Een verkoop in de webshop zelf (source 'webshop') hoeft niet terug.
+    const toShop = source === 'webshop' ? 0 : 1;
+    q(`UPDATE stock_items SET on_hand = on_hand + ?, updated_at = ?,
+      shop_dirty = CASE WHEN shop_product_id IS NOT NULL AND shop_sync = 1 AND ? = 1 THEN 1 ELSE shop_dirty END
+      WHERE tenant_id = ? AND id = ?`).run(r3(delta), at, toShop, tenantId, itemId);
+    if (toShop) dirty(tenantId);
     const balance = q('SELECT on_hand FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemId).on_hand;
     const id = crypto.randomUUID();
     q(`INSERT INTO stock_movements (id, tenant_id, item_id, kind, qty, balance, work_order_id, work_order_number, source, note, user_id, user_name, created_at)
@@ -167,9 +205,10 @@ function createStockStore(db, { articles = loadArticles } = {}) {
       if (findCode(tenantId, v.code)) return { error: 'Er is al een voorraadartikel met deze code.', field: 'code', status: 409 };
       const id = crypto.randomUUID();
       const t = now();
-      q(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?)`)
-        .run(id, tenantId, v.code, v.name, v.unit, v.location, v.minQty, v.costPrice, v.notes, t, t);
+      q(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
+           sale_price, vat_rate, revenue_group, shop_sync)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?)`)
+        .run(id, tenantId, v.code, v.name, v.unit, v.location, v.minQty, v.costPrice, v.notes, t, t, v.salePrice, v.vatRate, v.revenueGroup, v.shopSync ? 1 : 0);
       const start = Number(raw && raw.onHand);
       if (Number.isFinite(start) && start > 0 && start <= MAX_QTY) book(tenantId, id, start, { kind: 'ontvangst', note: 'Beginvoorraad', user });
       return { id };
@@ -184,7 +223,7 @@ function createStockStore(db, { articles = loadArticles } = {}) {
     const s = sanitizeItem(raw, { partial: true });
     if (s.error) return s;
     const v = s.value;
-    return transaction(db, () => {
+    const out = transaction(db, () => {
       const r = findItem(tenantId, id);
       if (!r) return { error: 'not_found', status: 404 };
       if (v.code && v.code !== r.code) {
@@ -194,14 +233,24 @@ function createStockStore(db, { articles = loadArticles } = {}) {
           .get(tenantId, r.id, tenantId, r.id).n;
         if (used) return { error: 'De code van een artikel dat al op werkorders is gereserveerd of afgeboekt, kan niet meer veranderen.', field: 'code', status: 409 };
       }
-      const n = { code: r.code, name: r.name, unit: r.unit, location: r.location, minQty: r.min_qty, costPrice: r.cost_price, notes: r.notes, ...v };
+      const n = {
+        code: r.code, name: r.name, unit: r.unit, location: r.location, minQty: r.min_qty, costPrice: r.cost_price, notes: r.notes,
+        salePrice: r.sale_price, vatRate: Number(r.vat_rate), revenueGroup: r.revenue_group, shopSync: Boolean(Number(r.shop_sync)), ...v,
+      };
       const archived = raw && raw.archived !== undefined ? (raw.archived ? 1 : 0) : r.archived;
-      q(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, cost_price = ?, notes = ?, archived = ?, updated_at = ?
+      // Andere prijs of btw (of weer meesturen): opnieuw naar de webshop.
+      const toShop = (n.salePrice ?? null) !== (r.sale_price ?? null) || n.vatRate !== Number(r.vat_rate) || (n.shopSync && !Number(r.shop_sync));
+      q(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, cost_price = ?, notes = ?, archived = ?, updated_at = ?,
+           sale_price = ?, vat_rate = ?, revenue_group = ?, shop_sync = ?,
+           shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
          WHERE tenant_id = ? AND id = ?`)
-        .run(n.code, n.name, n.unit, n.location, n.minQty, n.costPrice, n.notes, archived, now(), tenantId, r.id);
+        .run(n.code, n.name, n.unit, n.location, n.minQty, n.costPrice, n.notes, archived, now(), n.salePrice, n.vatRate, n.revenueGroup, n.shopSync ? 1 : 0,
+          toShop && n.shopSync ? 1 : 0, tenantId, r.id);
       if (archived && !r.archived) q('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, r.id);
-      return { item: get(tenantId, r.id) };
+      return { item: get(tenantId, r.id), toShop };
     });
+    if (out.toShop) dirty(tenantId);
+    return out;
   }
 
   /** Verwijderen: zonder mutaties echt weg, anders gearchiveerd (het logboek blijft). */
@@ -265,6 +314,37 @@ function createStockStore(db, { articles = loadArticles } = {}) {
     });
     if (fresh.length) resyncOpen(tenantId, fresh);
     return { created: fresh.length, existing: have.size };
+  }
+
+  /**
+   * Producten uit de webshop als voorraadartikel overnemen (nog niet bestaande
+   * codes). Code = het veld aquatech_code of de sku; prijs = de webshopprijs
+   * (excl. btw). De stand komt bij de volgende synchronisatie uit de webshop.
+   */
+  function importShop(tenantId, products, ids) {
+    const want = new Set((Array.isArray(ids) ? ids : []).map(String).slice(0, 500));
+    if (!want.size) return { error: 'Kies een of meer producten.', field: 'ids' };
+    const chosen = products.filter((p) => want.has(String(p.id)));
+    const skipped = [];
+    const fresh = [];
+    const seen = new Set();
+    for (const p of chosen) {
+      const code = normCode(p.code || p.sku);
+      if (!code || code.length > 40 || !/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code) || seen.has(code)) { skipped.push(p.name); continue; }
+      seen.add(code);
+      fresh.push({ p, code });
+    }
+    const have = new Set(fresh.length ? q(`SELECT code FROM stock_items WHERE tenant_id = ? AND code IN (${marks(fresh.length)})`).all(tenantId, ...fresh.map((f) => f.code)).map((r) => r.code) : []);
+    const todo = fresh.filter((f) => !have.has(f.code));
+    transaction(db, () => {
+      const t = now();
+      const put = q(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
+          sale_price, vat_rate, revenue_group, shop_sync, shop_product_id)
+        VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, 21, 'producten', 1, ?)`);
+      for (const { p, code } of todo) put.run(crypto.randomUUID(), tenantId, code, str(p.name, 200) || code, t, t, p.price == null ? null : Math.round(p.price * 100) / 100, String(p.id));
+    });
+    if (todo.length) resyncOpen(tenantId, todo.map((f) => f.code));
+    return { created: todo.length, existing: have.size, skipped };
   }
 
   /** Logboek (voor het overzicht en de Excel-export), nieuwste eerst. */
@@ -460,9 +540,24 @@ function createStockStore(db, { articles = loadArticles } = {}) {
     return out;
   }
 
+  /** Verkoopgegevens per code (facturen, catalogus): { CODE: { id, name, unit, salePrice, vatRate, revenueGroup } }. */
+  function saleInfo(tenantId, codes = null) {
+    const list0 = codes ? [...new Set(codes.map(normCode))].filter(Boolean) : null;
+    if (list0 && !list0.length) return {};
+    const rows = list0
+      ? q(`SELECT id, code, name, unit, sale_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND code IN (${marks(list0.length)})`).all(tenantId, ...list0)
+      : q('SELECT id, code, name, unit, sale_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND archived = 0').all(tenantId);
+    const out = {};
+    for (const r of rows) {
+      out[r.code] = { id: r.id, name: r.name, unit: r.unit, salePrice: r.sale_price == null ? null : Number(r.sale_price), vatRate: Number(r.vat_rate), revenueGroup: r.revenue_group };
+    }
+    return out;
+  }
+
   return {
-    list, get, create, update, remove, move, importCatalog, movements, reservations: reservationsOf,
-    syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book,
+    list, get, create, update, remove, move, importCatalog, importShop, movements, reservations: reservationsOf,
+    syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
+    onDirty: (fn) => { dirtyHook = fn; },
   };
 }
 
@@ -484,7 +579,7 @@ function registerStockRoutes(app, ctx) {
 
   app.get('/api/stock', requireStock, (req, res) => {
     noStore(res);
-    res.json({ items: stock.list(tid(req), { archived: req.query.archived === '1' }), kinds: KINDS });
+    res.json({ items: stock.list(tid(req), { archived: req.query.archived === '1' }), kinds: KINDS, groups: GROUPS });
   });
 
   app.get('/api/stock/reservations', requireStock, (req, res) => {
@@ -518,6 +613,24 @@ function registerStockRoutes(app, ctx) {
     const out = stock.importCatalog(tid(req), req.user, req.body?.codes);
     if (out.error) return fail(res, out);
     if (out.created) audit(req, 'voorraad_catalogus_overgenomen', { created: out.created });
+    res.json(out);
+  });
+
+  // Webshopproducten die nog geen voorraadartikel zijn (om over te nemen).
+  app.get('/api/stock/shop-products', requireStock, (req, res) => {
+    noStore(res);
+    const products = ctx.shopProductsOf ? ctx.shopProductsOf(tid(req)) : [];
+    const have = new Set(stock.list(tid(req), { archived: true }).flatMap((i) => [i.code, i.shop.productId ? `#${i.shop.productId}` : '']));
+    res.json({
+      items: products.filter((p) => !have.has(`#${p.id}`) && !have.has(normCode(p.code || p.sku)))
+        .map((p) => ({ id: p.id, sku: p.sku, code: normCode(p.code || p.sku), name: p.name, price: p.price, inStock: p.inStock })),
+    });
+  });
+
+  app.post('/api/stock/import-shop', requireJson, requireStock, (req, res) => {
+    const out = stock.importShop(tid(req), ctx.shopProductsOf ? ctx.shopProductsOf(tid(req)) : [], req.body?.ids);
+    if (out.error) return fail(res, out);
+    if (out.created) audit(req, 'voorraad_webshop_overgenomen', { created: out.created });
     res.json(out);
   });
 
@@ -569,4 +682,4 @@ function registerStockRoutes(app, ctx) {
   });
 }
 
-module.exports = { createStockStore, registerStockRoutes, sanitizeItem, needsOf, KINDS };
+module.exports = { createStockStore, registerStockRoutes, sanitizeItem, needsOf, KINDS, GROUPS, VAT_RATES };

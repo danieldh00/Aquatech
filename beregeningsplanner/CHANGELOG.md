@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.61.0
+
+Brincr vervangen (deel 1): verkoopprijzen in Aquatech als bron voor de
+webshop, facturen en de export naar de boekhouding.
+
+- **Artikelen** (`backend/src/stock.js`, migratie 26): `stock_items` krijgt
+  `sale_price` (excl. btw), `vat_rate`, `revenue_group` (producten, arbeid,
+  overig), `shop_sync` en de webshopstand (`shop_product_id`, `shop_dirty`,
+  `shop_price_seen`, `shop_stock_seen`, `shop_synced_at`, `shop_error`).
+  Elke wijziging van prijs of stand zet `shop_dirty`. `saleInfo()` geeft de
+  verkoopgegevens per code; `GET /api/catalog` gebruikt de verkoopprijs vóór
+  de webshopprijs. Producten uit de webshop overnemen:
+  `GET /api/stock/shop-products`, `POST /api/stock/import-shop`.
+- **Webshop in twee richtingen** (`backend/src/shopsync.js`, WooCommerce REST
+  v3): `shopSource.push` (+ `pushStock`) schrijft prijs (incl. btw als de
+  webshop zo rekent, met het tarief van het artikel) en beschikbare voorraad
+  (stand − gereserveerd) terug via `/products/batch`. Een daling van de
+  webshopvoorraad sinds de vorige ronde wordt eerst afgeboekt (bron
+  `webshop`); een prijs die alleen in de webshop wijzigde wordt overgenomen.
+  Na een wijziging na 3 s (alleen de gewijzigde artikelen, met hun actuele
+  stand via `include=`), elke 10 minuten alles, en met de knop in Beheer →
+  Webshop. Zonder push blijft de webshop leidend voor de prijs.
+- **Facturen** (`backend/src/invoices.js`, kern `frontend/facturen/invoice-core.js`,
+  tabel `invoices`, migratie 26): concept → definitief (nummer
+  `<voorvoegsel><jaar>-0001` per omgeving, vergrendeld) → betaald;
+  creditfactuur als nieuw concept met negatieve regels. Uit een werkorder:
+  de gekozen offerteregels plus geboekt materiaal dat niet in de offerte
+  staat (meerwerk), of zonder offerte het geboekte materiaal en de uren
+  × uurtarief. Een losse verkoop boekt bij definitief de voorraad af (bron
+  `factuur:<id>`), de credit ervan boekt terug. Instelling `invoicing`
+  (voorvoegsel, betaaltermijn, betaaltekst, voettekst, omzetcategorieën per
+  groep × btw-tarief met grootboekrekening). Recht `facturen` (beheerder).
+  API `/api/invoices[/:id]`, `.../finalize|paid|credit`, `/api/invoices/settings`,
+  `/api/invoices/articles`, `/api/invoices/export[/mark]`.
+- **Module Facturen** (`frontend/facturen/`): overzicht met filters,
+  factuur bewerken (`?id=`), afdrukversie/PDF, export voor Visma eAccounting
+  als Excel (omzetregels per categorie, facturen, totalen, debiteuren) en de
+  instellingen. Knop *Factuur maken* in het menu van de werkorder.
+- Testdata: verkoopprijzen en facturen (betaald, openstaand over de
+  vervaldatum, concept, credit, losse verkoop).
+
 ## 0.60.0
 
 Klantportaal: storing of onderhoud melden, met foto's; medewerkers maken er

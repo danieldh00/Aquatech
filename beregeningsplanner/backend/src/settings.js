@@ -4,6 +4,7 @@ const { sanitizeProfile } = require('./quotes');
 const { sanitizeMail } = require('./mailer');
 const { sanitizeShop } = require('./woocommerce');
 const { sanitizeOutsourcing } = require('./outsourcing');
+const { sanitizeInvoicing } = require('./invoices');
 const path = require('path');
 const Theme = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'theme.js'));
 const AiModels = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'ai-models.js'));
@@ -60,6 +61,10 @@ const FIELDS = {
   // (outsourcing.js): versturen en ontvangen staan standaard uit en zet de
   // beheerder zelf aan; region = werkgebied dat andere organisaties zien.
   outsourcing: { type: 'object', default: {}, sanitize: sanitizeOutsourcing },
+  // Facturen (invoices.js): nummering, betaaltermijn en -tekst, en de
+  // omzetcategorieën per omzetgroep en btw-tarief met grootboekrekening
+  // voor de export naar de boekhouding.
+  invoicing: { type: 'object', default: {}, sanitize: sanitizeInvoicing },
   // Kleurthema (shared/theme.js): alleen door een hoofdbeheerder te kiezen via
   // Hoofdbeheer (platform: niet via Beheer > Instellingen). In de hoofdtenant
   // geldt het voor alle organisaties, in een live-tenant als eigen thema.

@@ -38,6 +38,14 @@
   }
 
   const woLink = (w) => (w && w.id ? `<a href="../werkorders/?id=${encodeURIComponent(w.id)}">${esc(w.number || 'werkorder')}</a>` : '');
+  // Stand van de webshopkoppeling per artikel.
+  const shopPill = (i) => {
+    if (!i.shopSync) return '<span class="muted small">niet</span>';
+    if (!i.shop.productId) return '<span class="muted small">niet gekoppeld</span>';
+    if (i.shop.error) return `<span class="pill low" title="${esc(i.shop.error)}">Fout</span>`;
+    if (i.shop.pending) return '<span class="pill">Wordt bijgewerkt</span>';
+    return `<span class="pill ok" title="${esc(i.shop.syncedAt ? `Bijgewerkt ${when(i.shop.syncedAt)}` : '')}">Gekoppeld</span>`;
+  };
   const kindPill = (k) => `<span class="pill k-${esc(k)}">${esc(KINDS[k] || k)}</span>`;
 
   // ---------- Overzicht ----------
@@ -68,7 +76,7 @@
       return;
     }
     const items = visible();
-    t.innerHTML = `<thead><tr><th>Artikel</th><th>Locatie</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Waarde</th></tr></thead>
+    t.innerHTML = `<thead><tr><th>Artikel</th><th>Locatie</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Verkoopprijs</th><th>Webshop</th><th class="num">Waarde</th></tr></thead>
       <tbody>${items.map((i) => `<tr data-id="${esc(i.id)}" class="${i.low ? 'low' : ''}${i.archived ? ' arch' : ''}">
         <td class="wrap"><b class="code">${esc(i.code)}</b>${i.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(i.name)}</span></td>
         <td>${esc(i.location)}</td>
@@ -76,8 +84,10 @@
         <td class="num">${i.reserved ? `${esc(nl(i.reserved))}<span class="sub">${i.orders} werkorder${i.orders === 1 ? '' : 's'}</span>` : ''}</td>
         <td class="num avail">${esc(nl(i.available))}${i.low ? ' <span class="pill low">Bijbestellen</span>' : ''}</td>
         <td class="num">${i.minQty ? esc(nl(i.minQty)) : ''}</td>
+        <td class="num">${esc(eur(i.salePrice))}${i.salePrice != null && i.vatRate !== 21 ? `<span class="sub">${i.vatRate}% btw</span>` : ''}</td>
+        <td>${shopPill(i)}</td>
         <td class="num">${esc(eur(i.value))}</td>
-      </tr>`).join('') || '<tr><td colspan="7" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
+      </tr>`).join('') || '<tr><td colspan="9" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
     t.querySelectorAll('tr[data-id]').forEach((tr) => { tr.onclick = () => openItem(tr.dataset.id, true); });
   }
 
@@ -173,6 +183,7 @@
         const item = await api('stock/items', { method: 'POST', body: {
           code: f.code.value, name: f.name.value, unit: f.unit.value, location: f.location.value,
           onHand: num(f.onHand.value), minQty: num(f.minQty.value), costPrice: num(f.costPrice.value),
+          salePrice: num(f.salePrice.value), vatRate: Number(f.vatRate.value), revenueGroup: f.revenueGroup.value, shopSync: f.shopSync.checked,
         } });
         f.hidden = true;
         toast(`${item.code} toegevoegd`);
@@ -184,9 +195,54 @@
     };
   }
 
+  // ---------- Uit de webshop ----------
+  async function openShop() {
+    const f = $('#shop-form');
+    $('#new-form').hidden = true;
+    $('#import-form').hidden = true;
+    $('.err', f).textContent = '';
+    $('#sh-search').value = '';
+    $('#sh-list').innerHTML = '<p class="muted small">Laden…</p>';
+    f.hidden = false;
+    try {
+      const items = (await api('stock/shop-products')).items;
+      $('#sh-list').innerHTML = items.length ? items.map((p) => (p.code
+        ? `<label data-s="${esc(`${p.code} ${p.name}`.toLowerCase())}"><input type="checkbox" value="${esc(p.id)}"> <span><span class="code">${esc(p.code)}</span> ${esc(p.name)} <span class="muted">${esc(eur(p.price))}</span></span></label>`
+        : `<label class="have"><input type="checkbox" disabled> <span>${esc(p.name)} (geen SKU: vul die eerst in de webshop in)</span></label>`)).join('')
+        : '<p class="muted small">Alle producten uit de webshop staan al in de voorraad, of er zijn nog geen producten opgehaald (Beheer → Webshop).</p>';
+    } catch (e) {
+      $('.err', f).textContent = e.message;
+    }
+  }
+
+  function setupShop() {
+    const f = $('#shop-form');
+    $('[data-cancel]', f).onclick = () => { f.hidden = true; };
+    $('#sh-search').oninput = () => {
+      const s = $('#sh-search').value.trim().toLowerCase();
+      f.querySelectorAll('#sh-list label[data-s]').forEach((l) => { l.hidden = Boolean(s) && !l.dataset.s.includes(s); });
+    };
+    $('#sh-all').onclick = () => f.querySelectorAll('#sh-list label[data-s]:not([hidden]) input').forEach((i) => { i.checked = true; });
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const ids = [...f.querySelectorAll('#sh-list input:checked:not([disabled])')].map((i) => i.value);
+      const err = $('.err', f);
+      if (!ids.length) { err.textContent = 'Kies een of meer producten.'; return; }
+      try {
+        const out = await api('stock/import-shop', { method: 'POST', body: { ids } });
+        f.hidden = true;
+        toast(`${out.created} product${out.created === 1 ? '' : 'en'} overgenomen`);
+        await load();
+      } catch (e) {
+        err.textContent = e.message;
+      }
+    };
+  }
+
   function openImport(preselect = []) {
     const f = $('#import-form');
     $('#new-form').hidden = true;
+    $('#shop-form').hidden = true;
     $('.err', f).textContent = '';
     const have = new Set(state.items.map((i) => i.code));
     const pre = new Set(preselect.map((c) => c.toUpperCase()));
@@ -238,6 +294,14 @@
     for (const k of ['code', 'name', 'unit', 'location', 'notes']) f[k].value = i[k] || '';
     f.minQty.value = i.minQty || '';
     f.costPrice.value = i.costPrice == null ? '' : i.costPrice;
+    f.salePrice.value = i.salePrice == null ? '' : i.salePrice;
+    f.vatRate.value = String(i.vatRate);
+    f.revenueGroup.value = i.revenueGroup;
+    f.shopSync.checked = i.shopSync;
+    $('#d-shop').innerHTML = !i.shop.productId ? (i.shopSync ? 'Nog niet gekoppeld aan een webshopproduct (koppelen gaat op SKU = artikelcode).' : '')
+      : i.shop.error ? `Webshop: <span class="err">${esc(i.shop.error)}</span>`
+        : i.shop.pending ? 'Webshop: wijziging wordt binnen enkele seconden verstuurd.'
+          : `Webshop: gekoppeld (product ${esc(i.shop.productId)})${i.shop.syncedAt ? `, bijgewerkt ${esc(when(i.shop.syncedAt))}` : ''}.`;
     $('#d-remove').hidden = i.archived;
     $('#d-restore').hidden = !i.archived;
     $('#move-form').hidden = i.archived;
@@ -311,6 +375,7 @@
         state.item = { ...state.item, ...await api(`stock/items/${encodeURIComponent(state.item.id)}`, { method: 'PUT', body: {
           code: ef.code.value, name: ef.name.value, unit: ef.unit.value, location: ef.location.value, notes: ef.notes.value,
           minQty: num(ef.minQty.value), costPrice: num(ef.costPrice.value),
+          salePrice: num(ef.salePrice.value), vatRate: Number(ef.vatRate.value), revenueGroup: ef.revenueGroup.value, shopSync: ef.shopSync.checked,
         } }) };
         renderItem();
         toast('Opgeslagen');
@@ -404,14 +469,21 @@
         { header: 'Bijbestellen', key: 'low', width: 12 },
         { header: 'Inkoopprijs', key: 'costPrice', width: 12, style: { numFmt: '€ #,##0.00' } },
         { header: 'Waarde', key: 'value', width: 12, style: { numFmt: '€ #,##0.00' } },
+        { header: 'Verkoopprijs excl. btw', key: 'salePrice', width: 14, style: { numFmt: '€ #,##0.00' } },
+        { header: 'Btw', key: 'vat', width: 7 },
+        { header: 'Omzetgroep', key: 'group', width: 12 },
+        { header: 'Webshop', key: 'shop', width: 16 },
         { header: 'Gearchiveerd', key: 'archived', width: 13 },
         { header: 'Notities', key: 'notes', width: 30 },
       ];
+      const GROUPS = { producten: 'Producten', arbeid: 'Arbeid', overig: 'Overig' };
       for (const i of visible()) {
-        ws.addRow({ ...i, low: i.low ? 'ja' : '', archived: i.archived ? 'ja' : '', costPrice: i.costPrice, value: i.value });
+        ws.addRow({ ...i, low: i.low ? 'ja' : '', archived: i.archived ? 'ja' : '', costPrice: i.costPrice, value: i.value, salePrice: i.salePrice,
+          vat: `${i.vatRate}%`, group: GROUPS[i.revenueGroup] || i.revenueGroup,
+          shop: !i.shopSync ? 'niet' : i.shop.error ? 'fout' : i.shop.productId ? `product ${i.shop.productId}` : 'niet gekoppeld' });
       }
       ws.getRow(1).font = { bold: true };
-      ws.autoFilter = { from: 'A1', to: 'M1' };
+      ws.autoFilter = { from: 'A1', to: 'Q1' };
       const rs = wb.addWorksheet('Gereserveerd', { views: [{ state: 'frozen', ySplit: 1 }] });
       rs.columns = [
         { header: 'Werkorder', key: 'wo', width: 14 }, { header: 'Titel', key: 'title', width: 30 }, { header: 'Klant', key: 'customer', width: 24 },
@@ -469,6 +541,7 @@
     $('#f-archived').onchange = () => load().catch((e) => toast(e.message, true));
     $('#b-new').onclick = openNew;
     $('#b-import').onclick = () => openImport();
+    $('#b-shop').onclick = () => openShop();
     $('#b-export').onclick = () => exportStock().catch((e) => toast(`Export mislukt: ${e.message}`, true));
     $('#m-export').onclick = () => exportMoves().catch((e) => toast(`Export mislukt: ${e.message}`, true));
     $('#m-from').onchange = loadMoves;
@@ -483,6 +556,7 @@
     };
     setupNew();
     setupImport();
+    setupShop();
     setupItem();
     window.addEventListener('popstate', () => {
       const pid = new URLSearchParams(location.search).get('id');

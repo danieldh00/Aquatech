@@ -20,7 +20,9 @@ const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders'
 const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('./photos');
 const { createWorkLogStore, registerWorkLogRoutes } = require('./worklog');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
-const { createShopStore, registerShopRoutes } = require('./shop');
+const { createShopStore, registerShopRoutes, loadArticles } = require('./shop');
+const { createShopSync } = require('./shopsync');
+const { createInvoiceStore, registerInvoiceRoutes } = require('./invoices');
 const { createPortalStore, registerPortalRoutes } = require('./portal');
 const { createServiceRequestStore, registerServiceRequestRoutes } = require('./servicerequests');
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./outsourcing');
@@ -294,6 +296,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use(['/api/portal/requests', '/api/service-requests'], express.json({ limit: '64kb' }));
   app.use('/api/news', express.json({ limit: '64kb' }));
   app.use('/api/stock', express.json({ limit: '256kb' }));
+  app.use('/api/invoices', express.json({ limit: '1mb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -1256,6 +1259,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const outsourcingStore = createOutsourcingStore(database, { workorders: workOrderStore });
   const newsStore = createNewsStore(database);
   const stockStore = createStockStore(database);
+  // Prijs en voorraad in twee richtingen met de webshop (shopsync.js); na een
+  // wijziging gaan de gewijzigde artikelen enkele seconden later mee.
+  const shopSync = createShopSync({ db: database, shop: shopStore, stock: stockStore, settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch });
+  stockStore.onDirty((tid) => shopSync.schedule(tid));
+  const invoiceStore = createInvoiceStore(database, { stock: stockStore });
   // Materiaalverbruik op de werkorder boekt de voorraad af, in dezelfde
   // transactie als de verbruiksregel (zie stock.syncUsage).
   workLogStore.hook((tid, row, user) => stockStore.syncUsage(tid, {
@@ -1317,7 +1325,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   // ---------- Voorraadbeheer: reserveren en afboeken op werkorders (zie stock.js) ----------
-  registerStockRoutes(app, { stock: stockStore, requireRight, requireJson, audit });
+  registerStockRoutes(app, { stock: stockStore, requireRight, requireJson, audit, shopProductsOf: (tid) => shopStore.products(tid) });
+
+  // ---------- Facturen en export naar de boekhouding (zie invoices.js) ----------
+  registerInvoiceRoutes(app, {
+    invoices: invoiceStore, requireRight, requireJson, audit,
+    settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
+    loggedOf: (tid, woId) => workLogStore.list(tid, woId),
+    articlesOf: (tid) => stockStore.saleInfo(tid),
+    catalog: () => loadArticles(),
+  });
 
   // ---------- Opdrachten uitbesteden aan andere organisaties (zie outsourcing.js) ----------
   registerOutsourcingRoutes(app, {
@@ -1359,6 +1376,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // ---------- Webshopkoppeling (zie shop.js) ----------
   registerShopRoutes(app, {
     shop: shopStore, requireUser, requireJson, audit, fetchImpl: shopFetch,
+    sync: (tid, user) => shopSync.run(tid, { full: true, user }),
+    salePrices: (tid) => stockStore.saleInfo(tid),
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }),
   });
@@ -1522,7 +1541,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, requests: serviceRequestStore, settings: settingsFor(t.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, requests: serviceRequestStore, invoices: invoiceStore, settings: settingsFor(t.id) },
       set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );
@@ -1702,6 +1721,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
     return total;
   };
+  // Webshop: alle omgevingen met terugschrijven aan (elke 10 minuten vanuit main).
+  app.locals.shopSyncAll = () => shopSync.runAll(store.listTenants().flatMap((l) => [l, ...l.environments]).map((t) => t.id));
+  app.locals.shopSync = shopSync;
   // Automatische back-up als de nieuwste ouder is dan een dag.
   app.locals.backupIfDue = async () => {
     if (!backupDir || settings.get('backupKeepDays') === 0) return null;
@@ -1744,6 +1766,7 @@ if (require.main === module) {
   };
   runMaintenance();
   setInterval(runMaintenance, 60 * 60 * 1000).unref();
+  setInterval(() => app.locals.shopSyncAll().catch((err) => console.error('Webshopsynchronisatie mislukt:', err.message)), 10 * 60 * 1000).unref();
   if (!settings.get('anthropicApiKey')) console.log('Geen API-sleutel ingesteld: automatisch herkennen met AI staat uit (tekenen, lokale herkenning en de toverstaf werken wel).');
 
   const server = app.listen(port, () => {

@@ -1,0 +1,50 @@
+/* Facturen: overzicht, export, instellingen en de factuur zelf. Basis uit beheer.css/plannen.css, afdrukversie uit offertes/quote-view.css. */
+.filters .spacer, .edit-head .spacer { flex: 1; }
+.filters label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+.edit-head { align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.edit-head h1 { margin: 0; font-size: 22px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.card-form label.grow { flex: 1 1 220px; }
+.card-form label.grow input { width: 100%; }
+td .sub { display: block; font-size: 12px; color: var(--muted); white-space: normal; }
+.code { font-family: ui-monospace, monospace; font-size: 12px; }
+table.grid tr[data-id] { cursor: pointer; }
+table.grid tr[data-id]:hover td { background: var(--at-green-soft); }
+table.grid td.neg { color: var(--danger, #c62828); }
+.pill.st-concept { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+.pill.st-definitief { background: var(--primary-soft); color: var(--primary-dark); }
+.pill.st-betaald, .pill.ok { background: var(--at-green-soft); color: var(--at-green-dark); }
+.pill.overdue { background: var(--danger, #c62828); color: #fff; }
+.pill.credit { background: transparent; border: 1px solid var(--at-teal); color: var(--at-teal); }
+
+/* Regels */
+table.lines input, table.lines select { width: 100%; box-sizing: border-box; font: inherit; padding: 5px 6px; border: 1px solid var(--line); border-radius: 4px; }
+table.lines td { vertical-align: top; }
+table.lines .c-code { width: 110px; }
+table.lines .c-qty, table.lines .c-price { width: 90px; }
+table.lines .c-unit { width: 60px; }
+table.lines .c-vat { width: 72px; }
+table.lines .c-group { width: 110px; }
+table.lines .c-total { width: 96px; text-align: right; white-space: nowrap; }
+table.lines td.c-total { padding-top: 10px; }
+table.lines .c-del { width: 34px; }
+.totals { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 340px); gap: 18px; margin-top: 12px; }
+.totals table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.totals td { padding: 3px 6px; }
+.totals td.num { text-align: right; white-space: nowrap; }
+.totals tr.grand td { font-weight: 700; border-top: 2px solid var(--at-navy); }
+.totals h4 { margin: 0 0 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+@media (max-width: 760px) {
+  .totals { grid-template-columns: 1fr; }
+  table.lines thead { display: none; }
+  table.lines tr { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  table.lines td { padding: 0; border: 0; }
+  table.lines td.c-desc { grid-column: 1 / -1; }
+  table.lines .c-code, table.lines .c-qty, table.lines .c-price, table.lines .c-unit, table.lines .c-vat, table.lines .c-group, table.lines .c-total, table.lines .c-del { width: auto; }
+}
+#s-cats input { width: 100%; box-sizing: border-box; }
+#s-cats td.acc { width: 120px; }
+
+/* Afdrukversie: factuurspecifiek */
+.print-doc .p-credit { color: var(--at-teal); }
+.print-doc .p-pay { margin-top: 12px; padding: 8px 10px; background: var(--at-green-soft); border-left: 3px solid var(--at-green); white-space: pre-line; break-inside: avoid; }

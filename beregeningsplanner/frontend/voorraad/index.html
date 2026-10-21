@@ -49,6 +49,7 @@
           <span class="spacer"></span>
           <button class="btn primary" id="b-new">+ Artikel</button>
           <button class="btn" id="b-import">Uit catalogus</button>
+          <button class="btn" id="b-shop">Uit webshop</button>
           <button class="btn" id="b-export">Excel-export</button>
         </div>
 
@@ -64,6 +65,12 @@
             <label>Beginvoorraad<input name="onHand" type="number" min="0" step="any" inputmode="decimal"></label>
             <label>Minimumvoorraad<input name="minQty" type="number" min="0" step="any" inputmode="decimal"></label>
             <label>Inkoopprijs (€, excl. btw)<input name="costPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
+          </div>
+          <div class="row">
+            <label>Verkoopprijs (€, excl. btw)<input name="salePrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
+            <label>Btw<select name="vatRate"><option value="21">21%</option><option value="9">9%</option><option value="0">0%</option></select></label>
+            <label>Omzetgroep<select name="revenueGroup"><option value="producten">Producten</option><option value="arbeid">Arbeid</option><option value="overig">Overig</option></select></label>
+            <label class="chk"><input type="checkbox" name="shopSync" checked> Naar de webshop</label>
           </div>
           <datalist id="catalog-codes"></datalist>
           <div class="row">
@@ -83,6 +90,21 @@
           <div id="i-list" class="i-list"></div>
           <div class="row">
             <button class="btn primary" type="submit">Op voorraad nemen</button>
+            <button class="btn" type="button" data-cancel>Annuleren</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
+
+        <form id="shop-form" class="card-form" hidden novalidate>
+          <h3>Producten uit de webshop overnemen</h3>
+          <p class="muted small">Producten uit de webshop die nog geen voorraadartikel zijn. De artikelcode wordt de SKU (of het veld <code>aquatech_code</code>), de verkoopprijs de webshopprijs; de stand komt bij de volgende synchronisatie uit de webshop.</p>
+          <div class="filters">
+            <input id="sh-search" type="search" placeholder="Zoek in de webshop">
+            <button class="btn small" type="button" id="sh-all">Alles kiezen</button>
+          </div>
+          <div id="sh-list" class="i-list"></div>
+          <div class="row">
+            <button class="btn primary" type="submit">Overnemen</button>
             <button class="btn" type="button" data-cancel>Annuleren</button>
           </div>
           <div class="err" role="alert"></div>
@@ -142,6 +164,13 @@
             <label>Minimumvoorraad<input name="minQty" type="number" min="0" step="any" inputmode="decimal"></label>
             <label>Inkoopprijs (€)<input name="costPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
           </div>
+          <div class="row">
+            <label>Verkoopprijs (€, excl. btw)<input name="salePrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
+            <label>Btw<select name="vatRate"><option value="21">21%</option><option value="9">9%</option><option value="0">0%</option></select></label>
+            <label>Omzetgroep<select name="revenueGroup"><option value="producten">Producten</option><option value="arbeid">Arbeid</option><option value="overig">Overig</option></select></label>
+            <label class="chk"><input type="checkbox" name="shopSync"> Naar de webshop</label>
+          </div>
+          <p class="muted small" id="d-shop"></p>
           <label>Notities<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
           <div class="row">
             <button class="btn primary" type="submit">Opslaan</button>

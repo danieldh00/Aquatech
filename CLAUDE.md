@@ -330,6 +330,22 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `workLogStore.hook` met `{ nested: true }`, want `transaction` nest niet). Blok Voorraad op de
   werkorder: `werkorders/stock-panel.js`, API `/api/stock/workorders/:id`
   (recht `werkorders`).
+- **Verkoop, webshop en facturen** (0.61.0, Brincr vervangen deel 1; migratie 26):
+  `stock_items` heeft `sale_price`/`vat_rate`/`revenue_group` (Aquatech = bron).
+  `backend/src/shopsync.js`: tweerichting met WooCommerce REST v3
+  (`shopSource.push`/`pushStock`): prijs + beschikbaar (stand − gereserveerd)
+  terug via `/products/batch`, daling webshopvoorraad t.o.v. `shop_stock_seen`
+  = verkoop (afboeking bron `webshop`), alleen-in-webshop gewijzigde prijs
+  wordt overgenomen; `shop_dirty` + `stock.onDirty` → na 3 s, elke 10 min
+  `app.locals.shopSyncAll`. Facturen: `backend/src/invoices.js` + kern
+  `facturen/invoice-core.js` (UMD), tabel `invoices`, recht `facturen`
+  (beheerder), instelling `invoicing` (voorvoegsel, betaaltermijn,
+  omzetcategorieën groep × btw met grootboekrekening). Concept → definitief
+  (nummer `<prefix><jaar>-0001`, vergrendeld) → betaald; credit = nieuw
+  concept met negatieve regels. Losse verkoop boekt voorraad af (bron
+  `factuur:<id>`). Export Visma als Excel (`exportRows`). Gepland: deel 2
+  webshopbestellingen → factuur + debiteur, automatisch mailen; deel 3
+  Visma eAccounting-API.
 - **Tekening indienen + controle** (0.52.0, `backend/src/drawings.js`):
   knop *Direct een tekening maken* op login.html → `beregening/?tekenen&org=`
   (`isPublicPlanner` in server.js: pagina alleen met `?tekenen`, code van

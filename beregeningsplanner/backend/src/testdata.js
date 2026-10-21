@@ -11,6 +11,7 @@ const zlib = require('zlib');
 
 const Core = require(path.join(__dirname, '..', '..', 'frontend', 'offertes', 'quote-core.js'));
 const WoCore = require(path.join(__dirname, '..', '..', 'frontend', 'werkorders', 'workorder-core.js'));
+const InvCore = require(path.join(__dirname, '..', '..', 'frontend', 'facturen', 'invoice-core.js'));
 const { loadArticles } = require('./shop');
 
 // De plannerbibliotheken (zones indelen, stuklijst) in een sandbox, zoals de
@@ -440,9 +441,9 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
  * er geen klantlinks (de afspraaklink staat ernaast: openbaar/afspraak.html).
  */
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, requests } = stores;
+  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, requests, invoices } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0, invoices: 0 };
   const seededWos = [];
   // Werkorder per plan (voor meldingen over die installatie).
   const woByPlan = {};
@@ -653,7 +654,9 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
     items.forEach((it, k) => {
       const want = need.get(it.code) || 0;
       if (it.code === 'EIGEN-ZAND') return;
-      const meta = { location: k % 2 ? 'Bus 1' : `Magazijn ${String.fromCharCode(65 + (k % 4))}${1 + (k % 5)}`, minQty: Math.ceil(want / 2), costPrice: Math.round((2 + (k % 9) * 3.15) * 100) / 100 };
+      const cost = Math.round((2 + (k % 9) * 3.15) * 100) / 100;
+      // Verkoopprijs ongeveer 1,6 x de inkoop (Aquatech is de bron voor de webshop).
+      const meta = { location: k % 2 ? 'Bus 1' : `Magazijn ${String.fromCharCode(65 + (k % 4))}${1 + (k % 5)}`, minQty: Math.ceil(want / 2), costPrice: cost, salePrice: Math.round(cost * 160) / 100 };
       stock.update(tid, it.id, meta);
       // Genoeg voor alles, behalve het tekortartikel (half zoveel).
       const qty = it.code === short ? Math.max(1, Math.floor(want / 2)) : Math.ceil(want * 1.5) + 2;
@@ -683,6 +686,42 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
     counts.stockItems = stock.list(tid).length;
     counts.stockMovements = q('SELECT COUNT(*) AS n FROM stock_movements WHERE tenant_id = ?').get(tid).n;
     counts.stockReservations = q('SELECT COUNT(*) AS n FROM stock_reservations WHERE tenant_id = ?').get(tid).n;
+  }
+  // Facturen: de gereede werkorders gefactureerd (één betaald, één
+  // openstaand en over de vervaldatum, één nog concept), een creditfactuur
+  // in concept en een losse verkoop aan de balie.
+  if (invoices && seededWos.length) {
+    const tid = seeded.tenantId;
+    const admin = seeded.users.beheerder;
+    const conf = InvCore.sanitizeSettings(settings.get('invoicing'));
+    const profile = settings.get('quoteProfile');
+    const done = seededWos.filter((w) => w.status === 'gereed' || w.status === 'bezig');
+    const made = [];
+    done.slice(0, 3).forEach((w, k) => {
+      const wo = invoices.workOrder(tid, w.id);
+      const quote = wo.quoteId ? invoices.quote(tid, wo.quoteId) : null;
+      const built = InvCore.fromWorkOrder(wo, {
+        quote, logged: worklog ? worklog.list(tid, wo.id) : { hours: [], materials: [] }, articles: stock ? stock.saleInfo(tid) : {},
+        catalog: loadArticles(), hourlyRate: profile.hourlyRate, settings: conf,
+      });
+      // Betaald een maand terug, openstaand over de vervaldatum, concept van vandaag.
+      const date = set.day(Math.max(0, -w.planned - 1) + [30, 20, 0][k]).slice(0, 10);
+      const inv = invoices.create(tid, admin, { ...built.data, date, dueDate: InvCore.addDays(date, conf.paymentDays) }, conf,
+        { workOrderId: wo.id, quoteId: quote ? quote.id : null, customerId: quote ? quote.customerId : null });
+      if (k < 2) invoices.finalize(tid, admin, inv.id, conf);
+      if (k === 0) invoices.setPaid(tid, inv.id, true, InvCore.addDays(date, 9));
+      made.push(inv);
+    });
+    if (made[0]) invoices.credit(tid, admin, made[0].id, conf);
+    const sand = stock ? stock.saleInfo(tid, ['EIGEN-ZAND'])['EIGEN-ZAND'] : null;
+    const counter = invoices.create(tid, admin, {
+      date: today, reference: 'Afhaalverkoop',
+      customer: { name: 'Hoveniersbedrijf De Groene Hand', address: 'Industrieweg 4\n8071 AB Nunspeet', email: 'inkoop@groenehand.voorbeeld.test', vatNumber: 'NL001234567B01' },
+      lines: [{ code: 'EIGEN-ZAND', description: sand ? sand.name : 'Straatzand', qty: 2, unit: 'zak', price: 69.5, vat: 21, group: 'producten' },
+        { code: '', description: 'Bezorgen', qty: 1, unit: 'st', price: 35, vat: 21, group: 'overig' }],
+    }, conf);
+    invoices.finalize(tid, admin, counter.id, conf);
+    counts.invoices = q('SELECT COUNT(*) AS n FROM invoices WHERE tenant_id = ?').get(tid).n;
   }
   // Webshop alleen als de testomgeving geen eigen webshop heeft (de nepwinkel
   // van een vorige keer vullen we opnieuw).
