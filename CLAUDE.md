@@ -250,6 +250,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `work_orders.appointment`; stand berekend in `appointmentOf` (reactie telt
   alleen voor hetzelfde `Core.momentKey`). `workorders.respond(row, …, { via:
   'account', userId })` is ook bruikbaar voor een klantportaal.
+- **Uren en materiaalverbruik** (0.57.0, `backend/src/worklog.js`, kern
+  `werkorders/worklog-core.js`, tabellen `work_order_hours`/`work_order_materials`,
+  migratie 23): boeken per werkorder (eigen regels; recht `planning` = ook
+  voor collega's en na Gereed), `client_id` maakt POST idempotent (offline
+  wachtrij in `worklog.js`), urenstaat `GET /api/worklog` → Excel.
+  Voorraad haakt in via `workLogStore.hook(fn)` → `stock_movement_id`.
 - **Startscherm installateur** (0.42.0): blok *Vandaag* op het dashboard
   (`dashboard/today.js`, recht `werkorders`), API `GET /api/my-day`
   (`workorders.day`: elke werkdag via `Core.workDays`, `next`, fototelling

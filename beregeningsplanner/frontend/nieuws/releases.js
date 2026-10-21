@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.57.0',
+      date: '2026-10-21',
+      title: 'Uren en materiaal boeken op de werkorder',
+      items: [
+        { text: 'In elke werkorder staat nu **Uren en materiaalverbruik**: boek per dag je gewerkte uren (begin, eind en pauze, of gewoon een aantal uren), reistijd en meerwerk, en het materiaal dat je hebt gebruikt of retour neemt. Je ziet meteen hoeveel er geboekt is tegenover de planning.', for: ['werkorders'] },
+        { text: 'Geen bereik op de klus? Wat je boekt, blijft op je telefoon bewaard en wordt vanzelf verstuurd zodra je weer verbinding hebt.', for: ['werkorders'] },
+        { text: 'Met de knop **Urenstaat** in Werkorders exporteer je de uren en het materiaalverbruik over een periode naar Excel, per medewerker en per dag. Planners en beheerders boeken ook voor een collega en zien de uren van iedereen.', for: ['werkorders'] },
+      ],
+    },
+    {
       version: '0.56.0',
       date: '2026-10-21',
       title: 'Herkennen zonder AI leert van de AI',

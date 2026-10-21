@@ -116,6 +116,28 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.strictEqual((await c.get('/api/admin/ai-usage/requests')).status, 200);
     assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
+
+    // Werkregistratie: vaste aantallen queries, ongeacht het aantal regels
+    // (sessie + werkorder + uren + materiaal; urenstaat: sessie + uren + materiaal).
+    const lines = [{ id: 'a', section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 10 }];
+    const qid = (await c.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen' }, lines } })).body.id;
+    await c.put(`/api/quotes/${qid}`, { status: 'akkoord' });
+    const wo = (await c.post('/api/workorders', { quoteId: qid })).body;
+    const day = new Date().toISOString().slice(0, 10);
+    for (let i = 0; i < 5; i++) {
+      assert.strictEqual((await c.post(`/api/workorders/${wo.id}/hours`, { workDate: day, hours: 1 })).status, 201);
+      assert.strictEqual((await c.post(`/api/workorders/${wo.id}/materials`, { usedOn: day, description: 'Sproeier', qty: 1 })).status, 201);
+    }
+    probe.reset();
+    assert.strictEqual((await c.get(`/api/workorders/${wo.id}/worklog`)).status, 200);
+    assert.strictEqual(probe.stats.queries, 4, probe.stats.sql.join('\n'));
+    probe.reset();
+    assert.strictEqual((await c.get(`/api/worklog?from=${day}&to=${day}`)).status, 200);
+    assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
+    // Het werkorderoverzicht telt de geboekte uren met twee queries, niet per werkorder.
+    probe.reset();
+    assert.strictEqual((await c.get('/api/workorders')).body.items[0].logged.minutes, 300);
+    assert.ok(probe.stats.queries <= 5, probe.stats.sql.join('\n'));
   } finally {
     server.close();
   }

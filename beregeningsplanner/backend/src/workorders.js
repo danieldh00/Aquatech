@@ -392,6 +392,8 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
   function purge(tenantId, id) {
     return transaction(db, () => {
       q('DELETE FROM work_order_photos WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
+      q('DELETE FROM work_order_hours WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
+      q('DELETE FROM work_order_materials WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
       q('DELETE FROM work_order_offers WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
       return q('DELETE FROM work_orders WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
     });
@@ -431,6 +433,7 @@ function registerWorkOrderRoutes(app, ctx) {
   const publicLimiter = ctx.publicLimiter || ((req, res, next) => next());
   // Uitbesteed of aangenomen (outsourcing.js): per werkorder-id.
   const outsourcingOf = ctx.outsourcingOf || (() => ({}));
+  const loggedOf = ctx.loggedOf || (() => ({}));
   const requireWo = requireRight('werkorders');
   // Inplannen en de afspraak met de klant (planning of de werkorder zelf).
   const requirePlanning = requireRight('planning');
@@ -468,7 +471,9 @@ function registerWorkOrderRoutes(app, ctx) {
   app.get('/api/workorders', requireWo, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const marks = outsourcingOf(tid(req));
-    res.json({ items: workorders.list(tid(req), { quoteId: req.query.quote || null }).map((w) => ({ ...w, outsourcing: marks[w.id] || null })) });
+    // Geboekte uren en materiaalregels per werkorder (één query, zie worklog.js).
+    const logged = loggedOf(tid(req));
+    res.json({ items: workorders.list(tid(req), { quoteId: req.query.quote || null }).map((w) => ({ ...w, outsourcing: marks[w.id] || null, logged: logged[w.id] || null })) });
   });
 
   app.get('/api/workorders/:id', requireWo, (req, res) => {

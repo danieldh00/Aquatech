@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.57.0
+
+Urenregistratie en materiaalverbruik op de werkorder.
+
+- **Opslag** (`backend/src/worklog.js`, migratie 23 in `MIGRATIONS` én
+  `PG_MIGRATIONS`): tabellen `work_order_hours` (datum, begin/eind/pauze of
+  direct minuten, soort werk|reistijd|meerwerk, werkstap, opmerking) en
+  `work_order_materials` (datum, code, omschrijving, eenheid, aantal;
+  negatief = retour; `material_id` = geplande regel, leeg = extra;
+  `stock_movement_id` voor voorraadbeheer). `user_id` zonder FK, naam in
+  `user_name`; `client_id` (UUID uit de browser, uniek per tenant) maakt
+  boeken idempotent voor offline synchroniseren. Indexen met `tenant_id`
+  vooraan.
+- **Rekenkern** `frontend/werkorders/worklog-core.js` (UMD, ook op de
+  server): `cleanHours`, `cleanMaterial`, `minutesBetween`, `totals`
+  (geboekt tegenover gepland, per soort/medewerker/artikel).
+- **API**: `GET /api/workorders/:id/worklog`, `POST|PUT|DELETE
+  /api/workorders/:id/hours[/:eid]` en `.../materials[/:eid]` (recht
+  `werkorders`; eigen regels, met recht `planning` ook voor collega's en na
+  status Gereed/Geannuleerd, anders 409 `locked`), `GET /api/worklog?from&to[&user]`
+  (urenstaat, zonder `planning` alleen eigen uren, max. 400 dagen). Body-limiet
+  32 kB. Werkorderoverzicht geeft `logged` (één UNION-query).
+- **Voorraad**: `workLogStore.hook(fn)`; `fn(tenantId, { id, work_order_id,
+  code, qty, deleted }, user)` wordt in dezelfde transactie aangeroepen na
+  boeken/wijzigen/verwijderen; de teruggegeven id komt in `stock_movement_id`.
+  `usedByCode(tenantId, woId)`.
+- **Frontend**: kaart *Uren en materiaalverbruik* in de werkorder
+  (`worklog.js|.css`, tabbladen, mobiel als kaartjes), wachtrij in
+  localStorage bij geen netwerk (verstuurt bij `online`/openen), Excel:
+  bladen Uren, Materiaalverbruik en Gepland vs verbruikt bij de werkorder,
+  knop **Urenstaat** in het overzicht (per regel, per medewerker en dag,
+  materiaal).
+- Testdata: uren en verbruik bij de werkorders in uitvoering en gereed.
+  Gebruiker verwijderen zet `user_id`/`created_by` op NULL; leegmaken en
+  definitief wissen nemen de regels mee.
+
 ## 0.56.0
 
 Plan herkennen: vaste AI-uitkomst per tekening, betere herkenning zonder AI
