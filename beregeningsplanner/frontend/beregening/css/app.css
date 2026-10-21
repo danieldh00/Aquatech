@@ -62,6 +62,7 @@ body {
 .panel label.inline, .panel label.radio { display: flex; gap: 8px; align-items: flex-start; color: var(--text); }
 .panel label.radio { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
 .panel label.radio:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+.panel label.radio.off { opacity: 0.55; cursor: not-allowed; }
 .row { display: flex; gap: 6px; flex-wrap: wrap; }
 .row > label { flex: 1; }
 .hint { color: var(--muted); font-size: 13px; }
@@ -117,6 +118,7 @@ table.kv td:last-child { text-align: right; font-weight: 600; }
 td.num, th.num { text-align: right !important; white-space: nowrap; }
 .good { color: var(--good); }
 .warn { color: var(--warn); }
+table.list.missing td { color: var(--danger); }
 .bad { color: var(--danger); }
 .legend { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 8px 0; color: var(--muted); }
 .legend span { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
