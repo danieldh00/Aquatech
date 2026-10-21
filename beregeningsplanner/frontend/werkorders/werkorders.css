@@ -14,7 +14,7 @@
 .warn-text { color: #ef6c00 !important; }
 
 .design-line { margin: 0 0 10px; padding: 6px 10px; background: var(--at-green-soft, #e8f5ee); border-left: 3px solid var(--at-green, #19924f); font-size: 14px; }
-table.lines.zones td { padding: 5px 4px; }
+table.lines.zones td, table.lines.heads td { padding: 5px 4px; }
 table.lines.zones tr.bad td { color: #c62828; }
 
 table.lines .c-chk { width: 28px; text-align: center; }
@@ -26,7 +26,9 @@ table.lines tr.done input[data-s=title], table.lines tr.done input[data-m=descri
 @media (max-width: 760px) {
   table.lines.steps tr.line, table.lines.mats tr.line { grid-template-columns: 28px 1fr 1fr 32px; }
   table.lines.steps tr.line td.c-desc, table.lines.mats tr.line td.c-desc { grid-column: 2 / -1; }
-  table.lines.zones thead { display: none; }
+  table.lines.zones thead, table.lines.heads thead { display: none; }
+  table.lines.heads tr { display: block; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  table.lines.heads td { display: inline-block; border: 0; padding: 1px 6px 1px 0; }
   table.lines.zones tr { display: block; padding: 6px 0; border-bottom: 1px solid var(--line); }
   table.lines.zones td { display: inline-block; border: 0; padding: 1px 6px 1px 0; }
 }
@@ -36,7 +38,7 @@ table.lines tr.done input[data-s=title], table.lines tr.done input[data-m=descri
 .print-doc .p-box { display: inline-block; width: 11px; height: 11px; border: 1px solid #6b7785; border-radius: 2px; text-align: center; line-height: 11px; font-size: 9px; }
 .print-doc .p-small { font-size: 8pt; color: #6b7785; }
 .print-doc .p-fill { display: inline-block; width: 40px; border-bottom: 1px solid #9aa5b1; height: 10px; }
-.print-doc table.p-zones td { font-size: 8.5pt; }
+.print-doc table.p-zones td, .print-doc table.p-heads td { font-size: 8.5pt; }
 .print-doc table.p-zones tr.bad td { color: #c62828; }
 .print-doc .p-notes { min-height: 48px; border: 1px solid #d5dbe3; border-radius: 4px; padding: 6px 8px; }
 
@@ -57,3 +59,4 @@ table.lines tr.done input[data-s=title], table.lines tr.done input[data-m=descri
 
 /* Uitbesteed aan of aangenomen van een andere organisatie. */
 .notice.outsourced { border-left: 4px solid var(--at-teal); margin-bottom: 14px; padding: 10px 14px; font-size: 14px; }
+.print-doc .p-note { font-size: 8pt; margin: 0 0 4px; }

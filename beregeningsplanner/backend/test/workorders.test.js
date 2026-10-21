@@ -90,6 +90,16 @@ test('werkorder met plan: zone-indeling met onderdelen, debiet en druk', () => {
   assert.strictEqual(data.design.lawnM2, 96);
   assert.match(data.design.mainPipe, /^PE \d+ mm/);
   assert.ok(Array.isArray(warnings));
+  // afstelling per kop: kop, sector, sproeihoek, worp en linkerrand zoals in het plan
+  assert.strictEqual(data.heads.length, 6);
+  const h1 = data.heads.find((h) => h.nr === 1);
+  assert.deepStrictEqual([h1.nozzle, h1.sector, h1.arc, h1.r, h1.leftText], ['MP2000', '90–210°', 90, 6, '0° (rechts)']);
+  const h6 = data.heads.find((h) => h.nr === 6);
+  assert.strictEqual(h6.leftText, '180° (links)');
+  assert.ok(data.heads.every((h) => /^Zone/.test(h.zone)), 'elke kop heeft een zone');
+  const clean = W.sanitize({ heads: [{ nr: 'x', arc: 999, nozzle: '<b>'.repeat(50) }] }).heads[0];
+  assert.strictEqual(clean.arc, 360);
+  assert.ok(clean.nozzle.length <= 60);
 });
 
 test('planning: werkdagen, moment en opschonen van tijden en dagen', () => {

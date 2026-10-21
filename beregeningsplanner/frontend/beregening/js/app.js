@@ -537,40 +537,75 @@
     placeSprinkler(type, w) {
       const t = C.sprinklerTypes[type];
       this.checkpoint();
-      const lawns = this.state.areas.filter((a) => a.type === 'lawn' && a.pts.length >= 3);
       const r = this.state.settings.radius || t.rDefault;
       const s = { id: G.uid('s'), type, x: w.x, y: w.y, r, start: 0, arc: 360, zone: null };
       if (type === 'strip') { s.r = 0; s.arc = 0; s.width = 1.5; s.len = 4.6; }
-      const tol = Math.max(0.5, 10 / this.editor.view.scale);
-      let best = null;
-      for (const a of lawns) {
-        const pts = G.orientCW(a.pts);
-        // hoekpunt?
-        for (let i = 0; i < pts.length; i++) {
-          if (G.dist(pts[i], w) < tol) {
-            const prev = pts[(i - 1 + pts.length) % pts.length], next = pts[(i + 1) % pts.length];
-            const start = G.angleOf(G.sub(next, pts[i]));
-            const interior = G.normDeg(G.angleOf(G.sub(prev, pts[i])) - start) || 360;
-            best = { pt: pts[i], start, arc: interior, edgeDir: G.sub(next, pts[i]) };
-            break;
-          }
-        }
-        if (best) break;
-        const c = G.closestOnPolygon(w, pts);
-        if (c.d < tol) {
-          const a0 = pts[c.edge], b0 = pts[(c.edge + 1) % pts.length];
-          best = { pt: c.pt, start: G.angleOf(G.sub(b0, a0)), arc: 180, edgeDir: G.sub(b0, a0) };
-          break;
-        }
-      }
+      const best = this._boundaryFit(w, Math.max(0.5, 10 / this.editor.view.scale));
       if (best) {
         s.x = best.pt.x; s.y = best.pt.y;
         s.start = Math.round(best.start);
         if (type !== 'strip') s.arc = Math.round(best.arc);
       }
+      C.fitRotator(s);
       this.state.sprinklers.push(s);
+      this.tuneHeads([s.id]);
       this.editor.selection = { kind: 'sprinkler', id: s.id };
       this.commit();
+    },
+    /** Hoekpunt of rand van een gazon binnen `tol` van punt w: plek, beginrichting en sproeihoek. */
+    _boundaryFit(w, tol) {
+      for (const a of this.state.areas.filter((x) => x.type === 'lawn' && x.pts.length >= 3)) {
+        const pts = G.orientCW(a.pts);
+        for (let i = 0; i < pts.length; i++) {
+          if (G.dist(pts[i], w) < tol) {
+            const prev = pts[(i - 1 + pts.length) % pts.length], next = pts[(i + 1) % pts.length];
+            const start = G.angleOf(G.sub(next, pts[i]));
+            const interior = G.normDeg(G.angleOf(G.sub(prev, pts[i])) - start) || 360;
+            return { pt: pts[i], start, arc: interior };
+          }
+        }
+        const c = G.closestOnPolygon(w, pts);
+        if (c.d < tol) {
+          const a0 = pts[c.edge], b0 = pts[(c.edge + 1) % pts.length];
+          return { pt: c.pt, start: G.angleOf(G.sub(b0, a0)), arc: 180 };
+        }
+      }
+      return null;
+    },
+    /** Na verslepen: sproeihoek volgt de nieuwe plek (hoek, rand of binnenin), daarna afstellen. */
+    afterSprinklerMoved(id) {
+      const s = this.state.sprinklers.find((x) => x.id === id);
+      if (!s || s.type === 'strip') return;
+      const best = this._boundaryFit(s, 0.05);
+      if (best) { s.start = Math.round(best.start); s.arc = Math.round(best.arc); }
+      else if (this.state.areas.some((a) => a.type === 'lawn' && a.pts.length >= 3 && G.pointInPolygon(s, a.pts))) s.arc = 360;
+      C.fitRotator(s);
+      this.tuneHeads([id]);
+    },
+    /**
+     * Koppen optimaal afstellen (worp, sproeihoek, richting en kop) op de neerslagsimulatie
+     * van hun vlak. Positie blijft gelijk.
+     * @param ids alleen deze koppen (de rest telt mee maar blijft staan), of null voor alle
+     * @returns aantal aangepaste koppen
+     */
+    tuneHeads(ids = null) {
+      const st = this.state;
+      let changed = 0;
+      for (const a of st.areas) {
+        if (a.pts.length < 3) continue;
+        const own = a.type === 'lawn'
+          ? st.sprinklers.filter((s) => !s.areaId && (G.pointInPolygon(s, a.pts) || G.closestOnPolygon(s, a.pts).d < 0.1))
+          : st.sprinklers.filter((s) => s.areaId === a.id);
+        if (!own.length || (ids && !own.some((s) => ids.includes(s.id)))) continue;
+        const res = window.Planner.tune(a.pts, own, ids);
+        for (const h of res.heads) {
+          const s = st.sprinklers.find((x) => x.id === h.id);
+          if (!s || (ids && !ids.includes(s.id))) continue;
+          if (s.r !== h.r || s.arc !== h.arc || s.start !== h.start) changed++;
+          Object.assign(s, { r: h.r, arc: h.arc, start: h.start });
+        }
+      }
+      return changed;
     },
     deleteSelection() {
       const sel = this.editor.selection;
@@ -1167,7 +1202,8 @@
         <label class="inline"><input type="checkbox" id="r-auto" ${s.radius ? '' : 'checked'}> Worpwijdte automatisch</label>
         ${s.radius ? `<label>Worpwijdte (m)<input id="r-val" type="number" step="0.1" value="${s.radius}"></label>` : ''}
         <button id="auto-place" class="btn primary">Automatisch plaatsen</button>
-        <p class="hint small">Plaatst sproeiers op alle gazons en in beplanting waarvoor <b>Sproeiers</b> als methode gekozen is (stap 1).</p>
+        <p class="hint small">Plaatst sproeiers op alle gazons en in beplanting waarvoor <b>Sproeiers</b> als methode gekozen is (stap 1). Kop (MP-model), worp, sproeihoek en richting worden daarbij automatisch optimaal afgesteld, ook bij handmatig plaatsen en verslepen.</p>
+        <button id="tune-spr" class="btn">Alle koppen opnieuw afstellen</button>
         <div class="row">
           <button class="btn" id="manual-place">Handmatig plaatsen</button>
           <button class="btn" id="manual-strip">Strooksproeier</button>
@@ -1194,6 +1230,13 @@
       $('#r-auto', el).onchange = (e) => { s.radius = e.target.checked ? null : C.sprinklerTypes[s.sprinklerType].rDefault; this._save(); this.renderStepPanel(); };
       if ($('#r-val', el)) $('#r-val', el).onchange = (e) => { const t = C.sprinklerTypes[s.sprinklerType]; s.radius = Math.max(t.rMin, Math.min(t.rMax, +e.target.value || t.rDefault)); this._save(); this.renderStepPanel(); };
       $('#auto-place', el).onclick = () => this.autoPlace();
+      $('#tune-spr', el).onclick = () => {
+        if (!this.state.sprinklers.length) { this.toast('Plaats eerst sproeiers.', true); return; }
+        this.checkpoint();
+        const n = this.tuneHeads();
+        this.commit();
+        this.toast(n ? `${n} kop${n === 1 ? '' : 'pen'} bijgesteld. Controleer de neerslagkaart.` : 'Alle koppen staan al optimaal afgesteld.');
+      };
       $('#manual-place', el).onclick = () => this.editor.setTool('sprinkler', { type: s.sprinklerType });
       $('#manual-strip', el).onclick = () => this.editor.setTool('sprinkler', { type: 'strip' });
       $('#clear-spr', el).onclick = () => {
@@ -1353,9 +1396,11 @@
       const geom = s.type === 'strip'
         ? `<label>Breedte (m)<input data-f="width" type="number" step="0.1" min="${t.wMin}" max="${t.wMax}" value="${s.width}"></label>
            <label>Lengte (m)<input data-f="len" type="number" step="0.1" min="${t.lMin}" max="${t.lMax}" value="${s.len}"></label>`
+        : s.type === 'rotator' ? this._propsRotator(s)
         : `<label>Worpwijdte (m) <span class="small">${G.nlShort(t.rMin, 1)}–${G.nlShort(t.rMax, 1)}</span><input data-f="r" type="number" step="0.1" min="${t.rMin}" max="${t.rMax}" value="${s.r}"></label>
            <label>Sproeihoek (°)<input data-f="arc" type="number" step="5" min="10" max="360" value="${s.arc}"></label>
-           <div class="row"><button class="btn sm" data-arc="90">90°</button><button class="btn sm" data-arc="180">180°</button><button class="btn sm" data-arc="270">270°</button><button class="btn sm" data-arc="360">360°</button></div>`;
+           <div class="row"><button class="btn sm" data-arc="90">90°</button><button class="btn sm" data-arc="180">180°</button><button class="btn sm" data-arc="270">270°</button><button class="btn sm" data-arc="360">360°</button></div>
+           <p class="hint small">Of sleep in de tekening aan de grepen van het sproeibereik.</p>`;
       return `
         <h3>Sproeier</h3>
         <label>Type<select data-f="type">${typeOpts}</select></label>
@@ -1370,6 +1415,22 @@
           ${p != null ? `<tr><td>Berekende druk</td><td class="${p >= t.minBar ? 'good' : 'bad'}">${fmt(p, 2)} bar</td></tr>` : ''}
         </table>
         <button class="btn danger" data-act="delete">Verwijderen</button>`;
+    },
+    /** Meerstraalsrotator: kop (MP-model) met zijn instelbereik voor worp en sproeihoek. */
+    _propsRotator(s) {
+      const key = C.rotatorModelOf(s);
+      const m = C.rotatorModels[key];
+      const set = C.rotatorArcSet(key, s.arc);
+      const range = (lo, hi) => (lo === hi ? `${lo}°` : `${lo}–${hi}°`);
+      const auto = C.rotatorModels[C.autoRotatorModel(s.r, s.arc)];
+      const modelOpts = `<option value="">Automatisch (${esc(auto.label)})</option>` + Object.entries(C.rotatorModels).map(([k, mm]) =>
+        `<option value="${k}" ${s.model === k ? 'selected' : ''}>${esc(mm.label)} · ${G.nlShort(mm.rMin, 1)}–${G.nlShort(mm.rMax, 1)} m · ${mm.arcs.map((a) => range(a[0], a[1])).join(' / ')}</option>`).join('');
+      const presets = [...new Set(m.arcs.flatMap((a) => [a[0], a[1]]))].map((a) => `<button class="btn sm" data-arc="${a}">${a}°</button>`).join('');
+      return `<label>Kop (MP-model)<select data-f="model">${modelOpts}</select></label>
+           <label>Worpwijdte (m) <span class="small">${G.nlShort(m.rMin, 1)}–${G.nlShort(m.rMax, 1)} (stelschroef)</span><input data-f="r" type="number" step="0.1" min="${m.rMin}" max="${m.rMax}" value="${s.r}"></label>
+           <label>Sproeihoek (°) <span class="small">sector ${range(set[0], set[1])}</span><input data-f="arc" type="number" step="5" min="${m.arcs[0][0]}" max="${m.arcs[m.arcs.length - 1][1]}" value="${s.arc}"></label>
+           <div class="row">${presets}</div>
+           <p class="hint small">Instelling: ${esc(C.rotatorSetting(s))}. Sleep in de tekening aan de grepen om worp en sproeihoek binnen dit bereik in te regelen.</p>`;
     },
     _propsElement(e) {
       const et = C.elementTypes[e.kind];
@@ -1398,14 +1459,17 @@
               if (v === 'strip') { obj.width = obj.width || 1.5; obj.len = obj.len || 4.6; }
               else obj.r = Math.max(nt.rMin, Math.min(nt.rMax, obj.r || nt.rDefault));
               if (v !== 'strip' && !obj.arc) obj.arc = 180;
+              delete obj.model;
               const z = this.state.zones.find((zz) => zz.id === obj.zone);
               if (z && z.group !== nt.group) obj.zone = null;
             } else if (f === 'r') obj.r = Math.max(t0.rMin, Math.min(t0.rMax, v || t0.rDefault));
             else if (f === 'arc') obj.arc = Math.max(10, Math.min(360, v || 180));
+            else if (f === 'model') { if (v) obj.model = v; else delete obj.model; }
             else if (f === 'start') obj.start = G.normDeg(v || 0);
             else if (f === 'width') obj.width = Math.max(t0.wMin, Math.min(t0.wMax, v || 1.5));
             else if (f === 'len') obj.len = Math.max(t0.lMin, Math.min(t0.lMax, v || 4.6));
             else obj[f] = v;
+            C.fitRotator(obj);
           } else if (sel.kind === 'area') {
             if (f === 'method') obj.method = v || null;
             else obj[f] = v;
@@ -1419,7 +1483,7 @@
       el.querySelectorAll('[data-s]').forEach((inp) => {
         inp.onchange = () => { this.checkpoint(); this.state.settings[inp.dataset.s] = parseFloat(inp.value) || this.state.settings[inp.dataset.s]; this.commit(); };
       });
-      el.querySelectorAll('[data-arc]').forEach((b) => { b.onclick = () => { this.checkpoint(); obj.arc = +b.dataset.arc; this.commit(); }; });
+      el.querySelectorAll('[data-arc]').forEach((b) => { b.onclick = () => { this.checkpoint(); obj.arc = +b.dataset.arc; C.fitRotator(obj); this.commit(); }; });
       el.querySelectorAll('[data-rot]').forEach((b) => { b.onclick = () => { this.checkpoint(); obj.start = G.normDeg(obj.start + +b.dataset.rot); this.commit(); }; });
       el.querySelectorAll('[data-act]').forEach((b) => {
         b.onclick = () => {

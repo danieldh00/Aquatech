@@ -13,13 +13,23 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '0.53.0',
+      version: '0.54.0',
       date: '2026-10-21',
       title: 'AI-kosten in beeld en modelkeuze',
       items: [
         { text: 'Nieuw in Beheer: **AI-kosten**. Je ziet per dag of maand, per gebruiker en per model hoeveel het automatisch herkennen van plannen kost, en per verzoek hoeveel tokens het gebruikte en hoe lang het duurde. Ook te exporteren naar Excel.', for: ['beheer'] },
         { text: 'Kies in **Beheer → Instellingen** welk AI-model plannen herkent: Opus 5.5 (aanbevolen), het goedkopere Sonnet 5.5 of Haiku 5.5, of het krachtigste Fable 5.1.', for: ['beheer'] },
         { text: 'Elke organisatie gebruikt voor AI een **eigen API-sleutel** van Anthropic; vul die in bij Beheer → Instellingen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '0.53.0',
+      date: '2026-10-21',
+      title: 'Slimmere sproeierplaatsing en instelbare rotators',
+      items: [
+        { text: '**Automatisch plaatsen** maakt nu een nette kop-tot-kopindeling: hoeken, randen en binnenin in lijn, met minder koppen, een gelijkmatigere neerslag en veel minder water op terras en paden. Herkende vlakken worden eerst rechtgetrokken.' },
+        { text: 'Elke **meerstraalsrotator** wordt automatisch optimaal afgesteld: de juiste kop (MP1000 t/m MP3500 of MP Corner), worp, sproeihoek en richting. Ook bij handmatig plaatsen en verslepen. Bijstellen kan in het paneel of door in de tekening aan de grepen te slepen.' },
+        { text: 'De **werkorder** toont per sproeikop de afstelling (kop, sector, sproeihoek, worp en linkerrand), ook op de afgedrukte werkbon en in Excel.', for: ['werkorders'] },
       ],
     },
     {

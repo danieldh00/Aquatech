@@ -75,6 +75,21 @@
     return els.map((e) => ({ id: G.uid('e'), kind: e.kind, x: +e.x.toFixed(3), y: +e.y.toFixed(3) }));
   }
 
+  /**
+   * Herkende vlakken rechttrekken: pixelranden en kartels eruit, randen die bijna in de
+   * hoofdrichting van het plan lopen precies recht of haaks. Zo krijgt de sproeierplaatsing
+   * nette randen en hoeken in plaats van tientallen kleine knikken.
+   */
+  function straighten(areas) {
+    if (!areas.length) return;
+    const simple = areas.map((a) => G.simplifyClosed(a.pts, Math.max(0.08, Math.min(0.25, 0.03 * Math.sqrt(G.area(a.pts))))));
+    const angle = G.dominantAngle(simple);
+    areas.forEach((a, i) => {
+      const pts = G.regularize(simple[i], angle, { tolDeg: 12, merge: 0.2 });
+      if (pts.length >= 3) a.pts = pts.map((p) => ({ x: +p.x.toFixed(3), y: +p.y.toFixed(3) }));
+    });
+  }
+
   /** Breedte in pixels van alle herkende vlakken samen (de getekende tuin), of 0. */
   function gardenWidthPx(areas) {
     const xs = [];
@@ -131,6 +146,7 @@
       counters[a.type] = (counters[a.type] || 0) + 1;
       areas.push({ id: G.uid('a'), type: a.type, name: a.name || `${C.areaTypes[a.type].label} ${counters[a.type]}`, pts, zone: null });
     }
+    if (result.local) straighten(areas);
     if (!areas.some((a) => a.type === 'lawn')) warnings.push('Geen gazon herkend. Teken het gazon of gebruik de toverstaf in stap 2.');
     const elements = defaultElements(areas, (result.elements || []).map((e) => ({ kind: e.kind, ...toWorld(e) })));
     if (result.notes) warnings.push(result.notes);
@@ -145,5 +161,5 @@
     };
   }
 
-  window.Concept = { analyze, status, build, defaultElements, FALLBACK_WIDTH_M, FALLBACK_GARDEN_M };
+  window.Concept = { analyze, status, build, defaultElements, straighten, FALLBACK_WIDTH_M, FALLBACK_GARDEN_M };
 })();

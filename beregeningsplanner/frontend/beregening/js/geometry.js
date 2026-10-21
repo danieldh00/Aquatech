@@ -144,6 +144,149 @@
     return best;
   };
 
+  /** Vereenvoudigt een gesloten polygoon (Douglas-Peucker): punten die minder dan `tol` m afwijken vervallen. */
+  G.simplifyClosed = (pts, tol) => {
+    const n = pts.length;
+    if (n < 4) return pts.slice();
+    // splitsen op de twee verst uit elkaar liggende punten (benadering: verste van punt 0, dan verste daarvan)
+    const far = (from) => { let k = 0, d = -1; pts.forEach((p, i) => { const e = G.dist(p, pts[from]); if (e > d) { d = e; k = i; } }); return k; };
+    const a = far(0), b = far(a);
+    const keep = new Uint8Array(n);
+    keep[a] = keep[b] = 1;
+    const run = (i, j) => { // i..j langs de ring (j na i)
+      const len = (j - i + n) % n;
+      if (len < 2) return;
+      let best = -1, bd = tol;
+      for (let s = 1; s < len; s++) {
+        const k = (i + s) % n;
+        const d = G.distToSegment(pts[k], pts[i], pts[j]);
+        if (d > bd) { bd = d; best = k; }
+      }
+      if (best < 0) return;
+      keep[best] = 1;
+      run(i, best);
+      run(best, j);
+    };
+    run(a, b);
+    run(b, a);
+    const out = pts.filter((_, i) => keep[i]);
+    return out.length >= 3 ? out : pts.slice();
+  };
+
+  /** Hoofdrichting (graden, 0–90) van een of meer polygonen: de richting waarin de meeste randlengte ligt. */
+  G.dominantAngle = (polys) => {
+    const bins = new Float64Array(90);
+    for (const pts of polys) {
+      for (let i = 0; i < pts.length; i++) {
+        const v = G.sub(pts[(i + 1) % pts.length], pts[i]);
+        const l = G.len(v);
+        if (l < 1e-9) continue;
+        bins[Math.floor(G.normDeg(G.angleOf(v)) % 90) % 90] += l;
+      }
+    }
+    let best = 0, bestW = -1;
+    for (let k = 0; k < 90; k++) {
+      let w = 0;
+      for (let d = -3; d <= 3; d++) w += bins[(k + d + 90) % 90] * (4 - Math.abs(d));
+      if (w > bestW) { bestW = w; best = k; }
+    }
+    // verfijnen: gewogen gemiddelde van de randen rond de piek
+    let sum = 0, wsum = 0;
+    for (const pts of polys) {
+      for (let i = 0; i < pts.length; i++) {
+        const v = G.sub(pts[(i + 1) % pts.length], pts[i]);
+        const l = G.len(v);
+        if (l < 1e-9) continue;
+        let a = G.normDeg(G.angleOf(v)) % 90;
+        let d = a - (best + 0.5);
+        if (d > 45) d -= 90;
+        if (d < -45) d += 90;
+        if (Math.abs(d) <= 4) { sum += d * l; wsum += l; }
+      }
+    }
+    return G.normDeg(best + 0.5 + (wsum ? sum / wsum : 0)) % 90;
+  };
+
+  /**
+   * Trekt een polygoon recht: randen die minder dan `tolDeg` van de hoofdrichting (of haaks
+   * daarop) afwijken worden precies evenwijdig of haaks; bijna-gelijke evenwijdige randen
+   * worden één rand. Valt het resultaat te ver af (oppervlak), dan blijft de invoer.
+   */
+  G.regularize = (pts, angleDeg, opts = {}) => {
+    const tolDeg = opts.tolDeg == null ? 12 : opts.tolDeg;
+    const merge = opts.merge == null ? 0.25 : opts.merge;
+    if (pts.length < 4) return pts.slice();
+    const a = G.rad(angleDeg);
+    const axes = [{ x: Math.cos(a), y: Math.sin(a) }, { x: -Math.sin(a), y: Math.cos(a) }];
+    const cosTol = Math.cos(G.rad(tolDeg));
+    const lines = [];
+    for (let i = 0; i < pts.length; i++) {
+      const A = pts[i], B = pts[(i + 1) % pts.length];
+      const len = G.dist(A, B);
+      if (len < 1e-9) continue;
+      let d = G.norm(G.sub(B, A));
+      let snapped = false;
+      for (const ax of axes) {
+        const c = G.dot(d, ax);
+        if (Math.abs(c) >= cosTol) { d = c > 0 ? ax : G.mul(ax, -1); snapped = true; }
+      }
+      lines.push({ p: G.mul(G.add(A, B), 0.5), d, len, start: A, snapped });
+    }
+    // korte schuine stukjes tussen twee rechte randen (afgeronde of afgeschuinde hoek) vervallen
+    const minEdge = opts.minEdge == null ? 0.6 : opts.minEdge;
+    for (let i = lines.length - 1; i >= 0 && lines.length > 3; i--) {
+      const l = lines[i];
+      const prev = lines[(i - 1 + lines.length) % lines.length], next = lines[(i + 1) % lines.length];
+      if (!l.snapped && l.len < minEdge && prev.snapped && next.snapped && Math.abs(G.cross(prev.d, next.d)) > 0.5) lines.splice(i, 1);
+    }
+    const out = [];
+    const join = (last, l) => {
+      if (G.dot(last.d, l.d) < 0.9986) return 'corner';
+      const nrm = { x: -last.d.y, y: last.d.x };
+      const off = G.dot(G.sub(l.p, last.p), nrm);
+      if (Math.abs(off) <= merge) {
+        last.p = G.add(last.p, G.mul(nrm, (off * l.len) / (last.len + l.len)));
+        last.len += l.len;
+        return 'merged';
+      }
+      return { p: l.start, d: nrm, len: Math.abs(off), start: l.start };
+    };
+    for (const l of lines) {
+      const last = out[out.length - 1];
+      const r = last ? join(last, l) : 'corner';
+      if (r === 'merged') continue;
+      if (r !== 'corner') out.push(r);
+      out.push(l);
+    }
+    if (out.length > 2) {
+      const first = out[0], last = out[out.length - 1];
+      const r = join(first, { ...last, start: last.start });
+      if (r === 'merged') { first.start = last.start; out.pop(); } else if (r !== 'corner') out.push({ ...r, start: first.start, p: first.start });
+    }
+    if (out.length < 3) return pts.slice();
+    const res = [];
+    for (let i = 0; i < out.length; i++) {
+      const L1 = out[(i - 1 + out.length) % out.length], L2 = out[i];
+      const den = G.cross(L1.d, L2.d);
+      let v = L2.start;
+      if (Math.abs(den) > 1e-6) {
+        const t = G.cross(G.sub(L2.p, L1.p), L2.d) / den;
+        const q = G.add(L1.p, G.mul(L1.d, t));
+        if (G.dist(q, L2.start) < 2 * merge + 0.5) v = q;
+      }
+      if (!res.length || G.dist(res[res.length - 1], v) > 0.02) res.push(v);
+    }
+    if (res.length > 2 && G.dist(res[0], res[res.length - 1]) <= 0.02) res.pop();
+    // rechte tussenpunten weg
+    const clean = res.filter((p, i) => {
+      const prev = res[(i - 1 + res.length) % res.length], next = res[(i + 1) % res.length];
+      return G.distToSegment(p, prev, next) > 0.01;
+    });
+    const A0 = G.area(pts), A1 = clean.length >= 3 ? G.area(clean) : 0;
+    if (clean.length < 3 || Math.abs(A1 - A0) > 0.12 * A0) return pts.slice();
+    return clean;
+  };
+
   /** Hoek (graden) van vector, 0 = +x, positief richting +y (met de klok mee op scherm). */
   G.angleOf = (v) => G.normDeg(G.deg(Math.atan2(v.y, v.x)));
 
