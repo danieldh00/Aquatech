@@ -60,3 +60,15 @@ table.lines tr.done input[data-s=title], table.lines tr.done input[data-m=descri
 /* Uitbesteed aan of aangenomen van een andere organisatie. */
 .notice.outsourced { border-left: 4px solid var(--at-teal); margin-bottom: 14px; padding: 10px 14px; font-size: 14px; }
 .print-doc .p-note { font-size: 8pt; margin: 0 0 4px; }
+
+/* Voorraad bij de werkorder (stock-panel.js). */
+#st-card .tablewrap { overflow-x: auto; }
+table.st-lines td .sub { display: block; font-size: 12px; color: var(--muted); white-space: normal; }
+table.st-lines tr.bad td:first-child b { color: var(--danger, #c62828); }
+table.st-lines .st-act { white-space: nowrap; }
+table.st-lines .st-act input { width: 70px; margin-right: 4px; }
+.pill.st-ok { background: var(--primary-soft); color: var(--primary-dark); }
+.pill.st-done { background: var(--at-green-soft); color: var(--at-green-dark); }
+.pill.st-short { background: var(--danger, #c62828); color: #fff; }
+.st-moves summary { cursor: pointer; font-weight: 600; font-size: 14px; margin: 10px 0 6px; }
+#st-card .code { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }

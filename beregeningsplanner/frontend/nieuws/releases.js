@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.59.0',
+      date: '2026-10-21',
+      title: 'Voorraadbeheer',
+      items: [
+        { text: 'Nieuwe module **Voorraadbeheer**: wat er op voorraad ligt, met locatie, minimumvoorraad en voorraadwaarde. Artikelen neem je met één klik over uit de catalogus van de stuklijst. Ontvangsten, tellingen en correcties boek je per artikel, en alles is als Excel te exporteren.', for: ['voorraad'] },
+        { text: 'Een werkorder **reserveert** zijn materialen zolang hij open staat, en wordt hij **Gereed**, dan worden ze vanzelf van de voorraad **afgeboekt**. Op de werkorder zie je in het blok **Voorraad** wat er nodig is, wat er ligt en waar een tekort is; daar kun je ook zelf afboeken of een retour boeken.', for: ['werkorders'] },
+      ],
+    },
+    {
       version: '0.58.0',
       date: '2026-10-21',
       title: 'Werken zonder bereik op locatie',

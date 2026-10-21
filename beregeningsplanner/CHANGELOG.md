@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.59.0
+
+Voorraadbeheer: nieuwe module `frontend/voorraad/`, gekoppeld aan de
+stuklijst en werkorders via de artikelcode.
+
+- **Opslag** (`backend/src/stock.js`, migratie 24 in SQLite en PostgreSQL):
+  `stock_items` (per omgeving, code uniek per tenant, stand `on_hand`,
+  locatie, minimum, inkoopprijs, archief), `stock_movements` (logboek:
+  ontvangst, afboeking, retour, correctie, telling; wijziging + stand erna,
+  werkorder, bron, gebruiker) en `stock_reservations` (per werkorder en
+  artikel). Indexen met `tenant_id` vooraan.
+- **Reserveren**: `onWorkOrderChange` na aanmaken, opslaan en verwijderen van
+  een werkorder (`ctx.onChange` in workorders.js): open werkorders (Nieuw,
+  Gepland, In uitvoering) reserveren benodigd − afgeboekt per voorraadcode;
+  gereed/geannuleerd/verwijderd geeft vrij. Nieuwe voorraadartikelen
+  reserveren meteen op open werkorders (`resyncOpen`).
+- **Afboeken**: bij Gereed wordt de reservering afgeboekt (bron `gereed`),
+  tenzij er materiaalverbruik is geboekt. `syncUsage` boekt verbruik
+  idempotent per verbruiksregel (bron `verbruik:<id>`, alleen het verschil,
+  0 = terugboeken) voor de koppeling met de materiaalregistratie op de
+  werkorder. Handmatig per regel of alles via `POST
+  /api/stock/workorders/:id/issue`.
+- **API**: `/api/stock` (overzicht in één query), `/api/stock/items[/:id]`,
+  `/api/stock/items/:id/movements`, `/api/stock/import` (uit de catalogus),
+  `/api/stock/movements` (periode, voor de export), `/api/stock/reservations`,
+  `/api/stock/resync` (recht `voorraad`) en `/api/stock/workorders/:id`
+  (recht `werkorders`). Eigen `express.json({ limit: '256kb' })`.
+- **Rechten**: nieuw recht `voorraad` (beheerder en installateur).
+- **Frontend**: module Voorraadbeheer (overzicht, gereserveerd, mutaties,
+  artikel via `?id=`, Excel-export van voorraad en mutaties) en blok
+  Voorraad op de werkorder (`werkorders/stock-panel.js`).
+- **Testdata**: voorraadartikelen, mutaties en reserveringen bij de
+  testwerkorders. Tests in `test/stock.test.js` (flow, verbruik, rechten,
+  andere tenant → 404) en `test/queries.test.js`.
+
 ## 0.58.0
 
 Installeerbare app (PWA) die op locatie ook zonder verbinding werkt, voor

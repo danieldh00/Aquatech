@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Voorraadbeheer – AquaTech Service</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="../plannen/plannen.css">
+  <link rel="stylesheet" href="voorraad.css">
+  <script src="../shared/common.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Voorraadbeheer</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash wide">
+    <div id="v-denied" class="notice" hidden></div>
+
+    <!-- Overzicht -->
+    <div id="v-list" hidden>
+      <section class="intro">
+        <h1>Voorraadbeheer</h1>
+        <p class="muted">Wat er op voorraad ligt, met dezelfde artikelcodes als de stuklijst, de offerte en de werkorder. Een werkorder reserveert zijn materialen zolang hij open staat; bij Gereed (of bij het geregistreerde verbruik) worden ze afgeboekt. Ontvangsten, tellingen en correcties boek je hier.</p>
+      </section>
+      <div id="v-stats" class="stats"></div>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="stock" role="tab">Voorraad</button>
+        <button class="tab" data-tab="reserved" role="tab">Gereserveerd <span id="t-reserved" class="count"></span></button>
+        <button class="tab" data-tab="moves" role="tab">Mutaties</button>
+      </nav>
+
+      <section id="tab-stock" class="tabpane">
+        <div class="filters">
+          <input id="f-search" type="search" placeholder="Zoek op code, omschrijving of locatie">
+          <label class="chk"><input type="checkbox" id="f-low"> Alleen onder minimum</label>
+          <label class="chk"><input type="checkbox" id="f-archived"> Ook gearchiveerd</label>
+          <span class="spacer"></span>
+          <button class="btn primary" id="b-new">+ Artikel</button>
+          <button class="btn" id="b-import">Uit catalogus</button>
+          <button class="btn" id="b-export">Excel-export</button>
+        </div>
+
+        <form id="new-form" class="card-form" hidden novalidate>
+          <h3>Nieuw voorraadartikel</h3>
+          <div class="row">
+            <label>Artikelcode<input name="code" maxlength="40" list="catalog-codes" required autocomplete="off" placeholder="Bijv. PE-25"></label>
+            <label class="grow">Omschrijving<input name="name" maxlength="200" required></label>
+            <label>Eenheid<input name="unit" maxlength="12" value="st"></label>
+          </div>
+          <div class="row">
+            <label>Locatie<input name="location" maxlength="60" placeholder="Bijv. magazijn A3, bus 1"></label>
+            <label>Beginvoorraad<input name="onHand" type="number" min="0" step="any" inputmode="decimal"></label>
+            <label>Minimumvoorraad<input name="minQty" type="number" min="0" step="any" inputmode="decimal"></label>
+            <label>Inkoopprijs (€, excl. btw)<input name="costPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
+          </div>
+          <datalist id="catalog-codes"></datalist>
+          <div class="row">
+            <button class="btn primary" type="submit">Toevoegen</button>
+            <button class="btn" type="button" data-cancel>Annuleren</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
+
+        <form id="import-form" class="card-form" hidden novalidate>
+          <h3>Artikelen uit de catalogus op voorraad nemen</h3>
+          <p class="muted small">Kies de artikelen die je op voorraad houdt. Omschrijving en eenheid komen uit de catalogus; de stand begint op 0 (boek daarna een ontvangst of telling).</p>
+          <div class="filters">
+            <input id="i-search" type="search" placeholder="Zoek in de catalogus">
+            <button class="btn small" type="button" id="i-all">Alles kiezen</button>
+          </div>
+          <div id="i-list" class="i-list"></div>
+          <div class="row">
+            <button class="btn primary" type="submit">Op voorraad nemen</button>
+            <button class="btn" type="button" data-cancel>Annuleren</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
+
+        <div class="tablewrap"><table class="grid" id="s-table"></table></div>
+      </section>
+
+      <section id="tab-reserved" class="tabpane" hidden>
+        <p class="muted small">Materialen die open werkorders (Nieuw, Gepland, In uitvoering) nog nodig hebben. Klopt een reservering niet meer, bijvoorbeeld na een nieuw voorraadartikel, <button class="linkbtn" id="b-resync">bereken ze opnieuw</button>.</p>
+        <div class="tablewrap"><table class="grid" id="r-table"></table></div>
+      </section>
+
+      <section id="tab-moves" class="tabpane" hidden>
+        <div class="filters">
+          <label>Van<input id="m-from" type="date"></label>
+          <label>Tot en met<input id="m-to" type="date"></label>
+          <select id="m-kind"><option value="">Alle soorten</option></select>
+          <span class="spacer"></span>
+          <button class="btn" id="m-export">Excel-export</button>
+        </div>
+        <div class="tablewrap"><table class="grid" id="m-table"></table></div>
+      </section>
+    </div>
+
+    <!-- Artikel (?id=) -->
+    <div id="v-item" hidden>
+      <div class="row item-head">
+        <a id="d-back" class="btn" href="./">← Voorraad</a>
+        <h1 id="d-title"></h1>
+      </div>
+      <div id="d-stats" class="stats"></div>
+      <div class="cols">
+        <form id="move-form" class="card-form" novalidate>
+          <h3>Mutatie boeken</h3>
+          <div class="row">
+            <label>Soort<select name="kind">
+              <option value="ontvangst">Ontvangst (erbij)</option>
+              <option value="telling">Telling (stand wordt het getelde aantal)</option>
+              <option value="correctie">Correctie (+ of −)</option>
+            </select></label>
+            <label>Aantal<input name="qty" type="number" step="any" inputmode="decimal" required></label>
+            <label class="grow">Opmerking<input name="note" maxlength="300" placeholder="Bijv. pakbon, leverancier of reden"></label>
+          </div>
+          <div class="row"><button class="btn primary" type="submit">Boeken</button></div>
+          <div class="err" role="alert"></div>
+        </form>
+        <form id="edit-form" class="card-form" novalidate>
+          <h3>Gegevens</h3>
+          <div class="row">
+            <label>Artikelcode<input name="code" maxlength="40" required></label>
+            <label class="grow">Omschrijving<input name="name" maxlength="200" required></label>
+            <label>Eenheid<input name="unit" maxlength="12"></label>
+          </div>
+          <div class="row">
+            <label>Locatie<input name="location" maxlength="60"></label>
+            <label>Minimumvoorraad<input name="minQty" type="number" min="0" step="any" inputmode="decimal"></label>
+            <label>Inkoopprijs (€)<input name="costPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
+          </div>
+          <label>Notities<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
+          <div class="row">
+            <button class="btn primary" type="submit">Opslaan</button>
+            <button class="btn danger" type="button" id="d-remove">Verwijderen</button>
+            <button class="btn" type="button" id="d-restore" hidden>Terugzetten uit archief</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
+      </div>
+      <section class="card-form">
+        <h3>Gereserveerd op werkorders</h3>
+        <div class="tablewrap"><table class="grid" id="d-res"></table></div>
+      </section>
+      <section class="card-form">
+        <h3>Mutaties</h3>
+        <div class="tablewrap"><table class="grid" id="d-moves"></table></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="../beregening/js/catalog.js"></script>
+  <script src="../werkorders/workorder-core.js"></script>
+  <script src="voorraad.js"></script>
+</body>
+</html>

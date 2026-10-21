@@ -1,0 +1,30 @@
+/* Voorraadbeheer: overzicht, reserveringen, mutaties en een artikel. */
+.filters .spacer { flex: 1; }
+.filters label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+.tab .count:not(:empty) { display: inline-block; min-width: 18px; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--at-green); color: #fff; font-size: 12px; line-height: 18px; text-align: center; }
+.card-form label.grow { flex: 1 1 260px; }
+.card-form label.grow input { width: 100%; }
+#new-form, #import-form { border-left: 4px solid var(--at-teal); }
+td .sub { display: block; font-size: 12px; color: var(--muted); white-space: normal; }
+td .code, .code { font-family: ui-monospace, monospace; font-size: 12px; }
+table.grid tr.low td.avail { color: var(--danger, #c62828); font-weight: 600; }
+table.grid tr.arch td { color: var(--muted); }
+table.grid td.neg { color: var(--danger, #c62828); }
+table.grid tr[data-id] { cursor: pointer; }
+table.grid tr[data-id]:hover td { background: var(--at-green-soft); }
+.pill.k-ontvangst, .pill.k-retour { background: var(--at-green-soft); color: var(--at-green-dark); }
+.pill.k-afboeking { background: var(--primary-soft); color: var(--primary-dark); }
+.pill.low { background: var(--danger, #c62828); color: #fff; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--primary); text-decoration: underline; cursor: pointer; font: inherit; }
+.i-list { max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; margin-bottom: 10px; columns: 2 320px; }
+.i-list label { flex-direction: row !important; align-items: flex-start; gap: 6px; font-size: 13px; color: var(--text) !important; break-inside: avoid; padding: 3px 0; }
+.i-list .have { color: var(--muted); }
+.item-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
+.item-head h1 { margin: 0; font-size: 22px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.cols .card-form { margin-bottom: 0; }
+#v-item > section { margin-top: 14px; }
+@media (max-width: 640px) {
+  .filters .spacer { display: none; }
+  .i-list { columns: 1; }
+}
