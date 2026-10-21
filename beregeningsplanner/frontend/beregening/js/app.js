@@ -543,6 +543,22 @@
       this.commit();
       this.toast(`${C.areaTypes[type].label} toegevoegd (${fmt(G.area(area.pts))} m²)`);
     },
+    /** Nieuwe vorm voor een bestaand vlak ('Opnieuw tekenen'); naam, type en zone blijven. */
+    replaceAreaPoints(id, pts) {
+      const a = this.state.areas.find((x) => x.id === id);
+      if (!a) return;
+      this.checkpoint();
+      a.pts = pts.map((p) => ({ x: +p.x.toFixed(3), y: +p.y.toFixed(3) }));
+      this.editor.selection = { kind: 'area', id };
+      this.areaShapeChanged(id);
+      this.toast(`${a.name} opnieuw getekend (${fmt(G.area(a.pts))} m²)`);
+    },
+    /** Na een vormwijziging buiten het slepen om (punt weg, opnieuw tekenen). */
+    areaShapeChanged(id) {
+      this.invalidate();
+      this._applyMethods(id);
+      this.commit();
+    },
     placeElement(kind, w) {
       const et = C.elementTypes[kind];
       this.checkpoint();
@@ -631,6 +647,7 @@
     deleteSelection() {
       const sel = this.editor.selection;
       if (!sel) return;
+      this.editor.activeVertex = null;
       this.checkpoint();
       const st = this.state;
       if (sel.kind === 'area') {
@@ -642,6 +659,13 @@
       this.editor.selection = null;
       this._pruneZones();
       this.commit();
+    },
+    /** Vlak opnieuw tekenen: tekengereedschap met dit vlak als doel; Annuleren laat het vlak staan. */
+    redrawArea(id) {
+      const a = this.state.areas.find((x) => x.id === id);
+      if (!a) return;
+      this.editor.setTool('polygon', { areaType: a.type, redrawId: id });
+      this.toast(`Teken ${a.name} opnieuw; sluit af op het eerste punt. Annuleren laat het vlak zoals het was.`);
     },
     _pruneZones() {
       const st = this.state;
@@ -975,7 +999,7 @@
       $('#btn-help').onclick = () => $('#help').classList.toggle('open');
       $('#help-close').onclick = () => $('#help').classList.remove('open');
       $('#tool-select').onclick = () => this.editor.setTool('select');
-      $('#tool-pan').onclick = () => this.editor.setTool('pan');
+      $('#tool-pan').onclick = () => this.editor.togglePan();
       $('#tool-measure').onclick = () => this.editor.setTool('measure');
       $('#tool-fit').onclick = () => this.editor.fit();
       $('#tool-zoomin').onclick = () => this.editor.zoomAt(this.editor.w / 2, this.editor.h / 2, 1.25);
@@ -1007,6 +1031,7 @@
       document.querySelectorAll('#drawbar [data-db]').forEach((b) => {
         b.onclick = () => {
           if (b.dataset.db === 'undo') this.editor.undoPoint();
+          else if (b.dataset.db === 'pan') this.editor.togglePan();
           else if (b.dataset.db === 'finish') this.editor.finishPolygon();
           else this.editor.cancelDraw();
         };
@@ -1085,10 +1110,14 @@
       bar.querySelector('[data-db="undo"]').disabled = !n;
       bar.querySelector('[data-db="finish"]').hidden = t !== 'polygon';
       bar.querySelector('[data-db="finish"]').disabled = n < 3;
+      const pan = bar.querySelector('[data-db="pan"]');
+      pan.classList.toggle('active', !!ed.panHold);
+      pan.setAttribute('aria-pressed', ed.panHold ? 'true' : 'false');
       bar.querySelector('[data-db="cancel"] span').textContent = n ? 'Annuleren' : 'Stoppen';
       const o = ed.toolOpts || {};
       const name = o.areaType ? C.areaTypes[o.areaType].label : o.kind ? C.elementTypes[o.kind].label : o.type ? C.sprinklerTypes[o.type].label : '';
-      $('#drawbar-label').textContent = t === 'polygon' ? `${name}: ${n} punt${n === 1 ? '' : 'en'}` : name;
+      $('#drawbar-label').textContent = ed.panHold ? 'Schuiven: sleep het plan, tik ✋ om verder te tekenen'
+        : t === 'polygon' ? `${o.redrawId ? 'Opnieuw tekenen' : name}: ${n} punt${n === 1 ? '' : 'en'}` : name;
     },
 
     renderSteps() {
@@ -1421,12 +1450,15 @@
         el.innerHTML = '<p class="hint">Selecteer een vlak, sproeier of element om de eigenschappen te bewerken.</p>';
         return;
       }
+      const av = this.editor.activeVertex;
+      if (av && !(sel.kind === 'area' && av.id === obj.id && obj.pts[av.index])) this.editor.activeVertex = null;
       if (sel.kind === 'area') el.innerHTML = this._propsArea(obj);
       else if (sel.kind === 'sprinkler') el.innerHTML = this._propsSprinkler(obj);
       else el.innerHTML = this._propsElement(obj);
       this._bindProps(el, sel, obj);
     },
     _propsArea(a) {
+      const va = this.editor.activeVertex && this.editor.activeVertex.id === a.id ? this.editor.activeVertex : null;
       const opts = Object.entries(C.areaTypes).map(([k, t]) => `<option value="${k}" ${a.type === k ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
       let extra = '';
       const at = C.areaTypes[a.type];
@@ -1455,6 +1487,11 @@
         <label>Naam<input data-f="name" value="${esc(a.name)}"></label>
         <label>Type<select data-f="type">${opts}</select></label>
         <table class="kv"><tr><td>Oppervlak</td><td>${fmt(G.area(a.pts))} m²</td></tr><tr><td>Omtrek</td><td>${fmt(G.perimeter(a.pts))} m</td></tr><tr><td>Hoekpunten</td><td>${a.pts.length}</td></tr></table>
+        <div class="shape-edit">
+          <p class="hint small">Vorm aanpassen: sleep een hoekpunt (□), sleep een middenstip (●) voor een extra punt, tik een hoekpunt aan en kies <b>Punt verwijderen</b>${this.editor.touch ? '' : ' (of Delete / dubbelklik)'}.</p>
+          ${va ? `<button class="btn" data-act="vertexdel" ${a.pts.length <= 3 ? 'disabled' : ''}>Punt ${va.index + 1} verwijderen</button>` : ''}
+          <button class="btn" data-act="redraw">Opnieuw tekenen</button>
+        </div>
         ${extra}
         <button class="btn danger" data-act="delete">Verwijderen</button>`;
     },
@@ -1559,6 +1596,8 @@
       el.querySelectorAll('[data-act]').forEach((b) => {
         b.onclick = () => {
           if (b.dataset.act === 'delete') this.deleteSelection();
+          if (b.dataset.act === 'vertexdel') this.editor.removeVertex();
+          if (b.dataset.act === 'redraw') this.redrawArea(obj.id);
           if (b.dataset.act === 'autoplace') this.autoPlace([obj.id]);
           if (b.dataset.act === 'bedplace') { this.checkpoint(); this._syncBedSprinklers(true, obj.id); if (this.state.zones.length) Hy.autoZones(this.state); this.commit(); }
         };
@@ -1580,15 +1619,15 @@
       const touchHints = {
         select: 'Tik om te selecteren · sleep om te verplaatsen · één vinger op een lege plek = verschuiven · knijpen = zoomen',
         pan: 'Sleep om het plan te verschuiven · knijpen = zoomen',
-        polygon: `Tekenen: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – tik de hoekpunten aan; tik op het eerste punt of op Vorm sluiten · slepen = verschuiven`,
+        polygon: `Tekenen: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – tik de hoekpunten aan; tik op het eerste punt of op Vorm sluiten · slepen of ✋ = verschuiven · knijpen = zoomen`,
         element: `Plaats: ${opts.kind ? C.elementTypes[opts.kind].label : ''} – tik op het plan`,
         sprinkler: `Plaats: ${opts.type ? C.sprinklerTypes[opts.type].label : ''} – tik in of op de rand van het gazon`,
         wand: `Toverstaf: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – tik midden in het vlak op het plan`,
       };
       const hints = {
-        select: 'Klik om te selecteren · sleep om te verplaatsen · scrollen = zoomen · spatiebalk of rechtermuisknop + slepen = verschuiven',
+        select: 'Klik om te selecteren · sleep om te verplaatsen · scrollen = verschuiven · Ctrl + scrollen = zoomen · spatie of rechtermuisknop + slepen = verschuiven',
         pan: 'Sleep om het plan te verschuiven',
-        polygon: `Tekenen: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – klik de hoekpunten aan, sluit af op het eerste punt of met Enter · Esc = annuleren`,
+        polygon: `Tekenen: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – klik de hoekpunten aan, sluit af op het eerste punt of met Enter · scrollen, spatie + slepen of ✋ = verschuiven · Ctrl + scrollen = zoomen · Esc = annuleren`,
         rect: `Rechthoek: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – sleep van hoek naar hoek`,
         element: `Plaats: ${opts.kind ? C.elementTypes[opts.kind].label : ''} – klik op het plan`,
         sprinkler: `Plaats: ${opts.type ? C.sprinklerTypes[opts.type].label : ''} – klik in of op de rand van het gazon · Esc = stoppen`,
@@ -1596,11 +1635,13 @@
         wand: `Toverstaf: ${opts.areaType ? C.areaTypes[opts.areaType].label : ''} – klik midden in het vlak op het plan · Esc = stoppen`,
         measure: 'Meten: sleep een lijn',
       };
-      $('#hint').textContent = (touch && touchHints[tool]) || hints[tool] || '';
+      const panHint = touch ? 'Schuiven: sleep het plan · knijpen = zoomen · tik ✋ om verder te tekenen' : 'Schuiven: sleep het plan · klik ✋ om verder te tekenen';
+      $('#hint').textContent = this.editor && this.editor.panHold ? panHint : (touch && touchHints[tool]) || hints[tool] || '';
       // mobiel: bij tekenen het paneel inklappen voor meer ruimte, bij selecteren weer openen
       if (this._isMobile() && tool !== 'pan' && tool !== this._lastTool) this._setSheet(tool === 'select');
       this._lastTool = tool;
-      document.querySelectorAll('.toolbar [data-t]').forEach((b) => b.classList.toggle('active', b.dataset.t === tool));
+      const hold = !!(this.editor && this.editor.panHold);
+      document.querySelectorAll('.toolbar [data-t]').forEach((b) => b.classList.toggle('active', hold ? b.dataset.t === 'pan' : b.dataset.t === tool));
     },
     onMouseMove(w) {
       $('#coords').textContent = `x ${fmt(w.x, 2)} m · y ${fmt(w.y, 2)} m`;

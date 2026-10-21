@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.62.0
+
+Planner: vlakken achteraf corrigeren en verschuiven tijdens het tekenen.
+
+- **Vorm corrigeren** (`js/editor.js`, `js/app.js`): hoekpunten en middens
+  van het geselecteerde vlak gaan in `hitTest` vóór sproeiers en elementen
+  (sproeiers op de rand blokkeerden het slepen). Aangetikt hoekpunt
+  (`activeVertex`) is oranje; verwijderen met Delete/Backspace, dubbelklik
+  of de knop *Punt N verwijderen* in het paneel (minimaal 3 punten).
+  *Opnieuw tekenen* (`redrawArea`, `toolOpts.redrawId`) vervangt de vorm
+  van hetzelfde vlak (naam, type, zone en methode blijven,
+  `replaceAreaPoints`); annuleren laat het vlak staan. Na een vormwijziging
+  `areaShapeChanged` (sproeiers in beplanting opnieuw via `_applyMethods`).
+- **Verschuiven tijdens tekenen**: het handje (werkbalk en nieuwe knop
+  *✋ Schuiven* in de tekenbalk) schakelt tijdens het tekenen `panHold` in
+  zonder het gereedschap of de lopende vorm te wissen (voorheen brak het
+  handje de vorm af). Scrollwiel/touchpad verschuift nu (Shift = opzij),
+  Ctrl/Cmd + scrollen of knijpen op het touchpad zoomt; pijltjestoetsen
+  verschuiven. Spatie loslaten zet het gereedschap niet meer opnieuw (de
+  vorm bleef toen ook niet bewaard). Touch: slepen en knijpen werkten al.
+- **Leidingkleuren** (`js/hydraulics.js`): zonepalet zonder groen- en
+  bruintinten (`ZONE_COLORS`); bewaarde plannen worden omgezet
+  (`refreshZoneColors` in `calculate`). Leidingen en zonerand van
+  druppelvlakken krijgen een witte rand eronder.
+
 ## 0.61.0
 
 Brincr vervangen (deel 1): verkoopprijzen in Aquatech als bron voor de
