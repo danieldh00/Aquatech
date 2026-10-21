@@ -330,6 +330,17 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `mailServer.mode` `smtp` | `connector` (Exchange Online op IP: geen auth,
   `requireTLS`). WAN-IP via `backend/src/wanip.js` (ipify e.a., IPv4, 1 u
   cache, `WAN_IP` gaat voor), route `GET /api/admin/wan-ip`.
+- **Vaste AI-uitkomst + leren** (0.56.0, `backend/src/recognitions.js`, tabel
+  `plan_recognitions`, migratie 22): `/api/plan/analyze` bewaart per omgeving
+  onder SHA-256 van de afbeelding + model + `PROMPT_VERSION` (planAnalyzer.js)
+  en geeft dezelfde tekening daarna uit de opslag (`recognition.cached`, geen
+  kosten/daglimiet); `fresh: true` = opnieuw. Leren: de browser telt per
+  kleur/textuur-vakje (`featureKey`, `FEATURE_VERSION`) welk type er lag
+  (`LocalRecognizer.learn`) na een AI-herkenning of goedkeuring en stuurt alleen
+  tellingen (`POST /api/plan/learn`); `GET /api/plan/learned` telt op,
+  `classMap` gebruikt een vakje vóór de vaste regels. Andere vakjesindeling =
+  `FEATURE_VERSION` ophogen (in localrecog.js én recognitions.js). Vaste test op
+  Daniëls voorbeeldplan `test/fixtures/tuinontwerp-voorbeeld.png`.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - **Snelheid/navigatie** (0.46.0): `shared/common.js` in de `<head>` van elke

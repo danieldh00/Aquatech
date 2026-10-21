@@ -5,7 +5,8 @@ const express = require('express');
 const { createAuth, remoteIp, parseCookies } = require('./auth');
 const { createRateLimiter } = require('./rateLimit');
 const { loadOrCreateSecret } = require('./options');
-const { createPlanAnalyzer, AnalyzeError } = require('./planAnalyzer');
+const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./planAnalyzer');
+const { createRecognitionStore, sanitizeSamples, imageHash } = require('./recognitions');
 const { openDb, openDatabase, isPg } = require('./db');
 const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf } = require('./store');
 const testdata = require('./testdata');
@@ -245,6 +246,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }
   // Verbruik en kosten van elk AI-verzoek (Beheer > AI-kosten).
   const aiUsage = createAiUsageStore(database);
+  // Vaste AI-uitkomst per tekening en geleerde kleuren (zie recognitions.js).
+  const recognitions = createRecognitionStore(database);
   const aiAvailable = (tenantId = tenant.id) => settingsFor(tenantId).get('aiEnabled') && currentAnalyzer(tenantId).available;
 
   const app = express();
@@ -262,6 +265,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
   // Grote limiet alleen voor de plananalyse (afbeelding als base64).
   app.use('/api/plan/analyze', express.json({ limit: '12mb' }));
+  // Kleurtellingen van een herkend plan (zie recognitions.js).
+  app.use('/api/plan/learn', express.json({ limit: '256kb' }));
   // Een plan bevat de achtergrondafbeelding (base64).
   app.use('/api/plans', express.json({ limit: '12mb' }));
   // Een offerte met veel regels en lange teksten past niet in 16 kB.
@@ -922,6 +927,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Plan definitief wissen, inclusief de inhoud van de historie (AVG).
   app.delete('/api/admin/plans/:id', (req, res) => {
     const out = store.purgePlan(req.tenantId, req.params.id);
+    if (out) recognitions.removePlan(req.tenantId, req.params.id);
     if (!out) return res.status(404).json({ error: 'not_found', message: 'Plan niet gevonden.' });
     audit(req, 'plan_gewist', { planId: req.params.id, historyRows: out.history });
     res.json({ ok: true, ...out });
@@ -1129,6 +1135,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!planAnalyzer.available) {
       return res.status(409).json({ error: 'not_configured', message: 'Automatisch herkennen is niet ingesteld: een beheerder kan de API-sleutel invullen bij Beheer > Instellingen.' });
     }
+    // Dezelfde tekening (zelfde afbeelding, model en opdracht) geeft altijd
+    // hetzelfde resultaat: de eerder bewaarde herkenning, zonder AI-kosten.
+    // Met fresh: true herkent de AI opnieuw; die uitkomst geldt daarna.
+    const hash = imageHash(m[1], m[2]);
+    const aiModel = planAnalyzer.model || settingsFor(aiTenantOf(req.tenantId)).get('aiModel');
+    if (req.body.fresh !== true) {
+      const known = recognitions.findAi(req.tenantId, hash, aiModel, PROMPT_VERSION);
+      if (known) return res.json({ ...known.result, recognition: { id: known.id, cached: true, learned: known.learned } });
+    }
     const daily = dailyFor(req.tenantId);
     if (daily.count >= settings.get('aiDailyLimit')) {
       return res.status(429).json({ error: 'daily_limit', message: 'Het dagelijkse maximum voor automatisch herkennen is bereikt. Probeer het morgen opnieuw of teken het plan zelf.' });
@@ -1157,7 +1172,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         store.record({ tenantId: req.tenantId, userId: user.id, action: 'analyse', title: 'Plan herkend',
           summary: { areas: result.areas.length, elements: (result.elements || []).length, scale: result.scale.method || null, confidence: result.scale.confidence || null }, ip: ipOf(req) });
       }
-      res.json(result);
+      // usage/model horen bij de kosten, niet bij de bewaarde herkenning
+      const { usage, ...kept } = result;
+      let recognition = null;
+      try {
+        recognition = { id: recognitions.saveAi({ tenantId: req.tenantId || tenant.id, userId: user ? user.id : null, hash, model: aiModel, version: PROMPT_VERSION, result: kept }), cached: false, learned: false };
+      } catch (err) {
+        console.warn(`Herkenning niet bewaard: ${err.message}`);
+      }
+      res.json({ ...result, recognition });
     } catch (err) {
       if (err instanceof AnalyzeError) {
         if (err.code !== 'not_configured') logUsage(identify(req), { model: err.model, usage: err.usage, status: err.code });
@@ -1167,6 +1190,35 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       logUsage(identify(req), { status: 'error' });
       next(err);
     }
+  });
+
+  // Leren van herkende plannen (zie recognitions.js en localrecog.js). De
+  // planner haalt de geleerde kleuren op voor de lokale herkenning, en stuurt
+  // na een AI-herkenning of een goedkeuring alleen kleurtellingen (geen beeld).
+  const learnLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `${req.tenantId || tenant.id}|${remoteIp(req)}` });
+  app.get('/api/plan/learned', requireAppAccess, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(recognitions.learned(req.tenantId || tenant.id));
+  });
+  app.post('/api/plan/learn', requireAppAccess, learnLimiter, (req, res) => {
+    const samples = sanitizeSamples(req.body && req.body.samples);
+    if (!samples) return res.status(400).json({ error: 'invalid_samples', message: 'Ongeldige gegevens.' });
+    const tid = req.tenantId || tenant.id;
+    const user = identify(req);
+    if (req.body.recognitionId) {
+      // alleen bij een AI-herkenning van deze omgeving, en maar één keer
+      if (!recognitions.addSamples(tid, req.body.recognitionId, samples)) return res.status(404).json({ error: 'not_found', message: 'Herkenning niet gevonden.' });
+      return res.json({ ok: true });
+    }
+    if (req.body.planId) {
+      // een goedgekeurd plan: alleen wie plannen mag goedkeuren
+      if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+      if (!Roles.can(user, 'plannen.goedkeuren')) return res.status(403).json({ error: 'forbidden', message: 'Geen toegang.' });
+      if (store.planReviewStatus(tid, req.body.planId) !== 'goedgekeurd') return res.status(404).json({ error: 'not_found', message: 'Geen goedgekeurd plan gevonden.' });
+      recognitions.savePlanSamples({ tenantId: tid, userId: user.id, planId: String(req.body.planId), samples });
+      return res.json({ ok: true });
+    }
+    res.status(400).json({ error: 'invalid_samples', message: 'Ongeldige gegevens.' });
   });
 
   // Opslag van offertes, werkorders en webshop (ook gebruikt door de testdata).
@@ -1416,7 +1468,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, settings: settingsFor(t.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, settings: settingsFor(t.id) },
       set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );

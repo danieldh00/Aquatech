@@ -15,6 +15,7 @@
 
   const WORK_MAX = 1000; // werkresolutie voor de kleuranalyse
   const NONE = 0, LAWN = 1, HEDGE = 2, BED = 3, DRY = 4, WET = 5;
+  const TEX_PLANTS = 0.07; // textuur (zie normalizedColors) waarboven groen als beplanting telt
   const CLASS_TYPE = { [LAWN]: 'lawn', [HEDGE]: 'hedge', [BED]: 'bed', [DRY]: 'dry', [WET]: 'wet' };
 
   // ---------------------------------------------------------------- kleuren
@@ -201,7 +202,40 @@
     // maar bv. een luchtfoto met grijze daken en wegen)
     if (fill(model) > 0.04 && model) { model = null; fill(null); }
     const r = Math.max(1, Math.round(Math.max(w, h) / 220));
-    return { rgb: inkFreeBlur(out, w, h, r), normalized: Boolean(model) };
+    const rgb = inkFreeBlur(out, w, h, r);
+    // textuur: gemiddelde afwijking van de helderheid t.o.v. de gemiddelde kleur. Gazon is egaal,
+    // getekende planten en bomen zijn gevlekt (ook als ze gemiddeld dezelfde kleur hebben)
+    const dev = new Float32Array(w * h);
+    for (let k = 0; k < w * h; k++) {
+      const o = k * 3;
+      if (isInk(out[o], out[o + 1], out[o + 2])) continue; // lijnen en tekst tellen niet als textuur
+      dev[k] = Math.abs((out[o] - rgb[o]) * 0.3 + (out[o + 1] - rgb[o + 1]) * 0.59 + (out[o + 2] - rgb[o + 2]) * 0.11);
+    }
+    return { rgb, tex: boxBlur(dev, w, h, r), normalized: Boolean(model) };
+  }
+
+  /** Box-blur van één kanaal (lopende som). */
+  function boxBlur(src, w, h, r) {
+    const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      let sum = 0, n = 0;
+      for (let x = 0; x < Math.min(w, r); x++) { sum += src[y * w + x]; n++; }
+      for (let x = 0; x < w; x++) {
+        if (x + r < w) { sum += src[y * w + x + r]; n++; }
+        if (x - r - 1 >= 0) { sum -= src[y * w + x - r - 1]; n--; }
+        tmp[y * w + x] = sum / n;
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      let sum = 0, n = 0;
+      for (let y = 0; y < Math.min(h, r); y++) { sum += tmp[y * w + x]; n++; }
+      for (let y = 0; y < h; y++) {
+        if (y + r < h) { sum += tmp[(y + r) * w + x]; n++; }
+        if (y - r - 1 >= 0) { sum -= tmp[(y - r - 1) * w + x]; n--; }
+        out[y * w + x] = sum / n;
+      }
+    }
+    return out;
   }
 
   /** Is deze (genormaliseerde) kleur inkt: donker en kleurloos? */
@@ -242,11 +276,125 @@
     return out;
   }
 
-  function classMap(data, w, h) {
-    const { rgb, normalized } = normalizedColors(data, w, h);
+  function classMap(data, w, h, learned = null) {
+    const { rgb, tex, normalized } = normalizedColors(data, w, h);
     const cls = new Uint8Array(w * h);
-    for (let k = 0; k < w * h; k++) cls[k] = classify(rgb[k * 3] * 255, rgb[k * 3 + 1] * 255, rgb[k * 3 + 2] * 255);
-    return { cls, rgb, normalized };
+    const decide = learnedDecisions(learned);
+    let fromLearned = 0;
+    for (let k = 0; k < w * h; k++) {
+      const o = k * 3;
+      if (decide) {
+        const d = decide[featureKey(rgb[o], rgb[o + 1], rgb[o + 2], tex[k])];
+        if (d >= 0) { cls[k] = d; fromLearned++; continue; }
+      }
+      let c = classify(rgb[o] * 255, rgb[o + 1] * 255, rgb[o + 2] * 255);
+      // gevlekt lichtgroen = getekende planten of een boomkroon, geen gazon
+      if (c === LAWN && tex[k] > TEX_PLANTS) c = BED;
+      cls[k] = c;
+    }
+    return { cls, rgb, tex, normalized, learnedShare: fromLearned / (w * h) };
+  }
+
+  // ---------------------------------------------------------------- leren van herkende plannen
+  //
+  // Na een AI-herkenning (of het goedkeuren van een plan) telt de planner per kleur/textuur-vakje hoe vaak
+  // het bij gazon, haag, beplanting, bestrating, water of "niets" hoorde. Alleen die tellingen gaan naar de
+  // server, geen afbeelding. De server telt alle voorbeelden van de organisatie op; de lokale herkenning
+  // gebruikt die uitkomst vóór de vaste kleurregels, maar alleen als een vakje vaak en eenduidig gezien is.
+
+  const FEATURE_VERSION = 1;
+  const LEVELS = 8; // per kleurkanaal
+  const TEX_LEVELS = [0.025, 0.07]; // grenzen egaal | licht gevlekt | gevlekt
+  const FEATURE_BINS = LEVELS * LEVELS * LEVELS * (TEX_LEVELS.length + 1);
+  const SAMPLE_TOTAL = 20000; // elk voorbeeld weegt even zwaar, hoe groot het plan ook is
+  const LEARN_MIN = 40; // minimaal gewicht in een vakje voordat het meetelt
+  const LEARN_SHARE = 0.6; // en het winnende type moet zo'n aandeel hebben
+  const TYPE_CLASS = { lawn: LAWN, hedge: HEDGE, bed: BED, planter: BED, dry: DRY, wet: WET };
+
+  /** Vakje voor een (op het papier genormaliseerde) kleur 0..1 en textuur. */
+  function featureKey(r, g, b, t) {
+    const q = (v) => Math.max(0, Math.min(LEVELS - 1, Math.floor(v * LEVELS)));
+    const tl = t < TEX_LEVELS[0] ? 0 : t < TEX_LEVELS[1] ? 1 : 2;
+    return ((q(r) * LEVELS + q(g)) * LEVELS + q(b)) * (TEX_LEVELS.length + 1) + tl;
+  }
+
+  /** Per vakje het geleerde type (of -1: niet genoeg of niet eenduidig gezien). */
+  function learnedDecisions(learned) {
+    if (!learned || learned.v !== FEATURE_VERSION || !learned.bins) return null;
+    const decide = new Int8Array(FEATURE_BINS).fill(-1);
+    let any = false;
+    for (const [key, counts] of Object.entries(learned.bins)) {
+      const k = Number(key);
+      if (!(k >= 0 && k < FEATURE_BINS) || !Array.isArray(counts)) continue;
+      let total = 0, best = 0;
+      for (let c = 0; c < 6; c++) { total += counts[c] || 0; if ((counts[c] || 0) > (counts[best] || 0)) best = c; }
+      if (total >= LEARN_MIN && counts[best] / total >= LEARN_SHARE) { decide[k] = best; any = true; }
+    }
+    return any ? decide : null;
+  }
+
+  /** Vult een polygoon (pixels) in `label` met waarde v (scanline). */
+  function fillPolygon(label, w, h, pts, v) {
+    const ys = pts.map((p) => p.y);
+    const y0 = Math.max(0, Math.floor(Math.min(...ys))), y1 = Math.min(h - 1, Math.ceil(Math.max(...ys)));
+    const xs = [];
+    for (let y = y0; y <= y1; y++) {
+      const yc = y + 0.5;
+      xs.length = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], b = pts[(i + 1) % pts.length];
+        if ((a.y <= yc) !== (b.y <= yc)) xs.push(a.x + ((yc - a.y) / (b.y - a.y)) * (b.x - a.x));
+      }
+      xs.sort((p, q) => p - q);
+      for (let i = 0; i + 1 < xs.length; i += 2) {
+        const xa = Math.max(0, Math.ceil(xs[i] - 0.5)), xb = Math.min(w - 1, Math.floor(xs[i + 1] - 0.5));
+        for (let x = xa; x <= xb; x++) label[y * w + x] = v;
+      }
+    }
+  }
+
+  /**
+   * Tellingen per vakje uit RGBA-pixels (werkresolutie) en de juiste vlakken (in dezelfde pixels).
+   * Grote vlakken eerst, kleinere erover: een border in het gazon telt als border.
+   */
+  function samplesFromPixels(data, w, h, areas) {
+    const label = new Uint8Array(w * h); // 0 = buiten elk vlak
+    const list = (areas || []).filter((a) => TYPE_CLASS[a.type] && a.points && a.points.length >= 3)
+      .map((a) => ({ c: TYPE_CLASS[a.type], pts: a.points, size: G.area(a.points) }))
+      .sort((a, b) => b.size - a.size);
+    if (!list.length) return null;
+    for (const a of list) fillPolygon(label, w, h, a.pts, a.c);
+    const { rgb, tex } = normalizedColors(data, w, h);
+    const counts = new Map();
+    let total = 0;
+    for (let k = 0; k < w * h; k++) {
+      const o = k * 3;
+      const key = featureKey(rgb[o], rgb[o + 1], rgb[o + 2], tex[k]);
+      // buiten de vlakken: half gewicht (de AI tekent niet elk randje, en papier is overal)
+      const wt = label[k] ? 1 : 0.5;
+      let arr = counts.get(key);
+      if (!arr) counts.set(key, (arr = [0, 0, 0, 0, 0, 0]));
+      arr[label[k]] += wt;
+      total += wt;
+    }
+    const f = SAMPLE_TOTAL / total;
+    const bins = {};
+    for (const [key, arr] of counts) {
+      const scaled = arr.map((n) => Math.round(n * f));
+      if (scaled.some((n) => n > 0)) bins[key] = scaled;
+    }
+    return { v: FEATURE_VERSION, bins };
+  }
+
+  /**
+   * Leert van een herkenning: analyse-afbeelding + resultaat (vlakken in pixels van die afbeelding,
+   * zoals /api/plan/analyze ze geeft). Geeft de tellingen terug (zonder afbeelding).
+   */
+  async function learn(analyzeImage, result) {
+    const img = await window.PlanImport.loadImage(analyzeImage.dataUrl);
+    const { data, w, h, f } = workPixels(img);
+    const areas = (result.areas || []).map((a) => ({ type: a.type, points: (a.points || []).map((p) => ({ x: p.x * f, y: p.y * f })) }));
+    return samplesFromPixels(data, w, h, areas);
   }
 
   /** Meerderheidsfilter 3×3 (ruis en antialiasing weg). */
@@ -326,7 +474,7 @@
    * Grote gaten (een gazon midden in de verharding, een border) blijven open: een polygoon kent geen gaten,
    * dus wordt er een smalle snede langs de kortste weg naar buiten gemaakt (sleutelgat).
    */
-  function componentPolygons(comp, w, eps, minHole, cls, minFill = 0.4) {
+  function componentPolygons(comp, w, eps, minHole, cls, minFill = 0.4, keepHole = null) {
     const T = window.AutoTrace._internal;
     const pad = 2;
     const bw = comp.x1 - comp.x0 + 1 + 2 * pad, bh = comp.y1 - comp.y0 + 1 + 2 * pad;
@@ -347,7 +495,12 @@
     // getekende omtrek (lijn) i.p.v. ingekleurd vlak: binnenin vrijwel leeg
     if (minFill > 0 && comp.pix.length / Math.max(1, comp.pix.length + inner) < minFill) return [];
     const mask = filled.slice();
-    const holes = components(holeMask, bw, bh, minHole);
+    let holes = components(holeMask, bw, bh, minHole);
+    if (keepHole) {
+      // gatpixels terug naar beeldpixels voor de beoordeling
+      const toImg = (k) => (Math.floor(k / bw) + comp.y0 - pad) * w + (k % bw) + comp.x0 - pad;
+      holes = holes.filter((hole) => keepHole(hole.pix.map(toImg)));
+    }
     const holeId = new Int32Array(bw * bh).fill(-1);
     holes.forEach((hole, i) => { for (const k of hole.pix) { mask[k] = 0; holeId[k] = i; } });
     holes.forEach((hole, i) => {
@@ -409,7 +562,8 @@
     return window.AutoTrace._internal.simplify(contour, eps).map((p) => ({ x: p.x + comp.x0 - pad, y: p.y + comp.y0 - pad }));
   }
 
-  function findAreas(img, onProgress, opts = {}) {
+  /** Pixels van het beeld op werkresolutie; f = werk-px per beeld-px. */
+  function workPixels(img) {
     const W0 = img.naturalWidth || img.width, H0 = img.naturalHeight || img.height;
     const f = Math.min(1, WORK_MAX / Math.max(W0, H0));
     const cv = document.createElement('canvas');
@@ -417,25 +571,40 @@
     cv.height = Math.max(1, Math.round(H0 * f));
     const ctx = cv.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(img, 0, 0, cv.width, cv.height);
-    const { data } = ctx.getImageData(0, 0, cv.width, cv.height);
+    return { data: ctx.getImageData(0, 0, cv.width, cv.height).data, w: cv.width, h: cv.height, f };
+  }
+
+  function findAreas(img, onProgress, opts = {}) {
+    const { data, w, h, f } = workPixels(img);
     onProgress && onProgress('Kleuren indelen…');
-    return areasFromPixels(data, cv.width, cv.height, f, opts);
+    return areasFromPixels(data, w, h, f, opts);
   }
 
   /** Vlakken uit RGBA-pixels (werkresolutie); f = werk-px per beeld-px. Los van canvas, zodat het testbaar is. */
   function areasFromPixels(data, w, h, f = 1, opts = {}) {
-    const cm = classMap(data, w, h);
+    const cm = classMap(data, w, h, opts.learned);
     const cls = modeFilter(modeFilter(cm.cls, w, h), w, h);
 
     const r = Math.max(1, Math.round(Math.max(w, h) / 350)); // dichtmaken van lijnen en tekst
     const minPx = Math.max(60, Math.round(w * h * 0.0012));
     const eps = Math.max(1.2, Math.max(w, h) / 450);
+    const rLawn = Math.max(2, Math.round(Math.max(w, h) * 0.025));
     let colored = 0;
     const found = [];
     for (const c of [LAWN, HEDGE, BED, DRY, WET]) {
       let mask = new Uint8Array(w * h);
       for (let k = 0; k < mask.length; k++) if (cls[k] === c) { mask[k] = 1; colored++; }
       mask = morph(morph(mask, w, h, r, true), w, h, r, false);
+      if (c === LAWN) {
+        // tekst, een watermerk of een boom over het gras snijdt geen inhammen in het gazon: smalle
+        // stukken beplanting/tekst tussen gras horen erbij (bestrating, water en hagen niet)
+        // eerst losse snippers lichtgroen weg (in getekende planten, logo's): die zouden anders aan het gazon groeien
+        const parts = components(mask, w, h, 1);
+        const biggest = parts.reduce((m, p) => Math.max(m, p.pix.length), 0);
+        for (const p of parts) if (p.pix.length < Math.max(minPx, 0.1 * biggest)) for (const k of p.pix) mask[k] = 0;
+        const closed = morph(morph(mask, w, h, rLawn, true), w, h, rLawn, false);
+        for (let k = 0; k < mask.length; k++) if (closed[k] && !mask[k] && (cls[k] === BED || cls[k] === NONE)) mask[k] = 1;
+      }
       const comps = components(mask, w, h, minPx).sort((a, b) => b.pix.length - a.pix.length).slice(0, 25);
       for (const comp of comps) {
         if (comp.x1 - comp.x0 > 0.95 * w && comp.y1 - comp.y0 > 0.95 * h) continue; // achtergrond, geen vlak
@@ -463,20 +632,46 @@
     const counters = {};
     for (const { c, comp } of found) {
       const type = CLASS_TYPE[c];
-      for (const poly of componentPolygons(comp, w, eps, minPx, cls)) {
+      // in een gazon blijft alleen een gat open dat droog moet blijven (terras, vijver); een border of boom
+      // in het gras wordt meegenomen, die krijgt toch water van de sproeiers
+      const keepHole = c === LAWN ? (pix) => pix.filter((k) => cls[k] === DRY || cls[k] === WET).length > 0.5 * pix.length : null;
+      for (const poly of componentPolygons(comp, w, eps, minPx, cls, 0.4, keepHole)) {
         counters[type] = (counters[type] || 0) + 1;
         areas.push({ type, name: `${C.areaTypes[type].label} ${counters[type]}`, points: poly.map((p) => ({ x: p.x / f, y: p.y / f })) });
       }
     }
+    dropIslands(areas, 0.03 * Math.max(w, h) / f);
     const gray = new Uint8Array(w * h);
     for (let k = 0; k < gray.length; k++) gray[k] = (data[k * 4] * 0.299 + data[k * 4 + 1] * 0.587 + data[k * 4 + 2] * 0.114) | 0;
-    const res = { areas, coloredShare: colored / (w * h), normalized: cm.normalized, work: { gray, w, h, f } };
+    const res = { areas, coloredShare: colored / (w * h), normalized: cm.normalized, learnedShare: cm.learnedShare, work: { gray, w, h, f } };
     if (opts.debug) {
       const norm = new Uint8ClampedArray(w * h * 4);
       for (let k = 0; k < w * h; k++) { for (let c = 0; c < 3; c++) norm[k * 4 + c] = cm.rgb[k * 3 + c] * 255; norm[k * 4 + 3] = 255; }
       res.debug = { w, h, cls, norm, rgb: cm.rgb };
     }
     return res;
+  }
+
+  /**
+   * Losse eilandjes buiten de tuin weg (logo, legenda, kleurstalen): vlakken die elkaar binnen `gap`
+   * naderen vormen een groep; groepen met minder dan 10% van de oppervlakte van de grootste groep vallen af.
+   */
+  function dropIslands(areas, gap) {
+    if (areas.length < 2) return;
+    const boxes = areas.map((a) => G.bbox(a.points));
+    const sizes = areas.map((a) => G.area(a.points));
+    const parent = areas.map((_, i) => i);
+    const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    for (let i = 0; i < areas.length; i++) {
+      for (let j = i + 1; j < areas.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        if (a.minX - gap <= b.maxX && b.minX - gap <= a.maxX && a.minY - gap <= b.maxY && b.minY - gap <= a.maxY) parent[find(i)] = find(j);
+      }
+    }
+    const total = new Map();
+    areas.forEach((_, i) => total.set(find(i), (total.get(find(i)) || 0) + sizes[i]));
+    const max = Math.max(...total.values());
+    for (let i = areas.length - 1; i >= 0; i--) if (total.get(find(i)) < 0.1 * max) areas.splice(i, 1);
   }
 
   // ---------------------------------------------------------------- schaal (OCR)
@@ -949,10 +1144,11 @@
    * @param analyzeImage {dataUrl, width, height}
    * @returns resultaat in hetzelfde formaat als /api/plan/analyze
    */
-  async function analyze(analyzeImage, onProgress) {
+  async function analyze(analyzeImage, onProgress, opts = {}) {
     const img = await window.PlanImport.loadImage(analyzeImage.dataUrl);
     const notes = [];
-    const { areas, coloredShare, work } = findAreas(img, onProgress);
+    const { areas, coloredShare, learnedShare, work } = findAreas(img, onProgress, { learned: opts.learned });
+    if (learnedShare > 0.01) notes.push(`Kleuren herkend met wat geleerd is van ${opts.learned.examples || 'eerdere'} herkende plannen (${Math.round(learnedShare * 100)}% van het beeld).`);
     let labelStats = { retyped: 0, added: 0 }, labels = [], scale = null;
     try {
       const { words, scales, ratios } = await readText(img, onProgress);
@@ -989,7 +1185,7 @@
   }
 
   window.LocalRecognizer = {
-    analyze, classify, parseLength, lengthReadings, pickScale, measureLine, findAreas, findScale, areasFromPixels,
-    readText, matchLabel, labelsFromWords, enclosedRegions, regionForLabel, applyLabels, _internal: { paperModel, normalizedColors },
+    analyze, learn, samplesFromPixels, featureKey, FEATURE_VERSION, classify, parseLength, lengthReadings, pickScale, measureLine, findAreas, findScale, areasFromPixels,
+    readText, matchLabel, labelsFromWords, enclosedRegions, regionForLabel, applyLabels, _internal: { paperModel, normalizedColors, classMap },
   };
 })();

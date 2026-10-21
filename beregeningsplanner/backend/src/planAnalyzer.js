@@ -92,6 +92,11 @@ Je krijgt één afbeelding van een tuinplan. Coördinaten zijn pixels in die afb
 3. Elementen (alleen als ze aangegeven zijn of logisch af te leiden): "source" = buitenkraan/wateraansluiting, "controller" = plek voor de beregeningscomputer (meestal aan de gevel), "valvebox" = ventielkast, "outlet" = tappunt. Als niets is aangegeven, zet dan de wateraansluiting op de gevel van de woning die het dichtst bij het gazon ligt.
 4. Notes: korte Nederlandse toelichting op onzekerheden (bijv. "maat 12,50 m slecht leesbaar").`;
 
+// Versie van opdracht en schema: een bewaarde herkenning (recognitions.js)
+// geldt alleen voor dezelfde opdracht. Verandert de opdracht, dan herkent de
+// AI een tekening opnieuw.
+const PROMPT_VERSION = require('crypto').createHash('sha256').update(SYSTEM + JSON.stringify(SCHEMA)).digest('hex').slice(0, 12);
+
 function validate(result, width, height) {
   const clampX = (v) => Math.max(0, Math.min(width, Number(v) || 0));
   const clampY = (v) => Math.max(0, Math.min(height, Number(v) || 0));
@@ -234,4 +239,4 @@ function createPlanAnalyzer({ apiKey, client, model = MODEL, log = (msg) => cons
   return { available: Boolean(anthropic), model: modelId, analyze, check };
 }
 
-module.exports = { createPlanAnalyzer, validate, AnalyzeError, SCHEMA, MODEL };
+module.exports = { createPlanAnalyzer, validate, AnalyzeError, SCHEMA, MODEL, PROMPT_VERSION };

@@ -203,3 +203,33 @@ test('controle: klant biedt aan, installateur keurt goed, pas dan een offerte', 
     server.close();
   }
 });
+
+test('leren van een goedgekeurd plan: recht plannen.goedkeuren, eigen tenant, alleen goedgekeurd', async () => {
+  const { server, base, db, main } = await setup();
+  try {
+    const samples = { v: 1, bins: { 10: [0, 100, 0, 0, 0, 0] } };
+    const klaas = client(base);
+    await klaas.login('klaas', PW);
+    const id = (await klaas.post('/api/plans', { data: plan('Tuin Klaas') })).body.id;
+    const kees = client(base);
+    await kees.login('kees', PW);
+    // nog niet goedgekeurd
+    assert.strictEqual((await kees.post('/api/plan/learn', { planId: id, samples })).status, 404);
+    await kees.post(`/api/plans/${id}/review`, { action: 'approve' });
+    // klant mist het recht
+    assert.strictEqual((await klaas.post('/api/plan/learn', { planId: id, samples })).status, 403);
+    // andere organisatie
+    const gerrit = client(base);
+    await gerrit.login('gerrit', PW, 'groen');
+    assert.strictEqual((await gerrit.post('/api/plan/learn', { planId: id, samples })).status, 404);
+    assert.strictEqual((await kees.post('/api/plan/learn', { planId: id, samples })).status, 200);
+    // opnieuw goedkeuren vervangt, telt dubbel (door een mens gecontroleerd)
+    assert.strictEqual((await kees.post('/api/plan/learn', { planId: id, samples })).status, 200);
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM plan_recognitions WHERE tenant_id = ?').get(main.id).n, 1);
+    const learned = (await kees.get('/api/plan/learned')).body;
+    assert.deepStrictEqual([learned.examples, learned.bins['10'][1]], [1, 200]);
+    assert.strictEqual((await gerrit.get('/api/plan/learned')).body.examples, 0, 'andere organisatie leert niet mee');
+  } finally {
+    server.close();
+  }
+});
