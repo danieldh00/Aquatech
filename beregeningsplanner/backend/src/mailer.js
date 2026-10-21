@@ -6,7 +6,9 @@ const nodemailer = require('nodemailer');
 const { publicAddress, privateAllowed } = require('./netguard');
 
 const MAIL_TEXT = { host: 200, user: 200, from: 200, replyTo: 200 };
-const MAIL_DEFAULTS = { host: '', port: 587, secure: false, user: '', from: '', replyTo: '' };
+// mode: 'smtp' = inloggen met gebruikersnaam en wachtwoord; 'connector' =
+// Exchange Online-connector op IP-basis (poort 25, geen inlog, TLS verplicht).
+const MAIL_DEFAULTS = { mode: 'smtp', host: '', port: 587, secure: false, user: '', from: '', replyTo: '' };
 
 /** Schoont de servergegevens op (zonder wachtwoord; dat is een eigen geheim). */
 function sanitizeMail(raw) {
@@ -16,6 +18,8 @@ function sanitizeMail(raw) {
   const port = Number(r.port);
   out.port = Number.isInteger(port) && port > 0 && port < 65536 ? port : MAIL_DEFAULTS.port;
   out.secure = r.secure === true || r.secure === 'true';
+  out.mode = r.mode === 'connector' ? 'connector' : 'smtp';
+  if (out.mode === 'connector') out.user = '';
   // Geen kop-injectie via afzender of antwoordadres.
   for (const k of ['from', 'replyTo']) out[k] = out[k].replace(/[\r\n]/g, '');
   return out;
@@ -52,7 +56,9 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
     }
     const transport = createTransport({
       host: address, servername: c.host, port: c.port, secure: c.secure,
-      auth: c.user ? { user: c.user, pass: password } : undefined,
+      auth: c.mode !== 'connector' && c.user ? { user: c.user, pass: password } : undefined,
+      // De connector herkent de server aan zijn IP; dan moet STARTTLS wel lukken.
+      requireTLS: c.mode === 'connector' && !c.secure ? true : undefined,
       // Nooit zonder geldig certificaat; de verbinding loopt niet eindeloos.
       tls: { rejectUnauthorized: true },
       connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 20000,

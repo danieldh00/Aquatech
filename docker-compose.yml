@@ -21,6 +21,8 @@ services:
       - TZ=${TZ:-Europe/Amsterdam}
       - AQUATECH_MASTER_KEY=${AQUATECH_MASTER_KEY:-}
       - SETUP_CODE=${SETUP_CODE:-}
+      # Vast WAN-IP voor de Exchange-connector (leeg = automatisch opzoeken).
+      - WAN_IP=${WAN_IP:-}
       # PostgreSQL/Supabase i.p.v. SQLite (leeg = SQLite in /data); beter als
       # Docker-secret via DATABASE_URL_FILE, zie DOCS.md > Database: Supabase.
       - DATABASE_URL=${DATABASE_URL:-}
