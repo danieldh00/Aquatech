@@ -11,6 +11,7 @@ const zlib = require('zlib');
 
 const Core = require(path.join(__dirname, '..', '..', 'frontend', 'offertes', 'quote-core.js'));
 const WoCore = require(path.join(__dirname, '..', '..', 'frontend', 'werkorders', 'workorder-core.js'));
+const { fromOrder } = require('./shoporders');
 const InvCore = require(path.join(__dirname, '..', '..', 'frontend', 'facturen', 'invoice-core.js'));
 const { loadArticles } = require('./shop');
 
@@ -443,7 +444,7 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
   const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, requests, invoices } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0, invoices: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0 };
   const seededWos = [];
   // Werkorder per plan (voor meldingen over die installatie).
   const woByPlan = {};
@@ -721,7 +722,20 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
         { code: '', description: 'Bezorgen', qty: 1, unit: 'st', price: 35, vat: 21, group: 'overig' }],
     }, conf);
     invoices.finalize(tid, admin, counter.id, conf);
+    invoices.markSent(tid, counter.id, 'inkoop@groenehand.voorbeeld.test');
+    // Een afgeronde webshopbestelling (betaald met iDEAL), zoals shoporders.js hem maakt.
+    const order = fromOrder({
+      id: 9001, number: '9001', status: 'completed', customer_id: 0, date_created: `${today}T09:12:00`, date_completed: `${today}T10:00:00`, date_paid: `${today}T09:13:00`,
+      billing: { first_name: 'Petra', last_name: 'Jansen', address_1: 'Kerkstraat 12', postcode: '8071 CD', city: 'Nunspeet', country: 'NL', email: 'petra.jansen@voorbeeld.test', phone: '0612345678' },
+      tax_lines: [{ rate_id: 1, rate_percent: 21 }],
+      line_items: [{ sku: 'EIGEN-ZAND', name: sand ? sand.name : 'Straatzand', quantity: 1, total: '69.50', total_tax: '14.60', taxes: [{ id: 1, total: '14.60' }] }],
+      shipping_lines: [{ method_title: 'PostNL', total: '6.95', total_tax: '1.46', taxes: [{ id: 1, total: '1.46' }] }],
+    }, { articles: stock ? stock.saleInfo(tid, ['EIGEN-ZAND']) : {}, settings: conf });
+    const shopInv = invoices.create(tid, admin, order.data, conf, { shopOrderId: '9001' });
+    invoices.finalize(tid, admin, shopInv.id, conf, { skipStock: true });
+    invoices.setPaid(tid, shopInv.id, true, order.paidOn);
     counts.invoices = q('SELECT COUNT(*) AS n FROM invoices WHERE tenant_id = ?').get(tid).n;
+    counts.debtors = q('SELECT COUNT(*) AS n FROM debtors WHERE tenant_id = ?').get(tid).n;
   }
   // Webshop alleen als de testomgeving geen eigen webshop heeft (de nepwinkel
   // van een vorige keer vullen we opnieuw).

@@ -218,6 +218,27 @@ async function updateProducts(cfg, updates, { fetchImpl = fetch, allowInsecure =
   return out;
 }
 
+/**
+ * Bestellingen met een bepaalde status die sinds `after` (ISO-tijd) zijn
+ * gewijzigd, oudste wijziging eerst (REST v3, leesrechten). Geeft de
+ * bestellingen zoals WooCommerce ze stuurt; shoporders.js zet ze om.
+ */
+async function fetchOrders(cfg, { status = 'completed', after = '', fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress, maxPages = 10 } = {}) {
+  if (cfg.mode !== 'rest') throw new SourceError('rest_required', 'Bestellingen ophalen kan alleen via de REST API (met API-sleutels).', 400);
+  const base = await checkedBase(cfg, { allowInsecure, resolveHost });
+  const headers = restAuth(cfg);
+  const orders = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const qs = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page), status, orderby: 'modified', order: 'asc', dates_are_gmt: 'true' });
+    if (after) qs.set('modified_after', after);
+    const { body, totalPages } = await getJson(`${base}/wp-json/wc/v3/orders?${qs}`, headers, fetchImpl);
+    if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen bestellingen).');
+    orders.push(...body);
+    if (body.length < PER_PAGE || (totalPages && page >= totalPages)) break;
+  }
+  return orders;
+}
+
 /** Koppelinstelling (instelling shopSource) zonder sleutels; die staan apart en versleuteld. */
 function sanitizeShop(raw) {
   const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -244,4 +265,4 @@ function sanitizeShop(raw) {
   };
 }
 
-module.exports = { fetchProducts, updateProducts, shopPrice, normalizeBaseUrl, sanitizeShop, SourceError };
+module.exports = { fetchProducts, fetchOrders, updateProducts, shopPrice, normalizeBaseUrl, sanitizeShop, SourceError };

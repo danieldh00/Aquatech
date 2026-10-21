@@ -343,9 +343,16 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   omzetcategorieën groep × btw met grootboekrekening). Concept → definitief
   (nummer `<prefix><jaar>-0001`, vergrendeld) → betaald; credit = nieuw
   concept met negatieve regels. Losse verkoop boekt voorraad af (bron
-  `factuur:<id>`). Export Visma als Excel (`exportRows`). Gepland: deel 2
-  webshopbestellingen → factuur + debiteur, automatisch mailen; deel 3
+  `factuur:<id>`). Export Visma als Excel (`exportRows`). Gepland: deel 3
   Visma eAccounting-API.
+- **Debiteuren, webshopbestellingen, PDF en mail** (0.63.0, migratie 27):
+  `debtors.js` (tabel `debtors`, `ensure` bij definitief, `match_key`),
+  `shoporders.js` (WooCommerce-bestellingen met status uit
+  `invoicing.shopOrders` → factuur met `shop_order_id`, uniek; elke 10 min na
+  shopsync), `pdf.js` (eigen PDF-schrijver, geen bibliotheek) +
+  `invoicepdf.js`, `invoicemail.js` (`send`/`autoSend`, PDF als bijlage,
+  `invoicing.autoSend`). Routes `/api/invoices/:id/pdf|mail|send`,
+  `/api/invoices/shop-orders/sync`, `/api/debtors[/:id]`.
 - **Tekening indienen + controle** (0.52.0, `backend/src/drawings.js`):
   knop *Direct een tekening maken* op login.html → `beregening/?tekenen&org=`
   (`isPublicPlanner` in server.js: pagina alleen met `?tekenen`, code van

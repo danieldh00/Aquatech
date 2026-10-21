@@ -12,7 +12,6 @@
   <link rel="stylesheet" href="../dashboard/dashboard.css">
   <link rel="stylesheet" href="../beheer/beheer.css">
   <link rel="stylesheet" href="../plannen/plannen.css">
-  <link rel="stylesheet" href="../offertes/quote-view.css">
   <link rel="stylesheet" href="facturen.css">
   <script src="../shared/common.js"></script>
 </head>
@@ -33,11 +32,12 @@
     <div id="v-list" hidden>
       <section class="intro">
         <h1>Facturen</h1>
-        <p class="muted">Facturen vanuit een werkorder (knop <b>Factuur maken</b> in het menu van de werkorder) of als losse verkoop. Een concept pas je vrij aan; definitief krijgt hij een doorlopend nummer en ligt hij vast. De export voor de boekhouding zet elke regel onder de juiste omzetcategorie.</p>
+        <p class="muted">Facturen vanuit een werkorder (knop <b>Factuur maken</b> in het menu van de werkorder), uit afgeronde webshopbestellingen of als losse verkoop. Een concept pas je vrij aan; definitief krijgt hij een doorlopend nummer, een debiteur en ligt hij vast. Versturen gaat per e-mail met de factuur als PDF. De export voor de boekhouding zet elke regel onder de juiste omzetcategorie.</p>
       </section>
       <div id="v-stats" class="stats"></div>
       <nav class="tabs" role="tablist">
         <button class="tab active" data-tab="list" role="tab">Facturen</button>
+        <button class="tab" data-tab="debtors" role="tab">Debiteuren</button>
         <button class="tab" data-tab="export" role="tab">Export boekhouding</button>
         <button class="tab" data-tab="settings" role="tab">Instellingen</button>
       </nav>
@@ -55,9 +55,37 @@
           <label>Tot en met<input id="f-to" type="date"></label>
           <input id="f-search" type="search" placeholder="Zoek op nummer, klant of werkorder">
           <span class="spacer"></span>
+          <button class="btn" id="b-orders" hidden>Webshopbestellingen ophalen</button>
           <button class="btn primary" id="b-new">+ Losse factuur</button>
         </div>
+        <p id="l-orders" class="muted small" hidden></p>
         <div class="tablewrap"><table class="grid" id="l-table"></table></div>
+      </section>
+
+      <section id="tab-debtors" class="tabpane" hidden>
+        <div class="filters">
+          <input id="d-search" type="search" placeholder="Zoek op naam, e-mail of nummer">
+        </div>
+        <form id="d-form" class="card-form" novalidate hidden>
+          <h3 id="d-title">Debiteur</h3>
+          <div class="row">
+            <label class="grow">Naam<input name="name" maxlength="200" required></label>
+            <label class="grow">T.a.v.<input name="contact" maxlength="200"></label>
+          </div>
+          <label>Adres<textarea name="address" rows="3" maxlength="400"></textarea></label>
+          <div class="row">
+            <label class="grow">E-mail<input name="email" type="email" maxlength="200"></label>
+            <label>Telefoon<input name="phone" maxlength="40"></label>
+            <label>Btw-nummer<input name="vatNumber" maxlength="30"></label>
+          </div>
+          <p class="muted small">Nieuwe facturen gebruiken deze gegevens niet vanzelf; ze nemen de klantgegevens van de factuur over (en werken de debiteur daarmee bij).</p>
+          <div class="row">
+            <button class="btn primary" type="submit">Opslaan</button>
+            <button class="btn" type="button" id="d-cancel">Sluiten</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
+        <div class="tablewrap"><table class="grid" id="d-table"></table></div>
       </section>
 
       <section id="tab-export" class="tabpane" hidden>
@@ -89,6 +117,25 @@
             <textarea name="paymentText" rows="2" maxlength="1000"></textarea></label>
           <label>Voettekst (optioneel)<textarea name="footer" rows="2" maxlength="1000" placeholder="Bijv. algemene voorwaarden"></textarea></label>
           <p class="muted small">Bedrijfsnaam, adres, KvK, btw-nummer, IBAN en uurtarief komen uit het bedrijfsprofiel van de offertes (Offertes → Bedrijfsprofiel).</p>
+          <label>Eerste debiteurnummer<input name="debtorStart" type="number" min="1" max="99999999" step="1"></label>
+          <p class="muted small">Een nieuwe debiteur krijgt het volgende vrije nummer vanaf dit nummer. Kies een nummer boven de debiteuren die al in de boekhouding staan.</p>
+
+          <h3>Versturen per e-mail</h3>
+          <p id="s-mailwarn" class="notice warn" hidden>Er is nog geen mailserver ingesteld (Beheer → Instellingen → E-mail). Tot die er is, kun je facturen alleen als PDF downloaden.</p>
+          <label class="chk"><input type="checkbox" name="autoSend"> Een factuur meteen naar de klant mailen zodra hij definitief is (met de PDF als bijlage)</label>
+          <label>Onderwerp<input name="mailSubject" maxlength="200"></label>
+          <label>Tekst <span class="muted small">({klant}, {soort}, {nummer}, {datum}, {vervaldatum}, {bedrag}, {betaling} en {bedrijf} worden ingevuld)</span>
+            <textarea name="mailText" rows="7" maxlength="4000"></textarea></label>
+
+          <h3>Webshopbestellingen</h3>
+          <p id="s-shopinfo" class="muted small"></p>
+          <label class="chk"><input type="checkbox" name="ordersEnabled"> Bestellingen uit de webshop automatisch factureren (elke 10 minuten)</label>
+          <div class="row">
+            <label>Bij status<select name="ordersStatus"></select></label>
+            <label>Vanaf besteldatum<input name="ordersSince" type="date"></label>
+          </div>
+          <label class="chk"><input type="checkbox" name="ordersFinalize"> Factuur meteen definitief maken (anders blijft hij concept om te controleren)</label>
+          <p class="muted small">Per bestelling één factuur, met de klant als debiteur. Heeft de webshop de betaling al ontvangen (bijv. iDEAL), dan staat de factuur meteen op betaald. Bestellingen van vóór de datum hierboven worden overgeslagen (die zijn al gefactureerd).</p>
           <h3>Omzetcategorieën</h3>
           <p class="muted small">Elke factuurregel hoort bij een omzetgroep (producten, arbeid, overig) en een btw-tarief. Vul per combinatie de naam en de grootboekrekening in zoals in Visma, bijv. <i>Omzet producten hoog</i> op 8000.</p>
           <div class="tablewrap"><table class="grid" id="s-cats"></table></div>
@@ -109,12 +156,25 @@
         <span class="spacer"></span>
         <button class="btn" id="e-save">Opslaan</button>
         <button class="btn primary" id="e-final">Definitief maken</button>
-        <button class="btn" id="e-pdf">PDF / afdrukken</button>
+        <button class="btn" id="e-pdf">PDF</button>
+        <button class="btn" id="e-send" hidden>Versturen</button>
         <button class="btn" id="e-paid" hidden>Betaald</button>
         <button class="btn" id="e-credit" hidden>Creditfactuur</button>
         <button class="btn danger" id="e-del" hidden>Verwijderen</button>
       </div>
       <div id="e-warn" class="notice warn" hidden></div>
+      <form id="e-sendform" class="card-form" novalidate hidden>
+        <h3>Factuur versturen</h3>
+        <label>Aan <span class="muted small">(meerdere adressen met een komma)</span><input name="to" maxlength="600" autocomplete="off"></label>
+        <label>Onderwerp<input name="subject" maxlength="300"></label>
+        <label>Bericht<textarea name="message" rows="8" maxlength="5000"></textarea></label>
+        <p class="muted small">De factuur gaat als PDF mee als bijlage.</p>
+        <div class="row">
+          <button class="btn primary" type="submit">Versturen</button>
+          <button class="btn" type="button" id="e-sendcancel">Annuleren</button>
+        </div>
+        <div class="err" role="alert"></div>
+      </form>
       <p id="e-links" class="muted small"></p>
       <div class="cols">
         <form id="c-form" class="card-form" novalidate>
@@ -149,7 +209,6 @@
     </div>
   </main>
 
-  <div id="print" class="print-doc" aria-hidden="true"></div>
   <div id="toast" class="toast"></div>
 
   <script src="../shared/env.js"></script>

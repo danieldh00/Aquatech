@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.63.0
+
+Brincr vervangen (deel 2): webshopbestellingen als factuur, debiteuren en
+facturen per e-mail met PDF.
+
+- **Debiteuren** (`backend/src/debtors.js`, tabel `debtors`, migratie 27):
+  nummer per omgeving vanaf `invoicing.debtorStart` (standaard 1000),
+  herkend aan klantaccount, webshopklant, e-mailadres of naam
+  (`match_key`). Definitief maken koppelt de factuur (`invoices.debtor_id`)
+  en werkt de debiteur bij. API `GET /api/debtors`, `GET|PUT /api/debtors/:id`
+  (recht `facturen`); tabblad Debiteuren in Facturen; debiteurnummer in de
+  Visma-export.
+- **Webshopbestellingen** (`backend/src/shoporders.js`, `fetchOrders` in
+  woocommerce.js): bestellingen met de ingestelde status (standaard
+  `completed` = Afgerond) sinds `invoicing.shopOrders.since` worden een
+  factuur (`invoices.shop_order_id`, unieke index: nooit dubbel), met
+  debiteur, btw-tarief per regel uit de belastingregels, verzendkosten en
+  toeslagen (groep overig); optioneel meteen definitief, betaald als de
+  webshop `date_paid` heeft, en verstuurd. Elke 10 minuten (na de
+  prijs/voorraadsynchronisatie) en via `POST /api/invoices/shop-orders/sync`.
+  Voorraad: met `pushStock` al afgeboekt door shopsync.js (`skipStock`),
+  anders boekt de factuur af. Stand in `shop_sync.orders_*`.
+- **PDF** (`backend/src/pdf.js`, `backend/src/invoicepdf.js`): eigen kleine
+  PDF-schrijver (Helvetica/WinAnsi, PNG-logo met alfakanaal, meerdere
+  pagina's), kleuren uit het thema. `GET /api/invoices/:id/pdf`; de knop PDF
+  in Facturen gebruikt die (de afdrukversie in de browser is weg).
+- **Versturen** (`backend/src/invoicemail.js`): `POST /api/invoices/:id/send`
+  met PDF-bijlage (`mailer.send` kent nu `attachments`), voorstel via
+  `GET /api/invoices/:id/mail`; `invoicing.autoSend` verstuurt bij
+  definitief (ook uit de webshop). `sent_at`/`sent_to`/`send_error` op de
+  factuur; een mislukte verzending laat de factuur definitief.
+- Testomgeving leegmaken wist nu ook facturen en debiteuren; testdata met een
+  webshopfactuur, debiteuren en een verstuurde factuur.
+
 ## 0.62.0
 
 Planner: vlakken achteraf corrigeren en verschuiven tijdens het tekenen.

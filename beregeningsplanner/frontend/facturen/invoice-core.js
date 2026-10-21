@@ -65,7 +65,39 @@
         : 'Wij verzoeken u het totaalbedrag binnen {dagen} dagen over te maken op {iban} onder vermelding van factuurnummer {nummer}.',
       footer: str(r.footer, 1000),
       categories,
+      // Eerste debiteurnummer (laat ruimte voor de nummers die al in de boekhouding staan).
+      debtorStart: Math.round(numIn(r.debtorStart, 1, 99999999, 1000)),
+      // Definitieve facturen meteen per e-mail (met de PDF) naar de klant.
+      autoSend: r.autoSend === true,
+      mailSubject: typeof r.mailSubject === 'string' && r.mailSubject.trim() ? str(r.mailSubject, 200).replace(/[\r\n]/g, ' ') : DEFAULT_SUBJECT,
+      mailText: typeof r.mailText === 'string' && r.mailText.trim() ? str(r.mailText, 4000) : DEFAULT_MAIL,
+      shopOrders: sanitizeShopOrders(r.shopOrders),
     };
+  }
+
+  const DEFAULT_SUBJECT = '{soort} {nummer} van {bedrijf}';
+  const DEFAULT_MAIL = 'Beste {klant},\n\nIn de bijlage vindt u {soort_klein} {nummer} van {datum} voor {bedrag} incl. btw.\n\n{betaling}\n\nMet vriendelijke groet,\n{bedrijf}';
+  // WooCommerce-status die een bestelling tot factuur maakt ("Afgerond" = completed).
+  const SHOP_STATUSES = { completed: 'Afgerond', processing: 'In behandeling' };
+
+  /**
+   * Webshopbestellingen omzetten in facturen: aan/uit, bij welke status,
+   * vanaf welke datum (oudere bestellingen zijn al gefactureerd) en of de
+   * factuur meteen definitief wordt.
+   */
+  function sanitizeShopOrders(raw) {
+    const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    return {
+      enabled: r.enabled === true,
+      status: SHOP_STATUSES[r.status] ? r.status : 'completed',
+      since: isDate(r.since) ? r.since : '',
+      finalize: r.finalize !== false,
+    };
+  }
+
+  /** Vult {veld} in een mailtekst in; onbekende velden blijven staan. */
+  function fillText(template, values) {
+    return String(template || '').replace(/\{([a-z_]+)\}/g, (m, k) => (values[k] === undefined || values[k] === null ? m : String(values[k])));
   }
 
   /** Omzetcategorie van een regel: { key, name, account }. */
@@ -272,7 +304,7 @@
       for (const c of t.categories) {
         out.push({
           number: inv.number, kind: inv.kind || 'factuur', date: inv.data.date, dueDate: inv.data.dueDate,
-          customer: inv.data.customer.name, customerEmail: inv.data.customer.email, customerAddress: inv.data.customer.address,
+          debtorNumber: inv.debtorNumber || '', customer: inv.data.customer.name, customerEmail: inv.data.customer.email, customerAddress: inv.data.customer.address,
           customerVat: inv.data.customer.vatNumber || '', reference: inv.data.reference,
           category: c.name, account: c.account, group: c.group, rate: c.rate,
           base: c.base, vat: c.vatAmount, total: round2(c.base + c.vatAmount),
@@ -285,7 +317,7 @@
   const api = {
     STATUSES, KINDS, GROUPS, VAT_RATES, RATE_NAMES, SECTION_GROUP, MAX_LINES,
     today, addDays, isDate, round2, catKey, sanitizeSettings, categoryOf, sanitizeLine, sanitize, lineTotal, totals,
-    paymentText, creditOf, fromWorkOrder, exportRows,
+    paymentText, creditOf, fromWorkOrder, exportRows, sanitizeShopOrders, fillText, SHOP_STATUSES, DEFAULT_SUBJECT, DEFAULT_MAIL,
   };
   root.InvoiceCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
