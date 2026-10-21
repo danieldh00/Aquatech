@@ -313,7 +313,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `handoverOf` → `workorders.createReceived` (werkorder zonder offerte). De
   uitbesteder ziet alleen `execution` (status, planning, stappen). Werkorder-API
   geeft `outsourcing` mee (`ctx.outsourcingOf`).
-- **Tekening indienen + controle** (0.50.0, `backend/src/drawings.js`):
+- **Tekening indienen + controle** (0.52.0, `backend/src/drawings.js`):
   knop *Direct een tekening maken* op login.html → `beregening/?tekenen&org=`
   (`isPublicPlanner` in server.js: pagina alleen met `?tekenen`, code van
   beregening/ + enkele shared-bestanden openbaar; `ANON` in app.js: geen
@@ -321,10 +321,15 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   /api/public/drawing` (instelling `drawingRequests`, limiet per IP en per
   tenant, honeypot `website`, `store.submitDrawing` maakt een gast met
   contactgegevens als eigenaar). Plannen: `review_status` concept |
-  ter_controle | goedgekeurd (migratie 19), `POST /api/plans/:id/review-request`
+  ter_controle | goedgekeurd (migratie 20), `POST /api/plans/:id/review-request`
   (klant) en `/review` {approve|reopen} (recht `plannen.goedkeuren`). Klant
   wijzigt goedgekeurd plan → ter_controle. Offerte met `planId` alleen uit een
   goedgekeurd plan (409 `plan_not_approved`, `ctx.planReviewOf`).
+- **E-mail** (0.50.0): formulier in Beheer → Instellingen (`#s-mail`), API
+  `/api/admin/mail[/test]` (alias van `/api/quote-mail`, in quotes.js).
+  `mailServer.mode` `smtp` | `connector` (Exchange Online op IP: geen auth,
+  `requireTLS`). WAN-IP via `backend/src/wanip.js` (ipify e.a., IPv4, 1 u
+  cache, `WAN_IP` gaat voor), route `GET /api/admin/wan-ip`.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - **Snelheid/navigatie** (0.46.0): `shared/common.js` in de `<head>` van elke
@@ -341,6 +346,13 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   sessiequery (`auth.isAuthenticatedForAsset`). Geen `SELECT *` als grote
   kolommen niet nodig zijn; overzichten via `jsonDigest` (db.js); geen query
   per regel. `test/queries.test.js` bewaakt dat.
+- **Nieuws** (0.51.0, `frontend/nieuws/`, voor iedereen): berichten (tabel
+  `news`, migratie 19, `backend/src/news.js`, recht `nieuws` = plaatsen,
+  doelgroep `medewerkers`|`iedereen`, optioneel mail naar collega's) en het
+  versielogboek in gewone taal `frontend/nieuws/releases.js` (punten met
+  `for: [rechten]`). **Bij elke versie-bump een regel bovenaan releases.js**
+  (test eist dat). `api/me` geeft `news` (aantal nieuw, cache 30 s);
+  gezien-stand in voorkeuren `newsSeenAt`/`seenRelease` (`POST /api/news/seen`).
 - Health: `GET /api/health` (versie uit `package.json`).
 
 ## Checklist voor elke nieuwe feature (zonder dat Daniël erom vraagt)

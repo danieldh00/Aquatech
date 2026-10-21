@@ -52,7 +52,8 @@
     const profile = { id: 'profiel', href: `${base}profiel/` };
     const active = currentId(items.filter((m) => m.href).concat(data.profile ? [profile] : []));
     const link = (m) => {
-      const label = `<span class="at-nav-ico">${tools.icon(m.icon)}</span><span class="at-nav-label">${esc(m.title)}</span>`;
+      const badge = m.id === 'nieuws' && tools.newsBadge ? tools.newsBadge(data.news || 0) : '';
+      const label = `<span class="at-nav-ico">${tools.icon(m.icon)}${badge}</span><span class="at-nav-label">${esc(m.title)}</span>`;
       const cur = m.id === active ? ' aria-current="page"' : '';
       return `<a class="at-nav-item" href="${esc(m.href)}" title="${esc(m.title)}"${cur}>${label}</a>`;
     };
@@ -152,7 +153,7 @@
   Promise.all([getJson('api/me'), getJson('api/config')]).then(([me, config]) => {
     if (!me) return; // offline: laat de laatste stand staan
     // Mijn profiel alleen met een eigen account (niet met de toegangscode).
-    const data = { rights: me.rights || [], disabled: (config && config.modules) || {}, profile: Boolean(me.preferences) };
+    const data = { rights: me.rights || [], disabled: (config && config.modules) || {}, profile: Boolean(me.preferences), news: me.news || 0 };
     if (tools.usesSidebar(data.rights)) {
       store.set(CACHE, JSON.stringify(data));
       render(data);

@@ -93,3 +93,11 @@ body.nav-compact .at-nav-collapse .ico { transform: rotate(180deg); }
   .at-nav, .at-nav-backdrop, .at-nav-toggle { display: none !important; }
   body.has-nav, body.nav-compact { padding-left: 0 !important; }
 }
+
+/* Nieuw sinds het vorige bezoek (Nieuws): bolletje met aantal en stip op het
+   rondje van het gebruikersmenu. Op elke pagina, dus hier. */
+.news-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--at-green); color: #fff; font: 700 11px/1 var(--at-font); letter-spacing: 0; text-transform: none; vertical-align: middle; }
+.at-nav-ico { position: relative; }
+.at-nav-ico .news-count { position: absolute; top: -6px; right: -8px; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; box-shadow: 0 0 0 2px var(--at-navy); }
+.avatar { position: relative; }
+.news-dot { position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--at-green); box-shadow: 0 0 0 2px var(--at-navy); }

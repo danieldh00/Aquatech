@@ -543,7 +543,7 @@ function registerWorkOrderRoutes(app, ctx) {
     if (!current.data.plannedDate) return res.status(409).json({ error: 'not_planned', message: 'Plan eerst een datum in.' });
     const settings = settingsOf(req);
     const mailer = mailerFor(settings);
-    if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Offertes → Bedrijfsgegevens → E-mail).' });
+    if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Instellingen → E-mail).' });
     const shared = workorders.share(tid(req), req.params.id, url);
     if (shared.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (shared.error) return notFound(res);

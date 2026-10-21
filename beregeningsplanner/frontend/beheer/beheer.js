@@ -405,6 +405,7 @@
 
   async function loadSettings() {
     if (state.backups) loadBackups();
+    loadMail();
     try {
       renderSettings((await api('settings')).settings);
     } catch (e) {
@@ -516,6 +517,98 @@
     };
   }
 
+  // ---------- E-mail (SMTP of Exchange-connector) ----------
+  async function loadMail() {
+    const f = $('#s-mail');
+    try {
+      const out = await api('mail');
+      const c = out.config;
+      for (const k of ['host', 'port', 'user', 'from', 'replyTo']) f[k].value = c[k] ?? '';
+      f.mode.value = c.mode || 'smtp';
+      f.secure.value = String(Boolean(c.secure));
+      f.password.value = '';
+      f.password.placeholder = out.passwordSet ? '•••••••• (ingesteld; leeg = ongewijzigd)' : '';
+      const ok = Boolean(c.host && c.from);
+      $('#m-state').textContent = ok ? 'De mailserver is ingesteld.' : 'Nog geen mailserver ingesteld.';
+      $('#m-state').className = `state ${ok ? 'ok' : 'off'}`;
+      mailMode();
+    } catch (e) {
+      $('#m-state').textContent = `Kan de e-mailinstellingen niet laden: ${e.message}`;
+    }
+  }
+
+  // Connector: geen inlog, poort 25; het WAN-IP pas ophalen als het nodig is.
+  function mailMode(changed) {
+    const f = $('#s-mail');
+    const connector = f.mode.value === 'connector';
+    $('[data-connector]', f).hidden = !connector;
+    $('[data-login]', f).hidden = connector;
+    if (changed) {
+      f.port.value = connector ? 25 : 587;
+      f.secure.value = 'false';
+      const domain = (f.from.value.match(/@([^>\s]+)/) || [])[1];
+      if (connector && !f.host.value && domain) f.host.value = `${domain.replace(/\./g, '-')}.mail.protection.outlook.com`;
+    }
+    if (connector && !state.wanIp) loadWanIp(false);
+  }
+
+  async function loadWanIp(refresh) {
+    const el = $('#m-wanip');
+    const note = $('#m-wanip-note');
+    el.textContent = 'Bezig…';
+    try {
+      state.wanIp = await api(`wan-ip${refresh ? '?refresh=1' : ''}`);
+      el.textContent = state.wanIp.ip;
+      note.textContent = state.wanIp.source === 'omgeving'
+        ? 'Vast ingesteld (WAN_IP in de Docker-omgeving). Dit adres geef je vrij in de connector van Office 365.'
+        : `Opgezocht ${when(state.wanIp.checkedAt)}. Dit adres geef je vrij in de connector van Office 365.`;
+    } catch (e) {
+      state.wanIp = null;
+      el.textContent = 'onbekend';
+      note.textContent = e.message;
+    }
+  }
+
+  async function saveMail() {
+    const f = $('#s-mail');
+    const connector = f.mode.value === 'connector';
+    const body = {
+      config: { mode: f.mode.value, host: f.host.value.trim(), port: Number(f.port.value) || (connector ? 25 : 587), secure: f.secure.value === 'true', user: connector ? '' : f.user.value.trim(), from: f.from.value.trim(), replyTo: f.replyTo.value.trim() },
+    };
+    if (!connector && f.password.value) body.password = f.password.value;
+    await api('mail', { method: 'PUT', body });
+    await loadMail();
+  }
+
+  function initMail() {
+    const f = $('#s-mail');
+    f.mode.onchange = () => mailMode(true);
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      $('.err', f).textContent = '';
+      try { await saveMail(); toast('E-mailinstellingen opgeslagen'); } catch (e) { $('.err', f).textContent = e.message; }
+    };
+    $('#m-test').onclick = async () => {
+      const btn = $('#m-test');
+      $('.err', f).textContent = '';
+      btn.disabled = true;
+      try {
+        await saveMail();
+        await api('mail/test', { method: 'POST', body: { to: f.testTo.value } });
+        toast(`Testmail verstuurd naar ${f.testTo.value}`);
+      } catch (e) {
+        $('.err', f).textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    $('#m-refresh').onclick = () => loadWanIp(true);
+    $('#m-copy').onclick = async () => {
+      if (!state.wanIp) return;
+      try { await navigator.clipboard.writeText(state.wanIp.ip); toast('WAN-IP gekopieerd'); } catch (e) { toast('Kopiëren lukt niet; selecteer het adres zelf', true); }
+    };
+  }
+
   // ---------- Auditlog ----------
   function auditDetail(a) {
     const d = a.detail || {};
@@ -596,6 +689,7 @@
     $('#u-form').onsubmit = addUser;
     $('#u-guests').onchange = renderUsers;
     initSettings();
+    initMail();
     window.BeheerWebshop.init({ toast });
     window.BeheerRollen.init({ toast, onChange: setRoles });
     $('#detail-close').onclick = () => { $('#detail').hidden = true; };

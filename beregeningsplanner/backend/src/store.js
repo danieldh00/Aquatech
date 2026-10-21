@@ -149,7 +149,8 @@ function withoutBackground(data) {
 // ---------- Mijn profiel ----------
 // Persoonlijke voorkeuren staan als JSON in users.preferences; alleen deze
 // sleutels (met hun standaardwaarde) worden bewaard.
-const PREFERENCES = { startPage: '', mailCopy: false };
+// newsSeenAt/seenRelease: vorige bezoek aan Nieuws (zie news.js), niet in het profielformulier.
+const PREFERENCES = { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' };
 const EMAIL = /^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[^\s@<>()",;:]+$/;
 const PHONE = /^\+?[0-9 ()./-]{6,25}$/;
 
@@ -158,6 +159,8 @@ function cleanPreferences(input, base = PREFERENCES) {
   const out = { ...PREFERENCES, ...base };
   if (src.startPage !== undefined) out.startPage = /^[a-z0-9-]{0,40}$/.test(String(src.startPage)) ? String(src.startPage) : '';
   if (src.mailCopy !== undefined) out.mailCopy = src.mailCopy === true;
+  if (src.newsSeenAt !== undefined) out.newsSeenAt = /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(String(src.newsSeenAt)) ? String(src.newsSeenAt) : '';
+  if (src.seenRelease !== undefined) out.seenRelease = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(src.seenRelease)) ? String(src.seenRelease) : '';
   return out;
 }
 
@@ -357,6 +360,7 @@ function createStore(db) {
       q('UPDATE settings SET updated_by = NULL WHERE updated_by = ?').run(u.id);
       q('UPDATE history SET user_id = NULL WHERE user_id = ?').run(u.id);
       q('UPDATE audit SET user_id = NULL WHERE user_id = ?').run(u.id);
+      q('UPDATE news SET author_id = NULL WHERE author_id = ?').run(u.id);
       q('DELETE FROM impersonations WHERE admin_id = ? OR user_id = ?').run(u.id, u.id);
       q('DELETE FROM support_grants WHERE user_id = ?').run(u.id);
       q('DELETE FROM sessions WHERE user_id = ?').run(u.id);
@@ -539,6 +543,7 @@ function createStore(db) {
     q('DELETE FROM sessions WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM work_order_photos WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM work_order_offers WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM news WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM work_orders WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM impersonations WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM support_grants WHERE tenant_id = ?').run(tenantId);

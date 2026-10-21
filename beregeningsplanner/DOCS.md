@@ -234,11 +234,19 @@ onderaan de PDF.
 **Optie (aan)**. Een niet gekozen optie telt niet mee in het totaal, de PDF en
 de Excel-export.
 
-**E-mail** (beheerder, Bedrijfsgegevens → *E-mail*): SMTP-server, poort,
-STARTTLS of SSL/TLS, gebruikersnaam, wachtwoord (versleuteld opgeslagen, nooit
-getoond), afzender en antwoordadres; **Testmail sturen** controleert de
-instellingen. Met een mailserver krijgt de klant na een akkoord een
-bevestiging met een link naar het getekende document, en het bedrijf (het
+**E-mail** (beheerder, **Beheer → Instellingen → E-mail**): kies de soort.
+*SMTP met inlog*: SMTP-server, poort, STARTTLS of SSL/TLS, gebruikersnaam,
+wachtwoord (versleuteld opgeslagen, nooit getoond), afzender en antwoordadres.
+*Exchange Online-connector (op IP)*: geen inlog; de app verstuurt via het
+MX-adres van het domein (`<domein>.mail.protection.outlook.com`, poort 25,
+STARTTLS verplicht). Het scherm toont het **WAN-IP** van de server (het
+openbare uitgaande IPv4-adres, opgezocht via api.ipify.org met terugval, een
+uur onthouden; vast in te stellen met `WAN_IP` in de Docker-omgeving) en een
+korte handleiding: in het Exchange-beheercentrum een connector *van de
+e-mailserver van je organisatie naar Office 365* toevoegen die op dat IP
+controleert, en `ip4:<WAN-IP>` in het SPF-record. **Testmail sturen**
+controleert de instellingen. Met een mailserver krijgt de klant na een akkoord
+een bevestiging met een link naar het getekende document, en het bedrijf (het
 e-mailadres bij de bedrijfsgegevens) een bericht bij elk akkoord of elke
 afwijzing.
 

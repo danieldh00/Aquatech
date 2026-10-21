@@ -145,6 +145,53 @@
           <div class="err" role="alert"></div>
         </form>
 
+        <form id="s-mail" class="card-form settings">
+          <h3>E-mail (SMTP)</h3>
+          <p class="muted small">Hiermee verstuurt de app offertes, afspraaklinks en bevestigingen. Het wachtwoord wordt versleuteld opgeslagen en nooit getoond. Zonder mailserver opent versturen het eigen mailprogramma.</p>
+          <div class="row">
+            <label>Soort<select name="mode"><option value="smtp">SMTP met inlog</option><option value="connector">Exchange Online-connector (op IP)</option></select></label>
+          </div>
+          <div class="field" data-connector hidden>
+            <span class="label">WAN-IP van deze server</span>
+            <div class="row">
+              <code id="m-wanip" class="wanip">…</code>
+              <button type="button" class="btn" id="m-copy">Kopiëren</button>
+              <button type="button" class="btn ghost" id="m-refresh">Opnieuw bepalen</button>
+            </div>
+            <span class="muted small" id="m-wanip-note">Dit adres geef je vrij in de connector van Office 365.</span>
+            <details class="guide">
+              <summary>Handleiding: connector instellen in Office 365</summary>
+              <ol>
+                <li>Open het <b>Exchange-beheercentrum</b> (admin.exchange.microsoft.com) → <b>E-mailstroom</b> → <b>Connectors</b> → <b>Een connector toevoegen</b>.</li>
+                <li>Verbinding van: <b>De e-mailserver van uw organisatie</b>, naar: <b>Office 365</b>. Geef een naam (bijv. <i>AquaTech</i>) en laat de connector aan.</li>
+                <li>Verificatie: kies <b>Door te controleren of het IP-adres van de verzendende server overeenkomt</b> en vul het WAN-IP hierboven in. Opslaan.</li>
+                <li>Hier invullen: SMTP-server = het MX-adres van je domein (bijv. <code>bedrijf-nl.mail.protection.outlook.com</code>, zie Microsoft 365-beheer → Domeinen), poort <b>25</b>, beveiliging STARTTLS, afzender op je eigen domein.</li>
+                <li>Mail naar externe ontvangers: zet <code>ip4:&lt;WAN-IP&gt;</code> in het SPF-record van je domein (naast <code>include:spf.protection.outlook.com</code>).</li>
+                <li>Sla op en stuur een testmail. Lukt dat niet: uitgaand poort 25 moet open zijn bij de internetprovider, en bij een ander WAN-IP de connector aanpassen.</li>
+              </ol>
+            </details>
+          </div>
+          <div class="row">
+            <label>SMTP-server<input name="host" maxlength="200" placeholder="smtp.voorbeeld.nl" autocomplete="off" spellcheck="false"></label>
+            <label>Poort<input name="port" type="number" min="1" max="65535" placeholder="587"></label>
+            <label>Beveiliging<select name="secure"><option value="false">STARTTLS</option><option value="true">SSL/TLS (465)</option></select></label>
+          </div>
+          <div class="row" data-login>
+            <label>Gebruikersnaam<input name="user" maxlength="200" autocomplete="off" spellcheck="false"></label>
+            <label>Wachtwoord<input name="password" type="password" maxlength="500" autocomplete="new-password"></label>
+          </div>
+          <div class="row">
+            <label>Afzender<input name="from" maxlength="200" placeholder="AquaTech Service &lt;offerte@voorbeeld.nl&gt;"></label>
+            <label>Antwoorden naar<input name="replyTo" maxlength="200" placeholder="info@voorbeeld.nl"></label>
+          </div>
+          <p class="state" id="m-state"></p>
+          <div class="row">
+            <button class="btn primary" type="submit">Opslaan</button>
+            <input name="testTo" type="email" maxlength="200" placeholder="Testadres">
+            <button type="button" class="btn" id="m-test">Testmail sturen</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-security" class="card-form settings">
           <h3>Sessies en bewaartermijnen</h3>
           <p class="muted small">Een sessie (ingelogd toestel) vervalt na de ingestelde dagen zonder gebruik, en hoe dan ook na de maximale duur. IP-adressen in de historie en het auditlog worden na de bewaartermijn gewist (AVG); auditregels daarna verwijderd.</p>

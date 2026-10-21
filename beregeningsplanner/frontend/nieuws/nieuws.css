@@ -1,0 +1,51 @@
+/* Nieuws: berichten van de organisatie en wat is nieuw in de app. Basis uit dashboard.css en beheer.css. */
+.news { max-width: 1100px; }
+.news-intro { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.news-intro [hidden] { display: none; }
+.news-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+.news-grid[hidden] { display: none; }
+.news-col > h2 { margin-top: 4px; }
+
+.ncard { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px; min-width: 0; }
+.ncard h3 { margin: 0 0 4px; font-size: 17px; color: var(--primary-dark); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ncard.pinned { border-color: var(--at-teal); box-shadow: inset 4px 0 0 var(--at-teal); }
+.ncard.is-new { border-color: var(--at-green); }
+.n-meta { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+.n-body p { margin: 0 0 10px; overflow-wrap: anywhere; }
+.n-body p:last-child { margin-bottom: 0; }
+.n-body a { color: var(--at-green-dark); }
+.n-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.n-empty { color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: var(--radius); padding: 16px 18px; margin: 0 0 14px; }
+
+.tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px; background: #eceff1; color: var(--muted); }
+.tag.new { background: var(--at-green); color: #fff; }
+.tag.pin { background: var(--at-teal); color: #fff; }
+
+/* Versielogboek als tijdlijn. */
+.rel { position: relative; padding: 0 0 16px 22px; border-left: 2px solid var(--line); margin-left: 6px; }
+.rel:last-child { padding-bottom: 0; }
+.rel::before { content: ''; position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--panel); border: 2px solid var(--at-teal); }
+.rel.is-new::before { background: var(--at-green); border-color: var(--at-green); }
+.rel h3 { margin: 0; font-size: 15px; color: var(--primary-dark); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rel .n-meta { margin: 2px 0 6px; }
+.rel ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.rel li { margin: 0 0 4px; }
+
+.n-form textarea, .n-form input[type=text], .n-form select {
+  font: inherit; font-family: var(--at-font); padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); width: 100%; min-width: 0;
+}
+.n-form textarea { resize: vertical; min-height: 120px; }
+.n-form input:focus, .n-form textarea:focus, .n-form select:focus { outline: 2px solid var(--at-teal); outline-offset: 0; border-color: transparent; }
+.n-form .invalid { border-color: #c62828; }
+.n-form .chk { display: flex; }
+.n-form [hidden] { display: none; }
+.hint { color: var(--muted); font-size: 13px; }
+.form-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
+.form-msg { font-size: 14px; color: var(--muted); }
+.form-msg.ok { color: var(--primary); }
+.form-msg.err { color: #c62828; }
+.panel-note { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+
+@media (max-width: 800px) {
+  .news-grid { grid-template-columns: 1fr; }
+}

@@ -28,6 +28,14 @@
       right: 'portaal',
     },
     {
+      id: 'nieuws',
+      title: 'Nieuws',
+      description: 'Berichten van je organisatie en wat er nieuw is in de app sinds je vorige bezoek.',
+      href: 'nieuws/',
+      icon: 'news',
+      status: 'actief',
+    },
+    {
       id: 'beregening',
       title: 'Beregeningsplanner',
       description: 'Tuinberegening ontwerpen: vlakken tekenen of een plan laten herkennen, sproeiers, zones en leidingen, en een stuklijst met Excel-export.',
@@ -126,6 +134,7 @@
 
   // Iconen (SVG-paden, 24x24) voor de tegels en de zijbalk.
   const ICONS = {
+    news: '<path d="M4 5h13v14H6a2 2 0 0 1-2-2z"/><path d="M17 8h3v9a2 2 0 0 1-2 2"/><path d="M7.5 9h6"/><path d="M7.5 12.5h6"/><path d="M7.5 16h4"/>',
     handshake: '<path d="M3 8h4l5 4 5-4h4"/><path d="M7 8v7l5 4 5-4V8"/><path d="m10 13 2 2 2-2"/>',
     home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
@@ -158,6 +167,10 @@
   const usesSidebar = (rights) => (rights || []).includes('beheer') || (rights || []).includes('hoofdbeheer');
 
   root.AquatechModules = MODULES;
-  root.AquatechModuleTools = { ICONS, icon, visible, usesSidebar };
+  // Aantal nieuwe items bij Nieuws (api/me `news`) als bolletje; de pagina
+  // Nieuws haalt ze weg ([data-news-count]) zodra alles gezien is.
+  const newsBadge = (n) => (n > 0 ? `<span class="news-count" data-news-count title="Nieuw sinds je vorige bezoek">${n > 9 ? '9+' : n}</span>` : '');
+
+  root.AquatechModuleTools = { ICONS, icon, visible, usesSidebar, newsBadge };
   if (typeof module !== 'undefined' && module.exports) module.exports = MODULES;
 })(typeof window !== 'undefined' ? window : globalThis);

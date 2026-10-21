@@ -567,7 +567,7 @@ function registerQuoteRoutes(app, ctx) {
     if (!list.length || list.length > 5 || !list.every(validEmail)) return res.status(400).json({ error: 'invalid_to', message: 'Vul een of meer geldige e-mailadressen in.' });
     const settings = settingsOf(req);
     const mailer = mailerFor(settings);
-    if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Offertes → Bedrijfsgegevens → E-mail).' });
+    if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Instellingen → E-mail).' });
     const shared = quotes.share(req.user, req.params.id, url);
     if (shared.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (shared.error) return notFound(res);
@@ -622,10 +622,11 @@ function registerQuoteRoutes(app, ctx) {
   });
 
   // ---------- Mailserver (beheerder) ----------
+  // Ook onder /api/admin/mail: het formulier staat in Beheer > Instellingen.
   const mailView = (settings) => ({ config: settings.get('mailServer'), passwordSet: Boolean(settings.get('mailPassword')) });
-  app.get('/api/quote-mail', requireAdmin, (req, res) => res.json(mailView(settingsOf(req))));
+  app.get(['/api/quote-mail', '/api/admin/mail'], requireAdmin, (req, res) => res.json(mailView(settingsOf(req))));
 
-  app.put('/api/quote-mail', requireJson, requireAdmin, (req, res) => {
+  app.put(['/api/quote-mail', '/api/admin/mail'], requireJson, requireAdmin, (req, res) => {
     const settings = settingsOf(req);
     const patch = {};
     if (validData(req.body?.config)) patch.mailServer = { ...settings.get('mailServer'), ...req.body.config };
@@ -639,14 +640,14 @@ function registerQuoteRoutes(app, ctx) {
     res.json(mailView(settings));
   });
 
-  app.post('/api/quote-mail/test', requireJson, requireAdmin, wrapAsync(async (req, res) => {
+  app.post(['/api/quote-mail/test', '/api/admin/mail/test'], requireJson, requireAdmin, wrapAsync(async (req, res) => {
     const settings = settingsOf(req);
     const to = req.body?.to;
     if (!validEmail(to)) return res.status(400).json({ error: 'invalid_to', message: 'Vul een geldig e-mailadres in.' });
     const mailer = mailerFor(settings);
     if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Vul eerst de mailserver en het afzenderadres in.' });
     try {
-      await mailer.send({ to, subject: 'Testbericht van de offertemodule', ...mailBody(settings.get('quoteProfile'), ['Dit is een testbericht. De mailserver is goed ingesteld.'], null) });
+      await mailer.send({ to, subject: 'Testbericht van de mailinstellingen', ...mailBody(settings.get('quoteProfile'), ['Dit is een testbericht. De mailserver is goed ingesteld.'], null) });
     } catch (err) {
       return res.status(502).json({ error: 'send_failed', message: `Versturen mislukt: ${err.message}` });
     }

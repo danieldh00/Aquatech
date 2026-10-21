@@ -927,50 +927,6 @@
     const f = $('#pf');
     for (const el of f.elements) if (el.name) el.value = state.profile[el.name] ?? '';
     $('#profile').hidden = false;
-    loadMail();
-  }
-
-  async function loadMail() {
-    const f = $('#mf');
-    try {
-      const out = await api('quote-mail');
-      for (const k of ['host', 'port', 'user', 'from', 'replyTo']) f[k].value = out.config[k] ?? '';
-      f.secure.value = String(Boolean(out.config.secure));
-      f.password.value = '';
-      f.password.placeholder = out.passwordSet ? '•••••••• (ingesteld; leeg laten = ongewijzigd)' : '';
-      f.testTo.value = f.testTo.value || state.profile.email || '';
-      $('#mf-state').textContent = out.config.host && out.config.from ? 'De mailserver is ingesteld.' : 'Nog geen mailserver ingesteld: versturen gaat dan via je eigen mailprogramma.';
-    } catch (e) {
-      $('#mf-state').textContent = `Kan de e-mailinstellingen niet laden: ${e.message}`;
-    }
-  }
-
-  async function saveMail(e) {
-    if (e) e.preventDefault();
-    const f = $('#mf');
-    const body = {
-      config: { host: f.host.value, port: Number(f.port.value) || 587, secure: f.secure.value === 'true', user: f.user.value, from: f.from.value, replyTo: f.replyTo.value },
-    };
-    if (f.password.value) body.password = f.password.value;
-    const out = await api('quote-mail', { method: 'PUT', body });
-    state.mail = Boolean(out.config.host && out.config.from);
-    await loadMail();
-    return out;
-  }
-
-  async function testMail() {
-    const f = $('#mf');
-    const btn = $('#mf-test');
-    btn.disabled = true;
-    try {
-      await saveMail();
-      await api('quote-mail/test', { method: 'POST', body: { to: f.testTo.value } });
-      toast(`Testmail verstuurd naar ${f.testTo.value}`);
-    } catch (err) {
-      toast(err.message, true);
-    } finally {
-      btn.disabled = false;
-    }
   }
 
   async function saveProfile(e) {
@@ -1084,10 +1040,6 @@
     $('#l-profile').onclick = openProfile;
     $('#l-export').onclick = exportListXlsx;
     $('#pf').onsubmit = saveProfile;
-    $('#mf').onsubmit = async (e) => {
-      try { await saveMail(e); toast('E-mailinstellingen opgeslagen'); } catch (err) { toast(`Opslaan mislukt: ${err.message}`, true); }
-    };
-    $('#mf-test').onclick = testMail;
     $('#sf').onsubmit = sendQuote;
     document.querySelectorAll('.modal').forEach((m) => {
       m.onclick = (e) => { if (e.target === m || e.target.closest('[data-close]')) m.hidden = true; };
