@@ -14,6 +14,7 @@
   const PARAMS = new URLSearchParams(location.search);
   const ANON = PARAMS.has('tekenen');
   const STORAGE_KEY = `aquatech-beregeningsplanner-v1${window.AquatechEnv ? window.AquatechEnv.storageSuffix() : ''}${ANON ? '-tekenen' : ''}`;
+  const LEGEND_KEY = 'aquatech-legenda-open';
   const REVIEW_LABEL = { concept: 'Concept', ter_controle: 'Ter controle', goedgekeurd: 'Goedgekeurd' };
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -960,6 +961,15 @@
       }
       $('#snap').checked = this.editor.snap;
       $('#snap').onchange = (e) => { this.editor.snap = e.target.checked; };
+      // Legenda over de tekening: open/dicht onthouden per browser (op een
+      // smal scherm standaard dicht, daar is de tekening klein)
+      const legend = $('#plan-legend');
+      if (legend) {
+        let open = null;
+        try { open = localStorage.getItem(LEGEND_KEY); } catch (e) { /* geen opslag */ }
+        legend.open = open != null ? open === '1' : !window.matchMedia('(max-width: 760px)').matches;
+        legend.ontoggle = () => { try { localStorage.setItem(LEGEND_KEY, legend.open ? '1' : '0'); } catch (e) { /* geen opslag */ } };
+      }
       // Tekenbalk (touch heeft geen Enter/Backspace/Esc)
       document.querySelectorAll('#drawbar [data-db]').forEach((b) => {
         b.onclick = () => {
@@ -1005,6 +1015,30 @@
     _isMobile() { return !!(window.matchMedia && window.matchMedia('(max-width: 760px)').matches); },
 
     /** Toont de tekenbalk zolang er een teken- of plaatsgereedschap actief is. */
+    /** Legenda over het canvas; alleen opnieuw opbouwen als de inhoud wijzigt. */
+    updateLegend() {
+      const body = $('#plan-legend-body');
+      if (!body || !this.editor) return;
+      const sections = this.editor.legend();
+      const key = JSON.stringify(sections);
+      if (key === this._legendKey) return;
+      this._legendKey = key;
+      body.innerHTML = sections.map((sec) => `
+        <div class="lg-sec">
+          <div class="lg-title">${esc(sec.title)}</div>
+          ${sec.items.map((it, i) => `<div class="lg-item"><canvas class="lg-sw" data-i="${i}" width="26" height="16"></canvas><span class="lg-lbl">${esc(it.label)}</span>${it.sub ? `<span class="lg-sub">${esc(it.sub)}</span>` : ''}</div>`).join('')}
+        </div>`).join('');
+      const dpr = window.devicePixelRatio || 1;
+      body.querySelectorAll('.lg-sec').forEach((secEl, si) => {
+        secEl.querySelectorAll('canvas.lg-sw').forEach((cv) => {
+          cv.width = 26 * dpr; cv.height = 16 * dpr;
+          const ctx = cv.getContext('2d');
+          ctx.scale(dpr, dpr);
+          this.editor._legendSwatch(ctx, sections[si].items[+cv.dataset.i], 0, 0, 26, 16);
+        });
+      });
+    },
+
     updateDrawBar() {
       const bar = $('#drawbar');
       if (!bar || !this.editor) return;
