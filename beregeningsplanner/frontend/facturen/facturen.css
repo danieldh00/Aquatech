@@ -1,4 +1,4 @@
-/* Facturen: overzicht, export, instellingen en de factuur zelf. Basis uit beheer.css/plannen.css, afdrukversie uit offertes/quote-view.css. */
+/* Facturen: overzicht, debiteuren, export, instellingen en de factuur zelf. Basis uit beheer.css/plannen.css; de PDF maakt de server. */
 .filters .spacer, .edit-head .spacer { flex: 1; }
 .filters label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
 .edit-head { align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -45,6 +45,8 @@ table.lines .c-del { width: 34px; }
 #s-cats input { width: 100%; box-sizing: border-box; }
 #s-cats td.acc { width: 120px; }
 
-/* Afdrukversie: factuurspecifiek */
-.print-doc .p-credit { color: var(--at-teal); }
-.print-doc .p-pay { margin-top: 12px; padding: 8px 10px; background: var(--at-green-soft); border-left: 3px solid var(--at-green); white-space: pre-line; break-inside: avoid; }
+.pill.src { background: transparent; border: 1px solid var(--at-navy); color: var(--at-navy); }
+td .fail { color: var(--danger, #c62828); }
+#e-sendform { margin-bottom: 14px; border-left: 3px solid var(--at-green); }
+#d-form { margin-bottom: 14px; }
+#s-form h3 { margin-top: 22px; }

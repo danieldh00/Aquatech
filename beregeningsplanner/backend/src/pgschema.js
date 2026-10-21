@@ -564,6 +564,39 @@ const PG_MIGRATIONS = [
   CREATE INDEX invoices_status ON invoices (tenant_id, status, invoice_date);
   CREATE INDEX invoices_wo ON invoices (tenant_id, work_order_id);
   `,
+  // 27: debiteuren, facturen uit webshopbestellingen, verzonden (zie db.js).
+  `
+  CREATE TABLE debtors (
+    id               ${T} PRIMARY KEY,
+    tenant_id        ${T} NOT NULL ${FK('tenants(id)')},
+    number           BIGINT NOT NULL,
+    name             ${T} NOT NULL DEFAULT '',
+    contact          ${T} NOT NULL DEFAULT '',
+    address          ${T} NOT NULL DEFAULT '',
+    email            ${T} NOT NULL DEFAULT '',
+    phone            ${T} NOT NULL DEFAULT '',
+    vat_number       ${T} NOT NULL DEFAULT '',
+    match_key        ${T} NOT NULL DEFAULT '',
+    customer_id      ${T},
+    shop_customer_id ${T},
+    source           ${T} NOT NULL DEFAULT 'factuur',
+    created_at       ${T} NOT NULL,
+    updated_at       ${T} NOT NULL,
+    UNIQUE (tenant_id, number)
+  );
+  CREATE INDEX debtors_match ON debtors (tenant_id, match_key);
+  CREATE INDEX debtors_name ON debtors (tenant_id, name);
+  ALTER TABLE invoices ADD COLUMN debtor_id ${T};
+  ALTER TABLE invoices ADD COLUMN shop_order_id ${T};
+  ALTER TABLE invoices ADD COLUMN sent_at ${T};
+  ALTER TABLE invoices ADD COLUMN sent_to ${T};
+  ALTER TABLE invoices ADD COLUMN send_error ${T} NOT NULL DEFAULT '';
+  CREATE UNIQUE INDEX invoices_shop_order ON invoices (tenant_id, shop_order_id) WHERE shop_order_id IS NOT NULL;
+  CREATE INDEX invoices_debtor ON invoices (tenant_id, debtor_id);
+  ALTER TABLE shop_sync ADD COLUMN orders_after ${T};
+  ALTER TABLE shop_sync ADD COLUMN orders_synced_at ${T};
+  ALTER TABLE shop_sync ADD COLUMN orders_error ${T};
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

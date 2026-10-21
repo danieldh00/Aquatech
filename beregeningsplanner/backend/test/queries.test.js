@@ -160,6 +160,10 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.strictEqual((await c.get('/api/invoices/export')).body.items.length, 4);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
+    // Debiteuren met aantal facturen en openstaand bedrag: één query.
+    probe.reset();
+    assert.strictEqual((await c.get('/api/debtors')).body.items.length, 4);
+    assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
   } finally {
     server.close();
   }

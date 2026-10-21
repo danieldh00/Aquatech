@@ -715,6 +715,42 @@ const MIGRATIONS = [
   CREATE INDEX invoices_status ON invoices (tenant_id, status, invoice_date);
   CREATE INDEX invoices_wo ON invoices (tenant_id, work_order_id);
   `,
+  // 27: debiteuren (klanten van de facturen; later ook naar de boekhouding),
+  // facturen uit webshopbestellingen (shop_order_id, één factuur per
+  // bestelling) en verzonden per e-mail (sent_*). De stand van het ophalen
+  // van bestellingen staat bij shop_sync.
+  `
+  CREATE TABLE debtors (
+    id               TEXT PRIMARY KEY,
+    tenant_id        TEXT NOT NULL REFERENCES tenants(id),
+    number           INTEGER NOT NULL,
+    name             TEXT NOT NULL DEFAULT '',
+    contact          TEXT NOT NULL DEFAULT '',
+    address          TEXT NOT NULL DEFAULT '',
+    email            TEXT NOT NULL DEFAULT '',
+    phone            TEXT NOT NULL DEFAULT '',
+    vat_number       TEXT NOT NULL DEFAULT '',
+    match_key        TEXT NOT NULL DEFAULT '',
+    customer_id      TEXT,
+    shop_customer_id TEXT,
+    source           TEXT NOT NULL DEFAULT 'factuur',
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL,
+    UNIQUE (tenant_id, number)
+  );
+  CREATE INDEX debtors_match ON debtors (tenant_id, match_key);
+  CREATE INDEX debtors_name ON debtors (tenant_id, name);
+  ALTER TABLE invoices ADD COLUMN debtor_id TEXT;
+  ALTER TABLE invoices ADD COLUMN shop_order_id TEXT;
+  ALTER TABLE invoices ADD COLUMN sent_at TEXT;
+  ALTER TABLE invoices ADD COLUMN sent_to TEXT;
+  ALTER TABLE invoices ADD COLUMN send_error TEXT NOT NULL DEFAULT '';
+  CREATE UNIQUE INDEX invoices_shop_order ON invoices (tenant_id, shop_order_id) WHERE shop_order_id IS NOT NULL;
+  CREATE INDEX invoices_debtor ON invoices (tenant_id, debtor_id);
+  ALTER TABLE shop_sync ADD COLUMN orders_after TEXT;
+  ALTER TABLE shop_sync ADD COLUMN orders_synced_at TEXT;
+  ALTER TABLE shop_sync ADD COLUMN orders_error TEXT;
+  `,
 ];
 
 function openDb(file = ':memory:') {
