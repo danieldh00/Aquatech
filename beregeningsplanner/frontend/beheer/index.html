@@ -34,6 +34,7 @@
         <button class="tab" data-tab="roles" role="tab">Rollen</button>
         <button class="tab" data-tab="settings" role="tab">Instellingen</button>
         <button class="tab" data-tab="webshop" role="tab">Webshop</button>
+        <button class="tab" data-tab="aikosten" role="tab">AI-kosten</button>
         <button class="tab" data-tab="audit" role="tab">Auditlog</button>
       </nav>
 
@@ -117,6 +118,11 @@
             </div>
             <span class="muted small">Aan te maken via console.anthropic.com → API Keys. De sleutel wordt nooit teruggestuurd naar de browser; je ziet alleen de laatste 4 tekens.</span>
           </div>
+          <div class="row">
+            <label>Model <span class="src" data-origin="aiModel"></span><select name="aiModel" id="s-ai-model"></select></label>
+            <label>Koers: eurocent per dollar <span class="src" data-origin="aiEurCentsPerUsd"></span><input name="aiEurCentsPerUsd" type="number" min="50" max="200" step="1" required></label>
+          </div>
+          <p class="muted small" id="s-ai-model-info"></p>
           <div class="row">
             <label>Maximaal per dag (hele app) <span class="src" data-origin="aiDailyLimit"></span><input name="aiDailyLimit" type="number" min="0" max="500" step="1" required></label>
             <label>Maximaal per uur per IP-adres <span class="src" data-origin="aiHourlyPerIp"></span><input name="aiHourlyPerIp" type="number" min="1" max="100" step="1" required></label>
@@ -272,6 +278,37 @@
           <div id="w-status" class="muted">Laden…</div>
         </div>
       </section>
+      <section id="tab-aikosten" class="tabpane" hidden>
+        <div class="filters">
+          <select id="ai-range" aria-label="Periode">
+            <option value="30">Laatste 30 dagen</option>
+            <option value="month">Deze maand</option>
+            <option value="prev">Vorige maand</option>
+            <option value="year">Dit jaar</option>
+            <option value="custom">Zelf kiezen</option>
+          </select>
+          <input id="ai-from" type="date" aria-label="Van">
+          <input id="ai-to" type="date" aria-label="Tot en met">
+          <select id="ai-period" aria-label="Per"><option value="day">Per dag</option><option value="month">Per maand</option></select>
+          <select id="ai-user" aria-label="Gebruiker"><option value="">Alle gebruikers</option></select>
+          <select id="ai-feature" aria-label="Functie"><option value="">Alle functies</option></select>
+          <select id="ai-scope" aria-label="Organisaties" hidden><option value="">Deze omgeving</option><option value="all">Alle organisaties</option></select>
+          <button id="ai-export" class="btn primary">Exporteer naar Excel</button>
+        </div>
+        <p class="muted small" id="ai-note">Elk verzoek aan de AI-dienst (zoals een plan laten herkennen) met het verbruik in tokens, de duur en de geschatte kosten. Kosten zijn berekend met de prijzen van Anthropic op het moment van het verzoek; de factuur van Anthropic is leidend.</p>
+        <div class="stats" id="ai-stats"></div>
+        <div class="ai-grid">
+          <div><h3>Per periode</h3><div class="tablewrap"><table class="grid" id="ai-by-period"></table></div></div>
+          <div><h3>Per gebruiker</h3><div class="tablewrap"><table class="grid" id="ai-by-user"></table></div></div>
+          <div><h3>Per functie</h3><div class="tablewrap"><table class="grid" id="ai-by-feature"></table></div></div>
+          <div><h3>Per model</h3><div class="tablewrap"><table class="grid" id="ai-by-model"></table></div></div>
+          <div id="ai-tenant-wrap" hidden><h3>Per organisatie</h3><div class="tablewrap"><table class="grid" id="ai-by-tenant"></table></div></div>
+        </div>
+        <h3>Verzoeken</h3>
+        <p class="muted small">Klik op een verzoek voor alle details.</p>
+        <div class="tablewrap"><table class="grid" id="ai-requests"></table></div>
+        <div class="pager"><button id="ai-prev" class="btn">← Nieuwer</button><span id="ai-info" class="muted"></span><button id="ai-next" class="btn">Ouder →</button></div>
+      </section>
       <section id="tab-audit" class="tabpane" hidden>
         <p class="muted small">Beveiligingsgebeurtenissen: inloggen (ook mislukte pogingen), uitloggen, gebruikers en instellingen. Wachtwoorden, codes en sleutels worden nooit vastgelegd.</p>
         <div class="tablewrap"><table class="grid" id="a-table"></table></div>
@@ -291,12 +328,14 @@
 
   <script src="../shared/env.js"></script>
   <script src="../shared/roles.js"></script>
+  <script src="../shared/ai-models.js"></script>
   <script src="../beregening/js/catalog.js"></script>
   <script src="../dashboard/modules.js"></script>
   <script src="../shared/sidebar.js"></script>
   <script src="../dashboard/account.js"></script>
   <script src="webshop.js"></script>
   <script src="rollen.js"></script>
+  <script src="aikosten.js"></script>
   <script src="beheer.js"></script>
 </body>
 </html>

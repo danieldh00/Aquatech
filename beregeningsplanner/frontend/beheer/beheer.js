@@ -350,12 +350,18 @@
     ai.aiEnabled.checked = view.aiEnabled.value;
     ai.aiDailyLimit.value = view.aiDailyLimit.value;
     ai.aiHourlyPerIp.value = view.aiHourlyPerIp.value;
+    ai.aiEurCentsPerUsd.value = view.aiEurCentsPerUsd.value;
+    const M = window.AquatechAiModels;
+    ai.aiModel.innerHTML = M.SELECTABLE.map((k) => `<option value="${esc(k)}"${k === view.aiModel.value ? ' selected' : ''}>${esc(M.MODELS[k].label)}${k === M.DEFAULT ? ' (aanbevolen)' : ''}</option>`).join('');
+    modelInfo();
     document.querySelectorAll('[data-origin]').forEach((el) => { el.textContent = SOURCES[view[el.dataset.origin].source] || ''; });
     document.querySelectorAll('[data-reset]').forEach((b) => { b.hidden = view[b.dataset.reset].source !== 'instellingen'; });
     const key = view.anthropicApiKey;
     const keyState = $('[data-state="anthropicApiKey"]');
-    keyState.textContent = key.set ? `Ingesteld${key.hint ? ` (eindigt op ${key.hint.replace('…', '')})` : ''}` : 'Niet ingesteld: AI-herkenning staat uit.';
-    keyState.className = `state ${key.set ? 'ok' : 'off'}`;
+    keyState.textContent = key.set ? `Ingesteld${key.hint ? ` (eindigt op ${key.hint.replace('…', '')})` : ''}`
+      : state.aiFromLive ? 'Geen eigen sleutel: deze testomgeving gebruikt de sleutel, het model en de koers van de live-omgeving.'
+        : 'Niet ingesteld: AI-herkenning staat uit. Elke organisatie gebruikt een eigen sleutel.';
+    keyState.className = `state ${key.set || state.aiFromLive ? 'ok' : 'off'}`;
     const code = view.accessCode;
     const codeState = $('[data-state="accessCode"]');
     codeState.textContent = code.set ? 'Ingesteld: inloggen kan ook met de code (als beheerder).' : 'Niet ingesteld: inloggen alleen met een eigen account.';
@@ -378,6 +384,15 @@
     $('#s-module-list').innerHTML = mods.map((m) => `
       <label class="chk"><input type="checkbox" data-module="${esc(m.id)}"${m.status === 'gepland' ? ' disabled' : view.modules.value[m.id] === false ? '' : ' checked'}>
         ${esc(m.title)}${m.status === 'gepland' ? ' <span class="muted small">(binnenkort: aan te zetten zodra de module klaar is)</span>' : ''}</label>`).join('');
+  }
+
+  // Uitleg en prijs bij het gekozen model.
+  function modelInfo() {
+    const M = window.AquatechAiModels;
+    const m = M.MODELS[$('#s-ai-model').value];
+    if (!m) return;
+    $('#s-ai-model-info').textContent = `${m.description} Prijs: $ ${m.input} per miljoen tokens in, $ ${m.output} per miljoen tokens uit `
+      + '(een plan herkennen kost meestal enkele duizenden tokens in en 5.000–15.000 uit). Het verbruik per verzoek zie je bij AI-kosten.';
   }
 
   const size = (n) => (n >= 1048576 ? `${num(n / 1048576)} MB` : `${num(n / 1024, 0)} kB`);
@@ -407,7 +422,9 @@
     if (state.backups) loadBackups();
     loadMail();
     try {
-      renderSettings((await api('settings')).settings);
+      const out = await api('settings');
+      state.aiFromLive = Boolean(out.aiFromLive);
+      renderSettings(out.settings);
     } catch (e) {
       toast(`Kan de instellingen niet laden: ${e.message}`, true);
     }
@@ -432,10 +449,12 @@
     const ai = $('#s-ai');
     ai.onsubmit = (ev) => {
       ev.preventDefault();
-      const patch = { aiEnabled: ai.aiEnabled.checked, aiDailyLimit: Number(ai.aiDailyLimit.value), aiHourlyPerIp: Number(ai.aiHourlyPerIp.value) };
+      const patch = { aiEnabled: ai.aiEnabled.checked, aiDailyLimit: Number(ai.aiDailyLimit.value), aiHourlyPerIp: Number(ai.aiHourlyPerIp.value),
+        aiModel: ai.aiModel.value, aiEurCentsPerUsd: Number(ai.aiEurCentsPerUsd.value) };
       if (ai.anthropicApiKey.value.trim()) patch.anthropicApiKey = ai.anthropicApiKey.value.trim();
       saveSettings(ai, patch, 'Instellingen opgeslagen');
     };
+    ai.aiModel.onchange = modelInfo;
     $('#s-test').onclick = async () => {
       const btn = $('#s-test');
       const err = $('.err', ai);
@@ -445,8 +464,8 @@
       btn.textContent = 'Bezig…';
       err.textContent = '';
       try {
-        await api('settings/test-ai', { method: 'POST' });
-        toast('De sleutel werkt.');
+        const out = await api('settings/test-ai', { method: 'POST' });
+        toast(`De sleutel werkt${out.model ? ` met ${window.AquatechAiModels.label(out.model)}` : ''}.`);
       } catch (e) {
         err.textContent = e.message;
       } finally {
@@ -653,6 +672,7 @@
     if (name === 'roles') window.BeheerRollen.load();
     if (name === 'settings') loadSettings();
     if (name === 'webshop') window.BeheerWebshop.load();
+    if (name === 'aikosten') window.BeheerAiKosten.load();
     if (name === 'audit') loadAudit();
     try { window.history.replaceState(null, '', `#${name}`); } catch (e) { /* file:// */ }
   }
@@ -692,13 +712,14 @@
     initMail();
     window.BeheerWebshop.init({ toast });
     window.BeheerRollen.init({ toast, onChange: setRoles });
+    window.BeheerAiKosten.init({ toast });
     $('#detail-close').onclick = () => { $('#detail').hidden = true; };
     $('#detail').onclick = (e) => { if (e.target.id === 'detail') $('#detail').hidden = true; };
     await loadUsers().catch(() => {});
     loadHistory();
     // Direct naar een tabblad via beheer/#settings.
     const hash = location.hash.slice(1);
-    if (['plans', 'users', 'roles', 'settings', 'webshop', 'audit'].includes(hash)) showTab(hash);
+    if (['plans', 'users', 'roles', 'settings', 'webshop', 'aikosten', 'audit'].includes(hash)) showTab(hash);
   }
 
   init();

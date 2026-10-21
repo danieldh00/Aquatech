@@ -112,3 +112,17 @@ table.grid.matrix td.na { color: var(--line); }
 .guide ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.5; }
 .guide code { font-size: 13px; }
 .card-form.settings [hidden] { display: none !important; }
+
+/* AI-kosten */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 14px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.stat b { display: block; font-size: 22px; color: var(--primary-dark); }
+.stat span { color: var(--muted); font-size: 13px; }
+.ai-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 14px; margin-bottom: 16px; }
+.ai-grid h3, #tab-aikosten > h3 { font-size: 15px; margin: 4px 0 8px; }
+.ai-grid > div { min-width: 0; }
+.ai-grid .tablewrap { max-height: 360px; overflow-y: auto; }
+.bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--primary); vertical-align: middle; min-width: 2px; }
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 12px 0 0; font-size: 14px; }
+dl.kv dt { color: var(--muted); }
+dl.kv dd { margin: 0; }

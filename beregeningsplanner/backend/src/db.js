@@ -465,6 +465,31 @@ const MIGRATIONS = [
     WHERE owner_id IN (SELECT id FROM users WHERE kind IN ('account', 'systeem') AND role IN ('beheerder', 'installateur'));
   CREATE INDEX plans_review ON plans (tenant_id, review_status, updated_at);
   `,
+  // 21: verbruik en kosten van elk AI-verzoek (Beheer > AI-kosten, zie
+  // aiusage.js). user_id zonder foreign key: de regel blijft na het
+  // verwijderen van de gebruiker. Kosten in miljoensten (dollar en euro,
+  // met de koers van dat moment), zodat sommen exact blijven.
+  `
+  CREATE TABLE ai_usage (
+    id                 TEXT PRIMARY KEY,
+    tenant_id          TEXT NOT NULL REFERENCES tenants(id),
+    user_id            TEXT,
+    feature            TEXT NOT NULL,
+    model              TEXT NOT NULL,
+    status             TEXT NOT NULL DEFAULT 'ok',
+    input_tokens       INTEGER NOT NULL DEFAULT 0,
+    output_tokens      INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    duration_ms        INTEGER NOT NULL DEFAULT 0,
+    cost_usd_micro     INTEGER NOT NULL DEFAULT 0,
+    cost_eur_micro     INTEGER NOT NULL DEFAULT 0,
+    detail             TEXT NOT NULL DEFAULT '{}',
+    created_at         TEXT NOT NULL
+  );
+  CREATE INDEX ai_usage_tenant ON ai_usage (tenant_id, created_at);
+  CREATE INDEX ai_usage_created ON ai_usage (created_at);
+  `,
 ];
 
 function openDb(file = ':memory:') {

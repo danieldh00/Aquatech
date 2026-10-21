@@ -107,6 +107,15 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.strictEqual((await c.get('/api/admin/users')).status, 200);
     assert.ok(!probe.stats.sql.some((s) => /SELECT u\.\*/.test(s)));
+
+    // AI-kosten: vaste aantallen queries, ongeacht het aantal verzoeken
+    // (sessie + totaal + per periode/gebruiker/functie/model; lijst: aantal + pagina).
+    probe.reset();
+    assert.strictEqual((await c.get('/api/admin/ai-usage')).status, 200);
+    assert.strictEqual(probe.stats.queries, 6, probe.stats.sql.join('\n'));
+    probe.reset();
+    assert.strictEqual((await c.get('/api/admin/ai-usage/requests')).status, 200);
+    assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
   } finally {
     server.close();
   }

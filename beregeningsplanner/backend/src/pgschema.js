@@ -340,6 +340,28 @@ const PG_MIGRATIONS = [
     WHERE owner_id IN (SELECT id FROM users WHERE kind IN ('account', 'systeem') AND role IN ('beheerder', 'installateur'));
   CREATE INDEX plans_review ON plans (tenant_id, review_status, updated_at);
   `,
+  // 21: verbruik en kosten van AI-verzoeken (zie db.js).
+  `
+  CREATE TABLE ai_usage (
+    id                 ${T} PRIMARY KEY,
+    tenant_id          ${T} NOT NULL ${FK('tenants(id)')},
+    user_id            ${T},
+    feature            ${T} NOT NULL,
+    model              ${T} NOT NULL,
+    status             ${T} NOT NULL DEFAULT 'ok',
+    input_tokens       BIGINT NOT NULL DEFAULT 0,
+    output_tokens      BIGINT NOT NULL DEFAULT 0,
+    cache_read_tokens  BIGINT NOT NULL DEFAULT 0,
+    cache_write_tokens BIGINT NOT NULL DEFAULT 0,
+    duration_ms        BIGINT NOT NULL DEFAULT 0,
+    cost_usd_micro     BIGINT NOT NULL DEFAULT 0,
+    cost_eur_micro     BIGINT NOT NULL DEFAULT 0,
+    detail             ${T} NOT NULL DEFAULT '{}',
+    created_at         ${T} NOT NULL
+  );
+  CREATE INDEX ai_usage_tenant ON ai_usage (tenant_id, created_at);
+  CREATE INDEX ai_usage_created ON ai_usage (created_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

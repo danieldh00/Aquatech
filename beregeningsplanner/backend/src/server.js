@@ -23,6 +23,7 @@ const { createPortalStore, registerPortalRoutes } = require('./portal');
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./outsourcing');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./news');
 const { registerDrawingRoutes } = require('./drawings');
+const { createAiUsageStore } = require('./aiusage');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -217,18 +218,33 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const impersonation = createImpersonation({ store, imp: createImpersonationStore(database), auth, audit, mainTenantId: tenant.id });
   // Express 4 vangt geen afgewezen promises: doorgeven aan de foutafhandeling.
   const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-  // De AI-client volgt de API-sleutel uit de instellingen van de tenant (zonder herstart).
+  // De AI-client volgt de API-sleutel en het model uit de instellingen van de
+  // tenant (zonder herstart). Elke organisatie gebruikt haar eigen sleutel:
+  // de sleutel uit de Docker-omgeving (ANTHROPIC_API_KEY) is alleen een
+  // startwaarde voor de hoofdtenant en diens testomgevingen (settingsFor),
+  // nooit voor een andere organisatie. Een testomgeving zonder eigen sleutel
+  // gebruikt sleutel en model van haar live-tenant (zelfde organisatie).
   const analyzers = new Map();
+  function aiTenantOf(tenantId = tenant.id) {
+    if (settingsFor(tenantId).get('anthropicApiKey')) return tenantId;
+    const t = store.getTenant(tenantId);
+    return t && t.environment === 'test' && t.parent_id ? t.parent_id : tenantId;
+  }
   function currentAnalyzer(tenantId = tenant.id) {
     if (analyzer) return analyzer;
-    const key = settingsFor(tenantId).get('anthropicApiKey');
-    let cached = analyzers.get(key);
+    const s = settingsFor(aiTenantOf(tenantId));
+    const key = s.get('anthropicApiKey');
+    const model = s.get('aiModel');
+    const cacheKey = `${model}|${key}`;
+    let cached = analyzers.get(cacheKey);
     if (!cached) {
-      cached = createAnalyzer({ apiKey: key });
-      analyzers.set(key, cached);
+      cached = createAnalyzer({ apiKey: key, model });
+      analyzers.set(cacheKey, cached);
     }
     return cached;
   }
+  // Verbruik en kosten van elk AI-verzoek (Beheer > AI-kosten).
+  const aiUsage = createAiUsageStore(database);
   const aiAvailable = (tenantId = tenant.id) => settingsFor(tenantId).get('aiEnabled') && currentAnalyzer(tenantId).available;
 
   const app = express();
@@ -977,7 +993,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Beheer: instellingen (van de actieve omgeving) ----------
   app.get('/api/admin/settings', (req, res) => {
-    res.json({ settings: settingsFor(req.tenantId).view(), via: auth.session(req)?.via || null });
+    // aiFromLive: testomgeving zonder eigen sleutel gebruikt die van live.
+    const aiFrom = aiTenantOf(req.tenantId);
+    res.json({ settings: settingsFor(req.tenantId).view(), via: auth.session(req)?.via || null,
+      aiFromLive: aiFrom !== req.tenantId && Boolean(settingsFor(aiFrom).get('anthropicApiKey')) });
   });
 
   app.put('/api/admin/settings', requireJson, (req, res) => {
@@ -1022,6 +1041,39 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       if (err instanceof AnalyzeError) return res.status(err.status === 502 ? 400 : err.status).json({ error: err.code, message: err.message });
       next(err);
     }
+  });
+
+  // ---------- Beheer: AI-kosten (zie aiusage.js) ----------
+  // Een beheerder ziet de actieve omgeving; een hoofdbeheerder kan ook alle
+  // organisaties samen (?scope=all) of één andere omgeving (?tenant=id) zien.
+  function aiUsageScope(req, res) {
+    const all = req.query.scope === 'all';
+    const other = typeof req.query.tenant === 'string' && req.query.tenant && req.query.tenant !== req.tenantId;
+    if (!all && !other) return [req.tenantId];
+    if (!req.user?.platform_admin) {
+      res.status(403).json({ error: 'forbidden', message: 'Alleen een hoofdbeheerder ziet de AI-kosten van andere organisaties.' });
+      return undefined;
+    }
+    if (all) return null;
+    if (!store.getTenant(req.query.tenant)) {
+      res.status(404).json({ error: 'not_found', message: 'Organisatie niet gevonden.' });
+      return undefined;
+    }
+    return [req.query.tenant];
+  }
+
+  app.get('/api/admin/ai-usage', (req, res) => {
+    const scope = aiUsageScope(req, res);
+    if (scope === undefined) return;
+    const s = settingsFor(aiTenantOf(req.tenantId));
+    res.json({ ...aiUsage.summary(scope, req.query), scope: scope ? 'tenant' : 'all', platformAdmin: Boolean(req.user?.platform_admin),
+      model: s.get('aiModel'), eurCentsPerUsd: s.get('aiEurCentsPerUsd'), retentionDays: settingsFor(req.tenantId).get('auditRetentionDays') });
+  });
+
+  app.get('/api/admin/ai-usage/requests', (req, res) => {
+    const scope = aiUsageScope(req, res);
+    if (scope === undefined) return;
+    res.json(aiUsage.list(scope, req.query, { limit: req.query.limit, offset: req.query.offset }));
   });
 
   // WAN-IP van de server, voor een Exchange Online-connector op IP-basis
@@ -1082,10 +1134,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return res.status(429).json({ error: 'daily_limit', message: 'Het dagelijkse maximum voor automatisch herkennen is bereikt. Probeer het morgen opnieuw of teken het plan zelf.' });
     }
     daily.count += 1;
+    const started = Date.now();
+    // Elk verzoek dat de AI-dienst bereikt komt in het kostenoverzicht, ook
+    // als het mislukt (een weigering of te lang antwoord kost ook tokens).
+    const logUsage = (user, { model, usage, status = 'ok', detail = {} }) => {
+      try {
+        aiUsage.record({ tenantId: req.tenantId || tenant.id, userId: user ? user.id : null, feature: 'plan_analyse',
+          model: model || planAnalyzer.model || settingsFor(aiTenantOf(req.tenantId)).get('aiModel'), status, usage: usage || {}, durationMs: Date.now() - started,
+          eurCentsPerUsd: settingsFor(aiTenantOf(req.tenantId)).get('aiEurCentsPerUsd'), detail: { width: w, height: h, ...detail } });
+      } catch (err) {
+        console.warn(`AI-verbruik niet vastgelegd: ${err.message}`);
+      }
+    };
     try {
       const result = await planAnalyzer.analyze({ mediaType: m[1], data: m[2], width: w, height: h });
       console.log(`Plan geanalyseerd: ${result.areas.length} vlakken, schaal ${result.scale.method || '-'} (${result.scale.confidence || '-'})`);
       const user = identify(req) || (guestsAllowed() ? ensureUser(req, res) : null);
+      logUsage(user, { model: result.model, usage: result.usage,
+        detail: { areas: result.areas.length, elements: (result.elements || []).length, scale: result.scale.method || null } });
       if (res.headersSent) return;
       if (user) {
         store.record({ tenantId: req.tenantId, userId: user.id, action: 'analyse', title: 'Plan herkend',
@@ -1094,9 +1160,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       res.json(result);
     } catch (err) {
       if (err instanceof AnalyzeError) {
+        if (err.code !== 'not_configured') logUsage(identify(req), { model: err.model, usage: err.usage, status: err.code });
         console.warn(`Plananalyse mislukt: ${err.code} – ${err.message}`);
         return res.status(err.status).json({ error: err.code, message: err.message });
       }
+      logUsage(identify(req), { status: 'error' });
       next(err);
     }
   });
@@ -1348,7 +1416,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, outsourcing: outsourcingStore, news: newsStore, settings: settingsFor(t.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, settings: settingsFor(t.id) },
       set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );
@@ -1523,6 +1591,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     for (const t of store.listTenants().flatMap((l) => [l, ...l.environments])) {
       const s = settingsFor(t.id);
       const r = store.applyRetention(t.id, { ipDays: s.get('ipRetentionDays'), auditDays: s.get('auditRetentionDays') });
+      r.aiUsage = aiUsage.prune(t.id, s.get('auditRetentionDays'));
       for (const [k, v] of Object.entries(r)) total[k] = (total[k] || 0) + v;
     }
     return total;

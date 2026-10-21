@@ -141,6 +141,33 @@ Hiervoor is een API-sleutel van Anthropic nodig:
   op dezelfde plek; daar zet je AI-herkenning ook helemaal uit.
 - Het plan wordt voor de analyse naar Anthropic gestuurd. Zonder sleutel blijft
   alles lokaal.
+- **Elke organisatie gebruikt een eigen sleutel** (en betaalt dus zelf). De
+  sleutel uit de Docker-omgeving (`ANTHROPIC_API_KEY`) geldt alleen voor de
+  hoofdorganisatie, nooit voor andere organisaties. Een testomgeving zonder
+  eigen sleutel gebruikt de sleutel, het model en de koers van haar
+  live-omgeving.
+- **Model**: kies per organisatie Claude Opus 5.5 (standaard, aanbevolen),
+  Sonnet 5.5 (half zo duur), Haiku 5.5 (veruit het goedkoopst, minder
+  nauwkeurig bij schetsen) of Fable 5.1 (krachtigst, duurst).
+
+### AI-kosten
+
+**Beheer → AI-kosten** (`.../beheer/#aikosten`) toont elk AI-verzoek: wie,
+welke functie, welk model, tokens in en uit (inclusief het denkwerk van het
+model), duur, resultaat en de geschatte kosten in euro's. Met totalen per
+dag of maand, per gebruiker, per functie en per model, en een
+**Excel-export** met alle tabellen en de losse verzoeken.
+
+- Kosten worden bij het verzoek berekend met de prijzen van Anthropic
+  (`frontend/shared/ai-models.js`) en omgerekend met de koers uit de
+  instellingen (eurocent per dollar, standaard 86). De factuur van
+  Anthropic blijft leidend.
+- Ook mislukte verzoeken staan erin (een weigering of te lang antwoord kost
+  ook tokens).
+- Alleen getallen worden bewaard, niet de afbeelding of het antwoord. Regels
+  verdwijnen na de bewaartermijn van het auditlog.
+- Een beheerder ziet de eigen omgeving; een hoofdbeheerder kan ook **alle
+  organisaties** samen bekijken, met een uitsplitsing per organisatie.
 
 ## Toverstaf
 
@@ -591,6 +618,8 @@ Beheerders regelen alles onder **Beheer → Instellingen** (ook direct via
 | API-sleutel van Anthropic | leeg |
 | Maximaal aantal AI-analyses per dag (hele app) | 30 |
 | Maximaal aantal AI-analyses per uur per IP-adres | 10 |
+| AI-model | Claude Opus 5.5 |
+| Koers voor AI-kosten (eurocent per dollar) | 86 |
 | Gasten zonder inloggen toestaan | uit |
 | Tekening indienen zonder account (knop op de inlogpagina) | aan |
 | Toegangscode (optioneel, gedeelde beheerderscode) | leeg |
