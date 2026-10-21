@@ -38,6 +38,7 @@
       <nav class="tabs" role="tablist">
         <button class="tab active" data-tab="list" role="tab">Facturen</button>
         <button class="tab" data-tab="debtors" role="tab">Debiteuren</button>
+        <button class="tab" data-tab="visma" role="tab">Visma</button>
         <button class="tab" data-tab="export" role="tab">Export boekhouding</button>
         <button class="tab" data-tab="settings" role="tab">Instellingen</button>
       </nav>
@@ -86,6 +87,35 @@
           <div class="err" role="alert"></div>
         </form>
         <div class="tablewrap"><table class="grid" id="d-table"></table></div>
+      </section>
+
+      <section id="tab-visma" class="tabpane" hidden>
+        <div class="card-form">
+          <h3>Koppeling met Visma eAccounting</h3>
+          <p class="muted small">Definitieve facturen gaan als verkoopfactuur naar je eigen Visma-administratie. De debiteur wordt daar een klant met hetzelfde debiteurnummer. Elke factuurregel komt op het Visma-artikel dat je hieronder per omzetcategorie kiest; dat artikel bepaalt in Visma de grootboekrekening en de btw. Visma geeft de factuur een eigen nummer; ons nummer staat erbij als referentie.</p>
+          <div id="vi-status"></div>
+          <div class="row">
+            <button class="btn primary" id="vi-connect" hidden>Verbinden met Visma</button>
+            <button class="btn" id="vi-sync" hidden>Nu doorsturen</button>
+            <button class="btn danger" id="vi-disconnect" hidden>Verbinding verbreken</button>
+          </div>
+        </div>
+        <form id="vi-form" class="card-form settings" novalidate hidden>
+          <h3>Artikel per omzetcategorie</h3>
+          <p class="muted small">Kies voor elke omzetcategorie die je gebruikt een artikel uit Visma (bijv. een artikel <i>Arbeid</i> met omzetrekening 8140 en 21% btw). Een factuur met een regel in een categorie zonder artikel blijft staan met een melding.</p>
+          <div class="tablewrap"><table class="grid" id="vi-arts"></table></div>
+          <h3>Nieuwe klanten</h3>
+          <label>Betalingstermijn in Visma<select name="terms"></select></label>
+          <h3>Automatisch doorsturen</h3>
+          <label class="chk"><input type="checkbox" name="autoSync"> Een factuur vanzelf naar Visma sturen zodra hij definitief is (anders alleen met de knop)</label>
+          <label>Alleen facturen vanaf factuurdatum<input name="since" type="date"></label>
+          <p class="muted small">Facturen van vóór deze datum gaan niet mee, zodat wat al in Visma staat (bijv. uit het oude pakket) er niet dubbel in komt. Zet je automatisch aan zonder datum, dan geldt vandaag.</p>
+          <div class="row">
+            <button class="btn primary" type="submit">Opslaan</button>
+            <button class="btn" type="button" id="vi-reload">Artikelen opnieuw ophalen</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
       </section>
 
       <section id="tab-export" class="tabpane" hidden>
@@ -158,6 +188,7 @@
         <button class="btn primary" id="e-final">Definitief maken</button>
         <button class="btn" id="e-pdf">PDF</button>
         <button class="btn" id="e-send" hidden>Versturen</button>
+        <button class="btn" id="e-visma" hidden>Naar Visma</button>
         <button class="btn" id="e-paid" hidden>Betaald</button>
         <button class="btn" id="e-credit" hidden>Creditfactuur</button>
         <button class="btn danger" id="e-del" hidden>Verwijderen</button>

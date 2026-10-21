@@ -50,3 +50,11 @@ td .fail { color: var(--danger, #c62828); }
 #e-sendform { margin-bottom: 14px; border-left: 3px solid var(--at-green); }
 #d-form { margin-bottom: 14px; }
 #s-form h3 { margin-top: 22px; }
+/* Visma: op een telefoon alleen categorie en artikel. */
+#vi-arts select { width: 100%; min-width: 10rem; }
+@media (max-width: 640px) {
+  #vi-arts th:nth-child(2), #vi-arts td:nth-child(2) { display: none; }
+  #vi-arts { table-layout: fixed; width: 100%; }
+  #vi-arts td { white-space: normal; }
+  #vi-arts select { min-width: 0; }
+}

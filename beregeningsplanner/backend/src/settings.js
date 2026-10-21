@@ -5,6 +5,7 @@ const { sanitizeMail } = require('./mailer');
 const { sanitizeShop } = require('./woocommerce');
 const { sanitizeOutsourcing } = require('./outsourcing');
 const { sanitizeInvoicing } = require('./invoices');
+const { sanitizeVisma, sanitizeVismaApp } = require('./visma');
 const path = require('path');
 const Theme = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'theme.js'));
 const AiModels = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'ai-models.js'));
@@ -69,6 +70,15 @@ const FIELDS = {
   // Hoofdbeheer (platform: niet via Beheer > Instellingen). In de hoofdtenant
   // geldt het voor alle organisaties, in een live-tenant als eigen thema.
   theme: { type: 'object', default: {}, sanitize: Theme.sanitize, platform: true },
+  // Visma eAccounting (visma.js). De app-registratie (client ID, sandbox of
+  // productie, redirect URI) en het secret gelden voor het hele platform en
+  // staan in de hoofdtenant (Hoofdbeheer). Per omgeving: de keuzes in
+  // Facturen → Visma en het refresh token van de verbonden administratie;
+  // internal = alleen via /api/visma, niet via Beheer > Instellingen.
+  vismaApp: { type: 'object', default: {}, sanitize: sanitizeVismaApp, platform: true },
+  vismaClientSecret: { type: 'secret', default: '', min: 8, platform: true },
+  visma: { type: 'object', default: {}, sanitize: sanitizeVisma, internal: true },
+  vismaRefreshToken: { type: 'secret', default: '', min: 1, max: 4000, internal: true },
 };
 
 class SettingsError extends Error {
@@ -189,7 +199,7 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
       if (def.type === 'secret') {
         if (typeof raw !== 'string') throw new SettingsError(key, 'Ongeldige waarde.');
         const v = raw.trim();
-        if (v.length > 500) throw new SettingsError(key, 'Waarde is te lang.');
+        if (v.length > (def.max || 500)) throw new SettingsError(key, 'Waarde is te lang.');
         if (v && v.length < def.min) throw new SettingsError(key, `Minimaal ${def.min} tekens.`);
         next[key] = v;
       } else if (def.type === 'int') {
