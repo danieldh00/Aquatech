@@ -11,14 +11,19 @@
   const ACTIONS = { aangemaakt: 'Aangemaakt', bijgewerkt: 'Bijgewerkt', verwijderd: 'Verwijderd' };
   const areaLabel = (t) => (window.Catalog && window.Catalog.areaTypes[t] ? window.Catalog.areaTypes[t].label : t);
   const lawnM2 = (p) => (p.summary && p.summary.m2ByType ? p.summary.m2ByType.lawn || 0 : 0);
+  // Controle: een plan van een klant is pas definitief na goedkeuring.
+  const REVIEW = { concept: 'Concept', ter_controle: 'Ter controle', goedgekeurd: 'Goedgekeurd' };
+  const reviewOf = (p) => (p.review ? p.review.status : 'concept');
+  const reviewPill = (p) => `<span class="pill rv-${esc(reviewOf(p))}">${esc(REVIEW[reviewOf(p)] || reviewOf(p))}</span>${p.review && p.review.via === 'openbaar' ? '<span class="sub">zonder account</span>' : ''}`;
 
-  const state = { me: null, admin: false, team: false, quotes: false, plans: [], sort: { key: 'updatedAt', dir: -1 } };
+  const state = { me: null, admin: false, team: false, quotes: false, approver: false, plans: [], sort: { key: 'updatedAt', dir: -1 } };
 
   // Kolommen: key, kop, waarde (voor sorteren/Excel) en weergave.
   const COLUMNS = [
     { key: 'title', label: 'Projectnaam', value: (p) => p.title, html: (p) => `<b>${esc(p.title)}</b>${p.customer ? `<span class="sub">${esc(p.customer)}</span>` : ''}`, cls: 'wrap' },
     { key: 'address', label: 'Adres', value: (p) => p.address, html: (p) => esc(p.address || '–'), cls: 'wrap' },
     { key: 'owner', label: 'Gebruiker', team: true, value: (p) => (p.owner ? p.owner.displayName : ''), html: (p) => esc(p.owner ? p.owner.displayName : '–') },
+    { key: 'review', label: 'Status', value: reviewOf, html: reviewPill },
     { key: 'lawn', label: 'Gazon m²', value: lawnM2, html: (p) => num(lawnM2(p)), cls: 'num' },
     { key: 'totalM2', label: 'Totaal m²', value: (p) => p.summary.totalM2, html: (p) => num(p.summary.totalM2), cls: 'num' },
     { key: 'areas', label: 'Vlakken', value: (p) => p.summary.areas, html: (p) => p.summary.areas, cls: 'num' },
@@ -67,9 +72,11 @@
   function visible() {
     const q = $('#f-search').value.trim().toLowerCase();
     const owner = $('#f-owner').value;
+    const review = $('#f-review').value;
     const col = COLUMNS.find((c) => c.key === state.sort.key) || COLUMNS[0];
     return state.plans
       .filter((p) => !owner || (p.owner && p.owner.id === owner))
+      .filter((p) => !review || reviewOf(p) === review)
       .filter((p) => !q || [p.title, p.customer, p.address, p.owner && p.owner.displayName].some((v) => String(v || '').toLowerCase().includes(q)))
       .sort((a, b) => {
         const va = col.value(a), vb = col.value(b);
@@ -88,6 +95,7 @@
       [sum((p) => p.summary.sprinklers), 'sproeiers'],
     ];
     if (state.team) tiles.push([owners, owners === 1 ? 'gebruiker' : 'gebruikers']);
+    if (state.approver) tiles.push([items.filter((p) => reviewOf(p) === 'ter_controle').length, 'ter controle']);
     $('#stats').innerHTML = tiles.map(([v, l]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join('');
     $('#stats').hidden = !state.plans.length;
   }
@@ -129,11 +137,12 @@
     $('#p-count').textContent = `${items.length} van ${state.plans.length} plannen`;
   }
 
-  // Eigen plan: openen in de planner. Plan van iemand anders (beheerder,
-  // installateur): als kopie, zodat het origineel van de gebruiker niet wijzigt.
-  async function openPlan(p) {
+  // Eigen plan: openen in de planner. Wie plannen goedkeurt opent ook het
+  // plan van een ander zelf (om het te controleren). Anders als kopie, zodat
+  // het origineel van de gebruiker niet wijzigt.
+  async function openPlan(p, copy = false) {
     const own = !p.owner || !state.me.user || p.owner.id === state.me.user.id;
-    if (own) { location.href = `../beregening/?plan=${encodeURIComponent(p.id)}`; return; }
+    if (own || (state.approver && !copy)) { location.href = `../beregening/?plan=${encodeURIComponent(p.id)}`; return; }
     try {
       const plan = await getJson(`../api/plans/${encodeURIComponent(p.id)}`);
       sessionStorage.setItem('aquatech-open-copy', JSON.stringify(plan.data));
@@ -149,13 +158,20 @@
     const s = p.summary || {};
     const m2 = Object.entries(s.m2ByType || {}).map(([t, v]) => `${esc(areaLabel(t))}: ${num(v)} m²`).join('<br>');
     const own = !p.owner || !state.me.user || p.owner.id === state.me.user.id;
+    const r = p.review || { status: 'concept' };
+    const contact = p.owner && p.owner.kind === 'gast' && (p.owner.email || p.owner.phone)
+      ? `<dt>Contact</dt><dd>${p.owner.email ? `<a href="mailto:${esc(p.owner.email)}">${esc(p.owner.email)}</a>` : ''}${p.owner.email && p.owner.phone ? '<br>' : ''}${p.owner.phone ? `<a href="tel:${esc(p.owner.phone)}">${esc(p.owner.phone)}</a>` : ''}</dd>` : '';
+    const approved = r.status === 'goedgekeurd';
     $('#detail-body').innerHTML = `
       <h2>${esc(p.title)}</h2>
       ${p.deletedAt ? '<span class="pill verwijderd">verwijderd</span>' : ''}
       <dl class="kv">
         <dt>Klant</dt><dd>${esc(p.customer || '–')}</dd>
         <dt>Adres</dt><dd>${esc(p.address || '–')}</dd>
-        ${p.owner ? `<dt>Gebruiker</dt><dd>${esc(p.owner.displayName)} (${esc(p.owner.username)})</dd>` : ''}
+        ${p.owner ? `<dt>Gebruiker</dt><dd>${esc(p.owner.displayName)}${p.owner.kind === 'gast' ? ' (zonder account)' : ` (${esc(p.owner.username)})`}</dd>` : ''}
+        ${contact}
+        <dt>Status</dt><dd><span class="pill rv-${esc(r.status)}">${esc(REVIEW[r.status] || r.status)}</span>${r.via === 'openbaar' ? ' ingediend zonder account' : ''}${approved && r.reviewedBy ? ` door ${esc(r.reviewedBy)} op ${esc(when(r.reviewedAt))}` : ''}${r.status === 'ter_controle' && r.requestedAt ? ` sinds ${esc(when(r.requestedAt))}` : ''}</dd>
+        ${r.question ? `<dt>Vraag</dt><dd class="wrap">${esc(r.question)}</dd>` : ''}
         <dt>Vlakken</dt><dd>${s.areas ?? 0} (${num(s.totalM2)} m²)</dd>
         ${m2 ? `<dt>Per soort</dt><dd>${m2}</dd>` : ''}
         <dt>Sproeiers</dt><dd>${s.sprinklers ?? 0}</dd>
@@ -165,12 +181,36 @@
         <dt>Laatst gewijzigd</dt><dd>${esc(when(p.updatedAt))}</dd>
         ${p.deletedAt ? `<dt>Verwijderd</dt><dd>${esc(when(p.deletedAt))}</dd>` : ''}
       </dl>
-      <div class="actions">${p.deletedAt ? '' : `<button class="btn primary" id="d-open">${own ? 'Openen in de planner' : 'Kopie openen in de planner'}</button>
-        ${state.quotes ? `<a class="btn" href="../offertes/?plan=${encodeURIComponent(p.id)}">Offerte maken</a>` : ''}`}
+      <div class="actions">${p.deletedAt ? '' : `<button class="btn primary" id="d-open">${own || state.approver ? (r.status === 'ter_controle' && state.approver ? 'Controleren in de planner' : 'Openen in de planner') : 'Kopie openen in de planner'}</button>
+        ${!own && state.approver ? '<button class="btn" id="d-copy">Kopie openen</button>' : ''}
+        ${state.approver ? `<button class="btn" id="d-review">${approved ? 'Goedkeuring intrekken' : 'Goedkeuren'}</button>` : ''}
+        ${state.quotes && approved ? `<a class="btn" href="../offertes/?plan=${encodeURIComponent(p.id)}">Offerte maken</a>` : ''}`}
         ${state.admin ? '<button class="btn" id="d-purge">Definitief wissen</button>' : ''}</div>
       ${state.admin ? '<h3>Historie</h3><div id="d-history" class="muted small">Laden…</div>' : ''}`;
     const btn = $('#d-open');
     if (btn) btn.onclick = () => openPlan(p);
+    const copyBtn = $('#d-copy');
+    if (copyBtn) copyBtn.onclick = () => openPlan(p, true);
+    const reviewBtn = $('#d-review');
+    if (reviewBtn) {
+      reviewBtn.onclick = async () => {
+        reviewBtn.disabled = true;
+        try {
+          const res = await fetch(`../api/plans/${encodeURIComponent(p.id)}/review`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: approved ? 'reopen' : 'approve' }),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
+          p.review = body.review;
+          toast(approved ? 'Goedkeuring ingetrokken' : 'Plan goedgekeurd');
+          render();
+          showDetail(p.id);
+        } catch (e) {
+          toast(`Lukt niet: ${e.message}`, true);
+          reviewBtn.disabled = false;
+        }
+      };
+    }
     const purge = $('#d-purge');
     if (purge) {
       // AVG-verzoek: plan en de inhoud van de historie (kopieën, klant, adres) weg.
@@ -218,6 +258,8 @@
         { header: 'Klant', key: 'customer', width: 24 },
         { header: 'Adres', key: 'address', width: 30 },
         ...(state.team ? [{ header: 'Gebruiker', key: 'owner', width: 22 }] : []),
+        { header: 'Status', key: 'review', width: 14 },
+        { header: 'Vraag', key: 'question', width: 36 },
         { header: 'Vlakken', key: 'areas', width: 9 },
         { header: 'Totaal m²', key: 'totalM2', width: 11, style: { numFmt: '0.0' } },
         ...types.map((t) => ({ header: `${areaLabel(t)} m²`, key: `m2_${t}`, width: 14, style: { numFmt: '0.0' } })),
@@ -232,6 +274,7 @@
         const s = p.summary || {};
         const row = {
           title: p.title, customer: p.customer, address: p.address, owner: p.owner ? p.owner.displayName : '',
+          review: REVIEW[reviewOf(p)] || reviewOf(p), question: p.review ? p.review.question : '',
           areas: s.areas, totalM2: s.totalM2, sprinklers: s.sprinklers, zones: s.zones, elements: s.elements,
           createdAt: new Date(p.createdAt), updatedAt: new Date(p.updatedAt), historyCount: p.historyCount,
           deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
@@ -264,6 +307,7 @@
     state.admin = rights.includes('beheer');
     state.team = rights.includes('plannen.alle');
     state.quotes = rights.includes('offertes');
+    state.approver = rights.includes('plannen.goedkeuren');
     $('#p-heading').textContent = state.team ? 'Alle plannen' : 'Mijn plannen';
     $('#p-intro').textContent = state.admin
       ? 'Alle plannen van alle gebruikers. Klik op een plan voor de details en de historie van de aanvragen.'
@@ -275,6 +319,10 @@
     let t;
     $('#f-search').oninput = () => { clearTimeout(t); t = setTimeout(render, 150); };
     $('#f-owner').onchange = render;
+    // Direct naar wat er te controleren is: ?review=ter_controle.
+    const wanted = new URLSearchParams(location.search).get('review');
+    if (wanted && REVIEW[wanted]) $('#f-review').value = wanted;
+    $('#f-review').onchange = render;
     $('#f-deleted').onchange = load;
     $('#f-export').onclick = exportXlsx;
     $('#detail-close').onclick = () => { $('#detail').hidden = true; };

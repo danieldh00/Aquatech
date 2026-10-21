@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.52.0
+
+Klanten tekenen zelf, een installateur controleert.
+
+- **Direct een tekening maken** (inlogpagina): een klant zonder account
+  opent de beregeningsplanner, tekent de tuin (ook met een foto of PDF als
+  ondergrond en de lokale herkenning) en dient de tekening in met naam,
+  e-mail, telefoon, adres en een vraag (*"Kan dit gecontroleerd worden?"*).
+  Tot het indienen blijft de tekening alleen in de browser. De knop staat
+  er alleen als de organisatie (organisatiecode) dat toestaat; instelling
+  in **Beheer → Instellingen → Toegang** (standaard aan).
+- **Controle van plannen**: een plan heeft nu een status *Concept*, *Ter
+  controle* of *Goedgekeurd*. Een plan van een klant is nooit meteen
+  definitief: de klant biedt het **ter controle** aan (of dient het in
+  zonder account) en een installateur **keurt het goed**. Een installateur
+  keurt een eigen plan in één keer goed. Wijzigt een klant een goedgekeurd
+  plan, dan gaat het opnieuw ter controle.
+- **Offerte alleen uit een goedgekeurd plan** (ook op de server
+  afgedwongen); een losse offerte zonder plan blijft mogelijk.
+- **Plannenoverzicht**: kolom en filter *Status* (direct naar
+  `plannen/?review=ter_controle`), teller *ter controle*, de vraag en
+  contactgegevens van wie zonder account indiende, knoppen *Controleren in
+  de planner* en *Goedkeuren*; Excel-export met status en vraag.
+- Nieuw recht **Plannen goedkeuren** (standaard beheerder en installateur).
+- Het bedrijf krijgt een e-mail bij elke nieuwe aanvraag (als de mailserver
+  en het e-mailadres in het bedrijfsprofiel zijn ingesteld). De indiener
+  krijgt bewust geen mail: anders kon iedereen via het formulier mail naar
+  willekeurige adressen laten sturen.
+- Bestaande plannen van beheerders en installateurs gelden als goedgekeurd.
+- Testdata: een tekening die zonder account is ingediend, een plan van een
+  klant ter controle en een nog niet goedgekeurd plan van een installateur.
+- Database: migratie 20 (controlestatus op `plans`, index op
+  `tenant_id, review_status, updated_at`), voor SQLite en PostgreSQL.
 ## 0.51.0
 
 Nieuws: berichten van de organisatie en wat is nieuw in de app.

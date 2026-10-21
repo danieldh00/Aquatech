@@ -14,7 +14,7 @@
 //                 Ook opdrachten uitbesteden aan of aannemen van een andere
 //                 organisatie (als dat in de instellingen aan staat).
 //                 De rechten van deze rol liggen vast.
-// - installateur: plannen maken en bewerken, offertes opstellen en
+// - installateur: plannen maken, bewerken en goedkeuren, offertes opstellen en
 //                 werkorders uitvoeren voor de hele organisatie; geen
 //                 gebruikers, instellingen of historie.
 // - planner:      werkorders inplannen in de agenda en de afspraaklink naar de
@@ -35,6 +35,7 @@
   const RIGHT_INFO = {
     plannen: { label: 'Beregeningsplanner', description: 'Plannen tekenen en de eigen plannen inzien.', kind: ['medewerker', 'klant'] },
     'plannen.alle': { label: 'Alle plannen', description: 'De plannen van de hele organisatie inzien en bewerken.', kind: ['medewerker'], needs: ['plannen'] },
+    'plannen.goedkeuren': { label: 'Plannen goedkeuren', description: 'Plannen controleren en goedkeuren; een plan van een klant is pas definitief na goedkeuring.', kind: ['medewerker'], needs: ['plannen.alle'] },
     offertes: { label: 'Offertes opstellen', description: 'Offertes maken, bewerken en naar de klant sturen.', kind: ['medewerker'] },
     'offertes.alle': { label: 'Alle offertes', description: 'De offertes van de hele organisatie, niet alleen de eigen.', kind: ['medewerker'], needs: ['offertes'] },
     werkorders: { label: 'Werkorders en klantdossiers', description: 'Werkorders inzien en bijwerken, foto\'s toevoegen, klantdossiers bekijken en het blok Vandaag.', kind: ['medewerker'] },
@@ -55,13 +56,13 @@
       kind: 'medewerker',
       locked: true,
       description: 'Alles binnen de organisatie: gebruikers, rollen, instellingen, historie, alle plannen, offertes en werkorders, en opdrachten uitbesteden.',
-      rights: ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder', 'nieuws', 'uitbesteden', 'beheer'],
+      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder', 'nieuws', 'uitbesteden', 'beheer'],
     },
     installateur: {
       label: 'Installateur',
       kind: 'medewerker',
       description: 'Plannen maken en bewerken, offertes opstellen en werkorders uitvoeren; geen gebruikers of instellingen.',
-      rights: ['plannen', 'plannen.alle', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder'],
+      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder'],
     },
     planner: {
       label: 'Planner',

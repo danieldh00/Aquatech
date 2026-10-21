@@ -144,6 +144,13 @@
       toast(`Kan het plan niet laden: ${e.message}`, true);
       return go('');
     }
+    // Alleen uit een goedgekeurd plan (de server controleert dat ook): anders
+    // meteen naar het plan, om het te controleren en goed te keuren.
+    if (plan.review && plan.review.status !== 'goedgekeurd') {
+      toast('Dit plan is nog niet goedgekeurd. Keur het eerst goed in de planner.', true);
+      setTimeout(() => { location.href = `../beregening/?plan=${encodeURIComponent(plan.id)}`; }, 1200);
+      return;
+    }
     let built;
     try {
       built = Q.fromPlan(plan.data, LIB(), state.profile);
@@ -195,7 +202,7 @@
       const q = $('#pp-search').value.trim().toLowerCase();
       const items = plans.filter((p) => !q || [p.title, p.customer, p.address, p.owner && p.owner.displayName].some((v) => String(v || '').toLowerCase().includes(q)));
       list.innerHTML = items.map((p) => `
-        <button data-plan="${esc(p.id)}"><b>${esc(p.title)}</b>
+        <button data-plan="${esc(p.id)}"${p.review && p.review.status !== 'goedgekeurd' ? ' disabled title="Nog niet goedgekeurd"' : ''}><b>${esc(p.title)}</b>${p.review && p.review.status !== 'goedgekeurd' ? ` <span class="sub">${p.review.status === 'ter_controle' ? 'Ter controle' : 'Concept'}: eerst goedkeuren</span>` : ''}
           <span class="sub">${esc([p.customer, p.address].filter(Boolean).join(' · ') || 'Geen klant ingevuld')}</span>
           <span class="sub">${p.summary ? `${p.summary.sprinklers} sproeiers · ${p.summary.zones} zones · ${nl(p.summary.totalM2, 0)} m²` : ''}${p.owner && state.all ? ` · ${esc(p.owner.displayName)}` : ''} · gewijzigd ${esc(shortDate(p.updatedAt))}</span>
         </button>`).join('') || `<p class="muted">${plans.length ? 'Geen plannen gevonden.' : 'Nog geen plannen. Teken eerst een tuin in de <a href="../beregening/">beregeningsplanner</a>.'}</p>`;

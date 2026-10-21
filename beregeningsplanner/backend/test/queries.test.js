@@ -83,9 +83,9 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     // Na uitloggen geen bestanden meer.
     const other = client(`http://127.0.0.1:${server.address().port}`);
     assert.strictEqual((await other.post('/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
-    assert.strictEqual((await other.get('/shared/sidebar.js')).status, 200);
+    assert.strictEqual((await other.get('/beheer/beheer.js')).status, 200);
     await other.post('/api/auth/logout');
-    assert.strictEqual((await other.get('/shared/sidebar.js')).status, 401);
+    assert.strictEqual((await other.get('/beheer/beheer.js')).status, 401);
 
     // Een plan met een grote achtergrond (foto van de tekening).
     const background = { src: `data:image/png;base64,${'A'.repeat(400000)}` };

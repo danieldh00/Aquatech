@@ -365,6 +365,7 @@
     const acc = $('#s-access');
     acc.guestAccess.checked = view.guestAccess.value;
     acc.guestAccess.disabled = code.set;
+    acc.drawingRequests.checked = view.drawingRequests.value;
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
@@ -456,6 +457,9 @@
     const acc = $('#s-access');
     acc.guestAccess.onchange = () => {
       saveSettings(acc, { guestAccess: acc.guestAccess.checked }, acc.guestAccess.checked ? 'Gasten toegestaan' : 'Inloggen is nu verplicht');
+    };
+    acc.drawingRequests.onchange = () => {
+      saveSettings(acc, { drawingRequests: acc.drawingRequests.checked }, acc.drawingRequests.checked ? 'Tekening indienen zonder account staat aan' : 'Tekening indienen zonder account staat uit');
     };
     acc.onsubmit = (ev) => {
       ev.preventDefault();

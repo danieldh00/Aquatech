@@ -106,6 +106,8 @@ function polygonArea(pts) {
   return Math.abs(s) / 2;
 }
 
+const REVIEW_STATUSES = ['concept', 'ter_controle', 'goedgekeurd'];
+
 function summarize(data) {
   const areas = Array.isArray(data?.areas) ? data.areas : [];
   const m2ByType = {};
@@ -492,9 +494,12 @@ function createStore(db) {
       }
       let copied = 0;
       if (copyPlans) {
-        for (const p of q('SELECT owner_id, title, customer, address, data, created_at, updated_at FROM plans WHERE tenant_id = ? AND deleted_at IS NULL').all(parent.id)) {
-          q(`INSERT INTO plans (id, tenant_id, owner_id, title, customer, address, data, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(newId(), id, p.owner_id, p.title, p.customer, p.address, p.data, p.created_at, p.updated_at);
+        for (const p of q(`SELECT owner_id, title, customer, address, data, created_at, updated_at, review_status, review_question, review_requested_at,
+            reviewed_by, reviewed_at, submitted_via FROM plans WHERE tenant_id = ? AND deleted_at IS NULL`).all(parent.id)) {
+          q(`INSERT INTO plans (id, tenant_id, owner_id, title, customer, address, data, created_at, updated_at,
+              review_status, review_question, review_requested_at, reviewed_by, reviewed_at, submitted_via)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(newId(), id, p.owner_id, p.title, p.customer, p.address, p.data, p.created_at, p.updated_at,
+            p.review_status, p.review_question, p.review_requested_at, p.reviewed_by, p.reviewed_at, p.submitted_via);
           copied++;
         }
       }
@@ -638,9 +643,19 @@ function createStore(db) {
       for (const p of plans) {
         const pid = newId();
         const meta = metaOf(p.data);
-        q(`INSERT INTO plans (id, tenant_id, owner_id, title, customer, address, data, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(pid, tid, users[p.owner].id, meta.title, meta.customer, meta.address, JSON.stringify(p.data), p.at, p.at);
-        const hid = record({ tenantId: tid, userId: users[p.owner].id, planId: pid, action: 'aangemaakt', data: p.data });
+        // Ingediend zonder account: een gast met de contactgegevens is eigenaar.
+        let owner = users[p.owner];
+        if (p.guest) {
+          owner = insertUser(tid, { username: `aanvraag-${crypto.randomBytes(4).toString('hex')}`, displayName: p.guest.name, role: 'klant', kind: 'gast' });
+          q('UPDATE users SET email = ?, phone = ? WHERE id = ?').run(p.guest.email || '', p.guest.phone || '', owner.id);
+        }
+        const r = p.review || { status: 'concept' };
+        const requested = r.status === 'concept' ? null : p.at;
+        q(`INSERT INTO plans (id, tenant_id, owner_id, title, customer, address, data, created_at, updated_at,
+            review_status, review_question, review_requested_at, reviewed_by, reviewed_at, submitted_via)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(pid, tid, owner.id, meta.title, meta.customer, meta.address, JSON.stringify(p.data), p.at, p.at,
+          r.status, r.question || '', r.status === 'goedgekeurd' ? null : requested, r.by ? users[r.by].id : null, r.by ? p.at : null, r.via || '');
+        const hid = record({ tenantId: tid, userId: owner.id, planId: pid, action: 'aangemaakt', data: p.data });
         q('UPDATE history SET created_at = ?, updated_at = ? WHERE id = ?').run(p.at, p.at, hid);
         planIds[p.key] = pid;
       }
@@ -915,9 +930,30 @@ function createStore(db) {
   }
 
   // ---------- Plannen ----------
+  // Controle (migratie 19): concept -> ter_controle -> goedgekeurd. Alleen
+  // wie het recht plannen.goedkeuren heeft keurt goed; wijzigt een klant een
+  // goedgekeurd plan, dan gaat het opnieuw ter controle.
+  const REVIEW_COLS = 'p.review_status, p.review_question, p.review_requested_at, p.reviewed_at, p.submitted_via, p.reviewed_by, r.display_name AS reviewer_name';
+  const REVIEW_JOIN = 'LEFT JOIN users r ON r.id = p.reviewed_by';
+  function reviewOf(p) {
+    return {
+      status: p.review_status || 'concept',
+      question: p.review_question || '',
+      requestedAt: p.review_requested_at || null,
+      reviewedAt: p.reviewed_at || null,
+      reviewedBy: p.reviewed_by ? p.reviewer_name || 'Verwijderde gebruiker' : null,
+      via: p.submitted_via || '',
+    };
+  }
+
   function planRow(p, withData) {
     const out = { id: p.id, title: p.title, customer: p.customer, address: p.address, createdAt: p.created_at, updatedAt: p.updated_at };
-    if (p.owner_name !== undefined) out.owner = { id: p.owner_id, username: p.owner_username, displayName: p.owner_name, kind: p.owner_kind };
+    if (p.owner_name !== undefined) {
+      out.owner = { id: p.owner_id, username: p.owner_username, displayName: p.owner_name, kind: p.owner_kind };
+      // Contactgegevens van wie een tekening zonder account indiende.
+      if (p.owner_kind === 'gast') Object.assign(out.owner, { email: p.owner_email || '', phone: p.owner_phone || '' });
+    }
+    if (p.review_status !== undefined) out.review = reviewOf(p);
     if (p.lite !== undefined) {
       let data = null;
       try { data = JSON.parse(p.lite); } catch { /* beschadigd plan: lege samenvatting */ }
@@ -932,15 +968,17 @@ function createStore(db) {
   // Met samenvatting (vlakken, m², sproeiers, zones) voor de overzichten; de
   // achtergrondafbeelding laat SQLite al weg (json_remove), die is groot.
   // withHistory: aantal historieregels per plan (alleen voor beheerders).
-  function listPlans(tenantId, { ownerId = null, includeDeleted = false, withHistory = false } = {}) {
+  function listPlans(tenantId, { ownerId = null, includeDeleted = false, withHistory = false, reviewStatus = null } = {}) {
     const args = [tenantId];
     let sql = `SELECT p.id, p.title, p.customer, p.address, p.created_at, p.updated_at, p.deleted_at, p.owner_id,
         ${jsonDigest(db, 'p.data', { values: ['areas'], counts: ['sprinklers', 'zones', 'elements'] })} AS lite,
         ${withHistory ? '(SELECT COUNT(*) FROM history h WHERE h.tenant_id = p.tenant_id AND h.plan_id = p.id) AS history_count,' : ''}
-        u.username AS owner_username, u.display_name AS owner_name, u.kind AS owner_kind
-      FROM plans p JOIN users u ON u.id = p.owner_id WHERE p.tenant_id = ?${includeDeleted ? '' : ' AND p.deleted_at IS NULL'}`;
+        u.username AS owner_username, u.display_name AS owner_name, u.kind AS owner_kind, u.email AS owner_email, u.phone AS owner_phone,
+        ${REVIEW_COLS}
+      FROM plans p JOIN users u ON u.id = p.owner_id ${REVIEW_JOIN} WHERE p.tenant_id = ?${includeDeleted ? '' : ' AND p.deleted_at IS NULL'}`;
     if (ownerId) { sql += ' AND p.owner_id = ?'; args.push(ownerId); }
-    return q(`${sql} ORDER BY p.updated_at DESC`).all(...args).map((p) => planRow(p, false));
+    if (REVIEW_STATUSES.includes(reviewStatus)) { sql += ' AND p.review_status = ?'; args.push(reviewStatus); }
+    return q(`${sql} ORDER BY p.updated_at DESC, p.id`).all(...args).map((p) => planRow(p, false));
   }
 
   // Een plan is alleen zichtbaar voor de eigenaar; beheerders en installateurs
@@ -954,8 +992,73 @@ function createStore(db) {
   }
 
   function getPlan(user, id) {
-    const p = findPlan(user, id);
-    return p ? planRow(p, true) : null;
+    const p = findPlan(user, id, `id, owner_id, title, customer, address, data, created_at, updated_at,
+      review_status, review_question, review_requested_at, reviewed_at, submitted_via, reviewed_by`);
+    if (!p) return null;
+    if (p.reviewed_by) p.reviewer_name = q('SELECT display_name FROM users WHERE id = ?').get(p.reviewed_by)?.display_name;
+    return planRow(p, true);
+  }
+
+  /** Controlestatus van een plan binnen de tenant (null = bestaat niet of is verwijderd). */
+  function planReviewStatus(tenantId, id) {
+    return q('SELECT review_status FROM plans WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL').get(tenantId, String(id || ''))?.review_status || null;
+  }
+
+  // Ter controle aanbieden (eigenaar of wie alle plannen mag bewerken), met
+  // een vraag aan de installateur.
+  function requestReview(user, id, question) {
+    return transaction(db, () => {
+      const p = findPlan(user, id, 'id, owner_id, submitted_via');
+      if (!p) return null;
+      const ts = now();
+      q(`UPDATE plans SET review_status = 'ter_controle', review_question = ?, review_requested_at = ?, reviewed_by = NULL, reviewed_at = NULL,
+          submitted_via = ? WHERE id = ?`).run(String(question || '').trim().slice(0, 2000), ts, p.submitted_via || 'account', p.id);
+      return getPlanReview(user.tenant_id, p.id);
+    });
+  }
+
+  // Goedkeuren of de goedkeuring intrekken (terug naar concept); alleen met
+  // het recht plannen.goedkeuren (controle in server.js).
+  function reviewPlan(user, id, action) {
+    return transaction(db, () => {
+      const p = findPlan(user, id, 'id, owner_id');
+      if (!p) return null;
+      if (action === 'approve') {
+        q("UPDATE plans SET review_status = 'goedgekeurd', reviewed_by = ?, reviewed_at = ? WHERE id = ?").run(user.id, now(), p.id);
+      } else {
+        q("UPDATE plans SET review_status = 'concept', reviewed_by = NULL, reviewed_at = NULL WHERE id = ?").run(p.id);
+      }
+      return getPlanReview(user.tenant_id, p.id);
+    });
+  }
+
+  function getPlanReview(tenantId, id) {
+    const p = q(`SELECT p.id, ${REVIEW_COLS} FROM plans p ${REVIEW_JOIN} WHERE p.tenant_id = ? AND p.id = ?`).get(tenantId, id);
+    return p ? reviewOf(p) : null;
+  }
+
+  // Tekening ingediend zonder account (openbare planner): een gast met de
+  // contactgegevens wordt eigenaar, het plan staat meteen ter controle.
+  function submitDrawing(tenantId, { name, email, phone, address, question, data, ip }) {
+    return transaction(db, () => {
+      const tag = crypto.randomBytes(4).toString('hex');
+      const guest = insertUser(tenantId, { username: `aanvraag-${tag}`, displayName: name, role: 'klant', kind: 'gast' });
+      q('UPDATE users SET email = ?, phone = ? WHERE id = ?').run(email, phone, guest.id);
+      const meta = { ...(data.meta || {}) };
+      if (!String(meta.customer || '').trim()) meta.customer = name;
+      if (address) meta.address = address;
+      if (!String(meta.name || '').trim()) meta.name = `Tekening van ${name}`;
+      const plan = { ...data, meta };
+      const m = metaOf(plan);
+      const pid = newId();
+      const ts = now();
+      q(`INSERT INTO plans (id, tenant_id, owner_id, title, customer, address, data, created_at, updated_at,
+          review_status, review_question, review_requested_at, submitted_via)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ter_controle', ?, ?, 'openbaar')`)
+        .run(pid, tenantId, guest.id, m.title, m.customer, m.address, JSON.stringify(plan), ts, ts, question, ts);
+      record({ tenantId, userId: guest.id, planId: pid, action: 'aangemaakt', data: plan, ip });
+      return { id: pid, title: m.title, reference: pid.slice(0, 8).toUpperCase() };
+    });
   }
 
   function savePlan(user, id, data, ip) {
@@ -968,14 +1071,19 @@ function createStore(db) {
         q(`INSERT INTO plans (id, tenant_id, owner_id, title, customer, address, data, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(pid, user.tenant_id, user.id, meta.title, meta.customer, meta.address, json, ts, ts);
         record({ tenantId: user.tenant_id, userId: user.id, planId: pid, action: 'aangemaakt', data, ip });
-        return planRow({ id: pid, ...meta, created_at: ts, updated_at: ts }, false);
+        return { ...planRow({ id: pid, ...meta, created_at: ts, updated_at: ts }, false), reviewStatus: 'concept' };
       }
-      const p = findPlan(user, id, 'id, owner_id, created_at');
+      const p = findPlan(user, id, 'id, owner_id, created_at, review_status');
       if (!p) return null;
       q('UPDATE plans SET title = ?, customer = ?, address = ?, data = ?, updated_at = ? WHERE id = ?')
         .run(meta.title, meta.customer, meta.address, json, ts, p.id);
+      // Een klant past een goedgekeurd plan aan: opnieuw ter controle.
+      if (p.review_status === 'goedgekeurd' && !Roles.can(user, 'plannen.goedkeuren')) {
+        q("UPDATE plans SET review_status = 'ter_controle', review_requested_at = ?, reviewed_by = NULL, reviewed_at = NULL WHERE id = ?").run(ts, p.id);
+      }
+      const reviewStatus = p.review_status === 'goedgekeurd' && !Roles.can(user, 'plannen.goedkeuren') ? 'ter_controle' : p.review_status;
       record({ tenantId: user.tenant_id, userId: user.id, planId: p.id, action: 'bijgewerkt', data, ip, merge: true });
-      return planRow({ id: p.id, ...meta, created_at: p.created_at, updated_at: ts }, false);
+      return { ...planRow({ id: p.id, ...meta, created_at: p.created_at, updated_at: ts }, false), reviewStatus };
     });
   }
 
@@ -1010,6 +1118,7 @@ function createStore(db) {
     ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
     createSession, findSessionWithUser, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
+    planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing,
   };
 }
 

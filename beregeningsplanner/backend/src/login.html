@@ -18,6 +18,10 @@
     button { width: 100%; margin-top: 14px; padding: 10px; font: inherit; font-weight: 600; color: #fff; background: var(--at-green, #19924f); border: 0; border-radius: 999px; cursor: pointer; }
     button:disabled { opacity: .6; }
     .err { color: #c62828; font-size: 14px; min-height: 20px; margin-top: 10px; }
+    .draw { margin-top: 14px; padding-top: 16px; border-top: 1px solid #dde3e8; text-align: center; }
+    .draw[hidden] { display: none; }
+    .draw p { margin: 0 0 10px; }
+    .draw a { display: block; padding: 10px; font-weight: 600; color: var(--at-navy, #172f5e); border: 2px solid var(--at-navy, #172f5e); border-radius: 999px; text-decoration: none; }
   </style>
 </head>
 <body>
@@ -32,6 +36,10 @@
     <input id="code" name="code" type="password" autocomplete="current-password" required>
     <button id="b" type="submit">Inloggen</button>
     <div class="err" id="e" role="alert"></div>
+    <div class="draw" id="draw" hidden>
+      <p>Geen account? Teken zelf je tuin en laat de tekening controleren door een installateur.</p>
+      <a id="draw-link" href="beregening/?tekenen">Direct een tekening maken</a>
+    </div>
   </form>
   <script>
     // De organisatiecode komt uit de link (?org=...) of van de vorige keer.
@@ -39,6 +47,21 @@
     const fromUrl = new URLSearchParams(location.search).get('org');
     try { org.value = fromUrl ?? localStorage.getItem('aquatech_org') ?? ''; } catch (_) { org.value = fromUrl || ''; }
     if (org.value) document.getElementById('user').focus();
+    // Relatief tot de root van de app (de pagina kan op elk pad staan).
+    const root = (() => { const b = location.pathname.replace(/[^/]*$/, '').split('/').filter(Boolean).map(() => '..').join('/'); return b ? b + '/' : ''; })();
+    // Knop "Direct een tekening maken" alleen als de organisatie dat toestaat.
+    let drawTimer = null;
+    async function checkDraw() {
+      const code = org.value.trim();
+      try {
+        const res = await fetch(root + 'api/public/drawing?org=' + encodeURIComponent(code), { cache: 'no-store' });
+        const info = res.ok ? await res.json() : {};
+        document.getElementById('draw-link').href = root + 'beregening/?tekenen' + (code ? '&org=' + encodeURIComponent(code) : '');
+        document.getElementById('draw').hidden = !info.enabled;
+      } catch (_) { document.getElementById('draw').hidden = true; }
+    }
+    org.addEventListener('input', () => { clearTimeout(drawTimer); drawTimer = setTimeout(checkDraw, 400); });
+    checkDraw();
     document.getElementById('f').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const b = document.getElementById('b'), e = document.getElementById('e');

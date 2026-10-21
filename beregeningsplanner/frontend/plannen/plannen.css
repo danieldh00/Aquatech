@@ -21,3 +21,8 @@ table.grid tr.deleted td:first-child b { text-decoration: line-through; }
 .timeline li::before { content: ""; position: absolute; left: -6px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); }
 .timeline .when { color: var(--muted); font-size: 13px; }
 .actions a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* Controlestatus (plan van een klant pas definitief na goedkeuring) */
+.pill.rv-concept { background: var(--at-green-soft); color: var(--at-navy); }
+.pill.rv-ter_controle { background: var(--at-teal); color: #fff; }
+.pill.rv-goedgekeurd { background: var(--at-green); color: #fff; }

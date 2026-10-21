@@ -20,6 +20,9 @@ const FIELDS = {
   accessCode: { type: 'secret', env: 'ACCESS_CODE', default: '', min: 4 },
   // Zonder toegangscode mogen bezoekers zonder inloggen als gast werken.
   guestAccess: { type: 'bool', env: 'GUEST_ACCESS', default: false },
+  // Bezoekers zonder account mogen een tekening maken en ter controle
+  // indienen (knop op de inlogpagina, zie drawings.js).
+  drawingRequests: { type: 'bool', default: true },
   anthropicApiKey: { type: 'secret', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
   aiEnabled: { type: 'bool', default: true },
   aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },

@@ -22,6 +22,7 @@ const { createShopStore, registerShopRoutes } = require('./shop');
 const { createPortalStore, registerPortalRoutes } = require('./portal');
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./outsourcing');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./news');
+const { registerDrawingRoutes } = require('./drawings');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -88,6 +89,21 @@ function isPublicAsset(req) {
   try { p = decodeURIComponent(req.path); } catch { return false; }
   if (p !== path.posix.normalize(p) || p.includes('\\')) return false;
   return PUBLIC_FILES.has(p) || /^\/shared\/fonts\/montserrat-latin-\d{3}-normal\.woff2$/.test(p);
+}
+
+// De planner zonder inloggen (tekening indienen, zie drawings.js): de pagina
+// alleen met ?tekenen (anders gewoon de inlogpagina), en de code ervan. Er
+// zit geen data in: zonder account blijft het plan in de browser tot het
+// wordt ingediend.
+const PLANNER_FILES = new Set(['/shared/common.js', '/shared/env.js', '/shared/sidebar.js', '/shared/sidebar.css', '/shared/schild-white.png', '/dashboard/modules.js']);
+function isPublicPlanner(req) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  let p;
+  try { p = decodeURIComponent(req.path); } catch { return false; }
+  if (p !== path.posix.normalize(p) || p.includes('\\')) return false;
+  if (p === '/beregening/' || p === '/beregening/index.html') return Object.prototype.hasOwnProperty.call(req.query, 'tekenen');
+  if (p === '/beregening') return Object.prototype.hasOwnProperty.call(req.query, 'tekenen');
+  return PLANNER_FILES.has(p) || (p.startsWith('/beregening/') && !p.endsWith('.html') && /\.[a-z0-9]+(\.gz)?$/i.test(p));
 }
 
 // Een module is een map direct onder frontend/ met een eigen index.html.
@@ -234,6 +250,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/plans', express.json({ limit: '12mb' }));
   // Een offerte met veel regels en lange teksten past niet in 16 kB.
   app.use('/api/quotes', express.json({ limit: '1mb' }));
+  // Tekening indienen zonder inloggen (drawings.js): plan met achtergrond.
+  app.use('/api/public/drawing', express.json({ limit: '8mb' }));
   // Akkoord via de openbare link: met handtekening (PNG).
   app.use('/api/public', express.json({ limit: '512kb' }));
   // Foto's bij een werkorder (base64, verkleind in de browser): vóór de 1 MB hieronder.
@@ -679,7 +697,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const user = identify(req);
     if (!user) return res.json({ items: [] });
     const all = req.query.all === '1' && Roles.can(user, 'plannen.alle');
-    res.json({ items: store.listPlans(req.tenantId, { ownerId: all ? null : user.id }) });
+    res.json({ items: store.listPlans(req.tenantId, { ownerId: all ? null : user.id, reviewStatus: req.query.review || null }) });
   });
 
   app.get('/api/plans/:id', (req, res) => {
@@ -731,6 +749,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       ownerId: req.query.owner ? String(req.query.owner) : null,
       includeDeleted: req.query.deleted === '1',
       withHistory: true,
+      reviewStatus: req.query.review || null,
     }) });
   });
 
@@ -1102,9 +1121,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   };
   const publicLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: remoteIp });
 
+  // ---------- Tekening indienen zonder inloggen, plan ter controle, goedkeuren.
+  registerDrawingRoutes(app, {
+    store, identify, requireUser, requireRight, requireJson, audit, remoteIp, tenantActive, publicLimiter, planLimiter, mailerFor,
+    settingsFor: (id) => settingsFor(id), canApprove: (user) => Roles.can(user, 'plannen.goedkeuren'),
+  });
+
   // ---------- Offertes (module Offertes, zie quotes.js) ----------
   registerQuoteRoutes(app, {
     quotes: quoteStore, identify, requireUser, requireAdmin, requireRight, requireJson, audit,
+    // Een offerte uit een plan alleen als dat plan is goedgekeurd.
+    planReviewOf: (tenantId, planId) => store.planReviewStatus(tenantId, planId),
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     settingsForTenant: (id) => settingsFor(id), remoteIp, mailerFor, tenantActive, publicLimiter,
     themeOf: (id) => Theme.vars(themeFor(id)),
@@ -1407,7 +1434,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use((req, res, next) => {
     const asset = (req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api/') && STATIC_ASSET.test(req.path);
     const authenticated = asset ? auth.isAuthenticatedForAsset(req) : auth.isAuthenticated(req);
-    if (authenticated || (guestsAllowed() && !needsSetup()) || isPublicAsset(req)) return next();
+    if (authenticated || (guestsAllowed() && !needsSetup()) || isPublicAsset(req) || isPublicPlanner(req)) return next();
     if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(401).end();
     res.status(401);
     res.setHeader('Cache-Control', 'no-store');

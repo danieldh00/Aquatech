@@ -134,6 +134,8 @@ const CUSTOMERS = {
   mulder: { name: 'Fam. Mulder', contact: 'Jeroen Mulder', address: 'Zuiderzeestraatweg 220\n8096 BK Oldebroek', email: 'mulder@voorbeeld.test', phone: '0525 000 104' },
   vanberg: { name: 'Fam. van den Berg', contact: 'Sanne van den Berg', address: 'Hulshorsterweg 3\n8077 RA Hulshorst', email: 'vandenberg@voorbeeld.test', phone: '0341 000 105' },
   bos: { name: 'Vakantiepark De Veluwse Bossen', contact: 'Receptie', address: 'Bosweg 1\n8075 AA Elspeet', email: 'info@veluwsebossen.test', phone: '0577 000 106' },
+  // Diende zonder account een tekening in (knop op de inlogpagina).
+  jansen: { name: 'Mark Jansen', contact: 'Mark Jansen', address: 'Vierhouterweg 31\n8076 PL Vierhouten', email: 'jansen@voorbeeld.test', phone: '06 0000 7777' },
 };
 
 const oneLine = (c) => `${c.address.replace(/\n/g, ', ')}`;
@@ -161,15 +163,23 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
     return d.toISOString();
   };
   const c = CUSTOMERS;
+  // review = controlestatus (concept | ter_controle | goedgekeurd); plannen
+  // waar een offerte van is, zijn goedgekeurd. guest = ingediend zonder account.
+  const approved = (by) => ({ status: 'goedgekeurd', by });
   const plans = [
-    { key: 'devries', owner: 'inst1', at: day(34), data: garden({ name: 'Achtertuin De Vries', customer: c.klant1.name, address: oneLine(c.klant1), w: 14, h: 16, hedge: true, planter: true }) },
-    { key: 'bakker', owner: 'inst1', at: day(21), data: garden({ name: 'Tuin Bakker', customer: c.klant2.name, address: oneLine(c.klant2), w: 12, h: 13, outlet: true }) },
-    { key: 'visser', owner: 'inst2', at: day(17), data: garden({ name: 'Voortuin en achtertuin Visser', customer: c.klant3.name, address: oneLine(c.klant3), w: 10, h: 11, border: true, level: 'eco' }) },
-    { key: 'mulder', owner: 'inst2', at: day(9), data: garden({ name: 'Tuin Mulder', customer: c.mulder.name, address: oneLine(c.mulder), w: 18, h: 20, hedge: true, level: 'premium' }) },
-    { key: 'vanberg', owner: 'beheerder', at: day(5), data: garden({ name: 'Tuin Van den Berg', customer: c.vanberg.name, address: oneLine(c.vanberg), w: 9, h: 10, border: false, planter: true }) },
-    { key: 'bos', owner: 'inst1', at: day(2), data: garden({ name: 'Speelweide De Veluwse Bossen', customer: c.bos.name, address: oneLine(c.bos), w: 40, h: 34, border: false, hedge: true, turbine: true, outlet: true }) },
-    // Zelf getekend door een klant (nog zonder zones en offerte).
-    { key: 'zelf', owner: 'klant1', at: day(1), data: (() => {
+    { key: 'devries', owner: 'inst1', at: day(34), review: approved('inst1'), data: garden({ name: 'Achtertuin De Vries', customer: c.klant1.name, address: oneLine(c.klant1), w: 14, h: 16, hedge: true, planter: true }) },
+    { key: 'bakker', owner: 'inst1', at: day(21), review: approved('inst1'), data: garden({ name: 'Tuin Bakker', customer: c.klant2.name, address: oneLine(c.klant2), w: 12, h: 13, outlet: true }) },
+    { key: 'visser', owner: 'inst2', at: day(17), review: approved('inst2'), data: garden({ name: 'Voortuin en achtertuin Visser', customer: c.klant3.name, address: oneLine(c.klant3), w: 10, h: 11, border: true, level: 'eco' }) },
+    { key: 'mulder', owner: 'inst2', at: day(9), review: approved('inst1'), data: garden({ name: 'Tuin Mulder', customer: c.mulder.name, address: oneLine(c.mulder), w: 18, h: 20, hedge: true, level: 'premium' }) },
+    { key: 'vanberg', owner: 'beheerder', at: day(5), review: approved('beheerder'), data: garden({ name: 'Tuin Van den Berg', customer: c.vanberg.name, address: oneLine(c.vanberg), w: 9, h: 10, border: false, planter: true }) },
+    { key: 'bos', owner: 'inst1', at: day(2), review: approved('inst1'), data: garden({ name: 'Speelweide De Veluwse Bossen', customer: c.bos.name, address: oneLine(c.bos), w: 40, h: 34, border: false, hedge: true, turbine: true, outlet: true }) },
+    // Nog niet goedgekeurd plan van een installateur.
+    { key: 'smit', owner: 'inst2', at: day(3), review: { status: 'concept' }, data: garden({ name: 'Voortuin Smit (schets)', customer: 'Fam. Smit', address: 'Laan 5, 8071 CD Nunspeet', w: 7, h: 8, border: true }) },
+    // Zonder account ingediend via de inlogpagina: ter controle.
+    { key: 'aanvraag', guest: c.jansen, at: day(0), review: { status: 'ter_controle', via: 'openbaar', question: 'Kan dit gecontroleerd worden? Ik weet niet of de druk van mijn kraan genoeg is voor het hele gazon.' },
+      data: garden({ name: `Tekening van ${c.jansen.name}`, customer: c.jansen.name, address: oneLine(c.jansen), w: 11, h: 12, border: true }) },
+    // Zelf getekend door een klant (nog zonder zones en offerte), ter controle aangeboden.
+    { key: 'zelf', owner: 'klant1', at: day(1), review: { status: 'ter_controle', via: 'account', question: 'Kunnen jullie kijken of dit zo klopt? Dan graag een offerte.' }, data: (() => {
       const g = garden({ name: 'Mijn voortuin', customer: c.klant1.name, address: oneLine(c.klant1), w: 8, h: 9, border: true });
       return { ...g, zones: [], sprinklers: g.sprinklers.map(({ zone, ...s }) => s), areas: g.areas.map(({ zone, ...a }) => a) };
     })() },

@@ -313,6 +313,18 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `handoverOf` → `workorders.createReceived` (werkorder zonder offerte). De
   uitbesteder ziet alleen `execution` (status, planning, stappen). Werkorder-API
   geeft `outsourcing` mee (`ctx.outsourcingOf`).
+- **Tekening indienen + controle** (0.52.0, `backend/src/drawings.js`):
+  knop *Direct een tekening maken* op login.html → `beregening/?tekenen&org=`
+  (`isPublicPlanner` in server.js: pagina alleen met `?tekenen`, code van
+  beregening/ + enkele shared-bestanden openbaar; `ANON` in app.js: geen
+  serveropslag, eigen localStorage-sleutel). Indienen: `POST
+  /api/public/drawing` (instelling `drawingRequests`, limiet per IP en per
+  tenant, honeypot `website`, `store.submitDrawing` maakt een gast met
+  contactgegevens als eigenaar). Plannen: `review_status` concept |
+  ter_controle | goedgekeurd (migratie 20), `POST /api/plans/:id/review-request`
+  (klant) en `/review` {approve|reopen} (recht `plannen.goedkeuren`). Klant
+  wijzigt goedgekeurd plan → ter_controle. Offerte met `planId` alleen uit een
+  goedgekeurd plan (409 `plan_not_approved`, `ctx.planReviewOf`).
 - **E-mail** (0.50.0): formulier in Beheer → Instellingen (`#s-mail`), API
   `/api/admin/mail[/test]` (alias van `/api/quote-mail`, in quotes.js).
   `mailServer.mode` `smtp` | `connector` (Exchange Online op IP: geen auth,

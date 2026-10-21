@@ -13,6 +13,18 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.52.0',
+      date: '2026-10-21',
+      title: 'Tekening indienen en plannen goedkeuren',
+      items: [
+        { text: 'Klanten kunnen zonder account **direct een tekening maken** (knop op de inlogpagina) en die ter controle indienen met hun contactgegevens en een vraag.' },
+        { text: 'Plannen hebben een **status**: concept, ter controle of goedgekeurd. Een plan van een klant is pas definitief als een installateur het heeft goedgekeurd; een offerte maak je alleen van een goedgekeurd plan.', for: ['plannen.alle', 'offertes'] },
+        { text: 'Klaar met tekenen? Met **Ter controle aanbieden** laat je je plan nakijken door een installateur.', for: ['portaal'] },
+        { text: 'In het **Plannenoverzicht** zie je met het filter *Ter controle* welke tekeningen op je wachten, met de vraag en de contactgegevens.', for: ['plannen.goedkeuren'] },
+        { text: 'Tekening indienen zonder account zet je aan of uit in **Beheer → Instellingen → Toegang**.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '0.51.0',
       date: '2026-10-21',
       title: 'Nieuws en wat is nieuw',
