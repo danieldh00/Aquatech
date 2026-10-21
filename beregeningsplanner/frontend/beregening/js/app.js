@@ -1420,7 +1420,7 @@
           ${rows.map((r) => `<tr title="${esc(r.code)}${r.sku ? ' / ' + esc(r.sku) : ''}${r.notes ? ' – ' + esc(r.notes) : ''}"><td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>` : esc(r.name)}</td><td class="num">${r.qty} ${esc(r.unit)}</td><td class="num">${eur(r.total)}</td></tr>`).join('')}
           <tr class="total"><td>Totaal excl. btw${rows.every((r) => r.url) ? '' : ' (indicatief)'}</td><td></td><td class="num">${eur(total)}</td></tr>
         </table>` : '<p class="hint">Nog geen onderdelen – plaats sproeiers en deel zones in.</p>'}
-        ${missing.length ? `<h3>Niet in je assortiment (${missing.length})</h3>
+        ${missing.length && (this._can('offertes') || this._can('voorraad')) ? `<h3>Niet in je assortiment (${missing.length})</h3>
           <p class="hint small">Deze onderdelen zijn nodig, maar staan niet als artikel in Voorraadbeheer of de webshop. Ze tellen niet mee in de stuklijst en de offerte.${this._can('voorraad') ? ' <a href="../voorraad/">Artikel toevoegen</a>' : ''}</p>
           <table class="list bom missing">${missing.map((r) => `<tr title="${esc(r.code)}"><td>${esc(r.name)} <span class="small">(${esc(r.code)})</span></td><td class="num">${r.qty} ${esc(r.unit)}</td></tr>`).join('')}</table>` : ''}
         ${this._shopStatus(rows)}
@@ -1429,8 +1429,8 @@
     _shopStatus(rows) {
       const info = window.ShopCatalog && window.ShopCatalog.info;
       const admin = this._can('beheer') ? ' <a href="../beheer/#webshop">Webshop koppelen</a>' : '';
-      const own = window.ShopCatalog && window.ShopCatalog.assortment;
-      const ownTxt = own ? `<p class="hint small">De planner gebruikt alleen de ${own.length} artikelen uit je eigen assortiment (Voorraadbeheer en webshop).${window.ShopCatalog.unknownCodes ? ` ${window.ShopCatalog.unknownCodes} artikelen hebben een code die de planner niet kent en worden niet gebruikt.` : ''}</p>` : '';
+      const own = window.ShopCatalog && window.ShopCatalog.assortment && (this._can('offertes') || this._can('voorraad'));
+      const ownTxt = own ? `<p class="hint small">De planner gebruikt alleen de ${window.ShopCatalog.assortment.length} artikelen uit je eigen assortiment (Voorraadbeheer en webshop).${window.ShopCatalog.unknownCodes ? ` ${window.ShopCatalog.unknownCodes} artikelen hebben een code die de planner niet kent en worden niet gebruikt.` : ''}</p>` : '';
       if (!info) return ownTxt || (this._serverAvailable() ? `<p class="hint small">Prijzen zijn indicatief.${admin}</p>` : '');
       const linked = rows.filter((r) => r.url).length;
       return `${ownTxt}<p class="hint small">Prijzen uit de webshop (${esc(info.shop.replace(/^https?:\/\//, ''))}), bijgewerkt ${new Date(info.syncedAt).toLocaleDateString('nl-NL')}: ${linked} van ${rows.length} regels gekoppeld.${admin.replace('Webshop koppelen', 'Koppeling beheren')}</p>`;
