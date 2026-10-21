@@ -382,6 +382,53 @@ const PG_MIGRATIONS = [
   CREATE INDEX plan_recognitions_plan ON plan_recognitions (tenant_id, plan_id);
   CREATE INDEX plan_recognitions_created ON plan_recognitions (tenant_id, created_at);
   `,
+  // 23: werkregistratie: uren en materiaalverbruik (zie db.js).
+  `
+  CREATE TABLE work_order_hours (
+    id             ${T} PRIMARY KEY,
+    tenant_id      ${T} NOT NULL ${FK('tenants(id)')},
+    work_order_id  ${T} NOT NULL ${FK('work_orders(id)')},
+    user_id        ${T},
+    user_name      ${T} NOT NULL DEFAULT '',
+    work_date      ${T} NOT NULL,
+    start_time     ${T} NOT NULL DEFAULT '',
+    end_time       ${T} NOT NULL DEFAULT '',
+    break_minutes  BIGINT NOT NULL DEFAULT 0,
+    minutes        BIGINT NOT NULL,
+    kind           ${T} NOT NULL DEFAULT 'werk',
+    step_id        ${T} NOT NULL DEFAULT '',
+    note           ${T} NOT NULL DEFAULT '',
+    client_id      ${T},
+    created_by     ${T},
+    created_at     ${T} NOT NULL,
+    updated_at     ${T} NOT NULL
+  );
+  CREATE INDEX work_order_hours_wo ON work_order_hours (tenant_id, work_order_id, work_date);
+  CREATE INDEX work_order_hours_date ON work_order_hours (tenant_id, work_date);
+  CREATE UNIQUE INDEX work_order_hours_client ON work_order_hours (tenant_id, client_id);
+  CREATE TABLE work_order_materials (
+    id                 ${T} PRIMARY KEY,
+    tenant_id          ${T} NOT NULL ${FK('tenants(id)')},
+    work_order_id      ${T} NOT NULL ${FK('work_orders(id)')},
+    user_id            ${T},
+    user_name          ${T} NOT NULL DEFAULT '',
+    used_on            ${T} NOT NULL,
+    code               ${T} NOT NULL DEFAULT '',
+    description        ${T} NOT NULL DEFAULT '',
+    unit               ${T} NOT NULL DEFAULT '',
+    qty                DOUBLE PRECISION NOT NULL,
+    material_id        ${T} NOT NULL DEFAULT '',
+    note               ${T} NOT NULL DEFAULT '',
+    client_id          ${T},
+    stock_movement_id  ${T},
+    created_by         ${T},
+    created_at         ${T} NOT NULL,
+    updated_at         ${T} NOT NULL
+  );
+  CREATE INDEX work_order_materials_wo ON work_order_materials (tenant_id, work_order_id, used_on);
+  CREATE INDEX work_order_materials_date ON work_order_materials (tenant_id, used_on);
+  CREATE UNIQUE INDEX work_order_materials_client ON work_order_materials (tenant_id, client_id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
