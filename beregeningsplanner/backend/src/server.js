@@ -20,6 +20,7 @@ const { createImpersonationStore, createImpersonation } = require('./impersonati
 const { createShopStore, registerShopRoutes } = require('./shop');
 const { createPortalStore, registerPortalRoutes } = require('./portal');
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./outsourcing');
+const { createNewsStore, registerNewsRoutes, unreadCount } = require('./news');
 const crypto = require('crypto');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -237,6 +238,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Foto's bij een werkorder (base64, verkleind in de browser): vóór de 1 MB hieronder.
   app.use(/^\/api\/workorders\/[^/]+\/photos$/, express.json({ limit: '8mb' }));
   app.use('/api/workorders', express.json({ limit: '1mb' }));
+  app.use('/api/news', express.json({ limit: '64kb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -514,6 +516,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     werkorders: 'Alleen voor medewerkers met toegang tot werkorders.',
     planning: 'Alleen voor medewerkers met toegang tot de planning.',
     uitbesteden: 'Je rol heeft geen toegang tot uitbesteden.',
+    nieuws: 'Je rol mag geen nieuwsberichten plaatsen.',
     portaal: 'Het klantportaal is er voor klanten.',
   };
   const requireRight = (right) => (req, res, next) => {
@@ -621,6 +624,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // Tijdens een impersonatie wordt er niet gewisseld (eerst terug naar het eigen account).
       environments: user && !imp ? accessibleFor(user).length : 0,
       impersonation: imp ? { by: user.impersonator.display_name, expiresAt: imp.expiresAt, live: imp.live, environment: imp.tenantName } : null,
+      // Aantal nieuwe berichten en versies sinds het vorige bezoek aan Nieuws
+      // (alleen met een eigen account; uit het geheugen, zie news.js).
+      news: user?.kind === 'account' && !imp
+        ? unreadCount({ marks: newsStore.marks(req.tenantId), prefs: preferencesOf(user), user, rights: Roles.rightsOf(user), customer: isCustomer(req, user) })
+        : 0,
 
       // Staan gasten aan, dan werkt iedereen zonder inloggen als (nieuwe) gast.
       guest: !user && guestsAllowed(),
@@ -1070,6 +1078,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const photoStore = createPhotoStore(database, { vault });
   const dossierStore = createDossierStore(database, { photos: photoStore });
   const outsourcingStore = createOutsourcingStore(database, { workorders: workOrderStore });
+  const newsStore = createNewsStore(database);
+  // Klant (of gast): ziet alleen berichten voor iedereen.
+  const isCustomer = (req, user) => !user || user.kind === 'gast' || (!user.platform_admin && store.roles.get(req.tenantId || user.tenant_id, user.role)?.kind === 'klant');
 
   // Openbare links (offerte, afspraak): zonder inlog, dus de tenant volgt uit
   // de offerte of werkorder, en een uitgeschakelde tenant geeft niets prijs.
@@ -1115,6 +1126,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerOutsourcingRoutes(app, {
     outsourcing: outsourcingStore, store, requireRight, requireJson, audit, mailerFor, tenantActive,
     settingsForTenant: (id) => settingsFor(id),
+  });
+
+  // ---------- Nieuws: berichten van de organisatie en wat is nieuw (zie news.js) ----------
+  registerNewsRoutes(app, {
+    news: newsStore, store, requireUser, requireRight, requireJson, audit, isCustomer, mailerFor,
+    settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
+    staffTenantsOf: (req) => { const tid = req.tenantId || tenant.id; return [homeOf(tid), tid]; },
   });
 
   // ---------- Foto's bij werkorders en klantdossiers (zie photos.js) ----------
@@ -1292,7 +1310,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, outsourcing: outsourcingStore, settings: settingsFor(t.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, outsourcing: outsourcingStore, news: newsStore, settings: settingsFor(t.id) },
       set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );

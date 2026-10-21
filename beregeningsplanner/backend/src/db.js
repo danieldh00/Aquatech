@@ -431,6 +431,24 @@ const MIGRATIONS = [
   ALTER TABLE users_new RENAME TO users;
   `,
   },
+  // 19: nieuwsberichten van de organisatie (pagina Nieuws, zie news.js).
+  // Geen foreign key naar de auteur: bij het verwijderen van de gebruiker
+  // wordt author_id leeg, de naam blijft bij het bericht staan.
+  `
+  CREATE TABLE news (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    title       TEXT NOT NULL,
+    body        TEXT NOT NULL,
+    audience    TEXT NOT NULL DEFAULT 'medewerkers' CHECK (audience IN ('medewerkers', 'iedereen')),
+    pinned      INTEGER NOT NULL DEFAULT 0,
+    author_id   TEXT,
+    author_name TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+  );
+  CREATE INDEX news_tenant ON news (tenant_id, created_at);
+  `,
 ];
 
 function openDb(file = ':memory:') {

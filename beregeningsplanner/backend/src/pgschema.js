@@ -312,6 +312,22 @@ const PG_MIGRATIONS = [
   );
   ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
   `,
+  // 19: nieuwsberichten van de organisatie (zie db.js).
+  `
+  CREATE TABLE news (
+    id          ${T} PRIMARY KEY,
+    tenant_id   ${T} NOT NULL ${FK('tenants(id)')},
+    title       ${T} NOT NULL,
+    body        ${T} NOT NULL,
+    audience    ${T} NOT NULL DEFAULT 'medewerkers' CHECK (audience IN ('medewerkers', 'iedereen')),
+    pinned      BIGINT NOT NULL DEFAULT 0,
+    author_id   ${T},
+    author_name ${T} NOT NULL DEFAULT '',
+    created_at  ${T} NOT NULL,
+    updated_at  ${T} NOT NULL
+  );
+  CREATE INDEX news_tenant ON news (tenant_id, created_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

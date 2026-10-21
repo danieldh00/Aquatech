@@ -38,13 +38,18 @@
       // Gebruikersmenu: Mijn profiel (alleen met een eigen account, niet met
       // de toegangscode) en uitloggen.
       const profile = u.kind === 'account' ? `<a role="menuitem" href="${esc(base)}profiel/">Mijn profiel</a>` : '';
+      // Nieuws met het aantal nieuwe items (ook als stip op het rondje).
+      const tools = root.AquatechModuleTools;
+      const count = tools && tools.newsBadge ? tools.newsBadge(me.news || 0) : '';
+      const news = `<a role="menuitem" href="${esc(base)}nieuws/">Nieuws ${count}</a>`;
+      const dot = me.news > 0 ? '<span class="news-dot" data-news-count aria-hidden="true"></span>' : '';
       el.innerHTML = `<div class="user-menu">
           <button type="button" class="user-btn" aria-haspopup="true" aria-expanded="false" title="${esc(u.displayName)} · ${esc(role)}">
-            <span class="avatar" aria-hidden="true">${esc(initials(u.displayName))}</span><span class="user-name">${esc(u.displayName)}</span>
+            <span class="avatar" aria-hidden="true">${esc(initials(u.displayName))}${dot}</span><span class="user-name">${esc(u.displayName)}</span>
           </button>
           <div class="user-pop" role="menu" hidden>
             <div class="user-head"><strong>${esc(u.displayName)}</strong><span>${esc(role)}${u.email ? ` · ${esc(u.email)}` : ''}</span></div>
-            ${profile}<button type="button" role="menuitem" data-logout>Uitloggen</button>
+            ${news}${profile}<button type="button" role="menuitem" data-logout>Uitloggen</button>
           </div>
         </div>`;
       wireMenu(el.querySelector('.user-menu'));

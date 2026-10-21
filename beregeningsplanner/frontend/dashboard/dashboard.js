@@ -24,7 +24,7 @@
       const body = `
         <span class="tile-icon">${icon(m.icon)}</span>
         <span class="tile-text">
-          <span class="tile-title">${esc(m.title)}${active ? '' : ' <span class="badge">Binnenkort</span>'}</span>
+          <span class="tile-title">${esc(m.title)}${active ? '' : ' <span class="badge">Binnenkort</span>'}${m.id === 'nieuws' && me ? window.AquatechModuleTools.newsBadge(me.news || 0) : ''}</span>
           <span class="tile-desc">${esc(m.description || '')}</span>
         </span>`;
       return active
@@ -77,6 +77,17 @@
     $('#myplans').hidden = false;
   }
 
+  // Melding bovenaan als er sinds het vorige bezoek nieuws is (api/me `news`).
+  function renderNews(me) {
+    const n = (me && me.news) || 0;
+    const el = $('#news-banner');
+    if (!n) { el.hidden = true; return; }
+    el.innerHTML = `<span class="news-banner-ico">${icon('news')}</span>
+      <span class="news-banner-text"><strong>Er is nieuws sinds je vorige bezoek.</strong> ${n === 1 ? 'Eén nieuw bericht of nieuwe functie' : `${n > 9 ? 'Meer dan 9' : n} nieuwe berichten en functies`} op de pagina Nieuws.</span>
+      <a class="btn primary" href="nieuws/">Bekijken</a>`;
+    el.hidden = false;
+  }
+
   // Begroeting boven het dagoverzicht (installateurs, beheerders).
   function greet(me) {
     const h = Number(new Date().toLocaleString('nl-NL', { hour: 'numeric', hour12: false, timeZone: 'Europe/Amsterdam' }));
@@ -104,6 +115,7 @@
 
   Promise.all([window.AquatechAccount.load(''), loadConfig()]).then(([me]) => {
     renderModules(me);
+    renderNews(me);
     if (window.AquatechToday && window.AquatechToday.start(me)) greet(me);
     renderMyPlans(me);
     window.AquatechSupport.load(me);

@@ -243,7 +243,16 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
   // aquatech_code of een handmatige koppeling, een paar staan niet in de shop.
   const shop = testShop();
 
-  return { accounts, plans, quotes, shop, day };
+  // Nieuws: berichten van de beheerder (at = dagen geleden), één ook voor klanten.
+  const news = [
+    { at: 12, title: 'Welkom op de nieuwspagina', audience: 'iedereen', pinned: true,
+      body: 'Hier vind je voortaan berichten van ons en een overzicht van wat er nieuw is in de app.\n\nVragen? Bel of mail gerust.' },
+    { at: 6, title: 'Nieuwe druppelslang op voorraad', audience: 'medewerkers', pinned: false,
+      body: 'De nieuwe druppelslang (16 mm, 33 cm) ligt in het magazijn. Gebruik die voortaan bij beplanting.\nDe oude rollen gaan eerst op.' },
+    { at: 1, title: 'Teamoverleg vrijdag 8:00', audience: 'medewerkers', pinned: false,
+      body: 'Vrijdag om 8:00 kort overleg in de werkplaats over de planning van het voorjaar. Koffie staat klaar.' },
+  ];
+  return { accounts, plans, quotes, shop, news, day };
 }
 
 // Opties die de klant zelf kan aanvinken.
@@ -371,9 +380,9 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
  * er geen klantlinks (de afspraaklink staat ernaast: openbaar/afspraak.html).
  */
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, outsourcing } = stores;
+  const { db, quotes, workorders, shop, settings, photos, outsourcing, news } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0, offers: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0, offers: 0, news: 0 };
   const apptBase = shareBase ? shareBase.replace(/offerte\.html$/, 'afspraak.html') : null;
   const today = new Date().toISOString().slice(0, 10);
   const dateIn = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
@@ -461,6 +470,17 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
       }
     }
   });
+  // Nieuwsberichten van de testbeheerder, via de echte opslag.
+  if (news && set.news) {
+    const author = seeded.users.beheerder;
+    for (const n of set.news) {
+      const out = news.create(seeded.tenantId, author, n);
+      if (out.error) throw new Error(`Testdata: nieuwsbericht mislukt (${out.error})`);
+      q('UPDATE news SET created_at = ?, updated_at = ? WHERE id = ?').run(set.day(n.at), set.day(n.at), out.item.id);
+      counts.news++;
+    }
+    news.forget(seeded.tenantId);
+  }
   // Webshop alleen als de testomgeving geen eigen webshop heeft (de nepwinkel
   // van een vorige keer vullen we opnieuw).
   const url = settings.get('shopSource').url;
