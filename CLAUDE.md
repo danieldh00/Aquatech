@@ -361,6 +361,16 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   rotatorkop via `autoRotatorModel`); `BOM.build` zet de rest in
   `rows.missing` (niet in stuklijst/offerte). Leeg = standaardcatalogus.
   Nieuwe artikelcodes in bom.js altijd via `add()` (en zo mogelijk `pick()`).
+- **Visma eAccounting** (0.65.0, `backend/src/visma.js`, migratie 28):
+  OAuth2 per omgeving (refresh token = geheim `vismaRefreshToken`, keuzes in
+  `visma`; beide `internal`: alleen via `/api/visma/*`, recht `facturen`).
+  App-registratie platformbreed in de hoofdtenant (`vismaApp` +
+  `vismaClientSecret`, Hoofdbeheer → Visma, `/api/platform/visma`). Factuur
+  → verkoopfactuur, debiteur → klant (nummer = debiteurnummer), regel →
+  Visma-artikel per omzetcategorie. Automatisch alleen met `visma.autoSync`
+  (standaard uit) via `invoices.onFinalized` + `app.locals.vismaAll`, vanaf
+  `visma.since`. Tests: nagebootste Visma via `createApp({ vismaFetch })`.
+  Veldnamen van de Visma-API nog niet tegen de echte sandbox getest.
 - **Tekening indienen + controle** (0.52.0, `backend/src/drawings.js`):
   knop *Direct een tekening maken* op login.html → `beregening/?tekenen&org=`
   (`isPublicPlanner` in server.js: pagina alleen met `?tekenen`, code van

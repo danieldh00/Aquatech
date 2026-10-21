@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.65.0',
+      date: '2026-10-21',
+      title: 'Facturen gaan rechtstreeks naar Visma eAccounting',
+      items: [
+        { text: 'Verbind je eigen **Visma eAccounting**-administratie in **Facturen → Visma**. Een definitieve factuur gaat dan als verkoopfactuur naar Visma, en een nieuwe debiteur wordt daar een klant met hetzelfde nummer. Per omzetcategorie kies je het Visma-artikel, dat de grootboekrekening en btw bepaalt.', for: ['facturen'] },
+        { text: 'Zelf de controle houden: doorsturen gaat met de knop **Naar Visma** op een factuur of **Nu doorsturen**. Automatisch doorsturen zet je aan als je wilt, vanaf een datum die je kiest, zodat facturen die al in Visma staan er niet dubbel in komen.', for: ['facturen'] },
+      ],
+    },
+    {
       version: '0.64.1',
       date: '2026-10-21',
       title: 'Kopbalk past weer op de telefoon',
