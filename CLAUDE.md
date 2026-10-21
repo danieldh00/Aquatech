@@ -334,6 +334,13 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   sessiequery (`auth.isAuthenticatedForAsset`). Geen `SELECT *` als grote
   kolommen niet nodig zijn; overzichten via `jsonDigest` (db.js); geen query
   per regel. `test/queries.test.js` bewaakt dat.
+- **Nieuws** (0.51.0, `frontend/nieuws/`, voor iedereen): berichten (tabel
+  `news`, migratie 19, `backend/src/news.js`, recht `nieuws` = plaatsen,
+  doelgroep `medewerkers`|`iedereen`, optioneel mail naar collega's) en het
+  versielogboek in gewone taal `frontend/nieuws/releases.js` (punten met
+  `for: [rechten]`). **Bij elke versie-bump een regel bovenaan releases.js**
+  (test eist dat). `api/me` geeft `news` (aantal nieuw, cache 30 s);
+  gezien-stand in voorkeuren `newsSeenAt`/`seenRelease` (`POST /api/news/seen`).
 - Health: `GET /api/health` (versie uit `package.json`).
 
 ## Checklist voor elke nieuwe feature (zonder dat Daniël erom vraagt)

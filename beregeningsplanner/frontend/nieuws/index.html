@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Nieuws – AquaTech Service</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="nieuws.css">
+  <script src="../shared/common.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Nieuws</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash news">
+    <section class="intro news-intro">
+      <div>
+        <h1>Nieuws</h1>
+        <p class="muted">Berichten van je organisatie en wat er nieuw is in de app.</p>
+      </div>
+      <button id="n-new" class="btn primary" type="button" hidden>Nieuw bericht</button>
+    </section>
+
+    <p id="n-blocked" class="panel-note" hidden></p>
+
+    <form id="n-form" class="ncard n-form" novalidate hidden>
+      <h2 id="n-form-title">Nieuw bericht</h2>
+      <label class="field"><span class="label">Titel</span>
+        <input id="f-title" type="text" maxlength="120" required></label>
+      <label class="field"><span class="label">Bericht</span>
+        <textarea id="f-body" rows="7" maxlength="4000" required></textarea>
+        <span class="hint">Een lege regel begint een nieuwe alinea. Links (https://…) worden aanklikbaar.</span></label>
+      <label class="field"><span class="label">Voor wie</span>
+        <select id="f-audience">
+          <option value="medewerkers">Alle medewerkers</option>
+          <option value="iedereen">Iedereen, ook klanten</option>
+        </select></label>
+      <label class="chk"><input type="checkbox" id="f-pinned"> Bovenaan vastzetten</label>
+      <label class="chk" id="f-mail-wrap" hidden><input type="checkbox" id="f-mail"> Ook per e-mail sturen naar de collega's (klanten krijgen geen e-mail)</label>
+      <div class="form-foot">
+        <button class="btn primary" type="submit" id="f-submit">Plaatsen</button>
+        <button class="btn" type="button" id="f-cancel">Annuleren</button>
+        <span class="form-msg" role="status"></span>
+      </div>
+    </form>
+
+    <div id="n-content" class="news-grid" hidden>
+      <section class="news-col" aria-labelledby="h-posts">
+        <h2 id="h-posts">Berichten</h2>
+        <div id="n-posts"></div>
+      </section>
+      <section class="news-col" aria-labelledby="h-releases">
+        <h2 id="h-releases">Wat is nieuw in de app</h2>
+        <div id="n-releases"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="../shared/env.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="nieuws.js"></script>
+</body>
+</html>

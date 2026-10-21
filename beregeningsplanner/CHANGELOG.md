@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.51.0
+
+Nieuws: berichten van de organisatie en wat is nieuw in de app.
+
+- **Pagina Nieuws** (`nieuws/`, voor iedereen; tegel op het dashboard en in
+  de zijbalk, en in het gebruikersmenu): links de berichten van de
+  organisatie, rechts *Wat is nieuw in de app*, een versielogboek in gewone
+  taal (zonder technische details) per versie. Wat na het vorige bezoek kwam
+  heeft het label **Nieuw**.
+- **Melding**: een bolletje met het aantal bij Nieuws (zijbalk, tegel,
+  gebruikersmenu), een stip op het rondje rechtsboven en een balk op het
+  overzicht zolang er iets nieuws is. Na het openen van de pagina is alles
+  gezien (bewaard bij het account, dus op elk toestel). Een nieuw account
+  krijgt geen lange lijst, alleen de laatste versie.
+- **Berichten plaatsen** (nieuw recht *Nieuwsberichten plaatsen*, standaard
+  de beheerder; aan te zetten voor andere rollen in Beheer → Rollen): titel,
+  tekst (alinea's, aanklikbare links), voor *alle medewerkers* of *iedereen,
+  ook klanten*, bovenaan vastzetten, bewerken en verwijderen. Optioneel ook
+  per e-mail naar de collega's (los per ontvanger, via de eigen mailserver);
+  klanten krijgen nooit een e-mail. Plaatsen, wijzigen en verwijderen staan
+  in het auditlog (zonder de tekst).
+- **Versielogboek** in `frontend/nieuws/releases.js`, per punt te beperken
+  tot rechten (een klant ziet alleen wat voor hem geldt). Een test eist dat
+  de versie uit `package.json` erin staat: bij elke versie-bump een regel
+  toevoegen. Gevuld met de versies 0.36.0 tot en met 0.51.0.
+- API `GET /api/news`, `POST /api/news`, `PUT|DELETE /api/news/:id` (recht
+  `nieuws`), `POST /api/news/seen`; `api/me` geeft `news` (aantal nieuwe
+  items, uit een cache van 30 s per omgeving, dus geen extra query per
+  pagina). Voorkeuren `newsSeenAt` en `seenRelease` op het account.
+- Database: tabel `news` (migratie 19, SQLite en PostgreSQL, index op
+  tenant + datum). Testdata: drie berichten van de testbeheerder, één ook
+  voor klanten en vastgezet.
+
 ## 0.50.0
 
 - **E-mailinstellingen in Beheer → Instellingen** (verplaatst uit Offertes →
