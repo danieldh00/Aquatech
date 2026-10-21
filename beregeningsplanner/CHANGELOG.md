@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.64.1
+## 0.64.2
 
 Planner: ingezoomd blijven tekening en vlakken scherp en op hun plek.
 
@@ -17,6 +17,18 @@ Planner: ingezoomd blijven tekening en vlakken scherp en op hun plek.
   ingezoomd fijne lijnen en zette de tekening soms verschoven neer.
 - Randen van vlakken 2 px in plaats van 1,25 px (geselecteerd 3 px), zodat ze
   op een drukke tekening zichtbaar blijven.
+
+## 0.64.1
+
+Kopbalk op de telefoon past weer op elke pagina.
+
+- **Kopbalk smal scherm** (`dashboard/dashboard.css`, ≤ 600px): op een
+  modulepagina met paginatitel (`.brand-name`) vallen het logo en de
+  scheidingslijn weg (logo staat in de zijbalk en op het overzicht); de titel
+  staat links en kort zo nodig in met een beletselteken. Organisatiekiezer en
+  gebruikersmenu krimpen niet meer, zodat de avatar altijd zichtbaar is. Onder
+  360px wordt het logo op het overzicht iets kleiner. Getest op 320, 375, 390
+  en 430px voor alle modulepagina's, met organisatiekiezer.
 
 ## 0.64.0
 

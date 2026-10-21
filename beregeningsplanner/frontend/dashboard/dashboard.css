@@ -67,12 +67,19 @@ h2 .h2-link:hover { text-decoration: underline; }
   .topbar { padding: 8px 12px; gap: 8px; padding-top: max(8px, env(safe-area-inset-top)); }
   .brand { min-width: 0; flex: none; }
   .brand-logo { height: 24px; }
+  /* Modulepagina: alleen de paginatitel (het logo staat in de zijbalk en op
+     het overzicht). De titel mag inkorten, de knoppen rechts nooit. */
+  .topbar > .brand:has(.brand-name) { flex: 0 1 auto; margin-right: auto; }
+  .brand:has(.brand-name) .brand-logo, .brand:has(.brand-name) .brand-sep { display: none; }
+  .brand-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar > .account, .topbar-right { flex: none; }
   .topbar-right { min-width: 0; gap: 8px; }
   .account { min-width: 0; gap: 8px; font-size: 12px; }
   .account > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34vw; }
   .account > span:first-child .role { display: none; }
   .account a, .account button { flex: none; padding: 6px 10px; }
 }
+@media (max-width: 360px) { .brand-logo { height: 20px; } }
 
 /* Omgevingswisselaar (live/test, tenants) in de kopbalk. */
 .account .env-select { font: inherit; color: #fff; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 6px; padding: 3px 6px; max-width: 220px; }
