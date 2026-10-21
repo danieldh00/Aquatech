@@ -152,6 +152,7 @@
     'ROT-MP2000': { name: 'Rotatorsproeikop 4,0–6,4 m', unit: 'st', price: 9.5 },
     'ROT-MP3000': { name: 'Rotatorsproeikop 6,7–9,1 m', unit: 'st', price: 9.5 },
     'ROT-MP3500': { name: 'Rotatorsproeikop 9,4–10,7 m', unit: 'st', price: 10.5 },
+    'ROT-MPCORNER': { name: 'Rotatorsproeikop hoek 45–105°, 2,5–4,5 m', unit: 'st', price: 9.5 },
     'ROT-STRIP': { name: 'Rotatorsproeikop voor stroken (zijstrook)', unit: 'st', price: 9.5 },
     'TURB-10': { name: 'Pop-up turbinesproeier 10 cm, 7–14 m', unit: 'st', price: 17.5 },
     'TURB-10-PRO': { name: 'Pop-up turbinesproeier 10 cm met rvs-stijgbuis, 7–14 m', unit: 'st', price: 27.5 },
@@ -204,13 +205,67 @@
     'TAPE': { name: 'Teflontape', unit: 'rol', price: 1.2 },
   };
 
-  /** Rotator-kop op basis van worpwijdte. */
-  C.rotatorNozzle = (r) => {
-    if (r <= 4.5) return 'ROT-MP1000';
-    if (r <= 6.5) return 'ROT-MP2000';
-    if (r <= 9.2) return 'ROT-MP3000';
-    return 'ROT-MP3500';
+  /**
+   * Meerstraalsrotators (MP-type): per kop het instelbare bereik. De worpwijdte
+   * is met de stelschroef in te korten, de sproeihoek is binnen een sector
+   * (bijv. 90–210°) traploos in te stellen; 360° is een vaste kop.
+   */
+  C.rotatorModels = {
+    MP1000: { code: 'ROT-MP1000', label: 'MP1000', rMin: 2.5, rMax: 4.5, arcs: [[90, 210], [210, 270], [360, 360]] },
+    MP2000: { code: 'ROT-MP2000', label: 'MP2000', rMin: 4.0, rMax: 6.4, arcs: [[90, 210], [210, 270], [360, 360]] },
+    MP3000: { code: 'ROT-MP3000', label: 'MP3000', rMin: 6.7, rMax: 9.1, arcs: [[90, 210], [210, 270], [360, 360]] },
+    MP3500: { code: 'ROT-MP3500', label: 'MP3500', rMin: 9.4, rMax: 10.7, arcs: [[90, 210]] },
+    MPCORNER: { code: 'ROT-MPCORNER', label: 'MP Corner', rMin: 2.5, rMax: 4.5, arcs: [[45, 105]] },
   };
+
+  /** Rotatorkop die automatisch bij worpwijdte en sproeihoek hoort. */
+  C.autoRotatorModel = (r, arc = 360) => {
+    if (arc < 90 && r <= 4.5) return 'MPCORNER';
+    if (r <= 4.5) return 'MP1000';
+    if (r <= 6.55) return 'MP2000';
+    if (r <= 9.25 || arc > 210) return 'MP3000';
+    return 'MP3500';
+  };
+
+  /** Gekozen (of automatische) rotatorkop van een sproeier. */
+  C.rotatorModelOf = (s) => (s.model && C.rotatorModels[s.model] ? s.model : C.autoRotatorModel(s.r, s.arc));
+
+  /** Sector [van, tot] van de kop waarin de sproeihoek valt (of de dichtstbijzijnde). */
+  C.rotatorArcSet = (model, arc) => {
+    const m = C.rotatorModels[model];
+    let best = m.arcs[0], bestD = Infinity;
+    for (const set of m.arcs) {
+      const d = arc < set[0] ? set[0] - arc : arc > set[1] ? arc - set[1] : 0;
+      if (d < bestD) { best = set; bestD = d; }
+    }
+    return best;
+  };
+
+  /**
+   * Zet worpwijdte en sproeihoek van een rotator binnen het bereik van zijn kop
+   * (zonder gekozen kop: de kop die erbij past). Andere sproeiers blijven gelijk.
+   * @returns de sproeier (aangepast)
+   */
+  C.fitRotator = (s) => {
+    if (!s || s.type !== 'rotator') return s;
+    const m = C.rotatorModels[C.rotatorModelOf(s)];
+    s.r = Math.round(Math.max(m.rMin, Math.min(m.rMax, s.r || m.rMax)) * 10) / 10;
+    const set = C.rotatorArcSet(C.rotatorModelOf(s), s.arc);
+    s.arc = Math.round(Math.max(set[0], Math.min(set[1], s.arc)));
+    return s;
+  };
+
+  /** Omschrijving van de instelling, bijv. "MP2000 (90–210°) op 135° en 5,2 m". */
+  C.rotatorSetting = (s) => {
+    const key = C.rotatorModelOf(s);
+    const m = C.rotatorModels[key];
+    const set = C.rotatorArcSet(key, s.arc);
+    const sector = set[0] === set[1] ? `${set[0]}°` : `${set[0]}–${set[1]}°`;
+    return `${m.label} (${sector}) op ${s.arc}° en ${String(s.r).replace('.', ',')} m`;
+  };
+
+  /** Rotator-kop (artikel) op basis van worpwijdte (en sproeihoek). */
+  C.rotatorNozzle = (r, arc = 360) => C.rotatorModels[C.autoRotatorModel(r, arc)].code;
 
   /** Debiet van een sproeier in l/u. */
   C.sprinklerFlowLph = (s) => {

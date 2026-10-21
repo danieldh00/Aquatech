@@ -568,6 +568,7 @@
         s.start = Math.round(best.start);
         if (type !== 'strip') s.arc = Math.round(best.arc);
       }
+      C.fitRotator(s);
       this.state.sprinklers.push(s);
       this.editor.selection = { kind: 'sprinkler', id: s.id };
       this.commit();
@@ -1353,9 +1354,11 @@
       const geom = s.type === 'strip'
         ? `<label>Breedte (m)<input data-f="width" type="number" step="0.1" min="${t.wMin}" max="${t.wMax}" value="${s.width}"></label>
            <label>Lengte (m)<input data-f="len" type="number" step="0.1" min="${t.lMin}" max="${t.lMax}" value="${s.len}"></label>`
+        : s.type === 'rotator' ? this._propsRotator(s)
         : `<label>Worpwijdte (m) <span class="small">${G.nlShort(t.rMin, 1)}–${G.nlShort(t.rMax, 1)}</span><input data-f="r" type="number" step="0.1" min="${t.rMin}" max="${t.rMax}" value="${s.r}"></label>
            <label>Sproeihoek (°)<input data-f="arc" type="number" step="5" min="10" max="360" value="${s.arc}"></label>
-           <div class="row"><button class="btn sm" data-arc="90">90°</button><button class="btn sm" data-arc="180">180°</button><button class="btn sm" data-arc="270">270°</button><button class="btn sm" data-arc="360">360°</button></div>`;
+           <div class="row"><button class="btn sm" data-arc="90">90°</button><button class="btn sm" data-arc="180">180°</button><button class="btn sm" data-arc="270">270°</button><button class="btn sm" data-arc="360">360°</button></div>
+           <p class="hint small">Of sleep in de tekening aan de grepen van het sproeibereik.</p>`;
       return `
         <h3>Sproeier</h3>
         <label>Type<select data-f="type">${typeOpts}</select></label>
@@ -1370,6 +1373,22 @@
           ${p != null ? `<tr><td>Berekende druk</td><td class="${p >= t.minBar ? 'good' : 'bad'}">${fmt(p, 2)} bar</td></tr>` : ''}
         </table>
         <button class="btn danger" data-act="delete">Verwijderen</button>`;
+    },
+    /** Meerstraalsrotator: kop (MP-model) met zijn instelbereik voor worp en sproeihoek. */
+    _propsRotator(s) {
+      const key = C.rotatorModelOf(s);
+      const m = C.rotatorModels[key];
+      const set = C.rotatorArcSet(key, s.arc);
+      const range = (lo, hi) => (lo === hi ? `${lo}°` : `${lo}–${hi}°`);
+      const auto = C.rotatorModels[C.autoRotatorModel(s.r, s.arc)];
+      const modelOpts = `<option value="">Automatisch (${esc(auto.label)})</option>` + Object.entries(C.rotatorModels).map(([k, mm]) =>
+        `<option value="${k}" ${s.model === k ? 'selected' : ''}>${esc(mm.label)} · ${G.nlShort(mm.rMin, 1)}–${G.nlShort(mm.rMax, 1)} m · ${mm.arcs.map((a) => range(a[0], a[1])).join(' / ')}</option>`).join('');
+      const presets = [...new Set(m.arcs.flatMap((a) => [a[0], a[1]]))].map((a) => `<button class="btn sm" data-arc="${a}">${a}°</button>`).join('');
+      return `<label>Kop (MP-model)<select data-f="model">${modelOpts}</select></label>
+           <label>Worpwijdte (m) <span class="small">${G.nlShort(m.rMin, 1)}–${G.nlShort(m.rMax, 1)} (stelschroef)</span><input data-f="r" type="number" step="0.1" min="${m.rMin}" max="${m.rMax}" value="${s.r}"></label>
+           <label>Sproeihoek (°) <span class="small">sector ${range(set[0], set[1])}</span><input data-f="arc" type="number" step="5" min="${m.arcs[0][0]}" max="${m.arcs[m.arcs.length - 1][1]}" value="${s.arc}"></label>
+           <div class="row">${presets}</div>
+           <p class="hint small">Instelling: ${esc(C.rotatorSetting(s))}. Sleep in de tekening aan de grepen om worp en sproeihoek binnen dit bereik in te regelen.</p>`;
     },
     _propsElement(e) {
       const et = C.elementTypes[e.kind];
@@ -1398,14 +1417,17 @@
               if (v === 'strip') { obj.width = obj.width || 1.5; obj.len = obj.len || 4.6; }
               else obj.r = Math.max(nt.rMin, Math.min(nt.rMax, obj.r || nt.rDefault));
               if (v !== 'strip' && !obj.arc) obj.arc = 180;
+              delete obj.model;
               const z = this.state.zones.find((zz) => zz.id === obj.zone);
               if (z && z.group !== nt.group) obj.zone = null;
             } else if (f === 'r') obj.r = Math.max(t0.rMin, Math.min(t0.rMax, v || t0.rDefault));
             else if (f === 'arc') obj.arc = Math.max(10, Math.min(360, v || 180));
+            else if (f === 'model') { if (v) obj.model = v; else delete obj.model; }
             else if (f === 'start') obj.start = G.normDeg(v || 0);
             else if (f === 'width') obj.width = Math.max(t0.wMin, Math.min(t0.wMax, v || 1.5));
             else if (f === 'len') obj.len = Math.max(t0.lMin, Math.min(t0.lMax, v || 4.6));
             else obj[f] = v;
+            C.fitRotator(obj);
           } else if (sel.kind === 'area') {
             if (f === 'method') obj.method = v || null;
             else obj[f] = v;
@@ -1419,7 +1441,7 @@
       el.querySelectorAll('[data-s]').forEach((inp) => {
         inp.onchange = () => { this.checkpoint(); this.state.settings[inp.dataset.s] = parseFloat(inp.value) || this.state.settings[inp.dataset.s]; this.commit(); };
       });
-      el.querySelectorAll('[data-arc]').forEach((b) => { b.onclick = () => { this.checkpoint(); obj.arc = +b.dataset.arc; this.commit(); }; });
+      el.querySelectorAll('[data-arc]').forEach((b) => { b.onclick = () => { this.checkpoint(); obj.arc = +b.dataset.arc; C.fitRotator(obj); this.commit(); }; });
       el.querySelectorAll('[data-rot]').forEach((b) => { b.onclick = () => { this.checkpoint(); obj.start = G.normDeg(obj.start + +b.dataset.rot); this.commit(); }; });
       el.querySelectorAll('[data-act]').forEach((b) => {
         b.onclick = () => {

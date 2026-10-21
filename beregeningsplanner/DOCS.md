@@ -31,6 +31,42 @@ In stap 1 kies je per soort vlak hoe het water krijgt:
 Per vlak kun je afwijken: selecteer het vlak en kies bij **Beregening** een
 andere methode. Iedere methode krijgt eigen zones, omdat de neerslag verschilt.
 
+## Sproeiers plaatsen
+
+**Automatisch plaatsen** (stap 4) werkt zo:
+
+1. De vorm van het gazon wordt eerst **rechtgetrokken**: kartels van de
+   herkenning of de toverstaf verdwijnen en randen die bijna recht of haaks
+   lopen, worden precies recht of haaks.
+2. Daarna rekent de planner tientallen indelingen door: een raster
+   **vierkant** of **driehoekig**, in de hoofdrichting van de tuin of langs de
+   smalste kant, met verschillende afstanden. Elke indeling krijgt koppen op
+   alle hoeken (binnenhoek 270°), op de randen in lijn met het raster en
+   binnenin, altijd **kop-tot-kop** (worp = afstand tot de buurkop).
+3. De neerslagsimulatie kiest de beste: zo min mogelijk koppen, zo min
+   mogelijk water buiten het gazon, gelijkmatige neerslag (DU) en geen droge
+   plekken. Tot slot wordt per kop gekeken of een iets kortere worp
+   (stelschroef) minder water op het terras geeft.
+
+**Meerstraalsrotators** worden altijd binnen het bereik van een echte kop
+gezet:
+
+| Kop | Worp | Sproeihoek |
+|---|---|---|
+| MP1000 | 2,5–4,5 m | 90–210°, 210–270°, 360° |
+| MP2000 | 4,0–6,4 m | 90–210°, 210–270°, 360° |
+| MP3000 | 6,7–9,1 m | 90–210°, 210–270°, 360° |
+| MP3500 | 9,4–10,7 m | 90–210° |
+| MP Corner | 2,5–4,5 m | 45–105° |
+
+Selecteer een rotator om de **kop** te kiezen (of *Automatisch*) en worp en
+sproeihoek in te regelen; dat kan in het eigenschappenpaneel of door in de
+tekening aan de **grepen** te slepen (oranje = worp, wit = begin en einde van
+de sproeihoek; Alt = zonder afronden). De planner houdt de instelling binnen
+het bereik van de kop. Tekening, sproeibereik, neerslagkaart, debiet en
+stuklijst rekenen met de ingestelde waarden; de Excel-export toont per kop de
+instelling (bijv. *MP2000 (90–210°) op 135° en 5,2 m*).
+
 ## Plan laden en concept maken
 
 Herkennen kan **lokaal** (standaard, zonder AI, gratis) of met **AI** (als er

@@ -30,7 +30,7 @@
         add(level === 'eco' ? 'CON-ECO' : 'CON-FLEX', 1);
       } else if (s.type === 'rotator' || s.type === 'strip') {
         add(bed ? 'ROT-POP30-PRS' : 'ROT-POP10-PRS', 1, bed ? 'beplanting' : '');
-        add(s.type === 'strip' ? 'ROT-STRIP' : C.rotatorNozzle(s.r), 1);
+        add(s.type === 'strip' ? 'ROT-STRIP' : C.rotatorModels[C.rotatorModelOf(s)].code, 1);
         add(level === 'eco' ? 'CON-ECO' : 'CON-FLEX', 1);
       } else if (s.type === 'rotor') {
         add(level === 'premium' ? 'TURB-10-PRO' : 'TURB-10', 1);
@@ -312,7 +312,7 @@
       { header: 'Richting (°)', key: 'start', width: 12 },
       { header: 'Debiet (l/min)', key: 'q', width: 14 },
       { header: 'Druk (bar)', key: 'p', width: 11 },
-      { header: 'Sproeikop (artikel)', key: 'noz', width: 18 },
+      { header: 'Sproeikop / instelling', key: 'noz', width: 34 },
     ];
     headerStyle(ss.getRow(1));
     const pressureById = new Map();
@@ -331,7 +331,7 @@
         start: s.start,
         q: +(C.sprinklerFlowLph(s) / 60).toFixed(2),
         p: pressureById.has(s.id) ? +pressureById.get(s.id).toFixed(2) : '',
-        noz: s.type === 'rotator' ? C.rotatorNozzle(s.r) : s.type === 'strip' ? 'ROT-STRIP' : s.type === 'spray' ? 'SPR-VAN' : 'TURB-10',
+        noz: s.type === 'rotator' ? C.rotatorSetting(s) : s.type === 'strip' ? 'ROT-STRIP' : s.type === 'spray' ? 'SPR-VAN' : 'TURB-10',
       });
     });
 

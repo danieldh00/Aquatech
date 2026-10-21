@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.53.0',
+      date: '2026-10-21',
+      title: 'Slimmere sproeierplaatsing en instelbare rotators',
+      items: [
+        { text: '**Automatisch plaatsen** maakt nu een nette kop-tot-kopindeling: hoeken, randen en binnenin in lijn, met minder koppen, een gelijkmatigere neerslag en veel minder water op terras en paden. Herkende vlakken worden eerst rechtgetrokken.' },
+        { text: 'Per **meerstraalsrotator** kies je de kop (MP1000 t/m MP3500 of MP Corner) en regel je worp en sproeihoek in binnen het bereik van die kop, ook door in de tekening aan de grepen te slepen.' },
+      ],
+    },
+    {
       version: '0.52.0',
       date: '2026-10-21',
       title: 'Tekening indienen en plannen goedkeuren',

@@ -77,6 +77,12 @@ function garden({ name, customer, address, w, h, border = true, hedge = false, p
   if (planter) area('planter', rect(w - 2.5, 0.5, w - 0.5, 1.5));
   const type = turbine ? 'rotor' : 'rotator';
   const sprinklers = lawnHeads(0, 4, lawnRight, h, type, turbine ? 11 : 6).map((s, i) => ({ id: `s${i + 1}`, ...s }));
+  if (type === 'rotator') {
+    // rotators met een vaste MP-kop; de eerste hoekkop is met de stelschroef iets ingekort
+    const Cat = plannerLib().Catalog;
+    for (const s of sprinklers) Cat.fitRotator(Object.assign(s, { model: Cat.autoRotatorModel(s.r, s.arc) }));
+    sprinklers[0].r = round1(Math.max(Cat.rotatorModels[sprinklers[0].model].rMin, sprinklers[0].r * 0.9));
+  }
   const elements = [
     { id: 'e1', kind: 'source', x: 0.6, y: 3.2 },
     { id: 'e2', kind: 'controller', x: 1.6, y: 0.3 },
