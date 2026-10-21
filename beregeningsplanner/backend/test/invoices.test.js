@@ -54,6 +54,8 @@ test('factuurkern: totalen per btw-tarief en omzetcategorie, instellingen, credi
   assert.strictEqual(s.prefix, 'F/');
   assert.strictEqual(s.categories['producten:21'].account, '8000');
   assert.strictEqual(s.categories['arbeid:9'].name, 'Omzet arbeid laag (9%)');
+  assert.deepStrictEqual(Core.sanitizeSettings({}).categories['arbeid:21'], { name: 'Omzet diensten hoog tarief', account: '8140' });
+  assert.strictEqual(Core.sanitizeSettings({ categories: { 'arbeid:21': { account: '' } } }).categories['arbeid:21'].account, '');
   assert.strictEqual(Core.sanitizeSettings({}).prefix, 'F');
   const inv = Core.sanitize({ date: '2026-10-01', discountPct: 10, lines: [
     { description: 'Sproeier', qty: 10, price: 10, vat: 21, group: 'producten' },
@@ -68,7 +70,7 @@ test('factuurkern: totalen per btw-tarief en omzetcategorie, instellingen, credi
   assert.strictEqual(t.total, 315.9);
   const cat = Object.fromEntries(t.categories.map((c) => [c.key, [c.name, c.account, c.base]]));
   assert.deepStrictEqual(cat['producten:21'], ['Omzet producten hoog', '8000', 90]);
-  assert.deepStrictEqual(cat['arbeid:21'], ['Omzet arbeid hoog (21%)', '', 90]);
+  assert.deepStrictEqual(cat['arbeid:21'], ['Omzet diensten hoog tarief', '8140', 90]);
   const rows = Core.exportRows([{ number: 'F2026-0001', data: inv }], s);
   assert.strictEqual(rows.length, 3);
   assert.strictEqual(Math.round(rows.reduce((a, r) => a + r.total, 0) * 100) / 100, 315.9);

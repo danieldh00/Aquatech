@@ -37,7 +37,10 @@
   }
 
   const catKey = (group, rate) => `${group}:${rate}`;
-  const defaultCategoryName = (group, rate) => `Omzet ${GROUPS[group].toLowerCase()} ${RATE_NAMES[rate]}`;
+  // Bekende standaarden uit het rekeningschema van Visma eAccounting (opgave
+  // Daniël); de rest vult de beheerder zelf in.
+  const KNOWN = { 'arbeid:21': { name: 'Omzet diensten hoog tarief', account: '8140' } };
+  const defaultCategoryName = (group, rate) => (KNOWN[catKey(group, rate)] || {}).name || `Omzet ${GROUPS[group].toLowerCase()} ${RATE_NAMES[rate]}`;
 
   /** Factuurinstellingen (instelling invoicing van de tenant). */
   function sanitizeSettings(raw) {
@@ -50,7 +53,7 @@
         const c = cats[k] && typeof cats[k] === 'object' ? cats[k] : {};
         categories[k] = {
           name: str(c.name, 80).trim() || defaultCategoryName(g, rate),
-          account: str(c.account, 20).replace(/[^0-9A-Za-z.-]/g, ''),
+          account: c.account === undefined ? (KNOWN[k] || {}).account || '' : str(c.account, 20).replace(/[^0-9A-Za-z.-]/g, ''),
         };
       }
     }
