@@ -28,7 +28,10 @@
     f.mapping.value = Object.entries(src.mapping || {}).map(([k, s]) => `${k}=${s}`).join('\n');
     f.consumerKey.value = '';
     f.consumerSecret.value = '';
-    $('#w-keys').style.display = f.mode.value === 'rest' ? '' : 'none';
+    f.push.checked = Boolean(src.push);
+    f.pushStock.checked = src.pushStock !== false;
+    const rest = () => { $('#w-keys').style.display = f.mode.value === 'rest' ? '' : 'none'; $('#w-push-box').style.display = f.mode.value === 'rest' ? '' : 'none'; f.pushStock.disabled = !f.push.checked; };
+    rest();
     const keys = v.consumerKey && v.consumerKey.set && v.consumerSecret && v.consumerSecret.set;
     $('#w-key-state').textContent = keys ? `Ingesteld${v.consumerKey.hint ? ` (key eindigt op ${v.consumerKey.hint.replace('…', '')})` : ''}` : 'Nog niet ingesteld.';
     $('#w-key-state').className = `state ${keys ? 'ok' : 'off'}`;
@@ -39,6 +42,8 @@
     if (!src.url) { el.textContent = 'Geen webshop gekoppeld: de planner en offertes gebruiken de indicatieve standaardprijzen.'; return; }
     el.innerHTML = `
       ${st && st.syncedAt ? `<p>Laatst opgehaald: <b>${esc(when(st.syncedAt))}</b> · ${st.productCount} producten · <b>${v.matchedCount} van ${v.articleCount}</b> artikelen van de planner gekoppeld.</p>` : '<p>Nog geen producten opgehaald.</p>'}
+      ${src.push ? '<p>Prijzen' + (src.pushStock !== false ? ' en voorraad' : '') + ' gaan vanuit Voorraadbeheer naar de webshop. Per artikel zie je de stand in <a href="../voorraad/">Voorraadbeheer</a>.</p>' : ''}
+      ${v.stockSync && !v.stockSync.skipped ? `<p>Voorraadartikelen: ${v.stockSync.linked} nieuw gekoppeld, ${v.stockSync.updated} bijgewerkt in de webshop, ${v.stockSync.pricesFromShop} prijzen uit de webshop overgenomen, ${v.stockSync.soldInShop} verkocht via de webshop afgeboekt${v.stockSync.failed ? `, <b>${v.stockSync.failed} mislukt</b>` : ''}.</p>` : ''}
       ${st && st.lastError ? `<p class="err">Laatste poging (${esc(when(st.lastAttemptAt))}) mislukt: ${esc(st.lastError)}</p>` : ''}
       ${v.unmatched && v.unmatched.length && st && st.syncedAt ? `<details><summary>Nog niet gekoppeld (${v.unmatched.length})</summary><p class="small">${v.unmatched.map(esc).join(', ')}</p></details>` : ''}`;
   }
@@ -66,7 +71,9 @@
   function init(opts) {
     toast = opts.toast;
     const f = $('#w-form');
-    f.mode.onchange = () => { $('#w-keys').style.display = f.mode.value === 'rest' ? '' : 'none'; };
+    const rest = () => { $('#w-keys').style.display = f.mode.value === 'rest' ? '' : 'none'; $('#w-push-box').style.display = f.mode.value === 'rest' ? '' : 'none'; f.pushStock.disabled = !f.push.checked; };
+    f.mode.onchange = rest;
+    f.push.onchange = rest;
     f.onsubmit = async (ev) => {
       ev.preventDefault();
       const err = $('.err', f);
@@ -76,7 +83,7 @@
         const [code, sku] = line.split('=').map((x) => (x || '').trim());
         if (code && sku) mapping[code.toUpperCase()] = sku;
       }
-      const body = { url: f.url.value.trim(), mode: f.mode.value, pricesIncludeTax: f.pricesIncludeTax.checked, vatRate: Number(f.vatRate.value), mapping };
+      const body = { url: f.url.value.trim(), mode: f.mode.value, pricesIncludeTax: f.pricesIncludeTax.checked, vatRate: Number(f.vatRate.value), mapping, push: f.push.checked, pushStock: f.pushStock.checked };
       if (f.consumerKey.value.trim()) body.consumerKey = f.consumerKey.value.trim();
       if (f.consumerSecret.value.trim()) body.consumerSecret = f.consumerSecret.value.trim();
       try {

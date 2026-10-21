@@ -111,6 +111,15 @@
       right: 'voorraad',
     },
     {
+      id: 'facturen',
+      title: 'Facturen',
+      description: 'Facturen maken vanuit een werkorder of als losse verkoop, met doorlopende nummering, btw per regel en PDF. Crediteren, betalingen bijhouden en exporteren naar de boekhouding (Visma) per omzetcategorie.',
+      href: 'facturen/',
+      icon: 'invoice',
+      status: 'actief',
+      right: 'facturen',
+    },
+    {
       id: 'uitbesteden',
       title: 'Uitbesteden',
       description: 'Te veel werk? Bied een werkorder aan bij een andere organisatie op het platform, of neem opdrachten van anderen aan. Staat aan als de beheerder het in de instellingen aanzet.',
@@ -151,6 +160,7 @@
     calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4"/><path d="M16 3v4"/>',
     box: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5"/><path d="M12 12v9"/>',
     table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M3 14h18"/><path d="M9 9v11"/>',
+    invoice: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/><path d="M9 16h3"/>',
     quote: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6"/><path d="M10 17h6"/>',
     clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9z"/><path d="m9 12 2 2 4-4"/><path d="M9 17h6"/>',
     folder: '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/><circle cx="12" cy="14" r="2.5"/>',

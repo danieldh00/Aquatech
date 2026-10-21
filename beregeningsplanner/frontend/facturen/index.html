@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Facturen – AquaTech Service</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="../plannen/plannen.css">
+  <link rel="stylesheet" href="../offertes/quote-view.css">
+  <link rel="stylesheet" href="facturen.css">
+  <script src="../shared/common.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Facturen</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash wide screen">
+    <div id="v-denied" class="notice" hidden></div>
+
+    <!-- Overzicht -->
+    <div id="v-list" hidden>
+      <section class="intro">
+        <h1>Facturen</h1>
+        <p class="muted">Facturen vanuit een werkorder (knop <b>Factuur maken</b> in het menu van de werkorder) of als losse verkoop. Een concept pas je vrij aan; definitief krijgt hij een doorlopend nummer en ligt hij vast. De export voor de boekhouding zet elke regel onder de juiste omzetcategorie.</p>
+      </section>
+      <div id="v-stats" class="stats"></div>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="list" role="tab">Facturen</button>
+        <button class="tab" data-tab="export" role="tab">Export boekhouding</button>
+        <button class="tab" data-tab="settings" role="tab">Instellingen</button>
+      </nav>
+
+      <section id="tab-list" class="tabpane">
+        <div class="filters">
+          <select id="f-status">
+            <option value="">Alle facturen</option>
+            <option value="concept">Concepten</option>
+            <option value="definitief">Openstaand</option>
+            <option value="overdue">Over de vervaldatum</option>
+            <option value="betaald">Betaald</option>
+          </select>
+          <label>Van<input id="f-from" type="date"></label>
+          <label>Tot en met<input id="f-to" type="date"></label>
+          <input id="f-search" type="search" placeholder="Zoek op nummer, klant of werkorder">
+          <span class="spacer"></span>
+          <button class="btn primary" id="b-new">+ Losse factuur</button>
+        </div>
+        <div class="tablewrap"><table class="grid" id="l-table"></table></div>
+      </section>
+
+      <section id="tab-export" class="tabpane" hidden>
+        <form id="x-form" class="card-form" novalidate>
+          <h3>Export voor Visma eAccounting</h3>
+          <p class="muted small">Een Excel-bestand met per factuur per omzetcategorie één regel (grootboekrekening, btw-tarief, bedrag excl. en incl. btw), plus een blad met de facturen, de totalen per categorie en de debiteuren. Alleen definitieve en betaalde facturen; concepten tellen niet mee.</p>
+          <div class="row">
+            <label>Factuurdatum van<input name="from" type="date"></label>
+            <label>tot en met<input name="to" type="date"></label>
+            <label class="chk"><input type="checkbox" name="onlyNew" checked> Alleen nog niet geëxporteerd</label>
+          </div>
+          <div class="row">
+            <button class="btn primary" type="submit">Excel downloaden</button>
+          </div>
+          <div class="err" role="alert"></div>
+          <div id="x-result" class="muted small"></div>
+        </form>
+      </section>
+
+      <section id="tab-settings" class="tabpane" hidden>
+        <form id="s-form" class="card-form settings" novalidate>
+          <h3>Nummering en betaling</h3>
+          <div class="row">
+            <label>Voorvoegsel factuurnummer<input name="prefix" maxlength="12" placeholder="F"></label>
+            <label>Betaaltermijn (dagen)<input name="paymentDays" type="number" min="0" max="365" step="1"></label>
+          </div>
+          <p class="muted small" id="s-example"></p>
+          <label>Betaaltekst onder de factuur <span class="muted small">({dagen}, {iban}, {nummer} en {vervaldatum} worden ingevuld)</span>
+            <textarea name="paymentText" rows="2" maxlength="1000"></textarea></label>
+          <label>Voettekst (optioneel)<textarea name="footer" rows="2" maxlength="1000" placeholder="Bijv. algemene voorwaarden"></textarea></label>
+          <p class="muted small">Bedrijfsnaam, adres, KvK, btw-nummer, IBAN en uurtarief komen uit het bedrijfsprofiel van de offertes (Offertes → Bedrijfsprofiel).</p>
+          <h3>Omzetcategorieën</h3>
+          <p class="muted small">Elke factuurregel hoort bij een omzetgroep (producten, arbeid, overig) en een btw-tarief. Vul per combinatie de naam en de grootboekrekening in zoals in Visma, bijv. <i>Omzet producten hoog</i> op 8000.</p>
+          <div class="tablewrap"><table class="grid" id="s-cats"></table></div>
+          <div class="row">
+            <button class="btn primary" type="submit">Opslaan</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
+      </section>
+    </div>
+
+    <!-- Factuur (?id=) -->
+    <div id="v-edit" hidden>
+      <div class="row edit-head">
+        <a id="e-back" class="btn" href="./">← Facturen</a>
+        <h1 id="e-title">Factuur</h1>
+        <span id="e-state"></span>
+        <span class="spacer"></span>
+        <button class="btn" id="e-save">Opslaan</button>
+        <button class="btn primary" id="e-final">Definitief maken</button>
+        <button class="btn" id="e-pdf">PDF / afdrukken</button>
+        <button class="btn" id="e-paid" hidden>Betaald</button>
+        <button class="btn" id="e-credit" hidden>Creditfactuur</button>
+        <button class="btn danger" id="e-del" hidden>Verwijderen</button>
+      </div>
+      <div id="e-warn" class="notice warn" hidden></div>
+      <p id="e-links" class="muted small"></p>
+      <div class="cols">
+        <form id="c-form" class="card-form" novalidate>
+          <h3>Klant</h3>
+          <label>Naam<input name="name" maxlength="200" autocomplete="off"></label>
+          <label>T.a.v.<input name="contact" maxlength="200"></label>
+          <label>Adres<textarea name="address" rows="3" maxlength="400"></textarea></label>
+          <div class="row">
+            <label class="grow">E-mail<input name="email" type="email" maxlength="200"></label>
+            <label>Btw-nummer klant<input name="vatNumber" maxlength="30" placeholder="Zakelijk"></label>
+          </div>
+        </form>
+        <form id="m-form" class="card-form" novalidate>
+          <h3>Factuur</h3>
+          <div class="row">
+            <label>Factuurdatum<input name="date" type="date"></label>
+            <label>Vervaldatum<input name="dueDate" type="date"></label>
+          </div>
+          <label>Omschrijving / referentie<input name="reference" maxlength="120"></label>
+          <label>Tekst boven de regels<textarea name="intro" rows="2" maxlength="2000"></textarea></label>
+          <label>Opmerking onder de factuur<textarea name="notes" rows="2" maxlength="2000"></textarea></label>
+          <label>Korting (%)<input name="discountPct" type="number" min="0" max="100" step="0.01"></label>
+        </form>
+      </div>
+      <section class="card-form">
+        <h3>Regels</h3>
+        <div class="tablewrap"><table class="grid lines" id="e-lines"></table></div>
+        <datalist id="article-codes"></datalist>
+        <div class="row"><button class="btn" id="e-add" type="button">+ Regel</button></div>
+        <div id="e-totals" class="totals"></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="print" class="print-doc" aria-hidden="true"></div>
+  <div id="toast" class="toast"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="invoice-core.js"></script>
+  <script src="facturen.js"></script>
+</body>
+</html>

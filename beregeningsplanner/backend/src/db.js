@@ -666,6 +666,55 @@ const MIGRATIONS = [
   );
   CREATE INDEX service_request_photos_req ON service_request_photos (tenant_id, request_id, created_at);
   `,
+  // 26: artikelen met verkoopprijs, btw en omzetgroep (Aquatech als bron voor
+  // de webshop, zie shop.js syncStock) en facturen (invoices.js). shop_*_seen
+  // = prijs/voorraad zoals de webshop ze na de laatste synchronisatie had:
+  // een verschil daarmee is een wijziging of verkoop in de webshop.
+  // shop_dirty = nog naar de webshop te sturen. Een factuur krijgt pas een
+  // nummer als hij definitief wordt (doorlopende nummering per jaar).
+  `
+  ALTER TABLE stock_items ADD COLUMN sale_price REAL;
+  ALTER TABLE stock_items ADD COLUMN vat_rate INTEGER NOT NULL DEFAULT 21;
+  ALTER TABLE stock_items ADD COLUMN revenue_group TEXT NOT NULL DEFAULT 'producten';
+  ALTER TABLE stock_items ADD COLUMN shop_sync INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE stock_items ADD COLUMN shop_product_id TEXT;
+  ALTER TABLE stock_items ADD COLUMN shop_dirty INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE stock_items ADD COLUMN shop_price_seen REAL;
+  ALTER TABLE stock_items ADD COLUMN shop_stock_seen REAL;
+  ALTER TABLE stock_items ADD COLUMN shop_synced_at TEXT;
+  ALTER TABLE stock_items ADD COLUMN shop_error TEXT NOT NULL DEFAULT '';
+  CREATE INDEX stock_items_dirty ON stock_items (tenant_id, shop_dirty);
+  CREATE TABLE invoices (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenants(id),
+    number        TEXT,
+    status        TEXT NOT NULL DEFAULT 'concept' CHECK (status IN ('concept', 'definitief', 'betaald')),
+    kind          TEXT NOT NULL DEFAULT 'factuur' CHECK (kind IN ('factuur', 'credit')),
+    credit_of     TEXT,
+    customer_id   TEXT,
+    customer_name TEXT NOT NULL DEFAULT '',
+    work_order_id TEXT,
+    quote_id      TEXT,
+    invoice_date  TEXT NOT NULL,
+    due_date      TEXT NOT NULL,
+    subtotal      REAL NOT NULL DEFAULT 0,
+    vat_total     REAL NOT NULL DEFAULT 0,
+    total         REAL NOT NULL DEFAULT 0,
+    data          TEXT NOT NULL,
+    stock_booked  INTEGER NOT NULL DEFAULT 0,
+    finalized_at  TEXT,
+    paid_at       TEXT,
+    credited_at   TEXT,
+    exported_at   TEXT,
+    created_by    TEXT,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    UNIQUE (tenant_id, number)
+  );
+  CREATE INDEX invoices_date ON invoices (tenant_id, invoice_date);
+  CREATE INDEX invoices_status ON invoices (tenant_id, status, invoice_date);
+  CREATE INDEX invoices_wo ON invoices (tenant_id, work_order_id);
+  `,
 ];
 
 function openDb(file = ':memory:') {

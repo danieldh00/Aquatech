@@ -107,14 +107,26 @@ function createShopStore(db) {
  *   POST /api/admin/shop/sync  producten nu ophalen
  * /api/admin/* staat in server.js al achter requireAdmin.
  */
-function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, tenantOf, audit, syncLimiter, fetchImpl }) {
+function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, tenantOf, audit, syncLimiter, fetchImpl, sync = null, salePrices = () => ({}) }) {
   const configured = (s) => Boolean(s.get('shopSource').url);
+
+  // Verkoopprijzen uit voorraadbeheer gaan voor (Aquatech is de bron); de
+  // webshopprijs alleen voor artikelen zonder eigen verkoopprijs.
+  function withSalePrices(tenantId, articles) {
+    const out = { ...articles };
+    const arts = loadArticles();
+    for (const [code, v] of Object.entries(salePrices(tenantId))) {
+      if (v.salePrice == null || !arts[code]) continue;
+      out[code] = { ...(out[code] || { sku: code, name: v.name, url: '', inStock: true }), price: v.salePrice, via: 'voorraad' };
+    }
+    return out;
+  }
 
   function catalogOf(tenantId, settings) {
     const st = shop.status(tenantId);
-    if (!configured(settings) || !st || !st.syncedAt) return { configured: configured(settings), syncedAt: null, articles: {}, unmatched: [] };
+    if (!configured(settings) || !st || !st.syncedAt) return { configured: configured(settings), syncedAt: null, articles: withSalePrices(tenantId, {}), unmatched: [] };
     const { matched, unmatched } = matchProducts(shop.products(tenantId), loadArticles(), settings.get('shopSource').mapping);
-    return { configured: true, shop: settings.get('shopSource').url, syncedAt: st.syncedAt, productCount: st.productCount, articles: matched, unmatched };
+    return { configured: true, shop: settings.get('shopSource').url, syncedAt: st.syncedAt, productCount: st.productCount, articles: withSalePrices(tenantId, matched), unmatched };
   }
 
   app.get('/api/catalog', requireUser, (req, res) => {
@@ -173,11 +185,17 @@ function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, t
     if (!configured(s)) return res.status(409).json({ error: 'not_configured', message: 'Stel eerst de webshop in.' });
     const cfg = { ...s.get('shopSource'), consumerKey: s.get('shopConsumerKey'), consumerSecret: s.get('shopConsumerSecret') };
     try {
-      const products = await fetchProducts(cfg, { fetchImpl });
-      shop.replaceProducts(tenantId, products, new Date().toISOString());
-      const view = adminView(req);
-      console.log(`Webshop (${tenantId}): ${products.length} producten opgehaald, ${view.matchedCount} artikelen gekoppeld`);
-      audit(req, 'webshop_gesynchroniseerd', { products: products.length, matched: view.matchedCount });
+      // Met voorraadbeheer: ook de voorraadartikelen in beide richtingen (shopsync.js).
+      let stockSync = null;
+      if (sync) {
+        stockSync = await sync(tenantId, req.user);
+      } else {
+        shop.replaceProducts(tenantId, await fetchProducts(cfg, { fetchImpl }), new Date().toISOString());
+      }
+      const view = { ...adminView(req), stockSync };
+      const count = view.status ? view.status.productCount : 0;
+      console.log(`Webshop (${tenantId}): ${count} producten opgehaald, ${view.matchedCount} artikelen gekoppeld`);
+      audit(req, 'webshop_gesynchroniseerd', { products: count, matched: view.matchedCount, ...(stockSync || {}) });
       res.json(view);
     } catch (err) {
       if (err instanceof SourceError) {

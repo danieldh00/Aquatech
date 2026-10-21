@@ -248,7 +248,7 @@
           <label>Webadres van de webshop<input name="url" type="url" placeholder="https://www.voorbeeld.nl" spellcheck="false"></label>
           <label>Ophalen via<select name="mode">
             <option value="store">Store API (openbaar, geen sleutels nodig)</option>
-            <option value="rest">REST API v3 (met sleutels, alleen-lezen)</option>
+            <option value="rest">REST API v3 (met sleutels; nodig om prijs en voorraad terug te schrijven)</option>
           </select></label>
           <div class="field" id="w-keys" style="display:none">
             <span class="label">API-sleutels</span>
@@ -257,7 +257,13 @@
               <input name="consumerKey" type="text" autocomplete="off" spellcheck="false" placeholder="Consumer key (ck_…), leeg = ongewijzigd">
               <input name="consumerSecret" type="password" autocomplete="new-password" spellcheck="false" placeholder="Consumer secret (cs_…), leeg = ongewijzigd">
             </div>
-            <span class="muted small">Aan te maken in WordPress via WooCommerce → Instellingen → Geavanceerd → REST API, met alleen leesrechten. De sleutels worden versleuteld opgeslagen en nooit teruggestuurd naar de browser.</span>
+            <span class="muted small">Aan te maken in WordPress via WooCommerce → Instellingen → Geavanceerd → REST API: alleen lezen volstaat om op te halen, voor terugschrijven is lezen/schrijven nodig. De sleutels worden versleuteld opgeslagen en nooit teruggestuurd naar de browser.</span>
+          </div>
+          <div class="field" id="w-push-box" style="display:none">
+            <span class="label">Aquatech als bron</span>
+            <label class="chk"><input type="checkbox" name="push"> Verkoopprijzen uit Voorraadbeheer naar de webshop sturen</label>
+            <label class="chk"><input type="checkbox" name="pushStock"> Ook de voorraad (beschikbaar = stand − gereserveerd); verkopen in de webshop worden in Aquatech afgeboekt</label>
+            <span class="muted small">Een wijziging gaat binnen enkele seconden naar de webshop, en elke 10 minuten wordt alles vergeleken. Een prijs die alleen in de webshop is gewijzigd, neemt Aquatech over. Zonder dit vinkje blijft de webshop leidend voor de prijzen.</span>
           </div>
           <div class="row">
             <label class="chk"><input type="checkbox" name="pricesIncludeTax"> Prijzen in de webshop zijn incl. btw</label>

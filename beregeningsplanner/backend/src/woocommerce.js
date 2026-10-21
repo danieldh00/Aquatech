@@ -4,6 +4,10 @@
 //  - 'rest':  de REST API v3 (/wp-json/wc/v3/products) met consumer key en
 //    secret (alleen-lezen volstaat); geeft ook meta_data (aquatech_code).
 // Variaties van variabele producten worden in dit prototype niet opgehaald.
+//
+// Terugschrijven (updateProducts, alleen REST v3 met lees- en schrijfrechten):
+// prijs en voorraad uit Aquatech naar de webshop (instelling shopSource.push,
+// zie shop.js syncStock).
 
 const { publicAddress } = require('./netguard');
 
@@ -46,15 +50,24 @@ function normalizeBaseUrl(raw, { allowInsecure = insecureAllowed() } = {}) {
   return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
 }
 
-async function getJson(url, headers, fetchImpl) {
+async function getJson(url, headers, fetchImpl, { method = 'GET', body } = {}) {
   let res;
   try {
-    res = await fetchImpl(url, { headers: { Accept: 'application/json', ...headers }, redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS) });
+    res = await fetchImpl(url, {
+      method,
+      headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
   } catch (err) {
     const msg = err.name === 'TimeoutError' ? 'De webshop reageert niet (time-out).' : 'De webshop is niet bereikbaar (of stuurt door naar een ander adres: vul het juiste adres in).';
     throw new SourceError('unreachable', msg);
   }
-  if (res.status === 401 || res.status === 403) throw new SourceError('unauthorized', 'De webshop weigert de toegang: controleer de API-sleutels (leesrechten).');
+  if (res.status === 401 || res.status === 403) {
+    throw new SourceError('unauthorized', method === 'GET'
+      ? 'De webshop weigert de toegang: controleer de API-sleutels (leesrechten).'
+      : 'De webshop weigert het bijwerken: de API-sleutels moeten lees- en schrijfrechten hebben.');
+  }
   if (res.status === 404) throw new SourceError('not_found', 'Geen WooCommerce-API gevonden op dit adres.');
   if (!res.ok) throw new SourceError('bad_status', `De webshop antwoordt met status ${res.status}.`);
   const text = await res.text();
@@ -82,6 +95,9 @@ function fromStoreApi(p, cfg) {
     sku: String(p.sku || ''),
     name: String(p.name || ''),
     price: exTax(raw == null ? null : raw / 10 ** minor, cfg),
+    regularPrice: null,
+    rawRegular: null,
+    stockQty: null,
     currency: pr.currency_code || 'EUR',
     url: String(p.permalink || ''),
     image: p.images?.[0]?.src || '',
@@ -93,11 +109,18 @@ function fromStoreApi(p, cfg) {
 
 function fromRestV3(p, cfg) {
   const meta = (p.meta_data || []).find((m) => m.key === 'aquatech_code');
+  const regular = num(p.regular_price);
   return {
     id: String(p.id),
     sku: String(p.sku || ''),
     name: String(p.name || ''),
     price: exTax(num(p.price), cfg),
+    // Normale prijs (zonder actie) en voorraad zoals de webshop ze bijhoudt;
+    // null = niet ingevuld of geen voorraadbeheer in de webshop.
+    regularPrice: regular == null ? null : exTax(regular, cfg),
+    // Zoals de webshop hem opslaat (incl. of excl. btw), om te vergelijken.
+    rawRegular: regular,
+    stockQty: p.manage_stock && Number.isFinite(Number(p.stock_quantity)) ? Number(p.stock_quantity) : null,
     currency: 'EUR',
     url: String(p.permalink || ''),
     image: p.images?.[0]?.src || '',
@@ -107,11 +130,8 @@ function fromRestV3(p, cfg) {
   };
 }
 
-/**
- * Haalt alle gepubliceerde producten op en zet ze om naar het eigen formaat.
- * @param cfg {url, mode: 'store'|'rest', consumerKey, consumerSecret, pricesIncludeTax, vatRate}
- */
-async function fetchProducts(cfg, { fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
+// Webadres controleren en opzoeken (geen intern adres).
+async function checkedBase(cfg, { allowInsecure, resolveHost }) {
   const base = normalizeBaseUrl(cfg.url, { allowInsecure });
   if (!allowInsecure) {
     try {
@@ -122,15 +142,38 @@ async function fetchProducts(cfg, { fetchImpl = fetch, allowInsecure = insecureA
         : new SourceError('unreachable', 'De webshop is niet gevonden: controleer het webadres.');
     }
   }
+  return base;
+}
+
+function restAuth(cfg) {
+  if (!cfg.consumerKey || !cfg.consumerSecret) throw new SourceError('missing_keys', 'Vul de consumer key en secret van de WooCommerce REST API in.', 400);
+  return { Authorization: `Basic ${Buffer.from(`${cfg.consumerKey}:${cfg.consumerSecret}`).toString('base64')}` };
+}
+
+/**
+ * Haalt alle gepubliceerde producten op en zet ze om naar het eigen formaat.
+ * @param cfg {url, mode: 'store'|'rest', consumerKey, consumerSecret, pricesIncludeTax, vatRate}
+ * ids: alleen deze producten (REST v3), bijv. vlak voor het terugschrijven.
+ */
+async function fetchProducts(cfg, { fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress, ids = null } = {}) {
+  const base = await checkedBase(cfg, { allowInsecure, resolveHost });
   const rest = cfg.mode === 'rest';
-  const headers = {};
-  if (rest) {
-    if (!cfg.consumerKey || !cfg.consumerSecret) throw new SourceError('missing_keys', 'Vul de consumer key en secret van de WooCommerce REST API in.', 400);
-    headers.Authorization = `Basic ${Buffer.from(`${cfg.consumerKey}:${cfg.consumerSecret}`).toString('base64')}`;
-  }
+  if (ids && !rest) throw new SourceError('rest_required', 'Terugschrijven naar de webshop kan alleen via de REST API.', 400);
+  const headers = rest ? restAuth(cfg) : {};
   const path = rest ? '/wp-json/wc/v3/products' : '/wp-json/wc/store/v1/products';
   const map = rest ? fromRestV3 : fromStoreApi;
   const products = [];
+  if (ids) {
+    for (let i = 0; i < ids.length; i += PER_PAGE) {
+      const part = ids.slice(i, i + PER_PAGE).map(String).filter((v) => /^\d{1,20}$/.test(v));
+      if (!part.length) continue;
+      const qs = new URLSearchParams({ per_page: String(PER_PAGE), include: part.join(',') });
+      const { body } = await getJson(`${base}${path}?${qs}`, headers, fetchImpl);
+      if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen productlijst).');
+      products.push(...body.map((p) => map(p, cfg)));
+    }
+    return products;
+  }
   for (let page = 1; page <= MAX_PAGES; page++) {
     const qs = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page) });
     if (rest) qs.set('status', 'publish');
@@ -140,6 +183,39 @@ async function fetchProducts(cfg, { fetchImpl = fetch, allowInsecure = insecureA
     if (body.length < PER_PAGE || (totalPages && page >= totalPages)) break;
   }
   return products;
+}
+
+/** Prijs voor de webshop: excl. btw uit Aquatech, incl. als de webshop zo rekent. */
+function shopPrice(priceExcl, vatRate, cfg) {
+  return round2(cfg.pricesIncludeTax ? priceExcl * (1 + (Number(vatRate) || 0) / 100) : priceExcl);
+}
+
+/**
+ * Schrijft prijs en/of voorraad terug (REST v3, batch van hooguit 100).
+ * updates: [{ id, price (excl. btw), vatRate, stockQty }]; een veld dat
+ * ontbreekt blijft in de webshop zoals het is. Geeft per product { id, ok,
+ * error }.
+ */
+async function updateProducts(cfg, updates, { fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
+  if (cfg.mode !== 'rest') throw new SourceError('rest_required', 'Terugschrijven naar de webshop kan alleen via de REST API.', 400);
+  const base = await checkedBase(cfg, { allowInsecure, resolveHost });
+  const headers = restAuth(cfg);
+  const out = [];
+  for (let i = 0; i < updates.length; i += PER_PAGE) {
+    const part = updates.slice(i, i + PER_PAGE).map((u) => {
+      const p = { id: Number(u.id) };
+      if (u.price != null) p.regular_price = shopPrice(u.price, u.vatRate, cfg).toFixed(2);
+      if (u.stockQty != null) { p.manage_stock = true; p.stock_quantity = Math.max(0, Math.floor(u.stockQty)); }
+      return p;
+    });
+    const { body } = await getJson(`${base}/wp-json/wc/v3/products/batch`, headers, fetchImpl, { method: 'POST', body: { update: part } });
+    const done = new Map((Array.isArray(body && body.update) ? body.update : []).map((p) => [String(p.id), p]));
+    for (const p of part) {
+      const r = done.get(String(p.id));
+      out.push(r && !r.error ? { id: String(p.id), ok: true } : { id: String(p.id), ok: false, error: String((r && r.error && r.error.message) || 'niet bijgewerkt').slice(0, 200) });
+    }
+  }
+  return out;
 }
 
 /** Koppelinstelling (instelling shopSource) zonder sleutels; die staan apart en versleuteld. */
@@ -160,8 +236,12 @@ function sanitizeShop(raw) {
     mode: r.mode === 'rest' ? 'rest' : 'store',
     pricesIncludeTax: r.pricesIncludeTax !== false,
     vatRate: [0, 9, 21].includes(vat) ? vat : 21,
+    // Prijzen en voorraad uit Aquatech naar de webshop sturen (REST API met
+    // schrijfrechten); uit = de webshop blijft leidend voor de prijzen.
+    push: r.mode === 'rest' && r.push === true,
+    pushStock: r.pushStock !== false,
     mapping,
   };
 }
 
-module.exports = { fetchProducts, normalizeBaseUrl, sanitizeShop, SourceError };
+module.exports = { fetchProducts, updateProducts, shopPrice, normalizeBaseUrl, sanitizeShop, SourceError };

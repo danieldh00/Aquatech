@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.61.0',
+      date: '2026-10-21',
+      title: 'Facturen, verkoopprijzen en de webshop vanuit AquaTech',
+      items: [
+        { text: 'Nieuwe module **Facturen**: maak een factuur met één klik vanuit een werkorder (de offerteregels, plus meerwerk dat op de werkorder is geboekt) of als losse verkoop. Een concept pas je vrij aan; definitief krijgt hij een doorlopend factuurnummer. Afdrukken of opslaan als PDF, betaald markeren en crediteren.', for: ['facturen'] },
+        { text: 'Export voor de boekhouding: een Excel-bestand voor **Visma** met per factuur de omzet per categorie (bijv. *Omzet producten hoog 21%*) en de grootboekrekening, plus de debiteuren. Naam en rekeningnummer per categorie stel je zelf in.', for: ['facturen'] },
+        { text: 'In **Voorraadbeheer** heeft elk artikel nu een verkoopprijs, btw-tarief en omzetgroep. Met de webshopkoppeling aan gaan prijs en voorraad vanzelf naar de webshop, en wat in de webshop verkocht is, wordt hier afgeboekt. Producten uit de webshop neem je met één klik over als artikel.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '0.60.0',
       date: '2026-10-21',
       title: 'Storing of onderhoud melden via het portaal',
