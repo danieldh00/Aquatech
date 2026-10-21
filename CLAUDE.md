@@ -319,7 +319,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `handoverOf` → `workorders.createReceived` (werkorder zonder offerte). De
   uitbesteder ziet alleen `execution` (status, planning, stappen). Werkorder-API
   geeft `outsourcing` mee (`ctx.outsourcingOf`).
-- **Voorraadbeheer** (0.58.0, module `frontend/voorraad/`, recht `voorraad`:
+- **Voorraadbeheer** (0.59.0, module `frontend/voorraad/`, recht `voorraad`:
   beheerder + installateur): `backend/src/stock.js`, tabellen `stock_items`
   (code uniek per tenant = catalogus-/stuklijstcode, `on_hand`),
   `stock_movements` (logboek met `balance`, `source` `gereed`|`handmatig`|
@@ -381,6 +381,15 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `for: [rechten]`). **Bij elke versie-bump een regel bovenaan releases.js**
   (test eist dat). `api/me` geeft `news` (aantal nieuw, cache 30 s);
   gezien-stand in voorkeuren `newsSeenAt`/`seenRelease` (`POST /api/news/seen`).
+- **Offline/PWA** (0.58.0): `frontend/sw.js` (geregistreerd door
+  `shared/common.js`, ook manifest), regels in `shared/offline-core.js`
+  (UMD, getest), pagina-API + paneel `shared/offline.js|.css`. Gegevens alleen
+  voor de lijst `CACHEABLE` en een eigen account met `werkorders`; gewist bij
+  uitloggen/andere gebruiker. **Schrijfactie offline-geschikt maken**: kop via
+  `AquatechOffline.headers({ key, label, base, patch })`, 202 `{ queued }`
+  afhandelen; server: `Idempotency-Key` werkt generiek (`idempotency.js`),
+  conflictcontrole met `ifBaseOf(req)` → 409 `conflict`. Nieuwe GET die offline
+  moet werken: in `CACHEABLE`. Nieuwe pagina offline: `PRECACHE_PAGES` in sw.js.
 - Health: `GET /api/health` (versie uit `package.json`).
 
 ## Checklist voor elke nieuwe feature (zonder dat Daniël erom vraagt)

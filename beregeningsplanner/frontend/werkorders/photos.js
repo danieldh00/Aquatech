@@ -115,15 +115,19 @@
   }
 
   // ---------- Galerij bij een werkorder ----------
-  const state = { wo: null, items: [], max: 100, opts: {}, busy: false };
+  // pending: foto's die offline zijn gemaakt en nog in de wachtrij staan
+  // ({ queueId, thumb (data-URL), kind, customerVisible, takenAt }).
+  const state = { wo: null, items: [], pending: [], max: 100, opts: {}, busy: false };
+  const Offline = () => window.AquatechOffline;
   const $ = (sel) => document.querySelector(sel);
   const base = () => state.opts.base || '../';
   const toast = (msg, err) => (state.opts.toast ? state.opts.toast(msg, err) : console[err ? 'error' : 'log'](msg));
 
-  async function call(url, { method = 'GET', body } = {}) {
+  async function call(url, { method = 'GET', body, offline } = {}) {
+    const extra = offline && Offline() ? Offline().headers(offline) : {};
     const res = await fetch(`${base()}${url}`, {
       method, cache: 'no-store',
-      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+      headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extra },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const out = await res.json().catch(() => ({}));
@@ -154,34 +158,59 @@
     </div>`;
   }
 
+  // Offline gemaakt, nog niet verstuurd: alleen tonen (bewerken kan na versturen).
+  function pendingTile(p) {
+    return `<div class="ph-tile pending" data-queue="${esc(p.queueId)}">
+      <span class="ph-badge wait">Wacht op verbinding</span>
+      <span class="ph-img"><img src="${esc(p.thumb)}" alt="${esc(KINDS[p.kind] || 'Foto')}"></span>
+      <div class="ph-meta"><span>${esc(KINDS[p.kind] || '')} · ${esc(when(p.takenAt))}${p.customerVisible ? ' · zichtbaar voor de klant' : ' · alleen intern'}</span></div>
+    </div>`;
+  }
+
   function render() {
     const box = $('#ph-gallery');
     if (!box) return;
-    $('#ph-count').textContent = state.items.length ? `${state.items.length} foto${state.items.length === 1 ? '' : "'s"}` : '';
+    const total = state.items.length + state.pending.length;
+    $('#ph-count').textContent = total ? `${total} foto${total === 1 ? '' : "'s"}${state.pending.length ? ` (${state.pending.length} nog te versturen)` : ''}` : '';
+    const waiting = state.pending.length ? `<div class="ph-group">Nog te versturen (${state.pending.length})</div><div class="ph-grid">${state.pending.map(pendingTile).join('')}</div>` : '';
     if (!state.items.length) {
+      if (waiting) { box.innerHTML = waiting; return; }
       box.innerHTML = '<p class="ph-empty">Nog geen foto\'s. Leg vast hoe de tuin eruitzag, hoe de leidingen liggen en hoe de installatie is opgeleverd.</p>';
       return;
     }
     box.innerHTML = Object.entries(KINDS).map(([k, label]) => {
       const list = state.items.filter((p) => p.kind === k);
       return list.length ? `<div class="ph-group">${label} (${list.length})</div><div class="ph-grid">${list.map(tile).join('')}</div>` : '';
-    }).join('');
+    }).join('') + waiting;
   }
 
   const ordered = () => Object.keys(KINDS).flatMap((k) => state.items.filter((p) => p.kind === k));
 
+  const photosUrl = (wo) => `api/workorders/${encodeURIComponent(wo.id)}/photos`;
+
   async function load() {
     const wo = state.wo;
-    try {
-      const out = await call(`api/workorders/${encodeURIComponent(wo.id)}/photos`);
-      if (state.wo !== wo) return;
+    const [out, queued] = await Promise.all([
+      call(photosUrl(wo)).catch((e) => ({ error: e })),
+      Offline() ? Offline().list({ prefix: photosUrl(wo), method: 'POST' }) : [],
+    ]);
+    if (state.wo !== wo) return;
+    if (out.error) {
+      state.items = [];
+      if (navigator.onLine) toast(`Foto's laden mislukt: ${out.error.message}`, true);
+    } else {
       state.items = out.items || [];
       state.max = out.max || 100;
-    } catch (e) {
-      state.items = [];
-      toast(`Foto's laden mislukt: ${e.message}`, true);
     }
+    state.pending = queued.filter((q) => q.url === photosUrl(wo)).map(fromQueue).filter(Boolean);
     render();
+  }
+
+  function fromQueue(q) {
+    try {
+      const b = JSON.parse(q.body);
+      return { queueId: q.id, thumb: `data:image/jpeg;base64,${b.thumb}`, kind: b.kind, customerVisible: b.customerVisible !== false, takenAt: b.takenAt || new Date(q.createdAt).toISOString() };
+    } catch (e) { return null; }
   }
 
   async function upload(files) {
@@ -192,16 +221,25 @@
     const visible = $('#ph-visible').checked;
     const status = $('#ph-status');
     let ok = 0;
+    let queuedCount = 0;
     state.busy = true;
     for (let i = 0; i < list.length; i++) {
-      if (state.items.length >= state.max) { toast(`Maximaal ${state.max} foto's per werkorder.`, true); break; }
+      if (state.items.length + state.pending.length >= state.max) { toast(`Maximaal ${state.max} foto's per werkorder.`, true); break; }
       status.textContent = `Foto ${i + 1} van ${list.length} verwerken…`;
       try {
         const { image, thumb } = await prepare(list[i]);
         status.textContent = `Foto ${i + 1} van ${list.length} uploaden…`;
-        const p = await call(`api/workorders/${encodeURIComponent(wo.id)}/photos`, { method: 'POST', body: {
-          image, thumb, kind, customerVisible: visible, takenAt: list[i].lastModified ? new Date(list[i].lastModified).toISOString() : undefined,
-        } });
+        const takenAt = list[i].lastModified ? new Date(list[i].lastModified).toISOString() : undefined;
+        const p = await call(photosUrl(wo), {
+          method: 'POST', body: { image, thumb, kind, customerVisible: visible, takenAt },
+          // Zonder bereik: op het toestel bewaren en later versturen.
+          offline: { label: `Foto bij ${wo.number || 'werkorder'}` },
+        });
+        if (p.queued) {
+          queuedCount++;
+          if (state.wo === wo) { state.pending.push({ queueId: p.id, thumb: `data:image/jpeg;base64,${thumb}`, kind, customerVisible: visible, takenAt: takenAt || new Date().toISOString() }); render(); }
+          continue;
+        }
         if (state.wo === wo) { state.items.push(p); render(); }
         ok++;
       } catch (e) {
@@ -211,13 +249,16 @@
     state.busy = false;
     status.textContent = '';
     if (ok) toast(`${ok} foto${ok === 1 ? '' : "'s"} toegevoegd`);
+    if (queuedCount) toast(`${queuedCount} foto${queuedCount === 1 ? '' : "'s"} bewaard op dit toestel; ${queuedCount === 1 ? 'wordt' : 'worden'} verstuurd zodra er verbinding is`);
   }
 
   async function patch(id, body) {
     try {
-      const p = await call(`api/workorders/${encodeURIComponent(state.wo.id)}/photos/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+      const p = await call(`api/workorders/${encodeURIComponent(state.wo.id)}/photos/${encodeURIComponent(id)}`, {
+        method: 'PATCH', body, offline: { key: `photo:${id}`, label: `Foto bij ${state.wo.number || 'werkorder'} (bijschrift/fase)` },
+      });
       const i = state.items.findIndex((x) => x.id === id);
-      if (i >= 0) state.items[i] = p;
+      if (i >= 0) state.items[i] = p.queued ? { ...state.items[i], ...body } : p;
       if (body.kind !== undefined || body.customerVisible !== undefined) render();
     } catch (e) {
       toast(`Opslaan mislukt: ${e.message}`, true);
@@ -270,11 +311,26 @@
     state.opts = opts;
     state.wo = wo;
     state.items = [];
+    state.pending = [];
     bind();
     $('#ph-kind').value = defaultKind();
     $('#ph-visible').checked = true;
     $('#ph-gallery').innerHTML = '<p class="ph-empty">Foto\'s laden…</p>';
     load();
+  }
+
+  // Offline gemaakte foto verstuurd: uit "nog te versturen" naar de galerij.
+  if (window.AquatechOffline) {
+    window.AquatechOffline.on('synced', (msg) => {
+      const wo = state.wo;
+      const qid = msg.item ? msg.item.id : msg.id;
+      if (!wo || !qid) return;
+      const i = state.pending.findIndex((p) => p.queueId === qid);
+      if (i < 0) return;
+      state.pending.splice(i, 1);
+      if (!msg.discarded && msg.body && msg.body.id && !state.items.some((x) => x.id === msg.body.id)) state.items.push(msg.body);
+      render();
+    });
   }
 
   window.WorkOrderPhotos = { open, prepare, KINDS, busy: () => state.busy };

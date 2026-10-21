@@ -13,12 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '0.58.0',
+      version: '0.59.0',
       date: '2026-10-21',
       title: 'Voorraadbeheer',
       items: [
         { text: 'Nieuwe module **Voorraadbeheer**: wat er op voorraad ligt, met locatie, minimumvoorraad en voorraadwaarde. Artikelen neem je met één klik over uit de catalogus van de stuklijst. Ontvangsten, tellingen en correcties boek je per artikel, en alles is als Excel te exporteren.', for: ['voorraad'] },
         { text: 'Een werkorder **reserveert** zijn materialen zolang hij open staat, en wordt hij **Gereed**, dan worden ze vanzelf van de voorraad **afgeboekt**. Op de werkorder zie je in het blok **Voorraad** wat er nodig is, wat er ligt en waar een tekort is; daar kun je ook zelf afboeken of een retour boeken.', for: ['werkorders'] },
+      ],
+    },
+    {
+      version: '0.58.0',
+      date: '2026-10-21',
+      title: 'Werken zonder bereik op locatie',
+      items: [
+        { text: 'AquaTech is nu als **app op je telefoon** te zetten: kies in de browser *Toevoegen aan beginscherm* (iPhone: deelknop) of *App installeren* (Android).', for: ['werkorders'] },
+        { text: 'Geen bereik op locatie? Je **startscherm en werkorders blijven werken**. De klussen van vandaag staan al op je toestel zodra je het overzicht met verbinding hebt geopend. Afvinken, uren, notities en **foto\'s** worden bewaard en vanzelf verstuurd zodra er weer verbinding is. Rechtsonder zie je wat er nog wacht.', for: ['werkorders'] },
+        { text: 'Heeft kantoor dezelfde werkorder intussen ook gewijzigd, dan worden beide wijzigingen samengevoegd. Alleen als jullie hetzelfde veld anders invulden, kies je zelf welke versie blijft.', for: ['werkorders'] },
       ],
     },
     {
