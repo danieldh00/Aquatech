@@ -262,7 +262,21 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
     { at: 1, title: 'Teamoverleg vrijdag 8:00', audience: 'medewerkers', pinned: false,
       body: 'Vrijdag om 8:00 kort overleg in de werkplaats over de planning van het voorjaar. Koffie staat klaar.' },
   ];
-  return { accounts, plans, quotes, shop, news, day };
+  // AI-kosten: plannen die de afgelopen weken met AI zijn herkend (Beheer >
+  // AI-kosten). Verbruik zoals de AI-dienst het opgeeft; één weigering, één
+  // keer een ander model en één verzoek van een klant.
+  const aiUsage = [
+    { at: 33, user: 'inst1', model: 'claude-opus-5-5', input: 3120, output: 9480, ms: 41200, areas: 7, width: 1600, height: 1200 },
+    { at: 27, user: 'inst1', model: 'claude-opus-5-5', input: 2890, output: 7310, ms: 35800, areas: 5, width: 1400, height: 1000 },
+    { at: 20, user: 'inst2', model: 'claude-opus-5-5', input: 3340, output: 11820, ms: 52400, areas: 9, width: 2000, height: 1500 },
+    { at: 16, user: 'inst2', model: 'claude-opus-5-5', input: 3010, output: 2210, ms: 14100, status: 'refusal', width: 1200, height: 900 },
+    { at: 12, user: 'beheerder', model: 'claude-sonnet-5-5', input: 2760, output: 6020, ms: 22900, areas: 6, width: 1500, height: 1100 },
+    { at: 8, user: 'inst2', model: 'claude-opus-5-5', input: 3480, output: 12940, ms: 58300, areas: 11, width: 2200, height: 1600 },
+    { at: 6, user: 'klant1', model: 'claude-opus-5-5', input: 2650, output: 5880, ms: 27600, areas: 4, width: 1280, height: 960 },
+    { at: 4, user: 'beheerder', model: 'claude-opus-5-5', input: 3200, output: 8740, ms: 39100, areas: 8, width: 1800, height: 1300 },
+    { at: 1, user: 'inst1', model: 'claude-opus-5-5', input: 2980, output: 10230, ms: 46700, areas: 10, width: 1700, height: 1250 },
+  ];
+  return { accounts, plans, quotes, shop, news, aiUsage, day };
 }
 
 // Opties die de klant zelf kan aanvinken.
@@ -390,9 +404,9 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
  * er geen klantlinks (de afspraaklink staat ernaast: openbaar/afspraak.html).
  */
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, outsourcing, news } = stores;
+  const { db, quotes, workorders, shop, settings, photos, outsourcing, news, aiUsage } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0, offers: 0, news: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0, offers: 0, news: 0, aiRequests: 0 };
   const apptBase = shareBase ? shareBase.replace(/offerte\.html$/, 'afspraak.html') : null;
   const today = new Date().toISOString().slice(0, 10);
   const dateIn = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
@@ -490,6 +504,16 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
       counts.news++;
     }
     news.forget(seeded.tenantId);
+  }
+  // AI-verzoeken (kostenoverzicht), via de echte opslag (kosten uitgerekend).
+  if (aiUsage && set.aiUsage) {
+    for (const a of set.aiUsage) {
+      const id = aiUsage.record({ tenantId: seeded.tenantId, userId: seeded.users[a.user].id, feature: 'plan_analyse', model: a.model,
+        status: a.status || 'ok', usage: { input_tokens: a.input, output_tokens: a.output }, durationMs: a.ms,
+        eurCentsPerUsd: settings.get('aiEurCentsPerUsd'), detail: { width: a.width, height: a.height, ...(a.areas ? { areas: a.areas } : {}) } });
+      q('UPDATE ai_usage SET created_at = ? WHERE id = ?').run(set.day(a.at), id);
+      counts.aiRequests++;
+    }
   }
   // Webshop alleen als de testomgeving geen eigen webshop heeft (de nepwinkel
   // van een vorige keer vullen we opnieuw).

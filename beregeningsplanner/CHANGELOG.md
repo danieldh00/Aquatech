@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.53.0
+
+Inzicht in de kosten van AI, modelkeuze en een eigen sleutel per organisatie.
+
+- **Beheer → AI-kosten**: elk AI-verzoek (nu: plan herkennen) staat in de
+  nieuwe tabel `ai_usage` met gebruiker, omgeving, functie, model,
+  resultaat, tokens in/uit/cache, duur en kosten in dollar en euro
+  (migratie 21, SQLite en PostgreSQL). Totalen per dag of maand, per
+  gebruiker, functie en model, losse verzoeken met details en een
+  Excel-export (`aiusage.js`, API `/api/admin/ai-usage[/requests]`).
+  Ook mislukte verzoeken die tokens kostten (weigering, te lang,
+  onleesbaar) tellen mee. Geen afbeelding of antwoord in het logboek;
+  bewaartermijn = die van het auditlog.
+- Een hoofdbeheerder ziet ook **alle organisaties** samen
+  (`?scope=all`, uitsplitsing per organisatie) of één andere omgeving
+  (`?tenant=`); een gewone beheerder krijgt daarop 403.
+- **Modelkeuze** per organisatie in Beheer → Instellingen (instelling
+  `aiModel`: Opus 5.5, Sonnet 5.5, Haiku 5.5 of Fable 5.1, met prijs en
+  uitleg); prijzen gedeeld in `frontend/shared/ai-models.js`. Server-side
+  fallback alleen bij modellen die het ondersteunen. **Sleutel testen**
+  controleert het gekozen model.
+- **Eigen API-sleutel per organisatie**: de sleutel uit de Docker-omgeving
+  geldt alleen voor de hoofdorganisatie (en diens testomgevingen), nooit
+  voor een andere organisatie; die moet een eigen sleutel invullen. Een
+  testomgeving zonder eigen sleutel gebruikt sleutel en model van haar
+  live-omgeving.
+- Instelling `aiEurCentsPerUsd` (koers, standaard 86) en nieuw instellings-
+  type `enum`.
+- Testdata: AI-verzoeken van de testgebruikers (ook een weigering, een
+  ander model en een klant).
+
 ## 0.52.0
 
 Klanten tekenen zelf, een installateur controleert.

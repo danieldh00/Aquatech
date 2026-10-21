@@ -1,10 +1,14 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const path = require('path');
+const AiModels = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'ai-models.js'));
 
 // Leest een tuinplan (afbeelding) en geeft schaal, gebieden en elementen terug
 // in pixelcoördinaten van de aangeleverde afbeelding. De frontend rekent dat om
 // naar meters en maakt er een bewerkbaar concept van.
 
-const MODEL = 'claude-opus-5-5';
+// Standaardmodel; de beheerder kiest per organisatie een ander model in
+// Beheer > Instellingen (aiModel, zie shared/ai-models.js).
+const MODEL = AiModels.DEFAULT;
 
 const AREA_TYPES = ['lawn', 'bed', 'hedge', 'planter', 'wet', 'dry'];
 const ELEMENT_KINDS = ['source', 'controller', 'valvebox', 'outlet'];
@@ -131,15 +135,22 @@ function describe(err) {
 }
 
 class AnalyzeError extends Error {
-  constructor(code, message, status = 502) {
+  constructor(code, message, status = 502, extra = {}) {
     super(message);
     this.code = code;
     this.status = status;
+    // Bij een antwoord dat toch tokens kostte (weigering, te lang, onleesbaar):
+    // model en verbruik, zodat de kosten in het overzicht komen.
+    if (extra.model) this.model = extra.model;
+    if (extra.usage) this.usage = extra.usage;
   }
 }
 
-function createPlanAnalyzer({ apiKey, client, log = (msg) => console.warn(msg) }) {
+function createPlanAnalyzer({ apiKey, client, model = MODEL, log = (msg) => console.warn(msg) }) {
   const anthropic = client || (apiKey ? new Anthropic({ apiKey }) : null);
+  const modelId = AiModels.SELECTABLE.includes(model) ? model : MODEL;
+  // Server-side fallback alleen bij modellen die het ondersteunen.
+  const withFallback = Boolean(AiModels.MODELS[modelId].fallback);
 
   // Vertaalt een fout van de AI-dienst naar een begrijpelijke melding.
   function toAnalyzeError(err) {
@@ -157,7 +168,7 @@ function createPlanAnalyzer({ apiKey, client, log = (msg) => console.warn(msg) }
   async function analyze({ mediaType, data, width, height }) {
     if (!anthropic) throw new AnalyzeError('not_configured', 'Automatisch herkennen is niet ingesteld: stel de API-sleutel in bij Instellingen.', 409);
     const params = {
-      model: MODEL,
+      model: modelId,
       max_tokens: 32000,
       thinking: { type: 'adaptive' },
       output_config: { effort: 'high', format: { type: 'json_schema', schema: SCHEMA } },
@@ -174,28 +185,37 @@ function createPlanAnalyzer({ apiKey, client, log = (msg) => console.warn(msg) }
     };
     let message;
     try {
-      try {
-        // Met server-side fallback: bij een weigering neemt een ander model het over.
-        message = await anthropic.beta.messages
-          .stream({ ...params, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' })
-          .finalMessage();
-      } catch (err) {
-        if (!(err instanceof Anthropic.BadRequestError) || isNoCredit(err)) throw err;
-        // Sommige accounts/regio's ondersteunen de fallback-beta niet: één keer zonder.
-        log(`Verzoek met fallback geweigerd (${describe(err)}); opnieuw zonder fallback.`);
+      if (!withFallback) {
         message = await anthropic.messages.stream(params).finalMessage();
+      } else {
+        try {
+          // Met server-side fallback: bij een weigering neemt een ander model het over.
+          message = await anthropic.beta.messages
+            .stream({ ...params, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' })
+            .finalMessage();
+        } catch (err) {
+          if (!(err instanceof Anthropic.BadRequestError) || isNoCredit(err)) throw err;
+          // Sommige accounts/regio's ondersteunen de fallback-beta niet: één keer zonder.
+          log(`Verzoek met fallback geweigerd (${describe(err)}); opnieuw zonder fallback.`);
+          message = await anthropic.messages.stream(params).finalMessage();
+        }
       }
     } catch (err) {
       throw toAnalyzeError(err);
     }
-    if (message.stop_reason === 'refusal') throw new AnalyzeError('refusal', 'De AI-dienst wilde deze afbeelding niet verwerken.');
-    if (message.stop_reason === 'max_tokens') throw new AnalyzeError('too_long', 'Het plan is te complex om in één keer te verwerken. Probeer een uitsnede.');
+    return finish(message, width, height);
+  }
+
+  function finish(message, width, height) {
+    const spent = { model: message.model, usage: message.usage };
+    if (message.stop_reason === 'refusal') throw new AnalyzeError('refusal', 'De AI-dienst wilde deze afbeelding niet verwerken.', 502, spent);
+    if (message.stop_reason === 'max_tokens') throw new AnalyzeError('too_long', 'Het plan is te complex om in één keer te verwerken. Probeer een uitsnede.', 502, spent);
     const text = message.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     let parsed;
     try {
       parsed = JSON.parse(text);
     } catch {
-      throw new AnalyzeError('invalid_output', 'Het antwoord van de AI-dienst was onleesbaar. Probeer het opnieuw.');
+      throw new AnalyzeError('invalid_output', 'Het antwoord van de AI-dienst was onleesbaar. Probeer het opnieuw.', 502, spent);
     }
     return { ...validate(parsed, width, height), model: message.model, usage: message.usage };
   }
@@ -204,14 +224,14 @@ function createPlanAnalyzer({ apiKey, client, log = (msg) => console.warn(msg) }
   async function check() {
     if (!anthropic) throw new AnalyzeError('not_configured', 'Er is geen API-sleutel ingesteld.', 409);
     try {
-      await anthropic.models.retrieve(MODEL);
+      await anthropic.models.retrieve(modelId);
     } catch (err) {
       throw toAnalyzeError(err);
     }
-    return { ok: true, model: MODEL };
+    return { ok: true, model: modelId };
   }
 
-  return { available: Boolean(anthropic), analyze, check };
+  return { available: Boolean(anthropic), model: modelId, analyze, check };
 }
 
 module.exports = { createPlanAnalyzer, validate, AnalyzeError, SCHEMA, MODEL };

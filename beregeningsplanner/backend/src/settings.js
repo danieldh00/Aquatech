@@ -6,6 +6,7 @@ const { sanitizeShop } = require('./woocommerce');
 const { sanitizeOutsourcing } = require('./outsourcing');
 const path = require('path');
 const Theme = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'theme.js'));
+const AiModels = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'ai-models.js'));
 
 // App-instellingen, te beheren door beheerders via Beheer > Instellingen. Ze
 // staan per tenant in de database (tabel settings) en werken zonder herstart.
@@ -27,6 +28,11 @@ const FIELDS = {
   aiEnabled: { type: 'bool', default: true },
   aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },
   aiHourlyPerIp: { type: 'int', default: 10, min: 1, max: 100 },
+  // Model voor AI-verzoeken (prijzen in shared/ai-models.js) en de koers
+  // waarmee Beheer > AI-kosten de dollarprijzen in euro's omrekent
+  // (eurocent per dollar).
+  aiModel: { type: 'enum', values: AiModels.SELECTABLE, default: AiModels.DEFAULT },
+  aiEurCentsPerUsd: { type: 'int', default: 86, min: 50, max: 200 },
   modules: { type: 'flags', default: {} },
   // Sessies: uitgelogd na zoveel dagen zonder gebruik, en hoe dan ook na de
   // maximale duur (opnieuw inloggen).
@@ -80,6 +86,7 @@ function coerce(def, raw) {
     return out;
   }
   if (def.type === 'object') return def.sanitize(raw);
+  if (def.type === 'enum') return def.values.includes(raw) ? raw : def.default;
   return raw;
 }
 
@@ -184,6 +191,9 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
         const n = raw;
         if (typeof n !== 'number' || !Number.isInteger(n) || n < def.min || n > def.max) throw new SettingsError(key, `Kies een geheel getal van ${def.min} tot ${def.max}.`);
         next[key] = n;
+      } else if (def.type === 'enum') {
+        if (!def.values.includes(raw)) throw new SettingsError(key, 'Kies een van de mogelijkheden.');
+        next[key] = raw;
       } else if (def.type === 'bool') {
         if (typeof raw !== 'boolean') throw new SettingsError(key, 'Ongeldige waarde.');
         next[key] = raw;
