@@ -500,8 +500,28 @@
         this._renderReview();
         if (STEPS[this.step].id === 'bom') this.renderStepPanel();
         this.toast(action === 'approve' ? 'Plan goedgekeurd' : 'Goedkeuring ingetrokken');
+        if (action === 'approve') this._learnFromPlan();
       } catch (e) {
         this.toast(`Lukt niet: ${e.message}`, true);
+      }
+    },
+
+    /**
+     * Een goedgekeurd plan is door een mens gecontroleerd: de lokale herkenning leert van de vlakken op de
+     * ondergrond. Alleen kleurtellingen gaan naar de server; zonder ondergrond of vlakken gebeurt niets.
+     */
+    async _learnFromPlan() {
+      const st = this.state, bg = st.background;
+      if (!bg || !bg.dataUrl || !bg.scale || !st.areas.length || !st.serverId) return;
+      try {
+        const img = await window.PlanImport.analyzeImageFrom(bg.dataUrl);
+        // meters → pixels van de ondergrond → pixels van de analyse-afbeelding
+        const toPx = (p) => ({ x: ((p.x - (bg.x || 0)) / bg.scale) * img.factor, y: ((p.y - (bg.y || 0)) / bg.scale) * img.factor });
+        const areas = st.areas.filter((a) => a.pts && a.pts.length >= 3).map((a) => ({ type: a.type, points: a.pts.map(toPx) }));
+        const samples = await window.LocalRecognizer.learn(img, { areas });
+        if (samples) await window.Concept.teach({ planId: st.serverId, samples });
+      } catch (e) {
+        /* leren is een bijzaak */
       }
     },
 
@@ -750,6 +770,7 @@
       // voorlopige schaal: plan ca. 30 m breed; daarna herkennen of kalibreren
       this.state.background = { dataUrl: b.dataUrl, width: b.width, height: b.height, paper: b.paper || null, x: 0, y: 0, scale: window.Concept.FALLBACK_WIDTH_M / b.width, opacity: 0.6 };
       this._analyzeImage = loaded.analyze;
+      this.lastRecognition = null;
       if (!this.state.meta.name || this.state.meta.name === 'Nieuw beregeningsplan') this.state.meta.name = file.name.replace(/\.[^.]+$/, '');
       await this.refreshBackground();
       this._save();
@@ -762,7 +783,7 @@
     },
 
     /** Plan laten herkennen en er een volledig, bewerkbaar concept van maken. */
-    async makeConcept() {
+    async makeConcept({ fresh = false } = {}) {
       const st = this.state;
       if (!st.background || !st.background.dataUrl) { this.toast('Laad eerst een plan.', true); return; }
       if ((st.areas.length || st.sprinklers.length) && !confirm('Het huidige ontwerp wordt vervangen door een nieuw concept. Doorgaan?')) return;
@@ -777,14 +798,25 @@
         if (useAi) {
           this.busy('Plan wordt gelezen met AI: schaal, gazon, borders en bebouwing herkennen… Dit duurt meestal 1 à 2 minuten.');
           try {
-            raw = await window.Concept.analyze(img);
+            raw = await window.Concept.analyze(img, { fresh });
+            const rec = raw.recognition;
+            this.lastRecognition = rec || null;
+            if (rec && rec.cached) extraWarnings.push('Deze tekening is eerder met AI herkend: hetzelfde resultaat is opnieuw gebruikt (zonder kosten). Een nieuwe herkenning kan met "Opnieuw herkennen met AI" in stap 1.');
+            // de lokale herkenning leert van deze uitkomst (alleen kleurtellingen naar de server)
+            if (rec && rec.id && !rec.learned) {
+              const answer = raw;
+              window.LocalRecognizer.learn(img, answer)
+                .then((samples) => samples && window.Concept.teach({ recognitionId: rec.id, samples }))
+                .catch(() => {});
+            }
           } catch (e) {
             extraWarnings.push(`AI-herkenning niet gelukt (${e.message}); lokaal herkend.`);
           }
         }
         if (!raw) {
           this.busy('Plan wordt lokaal gelezen (zonder AI)…');
-          raw = await window.LocalRecognizer.analyze(img, (msg) => this.busy(`Plan wordt lokaal gelezen: ${msg}`));
+          const learned = ANON ? null : await window.Concept.learned();
+          raw = await window.LocalRecognizer.analyze(img, (msg) => this.busy(`Plan wordt lokaal gelezen: ${msg}`), { learned });
         }
         result = window.Concept.build(raw, img);
         if (result.scaleInfo.estimated && result.gardenWidthPx) {
@@ -898,6 +930,7 @@
       this._renderReview();
       this.conceptWarnings = [];
       this._analyzeImage = null;
+      this.lastRecognition = null;
       this.editor.selection = null;
       this.editor.bgImg = null;
       this.editor.heat = null;
@@ -1115,6 +1148,9 @@
           </select></label>` : ''}
         <button id="plan-concept" class="btn primary">Plan laden en concept maken…</button>
         ${bg ? '<button id="bg-concept" class="btn">Concept maken van deze ondergrond</button>' : ''}
+        ${bg && ai.available && s.recognizer === 'ai' && this.lastRecognition && this.lastRecognition.cached
+          ? '<button id="bg-fresh" class="btn">Opnieuw herkennen met AI</button><p class="hint small">Dezelfde tekening geeft altijd hetzelfde AI-resultaat. Alleen als dat niet goed is: opnieuw laten herkennen (kost API-tegoed); de nieuwe uitkomst geldt daarna.</p>'
+          : ''}
         <p class="hint small">${s.recognizer === 'ai' && ai.available
           ? 'De AI leest ook lijntekeningen en schetsen.'
           : 'Lokaal herkennen werkt het best op <b>gekleurde</b> tuinontwerpen: groen = gazon, donkergroen = haag, bruin/roze = beplanting, grijs/beige = bebouwing en verharding, blauw = water. De schaal wordt gelezen uit een maat met maatlijn (bijv. "12,00 m" of "1250").'}</p>
@@ -1150,6 +1186,7 @@
       $('#bg-load', el).onclick = () => { concept = false; $('#bg-file', el).click(); };
       if ($('#plan-concept', el)) $('#plan-concept', el).onclick = () => { concept = true; $('#bg-file', el).click(); };
       if ($('#bg-concept', el)) $('#bg-concept', el).onclick = () => this.makeConcept();
+      if ($('#bg-fresh', el)) $('#bg-fresh', el).onclick = () => this.makeConcept({ fresh: true });
       $('#bg-file', el).onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) this.loadBackground(f, { concept }); };
       if ($('#bg-cal', el)) {
         $('#bg-cal', el).onclick = () => { this.editor.setTool('calibrate'); this.toast('Trek een lijn over een bekende maat.'); };

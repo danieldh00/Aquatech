@@ -17,6 +17,7 @@
 
   const CORNER_DEVIATION = 20; // graden afwijking van een rechte lijn om als hoek te tellen
   const NARROW_WIDTH = 3.0; // m; smaller => strooksproeiers
+  const MIN_EDGE = 0.6; // m; kortere randjes van de vorm worden weggewerkt
   const SNAP = 0.5; // rasterpunten binnen deze fractie van de afstand tot de rand komen óp de rand
 
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -72,8 +73,34 @@
   /** Vorm waarop geplaatst wordt: zonder kartels (herkenning, toverstaf) en rechtgetrokken. */
   function placementShape(pts) {
     const simple = G.simplifyClosed(pts, clamp(0.035 * Math.sqrt(G.area(pts)), 0.12, 0.35));
-    const shape = G.orientCW(G.regularize(simple, G.dominantAngle([simple]), { tolDeg: 10, merge: 0.2 }));
+    const angle = G.dominantAngle([simple]);
+    let shape = G.orientCW(G.regularize(simple, angle, { tolDeg: 10, merge: 0.2 }));
+    // trapjes en inhammen van een paar decimeter (boomkroon, tekst op de rand) weg: die vragen anders
+    // elk een eigen hoekkop, terwijl de sproeiers er gewoon overheen werpen
+    const trimmed = collapseShortEdges(shape, MIN_EDGE);
+    if (trimmed.length >= 3 && trimmed.length < shape.length) {
+      const again = G.orientCW(G.regularize(trimmed, angle, { tolDeg: 10, merge: 0.2 }));
+      if (again.length >= 3 && Math.abs(G.area(again) - G.area(shape)) < 0.05 * G.area(shape)) shape = again;
+    }
     return shape.length >= 3 ? shape : pts;
+  }
+
+  /** Kortste rand korter dan `min` steeds samenvoegen tot zijn midden, tot er geen meer is. */
+  function collapseShortEdges(pts, min) {
+    let out = pts.slice();
+    while (out.length > 4) {
+      let best = -1, bestL = min;
+      for (let i = 0; i < out.length; i++) {
+        const L = G.dist(out[i], out[(i + 1) % out.length]);
+        if (L < bestL) { bestL = L; best = i; }
+      }
+      if (best < 0) break;
+      const j = (best + 1) % out.length;
+      const mid = { x: (out[best].x + out[j].x) / 2, y: (out[best].y + out[j].y) / 2 };
+      out = out.filter((_, k) => k !== best && k !== j);
+      out.splice(Math.min(best, out.length), 0, mid);
+    }
+    return out;
   }
 
   /** Hoeken van de vorm met beginrichting en binnenhoek. */

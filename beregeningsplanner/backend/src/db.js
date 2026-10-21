@@ -490,6 +490,30 @@ const MIGRATIONS = [
   CREATE INDEX ai_usage_tenant ON ai_usage (tenant_id, created_at);
   CREATE INDEX ai_usage_created ON ai_usage (created_at);
   `,
+  // 22: herkende plannen (zie recognitions.js). Een AI-herkenning wordt per
+  // tekening (SHA-256 van de afbeelding) bewaard, zodat dezelfde tekening
+  // altijd hetzelfde resultaat geeft. Daarnaast kleurtellingen (samples) van
+  // AI-herkenningen en goedgekeurde plannen, waarvan de lokale herkenning
+  // leert. Geen afbeelding in de tabel.
+  `
+  CREATE TABLE plan_recognitions (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    user_id     TEXT,
+    source      TEXT NOT NULL,
+    image_hash  TEXT NOT NULL DEFAULT '',
+    plan_id     TEXT,
+    model       TEXT NOT NULL DEFAULT '',
+    version     TEXT NOT NULL DEFAULT '',
+    result      TEXT NOT NULL DEFAULT '',
+    samples     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+  );
+  CREATE INDEX plan_recognitions_hash ON plan_recognitions (tenant_id, image_hash);
+  CREATE INDEX plan_recognitions_plan ON plan_recognitions (tenant_id, plan_id);
+  CREATE INDEX plan_recognitions_created ON plan_recognitions (tenant_id, created_at);
+  `,
 ];
 
 function openDb(file = ':memory:') {

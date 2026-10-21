@@ -362,6 +362,26 @@ const PG_MIGRATIONS = [
   CREATE INDEX ai_usage_tenant ON ai_usage (tenant_id, created_at);
   CREATE INDEX ai_usage_created ON ai_usage (created_at);
   `,
+  // 22: herkende plannen en geleerde kleuren (zie db.js).
+  `
+  CREATE TABLE plan_recognitions (
+    id          ${T} PRIMARY KEY,
+    tenant_id   ${T} NOT NULL ${FK('tenants(id)')},
+    user_id     ${T},
+    source      ${T} NOT NULL,
+    image_hash  ${T} NOT NULL DEFAULT '',
+    plan_id     ${T},
+    model       ${T} NOT NULL DEFAULT '',
+    version     ${T} NOT NULL DEFAULT '',
+    result      ${T} NOT NULL DEFAULT '',
+    samples     ${T} NOT NULL DEFAULT '',
+    created_at  ${T} NOT NULL,
+    updated_at  ${T} NOT NULL
+  );
+  CREATE INDEX plan_recognitions_hash ON plan_recognitions (tenant_id, image_hash);
+  CREATE INDEX plan_recognitions_plan ON plan_recognitions (tenant_id, plan_id);
+  CREATE INDEX plan_recognitions_created ON plan_recognitions (tenant_id, created_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

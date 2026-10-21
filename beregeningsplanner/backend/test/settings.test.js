@@ -188,9 +188,13 @@ test('daglimiet uit de instellingen geldt meteen', async () => {
     assert.strictEqual((await a.put('/api/admin/settings', { aiDailyLimit: 1 })).status, 200);
     const img = { image: 'data:image/png;base64,iVBORw0KGgo=', width: 10, height: 10 };
     assert.strictEqual((await a.post('/api/plan/analyze', img)).status, 200);
-    const second = await a.post('/api/plan/analyze', img);
+    const second = await a.post('/api/plan/analyze', { ...img, fresh: true });
     assert.strictEqual(second.status, 429);
     assert.strictEqual(second.body.error, 'daily_limit');
+    // dezelfde tekening nog eens: bewaarde herkenning, telt niet mee voor de daglimiet
+    const again = await a.post('/api/plan/analyze', img);
+    assert.strictEqual(again.status, 200);
+    assert.strictEqual(again.body.recognition.cached, true);
     const bad = await a.put('/api/admin/settings', { aiDailyLimit: 100000 });
     assert.strictEqual(bad.status, 400);
     assert.strictEqual(bad.body.field, 'aiDailyLimit');

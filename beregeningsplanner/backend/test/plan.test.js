@@ -69,11 +69,67 @@ test('analyse met nagebootste AI-dienst, daglimiet en invoercontrole', async () 
     const ok = await post(base, { image: PNG, width: 10, height: 10 });
     assert.strictEqual(ok.status, 200);
     assert.strictEqual((await ok.json()).scale.metersPerPixel, 0.02);
-    assert.strictEqual((await post(base, { image: PNG, width: 10, height: 10 })).status, 200);
-    const limited = await post(base, { image: PNG, width: 10, height: 10 });
+    assert.strictEqual((await post(base, { image: PNG, width: 10, height: 10, fresh: true })).status, 200);
+    const limited = await post(base, { image: PNG, width: 10, height: 10, fresh: true });
     assert.strictEqual(limited.status, 429);
     assert.strictEqual(calls, 2);
     assert.strictEqual((await (await fetch(`${base}/api/plan/status`)).json()).remainingToday, 0);
+  } finally { server.close(); }
+});
+
+test('zelfde tekening geeft altijd hetzelfde resultaat; opnieuw herkennen kan', async () => {
+  let calls = 0;
+  const analyzer = { available: true, model: 'claude-opus-5-5', analyze: async () => {
+    calls++;
+    return { scale: { metersPerPixel: 0.01 * calls }, areas: [{ type: 'lawn', name: `Gazon ${calls}`, points: [] }], elements: [], notes: '', model: 'claude-opus-5-5', usage: { input_tokens: 1 } };
+  } };
+  const { server, base } = await start({ analyzer });
+  try {
+    const first = await (await post(base, { image: PNG, width: 10, height: 10 })).json();
+    assert.strictEqual(first.recognition.cached, false);
+    const second = await (await post(base, { image: PNG, width: 10, height: 10 })).json();
+    assert.strictEqual(calls, 1, 'tweede keer geen AI-aanroep');
+    assert.strictEqual(second.recognition.cached, true);
+    assert.strictEqual(second.recognition.id, first.recognition.id);
+    assert.deepStrictEqual(second.areas, first.areas);
+    assert.strictEqual(second.scale.metersPerPixel, first.scale.metersPerPixel);
+    assert.strictEqual(second.usage, undefined, 'geen kosten bij een bewaarde herkenning');
+    // andere tekening: nieuwe herkenning
+    await post(base, { image: 'data:image/png;base64,iVBORw0KGgoA', width: 10, height: 10 });
+    assert.strictEqual(calls, 2);
+    // opnieuw herkennen: nieuwe uitkomst, die daarna vast blijft
+    const fresh = await (await post(base, { image: PNG, width: 10, height: 10, fresh: true })).json();
+    assert.strictEqual(calls, 3);
+    assert.strictEqual(fresh.areas[0].name, 'Gazon 3');
+    const after = await (await post(base, { image: PNG, width: 10, height: 10 })).json();
+    assert.strictEqual(after.areas[0].name, 'Gazon 3');
+    assert.strictEqual(calls, 3);
+  } finally { server.close(); }
+});
+
+test('leren: kleurtellingen bij een AI-herkenning, opgeteld per omgeving, invoercontrole', async () => {
+  const analyzer = { available: true, model: 'claude-opus-5-5', analyze: async () => ({ scale: {}, areas: [], elements: [], notes: '' }) };
+  const { server, base } = await start({ analyzer });
+  const learn = (body) => fetch(`${base}/api/plan/learn`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  try {
+    const empty = await (await fetch(`${base}/api/plan/learned`)).json();
+    assert.strictEqual(empty.examples, 0);
+    const { recognition } = await (await post(base, { image: PNG, width: 10, height: 10 })).json();
+    assert.strictEqual(recognition.learned, false);
+    const samples = { v: 1, bins: { 100: [0, 50, 0, 0, 0, 0], 7: [5, 0, 0, 0, 0, 1] } };
+    assert.strictEqual((await learn({ recognitionId: recognition.id, samples: { v: 1, bins: { 99999: [1, 0, 0, 0, 0, 0] } } })).status, 400);
+    assert.strictEqual((await learn({ recognitionId: recognition.id, samples: { v: 1, bins: { 1: [1, 2, 3] } } })).status, 400);
+    assert.strictEqual((await learn({ recognitionId: 'onbekend', samples })).status, 404);
+    assert.strictEqual((await learn({ recognitionId: recognition.id, samples })).status, 200);
+    // één keer per herkenning
+    assert.strictEqual((await learn({ recognitionId: recognition.id, samples })).status, 404);
+    const learned = await (await fetch(`${base}/api/plan/learned`)).json();
+    assert.strictEqual(learned.examples, 1);
+    assert.deepStrictEqual(learned.bins['100'], [0, 50, 0, 0, 0, 0]);
+    const again = await (await post(base, { image: PNG, width: 10, height: 10 })).json();
+    assert.strictEqual(again.recognition.learned, true);
+    // goedgekeurd plan: alleen ingelogd met recht plannen.goedkeuren (zie drawings.test.js)
+    assert.strictEqual((await learn({ planId: 'x', samples })).status, 401);
   } finally { server.close(); }
 });
 
@@ -83,6 +139,7 @@ test('met toegangscode: analyse vereist inloggen', async () => {
   try {
     assert.strictEqual((await post(base, { image: PNG, width: 10, height: 10 })).status, 401);
     assert.strictEqual((await fetch(`${base}/api/plan/status`)).status, 401);
+    assert.strictEqual((await fetch(`${base}/api/plan/learned`)).status, 401);
   } finally { server.close(); }
 });
 

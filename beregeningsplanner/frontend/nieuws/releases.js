@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.56.0',
+      date: '2026-10-21',
+      title: 'Herkennen zonder AI leert van de AI',
+      items: [
+        { text: 'Herkennen **zonder AI** is veel beter op gekleurde tuinontwerpen: getekende planten en bomen worden geen gazon meer, tekst of een watermerk over het gras snijdt geen stukken uit het gazon, en een logo of legenda naast de tuin wordt genegeerd. Daardoor komen de sproeiers weer netjes langs de randen.' },
+        { text: 'Dezelfde tekening geeft met AI nu **altijd hetzelfde resultaat**, en de tweede keer kost het geen API-tegoed. Klopt het resultaat niet, dan kan het in stap 1 opnieuw met **Opnieuw herkennen met AI**.' },
+        { text: 'De herkenning zonder AI **leert** van elke AI-herkenning en van elk goedgekeurd plan in je organisatie: welke kleuren en texturen gazon, beplanting, haag of bestrating zijn. Er gaat geen afbeelding mee, alleen kleurtellingen. Hoe vaker er met AI herkend en goedgekeurd wordt, hoe beter het zonder AI gaat.' },
+      ],
+    },
+    {
       version: '0.55.0',
       date: '2026-10-21',
       title: 'Legenda in de tekening',

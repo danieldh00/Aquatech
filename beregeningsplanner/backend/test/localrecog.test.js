@@ -230,3 +230,61 @@ test('schaal: meeste en zekerste lezingen winnen, tegenstrijdigheid verlaagt bet
   assert.strictEqual(b.confidence, 'hoog');
   assert.strictEqual(L.pickScale([k(500, 10, 90)], 1300), null); // onwaarschijnlijk (650 km breed)
 });
+
+// ---------------------------------------------------------------- echte tekening en leren
+
+const { readPng } = require('./png');
+const sandbox2 = { window: {}, console };
+vm.createContext(sandbox2);
+for (const f of ['geometry.js', 'catalog.js', 'autotrace.js', 'simulation.js', 'planner.js', 'planimport.js', 'concept.js', 'localrecog.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox2);
+const W2 = sandbox2.window;
+
+test('tuinontwerp met watermerk, boom en logo: één gazon, rustige plaatsing', () => {
+  // Voorbeeldplan van tuinontwerp-webshop.nl (500 × 500): gazon met een boomkroon en het watermerk
+  // "Voorbeeld" erover, borders met getekende planten, een groen logo boven de tuin.
+  const img = readPng(path.join(__dirname, 'fixtures', 'tuinontwerp-voorbeeld.png'));
+  const res = W2.LocalRecognizer.areasFromPixels(img.data, img.width, img.height, 1);
+  const lawns = res.areas.filter((a) => a.type === 'lawn');
+  assert.strictEqual(lawns.length, 1, 'één gazon, geen snippers in de borders');
+  const bb = W2.Geo.bbox(lawns[0].points);
+  // gazon ligt ongeveer tussen x 200–400 en y 235–405 (het logo staat bij y < 90)
+  assert.ok(bb.minX > 190 && bb.maxX < 410 && bb.minY > 225 && bb.maxY < 415, JSON.stringify(bb));
+  assert.ok((bb.maxX - bb.minX) * (bb.maxY - bb.minY) > 0.8 * 190 * 160, 'gazon niet aangevreten door tekst');
+  assert.ok(!res.areas.some((a) => W2.Geo.bbox(a.points).maxY < 120), 'logo is geen vlak');
+  // plaatsen op de schaal die Daniël opgaf (tuin 14 m breed)
+  const built = W2.Concept.build({ scale: {}, areas: res.areas, elements: [], local: true }, { width: 500, height: 500, factor: 1 }, { gardenWidthM: 14 });
+  const lawn = built.areas.find((a) => a.type === 'lawn');
+  const heads = W2.Planner.autoPlace(lawn.pts, 'rotator', {});
+  const ev = W2.Planner.evaluate(lawn.pts, heads);
+  assert.ok(heads.length <= 18, `${heads.length} koppen`);
+  assert.ok(ev.du >= 0.65, `DU ${ev.du}`);
+});
+
+test('leren: kleur die de vaste regels niet als gazon zien, wordt na een voorbeeld wel gazon', () => {
+  const w = 240, h = 160;
+  const data = new Uint8ClampedArray(w * h * 4).fill(255);
+  const rect = (x0, y0, x1, y1, [r, g, b]) => {
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const k = (y * w + x) * 4; data[k] = r; data[k + 1] = g; data[k + 2] = b; }
+  };
+  rect(20, 20, 150, 140, [150, 215, 205]); // gazon in een ongebruikelijke blauwgroene tint
+  rect(160, 20, 220, 140, [160, 160, 160]); // terras
+  const before = W2.LocalRecognizer.areasFromPixels(data, w, h, 1);
+  assert.ok(!before.areas.some((a) => a.type === 'lawn'), 'zonder leren geen gazon');
+  // "AI-herkenning" van een ander plan met dezelfde kleuren
+  const truth = [
+    { type: 'lawn', points: [{ x: 20, y: 20 }, { x: 150, y: 20 }, { x: 150, y: 140 }, { x: 20, y: 140 }] },
+    { type: 'dry', points: [{ x: 160, y: 20 }, { x: 220, y: 20 }, { x: 220, y: 140 }, { x: 160, y: 140 }] },
+  ];
+  const samples = W2.LocalRecognizer.samplesFromPixels(data, w, h, truth);
+  assert.strictEqual(samples.v, W2.LocalRecognizer.FEATURE_VERSION);
+  assert.ok(JSON.stringify(samples).length < 20000, 'klein: alleen tellingen');
+  const after = W2.LocalRecognizer.areasFromPixels(data, w, h, 1, { learned: { ...samples, examples: 1 } });
+  const lawn = after.areas.find((a) => a.type === 'lawn');
+  assert.ok(lawn, 'na leren gazon');
+  const bb = W2.Geo.bbox(lawn.points);
+  assert.ok(Math.abs(bb.minX - 20) < 4 && Math.abs(bb.maxX - 150) < 4, JSON.stringify(bb));
+  assert.ok(after.learnedShare > 0.5);
+  // onbekende versie of te weinig bewijs: vaste regels
+  const old = W2.LocalRecognizer.areasFromPixels(data, w, h, 1, { learned: { ...samples, v: 0 } });
+  assert.ok(!old.areas.some((a) => a.type === 'lawn'));
+});

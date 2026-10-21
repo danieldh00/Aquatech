@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.56.0
+
+Plan herkennen: vaste AI-uitkomst per tekening, betere herkenning zonder AI
+en een lokale herkenning die leert van AI-herkenningen en goedgekeurde plannen.
+
+- **Zonder AI** (`localrecog.js`): textuur per pixel (`normalizedColors`
+  geeft `tex`, gemiddelde helderheidsafwijking zonder inkt). Gevlekt
+  lichtgroen (getekende planten, boomkroon) telt als beplanting
+  (`TEX_PLANTS`). Gazon: losse snippers (< 10% van het grootste stuk) weg,
+  daarna sluiten met straal 2,5% van het beeld over beplanting/papier
+  (watermerk, tekst), en alleen gaten die droog moeten blijven (bestrating,
+  water) worden een sleutelgat; een border of boom in het gras hoort bij het
+  gazon. `dropIslands`: groepjes vlakken ver van de tuin met < 10% van de
+  oppervlakte (logo, legenda) vallen weg. Op het voorbeeldplan van
+  Daniël: 1 gazon i.p.v. 5, 9–12 koppen i.p.v. 55, DU 43% → 71–74%
+  (vaste test met `test/fixtures/tuinontwerp-voorbeeld.png`, kleine
+  PNG-lezer `test/png.js`).
+- **Plaatsen** (`planner.js`): randjes korter dan 0,6 m in de
+  plaatsingsvorm worden weggewerkt (`collapseShortEdges`), zodat een trapje
+  geen drie hoekkoppen krijgt.
+- **Vaste AI-uitkomst**: tabel `plan_recognitions` (migratie 22, SQLite en
+  PostgreSQL, `recognitions.js`). `/api/plan/analyze` bewaart elke
+  herkenning onder SHA-256 van de afbeelding + model + versie van de
+  opdracht (`PROMPT_VERSION` in planAnalyzer.js) per omgeving en geeft
+  dezelfde tekening daarna uit de opslag (`recognition.cached`, geen
+  kosten, telt niet voor de daglimiet). `fresh: true` herkent opnieuw;
+  knop **Opnieuw herkennen met AI** in stap 1.
+- **Leren**: na een AI-herkenning of het goedkeuren van een plan telt de
+  planner per kleur/textuur-vakje (8×8×8 kleuren × 3 texturen) welk type
+  vlak er lag (`LocalRecognizer.learn`/`samplesFromPixels`) en stuurt alleen
+  die tellingen naar `POST /api/plan/learn` (bij de herkenning, één keer;
+  of bij een goedgekeurd plan met recht `plannen.goedkeuren`). `GET
+  /api/plan/learned` telt de laatste 300 voorbeelden van de omgeving op
+  (goedgekeurd plan telt dubbel, cache 60 s); de lokale herkenning
+  gebruikt een vakje vóór de vaste regels als het minstens 40 gewicht en
+  60% eenduidigheid heeft. Geen afbeelding in de database; plan wissen
+  (AVG) wist ook de tellingen van dat plan; omgeving leegmaken wist alles.
+- Testdata: drie herkende plannen met kleurtellingen.
+
 ## 0.55.0
 
 Legenda in de tekening van de beregeningsplanner.

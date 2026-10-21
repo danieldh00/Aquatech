@@ -282,7 +282,18 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
     { at: 4, user: 'beheerder', model: 'claude-opus-5-5', input: 3200, output: 8740, ms: 39100, areas: 8, width: 1800, height: 1300 },
     { at: 1, user: 'inst1', model: 'claude-opus-5-5', input: 2980, output: 10230, ms: 46700, areas: 10, width: 1700, height: 1250 },
   ];
-  return { accounts, plans, quotes, shop, news, aiUsage, day };
+  // Herkende plannen (recognitions.js): bewaarde AI-herkenningen met de
+  // kleurtellingen waarvan de lokale herkenning leert. Vakjes volgens
+  // localrecog.js featureKey: lichtgroen egaal = gazon, donkergroen = haag,
+  // gevlekt groen = beplanting, grijs = bestrating, wit = papier.
+  const bins = (lawn) => ({ 918: [0, lawn, 0, 0, 0, 0], 268: [0, 0, 900, 0, 0, 0],
+    872: [10, 30, 0, 700, 0, 0], 876: [20, 0, 0, 0, 1200, 0], 1533: [9000, 0, 0, 0, 0, 0] });
+  const recognitions = [
+    { at: 33, user: 'inst1', areas: 7, lawn: 4200 },
+    { at: 20, user: 'inst2', areas: 9, lawn: 5100 },
+    { at: 4, user: 'beheerder', areas: 8, lawn: 3900 },
+  ].map((r, i) => ({ ...r, hash: crypto.createHash('sha256').update(`testdata:${slug}:${i}`).digest('hex'), samples: { v: 1, bins: bins(r.lawn) } }));
+  return { accounts, plans, quotes, shop, news, aiUsage, recognitions, day };
 }
 
 // Opties die de klant zelf kan aanvinken.
@@ -410,9 +421,9 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
  * er geen klantlinks (de afspraaklink staat ernaast: openbaar/afspraak.html).
  */
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, outsourcing, news, aiUsage } = stores;
+  const { db, quotes, workorders, shop, settings, photos, outsourcing, news, aiUsage, recognitions } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0, offers: 0, news: 0, aiRequests: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0 };
   const apptBase = shareBase ? shareBase.replace(/offerte\.html$/, 'afspraak.html') : null;
   const today = new Date().toISOString().slice(0, 10);
   const dateIn = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
@@ -519,6 +530,18 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
         eurCentsPerUsd: settings.get('aiEurCentsPerUsd'), detail: { width: a.width, height: a.height, ...(a.areas ? { areas: a.areas } : {}) } });
       q('UPDATE ai_usage SET created_at = ? WHERE id = ?').run(set.day(a.at), id);
       counts.aiRequests++;
+    }
+  }
+  // Herkende plannen met kleurtellingen, via de echte opslag.
+  if (recognitions && set.recognitions) {
+    for (const r of set.recognitions) {
+      const result = { scale: { metersPerPixel: 0.02, method: 'maatvoering', confidence: 'hoog', evidence: 'maat 12,00 m' },
+        areas: [{ type: 'lawn', name: 'Gazon', points: [{ x: 100, y: 100 }, { x: 700, y: 100 }, { x: 700, y: 500 }, { x: 100, y: 500 }] }],
+        elements: [], notes: `${r.areas} vlakken (testdata)` };
+      const id = recognitions.saveAi({ tenantId: seeded.tenantId, userId: seeded.users[r.user].id, hash: r.hash, model: 'claude-opus-5-5', version: 'testdata', result });
+      recognitions.addSamples(seeded.tenantId, id, r.samples);
+      q('UPDATE plan_recognitions SET created_at = ?, updated_at = ? WHERE id = ?').run(set.day(r.at), set.day(r.at), id);
+      counts.recognitions++;
     }
   }
   // Webshop alleen als de testomgeving geen eigen webshop heeft (de nepwinkel

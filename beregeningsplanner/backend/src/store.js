@@ -545,6 +545,7 @@ function createStore(db) {
     q('DELETE FROM work_order_offers WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM news WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM ai_usage WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM plan_recognitions WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM work_orders WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM impersonations WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM support_grants WHERE tenant_id = ?').run(tenantId);

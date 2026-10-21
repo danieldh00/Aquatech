@@ -8,14 +8,17 @@
   const FALLBACK_WIDTH_M = 30; // aangenomen breedte van het plan als er geen schaal gevonden is
   const FALLBACK_GARDEN_M = 10; // aangenomen breedte van de herkende tuin (gangbare achtertuin)
 
-  /** Vraagt de backend om het plan te herkennen. */
-  async function analyze(analyzeImage) {
+  /**
+   * Vraagt de backend om het plan te herkennen. Een eerder herkende tekening geeft de bewaarde uitkomst
+   * (recognition.cached); met `fresh` herkent de AI opnieuw.
+   */
+  async function analyze(analyzeImage, { fresh = false } = {}) {
     let res;
     try {
       res = await fetch('api/plan/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: analyzeImage.dataUrl, width: analyzeImage.width, height: analyzeImage.height }),
+        body: JSON.stringify({ image: analyzeImage.dataUrl, width: analyzeImage.width, height: analyzeImage.height, fresh }),
       });
     } catch (err) {
       throw new Error('Geen verbinding met de server. Automatisch herkennen werkt alleen via de app, niet via een lokaal geopend bestand.');
@@ -23,6 +26,27 @@
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.message || `Herkennen mislukt (${res.status}).`);
     return body;
+  }
+
+  /** Wat de organisatie geleerd heeft van eerder herkende plannen (voor de lokale herkenning), of null. */
+  async function learned() {
+    try {
+      const res = await fetch('api/plan/learned', { cache: 'no-store' });
+      if (!res.ok) return null;
+      const body = await res.json();
+      return body && body.examples > 0 ? body : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /** Kleurtellingen van een herkend of goedgekeurd plan naar de server (geen afbeelding); fouten negeren. */
+  async function teach(body) {
+    try {
+      await fetch('api/plan/learn', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    } catch (err) {
+      /* leren is een bijzaak */
+    }
   }
 
   async function status() {
@@ -161,5 +185,5 @@
     };
   }
 
-  window.Concept = { analyze, status, build, defaultElements, straighten, FALLBACK_WIDTH_M, FALLBACK_GARDEN_M };
+  window.Concept = { analyze, learned, teach, status, build, defaultElements, straighten, FALLBACK_WIDTH_M, FALLBACK_GARDEN_M };
 })();

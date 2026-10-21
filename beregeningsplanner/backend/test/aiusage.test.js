@@ -80,7 +80,7 @@ async function setup() {
   return { db, store, server, base, as, main, groen, ai, app };
 }
 
-const analyze = (c) => c.post('/api/plan/analyze', { image: PNG, width: 800, height: 600 });
+const analyze = (c) => c.post('/api/plan/analyze', { image: PNG, width: 800, height: 600, fresh: true });
 
 test('prijzen: kosten per model, cache en onbekend model', () => {
   assert.strictEqual(AiModels.DEFAULT, 'claude-opus-5-5');
