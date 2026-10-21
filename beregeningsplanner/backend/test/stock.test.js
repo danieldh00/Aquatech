@@ -168,10 +168,12 @@ test('voorraad: verbruik boeken is idempotent per verbruiksregel; met verbruik v
     const stock = createStockStore(db);
     const user = { id: 'u1', display_name: 'Kees' };
     const onHand = () => stock.get(main, item.id).onHand;
-    assert.ok(stock.syncUsage(main, { usageId: 'v1', workOrderId: wo.id, code: 'pe-25', qty: 30, user }));
+    const first = stock.syncUsage(main, { usageId: 'v1', workOrderId: wo.id, code: 'pe-25', qty: 30, user });
+    assert.ok(first);
     assert.strictEqual(onHand(), 50);
     assert.strictEqual(stock.get(main, item.id).reserved, 20);
-    assert.strictEqual(stock.syncUsage(main, { usageId: 'v1', workOrderId: wo.id, code: 'PE-25', qty: 30, user }), null, 'zelfde regel nogmaals: niets');
+    assert.strictEqual(stock.syncUsage(main, { usageId: 'v1', workOrderId: wo.id, code: 'PE-25', qty: 30, user }), first, 'zelfde regel nogmaals: niets nieuws');
+    assert.strictEqual(onHand(), 50);
     stock.syncUsage(main, { usageId: 'v1', workOrderId: wo.id, code: 'PE-25', qty: 35, user });
     assert.strictEqual(onHand(), 45, 'alleen het verschil');
     stock.syncUsage(main, { usageId: 'v2', workOrderId: wo.id, code: 'PE-25', qty: -2, user });
@@ -183,6 +185,15 @@ test('voorraad: verbruik boeken is idempotent per verbruiksregel; met verbruik v
     assert.strictEqual(onHand(), 44);
     stock.syncUsage(main, { usageId: 'v4', workOrderId: wo.id, code: 'PE-25', qty: 0, user });
     assert.strictEqual(stock.syncUsage(main, { usageId: 'v3', workOrderId: wo.id, code: 'GEEN-VOORRAAD', qty: 3, user }), null);
+    // Via de materiaalregistratie op de werkorder (zelfde transactie, id terug in stock_movement_id).
+    const day = new Date().toISOString().slice(0, 10);
+    const used = await kees.post(`/api/workorders/${wo.id}/materials`, { usedOn: day, code: 'PE-25', description: 'PE-buis', unit: 'm', qty: 5 });
+    assert.strictEqual(used.status, 201, JSON.stringify(used.body));
+    assert.strictEqual(onHand(), 40);
+    const entry = used.body.entry || used.body;
+    assert.ok(entry.stockMovementId, 'afboeking gekoppeld aan de verbruiksregel');
+    assert.strictEqual((await kees.del(`/api/workorders/${wo.id}/materials/${entry.id}`)).status, 200);
+    assert.strictEqual(onHand(), 45, 'verwijderde regel wordt teruggeboekt');
     // Gereed: er is verbruik, dus de rest van de reservering (15) vervalt zonder afboeking.
     await kees.put(`/api/workorders/${wo.id}`, { status: 'gereed' });
     assert.strictEqual(onHand(), 45);

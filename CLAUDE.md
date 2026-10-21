@@ -250,6 +250,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `work_orders.appointment`; stand berekend in `appointmentOf` (reactie telt
   alleen voor hetzelfde `Core.momentKey`). `workorders.respond(row, …, { via:
   'account', userId })` is ook bruikbaar voor een klantportaal.
+- **Uren en materiaalverbruik** (0.57.0, `backend/src/worklog.js`, kern
+  `werkorders/worklog-core.js`, tabellen `work_order_hours`/`work_order_materials`,
+  migratie 23): boeken per werkorder (eigen regels; recht `planning` = ook
+  voor collega's en na Gereed), `client_id` maakt POST idempotent (offline
+  wachtrij in `worklog.js`), urenstaat `GET /api/worklog` → Excel.
+  Voorraad haakt in via `workLogStore.hook(fn)` → `stock_movement_id`.
 - **Startscherm installateur** (0.42.0): blok *Vandaag* op het dashboard
   (`dashboard/today.js`, recht `werkorders`), API `GET /api/my-day`
   (`workorders.day`: elke werkdag via `Core.workDays`, `next`, fototelling
@@ -313,15 +319,15 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `handoverOf` → `workorders.createReceived` (werkorder zonder offerte). De
   uitbesteder ziet alleen `execution` (status, planning, stappen). Werkorder-API
   geeft `outsourcing` mee (`ctx.outsourcingOf`).
-- **Voorraadbeheer** (0.57.0, module `frontend/voorraad/`, recht `voorraad`:
+- **Voorraadbeheer** (0.58.0, module `frontend/voorraad/`, recht `voorraad`:
   beheerder + installateur): `backend/src/stock.js`, tabellen `stock_items`
   (code uniek per tenant = catalogus-/stuklijstcode, `on_hand`),
   `stock_movements` (logboek met `balance`, `source` `gereed`|`handmatig`|
-  `verbruik:<id>`) en `stock_reservations` (migratie 23). Reserveren =
+  `verbruik:<id>`) en `stock_reservations` (migratie 24). Reserveren =
   benodigd − afgeboekt voor open werkorders, via `ctx.onChange` in
   workorders.js (na POST/PUT/DELETE). Gereed boekt de reservering af, tenzij
-  er verbruik is (`syncUsage`, idempotent per verbruiksregel; niet binnen een
-  andere transactie aanroepen, `transaction` nest niet). Blok Voorraad op de
+  er verbruik is (`syncUsage`, idempotent per verbruiksregel; vanuit
+  `workLogStore.hook` met `{ nested: true }`, want `transaction` nest niet). Blok Voorraad op de
   werkorder: `werkorders/stock-panel.js`, API `/api/stock/workorders/:id`
   (recht `werkorders`).
 - **Tekening indienen + controle** (0.52.0, `backend/src/drawings.js`):

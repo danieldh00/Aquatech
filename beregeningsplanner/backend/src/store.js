@@ -357,6 +357,11 @@ function createStore(db) {
       q('UPDATE quotes SET customer_id = NULL WHERE customer_id = ?').run(u.id);
       q('UPDATE work_orders SET assignee_id = NULL WHERE assignee_id = ?').run(u.id);
       q('UPDATE work_order_photos SET uploaded_by = NULL WHERE uploaded_by = ?').run(u.id);
+      // Geboekte uren en materiaal blijven (urenstaat, voorraad); de naam staat in user_name.
+      for (const t of ['work_order_hours', 'work_order_materials']) {
+        q(`UPDATE ${t} SET user_id = NULL WHERE user_id = ?`).run(u.id);
+        q(`UPDATE ${t} SET created_by = NULL WHERE created_by = ?`).run(u.id);
+      }
       q('UPDATE settings SET updated_by = NULL WHERE updated_by = ?').run(u.id);
       q('UPDATE history SET user_id = NULL WHERE user_id = ?').run(u.id);
       q('UPDATE audit SET user_id = NULL WHERE user_id = ?').run(u.id);
@@ -542,6 +547,8 @@ function createStore(db) {
     q('DELETE FROM audit WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM sessions WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM work_order_photos WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM work_order_hours WHERE tenant_id = ?').run(tenantId);
+    q('DELETE FROM work_order_materials WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM work_order_offers WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM news WHERE tenant_id = ?').run(tenantId);
     q('DELETE FROM ai_usage WHERE tenant_id = ?').run(tenantId);

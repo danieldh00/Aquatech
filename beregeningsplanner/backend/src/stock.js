@@ -430,8 +430,7 @@ function createStockStore(db, { articles = loadArticles } = {}) {
    * werkorder). Idempotent per verbruiksregel: de totale afboeking voor
    * usageId wordt qty (0 = regel verwijderd, negatief = retour), dus een
    * gewijzigde regel boekt alleen het verschil. Geeft het id van de laatste
-   * mutatie, of null als de code geen voorraadartikel is of er niets
-   * veranderde. nested: aanroepen binnen de transactie van de aanroeper
+   * mutatie voor deze regel, of null als de code geen voorraadartikel is. nested: aanroepen binnen de transactie van de aanroeper
    * (materiaalregistratie), zodat verbruik en afboeking samen slagen.
    */
   function syncUsage(tenantId, { usageId, workOrderId, code, qty, user = null }, { nested = false } = {}) {
@@ -452,6 +451,8 @@ function createStockStore(db, { articles = loadArticles } = {}) {
         const was = r3(-(prev.find((p) => p.item_id === item.id)?.qty || 0));
         const delta = r3((Number(qty) || 0) - was);
         if (delta) last = book(tenantId, item.id, -delta, { kind: delta > 0 ? 'afboeking' : 'retour', workOrder: wo, source, note: 'Materiaalverbruik', user });
+        // Niets veranderd (bijv. alleen de opmerking): de bestaande afboeking blijft de koppeling.
+        if (!last && prev.length) last = q('SELECT id FROM stock_movements WHERE tenant_id = ? AND source = ? AND item_id = ? ORDER BY created_at DESC, id LIMIT 1').get(tenantId, source, item.id)?.id || null;
       }
       return last;
     }, nested);
