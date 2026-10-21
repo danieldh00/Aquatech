@@ -514,7 +514,59 @@ const MIGRATIONS = [
   CREATE INDEX plan_recognitions_plan ON plan_recognitions (tenant_id, plan_id);
   CREATE INDEX plan_recognitions_created ON plan_recognitions (tenant_id, created_at);
   `,
-  // 23: meldingen van klanten (storing of onderhoudsverzoek) via het
+  // 23: werkregistratie (zie worklog.js): uren en materiaalverbruik die de
+  // ploeg op een werkorder boekt. user_id zonder foreign key (de gebruiker
+  // kan weg; de naam blijft in user_name voor de urenstaat). client_id = id
+  // uit de browser, zodat een regel die opnieuw wordt verstuurd (offline,
+  // opnieuw proberen) maar één keer telt. stock_movement_id = de afboeking
+  // in de voorraad (voorraadbeheer), leeg zolang er niets is afgeboekt.
+  `
+  CREATE TABLE work_order_hours (
+    id             TEXT PRIMARY KEY,
+    tenant_id      TEXT NOT NULL REFERENCES tenants(id),
+    work_order_id  TEXT NOT NULL REFERENCES work_orders(id),
+    user_id        TEXT,
+    user_name      TEXT NOT NULL DEFAULT '',
+    work_date      TEXT NOT NULL,
+    start_time     TEXT NOT NULL DEFAULT '',
+    end_time       TEXT NOT NULL DEFAULT '',
+    break_minutes  INTEGER NOT NULL DEFAULT 0,
+    minutes        INTEGER NOT NULL,
+    kind           TEXT NOT NULL DEFAULT 'werk',
+    step_id        TEXT NOT NULL DEFAULT '',
+    note           TEXT NOT NULL DEFAULT '',
+    client_id      TEXT,
+    created_by     TEXT,
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL
+  );
+  CREATE INDEX work_order_hours_wo ON work_order_hours (tenant_id, work_order_id, work_date);
+  CREATE INDEX work_order_hours_date ON work_order_hours (tenant_id, work_date);
+  CREATE UNIQUE INDEX work_order_hours_client ON work_order_hours (tenant_id, client_id);
+  CREATE TABLE work_order_materials (
+    id                 TEXT PRIMARY KEY,
+    tenant_id          TEXT NOT NULL REFERENCES tenants(id),
+    work_order_id      TEXT NOT NULL REFERENCES work_orders(id),
+    user_id            TEXT,
+    user_name          TEXT NOT NULL DEFAULT '',
+    used_on            TEXT NOT NULL,
+    code               TEXT NOT NULL DEFAULT '',
+    description        TEXT NOT NULL DEFAULT '',
+    unit               TEXT NOT NULL DEFAULT '',
+    qty                REAL NOT NULL,
+    material_id        TEXT NOT NULL DEFAULT '',
+    note               TEXT NOT NULL DEFAULT '',
+    client_id          TEXT,
+    stock_movement_id  TEXT,
+    created_by         TEXT,
+    created_at         TEXT NOT NULL,
+    updated_at         TEXT NOT NULL
+  );
+  CREATE INDEX work_order_materials_wo ON work_order_materials (tenant_id, work_order_id, used_on);
+  CREATE INDEX work_order_materials_date ON work_order_materials (tenant_id, used_on);
+  CREATE UNIQUE INDEX work_order_materials_client ON work_order_materials (tenant_id, client_id);
+  `,
+  // 24: meldingen van klanten (storing of onderhoudsverzoek) via het
   // klantportaal, zie servicerequests.js. customer_id, handled_by en
   // work_order_id zonder foreign key: de melding blijft staan als het account
   // of de werkorder verdwijnt. installation_id = de werkorder van de

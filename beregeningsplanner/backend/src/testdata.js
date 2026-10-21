@@ -440,9 +440,9 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
  * er geen klantlinks (de afspraaklink staat ernaast: openbaar/afspraak.html).
  */
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, outsourcing, news, aiUsage, recognitions, requests } = stores;
+  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, requests } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, requests: 0, requestWorkOrders: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, requests: 0, requestWorkOrders: 0 };
   // Werkorder per plan (voor meldingen over die installatie).
   const woByPlan = {};
   const apptBase = shareBase ? shareBase.replace(/offerte\.html$/, 'afspraak.html') : null;
@@ -530,6 +530,37 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
           if (out.error) throw new Error(`Testdata: foto bij werkorder ${wo.number} mislukt (${out.error})`);
           counts.photos++;
         });
+      }
+      // Geboekte uren en materiaalverbruik: elke werkdag tot en met vandaag de
+      // uitvoerder (07:30–16:00, halfuur pauze) plus reistijd; het verzamelde
+      // materiaal verbruikt, één extra artikel en één retour.
+      if (worklog && w.done > 0) {
+        const fitter = seeded.users[w.assignee];
+        const forUser = { id: fitter.id, displayName: fitter.display_name };
+        const opts = { actor: fitter, forUser };
+        const workDays = WoCore.workDays(data.plannedDate, data.days).filter((d) => d <= today);
+        workDays.forEach((d, k) => {
+          for (const h of [
+            { workDate: d, startTime: '07:30', endTime: k === workDays.length - 1 && w.status !== 'gereed' ? '12:00' : '16:00', breakMinutes: 30, kind: 'werk', stepId: data.steps.length ? data.steps[Math.min(k + 3, data.steps.length - 1)].id : '' },
+            { workDate: d, hours: 0.75, kind: 'reistijd', note: 'Heen en terug vanaf de werkplaats' },
+          ]) {
+            const out = worklog.addHours(owner.tenant_id, wo.id, h, opts);
+            if (out.error) throw new Error(`Testdata: uren bij werkorder ${wo.number} mislukt (${out.message})`);
+            counts.hours++;
+          }
+        });
+        const usedOn = workDays[0] || data.plannedDate;
+        const mats = data.materials.filter((m) => m.picked && m.qty > 0).slice(0, 6).map((m, k) => ({
+          usedOn, code: m.code, description: m.description, unit: m.unit, materialId: m.id, qty: k === 0 ? m.qty + 1 : m.qty,
+          note: k === 0 ? 'Eén extra nodig door een omweg om de boomwortels' : '',
+        }));
+        mats.push({ usedOn, code: '', description: 'Koppelstuk 25 mm (meerwerk, uit de bus)', unit: 'st', qty: 2, note: 'Aansluiting bestaande tuinkraan' });
+        if (mats.length > 2) mats.push({ ...mats[1], qty: -1, note: 'Retour: niet gebruikt', materialId: mats[1].materialId });
+        for (const m of mats) {
+          const out = worklog.addMaterial(owner.tenant_id, wo.id, m, opts);
+          if (out.error) throw new Error(`Testdata: materiaal bij werkorder ${wo.number} mislukt (${out.message})`);
+          counts.materialUsage++;
+        }
       }
     }
   });

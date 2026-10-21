@@ -13,12 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '0.57.0',
+      version: '0.58.0',
       date: '2026-10-21',
       title: 'Storing of onderhoud melden via het portaal',
       items: [
         { text: 'Werkt er iets niet of wilt u onderhoud? In **Mijn portaal** meldt u nu zelf een storing of onderhoudsverzoek, met een omschrijving en foto\'s. U ziet daar ook onze reactie en wanneer we komen.', for: ['portaal'] },
         { text: 'Nieuwe module **Meldingen**: storingen en onderhoudsverzoeken van klanten met hun foto\'s. Stuur de klant een reactie of maak er met één klik een werkorder van; de gegevens van de installatie en de foto\'s gaan mee, en de klant ziet de afspraak in zijn portaal.', for: ['werkorders'] },
+      ],
+    },
+    {
+      version: '0.57.0',
+      date: '2026-10-21',
+      title: 'Uren en materiaal boeken op de werkorder',
+      items: [
+        { text: 'In elke werkorder staat nu **Uren en materiaalverbruik**: boek per dag je gewerkte uren (begin, eind en pauze, of gewoon een aantal uren), reistijd en meerwerk, en het materiaal dat je hebt gebruikt of retour neemt. Je ziet meteen hoeveel er geboekt is tegenover de planning.', for: ['werkorders'] },
+        { text: 'Geen bereik op de klus? Wat je boekt, blijft op je telefoon bewaard en wordt vanzelf verstuurd zodra je weer verbinding hebt.', for: ['werkorders'] },
+        { text: 'Met de knop **Urenstaat** in Werkorders exporteer je de uren en het materiaalverbruik over een periode naar Excel, per medewerker en per dag. Planners en beheerders boeken ook voor een collega en zien de uren van iedereen.', for: ['werkorders'] },
       ],
     },
     {
