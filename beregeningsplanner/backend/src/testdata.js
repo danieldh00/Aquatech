@@ -293,7 +293,26 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
     { at: 20, user: 'inst2', areas: 9, lawn: 5100 },
     { at: 4, user: 'beheerder', areas: 8, lawn: 3900 },
   ].map((r, i) => ({ ...r, hash: crypto.createHash('sha256').update(`testdata:${slug}:${i}`).digest('hex'), samples: { v: 1, bins: bins(r.lawn) } }));
-  return { accounts, plans, quotes, shop, news, aiUsage, recognitions, day };
+  // Meldingen van klanten via het portaal (servicerequests.js): installation =
+  // planKey van de offerte met de werkorder waar het om gaat, photos = aantal
+  // foto's van de klant, workorder = er is al een werkorder van gemaakt.
+  const requests = [
+    { customer: 'klant1', at: 1, kind: 'storing', urgent: true, installation: 'devries', status: 'nieuw', photos: 2,
+      subject: 'Sproeiers bij de border gaan niet meer aan',
+      description: 'Sinds gisteren gaan de sproeiers langs de border niet meer aan. Het gazon krijgt wel water. Op de computer staat zone 2 te knipperen.',
+      preferred: 'Liefst deze week, \'s ochtends' },
+    { customer: 'klant1', at: 8, kind: 'onderhoud', installation: 'devries', status: 'ingepland', photos: 1, handler: 'planner',
+      subject: 'Installatie winterklaar maken', description: 'Graag de beregening winterklaar maken (leegblazen) voordat het gaat vriezen.',
+      preferred: 'Tweede helft november', reply: 'Wij komen de installatie winterklaar maken. U krijgt een afspraakvoorstel in uw portaal.',
+      workorder: { assignee: 'inst2', planned: 12 } },
+    { customer: 'klant4', at: 3, kind: 'overig', status: 'in_behandeling', handler: 'beheerder',
+      subject: 'Extra sproeier bij het terras?', description: 'Kan er bij de aanleg ook een sproeier bij het nieuwe terras worden geplaatst? Daar is het gras altijd droog.',
+      reply: 'Dat kan. We nemen het mee bij de aanleg en sturen u een kleine aanvulling op de offerte.', note: 'Eén rotator en circa 4 m leiding extra; aanvulling offerte maken.' },
+    { customer: 'klant2', at: 20, kind: 'storing', status: 'afgehandeld', handler: 'inst1',
+      subject: 'Lekt water bij de buitenkraan', description: 'Bij de buitenkraan aan de achterkant staat steeds een plas water, ook als de beregening uit staat.',
+      reply: 'Dit zat in de kraan zelf en niet in de beregening; de pakking is vervangen. Laat het weten als het weer gebeurt.' },
+  ];
+  return { accounts, plans, quotes, shop, news, aiUsage, recognitions, requests, day };
 }
 
 // Opties die de klant zelf kan aanvinken.
@@ -421,10 +440,12 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, w = 480, h = 320) {
  * er geen klantlinks (de afspraaklink staat ernaast: openbaar/afspraak.html).
  */
 function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock } = stores;
+  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, requests } = stores;
   const q = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0 };
   const seededWos = [];
+  // Werkorder per plan (voor meldingen over die installatie).
+  const woByPlan = {};
   const apptBase = shareBase ? shareBase.replace(/offerte\.html$/, 'afspraak.html') : null;
   const today = new Date().toISOString().slice(0, 10);
   const dateIn = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
@@ -471,6 +492,7 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
       data.materials.forEach((m, k) => { m.picked = k < nPicked; });
       if (w.status === 'gereed') data.report = { notes: w.notes || '', completedOn: dateIn(w.planned + 1), signedBy: spec.response.name };
       const wo = workorders.create(owner, quote, data, { assigneeId: seeded.users[w.assignee].id });
+      woByPlan[spec.planKey] = wo.id;
       // Afspraaklink en de reactie van de klant (vóór de status verder gaat:
       // reageren kan alleen op een geplande klus die niet voorbij is).
       if (apptBase && !workorders.share(owner.tenant_id, wo.id, apptBase).error) counts.appointmentLinks++;
@@ -544,6 +566,39 @@ function seedFeatures(stores, set, seeded, { shareBase = null } = {}) {
       }
     }
   });
+  // Meldingen van klanten, via de echte opslag (foto's, antwoord, werkorder).
+  if (requests && set.requests) {
+    set.requests.forEach((r, i) => {
+      const customer = seeded.users[r.customer];
+      const c = CUSTOMERS[r.customer] || {};
+      const out = requests.create(customer, seeded.tenantId, { kind: r.kind, urgent: r.urgent, subject: r.subject, description: r.description,
+        address: (c.address || '').replace(/\n/g, ', '), phone: c.phone || '', email: c.email || '', preferred: r.preferred || '',
+        installationId: r.installation ? woByPlan[r.installation] || null : null }, { installationOk: () => true });
+      if (out.error) throw new Error(`Testdata: melding mislukt (${out.error})`);
+      const id = out.item.id;
+      for (let k = 0; k < (r.photos || 0); k++) {
+        const p = requests.addPhoto(seeded.tenantId, id, customer.id, { image: sitePhotoPng('voor', 50 + i * 5 + k).toString('base64'), thumb: sitePhotoPng('voor', 50 + i * 5 + k, 240, 160).toString('base64') });
+        if (p.error) throw new Error(`Testdata: foto bij melding mislukt (${p.error})`);
+      }
+      const handler = r.handler ? seeded.users[r.handler] : null;
+      if (handler && (r.reply || r.note || r.status !== 'ingepland')) {
+        const u = requests.update(handler, seeded.tenantId, id, { status: r.status === 'ingepland' ? 'in_behandeling' : r.status, reply: r.reply || '', note: r.note || '' });
+        if (u.error) throw new Error(`Testdata: melding bijwerken mislukt (${u.error})`);
+      }
+      if (r.workorder) {
+        const w = requests.toWorkOrder(handler, seeded.tenantId, id, { assigneeId: seeded.users[r.workorder.assignee].id });
+        if (w.error) throw new Error(`Testdata: werkorder van melding mislukt (${w.error})`);
+        // Ingepland: de klant ziet de afspraak in zijn portaal.
+        const wd = { ...w.workOrder.data, plannedDate: dateIn(r.workorder.planned), startTime: '13:00', endTime: '15:00', days: 1, crew: seeded.users[r.workorder.assignee].display_name };
+        workorders.update(seeded.tenantId, w.workOrder.id, wd, 'gepland');
+        q('UPDATE work_orders SET created_at = ?, updated_at = ? WHERE id = ?').run(set.day(Math.max(0, r.at - 1)), set.day(Math.max(0, r.at - 1)), w.workOrder.id);
+        counts.requestWorkOrders++;
+      }
+      q('UPDATE service_requests SET created_at = ?, updated_at = ? WHERE id = ?').run(set.day(r.at), set.day(Math.max(0, r.at - (r.handler ? 1 : 0))), id);
+      q('UPDATE service_request_photos SET created_at = ? WHERE request_id = ?').run(set.day(r.at), id);
+      counts.requests++;
+    });
+  }
   // Nieuwsberichten van de testbeheerder, via de echte opslag.
   if (news && set.news) {
     const author = seeded.users.beheerder;

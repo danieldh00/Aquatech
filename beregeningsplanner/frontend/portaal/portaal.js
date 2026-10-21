@@ -11,8 +11,14 @@
   const QUOTE_STATUS = { concept: 'Concept', verzonden: 'Wacht op uw reactie', akkoord: 'Akkoord', afgewezen: 'Afgewezen' };
   const APPOINTMENT = { wacht: 'Wacht op uw bevestiging', bevestigd: 'Door u bevestigd', ander_moment: 'Ander moment gevraagd' };
   const KIND = { voor: 'Voor de aanleg', tijdens: 'Tijdens de aanleg', oplevering: 'Bij oplevering' };
+  // Meldingen (storing, onderhoud): status in gewone taal en de kleur van het label.
+  const REQ_STATUS = { nieuw: 'Ontvangen', in_behandeling: 'In behandeling', ingepland: 'Ingepland', afgehandeld: 'Afgehandeld', afgewezen: 'Niet in behandeling genomen', ingetrokken: 'Ingetrokken' };
+  const REQ_PILL = { nieuw: 'open', in_behandeling: 'bezig', ingepland: 'gepland', afgehandeld: 'gereed', afgewezen: 'afgewezen', ingetrokken: 'geannuleerd' };
+  const REQ_KIND = { storing: 'Storing', onderhoud: 'Onderhoud', overig: 'Vraag of verzoek' };
+  const REQ_OPEN = ['nieuw', 'in_behandeling'];
+  const MAX_REQ_PHOTOS = 6;
 
-  const state = { data: null, detail: null };
+  const state = { data: null, detail: null, request: null, files: [] };
 
   function toast(msg, err = false) {
     const t = $('#toast');
@@ -68,11 +74,12 @@
     const name = d.user && d.user.kind !== 'gast' ? d.user.displayName : '';
     $('#p-welcome').textContent = name ? `Welkom, ${name}` : 'Mijn portaal';
     renderTodo(d);
+    renderRequests(d);
     renderWork(d);
     renderQuotes(d);
     renderPlans(d);
     renderContact(d);
-    if (!d.quotes.length && !d.workorders.length && !d.plans.length) {
+    if (!d.quotes.length && !d.workorders.length && !d.plans.length && !(d.requests || []).length) {
       message('Er staat nog niets voor u klaar. Zodra wij een offerte voor u hebben opgesteld of werkzaamheden hebben ingepland, ziet u die hier.');
     } else message('');
   }
@@ -97,6 +104,174 @@
         </div>`),
     ].join('');
     $('#s-todo').hidden = !quotes.length && !work.length;
+  }
+
+  // ---------- Meldingen ----------
+  const reqPill = (r) => `<span class="pill ${esc(REQ_PILL[r.status] || '')}">${esc(REQ_STATUS[r.status] || r.status)}</span>${r.urgent ? ' <span class="pill spoed">Spoed</span>' : ''}`;
+
+  function renderRequests(d) {
+    const list = d.requests || [];
+    $('#requests').innerHTML = list.map((r) => `
+      <div class="card">
+        <h3>${esc(r.subject)}</h3>
+        <div>${reqPill(r)}</div>
+        <div class="meta">${esc(REQ_KIND[r.kind] || r.kind)} · ${esc(r.number)} · gemeld ${esc(when(r.createdAt))}${r.photoCount ? ` · ${r.photoCount} foto${r.photoCount > 1 ? "'s" : ''}` : ''}</div>
+        ${r.workOrder ? `<div class="meta">${r.workOrder.plannedDate ? `Ingepland op <span class="when">${esc(day(r.workOrder.plannedDate))}</span>` : 'Wij plannen de werkzaamheden in'}</div>` : ''}
+        ${r.reply ? `<div class="meta">Onze reactie: ${esc(r.reply.length > 140 ? `${r.reply.slice(0, 140)}…` : r.reply)}</div>` : ''}
+        <div class="actions"><button class="btn" data-req="${esc(r.id)}">Details</button></div>
+      </div>`).join('');
+    $('#s-requests').hidden = !(d.features && d.features.requests);
+  }
+
+  // Formulier: installaties van de klant om uit te kiezen, adres van de laatste.
+  const form = () => $('#r-form');
+  function openForm() {
+    const d = state.data;
+    const f = form();
+    f.reset();
+    f.querySelector('.err').textContent = '';
+    state.files = [];
+    $('#r-previews').innerHTML = '';
+    const inst = d.workorders.filter((w) => w.quoteId || w.status === 'gereed');
+    f.installationId.innerHTML = `<option value="">Weet ik niet / niet van toepassing</option>${inst.map((w) => `<option value="${esc(w.id)}">${esc(w.title)}${w.address ? ` (${esc(w.address)})` : ''}</option>`).join('')}`;
+    if (inst.length === 1) f.installationId.value = inst[0].id;
+    $('#r-inst-row').hidden = !inst.length;
+    const last = d.workorders.find((w) => w.address);
+    f.address.value = last ? last.address : '';
+    f.phone.value = (d.user && d.user.phone) || '';
+    syncKind();
+    $('#r-modal').hidden = false;
+    f.subject.focus();
+  }
+  function syncKind() {
+    const kind = form().kind.value;
+    $('#r-urgent-row').hidden = kind === 'overig';
+  }
+  function closeForm() { $('#r-modal').hidden = true; }
+
+  function previews() {
+    $('#r-previews').innerHTML = state.files.map((file, i) => `<figure><img src="${esc(URL.createObjectURL(file))}" alt="Foto ${i + 1}"></figure>`).join('');
+  }
+
+  // Foto's één voor één verkleinen en uploaden (net als bij een werkorder).
+  async function uploadPhotos(id, files) {
+    let ok = 0;
+    for (const file of files) {
+      try {
+        const body = await window.WorkOrderPhotos.prepare(file);
+        await api(`../api/portal/requests/${encodeURIComponent(id)}/photos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        ok++;
+      } catch (e) {
+        toast(`Foto ${file.name || ''} niet toegevoegd: ${e.message}`, true);
+      }
+    }
+    return ok;
+  }
+
+  async function submitForm(e) {
+    e.preventDefault();
+    const f = form();
+    const err = f.querySelector('.err');
+    err.textContent = '';
+    if (!f.subject.value.trim()) { err.textContent = 'Geef een kort onderwerp.'; f.subject.focus(); return; }
+    if (f.description.value.trim().length < 10) { err.textContent = 'Beschrijf wat er aan de hand is.'; f.description.focus(); return; }
+    const btn = f.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    try {
+      const body = {
+        kind: f.kind.value, urgent: f.urgent.checked, subject: f.subject.value, description: f.description.value,
+        installationId: f.installationId.value || null, address: f.address.value, phone: f.phone.value, preferred: f.preferred.value,
+      };
+      const r = await api('../api/portal/requests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (state.files.length) {
+        btn.textContent = 'Foto\'s uploaden…';
+        await uploadPhotos(r.id, state.files);
+      }
+      closeForm();
+      toast(`Melding ${r.number} is verstuurd. Wij nemen contact met u op.`);
+      load();
+    } catch (ex) {
+      err.textContent = ex.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Melding versturen';
+    }
+  }
+
+  async function openRequest(id) {
+    try {
+      state.request = await api(`../api/portal/requests/${encodeURIComponent(id)}`);
+    } catch (e) {
+      toast(`Kan de melding niet openen: ${e.message}`, true);
+      return;
+    }
+    renderRequest();
+    $('#detail').hidden = false;
+  }
+
+  function renderRequest() {
+    const r = state.request;
+    const open = REQ_OPEN.includes(r.status);
+    const photos = r.photos || [];
+    $('#detail-body').innerHTML = `
+      <div class="dossier">
+        <h2>Melding: ${esc(r.subject)}</h2>
+        <div>${reqPill(r)}</div>
+        <dl class="kv">
+          <dt>Nummer</dt><dd>${esc(r.number)}</dd>
+          <dt>Soort</dt><dd>${esc(REQ_KIND[r.kind] || r.kind)}</dd>
+          <dt>Gemeld</dt><dd>${esc(when(r.createdAt))}</dd>
+          ${r.installation ? `<dt>Installatie</dt><dd>${esc(r.installation.title)}</dd>` : ''}
+          ${r.address ? `<dt>Adres</dt><dd>${esc(r.address)}</dd>` : ''}
+          ${r.phone ? `<dt>Telefoon</dt><dd>${esc(r.phone)}</dd>` : ''}
+          ${r.preferred ? `<dt>Voorkeur</dt><dd>${esc(r.preferred)}</dd>` : ''}
+        </dl>
+        <h3>Uw omschrijving</h3><div class="notes">${esc(r.description)}</div>
+        ${r.reply ? `<h3>Onze reactie</h3><div class="reply">${esc(r.reply)}</div>` : ''}
+        ${r.workOrder ? `<h3>Werkzaamheden</h3><p>${r.workOrder.plannedDate ? `Ingepland op <b>${esc(day(r.workOrder.plannedDate))}</b>.` : 'Wij plannen de werkzaamheden in en laten u weten wanneer we komen.'}</p>
+          <div class="actions"><button class="btn" data-open="${esc(r.workOrder.id)}">Bekijk de werkzaamheden</button></div>` : ''}
+        ${photos.length ? `<h3>Foto's</h3><div class="photos">${photos.map((p, i) => `
+          <figure><button type="button" data-rphoto="${i}" title="Vergroten"><img src="../${esc(p.thumbUrl)}" alt="Foto ${i + 1}" loading="lazy"></button>
+          ${open ? `<figcaption><button type="button" class="btn small" data-rdel="${esc(p.id)}">Verwijderen</button></figcaption>` : ''}</figure>`).join('')}</div>` : ''}
+        ${open ? `<div class="actions no-print" style="margin-top:16px">
+          ${photos.length < MAX_REQ_PHOTOS ? `<label class="btn">Foto toevoegen<input type="file" id="r-add" accept="image/*" multiple hidden></label>` : ''}
+          <button class="btn" id="r-withdraw">Melding intrekken</button></div>` : ''}
+      </div>`;
+    document.querySelectorAll('#detail-body [data-rphoto]').forEach((b) => { b.onclick = () => { const p = photos[Number(b.dataset.rphoto)]; showPhoto({ url: p.url, caption: `Foto bij melding ${r.number}` }); }; });
+    document.querySelectorAll('#detail-body [data-rdel]').forEach((b) => { b.onclick = () => removeRequestPhoto(b.dataset.rdel); });
+    const add = $('#r-add');
+    if (add) add.onchange = async () => {
+      const files = [...add.files].slice(0, MAX_REQ_PHOTOS - photos.length);
+      if (!files.length) return;
+      if (await uploadPhotos(r.id, files)) toast('Foto toegevoegd.');
+      openRequest(r.id);
+      load();
+    };
+    const w = $('#r-withdraw');
+    if (w) w.onclick = withdraw;
+    document.querySelectorAll('#detail-body [data-open]').forEach((b) => { b.onclick = () => openDetail(b.dataset.open); });
+  }
+
+  async function removeRequestPhoto(pid) {
+    try {
+      await api(`../api/portal/requests/${encodeURIComponent(state.request.id)}/photos/${encodeURIComponent(pid)}`, { method: 'DELETE' });
+      openRequest(state.request.id);
+      load();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }
+
+  async function withdraw() {
+    if (!window.confirm('Weet u zeker dat u deze melding wilt intrekken?')) return;
+    try {
+      state.request = await api(`../api/portal/requests/${encodeURIComponent(state.request.id)}/withdraw`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      toast('De melding is ingetrokken.');
+      renderRequest();
+      load();
+    } catch (e) {
+      toast(e.message, true);
+    }
   }
 
   function renderWork(d) {
@@ -245,18 +420,38 @@
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       if (!$('#photo').hidden) $('#photo').hidden = true;
+      else if (!$('#r-modal').hidden) closeForm();
       else $('#detail').hidden = true;
     });
     document.addEventListener('click', (e) => {
       const b = e.target.closest('main [data-open]');
       if (b) openDetail(b.dataset.open);
+      const r = e.target.closest('main [data-req]');
+      if (r) openRequest(r.dataset.req);
+    });
+    $('#r-new').onclick = openForm;
+    $('#r-close').onclick = closeForm;
+    $('#r-cancel').onclick = closeForm;
+    $('#r-modal').onclick = (e) => { if (e.target.id === 'r-modal') closeForm(); };
+    form().addEventListener('submit', submitForm);
+    form().addEventListener('change', (e) => {
+      if (e.target.name === 'kind') syncKind();
+      if (e.target.name === 'photos') {
+        state.files = [...e.target.files].slice(0, MAX_REQ_PHOTOS);
+        if (e.target.files.length > MAX_REQ_PHOTOS) toast(`Maximaal ${MAX_REQ_PHOTOS} foto's; de eerste ${MAX_REQ_PHOTOS} worden meegestuurd.`, true);
+        previews();
+      }
     });
     await Promise.all([account, load()]);
     // Terug via de knop Terug van de browser: opnieuw laden.
     if (window.AquatechCommon) window.AquatechCommon.onReturn(load);
-    // Direct naar een werkorder: portaal/#wo=<id> (bijv. vanuit een e-mail).
+    // Direct naar een werkorder of melding: portaal/#wo=<id> of #melding=<id>
+    // (bijv. vanuit een e-mail); #melden opent het formulier.
     const m = /^#wo=([\w-]+)$/.exec(location.hash);
     if (m && state.data) openDetail(m[1]);
+    const mr = /^#melding=([\w-]+)$/.exec(location.hash);
+    if (mr && state.data) openRequest(mr[1]);
+    if (location.hash === '#melden' && state.data && state.data.features.requests) openForm();
   }
 
   init();

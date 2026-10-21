@@ -355,6 +355,8 @@ function createStore(db) {
         }
       }
       q('UPDATE quotes SET customer_id = NULL WHERE customer_id = ?').run(u.id);
+      q('UPDATE service_requests SET customer_id = NULL WHERE customer_id = ?').run(u.id);
+      q('UPDATE service_requests SET handled_by = NULL WHERE handled_by = ?').run(u.id);
       q('UPDATE work_orders SET assignee_id = NULL WHERE assignee_id = ?').run(u.id);
       q('UPDATE work_order_photos SET uploaded_by = NULL WHERE uploaded_by = ?').run(u.id);
       // Geboekte uren en materiaal blijven (urenstaat, voorraad); de naam staat in user_name.

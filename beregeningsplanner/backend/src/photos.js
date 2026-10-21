@@ -191,11 +191,13 @@ function createPhotoStore(db, { vault }) {
     return { mime: inspectImage(body)?.mime || r.mime, body, workOrderId: r.work_order_id, customerVisible: Boolean(r.customer_visible) };
   }
 
-  /** Mag deze klant de foto zien: zichtbaar gezet en de werkorder hoort via de offerte bij hem. */
+  /** Mag deze klant de foto zien: zichtbaar gezet en de werkorder hoort via de offerte (of zijn melding) bij hem. */
   function customerOwns(tenantId, id, userId) {
     return Boolean(q(`SELECT 1 AS ok FROM work_order_photos p JOIN work_orders w ON w.id = p.work_order_id AND w.deleted_at IS NULL
-      JOIN quotes o ON o.id = w.quote_id AND o.tenant_id = w.tenant_id
-      WHERE p.tenant_id = ? AND p.id = ? AND p.customer_visible = 1 AND o.customer_id = ?`).get(tenantId, String(id), String(userId)));
+      WHERE p.tenant_id = ? AND p.id = ? AND p.customer_visible = 1
+        AND (EXISTS (SELECT 1 FROM quotes o WHERE o.id = w.quote_id AND o.tenant_id = w.tenant_id AND o.customer_id = ?)
+        OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?))`)
+      .get(tenantId, String(id), String(userId), String(userId)));
   }
 
   return { list, listMany, counts, add, update, remove, removeAll, file, customerOwns, KINDS, MAX_PER_WORK_ORDER };
@@ -375,4 +377,4 @@ function registerPhotoRoutes(app, ctx) {
   });
 }
 
-module.exports = { createPhotoStore, createDossierStore, registerPhotoRoutes, inspectImage, cleanJpeg, KINDS, MAX_PER_WORK_ORDER };
+module.exports = { createPhotoStore, createDossierStore, registerPhotoRoutes, inspectImage, cleanJpeg, fromBase64, KINDS, MAX_PER_WORK_ORDER, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE };

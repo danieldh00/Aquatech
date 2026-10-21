@@ -120,7 +120,7 @@ async function views(base, jars) {
   for (const [who, jar] of Object.entries(jars)) {
     const c = client(base, new Map(jar));
     for (const p of ['/api/me', '/api/plans?all=1', '/api/quotes?all=1', '/api/workorders', '/api/catalog', '/api/admin/users', '/api/admin/history?limit=1000',
-      '/api/admin/plans?deleted=1', '/api/admin/settings', '/api/platform/tenants', '/api/admin/audit?limit=1000']) {
+      '/api/admin/plans?deleted=1', '/api/admin/settings', '/api/platform/tenants', '/api/admin/audit?limit=1000', '/api/service-requests', '/api/portal']) {
       const r = await c.get(p);
       out[`${who} ${p}`] = { status: r.status, body: r.body };
     }
@@ -186,7 +186,7 @@ test('overstap SQLite → PostgreSQL: alle gegevens één op één, ingelogd bli
       const after = await views(base, jars);
       assert.ok(Object.keys(before).length > 30);
       assert.strictEqual(before['installateur /api/quotes?all=1'].body.items.length, 6, 'vergelijking met echte gegevens');
-      assert.ok(before['installateur /api/workorders'].body.items.length === 3 && before['baas /api/platform/tenants'].body.items.length === 2);
+      assert.ok(before['installateur /api/workorders'].body.items.length === 4 && before['baas /api/platform/tenants'].body.items.length === 2);
       for (const k of Object.keys(before)) assert.deepStrictEqual(after[k], before[k], k);
       assert.strictEqual((await client(base, new Map(jars.baas)).get('/api/admin/settings')).body.settings.anthropicApiKey.hint, '…WXYZ');
       // En verder werken op PostgreSQL.

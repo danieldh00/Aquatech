@@ -22,6 +22,7 @@ const { createWorkLogStore, registerWorkLogRoutes } = require('./worklog');
 const { createImpersonationStore, createImpersonation } = require('./impersonation');
 const { createShopStore, registerShopRoutes } = require('./shop');
 const { createPortalStore, registerPortalRoutes } = require('./portal');
+const { createServiceRequestStore, registerServiceRequestRoutes } = require('./servicerequests');
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./outsourcing');
 const { createStockStore, registerStockRoutes } = require('./stock');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./news');
@@ -288,6 +289,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Uren en materiaal boeken (worklog.js): kleine regels.
   app.use(/^\/api\/workorders\/[^/]+\/(hours|materials)(\/[^/]+)?$/, express.json({ limit: '32kb' }));
   app.use('/api/workorders', express.json({ limit: '1mb' }));
+  // Meldingen van klanten: foto's (base64, verkleind in de browser) en de tekst.
+  app.use(/^\/api\/portal\/requests\/[^/]+\/photos$/, express.json({ limit: '8mb' }));
+  app.use(['/api/portal/requests', '/api/service-requests'], express.json({ limit: '64kb' }));
   app.use('/api/news', express.json({ limit: '64kb' }));
   app.use('/api/stock', express.json({ limit: '256kb' }));
   app.use(express.json({ limit: '16kb' }));
@@ -1257,6 +1261,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   workLogStore.hook((tid, row, user) => stockStore.syncUsage(tid, {
     usageId: row.id, workOrderId: row.work_order_id, code: row.code, qty: row.deleted ? 0 : row.qty, user,
   }, { nested: true }));
+  const serviceRequestStore = createServiceRequestStore(database, { vault, workorders: workOrderStore, photos: photoStore });
   // Klant (of gast): ziet alleen berichten voor iedereen.
   const isCustomer = (req, user) => !user || user.kind === 'gast' || (!user.platform_admin && store.roles.get(req.tenantId || user.tenant_id, user.role)?.kind === 'klant');
 
@@ -1338,9 +1343,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerPhotoRoutes(app, { photos: photoStore, dossiers: dossierStore, requireRight, requireUser, requireJson, identify, audit });
 
   // ---------- Klantportaal (module Portaal, zie portal.js) ----------
+  const portalStore = createPortalStore(database);
   registerPortalRoutes(app, {
-    portal: createPortalStore(database), store, quotes: quoteStore, workorders: workOrderStore, photos: photoStore,
+    portal: portalStore, store, quotes: quoteStore, workorders: workOrderStore, photos: photoStore, requests: serviceRequestStore,
     requireRight, requireJson, audit, remoteIp, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
+  });
+
+  // ---------- Meldingen: storing of onderhoud via het portaal (zie servicerequests.js) ----------
+  registerServiceRequestRoutes(app, {
+    requests: serviceRequestStore, portal: portalStore, workorders: workOrderStore, requireRight, requireJson, audit,
+    remoteIp, createRateLimiter, mailerFor, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
+    staffTenantsOf: (req) => { const tid = req.tenantId || tenant.id; return [homeOf(tid), tid]; },
   });
 
   // ---------- Webshopkoppeling (zie shop.js) ----------
@@ -1509,7 +1522,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, settings: settingsFor(t.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, requests: serviceRequestStore, settings: settingsFor(t.id) },
       set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );

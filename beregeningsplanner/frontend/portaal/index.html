@@ -37,6 +37,15 @@
       <div id="todo" class="cards"></div>
     </section>
 
+    <section id="s-requests" hidden>
+      <h2>Storingen en onderhoud</h2>
+      <div class="req-intro">
+        <p class="muted">Werkt er iets niet, of wilt u onderhoud laten uitvoeren? Meld het hier, eventueel met foto's. Wij nemen contact met u op.</p>
+        <button class="btn primary" id="r-new" type="button">Storing of onderhoud melden</button>
+      </div>
+      <div id="requests" class="cards"></div>
+    </section>
+
     <section id="s-work" hidden>
       <h2>Afspraken en werkzaamheden</h2>
       <div id="work" class="cards"></div>
@@ -65,6 +74,37 @@
     </div>
   </div>
 
+  <div id="r-modal" class="modal" hidden>
+    <div class="modal-card">
+      <button class="btn ghost close" id="r-close" type="button" title="Sluiten">✕</button>
+      <h2>Storing of onderhoud melden</h2>
+      <form id="r-form" class="card-form req-form" novalidate>
+        <fieldset class="kinds">
+          <legend>Waar gaat het om?</legend>
+          <label class="chk"><input type="radio" name="kind" value="storing" checked> Storing</label>
+          <label class="chk"><input type="radio" name="kind" value="onderhoud"> Onderhoud</label>
+          <label class="chk"><input type="radio" name="kind" value="overig"> Vraag of verzoek</label>
+        </fieldset>
+        <label class="chk" id="r-urgent-row"><input type="checkbox" name="urgent"> Spoed (bijvoorbeeld een lekkage die niet stopt)</label>
+        <label id="r-inst-row" hidden>Installatie<select name="installationId"></select></label>
+        <label>Onderwerp<input name="subject" maxlength="200" required placeholder="Bijv. sproeiers bij de border gaan niet aan"></label>
+        <label>Omschrijving<textarea name="description" rows="4" maxlength="4000" required placeholder="Wat ziet u, sinds wanneer, en welke zone of welk deel van de tuin?"></textarea></label>
+        <div class="row">
+          <label class="grow">Adres<input name="address" maxlength="400" autocomplete="street-address"></label>
+          <label>Telefoon<input name="phone" maxlength="40" type="tel" autocomplete="tel"></label>
+        </div>
+        <label>Wanneer komt het u uit? (optioneel)<input name="preferred" maxlength="300" placeholder="Bijv. liefst 's ochtends, niet op woensdag"></label>
+        <label>Foto's (optioneel, maximaal 6)<input name="photos" type="file" accept="image/*" multiple></label>
+        <div id="r-previews" class="photos small-photos"></div>
+        <div class="row">
+          <button class="btn primary" type="submit">Melding versturen</button>
+          <button class="btn" type="button" id="r-cancel">Annuleren</button>
+        </div>
+        <div class="err" role="alert"></div>
+      </form>
+    </div>
+  </div>
+
   <div id="photo" class="modal photo-view" hidden>
     <figure>
       <img id="photo-img" alt="">
@@ -78,6 +118,7 @@
   <script src="../dashboard/modules.js"></script>
   <script src="../shared/sidebar.js"></script>
   <script src="../dashboard/account.js"></script>
+  <script src="../werkorders/photos.js"></script>
   <script src="portaal.js"></script>
 </body>
 </html>

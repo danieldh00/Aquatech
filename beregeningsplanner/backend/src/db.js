@@ -617,6 +617,55 @@ const MIGRATIONS = [
   );
   CREATE INDEX stock_reservations_item ON stock_reservations (tenant_id, item_id);
   `,
+  // 25: meldingen van klanten (storing of onderhoudsverzoek) via het
+  // klantportaal, zie servicerequests.js. customer_id, handled_by en
+  // work_order_id zonder foreign key: de melding blijft staan als het account
+  // of de werkorder verdwijnt. installation_id = de werkorder van de
+  // installatie waar de melding over gaat. Foto's van de klant versleuteld
+  // (vault.sealBytes) in een eigen tabel.
+  `
+  CREATE TABLE service_requests (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+    number          TEXT NOT NULL,
+    customer_id     TEXT,
+    customer_name   TEXT NOT NULL DEFAULT '',
+    kind            TEXT NOT NULL DEFAULT 'storing' CHECK (kind IN ('storing', 'onderhoud', 'overig')),
+    urgent          INTEGER NOT NULL DEFAULT 0,
+    subject         TEXT NOT NULL,
+    description     TEXT NOT NULL DEFAULT '',
+    address         TEXT NOT NULL DEFAULT '',
+    phone           TEXT NOT NULL DEFAULT '',
+    email           TEXT NOT NULL DEFAULT '',
+    preferred       TEXT NOT NULL DEFAULT '',
+    installation_id TEXT,
+    status          TEXT NOT NULL DEFAULT 'nieuw' CHECK (status IN ('nieuw', 'in_behandeling', 'ingepland', 'afgehandeld', 'afgewezen', 'ingetrokken')),
+    reply           TEXT NOT NULL DEFAULT '',
+    note            TEXT NOT NULL DEFAULT '',
+    handled_by      TEXT,
+    handled_by_name TEXT NOT NULL DEFAULT '',
+    work_order_id   TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    UNIQUE (tenant_id, number)
+  );
+  CREATE INDEX service_requests_status ON service_requests (tenant_id, status, created_at);
+  CREATE INDEX service_requests_customer ON service_requests (tenant_id, customer_id, created_at);
+  CREATE INDEX service_requests_wo ON service_requests (tenant_id, work_order_id);
+  CREATE TABLE service_request_photos (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    request_id TEXT NOT NULL REFERENCES service_requests(id),
+    mime       TEXT NOT NULL,
+    width      INTEGER,
+    height     INTEGER,
+    size       INTEGER NOT NULL,
+    image      TEXT NOT NULL,
+    thumb      TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX service_request_photos_req ON service_request_photos (tenant_id, request_id, created_at);
+  `,
 ];
 
 function openDb(file = ':memory:') {

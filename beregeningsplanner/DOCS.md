@@ -444,6 +444,23 @@ ontwerp en zones, geplaatste materialen, foto's per fase en de offertes.
 voor een versie voor de klant). Klanten met een klantaccount (gekoppeld aan
 de offerte) zien hun zichtbaar gezette foto's in het klantportaal.
 
+## Storing of onderhoud melden
+
+Een klant meldt in **Mijn portaal** (blok *Storingen en onderhoud*) zelf een
+storing, een onderhoudsverzoek of een andere vraag: onderwerp, omschrijving,
+eventueel spoed, de installatie waar het om gaat, adres, telefoon, een
+voorkeursmoment en tot 6 foto's. Zolang de melding nog niet is opgepakt kan
+hij foto's toevoegen of verwijderen en de melding intrekken. Het bedrijf
+krijgt een e-mail (als er een mailserver is ingesteld).
+
+Medewerkers met het recht *Werkorders* zien de meldingen in de module
+**Meldingen**. Daar sturen ze de klant een reactie (in het portaal en per
+e-mail), houden ze een interne notitie bij en zetten ze de status. Met
+**Werkorder maken** ontstaat een werkorder met de klantgegevens, de
+omschrijving als instructie, het ontwerp en de zones van de gekozen
+installatie en de foto's van de klant. De klant ziet die werkorder daarna in
+zijn portaal en kan de afspraak daar bevestigen.
+
 ## Voorraadbeheer
 
 Module **Voorraadbeheer** (recht *Voorraadbeheer*: standaard beheerder en

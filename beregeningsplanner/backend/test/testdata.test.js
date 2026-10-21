@@ -127,8 +127,12 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     const devries = client(base);
     await devries.login(name('klant1'), password, 'groen');
     const p1 = (await devries.get('/api/portal')).body;
-    assert.deepStrictEqual(p1.workorders.map((w) => w.status), ['gereed']);
-    const dossier = (await devries.get(`/api/portal/workorders/${p1.workorders[0].id}`)).body;
+    // Plus de werkorder uit zijn melding (winterklaar maken), ingepland.
+    assert.deepStrictEqual(p1.workorders.map((w) => w.status).sort(), ['gepland', 'gereed']);
+    assert.deepStrictEqual(p1.requests.map((r) => r.status).sort(), ['ingepland', 'nieuw']);
+    assert.ok(p1.requests.every((r) => r.note === undefined), 'geen interne notitie naar de klant');
+    const done = p1.workorders.find((w) => w.status === 'gereed');
+    const dossier = (await devries.get(`/api/portal/workorders/${done.id}`)).body;
     assert.ok(dossier.report.notes && dossier.report.completedOn && dossier.steps.every((st) => st.done));
     const vanberg = client(base);
     await vanberg.login(name('klant4'), password, 'groen');
@@ -229,7 +233,20 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
     }
     assert.ok(list.length === 6);
 
-    const wos = (await inst.get('/api/workorders')).body.items;
+    // Meldingen in alle stadia; één is al een (ingeplande) werkorder.
+    assert.strictEqual(counts.requests, 4);
+    assert.strictEqual(counts.requestWorkOrders, 1);
+    const reqs = (await inst.get('/api/service-requests')).body.items;
+    assert.deepStrictEqual(reqs.map((r) => r.status).sort(), ['afgehandeld', 'in_behandeling', 'ingepland', 'nieuw']);
+    const fromRequest = reqs.find((r) => r.workOrder);
+    assert.ok(fromRequest.installation && fromRequest.photoCount === 1);
+    const all = (await inst.get('/api/workorders')).body.items;
+    const service = all.filter((w) => !w.quoteId);
+    assert.deepStrictEqual(service.map((w) => [w.id, w.status]), [[fromRequest.workOrder.id, 'gepland']]);
+    const sfull = (await inst.get(`/api/workorders/${service[0].id}`)).body;
+    assert.ok(sfull.data.zones.length > 0, 'zones van de installatie gaan mee');
+    assert.strictEqual((await inst.get(`/api/workorders/${service[0].id}/photos`)).body.items.length, 1, 'foto van de klant gaat mee');
+    const wos = all.filter((w) => w.quoteId);
     assert.deepStrictEqual(wos.map((w) => w.status).sort(), ['bezig', 'gepland', 'gereed']);
     for (const w of wos) {
       const full = (await inst.get(`/api/workorders/${w.id}`)).body;

@@ -476,6 +476,50 @@ const PG_MIGRATIONS = [
   );
   CREATE INDEX stock_reservations_item ON stock_reservations (tenant_id, item_id);
   `,
+  // 25: meldingen van klanten (zie db.js).
+  `
+  CREATE TABLE service_requests (
+    id              ${T} PRIMARY KEY,
+    tenant_id       ${T} NOT NULL ${FK('tenants(id)')},
+    number          ${T} NOT NULL,
+    customer_id     ${T},
+    customer_name   ${T} NOT NULL DEFAULT '',
+    kind            ${T} NOT NULL DEFAULT 'storing' CHECK (kind IN ('storing', 'onderhoud', 'overig')),
+    urgent          BIGINT NOT NULL DEFAULT 0,
+    subject         ${T} NOT NULL,
+    description     ${T} NOT NULL DEFAULT '',
+    address         ${T} NOT NULL DEFAULT '',
+    phone           ${T} NOT NULL DEFAULT '',
+    email           ${T} NOT NULL DEFAULT '',
+    preferred       ${T} NOT NULL DEFAULT '',
+    installation_id ${T},
+    status          ${T} NOT NULL DEFAULT 'nieuw' CHECK (status IN ('nieuw', 'in_behandeling', 'ingepland', 'afgehandeld', 'afgewezen', 'ingetrokken')),
+    reply           ${T} NOT NULL DEFAULT '',
+    note            ${T} NOT NULL DEFAULT '',
+    handled_by      ${T},
+    handled_by_name ${T} NOT NULL DEFAULT '',
+    work_order_id   ${T},
+    created_at      ${T} NOT NULL,
+    updated_at      ${T} NOT NULL,
+    UNIQUE (tenant_id, number)
+  );
+  CREATE INDEX service_requests_status ON service_requests (tenant_id, status, created_at);
+  CREATE INDEX service_requests_customer ON service_requests (tenant_id, customer_id, created_at);
+  CREATE INDEX service_requests_wo ON service_requests (tenant_id, work_order_id);
+  CREATE TABLE service_request_photos (
+    id         ${T} PRIMARY KEY,
+    tenant_id  ${T} NOT NULL ${FK('tenants(id)')},
+    request_id ${T} NOT NULL ${FK('service_requests(id)')},
+    mime       ${T} NOT NULL,
+    width      BIGINT,
+    height     BIGINT,
+    size       BIGINT NOT NULL,
+    image      ${T} NOT NULL,
+    thumb      ${T} NOT NULL,
+    created_at ${T} NOT NULL
+  );
+  CREATE INDEX service_request_photos_req ON service_request_photos (tenant_id, request_id, created_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
