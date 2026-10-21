@@ -345,7 +345,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   concept met negatieve regels. Losse verkoop boekt voorraad af (bron
   `factuur:<id>`). Export Visma als Excel (`exportRows`). Gepland: deel 3
   Visma eAccounting-API.
-- **Debiteuren, webshopbestellingen, PDF en mail** (0.62.0, migratie 27):
+- **Debiteuren, webshopbestellingen, PDF en mail** (0.63.0, migratie 27):
   `debtors.js` (tabel `debtors`, `ensure` bij definitief, `match_key`),
   `shoporders.js` (WooCommerce-bestellingen met status uit
   `invoicing.shopOrders` → factuur met `shop_order_id`, uniek; elke 10 min na

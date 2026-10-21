@@ -85,6 +85,7 @@
         <canvas id="canvas"></canvas>
         <div id="drawbar" class="drawbar" hidden>
           <span id="drawbar-label" class="drawbar-label"></span>
+          <button data-db="pan" class="btn" title="Verschuiven zonder de vorm af te breken" aria-pressed="false">✋ <span>Schuiven</span></button>
           <button data-db="undo" class="btn">↶ Punt terug</button>
           <button data-db="finish" class="btn primary">✓ Vorm sluiten</button>
           <button data-db="cancel" class="btn">✕ <span>Stoppen</span></button>
@@ -118,10 +119,11 @@
       </ol>
       <h3>Bediening</h3>
       <ul>
-        <li>Scrollen = in- en uitzoomen; rechtermuisknop, middelste muisknop of spatiebalk + slepen = verschuiven.</li>
+        <li>Scrollen (muiswiel of touchpad) = verschuiven, Shift + scrollen = opzij, Ctrl + scrollen of knijpen op het touchpad = zoomen; rechtermuisknop, middelste muisknop, spatiebalk + slepen of de pijltjestoetsen = verschuiven. Dat werkt ook midden in het tekenen van een vorm, net als het handje ✋.</li>
+        <li>Vorm achteraf aanpassen: selecteer het vlak, sleep een hoekpunt, sleep een middenstip voor een extra punt, of klik een hoekpunt aan en druk Delete (of dubbelklik) om het weg te halen. <b>Opnieuw tekenen</b> in het paneel tekent de vorm opnieuw met dezelfde naam en hetzelfde type.</li>
         <li>Delete-toets = selectie verwijderen; Ctrl+Z / Ctrl+Y = ongedaan maken / opnieuw.</li>
         <li>Tekenen: Enter = vorm sluiten, Backspace = laatste punt weg, Shift = hoeken van 45°, Alt = niet op het raster uitlijnen.</li>
-        <li>Telefoon of tablet: tik om te selecteren of een punt te zetten, sleep met één vinger om te verschuiven, knijp met twee vingers om te zoomen. Tijdens het tekenen staan <b>Punt terug</b>, <b>Vorm sluiten</b> en <b>Stoppen</b> boven in beeld; met <b>▾ Paneel</b> klap je het stappenpaneel in voor meer tekenruimte. Voorbeeld, Nieuw, Mijn plannen, Openen, Opslaan en Help staan onder het menu (☰) rechtsboven; raster en lagen onder <b>Lagen ▾</b>.</li>
+        <li>Telefoon of tablet: tik om te selecteren of een punt te zetten, sleep met één vinger om te verschuiven, knijp met twee vingers om te zoomen. Tijdens het tekenen staan <b>✋ Schuiven</b>, <b>Punt terug</b>, <b>Vorm sluiten</b> en <b>Stoppen</b> boven in beeld; een vlak aanpassen: tik het aan, sleep de hoekpunten, of tik een hoekpunt aan en kies <b>Punt verwijderen</b>; met <b>▾ Paneel</b> klap je het stappenpaneel in voor meer tekenruimte. Voorbeeld, Nieuw, Mijn plannen, Openen, Opslaan en Help staan onder het menu (☰) rechtsboven; raster en lagen onder <b>Lagen ▾</b>.</li>
         <li>Het project wordt automatisch in de browser en in <b>Mijn plannen</b> op de server bewaard. Gebruik <b>Opslaan</b> voor een bestand.</li>
       </ul>
       <p class="hint">Berekeningen zijn indicatief (Hazen-Williams, PE PN6, geen hoogteverschillen). Controleer altijd de werkelijke druk en het debiet ter plaatse.</p>
