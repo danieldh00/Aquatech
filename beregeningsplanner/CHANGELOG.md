@@ -1,6 +1,7 @@
 # Changelog
 
-## 0.66.1
+<<<<<<< HEAD
+## 0.67.1
 
 Codestijlregels vastgelegd en bewaakt (geen functionele wijziging).
 
@@ -12,6 +13,35 @@ Codestijlregels vastgelegd en bewaakt (geen functionele wijziging).
   opgeschoond staan in `tools/codestyle-baseline.json`; die lijst mag alleen
   korter worden.
 - Losse screenshots en een export uit de root van de repo verwijderd.
+=======
+## 0.67.0
+
+Automatisch plaatsen: rustiger indeling en automatisch het beste sproeiertype.
+
+- **Beste type per gazon** (`Planner.bestPlace`): plaatst elk bruikbaar type
+  (assortiment, druk ≥ minimale kopdruk + 0,2 bar) en kiest per gazon de
+  laagste kosten op één gezamenlijke beoordeling. Sproeiertype `auto` in de
+  planner (stap 1 en 4, standaard voor nieuwe plannen), behuizing per type
+  (`body-lawn-<type>`), melding met de keuze per gazon. `C.usableType` valt
+  bij een onbekend type terug op het eerste bruikbare.
+- **Geen kluitjes langs de rand**: per kopafstand een grovere vorm
+  (`coarseShape`: randen korter dan 0,3 × afstand weg, naar buiten), daarna
+  `prune` (overbodige koppen weg) en `fill` (kop bij de droogste plek, alleen
+  als het beter wordt). Afstanden tot 1,2 × de maximale worp dwars op het
+  gazon (twee rijen randkoppen), de beste zes indelingen worden afgesteld.
+- **Kosten** (`W`): water buiten het gazon over de volle worp (was tot 3 m)
+  en zwaarder (80), gele plekken < 70% van het gemiddelde (2,5 per %),
+  droge plekken 3 per %. Meetraster iets verschoven (geen punten precies op
+  een rechte rand).
+- **Sneller** (ca. 5×): bijdrage per kop onthouden (`headCells`), sector
+  zonder hoekfuncties, laagste kwart via quickselect, natte cellen buiten
+  het gazon bijgehouden.
+- **Neerslagkaart** (`simulation.js`): kleur en DU/droog per gazon t.o.v. het
+  eigen gemiddelde (`areaMean`), zodat rotators naast turbines niet geel
+  lijken.
+- Voorbeeld terrastuin (getrapte rand): rotators 20 → 12 koppen (kleinste
+  afstand 1,0 → 4,0 m, DU 71 → 81%), turbines 18 → 9 (DU 62 → 85%).
+>>>>>>> origin/master
 
 ## 0.66.0
 

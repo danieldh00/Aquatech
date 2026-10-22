@@ -299,7 +299,7 @@
   };
 
   /** Het gewenste type als dat bruikbaar is, anders het eerste bruikbare gazontype. */
-  C.usableType = (type, order = ['rotator', 'spray', 'rotor']) => (C.typeAvailable(type) ? type : order.find((t) => C.typeAvailable(t)) || type);
+  C.usableType = (type, order = ['rotator', 'spray', 'rotor']) => (C.sprinklerTypes[type] && C.typeAvailable(type) ? type : order.find((t) => C.typeAvailable(t)) || order[0]);
 
   /** Rotatorkoppen die de planner mag kiezen. */
   C.rotatorModelsAvailable = () => Object.fromEntries(Object.entries(C.rotatorModels).filter(([, m]) => C.available(m.code)));
