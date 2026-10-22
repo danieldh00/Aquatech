@@ -12,7 +12,6 @@
     "frontend/beregening/js/localrecog.js",
     "frontend/beregening/js/planimport.js",
     "frontend/beregening/js/simulation.js",
-    "frontend/beregening/js/sprinklerlib.js",
-    "frontend/werkorders/werkorders.js"
+    "frontend/beregening/js/sprinklerlib.js"
   ]
 }
