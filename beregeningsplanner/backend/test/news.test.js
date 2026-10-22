@@ -105,6 +105,8 @@ test('nieuws: beheerder plaatst, collega en klant lezen, melding en gezien', asy
     const kees = await as('kees');
     const klaas = await as('klaas');
     // Account van voor deze versie: krijgt één melding voor de laatste versie.
+    // Accounts aangemaakt vóór de laatste versie, zodat de test niet afhangt van de dag waarop hij draait.
+    db.prepare('UPDATE users SET created_at = ?').run('2026-01-01T08:00:00.000Z');
     assert.strictEqual((await kees.get('/api/me')).body.news, 1);
 
     const intern = await baas.post('/api/news', { title: 'Teamoverleg', body: 'Vrijdag 8:00 in de werkplaats.\nhttps://voorbeeld.nl/agenda', mail: true });

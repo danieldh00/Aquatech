@@ -3,3 +3,7 @@ data/
 *.log
 .env
 .DS_Store
+
+# Screenshots en exports horen in de projectbestanden, niet in de repo.
+/*.png
+/*.xlsx

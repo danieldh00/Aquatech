@@ -22,6 +22,19 @@ Automatisch plaatsen stuurt op een groene neerslagkaart.
   van 20 × 15 m krijgt 12 i.p.v. 9 rotators: met 9 spuiten de randkoppen ruim
   25 m² naast het gazon.
 
+## 0.67.1
+
+Codestijlregels vastgelegd en bewaakt (geen functionele wijziging).
+
+- **Codestijl** (CLAUDE.md, *Codestijl*): duidelijke namen (geen namen van
+  één letter, geen cryptische afkortingen) en een commentaarblok met
+  omschrijving, `@param` en `@returns` bij elke functie.
+- **Controle** `tools/codestyle.js` (acorn, devDependency) + `npm run
+  codestyle` en `test/codestyle.test.js`. Bestanden die nog niet zijn
+  opgeschoond staan in `tools/codestyle-baseline.json`; die lijst mag alleen
+  korter worden.
+- Losse screenshots en een export uit de root van de repo verwijderd.
+
 ## 0.67.0
 
 Automatisch plaatsen: rustiger indeling en automatisch het beste sproeiertype.
