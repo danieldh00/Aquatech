@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.68.0',
+      date: '2026-10-22',
+      title: 'Automatisch plaatsen: zo groen mogelijk met zo min mogelijk koppen',
+      items: [
+        { text: '**Automatisch plaatsen** stuurt nu op een groene neerslagkaart: elke plek die te weinig (geel) of te veel (blauw) water krijgt, telt mee bij het kiezen. Op onregelmatige gazons is gemiddeld zo’n 95% groen, waar dat eerst rond de 80% lag.', for: ['plannen'] },
+        { text: 'Teken je een vlak **Moet droog blijven** (huis, terras), dan houdt de planner daar extra rekening mee: water daarop telt zes keer zo zwaar als op beplanting.', for: ['plannen'] },
+      ],
+    },
+    {
       version: '0.67.2',
       date: '2026-10-22',
       title: 'Nettere mappenindeling van de server',
