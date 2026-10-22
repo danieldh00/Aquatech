@@ -52,6 +52,20 @@ andere methode. Iedere methode krijgt eigen zones, omdat de neerslag verschilt.
    afstand dan dwars erop). De beste paar indelingen worden eerst afgesteld en
    dan pas vergeleken. Tot slot wordt per kop gekeken of een iets kortere worp
    (stelschroef) minder water op het terras geeft.
+4. Trapjes en inhammen die veel kleiner zijn dan de worp (terrasranden,
+   plantvakjes) krijgen geen eigen hoekkop meer; de randkoppen komen op de
+   buitenste lijn, zodat er geen gazon achter een kop valt. Overbodige koppen
+   (kluitjes langs de rand) worden weggehaald zolang de verdeling daar niet
+   slechter van wordt. Water buiten het gazon telt over de **volle worp** mee,
+   en **gele plekken** (minder dan 70% van het gemiddelde) wegen zwaar.
+
+**Automatisch: beste type per gazon** (standaard bij een nieuw plan) plaatst
+per gazon rotators, sproeiers én turbines en kiest de indeling met de laagste
+kosten volgens dezelfde maatstaf. Alleen types uit het assortiment doen mee,
+en alleen als de waterdruk volstaat (minimale kopdruk + 0,2 bar). Na het
+plaatsen meldt de planner welk type per gazon gekozen is. De neerslagkaart
+kleurt elk gazon ten opzichte van zijn eigen gemiddelde, omdat elk gazon in
+eigen zones draait (rotators langer dan turbines).
 
 **Meerstraalsrotators** worden altijd binnen het bereik van een echte kop
 gezet (standaardbibliotheek, bij 2,8 bar):

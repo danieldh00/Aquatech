@@ -107,13 +107,24 @@
       };
     };
 
-    const stats = statsFor((k) => mask[k] === 1);
     const perArea = lawns.map((a, idx) => ({ area: a, stats: statsFor((k) => mask[k] === 1 && areaIdx[k] === idx) }));
+    // Elk gazon draait in eigen zones zo lang als nodig (rotators langer dan sproeiers), dus de
+    // verdeling telt per gazon: elke cel t.o.v. het gemiddelde van zijn eigen gazon.
+    const areaMean = perArea.map((p) => (p.stats && p.stats.mean > 0 ? p.stats.mean : 0));
+    const stats = statsFor((k) => mask[k] === 1);
+    if (stats && lawns.length > 1) {
+      const rel = [];
+      for (let k = 0; k < values.length; k++) if (mask[k] === 1) rel.push(areaMean[areaIdx[k]] > 0 ? values[k] / areaMean[areaIdx[k]] : 0);
+      rel.sort((a, b) => a - b);
+      const q = rel.slice(0, Math.max(1, Math.floor(rel.length / 4)));
+      stats.du = q.reduce((t, v) => t + v, 0) / q.length;
+      stats.dryPct = (rel.filter((v) => v < 0.3).length / rel.length) * 100;
+    }
     let oversprayCells = 0;
     for (let k = 0; k < values.length; k++) if (mask[k] === 2 && values[k] > 0) oversprayCells++;
     const overspray = oversprayCells * cx * cy;
 
-    return { cellX: cx, cellY: cy, minX: bb.minX, minY: bb.minY, nx, ny, values, mask, stats, perArea, overspray };
+    return { cellX: cx, cellY: cy, minX: bb.minX, minY: bb.minY, nx, ny, values, mask, areaIdx, areaMean, stats, perArea, overspray };
   }
 
   /** Kleurenschaal: 0 = rood, 50% = geel, 100% = groen, 150%+ = blauw (t.o.v. gemiddelde). */
@@ -150,7 +161,8 @@
       const v = sim.values[k];
       const o = k * 4;
       if (m === 1) {
-        const c = colorFor(v / ref);
+        const am = sim.areaMean && sim.areaIdx ? sim.areaMean[sim.areaIdx[k]] : 0;
+        const c = colorFor(v / (am > 0 ? am : ref));
         img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 190;
       } else if (v > 0) {
         // overspray buiten gazon
