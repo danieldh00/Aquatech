@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.67.3
+
+Opschoonronde backend deel 1 (geen functionele wijziging): duidelijke namen
+en een commentaarblok (omschrijving, `@param`, `@returns`) bij elke functie.
+
+- `beveiliging/` (auth, vault, netguard, rate-limit, idempotency,
+  impersonation, session-secret), `database/` (db, pgdb, pgdb-worker,
+  pgschema, db-copy), `backup.js`, `migrate-to-postgres.js`.
+- `platform/` (store, settings, roles, mailer, wan-ip, news, ai-usage) en
+  `verkoop/debtors.js`.
+- Hernoemen alleen binnen de eigen scope, gecontroleerd op gelijke
+  code-tokens; codestijl-afbouwlijst van 140 naar 118 bestanden.
+
 ## 0.67.2
 
 Mappenstructuur van de backend per onderwerp (geen functionele wijziging).

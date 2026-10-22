@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.67.3',
+      date: '2026-10-22',
+      title: 'Opgeschoonde servercode (deel 1)',
+      items: [],
+    },
+    {
       version: '0.67.2',
       date: '2026-10-22',
       title: 'Nettere mappenindeling van de server',
