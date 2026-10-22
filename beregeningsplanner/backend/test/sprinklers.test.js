@@ -134,9 +134,10 @@ test('automatisch plaatsen: volle worp over de breedte van het gazon', () => {
   assert.ok(Math.max(...heads.map((h) => h.r)) >= 9, 'grote MP-koppen benut');
   const st = stats(lawn, heads);
   assert.ok(st.du > 0.75 && st.dryPct < 3, `DU ${st.du}, droog ${st.dryPct}%`);
-  // 20 × 15 m: kop-tot-kop met MP3000/MP3500, geen raster van kleine koppen
+  // 20 × 15 m: kop-tot-kop met MP3000/MP3500, geen raster van kleine koppen (9 koppen kan ook,
+  // maar dan spuiten de randkoppen ruim 25 m² naast het gazon)
   const wide = P.autoPlace(rect(0, 0, 20, 15), 'rotator');
-  assert.ok(wide.length <= 10, `${wide.length} koppen`);
+  assert.ok(wide.length <= 12, `${wide.length} koppen`);
   // met een gekozen behuizing krijgt elke kop die behuizing
   const withBody = P.autoPlace(rect(0, 0, 10, 8), 'rotator', { body: 'HU-PROS04-PRS40' });
   assert.ok(withBody.every((h) => h.body === 'HU-PROS04-PRS40'));

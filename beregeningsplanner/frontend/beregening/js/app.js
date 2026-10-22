@@ -646,7 +646,7 @@
           ? st.sprinklers.filter((s) => !s.areaId && (G.pointInPolygon(s, a.pts) || G.closestOnPolygon(s, a.pts).d < 0.1))
           : st.sprinklers.filter((s) => s.areaId === a.id);
         if (!own.length || (ids && !own.some((s) => ids.includes(s.id)))) continue;
-        const res = window.Planner.tune(a.pts, own, ids);
+        const res = window.Planner.tune(a.pts, own, ids, this._surroundings());
         for (const h of res.heads) {
           const s = st.sprinklers.find((x) => x.id === h.id);
           if (!s || (ids && !ids.includes(s.id))) continue;
@@ -689,13 +689,21 @@
       const st = this.state;
       const lawns = st.areas.filter((a) => a.type === 'lawn' && a.pts.length >= 3 && (!areaIds || areaIds.includes(a.id)));
       if (!lawns.length) { this.toast('Teken eerst een gazonvlak (stap 2).', true); return; }
-      this.checkpoint();
-      const chosen = [];
-      let count = this._placeSprinklers(lawns, st.settings.sprinklerType, chosen);
-      if (!areaIds) count += this._syncBedSprinklers(true);
-      this.commit();
-      const why = chosen.length ? ` Gekozen: ${chosen.map((c) => `${c.area} ${c.label}`).join(', ')}.` : '';
-      this.toast(`${count} sproeiers geplaatst.${why} Controleer de neerslagkaart.`);
+      // rekenen duurt op een telefoon enkele seconden: eerst de melding tonen, dan rekenen
+      this.busy(st.settings.sprinklerType === 'auto' ? 'Sproeiers plaatsen en het beste type per gazon kiezen…' : 'Sproeiers plaatsen…');
+      setTimeout(() => {
+        try {
+          this.checkpoint();
+          const chosen = [];
+          let count = this._placeSprinklers(lawns, st.settings.sprinklerType, chosen);
+          if (!areaIds) count += this._syncBedSprinklers(true);
+          this.commit();
+          const why = chosen.length ? ` Gekozen: ${chosen.map((c) => `${c.area} ${c.label}`).join(', ')}.` : '';
+          this.toast(`${count} sproeiers geplaatst.${why} Controleer de neerslagkaart.`);
+        } finally {
+          this.busy(null);
+        }
+      }, 30);
     },
     /**
      * Sproeiers in beplanting/hagen in lijn brengen met de gekozen methode:
@@ -714,7 +722,7 @@
         st.sprinklers = st.sprinklers.filter((s) => s.areaId !== a.id);
         if (!want) continue;
         const bedType = C.usableType(st.settings.bedSprinklerType || 'spray', ['spray', 'rotator']);
-        const heads = window.Planner.autoPlace(a.pts, bedType, { body: this._bodyFor(`bed-${bedType}`) });
+        const heads = window.Planner.autoPlace(a.pts, bedType, { body: this._bodyFor(`bed-${bedType}`), ...this._surroundings() });
         heads.forEach((h) => { h.areaId = a.id; });
         st.sprinklers.push(...heads);
         placed += heads.length;
@@ -736,6 +744,11 @@
       const type = key.replace(/^bed-/, '');
       return k && C.bodies[k] && C.bodiesFor(type).some((b) => b.key === k) ? k : null;
     },
+    /** Vlakken rondom voor de beoordeling van overspray: droog te houden (huis, terras) en mag nat. */
+    _surroundings() {
+      const of = (type) => this.state.areas.filter((x) => x.type === type && x.pts.length >= 3).map((x) => x.pts);
+      return { dry: of('dry'), wet: of('wet') };
+    },
     /**
      * Sproeiers op gazons plaatsen. Type `auto`: per gazon het beste type (rotators, sproeiers of
      * turbines, binnen het assortiment en de druk); `chosen` krijgt dan per gazon de keuze.
@@ -744,6 +757,7 @@
       const st = this.state;
       const auto = wanted === 'auto';
       const type = auto ? null : C.usableType(wanted);
+      const around = this._surroundings();
       let count = 0;
       for (const a of lawns) {
         // verwijder bestaande sproeiers binnen of op de rand van dit vlak
@@ -752,10 +766,10 @@
         if (auto) {
           const types = ['rotator', 'spray', 'rotor'].filter((k) => C.typeAvailable(k));
           const bodies = Object.fromEntries(types.map((k) => [k, this._bodyFor(k)]));
-          const res = window.Planner.bestPlace(a.pts, { types, bodies, pressure: st.settings.pressure });
+          const res = window.Planner.bestPlace(a.pts, { types, bodies, pressure: st.settings.pressure, ...around });
           heads = res.heads;
           if (res.type) chosen.push({ area: a.name || 'gazon', type: res.type, label: TYPE_PLURAL[res.type] || res.type });
-        } else heads = window.Planner.autoPlace(a.pts, type, { r: st.settings.radius || null, body: this._bodyFor(type) });
+        } else heads = window.Planner.autoPlace(a.pts, type, { r: st.settings.radius || null, body: this._bodyFor(type), ...around });
         st.sprinklers.push(...heads);
         count += heads.length;
       }

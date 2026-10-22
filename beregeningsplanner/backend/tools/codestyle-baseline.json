@@ -77,7 +77,6 @@
     "frontend/beregening/js/hydraulics.js",
     "frontend/beregening/js/localrecog.js",
     "frontend/beregening/js/planimport.js",
-    "frontend/beregening/js/planner.js",
     "frontend/beregening/js/shopcatalog.js",
     "frontend/beregening/js/simulation.js",
     "frontend/beregening/js/sprinklerlib.js",

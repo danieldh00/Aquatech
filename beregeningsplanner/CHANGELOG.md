@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.67.3
+## 0.68.1
 
 Opschoonronde backend deel 1 (geen functionele wijziging): duidelijke namen
 en een commentaarblok (omschrijving, `@param`, `@returns`) bij elke functie.
@@ -12,6 +12,31 @@ en een commentaarblok (omschrijving, `@param`, `@returns`) bij elke functie.
   `verkoop/debtors.js`.
 - Hernoemen alleen binnen de eigen scope, gecontroleerd op gelijke
   code-tokens; codestijl-afbouwlijst van 140 naar 118 bestanden.
+
+## 0.68.0
+
+Automatisch plaatsen stuurt op een groene neerslagkaart.
+
+- **Kosten** (`WEIGHTS` in `planner.js`): elke cel buiten 85–130% van het gemiddelde
+  telt mee (`off` 2 per % te weinig, `offHigh` 1,5 per % te veel), droge
+  plekken 6 per %. Water op vlakken *Moet droog blijven* telt 6×, op *Mag nat
+  worden* ¼× (`dry`/`wet` in `autoPlace`/`bestPlace`/`tune`, uit
+  `App._surroundings`).
+- **Zoeken**: koppen verschuiven bij het afstellen (binnenkop in 4
+  richtingen, randkop langs de rand, `variantsOf(head, grid)`), sproeihoek opnieuw
+  uit de echte rand, worp ook 1,2×. Nieuwe indeling vanaf de rand
+  (`layoutPerimeter`: hoeken, gelijke afstanden langs de rand, raster
+  binnenin). Per afstand zowel de grove als de gewone vorm. Beste zes
+  indelingen ruw afgesteld, beste twee met verschuiven en aanvullen, winnaar
+  6 rondes.
+- Melding *Sproeiers plaatsen…* tijdens het rekenen.
+- Groen deel van het gazon (gemiddeld over de testvormen, automatisch type):
+  89% → 97%; terrastuin 80% → 94%, onregelmatig gazon 78% → 94%. Een gazon
+  van 20 × 15 m krijgt 12 i.p.v. 9 rotators: met 9 spuiten de randkoppen ruim
+  25 m² naast het gazon.
+- `planner.js` volgt de codestijl (duidelijke namen, commentaarblok per
+  functie) en staat niet meer in `tools/codestyle-baseline.json`; uitkomst
+  van het plaatsen ongewijzigd.
 
 ## 0.67.2
 
@@ -32,7 +57,6 @@ Mappenstructuur van de backend per onderwerp (geen functionele wijziging).
 - Codestijlcontrole: een korte functie in een object op één regel telt als
   callback (geen commentaarblok nodig).
 
-<<<<<<< HEAD
 ## 0.67.1
 
 Codestijlregels vastgelegd en bewaakt (geen functionele wijziging).
@@ -45,7 +69,7 @@ Codestijlregels vastgelegd en bewaakt (geen functionele wijziging).
   opgeschoond staan in `tools/codestyle-baseline.json`; die lijst mag alleen
   korter worden.
 - Losse screenshots en een export uit de root van de repo verwijderd.
-=======
+
 ## 0.67.0
 
 Automatisch plaatsen: rustiger indeling en automatisch het beste sproeiertype.
@@ -73,7 +97,6 @@ Automatisch plaatsen: rustiger indeling en automatisch het beste sproeiertype.
   lijken.
 - Voorbeeld terrastuin (getrapte rand): rotators 20 → 12 koppen (kleinste
   afstand 1,0 → 4,0 m, DU 71 → 81%), turbines 18 → 9 (DU 62 → 85%).
->>>>>>> origin/master
 
 ## 0.66.0
 
