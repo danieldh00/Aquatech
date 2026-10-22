@@ -4,65 +4,121 @@
 // de foto's. Bladeren per dag; "Hele ploeg" toont de klussen van iedereen.
 // Alleen voor wie het recht 'werkorders' heeft (installateur, beheerder).
 (function () {
-  const $ = (sel, el = document) => el.querySelector(sel);
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  /**
+   * Zoekt het eerste element bij een CSS-selector.
+   * @param {string} selector CSS-selector.
+   * @param {ParentNode} [root] Waarbinnen gezocht wordt (standaard de pagina).
+   * @returns {Element|null} Het element.
+   */
+  const $ = (selector, root = document) => root.querySelector(selector);
+  /**
+   * Maakt tekst veilig voor HTML.
+   * @param {*} value De tekst (null/undefined = leeg).
+   * @returns {string} De tekst met &, <, >, " en ' als entiteit.
+   */
+  const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
   const STATUSES = { open: 'Nieuw', gepland: 'Gepland', bezig: 'In uitvoering', gereed: 'Gereed', geannuleerd: 'Geannuleerd' };
-  const APPT = { wacht: 'Wacht op klant', bevestigd: 'Bevestigd door klant', ander_moment: 'Klant vraagt ander moment' };
+  const APPOINTMENT_STATES = { wacht: 'Wacht op klant', bevestigd: 'Bevestigd door klant', ander_moment: 'Klant vraagt ander moment' };
   const ALL_KEY = 'aquatech_today_all';
 
-  const state = { date: '', today: '', all: false, el: null, loading: 0 };
+  const state = { date: '', today: '', all: false, container: null, loading: 0 };
 
-  const pad = (n) => String(n).padStart(2, '0');
-  function addDays(date, n) {
-    const dt = new Date(`${date}T00:00:00Z`);
-    dt.setUTCDate(dt.getUTCDate() + n);
-    return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+  /**
+   * Getal met een voorloopnul tot twee cijfers.
+   * @param {number} number Het getal.
+   * @returns {string} Bijv. "07".
+   */
+  const padTwo = (number) => String(number).padStart(2, '0');
+  /**
+   * Telt dagen op bij een datum.
+   * @param {string} date Datum als JJJJ-MM-DD.
+   * @param {number} count Aantal dagen (negatief = terug).
+   * @returns {string} De nieuwe datum als JJJJ-MM-DD.
+   */
+  function addDays(date, count) {
+    const moment = new Date(`${date}T00:00:00Z`);
+    moment.setUTCDate(moment.getUTCDate() + count);
+    return `${moment.getUTCFullYear()}-${padTwo(moment.getUTCMonth() + 1)}-${padTwo(moment.getUTCDate())}`;
   }
-  const longDate = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
-  const shortDate = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-  function dayLabel(d) {
-    if (d === state.today) return 'Vandaag';
-    if (d === addDays(state.today, 1)) return 'Morgen';
-    if (d === addDays(state.today, -1)) return 'Gisteren';
-    return longDate(d).replace(/^./, (c) => c.toUpperCase());
+  /**
+   * Datum voluit, bijv. "donderdag 22 oktober".
+   * @param {string} date Datum als JJJJ-MM-DD.
+   * @returns {string} De datum voluit.
+   */
+  const longDate = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+  /**
+   * Datum kort, bijv. "do 22 okt".
+   * @param {string} date Datum als JJJJ-MM-DD.
+   * @returns {string} De datum kort.
+   */
+  const shortDate = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  /**
+   * Kopje voor een dag: Vandaag, Morgen, Gisteren of de datum voluit.
+   * @param {string} date Datum als JJJJ-MM-DD.
+   * @returns {string} Het kopje.
+   */
+  function dayLabel(date) {
+    if (date === state.today) return 'Vandaag';
+    if (date === addDays(state.today, 1)) return 'Morgen';
+    if (date === addDays(state.today, -1)) return 'Gisteren';
+    return longDate(date).replace(/^./, (character) => character.toUpperCase());
   }
-  const mapsUrl = (a) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a)}`;
-  const timeOf = (w) => (w.startTime ? `${w.startTime}${w.endTime ? `–${w.endTime}` : ''}` : 'Hele dag');
+  /**
+   * Link naar Google Maps voor een adres.
+   * @param {string} address Het adres.
+   * @returns {string} De URL.
+   */
+  const mapsUrl = (address) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  /**
+   * Tijd van een klus als tekst.
+   * @param {object} job Klus uit api/my-day.
+   * @returns {string} Bijv. "08:00–12:00" of "Hele dag".
+   */
+  const timeOf = (job) => (job.startTime ? `${job.startTime}${job.endTime ? `–${job.endTime}` : ''}` : 'Hele dag');
 
-  function card(w) {
-    const open = `werkorders/?id=${encodeURIComponent(w.id)}`;
-    const p = w.progress || { steps: 0, done: 0, pct: 0 };
-    const appt = w.appointment && APPT[w.appointment.state];
-    const sub = [
-      esc(w.number),
-      w.totalDays > 1 ? `dag ${w.dayNumber} van ${w.totalDays}` : '',
-      state.all ? esc(w.assignee ? w.assignee.displayName : 'Nog niet toegewezen') : '',
+  /**
+   * Kaart voor één klus: tijd, status, klant, adres, notities, voortgang en knoppen.
+   * @param {object} job Klus uit api/my-day.
+   * @returns {string} HTML van de kaart.
+   */
+  function card(job) {
+    const workOrderHref = `werkorders/?id=${encodeURIComponent(job.id)}`;
+    const progress = job.progress || { steps: 0, done: 0, pct: 0 };
+    const appointmentLabel = job.appointment && APPOINTMENT_STATES[job.appointment.state];
+    const subtitle = [
+      esc(job.number),
+      job.totalDays > 1 ? `dag ${job.dayNumber} van ${job.totalDays}` : '',
+      state.all ? esc(job.assignee ? job.assignee.displayName : 'Nog niet toegewezen') : '',
     ].filter(Boolean).join(' · ');
-    const notes = [w.siteNotes, w.instructions || w.summary].filter(Boolean);
+    const notes = [job.siteNotes, job.instructions || job.summary].filter(Boolean);
     return `
-      <article class="job st-${esc(w.status)}">
+      <article class="job st-${esc(job.status)}">
         <div class="job-head">
-          <span class="job-time">${esc(timeOf(w))}</span>
-          <span class="pill wo-${esc(w.status)}">${esc(STATUSES[w.status] || w.status)}</span>
+          <span class="job-time">${esc(timeOf(job))}</span>
+          <span class="pill wo-${esc(job.status)}">${esc(STATUSES[job.status] || job.status)}</span>
         </div>
-        <div class="job-title">${esc(w.customer || w.title || 'Werkorder')}</div>
-        <div class="job-sub">${sub}</div>
-        ${w.address ? `<a class="job-addr" href="${esc(mapsUrl(w.address))}" target="_blank" rel="noopener">${esc(w.address)}</a>` : ''}
-        ${w.contact || w.phone ? `<div class="job-contact">${esc(w.contact)}${w.contact && w.phone ? ' · ' : ''}${w.phone ? `<a href="tel:${esc(w.phone.replace(/[^\d+]/g, ''))}">${esc(w.phone)}</a>` : ''}</div>` : ''}
-        ${appt ? `<div><span class="pill appt-${esc(w.appointment.state)}">${esc(appt)}</span></div>` : ''}
-        ${notes.map((n) => `<p class="job-note">${esc(n)}</p>`).join('')}
-        ${p.steps ? `<div class="job-progress"><span class="bar"><span style="width:${Number(p.pct) || 0}%"></span></span><span>${p.done}/${p.steps} stappen</span></div>` : ''}
+        <div class="job-title">${esc(job.customer || job.title || 'Werkorder')}</div>
+        <div class="job-sub">${subtitle}</div>
+        ${job.address ? `<a class="job-addr" href="${esc(mapsUrl(job.address))}" target="_blank" rel="noopener">${esc(job.address)}</a>` : ''}
+        ${job.contact || job.phone ? `<div class="job-contact">${esc(job.contact)}${job.contact && job.phone ? ' · ' : ''}${job.phone ? `<a href="tel:${esc(job.phone.replace(/[^\d+]/g, ''))}">${esc(job.phone)}</a>` : ''}</div>` : ''}
+        ${appointmentLabel ? `<div><span class="pill appt-${esc(job.appointment.state)}">${esc(appointmentLabel)}</span></div>` : ''}
+        ${notes.map((note) => `<p class="job-note">${esc(note)}</p>`).join('')}
+        ${progress.steps ? `<div class="job-progress"><span class="bar"><span style="width:${Number(progress.pct) || 0}%"></span></span><span>${progress.done}/${progress.steps} stappen</span></div>` : ''}
         <div class="job-actions">
-          <a class="btn primary" href="${open}">Werkorder openen</a>
-          <a class="btn" href="${open}#fotos">Foto's${w.photos ? ` (${w.photos})` : ''}</a>
-          ${w.address ? `<a class="btn" href="${esc(mapsUrl(w.address))}" target="_blank" rel="noopener">Route</a>` : ''}
-          ${w.phone ? `<a class="btn" href="tel:${esc(w.phone.replace(/[^\d+]/g, ''))}">Bellen</a>` : ''}
+          <a class="btn primary" href="${workOrderHref}">Werkorder openen</a>
+          <a class="btn" href="${workOrderHref}#fotos">Foto's${job.photos ? ` (${job.photos})` : ''}</a>
+          ${job.address ? `<a class="btn" href="${esc(mapsUrl(job.address))}" target="_blank" rel="noopener">Route</a>` : ''}
+          ${job.phone ? `<a class="btn" href="tel:${esc(job.phone.replace(/[^\d+]/g, ''))}">Bellen</a>` : ''}
         </div>
       </article>`;
   }
 
+  /**
+   * Tekent het blok voor de gekozen dag.
+   * @param {object} data Antwoord van api/my-day (items, next).
+   */
   function render(data) {
-    const el = state.el;
+    const container = state.container;
     const items = data.items || [];
     const label = dayLabel(state.date);
     const named = ['Vandaag', 'Morgen', 'Gisteren'].includes(label);
@@ -78,7 +134,7 @@
         : '';
       body = `<div class="job-empty"><p>${who} ${named ? label.toLowerCase() : `op ${esc(longDate(state.date))}`}.</p>${next}</div>`;
     }
-    el.innerHTML = `
+    container.innerHTML = `
       <div class="today-head">
         <h2>${esc(label)}${named ? ` <span class="today-date">${esc(longDate(state.date))}</span>` : ''}</h2>
         <div class="today-nav">
@@ -93,59 +149,68 @@
         <a class="today-link" href="planning/">Planning →</a>
       </div>
       ${body}`;
-    el.hidden = false;
+    container.hidden = false;
   }
 
+  /**
+   * Haalt de klussen van de gekozen dag op en tekent ze; een ouder antwoord wordt genegeerd.
+   * @returns {Promise<void>}
+   */
   async function load() {
-    const n = ++state.loading;
-    const qs = new URLSearchParams();
-    if (state.date) qs.set('date', state.date);
-    if (state.all) qs.set('all', '1');
+    const requestNumber = ++state.loading;
+    const query = new URLSearchParams();
+    if (state.date) query.set('date', state.date);
+    if (state.all) query.set('all', '1');
     let data;
     try {
-      const res = await fetch(`api/my-day?${qs}`, { cache: 'no-store' });
+      const res = await fetch(`api/my-day?${query}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       data = await res.json();
-    } catch (e) {
-      if (n !== state.loading) return;
-      state.el.innerHTML = '<h2>Vandaag</h2><p class="muted">Kan de planning nu niet laden.</p>';
-      state.el.hidden = false;
+    } catch (error) {
+      if (requestNumber !== state.loading) return;
+      state.container.innerHTML = '<h2>Vandaag</h2><p class="muted">Kan de planning nu niet laden.</p>';
+      state.container.hidden = false;
       return;
     }
-    if (n !== state.loading) return;
+    if (requestNumber !== state.loading) return;
     state.today = data.today;
     if (!state.date) state.date = data.date;
     render(data);
-    keepOffline(data, qs);
+    keepOffline(data, query);
   }
 
-  // Klussen van vandaag (en de volgende) alvast op het toestel zetten, zodat
-  // de installateur ze op locatie ook zonder bereik kan openen (shared/offline.js).
-  function keepOffline(data, qs) {
-    const off = window.AquatechOffline;
-    if (!off || !off.supported || state.kept === data.date) return;
+  /**
+   * Klussen van vandaag (en de volgende) alvast op het toestel zetten, zodat
+   * de installateur ze op locatie ook zonder bereik kan openen (shared/offline.js).
+   * @param {object} data Antwoord van api/my-day.
+   * @param {URLSearchParams} query De vraag van dit antwoord.
+   */
+  function keepOffline(data, query) {
+    const offline = window.AquatechOffline;
+    if (!offline || !offline.supported || state.kept === data.date) return;
     state.kept = data.date;
-    const ids = (data.items || []).map((w) => w.id).concat(data.next ? [data.next.id] : []);
-    const next = new URLSearchParams(qs);
-    next.set('date', addDays(data.date, 1));
-    off.prefetch([
-      'api/workorders', 'api/workorder-staff', 'api/quote-profile', `api/my-day?${next}`,
+    const ids = (data.items || []).map((job) => job.id).concat(data.next ? [data.next.id] : []);
+    const nextQuery = new URLSearchParams(query);
+    nextQuery.set('date', addDays(data.date, 1));
+    offline.prefetch([
+      'api/workorders', 'api/workorder-staff', 'api/quote-profile', `api/my-day?${nextQuery}`,
       ...ids.flatMap((id) => [`api/workorders/${encodeURIComponent(id)}`, `api/workorders/${encodeURIComponent(id)}/photos`, `api/workorders/${encodeURIComponent(id)}/worklog`]),
     ]);
   }
 
+  /** Koppelt bladeren per dag, "Hele ploeg" en verversen als de telefoon weer opengaat. */
   function bind() {
-    state.el.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-day]');
-      if (!b) return;
-      const d = Number(b.dataset.day);
-      state.date = d === 0 ? state.today : addDays(state.date, d);
+    state.container.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-day]');
+      if (!button) return;
+      const step = Number(button.dataset.day);
+      state.date = step === 0 ? state.today : addDays(state.date, step);
       load();
     });
-    state.el.addEventListener('change', (e) => {
-      if (!e.target.matches('[data-all]')) return;
-      state.all = e.target.checked;
-      try { localStorage.setItem(ALL_KEY, state.all ? '1' : '0'); } catch (err) { /* geen opslag */ }
+    state.container.addEventListener('change', (event) => {
+      if (!event.target.matches('[data-all]')) return;
+      state.all = event.target.checked;
+      try { localStorage.setItem(ALL_KEY, state.all ? '1' : '0'); } catch (error) { /* geen opslag */ }
       load();
     });
     // Telefoon die 's ochtends weer opengaat: verse planning (en een nieuwe dag).
@@ -159,13 +224,15 @@
   /**
    * Toont het blok voor wie werkorders heeft. Installateurs zien standaard hun
    * eigen klussen, beheerders (die plannen) de hele ploeg.
+   * @param {object} me Antwoord van api/me.
+   * @returns {boolean} true als het blok getoond wordt.
    */
   function start(me) {
     const rights = (me && me.rights) || [];
-    state.el = document.getElementById('today');
-    if (!state.el || !me || !me.user || !rights.includes('werkorders') || location.protocol === 'file:') return false;
+    state.container = document.getElementById('today');
+    if (!state.container || !me || !me.user || !rights.includes('werkorders') || location.protocol === 'file:') return false;
     let saved = null;
-    try { saved = localStorage.getItem(ALL_KEY); } catch (e) { /* geen opslag */ }
+    try { saved = localStorage.getItem(ALL_KEY); } catch (error) { /* geen opslag */ }
     // Wie zelf niet uitvoert (zoals een planner) ziet standaard de hele ploeg.
     state.all = saved === null ? rights.includes('beheer') || !rights.includes('uitvoerder') : saved === '1';
     bind();
@@ -174,8 +241,11 @@
     return true;
   }
 
-  // Opnieuw laden (terug op het dashboard via de knop Terug van de browser).
-  const refresh = () => { if (state.el && state.bound) load(); };
+  /**
+   * Opnieuw laden (terug op het dashboard via de knop Terug van de browser).
+   * @returns {void}
+   */
+  const refresh = () => { if (state.container && state.bound) load(); };
 
   window.AquatechToday = { start, refresh };
 })();

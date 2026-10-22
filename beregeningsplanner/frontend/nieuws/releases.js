@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.68.5',
+      date: '2026-10-22',
+      title: 'Opgeschoonde code (deel 1 van de schermen)',
+      items: [],
+    },
+    {
       version: '0.68.4',
       date: '2026-10-22',
       title: 'Opgeschoonde tests',

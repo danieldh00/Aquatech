@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.68.5
+
+Opschoonronde frontend, deel 1 (geen functionele wijziging): duidelijke namen
+en een commentaarblok bij elke functie in 23 bestanden (dashboard, profiel,
+nieuws, openbare offerte- en afspraakpagina, Beheer > Rollen/Webshop/Sproeiers,
+voorraadblok en urenkern van de werkorder, en in `shared/` common, env, roles,
+theme, sidebar, offline en ai-models).
+
+- `state.wo`/`state.opts`/`state.el`/`state.a` heten nu naar wat erin staat
+  (`workOrder`, `options`, `box`/`container`, `appointment`).
+- Lokale verwijzingen naar namespaces voluit (`QuoteView`, `WorkOrderCore`,
+  `SprinklerLib`, `Catalog`).
+
 ## 0.68.4
 
 Opschoonronde tests (geen functionele wijziging): duidelijke namen en een
