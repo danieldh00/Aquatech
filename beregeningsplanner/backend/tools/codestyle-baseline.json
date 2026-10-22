@@ -16,7 +16,6 @@
     "frontend/beregening/js/sprinklerlib.js",
     "frontend/facturen/facturen.js",
     "frontend/hoofdbeheer/hoofdbeheer.js",
-    "frontend/klantdossier/klantdossier.js",
     "frontend/offertes/offertes.js",
     "frontend/plannen/plannen.js",
     "frontend/planning/planning.js",
