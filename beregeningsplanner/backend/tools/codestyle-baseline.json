@@ -3,7 +3,6 @@
   "files": [
     "backend/src/platform/test-data.js",
     "backend/src/server.js",
-    "backend/src/uitvoering/service-requests.js",
     "backend/src/uitvoering/worklog.js",
     "backend/src/uitvoering/workorders.js",
     "backend/src/voorraad/stock.js",
