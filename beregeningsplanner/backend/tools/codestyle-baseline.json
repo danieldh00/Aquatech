@@ -9,7 +9,6 @@
     "backend/src/uitvoering/service-requests.js",
     "backend/src/uitvoering/worklog.js",
     "backend/src/uitvoering/workorders.js",
-    "backend/src/verkoop/visma.js",
     "backend/src/voorraad/stock.js",
     "backend/src/webshop/shop-orders.js",
     "backend/src/webshop/shop-sync.js",
