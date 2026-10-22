@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.68.4',
+      date: '2026-10-22',
+      title: 'Opgeschoonde tests',
+      items: [],
+    },
+    {
       version: '0.68.3',
       date: '2026-10-22',
       title: 'Opgeschoonde servercode (deel 3)',

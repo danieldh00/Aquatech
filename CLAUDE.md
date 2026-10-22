@@ -539,6 +539,11 @@ bewaakt de eerste twee regels voor elk eigen `.js`-bestand (backend `src/`,
   voldoen. Raak je een bestand uit de lijst flink aan, schoon het dan op en
   haal het eraf.
 - Opschonen verandert nooit het gedrag: alleen namen en commentaar.
+- Tests: gedeelde hulpcode in `backend/test/helpers/` (`http-client.js`:
+  `createClient`, `listen(app)` → `{ server, base }`, `createLogin(base,
+  { password })` → `as(username, org)`; `png.js`). Geen eigen kopie van
+  een testclient of serverstart in een testbestand. Alle tests voldoen
+  sinds 0.68.4 aan de codestijl.
 
 ## Harde regels
 
