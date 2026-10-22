@@ -20,27 +20,46 @@ const crypto = require('node:crypto');
 const KEY = /^[A-Za-z0-9-]{8,100}$/;
 const WRITE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/**
+ * Maakt het geheugen voor herhaalde verzoeken met de kop Idempotency-Key.
+ * @param {object} [options] ttlMs (bewaartijd), maxEntries (aantal), maxBytes (totale grootte), maxBody (grootste antwoord) en now (klok, voor tests).
+ * @returns {{ middleware: Function, size: Function }} De middleware-fabriek en het aantal onthouden antwoorden.
+ */
 function createIdempotency({ ttlMs = 24 * 3600 * 1000, maxEntries = 5000, maxBytes = 32 * 1024 * 1024, maxBody = 512 * 1024, now = () => Date.now() } = {}) {
   const done = new Map(); // hash -> { at, status, body (tekst), size }
   const running = new Set();
   let bytes = 0;
 
+  /**
+   * Vergeet een onthouden antwoord.
+   * @param {string} hash Sleutel van het antwoord.
+   * @returns {void}
+   */
   function drop(hash) {
-    const e = done.get(hash);
-    if (!e) return;
-    bytes -= e.size;
+    const entry = done.get(hash);
+    if (!entry) return;
+    bytes -= entry.size;
     done.delete(hash);
   }
+  /**
+   * Ruimt verlopen antwoorden op en houdt het geheugen binnen het maximale aantal en de maximale grootte (oudste eerst).
+   * @returns {void}
+   */
   function prune() {
-    const t = now();
+    const currentTime = now();
     // Map houdt de volgorde van toevoegen aan: de oudste staan vooraan.
-    for (const [hash, e] of done) {
-      if (t - e.at <= ttlMs && done.size <= maxEntries && bytes <= maxBytes) break;
+    for (const [hash, entry] of done) {
+      if (currentTime - entry.at <= ttlMs && done.size <= maxEntries && bytes <= maxBytes) break;
       drop(hash);
     }
   }
 
-  /** scopeOf(req) -> tekst die de gebruiker + omgeving aanwijst, of null (dan geen idempotentie). */
+  /**
+   * Middleware: een herhaald schrijfverzoek met dezelfde Idempotency-Key krijgt
+   * het onthouden antwoord terug in plaats van opnieuw te worden uitgevoerd.
+   * @param {Function} scopeOf (req) => tekst die gebruiker + omgeving aanwijst, of null (dan geen idempotentie).
+   * @returns {Function} De Express-middleware (req, res, next).
+   */
   function middleware(scopeOf) {
     return (req, res, next) => {
       if (!WRITE.has(req.method)) return next();
@@ -59,6 +78,11 @@ function createIdempotency({ ttlMs = 24 * 3600 * 1000, maxEntries = 5000, maxByt
       if (running.has(hash)) return res.status(409).json({ error: 'in_progress', message: 'Dit verzoek wordt al verwerkt.' });
       running.add(hash);
       const json = res.json.bind(res);
+      /**
+       * Vervangt res.json: onthoudt een geslaagd antwoord (2xx) voordat het wordt verstuurd.
+       * @param {*} body Het antwoord.
+       * @returns {object} Het Express-antwoord.
+       */
       res.json = (body) => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           const text = JSON.stringify(body);
@@ -71,6 +95,10 @@ function createIdempotency({ ttlMs = 24 * 3600 * 1000, maxEntries = 5000, maxByt
         }
         return json(body);
       };
+      /**
+       * Markeert het verzoek als afgerond (ook bij een afgebroken verbinding).
+       * @returns {boolean} Of het verzoek nog liep.
+       */
       const finish = () => running.delete(hash);
       res.on('finish', finish);
       res.on('close', finish);
@@ -81,10 +109,14 @@ function createIdempotency({ ttlMs = 24 * 3600 * 1000, maxEntries = 5000, maxByt
   return { middleware, size: () => done.size };
 }
 
-/** De basis van een offline wijziging (X-Aquatech-If-Base), of null. */
+/**
+ * De basis van een offline wijziging: de kop X-Aquatech-If-Base (updatedAt waarop de wijziging was gebaseerd).
+ * @param {object} req Het Express-verzoek.
+ * @returns {string|null} De basis, of null als de kop ontbreekt of te lang is.
+ */
 function ifBaseOf(req) {
-  const v = req.get('X-Aquatech-If-Base');
-  return v && v.length <= 64 ? v : null;
+  const base = req.get('X-Aquatech-If-Base');
+  return base && base.length <= 64 ? base : null;
 }
 
 module.exports = { createIdempotency, ifBaseOf };
