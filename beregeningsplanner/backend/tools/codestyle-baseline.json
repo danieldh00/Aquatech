@@ -17,7 +17,6 @@
     "frontend/facturen/facturen.js",
     "frontend/hoofdbeheer/hoofdbeheer.js",
     "frontend/offertes/offertes.js",
-    "frontend/voorraad/voorraad.js",
     "frontend/werkorders/werkorders.js"
   ]
 }
