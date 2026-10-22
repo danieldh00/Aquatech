@@ -144,6 +144,22 @@ function docCommentBefore(sourceText, comments, position) {
 }
 
 /**
+ * Haalt een type tussen accolades ({...}, ook genest) van het begin van een tag-tekst af.
+ * @param {string} text Tekst na de tag, bijv. '{{ id: string }} options Uitleg'.
+ * @returns {string} De tekst zonder het type en de witruimte erna.
+ */
+function stripType(text) {
+  if (!text.startsWith('{')) return text;
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{') depth += 1;
+    else if (text[i] === '}') depth -= 1;
+    if (depth === 0) return text.slice(i + 1).trimStart();
+  }
+  return text;
+}
+
+/**
  * Controleert of een commentaarblok de functie volledig beschrijft.
  * @param {string} docText Tekst van het commentaar (zonder /** en *\/).
  * @param {object} functionNode De functieknoop waar het commentaar bij hoort.
@@ -155,7 +171,7 @@ function docProblems(docText, functionNode) {
   const descriptionLines = lines.filter((line) => line && !line.startsWith('@'));
   if (!descriptionLines.length) problems.push('omschrijving ontbreekt');
   const paramTags = lines.filter((line) => /^@param\b/.test(line))
-    .map((line) => (line.replace(/^@param\s*(\{[^}]*\})?\s*/, '').match(/^\[?([\w$.]+)/) || [])[1] || '')
+    .map((line) => (stripType(line.replace(/^@param\s*/, '')).match(/^\[?([\w$.]+)/) || [])[1] || '')
     .filter((name) => name && !name.includes('.'));
   if (paramTags.length < functionNode.params.length) {
     problems.push(`@param ontbreekt (${functionNode.params.length} parameter(s), ${paramTags.length} beschreven)`);
