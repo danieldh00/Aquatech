@@ -5,8 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
 
 const Lib = require('../../frontend/beregening/js/sprinklerlib.js');
 const FRONT = path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js');

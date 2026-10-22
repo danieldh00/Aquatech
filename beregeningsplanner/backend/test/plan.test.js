@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
-const { validate, createPlanAnalyzer, SCHEMA } = require('../src/planAnalyzer');
+const { validate, createPlanAnalyzer, SCHEMA } = require('../src/beregening/plan-analyzer');
 
 const SECRET = 'x'.repeat(64);
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';

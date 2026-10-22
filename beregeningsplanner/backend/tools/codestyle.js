@@ -271,7 +271,9 @@ function checkSource(sourceText) {
   /**
    * Controleert een functie-expressie of pijlfunctie: namen altijd, het
    * commentaarblok alleen als de functie een naam krijgt (variabele, eigenschap,
-   * methode of toewijzing) en dus geen losse callback is.
+   * methode of toewijzing) en dus geen losse callback is. Een functie in een
+   * object op één regel (`return { list, size: () => items.size }`) telt als
+   * callback.
    * @param {object} node De functieknoop.
    * @param {object[]} ancestors De ouderknopen, met de functie zelf als laatste.
    * @returns {void}
@@ -288,8 +290,10 @@ function checkSource(sourceText) {
     } else if (parent.type === 'MethodDefinition') {
       requireDoc(node, parent, keyName(parent.key, parent.computed) || 'methode');
     } else if (parent.type === 'Property' && parent.value === node && !parent.shorthand) {
+      const objectNode = ancestors[ancestors.length - 3];
       const objectParent = ancestors[ancestors.length - 4];
-      if (isNamedObjectParent(objectParent)) requireDoc(node, parent, keyName(parent.key, parent.computed) || 'methode');
+      const singleLine = objectNode.loc.start.line === objectNode.loc.end.line;
+      if (isNamedObjectParent(objectParent) && !singleLine) requireDoc(node, parent, keyName(parent.key, parent.computed) || 'methode');
     } else if (parent.type === 'AssignmentExpression' && parent.right === node && grandparent && grandparent.type === 'ExpressionStatement') {
       const target = parent.left.type === 'MemberExpression' ? keyName(parent.left.property, parent.left.computed) : parent.left.name;
       requireDoc(node, grandparent, target || 'functie');

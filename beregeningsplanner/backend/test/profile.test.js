@@ -2,8 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore, preferencesOf } = require('../src/store');
+const { openDb } = require('../src/database/db');
+const { createStore, preferencesOf } = require('../src/platform/store');
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';

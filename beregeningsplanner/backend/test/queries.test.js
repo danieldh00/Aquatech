@@ -4,8 +4,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
 
 const SECRET = 'q'.repeat(64);
 const PASSWORD = 'Tuin-Plan-2026!';
@@ -187,7 +187,9 @@ test('queries: geen SELECT * in de backend', () => {
   const path = require('path');
   const dir = path.join(__dirname, '..', 'src');
   const hits = [];
-  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.js'))) {
+  const files = fs.readdirSync(dir, { recursive: true }).filter((n) => n.endsWith('.js'));
+  assert.ok(files.some((n) => n.includes(path.sep)), 'ook de submappen van src/ worden doorzocht');
+  for (const f of files) {
     fs.readFileSync(path.join(dir, f), 'utf8').split('\n').forEach((line, i) => {
       const code = line.replace(/COUNT\(\*\)/gi, '');
       if (/^\s*\/\//.test(line)) return;

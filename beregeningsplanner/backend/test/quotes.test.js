@@ -5,8 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
 const Core = require('../../frontend/offertes/quote-core.js');
 
 // Plannerbibliotheken in een sandbox, zoals de offertemodule ze laadt.
@@ -290,7 +290,7 @@ test('API: bedrijfsprofiel lezen voor iedereen, wijzigen alleen door beheerders'
 });
 
 test('testomgeving leegmaken en verwijderen neemt de offertes mee; offertes zijn per tenant', async () => {
-  const { createQuoteStore } = require('../src/quotes');
+  const { createQuoteStore } = require('../src/verkoop/quotes');
   const db = openDb();
   const store = createStore(db);
   const live = store.ensureTenant();
@@ -311,7 +311,7 @@ test('testomgeving leegmaken en verwijderen neemt de offertes mee; offertes zijn
 });
 
 test('digitale offerte: link, openbare pagina, opties, tekenen, vastleggen en e-mail', async () => {
-  const { createMailer } = require('../src/mailer');
+  const { createMailer } = require('../src/platform/mailer');
   const sent = [];
   const mailerFor = (settings) => createMailer(settings, { resolveHost: async (h) => h, createTransport: () => ({ sendMail: async (m) => { sent.push(m); return {}; } }) });
   const { server, base, as, tid, db } = await setup({ mailerFor });

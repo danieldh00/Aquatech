@@ -6,11 +6,11 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
-const { fromOrder, snapRate } = require('../src/shoporders');
-const { createPdf, wrap, textWidth, encode } = require('../src/pdf');
-const { invoicePdf } = require('../src/invoicepdf');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
+const { fromOrder, snapRate } = require('../src/webshop/shop-orders');
+const { createPdf, wrap, textWidth, encode } = require('../src/verkoop/pdf');
+const { invoicePdf } = require('../src/verkoop/invoice-pdf');
 
 const Core = require(path.join(__dirname, '..', '..', 'frontend', 'facturen', 'invoice-core.js'));
 const SECRET = 's'.repeat(64);

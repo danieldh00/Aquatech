@@ -2,49 +2,49 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 
-const { createAuth, remoteIp, parseCookies } = require('./auth');
-const { createRateLimiter } = require('./rateLimit');
-const { loadOrCreateSecret } = require('./options');
-const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./planAnalyzer');
-const { createRecognitionStore, sanitizeSamples, imageHash } = require('./recognitions');
-const { openDb, openDatabase, isPg } = require('./db');
-const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf } = require('./store');
-const testdata = require('./testdata');
-const { createSettings, SettingsError, FIELDS } = require('./settings');
-const { createVault, loadOrCreateMasterKey } = require('./vault');
+const { createAuth, remoteIp, parseCookies } = require('./beveiliging/auth');
+const { createRateLimiter } = require('./beveiliging/rate-limit');
+const { loadOrCreateSecret } = require('./beveiliging/session-secret');
+const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
+const { createRecognitionStore, sanitizeSamples, imageHash } = require('./beregening/recognitions');
+const { openDb, openDatabase, isPg } = require('./database/db');
+const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf } = require('./platform/store');
+const testdata = require('./platform/test-data');
+const { createSettings, SettingsError, FIELDS } = require('./platform/settings');
+const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
 const backups = require('./backup');
-const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody } = require('./quotes');
-const { createMailer } = require('./mailer');
-const { createWanIp } = require('./wanip');
-const { createWorkOrderStore, registerWorkOrderRoutes } = require('./workorders');
-const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('./photos');
-const { createWorkLogStore, registerWorkLogRoutes } = require('./worklog');
-const { createImpersonationStore, createImpersonation } = require('./impersonation');
-const { createShopStore, registerShopRoutes, loadArticles } = require('./shop');
-const { createShopSync } = require('./shopsync');
-const { createShopOrders } = require('./shoporders');
-const { createDebtorStore, registerDebtorRoutes } = require('./debtors');
-const { createInvoiceSender } = require('./invoicemail');
-const { createInvoiceStore, registerInvoiceRoutes } = require('./invoices');
-const { createVisma, registerVismaRoutes } = require('./visma');
-const { createPortalStore, registerPortalRoutes } = require('./portal');
-const { createServiceRequestStore, registerServiceRequestRoutes } = require('./servicerequests');
-const { createOutsourcingStore, registerOutsourcingRoutes } = require('./outsourcing');
-const { createStockStore, registerStockRoutes } = require('./stock');
-const { createNewsStore, registerNewsRoutes, unreadCount } = require('./news');
-const { createSprinklerStore, registerSprinklerRoutes } = require('./sprinklers');
-const { registerDrawingRoutes } = require('./drawings');
-const { createAiUsageStore } = require('./aiusage');
-const { createIdempotency, ifBaseOf } = require('./idempotency');
+const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody } = require('./verkoop/quotes');
+const { createMailer } = require('./platform/mailer');
+const { createWanIp } = require('./platform/wan-ip');
+const { createWorkOrderStore, registerWorkOrderRoutes } = require('./uitvoering/workorders');
+const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('./uitvoering/photos');
+const { createWorkLogStore, registerWorkLogRoutes } = require('./uitvoering/worklog');
+const { createImpersonationStore, createImpersonation } = require('./beveiliging/impersonation');
+const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
+const { createShopSync } = require('./webshop/shop-sync');
+const { createShopOrders } = require('./webshop/shop-orders');
+const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
+const { createInvoiceSender } = require('./verkoop/invoice-mail');
+const { createInvoiceStore, registerInvoiceRoutes } = require('./verkoop/invoices');
+const { createVisma, registerVismaRoutes } = require('./verkoop/visma');
+const { createPortalStore, registerPortalRoutes } = require('./uitvoering/portal');
+const { createServiceRequestStore, registerServiceRequestRoutes } = require('./uitvoering/service-requests');
+const { createOutsourcingStore, registerOutsourcingRoutes } = require('./uitvoering/outsourcing');
+const { createStockStore, registerStockRoutes } = require('./voorraad/stock');
+const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
+const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
+const { registerDrawingRoutes } = require('./beregening/drawings');
+const { createAiUsageStore } = require('./platform/ai-usage');
+const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
 const crypto = require('crypto');
 
-const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
+const { FRONTEND_DIR, PAGES_DIR } = require('./paths');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 const MODULES = require(path.join(FRONTEND_DIR, 'dashboard', 'modules.js'));
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
-const LOGIN_PAGE = path.join(__dirname, 'login.html');
-const SETUP_PAGE = path.join(__dirname, 'setup.html');
-const PASSWORD_PAGE = path.join(__dirname, 'password.html');
+const LOGIN_PAGE = path.join(PAGES_DIR, 'login.html');
+const SETUP_PAGE = path.join(PAGES_DIR, 'setup.html');
+const PASSWORD_PAGE = path.join(PAGES_DIR, 'password.html');
 const PKG = require('../package.json');
 
 // De versie van de app staat in package.json.
@@ -822,7 +822,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   // Gebruikers horen bij de live-tenant; in een testomgeving dezelfde lijst.
-  // Testaccounts (zie testdata.js) horen bij de testomgeving zelf en beheren
+  // Testaccounts (zie test-data.js) horen bij de testomgeving zelf en beheren
   // alleen de gebruikers daarvan, nooit die van live.
   const usersTenantOf = (req) => (req.user && req.user.home_tenant_id === req.tenantId ? req.tenantId : homeOf(req.tenantId));
 
@@ -1088,7 +1088,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
   });
 
-  // ---------- Beheer: AI-kosten (zie aiusage.js) ----------
+  // ---------- Beheer: AI-kosten (zie ai-usage.js) ----------
   // Een beheerder ziet de actieve omgeving; een hoofdbeheerder kan ook alle
   // organisaties samen (?scope=all) of één andere omgeving (?tenant=id) zien.
   function aiUsageScope(req, res) {
@@ -1272,13 +1272,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const newsStore = createNewsStore(database);
   const sprinklerStore = createSprinklerStore(database);
   const stockStore = createStockStore(database);
-  // Prijs en voorraad in twee richtingen met de webshop (shopsync.js); na een
+  // Prijs en voorraad in twee richtingen met de webshop (shop-sync.js); na een
   // wijziging gaan de gewijzigde artikelen enkele seconden later mee.
   const shopSync = createShopSync({ db: database, shop: shopStore, stock: stockStore, settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch });
   stockStore.onDirty((tid) => shopSync.schedule(tid));
   const debtorStore = createDebtorStore(database);
   const invoiceStore = createInvoiceStore(database, { stock: stockStore, debtors: debtorStore });
-  // Facturen per e-mail met PDF (invoicemail.js) en webshopbestellingen als factuur (shoporders.js).
+  // Facturen per e-mail met PDF (invoice-mail.js) en webshopbestellingen als factuur (shop-orders.js).
   const invoiceSender = createInvoiceSender({
     invoices: invoiceStore, settingsFor: (id) => settingsFor(id), mailerFor, mailBody,
     colorsOf: (id) => {
@@ -1406,7 +1406,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     requireRight, requireJson, audit, remoteIp, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
   });
 
-  // ---------- Meldingen: storing of onderhoud via het portaal (zie servicerequests.js) ----------
+  // ---------- Meldingen: storing of onderhoud via het portaal (zie service-requests.js) ----------
   registerServiceRequestRoutes(app, {
     requests: serviceRequestStore, portal: portalStore, workorders: workOrderStore, requireRight, requireJson, audit,
     remoteIp, createRateLimiter, mailerFor, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),

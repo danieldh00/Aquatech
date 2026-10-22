@@ -4,10 +4,10 @@ const test = require('node:test');
 const assert = require('node:assert');
 const http = require('http');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
-const { fetchProducts, normalizeBaseUrl, sanitizeShop } = require('../src/woocommerce');
-const { matchProducts, loadArticles } = require('../src/shop');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
+const { fetchProducts, normalizeBaseUrl, sanitizeShop } = require('../src/webshop/woocommerce');
+const { matchProducts, loadArticles } = require('../src/webshop/shop');
 
 const SECRET = 'w'.repeat(64);
 const PW = 'Tuin-Plan-2026!';

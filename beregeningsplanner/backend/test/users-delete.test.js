@@ -1,8 +1,8 @@
 // Gebruikers verwijderen: door een beheerder in de eigen tenant en door een hoofdbeheerder.
 const test = require('node:test');
 const assert = require('node:assert');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
 const { createApp } = require('../src/server');
 
 const PW = 'Tuin-Plan-2026!';

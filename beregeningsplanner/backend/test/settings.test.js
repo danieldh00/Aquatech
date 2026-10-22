@@ -4,12 +4,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
+const { openDb } = require('../src/database/db');
 const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
 
-const { createStore } = require('../src/store');
-const { createSettings, SettingsError } = require('../src/settings');
-const { createVault } = require('../src/vault');
+const { createStore } = require('../src/platform/store');
+const { createSettings, SettingsError } = require('../src/platform/settings');
+const { createVault } = require('../src/beveiliging/vault');
 const crypto = require('crypto');
 
 const SECRET = 'z'.repeat(64);

@@ -5,8 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
 const QuoteCore = require('../../frontend/offertes/quote-core.js');
 const W = require('../../frontend/werkorders/workorder-core.js');
 

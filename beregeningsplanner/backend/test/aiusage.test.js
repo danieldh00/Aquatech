@@ -6,10 +6,10 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
-const { createAiUsageStore, sanitizeFilter } = require('../src/aiusage');
-const { AnalyzeError, createPlanAnalyzer } = require('../src/planAnalyzer');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
+const { createAiUsageStore, sanitizeFilter } = require('../src/platform/ai-usage');
+const { AnalyzeError, createPlanAnalyzer } = require('../src/beregening/plan-analyzer');
 const AiModels = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'ai-models.js'));
 
 const SECRET = 'k'.repeat(64);
