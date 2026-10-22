@@ -19,7 +19,6 @@
     "frontend/facturen/invoice-core.js",
     "frontend/hoofdbeheer/hoofdbeheer.js",
     "frontend/klantdossier/klantdossier.js",
-    "frontend/meldingen/meldingen.js",
     "frontend/offertes/offertes.js",
     "frontend/offertes/quote-core.js",
     "frontend/offertes/quote-view.js",
