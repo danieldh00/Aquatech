@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.68.2
+
+Opschoonronde backend deel 2 (geen functionele wijziging): duidelijke namen
+en een commentaarblok bij elke functie.
+
+- `beregening/` (plan-analyzer, recognitions, drawings, sprinklers).
+- `verkoop/` (quotes, invoices, invoice-pdf, invoice-mail, pdf, visma).
+- `webshop/` (woocommerce, shop, shop-sync, shop-orders).
+- `uitvoering/portal.js` en `uitvoering/outsourcing.js` (`respondable` geeft
+  nu `{ tenantId, offerRow }`).
+- Codestijl-afbouwlijst van 118 naar 101 bestanden.
+
 ## 0.68.1
 
 Opschoonronde backend deel 1 (geen functionele wijziging): duidelijke namen
