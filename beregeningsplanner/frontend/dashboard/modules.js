@@ -169,27 +169,48 @@
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>',
     module: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   };
+  /**
+   * SVG-icoon voor een module.
+   * @param {string} name Sleutel in ICONS (onbekend = module).
+   * @returns {string} De SVG als HTML.
+   */
   const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.module}</svg>`;
 
-  // De modules die iemand met deze rechten ziet (tegels en zijbalk), met de
-  // `alt`-titel waar die geldt. `disabled` = de instelling `modules` uit
-  // api/config (een beheerder kan modules uitzetten; beheer blijft altijd).
+  /**
+   * De modules die iemand met deze rechten ziet (tegels en zijbalk), met de
+   * `alt`-titel waar die geldt.
+   * @param {string[]} rights Rechten van de gebruiker.
+   * @param {object} [disabled] De instelling `modules` uit api/config (een beheerder kan modules uitzetten; beheer blijft altijd).
+   * @returns {object[]} De zichtbare modules.
+   */
   function visible(rights, disabled) {
-    const has = (r) => [].concat(r).some((x) => (rights || []).includes(x));
+    /**
+     * Heeft de gebruiker (een van) deze rechten?
+     * @param {string|string[]} wanted Recht of lijst van rechten.
+     * @returns {boolean} true als er één klopt.
+     */
+    const has = (wanted) => [].concat(wanted).some((right) => (rights || []).includes(right));
     return MODULES
-      .filter((m) => !m.right || has(m.right))
-      .filter((m) => m.id === 'beheer' || m.id === 'hoofdbeheer' || !disabled || disabled[m.id] !== false)
-      .map((m) => (m.alt && has(m.alt.right) && !has(m.alt.unless) ? { ...m, ...m.alt } : m));
+      .filter((module) => !module.right || has(module.right))
+      .filter((module) => module.id === 'beheer' || module.id === 'hoofdbeheer' || !disabled || disabled[module.id] !== false)
+      .map((module) => (module.alt && has(module.alt.right) && !has(module.alt.unless) ? { ...module, ...module.alt } : module));
   }
 
-  // Wie krijgt de vaste zijbalk in plaats van het tegeldashboard
-  // (shared/sidebar.js): beheerders en hoofdbeheerders.
+  /**
+   * Wie krijgt de vaste zijbalk in plaats van het tegeldashboard (shared/sidebar.js): beheerders en hoofdbeheerders.
+   * @param {string[]} rights Rechten van de gebruiker.
+   * @returns {boolean} true voor de zijbalk.
+   */
   const usesSidebar = (rights) => (rights || []).includes('beheer') || (rights || []).includes('hoofdbeheer');
 
   root.AquatechModules = MODULES;
-  // Aantal nieuwe items bij Nieuws (api/me `news`) als bolletje; de pagina
-  // Nieuws haalt ze weg ([data-news-count]) zodra alles gezien is.
-  const newsBadge = (n) => (n > 0 ? `<span class="news-count" data-news-count title="Nieuw sinds je vorige bezoek">${n > 9 ? '9+' : n}</span>` : '');
+  /**
+   * Aantal nieuwe items bij Nieuws (api/me `news`) als bolletje; de pagina Nieuws
+   * haalt ze weg ([data-news-count]) zodra alles gezien is.
+   * @param {number} count Aantal nieuwe items.
+   * @returns {string} HTML van het bolletje (leeg bij 0).
+   */
+  const newsBadge = (count) => (count > 0 ? `<span class="news-count" data-news-count title="Nieuw sinds je vorige bezoek">${count > 9 ? '9+' : count}</span>` : '');
 
   root.AquatechModuleTools = { ICONS, icon, visible, usesSidebar, newsBadge };
   if (typeof module !== 'undefined' && module.exports) module.exports = MODULES;

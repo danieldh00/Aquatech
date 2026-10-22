@@ -364,19 +364,33 @@
     },
   ];
 
-  /** De versies met alleen de punten die iemand met deze rechten ziet. */
+  /**
+   * De versies met alleen de punten die iemand met deze rechten ziet.
+   * @param {string[]} rights Rechten van de gebruiker.
+   * @returns {object[]} De versies met zichtbare punten (lege versies vallen weg).
+   */
   function visibleFor(rights) {
-    const has = (list) => !list || list.some((r) => (rights || []).includes(r));
+    /**
+     * Mag de gebruiker een punt zien?
+     * @param {string[]} [list] Rechten waarvan er één nodig is (leeg = iedereen).
+     * @returns {boolean} true als het punt zichtbaar is.
+     */
+    const has = (list) => !list || list.some((right) => (rights || []).includes(right));
     return RELEASES
-      .map((r) => ({ ...r, items: r.items.filter((it) => has(it.for)).map(({ text }) => ({ text })) }))
-      .filter((r) => r.items.length);
+      .map((release) => ({ ...release, items: release.items.filter((item) => has(item.for)).map(({ text }) => ({ text })) }))
+      .filter((release) => release.items.length);
   }
 
-  /** Vergelijkt twee versienummers ('0.9.0' < '0.10.0'). */
-  function compare(a, b) {
-    const pa = String(a || '0').split('.').map(Number);
-    const pb = String(b || '0').split('.').map(Number);
-    for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+  /**
+   * Vergelijkt twee versienummers ('0.9.0' < '0.10.0').
+   * @param {string} left Eerste versie.
+   * @param {string} right Tweede versie.
+   * @returns {number} Negatief, 0 of positief (zoals bij sort).
+   */
+  function compare(left, right) {
+    const leftParts = String(left || '0').split('.').map(Number);
+    const rightParts = String(right || '0').split('.').map(Number);
+    for (let i = 0; i < 3; i++) if ((leftParts[i] || 0) !== (rightParts[i] || 0)) return (leftParts[i] || 0) - (rightParts[i] || 0);
     return 0;
   }
 

@@ -26,38 +26,60 @@
     'claude-fable-5': { label: 'Claude Fable 5', input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
   };
   const DEFAULT = 'claude-opus-5-5';
-  const SELECTABLE = Object.keys(MODELS).filter((k) => MODELS[k].select);
+  const SELECTABLE = Object.keys(MODELS).filter((key) => MODELS[key].select);
 
   // Waarvoor de app AI gebruikt (kolom feature in ai_usage).
   const FEATURES = {
     plan_analyse: 'Plan herkennen',
   };
 
-  // Het model zoals de AI-dienst het teruggeeft kan een datum-achtervoegsel
-  // hebben (claude-…-20260101): dan het basismodel.
+  /**
+   * Prijs van een model. Het model zoals de AI-dienst het teruggeeft kan een
+   * datum-achtervoegsel hebben (claude-…-20260101): dan het basismodel.
+   * @param {string} model Model-id.
+   * @returns {object} id, label, prijzen per miljoen tokens en known (false = onbekend, standaardmodel gebruikt).
+   */
   function priceOf(model) {
     const id = String(model || '');
     if (MODELS[id]) return { id, ...MODELS[id], known: true };
-    const base = Object.keys(MODELS).find((k) => id.startsWith(`${k}-`));
+    const base = Object.keys(MODELS).find((key) => id.startsWith(`${key}-`));
     if (base) return { id: base, ...MODELS[base], known: true };
     return { id: DEFAULT, ...MODELS[DEFAULT], known: false };
   }
 
+  /**
+   * Leesbare naam van een model.
+   * @param {string} model Model-id.
+   * @returns {string} De naam (of het id zelf als het onbekend is).
+   */
   const label = (model) => (MODELS[model] ? MODELS[model].label : priceOf(model).known ? priceOf(model).label : String(model || '–'));
-  const featureLabel = (f) => FEATURES[f] || String(f || '–');
+  /**
+   * Leesbare naam van een AI-functie.
+   * @param {string} feature Sleutel (bijv. plan_analyse).
+   * @returns {string} De naam.
+   */
+  const featureLabel = (feature) => FEATURES[feature] || String(feature || '–');
 
   /**
    * Kosten in dollar van één verzoek. usage = { inputTokens, outputTokens,
    * cacheReadTokens, cacheWriteTokens } (of de velden van de AI-dienst).
-   * known = false: onbekend model, geschat met de prijs van het standaardmodel.
+   * @param {string} model Model-id.
+   * @param {object} usage Tokenverbruik.
+   * @returns {{ usd: number, known: boolean }} Kosten; known = false: onbekend model, geschat met de prijs van het standaardmodel.
    */
   function costUsd(model, usage) {
-    const u = usage || {};
-    const n = (a, b) => Math.max(0, Number(u[a] ?? u[b]) || 0);
-    const p = priceOf(model);
-    const usd = (n('inputTokens', 'input_tokens') * p.input + n('outputTokens', 'output_tokens') * p.output
-      + n('cacheReadTokens', 'cache_read_input_tokens') * p.cacheRead + n('cacheWriteTokens', 'cache_creation_input_tokens') * p.cacheWrite) / 1e6;
-    return { usd, known: p.known };
+    const counts = usage || {};
+    /**
+     * Aantal tokens uit het eerste veld dat er is (nooit negatief).
+     * @param {string} camelName Veldnaam van de app.
+     * @param {string} snakeName Veldnaam van de AI-dienst.
+     * @returns {number} Aantal tokens.
+     */
+    const tokens = (camelName, snakeName) => Math.max(0, Number(counts[camelName] ?? counts[snakeName]) || 0);
+    const price = priceOf(model);
+    const usd = (tokens('inputTokens', 'input_tokens') * price.input + tokens('outputTokens', 'output_tokens') * price.output
+      + tokens('cacheReadTokens', 'cache_read_input_tokens') * price.cacheRead + tokens('cacheWriteTokens', 'cache_creation_input_tokens') * price.cacheWrite) / 1e6;
+    return { usd, known: price.known };
   }
 
   const api = { MODELS, DEFAULT, SELECTABLE, FEATURES, priceOf, label, featureLabel, costUsd };
