@@ -85,33 +85,71 @@
   // Oude rolnaam (tot 0.22.0): een 'gebruiker' is nu een installateur.
   const ALIASES = { gebruiker: 'installateur' };
 
+  /**
+   * Huidige rolnaam (oude namen omgezet).
+   * @param {string} role Rolsleutel.
+   * @returns {string} De rolsleutel.
+   */
   const normalize = (role) => ALIASES[role] || role;
+  /**
+   * Is dit een standaardrol?
+   * @param {string} role Rolsleutel.
+   * @returns {boolean} true als hij in ROLES staat.
+   */
   const isRole = (role) => Object.prototype.hasOwnProperty.call(ROLES, role);
+  /**
+   * Leesbare naam van een rol.
+   * @param {string} role Rolsleutel.
+   * @returns {string} De naam (of de sleutel zelf).
+   */
   const label = (role) => (isRole(role) ? ROLES[role].label : String(role || ''));
 
-  /** Rechten die een rol van deze soort mag hebben (zonder de vaste). */
-  const rightsForKind = (kind) => RIGHTS.filter((r) => !RIGHT_INFO[r].locked && RIGHT_INFO[r].kind.includes(kind));
+  /**
+   * Rechten die een rol van deze soort mag hebben (zonder de vaste).
+   * @param {string} kind medewerker of klant.
+   * @returns {string[]} De rechten.
+   */
+  const rightsForKind = (kind) => RIGHTS.filter((right) => !RIGHT_INFO[right].locked && RIGHT_INFO[right].kind.includes(kind));
 
-  /** Rechten aangevuld met wat ze nodig hebben (needs), in vaste volgorde. */
+  /**
+   * Rechten aangevuld met wat ze nodig hebben (needs), in vaste volgorde.
+   * @param {string[]} rights De rechten.
+   * @returns {string[]} De aangevulde rechten.
+   */
   function withNeeds(rights) {
     const set = new Set(rights);
-    for (const r of rights) for (const n of (RIGHT_INFO[r] && RIGHT_INFO[r].needs) || []) set.add(n);
-    return RIGHTS.filter((r) => set.has(r));
+    for (const right of rights) for (const needed of (RIGHT_INFO[right] && RIGHT_INFO[right].needs) || []) set.add(needed);
+    return RIGHTS.filter((right) => set.has(right));
   }
-  /** Rechten zonder de rechten die van een uitgezet recht afhangen. */
+  /**
+   * Rechten zonder de rechten die van een uitgezet recht afhangen.
+   * @param {string[]} rights De rechten.
+   * @param {string} off Het uitgezette recht.
+   * @returns {string[]} De overgebleven rechten.
+   */
   function withoutDependents(rights, off) {
-    return rights.filter((r) => r !== off && !((RIGHT_INFO[r] && RIGHT_INFO[r].needs) || []).includes(off));
+    return rights.filter((right) => right !== off && !((RIGHT_INFO[right] && RIGHT_INFO[right].needs) || []).includes(off));
   }
 
-  /** Rechten van een gebruiker (database-rij of publicUser-vorm). */
+  /**
+   * Rechten van een gebruiker (database-rij of publicUser-vorm).
+   * @param {object|null} user De gebruiker.
+   * @returns {string[]} De rechten (hoofdbeheerder: alle).
+   */
   function rightsOf(user) {
     if (!user) return [];
     if (user.platform_admin || user.platformAdmin) return RIGHTS.slice();
     if (Array.isArray(user.rights)) return user.rights.slice();
-    const r = ROLES[normalize(user.role)];
-    return r ? r.rights.slice() : [];
+    const role = ROLES[normalize(user.role)];
+    return role ? role.rights.slice() : [];
   }
 
+  /**
+   * Heeft de gebruiker dit recht?
+   * @param {object|null} user De gebruiker.
+   * @param {string} right Het recht.
+   * @returns {boolean} true als hij het heeft.
+   */
   const can = (user, right) => rightsOf(user).includes(right);
 
   const api = { ROLES, RIGHTS, RIGHT_INFO, KINDS, ALIASES, normalize, isRole, label, rightsForKind, withNeeds, withoutDependents, rightsOf, can };

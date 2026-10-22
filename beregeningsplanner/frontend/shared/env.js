@@ -3,18 +3,23 @@
 // beveiligt niets, maar toont een testlabel in de kopbalk en scheidt het lokale
 // concept van de planner per omgeving, zodat live en test niet door elkaar lopen.
 (function (root) {
+  /**
+   * Leest de testomgeving uit de cookie aquatech_env_hint.
+   * @returns {{ slug: string, name: string }|null} Code en naam, of null in live.
+   */
   function read() {
-    const m = /(?:^|;\s*)aquatech_env_hint=([^;]*)/.exec(document.cookie || '');
-    if (!m) return null;
+    const match = /(?:^|;\s*)aquatech_env_hint=([^;]*)/.exec(document.cookie || '');
+    if (!match) return null;
     let raw = '';
-    try { raw = decodeURIComponent(m[1]); } catch (e) { return null; }
-    const idx = raw.indexOf('|');
-    if (idx < 1) return null;
-    return { slug: raw.slice(0, idx), name: raw.slice(idx + 1) || 'Test' };
+    try { raw = decodeURIComponent(match[1]); } catch (error) { return null; }
+    const separator = raw.indexOf('|');
+    if (separator < 1) return null;
+    return { slug: raw.slice(0, separator), name: raw.slice(separator + 1) || 'Test' };
   }
 
   const env = read();
 
+  /** Toont het testlabel in de kopbalk en zet [TEST] voor de titel. */
   function mark() {
     if (!env) return;
     document.documentElement.classList.add('env-test');
@@ -34,13 +39,22 @@
   // zet dan de leesbare cookie `aquatech_imp_hint` (`<naam>|<verloopt>|live|test`).
   // Op elke pagina staat zolang een balk met de knop terug naar het eigen account.
   const script = document.currentScript;
-  const fromApp = (rel) => (script && script.src ? new URL(rel, script.src).href : rel);
+  /**
+   * Adres relatief aan de map van de app (dit script staat in shared/).
+   * @param {string} relative Pad vanaf shared/.
+   * @returns {string} Het volledige adres.
+   */
+  const fromApp = (relative) => (script && script.src ? new URL(relative, script.src).href : relative);
 
+  /**
+   * Leest de impersonatie uit de cookie aquatech_imp_hint.
+   * @returns {{ name: string, expiresAt: string, live: boolean }|null} Naam, einde en omgeving, of null.
+   */
   function readImpersonation() {
-    const m = /(?:^|;\s*)aquatech_imp_hint=([^;]*)/.exec(document.cookie || '');
-    if (!m) return null;
+    const match = /(?:^|;\s*)aquatech_imp_hint=([^;]*)/.exec(document.cookie || '');
+    if (!match) return null;
     let raw = '';
-    try { raw = decodeURIComponent(m[1]); } catch (e) { return null; }
+    try { raw = decodeURIComponent(match[1]); } catch (error) { return null; }
     const parts = raw.split('|');
     if (parts.length < 3) return null;
     const live = parts.pop() === 'live';
@@ -48,20 +62,26 @@
     return { name: parts.join('|'), expiresAt, live };
   }
 
-  const imp = readImpersonation();
+  const impersonation = readImpersonation();
 
-  async function stopImpersonation(btn) {
-    if (btn) btn.disabled = true;
+  /**
+   * Stopt de impersonatie en gaat terug naar Hoofdbeheer.
+   * @param {HTMLButtonElement} [button] De knop (wordt uitgezet).
+   * @returns {Promise<void>}
+   */
+  async function stopImpersonation(button) {
+    if (button) button.disabled = true;
     try {
       await fetch(fromApp('../api/impersonation/stop'), { method: 'POST' });
-    } catch (e) { /* toch terug: de server ruimt een verlopen impersonatie zelf op */ }
+    } catch (error) { /* toch terug: de server ruimt een verlopen impersonatie zelf op */ }
     location.href = fromApp('../hoofdbeheer/');
   }
 
+  /** Toont de balk "Je werkt als …" met de knop terug naar het eigen account. */
   function markImpersonation() {
-    if (!imp || document.querySelector('.imp-bar')) return;
+    if (!impersonation || document.querySelector('.imp-bar')) return;
     document.documentElement.classList.add('impersonating');
-    const until = new Date(imp.expiresAt);
+    const until = new Date(impersonation.expiresAt);
     const time = isNaN(until) ? '' : until.toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
     const bar = document.createElement('div');
     bar.className = 'imp-bar';
@@ -69,34 +89,42 @@
     const text = document.createElement('span');
     text.className = 'imp-text';
     const who = document.createElement('b');
-    who.textContent = imp.name;
-    text.append('Je werkt als ', who, ` · ${imp.live ? 'live, met toestemming' : 'testomgeving'}${time ? ` · tot ${time}` : ''}`);
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = 'Terug naar eigen account';
-    btn.onclick = () => stopImpersonation(btn);
-    bar.append(text, btn);
+    who.textContent = impersonation.name;
+    text.append('Je werkt als ', who, ` · ${impersonation.live ? 'live, met toestemming' : 'testomgeving'}${time ? ` · tot ${time}` : ''}`);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Terug naar eigen account';
+    /**
+     * Stopt de impersonatie.
+     * @returns {Promise<void>}
+     */
+    button.onclick = () => stopImpersonation(button);
+    bar.append(text, button);
     document.body.appendChild(bar);
   }
 
   root.AquatechEnv = {
     current: env,
     isTest: Boolean(env),
-    // Achtervoegsel voor localStorage-sleutels: leeg in live. Tijdens een
-    // impersonatie apart, zodat het lokale concept van de hoofdbeheerder en dat
-    // van de gebruiker niet door elkaar lopen.
-    storageSuffix: () => (env ? `@${env.slug}` : '') + (imp ? `#als:${imp.name}` : ''),
-    impersonation: imp,
+    /**
+     * Achtervoegsel voor localStorage-sleutels. Tijdens een impersonatie apart,
+     * zodat het lokale concept van de hoofdbeheerder en dat van de gebruiker
+     * niet door elkaar lopen.
+     * @returns {string} Leeg in live; @code in een testomgeving, plus #als:naam tijdens een impersonatie.
+     */
+    storageSuffix: () => (env ? `@${env.slug}` : '') + (impersonation ? `#als:${impersonation.name}` : ''),
+    impersonation,
     stopImpersonation,
   };
 
-  // Kleur van de browserbalk (mobiel) volgt het kleurthema (shared/theme.css).
+  /** Kleur van de browserbalk (mobiel) volgt het kleurthema (shared/theme.css). */
   function themeColor() {
     const meta = document.querySelector('meta[name="theme-color"]');
     const navy = getComputedStyle(document.documentElement).getPropertyValue('--at-navy').trim();
     if (meta && /^#[0-9a-f]{6}$/i.test(navy)) meta.setAttribute('content', navy);
   }
 
+  /** Alles klaarzetten zodra de pagina geladen is. */
   const ready = () => { mark(); markImpersonation(); themeColor(); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready);
   else ready();
