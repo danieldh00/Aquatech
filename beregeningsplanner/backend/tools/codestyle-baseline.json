@@ -20,7 +20,6 @@
     "frontend/hoofdbeheer/hoofdbeheer.js",
     "frontend/klantdossier/klantdossier.js",
     "frontend/offertes/offertes.js",
-    "frontend/offertes/quote-view.js",
     "frontend/plannen/plannen.js",
     "frontend/planning/planning.js",
     "frontend/portaal/portaal.js",
