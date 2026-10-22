@@ -3,19 +3,56 @@
 // moment. Geen account nodig. Het token staat in het fragment (#t=...) en gaat
 // alleen in een kop naar de server, zodat het niet in logboeken terechtkomt.
 (function () {
-  const W = window.WorkOrderCore;
-  const $ = (s) => document.querySelector(s);
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const WorkOrderCore = window.WorkOrderCore;
+  /**
+   * Zoekt het eerste element bij een CSS-selector.
+   * @param {string} selector CSS-selector.
+   * @returns {Element|null} Het element.
+   */
+  const $ = (selector) => document.querySelector(selector);
+  /**
+   * Maakt tekst veilig voor HTML.
+   * @param {*} value De tekst (null/undefined = leeg).
+   * @returns {string} De tekst met &, <, >, " en ' als entiteit.
+   */
+  const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
   const hash = new URLSearchParams(location.hash.slice(1));
   const token = hash.get('t') || '';
   const preview = hash.get('voorbeeld') === '1';
-  const state = { a: null, profile: null };
+  const state = { appointment: null, profile: null };
 
-  const day = (iso, opts) => new Date(`${iso}T12:00:00`).toLocaleDateString('nl-NL', opts);
+  /**
+   * Datum (JJJJ-MM-DD) als Nederlandse tekst.
+   * @param {string} iso Datum als JJJJ-MM-DD.
+   * @param {object} formatOptions Opties voor toLocaleDateString.
+   * @returns {string} De opgemaakte datum.
+   */
+  const day = (iso, formatOptions) => new Date(`${iso}T12:00:00`).toLocaleDateString('nl-NL', formatOptions);
+  /**
+   * Datum voluit, bijv. "donderdag 22 oktober 2026".
+   * @param {string} iso Datum als JJJJ-MM-DD.
+   * @returns {string} De datum voluit.
+   */
   const longDate = (iso) => day(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  /**
+   * Datum en tijd voluit.
+   * @param {string} iso Tijdstip als ISO-tekst.
+   * @returns {string} Bijv. "22 oktober 2026 om 10:15".
+   */
   const dateTime = (iso) => new Date(iso).toLocaleString('nl-NL', { dateStyle: 'long', timeStyle: 'short' });
-  const timeText = (a) => (a.startTime ? `${a.startTime}${a.endTime ? ` – ${a.endTime}` : ''} uur` : 'Tijd volgt nog');
+  /**
+   * Tijd van de afspraak als tekst.
+   * @param {object} appointment De afspraak.
+   * @returns {string} Bijv. "08:00 – 12:00 uur" of "Tijd volgt nog".
+   */
+  const timeText = (appointment) => (appointment.startTime ? `${appointment.startTime}${appointment.endTime ? ` – ${appointment.endTime}` : ''} uur` : 'Tijd volgt nog');
 
+  /**
+   * Roept de openbare afspraak-API aan met het token als kop.
+   * @param {string} path Pad onder api/public/, bijv. "appointment".
+   * @param {object} [body] JSON-body; met body een POST, anders een GET.
+   * @returns {Promise<object>} Het antwoord (fout = Error met status).
+   */
   async function api(path, body) {
     const res = await fetch(`../api/public/${path}${preview && !body ? '?preview=1' : ''}`, {
       method: body ? 'POST' : 'GET', cache: 'no-store', credentials: 'omit',
@@ -27,73 +64,95 @@
     return out;
   }
 
+  /**
+   * Toont een melding in plaats van de afspraak.
+   * @param {string} text De melding (leeg = weg).
+   */
   const message = (text) => { $('#a-message').textContent = text; };
-  function status(text, cls) {
-    const el = $('#a-status');
-    el.textContent = text || '';
-    el.className = `o-status${cls ? ` ${cls}` : ''}`;
-    el.hidden = !text;
+  /**
+   * Toont of verbergt de statusbalk boven de afspraak.
+   * @param {string} text De tekst (leeg = verbergen).
+   * @param {string} [kind] Extra klasse: ok, bad of warn.
+   */
+  function status(text, kind) {
+    const banner = $('#a-status');
+    banner.textContent = text || '';
+    banner.className = `o-status${kind ? ` ${kind}` : ''}`;
+    banner.hidden = !text;
   }
 
-  // Agendabestand (.ics) voor de eigen agenda van de klant.
-  function icsFile(a, p) {
-    const stamp = (d, t) => `${d.replace(/-/g, '')}T${t.replace(':', '')}00`;
-    const last = a.dates[a.dates.length - 1];
-    const allDay = !a.startTime;
+  /**
+   * Agendabestand (.ics) voor de eigen agenda van de klant.
+   * @param {object} appointment De afspraak.
+   * @param {object} profile Bedrijfsprofiel (naam).
+   * @returns {Blob} Het .ics-bestand.
+   */
+  function icsFile(appointment, profile) {
+    /**
+     * Datum en tijd in het formaat van iCalendar.
+     * @param {string} date Datum als JJJJ-MM-DD.
+     * @param {string} time Tijd als UU:MM.
+     * @returns {string} Bijv. "20261022T080000".
+     */
+    const stamp = (date, time) => `${date.replace(/-/g, '')}T${time.replace(':', '')}00`;
+    const lastDate = appointment.dates[appointment.dates.length - 1];
+    const allDay = !appointment.startTime;
     const lines = [
       'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//AquaTech//Afspraak//NL', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT',
-      `UID:${a.number}-${a.plannedDate}@aquatech`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
-      allDay ? `DTSTART;VALUE=DATE:${a.plannedDate.replace(/-/g, '')}` : `DTSTART;TZID=Europe/Amsterdam:${stamp(a.plannedDate, a.startTime)}`,
-      allDay ? `DTEND;VALUE=DATE:${W.addDays(last, 1).replace(/-/g, '')}` : `DTEND;TZID=Europe/Amsterdam:${stamp(last, a.endTime || a.startTime)}`,
-      `SUMMARY:${(p.companyName ? `${p.companyName}: ` : '')}${a.title}`.replace(/[,;]/g, (c) => `\\${c}`),
-      a.address ? `LOCATION:${a.address.replace(/\n/g, ', ').replace(/[,;]/g, (c) => `\\${c}`)}` : '',
+      `UID:${appointment.number}-${appointment.plannedDate}@aquatech`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
+      allDay ? `DTSTART;VALUE=DATE:${appointment.plannedDate.replace(/-/g, '')}` : `DTSTART;TZID=Europe/Amsterdam:${stamp(appointment.plannedDate, appointment.startTime)}`,
+      allDay ? `DTEND;VALUE=DATE:${WorkOrderCore.addDays(lastDate, 1).replace(/-/g, '')}` : `DTEND;TZID=Europe/Amsterdam:${stamp(lastDate, appointment.endTime || appointment.startTime)}`,
+      `SUMMARY:${(profile.companyName ? `${profile.companyName}: ` : '')}${appointment.title}`.replace(/[,;]/g, (character) => `\\${character}`),
+      appointment.address ? `LOCATION:${appointment.address.replace(/\n/g, ', ').replace(/[,;]/g, (character) => `\\${character}`)}` : '',
       'END:VEVENT', 'END:VCALENDAR',
     ].filter(Boolean);
     return new Blob([lines.join('\r\n')], { type: 'text/calendar' });
   }
 
+  /** Tekent de afspraak, de statusbalk en (als het nog kan) het formulier om te reageren. */
   function render() {
-    const a = state.a;
-    const p = state.profile || {};
-    document.title = `Afspraak ${a.number}${p.companyName ? ` – ${p.companyName}` : ''}`;
-    $('#a-company').textContent = p.companyName || 'Afspraak';
+    const appointment = state.appointment;
+    const profile = state.profile || {};
+    document.title = `Afspraak ${appointment.number}${profile.companyName ? ` – ${profile.companyName}` : ''}`;
+    $('#a-company').textContent = profile.companyName || 'Afspraak';
     message('');
-    const st = a.appointment.state;
-    const r = a.appointment.response;
-    const past = a.plannedDate && a.plannedDate < a.today;
-    const open = Boolean(a.plannedDate) && ['open', 'gepland'].includes(a.status) && !past && !(r && r.current);
-    if (a.status === 'geannuleerd') status('Deze afspraak is geannuleerd. Neem contact met ons op als u vragen heeft.', 'bad');
-    else if (a.status === 'gereed') status('De werkzaamheden zijn uitgevoerd. Bedankt voor uw vertrouwen!', 'ok');
-    else if (!a.plannedDate) status('Er is nog geen datum gepland. U hoort van ons zodra de afspraak vaststaat.', 'warn');
-    else if (st === 'bevestigd') status(`U heeft deze afspraak bevestigd op ${dateTime(r.at)}. Tot dan!`, 'ok');
-    else if (st === 'ander_moment') status(`U heeft op ${dateTime(r.at)} om een ander moment gevraagd. Wij nemen contact met u op en sturen u een nieuwe afspraak.`, 'warn');
+    const appointmentState = appointment.appointment.state;
+    const response = appointment.appointment.response;
+    const past = appointment.plannedDate && appointment.plannedDate < appointment.today;
+    const open = Boolean(appointment.plannedDate) && ['open', 'gepland'].includes(appointment.status) && !past && !(response && response.current);
+    if (appointment.status === 'geannuleerd') status('Deze afspraak is geannuleerd. Neem contact met ons op als u vragen heeft.', 'bad');
+    else if (appointment.status === 'gereed') status('De werkzaamheden zijn uitgevoerd. Bedankt voor uw vertrouwen!', 'ok');
+    else if (!appointment.plannedDate) status('Er is nog geen datum gepland. U hoort van ons zodra de afspraak vaststaat.', 'warn');
+    else if (appointmentState === 'bevestigd') status(`U heeft deze afspraak bevestigd op ${dateTime(response.at)}. Tot dan!`, 'ok');
+    else if (appointmentState === 'ander_moment') status(`U heeft op ${dateTime(response.at)} om een ander moment gevraagd. Wij nemen contact met u op en sturen u een nieuwe afspraak.`, 'warn');
     else if (past) status('Deze afspraak ligt in het verleden.', 'warn');
-    else status(`${r && !r.current ? 'De afspraak is gewijzigd. ' : ''}Controleer het moment hieronder en bevestig de afspraak, of vraag een ander moment.${preview ? ' (Voorbeeld: het openen telt niet als bekeken.)' : ''}`);
+    else status(`${response && !response.current ? 'De afspraak is gewijzigd. ' : ''}Controleer het moment hieronder en bevestig de afspraak, of vraag een ander moment.${preview ? ' (Voorbeeld: het openen telt niet als bekeken.)' : ''}`);
 
-    const when = a.plannedDate ? `
+    const whenHtml = appointment.plannedDate ? `
       <div class="a-when">
-        <div class="cal"><span class="m">${esc(day(a.plannedDate, { month: 'short' }).replace('.', ''))}</span><span class="d">${esc(day(a.plannedDate, { day: 'numeric' }))}</span></div>
-        <div class="txt"><b>${esc(longDate(a.plannedDate))}</b><span>${esc(timeText(a))}${a.days > 1 ? ` · ${a.days} werkdagen, t/m ${esc(longDate(a.dates[a.dates.length - 1]))}` : ''}</span></div>
+        <div class="cal"><span class="m">${esc(day(appointment.plannedDate, { month: 'short' }).replace('.', ''))}</span><span class="d">${esc(day(appointment.plannedDate, { day: 'numeric' }))}</span></div>
+        <div class="txt"><b>${esc(longDate(appointment.plannedDate))}</b><span>${esc(timeText(appointment))}${appointment.days > 1 ? ` · ${appointment.days} werkdagen, t/m ${esc(longDate(appointment.dates[appointment.dates.length - 1]))}` : ''}</span></div>
       </div>` : '';
-    const contact = [p.phone ? `<a href="tel:${esc(p.phone.replace(/[^\d+]/g, ''))}">${esc(p.phone)}</a>` : '', p.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ''].filter(Boolean).join(' · ');
+    const contact = [profile.phone ? `<a href="tel:${esc(profile.phone.replace(/[^\d+]/g, ''))}">${esc(profile.phone)}</a>` : '', profile.email ? `<a href="mailto:${esc(profile.email)}">${esc(profile.email)}</a>` : ''].filter(Boolean).join(' · ');
     $('#a-card').innerHTML = `
-      <h1>${esc(a.title || 'Werkzaamheden')}</h1>
-      <p class="sub">Werkorder ${esc(a.number)}${a.quoteNumber ? ` · bij offerte ${esc(a.quoteNumber)}` : ''}</p>
-      ${when}
+      <h1>${esc(appointment.title || 'Werkzaamheden')}</h1>
+      <p class="sub">Werkorder ${esc(appointment.number)}${appointment.quoteNumber ? ` · bij offerte ${esc(appointment.quoteNumber)}` : ''}</p>
+      ${whenHtml}
       <table class="a-facts">
-        ${a.customer ? `<tr><td>Voor</td><td>${esc(a.customer)}</td></tr>` : ''}
-        ${a.address ? `<tr><td>Adres</td><td>${esc(a.address).replace(/\n/g, '<br>')}</td></tr>` : ''}
-        ${a.days > 1 ? `<tr><td>Werkdagen</td><td><ul class="a-days">${a.dates.map((d) => `<li>${esc(longDate(d))}</li>`).join('')}</ul></td></tr>` : ''}
+        ${appointment.customer ? `<tr><td>Voor</td><td>${esc(appointment.customer)}</td></tr>` : ''}
+        ${appointment.address ? `<tr><td>Adres</td><td>${esc(appointment.address).replace(/\n/g, '<br>')}</td></tr>` : ''}
+        ${appointment.days > 1 ? `<tr><td>Werkdagen</td><td><ul class="a-days">${appointment.dates.map((date) => `<li>${esc(longDate(date))}</li>`).join('')}</ul></td></tr>` : ''}
       </table>
-      ${a.plannedDate && !['geannuleerd', 'gereed'].includes(a.status) && !past ? '<div class="a-actions"><button type="button" class="btn" id="a-ics">Zet in mijn agenda</button></div>' : ''}
-      ${contact ? `<p class="a-contact">Vragen? Neem contact op met ${esc(p.companyName || 'ons')}: ${contact}</p>` : ''}`;
+      ${appointment.plannedDate && !['geannuleerd', 'gereed'].includes(appointment.status) && !past ? '<div class="a-actions"><button type="button" class="btn" id="a-ics">Zet in mijn agenda</button></div>' : ''}
+      ${contact ? `<p class="a-contact">Vragen? Neem contact op met ${esc(profile.companyName || 'ons')}: ${contact}</p>` : ''}`;
     $('#a-card').hidden = false;
-    const ics = $('#a-ics');
-    if (ics) {
-      ics.onclick = () => {
+    const icsButton = $('#a-ics');
+    if (icsButton) {
+      /** Downloadt het agendabestand. */
+      icsButton.onclick = () => {
         const link = document.createElement('a');
-        link.href = URL.createObjectURL(icsFile(a, p));
-        link.download = `afspraak-${a.number}.ics`;
+        link.href = URL.createObjectURL(icsFile(appointment, profile));
+        link.download = `afspraak-${appointment.number}.ics`;
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -101,33 +160,56 @@
       };
     }
     $('#a-form').hidden = !open;
-    if (open && r && !$('#a-name').value) $('#a-name').value = r.name;
+    if (open && response && !$('#a-name').value) $('#a-name').value = response.name;
   }
 
+  /**
+   * Verstuurt de reactie van de klant (bevestigd of ander moment) en tekent opnieuw.
+   * @param {string} answer "bevestigd" of "ander_moment".
+   * @returns {Promise<void>}
+   */
   async function respond(answer) {
-    const err = (m) => { $('#a-err').textContent = m || ''; };
+    /**
+     * Toont een foutmelding bij het formulier.
+     * @param {string} text De melding (leeg = weg).
+     * @returns {void}
+     */
+    const showError = (text) => { $('#a-err').textContent = text || ''; };
     const name = $('#a-name').value.trim();
     const reason = $('#a-reason').value.trim();
-    if (name.length < 2) return err('Vul uw naam in.');
-    if (answer === 'ander_moment' && reason.length < 3) return err('Laat weten welk moment u beter uitkomt.');
-    err('');
+    if (name.length < 2) return showError('Vul uw naam in.');
+    if (answer === 'ander_moment' && reason.length < 3) return showError('Laat weten welk moment u beter uitkomt.');
+    showError('');
     const buttons = document.querySelectorAll('#a-form button');
-    buttons.forEach((b) => { b.disabled = true; });
+    buttons.forEach((button) => { button.disabled = true; });
     try {
       const out = await api('appointment/respond', { answer, name, reason });
-      state.a = out.appointment;
+      state.appointment = out.appointment;
       render();
       window.scrollTo(0, 0);
-    } catch (e) {
-      err(e.message);
+    } catch (error) {
+      showError(error.message);
     } finally {
-      buttons.forEach((b) => { b.disabled = false; });
+      buttons.forEach((button) => { button.disabled = false; });
     }
   }
 
+  /**
+   * Koppelt de knoppen, haalt de afspraak op bij het token en tekent hem.
+   * @returns {Promise<void>}
+   */
   async function init() {
+    /**
+     * Bevestigt de afspraak.
+     * @returns {Promise<void>}
+     */
     $('#a-confirm').onclick = () => respond('bevestigd');
+    /** Toont of verbergt het veld voor een ander moment. */
     $('#a-other-open').onclick = () => { $('#a-other').hidden = !$('#a-other').hidden; if (!$('#a-other').hidden) $('#a-reason').focus(); };
+    /**
+     * Vraagt een ander moment.
+     * @returns {Promise<void>}
+     */
     $('#a-other-send').onclick = () => respond('ander_moment');
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) {
       message('Deze link is niet compleet. Open de link uit de e-mail opnieuw, of neem contact op met de afzender.');
@@ -135,12 +217,12 @@
     }
     try {
       const out = await api('appointment');
-      state.a = out.appointment;
+      state.appointment = out.appointment;
       state.profile = out.profile;
       if (window.AquatechTheme) window.AquatechTheme.apply(out.theme);
       render();
-    } catch (e) {
-      message(e.status === 429 ? 'Te veel verzoeken. Probeer het later opnieuw.' : e.message);
+    } catch (error) {
+      message(error.status === 429 ? 'Te veel verzoeken. Probeer het later opnieuw.' : error.message);
     }
   }
 
