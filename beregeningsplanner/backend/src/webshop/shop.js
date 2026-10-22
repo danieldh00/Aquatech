@@ -20,7 +20,10 @@ const { fetchProducts, normalizeBaseUrl, sanitizeShop, SourceError } = require('
 const CATALOG_FILE = path.join(FRONTEND_DIR, 'beregening', 'js', 'catalog.js');
 
 let articles = null;
-/** Interne artikelen uit de frontend-catalogus (één bron van waarheid). */
+/**
+ * Interne artikelen uit de frontend-catalogus (één bron van waarheid), één keer ingelezen.
+ * @returns {object} Artikelcode → artikel.
+ */
 function loadArticles() {
   if (!articles) {
     const sandbox = { window: {} };
@@ -32,22 +35,35 @@ function loadArticles() {
   return articles;
 }
 
-const key = (s) => String(s || '').trim().toUpperCase();
+/**
+ * Maakt een sku of code vergelijkbaar (getrimd, hoofdletters).
+ * @param {*} value De sku of code.
+ * @returns {string} De sleutel.
+ */
+const normalizeKey = (value) => String(value || '').trim().toUpperCase();
 
-function matchProducts(products, arts, mapping = {}) {
+/**
+ * Koppelt webshopproducten aan de interne artikelcodes. Volgorde: handmatige
+ * koppeling (code → sku), het productveld aquatech_code, een sku gelijk aan de code.
+ * @param {object[]} products De webshopproducten.
+ * @param {object} articleMap Artikelcode → artikel (loadArticles).
+ * @param {object} [mapping] Handmatige koppeling code → sku.
+ * @returns {{ matched: object, unmatched: string[] }} Per code het gekoppelde product (met prijs) en de codes zonder product.
+ */
+function matchProducts(products, articleMap, mapping = {}) {
   const bySku = new Map();
   const byCode = new Map();
-  for (const p of products) {
-    if (p.sku && !bySku.has(key(p.sku))) bySku.set(key(p.sku), p);
-    if (p.code && !byCode.has(key(p.code))) byCode.set(key(p.code), p);
+  for (const product of products) {
+    if (product.sku && !bySku.has(normalizeKey(product.sku))) bySku.set(normalizeKey(product.sku), product);
+    if (product.code && !byCode.has(normalizeKey(product.code))) byCode.set(normalizeKey(product.code), product);
   }
   const matched = {};
   const unmatched = [];
-  for (const code of Object.keys(arts)) {
-    const viaMap = mapping[code] ? bySku.get(key(mapping[code])) : null;
-    const p = viaMap || byCode.get(key(code)) || bySku.get(key(code));
-    if (p && p.price != null) {
-      matched[code] = { sku: p.sku, name: p.name, price: p.price, url: p.url, inStock: p.inStock, via: viaMap ? 'mapping' : byCode.get(key(code)) === p ? 'code' : 'sku' };
+  for (const code of Object.keys(articleMap)) {
+    const viaMap = mapping[code] ? bySku.get(normalizeKey(mapping[code])) : null;
+    const product = viaMap || byCode.get(normalizeKey(code)) || bySku.get(normalizeKey(code));
+    if (product && product.price != null) {
+      matched[code] = { sku: product.sku, name: product.name, price: product.price, url: product.url, inStock: product.inStock, via: viaMap ? 'mapping' : byCode.get(normalizeKey(code)) === product ? 'code' : 'sku' };
     } else {
       unmatched.push(code);
     }
@@ -55,89 +71,147 @@ function matchProducts(products, arts, mapping = {}) {
   return { matched, unmatched };
 }
 
+/**
+ * Maakt de opslag voor opgehaalde webshopproducten en de synchronisatiestand.
+ * @param {object} db De database.
+ * @returns {{ replaceProducts: Function, setStatus: Function, status: Function, products: Function, clear: Function }} De opslagfuncties.
+ */
 function createShopStore(db) {
-  const q = (sql) => db.prepare(sql);
+  /**
+   * Bereidt een SQL-opdracht voor.
+   * @param {string} sql De SQL.
+   * @returns {object} De voorbereide opdracht.
+   */
+  const prepare = (sql) => db.prepare(sql);
 
+  /**
+   * Vervangt alle opgehaalde producten van een tenant in één transactie.
+   * @param {string} tenantId Id van de tenant.
+   * @param {object[]} products De producten (fetchProducts).
+   * @param {string} syncedAt Moment van ophalen.
+   */
   function replaceProducts(tenantId, products, syncedAt) {
     transaction(db, () => {
-      q('DELETE FROM shop_products WHERE tenant_id = ?').run(tenantId);
-      const put = q(`INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories)
+      prepare('DELETE FROM shop_products WHERE tenant_id = ?').run(tenantId);
+      const insert = prepare(`INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       const seen = new Set();
-      for (const p of products) {
-        if (seen.has(p.id)) continue;
-        seen.add(p.id);
-        put.run(tenantId, p.id, p.sku.slice(0, 100), p.name.slice(0, 300), p.price, p.currency.slice(0, 3), p.url.slice(0, 1000),
-          p.image.slice(0, 1000), p.inStock ? 1 : 0, p.code.slice(0, 40), JSON.stringify(p.categories.slice(0, 20)));
+      for (const product of products) {
+        if (seen.has(product.id)) continue;
+        seen.add(product.id);
+        insert.run(tenantId, product.id, product.sku.slice(0, 100), product.name.slice(0, 300), product.price, product.currency.slice(0, 3), product.url.slice(0, 1000),
+          product.image.slice(0, 1000), product.inStock ? 1 : 0, product.code.slice(0, 40), JSON.stringify(product.categories.slice(0, 20)));
       }
       setStatus(tenantId, { syncedAt, productCount: seen.size, error: null });
     });
   }
 
+  /**
+   * Legt de stand van de laatste synchronisatie vast; lege velden houden hun waarde.
+   * @param {string} tenantId Id van de tenant.
+   * @param {{ syncedAt?: string, productCount?: number, error?: string }} result Moment, aantal producten en foutmelding.
+   */
   function setStatus(tenantId, { syncedAt = null, productCount = null, error = null }) {
-    const at = new Date().toISOString();
-    q(`INSERT INTO shop_sync (tenant_id, synced_at, product_count, last_attempt_at, last_error) VALUES (?, ?, ?, ?, ?)
+    const timestamp = new Date().toISOString();
+    prepare(`INSERT INTO shop_sync (tenant_id, synced_at, product_count, last_attempt_at, last_error) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT (tenant_id) DO UPDATE SET
         synced_at = COALESCE(excluded.synced_at, shop_sync.synced_at),
         product_count = COALESCE(excluded.product_count, shop_sync.product_count),
-        last_attempt_at = excluded.last_attempt_at, last_error = excluded.last_error`).run(tenantId, syncedAt, productCount, at, error);
+        last_attempt_at = excluded.last_attempt_at, last_error = excluded.last_error`).run(tenantId, syncedAt, productCount, timestamp, error);
   }
 
+  /**
+   * De stand van de laatste synchronisatie.
+   * @param {string} tenantId Id van de tenant.
+   * @returns {object|null} syncedAt, productCount, lastAttemptAt en lastError, of null.
+   */
   const status = (tenantId) => {
-    const r = q('SELECT synced_at, product_count, last_attempt_at, last_error FROM shop_sync WHERE tenant_id = ?').get(tenantId);
-    return r ? { syncedAt: r.synced_at, productCount: r.product_count || 0, lastAttemptAt: r.last_attempt_at, lastError: r.last_error } : null;
+    const row = prepare('SELECT synced_at, product_count, last_attempt_at, last_error FROM shop_sync WHERE tenant_id = ?').get(tenantId);
+    return row ? { syncedAt: row.synced_at, productCount: row.product_count || 0, lastAttemptAt: row.last_attempt_at, lastError: row.last_error } : null;
   };
 
-  const products = (tenantId) => q('SELECT id, sku, name, price, currency, url, image, in_stock, code, categories FROM shop_products WHERE tenant_id = ?').all(tenantId).map((r) => ({
-    id: r.id, sku: r.sku, name: r.name, price: r.price, currency: r.currency, url: r.url, image: r.image,
-    inStock: Boolean(r.in_stock), code: r.code, categories: JSON.parse(r.categories || '[]'),
+  /**
+   * De opgehaalde producten van een tenant.
+   * @param {string} tenantId Id van de tenant.
+   * @returns {object[]} De producten.
+   */
+  const products = (tenantId) => prepare('SELECT id, sku, name, price, currency, url, image, in_stock, code, categories FROM shop_products WHERE tenant_id = ?').all(tenantId).map((row) => ({
+    id: row.id, sku: row.sku, name: row.name, price: row.price, currency: row.currency, url: row.url, image: row.image,
+    inStock: Boolean(row.in_stock), code: row.code, categories: JSON.parse(row.categories || '[]'),
   }));
 
+  /**
+   * Wist de producten en de stand van een tenant (koppeling verwijderd).
+   * @param {string} tenantId Id van de tenant.
+   */
   function clear(tenantId) {
-    q('DELETE FROM shop_products WHERE tenant_id = ?').run(tenantId);
-    q('DELETE FROM shop_sync WHERE tenant_id = ?').run(tenantId);
+    prepare('DELETE FROM shop_products WHERE tenant_id = ?').run(tenantId);
+    prepare('DELETE FROM shop_sync WHERE tenant_id = ?').run(tenantId);
   }
 
   return { replaceProducts, setStatus, status, products, clear };
 }
 
 /**
- * Routes:
- *   GET  /api/catalog          artikelen met webshopprijs en eigen assortiment (planner en offertes, iedereen die is ingelogd)
- *   GET  /api/admin/shop       koppeling en status (beheerder)
- *   PUT  /api/admin/shop       koppeling instellen
- *   POST /api/admin/shop/sync  producten nu ophalen
- * /api/admin/* staat in server.js al achter requireAdmin.
+ * Registreert de routes: GET /api/catalog (artikelen met webshopprijs en
+ * eigen assortiment, voor iedereen die is ingelogd) en /api/admin/shop[/sync]
+ * (koppeling, status en nu ophalen; in server.js al achter requireAdmin).
+ * @param {object} app De Express-app.
+ * @param {object} ctx shop, requireUser, requireJson, settingsOf, tenantOf, audit, syncLimiter, fetchImpl, sync, salePrices en libraryCodes.
  */
 function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, tenantOf, audit, syncLimiter, fetchImpl, sync = null, salePrices = () => ({}), libraryCodes = () => [] }) {
-  const configured = (s) => Boolean(s.get('shopSource').url);
+  /**
+   * Of er een webshop is ingesteld.
+   * @param {object} settings De instellingen van de tenant.
+   * @returns {boolean} True als er een webadres is.
+   */
+  const configured = (settings) => Boolean(settings.get('shopSource').url);
 
-  // Plannercode? Ook de eigen behuizingen en nozzles uit de sproeierbibliotheek
-  // (sprinklers.js) tellen mee; die alleen opvragen als er een onbekende code is.
+  /**
+   * Maakt een controle of een code een plannercode is. Ook de eigen
+   * behuizingen en nozzles uit de sproeierbibliotheek tellen mee; die worden
+   * alleen opgevraagd als er een onbekende code is.
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} sale Verkoopprijzen per code (voorraadbeheer).
+   * @returns {Function} code → boolean.
+   */
   function knownCodes(tenantId, sale) {
-    const arts = loadArticles();
+    const articleMap = loadArticles();
     let extra = null;
     return (code) => {
-      if (arts[code]) return true;
-      if (!extra) extra = new Set(Object.keys(sale).some((c) => !arts[c]) ? libraryCodes(tenantId) : []);
+      if (articleMap[code]) return true;
+      if (!extra) extra = new Set(Object.keys(sale).some((saleCode) => !articleMap[saleCode]) ? libraryCodes(tenantId) : []);
       return extra.has(code);
     };
   }
 
-  // Verkoopprijzen uit voorraadbeheer gaan voor (Aquatech is de bron); de
-  // webshopprijs alleen voor artikelen zonder eigen verkoopprijs.
+  /**
+   * Legt de verkoopprijzen uit voorraadbeheer over de artikelen (Aquatech is de
+   * bron); de webshopprijs alleen voor artikelen zonder eigen verkoopprijs.
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} articles Gekoppelde artikelen per code.
+   * @param {object} [sale] Verkoopprijzen per code.
+   * @param {Function} [known] Controle op plannercodes (knownCodes).
+   * @returns {object} Artikelen per code met prijs en herkomst.
+   */
   function withSalePrices(tenantId, articles, sale = salePrices(tenantId), known = knownCodes(tenantId, sale)) {
     const out = { ...articles };
-    for (const [code, v] of Object.entries(sale)) {
-      if (v.salePrice == null || !known(code)) continue;
-      out[code] = { ...(out[code] || { sku: code, name: v.name, url: '', inStock: true }), price: v.salePrice, via: 'voorraad' };
+    for (const [code, item] of Object.entries(sale)) {
+      if (item.salePrice == null || !known(code)) continue;
+      out[code] = { ...(out[code] || { sku: code, name: item.name, url: '', inStock: true }), price: item.salePrice, via: 'voorraad' };
     }
     return out;
   }
 
-  // Eigen assortiment: de plannercodes die de organisatie als product heeft
-  // (voorraadartikel of gekoppeld webshopproduct). Met een assortiment
-  // gebruikt de planner alleen die artikelen; zonder (leeg) de standaardcatalogus.
+  /**
+   * Eigen assortiment: de plannercodes die de organisatie als product heeft
+   * (voorraadartikel of gekoppeld webshopproduct). Met een assortiment gebruikt
+   * de planner alleen die artikelen; zonder (leeg) de standaardcatalogus.
+   * @param {object} sale Verkoopprijzen per code.
+   * @param {object} matched Gekoppelde webshopproducten per code.
+   * @param {Function} known Controle op plannercodes.
+   * @returns {{ assortment: string[], unknownCodes: number }} De codes en het aantal onbekende voorraadcodes.
+   */
   function assortmentOf(sale, matched, known) {
     const codes = new Set(Object.keys(matched));
     let unknown = 0;
@@ -148,16 +222,22 @@ function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, t
     return { assortment: [...codes].sort(), unknownCodes: unknown };
   }
 
+  /**
+   * De catalogus voor planner en offertes: prijzen, assortiment en ongekoppelde codes.
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} settings De instellingen van de tenant.
+   * @returns {object} configured, shop, syncedAt, productCount, articles, unmatched, assortment en unknownCodes.
+   */
   function catalogOf(tenantId, settings) {
-    const st = shop.status(tenantId);
+    const syncStatus = shop.status(tenantId);
     const sale = salePrices(tenantId);
     const known = knownCodes(tenantId, sale);
-    if (!configured(settings) || !st || !st.syncedAt) {
+    if (!configured(settings) || !syncStatus || !syncStatus.syncedAt) {
       return { configured: configured(settings), syncedAt: null, articles: withSalePrices(tenantId, {}, sale, known), unmatched: [], ...assortmentOf(sale, {}, known) };
     }
     const { matched, unmatched } = matchProducts(shop.products(tenantId), loadArticles(), settings.get('shopSource').mapping);
     return {
-      configured: true, shop: settings.get('shopSource').url, syncedAt: st.syncedAt, productCount: st.productCount,
+      configured: true, shop: settings.get('shopSource').url, syncedAt: syncStatus.syncedAt, productCount: syncStatus.productCount,
       articles: withSalePrices(tenantId, matched, sale, known), unmatched, ...assortmentOf(sale, matched, known),
     };
   }
@@ -167,44 +247,49 @@ function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, t
     res.json(catalogOf(tenantOf(req), settingsOf(req)));
   });
 
+  /**
+   * De koppeling en de stand voor Beheer → Webshop (sleutels alleen als "ingesteld" met de laatste tekens).
+   * @param {object} req Het Express-verzoek.
+   * @returns {object} source, consumerKey, consumerSecret, status, matchedCount, articleCount en unmatched.
+   */
   function adminView(req) {
-    const s = settingsOf(req);
-    const v = s.view();
-    const cat = catalogOf(tenantOf(req), s);
+    const settings = settingsOf(req);
+    const secrets = settings.view();
+    const catalog = catalogOf(tenantOf(req), settings);
     return {
-      source: s.get('shopSource'),
-      consumerKey: v.shopConsumerKey,
-      consumerSecret: v.shopConsumerSecret,
+      source: settings.get('shopSource'),
+      consumerKey: secrets.shopConsumerKey,
+      consumerSecret: secrets.shopConsumerSecret,
       status: shop.status(tenantOf(req)),
-      matchedCount: Object.keys(cat.articles).length,
+      matchedCount: Object.keys(catalog.articles).length,
       articleCount: Object.keys(loadArticles()).length,
-      unmatched: cat.unmatched,
+      unmatched: catalog.unmatched,
     };
   }
 
   app.get('/api/admin/shop', (req, res) => res.json(adminView(req)));
 
   app.put('/api/admin/shop', requireJson, (req, res) => {
-    const b = req.body || {};
+    const body = req.body || {};
     // Eerst het webadres controleren met een duidelijke melding; sanitizeShop
     // laat een ongeldig adres stil vallen.
-    if (b.url) {
-      try { normalizeBaseUrl(b.url); } catch (err) { return res.status(400).json({ error: err.code, field: 'url', message: err.message }); }
+    if (body.url) {
+      try { normalizeBaseUrl(body.url); } catch (error) { return res.status(400).json({ error: error.code, field: 'url', message: error.message }); }
     }
-    const patch = { shopSource: sanitizeShop(b) };
+    const patch = { shopSource: sanitizeShop(body) };
     // Sleutels: weglaten = ongewijzigd, tekst = nieuw, '' = wissen (zoals bij de andere geheimen).
-    for (const [field, k] of [['consumerKey', 'shopConsumerKey'], ['consumerSecret', 'shopConsumerSecret']]) {
-      if (typeof b[field] === 'string' && (b[field].trim() || b.clearKeys)) patch[k] = b[field].trim();
+    for (const [field, settingKey] of [['consumerKey', 'shopConsumerKey'], ['consumerSecret', 'shopConsumerSecret']]) {
+      if (typeof body[field] === 'string' && (body[field].trim() || body.clearKeys)) patch[settingKey] = body[field].trim();
     }
     const settings = settingsOf(req);
-    if (patch.shopSource.mode !== 'rest' || b.clearKeys) {
-      for (const k of ['shopConsumerKey', 'shopConsumerSecret']) if (settings.get(k)) patch[k] = '';
+    if (patch.shopSource.mode !== 'rest' || body.clearKeys) {
+      for (const settingKey of ['shopConsumerKey', 'shopConsumerSecret']) if (settings.get(settingKey)) patch[settingKey] = '';
     }
     let changed;
     try {
       changed = settings.update(patch, req.user?.id);
-    } catch (err) {
-      return res.status(400).json({ error: 'invalid_setting', field: err.field, message: err.message });
+    } catch (error) {
+      return res.status(400).json({ error: 'invalid_setting', field: error.field, message: error.message });
     }
     if (!patch.shopSource.url) shop.clear(tenantOf(req));
     if (changed.length) audit(req, 'instellingen_gewijzigd', { fields: changed });
@@ -214,29 +299,29 @@ function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, t
   app.post('/api/admin/shop/sync', syncLimiter, async (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     const tenantId = tenantOf(req);
-    const s = settingsOf(req);
-    if (!configured(s)) return res.status(409).json({ error: 'not_configured', message: 'Stel eerst de webshop in.' });
-    const cfg = { ...s.get('shopSource'), consumerKey: s.get('shopConsumerKey'), consumerSecret: s.get('shopConsumerSecret') };
+    const settings = settingsOf(req);
+    if (!configured(settings)) return res.status(409).json({ error: 'not_configured', message: 'Stel eerst de webshop in.' });
+    const shopConfig = { ...settings.get('shopSource'), consumerKey: settings.get('shopConsumerKey'), consumerSecret: settings.get('shopConsumerSecret') };
     try {
       // Met voorraadbeheer: ook de voorraadartikelen in beide richtingen (shop-sync.js).
       let stockSync = null;
       if (sync) {
         stockSync = await sync(tenantId, req.user);
       } else {
-        shop.replaceProducts(tenantId, await fetchProducts(cfg, { fetchImpl }), new Date().toISOString());
+        shop.replaceProducts(tenantId, await fetchProducts(shopConfig, { fetchImpl }), new Date().toISOString());
       }
       const view = { ...adminView(req), stockSync };
       const count = view.status ? view.status.productCount : 0;
       console.log(`Webshop (${tenantId}): ${count} producten opgehaald, ${view.matchedCount} artikelen gekoppeld`);
       audit(req, 'webshop_gesynchroniseerd', { products: count, matched: view.matchedCount, ...(stockSync || {}) });
       res.json(view);
-    } catch (err) {
-      if (err instanceof SourceError) {
-        shop.setStatus(tenantId, { error: err.message });
-        console.warn(`Webshop (${tenantId}): ophalen mislukt: ${err.code}`);
-        return res.status(err.status).json({ error: err.code, message: err.message });
+    } catch (error) {
+      if (error instanceof SourceError) {
+        shop.setStatus(tenantId, { error: error.message });
+        console.warn(`Webshop (${tenantId}): ophalen mislukt: ${error.code}`);
+        return res.status(error.status).json({ error: error.code, message: error.message });
       }
-      next(err);
+      next(error);
     }
   });
 }
