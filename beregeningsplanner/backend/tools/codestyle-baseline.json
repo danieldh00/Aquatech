@@ -2,7 +2,6 @@
   "toelichting": "Bestanden die nog niet aan de codestijlregels voldoen (zie CLAUDE.md, Codestijl). Deze lijst mag alleen korter worden: een opgeschoond bestand gaat eraf, een nieuw bestand komt er nooit op.",
   "files": [
     "backend/test/localrecog.test.js",
-    "backend/test/workorders.test.js",
     "frontend/beheer/aikosten.js",
     "frontend/beheer/beheer.js",
     "frontend/beheer/rollen.js",
