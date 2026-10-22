@@ -5,8 +5,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
 
 const Core = require(path.join(__dirname, '..', '..', 'frontend', 'facturen', 'invoice-core.js'));
 const SECRET = 's'.repeat(64);

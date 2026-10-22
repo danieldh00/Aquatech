@@ -25,6 +25,25 @@ Automatisch plaatsen stuurt op een groene neerslagkaart.
   functie) en staat niet meer in `tools/codestyle-baseline.json`; uitkomst
   van het plaatsen ongewijzigd.
 
+## 0.67.2
+
+Mappenstructuur van de backend per onderwerp (geen functionele wijziging).
+
+- `backend/src/` ingedeeld in `database/`, `beveiliging/`, `platform/`,
+  `beregening/`, `verkoop/`, `webshop/`, `uitvoering/`, `voorraad/` en
+  `paginas/` (login/setup/wachtwoord). In de root alleen de opdrachten
+  `server.js`, `backup.js` (blijft `node src/backup.js create` voor
+  `update.sh`), `migrate-to-postgres.js` en het nieuwe `paths.js`
+  (`FRONTEND_DIR`, `PAGES_DIR`).
+- Bestandsnamen in kebab-case: `plan-analyzer.js`, `rate-limit.js`,
+  `db-copy.js`, `session-secret.js` (was `options.js`), `wan-ip.js`,
+  `test-data.js`, `ai-usage.js`, `invoice-pdf.js`, `invoice-mail.js`,
+  `shop-sync.js`, `shop-orders.js`, `service-requests.js`.
+- Verwijzingen in CLAUDE.md, README (nieuwe structuuroverzicht) en
+  commentaar bijgewerkt; `queries.test.js` doorzoekt ook de submappen.
+- Codestijlcontrole: een korte functie in een object op één regel telt als
+  callback (geen commentaarblok nodig).
+
 ## 0.67.1
 
 Codestijlregels vastgelegd en bewaakt (geen functionele wijziging).

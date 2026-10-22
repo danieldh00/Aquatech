@@ -1,5 +1,5 @@
 // Beheer > Webshop: koppeling met de webshop van de organisatie instellen en
-// producten ophalen (API /api/admin/shop, zie backend/src/shop.js).
+// producten ophalen (API /api/admin/shop, zie backend/src/webshop/shop.js).
 (function () {
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

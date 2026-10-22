@@ -2,7 +2,7 @@
 // omzetcategorie, de factuurinstellingen (nummering, betaaltermijn,
 // omzetcategorieën met grootboekrekening) en het opbouwen van een factuur uit
 // een werkorder. Gedeeld door de module Facturen in de browser en de server
-// (backend/src/invoices.js). Geen afhankelijkheden.
+// (backend/src/verkoop/invoices.js). Geen afhankelijkheden.
 //
 // Omzetcategorie = omzetgroep (producten, arbeid, overig) x btw-tarief, bijv.
 // "Omzet producten hoog (21%)" op grootboekrekening 8000. Die gaan per regel

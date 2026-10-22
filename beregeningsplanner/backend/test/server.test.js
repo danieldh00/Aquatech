@@ -4,8 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { createApp, FRONTEND_DIR, versionAssets } = require('../src/server');
 const PKG = require('../package.json');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
 
 const SECRET = 'x'.repeat(64);
 

@@ -4,9 +4,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const express = require('express');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
-const { registerPortalRoutes, customerWorkOrder } = require('../src/portal');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
+const { registerPortalRoutes, customerWorkOrder } = require('../src/uitvoering/portal');
 const Roles = require('../../frontend/shared/roles.js');
 
 const SECRET = 'p'.repeat(64);

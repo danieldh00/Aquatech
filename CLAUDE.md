@@ -60,13 +60,13 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   Zonder versie-bump geen nieuw image en dus geen uitrol.
 - **Eerste start**: zolang er geen actieve beheerder met een eigen account is
   (`store.countAdmins`), krijgt elke niet-ingelogde bezoeker
-  `backend/src/setup.html` (POST `/api/setup`; met een toegangscode is die
+  `backend/src/paginas/setup.html` (POST `/api/setup`; met een toegangscode is die
   code nodig). De laatste actieve beheerder kan niet worden uitgeschakeld of
   gedegradeerd. Daarna is inloggen verplicht (`login.html`), tenzij de
   instelling `guestAccess` aan staat en er geen toegangscode is.
 - **Nooit secrets in de repo of in chat**: toegangscode en API-sleutel alleen
   in **Beheer → Instellingen** (tabel `settings` in de database,
-  `backend/src/settings.js`). Volgorde: database → env → standaard; env is
+  `backend/src/platform/settings.js`). Volgorde: database → env → standaard; env is
   alleen een startwaarde. Geheimen gaan nooit volledig naar de
   frontend (`view()` geeft `set` + laatste 4 tekens van de sleutel).
 - **Beveiliging opslag** (0.16.0, ASVS L2 + AVG; overzicht in DOCS.md >
@@ -87,7 +87,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   nieuwe inline scripts elders werken niet. Proces zakt van root naar uid 1000
   (`dropPrivileges`, `RUN_AS_ROOT=1` slaat over). Test-wachtwoorden moeten
   aan het beleid voldoen (bijv. `Tuin-Plan-2026!`).
-- **Plan herkennen** (`backend/src/planAnalyzer.js`): één Claude API-aanroep
+- **Plan herkennen** (`backend/src/beregening/plan-analyzer.js`): één Claude API-aanroep
   (vision, gestructureerde JSON-uitvoer, fallback "default") die schaal
   (referentiemaat in pixels + lengte in m), vlakken en elementen teruggeeft. De
   frontend (`js/concept.js`) rekent om naar meters en bouwt het concept. Kosten
@@ -119,7 +119,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   maatlijn, schaal 1:50). Zelfde uitvoerformaat als de AI; bij een AI-fout valt
   `makeConcept` terug op lokaal. Unittests in `backend/test/localrecog.test.js`
   laden de frontendcode in een vm-sandbox.
-- **Database** (`backend/src/db.js`, `node:sqlite`, geen npm-module) in
+- **Database** (`backend/src/database/db.js`, `node:sqlite`, geen npm-module) in
   `/data/aquatech.db` (of PostgreSQL, zie hieronder); migraties via `PRAGMA user_version` (alleen nieuwe
   toevoegen). Tenant-klaar: elke tabel heeft `tenant_id`, id's zijn UUID's.
   `store.js`: users (rol `beheerder`|`installateur`|`klant`, soort `account`|`gast`|
@@ -146,7 +146,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (`jsonField`, `jsonWithout`, `listTables`, `tableColumns`, `foreignKeys`,
   `deferForeignKeys`, `schemaVersion`). **Nieuwe migratie: in `MIGRATIONS`
   (db.js) én `PG_MIGRATIONS` (pgschema.js)**; `test/postgres.test.js`
-  vergelijkt de schema's. Overstap: `src/migrate-to-postgres.js` (dbcopy.js,
+  vergelijkt de schema's. Overstap: `src/migrate-to-postgres.js` (db-copy.js,
   aantallen + SHA-256 per tabel). Testsuite tegen PG: `TEST_DATABASE_URL`
   (elke `openDb()` een eigen schema `aqt_test_*`; CI-job `test-postgres`).
   Lokaal: `/usr/lib/postgresql/16/bin` staat in de sandbox (initdb als
@@ -177,11 +177,11 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `confirm_required`). Back-ups: `DELETE /api/admin/backups/:name`.
 - **Testdata beweegt mee met elke feature** (wens Daniël 2026-10-19): een
   nieuwe feature (tabel, status, koppeling) krijgt in dezelfde PR testdata in
-  `backend/src/testdata.js` (`buildTestData` voor de opbouw, `seedFeatures`
+  `backend/src/platform/test-data.js` (`buildTestData` voor de opbouw, `seedFeatures`
   voor alles wat via de echte stores moet: klantlinks, reacties, werkorders,
   webshop). `test/testdata.test.js` faalt als een tabel met `tenant_id` na
   het vullen leeg is (uitzonderingen met reden in `NO_TESTDATA`).
-- **Testdata** (0.23.0, `backend/src/testdata.js`): `POST
+- **Testdata** (0.23.0, `backend/src/platform/test-data.js`): `POST
   /api/platform/tenants/:id/testdata` (alleen test-tenants) wist de omgeving
   en maakt testaccounts per rol (`<slug>.klant1` enz., één gedeeld
   wachtwoord, alleen in het antwoord), tuinen (zones via de plannerlibs in
@@ -199,7 +199,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (CHECK op rol) met `foreignKeysOff: true` in `db.js`.
 - **Rollenbeheer** (0.49.0): rollen per organisatie in tabel `roles`
   (migratie 18, bij de live-tenant via `rootOf`; test volgt live), store
-  `backend/src/roles.js` (`store.roles`: `list`, `rightsFor`, `keysWith`,
+  `backend/src/platform/roles.js` (`store.roles`: `list`, `rightsFor`, `keysWith`,
   `keysOfKind`, `create/update/remove`, cache 30 s). Tabel bewaart alleen
   afwijkingen van de standaardrollen in roles.js plus eigen rollen;
   `users.role` is een vrije sleutel (geen CHECK meer). `identify()` zet
@@ -217,7 +217,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `/api/admin/plans/:id/history`. Hergebruikt `beheer/beheer.css`.
 - **Offertes** (`frontend/offertes/`, 0.21.0): rekenkern `quote-core.js`
   (UMD, ook door de server geladen: `sanitize`, `totals`, `fromPlan` met
-  BOM + arbeidsnormen `LABOR`), opslag/routes in `backend/src/quotes.js`
+  BOM + arbeidsnormen `LABOR`), opslag/routes in `backend/src/verkoop/quotes.js`
   (tabel `quotes`, migratie 5, nummer `<prefix><jaar>-0001` per tenant),
   bedrijfsprofiel = instelling `quoteProfile` (type `object`). PDF via
   afdrukversie (`#print`, print-CSS), geen PDF-bibliotheek. Document +
@@ -235,7 +235,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - **Werkorders** (`frontend/werkorders/`, 0.28.0, recht `werkorders`:
   beheerder + installateur): kern `workorder-core.js` (UMD, `fromQuote`,
   `zonesFromPlan`, `sanitize`, `progress`), opslag/routes
-  `backend/src/workorders.js` (tabel `work_orders`, migratie 10, nummer
+  `backend/src/uitvoering/workorders.js` (tabel `work_orders`, migratie 10, nummer
   `WO-<jaar>-0001`). Alleen uit een offerte met status `akkoord`; koppeling
   met offerte/plan komt altijd uit de offerte. Knop **Werkorder maken** in
   de offerte-editor.
@@ -250,7 +250,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `work_orders.appointment`; stand berekend in `appointmentOf` (reactie telt
   alleen voor hetzelfde `Core.momentKey`). `workorders.respond(row, …, { via:
   'account', userId })` is ook bruikbaar voor een klantportaal.
-- **Uren en materiaalverbruik** (0.57.0, `backend/src/worklog.js`, kern
+- **Uren en materiaalverbruik** (0.57.0, `backend/src/uitvoering/worklog.js`, kern
   `werkorders/worklog-core.js`, tabellen `work_order_hours`/`work_order_materials`,
   migratie 23): boeken per werkorder (eigen regels; recht `planning` = ook
   voor collega's en na Gereed), `client_id` maakt POST idempotent (offline
@@ -261,13 +261,13 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (`workorders.day`: elke werkdag via `Core.workDays`, `next`, fototelling
   via `ctx.photoCounts`). `werkorders/?id=…#fotos` springt naar de foto's.
 - **Klantportaal** (`frontend/portaal/`, 0.37.0, recht `portaal`: alleen
-  klant): `backend/src/portal.js`, `GET /api/portal` (plannen, offertes,
+  klant): `backend/src/uitvoering/portal.js`, `GET /api/portal` (plannen, offertes,
   werkorders, contact) en `/api/portal/workorders/:id` (opleverdossier via
   `customerWorkOrder`, zonder uren/instructies/notities). Werkorder zichtbaar
   als `quotes.customer_id` = klant en offerte ≠ concept. Optioneel:
   `ctx.photos.list(tid, woId, { customerOnly })` en `workorders.respond`
   (afspraak bevestigen, `POST .../appointment`).
-- **Foto's + klantdossier** (0.38.0): `backend/src/photos.js` (tabel
+- **Foto's + klantdossier** (0.38.0): `backend/src/uitvoering/photos.js` (tabel
   `work_order_photos`, migratie 14; afbeelding + miniatuur via
   `vault.sealBytes` met AAD `<tenant>:foto:<id>:beeld|mini`, als tekst in de
   db zodat ze in back-ups/Supabase meegaan; server controleert JPEG/PNG/WebP
@@ -286,7 +286,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   login/setup/wachtwoord, en openbare API's geven `theme` (vars) mee.
   **Nieuwe kleuren in CSS altijd via `--at-*`-variabelen**, nooit hardcoded.
 - **Wachtwoord** (0.31.0): eigen wijzigen via `POST /api/account/password`
-  (pagina `backend/src/password.html`, route `/wachtwoord`, inline script op
+  (pagina `backend/src/paginas/password.html`, route `/wachtwoord`, inline script op
   CSP-hash). `users.must_change_password` (migratie 12): zolang aan toont
   elke pagina het wachtwoordscherm en geeft de API 403
   `password_change_required` (behalve me/health/auth). Standaard aan bij
@@ -300,9 +300,9 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (`preferencesOf`): `startPage` (dashboard.js stuurt bij de eerste keer per
   tabblad door) en `mailCopy` (bcc via `copyTo` in quotes/workorders.js).
   Versienummer staat niet meer in de kopbalk, alleen voor beheerders op het profiel.
-- **Webshopkoppeling** (0.29.0, prototype WooCommerce): `backend/src/woocommerce.js`
+- **Webshopkoppeling** (0.29.0, prototype WooCommerce): `backend/src/webshop/woocommerce.js`
   (adapter Store API/REST v3, `sanitizeShop`, alleen openbare https tenzij
-  `SHOP_ALLOW_INSECURE=1` voor tests) en `backend/src/shop.js` (tabellen
+  `SHOP_ALLOW_INSECURE=1` voor tests) en `backend/src/webshop/shop.js` (tabellen
   `shop_products`/`shop_sync`, migratie 11; koppelen aan `Catalog.articles`:
   handmatig code→sku, meta `aquatech_code`, sku = code). Instellingen
   `shopSource` + geheimen `shopConsumerKey`/`shopConsumerSecret` per tenant.
@@ -310,7 +310,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   Frontend `beregening/js/shopcatalog.js` legt de prijzen over de catalogus
   (planner + offertes, vóór `fromPlan`); beheer in `beheer/webshop.js`.
 - **Uitbesteden** (0.48.0, module `frontend/uitbesteden/`, recht `uitbesteden`:
-  beheerder): `backend/src/outsourcing.js`, tabel `work_order_offers`
+  beheerder): `backend/src/uitvoering/outsourcing.js`, tabel `work_order_offers`
   (migratie 17; `tenant_id` = uitbesteder, `to_tenant_id` leeg = iedereen,
   na aannemen `receiver_tenant_id` + `received_work_order_id`, geen FK's naar
   de andere organisatie). Opt-in via instelling `outsourcing` {send, receive,
@@ -320,7 +320,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   uitbesteder ziet alleen `execution` (status, planning, stappen). Werkorder-API
   geeft `outsourcing` mee (`ctx.outsourcingOf`).
 - **Voorraadbeheer** (0.59.0, module `frontend/voorraad/`, recht `voorraad`:
-  beheerder + installateur): `backend/src/stock.js`, tabellen `stock_items`
+  beheerder + installateur): `backend/src/voorraad/stock.js`, tabellen `stock_items`
   (code uniek per tenant = catalogus-/stuklijstcode, `on_hand`),
   `stock_movements` (logboek met `balance`, `source` `gereed`|`handmatig`|
   `verbruik:<id>`) en `stock_reservations` (migratie 24). Reserveren =
@@ -332,12 +332,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (recht `werkorders`).
 - **Verkoop, webshop en facturen** (0.61.0, Brincr vervangen deel 1; migratie 26):
   `stock_items` heeft `sale_price`/`vat_rate`/`revenue_group` (Aquatech = bron).
-  `backend/src/shopsync.js`: tweerichting met WooCommerce REST v3
+  `backend/src/webshop/shop-sync.js`: tweerichting met WooCommerce REST v3
   (`shopSource.push`/`pushStock`): prijs + beschikbaar (stand − gereserveerd)
   terug via `/products/batch`, daling webshopvoorraad t.o.v. `shop_stock_seen`
   = verkoop (afboeking bron `webshop`), alleen-in-webshop gewijzigde prijs
   wordt overgenomen; `shop_dirty` + `stock.onDirty` → na 3 s, elke 10 min
-  `app.locals.shopSyncAll`. Facturen: `backend/src/invoices.js` + kern
+  `app.locals.shopSyncAll`. Facturen: `backend/src/verkoop/invoices.js` + kern
   `facturen/invoice-core.js` (UMD), tabel `invoices`, recht `facturen`
   (beheerder), instelling `invoicing` (voorvoegsel, betaaltermijn,
   omzetcategorieën groep × btw met grootboekrekening). Concept → definitief
@@ -347,10 +347,10 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   Visma eAccounting-API.
 - **Debiteuren, webshopbestellingen, PDF en mail** (0.63.0, migratie 27):
   `debtors.js` (tabel `debtors`, `ensure` bij definitief, `match_key`),
-  `shoporders.js` (WooCommerce-bestellingen met status uit
+  `shop-orders.js` (WooCommerce-bestellingen met status uit
   `invoicing.shopOrders` → factuur met `shop_order_id`, uniek; elke 10 min na
   shopsync), `pdf.js` (eigen PDF-schrijver, geen bibliotheek) +
-  `invoicepdf.js`, `invoicemail.js` (`send`/`autoSend`, PDF als bijlage,
+  `invoice-pdf.js`, `invoice-mail.js` (`send`/`autoSend`, PDF als bijlage,
   `invoicing.autoSend`). Routes `/api/invoices/:id/pdf|mail|send`,
   `/api/invoices/shop-orders/sync`, `/api/debtors[/:id]`.
 - **Eigen assortiment in de planner** (0.64.0): `/api/catalog` geeft
@@ -361,7 +361,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   rotatorkop via `autoRotatorModel`); `BOM.build` zet de rest in
   `rows.missing` (niet in stuklijst/offerte). Leeg = standaardcatalogus.
   Nieuwe artikelcodes in bom.js altijd via `add()` (en zo mogelijk `pick()`).
-- **Visma eAccounting** (0.65.0, `backend/src/visma.js`, migratie 28):
+- **Visma eAccounting** (0.65.0, `backend/src/verkoop/visma.js`, migratie 28):
   OAuth2 per omgeving (refresh token = geheim `vismaRefreshToken`, keuzes in
   `visma`; beide `internal`: alleen via `/api/visma/*`, recht `facturen`).
   App-registratie platformbreed in de hoofdtenant (`vismaApp` +
@@ -371,7 +371,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (standaard uit) via `invoices.onFinalized` + `app.locals.vismaAll`, vanaf
   `visma.since`. Tests: nagebootste Visma via `createApp({ vismaFetch })`.
   Veldnamen van de Visma-API nog niet tegen de echte sandbox getest.
-- **Tekening indienen + controle** (0.52.0, `backend/src/drawings.js`):
+- **Tekening indienen + controle** (0.52.0, `backend/src/beregening/drawings.js`):
   knop *Direct een tekening maken* op login.html → `beregening/?tekenen&org=`
   (`isPublicPlanner` in server.js: pagina alleen met `?tekenen`, code van
   beregening/ + enkele shared-bestanden openbaar; `ANON` in app.js: geen
@@ -386,9 +386,9 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - **E-mail** (0.50.0): formulier in Beheer → Instellingen (`#s-mail`), API
   `/api/admin/mail[/test]` (alias van `/api/quote-mail`, in quotes.js).
   `mailServer.mode` `smtp` | `connector` (Exchange Online op IP: geen auth,
-  `requireTLS`). WAN-IP via `backend/src/wanip.js` (ipify e.a., IPv4, 1 u
+  `requireTLS`). WAN-IP via `backend/src/platform/wan-ip.js` (ipify e.a., IPv4, 1 u
   cache, `WAN_IP` gaat voor), route `GET /api/admin/wan-ip`.
-- **Meldingen** (0.60.0, `backend/src/servicerequests.js`, tabellen
+- **Meldingen** (0.60.0, `backend/src/uitvoering/service-requests.js`, tabellen
   `service_requests` + `service_request_photos`, migratie 25): klant meldt in
   het portaal een storing/onderhoud met foto's (`/api/portal/requests…`,
   recht `portaal`, foto's via `vault.sealBytes` AAD
@@ -397,9 +397,9 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `workorders.createReceived` (werkorder zonder offerte); de klant ziet een
   werkorder als `quotes.customer_id` **of** `service_requests.customer_id` =
   klant (`OF_CUSTOMER` in workorders.js, `portal.ownRow`, `photos.customerOwns`).
-- **Vaste AI-uitkomst + leren** (0.56.0, `backend/src/recognitions.js`, tabel
+- **Vaste AI-uitkomst + leren** (0.56.0, `backend/src/beregening/recognitions.js`, tabel
   `plan_recognitions`, migratie 22): `/api/plan/analyze` bewaart per omgeving
-  onder SHA-256 van de afbeelding + model + `PROMPT_VERSION` (planAnalyzer.js)
+  onder SHA-256 van de afbeelding + model + `PROMPT_VERSION` (plan-analyzer.js)
   en geeft dezelfde tekening daarna uit de opslag (`recognition.cached`, geen
   kosten/daglimiet); `fresh: true` = opnieuw. Leren: de browser telt per
   kleur/textuur-vakje (`featureKey`, `FEATURE_VERSION`) welk type er lag
@@ -416,7 +416,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `body` + `model` (nozzle-sleutel, MP-sleutels als voorheen). Rekenen via
   `C.nozzleOf`/`headRange`/`fitHead`/`headPr`/`headMinBar`/`sprinklerFlowLph`.
   Eigen regels per omgeving in tabel `sprinkler_library` (migratie 29,
-  `backend/src/sprinklers.js`, alleen afwijkingen van de standaard), Excel via
+  `backend/src/beregening/sprinklers.js`, alleen afwijkingen van de standaard), Excel via
   Beheer → Sproeiers (`beheer/sproeiers.js`). Automatisch plaatsen: kostenweging
   `WEIGHTS` in planner.js (groen = 85–130% van het gemiddelde, droog/nat
   omliggend via `dry`/`wet`), type `auto` = `Planner.bestPlace` per gazon.
@@ -437,7 +437,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   kolommen niet nodig zijn; overzichten via `jsonDigest` (db.js); geen query
   per regel. `test/queries.test.js` bewaakt dat.
 - **Nieuws** (0.51.0, `frontend/nieuws/`, voor iedereen): berichten (tabel
-  `news`, migratie 19, `backend/src/news.js`, recht `nieuws` = plaatsen,
+  `news`, migratie 19, `backend/src/platform/news.js`, recht `nieuws` = plaatsen,
   doelgroep `medewerkers`|`iedereen`, optioneel mail naar collega's) en het
   versielogboek in gewone taal `frontend/nieuws/releases.js` (punten met
   `for: [rechten]`). **Bij elke versie-bump een regel bovenaan releases.js**
@@ -520,10 +520,18 @@ bewaakt de eerste twee regels voor elk eigen `.js`-bestand (backend `src/`,
   `@param {type} naam uitleg` en `@returns {type} uitleg` als er iets
   terugkomt. Geldt voor function-declaraties, `const naam = (…) => …`,
   methoden en functies in een toegewezen/teruggegeven object; losse
-  callbacks als argument (`.map((row) => …)`, `addEventListener`) niet.
+  callbacks als argument (`.map((row) => …)`, `addEventListener`) en korte
+  functies in een object op één regel niet.
   Een bestand begint met een kort kopcommentaar: wat erin staat.
 - **Mappenstructuur**: één map per module onder `frontend/`, gedeelde code in
-  `frontend/shared/`; backend per onderwerp in mappen onder `backend/src/`.
+  `frontend/shared/`. Backend per onderwerp onder `backend/src/`: `database/`,
+  `beveiliging/`, `platform/` (store, instellingen, rollen, mail, nieuws),
+  `beregening/`, `verkoop/`, `webshop/`, `uitvoering/`, `voorraad/`,
+  `paginas/` (HTML die de server vult); in de root van `src/` alleen de
+  opdrachten `server.js`, `backup.js`, `migrate-to-postgres.js` en `paths.js`
+  (`FRONTEND_DIR`, `PAGES_DIR`: nooit zelf `'..'` tellen naar de frontend).
+  Bestandsnamen in kebab-case (`invoice-pdf.js`). Een nieuw backendbestand
+  hoort in de map van zijn onderwerp; een nieuw onderwerp krijgt een eigen map.
   Geen losse bestanden (screenshots, exports) in de root van de repo; die
   horen in de projectbestanden.
 - `tools/codestyle-baseline.json` somt de bestanden op die nog niet zijn

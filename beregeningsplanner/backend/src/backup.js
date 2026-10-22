@@ -1,7 +1,7 @@
 // Versleutelde back-ups van de database.
 //
 // Een back-up is een consistente kopie als SQLite-bestand (VACUUM INTO, of
-// bij PostgreSQL een kopie van alle rijen via dbcopy.js; werkt terwijl de app
+// bij PostgreSQL een kopie van alle rijen via db-copy.js; werkt terwijl de app
 // draait), versleuteld met AES-256-GCM met een eigen, van de hoofdsleutel
 // afgeleide sleutel. Formaat: "AQBK" + versie (1 byte) + IV (12) +
 // versleutelde database + authenticatietag (16). Zonder de hoofdsleutel is een
@@ -17,8 +17,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { pipeline } = require('stream/promises');
-const { isPg, openSqlite } = require('./db');
-const { copyDatabase } = require('./dbcopy');
+const { isPg, openSqlite } = require('./database/db');
+const { copyDatabase } = require('./database/db-copy');
 
 const MAGIC = Buffer.from('AQBK');
 const VERSION = 1;
@@ -132,7 +132,7 @@ if (require.main === module) {
     console.error('Gebruik: node src/backup.js create [map]\n       node src/backup.js decrypt <back-up.db.enc> <doelbestand.db>');
     process.exit(2);
   }
-  const { createVault, loadOrCreateMasterKey } = require('./vault');
+  const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
   const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', '..', '..', 'data');
   // Nooit een nieuwe hoofdsleutel maken: dan is de back-up met de echte sleutel niet te lezen.
   if (!process.env.AQUATECH_MASTER_KEY_FILE && !process.env.AQUATECH_MASTER_KEY && !fs.existsSync(path.join(dataDir, 'master-key'))) {
@@ -141,7 +141,7 @@ if (require.main === module) {
   }
   const vault = createVault(loadOrCreateMasterKey(dataDir).key);
   if (cmd === 'create') {
-    const { openDatabase } = require('./db');
+    const { openDatabase } = require('./database/db');
     const dir = src || process.env.BACKUP_DIR || path.join(dataDir, 'backups');
     createBackup({ db: openDatabase(dataDir), dir, vault })
       .then((b) => { console.log(`Back-up gemaakt: ${path.join(dir, b.name)} (${b.size} bytes)`); process.exit(0); })

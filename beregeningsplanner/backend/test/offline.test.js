@@ -6,10 +6,10 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
-const { createIdempotency } = require('../src/idempotency');
-const { sitePhotoPng } = require('../src/testdata');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
+const { createIdempotency } = require('../src/beveiliging/idempotency');
+const { sitePhotoPng } = require('../src/platform/test-data');
 const Core = require('../../frontend/shared/offline-core.js');
 
 const FRONT = path.join(__dirname, '..', '..', 'frontend');

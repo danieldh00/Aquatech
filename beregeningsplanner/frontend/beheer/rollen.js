@@ -1,5 +1,5 @@
 // Beheer > Rollen: rechten per rol aan- en uitzetten, rollen hernoemen en
-// eigen rollen toevoegen (API /api/admin/roles, zie backend/src/roles.js).
+// eigen rollen toevoegen (API /api/admin/roles, zie backend/src/platform/roles.js).
 // Rollen gelden voor de hele organisatie, ook in de testomgevingen.
 (function () {
   const $ = (sel, root = document) => root.querySelector(sel);

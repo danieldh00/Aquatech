@@ -5,8 +5,8 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { createApp } = require('../src/server');
-const { openDb, MIGRATIONS, schemaVersion } = require('../src/db');
-const { COOKIE_NAME } = require('../src/auth');
+const { openDb, MIGRATIONS, schemaVersion } = require('../src/database/db');
+const { COOKIE_NAME } = require('../src/beveiliging/auth');
 
 const SECRET = 'y'.repeat(64);
 const GUESTS = { accessCode: '', env: { GUEST_ACCESS: 'true' } };

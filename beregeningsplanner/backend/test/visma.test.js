@@ -4,9 +4,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
-const { splitAddress, invoiceBody, sanitizeVismaApp, sanitizeVisma } = require('../src/visma');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
+const { splitAddress, invoiceBody, sanitizeVismaApp, sanitizeVisma } = require('../src/verkoop/visma');
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';

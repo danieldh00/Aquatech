@@ -4,9 +4,9 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
-const { sanitizeNews, unreadCount, Releases } = require('../src/news');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
+const { sanitizeNews, unreadCount, Releases } = require('../src/platform/news');
 
 const SECRET = 'n'.repeat(64);
 const PW = 'Tuin-Plan-2026!';

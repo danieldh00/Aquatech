@@ -7,12 +7,12 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { createApp } = require('../src/server');
-const { openDb, openSqlite } = require('../src/db');
+const { openDb, openSqlite } = require('../src/database/db');
 const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
 
-const { createStore, passwordProblem, hashPassword, verifyPassword, needsRehash } = require('../src/store');
-const { createSettings } = require('../src/settings');
-const { createVault, loadOrCreateMasterKey } = require('../src/vault');
+const { createStore, passwordProblem, hashPassword, verifyPassword, needsRehash } = require('../src/platform/store');
+const { createSettings } = require('../src/platform/settings');
+const { createVault, loadOrCreateMasterKey } = require('../src/beveiliging/vault');
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -329,7 +329,7 @@ test('plan definitief wissen haalt ook klantgegevens uit de historie', async () 
 });
 
 test('bezoekers-IP achter de tunnel: doorgegeven adres alleen van een proxy in het eigen netwerk', () => {
-  const { remoteIp } = require('../src/auth');
+  const { remoteIp } = require('../src/beveiliging/auth');
   const req = (sock, headers = {}) => ({ socket: { remoteAddress: sock }, headers });
   assert.strictEqual(remoteIp(req('::ffff:172.18.0.3', { 'cf-connecting-ip': '203.0.114.7' })), '203.0.114.7');
   assert.strictEqual(remoteIp(req('172.18.0.3', { 'x-forwarded-for': '1.1.1.1, 8.8.4.4' })), '8.8.4.4', 'laatste hop, niet te vervalsen');
@@ -366,7 +366,7 @@ test('wijzigingen via de API vanaf een andere (sub)site worden geweigerd', async
 });
 
 test('mailserver en webshop alleen op een openbaar adres (geen toegang tot het eigen netwerk)', async () => {
-  const { publicAddress, isPublicAddress } = require('../src/netguard');
+  const { publicAddress, isPublicAddress } = require('../src/beveiliging/netguard');
   for (const ip of ['10.1.2.3', '192.168.2.251', '172.18.0.2', '127.0.0.1', '169.254.169.254', '100.100.1.1', '::1', 'fd00::1', '::ffff:192.168.1.1']) {
     assert.strictEqual(isPublicAddress(ip), false, ip);
   }
@@ -375,7 +375,7 @@ test('mailserver en webshop alleen op een openbaar adres (geen toegang tot het e
   await assert.rejects(publicAddress('intern.example', { lookup: lookup(['93.184.215.14', '192.168.2.251']) }), { code: 'private_host' });
   assert.strictEqual(await publicAddress('smtp.example', { lookup: lookup(['93.184.215.14']) }), '93.184.215.14');
 
-  const { createMailer } = require('../src/mailer');
+  const { createMailer } = require('../src/platform/mailer');
   const settings = { get: (k) => (k === 'mailServer' ? { host: 'mail.intern', port: 25, from: 'a@b.nl' } : '') };
   let used = null;
   const mailer = createMailer(settings, { resolveHost: async () => { throw Object.assign(new Error('x'), { code: 'private_host' }); },
@@ -387,7 +387,7 @@ test('mailserver en webshop alleen op een openbaar adres (geen toegang tot het e
   assert.strictEqual(used.host, '93.184.215.14');
   assert.strictEqual(used.servername, 'mail.intern', 'certificaat op naam gecontroleerd');
 
-  const { fetchProducts } = require('../src/woocommerce');
+  const { fetchProducts } = require('../src/webshop/woocommerce');
   await assert.rejects(fetchProducts({ url: 'https://shop.example', mode: 'store' }, { allowInsecure: false, fetchImpl: async () => { throw new Error('niet ophalen'); },
     resolveHost: async () => { throw Object.assign(new Error('x'), { code: 'private_host' }); } }), { code: 'invalid_url' });
 });
