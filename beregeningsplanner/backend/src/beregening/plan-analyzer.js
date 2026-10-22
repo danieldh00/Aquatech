@@ -98,29 +98,48 @@ Je krijgt één afbeelding van een tuinplan. Coördinaten zijn pixels in die afb
 // AI een tekening opnieuw.
 const PROMPT_VERSION = require('crypto').createHash('sha256').update(SYSTEM + JSON.stringify(SCHEMA)).digest('hex').slice(0, 12);
 
+/**
+ * Controleert het antwoord van de AI en zet het om naar het formaat van de
+ * frontend: coördinaten binnen de afbeelding, alleen bekende soorten vlakken
+ * en elementen, teksten ingekort.
+ * @param {object} result Het JSON-antwoord volgens SCHEMA.
+ * @param {number} width Breedte van de afbeelding in pixels.
+ * @param {number} height Hoogte van de afbeelding in pixels.
+ * @returns {{ scale: object, areas: object[], elements: object[], notes: string }} Schaal (metersPerPixel of null), vlakken, elementen en toelichting.
+ */
 function validate(result, width, height) {
-  const clampX = (v) => Math.max(0, Math.min(width, Number(v) || 0));
-  const clampY = (v) => Math.max(0, Math.min(height, Number(v) || 0));
-  const s = result.scale || {};
-  const dist = Math.hypot((s.x2 || 0) - (s.x1 || 0), (s.y2 || 0) - (s.y1 || 0));
-  const metersPerPixel = dist > 2 && s.length_m > 0 ? s.length_m / dist : null;
+  /**
+   * Houdt een x-coördinaat binnen de afbeelding.
+   * @param {*} value De coördinaat.
+   * @returns {number} Waarde tussen 0 en de breedte.
+   */
+  const clampX = (value) => Math.max(0, Math.min(width, Number(value) || 0));
+  /**
+   * Houdt een y-coördinaat binnen de afbeelding.
+   * @param {*} value De coördinaat.
+   * @returns {number} Waarde tussen 0 en de hoogte.
+   */
+  const clampY = (value) => Math.max(0, Math.min(height, Number(value) || 0));
+  const scale = result.scale || {};
+  const referencePixels = Math.hypot((scale.x2 || 0) - (scale.x1 || 0), (scale.y2 || 0) - (scale.y1 || 0));
+  const metersPerPixel = referencePixels > 2 && scale.length_m > 0 ? scale.length_m / referencePixels : null;
   const areas = (result.areas || [])
-    .filter((a) => AREA_TYPES.includes(a.type) && Array.isArray(a.points) && a.points.length >= 3)
-    .map((a) => ({
-      type: a.type,
-      name: String(a.name || '').slice(0, 60),
-      points: a.points.map((p) => ({ x: clampX(p.x), y: clampY(p.y) })),
+    .filter((area) => AREA_TYPES.includes(area.type) && Array.isArray(area.points) && area.points.length >= 3)
+    .map((area) => ({
+      type: area.type,
+      name: String(area.name || '').slice(0, 60),
+      points: area.points.map((point) => ({ x: clampX(point.x), y: clampY(point.y) })),
     }));
   const elements = (result.elements || [])
-    .filter((e) => ELEMENT_KINDS.includes(e.kind))
-    .map((e) => ({ kind: e.kind, x: clampX(e.x), y: clampY(e.y), reason: String(e.reason || '').slice(0, 200) }));
+    .filter((element) => ELEMENT_KINDS.includes(element.kind))
+    .map((element) => ({ kind: element.kind, x: clampX(element.x), y: clampY(element.y), reason: String(element.reason || '').slice(0, 200) }));
   return {
     scale: {
       metersPerPixel,
-      method: s.method,
-      evidence: String(s.evidence || '').slice(0, 300),
-      confidence: s.confidence,
-      reference: { x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2, lengthM: s.length_m },
+      method: scale.method,
+      evidence: String(scale.evidence || '').slice(0, 300),
+      confidence: scale.confidence,
+      reference: { x1: scale.x1, y1: scale.y1, x2: scale.x2, y2: scale.y2, lengthM: scale.length_m },
     },
     areas,
     elements,
@@ -128,19 +147,40 @@ function validate(result, width, height) {
   };
 }
 
-/** Leesbare foutmelding uit een API-fout (zonder sleutel of afbeeldingsdata). */
-function apiMessage(err) {
-  const m = err && err.error && err.error.error && err.error.error.message;
-  return String(m || err.message || 'onbekende fout').slice(0, 400);
+/**
+ * Leesbare foutmelding uit een API-fout (zonder sleutel of afbeeldingsdata).
+ * @param {Error} error De fout van de AI-dienst.
+ * @returns {string} De melding, hooguit 400 tekens.
+ */
+function apiMessage(error) {
+  const message = error && error.error && error.error.error && error.error.error.message;
+  return String(message || error.message || 'onbekende fout').slice(0, 400);
 }
 
-const isNoCredit = (err) => err instanceof Anthropic.APIError && /credit balance/i.test(apiMessage(err));
+/**
+ * Of de fout betekent dat het API-tegoed op is.
+ * @param {Error} error De fout van de AI-dienst.
+ * @returns {boolean} True als het tegoed op is.
+ */
+const isNoCredit = (error) => error instanceof Anthropic.APIError && /credit balance/i.test(apiMessage(error));
 
-function describe(err) {
-  return `${err.status ?? '-'} ${err.error?.error?.type || err.name}: ${apiMessage(err)}${err.requestID ? ` (request ${err.requestID})` : ''}`;
+/**
+ * Korte beschrijving van een API-fout voor het serverlog.
+ * @param {Error} error De fout van de AI-dienst.
+ * @returns {string} Status, soort, melding en request-id.
+ */
+function describe(error) {
+  return `${error.status ?? '-'} ${error.error?.error?.type || error.name}: ${apiMessage(error)}${error.requestID ? ` (request ${error.requestID})` : ''}`;
 }
 
 class AnalyzeError extends Error {
+  /**
+   * Fout bij het herkennen, met een code voor de frontend en de HTTP-status.
+   * @param {string} code Foutcode, bijv. 'auth' of 'no_credit'.
+   * @param {string} message Melding voor de gebruiker.
+   * @param {number} [status] HTTP-status (standaard 502).
+   * @param {{ model?: string, usage?: object }} [extra] Model en verbruik als het antwoord toch tokens kostte.
+   */
   constructor(code, message, status = 502, extra = {}) {
     super(message);
     this.code = code;
@@ -152,25 +192,40 @@ class AnalyzeError extends Error {
   }
 }
 
+/**
+ * Maakt de herkenner voor tuinplannen met de AI-dienst.
+ * @param {object} options apiKey, client (voor tests), model en log (functie voor waarschuwingen).
+ * @returns {{ available: boolean, model: string, analyze: Function, check: Function }} De herkenner.
+ */
 function createPlanAnalyzer({ apiKey, client, model = MODEL, log = (msg) => console.warn(msg) }) {
   const anthropic = client || (apiKey ? new Anthropic({ apiKey }) : null);
   const modelId = AiModels.SELECTABLE.includes(model) ? model : MODEL;
   // Server-side fallback alleen bij modellen die het ondersteunen.
   const withFallback = Boolean(AiModels.MODELS[modelId].fallback);
 
-  // Vertaalt een fout van de AI-dienst naar een begrijpelijke melding.
-  function toAnalyzeError(err) {
-    if (err instanceof Anthropic.APIError) log(`AI-dienst gaf een fout: ${describe(err)}`);
-    if (err instanceof Anthropic.AuthenticationError) return new AnalyzeError('auth', 'De API-sleutel wordt geweigerd. Controleer de API-sleutel bij Instellingen.');
-    if (err instanceof Anthropic.PermissionDeniedError) return new AnalyzeError('permission', `Deze API-sleutel heeft geen toegang: ${apiMessage(err)}`);
-    if (err instanceof Anthropic.NotFoundError) return new AnalyzeError('not_found', `Model niet beschikbaar voor deze API-sleutel: ${apiMessage(err)}`);
-    if (err instanceof Anthropic.RateLimitError) return new AnalyzeError('rate_limited', 'De AI-dienst is even overbelast of het tegoed is op. Probeer het later opnieuw.', 429);
-    if (isNoCredit(err)) return new AnalyzeError('no_credit', 'Het API-tegoed bij Anthropic is op. Koop tegoed via console.anthropic.com → Plans & Billing; daarna werkt automatisch herkennen meteen weer.', 402);
-    if (err instanceof Anthropic.BadRequestError) return new AnalyzeError('bad_request', `De AI-dienst weigert het verzoek: ${apiMessage(err)}`);
-    if (err instanceof Anthropic.APIError) return new AnalyzeError('api_error', `Fout bij de AI-dienst (${err.status ?? 'verbinding'}): ${apiMessage(err)}`);
-    return err;
+  /**
+   * Vertaalt een fout van de AI-dienst naar een begrijpelijke melding.
+   * @param {Error} error De fout.
+   * @returns {Error} Een AnalyzeError, of de oorspronkelijke fout als die niet van de AI-dienst komt.
+   */
+  function toAnalyzeError(error) {
+    if (error instanceof Anthropic.APIError) log(`AI-dienst gaf een fout: ${describe(error)}`);
+    if (error instanceof Anthropic.AuthenticationError) return new AnalyzeError('auth', 'De API-sleutel wordt geweigerd. Controleer de API-sleutel bij Instellingen.');
+    if (error instanceof Anthropic.PermissionDeniedError) return new AnalyzeError('permission', `Deze API-sleutel heeft geen toegang: ${apiMessage(error)}`);
+    if (error instanceof Anthropic.NotFoundError) return new AnalyzeError('not_found', `Model niet beschikbaar voor deze API-sleutel: ${apiMessage(error)}`);
+    if (error instanceof Anthropic.RateLimitError) return new AnalyzeError('rate_limited', 'De AI-dienst is even overbelast of het tegoed is op. Probeer het later opnieuw.', 429);
+    if (isNoCredit(error)) return new AnalyzeError('no_credit', 'Het API-tegoed bij Anthropic is op. Koop tegoed via console.anthropic.com → Plans & Billing; daarna werkt automatisch herkennen meteen weer.', 402);
+    if (error instanceof Anthropic.BadRequestError) return new AnalyzeError('bad_request', `De AI-dienst weigert het verzoek: ${apiMessage(error)}`);
+    if (error instanceof Anthropic.APIError) return new AnalyzeError('api_error', `Fout bij de AI-dienst (${error.status ?? 'verbinding'}): ${apiMessage(error)}`);
+    return error;
   }
 
+  /**
+   * Leest een tuinplan: één aanroep met de afbeelding, met server-side fallback
+   * als het model dat ondersteunt.
+   * @param {{ mediaType: string, data: string, width: number, height: number }} image De afbeelding (base64) en de afmetingen in pixels.
+   * @returns {Promise<object>} Schaal, vlakken, elementen en toelichting, plus model en verbruik.
+   */
   async function analyze({ mediaType, data, width, height }) {
     if (!anthropic) throw new AnalyzeError('not_configured', 'Automatisch herkennen is niet ingesteld: stel de API-sleutel in bij Instellingen.', 409);
     const params = {
@@ -199,24 +254,32 @@ function createPlanAnalyzer({ apiKey, client, model = MODEL, log = (msg) => cons
           message = await anthropic.beta.messages
             .stream({ ...params, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' })
             .finalMessage();
-        } catch (err) {
-          if (!(err instanceof Anthropic.BadRequestError) || isNoCredit(err)) throw err;
+        } catch (error) {
+          if (!(error instanceof Anthropic.BadRequestError) || isNoCredit(error)) throw error;
           // Sommige accounts/regio's ondersteunen de fallback-beta niet: één keer zonder.
-          log(`Verzoek met fallback geweigerd (${describe(err)}); opnieuw zonder fallback.`);
+          log(`Verzoek met fallback geweigerd (${describe(error)}); opnieuw zonder fallback.`);
           message = await anthropic.messages.stream(params).finalMessage();
         }
       }
-    } catch (err) {
-      throw toAnalyzeError(err);
+    } catch (error) {
+      throw toAnalyzeError(error);
     }
     return finish(message, width, height);
   }
 
+  /**
+   * Verwerkt het antwoord van de AI-dienst; een weigering, een te lang of een
+   * onleesbaar antwoord wordt een AnalyzeError (met het verbruik, voor het kostenoverzicht).
+   * @param {object} message Het antwoord van de AI-dienst.
+   * @param {number} width Breedte van de afbeelding in pixels.
+   * @param {number} height Hoogte van de afbeelding in pixels.
+   * @returns {object} De gecontroleerde herkenning met model en verbruik.
+   */
   function finish(message, width, height) {
     const spent = { model: message.model, usage: message.usage };
     if (message.stop_reason === 'refusal') throw new AnalyzeError('refusal', 'De AI-dienst wilde deze afbeelding niet verwerken.', 502, spent);
     if (message.stop_reason === 'max_tokens') throw new AnalyzeError('too_long', 'Het plan is te complex om in één keer te verwerken. Probeer een uitsnede.', 502, spent);
-    const text = message.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    const text = message.content.filter((block) => block.type === 'text').map((block) => block.text).join('');
     let parsed;
     try {
       parsed = JSON.parse(text);
@@ -226,13 +289,16 @@ function createPlanAnalyzer({ apiKey, client, model = MODEL, log = (msg) => cons
     return { ...validate(parsed, width, height), model: message.model, usage: message.usage };
   }
 
-  // Controleert sleutel en modeltoegang zonder kosten (opvragen van het model).
+  /**
+   * Controleert sleutel en modeltoegang zonder kosten (opvragen van het model).
+   * @returns {Promise<{ ok: boolean, model: string }>} Het gebruikte model.
+   */
   async function check() {
     if (!anthropic) throw new AnalyzeError('not_configured', 'Er is geen API-sleutel ingesteld.', 409);
     try {
       await anthropic.models.retrieve(modelId);
-    } catch (err) {
-      throw toAnalyzeError(err);
+    } catch (error) {
+      throw toAnalyzeError(error);
     }
     return { ok: true, model: modelId };
   }

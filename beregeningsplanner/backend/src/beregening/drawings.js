@@ -20,23 +20,33 @@ const MAX_PLAN_CHARS = 7 * 1024 * 1024;
 const PER_IP_HOUR = 10;
 const PER_TENANT_DAY = 30;
 
-const text = (v, max) => String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, max);
+/**
+ * Maakt van een invoerwaarde nette tekst: zonder stuurtekens, getrimd en ingekort.
+ * @param {*} value De invoer.
+ * @param {number} maxLength Maximaal aantal tekens.
+ * @returns {string} De opgeschoonde tekst.
+ */
+const text = (value, maxLength) => String(value == null ? '' : value).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, maxLength);
 
-/** Controleert en schoont de invoer van het indienformulier op. */
+/**
+ * Controleert en schoont de invoer van het indienformulier op.
+ * @param {object} body De body van het verzoek (naam, e-mail, telefoon, adres, vraag, toestemming en het plan).
+ * @returns {{ value: object }|{ error: string }} De opgeschoonde aanvraag, of een foutmelding voor de indiener.
+ */
 function sanitizeSubmission(body) {
-  const b = body && typeof body === 'object' ? body : {};
+  const fields = body && typeof body === 'object' ? body : {};
   const out = {
-    name: text(b.name, LIMITS.name),
-    email: text(b.email, LIMITS.email).toLowerCase(),
-    phone: text(b.phone, LIMITS.phone),
-    address: text(b.address, LIMITS.address),
-    question: text(b.question, LIMITS.question),
+    name: text(fields.name, LIMITS.name),
+    email: text(fields.email, LIMITS.email).toLowerCase(),
+    phone: text(fields.phone, LIMITS.phone),
+    address: text(fields.address, LIMITS.address),
+    question: text(fields.question, LIMITS.question),
   };
   if (out.name.length < 2) return { error: 'Vul je naam in.' };
   if (!validEmail(out.email)) return { error: 'Vul een geldig e-mailadres in.' };
   if (out.phone && !/^[+0-9 ()./-]{6,30}$/.test(out.phone)) return { error: 'Ongeldig telefoonnummer.' };
-  if (b.consent !== true) return { error: 'Geef toestemming om je gegevens te gebruiken voor deze aanvraag.' };
-  const data = b.data;
+  if (fields.consent !== true) return { error: 'Geef toestemming om je gegevens te gebruiken voor deze aanvraag.' };
+  const data = fields.data;
   if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.areas)) return { error: 'Ongeldige tekening.' };
   if (!data.areas.length) return { error: 'Teken eerst minstens één vlak van je tuin.' };
   // Interne velden van de planner gaan niet mee.
@@ -45,9 +55,9 @@ function sanitizeSubmission(body) {
 }
 
 /**
- * ctx: { store, identify, requireUser, requireRight, requireJson, audit,
- * settingsFor(tenantId), tenantActive(id), mailerFor(settings), remoteIp,
- * publicLimiter, planLimiter }.
+ * Registreert de routes voor tekeningen indienen en plannen controleren.
+ * @param {object} app De Express-app.
+ * @param {object} ctx store, identify, requireUser, requireRight, requireJson, audit, settingsFor(tenantId), tenantActive(id), mailerFor(settings), remoteIp, publicLimiter en planLimiter.
  */
 function registerDrawingRoutes(app, ctx) {
   const { store, identify, requireUser, requireRight, requireJson, audit, settingsFor, remoteIp, publicLimiter } = ctx;
@@ -56,18 +66,27 @@ function registerDrawingRoutes(app, ctx) {
   const planLimiter = ctx.planLimiter || ((req, res, next) => next());
   const ipLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: PER_IP_HOUR, keyFn: remoteIp });
   const tenantLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: PER_TENANT_DAY, keyFn: (req) => req.drawingTenant });
+  /**
+   * Stuurt het antwoord 404 "plan niet gevonden".
+   * @param {object} res Het Express-antwoord.
+   * @returns {object} Het antwoord.
+   */
   const notFound = (res) => res.status(404).json({ error: 'not_found', message: 'Plan niet gevonden.' });
 
-  // Organisatie bij een organisatiecode (leeg = hoofdtenant). Ook een
-  // testomgeving kan tekeningen ontvangen (om te proberen); een uitgeschakelde
-  // organisatie of een met de instelling uit niet.
+  /**
+   * De organisatie bij een organisatiecode (leeg = hoofdtenant). Ook een
+   * testomgeving kan tekeningen ontvangen (om te proberen); een uitgeschakelde
+   * organisatie of een met de instelling uit niet.
+   * @param {string} code De organisatiecode.
+   * @returns {{ tenant: object, settings: object }|null} Tenant en instellingen, of null.
+   */
   function drawingTenant(code) {
     const slug = String(code ?? '').trim().toLowerCase().slice(0, 64);
-    const t = store.getTenantBySlug(slug || 'default');
-    if (!t || !tenantActive(t.id)) return null;
-    const settings = settingsFor(t.id);
+    const tenant = store.getTenantBySlug(slug || 'default');
+    if (!tenant || !tenantActive(tenant.id)) return null;
+    const settings = settingsFor(tenant.id);
     if (!settings.get('drawingRequests')) return null;
-    return { tenant: t, settings };
+    return { tenant: tenant, settings };
   }
 
   app.get('/api/public/drawing', publicLimiter, (req, res) => {
@@ -103,15 +122,20 @@ function registerDrawingRoutes(app, ctx) {
     res.status(201).json({ ok: true, reference: plan.reference });
   });
 
-  // Bericht naar het bedrijf (e-mail uit het bedrijfsprofiel), als er een
-  // mailserver is. Nooit een mail naar het opgegeven adres van de indiener:
-  // dan kon iedereen via dit formulier mail naar willekeurige adressen sturen.
+  /**
+   * Stuurt een bericht naar het bedrijf (e-mail uit het bedrijfsprofiel), als
+   * er een mailserver is. Nooit een mail naar het opgegeven adres van de
+   * indiener: dan kon iedereen via dit formulier mail naar willekeurige adressen sturen.
+   * @param {string} tenantId Id van de tenant.
+   * @param {string[]} lines De regels van het bericht (lege regels vallen weg).
+   * @param {string} subject Het onderwerp.
+   */
   function notify(tenantId, lines, subject) {
     const settings = settingsFor(tenantId);
     const mailer = mailerFor(settings);
-    const p = settings.get('quoteProfile');
-    if (!mailer.configured() || !validEmail(p.email)) return;
-    mailer.send({ to: p.email, subject, ...mailBody(p, lines, null) })
+    const profile = settings.get('quoteProfile');
+    if (!mailer.configured() || !validEmail(profile.email)) return;
+    mailer.send({ to: profile.email, subject, ...mailBody(profile, lines, null) })
       .catch((err) => console.warn(`Bericht over een tekening ter controle niet verstuurd: ${err.message}`));
   }
 
