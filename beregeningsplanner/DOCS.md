@@ -56,8 +56,13 @@ andere methode. Iedere methode krijgt eigen zones, omdat de neerslag verschilt.
    plantvakjes) krijgen geen eigen hoekkop meer; de randkoppen komen op de
    buitenste lijn, zodat er geen gazon achter een kop valt. Overbodige koppen
    (kluitjes langs de rand) worden weggehaald zolang de verdeling daar niet
-   slechter van wordt. Water buiten het gazon telt over de **volle worp** mee,
-   en **gele plekken** (minder dan 70% van het gemiddelde) wegen zwaar.
+   slechter van wordt. Water buiten het gazon telt over de **volle worp** mee.
+5. Het doel is een **groene neerslagkaart**: elke plek buiten 85–130% van het
+   gemiddelde telt mee (te weinig zwaarder dan te veel). Koppen worden daarvoor
+   ook verschoven (langs de rand of een stukje binnenin), en naast het raster
+   wordt een indeling vanaf de rand geprobeerd (hoeken, gelijke afstanden langs
+   de rand, raster binnenin). Water op een vlak **Moet droog blijven** (huis,
+   terras) telt 6× zo zwaar, op **Mag nat worden** ¼×.
 
 **Automatisch: beste type per gazon** (standaard bij een nieuw plan) plaatst
 per gazon rotators, sproeiers én turbines en kiest de indeling met de laagste

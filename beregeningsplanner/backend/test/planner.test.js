@@ -170,7 +170,7 @@ const minGap = (heads) => {
 
 test('plaatsing: geen kluitjes koppen langs een getrapte rand, weinig gele plekken', () => {
   // voorheen 20 rotators / 18 turbines met koppen op 1 m van elkaar op elk trapje
-  for (const [type, max] of [['rotator', 14], ['spray', 24], ['rotor', 11]]) {
+  for (const [type, max] of [['rotator', 14], ['spray', 30], ['rotor', 13]]) {
     const heads = P.autoPlace(TERRAS, type);
     assert.ok(heads.length <= max, `${type}: ${heads.length} koppen (max ${max})`);
     assert.ok(minGap(heads) > 2.5, `${type}: koppen op ${minGap(heads).toFixed(2)} m van elkaar`);
@@ -180,6 +180,38 @@ test('plaatsing: geen kluitjes koppen langs een getrapte rand, weinig gele plekk
     const ev = P.evaluate(TERRAS, heads);
     assert.ok(ev.lowPct < 6, `${type}: geel ${ev.lowPct}%`);
   }
+});
+
+// deel van het gazon dat groen kleurt op de neerslagkaart (85–130% van het gemiddelde)
+const greenPct = (pts, heads) => {
+  const sim = S.simulate({ areas: [{ type: 'lawn', pts }], sprinklers: heads }, 0.25);
+  let n = 0, g = 0;
+  for (let k = 0; k < sim.values.length; k++) {
+    if (sim.mask[k] !== 1) continue;
+    n++;
+    const r = sim.values[k] / sim.stats.mean;
+    if (r >= 0.85 && r <= 1.3) g++;
+  }
+  return (100 * g) / n;
+};
+
+test('plaatsing: neerslagkaart nagenoeg helemaal groen', () => {
+  // 0.67.0: 78–80% groen op onregelmatige gazons
+  for (const [pts, min] of [[TERRAS, 92], [rect(0, 0, 12, 8), 97], [L, 97], [rect(0, 0, 25, 18), 96]]) {
+    const res = P.bestPlace(pts, { pressure: 3.5 });
+    const g = greenPct(pts, res.heads);
+    assert.ok(g >= min, `${res.type}: ${g.toFixed(1)}% groen (min ${min}%)`);
+  }
+});
+
+test('plaatsing: water op een vlak dat droog moet blijven telt zwaarder', () => {
+  const pts = rect(0, 0, 10, 4);
+  const head = [{ id: 'a', type: 'rotator', x: 5, y: 4, r: 6, start: 180, arc: 180 }];
+  const plain = P.evaluate(pts, head);
+  const terrace = P.autoPlace(pts, 'rotator', { dry: [rect(-5, -8, 15, 0)] });
+  const sim = S.simulate({ areas: [{ type: 'lawn', pts }, { type: 'dry', pts: rect(-5, -8, 15, 0) }], sprinklers: terrace }, 0.2);
+  assert.ok(plain.outsideM2 > 0);
+  assert.ok(sim.overspray < 4, `${sim.overspray} m² op het terras`);
 });
 
 test('plaatsing: water buiten het gazon telt over de volle worp mee', () => {

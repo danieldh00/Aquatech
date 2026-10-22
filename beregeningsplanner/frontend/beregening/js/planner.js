@@ -25,7 +25,13 @@
    * graafwerk): liever minder koppen met volle worp dan veel kleine. Gelijkmatigheid telt
    * pas onder de streefwaarde mee; droge plekken en water buiten het vlak blijven zwaar.
    */
-  const W = { head: 2.5, outside: 80, du: 60, duTarget: 0.85, dry: 3, low: 2.5, lowRatio: 0.7 };
+  const W = {
+    head: 2.5, outside: 80, du: 60, duTarget: 0.85, dry: 6, low: 2.5, lowRatio: 0.7,
+    // niet groen op de neerslagkaart (85–130% van het gemiddelde): te weinig per %, te veel per %
+    off: 2, offHigh: 1.5, green: [0.85, 1.3],
+    // water op een vlak dat droog moet blijven (huis, terras) telt 6×, op een vlak dat nat mag ¼×
+    dryOut: 6, wetOut: 0.25,
+  };
 
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const round1 = (v) => Math.round(v * 10) / 10;
@@ -242,6 +248,68 @@
     return heads;
   }
 
+  /**
+   * Indeling vanaf de rand, zoals een hovenier het doet: koppen op de hoeken, daartussen langs
+   * de rand op gelijke afstanden (ook langs schuine en bolle randen, los van het raster) en
+   * binnenin een raster op minstens ruim een halve afstand van de rand.
+   */
+  function layoutPerimeter(shape, type, s, angle, pattern, body = null) {
+    const t = C.sprinklerTypes[type];
+    s = clamp(s, t.rMin, t.rMax);
+    const n = shape.length;
+    const cs = cornersOf(shape);
+    const heads = [];
+    for (const c of cs) {
+      if (!c.corner) continue;
+      const longEdge = Math.max(G.dist(c.p, shape[(c.i + 1) % n]), G.dist(c.p, shape[(c.i - 1 + n) % n]));
+      const r = c.interior < 180 ? clamp(longEdge, Math.max(t.rMin, 0.75 * s), s) : s;
+      heads.push(makeRadial(type, c.p, r, c.start, c.interior, body));
+    }
+    // ketens van rand tussen twee hoeken (zonder hoeken: de hele omtrek)
+    let starts = cs.filter((c) => c.corner).map((c) => c.i);
+    if (!starts.length) starts = [0];
+    for (let k = 0; k < starts.length; k++) {
+      const from = starts[k], to = starts[(k + 1) % starts.length];
+      const chain = [];
+      let i = from;
+      do { chain.push(shape[i]); i = (i + 1) % n; } while (i !== to);
+      chain.push(shape[to]);
+      const seg = [];
+      let L = 0;
+      for (let q = 1; q < chain.length; q++) { const d = G.dist(chain[q - 1], chain[q]); seg.push(d); L += d; }
+      const m = Math.ceil(L / s - 1e-6);
+      for (let q = 1; q < m; q++) {
+        let at = (L * q) / m, e = 0;
+        while (e < seg.length - 1 && at > seg[e]) { at -= seg[e]; e++; }
+        const A = chain[e], B = chain[e + 1];
+        const p = G.add(A, G.mul(G.sub(B, A), seg[e] ? at / seg[e] : 0));
+        heads.push(makeRadial(type, p, s, G.angleOf(G.sub(B, A)), 180, body));
+      }
+    }
+    // binnenin: raster in de hoofdrichting
+    const a = G.rad(angle);
+    const u = { x: Math.cos(a), y: Math.sin(a) }, v = { x: -u.y, y: u.x };
+    const pu = shape.map((p) => G.dot(p, u)), pv = shape.map((p) => G.dot(p, v));
+    const u0 = Math.min(...pu), u1 = Math.max(...pu), v0 = Math.min(...pv), v1 = Math.max(...pv);
+    const tri = pattern === 'triangle';
+    const nu = Math.max(1, Math.round((u1 - u0) / s)), su = (u1 - u0) / nu;
+    const rowStep = tri ? s * Math.sqrt(3) / 2 : s;
+    const nv = Math.max(1, Math.round((v1 - v0) / rowStep)), sv = (v1 - v0) / nv;
+    for (let j = 1; j < nv; j++) {
+      const shift = tri && j % 2 ? su / 2 : 0;
+      for (let i = shift ? 0 : 1; i < nu; i++) {
+        const p = G.add(G.mul(u, u0 + i * su + shift), G.mul(v, v0 + j * sv));
+        if (!G.pointInPolygon(p, shape)) continue;
+        const d = G.closestOnPolygon(p, shape).d;
+        if (d < 0.6 * s || heads.some((h) => G.dist(h, p) < 0.6 * s)) continue;
+        heads.push(makeRadial(type, p, s, 0, 360, body));
+      }
+    }
+    heads.key = `rand-${round1(s)}-${pattern}-${Math.round(angle)}`;
+    heads.spacing = s;
+    return heads;
+  }
+
   // ------------------------------------------------------------ beoordelen
 
   /** Neerslagfunctie per kop, vooraf uitgerekend (zelfde profiel als Simulation.precipAt). */
@@ -273,7 +341,13 @@
   }
 
   /** Meetpunten binnen het vlak en in een band eromheen (vast per vlak, zodat varianten snel te vergelijken zijn). */
-  function evaluator(pts, reach) {
+  /**
+   * @param surroundings {dry: [polygonen], wet: [polygonen]}: water op wat droog moet blijven
+   *   (huis, terras) telt zwaarder, op wat nat mag worden lichter
+   */
+  function evaluator(pts, reach, surroundings = null) {
+    const dryPolys = ((surroundings && surroundings.dry) || []).filter((p) => p && p.length >= 3);
+    const wetPolys = ((surroundings && surroundings.wet) || []).filter((p) => p && p.length >= 3);
     const area = G.area(pts);
     const cell = clamp(Math.sqrt(area) / 30, 0.2, 0.6);
     const bb = G.bbox(pts);
@@ -282,16 +356,23 @@
     const nx = Math.ceil((bb.w + 2 * reach) / cell) + 1, ny = Math.ceil((bb.h + 2 * reach) / cell) + 1;
     // per rastercel: index in inside (>= 0), in outside (-2 - index) of -1 (niet meetellen)
     const cellIdx = new Int32Array(nx * ny).fill(-1);
-    const inside = [], outside = [];
+    const inside = [], outside = [], outWeight = [];
     for (let j = 0; j < ny; j++) {
       for (let i = 0; i < nx; i++) {
         const p = { x: x0 + i * cell, y: y0 + j * cell };
         if (G.pointInPolygon(p, pts)) { cellIdx[j * nx + i] = inside.length; inside.push(p); }
         // buiten het vlak: alles in de band telt (verder dan de worp komt geen kop)
-        else { cellIdx[j * nx + i] = -2 - outside.length; outside.push(p); }
+        else {
+          cellIdx[j * nx + i] = -2 - outside.length;
+          outside.push(p);
+          outWeight.push(dryPolys.some((d) => G.pointInPolygon(p, d)) ? W.dryOut : wetPolys.some((d) => G.pointInPolygon(p, d)) ? W.wetOut : 1);
+        }
       }
     }
-    return { pts, area, cell, inside, outside, x0, y0, nx, ny, cellIdx };
+    // rand voor verschuiven langs de rand: zonder kartels (rekent veel sneller)
+    const simple = G.orientCW(G.simplifyClosed(pts, 0.1));
+    const edge = simple.length >= 3 ? simple : pts;
+    return { pts, edge, corners: cornersOf(edge), area, cell, inside, outside, outWeight: Float64Array.from(outWeight), x0, y0, nx, ny, cellIdx };
   }
 
   // bijdrage per kop aan de meetpunten, onthouden zolang kop en meetpunten gelijk blijven
@@ -330,13 +411,13 @@
       if (k >= 0) acc.vals[k] += sign * vals[n];
       else {
         const o = -2 - k;
-        if (sign > 0 ? acc.wet[o]++ === 0 : --acc.wet[o] === 0) acc.wetCount += sign;
+        if (sign > 0 ? acc.wet[o]++ === 0 : --acc.wet[o] === 0) { acc.wetCount += sign; acc.wetWeight += sign * ev.outWeight[o]; }
       }
     }
   }
 
   function accumulate(ev, heads) {
-    const acc = { vals: new Float64Array(ev.inside.length), wet: new Int16Array(ev.outside.length), wetCount: 0 };
+    const acc = { vals: new Float64Array(ev.inside.length), wet: new Int16Array(ev.outside.length), wetCount: 0, wetWeight: 0 };
     for (const h of heads) apply(ev, acc, h, 1);
     return acc;
   }
@@ -374,11 +455,16 @@
     let sum = 0;
     for (let i = 0; i < n; i++) sum += vals[i];
     const mean = sum / n;
-    let dry = 0, low = 0;
+    let dry = 0, low = 0, off = 0, high = 0;
+    const g0 = W.green[0] * mean, g1 = W.green[1] * mean;
     for (let i = 0; i < n; i++) {
       const x = vals[i];
       if (x < W.lowRatio * mean) { low++; if (x < 0.3 * mean) dry++; }
+      if (x < g0) off++;
+      else if (x > g1) high++;
     }
+    // niet groen op de neerslagkaart: te weinig weegt zwaarder dan te veel (dat wordt geen bruine plek)
+    const offPct = (off / n) * 100, highPct = (high / n) * 100;
     const nq = Math.max(1, Math.floor(n / 4));
     const lq = sumSmallest(vals, nq);
     const du = mean > 0 ? lq / nq / mean : 0;
@@ -386,8 +472,9 @@
     // geel op de neerslagkaart: duidelijk minder dan gemiddeld
     const lowPct = (low / n) * 100;
     const outsideM2 = acc.wetCount * ev.cell * ev.cell;
-    const cost = W.head * count + (outsideM2 / Math.max(ev.area, 1)) * W.outside + Math.max(0, W.duTarget - du) * W.du + dryPct * W.dry + lowPct * W.low;
-    return { cost, outsideM2, du, dryPct, lowPct };
+    const outsideCost = acc.wetWeight * ev.cell * ev.cell;
+    const cost = W.head * count + (outsideCost / Math.max(ev.area, 1)) * W.outside + Math.max(0, W.duTarget - du) * W.du + dryPct * W.dry + lowPct * W.low + offPct * W.off + highPct * W.offHigh;
+    return { cost, outsideM2, du, dryPct, lowPct, offPct, highPct };
   }
 
   function score(ev, heads) {
@@ -396,10 +483,10 @@
   }
 
   /** Varianten van één kop om te proberen: worp korter/langer, sproeihoek kleiner/groter, richting draaien. */
-  function variantsOf(h) {
+  function variantsOf(h, ev = null) {
     const t = C.headRange ? C.headRange(h) : C.sprinklerTypes[h.type];
     const out = [];
-    for (const f of [0.9, 0.8, 0.7, 0.6, 1.1]) {
+    for (const f of [0.9, 0.8, 0.7, 0.6, 1.1, 1.2]) {
       const r = round1(clamp(h.r * f, t.rMin, t.rMax));
       if (r !== h.r) out.push({ ...h, r });
     }
@@ -409,7 +496,38 @@
       // beide randen iets naar binnen (hoek kleiner, midden gelijk)
       out.push({ ...h, start: Math.round(G.normDeg(h.start + 5)), arc: h.arc - 10 });
     }
-    return out.map((c) => C.fitRotator(c)).filter((c) => c.r !== h.r || c.arc !== h.arc || c.start !== h.start);
+    // verschuiven (alleen bij automatisch plaatsen): binnenkop een stukje, randkop langs de rand
+    if (ev) {
+      // sproeihoek en richting opnieuw uit de echte rand op deze plek (na de grove vorm kan een
+      // kop op een trapje van het terras staan en dan over het terras spuiten)
+      if (h.arc < 359.9) {
+        const v = ev.corners.find((c) => G.dist(c.p, h) < 0.15);
+        if (v) {
+          for (const [ds, da] of [[0, 0], [0, -15], [15, -15]]) out.push({ ...h, start: Math.round(G.normDeg(v.start + ds)), arc: Math.round(v.interior + da) });
+        } else {
+          const c = G.closestOnPolygon(h, ev.edge);
+          if (c.d < 0.15) {
+            const A = ev.edge[c.edge], B = ev.edge[(c.edge + 1) % ev.edge.length];
+            out.push({ ...h, start: Math.round(G.normDeg(G.angleOf(G.sub(B, A)))), arc: 180 });
+          }
+        }
+      }
+      const step = Math.max(0.3, 0.1 * h.r);
+      if (h.arc >= 359.9) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const p = { x: h.x + dx * step, y: h.y + dy * step };
+          if (G.pointInPolygon(p, ev.pts)) out.push({ ...h, x: p.x, y: p.y });
+        }
+      } else if (Math.abs(h.arc - 180) < 1) {
+        const a = G.rad(h.start);
+        for (const d of [-2 * step, -step, step, 2 * step]) {
+          const c = G.closestOnPolygon({ x: h.x + Math.cos(a) * d, y: h.y + Math.sin(a) * d }, ev.edge);
+          const A = ev.edge[c.edge], B = ev.edge[(c.edge + 1) % ev.edge.length];
+          out.push({ ...h, x: c.pt.x, y: c.pt.y, start: Math.round(G.normDeg(G.angleOf(G.sub(B, A)))) });
+        }
+      }
+    }
+    return out.map((c) => C.fitRotator(c)).filter((c) => c.r !== h.r || c.arc !== h.arc || c.start !== h.start || c.x !== h.x || c.y !== h.y);
   }
 
   /**
@@ -417,7 +535,7 @@
    * minder water buiten het vlak valt en de verdeling gelijkmatiger wordt.
    * Hebzuchtig: per kop de beste verbetering, rondes tot er niets meer te winnen is.
    */
-  function refine(ev, heads, sc, rounds = 3, only = null) {
+  function refine(ev, heads, sc, rounds = 3, only = null, move = false) {
     let best = sc;
     if (!ev.inside.length) return best;
     const acc = accumulate(ev, heads);
@@ -427,7 +545,7 @@
         if (heads[i].type === 'strip' || (only && !only.has(heads[i].id))) continue;
         let pick = null;
         apply(ev, acc, heads[i], -1);
-        for (const cand of variantsOf(heads[i])) {
+        for (const cand of variantsOf(heads[i], move ? ev : null)) {
           apply(ev, acc, cand, 1);
           const tsc = costOf(ev, acc, heads.length);
           apply(ev, acc, cand, -1);
@@ -464,15 +582,15 @@
       if (at < 0) break;
       const p = ev.inside[at];
       tried.push(p);
-      const c = G.closestOnPolygon(p, ev.pts);
+      const c = G.closestOnPolygon(p, ev.edge);
       let cand;
       if (c.d < 0.35 * s) {
-        const n = ev.pts.length, A = ev.pts[c.edge], B = ev.pts[(c.edge + 1) % n];
+        const n = ev.edge.length, A = ev.edge[c.edge], B = ev.edge[(c.edge + 1) % n];
         cand = makeRadial(type, c.pt, s, G.angleOf(G.sub(B, A)), 180, body);
       } else cand = makeRadial(type, p, clamp(c.d + 0.5 * s, t.rMin, s), 0, 360, body);
       const list = heads.concat([cand]);
       let tsc = costOf(ev, (() => { const a = accumulate(ev, list); return a; })(), list.length);
-      tsc = refine(ev, list, tsc, 2, new Set([cand.id]));
+      tsc = refine(ev, list, tsc, 2, new Set([cand.id]), true);
       if (tsc.cost < best.cost - 1e-6) { heads.splice(0, heads.length, ...list); best = tsc; }
     }
     return best;
@@ -508,12 +626,12 @@
    * @param onlyIds alleen deze koppen afstellen (de rest blijft staan), of null voor alle
    * @returns {{heads, before, after}} nieuwe objecten (zelfde id's), plus de beoordeling voor en na
    */
-  function tune(rawPts, heads, onlyIds = null) {
+  function tune(rawPts, heads, onlyIds = null, surroundings = null) {
     const pts = G.orientCW(rawPts);
     const list = heads.map((h) => C.fitRotator({ ...h }));
     if (!list.length || pts.length < 3) return { heads: list, before: null, after: null };
     const reach = Math.max(0.5, ...list.map((h) => (h.type === 'strip' ? Math.hypot(h.len / 2, h.width) : h.r * 1.1)));
-    const ev = evaluator(pts, reach);
+    const ev = evaluator(pts, reach, surroundings);
     const before = score(ev, list);
     const after = refine(ev, list, before, 3, onlyIds ? new Set(onlyIds) : null);
     return { heads: list, before, after };
@@ -563,7 +681,7 @@
    * Plaatst sproeiers in een polygoon.
    * @param {Array<{x,y}>} rawPts
    * @param {string} type  spray|rotator|rotor
-   * @param {object} [opts] {r: vaste worpwijdte}
+   * @param {object} [opts] {r: vaste worpwijdte, body, dry/wet: polygonen rondom (huis/terras, mag nat)}
    */
   function autoPlace(rawPts, type, opts = {}) {
     if (!rawPts || rawPts.length < 3) return [];
@@ -578,9 +696,18 @@
     const ra = G.normDeg(G.angleOf(rect.u)) % 90;
     if (Math.abs(ra - angles[0]) > 2 && Math.abs(ra - angles[0]) < 88) angles.push(ra);
     const fixed = opts.r ? clamp(opts.r, t.rMin, t.rMax) : null;
-    const ev = evaluator(pts, fixed || t.rMax);
+    const ev = evaluator(pts, fixed || t.rMax, opts);
     const cands = [];
+    // per afstand de grove vorm (trapjes weg) en, als die afwijkt, ook de vorm zelf: bij een
+    // terras langs het gazon kan een kop op elk trapje beter zijn dan water op het terras
     const coarse = new Map();
+    const shapesFor = (key) => {
+      if (!coarse.has(key)) {
+        const c = coarseShape(shape, key);
+        coarse.set(key, c === shape ? [['', shape]] : [['grof', c], ['', shape]]);
+      }
+      return coarse.get(key);
+    };
     for (const angle of angles) {
       const a = G.rad(angle);
       const u = { x: Math.cos(a), y: Math.sin(a) }, v = { x: -u.y, y: u.x };
@@ -594,12 +721,19 @@
           for (const sv of alongV) {
             // rechthoekig verband mag, maar niet extreem langgerekt (dan valt er midden tussen te weinig)
             if (Math.max(su, sv) > 2 * Math.min(su, sv)) continue;
-            const key = round1(Math.min(su, sv));
-            if (!coarse.has(key)) coarse.set(key, coarseShape(shape, key));
-            const heads = layout(coarse.get(key), type, su, angle, pattern, sv, opts.body || null);
-            if (seen.has(heads.key)) continue;
-            seen.add(heads.key);
-            cands.push({ heads, score: score(ev, heads) });
+            for (const [variant, form] of shapesFor(round1(Math.min(su, sv)))) {
+              const heads = layout(form, type, su, angle, pattern, sv, opts.body || null);
+              if (seen.has(variant + heads.key)) continue;
+              seen.add(variant + heads.key);
+              cands.push({ heads, score: score(ev, heads) });
+            }
+          }
+        }
+        // vanaf de rand, met de kleinste en de grootste afstand
+        for (const sp of new Set([Math.min(...alongU, ...alongV), Math.max(...alongU, ...alongV)])) {
+          for (const [, form] of shapesFor(round1(sp))) {
+            const heads = layoutPerimeter(form, type, sp, angle, pattern, opts.body || null);
+            if (heads.length) cands.push({ heads, score: score(ev, heads) });
           }
         }
       }
@@ -609,12 +743,16 @@
     // koppen wint vaak pas als randkoppen zijn ingekort
     cands.sort((x, y) => x.score.cost - y.score.cost);
     let best = null;
-    for (const c of cands.slice(0, 6)) {
-      c.score = refine(ev, c.heads, prune(ev, c.heads, c.score), 2);
+    // eerst ruw afstellen, dan de beste twee ook verschuiven en aanvullen, dan de winnaar fijn
+    const top = cands.slice(0, 6);
+    for (const c of top) c.score = refine(ev, c.heads, prune(ev, c.heads, c.score), 2);
+    top.sort((x, y) => x.score.cost - y.score.cost);
+    for (const c of top.slice(0, 2)) {
+      c.score = refine(ev, c.heads, c.score, 3, null, true);
       c.score = fill(ev, c.heads, c.score, type, c.heads.spacing, opts.body || null);
       if (!best || c.score.cost < best.score.cost) best = c;
     }
-    best.score = refine(ev, best.heads, prune(ev, best.heads, best.score), 2);
+    best.score = refine(ev, best.heads, prune(ev, best.heads, best.score), 6, null, true);
     return best.heads;
   }
 
@@ -627,7 +765,7 @@
    * vlak, gele en droge plekken, gelijkmatigheid). Types die bij de beschikbare druk niet
    * werken, doen niet mee (tenzij er dan niets overblijft).
    * @param {Array<{x,y}>} rawPts
-   * @param {object} [opts] {types: kandidaten, bodies: {type: behuizing}, pressure: bar}
+   * @param {object} [opts] {types: kandidaten, bodies: {type: behuizing}, pressure: bar, dry/wet: polygonen rondom}
    * @returns {{type, heads, score, results: Array<{type, count, score}>}}
    */
   function bestPlace(rawPts, opts = {}) {
@@ -637,10 +775,10 @@
       const ok = types.filter((k) => C.sprinklerTypes[k].minBar <= opts.pressure - PRESSURE_MARGIN + 1e-9);
       if (ok.length) types = ok;
     }
-    const placed = types.map((type) => ({ type, heads: autoPlace(rawPts, type, { body: (opts.bodies || {})[type] || null }) }));
+    const placed = types.map((type) => ({ type, heads: autoPlace(rawPts, type, { body: (opts.bodies || {})[type] || null, dry: opts.dry, wet: opts.wet }) }));
     const pts = G.orientCW(rawPts);
     const reach = Math.max(0.5, ...placed.flatMap((p) => p.heads.map((h) => (h.type === 'strip' ? Math.hypot(h.len / 2, h.width) : h.r))));
-    const ev = evaluator(pts, reach);
+    const ev = evaluator(pts, reach, opts);
     let best = null;
     const results = placed.map((p) => {
       const sc = score(ev, p.heads);
