@@ -17,61 +17,121 @@
   const SECTION_GROUP = { materiaal: 'producten', arbeid: 'arbeid', overig: 'overig' };
   const MAX_LINES = 400;
 
-  const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
-  const str = (v, max) => String(v == null ? '' : v).slice(0, max);
-  const numIn = (v, min, max, dflt = 0) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : dflt;
+  /**
+   * Rondt af op twee decimalen (centen).
+   * @param {*} value Getal of tekst met een getal.
+   * @returns {number} Het afgeronde getal (0 als het geen getal is).
+   */
+  const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;
+  /**
+   * Maakt van een waarde tekst van hoogstens max tekens.
+   * @param {*} value De waarde (null/undefined = leeg).
+   * @param {number} max Maximaal aantal tekens.
+   * @returns {string} De ingekorte tekst.
+   */
+  const limitText = (value, max) => String(value == null ? '' : value).slice(0, max);
+  /**
+   * Getal begrensd tussen min en max.
+   * @param {*} value De invoer.
+   * @param {number} min Ondergrens.
+   * @param {number} max Bovengrens.
+   * @param {number} [fallback] Waarde als de invoer geen getal is.
+   * @returns {number} Het begrensde getal.
+   */
+  const clampNumber = (value, min, max, fallback = 0) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
   };
-  const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00Z`));
-  const rid = () => Math.random().toString(36).slice(2, 10);
+  /**
+   * Geeft aan of een waarde een geldige datum JJJJ-MM-DD is.
+   * @param {*} value De waarde.
+   * @returns {boolean} true bij een geldige datum.
+   */
+  const isDate = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T12:00:00Z`));
+  /**
+   * Kort willekeurig id voor een regel.
+   * @returns {string} 8 letters/cijfers.
+   */
+  const randomId = () => Math.random().toString(36).slice(2, 10);
 
-  function today(d = new Date()) {
-    const p = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  /**
+   * Datum van vandaag (of van een gegeven datum) als JJJJ-MM-DD in lokale tijd.
+   * @param {Date} [date] De datum.
+   * @returns {string} De datum als JJJJ-MM-DD.
+   */
+  function today(date = new Date()) {
+    /**
+     * Getal met een voorloopnul tot twee cijfers.
+     * @param {number} number Het getal.
+     * @returns {string} Bijv. "07".
+     */
+    const padTwo = (number) => String(number).padStart(2, '0');
+    return `${date.getFullYear()}-${padTwo(date.getMonth() + 1)}-${padTwo(date.getDate())}`;
   }
+  /**
+   * Telt dagen op bij een datum.
+   * @param {string} iso Datum als JJJJ-MM-DD.
+   * @param {number} days Aantal dagen.
+   * @returns {string} De nieuwe datum als JJJJ-MM-DD.
+   */
   function addDays(iso, days) {
-    const d = new Date(`${iso}T12:00:00`);
-    d.setDate(d.getDate() + days);
-    return today(d);
+    const date = new Date(`${iso}T12:00:00`);
+    date.setDate(date.getDate() + days);
+    return today(date);
   }
 
+  /**
+   * Sleutel van een omzetcategorie.
+   * @param {string} group Omzetgroep (producten, arbeid, overig).
+   * @param {number} rate Btw-tarief.
+   * @returns {string} Bijv. "arbeid:21".
+   */
   const catKey = (group, rate) => `${group}:${rate}`;
   // Bekende standaarden uit het rekeningschema van Visma eAccounting (opgave
   // Daniël); de rest vult de beheerder zelf in.
   const KNOWN = { 'arbeid:21': { name: 'Omzet diensten hoog tarief', account: '8140' } };
+  /**
+   * Standaardnaam van een omzetcategorie.
+   * @param {string} group Omzetgroep.
+   * @param {number} rate Btw-tarief.
+   * @returns {string} Bijv. "Omzet producten hoog (21%)".
+   */
   const defaultCategoryName = (group, rate) => (KNOWN[catKey(group, rate)] || {}).name || `Omzet ${GROUPS[group].toLowerCase()} ${RATE_NAMES[rate]}`;
 
-  /** Factuurinstellingen (instelling invoicing van de tenant). */
+  /**
+   * Factuurinstellingen opschonen (instelling invoicing van de tenant).
+   * @param {object} raw De opgeslagen of ingevulde instellingen.
+   * @returns {object} { prefix, paymentDays, paymentText, footer, categories, debtorStart, autoSend, mailSubject, mailText, shopOrders }.
+   */
   function sanitizeSettings(raw) {
-    const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-    const cats = r.categories && typeof r.categories === 'object' && !Array.isArray(r.categories) ? r.categories : {};
+    const fields = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const rawCategories = fields.categories && typeof fields.categories === 'object' && !Array.isArray(fields.categories) ? fields.categories : {};
     const categories = {};
-    for (const g of Object.keys(GROUPS)) {
+    for (const group of Object.keys(GROUPS)) {
       for (const rate of VAT_RATES) {
-        const k = catKey(g, rate);
-        const c = cats[k] && typeof cats[k] === 'object' ? cats[k] : {};
-        categories[k] = {
-          name: str(c.name, 80).trim() || defaultCategoryName(g, rate),
-          account: c.account === undefined ? (KNOWN[k] || {}).account || '' : str(c.account, 20).replace(/[^0-9A-Za-z.-]/g, ''),
+        const key = catKey(group, rate);
+        const category = rawCategories[key] && typeof rawCategories[key] === 'object' ? rawCategories[key] : {};
+        categories[key] = {
+          name: limitText(category.name, 80).trim() || defaultCategoryName(group, rate),
+          account: category.account === undefined ? (KNOWN[key] || {}).account || '' : limitText(category.account, 20).replace(/[^0-9A-Za-z.-]/g, ''),
         };
       }
     }
-    const prefix = str(r.prefix, 12).replace(/[^0-9A-Za-z._/-]/g, '');
+    const prefix = limitText(fields.prefix, 12).replace(/[^0-9A-Za-z._/-]/g, '');
     return {
-      prefix: r.prefix === undefined ? 'F' : prefix,
-      paymentDays: Math.round(numIn(r.paymentDays, 0, 365, 14)),
-      paymentText: typeof r.paymentText === 'string' ? str(r.paymentText, 1000)
+      prefix: fields.prefix === undefined ? 'F' : prefix,
+      paymentDays: Math.round(clampNumber(fields.paymentDays, 0, 365, 14)),
+      paymentText: typeof fields.paymentText === 'string' ? limitText(fields.paymentText, 1000)
         : 'Wij verzoeken u het totaalbedrag binnen {dagen} dagen over te maken op {iban} onder vermelding van factuurnummer {nummer}.',
-      footer: str(r.footer, 1000),
+      footer: limitText(fields.footer, 1000),
       categories,
       // Eerste debiteurnummer (laat ruimte voor de nummers die al in de boekhouding staan).
-      debtorStart: Math.round(numIn(r.debtorStart, 1, 99999999, 1000)),
+      debtorStart: Math.round(clampNumber(fields.debtorStart, 1, 99999999, 1000)),
       // Definitieve facturen meteen per e-mail (met de PDF) naar de klant.
-      autoSend: r.autoSend === true,
-      mailSubject: typeof r.mailSubject === 'string' && r.mailSubject.trim() ? str(r.mailSubject, 200).replace(/[\r\n]/g, ' ') : DEFAULT_SUBJECT,
-      mailText: typeof r.mailText === 'string' && r.mailText.trim() ? str(r.mailText, 4000) : DEFAULT_MAIL,
-      shopOrders: sanitizeShopOrders(r.shopOrders),
+      autoSend: fields.autoSend === true,
+      mailSubject: typeof fields.mailSubject === 'string' && fields.mailSubject.trim() ? limitText(fields.mailSubject, 200).replace(/[\r\n]/g, ' ') : DEFAULT_SUBJECT,
+      mailText: typeof fields.mailText === 'string' && fields.mailText.trim() ? limitText(fields.mailText, 4000) : DEFAULT_MAIL,
+      shopOrders: sanitizeShopOrders(fields.shopOrders),
     };
   }
 
@@ -84,126 +144,165 @@
    * Webshopbestellingen omzetten in facturen: aan/uit, bij welke status,
    * vanaf welke datum (oudere bestellingen zijn al gefactureerd) en of de
    * factuur meteen definitief wordt.
+   * @param {object} raw De ingevulde instellingen.
+   * @returns {{enabled: boolean, status: string, since: string, finalize: boolean}} De opgeschoonde instellingen.
    */
   function sanitizeShopOrders(raw) {
-    const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const fields = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
     return {
-      enabled: r.enabled === true,
-      status: SHOP_STATUSES[r.status] ? r.status : 'completed',
-      since: isDate(r.since) ? r.since : '',
-      finalize: r.finalize !== false,
+      enabled: fields.enabled === true,
+      status: SHOP_STATUSES[fields.status] ? fields.status : 'completed',
+      since: isDate(fields.since) ? fields.since : '',
+      finalize: fields.finalize !== false,
     };
   }
 
-  /** Vult {veld} in een mailtekst in; onbekende velden blijven staan. */
+  /**
+   * Vult {veld} in een mailtekst in; onbekende velden blijven staan.
+   * @param {string} template De tekst met {velden}.
+   * @param {object} values Waarden per veldnaam.
+   * @returns {string} De ingevulde tekst.
+   */
   function fillText(template, values) {
-    return String(template || '').replace(/\{([a-z_]+)\}/g, (m, k) => (values[k] === undefined || values[k] === null ? m : String(values[k])));
+    return String(template || '').replace(/\{([a-z_]+)\}/g, (placeholder, name) => (values[name] === undefined || values[name] === null ? placeholder : String(values[name])));
   }
 
-  /** Omzetcategorie van een regel: { key, name, account }. */
+  /**
+   * Omzetcategorie van een regel.
+   * @param {object} line De regel (group, vat).
+   * @param {object} settings Factuurinstellingen (opgeschoond of ruw).
+   * @returns {{key: string, group: string, rate: number, name: string, account: string}} De categorie.
+   */
   function categoryOf(line, settings) {
-    const s = settings && settings.categories ? settings : sanitizeSettings(settings);
+    const cleanSettings = settings && settings.categories ? settings : sanitizeSettings(settings);
     const group = GROUPS[line.group] ? line.group : 'producten';
     const rate = VAT_RATES.includes(Number(line.vat)) ? Number(line.vat) : 21;
-    const k = catKey(group, rate);
-    return { key: k, group, rate, name: s.categories[k].name, account: s.categories[k].account };
+    const key = catKey(group, rate);
+    return { key, group, rate, name: cleanSettings.categories[key].name, account: cleanSettings.categories[key].account };
   }
 
-  function sanitizeLine(l) {
-    l = l && typeof l === 'object' ? l : {};
+  /**
+   * Maakt van willekeurige invoer een geldige factuurregel.
+   * @param {object} line De regel.
+   * @returns {object} { id, code, description, qty, unit, price, vat, group }.
+   */
+  function sanitizeLine(line) {
+    line = line && typeof line === 'object' ? line : {};
     return {
-      id: str(l.id, 40) || rid(),
-      code: str(l.code, 40).trim(),
-      description: str(l.description, 500),
-      qty: round2(numIn(l.qty, -1e6, 1e6)),
-      unit: str(l.unit, 12).trim(),
-      price: round2(numIn(l.price, -1e7, 1e7)),
-      vat: VAT_RATES.includes(Number(l.vat)) ? Number(l.vat) : 21,
-      group: GROUPS[l.group] ? l.group : 'producten',
+      id: limitText(line.id, 40) || randomId(),
+      code: limitText(line.code, 40).trim(),
+      description: limitText(line.description, 500),
+      qty: round2(clampNumber(line.qty, -1e6, 1e6)),
+      unit: limitText(line.unit, 12).trim(),
+      price: round2(clampNumber(line.price, -1e7, 1e7)),
+      vat: VAT_RATES.includes(Number(line.vat)) ? Number(line.vat) : 21,
+      group: GROUPS[line.group] ? line.group : 'producten',
     };
   }
 
-  /** Maakt van willekeurige invoer een geldige factuur. */
+  /**
+   * Maakt van willekeurige invoer een geldige factuur.
+   * @param {object} data De factuurgegevens.
+   * @param {object} [settings] Factuurinstellingen (voor de betaaltermijn).
+   * @returns {object} De opgeschoonde factuurgegevens.
+   */
   function sanitize(data, settings = null) {
-    const d = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
-    const c = d.customer && typeof d.customer === 'object' ? d.customer : {};
-    const s = settings && settings.categories ? settings : sanitizeSettings(settings);
-    const date = isDate(d.date) ? d.date : today();
+    const fields = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    const customer = fields.customer && typeof fields.customer === 'object' ? fields.customer : {};
+    const cleanSettings = settings && settings.categories ? settings : sanitizeSettings(settings);
+    const date = isDate(fields.date) ? fields.date : today();
     return {
       date,
-      dueDate: isDate(d.dueDate) && d.dueDate >= date ? d.dueDate : addDays(date, s.paymentDays),
-      reference: str(d.reference, 120),
+      dueDate: isDate(fields.dueDate) && fields.dueDate >= date ? fields.dueDate : addDays(date, cleanSettings.paymentDays),
+      reference: limitText(fields.reference, 120),
       customer: {
-        name: str(c.name, 200),
-        contact: str(c.contact, 200),
-        address: str(c.address, 400),
-        email: str(c.email, 200),
-        phone: str(c.phone, 40),
-        vatNumber: str(c.vatNumber, 30),
+        name: limitText(customer.name, 200),
+        contact: limitText(customer.contact, 200),
+        address: limitText(customer.address, 400),
+        email: limitText(customer.email, 200),
+        phone: limitText(customer.phone, 40),
+        vatNumber: limitText(customer.vatNumber, 30),
       },
-      intro: str(d.intro, 2000),
-      notes: str(d.notes, 2000),
-      discountPct: round2(numIn(d.discountPct, 0, 100)),
-      workOrderNumber: str(d.workOrderNumber, 40),
-      quoteNumber: str(d.quoteNumber, 40),
-      creditOfNumber: str(d.creditOfNumber, 40),
-      lines: (Array.isArray(d.lines) ? d.lines : []).slice(0, MAX_LINES).map(sanitizeLine),
+      intro: limitText(fields.intro, 2000),
+      notes: limitText(fields.notes, 2000),
+      discountPct: round2(clampNumber(fields.discountPct, 0, 100)),
+      workOrderNumber: limitText(fields.workOrderNumber, 40),
+      quoteNumber: limitText(fields.quoteNumber, 40),
+      creditOfNumber: limitText(fields.creditOfNumber, 40),
+      lines: (Array.isArray(fields.lines) ? fields.lines : []).slice(0, MAX_LINES).map(sanitizeLine),
     };
   }
 
-  const lineTotal = (l) => round2((Number(l.qty) || 0) * (Number(l.price) || 0));
+  /**
+   * Bedrag van een regel: aantal × prijs.
+   * @param {object} line De regel.
+   * @returns {number} Het bedrag in euro's.
+   */
+  const lineTotal = (line) => round2((Number(line.qty) || 0) * (Number(line.price) || 0));
 
   /**
    * Totalen: subtotaal, korting (naar rato), btw per tarief, eindbedrag en
    * de omzet per categorie (excl. btw, na korting; voor de boekhouding).
+   * @param {object} invoice Factuurgegevens (lines, discountPct).
+   * @param {object} [settings] Factuurinstellingen (voor de categorieën).
+   * @returns {object} { subtotal, discountPct, discount, net, vat, vatTotal, total, categories }.
    */
-  function totals(inv, settings = null) {
-    const lines = (inv && inv.lines) || [];
-    const pct = numIn(inv && inv.discountPct, 0, 100) / 100;
+  function totals(invoice, settings = null) {
+    const lines = (invoice && invoice.lines) || [];
+    const discountFraction = clampNumber(invoice && invoice.discountPct, 0, 100) / 100;
     let subtotal = 0;
     const bases = new Map();
-    const cats = new Map();
-    for (const l of lines) {
-      const t = lineTotal(l);
-      subtotal += t;
-      const rate = Number(l.vat) || 0;
-      bases.set(rate, (bases.get(rate) || 0) + t * (1 - pct));
-      const c = categoryOf(l, settings);
-      const cur = cats.get(c.key) || { ...c, base: 0 };
-      cur.base += t * (1 - pct);
-      cats.set(c.key, cur);
+    const categoryTotals = new Map();
+    for (const line of lines) {
+      const amount = lineTotal(line);
+      subtotal += amount;
+      const rate = Number(line.vat) || 0;
+      bases.set(rate, (bases.get(rate) || 0) + amount * (1 - discountFraction));
+      const category = categoryOf(line, settings);
+      const entry = categoryTotals.get(category.key) || { ...category, base: 0 };
+      entry.base += amount * (1 - discountFraction);
+      categoryTotals.set(category.key, entry);
     }
     subtotal = round2(subtotal);
-    const discount = round2(subtotal * pct);
+    const discount = round2(subtotal * discountFraction);
     const net = round2(subtotal - discount);
-    const vat = [...bases.entries()].sort((a, b) => b[0] - a[0])
+    const vat = [...bases.entries()].sort((left, right) => right[0] - left[0])
       .map(([rate, base]) => ({ rate, base: round2(base), amount: round2((base * rate) / 100) }));
-    const vatTotal = round2(vat.reduce((s, v) => s + v.amount, 0));
-    const categories = [...cats.values()].map((c) => ({ ...c, base: round2(c.base), vatAmount: round2((c.base * c.rate) / 100) }))
-      .sort((a, b) => a.key.localeCompare(b.key));
-    return { subtotal, discountPct: round2(pct * 100), discount, net, vat, vatTotal, total: round2(net + vatTotal), categories };
+    const vatTotal = round2(vat.reduce((sum, entry) => sum + entry.amount, 0));
+    const categories = [...categoryTotals.values()].map((category) => ({ ...category, base: round2(category.base), vatAmount: round2((category.base * category.rate) / 100) }))
+      .sort((left, right) => left.key.localeCompare(right.key));
+    return { subtotal, discountPct: round2(discountFraction * 100), discount, net, vat, vatTotal, total: round2(net + vatTotal), categories };
   }
 
-  /** Betaaltekst met {dagen}, {iban}, {nummer}, {vervaldatum} ingevuld. */
+  /**
+   * Betaaltekst met {dagen}, {iban}, {nummer}, {vervaldatum} ingevuld.
+   * @param {object} settings Factuurinstellingen.
+   * @param {object} [values] { number, iban, dueDate }.
+   * @returns {string} De betaaltekst.
+   */
   function paymentText(settings, { number = '', iban = '', dueDate = '' } = {}) {
-    const s = settings && settings.categories ? settings : sanitizeSettings(settings);
-    return s.paymentText
-      .replace(/\{dagen\}/g, String(s.paymentDays))
+    const cleanSettings = settings && settings.categories ? settings : sanitizeSettings(settings);
+    return cleanSettings.paymentText
+      .replace(/\{dagen\}/g, String(cleanSettings.paymentDays))
       .replace(/\{iban\}/g, iban || 'onze rekening')
       .replace(/\{nummer\}/g, number || '(volgt)')
       .replace(/\{vervaldatum\}/g, dueDate);
   }
 
-  /** Creditfactuur: dezelfde regels met negatieve aantallen. */
-  function creditOf(inv) {
-    const d = inv.data || inv;
+  /**
+   * Creditfactuur: dezelfde regels met negatieve aantallen.
+   * @param {object} invoice De factuur (met number en data) of alleen de gegevens.
+   * @returns {object} Gegevens voor een nieuwe conceptfactuur.
+   */
+  function creditOf(invoice) {
+    const fields = invoice.data || invoice;
     return {
-      ...d,
+      ...fields,
       date: today(),
       dueDate: '',
-      creditOfNumber: inv.number || d.creditOfNumber || '',
-      intro: `Creditering van factuur ${inv.number || ''}`.trim(),
-      lines: (d.lines || []).map((l) => ({ ...l, id: rid(), qty: -l.qty })),
+      creditOfNumber: invoice.number || fields.creditOfNumber || '',
+      intro: `Creditering van factuur ${invoice.number || ''}`.trim(),
+      lines: (fields.lines || []).map((line) => ({ ...line, id: randomId(), qty: -line.qty })),
     };
   }
 
@@ -218,74 +317,82 @@
    * de offerte staat als meerwerk. Zonder offerte (bijv. uit een melding):
    * geboekt materiaal (of de materiaallijst) en geboekte uren (of de geplande
    * uren van de werkstappen). Geeft { data, warnings }.
+   * @param {object} workOrder De werkorder (number, data).
+   * @param {object} [ctx] { quote, logged, articles, catalog, hourlyRate, settings }.
+   * @returns {{data: object, warnings: string[]}} De factuurgegevens en waarschuwingen.
    */
-  function fromWorkOrder(wo, ctx = {}) {
-    const w = wo || {};
-    const d = w.data || {};
+  function fromWorkOrder(workOrder, ctx = {}) {
+    const order = workOrder || {};
+    const data = order.data || {};
     const quote = ctx.quote || null;
     const logged = ctx.logged || { hours: [], materials: [] };
     const articles = ctx.articles || {};
     const catalog = ctx.catalog || {};
     const rate = round2(ctx.hourlyRate || 0);
     const warnings = [];
+    /**
+     * Verkoopprijs, btw en omzetgroep van een artikel (voorraad, anders catalogus).
+     * @param {string} code Artikelcode.
+     * @returns {{price: number, vat: number, group: string, missing?: boolean}} De prijsgegevens; missing = geen prijs gevonden.
+     */
     const priceOf = (code) => {
-      const a = articles[String(code || '').toUpperCase()];
-      if (a && a.salePrice != null) return { price: a.salePrice, vat: a.vatRate, group: a.revenueGroup };
-      const c = catalog[code] || catalog[String(code || '').toUpperCase()];
-      return { price: c && c.price != null ? c.price : 0, vat: a ? a.vatRate : 21, group: a ? a.revenueGroup : 'producten', missing: !c || c.price == null };
+      const article = articles[String(code || '').toUpperCase()];
+      if (article && article.salePrice != null) return { price: article.salePrice, vat: article.vatRate, group: article.revenueGroup };
+      const catalogItem = catalog[code] || catalog[String(code || '').toUpperCase()];
+      return { price: catalogItem && catalogItem.price != null ? catalogItem.price : 0, vat: article ? article.vatRate : 21, group: article ? article.revenueGroup : 'producten', missing: !catalogItem || catalogItem.price == null };
     };
     const lines = [];
-    const qd = quote ? quote.data || {} : null;
-    if (qd) {
-      for (const l of (qd.lines || []).filter((x) => !x.optional || x.selected)) {
-        lines.push({ code: l.code, description: l.description, qty: l.qty, unit: l.unit, price: l.price, vat: l.vat, group: SECTION_GROUP[l.section] || 'overig' });
+    const quoteData = quote ? quote.data || {} : null;
+    if (quoteData) {
+      for (const line of (quoteData.lines || []).filter((candidate) => !candidate.optional || candidate.selected)) {
+        lines.push({ code: line.code, description: line.description, qty: line.qty, unit: line.unit, price: line.price, vat: line.vat, group: SECTION_GROUP[line.section] || 'overig' });
       }
-      const quoted = new Set((qd.lines || []).map((l) => String(l.code || '').toUpperCase()).filter(Boolean));
+      const quoted = new Set((quoteData.lines || []).map((line) => String(line.code || '').toUpperCase()).filter(Boolean));
       const extra = new Map();
-      for (const m of logged.materials || []) {
-        const code = String(m.code || '').toUpperCase();
-        if (!code || quoted.has(code) || !(Number(m.qty) > 0)) continue;
-        const cur = extra.get(code) || { code, description: m.description, qty: 0, unit: m.unit };
-        cur.qty = round2(cur.qty + Number(m.qty));
-        extra.set(code, cur);
+      for (const material of logged.materials || []) {
+        const code = String(material.code || '').toUpperCase();
+        if (!code || quoted.has(code) || !(Number(material.qty) > 0)) continue;
+        const entry = extra.get(code) || { code, description: material.description, qty: 0, unit: material.unit };
+        entry.qty = round2(entry.qty + Number(material.qty));
+        extra.set(code, entry);
       }
-      for (const m of extra.values()) {
-        const p = priceOf(m.code);
-        if (p.missing) warnings.push(`Geen verkoopprijs voor ${m.code}: vul die op de factuur in.`);
-        lines.push({ code: m.code, description: `Meerwerk: ${m.description || m.code}`, qty: m.qty, unit: m.unit, price: p.price, vat: p.vat, group: p.group });
+      for (const material of extra.values()) {
+        const pricing = priceOf(material.code);
+        if (pricing.missing) warnings.push(`Geen verkoopprijs voor ${material.code}: vul die op de factuur in.`);
+        lines.push({ code: material.code, description: `Meerwerk: ${material.description || material.code}`, qty: material.qty, unit: material.unit, price: pricing.price, vat: pricing.vat, group: pricing.group });
       }
     } else {
-      const used = (logged.materials || []).filter((m) => Number(m.qty) > 0);
-      const mats = used.length ? used : (d.materials || []).filter((m) => Number(m.qty) > 0);
+      const used = (logged.materials || []).filter((material) => Number(material.qty) > 0);
+      const materialList = used.length ? used : (data.materials || []).filter((material) => Number(material.qty) > 0);
       const merged = new Map();
-      for (const m of mats) {
-        const k = String(m.code || m.description || '').toUpperCase();
-        const cur = merged.get(k) || { code: m.code || '', description: m.description || '', qty: 0, unit: m.unit || '' };
-        cur.qty = round2(cur.qty + Number(m.qty));
-        merged.set(k, cur);
+      for (const material of materialList) {
+        const key = String(material.code || material.description || '').toUpperCase();
+        const entry = merged.get(key) || { code: material.code || '', description: material.description || '', qty: 0, unit: material.unit || '' };
+        entry.qty = round2(entry.qty + Number(material.qty));
+        merged.set(key, entry);
       }
-      for (const m of merged.values()) {
-        const p = m.code ? priceOf(m.code) : { price: 0, vat: 21, group: 'producten', missing: true };
-        if (p.missing) warnings.push(`Geen verkoopprijs voor ${m.code || m.description}: vul die op de factuur in.`);
-        lines.push({ code: m.code, description: m.description || m.code, qty: m.qty, unit: m.unit, price: p.price, vat: p.vat, group: p.group });
+      for (const material of merged.values()) {
+        const pricing = material.code ? priceOf(material.code) : { price: 0, vat: 21, group: 'producten', missing: true };
+        if (pricing.missing) warnings.push(`Geen verkoopprijs voor ${material.code || material.description}: vul die op de factuur in.`);
+        lines.push({ code: material.code, description: material.description || material.code, qty: material.qty, unit: material.unit, price: pricing.price, vat: pricing.vat, group: pricing.group });
       }
-      const minutes = (logged.hours || []).reduce((s, h) => s + (Number(h.minutes) || 0), 0);
+      const minutes = (logged.hours || []).reduce((sum, entry) => sum + (Number(entry.minutes) || 0), 0);
       const hours = minutes
         ? Math.ceil((minutes / 60) * 4 - 1e-9) / 4
-        : round2((d.steps || []).reduce((s, x) => s + (Number(x.actualHours != null ? x.actualHours : x.hours) || 0), 0));
+        : round2((data.steps || []).reduce((sum, step) => sum + (Number(step.actualHours != null ? step.actualHours : step.hours) || 0), 0));
       if (hours > 0) {
         lines.push({ code: '', description: minutes ? 'Arbeid (geboekte uren)' : 'Arbeid', qty: hours, unit: 'uur', price: rate, vat: 21, group: 'arbeid' });
         if (!rate) warnings.push('Geen uurtarief in het bedrijfsprofiel: vul het tarief op de factuur in.');
       }
       if (!lines.length) warnings.push('Op deze werkorder is niets geboekt: vul de regels zelf in.');
     }
-    const c = d.customer || {};
+    const customer = data.customer || {};
     return {
       data: sanitize({
-        reference: d.title || '',
-        customer: { name: c.name, contact: c.contact, address: c.address, email: c.email, phone: c.phone },
-        discountPct: qd ? qd.discountPct : 0,
-        workOrderNumber: w.number || '',
+        reference: data.title || '',
+        customer: { name: customer.name, contact: customer.contact, address: customer.address, email: customer.email, phone: customer.phone },
+        discountPct: quoteData ? quoteData.discountPct : 0,
+        workOrderNumber: order.number || '',
         quoteNumber: quote ? quote.number || '' : '',
         lines,
       }, ctx.settings),
@@ -296,18 +403,21 @@
   /**
    * Regels voor de export naar de boekhouding: per factuur per
    * omzetcategorie één regel (zoals een verkoopboeking in Visma).
+   * @param {object[]} invoices De facturen (number, kind, data, debtorNumber).
+   * @param {object} settings Factuurinstellingen.
+   * @returns {object[]} Eén regel per factuur per omzetcategorie.
    */
   function exportRows(invoices, settings) {
     const out = [];
-    for (const inv of invoices) {
-      const t = totals(inv.data, settings);
-      for (const c of t.categories) {
+    for (const invoice of invoices) {
+      const invoiceTotals = totals(invoice.data, settings);
+      for (const category of invoiceTotals.categories) {
         out.push({
-          number: inv.number, kind: inv.kind || 'factuur', date: inv.data.date, dueDate: inv.data.dueDate,
-          debtorNumber: inv.debtorNumber || '', customer: inv.data.customer.name, customerEmail: inv.data.customer.email, customerAddress: inv.data.customer.address,
-          customerVat: inv.data.customer.vatNumber || '', reference: inv.data.reference,
-          category: c.name, account: c.account, group: c.group, rate: c.rate,
-          base: c.base, vat: c.vatAmount, total: round2(c.base + c.vatAmount),
+          number: invoice.number, kind: invoice.kind || 'factuur', date: invoice.data.date, dueDate: invoice.data.dueDate,
+          debtorNumber: invoice.debtorNumber || '', customer: invoice.data.customer.name, customerEmail: invoice.data.customer.email, customerAddress: invoice.data.customer.address,
+          customerVat: invoice.data.customer.vatNumber || '', reference: invoice.data.reference,
+          category: category.name, account: category.account, group: category.group, rate: category.rate,
+          base: category.base, vat: category.vatAmount, total: round2(category.base + category.vatAmount),
         });
       }
     }

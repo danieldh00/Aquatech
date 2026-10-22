@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.68.6
+
+Opschoonronde frontend, deel 2 (geen functionele wijziging): duidelijke namen
+en een commentaarblok bij elke functie in 11 bestanden (Meldingen,
+Uitbesteden, Klantdossier, Plannen, Beheer > AI-kosten, foto's bij de
+werkorder, en de kernbestanden `quote-core`, `quote-view`, `invoice-core`,
+`workorder-core` en `shared/offline-core`).
+
+- Interne afkortingen als `C`/`Hy`/`Q`/`W`/`M` heten nu `Catalog`,
+  `Hydraulics`, `QuoteCore`, `WorkOrderCore` en `AiModels`; geëxporteerde
+  namen en opgeslagen velden zijn ongewijzigd.
+
 ## 0.68.5
 
 Opschoonronde frontend, deel 1 (geen functionele wijziging): duidelijke namen
