@@ -15,7 +15,6 @@
     "frontend/beregening/js/simulation.js",
     "frontend/beregening/js/sprinklerlib.js",
     "frontend/facturen/facturen.js",
-    "frontend/hoofdbeheer/hoofdbeheer.js",
     "frontend/offertes/offertes.js",
     "frontend/werkorders/werkorders.js"
   ]
