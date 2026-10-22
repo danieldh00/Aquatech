@@ -11,31 +11,52 @@ const { createShopStore } = require('../src/webshop/shop');
 const { createShopSync } = require('../src/webshop/shop-sync');
 const { sanitizeShop } = require('../src/webshop/woocommerce');
 
-// Nagebootste WooCommerce REST API v3: producten in een map, prijzen incl. btw.
+/**
+ * Nagebootste WooCommerce REST API v3: producten in een map, prijzen incl. btw.
+ * @param {Map<string, object>} products Producten op id.
+ * @returns {{ fetchImpl: Function, calls: object[], products: Map }} Nagebootste fetch, gedane verzoeken en de producten.
+ */
 function fakeShop(products) {
   const calls = [];
-  const fetchImpl = async (url, opts = {}) => {
-    const u = new URL(url);
-    calls.push({ method: opts.method || 'GET', path: u.pathname, body: opts.body ? JSON.parse(opts.body) : null });
+  /**
+   * Beantwoordt één verzoek: batch-wijziging of productenlijst (met include).
+   * @param {string} url Adres van het verzoek.
+   * @param {object} [options] Fetch-opties (method, headers, body).
+   * @returns {Promise<object>} Antwoord zoals fetch het geeft.
+   */
+  const fetchImpl = async (url, options = {}) => {
+    const requestUrl = new URL(url);
+    calls.push({ method: options.method || 'GET', path: requestUrl.pathname, body: options.body ? JSON.parse(options.body) : null });
+    /**
+     * Een geslaagd JSON-antwoord.
+     * @param {*} body De inhoud.
+     * @returns {object} Antwoord zoals fetch het geeft.
+     */
     const json = (body) => ({ ok: true, status: 200, headers: new Headers({ 'x-wp-totalpages': '1' }), text: async () => JSON.stringify(body) });
-    if (!opts.headers || !String(opts.headers.Authorization || '').startsWith('Basic ')) return { ok: false, status: 401, headers: new Headers(), text: async () => '{}' };
-    if (u.pathname.endsWith('/products/batch')) {
-      const body = JSON.parse(opts.body);
-      return json({ update: body.update.map((p) => {
-        const cur = products.get(String(p.id));
-        if (!cur) return { id: p.id, error: { message: 'Onbekend product' } };
-        if (p.regular_price !== undefined) cur.regular_price = p.regular_price;
-        if (p.stock_quantity !== undefined) { cur.stock_quantity = p.stock_quantity; cur.manage_stock = true; }
-        return cur;
+    if (!options.headers || !String(options.headers.Authorization || '').startsWith('Basic ')) return { ok: false, status: 401, headers: new Headers(), text: async () => '{}' };
+    if (requestUrl.pathname.endsWith('/products/batch')) {
+      const body = JSON.parse(options.body);
+      return json({ update: body.update.map((update) => {
+        const current = products.get(String(update.id));
+        if (!current) return { id: update.id, error: { message: 'Onbekend product' } };
+        if (update.regular_price !== undefined) current.regular_price = update.regular_price;
+        if (update.stock_quantity !== undefined) { current.stock_quantity = update.stock_quantity; current.manage_stock = true; }
+        return current;
       }) });
     }
-    const include = u.searchParams.get('include');
-    const list = [...products.values()].filter((p) => !include || include.split(',').includes(String(p.id)));
-    return json(list.map((p) => ({ ...p, price: p.regular_price })));
+    const include = requestUrl.searchParams.get('include');
+    const list = [...products.values()].filter((product) => !include || include.split(',').includes(String(product.id)));
+    return json(list.map((product) => ({ ...product, price: product.regular_price })));
   };
   return { fetchImpl, calls, products };
 }
 
+/**
+ * Database met voorraad, webshopkoppeling en synchronisatie tegen de nagebootste webshop.
+ * @param {Map<string, object>} products Producten in de webshop.
+ * @param {object} source Instelling shopSource.
+ * @returns {object} db, tid, stock, sync, fake (webshop) en settings.
+ */
 function setup(products, source) {
   const db = openDb();
   const store = createStore(db);
@@ -44,10 +65,18 @@ function setup(products, source) {
   const stock = createStockStore(db);
   const shop = createShopStore(db);
   const fake = fakeShop(products);
-  const sync = createShopSync({ db, shop, stock, settingsFor: () => ({ get: (k) => settings.get(k) }), fetchImpl: fake.fetchImpl, log: { warn() {} } });
+  const sync = createShopSync({ db, shop, stock, settingsFor: () => ({ get: (key) => settings.get(key) }), fetchImpl: fake.fetchImpl, log: { warn() {} } });
   return { db, tid, stock, sync, fake, settings };
 }
 
+/**
+ * Een WooCommerce-product als [id, product] voor een Map.
+ * @param {number} id Product-id.
+ * @param {string} sku Sku (= artikelcode).
+ * @param {string} regular Prijs incl. btw.
+ * @param {number|null} stockQty Voorraad in de webshop (null = niet bijgehouden).
+ * @returns {Array} [id als tekst, product].
+ */
 const product = (id, sku, regular, stockQty) => [String(id), { id, sku, name: sku, regular_price: String(regular), manage_stock: stockQty != null, stock_quantity: stockQty, status: 'publish', meta_data: [] }];
 
 test('webshop: Aquatech is de bron voor prijs en voorraad, verkopen in de webshop komen terug', async () => {
@@ -63,10 +92,10 @@ test('webshop: Aquatech is de bron voor prijs en voorraad, verkopen in de websho
 
   const s1 = await sync.run(tid);
   assert.strictEqual(s1.linked, 2);
-  let p = stock.get(tid, pe.id);
-  assert.strictEqual(p.onHand, 7);
-  assert.strictEqual(p.salePrice, 2);
-  assert.strictEqual(p.shop.productId, '11');
+  let item = stock.get(tid, pe.id);
+  assert.strictEqual(item.onHand, 7);
+  assert.strictEqual(item.salePrice, 2);
+  assert.strictEqual(item.shop.productId, '11');
   assert.strictEqual(stock.get(tid, val.id).shop.pending, false);
   assert.strictEqual(products.get('12').regular_price, '54.45');
   assert.strictEqual(products.get('12').stock_quantity, 6);
@@ -78,9 +107,9 @@ test('webshop: Aquatech is de bron voor prijs en voorraad, verkopen in de websho
   assert.strictEqual(stock.get(tid, val.id).shop.pending, true);
   const s2 = await sync.run(tid);
   assert.strictEqual(s2.soldInShop, 2);
-  p = stock.get(tid, pe.id);
-  assert.strictEqual(p.onHand, 5);
-  assert.ok(p.movements.some((m) => m.source === 'webshop' && m.qty === -2));
+  item = stock.get(tid, pe.id);
+  assert.strictEqual(item.onHand, 5);
+  assert.ok(item.movements.some((movement) => movement.source === 'webshop' && movement.qty === -2));
   assert.strictEqual(products.get('12').regular_price, '60.50');
 
   // Snelle ronde: alleen gewijzigde artikelen, eerst hun stand opvragen.

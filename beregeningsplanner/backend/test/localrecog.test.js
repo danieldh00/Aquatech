@@ -8,205 +8,247 @@ const vm = require('vm');
 const FRONT = path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js');
 const sandbox = { window: {}, console };
 vm.createContext(sandbox);
-for (const f of ['geometry.js', 'sprinklerlib.js', 'catalog.js', 'autotrace.js', 'planimport.js', 'concept.js', 'localrecog.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox);
-const L = sandbox.window.LocalRecognizer;
+for (const file of ['geometry.js', 'sprinklerlib.js', 'catalog.js', 'autotrace.js', 'planimport.js', 'concept.js', 'localrecog.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, file), 'utf8'), sandbox);
+const LocalRecognizer = sandbox.window.LocalRecognizer;
 
 test('maten lezen: eenheden en notaties', () => {
-  assert.strictEqual(L.parseLength('12,00', 'm'), 12);
-  assert.strictEqual(L.parseLength('12,00m'), 12);
-  assert.strictEqual(L.parseLength('8500'), 8.5); // mm op bouwtekening
-  assert.strictEqual(L.parseLength('450', 'cm'), 4.5);
-  assert.strictEqual(L.parseLength('3.5'), 3.5);
-  assert.strictEqual(L.parseLength('1250mm'), 1.25);
-  assert.strictEqual(L.parseLength('12'), null); // geheel getal zonder eenheid: te onzeker
-  assert.strictEqual(L.parseLength('abc'), null);
+  assert.strictEqual(LocalRecognizer.parseLength('12,00', 'm'), 12);
+  assert.strictEqual(LocalRecognizer.parseLength('12,00m'), 12);
+  assert.strictEqual(LocalRecognizer.parseLength('8500'), 8.5); // mm op bouwtekening
+  assert.strictEqual(LocalRecognizer.parseLength('450', 'cm'), 4.5);
+  assert.strictEqual(LocalRecognizer.parseLength('3.5'), 3.5);
+  assert.strictEqual(LocalRecognizer.parseLength('1250mm'), 1.25);
+  assert.strictEqual(LocalRecognizer.parseLength('12'), null); // geheel getal zonder eenheid: te onzeker
+  assert.strictEqual(LocalRecognizer.parseLength('abc'), null);
 });
 
 test('kleur naar vlaksoort', () => {
-  const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-  const type = (h) => L.classify(...hex(h));
+  /**
+   * Kleur als #rrggbb naar [rood, groen, blauw].
+   * @param {string} color De kleur.
+   * @returns {number[]} De drie kanalen (0–255).
+   */
+  const hex = (color) => [parseInt(color.slice(1, 3), 16), parseInt(color.slice(3, 5), 16), parseInt(color.slice(5, 7), 16)];
+  /**
+   * Vlaktype dat de herkenning aan een kleur geeft.
+   * @param {string} color De kleur als #rrggbb.
+   * @returns {number} Typenummer (0 = geen).
+   */
+  const type = (color) => LocalRecognizer.classify(...hex(color));
   // 0 geen, 1 gazon, 2 haag, 3 beplanting, 4 droog, 5 nat
-  for (const h of ['#8bc34a', '#7cb342', '#9ccc65', '#66bb6a']) assert.strictEqual(type(h), 1, h);
-  for (const h of ['#2e7d32', '#1b5e20']) assert.strictEqual(type(h), 2, h);
-  for (const h of ['#a1887f', '#8d6e63', '#f48fb1', '#ce93d8']) assert.strictEqual(type(h), 3, h);
-  for (const h of ['#9e9e9e', '#bdbdbd', '#e8dcc2']) assert.strictEqual(type(h), 4, h);
-  for (const h of ['#4fc3f7', '#1e88e5']) assert.strictEqual(type(h), 5, h);
-  for (const h of ['#ffffff', '#000000', '#222222']) assert.strictEqual(type(h), 0, h);
+  for (const color of ['#8bc34a', '#7cb342', '#9ccc65', '#66bb6a']) assert.strictEqual(type(color), 1, color);
+  for (const color of ['#2e7d32', '#1b5e20']) assert.strictEqual(type(color), 2, color);
+  for (const color of ['#a1887f', '#8d6e63', '#f48fb1', '#ce93d8']) assert.strictEqual(type(color), 3, color);
+  for (const color of ['#9e9e9e', '#bdbdbd', '#e8dcc2']) assert.strictEqual(type(color), 4, color);
+  for (const color of ['#4fc3f7', '#1e88e5']) assert.strictEqual(type(color), 5, color);
+  for (const color of ['#ffffff', '#000000', '#222222']) assert.strictEqual(type(color), 0, color);
 });
 
 test('maatlijn meten: lijn boven de tekst, onderbroken door de tekst', () => {
-  const w = 300, h = 60;
-  const gray = new Uint8Array(w * h).fill(255);
+  const width = 300, height = 60;
+  const gray = new Uint8Array(width * height).fill(255);
   // maatlijn op y=40 van x=20 tot 280, met gat waar de tekst staat (130–170)
-  for (let x = 20; x <= 280; x++) if (x < 130 || x > 170) gray[40 * w + x] = 0;
+  for (let x = 20; x <= 280; x++) if (x < 130 || x > 170) gray[40 * width + x] = 0;
   // tekst iets erboven
-  for (let y = 25; y < 37; y++) for (let x = 132; x < 168; x += 3) gray[y * w + x] = 0;
-  const r = L.measureLine(gray, w, h, { x0: 130, y0: 24, x1: 170, y1: 38 });
-  assert.ok(r, 'lijn gevonden');
-  assert.strictEqual(r.len, 261);
+  for (let y = 25; y < 37; y++) for (let x = 132; x < 168; x += 3) gray[y * width + x] = 0;
+  const line = LocalRecognizer.measureLine(gray, width, height, { x0: 130, y0: 24, x1: 170, y1: 38 });
+  assert.ok(line, 'lijn gevonden');
+  assert.strictEqual(line.len, 261);
 });
 
 test('maatlijn meten: tekst midden in een onderbreking van de lijn', () => {
-  const w = 300, h = 60;
-  const gray = new Uint8Array(w * h).fill(255);
-  for (let x = 20; x <= 280; x++) if (x < 128 || x > 172) gray[30 * w + x] = 0;
-  for (let y = 24; y < 37; y++) for (let x = 132; x < 168; x += 3) gray[y * w + x] = 0;
-  const r = L.measureLine(gray, w, h, { x0: 130, y0: 23, x1: 170, y1: 37 });
-  assert.ok(r, 'lijn gevonden');
-  assert.strictEqual(r.len, 261);
+  const width = 300, height = 60;
+  const gray = new Uint8Array(width * height).fill(255);
+  for (let x = 20; x <= 280; x++) if (x < 128 || x > 172) gray[30 * width + x] = 0;
+  for (let y = 24; y < 37; y++) for (let x = 132; x < 168; x += 3) gray[y * width + x] = 0;
+  const line = LocalRecognizer.measureLine(gray, width, height, { x0: 130, y0: 23, x1: 170, y1: 37 });
+  assert.ok(line, 'lijn gevonden');
+  assert.strictEqual(line.len, 261);
 });
 
 test('maatlijn meten: rand van een vlak die niet voorbij de tekst loopt telt niet', () => {
-  const w = 300, h = 60;
-  const gray = new Uint8Array(w * h).fill(255);
-  for (let x = 125; x <= 175; x++) gray[42 * w + x] = 0; // korte rand net onder de tekst
-  assert.strictEqual(L.measureLine(gray, w, h, { x0: 130, y0: 24, x1: 170, y1: 38 }), null);
+  const width = 300, height = 60;
+  const gray = new Uint8Array(width * height).fill(255);
+  for (let x = 125; x <= 175; x++) gray[42 * width + x] = 0; // korte rand net onder de tekst
+  assert.strictEqual(LocalRecognizer.measureLine(gray, width, height, { x0: 130, y0: 24, x1: 170, y1: 38 }), null);
 });
 
 test('bleke potloodkleuren (genormaliseerd op het papier)', () => {
-  const t = (r, g, b) => L.classify(r * 255, g * 255, b * 255);
-  assert.strictEqual(t(0.94, 1.0, 0.86), 1); // lichtgroen potlood = gazon
-  assert.strictEqual(t(0.87, 0.94, 0.89), 0); // grijsgroen, licht (grind, vervaagd) ≠ gazon
-  assert.strictEqual(t(0.6, 0.89, 0.95), 2); // blauwgroen = heesters
-  assert.strictEqual(t(0.99, 0.96, 0.8), 4); // lichtgeel = terras
-  assert.strictEqual(t(1.0, 0.98, 0.76), 4); // geel = vlonder/veranda
-  assert.strictEqual(t(1.0, 0.9, 0.9), 4); // licht rood = schuur, baksteen
+  /**
+   * Vlaktype van een kleur met kanalen als fractie (0–1).
+   * @param {number} red Rood.
+   * @param {number} green Groen.
+   * @param {number} blue Blauw.
+   * @returns {number} Typenummer (0 = geen).
+   */
+  const classify = (red, green, blue) => LocalRecognizer.classify(red * 255, green * 255, blue * 255);
+  assert.strictEqual(classify(0.94, 1.0, 0.86), 1); // lichtgroen potlood = gazon
+  assert.strictEqual(classify(0.87, 0.94, 0.89), 0); // grijsgroen, licht (grind, vervaagd) ≠ gazon
+  assert.strictEqual(classify(0.6, 0.89, 0.95), 2); // blauwgroen = heesters
+  assert.strictEqual(classify(0.99, 0.96, 0.8), 4); // lichtgeel = terras
+  assert.strictEqual(classify(1.0, 0.98, 0.76), 4); // geel = vlonder/veranda
+  assert.strictEqual(classify(1.0, 0.9, 0.9), 4); // licht rood = schuur, baksteen
 });
 
 test('maten lezen: zwakke lezingen bij een weggevallen komma', () => {
   // via JSON: arrays uit de sandbox hebben een ander prototype
-  const rd = (...a) => JSON.stringify(L.lengthReadings(...a).map((x) => [x.meters, x.strong]));
-  assert.strictEqual(rd('100', 'm'), '[[100,false],[10,false],[1,false]]');
-  assert.strictEqual(rd('12,50', 'm'), '[[12.5,true]]');
-  assert.strictEqual(rd('8 m'), '[[8,true]]');
-  assert.strictEqual(rd('8500'), '[[8.5,false]]');
+  /**
+   * Lezingen van een maat als JSON: [[meters, sterk], ...].
+   * @param {...string} args Tekst en eventueel eenheid.
+   * @returns {string} De lezingen als JSON.
+   */
+  const readings = (...args) => JSON.stringify(LocalRecognizer.lengthReadings(...args).map((reading) => [reading.meters, reading.strong]));
+  assert.strictEqual(readings('100', 'm'), '[[100,false],[10,false],[1,false]]');
+  assert.strictEqual(readings('12,50', 'm'), '[[12.5,true]]');
+  assert.strictEqual(readings('8 m'), '[[8,true]]');
+  assert.strictEqual(readings('8500'), '[[8.5,false]]');
 });
 
 test('schaal kiezen: sterke lezing wint, losse zwakke alleen als plausibel', () => {
-  const W = 1200;
+  const imageWidth = 1200;
   const strong = { mpp: 10 / 702, strong: true, text: '10,00 m', meters: 10, px: 702 };
   const weak = { mpp: 1.1 / 241, strong: false, text: '1100', meters: 1.1, px: 241 };
-  assert.strictEqual(L.pickScale([weak, strong], W).metersPerPixel, strong.mpp);
+  assert.strictEqual(LocalRecognizer.pickScale([weak, strong], imageWidth).metersPerPixel, strong.mpp);
   // "100 m" over 592 px: 100 m geeft een plan van 200+ m, 1 m een van 2 m; 10 m is plausibel
-  const lost = [100, 10, 1].map((m) => ({ mpp: m / 592, strong: false, text: '100 m', meters: m, px: 592 }));
-  const p = L.pickScale(lost, W);
-  assert.strictEqual(p.metersPerPixel, 10 / 592);
-  assert.strictEqual(p.confidence, 'laag');
+  const lost = [100, 10, 1].map((meters) => ({ mpp: meters / 592, strong: false, text: '100 m', meters, px: 592 }));
+  const picked = LocalRecognizer.pickScale(lost, imageWidth);
+  assert.strictEqual(picked.metersPerPixel, 10 / 592);
+  assert.strictEqual(picked.confidence, 'laag');
   // twee zwakke die overeenkomen: hoog
   const mm = [{ ...weak, mpp: 0.01, text: '4500', px: 450 }, { ...weak, mpp: 0.0101, text: '6000', px: 594 }];
-  assert.strictEqual(L.pickScale(mm, W).confidence, 'hoog');
-  assert.strictEqual(L.pickScale([], W), null);
+  assert.strictEqual(LocalRecognizer.pickScale(mm, imageWidth).confidence, 'hoog');
+  assert.strictEqual(LocalRecognizer.pickScale([], imageWidth), null);
 });
 
 // ---- synthetisch gefotografeerd potloodplan: grijs, ongelijk belicht papier, arcering, lijnen, titelblok
+/**
+ * Synthetisch gefotografeerd potloodplan.
+ * @returns {{ data: Uint8ClampedArray, w: number, h: number, lawn: number[], path: number[], title: number[] }} Pixels (RGBA), afmetingen en de rechthoeken van gazon, pad en titelblok.
+ */
 function photoPlan() {
-  const w = 400, h = 300;
-  const data = new Uint8ClampedArray(w * h * 4);
+  const width = 400, height = 300;
+  const data = new Uint8ClampedArray(width * height * 4);
   let seed = 7;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const inRect = (x, y, r) => x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
+  /**
+   * Volgende waarde van de vaste toevalsreeks.
+   * @returns {number} Tussen 0 en 1.
+   */
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  /**
+   * Ligt het punt in de rechthoek?
+   * @param {number} x Horizontale positie.
+   * @param {number} y Verticale positie.
+   * @param {number[]} box [links, boven, rechts, onder].
+   * @returns {boolean} true als het punt erin ligt.
+   */
+  const inRect = (x, y, box) => x >= box[0] && x <= box[2] && y >= box[1] && y <= box[3];
   const lawn = [120, 80, 280, 220], path = [60, 60, 340, 250], title = [250, 268, 395, 296];
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const light = 0.5 + 0.2 * (x / w) + 0.08 * (y / h); // belichting loopt van 50% naar 78%
-      let c = [255, 255, 250]; // papier
-      if (inRect(x, y, path)) c = [200, 200, 200]; // grijze verharding rond het gazon
-      if (inRect(x, y, lawn) && (x + y) % 4 < 3) c = [215, 240, 190]; // lichtgroene arcering met papier ertussen
-      if (inRect(x, y, title) && (y % 7 === 0 || x % 50 === 0)) c = [60, 60, 60]; // titelblok: lijnen
-      if (x === 150 || y === 150) c = [30, 30, 30]; // inktlijnen dwars door alles
-      const n = (rnd() - 0.5) * 8;
-      const i = (y * w + x) * 4;
-      data[i] = c[0] * light * 1.0 + n; data[i + 1] = c[1] * light * 0.98 + n; data[i + 2] = c[2] * light * 0.92 + n; data[i + 3] = 255;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const light = 0.5 + 0.2 * (x / width) + 0.08 * (y / height); // belichting loopt van 50% naar 78%
+      let color = [255, 255, 250]; // papier
+      if (inRect(x, y, path)) color = [200, 200, 200]; // grijze verharding rond het gazon
+      if (inRect(x, y, lawn) && (x + y) % 4 < 3) color = [215, 240, 190]; // lichtgroene arcering met papier ertussen
+      if (inRect(x, y, title) && (y % 7 === 0 || x % 50 === 0)) color = [60, 60, 60]; // titelblok: lijnen
+      if (x === 150 || y === 150) color = [30, 30, 30]; // inktlijnen dwars door alles
+      const noise = (random() - 0.5) * 8;
+      const i = (y * width + x) * 4;
+      data[i] = color[0] * light * 1.0 + noise; data[i + 1] = color[1] * light * 0.98 + noise; data[i + 2] = color[2] * light * 0.92 + noise; data[i + 3] = 255;
     }
   }
-  return { data, w, h, lawn, path, title };
+  return { data, w: width, h: height, lawn, path, title };
 }
 
 test('vlakken op een gefotografeerd potloodplan', () => {
-  const G = sandbox.window.Geo;
-  const p = photoPlan();
-  const r = L.areasFromPixels(p.data, p.w, p.h);
-  assert.ok(r.normalized, 'belichting gecorrigeerd');
-  const lawns = r.areas.filter((a) => a.type === 'lawn');
+  const Geo = sandbox.window.Geo;
+  const plan = photoPlan();
+  const result = LocalRecognizer.areasFromPixels(plan.data, plan.w, plan.h);
+  assert.ok(result.normalized, 'belichting gecorrigeerd');
+  const lawns = result.areas.filter((area) => area.type === 'lawn');
   assert.strictEqual(lawns.length, 1, 'één gazon');
-  const la = G.area(lawns[0].points), expect = (p.lawn[2] - p.lawn[0]) * (p.lawn[3] - p.lawn[1]);
-  assert.ok(Math.abs(la - expect) / expect < 0.12, `gazon ${la} ≈ ${expect}`);
+  const lawnArea = Geo.area(lawns[0].points), expect = (plan.lawn[2] - plan.lawn[0]) * (plan.lawn[3] - plan.lawn[1]);
+  assert.ok(Math.abs(lawnArea - expect) / expect < 0.12, `gazon ${lawnArea} ≈ ${expect}`);
   // het papier zelf en het titelblok zijn geen vlak
-  for (const a of r.areas) {
-    const b = G.bbox(a.points);
-    assert.ok(b.w < 0.9 * p.w, `${a.type} beslaat niet het hele vel`);
-    assert.ok(b.minY < p.title[1] - 5, `${a.type} ligt niet in het titelblok`);
+  for (const area of result.areas) {
+    const box = Geo.bbox(area.points);
+    assert.ok(box.w < 0.9 * plan.w, `${area.type} beslaat niet het hele vel`);
+    assert.ok(box.minY < plan.title[1] - 5, `${area.type} ligt niet in het titelblok`);
   }
   // verharding rond het gazon: het gazon ligt niet binnen het verhardingsvlak (sleutelgat)
-  const dry = r.areas.filter((a) => a.type === 'dry');
+  const dry = result.areas.filter((area) => area.type === 'dry');
   assert.ok(dry.length >= 1, 'verharding herkend');
-  const mid = { x: (p.lawn[0] + p.lawn[2]) / 2 + 10, y: (p.lawn[1] + p.lawn[3]) / 2 + 10 };
-  assert.ok(!dry.some((d) => G.pointInPolygon(mid, d.points)), 'gazon niet als droog vlak');
-  assert.ok(dry.some((d) => G.pointInPolygon({ x: 80, y: 100 }, d.points)), 'pad wel droog');
+  const mid = { x: (plan.lawn[0] + plan.lawn[2]) / 2 + 10, y: (plan.lawn[1] + plan.lawn[3]) / 2 + 10 };
+  assert.ok(!dry.some((area) => Geo.pointInPolygon(mid, area.points)), 'gazon niet als droog vlak');
+  assert.ok(dry.some((area) => Geo.pointInPolygon({ x: 80, y: 100 }, area.points)), 'pad wel droog');
 });
 
 test('digitaal plan (egaal wit) wordt niet genormaliseerd', () => {
-  const w = 200, h = 150;
-  const data = new Uint8ClampedArray(w * h * 4).fill(255);
-  for (let y = 40; y < 110; y++) for (let x = 50; x < 150; x++) { const i = (y * w + x) * 4; data[i] = 0x8b; data[i + 1] = 0xc3; data[i + 2] = 0x4a; }
-  const r = L.areasFromPixels(data, w, h);
-  assert.ok(!r.normalized);
-  const lawns = r.areas.filter((a) => a.type === 'lawn');
+  const width = 200, height = 150;
+  const data = new Uint8ClampedArray(width * height * 4).fill(255);
+  for (let y = 40; y < 110; y++) for (let x = 50; x < 150; x++) { const i = (y * width + x) * 4; data[i] = 0x8b; data[i + 1] = 0xc3; data[i + 2] = 0x4a; }
+  const result = LocalRecognizer.areasFromPixels(data, width, height);
+  assert.ok(!result.normalized);
+  const lawns = result.areas.filter((area) => area.type === 'lawn');
   assert.strictEqual(lawns.length, 1);
   assert.ok(Math.abs(sandbox.window.Geo.area(lawns[0].points) - 7000) < 700);
 });
 
 test('schaal 1:N herkennen', () => {
-  const P = sandbox.window.PlanImport;
-  assert.strictEqual(P.parseRatio('Schaal: 1:50'), 50);
-  assert.strictEqual(P.parseRatio('schaal 1 : 100 datum 12-3'), 100);
-  assert.strictEqual(P.parseRatio('1/200'), 200);
-  assert.strictEqual(P.parseRatio('om 11:50 uur'), null);
-  assert.strictEqual(P.parseRatio('1:12345'), null);
-  assert.strictEqual(P.parseRatio('geen schaal'), null);
+  const PlanImport = sandbox.window.PlanImport;
+  assert.strictEqual(PlanImport.parseRatio('Schaal: 1:50'), 50);
+  assert.strictEqual(PlanImport.parseRatio('schaal 1 : 100 datum 12-3'), 100);
+  assert.strictEqual(PlanImport.parseRatio('1/200'), 200);
+  assert.strictEqual(PlanImport.parseRatio('om 11:50 uur'), null);
+  assert.strictEqual(PlanImport.parseRatio('1:12345'), null);
+  assert.strictEqual(PlanImport.parseRatio('geen schaal'), null);
 });
 
 test('concept: schaal uit 1:N op papierformaat, tuinbreedte of aanname', () => {
-  const Cn = sandbox.window.Concept;
+  const Concept = sandbox.window.Concept;
   const areas = [{ type: 'lawn', points: [{ x: 100, y: 100 }, { x: 600, y: 100 }, { x: 600, y: 400 }, { x: 100, y: 400 }] }];
   const res = { scale: { metersPerPixel: null, method: 'schatting' }, areas, elements: [] };
   const img = { width: 1000, height: 700, factor: 1 };
   // A3 liggend (420 mm) op 1:50 = 21 m over 1000 px
-  const a = Cn.build(res, { ...img, paper: { widthM: 0.42, ratio: 50 } });
-  assert.ok(Math.abs(a.backgroundScale - 0.021) < 1e-9);
-  assert.ok(!a.scaleInfo.estimated);
+  const onPaper = Concept.build(res, { ...img, paper: { widthM: 0.42, ratio: 50 } });
+  assert.ok(Math.abs(onPaper.backgroundScale - 0.021) < 1e-9);
+  assert.ok(!onPaper.scaleInfo.estimated);
   // opgegeven tuinbreedte: 500 px = 8 m
-  const b = Cn.build(res, img, { gardenWidthM: 8 });
-  assert.ok(Math.abs(b.backgroundScale - 8 / 500) < 1e-9);
+  const withWidth = Concept.build(res, img, { gardenWidthM: 8 });
+  assert.ok(Math.abs(withWidth.backgroundScale - 8 / 500) < 1e-9);
   // niets bekend: tuin 10 m breed aangenomen, en de app mag ernaar vragen
-  const c = Cn.build(res, img);
-  assert.ok(c.scaleInfo.estimated);
-  assert.strictEqual(c.gardenWidthPx, 500);
-  assert.ok(Math.abs(c.backgroundScale - Cn.FALLBACK_GARDEN_M / 500) < 1e-9);
+  const estimated = Concept.build(res, img);
+  assert.ok(estimated.scaleInfo.estimated);
+  assert.strictEqual(estimated.gardenWidthPx, 500);
+  assert.ok(Math.abs(estimated.backgroundScale - Concept.FALLBACK_GARDEN_M / 500) < 1e-9);
   // een gevonden maat gaat voor
-  const d = Cn.build({ ...res, scale: { metersPerPixel: 0.02, method: 'maatvoering', confidence: 'hoog' } }, { ...img, paper: { widthM: 0.42, ratio: 50 } });
-  assert.strictEqual(d.backgroundScale, 0.02);
+  const measured = Concept.build({ ...res, scale: { metersPerPixel: 0.02, method: 'maatvoering', confidence: 'hoog' } }, { ...img, paper: { widthM: 0.42, ratio: 50 } });
+  assert.strictEqual(measured.backgroundScale, 0.02);
 });
 
 test('labels herkennen, ook slordig gelezen handschrift', () => {
-  const t = (w) => { const m = L.matchLabel(w); return m ? m.type : null; };
-  assert.strictEqual(t('gras'), 'lawn');
-  assert.strictEqual(t('Gazon'), 'lawn');
-  assert.strictEqual(t('gazn'), 'lawn'); // letter gemist
-  assert.strictEqual(t('grasveld,'), 'lawn');
-  assert.strictEqual(t('Terras'), 'dry');
-  assert.strictEqual(t('teras'), 'dry');
-  assert.strictEqual(t('WONING'), 'dry');
-  assert.strictEqual(t('bordr'), 'bed');
-  assert.strictEqual(t('beplantlng'), 'bed'); // i als l gelezen
-  assert.strictEqual(t('haag'), 'hedge');
-  assert.strictEqual(t('vijver'), 'wet');
-  assert.strictEqual(t('grind'), 'wet');
-  assert.strictEqual(t('plantenbak'), 'planter');
-  assert.strictEqual(t('Rasen'), 'lawn');
-  assert.strictEqual(t('ab'), null);
-  assert.strictEqual(t('graf'), null); // kort woord: geen speling
-  assert.strictEqual(t('12,00'), null);
+  /**
+   * Vlaktype van een (slordig gelezen) woord.
+   * @param {string} word Het woord.
+   * @returns {string|null} Het type, of null.
+   */
+  const typeOf = (word) => { const match = LocalRecognizer.matchLabel(word); return match ? match.type : null; };
+  assert.strictEqual(typeOf('gras'), 'lawn');
+  assert.strictEqual(typeOf('Gazon'), 'lawn');
+  assert.strictEqual(typeOf('gazn'), 'lawn'); // letter gemist
+  assert.strictEqual(typeOf('grasveld,'), 'lawn');
+  assert.strictEqual(typeOf('Terras'), 'dry');
+  assert.strictEqual(typeOf('teras'), 'dry');
+  assert.strictEqual(typeOf('WONING'), 'dry');
+  assert.strictEqual(typeOf('bordr'), 'bed');
+  assert.strictEqual(typeOf('beplantlng'), 'bed'); // i als l gelezen
+  assert.strictEqual(typeOf('haag'), 'hedge');
+  assert.strictEqual(typeOf('vijver'), 'wet');
+  assert.strictEqual(typeOf('grind'), 'wet');
+  assert.strictEqual(typeOf('plantenbak'), 'planter');
+  assert.strictEqual(typeOf('Rasen'), 'lawn');
+  assert.strictEqual(typeOf('ab'), null);
+  assert.strictEqual(typeOf('graf'), null); // kort woord: geen speling
+  assert.strictEqual(typeOf('12,00'), null);
 });
 
 test('labels uit meerdere OCR-rondes worden samengevoegd', () => {
@@ -216,75 +258,91 @@ test('labels uit meerdere OCR-rondes worden samengevoegd', () => {
     { text: 'terras', confidence: 80, bbox: { x0: 300, y0: 100, x1: 380, y1: 130 } },
     { text: 'xyz', confidence: 90, bbox: { x0: 0, y0: 0, x1: 10, y1: 10 } },
   ];
-  const labels = L.labelsFromWords(words);
+  const labels = LocalRecognizer.labelsFromWords(words);
   assert.strictEqual(labels.length, 2);
-  assert.strictEqual(labels.find((l) => l.type === 'lawn').conf, 90);
+  assert.strictEqual(labels.find((label) => label.type === 'lawn').conf, 90);
 });
 
 test('schaal: meeste en zekerste lezingen winnen, tegenstrijdigheid verlaagt betrouwbaarheid', () => {
-  const k = (meters, px, conf, text) => ({ mpp: meters / px, meters, px, conf, text: text || String(meters) });
-  const a = L.pickScale([k(12, 600, 90), k(12, 600, 80), k(42, 600, 78)], 1300);
-  assert.ok(Math.abs(a.metersPerPixel - 0.02) < 1e-9);
-  assert.strictEqual(a.confidence, 'laag');
-  const b = L.pickScale([k(12, 600, 90), k(8.5, 425, 85)], 1300);
-  assert.strictEqual(b.confidence, 'hoog');
-  assert.strictEqual(L.pickScale([k(500, 10, 90)], 1300), null); // onwaarschijnlijk (650 km breed)
+  /**
+   * Een lezing van een maat.
+   * @param {number} meters Gelezen lengte.
+   * @param {number} px Lengte van de maatlijn in pixels.
+   * @param {number} conf Zekerheid van de OCR.
+   * @param {string} [text] Gelezen tekst.
+   * @returns {object} De lezing.
+   */
+  const reading = (meters, px, conf, text) => ({ mpp: meters / px, meters, px, conf, text: text || String(meters) });
+  const contradicting = LocalRecognizer.pickScale([reading(12, 600, 90), reading(12, 600, 80), reading(42, 600, 78)], 1300);
+  assert.ok(Math.abs(contradicting.metersPerPixel - 0.02) < 1e-9);
+  assert.strictEqual(contradicting.confidence, 'laag');
+  const agreeing = LocalRecognizer.pickScale([reading(12, 600, 90), reading(8.5, 425, 85)], 1300);
+  assert.strictEqual(agreeing.confidence, 'hoog');
+  assert.strictEqual(LocalRecognizer.pickScale([reading(500, 10, 90)], 1300), null); // onwaarschijnlijk (650 km breed)
 });
 
 // ---------------------------------------------------------------- echte tekening en leren
 
-const { readPng } = require('./png');
+const { readPng } = require('./helpers/png');
 const sandbox2 = { window: {}, console };
 vm.createContext(sandbox2);
-for (const f of ['geometry.js', 'sprinklerlib.js', 'catalog.js', 'autotrace.js', 'simulation.js', 'planner.js', 'planimport.js', 'concept.js', 'localrecog.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox2);
-const W2 = sandbox2.window;
+for (const file of ['geometry.js', 'sprinklerlib.js', 'catalog.js', 'autotrace.js', 'simulation.js', 'planner.js', 'planimport.js', 'concept.js', 'localrecog.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, file), 'utf8'), sandbox2);
+const isolatedWindow = sandbox2.window;
 
 test('tuinontwerp met watermerk, boom en logo: één gazon, rustige plaatsing', () => {
   // Voorbeeldplan van tuinontwerp-webshop.nl (500 × 500): gazon met een boomkroon en het watermerk
   // "Voorbeeld" erover, borders met getekende planten, een groen logo boven de tuin.
   const img = readPng(path.join(__dirname, 'fixtures', 'tuinontwerp-voorbeeld.png'));
-  const res = W2.LocalRecognizer.areasFromPixels(img.data, img.width, img.height, 1);
-  const lawns = res.areas.filter((a) => a.type === 'lawn');
+  const res = isolatedWindow.LocalRecognizer.areasFromPixels(img.data, img.width, img.height, 1);
+  const lawns = res.areas.filter((area) => area.type === 'lawn');
   assert.strictEqual(lawns.length, 1, 'één gazon, geen snippers in de borders');
-  const bb = W2.Geo.bbox(lawns[0].points);
+  const bb = isolatedWindow.Geo.bbox(lawns[0].points);
   // gazon ligt ongeveer tussen x 200–400 en y 235–405 (het logo staat bij y < 90)
   assert.ok(bb.minX > 190 && bb.maxX < 410 && bb.minY > 225 && bb.maxY < 415, JSON.stringify(bb));
   assert.ok((bb.maxX - bb.minX) * (bb.maxY - bb.minY) > 0.8 * 190 * 160, 'gazon niet aangevreten door tekst');
-  assert.ok(!res.areas.some((a) => W2.Geo.bbox(a.points).maxY < 120), 'logo is geen vlak');
+  assert.ok(!res.areas.some((area) => isolatedWindow.Geo.bbox(area.points).maxY < 120), 'logo is geen vlak');
   // plaatsen op de schaal die Daniël opgaf (tuin 14 m breed)
-  const built = W2.Concept.build({ scale: {}, areas: res.areas, elements: [], local: true }, { width: 500, height: 500, factor: 1 }, { gardenWidthM: 14 });
-  const lawn = built.areas.find((a) => a.type === 'lawn');
-  const heads = W2.Planner.autoPlace(lawn.pts, 'rotator', {});
-  const ev = W2.Planner.evaluate(lawn.pts, heads);
+  const built = isolatedWindow.Concept.build({ scale: {}, areas: res.areas, elements: [], local: true }, { width: 500, height: 500, factor: 1 }, { gardenWidthM: 14 });
+  const lawn = built.areas.find((area) => area.type === 'lawn');
+  const heads = isolatedWindow.Planner.autoPlace(lawn.pts, 'rotator', {});
+  const evaluation = isolatedWindow.Planner.evaluate(lawn.pts, heads);
   assert.ok(heads.length <= 18, `${heads.length} koppen`);
-  assert.ok(ev.du >= 0.65, `DU ${ev.du}`);
+  assert.ok(evaluation.du >= 0.65, `DU ${evaluation.du}`);
 });
 
 test('leren: kleur die de vaste regels niet als gazon zien, wordt na een voorbeeld wel gazon', () => {
-  const w = 240, h = 160;
-  const data = new Uint8ClampedArray(w * h * 4).fill(255);
-  const rect = (x0, y0, x1, y1, [r, g, b]) => {
-    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const k = (y * w + x) * 4; data[k] = r; data[k + 1] = g; data[k + 2] = b; }
+  const width = 240, height = 160;
+  const data = new Uint8ClampedArray(width * height * 4).fill(255);
+  /**
+   * Kleurt een rechthoek in het beeld.
+   * @param {number} x0 Links.
+   * @param {number} y0 Boven.
+   * @param {number} x1 Rechts.
+   * @param {number} y1 Onder.
+   * @param {number[]} color [rood, groen, blauw].
+   */
+  const rect = (x0, y0, x1, y1, [red, green, blue]) => {
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const index = (y * width + x) * 4; data[index] = red; data[index + 1] = green; data[index + 2] = blue; }
   };
   rect(20, 20, 150, 140, [150, 215, 205]); // gazon in een ongebruikelijke blauwgroene tint
   rect(160, 20, 220, 140, [160, 160, 160]); // terras
-  const before = W2.LocalRecognizer.areasFromPixels(data, w, h, 1);
-  assert.ok(!before.areas.some((a) => a.type === 'lawn'), 'zonder leren geen gazon');
+  const before = isolatedWindow.LocalRecognizer.areasFromPixels(data, width, height, 1);
+  assert.ok(!before.areas.some((area) => area.type === 'lawn'), 'zonder leren geen gazon');
   // "AI-herkenning" van een ander plan met dezelfde kleuren
   const truth = [
     { type: 'lawn', points: [{ x: 20, y: 20 }, { x: 150, y: 20 }, { x: 150, y: 140 }, { x: 20, y: 140 }] },
     { type: 'dry', points: [{ x: 160, y: 20 }, { x: 220, y: 20 }, { x: 220, y: 140 }, { x: 160, y: 140 }] },
   ];
-  const samples = W2.LocalRecognizer.samplesFromPixels(data, w, h, truth);
-  assert.strictEqual(samples.v, W2.LocalRecognizer.FEATURE_VERSION);
+  const samples = isolatedWindow.LocalRecognizer.samplesFromPixels(data, width, height, truth);
+  assert.strictEqual(samples.v, isolatedWindow.LocalRecognizer.FEATURE_VERSION);
   assert.ok(JSON.stringify(samples).length < 20000, 'klein: alleen tellingen');
-  const after = W2.LocalRecognizer.areasFromPixels(data, w, h, 1, { learned: { ...samples, examples: 1 } });
-  const lawn = after.areas.find((a) => a.type === 'lawn');
+  const after = isolatedWindow.LocalRecognizer.areasFromPixels(data, width, height, 1, { learned: { ...samples, examples: 1 } });
+  const lawn = after.areas.find((area) => area.type === 'lawn');
   assert.ok(lawn, 'na leren gazon');
-  const bb = W2.Geo.bbox(lawn.points);
+  const bb = isolatedWindow.Geo.bbox(lawn.points);
   assert.ok(Math.abs(bb.minX - 20) < 4 && Math.abs(bb.maxX - 150) < 4, JSON.stringify(bb));
   assert.ok(after.learnedShare > 0.5);
   // onbekende versie of te weinig bewijs: vaste regels
-  const old = W2.LocalRecognizer.areasFromPixels(data, w, h, 1, { learned: { ...samples, v: 0 } });
-  assert.ok(!old.areas.some((a) => a.type === 'lawn'));
+  const old = isolatedWindow.LocalRecognizer.areasFromPixels(data, width, height, 1, { learned: { ...samples, v: 0 } });
+  assert.ok(!old.areas.some((area) => area.type === 'lawn'));
 });

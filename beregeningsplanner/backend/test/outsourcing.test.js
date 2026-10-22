@@ -6,44 +6,23 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { placeOf, previewOf, sanitizeOutsourcing } = require('../src/uitvoering/outsourcing');
+const { createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    let json = null;
-    try { json = JSON.parse(await res.text()); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b), patch: (p, b) => call('PATCH', p, b), del: (p) => call('DELETE', p) };
-}
-
-// Platform met drie organisaties: Aquatech (hoofdtenant), Groen en Blauw.
+/**
+ * Hoofdtenant met beheerder en installateur, organisaties voor uitbesteden, plus een testserver.
+ * @returns {Promise<object>} db, server, base, as (inloggen), baas, orgs en main.
+ */
 async function setup() {
   const db = openDb();
   const store = createStore(db);
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org) => {
-    const c = client(base);
-    const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
-    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const as = createLogin(base, { password: PW });
   const baas = await as('baas');
   const orgs = {};
   for (const [slug, name, admin] of [['groen', 'Groen BV', 'piet'], ['blauw', 'Blauw BV', 'bram']]) {
@@ -54,13 +33,19 @@ async function setup() {
   return { db, server, base, as, baas, orgs, main };
 }
 
-async function acceptedWorkOrder(c, extra = {}) {
-  const q = (await c.post('/api/quotes', { data: { title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1\n8071 AB Nunspeet', email: 'jansen@voorbeeld.nl', phone: '0612345678' },
+/**
+ * Maakt een geaccordeerde offerte met werkorder en vult de planning in.
+ * @param {object} client Ingelogde client (met recht op offertes en werkorders).
+ * @param {object} [extra] Extra velden voor de werkordergegevens.
+ * @returns {Promise<object>} De bijgewerkte werkorder.
+ */
+async function acceptedWorkOrder(client, extra = {}) {
+  const quote = (await client.post('/api/quotes', { data: { title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1\n8071 AB Nunspeet', email: 'jansen@voorbeeld.nl', phone: '0612345678' },
     lines: [{ section: 'materiaal', code: 'PE25', description: 'PE-buis 25 mm', qty: 50, unit: 'm', price: 1.2 }, { section: 'arbeid', description: 'Sleuven graven', qty: 6, unit: 'uur', price: 55 }] } })).body;
-  await c.put(`/api/quotes/${q.id}`, { status: 'akkoord' });
-  const wo = (await c.post('/api/workorders', { quoteId: q.id })).body;
+  await client.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
+  const wo = (await client.post('/api/workorders', { quoteId: quote.id })).body;
   const data = { ...wo.data, plannedDate: '2027-04-12', instructions: 'Sleutel ligt bij de buren (nr. 3).', crew: 'Jan en Kees', ...extra };
-  return (await c.put(`/api/workorders/${wo.id}`, { data })).body;
+  return (await client.put(`/api/workorders/${wo.id}`, { data })).body;
 }
 
 test('plaats zonder straat; voorvertoning zonder klantgegevens', () => {
@@ -68,12 +53,12 @@ test('plaats zonder straat; voorvertoning zonder klantgegevens', () => {
   assert.strictEqual(placeOf('Dorpsstraat 1, 8071AB  Nunspeet'), '8071 Nunspeet');
   assert.strictEqual(placeOf('Dorpsstraat 1, Nunspeet'), 'Nunspeet');
   assert.strictEqual(placeOf('Dorpsstraat 1'), '', 'alleen een straat geeft niets prijs');
-  const p = previewOf({ title: 'Tuin', customer: { name: 'Fam. Jansen', contact: 'Jan', address: 'Dorpsstraat 1, Nunspeet', email: 'j@x.nl', phone: '06' },
+  const preview = previewOf({ title: 'Tuin', customer: { name: 'Fam. Jansen', contact: 'Jan', address: 'Dorpsstraat 1, Nunspeet', email: 'j@x.nl', phone: '06' },
     instructions: 'Sleutel onder de mat', siteNotes: 'Hond', steps: [{ title: 'Graven', hours: 4, details: 'bij Jansen' }], materials: [{ code: 'A', description: 'Buis', qty: 2, unit: 'm' }] });
-  const text = JSON.stringify(p);
+  const text = JSON.stringify(preview);
   for (const secret of ['Jansen', 'Dorpsstraat', 'j@x.nl', 'Sleutel', 'Hond', 'Jan"']) assert.ok(!text.includes(secret), `${secret} hoort niet in de voorvertoning`);
-  assert.strictEqual(p.place, 'Nunspeet');
-  assert.strictEqual(p.hours, 4);
+  assert.strictEqual(preview.place, 'Nunspeet');
+  assert.strictEqual(preview.hours, 4);
   assert.deepStrictEqual(sanitizeOutsourcing({ send: 'ja', receive: true, region: ' Veluwe ' }), { send: false, receive: true, region: 'Veluwe' });
 });
 
@@ -81,7 +66,7 @@ test('uitbesteden: opt-in aan beide kanten, aannemen geeft een eigen werkorder, 
   const { server, as, baas, orgs } = await setup();
   try {
     const kees = await as('kees');
-    const mainName = (await baas.get('/api/platform/tenants')).body.items.find((t) => t.slug === 'default').name;
+    const mainName = (await baas.get('/api/platform/tenants')).body.items.find((tenant) => tenant.slug === 'default').name;
     const piet = await as('piet', 'groen');
     const bram = await as('bram', 'blauw');
     const wo = await acceptedWorkOrder(baas);
@@ -96,7 +81,7 @@ test('uitbesteden: opt-in aan beide kanten, aannemen geeft een eigen werkorder, 
     await piet.put('/api/admin/settings', { outsourcing: { receive: true, region: 'Veluwe' } });
     await bram.put('/api/admin/settings', { outsourcing: { receive: true } });
     const ov = (await baas.get('/api/outsourcing')).body;
-    assert.deepStrictEqual(ov.partners.map((p) => [p.name, p.region]), [['Blauw BV', ''], ['Groen BV', 'Veluwe']]);
+    assert.deepStrictEqual(ov.partners.map((partner) => [partner.name, partner.region]), [['Blauw BV', ''], ['Groen BV', 'Veluwe']]);
     assert.deepStrictEqual(ov.incoming, [], 'Aquatech ontvangt zelf niet');
 
     // Gericht aan Groen: Blauw ziet het niet.
@@ -135,7 +120,7 @@ test('uitbesteden: opt-in aan beide kanten, aannemen geeft een eigen werkorder, 
     assert.strictEqual(mine.data.plannedDate, '2027-04-12');
     assert.strictEqual(mine.data.quoteId, '', 'geen koppeling met de offerte van een ander');
     assert.strictEqual(mine.data.crew, '', 'de ploeg van de uitbesteder gaat niet mee');
-    assert.ok(mine.data.steps.length > 0 && mine.data.steps.every((s) => !s.done));
+    assert.ok(mine.data.steps.length > 0 && mine.data.steps.every((step) => !step.done));
     assert.ok(!JSON.stringify(mine).includes('price'));
     assert.strictEqual(mine.status, 'gepland');
     const got = (await piet.get(`/api/workorders/${mine.id}`)).body;
@@ -145,7 +130,7 @@ test('uitbesteden: opt-in aan beide kanten, aannemen geeft een eigen werkorder, 
     assert.strictEqual((await baas.del(`/api/outsourcing/offers/${offer.body.id}`)).status, 409, 'aangenomen: niet meer in te trekken');
 
     // De uitbesteder ziet de voortgang bij Groen, niet de werkorder zelf.
-    const steps = got.data.steps.map((s, i) => ({ ...s, done: i === 0 }));
+    const steps = got.data.steps.map((step, i) => ({ ...step, done: i === 0 }));
     await piet.put(`/api/workorders/${mine.id}`, { status: 'bezig', data: { ...got.data, steps } });
     const out = (await baas.get('/api/outsourcing')).body.outgoing[0];
     assert.strictEqual(out.status, 'geaccepteerd');
@@ -190,27 +175,27 @@ test('uitbesteden: open aanbod, afwijzen, intrekken en alleen tussen live-omgevi
     const wo2 = await acceptedWorkOrder(baas);
     const o2 = (await baas.post('/api/outsourcing/offers', { workOrderId: wo2.id, toTenantId: orgs.groen.id })).body;
     await piet.post(`/api/outsourcing/offers/${o2.id}/decline`, { reason: 'Geen tijd in april' });
-    const back = (await baas.get('/api/outsourcing')).body.outgoing.find((o) => o.id === o2.id);
+    const back = (await baas.get('/api/outsourcing')).body.outgoing.find((offer) => offer.id === o2.id);
     assert.deepStrictEqual([back.status, back.reason], ['afgewezen', 'Geen tijd in april']);
     const o3 = (await baas.post('/api/outsourcing/offers', { workOrderId: wo2.id, toTenantId: orgs.blauw.id })).body;
     assert.strictEqual((await bram.del(`/api/outsourcing/offers/${o3.id}`)).status, 404, 'alleen de uitbesteder trekt in');
     assert.strictEqual((await baas.del(`/api/outsourcing/offers/${o3.id}`)).body.status, 'ingetrokken');
-    assert.deepStrictEqual((await bram.get('/api/outsourcing')).body.incoming.filter((o) => o.id === o3.id), []);
+    assert.deepStrictEqual((await bram.get('/api/outsourcing')).body.incoming.filter((offer) => offer.id === o3.id), []);
 
     // Een testomgeving ziet live-organisaties niet (en andersom).
     const env = await baas.post(`/api/platform/tenants/${orgs.groen.id}/environments`, { name: 'Groen test', slug: 'groen-test' });
     assert.strictEqual(env.status, 201, JSON.stringify(env.body));
     await piet.post('/api/environment', { tenantId: env.body.tenant.id });
     await piet.put('/api/admin/settings', { outsourcing: { send: true, receive: true } });
-    const t = (await piet.get('/api/outsourcing')).body;
-    assert.strictEqual(t.environment, 'test');
-    assert.deepStrictEqual(t.partners, []);
-    assert.deepStrictEqual(t.incoming, []);
-    assert.ok(!(await baas.get('/api/outsourcing')).body.partners.some((p) => p.id === env.body.tenant.id));
+    const overview = (await piet.get('/api/outsourcing')).body;
+    assert.strictEqual(overview.environment, 'test');
+    assert.deepStrictEqual(overview.partners, []);
+    assert.deepStrictEqual(overview.incoming, []);
+    assert.ok(!(await baas.get('/api/outsourcing')).body.partners.some((partner) => partner.id === env.body.tenant.id));
 
     // Een uitgeschakelde organisatie is geen partner meer.
     await baas.patch(`/api/platform/tenants/${orgs.blauw.id}`, { disabled: true });
-    assert.deepStrictEqual((await baas.get('/api/outsourcing')).body.partners.map((p) => p.name), ['Groen BV']);
+    assert.deepStrictEqual((await baas.get('/api/outsourcing')).body.partners.map((partner) => partner.name), ['Groen BV']);
   } finally {
     server.close();
   }

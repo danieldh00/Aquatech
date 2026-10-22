@@ -7,30 +7,16 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { sanitizeNews, unreadCount, Releases } = require('../src/platform/news');
+const { createClient, createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 'n'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (/Max-Age=0/.test(c)) jar.delete(kv.slice(0, i)); else jar.set(kv.slice(0, i), kv.slice(i + 1));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json, text };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b), del: (p) => call('DELETE', p) };
-}
-
+/**
+ * Hoofdtenant met beheerder, installateur en klant (met e-mailadressen), plus een testserver.
+ * @param {object} [opts] Extra opties voor createApp (bijv. mailerFor).
+ * @returns {Promise<object>} db, store, server, base, as (inloggen) en main.
+ */
 async function setup(opts = {}) {
   const db = openDb();
   const store = createStore(db);
@@ -38,18 +24,12 @@ async function setup(opts = {}) {
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW, email: 'baas@voorbeeld.nl' }, { platformAdmin: true });
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
   await store.createAccount(main, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: PW });
-  for (const [u, email] of [['kees', 'kees@voorbeeld.nl'], ['klaas', 'klaas@voorbeeld.nl']]) {
-    const row = db.prepare('SELECT id FROM users WHERE username = ?').get(u);
+  for (const [username, email] of [['kees', 'kees@voorbeeld.nl'], ['klaas', 'klaas@voorbeeld.nl']]) {
+    const row = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     store.updateProfile(row.id, { email });
   }
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, ...opts }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org) => {
-    const c = client(base);
-    const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
-    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db, ...opts }));
+  const as = createLogin(base, { password: PW });
   return { db, store, server, base, as, main };
 }
 
@@ -66,15 +46,15 @@ test('wat is nieuw: huidige versie staat erin, nieuwste bovenaan, punten per rec
   assert.strictEqual(Releases.latest, version, 'zet de nieuwe versie bovenaan in frontend/nieuws/releases.js');
   for (let i = 1; i < Releases.RELEASES.length; i++) assert.ok(Releases.compare(Releases.RELEASES[i - 1].version, Releases.RELEASES[i].version) > 0);
   const changelog = fs.readFileSync(path.join(__dirname, '..', '..', 'CHANGELOG.md'), 'utf8');
-  for (const r of Releases.RELEASES) {
-    assert.match(r.date, /^\d{4}-\d\d-\d\d$/);
-    assert.ok(changelog.includes(`## ${r.version}\n`), `versie ${r.version} staat niet in CHANGELOG.md`);
+  for (const release of Releases.RELEASES) {
+    assert.match(release.date, /^\d{4}-\d\d-\d\d$/);
+    assert.ok(changelog.includes(`## ${release.version}\n`), `versie ${release.version} staat niet in CHANGELOG.md`);
   }
   const klant = Releases.visibleFor(['plannen', 'offertes.klant', 'portaal']);
   const text = JSON.stringify(klant);
   assert.ok(!/Beheer → Rollen|Uitbesteden|Planner/.test(text), 'een klant ziet geen nieuws over beheer of planning');
-  assert.ok(klant.some((r) => r.version === '0.37.0'), 'wel over zijn portaal');
-  assert.ok(Releases.visibleFor(['beheer']).some((r) => r.version === '0.49.0'));
+  assert.ok(klant.some((release) => release.version === '0.37.0'), 'wel over zijn portaal');
+  assert.ok(Releases.visibleFor(['beheer']).some((release) => release.version === '0.49.0'));
   assert.strictEqual(Releases.compare('0.10.0', '0.9.9') > 0, true);
 });
 
@@ -91,14 +71,18 @@ test('nieuw sinds het vorige bezoek: telling', () => {
   assert.strictEqual(unreadCount({ marks, prefs: seenAll, user, rights: ['portaal'], customer: true }), 1, 'klant: alleen berichten voor iedereen');
   // Eigen berichten tellen niet; zonder vorig bezoek alleen de laatste versie.
   assert.strictEqual(unreadCount({ marks, prefs: { newsSeenAt: '', seenRelease: '' }, user, rights: [], customer: false }), 3);
-  const since48 = Releases.visibleFor(['beheer']).filter((r) => Releases.compare(r.version, '0.48.0') > 0).length;
+  const since48 = Releases.visibleFor(['beheer']).filter((release) => Releases.compare(release.version, '0.48.0') > 0).length;
   assert.ok(since48 >= 2);
   assert.strictEqual(unreadCount({ marks: [], prefs: { newsSeenAt: '', seenRelease: '0.48.0' }, user, rights: ['beheer'], customer: false }), since48);
 });
 
 test('nieuws: beheerder plaatst, collega en klant lezen, melding en gezien', async () => {
   const sent = [];
-  const mailerFor = () => ({ configured: () => true, send: async (m) => { sent.push(m); } });
+  /**
+   * Mailer die niets verstuurt maar elk bericht bewaart.
+   * @returns {object} De mailer.
+   */
+  const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
   const { server, as, db } = await setup({ mailerFor });
   try {
     const baas = await as('baas');
@@ -112,7 +96,7 @@ test('nieuws: beheerder plaatst, collega en klant lezen, melding en gezien', asy
     const intern = await baas.post('/api/news', { title: 'Teamoverleg', body: 'Vrijdag 8:00 in de werkplaats.\nhttps://voorbeeld.nl/agenda', mail: true });
     assert.strictEqual(intern.status, 201, JSON.stringify(intern.body));
     assert.strictEqual(intern.body.mailed.sent, 1, 'alleen collega\'s met een e-mailadres, niet de afzender of klanten');
-    assert.deepStrictEqual(sent.map((m) => m.to), ['kees@voorbeeld.nl']);
+    assert.deepStrictEqual(sent.map((message) => message.to), ['kees@voorbeeld.nl']);
     assert.match(sent[0].subject, /Nieuws: Teamoverleg/);
     const open = await baas.post('/api/news', { title: 'Zomerstop', body: 'Van 1 tot 14 augustus zijn we dicht.', audience: 'iedereen', pinned: true });
     assert.strictEqual(open.status, 201);
@@ -153,8 +137,8 @@ test('nieuws: beheerder plaatst, collega en klant lezen, melding en gezien', asy
 
     // Auditlog zonder de inhoud van het bericht.
     const audit = db.prepare("SELECT action, detail FROM audit WHERE action LIKE 'nieuws_%'").all();
-    assert.deepStrictEqual(audit.map((a) => a.action).sort(), ['nieuws_geplaatst', 'nieuws_geplaatst', 'nieuws_gewijzigd', 'nieuws_verwijderd']);
-    assert.ok(!audit.some((a) => /werkplaats|augustus/.test(a.detail)));
+    assert.deepStrictEqual(audit.map((entry) => entry.action).sort(), ['nieuws_geplaatst', 'nieuws_geplaatst', 'nieuws_gewijzigd', 'nieuws_verwijderd']);
+    assert.ok(!audit.some((entry) => /werkplaats|augustus/.test(entry.detail)));
 
   } finally {
     server.close();
@@ -168,7 +152,7 @@ test('nieuws: rechten en tenantscheiding', async () => {
     const kees = await as('kees');
     const klaas = await as('klaas');
     // Zonder inloggen niets.
-    assert.strictEqual((await client(base).get('/api/news')).status, 401);
+    assert.strictEqual((await createClient(base).get('/api/news')).status, 401);
     // Zonder het recht nieuws geen plaatsen, wijzigen of verwijderen.
     assert.strictEqual((await kees.post('/api/news', { title: 'x', body: 'y' })).status, 403);
     assert.strictEqual((await klaas.post('/api/news', { title: 'x', body: 'y' })).status, 403);

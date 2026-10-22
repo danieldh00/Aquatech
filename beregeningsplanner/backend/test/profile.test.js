@@ -4,47 +4,37 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore, preferencesOf } = require('../src/platform/store');
+const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
+/**
+ * Start een testserver met beheerder 'baas' en klant 'klaas'.
+ * @returns {Promise<{ store: object, server: import('http').Server, base: string }>} Store, server en adres.
+ */
 async function start() {
   const db = openDb();
   const store = createStore(db);
   const tid = store.ensureTenant().id;
   await store.createAccount(tid, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: PW });
-  return new Promise((resolve) => {
-    const app = createApp({ secret: SECRET, db, accessCode: 'Toegang-Code-2026!' });
-    const server = app.listen(0, () => resolve({ store, server, base: `http://127.0.0.1:${server.address().port}` }));
-  });
+  const app = createApp({ secret: SECRET, db, accessCode: 'Toegang-Code-2026!' });
+  return { store, ...(await listen(app)) };
 }
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (/Max-Age=0/.test(c)) jar.delete(kv.slice(0, i)); else jar.set(kv.slice(0, i), kv.slice(i + 1));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json, text };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b), put: (p, b) => call('PUT', p, b) };
-}
-
+/**
+ * Logt in zonder lege JSON-body bij andere POST's (zoals een browserformulier).
+ * @param {string} base Adres van de testserver.
+ * @param {string} username Gebruikersnaam.
+ * @param {string} [password] Wachtwoord (standaard het testwachtwoord).
+ * @returns {Promise<object>} De ingelogde client.
+ */
 async function login(base, username, password = PW) {
-  const c = client(base);
-  const r = await c.post('/api/auth/login', { username, password });
-  assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-  return c;
+  const client = createClient(base, { emptyJsonBody: false });
+  const response = await client.post('/api/auth/login', { username, password });
+  assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+  return client;
 }
 
 test('voorkeuren: alleen bekende sleutels, altijd compleet', () => {
@@ -57,10 +47,10 @@ test('Mijn profiel: gegevens en voorkeuren wijzigen', async () => {
   const { server, base } = await start();
   try {
     const klaas = await login(base, 'klaas');
-    const p = await klaas.get('/api/account/profile');
-    assert.strictEqual(p.status, 200);
-    assert.deepStrictEqual(p.body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' });
-    assert.strictEqual(p.body.user.email, '');
+    const profile = await klaas.get('/api/account/profile');
+    assert.strictEqual(profile.status, 200);
+    assert.deepStrictEqual(profile.body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' });
+    assert.strictEqual(profile.body.user.email, '');
     assert.deepStrictEqual((await klaas.get('/api/me')).body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' });
 
     // Ongeldige invoer: niets opgeslagen, met het veld erbij.
@@ -89,14 +79,14 @@ test('Mijn profiel: gegevens en voorkeuren wijzigen', async () => {
 
     // Logboek: welke velden, nooit de waarden.
     const baas = await login(base, 'baas');
-    const items = (await baas.get('/api/admin/audit')).body.items.filter((a) => a.action === 'profiel_gewijzigd');
+    const items = (await baas.get('/api/admin/audit')).body.items.filter((entry) => entry.action === 'profiel_gewijzigd');
     assert.ok(items.length >= 3);
     assert.ok(!JSON.stringify(items).includes('voorbeeld.test') && !JSON.stringify(items).includes('12-34'), 'geen persoonsgegevens in het logboek');
     // De beheerder ziet de contactgegevens in het gebruikersoverzicht.
     await klaas.put('/api/account/profile', { email: 'klaas@voorbeeld.test' });
     const users = (await baas.get('/api/admin/users')).body;
     const list = users.items || users;
-    assert.strictEqual(list.find((u) => u.username === 'klaas').email, 'klaas@voorbeeld.test');
+    assert.strictEqual(list.find((user) => user.username === 'klaas').email, 'klaas@voorbeeld.test');
   } finally {
     server.close();
   }
@@ -105,9 +95,9 @@ test('Mijn profiel: gegevens en voorkeuren wijzigen', async () => {
 test('Mijn profiel: niet zonder eigen account, pagina bereikbaar', async () => {
   const { server, base } = await start();
   try {
-    assert.strictEqual((await client(base).get('/api/account/profile')).status, 400);
+    assert.strictEqual((await createClient(base, { emptyJsonBody: false }).get('/api/account/profile')).status, 400);
     // Met de toegangscode is er geen eigen profiel.
-    const code = client(base);
+    const code = createClient(base, { emptyJsonBody: false });
     assert.strictEqual((await code.post('/api/auth/login', { code: 'Toegang-Code-2026!' })).status, 200);
     assert.strictEqual((await code.get('/api/account/profile')).status, 400);
     assert.strictEqual((await code.put('/api/account/profile', { displayName: 'X' })).status, 400);
@@ -127,6 +117,11 @@ test('startpagina: het dashboard krijgt hem mee, alleen als de module er voor de
   const { server, base } = await start();
   try {
     const klaas = await login(base, 'klaas');
+    /**
+     * Leest de startpagina uit de meta-tag van het dashboard.
+     * @param {string} html De HTML van de pagina.
+     * @returns {string|null} De startpagina, of null zonder meta-tag.
+     */
     const meta = (html) => (/<meta name="aquatech-start" content="([^"]*)">/.exec(html) || [])[1] || null;
     assert.strictEqual(meta((await klaas.get('/')).text), null);
     await klaas.put('/api/account/profile', { preferences: { startPage: 'portaal' } });

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.68.4
+
+Opschoonronde tests (geen functionele wijziging): duidelijke namen en een
+commentaarblok bij elke functie in alle bestanden onder `backend/test/`.
+
+- Gedeelde hulpcode in `test/helpers/`: `http-client.js` (`createClient`,
+  `listen` voor een testserver, `createLogin` voor een ingelogde client per
+  account) en `png.js`. De 31 losse kopieën van de testclient zijn weg.
+- Offertetest gebruikt `signaturePng` uit `test-data.js` voor de handtekening.
+
 ## 0.68.3
 
 Opschoonronde backend deel 3 (geen functionele wijziging): duidelijke namen

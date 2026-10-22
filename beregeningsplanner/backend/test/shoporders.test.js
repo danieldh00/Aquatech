@@ -13,29 +13,16 @@ const { createPdf, wrap, textWidth, encode } = require('../src/verkoop/pdf');
 const { invoicePdf } = require('../src/verkoop/invoice-pdf');
 
 const Core = require(path.join(__dirname, '..', '..', 'frontend', 'facturen', 'invoice-core.js'));
+const { createLogin, listen } = require('./helpers/http-client');
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    const buf = Buffer.from(await res.arrayBuffer());
-    let json = null;
-    try { json = JSON.parse(buf.toString('utf8')); } catch { /* geen JSON */ }
-    return { status: res.status, body: json, raw: buf, type: res.headers.get('content-type') || '' };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b), del: (p) => call('DELETE', p) };
-}
-
+/**
+ * Een WooCommerce-bestelling (afgerond, betaald, met verzendkosten).
+ * @param {number} id Bestelnummer.
+ * @param {object} [extra] Velden die de standaard overschrijven.
+ * @returns {object} De bestelling.
+ */
 const order = (id, extra = {}) => ({
   id, number: String(id), status: 'completed', customer_id: 0,
   date_created: '2026-10-20T09:00:00', date_completed: '2026-10-21T10:00:00', date_paid: '2026-10-20T09:01:00',
@@ -47,22 +34,41 @@ const order = (id, extra = {}) => ({
   ...extra,
 });
 
-// Nagebootste WooCommerce: alleen bestellingen (en een lege productlijst).
+/**
+ * Nagebootste WooCommerce: alleen bestellingen (en een lege productlijst).
+ * @param {object[]} orders Alle bestellingen.
+ * @returns {{ fetchImpl: Function, calls: object[] }} Nagebootste fetch en de gedane verzoeken.
+ */
 function fakeShop(orders) {
   const calls = [];
+  /**
+   * Beantwoordt één verzoek: bestellingen per status (en modified_after), anders een lege lijst.
+   * @param {string} url Adres van het verzoek.
+   * @returns {Promise<object>} Antwoord zoals fetch het geeft.
+   */
   const fetchImpl = async (url) => {
-    const u = new URL(url);
-    calls.push({ path: u.pathname, query: Object.fromEntries(u.searchParams) });
+    const requestUrl = new URL(url);
+    calls.push({ path: requestUrl.pathname, query: Object.fromEntries(requestUrl.searchParams) });
+    /**
+     * Een geslaagd JSON-antwoord.
+     * @param {*} body De inhoud.
+     * @returns {object} Antwoord zoals fetch het geeft.
+     */
     const json = (body) => ({ ok: true, status: 200, headers: new Headers({ 'x-wp-totalpages': '1' }), text: async () => JSON.stringify(body) });
-    if (u.pathname.endsWith('/orders')) {
-      const after = u.searchParams.get('modified_after') || '';
-      return json(orders.filter((o) => o.status === u.searchParams.get('status') && (!after || o.date_modified_gmt > after)));
+    if (requestUrl.pathname.endsWith('/orders')) {
+      const after = requestUrl.searchParams.get('modified_after') || '';
+      return json(orders.filter((order) => order.status === requestUrl.searchParams.get('status') && (!after || order.date_modified_gmt > after)));
     }
     return json([]);
   };
   return { fetchImpl, calls };
 }
 
+/**
+ * Hoofdtenant met beheerder en installateur, plus een testserver met nagebootste webshop en mailer.
+ * @param {{ orders?: object[], mailOn?: boolean }} [options] Bestellingen in de webshop; mailOn: mailer ingesteld.
+ * @returns {Promise<object>} db, server, as (inloggen), sent (mails), mail, shop en main.
+ */
 async function setup({ orders = [], mailOn = true } = {}) {
   const db = openDb();
   const store = createStore(db);
@@ -71,16 +77,14 @@ async function setup({ orders = [], mailOn = true } = {}) {
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
   const sent = [];
   const mail = { on: mailOn };
-  const mailerFor = () => ({ configured: () => mail.on, send: async (m) => { sent.push(m); return {}; } });
+  /**
+   * Mailer die niets verstuurt maar elk bericht bewaart.
+   * @returns {object} De mailer.
+   */
+  const mailerFor = () => ({ configured: () => mail.on, send: async (message) => { sent.push(message); return {}; } });
   const shop = fakeShop(orders);
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, mailerFor, shopFetch: shop.fetchImpl }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org) => {
-    const c = client(base);
-    const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
-    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db, mailerFor, shopFetch: shop.fetchImpl }));
+  const as = createLogin(base, { password: PW });
   return { db, server, as, sent, mail, shop, main };
 }
 
@@ -93,28 +97,28 @@ test('pdf: tekst in WinAnsi, breedtes, afbreken en een geldig bestand', () => {
   pdf.addPage();
   pdf.text('Hallo (wereld) \\ €', 40, 40);
   const buf = pdf.toBuffer();
-  const s = buf.toString('latin1');
-  assert.ok(s.startsWith('%PDF-1.4'));
+  const text = buf.toString('latin1');
+  assert.ok(text.startsWith('%PDF-1.4'));
   // De xref-tabel wijst naar de objecten.
-  const start = Number(/startxref\n(\d+)/.exec(s)[1]);
-  assert.ok(s.slice(start).startsWith('xref'));
-  const first = Number(/xref\n0 \d+\n0000000000 65535 f \n(\d{10})/.exec(s.slice(start))[1]);
-  assert.ok(s.slice(first).startsWith('1 0 obj'));
+  const start = Number(/startxref\n(\d+)/.exec(text)[1]);
+  assert.ok(text.slice(start).startsWith('xref'));
+  const first = Number(/xref\n0 \d+\n0000000000 65535 f \n(\d{10})/.exec(text.slice(start))[1]);
+  assert.ok(text.slice(first).startsWith('1 0 obj'));
 });
 
 test('factuur-pdf: met logo, meerdere pagina\'s bij veel regels', () => {
   const lines = Array.from({ length: 60 }, (_, i) => ({ code: `A${i}`, description: `Artikel ${i}`, qty: 1, unit: 'st', price: 10, vat: 21, group: 'producten' }));
   const inv = { kind: 'factuur', number: 'F2026-0001', status: 'definitief', data: Core.sanitize({ customer: { name: 'Jan' }, lines }) };
-  const s = invoicePdf(inv, { profile: { companyName: 'AquaTech Service', iban: 'NL00TEST0123456789' } }).toString('latin1');
-  assert.ok(s.includes('/Subtype /Image'), 'logo ingesloten');
-  assert.ok(s.includes('/SMask'), 'met transparantie');
-  assert.strictEqual(Number(/\/Count (\d+)/.exec(s)[1]), 2);
+  const text = invoicePdf(inv, { profile: { companyName: 'AquaTech Service', iban: 'NL00TEST0123456789' } }).toString('latin1');
+  assert.ok(text.includes('/Subtype /Image'), 'logo ingesloten');
+  assert.ok(text.includes('/SMask'), 'met transparantie');
+  assert.strictEqual(Number(/\/Count (\d+)/.exec(text)[1]), 2);
 });
 
 test('bestelling als factuur: klant, btw-tarief per regel, verzendkosten, afronding', () => {
   assert.strictEqual(snapRate(20.6), 21);
   assert.strictEqual(snapRate(9.2), 9);
-  const o = order(1, {
+  const shopOrder = order(1, {
     billing: { first_name: 'Petra', last_name: 'Jansen', company: 'Tuin BV', address_1: 'Rue 1', postcode: '1000', city: 'Brussel', country: 'BE', email: 'p@x.test' },
     meta_data: [{ key: '_billing_vat_number', value: 'BE0123456789' }],
     line_items: [
@@ -122,19 +126,19 @@ test('bestelling als factuur: klant, btw-tarief per regel, verzendkosten, afrond
       { sku: '', name: 'Zaad', quantity: 2, total: '5.00', total_tax: '0.45', taxes: [{ id: 2, total: '0.45' }] },
     ],
   });
-  const b = fromOrder(o, { articles: { 'PE-25': { unit: 'm', vatRate: 21, revenueGroup: 'producten' } } });
-  assert.strictEqual(b.data.customer.name, 'Tuin BV');
-  assert.strictEqual(b.data.customer.contact, 'Petra Jansen');
-  assert.ok(b.data.customer.address.endsWith('BE'));
-  assert.strictEqual(b.data.customer.vatNumber, 'BE0123456789');
-  assert.strictEqual(b.data.reference, 'Webshopbestelling #1');
+  const built = fromOrder(shopOrder, { articles: { 'PE-25': { unit: 'm', vatRate: 21, revenueGroup: 'producten' } } });
+  assert.strictEqual(built.data.customer.name, 'Tuin BV');
+  assert.strictEqual(built.data.customer.contact, 'Petra Jansen');
+  assert.ok(built.data.customer.address.endsWith('BE'));
+  assert.strictEqual(built.data.customer.vatNumber, 'BE0123456789');
+  assert.strictEqual(built.data.reference, 'Webshopbestelling #1');
   // 10,00 / 3 komt niet uit: één regel met het totaal.
-  assert.deepStrictEqual([b.data.lines[0].qty, b.data.lines[0].price, b.data.lines[0].description], [1, 10, '3 × PE-buis']);
-  assert.deepStrictEqual([b.data.lines[1].qty, b.data.lines[1].price, b.data.lines[1].vat], [2, 2.5, 9]);
-  assert.deepStrictEqual([b.data.lines[2].description, b.data.lines[2].group, b.data.lines[2].vat], ['Verzendkosten (PostNL)', 'overig', 21]);
-  assert.strictEqual(Core.totals(b.data).net, 21.95);
-  assert.strictEqual(b.paidOn, '2026-10-20');
-  assert.strictEqual(b.data.date, '2026-10-21');
+  assert.deepStrictEqual([built.data.lines[0].qty, built.data.lines[0].price, built.data.lines[0].description], [1, 10, '3 × PE-buis']);
+  assert.deepStrictEqual([built.data.lines[1].qty, built.data.lines[1].price, built.data.lines[1].vat], [2, 2.5, 9]);
+  assert.deepStrictEqual([built.data.lines[2].description, built.data.lines[2].group, built.data.lines[2].vat], ['Verzendkosten (PostNL)', 'overig', 21]);
+  assert.strictEqual(Core.totals(built.data).net, 21.95);
+  assert.strictEqual(built.paidOn, '2026-10-20');
+  assert.strictEqual(built.data.date, '2026-10-21');
 });
 
 test('webshopbestellingen: factuur + debiteur, definitief, betaald, automatisch verstuurd met pdf; niet dubbel', async () => {
@@ -156,10 +160,10 @@ test('webshopbestellingen: factuur + debiteur, definitief, betaald, automatisch 
     // Voorraad: PE-25 met 50 op voorraad (zonder voorraadsync boekt de factuur af).
     const item = (await baas.post('/api/stock/items', { code: 'PE-25', name: 'PE-buis', unit: 'm', onHand: 50, salePrice: 2, revenueGroup: 'producten' })).body;
 
-    const r = await baas.post('/api/invoices/shop-orders/sync');
-    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    assert.deepStrictEqual([r.body.found, r.body.imported, r.body.finalized, r.body.paid, r.body.sent, r.body.skipped], [3, 2, 2, 1, 2, 1]);
-    assert.strictEqual(shop.calls.find((c) => c.path.endsWith('/orders')).query.modified_after, '2026-10-01T00:00:00');
+    const response = await baas.post('/api/invoices/shop-orders/sync');
+    assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+    assert.deepStrictEqual([response.body.found, response.body.imported, response.body.finalized, response.body.paid, response.body.sent, response.body.skipped], [3, 2, 2, 1, 2, 1]);
+    assert.strictEqual(shop.calls.find((call) => call.path.endsWith('/orders')).query.modified_after, '2026-10-01T00:00:00');
     const list = (await baas.get('/api/invoices')).body.items;
     assert.strictEqual(list.length, 2);
     const paid = list.find((i) => i.status === 'betaald');
@@ -170,17 +174,17 @@ test('webshopbestellingen: factuur + debiteur, definitief, betaald, automatisch 
     assert.strictEqual(full.debtorNumber, 5000);
     assert.strictEqual(full.total, 32.61);
     // Mail met de pdf als bijlage, betaald = "al voldaan".
-    const m = sent.find((x) => x.to.includes('petra@voorbeeld.test'));
-    assert.match(m.subject, /^Factuur F2026-\d{4} van /);
-    assert.match(m.text, /al voldaan/);
-    assert.strictEqual(m.attachments[0].contentType, 'application/pdf');
-    assert.ok(m.attachments[0].content.subarray(0, 5).equals(Buffer.from('%PDF-')));
+    const message = sent.find((item) => item.to.includes('petra@voorbeeld.test'));
+    assert.match(message.subject, /^Factuur F2026-\d{4} van /);
+    assert.match(message.text, /al voldaan/);
+    assert.strictEqual(message.attachments[0].contentType, 'application/pdf');
+    assert.ok(message.attachments[0].content.subarray(0, 5).equals(Buffer.from('%PDF-')));
     // Voorraad afgeboekt (2 bestellingen x 10).
     assert.strictEqual((await baas.get(`/api/stock/items/${item.id}`)).body.onHand, 30);
     // Debiteuren: twee (verschillende e-mailadressen), nummers vanaf 5000.
     const debtors = (await baas.get('/api/debtors')).body.items;
-    assert.deepStrictEqual(debtors.map((d) => d.number).sort(), [5000, 5001]);
-    assert.strictEqual(debtors.find((d) => d.number === 5001).openTotal, 32.61);
+    assert.deepStrictEqual(debtors.map((debtor) => debtor.number).sort(), [5000, 5001]);
+    assert.strictEqual(debtors.find((debtor) => debtor.number === 5001).openTotal, 32.61);
     assert.strictEqual(debtors[0].source, 'webshop');
 
     // Opnieuw ophalen: niets dubbel.
@@ -211,9 +215,9 @@ test('factuur versturen: voorstel, pdf, handmatig versturen, automatisch bij def
     assert.strictEqual(pdf.type, 'application/pdf');
     assert.ok(pdf.raw.subarray(0, 5).equals(Buffer.from('%PDF-')));
     assert.strictEqual((await baas.post(`/api/invoices/${inv.id}/send`, { to: 'geen-adres' })).status, 400);
-    const s = await baas.post(`/api/invoices/${inv.id}/send`, { to: 'jan@voorbeeld.test, boekhouding@voorbeeld.test', subject: 'Uw factuur', message: 'Hallo' });
-    assert.strictEqual(s.status, 200, JSON.stringify(s.body));
-    assert.strictEqual(s.body.sentTo, 'jan@voorbeeld.test, boekhouding@voorbeeld.test');
+    const response = await baas.post(`/api/invoices/${inv.id}/send`, { to: 'jan@voorbeeld.test, boekhouding@voorbeeld.test', subject: 'Uw factuur', message: 'Hallo' });
+    assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+    assert.strictEqual(response.body.sentTo, 'jan@voorbeeld.test, boekhouding@voorbeeld.test');
     assert.strictEqual(sent[0].subject, 'Uw factuur');
     assert.match(sent[0].attachments[0].filename, /^Factuur F2026-0001\.pdf$/);
 
@@ -256,9 +260,9 @@ test('debiteuren en versturen: recht facturen en scheiding tussen organisaties',
     const inv = (await baas.post('/api/invoices', { data: { customer: { name: 'Jan', email: 'jan@voorbeeld.test' }, lines: [{ description: 'X', qty: 1, price: 5 }] } })).body;
     const fin = (await baas.post(`/api/invoices/${inv.id}/finalize`, {})).body;
     const kees = await as('kees');
-    for (const [m, p] of [['get', '/api/debtors'], ['get', `/api/debtors/${fin.debtorId}`], ['get', `/api/invoices/${inv.id}/pdf`], ['get', `/api/invoices/${inv.id}/mail`],
+    for (const [method, urlPath] of [['get', '/api/debtors'], ['get', `/api/debtors/${fin.debtorId}`], ['get', `/api/invoices/${inv.id}/pdf`], ['get', `/api/invoices/${inv.id}/mail`],
       ['post', `/api/invoices/${inv.id}/send`], ['post', '/api/invoices/shop-orders/sync']]) {
-      assert.strictEqual((await kees[m](p, m === 'post' ? { to: 'a@b.test' } : undefined)).status, 403, p);
+      assert.strictEqual((await kees[method](urlPath, method === 'post' ? { to: 'a@b.test' } : undefined)).status, 403, urlPath);
     }
     await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
     const piet = await as('piet', 'groen');

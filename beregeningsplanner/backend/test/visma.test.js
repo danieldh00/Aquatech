@@ -7,85 +7,85 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { splitAddress, invoiceBody, sanitizeVismaApp, sanitizeVisma } = require('../src/verkoop/visma');
+const { listen, createLogin } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 const ART = { producten: '11111111-1111-1111-1111-111111111111', arbeid: '22222222-2222-2222-2222-222222222222' };
 const TERMS = '33333333-3333-3333-3333-333333333333';
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, redirect: 'manual', body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json, text, location: res.headers.get('location') || '' };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b) };
-}
-
-// Nagebootste Visma: identity (token) en de API.
+/**
+ * Nagebootste Visma: identity (token) en de API.
+ * @returns {object} Opgeslagen aanroepen, klanten, facturen en tokenverzoeken, plus fetchImpl.
+ */
 function fakeVisma() {
-  const v = { calls: [], customers: [], invoices: [], tokenCalls: [], expireNext: false, access: 'acc-1' };
-  let n = 0;
+  const visma = { calls: [], customers: [], invoices: [], tokenCalls: [], expireNext: false, access: 'acc-1' };
+  let refreshCount = 0;
+  /**
+   * Een fetch-antwoord met JSON.
+   * @param {number} status HTTP-status.
+   * @param {*} body De inhoud.
+   * @returns {object} Antwoord zoals fetch het geeft.
+   */
   const reply = (status, body) => ({ ok: status < 400, status, json: async () => body, text: async () => JSON.stringify(body) });
-  v.fetchImpl = async (url, init = {}) => {
-    const u = new URL(url);
+  /**
+   * Beantwoordt één verzoek: token, bedrijfsgegevens, artikelen, betaaltermijnen, klanten of facturen.
+   * @param {string} url Adres van het verzoek.
+   * @param {object} [init] Fetch-opties (method, headers, body).
+   * @returns {Promise<object>} Antwoord zoals fetch het geeft.
+   */
+  visma.fetchImpl = async (url, init = {}) => {
+    const requestUrl = new URL(url);
     const method = init.method || 'GET';
-    if (u.pathname === '/connect/token') {
+    if (requestUrl.pathname === '/connect/token') {
       const form = new URLSearchParams(init.body);
-      v.tokenCalls.push({ form: Object.fromEntries(form), auth: init.headers.Authorization });
+      visma.tokenCalls.push({ form: Object.fromEntries(form), auth: init.headers.Authorization });
       if (form.get('grant_type') === 'authorization_code') {
         if (form.get('code') !== 'goede-code') return reply(400, { error: 'invalid_grant' });
-        return reply(200, { access_token: v.access, refresh_token: 'refresh-geheim-1', expires_in: 3600 });
+        return reply(200, { access_token: visma.access, refresh_token: 'refresh-geheim-1', expires_in: 3600 });
       }
       if (form.get('refresh_token') !== 'refresh-geheim-1' && form.get('refresh_token') !== 'refresh-geheim-2') return reply(400, { error: 'invalid_grant' });
-      v.access = `acc-${++n + 1}`;
-      return reply(200, { access_token: v.access, refresh_token: 'refresh-geheim-2', expires_in: 3600 });
+      visma.access = `acc-${++refreshCount + 1}`;
+      return reply(200, { access_token: visma.access, refresh_token: 'refresh-geheim-2', expires_in: 3600 });
     }
-    const p = u.pathname.replace(/^\/v2/, '');
-    v.calls.push({ method, path: p, query: Object.fromEntries(u.searchParams), body: init.body ? JSON.parse(init.body) : null });
-    if (init.headers.Authorization !== `Bearer ${v.access}` || v.expireNext) {
-      v.expireNext = false;
+    const apiPath = requestUrl.pathname.replace(/^\/v2/, '');
+    visma.calls.push({ method, path: apiPath, query: Object.fromEntries(requestUrl.searchParams), body: init.body ? JSON.parse(init.body) : null });
+    if (init.headers.Authorization !== `Bearer ${visma.access}` || visma.expireNext) {
+      visma.expireNext = false;
       return reply(401, { Message: 'Unauthorized' });
     }
-    if (p === '/companysettings') return reply(200, { Name: 'AquaTech Service' });
-    if (p === '/articles') {
+    if (apiPath === '/companysettings') return reply(200, { Name: 'AquaTech Service' });
+    if (apiPath === '/articles') {
       return reply(200, { Meta: { TotalNumberOfPages: 1 }, Data: [
         { Id: ART.producten, Number: '1', Name: 'Verkoop producten hoog', IsActive: true },
         { Id: ART.arbeid, Number: '2', Name: 'Arbeid hoog', IsActive: true },
         { Id: '44444444-4444-4444-4444-444444444444', Number: '3', Name: 'Oud', IsActive: false },
       ] });
     }
-    if (p === '/termsofpayments') return reply(200, { Meta: { TotalNumberOfPages: 1 }, Data: [{ Id: TERMS, Name: '14 dagen', NumberOfDays: 14 }] });
-    if (p === '/customers' && method === 'GET') {
-      const m = /CustomerNumber eq '(\d+)'/.exec(u.searchParams.get('$filter') || '');
-      return reply(200, { Meta: { TotalNumberOfPages: 1 }, Data: v.customers.filter((c) => m && c.CustomerNumber === m[1]) });
+    if (apiPath === '/termsofpayments') return reply(200, { Meta: { TotalNumberOfPages: 1 }, Data: [{ Id: TERMS, Name: '14 dagen', NumberOfDays: 14 }] });
+    if (apiPath === '/customers' && method === 'GET') {
+      const match = /CustomerNumber eq '(\d+)'/.exec(requestUrl.searchParams.get('$filter') || '');
+      return reply(200, { Meta: { TotalNumberOfPages: 1 }, Data: visma.customers.filter((customer) => match && customer.CustomerNumber === match[1]) });
     }
-    if (p === '/customers' && method === 'POST') {
-      const c = { ...JSON.parse(init.body), Id: `cust-${v.customers.length + 1}` };
-      v.customers.push(c);
-      return reply(201, c);
+    if (apiPath === '/customers' && method === 'POST') {
+      const customer = { ...JSON.parse(init.body), Id: `cust-${visma.customers.length + 1}` };
+      visma.customers.push(customer);
+      return reply(201, customer);
     }
-    if (p === '/customerinvoices' && method === 'POST') {
-      const inv = { ...JSON.parse(init.body), Id: `inv-${v.invoices.length + 1}`, InvoiceNumber: String(500 + v.invoices.length) };
-      v.invoices.push(inv);
+    if (apiPath === '/customerinvoices' && method === 'POST') {
+      const inv = { ...JSON.parse(init.body), Id: `inv-${visma.invoices.length + 1}`, InvoiceNumber: String(500 + visma.invoices.length) };
+      visma.invoices.push(inv);
       return reply(201, inv);
     }
     return reply(404, { Message: 'Niet gevonden' });
   };
-  return v;
+  return visma;
 }
 
+/**
+ * Hoofdtenant met beheerders, plus een testserver met de nagebootste Visma.
+ * @returns {Promise<object>} db, app, server, as (inloggen), visma en main.
+ */
 async function setup() {
   const db = openDb();
   const store = createStore(db);
@@ -95,30 +95,35 @@ async function setup() {
   await store.createAccount(main, { username: 'anna', displayName: 'Anna', role: 'beheerder', password: PW });
   const visma = fakeVisma();
   const app = createApp({ secret: SECRET, db, vismaFetch: visma.fetchImpl });
-  const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org) => {
-    const c = client(base);
-    const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
-    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    return c;
-  };
+  const { server, base } = await listen(app);
+  const as = createLogin(base, { password: PW, clientOptions: { followRedirects: false } });
   return { db, app, server, as, visma, main };
 }
 
-// Verbindt de omgeving van deze gebruiker met de nagebootste Visma.
-async function connect(c) {
-  const r = await c.post('/api/visma/connect', {});
-  assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-  const state = new URL(r.body.url).searchParams.get('state');
-  const cb = await c.get(`/api/visma/callback?code=goede-code&state=${encodeURIComponent(state)}`);
+/**
+ * Verbindt de omgeving van deze gebruiker met de nagebootste Visma.
+ * @param {object} client Ingelogde client (recht facturen).
+ * @returns {Promise<string>} Doorverwijzing na de callback.
+ */
+async function connect(client) {
+  const response = await client.post('/api/visma/connect', {});
+  assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+  const state = new URL(response.body.url).searchParams.get('state');
+  const cb = await client.get(`/api/visma/callback?code=goede-code&state=${encodeURIComponent(state)}`);
   assert.strictEqual(cb.status, 303);
   return cb.location;
 }
 
-async function finalInvoice(c, customer, lines) {
-  const inv = (await c.post('/api/invoices', { data: { customer, lines } })).body;
-  const fin = await c.post(`/api/invoices/${inv.id}/finalize`, {});
+/**
+ * Maakt een factuur en maakt hem definitief.
+ * @param {object} client Ingelogde client (recht facturen).
+ * @param {object} customer Klantgegevens.
+ * @param {object[]} lines Factuurregels.
+ * @returns {Promise<object>} De definitieve factuur.
+ */
+async function finalInvoice(client, customer, lines) {
+  const inv = (await client.post('/api/invoices', { data: { customer, lines } })).body;
+  const fin = await client.post(`/api/invoices/${inv.id}/finalize`, {});
   assert.strictEqual(fin.status, 200, JSON.stringify(fin.body));
   return fin.body;
 }
@@ -187,7 +192,7 @@ test('visma: app instellen (hoofdbeheerder), verbinden, doorsturen, token vernie
 
     // Keuzes uit Visma: alleen actieve artikelen.
     const opts = (await baas.get('/api/visma/options')).body;
-    assert.deepStrictEqual(opts.articles.map((a) => a.name), ['Verkoop producten hoog', 'Arbeid hoog']);
+    assert.deepStrictEqual(opts.articles.map((article) => article.name), ['Verkoop producten hoog', 'Arbeid hoog']);
     assert.strictEqual(opts.terms[0].days, 14);
     await baas.put('/api/visma/settings', { articles: { 'producten:21': ART.producten }, termsOfPaymentId: TERMS });
 
@@ -213,7 +218,7 @@ test('visma: app instellen (hoofdbeheerder), verbinden, doorsturen, token vernie
     const sentInv = visma.invoices[0];
     assert.strictEqual(sentInv.CustomerId, 'cust-1');
     assert.strictEqual(sentInv.OurReference, one.number);
-    assert.deepStrictEqual(sentInv.Rows.slice(1).map((r) => [r.ArticleId, r.Quantity, r.UnitPrice]), [[ART.producten, 2, 10], [ART.arbeid, 1, 50]]);
+    assert.deepStrictEqual(sentInv.Rows.slice(1).map((row) => [row.ArticleId, row.Quantity, row.UnitPrice]), [[ART.producten, 2, 10], [ART.arbeid, 1, 50]]);
     // Nogmaals doorsturen doet niets.
     await baas.post(`/api/visma/invoices/${one.id}`, {});
     assert.strictEqual(visma.invoices.length, 1);
@@ -288,9 +293,9 @@ test('visma: rechten en scheiding tussen organisaties', async () => {
     await connect(baas);
     const inv = await finalInvoice(baas, { name: 'Jan' }, [{ description: 'X', qty: 1, price: 1 }]);
     const kees = await as('kees');
-    for (const [m, p] of [['get', '/api/visma'], ['get', '/api/visma/options'], ['put', '/api/visma/settings'], ['post', '/api/visma/connect'],
+    for (const [method, urlPath] of [['get', '/api/visma'], ['get', '/api/visma/options'], ['put', '/api/visma/settings'], ['post', '/api/visma/connect'],
       ['get', '/api/visma/callback?code=a&state=b'], ['post', '/api/visma/disconnect'], ['post', '/api/visma/sync'], ['post', `/api/visma/invoices/${inv.id}`]]) {
-      assert.strictEqual((await kees[m](p, m === 'get' ? undefined : {})).status, 403, p);
+      assert.strictEqual((await kees[method](urlPath, method === 'get' ? undefined : {})).status, 403, urlPath);
     }
     await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
     const piet = await as('piet', 'groen');

@@ -6,53 +6,63 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
+const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'q'.repeat(64);
 const PASSWORD = 'Tuin-Plan-2026!';
 
-// Telt queries en de omvang van wat ze teruggeven (alle tekst in de rijen).
+/**
+ * Telt queries en de omvang van wat ze teruggeven (alle tekst in de rijen).
+ * @param {object} db De database (prepare wordt vervangen).
+ * @returns {{ reset: Function, stats: object }} Tellers en een functie om ze op nul te zetten.
+ */
 function instrument(db) {
   const stats = { queries: 0, bytes: 0, sql: [] };
-  const size = (v) => (v == null ? 0 : Array.isArray(v) ? v.reduce((a, r) => a + size(r), 0)
-    : typeof v === 'object' ? Object.values(v).reduce((a, x) => a + (x == null ? 0 : String(x).length), 0) : 0);
+  /**
+   * Omvang van een queryresultaat: lengte van alle waarden als tekst.
+   * @param {*} value Rij, lijst van rijen of niets.
+   * @returns {number} Aantal tekens.
+   */
+  const size = (value) => (value == null ? 0 : Array.isArray(value) ? value.reduce((sum, item) => sum + size(item), 0)
+    : typeof value === 'object' ? Object.values(value).reduce((sum, field) => sum + (field == null ? 0 : String(field).length), 0) : 0);
   const prepare = db.prepare.bind(db);
+  /**
+   * Telt elke query van dit statement.
+   * @param {string} sql De SQL.
+   * @returns {object} Het statement, met getelde get/all/run.
+   */
   db.prepare = (sql) => {
-    const st = prepare(sql);
-    const wrap = (fn) => (...args) => {
-      const r = st[fn](...args);
+    const statement = prepare(sql);
+    /**
+     * Maakt een getelde versie van get, all of run.
+     * @param {string} method Naam van de methode.
+     * @returns {Function} De getelde methode.
+     */
+    const wrap = (method) => (...args) => {
+      const result = statement[method](...args);
       stats.queries++;
-      stats.bytes += size(r);
+      stats.bytes += size(result);
       stats.sql.push(sql.replace(/\s+/g, ' ').slice(0, 80));
-      return r;
+      return result;
     };
-    return new Proxy(st, { get: (t, p) => (['get', 'all', 'run'].includes(p) ? wrap(p) : typeof t[p] === 'function' ? t[p].bind(t) : t[p]) });
+    return new Proxy(statement, { get: (target, property) => (['get', 'all', 'run'].includes(property) ? wrap(property) : typeof target[property] === 'function' ? target[property].bind(target) : target[property]) });
   };
   return {
+    /** Zet de tellers op nul. */
     reset() { stats.queries = 0; stats.bytes = 0; stats.sql = []; },
+    /**
+     * De tellers: queries, bytes en de (ingekorte) SQL.
+     * @returns {object} De tellers.
+     */
     get stats() { return stats; },
   };
 }
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b) };
-}
-
+/**
+ * Maakt een plan met één gazon en één sproeier.
+ * @param {object} [extra] Velden die de standaard aanvullen of overschrijven.
+ * @returns {object} De plangegevens.
+ */
 const plan = (extra = {}) => ({
   meta: { name: 'Tuin', customer: 'Fam. Jansen', address: 'Dorpsstraat 1' },
   areas: [{ id: 'a1', type: 'lawn', pts: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }, { x: 0, y: 5 }] }],
@@ -63,25 +73,25 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
   const db = openDb();
   const store = createStore(db);
   await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PASSWORD });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
-  const c = client(`http://127.0.0.1:${server.address().port}`);
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const client = createClient(base);
   try {
-    assert.strictEqual((await c.post('/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
-    await c.get('/api/me');
+    assert.strictEqual((await client.post('/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
+    await client.get('/api/me');
     const probe = instrument(db);
 
     // Elk verzoek: sessie + gebruiker + tenant in één query, verder niets
     // (last_seen_at is net geschreven, het aantal beheerders is bekend).
     probe.reset();
-    assert.strictEqual((await c.get('/api/account/profile')).status, 200);
+    assert.strictEqual((await client.get('/api/account/profile')).status, 200);
     assert.strictEqual(probe.stats.queries, 1, probe.stats.sql.join('\n'));
 
     // Statische bestanden van een pagina: één sessiecontrole, daarna even geen query.
     probe.reset();
-    for (const f of ['/shared/brand.css', '/dashboard/modules.js', '/shared/sidebar.js']) assert.strictEqual((await c.get(f)).status, 200, f);
+    for (const file of ['/shared/brand.css', '/dashboard/modules.js', '/shared/sidebar.js']) assert.strictEqual((await client.get(file)).status, 200, file);
     assert.ok(probe.stats.queries <= 1, probe.stats.sql.join('\n'));
     // Na uitloggen geen bestanden meer.
-    const other = client(`http://127.0.0.1:${server.address().port}`);
+    const other = createClient(`http://127.0.0.1:${server.address().port}`);
     assert.strictEqual((await other.post('/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
     assert.strictEqual((await other.get('/beheer/beheer.js')).status, 200);
     await other.post('/api/auth/logout');
@@ -89,91 +99,91 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
 
     // Een plan met een grote achtergrond (foto van de tekening).
     const background = { src: `data:image/png;base64,${'A'.repeat(400000)}` };
-    const id = (await c.post('/api/plans', { data: plan({ background }) })).body.id;
+    const id = (await client.post('/api/plans', { data: plan({ background }) })).body.id;
 
     // Automatisch opslaan leest het plan niet terug uit de database.
     probe.reset();
-    assert.strictEqual((await c.put(`/api/plans/${id}`, { data: plan({ background }) })).status, 200);
+    assert.strictEqual((await client.put(`/api/plans/${id}`, { data: plan({ background }) })).status, 200);
     assert.ok(probe.stats.bytes < 5000, `opslaan las ${probe.stats.bytes} tekens`);
 
     // Het overzicht haalt alleen de vlakken en aantallen op, niet de achtergrond of het hele plan.
     probe.reset();
-    const list = (await c.get('/api/plans')).body.items;
+    const list = (await client.get('/api/plans')).body.items;
     assert.deepStrictEqual(list[0].summary, { areas: 1, totalM2: 50, m2ByType: { lawn: 50 }, sprinklers: 1, zones: 0, elements: 0 });
     assert.ok(probe.stats.bytes < 5000, `overzicht las ${probe.stats.bytes} tekens`);
     assert.strictEqual(probe.stats.queries, 2);
 
     // Gebruikersbeheer stuurt nooit de wachtwoord-hash mee uit de database.
     probe.reset();
-    assert.strictEqual((await c.get('/api/admin/users')).status, 200);
-    assert.ok(!probe.stats.sql.some((s) => /SELECT u\.\*/.test(s)));
+    assert.strictEqual((await client.get('/api/admin/users')).status, 200);
+    assert.ok(!probe.stats.sql.some((sql) => /SELECT u\.\*/.test(sql)));
 
     // AI-kosten: vaste aantallen queries, ongeacht het aantal verzoeken
     // (sessie + totaal + per periode/gebruiker/functie/model; lijst: aantal + pagina).
     probe.reset();
-    assert.strictEqual((await c.get('/api/admin/ai-usage')).status, 200);
+    assert.strictEqual((await client.get('/api/admin/ai-usage')).status, 200);
     assert.strictEqual(probe.stats.queries, 6, probe.stats.sql.join('\n'));
     probe.reset();
-    assert.strictEqual((await c.get('/api/admin/ai-usage/requests')).status, 200);
+    assert.strictEqual((await client.get('/api/admin/ai-usage/requests')).status, 200);
     assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
 
     // Voorraad: overzicht in één query (stand + reserveringen samen), een
     // artikel in drie, ongeacht het aantal artikelen en mutaties.
-    assert.strictEqual((await c.post('/api/stock/import', { codes: ['PE-25', 'PE-32', 'FIT-T-25', 'VAL-24V', 'BOX-STD'] })).status, 200);
+    assert.strictEqual((await client.post('/api/stock/import', { codes: ['PE-25', 'PE-32', 'FIT-T-25', 'VAL-24V', 'BOX-STD'] })).status, 200);
     probe.reset();
-    const stock = (await c.get('/api/stock')).body.items;
+    const stock = (await client.get('/api/stock')).body.items;
     assert.strictEqual(stock.length, 5);
     assert.strictEqual(probe.stats.queries, 2, probe.stats.sql.join('\n'));
     probe.reset();
-    assert.strictEqual((await c.get(`/api/stock/items/${stock[0].id}`)).status, 200);
+    assert.strictEqual((await client.get(`/api/stock/items/${stock[0].id}`)).status, 200);
     assert.strictEqual(probe.stats.queries, 4, probe.stats.sql.join('\n'));
     // Werkregistratie: vaste aantallen queries, ongeacht het aantal regels
     // (sessie + werkorder + uren + materiaal; urenstaat: sessie + uren + materiaal).
     const lines = [{ id: 'a', section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 10 }];
-    const qid = (await c.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen' }, lines } })).body.id;
-    await c.put(`/api/quotes/${qid}`, { status: 'akkoord' });
-    const wo = (await c.post('/api/workorders', { quoteId: qid })).body;
+    const qid = (await client.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen' }, lines } })).body.id;
+    await client.put(`/api/quotes/${qid}`, { status: 'akkoord' });
+    const wo = (await client.post('/api/workorders', { quoteId: qid })).body;
     const day = new Date().toISOString().slice(0, 10);
     for (let i = 0; i < 5; i++) {
-      assert.strictEqual((await c.post(`/api/workorders/${wo.id}/hours`, { workDate: day, hours: 1 })).status, 201);
-      assert.strictEqual((await c.post(`/api/workorders/${wo.id}/materials`, { usedOn: day, description: 'Sproeier', qty: 1 })).status, 201);
+      assert.strictEqual((await client.post(`/api/workorders/${wo.id}/hours`, { workDate: day, hours: 1 })).status, 201);
+      assert.strictEqual((await client.post(`/api/workorders/${wo.id}/materials`, { usedOn: day, description: 'Sproeier', qty: 1 })).status, 201);
     }
     probe.reset();
-    assert.strictEqual((await c.get(`/api/workorders/${wo.id}/worklog`)).status, 200);
+    assert.strictEqual((await client.get(`/api/workorders/${wo.id}/worklog`)).status, 200);
     assert.strictEqual(probe.stats.queries, 4, probe.stats.sql.join('\n'));
     probe.reset();
-    assert.strictEqual((await c.get(`/api/worklog?from=${day}&to=${day}`)).status, 200);
+    assert.strictEqual((await client.get(`/api/worklog?from=${day}&to=${day}`)).status, 200);
     assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
     // Het werkorderoverzicht telt de geboekte uren met twee queries, niet per werkorder.
     probe.reset();
-    assert.strictEqual((await c.get('/api/workorders')).body.items[0].logged.minutes, 300);
+    assert.strictEqual((await client.get('/api/workorders')).body.items[0].logged.minutes, 300);
     assert.ok(probe.stats.queries <= 5, probe.stats.sql.join('\n'));
     // Facturen: overzicht en export in een vast aantal queries, ongeacht het
     // aantal facturen (geen query per factuur of regel).
     for (let i = 0; i < 4; i++) {
-      const inv = (await c.post('/api/invoices', { data: { customer: { name: `Klant ${i}` }, lines: [{ description: 'Sproeier', qty: 2, price: 10 }] } })).body;
-      assert.strictEqual((await c.post(`/api/invoices/${inv.id}/finalize`, {})).status, 200);
+      const inv = (await client.post('/api/invoices', { data: { customer: { name: `Klant ${i}` }, lines: [{ description: 'Sproeier', qty: 2, price: 10 }] } })).body;
+      assert.strictEqual((await client.post(`/api/invoices/${inv.id}/finalize`, {})).status, 200);
     }
     probe.reset();
-    assert.strictEqual((await c.get('/api/invoices')).body.items.length, 4);
+    assert.strictEqual((await client.get('/api/invoices')).body.items.length, 4);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
     probe.reset();
-    assert.strictEqual((await c.get('/api/invoices/export')).body.items.length, 4);
+    assert.strictEqual((await client.get('/api/invoices/export')).body.items.length, 4);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
     // Debiteuren met aantal facturen en openstaand bedrag: één query.
     probe.reset();
-    assert.strictEqual((await c.get('/api/debtors')).body.items.length, 4);
+    assert.strictEqual((await client.get('/api/debtors')).body.items.length, 4);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
     // Sproeierbibliotheek: alle eigen regels in één query (sessie + bibliotheek).
     const Lib = require('../../frontend/beregening/js/sprinklerlib.js');
-    const own = { bodies: Lib.DEFAULTS.bodies.map((b) => ({ ...b, key: `X-${b.key}` })), nozzles: Lib.DEFAULTS.nozzles.map((n) => ({ ...n, key: `X-${n.key}` })) };
-    assert.strictEqual((await c.put('/api/sprinkler-library', own)).status, 200);
+    const own = { bodies: Lib.DEFAULTS.bodies.map((body) => ({ ...body, key: `X-${body.key}` })), nozzles: Lib.DEFAULTS.nozzles.map((nozzle) => ({ ...nozzle, key: `X-${nozzle.key}` })) };
+    assert.strictEqual((await client.put('/api/sprinkler-library', own)).status, 200);
     probe.reset();
-    assert.strictEqual((await c.get('/api/sprinkler-library')).body.own.nozzles.length, own.nozzles.length);
+    assert.strictEqual((await client.get('/api/sprinkler-library')).body.own.nozzles.length, own.nozzles.length);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
     // Visma-status: wachtende facturen in één telling.
     probe.reset();
-    assert.strictEqual((await c.get('/api/visma')).body.connected, false);
+    assert.strictEqual((await client.get('/api/visma')).body.connected, false);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
   } finally {
     server.close();
@@ -187,13 +197,13 @@ test('queries: geen SELECT * in de backend', () => {
   const path = require('path');
   const dir = path.join(__dirname, '..', 'src');
   const hits = [];
-  const files = fs.readdirSync(dir, { recursive: true }).filter((n) => n.endsWith('.js'));
-  assert.ok(files.some((n) => n.includes(path.sep)), 'ook de submappen van src/ worden doorzocht');
-  for (const f of files) {
-    fs.readFileSync(path.join(dir, f), 'utf8').split('\n').forEach((line, i) => {
+  const files = fs.readdirSync(dir, { recursive: true }).filter((file) => file.endsWith('.js'));
+  assert.ok(files.some((file) => file.includes(path.sep)), 'ook de submappen van src/ worden doorzocht');
+  for (const file of files) {
+    fs.readFileSync(path.join(dir, file), 'utf8').split('\n').forEach((line, i) => {
       const code = line.replace(/COUNT\(\*\)/gi, '');
       if (/^\s*\/\//.test(line)) return;
-      if (/SELECT\s+\*|\b[a-z]\.\*(\s|,)/i.test(code)) hits.push(`${f}:${i + 1}: ${line.trim()}`);
+      if (/SELECT\s+\*|\b[a-z]\.\*(\s|,)/i.test(code)) hits.push(`${file}:${i + 1}: ${line.trim()}`);
     });
   }
   assert.deepStrictEqual(hits, []);
