@@ -12,31 +12,48 @@ const SOURCES = ['https://api.ipify.org', 'https://ipv4.icanhazip.com', 'https:/
 const TTL = 60 * 60 * 1000;
 const MIN_REFRESH = 60 * 1000;
 
-/** Haalt de tekst van een korte https-pagina op, via IPv4, met tijdslimiet. */
+/**
+ * Haalt de tekst van een korte https-pagina op, via IPv4, met tijdslimiet.
+ * @param {string} url Adres van de pagina.
+ * @param {{ timeout?: number }} [options] Tijdslimiet in ms.
+ * @returns {Promise<string>} De inhoud (hoogstens ruim 100 tekens).
+ */
 function fetchText(url, { timeout = 5000 } = {}) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { family: 4, timeout, headers: { 'User-Agent': 'aquatech' } }, (res) => {
-      if (res.statusCode !== 200) { res.resume(); reject(new Error(`HTTP ${res.statusCode}`)); return; }
+    const request = https.get(url, { family: 4, timeout, headers: { 'User-Agent': 'aquatech' } }, (response) => {
+      if (response.statusCode !== 200) { response.resume(); reject(new Error(`HTTP ${response.statusCode}`)); return; }
       let body = '';
-      res.setEncoding('utf8');
-      res.on('data', (c) => { body += c; if (body.length > 100) req.destroy(new Error('te lang')); });
-      res.on('end', () => resolve(body));
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => { body += chunk; if (body.length > 100) request.destroy(new Error('te lang')); });
+      response.on('end', () => resolve(body));
     });
-    req.on('timeout', () => req.destroy(new Error('time-out')));
-    req.on('error', reject);
+    request.on('timeout', () => request.destroy(new Error('time-out')));
+    request.on('error', reject);
   });
 }
 
-const validIp = (v) => net.isIPv4(v) && isPublicAddress(v);
+/**
+ * Of een waarde een openbaar IPv4-adres is.
+ * @param {string} value De waarde.
+ * @returns {boolean} true bij een openbaar IPv4-adres.
+ */
+const validIp = (value) => net.isIPv4(value) && isPublicAddress(value);
 
 /**
- * get({ refresh }) → { ip, source: 'omgeving'|'opgezocht', checkedAt }.
- * Gooit een fout met code 'unavailable' als geen enkele dienst antwoordt.
+ * Maakt de opzoeker van het WAN-IP: WAN_IP uit de omgeving gaat voor, anders
+ * een externe dienst, met de uitkomst een uur in het geheugen.
+ * @param {object} [options] fetch, env, now en sources (te vervangen in tests).
+ * @returns {{ get: Function }} get({ refresh }) → { ip, source: 'omgeving'|'opgezocht', checkedAt }.
  */
 function createWanIp({ fetch = fetchText, env = process.env, now = Date.now, sources = SOURCES } = {}) {
   let cached = null;
   let pending = null;
 
+  /**
+   * Vraagt de diensten één voor één om het IPv4-adres.
+   * @returns {Promise<string>} Het eerste geldige openbare adres.
+   * @throws {Error} Met code 'unavailable' als geen enkele dienst antwoordt.
+   */
   async function lookup() {
     for (const url of sources) {
       try {
@@ -47,6 +64,12 @@ function createWanIp({ fetch = fetchText, env = process.env, now = Date.now, sou
     throw Object.assign(new Error('Het WAN-IP kon niet worden bepaald.'), { code: 'unavailable' });
   }
 
+  /**
+   * Het WAN-IP: uit de omgeving, uit het geheugen (een uur), of opnieuw opgezocht.
+   * Met refresh wordt opnieuw opgezocht, maar hoogstens eens per minuut.
+   * @param {{ refresh?: boolean }} [options] Opnieuw opzoeken.
+   * @returns {Promise<{ ip: string, source: string, checkedAt: string|null }>} Het adres, de bron en wanneer het is opgezocht.
+   */
   async function get({ refresh = false } = {}) {
     const fixed = String(env.WAN_IP || '').trim();
     if (validIp(fixed)) return { ip: fixed, source: 'omgeving', checkedAt: null };

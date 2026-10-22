@@ -777,6 +777,13 @@ const MIGRATIONS = [
   `,
 ];
 
+/**
+ * Opent een database voor de app of de tests: SQLite (bestand of :memory:),
+ * of in de testsuite tegen PostgreSQL (TEST_DATABASE_URL) een eigen schema per
+ * database (een bestand steeds hetzelfde schema).
+ * @param {string} [file] Pad van het databasebestand, of ':memory:'.
+ * @returns {object} De geopende en gemigreerde database.
+ */
 function openDb(file = ':memory:') {
   // Testsuite tegen PostgreSQL (TEST_DATABASE_URL): elke database wordt een
   // eigen schema, een bestand steeds hetzelfde schema.
@@ -784,7 +791,14 @@ function openDb(file = ':memory:') {
   return openSqlite(file);
 }
 
-/** Altijd SQLite (bestand of :memory:), ook in de testsuite tegen PostgreSQL. */
+/**
+ * Opent altijd SQLite (bestand of :memory:), ook in de testsuite tegen
+ * PostgreSQL. Zet de bestandsrechten op alleen-eigenaar, schakelt foreign keys,
+ * secure_delete (AVG: geen resten in het bestand) en trusted_schema=OFF in,
+ * controleert het bestand en voert de migraties uit.
+ * @param {string} [file] Pad van het databasebestand, of ':memory:'.
+ * @returns {DatabaseSync} De database (node:sqlite).
+ */
 function openSqlite(file = ':memory:') {
   const onDisk = file !== ':memory:';
   if (onDisk) {
@@ -805,13 +819,19 @@ function openSqlite(file = ':memory:') {
   // gemanipuleerd databasebestand).
   db.exec('PRAGMA trusted_schema = OFF');
   if (onDisk) {
-    const check = db.prepare('PRAGMA quick_check').all().map((r) => Object.values(r)[0]);
+    const check = db.prepare('PRAGMA quick_check').all().map((row) => Object.values(row)[0]);
     if (check.join() !== 'ok') console.error(`Database-controle meldt problemen: ${check.slice(0, 5).join('; ')}`);
   }
   migrate(db);
   return db;
 }
 
+/**
+ * Opent voor de testsuite een eigen schema in PostgreSQL per database.
+ * @param {string} url De test-database-URL.
+ * @param {string} file ':memory:' (elke keer een nieuw schema) of een pad (steeds hetzelfde schema).
+ * @returns {object} De database in PostgreSQL.
+ */
 function openTestPg(url, file) {
   const { openPg } = require('./pgdb');
   const id = file === ':memory:' ? crypto.randomUUID() : path.resolve(file);
@@ -819,47 +839,69 @@ function openTestPg(url, file) {
 }
 
 /**
- * De database van de server: PostgreSQL (bijv. Supabase) als DATABASE_URL of
- * DATABASE_URL_FILE gezet is, anders het SQLite-bestand in de datamap.
+ * De URL van PostgreSQL (bijv. Supabase) uit DATABASE_URL_FILE of DATABASE_URL.
+ * @param {object} [env] Omgevingsvariabelen.
+ * @returns {string} De URL, of '' als er geen is (dan SQLite).
  */
 function databaseUrl(env = process.env) {
   if (env.DATABASE_URL_FILE) return fs.readFileSync(env.DATABASE_URL_FILE, 'utf8').trim();
   return String(env.DATABASE_URL || '').trim();
 }
 
+/**
+ * De database van de server: PostgreSQL als DATABASE_URL of DATABASE_URL_FILE
+ * gezet is, anders het SQLite-bestand aquatech.db in de datamap.
+ * @param {string} dataDir Map met de gegevens van de app.
+ * @param {object} [env] Omgevingsvariabelen.
+ * @returns {object} De database.
+ */
 function openDatabase(dataDir, env = process.env) {
   const url = databaseUrl(env);
   if (url) return require('./pgdb').openPg(url, { schema: env.DATABASE_SCHEMA || 'aquatech' });
   return openDb(path.join(dataDir, 'aquatech.db'));
 }
 
+/**
+ * Voert de migraties uit die nog niet zijn gedaan (PRAGMA user_version telt
+ * mee). Een migratie met foreignKeysOff bouwt een tabel opnieuw op met foreign
+ * keys uit (kan niet binnen een transactie); verbroken verwijzingen worden alleen
+ * gemeld.
+ * @param {DatabaseSync} db De SQLite-database.
+ * @returns {void}
+ */
 function migrate(db) {
   const current = db.prepare('PRAGMA user_version').get().user_version;
-  for (let v = current; v < MIGRATIONS.length; v++) {
-    const m = typeof MIGRATIONS[v] === 'string' ? { sql: MIGRATIONS[v] } : MIGRATIONS[v];
+  for (let index = current; index < MIGRATIONS.length; index++) {
+    const migration = typeof MIGRATIONS[index] === 'string' ? { sql: MIGRATIONS[index] } : MIGRATIONS[index];
     // Een tabel opnieuw opbouwen kan alleen met foreign keys uit (en dat kan
     // niet binnen een transactie). De rijen gaan één op één over, dus de
     // verwijzingen blijven kloppen; afwijkingen (ook van vroeger) alleen melden.
-    if (m.foreignKeysOff) db.exec('PRAGMA foreign_keys = OFF');
+    if (migration.foreignKeysOff) db.exec('PRAGMA foreign_keys = OFF');
     try {
       transaction(db, () => {
-        db.exec(m.sql);
-        if (m.foreignKeysOff) {
+        db.exec(migration.sql);
+        if (migration.foreignKeysOff) {
           const broken = db.prepare('PRAGMA foreign_key_check').all();
-          if (broken.length) console.warn(`Migratie ${v + 1}: ${broken.length} verbroken verwijzing(en), eerste in ${broken[0].table}`);
+          if (broken.length) console.warn(`Migratie ${index + 1}: ${broken.length} verbroken verwijzing(en), eerste in ${broken[0].table}`);
         }
-        db.exec(`PRAGMA user_version = ${v + 1}`);
+        db.exec(`PRAGMA user_version = ${index + 1}`);
       });
     } finally {
-      if (m.foreignKeysOff) db.exec('PRAGMA foreign_keys = ON');
+      if (migration.foreignKeysOff) db.exec('PRAGMA foreign_keys = ON');
     }
   }
 }
 
-function transaction(db, fn) {
+/**
+ * Voert een functie uit binnen één transactie: COMMIT als hij slaagt, ROLLBACK bij een fout.
+ * @param {object} db De database (SQLite of PostgreSQL).
+ * @param {Function} callback De functie met de wijzigingen.
+ * @returns {*} Wat de functie teruggeeft.
+ */
+function transaction(db, callback) {
   db.exec(isPg(db) ? 'BEGIN' : 'BEGIN IMMEDIATE');
   try {
-    const out = fn();
+    const out = callback();
     db.exec('COMMIT');
     return out;
   } catch (err) {
@@ -871,27 +913,51 @@ function transaction(db, fn) {
 // ---------- Verschillen tussen SQLite en PostgreSQL ----------
 // De rest van de code schrijft SQL die in beide werkt (?-parameters, lower()
 // i.p.v. COLLATE NOCASE); waar dat niet kan, helpen deze functies.
+/**
+ * Of de database PostgreSQL is (anders SQLite).
+ * @param {object} db De database.
+ * @returns {boolean} true bij PostgreSQL.
+ */
 const isPg = (db) => db.dialect === 'postgres';
 
-/** Schemaversie: aantal uitgevoerde migraties. */
+/**
+ * Schemaversie: het aantal uitgevoerde migraties.
+ * @param {object} db De database.
+ * @returns {number} De versie.
+ */
 function schemaVersion(db) {
   if (isPg(db)) return require('./pgdb').pgVersion(db);
   return db.prepare('PRAGMA user_version').get().user_version;
 }
 
-/** Namen van de tabellen van de app. */
+/**
+ * Namen van de tabellen van de app (zonder interne tabellen).
+ * @param {object} db De database.
+ * @returns {string[]} Tabelnamen, alfabetisch.
+ */
 function listTables(db) {
   if (isPg(db)) {
     return db.prepare("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' AND table_name <> 'schema_version' ORDER BY table_name")
-      .all().map((r) => r.name);
+      .all().map((row) => row.name);
   }
-  return db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((r) => r.name);
+  return db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name);
 }
 
 const SAFE_NAME = /^[a-z_][a-z0-9_]*$/;
-const checkName = (n) => { if (!SAFE_NAME.test(n)) throw new Error(`Ongeldige tabelnaam: ${n}`); return n; };
+/**
+ * Controleert dat een tabelnaam veilig in SQL kan (alleen kleine letters, cijfers en _).
+ * @param {string} name De tabelnaam.
+ * @returns {string} Dezelfde naam.
+ * @throws {Error} Bij een ongeldige naam.
+ */
+const checkName = (name) => { if (!SAFE_NAME.test(name)) throw new Error(`Ongeldige tabelnaam: ${name}`); return name; };
 
-/** Kolommen van een tabel in volgorde: { name, notnull, pk }. */
+/**
+ * Kolommen van een tabel, in volgorde.
+ * @param {object} db De database.
+ * @param {string} table Naam van de tabel.
+ * @returns {{ name: string, notnull: boolean, pk: boolean }[]} De kolommen.
+ */
 function tableColumns(db, table) {
   if (isPg(db)) {
     return db.prepare(`SELECT c.column_name AS name, c.is_nullable = 'NO' AS notnull,
@@ -899,12 +965,17 @@ function tableColumns(db, table) {
           ON tc.constraint_name = k.constraint_name AND tc.table_schema = k.table_schema
           WHERE tc.constraint_type = 'PRIMARY KEY' AND k.table_schema = c.table_schema AND k.table_name = c.table_name AND k.column_name = c.column_name) AS pk
       FROM information_schema.columns c WHERE c.table_schema = current_schema() AND c.table_name = ? ORDER BY c.ordinal_position`)
-      .all(table).map((c) => ({ name: c.name, notnull: Boolean(c.notnull), pk: Boolean(c.pk) }));
+      .all(table).map((column) => ({ name: column.name, notnull: Boolean(column.notnull), pk: Boolean(column.pk) }));
   }
-  return db.prepare(`PRAGMA table_info(${checkName(table)})`).all().map((c) => ({ name: c.name, notnull: Boolean(c.notnull), pk: c.pk > 0 }));
+  return db.prepare(`PRAGMA table_info(${checkName(table)})`).all().map((column) => ({ name: column.name, notnull: Boolean(column.notnull), pk: column.pk > 0 }));
 }
 
-/** Foreign keys van een tabel: { from (kolom), table (doeltabel) }. */
+/**
+ * Foreign keys van een tabel.
+ * @param {object} db De database.
+ * @param {string} table Naam van de tabel.
+ * @returns {{ from: string, table: string }[]} Per foreign key de kolom en de doeltabel.
+ */
 function foreignKeys(db, table) {
   if (isPg(db)) {
     return db.prepare(`SELECT a.attname AS "from", cf.relname AS "table"
@@ -915,39 +986,58 @@ function foreignKeys(db, table) {
       JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
       WHERE c.contype = 'f' AND n.nspname = current_schema() AND cl.relname = ?`).all(table);
   }
-  return db.prepare(`PRAGMA foreign_key_list(${checkName(table)})`).all().map((f) => ({ from: f.from, table: f.table }));
+  return db.prepare(`PRAGMA foreign_key_list(${checkName(table)})`).all().map((foreignKey) => ({ from: foreignKey.from, table: foreignKey.table }));
 }
 
-/** Foreign keys binnen de lopende transactie pas bij COMMIT controleren. */
+/**
+ * Laat foreign keys binnen de lopende transactie pas bij COMMIT controleren.
+ * @param {object} db De database.
+ * @returns {void}
+ */
 function deferForeignKeys(db) {
   db.exec(isPg(db) ? 'SET CONSTRAINTS ALL DEFERRED' : 'PRAGMA defer_foreign_keys = ON');
 }
 
-/** SQL-expressie: tekstwaarde van een veld uit een JSON-kolom. */
+/**
+ * SQL-expressie voor de tekstwaarde van een veld uit een JSON-kolom.
+ * @param {object} db De database (bepaalt het dialect).
+ * @param {string} expr SQL-expressie van de JSON-kolom.
+ * @param {string} key Vaste veldnaam uit de code.
+ * @returns {string} De SQL-expressie.
+ */
 const jsonField = (db, expr, key) => (isPg(db) ? `((${expr})::jsonb ->> '${key}')` : `json_extract(${expr}, '$.${key}')`);
 
-/** SQL-expressie: de JSON-kolom zonder dit veld (als tekst). */
+/**
+ * SQL-expressie voor de JSON-kolom zonder dit veld (als tekst).
+ * @param {object} db De database (bepaalt het dialect).
+ * @param {string} expr SQL-expressie van de JSON-kolom.
+ * @param {string} key Vaste veldnaam uit de code.
+ * @returns {string} De SQL-expressie.
+ */
 const jsonWithout = (db, expr, key) => (isPg(db) ? `(((${expr})::jsonb - '${key}')::text)` : `json_remove(${expr}, '$.${key}')`);
 
 /**
- * SQL-expressie: een klein JSON-object (als tekst) uit een grote JSON-kolom,
- * zodat een overzicht niet het hele document ophaalt. values = velden die
- * meegaan zoals ze zijn, counts = arrays waarvan alleen de lengte meegaat
- * (0 als het veld geen array is). Sleutels zijn vaste namen uit de code.
+ * SQL-expressie voor een klein JSON-object (als tekst) uit een grote JSON-kolom,
+ * zodat een overzicht niet het hele document ophaalt. Sleutels zijn vaste
+ * namen uit de code.
+ * @param {object} db De database (bepaalt het dialect).
+ * @param {string} expr SQL-expressie van de JSON-kolom.
+ * @param {{ values?: string[], counts?: string[] }} [fields] values = velden die meegaan zoals ze zijn; counts = arrays waarvan alleen de lengte meegaat (0 als het geen array is).
+ * @returns {string} De SQL-expressie.
  */
 function jsonDigest(db, expr, { values = [], counts = [] } = {}) {
   if (isPg(db)) {
     const parts = [
-      ...values.map((k) => `'${k}', j -> '${k}'`),
-      ...counts.map((k) => `'${k}', CASE WHEN jsonb_typeof(j -> '${k}') = 'array' THEN jsonb_array_length(j -> '${k}') ELSE 0 END`),
+      ...values.map((key) => `'${key}', j -> '${key}'`),
+      ...counts.map((key) => `'${key}', CASE WHEN jsonb_typeof(j -> '${key}') = 'array' THEN jsonb_array_length(j -> '${key}') ELSE 0 END`),
     ];
     // OFFSET 0: anders vouwt PostgreSQL de subquery in en zet hij de kolom per
     // veld opnieuw om naar jsonb (bij een plan met achtergrond: megabytes).
     return `(SELECT jsonb_build_object(${parts.join(', ')})::text FROM (SELECT (${expr})::jsonb AS j OFFSET 0) AS digest)`;
   }
   const parts = [
-    ...values.map((k) => `'${k}', json_extract(${expr}, '$.${k}')`),
-    ...counts.map((k) => `'${k}', CASE WHEN json_type(${expr}, '$.${k}') = 'array' THEN json_array_length(${expr}, '$.${k}') ELSE 0 END`),
+    ...values.map((key) => `'${key}', json_extract(${expr}, '$.${key}')`),
+    ...counts.map((key) => `'${key}', CASE WHEN json_type(${expr}, '$.${key}') = 'array' THEN json_array_length(${expr}, '$.${key}') ELSE 0 END`),
   ];
   return `json_object(${parts.join(', ')})`;
 }

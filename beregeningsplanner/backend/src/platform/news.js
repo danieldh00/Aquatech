@@ -28,122 +28,208 @@ const CACHE_MS = 30 * 1000;
 const MAIL_LIMIT = 300;
 const COLS = 'id, title, body, audience, pinned, author_id, author_name, created_at, updated_at';
 
-const now = () => new Date().toISOString();
+/**
+ * Huidig tijdstip als ISO-tekst.
+ * @returns {string} Tijdstip in ISO 8601.
+ */
+const currentTimestamp = () => new Date().toISOString();
 
-/** Schoont een bericht op; geeft { value } of { error, field }. */
+/**
+ * Schoont een nieuwsbericht op: titel op één regel, tekst met regels en
+ * alinea's maar zonder stuurtekens, doelgroep medewerkers of iedereen.
+ * @param {object} raw De ruwe invoer.
+ * @returns {{ value: { title: string, body: string, audience: string, pinned: boolean } }|{ error: string, field: string }} Het bericht of een foutmelding.
+ */
 function sanitizeNews(raw) {
-  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  const title = String(r.title ?? '').replace(/\s+/g, ' ').trim();
+  const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const title = String(input.title ?? '').replace(/\s+/g, ' ').trim();
   // Regels en alinea's blijven staan; geen stuurtekens.
-  const body = String(r.body ?? '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  const body = String(input.body ?? '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').replace(/\n{3,}/g, '\n\n').trim();
   if (!title) return { error: 'Geef het bericht een titel.', field: 'title' };
   if (title.length > MAX.title) return { error: `De titel mag maximaal ${MAX.title} tekens hebben.`, field: 'title' };
   if (!body) return { error: 'Schrijf een bericht.', field: 'body' };
   if (body.length > MAX.body) return { error: `Het bericht mag maximaal ${MAX.body} tekens hebben.`, field: 'body' };
-  const audience = AUDIENCES.includes(r.audience) ? r.audience : 'medewerkers';
-  return { value: { title, body, audience, pinned: r.pinned === true } };
+  const audience = AUDIENCES.includes(input.audience) ? input.audience : 'medewerkers';
+  return { value: { title, body, audience, pinned: input.pinned === true } };
 }
 
+/**
+ * Maakt de opslag voor nieuwsberichten (tabel news), met per omgeving een korte cache voor de melding.
+ * @param {object} db Databaseverbinding.
+ * @returns {object} list, get, marks, create, update, remove, staffEmails en forget.
+ */
 function createNewsStore(db) {
-  const q = (sql) => db.prepare(sql);
+  /**
+   * Bereidt een SQL-opdracht voor.
+   * @param {string} sql De SQL met ?-parameters.
+   * @returns {object} Het voorbereide statement.
+   */
+  const prepare = (sql) => db.prepare(sql);
   const recent = new Map();
 
-  const shape = (r) => ({
-    id: r.id, title: r.title, body: r.body, audience: r.audience, pinned: Boolean(r.pinned),
-    authorId: r.author_id || null, authorName: r.author_name, createdAt: r.created_at, updatedAt: r.updated_at,
+  /**
+   * Zet een databaserij om naar een bericht voor de API.
+   * @param {object} row Rij uit de tabel news.
+   * @returns {object} Het bericht.
+   */
+  const toNewsItem = (row) => ({
+    id: row.id, title: row.title, body: row.body, audience: row.audience, pinned: Boolean(row.pinned),
+    authorId: row.author_id || null, authorName: row.author_name, createdAt: row.created_at, updatedAt: row.updated_at,
   });
 
-  /** Berichten voor de pagina: vastgezet eerst, dan de nieuwste. Klanten alleen 'iedereen'. */
+  /**
+   * Berichten voor de pagina: vastgezet eerst, dan de nieuwste. Klanten zien alleen 'iedereen'.
+   * @param {string} tenantId De omgeving.
+   * @param {{ customer?: boolean }} [options] customer = de lezer is een klant.
+   * @returns {object[]} De berichten.
+   */
   function list(tenantId, { customer = false } = {}) {
     const filter = customer ? " AND audience = 'iedereen'" : '';
-    return q(`SELECT ${COLS} FROM news WHERE tenant_id = ?${filter} ORDER BY pinned DESC, created_at DESC LIMIT ${LIST_LIMIT}`)
-      .all(tenantId).map(shape);
+    return prepare(`SELECT ${COLS} FROM news WHERE tenant_id = ?${filter} ORDER BY pinned DESC, created_at DESC LIMIT ${LIST_LIMIT}`)
+      .all(tenantId).map(toNewsItem);
   }
 
+  /**
+   * Haalt één bericht op.
+   * @param {string} tenantId De omgeving.
+   * @param {string} id Id van het bericht.
+   * @returns {object|null} Het bericht, of null.
+   */
   function get(tenantId, id) {
-    const r = q(`SELECT ${COLS} FROM news WHERE tenant_id = ? AND id = ?`).get(tenantId, String(id));
-    return r ? shape(r) : null;
+    const row = prepare(`SELECT ${COLS} FROM news WHERE tenant_id = ? AND id = ?`).get(tenantId, String(id));
+    return row ? toNewsItem(row) : null;
   }
 
-  // Tijdstip, doelgroep en auteur van de laatste berichten (voor de melding).
+  /**
+   * Tijdstip, doelgroep en auteur van de laatste berichten (voor de melding), 30 s in het geheugen.
+   * @param {string} tenantId De omgeving.
+   * @returns {object[]} De rijen (created_at, audience, author_id).
+   */
   function marks(tenantId) {
     const hit = recent.get(tenantId);
     if (hit && Date.now() - hit.at < CACHE_MS) return hit.rows;
-    const rows = q(`SELECT created_at, audience, author_id FROM news WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ${LIST_LIMIT}`).all(tenantId);
+    const rows = prepare(`SELECT created_at, audience, author_id FROM news WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ${LIST_LIMIT}`).all(tenantId);
     recent.set(tenantId, { at: Date.now(), rows });
     return rows;
   }
+  /**
+   * Vergeet de cache van een omgeving (na een wijziging).
+   * @param {string} tenantId De omgeving.
+   * @returns {boolean} Of er iets in de cache stond.
+   */
   const forget = (tenantId) => recent.delete(tenantId);
 
+  /**
+   * Plaatst een nieuw bericht.
+   * @param {string} tenantId De omgeving.
+   * @param {object} user De auteur.
+   * @param {object} raw De invoer.
+   * @returns {{ item: object }|{ error: string, field: string }} Het bericht of een foutmelding.
+   */
   function create(tenantId, user, raw) {
-    const s = sanitizeNews(raw);
-    if (s.error) return s;
-    const t = now();
-    const item = { id: crypto.randomUUID(), ...s.value };
-    q(`INSERT INTO news (id, tenant_id, title, body, audience, pinned, author_id, author_name, created_at, updated_at)
+    const cleaned = sanitizeNews(raw);
+    if (cleaned.error) return cleaned;
+    const timestamp = currentTimestamp();
+    const item = { id: crypto.randomUUID(), ...cleaned.value };
+    prepare(`INSERT INTO news (id, tenant_id, title, body, audience, pinned, author_id, author_name, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(item.id, tenantId, item.title, item.body, item.audience, item.pinned ? 1 : 0, user.id, user.display_name || '', t, t);
+      .run(item.id, tenantId, item.title, item.body, item.audience, item.pinned ? 1 : 0, user.id, user.display_name || '', timestamp, timestamp);
     forget(tenantId);
     return { item: get(tenantId, item.id) };
   }
 
+  /**
+   * Wijzigt een bericht; ontbrekende velden blijven gelijk.
+   * @param {string} tenantId De omgeving.
+   * @param {string} id Id van het bericht.
+   * @param {object} raw De gewijzigde velden.
+   * @returns {{ item: object }|{ error: string, field?: string, status?: number }} Het bericht of een foutmelding (status 404 als het niet bestaat).
+   */
   function update(tenantId, id, raw) {
-    const cur = get(tenantId, id);
-    if (!cur) return { error: 'Bericht niet gevonden.', status: 404 };
-    const s = sanitizeNews({ title: cur.title, body: cur.body, audience: cur.audience, pinned: cur.pinned, ...raw });
-    if (s.error) return s;
-    q('UPDATE news SET title = ?, body = ?, audience = ?, pinned = ?, updated_at = ? WHERE tenant_id = ? AND id = ?')
-      .run(s.value.title, s.value.body, s.value.audience, s.value.pinned ? 1 : 0, now(), tenantId, cur.id);
+    const current = get(tenantId, id);
+    if (!current) return { error: 'Bericht niet gevonden.', status: 404 };
+    const cleaned = sanitizeNews({ title: current.title, body: current.body, audience: current.audience, pinned: current.pinned, ...raw });
+    if (cleaned.error) return cleaned;
+    prepare('UPDATE news SET title = ?, body = ?, audience = ?, pinned = ?, updated_at = ? WHERE tenant_id = ? AND id = ?')
+      .run(cleaned.value.title, cleaned.value.body, cleaned.value.audience, cleaned.value.pinned ? 1 : 0, currentTimestamp(), tenantId, current.id);
     forget(tenantId);
-    return { item: get(tenantId, cur.id) };
+    return { item: get(tenantId, current.id) };
   }
 
+  /**
+   * Verwijdert een bericht.
+   * @param {string} tenantId De omgeving.
+   * @param {string} id Id van het bericht.
+   * @returns {boolean} true als het bestond.
+   */
   function remove(tenantId, id) {
-    const n = q('DELETE FROM news WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes;
+    const deleted = prepare('DELETE FROM news WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes;
     forget(tenantId);
-    return n > 0;
+    return deleted > 0;
   }
 
-  /** E-mailadressen van actieve medewerkers met een eigen account (niet de afzender). */
+  /**
+   * E-mailadressen van actieve medewerkers met een eigen account (niet de afzender, geen klanten).
+   * @param {string[]} tenantIds De omgevingen van de organisatie.
+   * @param {{ exceptId: string, isCustomerRole: Function }} options Id van de afzender en de functie (rol) => is klantrol.
+   * @returns {string[]} De e-mailadressen, in kleine letters.
+   */
   function staffEmails(tenantIds, { exceptId, isCustomerRole }) {
     const ids = [...new Set(tenantIds)];
-    return q(`SELECT id, email, role FROM users WHERE tenant_id IN (${ids.map(() => '?').join(', ')})
+    return prepare(`SELECT id, email, role FROM users WHERE tenant_id IN (${ids.map(() => '?').join(', ')})
        AND kind = 'account' AND disabled = 0 AND email IS NOT NULL AND email <> ''`).all(...ids)
-      .filter((u) => u.id !== exceptId && !isCustomerRole(u.role) && validEmail(u.email))
-      .map((u) => u.email.trim().toLowerCase());
+      .filter((user) => user.id !== exceptId && !isCustomerRole(user.role) && validEmail(user.email))
+      .map((user) => user.email.trim().toLowerCase());
   }
 
   return { list, get, marks, create, update, remove, staffEmails, forget };
 }
 
 /**
- * Aantal nieuwe items voor de melding: berichten na het vorige bezoek (niet
- * de eigen) en nieuwe versies met iets voor deze rechten. Zonder vorig bezoek
- * telt alles vanaf het aanmaken van het account, en van de versies alleen de
- * laatste (geen lange lijst bij de eerste keer).
+ * Aantal nieuwe items voor de melding: berichten na het vorige bezoek (niet de
+ * eigen) en nieuwe versies met iets voor deze rechten. Zonder vorig bezoek telt
+ * alles vanaf het aanmaken van het account, en van de versies alleen de laatste
+ * (geen lange lijst bij de eerste keer).
+ * @param {{ marks: object[], prefs: object, user: object, rights: string[], customer: boolean }} input Laatste berichten, voorkeuren, gebruiker, rechten en of het een klant is.
+ * @returns {number} Aantal nieuwe items.
  */
 function unreadCount({ marks, prefs, user, rights, customer }) {
   const since = prefs.newsSeenAt || user.created_at || '';
-  const messages = marks.filter((m) => m.created_at > since && m.author_id !== user.id && (!customer || m.audience === 'iedereen')).length;
+  const messages = marks.filter((mark) => mark.created_at > since && mark.author_id !== user.id && (!customer || mark.audience === 'iedereen')).length;
   const versions = Releases.visibleFor(rights);
   let releases;
-  if (prefs.seenRelease) releases = versions.filter((r) => Releases.compare(r.version, prefs.seenRelease) > 0).length;
+  if (prefs.seenRelease) releases = versions.filter((release) => Releases.compare(release.version, prefs.seenRelease) > 0).length;
   else releases = versions.length && versions[0].date >= String(user.created_at || '').slice(0, 10) ? 1 : 0;
   return messages + releases;
 }
 
 /**
- * API. ctx: { news, store, requireUser, requireRight, requireJson, audit,
- * identify, isCustomer(req, user), staffTenantsOf(req), settingsOf(req), mailerFor }.
+ * Registreert de routes /api/news (lezen, plaatsen, wijzigen, verwijderen) en /api/news/seen.
+ * @param {object} app De Express-app.
+ * @param {object} context news, store, requireUser, requireRight, requireJson, audit, isCustomer(req, user), staffTenantsOf(req), settingsOf(req) en mailerFor.
+ * @returns {void}
  */
-function registerNewsRoutes(app, ctx) {
-  const { news, store, requireUser, requireRight, requireJson, audit, isCustomer, staffTenantsOf, settingsOf, mailerFor } = ctx;
+function registerNewsRoutes(app, context) {
+  const { news, store, requireUser, requireRight, requireJson, audit, isCustomer, staffTenantsOf, settingsOf, mailerFor } = context;
   const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
   const requireNews = requireRight('nieuws');
-  const tid = (req) => req.tenantId || req.user.tenant_id;
+  /**
+   * Omgeving van het verzoek.
+   * @param {object} req Het Express-verzoek.
+   * @returns {string} Id van de actieve omgeving.
+   */
+  const tenantOf = (req) => req.tenantId || req.user.tenant_id;
+  /**
+   * Stuurt 404 'bericht niet gevonden'.
+   * @param {object} res Het Express-antwoord.
+   * @returns {object} Het antwoord.
+   */
   const notFound = (res) => res.status(404).json({ error: 'not_found', message: 'Bericht niet gevonden.' });
-  // Eigen account (geen toegangscode of gast, geen impersonatie): alleen dan
-  // wordt het vorige bezoek onthouden.
+  /**
+   * Eigen account (geen toegangscode of gast, geen impersonatie): alleen dan wordt het vorige bezoek onthouden.
+   * @param {object} user De gebruiker.
+   * @returns {boolean} true bij een eigen account.
+   */
   const ownAccount = (user) => user.kind === 'account' && !user.impersonation;
 
   app.get('/api/news', requireUser, (req, res) => {
@@ -152,7 +238,7 @@ function registerNewsRoutes(app, ctx) {
     const rights = Roles.rightsOf(user);
     const prefs = ownAccount(user) ? preferencesOf(user) : null;
     res.json({
-      items: news.list(tid(req), { customer: isCustomer(req, user) }),
+      items: news.list(tenantOf(req), { customer: isCustomer(req, user) }),
       releases: Releases.visibleFor(rights),
       // Vorige bezoek: wat daarna kwam, krijgt op de pagina het label Nieuw.
       seen: prefs ? { at: prefs.newsSeenAt || user.created_at || '', release: prefs.seenRelease || '' } : null,
@@ -164,31 +250,36 @@ function registerNewsRoutes(app, ctx) {
   // De pagina is bekeken: alles tot nu is gezien (geen auditregel, het is geen wijziging).
   app.post('/api/news/seen', requireJson, requireUser, (req, res) => {
     if (!ownAccount(req.user)) return res.json({ ok: true, unread: 0 });
-    const out = store.updateProfile(req.user.id, { preferences: { newsSeenAt: now(), seenRelease: Releases.latest } });
+    const out = store.updateProfile(req.user.id, { preferences: { newsSeenAt: currentTimestamp(), seenRelease: Releases.latest } });
     if (out.error) return res.status(400).json({ error: 'no_account', message: out.error });
     res.json({ ok: true, unread: 0 });
   });
 
-  // Per e-mail naar de collega's (los per ontvanger, zodat niemand andermans adres ziet).
+  /**
+   * Stuurt een bericht per e-mail naar de collega's (los per ontvanger, zodat niemand andermans adres ziet).
+   * @param {object} req Het Express-verzoek.
+   * @param {object} item Het bericht.
+   * @returns {{ sent: number, error?: string }} Aantal ontvangers, of een foutmelding als er geen mailserver is.
+   */
   function mail(req, item) {
     const settings = settingsOf(req);
     const mailer = mailerFor(settings);
     if (!mailer.configured()) return { sent: 0, error: 'Er is geen mailserver ingesteld.' };
     const to = news.staffEmails(staffTenantsOf(req), {
       exceptId: req.user.id,
-      isCustomerRole: (role) => store.roles.get(tid(req), role)?.kind === 'klant',
+      isCustomerRole: (role) => store.roles.get(tenantOf(req), role)?.kind === 'klant',
     }).slice(0, MAIL_LIMIT);
-    const p = settings.get('quoteProfile');
-    const { text, html } = mailBody(p, [item.title, item.body, `— ${item.authorName}`, 'Dit bericht staat ook in de app onder Nieuws.'], null);
-    for (const addr of to) {
-      mailer.send({ to: addr, replyTo: req.user.email || p.email, subject: `Nieuws: ${item.title}`, text, html })
+    const profile = settings.get('quoteProfile');
+    const { text, html } = mailBody(profile, [item.title, item.body, `— ${item.authorName}`, 'Dit bericht staat ook in de app onder Nieuws.'], null);
+    for (const address of to) {
+      mailer.send({ to: address, replyTo: req.user.email || profile.email, subject: `Nieuws: ${item.title}`, text, html })
         .catch((err) => console.warn(`Nieuwsbericht niet verstuurd: ${err.message}`));
     }
     return { sent: to.length };
   }
 
   app.post('/api/news', requireJson, requireNews, (req, res) => {
-    const out = news.create(tid(req), req.user, req.body);
+    const out = news.create(tenantOf(req), req.user, req.body);
     if (out.error) return res.status(400).json({ error: 'invalid_news', field: out.field, message: out.error });
     const mailed = req.body?.mail === true ? mail(req, out.item) : null;
     audit(req, 'nieuws_geplaatst', { id: out.item.id, doelgroep: out.item.audience, mail: mailed ? mailed.sent : 0 });
@@ -197,8 +288,8 @@ function registerNewsRoutes(app, ctx) {
 
   app.put('/api/news/:id', requireJson, requireNews, (req, res) => {
     const input = {};
-    for (const k of ['title', 'body', 'audience', 'pinned']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
-    const out = news.update(tid(req), req.params.id, input);
+    for (const field of ['title', 'body', 'audience', 'pinned']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
+    const out = news.update(tenantOf(req), req.params.id, input);
     if (out.status === 404) return notFound(res);
     if (out.error) return res.status(400).json({ error: 'invalid_news', field: out.field, message: out.error });
     audit(req, 'nieuws_gewijzigd', { id: out.item.id, velden: Object.keys(input) });
@@ -206,7 +297,7 @@ function registerNewsRoutes(app, ctx) {
   });
 
   app.delete('/api/news/:id', requireNews, (req, res) => {
-    if (!news.remove(tid(req), req.params.id)) return notFound(res);
+    if (!news.remove(tenantOf(req), req.params.id)) return notFound(res);
     audit(req, 'nieuws_verwijderd', { id: req.params.id });
     res.json({ ok: true });
   });
