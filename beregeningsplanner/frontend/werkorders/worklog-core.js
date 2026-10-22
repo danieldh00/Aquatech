@@ -12,49 +12,93 @@
   const MAX_MINUTES = 24 * 60;
   const MAX_ENTRIES = 1000;
 
-  const str = (v, max) => String(v == null ? '' : v).slice(0, max);
-  const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
-  const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00Z`));
-  const isTime = (v) => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
-  const isClientId = (v) => typeof v === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(v);
-  const toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  /**
+   * Maakt van een waarde tekst van hoogstens max tekens.
+   * @param {*} value De waarde (null/undefined = leeg).
+   * @param {number} max Maximaal aantal tekens.
+   * @returns {string} De ingekorte tekst.
+   */
+  const limitText = (value, max) => String(value == null ? '' : value).slice(0, max);
+  /**
+   * Rondt af op twee decimalen.
+   * @param {*} value Getal of tekst met een getal.
+   * @returns {number} Het afgeronde getal (0 als het geen getal is).
+   */
+  const roundTwoDecimals = (value) => Math.round((Number(value) || 0) * 100) / 100;
+  /**
+   * Geeft aan of een waarde een geldige datum JJJJ-MM-DD is.
+   * @param {*} value De waarde.
+   * @returns {boolean} true bij een geldige datum.
+   */
+  const isDate = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T12:00:00Z`));
+  /**
+   * Geeft aan of een waarde een geldige tijd UU:MM is.
+   * @param {*} value De waarde.
+   * @returns {boolean} true bij een geldige tijd.
+   */
+  const isTime = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+  /**
+   * Geeft aan of een waarde een geldig clientId is (8–64 letters, cijfers of streepjes).
+   * @param {*} value De waarde.
+   * @returns {boolean} true bij een geldig clientId.
+   */
+  const isClientId = (value) => typeof value === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(value);
+  /**
+   * Zet een tijd UU:MM om naar minuten sinds middernacht.
+   * @param {string} time Tijd als UU:MM.
+   * @returns {number} Minuten.
+   */
+  const toMinutes = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 
-  /** Minuten tussen begin en eind min de pauze (over middernacht telt door). */
+  /**
+   * Minuten tussen begin en eind min de pauze (over middernacht telt door).
+   * @param {string} start Begintijd UU:MM.
+   * @param {string} end Eindtijd UU:MM.
+   * @param {number} [pause] Pauze in minuten.
+   * @returns {number} Minuten (0 bij een ongeldige tijd).
+   */
   function minutesBetween(start, end, pause = 0) {
     if (!isTime(start) || !isTime(end)) return 0;
-    let m = toMin(end) - toMin(start);
-    if (m <= 0) m += 24 * 60;
-    return Math.max(0, m - (Number(pause) || 0));
+    let minutes = toMinutes(end) - toMinutes(start);
+    if (minutes <= 0) minutes += 24 * 60;
+    return Math.max(0, minutes - (Number(pause) || 0));
   }
 
-  const hoursText = (min) => {
-    const m = Math.round(Number(min) || 0);
-    return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+  /**
+   * Minuten als uren:minuten.
+   * @param {number} minutes Aantal minuten.
+   * @returns {string} Bijv. "7:30".
+   */
+  const hoursText = (minutes) => {
+    const rounded = Math.round(Number(minutes) || 0);
+    return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, '0')}`;
   };
 
   /**
    * Urenregel opschonen. Met begin- en eindtijd volgen de minuten daaruit,
    * anders telt het ingevulde aantal uren (hours) of minuten.
    * Geeft { entry } of { error } (Nederlandse melding).
+   * @param {object} input Ingevulde urenregel.
+   * @returns {{entry: object}|{error: string}} De opgeschoonde regel of de foutmelding.
    */
   function cleanHours(input) {
-    const d = input && typeof input === 'object' ? input : {};
-    const startTime = isTime(d.startTime) ? d.startTime : '';
-    const endTime = isTime(d.endTime) ? d.endTime : '';
-    const breakMinutes = Math.round(Math.min(MAX_MINUTES, Math.max(0, Number(d.breakMinutes) || 0)));
+    const fields = input && typeof input === 'object' ? input : {};
+    const startTime = isTime(fields.startTime) ? fields.startTime : '';
+    const endTime = isTime(fields.endTime) ? fields.endTime : '';
+    const breakMinutes = Math.round(Math.min(MAX_MINUTES, Math.max(0, Number(fields.breakMinutes) || 0)));
     let minutes;
     if (startTime && endTime) minutes = minutesBetween(startTime, endTime, breakMinutes);
-    else if (d.hours !== undefined && d.hours !== null && d.hours !== '') minutes = Math.round((Number(String(d.hours).replace(',', '.')) || 0) * 60);
-    else minutes = Math.round(Number(d.minutes) || 0);
+    else if (fields.hours !== undefined && fields.hours !== null && fields.hours !== '') minutes = Math.round((Number(String(fields.hours).replace(',', '.')) || 0) * 60);
+    else minutes = Math.round(Number(fields.minutes) || 0);
     const entry = {
-      workDate: isDate(d.workDate) ? d.workDate : '',
+      workDate: isDate(fields.workDate) ? fields.workDate : '',
       startTime: startTime && endTime ? startTime : '',
       endTime: startTime && endTime ? endTime : '',
       breakMinutes: startTime && endTime ? breakMinutes : 0,
       minutes,
-      kind: KINDS[d.kind] ? d.kind : 'werk',
-      stepId: str(d.stepId, 40),
-      note: str(d.note, 500).trim(),
+      kind: KINDS[fields.kind] ? fields.kind : 'werk',
+      stepId: limitText(fields.stepId, 40),
+      note: limitText(fields.note, 500).trim(),
     };
     if (!entry.workDate) return { error: 'Vul een geldige datum in.' };
     if (!(minutes > 0)) return { error: 'Vul de begin- en eindtijd of het aantal uren in.' };
@@ -62,18 +106,22 @@
     return { entry };
   }
 
-  /** Verbruiksregel opschonen: { entry } of { error }. */
+  /**
+   * Verbruiksregel opschonen.
+   * @param {object} input Ingevulde verbruiksregel (positief = verbruikt, negatief = retour).
+   * @returns {{entry: object}|{error: string}} De opgeschoonde regel of de foutmelding.
+   */
   function cleanMaterial(input) {
-    const d = input && typeof input === 'object' ? input : {};
-    const qty = round2(String(d.qty == null ? '' : d.qty).replace(',', '.'));
+    const fields = input && typeof input === 'object' ? input : {};
+    const qty = roundTwoDecimals(String(fields.qty == null ? '' : fields.qty).replace(',', '.'));
     const entry = {
-      usedOn: isDate(d.usedOn) ? d.usedOn : '',
-      code: str(d.code, 40).trim(),
-      description: str(d.description, 500).trim(),
-      unit: str(d.unit, 12).trim(),
+      usedOn: isDate(fields.usedOn) ? fields.usedOn : '',
+      code: limitText(fields.code, 40).trim(),
+      description: limitText(fields.description, 500).trim(),
+      unit: limitText(fields.unit, 12).trim(),
       qty,
-      materialId: str(d.materialId, 40),
-      note: str(d.note, 500).trim(),
+      materialId: limitText(fields.materialId, 40),
+      note: limitText(fields.note, 500).trim(),
     };
     if (!entry.usedOn) return { error: 'Vul een geldige datum in.' };
     if (!entry.description && !entry.code) return { error: 'Kies een materiaal of vul een omschrijving in.' };
@@ -86,38 +134,47 @@
    * geplande uren, en per materiaal gepland tegenover verbruikt (op code, of
    * op omschrijving als er geen code is). data = werkorderdata (steps,
    * materials); hours/materials = de geboekte regels.
+   * @param {object} data Werkorderdata (steps, materials).
+   * @param {object[]} hours De geboekte urenregels.
+   * @param {object[]} materials De geboekte verbruiksregels.
+   * @returns {object} { minutes, hours, plannedHours, byKind, byUser, materials, extraMaterials }.
    */
   function totals(data, hours, materials) {
-    const d = data || {};
-    const steps = d.steps || [];
+    const workOrderData = data || {};
+    const steps = workOrderData.steps || [];
     const byKind = {};
     const byUser = {};
     let minutes = 0;
-    for (const h of hours || []) {
-      minutes += h.minutes;
-      byKind[h.kind] = (byKind[h.kind] || 0) + h.minutes;
-      const name = (h.user && h.user.displayName) || '–';
-      byUser[name] = (byUser[name] || 0) + h.minutes;
+    for (const entry of hours || []) {
+      minutes += entry.minutes;
+      byKind[entry.kind] = (byKind[entry.kind] || 0) + entry.minutes;
+      const name = (entry.user && entry.user.displayName) || '–';
+      byUser[name] = (byUser[name] || 0) + entry.minutes;
     }
-    const plannedHours = round2(steps.reduce((s, x) => s + (Number(x.hours) || 0), 0));
-    const keyOf = (m) => (m.code ? `c:${m.code.toLowerCase()}` : `d:${String(m.description || '').trim().toLowerCase()}`);
+    const plannedHours = roundTwoDecimals(steps.reduce((sum, step) => sum + (Number(step.hours) || 0), 0));
+    /**
+     * Sleutel om gepland en verbruikt materiaal bij elkaar te zoeken: de code, of anders de omschrijving.
+     * @param {object} material Materiaalregel.
+     * @returns {string} De sleutel.
+     */
+    const keyOf = (material) => (material.code ? `c:${material.code.toLowerCase()}` : `d:${String(material.description || '').trim().toLowerCase()}`);
     const map = new Map();
-    for (const m of d.materials || []) {
-      const k = keyOf(m);
-      const row = map.get(k) || { code: m.code, description: m.description, unit: m.unit, planned: 0, used: 0, extra: false };
-      row.planned = round2(row.planned + (Number(m.qty) || 0));
-      map.set(k, row);
+    for (const material of workOrderData.materials || []) {
+      const key = keyOf(material);
+      const row = map.get(key) || { code: material.code, description: material.description, unit: material.unit, planned: 0, used: 0, extra: false };
+      row.planned = roundTwoDecimals(row.planned + (Number(material.qty) || 0));
+      map.set(key, row);
     }
-    for (const m of materials || []) {
-      const k = keyOf(m);
-      let row = map.get(k);
-      if (!row) { row = { code: m.code, description: m.description, unit: m.unit, planned: 0, used: 0, extra: true }; map.set(k, row); }
-      row.used = round2(row.used + (Number(m.qty) || 0));
+    for (const material of materials || []) {
+      const key = keyOf(material);
+      let row = map.get(key);
+      if (!row) { row = { code: material.code, description: material.description, unit: material.unit, planned: 0, used: 0, extra: true }; map.set(key, row); }
+      row.used = roundTwoDecimals(row.used + (Number(material.qty) || 0));
     }
-    const mats = [...map.values()].map((r) => ({ ...r, diff: round2(r.used - r.planned) }));
+    const materialRows = [...map.values()].map((row) => ({ ...row, diff: roundTwoDecimals(row.used - row.planned) }));
     return {
-      minutes, hours: round2(minutes / 60), plannedHours, byKind, byUser,
-      materials: mats, extraMaterials: mats.filter((m) => m.extra).length,
+      minutes, hours: roundTwoDecimals(minutes / 60), plannedHours, byKind, byUser,
+      materials: materialRows, extraMaterials: materialRows.filter((row) => row.extra).length,
     };
   }
 

@@ -22,105 +22,170 @@
   };
   const WHITE = '#ffffff';
 
+  /**
+   * Maakt van een kleur een nette #rrggbb (ook #rgb en zonder #).
+   * @param {*} value De kleur als tekst.
+   * @returns {string|null} De kleur als #rrggbb, of null als het geen kleur is.
+   */
   function hex(value) {
-    const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(value == null ? '' : value).trim());
-    if (!m) return null;
-    const h = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
-    return `#${h.toLowerCase()}`;
+    const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(value == null ? '' : value).trim());
+    if (!match) return null;
+    const digits = match[1].length === 3 ? match[1].replace(/./g, (character) => character + character) : match[1];
+    return `#${digits.toLowerCase()}`;
   }
 
-  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-  const toHex = (c) => `#${c.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')).join('')}`;
+  /**
+   * Zet een #rrggbb-kleur om naar rood, groen en blauw.
+   * @param {string} color Kleur als #rrggbb.
+   * @returns {number[]} [rood, groen, blauw], elk 0–255.
+   */
+  const rgb = (color) => [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+  /**
+   * Zet rood, groen en blauw om naar #rrggbb (afgerond en begrensd op 0–255).
+   * @param {number[]} channels [rood, groen, blauw].
+   * @returns {string} De kleur als #rrggbb.
+   */
+  const toHex = (channels) => `#${channels.map((channel) => Math.round(Math.min(255, Math.max(0, channel))).toString(16).padStart(2, '0')).join('')}`;
 
-  function luminance(h) {
-    const [r, g, b] = rgb(h).map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  /**
+   * Relatieve helderheid volgens WCAG 2.1.
+   * @param {string} color Kleur als #rrggbb.
+   * @returns {number} Helderheid van 0 (zwart) tot 1 (wit).
+   */
+  function luminance(color) {
+    const [red, green, blue] = rgb(color).map((channel) => channel / 255).map((channel) => (channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
   }
 
-  /** Contrastverhouding (1 tot 21) tussen twee kleuren. */
-  function contrast(a, b) {
-    const [l1, l2] = [luminance(hex(a)), luminance(hex(b))].sort((x, y) => y - x);
-    return (l1 + 0.05) / (l2 + 0.05);
+  /**
+   * Contrastverhouding tussen twee kleuren.
+   * @param {string} firstColor Eerste kleur.
+   * @param {string} secondColor Tweede kleur.
+   * @returns {number} Verhouding van 1 tot 21.
+   */
+  function contrast(firstColor, secondColor) {
+    const [lighter, darker] = [luminance(hex(firstColor)), luminance(hex(secondColor))].sort((left, right) => right - left);
+    return (lighter + 0.05) / (darker + 0.05);
   }
 
-  // t = 0 geeft a, t = 1 geeft b.
-  const mix = (a, b, t) => toHex(rgb(a).map((v, i) => v + (rgb(b)[i] - v) * t));
+  /**
+   * Mengt twee kleuren: fraction 0 geeft fromColor, 1 geeft toColor.
+   * @param {string} fromColor Beginkleur als #rrggbb.
+   * @param {string} toColor Eindkleur als #rrggbb.
+   * @param {number} fraction Aandeel van toColor (0–1).
+   * @returns {string} De gemengde kleur als #rrggbb.
+   */
+  const mix = (fromColor, toColor, fraction) => toHex(rgb(fromColor).map((channel, i) => channel + (rgb(toColor)[i] - channel) * fraction));
 
-  /** Alleen geldige kleuren van de bekende velden, als #rrggbb. */
+  /**
+   * Houdt alleen geldige kleuren van de bekende velden over, als #rrggbb.
+   * @param {object} raw Invoer, bijv. { navy, green, teal }.
+   * @returns {object} De geldige kleuren.
+   */
   function sanitize(raw) {
     const out = {};
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
     for (const key of Object.keys(FIELDS)) {
-      const v = hex(raw[key]);
-      if (v) out[key] = v;
+      const color = hex(raw[key]);
+      if (color) out[key] = color;
     }
     return out;
   }
 
-  /** Volledige set kleuren: wat gekozen is, aangevuld met de standaard. */
+  /**
+   * Volledige set kleuren: wat gekozen is, aangevuld met de standaard.
+   * @param {object} colors De keuze.
+   * @returns {{navy: string, green: string, teal: string}} Alle drie de kleuren.
+   */
   function resolve(colors) {
     return { ...DEFAULTS, ...sanitize(colors) };
   }
 
-  // Donker groen: minstens 15% donkerder en leesbaar als tekst op wit en op
-  // licht groen (4,5:1). Licht groen: 10% van de kleur op wit. Helder groen
-  // (actief icoon in de zijbalk): de kleur opgehelderd tot hij op de hoofdkleur
-  // opvalt.
+  /**
+   * Leidt de extra groentinten af uit actiekleur en hoofdkleur. Donker groen:
+   * minstens 15% donkerder en leesbaar als tekst op wit en op licht groen
+   * (4,5:1). Licht groen: 10% van de kleur op wit. Helder groen (actief icoon in
+   * de zijbalk): de kleur opgehelderd tot hij op de hoofdkleur opvalt.
+   * @param {string} green Actiekleur.
+   * @param {string} navy Hoofdkleur.
+   * @returns {{greenDark: string, greenSoft: string, greenLight: string}} De afgeleide kleuren.
+   */
   function derive(green, navy) {
-    const g = hex(green) || DEFAULTS.green;
-    const n = hex(navy) || DEFAULTS.navy;
-    if (g === DEFAULTS.green && n === DEFAULTS.navy) return { ...DEFAULT_DERIVED };
-    let greenLight = mix(g, WHITE, 0.3);
-    for (let t = 0.35; t <= 1 && contrast(greenLight, n) < 4.5; t += 0.05) greenLight = mix(g, WHITE, t);
-    if (g === DEFAULTS.green) return { ...DEFAULT_DERIVED, greenLight: contrast(DEFAULT_DERIVED.greenLight, n) >= 4.5 ? DEFAULT_DERIVED.greenLight : greenLight };
-    const greenSoft = mix(g, WHITE, 0.9);
-    let greenDark = mix(g, '#000000', 0.15);
-    for (let t = 0.2; t <= 1 && contrast(greenDark, greenSoft) < 4.5; t += 0.05) greenDark = mix(g, '#000000', t);
+    const greenHex = hex(green) || DEFAULTS.green;
+    const navyHex = hex(navy) || DEFAULTS.navy;
+    if (greenHex === DEFAULTS.green && navyHex === DEFAULTS.navy) return { ...DEFAULT_DERIVED };
+    let greenLight = mix(greenHex, WHITE, 0.3);
+    for (let fraction = 0.35; fraction <= 1 && contrast(greenLight, navyHex) < 4.5; fraction += 0.05) greenLight = mix(greenHex, WHITE, fraction);
+    if (greenHex === DEFAULTS.green) return { ...DEFAULT_DERIVED, greenLight: contrast(DEFAULT_DERIVED.greenLight, navyHex) >= 4.5 ? DEFAULT_DERIVED.greenLight : greenLight };
+    const greenSoft = mix(greenHex, WHITE, 0.9);
+    let greenDark = mix(greenHex, '#000000', 0.15);
+    for (let fraction = 0.2; fraction <= 1 && contrast(greenDark, greenSoft) < 4.5; fraction += 0.05) greenDark = mix(greenHex, '#000000', fraction);
     return { greenDark, greenSoft, greenLight };
   }
 
-  /** Bezwaren tegen een keuze: [{ field, ratio, min, message }]. */
+  /**
+   * Bezwaren tegen een keuze (te weinig contrast met witte tekst).
+   * @param {object} colors De keuze.
+   * @returns {Array<{field: string, ratio: number, min: number, message: string}>} Leeg als alles goed is.
+   */
   function problems(colors) {
-    const c = resolve(colors);
+    const resolved = resolve(colors);
     const out = [];
-    for (const [key, def] of Object.entries(FIELDS)) {
-      const ratio = contrast(c[key], WHITE);
-      if (def.min && ratio < def.min) {
-        out.push({ field: key, ratio, min: def.min, message: `${def.label}: te licht voor witte tekst (contrast ${ratio.toFixed(1).replace('.', ',')}:1, minimaal ${String(def.min).replace('.', ',')}:1). Kies een donkerdere kleur.` });
+    for (const [key, field] of Object.entries(FIELDS)) {
+      const ratio = contrast(resolved[key], WHITE);
+      if (field.min && ratio < field.min) {
+        out.push({ field: key, ratio, min: field.min, message: `${field.label}: te licht voor witte tekst (contrast ${ratio.toFixed(1).replace('.', ',')}:1, minimaal ${String(field.min).replace('.', ',')}:1). Kies een donkerdere kleur.` });
       }
     }
     return out;
   }
 
-  /** CSS-variabelen voor een keuze ({} = standaard). */
+  /**
+   * CSS-variabelen voor een keuze ({} = standaard).
+   * @param {object} colors De keuze.
+   * @returns {object} Variabelen --at-* met hun kleur.
+   */
   function vars(colors) {
-    const c = resolve(colors);
-    const d = derive(c.green, c.navy);
+    const resolved = resolve(colors);
+    const derived = derive(resolved.green, resolved.navy);
     return {
-      '--at-navy': c.navy,
-      '--at-green': c.green,
-      '--at-green-dark': d.greenDark,
-      '--at-green-soft': d.greenSoft,
-      '--at-green-light': d.greenLight,
-      '--at-teal': c.teal,
+      '--at-navy': resolved.navy,
+      '--at-green': resolved.green,
+      '--at-green-dark': derived.greenDark,
+      '--at-green-soft': derived.greenSoft,
+      '--at-green-light': derived.greenLight,
+      '--at-teal': resolved.teal,
     };
   }
 
-  const isDefault = (colors) => Object.entries(resolve(colors)).every(([k, v]) => DEFAULTS[k] === v);
+  /**
+   * Geeft aan of de keuze gelijk is aan het standaardthema.
+   * @param {object} colors De keuze.
+   * @returns {boolean} true bij het standaardthema.
+   */
+  const isDefault = (colors) => Object.entries(resolve(colors)).every(([key, value]) => DEFAULTS[key] === value);
 
-  /** Stylesheet met de variabelen; leeg bij het standaardthema. */
+  /**
+   * Stylesheet met de variabelen; leeg bij het standaardthema.
+   * @param {object} colors De keuze.
+   * @returns {string} CSS met een :root-blok.
+   */
   function css(colors) {
     if (isDefault(colors)) return '';
-    return `:root {\n${Object.entries(vars(colors)).map(([k, v]) => `  ${k}: ${v};`).join('\n')}\n}\n`;
+    return `:root {\n${Object.entries(vars(colors)).map(([name, value]) => `  ${name}: ${value};`).join('\n')}\n}\n`;
   }
 
-  /** Variabelen op de pagina zetten (openbare pagina's, voorbeeld). */
-  function apply(v, doc) {
-    const d = doc || (typeof document !== 'undefined' ? document : null);
-    if (!d || !v) return;
-    for (const [k, val] of Object.entries(v)) if (/^--at-[a-z-]+$/.test(k) && hex(val)) d.documentElement.style.setProperty(k, hex(val));
-    const meta = d.querySelector('meta[name="theme-color"]');
-    if (meta && hex(v['--at-navy'])) meta.setAttribute('content', hex(v['--at-navy']));
+  /**
+   * Zet de variabelen op de pagina (openbare pagina's, voorbeeld).
+   * @param {object} variables Variabelen --at-* met hun kleur.
+   * @param {Document} [targetDocument] De pagina (standaard het huidige document).
+   */
+  function apply(variables, targetDocument) {
+    const page = targetDocument || (typeof document !== 'undefined' ? document : null);
+    if (!page || !variables) return;
+    for (const [name, value] of Object.entries(variables)) if (/^--at-[a-z-]+$/.test(name) && hex(value)) page.documentElement.style.setProperty(name, hex(value));
+    const meta = page.querySelector('meta[name="theme-color"]');
+    if (meta && hex(variables['--at-navy'])) meta.setAttribute('content', hex(variables['--at-navy']));
   }
 
   const api = { DEFAULTS, FIELDS, hex, contrast, mix, sanitize, resolve, derive, problems, vars, css, isDefault, apply };
