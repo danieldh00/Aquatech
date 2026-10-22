@@ -7,32 +7,10 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { sanitizeSubmission, PER_IP_HOUR } = require('../src/beregening/drawings');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'd'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
-
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json, text };
-  }
-  return {
-    get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b),
-    login: (username, password, tenant = '') => call('POST', '/api/auth/login', { username, password, tenant }),
-  };
-}
 
 const listen = (app) => new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
 const plan = (name = 'Tuin') => ({
@@ -74,7 +52,7 @@ test('invoer van het indienformulier wordt gecontroleerd en opgeschoond', () => 
 test('planner zonder inloggen: alleen met ?tekenen, de code wel, andere modules niet', async () => {
   const { server, base } = await setup();
   try {
-    const anon = client(base);
+    const anon = createClient(base);
     const page = await anon.get('/beregening/?tekenen');
     assert.strictEqual(page.status, 200);
     assert.match(page.text, /id="review-bar"/);
@@ -94,7 +72,7 @@ test('planner zonder inloggen: alleen met ?tekenen, de code wel, andere modules 
 test('tekening indienen zonder account: komt ter controle bij de juiste organisatie', async () => {
   const { db, store, main, groen, server, base } = await setup();
   try {
-    const anon = client(base);
+    const anon = createClient(base);
     assert.deepStrictEqual((await anon.get('/api/public/drawing')).body.enabled, true);
     assert.strictEqual((await anon.get('/api/public/drawing?org=bestaat-niet')).body.enabled, false);
 
@@ -120,13 +98,13 @@ test('tekening indienen zonder account: komt ter controle bij de juiste organisa
     assert.ok(audit && !/jansen|Mark/i.test(audit));
 
     // De installateur ziet hem ter controle, met contactgegevens; de andere organisatie niet.
-    const kees = client(base);
+    const kees = createClient(base);
     await kees.login('kees', PW);
     const items = (await kees.get('/api/plans?all=1&review=ter_controle')).body.items;
     assert.strictEqual(items.length, 1);
     assert.strictEqual(items[0].owner.email, 'jansen@voorbeeld.test');
     assert.strictEqual(items[0].review.via, 'openbaar');
-    const gerrit = client(base);
+    const gerrit = createClient(base);
     await gerrit.login('gerrit', PW, 'groen');
     const theirs = (await gerrit.get('/api/plans?all=1')).body.items;
     assert.deepStrictEqual(theirs.map((p) => p.customer), ['Piet Groen']);
@@ -134,7 +112,7 @@ test('tekening indienen zonder account: komt ter controle bij de juiste organisa
     assert.strictEqual((await gerrit.get(`/api/plans/${items[0].id}`)).status, 404);
 
     // Instelling uit: geen knop en geen indiening meer.
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', PW);
     assert.strictEqual((await baas.put('/api/admin/settings', { drawingRequests: false })).status, 200);
     assert.strictEqual((await anon.get('/api/public/drawing')).body.enabled, false);
@@ -150,7 +128,7 @@ test('tekening indienen zonder account: komt ter controle bij de juiste organisa
 test('indienen is per IP-adres begrensd', async () => {
   const { server, base } = await setup();
   try {
-    const anon = client(base);
+    const anon = createClient(base);
     for (let i = 0; i < PER_IP_HOUR; i++) assert.strictEqual((await anon.post('/api/public/drawing', submission({ consent: false }))).status, 400);
     assert.strictEqual((await anon.post('/api/public/drawing', submission())).status, 429);
   } finally {
@@ -161,7 +139,7 @@ test('indienen is per IP-adres begrensd', async () => {
 test('controle: klant biedt aan, installateur keurt goed, pas dan een offerte', async () => {
   const { server, base } = await setup();
   try {
-    const klaas = client(base);
+    const klaas = createClient(base);
     await klaas.login('klaas', PW);
     const created = await klaas.post('/api/plans', { data: plan('Voortuin Klaas') });
     assert.strictEqual(created.body.reviewStatus, 'concept');
@@ -172,7 +150,7 @@ test('controle: klant biedt aan, installateur keurt goed, pas dan een offerte', 
     assert.strictEqual(req.status, 200);
     assert.deepStrictEqual([req.body.review.status, req.body.review.question, req.body.review.via], ['ter_controle', 'Klopt dit?', 'account']);
 
-    const kees = client(base);
+    const kees = createClient(base);
     await kees.login('kees', PW);
     const quote = (planId) => kees.post('/api/quotes', { data: { title: 'Offerte', planId, customer: { name: 'Klaas' }, lines: [] } });
     const blocked = await quote(id);
@@ -208,10 +186,10 @@ test('leren van een goedgekeurd plan: recht plannen.goedkeuren, eigen tenant, al
   const { server, base, db, main } = await setup();
   try {
     const samples = { v: 1, bins: { 10: [0, 100, 0, 0, 0, 0] } };
-    const klaas = client(base);
+    const klaas = createClient(base);
     await klaas.login('klaas', PW);
     const id = (await klaas.post('/api/plans', { data: plan('Tuin Klaas') })).body.id;
-    const kees = client(base);
+    const kees = createClient(base);
     await kees.login('kees', PW);
     // nog niet goedgekeurd
     assert.strictEqual((await kees.post('/api/plan/learn', { planId: id, samples })).status, 404);
@@ -219,7 +197,7 @@ test('leren van een goedgekeurd plan: recht plannen.goedkeuren, eigen tenant, al
     // klant mist het recht
     assert.strictEqual((await klaas.post('/api/plan/learn', { planId: id, samples })).status, 403);
     // andere organisatie
-    const gerrit = client(base);
+    const gerrit = createClient(base);
     await gerrit.login('gerrit', PW, 'groen');
     assert.strictEqual((await gerrit.post('/api/plan/learn', { planId: id, samples })).status, 404);
     assert.strictEqual((await kees.post('/api/plan/learn', { planId: id, samples })).status, 200);

@@ -11,30 +11,11 @@ const { createStore } = require('../src/platform/store');
 const { createAiUsageStore, sanitizeFilter } = require('../src/platform/ai-usage');
 const { AnalyzeError, createPlanAnalyzer } = require('../src/beregening/plan-analyzer');
 const AiModels = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'ai-models.js'));
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'k'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
-
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (/Max-Age=0/.test(c)) jar.delete(kv.slice(0, i)); else jar.set(kv.slice(0, i), kv.slice(i + 1));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b) };
-}
 
 const result = (model = 'claude-opus-5-5') => ({
   scale: { metersPerPixel: 0.02, method: 'maatvoering' }, areas: [{ type: 'lawn', name: 'Gazon', points: [] }], elements: [], notes: '',
@@ -72,7 +53,7 @@ async function setup() {
   const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username, org) => {
-    const c = client(base);
+    const c = createClient(base);
     const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
     assert.strictEqual(r.status, 200, JSON.stringify(r.body));
     return c;

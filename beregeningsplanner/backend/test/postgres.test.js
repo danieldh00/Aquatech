@@ -13,6 +13,7 @@ const { PG_BASE_VERSION, PG_MIGRATIONS } = require('../src/database/pgschema');
 const { fingerprint, copyDatabase } = require('../src/database/db-copy');
 const { createStore } = require('../src/platform/store');
 const { createVault } = require('../src/beveiliging/vault');
+const { createClient } = require('./helpers/http-client');
 
 const URL_ = process.env.TEST_DATABASE_URL;
 const needPg = { skip: !URL_ && 'zet TEST_DATABASE_URL voor tests tegen PostgreSQL' };
@@ -95,30 +96,11 @@ function start(db, vault) {
   });
 }
 
-function client(base, jar = new Map()) {
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return { jar, get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b) };
-}
-
 // Wat een gebruiker in de app ziet; na de overstap moet dat exact gelijk zijn.
 async function views(base, jars) {
   const out = {};
   for (const [who, jar] of Object.entries(jars)) {
-    const c = client(base, new Map(jar));
+    const c = createClient(base, { jar: new Map(jar) });
     for (const p of ['/api/me', '/api/plans?all=1', '/api/quotes?all=1', '/api/workorders', '/api/catalog', '/api/admin/users', '/api/admin/history?limit=1000',
       '/api/admin/plans?deleted=1', '/api/admin/settings', '/api/platform/tenants', '/api/admin/audit?limit=1000', '/api/service-requests', '/api/portal']) {
       const r = await c.get(p);
@@ -144,14 +126,14 @@ test('overstap SQLite → PostgreSQL: alle gegevens één op één, ingelogd bli
     let { server, base } = await start(lite, vault);
     const jars = {};
     try {
-      const baas = client(base);
+      const baas = createClient(base);
       assert.strictEqual((await baas.post('/api/auth/login', { username: 'baas', password: PW })).status, 200);
       assert.strictEqual((await baas.put('/api/admin/settings', { anthropicApiKey: KEY })).status, 200);
       const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
       const env = (await baas.post(`/api/platform/tenants/${t.id}/environments`, { name: 'Test' })).body.tenant;
       const seed = await baas.post(`/api/platform/tenants/${env.id}/testdata`, { shareBase: 'https://app.voorbeeld.nl/openbaar/offerte.html' });
       assert.strictEqual(seed.status, 201);
-      const inst = client(base);
+      const inst = createClient(base);
       const instName = seed.body.accounts.find((a) => a.username.endsWith('.installateur')).username;
       assert.strictEqual((await inst.post('/api/auth/login', { username: instName, password: seed.body.password, tenant: 'groen' })).status, 200);
       jars.baas = [...baas.jar];
@@ -188,9 +170,9 @@ test('overstap SQLite → PostgreSQL: alle gegevens één op één, ingelogd bli
       assert.strictEqual(before['installateur /api/quotes?all=1'].body.items.length, 6, 'vergelijking met echte gegevens');
       assert.ok(before['installateur /api/workorders'].body.items.length === 4 && before['baas /api/platform/tenants'].body.items.length === 2);
       for (const k of Object.keys(before)) assert.deepStrictEqual(after[k], before[k], k);
-      assert.strictEqual((await client(base, new Map(jars.baas)).get('/api/admin/settings')).body.settings.anthropicApiKey.hint, '…WXYZ');
+      assert.strictEqual((await createClient(base, { jar: new Map(jars.baas) }).get('/api/admin/settings')).body.settings.anthropicApiKey.hint, '…WXYZ');
       // En verder werken op PostgreSQL.
-      const baas = client(base, new Map(jars.baas));
+      const baas = createClient(base, { jar: new Map(jars.baas) });
       const created = await baas.post('/api/plans', { data: { meta: { name: 'Nieuw na overstap' }, areas: [], sprinklers: [], zones: [], elements: [] } });
       assert.strictEqual(created.status, 201);
       assert.ok((await baas.get('/api/admin/history?search=NIEUW')).body.items.some((h) => h.title === 'Nieuw na overstap'), 'zoeken blijft hoofdletterongevoelig');

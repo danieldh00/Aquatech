@@ -233,7 +233,7 @@ test('schaal: meeste en zekerste lezingen winnen, tegenstrijdigheid verlaagt bet
 
 // ---------------------------------------------------------------- echte tekening en leren
 
-const { readPng } = require('./png');
+const { readPng } = require('./helpers/png');
 const sandbox2 = { window: {}, console };
 vm.createContext(sandbox2);
 for (const f of ['geometry.js', 'sprinklerlib.js', 'catalog.js', 'autotrace.js', 'simulation.js', 'planner.js', 'planimport.js', 'concept.js', 'localrecog.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, f), 'utf8'), sandbox2);

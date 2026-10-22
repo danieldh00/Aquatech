@@ -8,28 +8,10 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { registerPortalRoutes, customerWorkOrder } = require('../src/uitvoering/portal');
 const Roles = require('../../frontend/shared/roles.js');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'p'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
-
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    let json = null;
-    try { json = JSON.parse(await res.text()); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b) };
-}
 
 const listen = (app) => new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
 
@@ -74,12 +56,12 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
   const server = await listen(createApp({ secret: SECRET, db }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username) => {
-    const c = client(base);
+    const c = createClient(base);
     assert.strictEqual((await c.post('/api/auth/login', { username, password: PW, mustChangePassword: false })).status, 200);
     return c;
   };
   try {
-    assert.strictEqual((await client(base).get('/api/portal')).status, 401);
+    assert.strictEqual((await createClient(base).get('/api/portal')).status, 401);
     const kees = await as('kees'), klaas = await as('klaas'), piet = await as('piet');
     assert.strictEqual((await kees.get('/api/portal')).status, 403, 'medewerker heeft geen portaal');
 
@@ -166,7 +148,7 @@ test('API: foto\'s en afspraak bevestigen via de optionele koppelingen', async (
     audit: () => {},
   });
   const server = await listen(app);
-  const c = client(`http://127.0.0.1:${server.address().port}`);
+  const c = createClient(`http://127.0.0.1:${server.address().port}`);
   try {
     const p = (await c.get('/api/portal')).body;
     assert.deepStrictEqual(p.features, { photos: true, appointments: true, requests: false });

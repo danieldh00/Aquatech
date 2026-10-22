@@ -9,6 +9,7 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const QuoteCore = require('../../frontend/offertes/quote-core.js');
 const W = require('../../frontend/werkorders/workorder-core.js');
+const { createClient } = require('./helpers/http-client');
 
 const FRONT = path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js');
 const sandbox = { window: {}, console };
@@ -147,24 +148,6 @@ test('opschonen en voortgang', () => {
 
 // ---------- API ----------
 const SECRET = 'z'.repeat(64);
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    let json = null;
-    try { json = JSON.parse(await res.text()); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b), del: (p) => call('DELETE', p) };
-}
 
 async function setup(appOpts = {}) {
   const db = openDb();
@@ -176,7 +159,7 @@ async function setup(appOpts = {}) {
   const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, ...appOpts }).listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username) => {
-    const c = client(base);
+    const c = createClient(base);
     assert.strictEqual((await c.post('/api/auth/login', { username, password: 'Tuin-Plan-2026!' })).status, 200);
     return c;
   };
@@ -186,7 +169,7 @@ async function setup(appOpts = {}) {
 test('API: werkorder alleen uit een geaccordeerde offerte, alleen voor beheerder en installateur', async () => {
   const { server, base, as } = await setup();
   try {
-    assert.strictEqual((await client(base).get('/api/workorders')).status, 401);
+    assert.strictEqual((await createClient(base).get('/api/workorders')).status, 401);
     const kees = await as('kees'), baas = await as('baas'), klaas = await as('klaas');
     const quote = quoteFromGarden();
     const q = (await kees.post('/api/quotes', { data: quote.data })).body;

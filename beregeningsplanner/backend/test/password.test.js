@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -18,28 +19,8 @@ async function start() {
   });
 }
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (/Max-Age=0/.test(c)) jar.delete(kv.slice(0, i)); else jar.set(kv.slice(0, i), kv.slice(i + 1));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json, text };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b), patch: (p, b) => call('PATCH', p, b) };
-}
-
 async function login(base, username, password) {
-  const c = client(base);
+  const c = createClient(base, { emptyJsonBody: false });
   const r = await c.post('/api/auth/login', { username, password });
   assert.strictEqual(r.status, 200, JSON.stringify(r.body));
   return c;
@@ -63,13 +44,13 @@ test('gebruiker wijzigt zelf het wachtwoord; andere sessies vervallen', async ()
     // Dit toestel blijft ingelogd, het andere niet; het oude wachtwoord werkt niet meer.
     assert.strictEqual((await jan.get('/api/me')).body.user.username, 'jan');
     assert.strictEqual((await tweede.get('/api/me')).body.user, null);
-    assert.strictEqual((await client(base).post('/api/auth/login', { username: 'jan', password: 'Gras-Pomp-2027!' })).status, 401);
+    assert.strictEqual((await createClient(base, { emptyJsonBody: false }).post('/api/auth/login', { username: 'jan', password: 'Gras-Pomp-2027!' })).status, 401);
     await login(base, 'jan', 'Haag-Slang-2028!');
     const audit = (await baas.get('/api/admin/audit')).body.items.map((a) => a.action);
     assert.ok(audit.includes('wachtwoord_gewijzigd'));
 
     // Met de toegangscode of als gast is er geen eigen wachtwoord.
-    assert.strictEqual((await client(base).post('/api/account/password', { currentPassword: 'x', newPassword: 'Haag-Slang-2028!' })).status, 400);
+    assert.strictEqual((await createClient(base, { emptyJsonBody: false }).post('/api/account/password', { currentPassword: 'x', newPassword: 'Haag-Slang-2028!' })).status, 400);
   } finally {
     server.close();
   }

@@ -13,28 +13,9 @@ const { createPdf, wrap, textWidth, encode } = require('../src/verkoop/pdf');
 const { invoicePdf } = require('../src/verkoop/invoice-pdf');
 
 const Core = require(path.join(__dirname, '..', '..', 'frontend', 'facturen', 'invoice-core.js'));
+const { createClient } = require('./helpers/http-client');
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
-
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    const buf = Buffer.from(await res.arrayBuffer());
-    let json = null;
-    try { json = JSON.parse(buf.toString('utf8')); } catch { /* geen JSON */ }
-    return { status: res.status, body: json, raw: buf, type: res.headers.get('content-type') || '' };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b), del: (p) => call('DELETE', p) };
-}
 
 const order = (id, extra = {}) => ({
   id, number: String(id), status: 'completed', customer_id: 0,
@@ -76,7 +57,7 @@ async function setup({ orders = [], mailOn = true } = {}) {
   const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, mailerFor, shopFetch: shop.fetchImpl }).listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username, org) => {
-    const c = client(base);
+    const c = createClient(base);
     const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
     assert.strictEqual(r.status, 200, JSON.stringify(r.body));
     return c;

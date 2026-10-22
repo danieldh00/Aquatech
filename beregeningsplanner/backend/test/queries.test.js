@@ -6,6 +6,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'q'.repeat(64);
 const PASSWORD = 'Tuin-Plan-2026!';
@@ -33,26 +34,6 @@ function instrument(db) {
   };
 }
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b) };
-}
-
 const plan = (extra = {}) => ({
   meta: { name: 'Tuin', customer: 'Fam. Jansen', address: 'Dorpsstraat 1' },
   areas: [{ id: 'a1', type: 'lawn', pts: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }, { x: 0, y: 5 }] }],
@@ -64,7 +45,7 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
   const store = createStore(db);
   await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PASSWORD });
   const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
-  const c = client(`http://127.0.0.1:${server.address().port}`);
+  const c = createClient(`http://127.0.0.1:${server.address().port}`);
   try {
     assert.strictEqual((await c.post('/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
     await c.get('/api/me');
@@ -81,7 +62,7 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     for (const f of ['/shared/brand.css', '/dashboard/modules.js', '/shared/sidebar.js']) assert.strictEqual((await c.get(f)).status, 200, f);
     assert.ok(probe.stats.queries <= 1, probe.stats.sql.join('\n'));
     // Na uitloggen geen bestanden meer.
-    const other = client(`http://127.0.0.1:${server.address().port}`);
+    const other = createClient(`http://127.0.0.1:${server.address().port}`);
     assert.strictEqual((await other.post('/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
     assert.strictEqual((await other.get('/beheer/beheer.js')).status, 200);
     await other.post('/api/auth/logout');

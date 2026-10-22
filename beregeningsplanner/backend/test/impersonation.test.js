@@ -3,6 +3,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
 
@@ -12,36 +13,6 @@ function start(db, opts = {}) {
       resolve({ server, base: `http://127.0.0.1:${server.address().port}` });
     });
   });
-}
-
-// Kleine client die cookies onthoudt (zoals een browser).
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      const v = kv.slice(i + 1);
-      if (v) jar.set(kv.slice(0, i), v); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return {
-    jar,
-    get: (p) => call('GET', p),
-    post: (p, b) => call('POST', p, b ?? {}),
-    put: (p, b) => call('PUT', p, b),
-    patch: (p, b) => call('PATCH', p, b),
-    del: (p) => call('DELETE', p),
-    login: (username, password, tenant) => call('POST', '/api/auth/login', { username, password, tenant }),
-  };
 }
 
 const plan = (name) => ({
@@ -66,7 +37,7 @@ const auditRows = (db, action) => db.prepare('SELECT * FROM audit WHERE action =
 async function setup() {
   const db = await platformDb();
   const { server, base } = await start(db);
-  const baas = client(base);
+  const baas = createClient(base);
   await baas.login('baas', 'Tuin-Plan-2026!');
   const groen = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
   const kees = (await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'kees', displayName: 'Kees', role: 'klant', password: 'Haag-Slang-2028!', mustChangePassword: false })).body;
@@ -129,7 +100,7 @@ test('impersonatie in live: alleen met toestemming van de gebruiker, intrekken s
     assert.strictEqual(no.status, 403);
     assert.strictEqual(no.body.error, 'consent_required');
 
-    const pc = client(base);
+    const pc = createClient(base);
     await pc.login('piet', 'Gras-Pomp-2027!', 'groen');
     assert.strictEqual((await pc.get('/api/support')).body.grant, null);
     assert.strictEqual((await pc.post('/api/support', { hours: 5 })).status, 400);
@@ -174,7 +145,7 @@ test('impersonatie: verloopt vanzelf, stopt bij uitloggen en heeft grenzen', asy
     assert.strictEqual((await baas.post('/api/platform/impersonate', { userId: 'bestaat-niet', tenantId: env.id })).status, 404);
 
     // Een gewone beheerder mag niet impersoneren.
-    const pc = client(base);
+    const pc = createClient(base);
     await pc.login('piet', 'Gras-Pomp-2027!', 'groen');
     assert.strictEqual((await pc.post('/api/platform/impersonate', { userId: kees.id, tenantId: env.id })).status, 403);
 
@@ -205,7 +176,7 @@ test('impersonatie: verloopt vanzelf, stopt bij uitloggen en heeft grenzen', asy
     // Een testaccount (bestaat alleen in de testomgeving): zonder toestemming.
     const tester = await baas.post(`/api/platform/tenants/${env.id}/users`, { username: 'tester', displayName: 'Tester', role: 'klant', password: 'Bloem-Perk-2029!', mustChangePassword: false });
     assert.strictEqual(tester.status, 201, JSON.stringify(tester.body));
-    const tc = client(base);
+    const tc = createClient(base);
     await tc.login('tester', 'Bloem-Perk-2029!', 'groen');
     assert.strictEqual((await tc.get('/api/support')).body.applicable, false);
     assert.strictEqual((await tc.post('/api/support', { hours: 1 })).status, 409);

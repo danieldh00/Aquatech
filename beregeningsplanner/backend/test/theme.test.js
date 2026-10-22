@@ -4,6 +4,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const Theme = require('../../frontend/shared/theme.js');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -12,32 +13,6 @@ function start(db) {
   return new Promise((resolve) => {
     const server = createApp({ secret: SECRET, db }).listen(0, () => resolve({ server, base: `http://127.0.0.1:${server.address().port}` }));
   });
-}
-
-// Client met cookies; geeft zowel tekst als JSON terug.
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      const v = kv.slice(i + 1);
-      if (v) jar.set(kv.slice(0, i), v); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, text, body: json, type: res.headers.get('content-type') || '' };
-  }
-  return {
-    get: (p) => call('GET', p),
-    put: (p, b) => call('PUT', p, b),
-    login: (username, password, tenant) => call('POST', '/api/auth/login', { username, password, tenant }),
-  };
 }
 
 test('thema-kern: standaard, afleiding, contrast en opschonen', () => {
@@ -66,14 +41,14 @@ test('hoofdbeheerder kiest kleuren: standaard, per tenant, terugzetten', async (
   await store.createAccount(main.id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   const { server, base } = await start(db);
   try {
-    const anon = client(base);
+    const anon = createClient(base);
     let r = await anon.get('/shared/theme.css');
     assert.strictEqual(r.status, 200, 'ook zonder inloggen bereikbaar');
     assert.match(r.type, /text\/css/);
     assert.doesNotMatch(r.text, /--at-navy/, 'standaard: geen overschrijving');
     assert.strictEqual((await anon.get('/api/platform/theme')).status, 401);
 
-    const baas = client(base);
+    const baas = createClient(base);
     assert.strictEqual((await baas.login('baas', PW)).status, 200);
     r = await baas.get('/api/platform/theme');
     assert.strictEqual(r.status, 200);
@@ -115,11 +90,11 @@ test('hoofdbeheerder kiest kleuren: standaard, per tenant, terugzetten', async (
     const env = store.createEnvironment(groen.id, { name: 'Test' }).tenant;
     assert.strictEqual((await baas.put('/api/platform/theme', { tenantId: env.id, colors: { navy: '#000000' } })).status, 404, 'testomgeving volgt de tenant');
 
-    const piet = client(base);
+    const piet = createClient(base);
     assert.strictEqual((await piet.login('piet', PW, 'groen')).status, 200);
     assert.match((await piet.get('/shared/theme.css')).text, /--at-navy: #0b3d2e;/);
     assert.strictEqual((await piet.get('/api/platform/theme')).status, 403, 'alleen hoofdbeheerders');
-    const kees = client(base);
+    const kees = createClient(base);
     assert.strictEqual((await kees.login('kees', PW, 'blauw')).status, 200);
     assert.match((await kees.get('/shared/theme.css')).text, /--at-navy: #203040;/);
 

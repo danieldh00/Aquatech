@@ -15,7 +15,6 @@
     "backend/test/photos.test.js",
     "backend/test/plan.test.js",
     "backend/test/planner.test.js",
-    "backend/test/png.js",
     "backend/test/portal.test.js",
     "backend/test/postgres.test.js",
     "backend/test/profile.test.js",

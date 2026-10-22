@@ -11,6 +11,7 @@ const { createStore } = require('../src/platform/store');
 const { createSettings, SettingsError } = require('../src/platform/settings');
 const { createVault } = require('../src/beveiliging/vault');
 const crypto = require('crypto');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
 const KEY = 'sk-ant-test-0123456789abcdefWXYZ';
@@ -31,29 +32,8 @@ function start(opts = {}) {
   });
 }
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      const v = kv.slice(i + 1);
-      if (v) jar.set(kv.slice(0, i), v); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json, text };
-  }
-  return { jar, get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b) };
-}
-
 async function admin(base, code = 'geheim') {
-  const c = client(base);
+  const c = createClient(base);
   const r = await c.post('/api/auth/login', { code });
   assert.strictEqual(r.status, 200);
   return c;
@@ -133,14 +113,14 @@ test('instellingen blijven bewaard na een herstart', () => {
 test('instellingen-API alleen voor beheerders', async () => {
   const { server, base } = await start();
   try {
-    const anon = client(base);
+    const anon = createClient(base);
     assert.strictEqual((await anon.get('/api/admin/settings')).status, 401);
     assert.strictEqual((await anon.put('/api/admin/settings', { aiEnabled: false })).status, 401);
     const a = await admin(base);
     // Een gewoon gebruikersaccount mag het niet.
     const u = await a.post('/api/admin/users', { username: 'jan', displayName: 'Jan', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false });
     assert.strictEqual(u.status, 201);
-    const jan = client(base);
+    const jan = createClient(base);
     assert.strictEqual((await jan.post('/api/auth/login', { username: 'jan', password: 'Tuin-Plan-2026!' })).status, 200);
     assert.strictEqual((await jan.get('/api/admin/settings')).status, 403);
     const r = await a.get('/api/admin/settings');
@@ -212,8 +192,8 @@ test('nieuwe toegangscode: andere toestellen uit, de beheerder blijft ingelogd',
     assert.strictEqual(r.status, 200);
     assert.strictEqual((await a.get('/api/admin/settings')).status, 200);
     assert.strictEqual((await other.get('/api/admin/settings')).status, 401);
-    assert.strictEqual((await client(base).post('/api/auth/login', { code: 'geheim' })).status, 401);
-    assert.strictEqual((await client(base).post('/api/auth/login', { code: 'nieuwecode' })).status, 200);
+    assert.strictEqual((await createClient(base).post('/api/auth/login', { code: 'geheim' })).status, 401);
+    assert.strictEqual((await createClient(base).post('/api/auth/login', { code: 'nieuwecode' })).status, 200);
   } finally {
     server.close();
   }
@@ -231,10 +211,10 @@ test('wie met de toegangscode beheert, kan die niet leegmaken', async () => {
     assert.strictEqual(reset.status, 200);
     // Met een beheerdersaccount mag het wel.
     await a.post('/api/admin/users', { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!', mustChangePassword: false });
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.post('/api/auth/login', { username: 'baas', password: 'Tuin-Plan-2026!' });
     assert.strictEqual((await baas.put('/api/admin/settings', { accessCode: '' })).status, 200);
-    assert.strictEqual((await client(base).get('/api/auth/status')).body.configured, false);
+    assert.strictEqual((await createClient(base).get('/api/auth/status')).body.configured, false);
   } finally {
     server.close();
   }

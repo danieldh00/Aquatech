@@ -9,6 +9,7 @@ const { openDb, MIGRATIONS } = require('../src/database/db');
 const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
 
 const { createStore } = require('../src/platform/store');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
 
@@ -18,36 +19,6 @@ function start(db, opts = {}) {
       resolve({ server, base: `http://127.0.0.1:${server.address().port}` });
     });
   });
-}
-
-// Kleine client die cookies onthoudt (zoals een browser).
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      const v = kv.slice(i + 1);
-      if (v) jar.set(kv.slice(0, i), v); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return {
-    jar,
-    get: (p) => call('GET', p),
-    post: (p, b) => call('POST', p, b ?? {}),
-    put: (p, b) => call('PUT', p, b),
-    patch: (p, b) => call('PATCH', p, b),
-    del: (p) => call('DELETE', p),
-    login: (username, password, tenant) => call('POST', '/api/auth/login', { username, password, tenant }),
-  };
 }
 
 const plan = (name) => ({
@@ -119,7 +90,7 @@ test('migratie rollen: gebruiker wordt installateur, gast wordt klant; verwijzin
 test('eerste beheerder via het instelscherm is hoofdbeheerder', async () => {
   const { server, base } = await start(openDb(), { setupCode: 'ABCD-EFGH-JKLM' });
   try {
-    const c = client(base);
+    const c = createClient(base);
     assert.strictEqual((await c.post('/api/setup', { username: 'eigenaar', password: 'Tuin-Plan-2026!', code: 'ABCD-EFGH-JKLM' })).status, 201);
     const me = await c.get('/api/me');
     assert.strictEqual(me.body.platformAdmin, true);
@@ -132,7 +103,7 @@ test('eerste beheerder via het instelscherm is hoofdbeheerder', async () => {
 test('hoofdbeheerder maakt een tenant met beheerder; tenants zien elkaars data niet', async () => {
   const { server, base } = await start(await platformDb());
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     assert.strictEqual((await baas.login('baas', 'Tuin-Plan-2026!')).status, 200);
     assert.strictEqual((await baas.post('/api/plans', { data: plan('Plan van Aquatech') })).status, 201);
 
@@ -147,7 +118,7 @@ test('hoofdbeheerder maakt een tenant met beheerder; tenants zien elkaars data n
     assert.ok(!(await baas.get('/api/platform/tenants')).body.items.some((t) => t.slug === 'blauw'));
 
     // Piet logt in op dezelfde URL met de organisatiecode van Groen.
-    const piet = client(base);
+    const piet = createClient(base);
     assert.strictEqual((await piet.login('piet', 'Gras-Pomp-2027!', 'groen')).status, 200);
     const me = (await piet.get('/api/me')).body;
     assert.strictEqual(me.tenant.slug, 'groen');
@@ -173,22 +144,22 @@ test('hoofdbeheerder maakt een tenant met beheerder; tenants zien elkaars data n
 test('uitgeschakelde tenant: inloggen geweigerd en bestaande sessie vervalt; hoofdtenant blijft aan', async () => {
   const { server, base } = await start(await platformDb());
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
     const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
-    const piet = client(base);
+    const piet = createClient(base);
     await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
     assert.ok((await piet.get('/api/me')).body.user);
 
     assert.strictEqual((await baas.patch(`/api/platform/tenants/${t.id}`, { disabled: true })).status, 200);
     assert.strictEqual((await piet.get('/api/me')).body.user, null);
-    assert.strictEqual((await client(base).login('piet', 'Gras-Pomp-2027!', 'groen')).status, 403);
+    assert.strictEqual((await createClient(base).login('piet', 'Gras-Pomp-2027!', 'groen')).status, 403);
 
     const main = (await baas.get('/api/platform/tenants')).body.mainTenantId;
     assert.strictEqual((await baas.patch(`/api/platform/tenants/${main}`, { disabled: true })).status, 409);
 
     await baas.patch(`/api/platform/tenants/${t.id}`, { disabled: false, name: 'Groen Beregening' });
-    assert.strictEqual((await client(base).login('piet', 'Gras-Pomp-2027!', 'groen')).status, 200);
+    assert.strictEqual((await createClient(base).login('piet', 'Gras-Pomp-2027!', 'groen')).status, 200);
   } finally {
     server.close();
   }
@@ -197,12 +168,12 @@ test('uitgeschakelde tenant: inloggen geweigerd en bestaande sessie vervalt; hoo
 test('testomgeving: los van live, wisselen zonder opnieuw inloggen', async () => {
   const { server, base } = await start(await platformDb());
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
     const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
     await baas.post(`/api/platform/tenants/${t.id}/users`, { username: 'jan', role: 'gebruiker', password: 'Haag-Slang-2028!', mustChangePassword: false });
 
-    const piet = client(base);
+    const piet = createClient(base);
     await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
     await piet.post('/api/plans', { data: plan('Live plan') });
     assert.strictEqual((await piet.put('/api/admin/settings', { aiDailyLimit: 7, anthropicApiKey: `sk-ant-${'k'.repeat(30)}` })).status, 200);
@@ -239,7 +210,7 @@ test('testomgeving: los van live, wisselen zonder opnieuw inloggen', async () =>
     assert.strictEqual((await piet.get('/api/admin/settings')).body.settings.aiDailyLimit.value, 7);
 
     // Een gewone gebruiker komt niet in de testomgeving, ook niet met een gekopieerde cookie.
-    const jan = client(base);
+    const jan = createClient(base);
     await jan.login('jan', 'Haag-Slang-2028!', 'groen');
     assert.strictEqual((await jan.get('/api/environments')).body.items.length, 1);
     assert.strictEqual((await jan.post('/api/environment', { tenantId: env.body.tenant.id })).status, 404);
@@ -267,14 +238,14 @@ test('testomgeving: los van live, wisselen zonder opnieuw inloggen', async () =>
 test('hoofdbeheerder opent een andere tenant en werkt daar als beheerder', async () => {
   const { server, base } = await start(await platformDb());
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
     const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
     assert.strictEqual((await baas.post('/api/environment', { tenantId: t.id })).status, 200);
     assert.strictEqual((await baas.get('/api/me')).body.tenant.slug, 'groen');
     assert.deepStrictEqual((await baas.get('/api/admin/users')).body.items.map((u) => u.username), ['piet']);
     // Een gewone beheerder kan een andere tenant niet openen.
-    const piet = client(base);
+    const piet = createClient(base);
     await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
     const main = (await baas.get('/api/platform/tenants')).body.mainTenantId;
     assert.strictEqual((await piet.post('/api/environment', { tenantId: main })).status, 404);
@@ -287,7 +258,7 @@ test('de laatste hoofdbeheerder kan niet worden uitgeschakeld', async () => {
   const db = await platformDb();
   const { server, base } = await start(db);
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
     await baas.post('/api/admin/users', { username: 'tweede', role: 'beheerder', password: 'Vijver-Mos-2029!', mustChangePassword: false });
     const users = (await baas.get('/api/admin/users')).body.items;
@@ -301,7 +272,7 @@ test('de laatste hoofdbeheerder kan niet worden uitgeschakeld', async () => {
 test('hoofdbeheerders aanmaken, intrekken en beschermen', async () => {
   const { server, base } = await start(await platformDb());
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
     const { items, mainTenantId } = (await baas.get('/api/platform/tenants')).body;
     const groen = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen' })).body.tenant;
@@ -312,12 +283,12 @@ test('hoofdbeheerders aanmaken, intrekken en beschermen', async () => {
     assert.strictEqual(made.status, 201, JSON.stringify(made.body));
     assert.strictEqual(made.body.platformAdmin, true);
     assert.strictEqual(made.body.role, 'beheerder');
-    const anna = client(base);
+    const anna = createClient(base);
     assert.strictEqual((await anna.login('anna', 'Vijver-Mos-2029!')).status, 200);
     assert.strictEqual((await anna.get('/api/platform/tenants')).status, 200);
     // Ook met een andere (onthouden) organisatiecode of de naam van de hoofdtenant.
     for (const org of ['groen', 'aquatech']) {
-      const c = client(base);
+      const c = createClient(base);
       const r = await c.login('anna', 'Vijver-Mos-2029!', org);
       assert.strictEqual(r.status, 200, org);
       assert.strictEqual(r.body.tenant, '');
@@ -331,9 +302,9 @@ test('hoofdbeheerders aanmaken, intrekken en beschermen', async () => {
 
     // Een gewone beheerder van de hoofdtenant kan geen hoofdbeheerder wijzigen.
     const jan = (await baas.post('/api/admin/users', { username: 'jan', role: 'beheerder', password: 'Haag-Slang-2028!', mustChangePassword: false })).body;
-    const janc = client(base);
+    const janc = createClient(base);
     // Een gewone gebruiker van de hoofdtenant komt niet binnen met een andere code.
-    assert.strictEqual((await client(base).login('jan', 'Haag-Slang-2028!', 'groen')).status, 401);
+    assert.strictEqual((await createClient(base).login('jan', 'Haag-Slang-2028!', 'groen')).status, 401);
     await janc.login('jan', 'Haag-Slang-2028!');
     assert.strictEqual((await janc.patch(`/api/admin/users/${made.body.id}`, { disabled: true })).status, 403);
     assert.strictEqual((await janc.patch(`/api/admin/users/${made.body.id}`, { password: 'Bloem-Perk-2029!', mustChangePassword: false })).status, 403);
@@ -391,7 +362,7 @@ test('gebruikersnamen zijn uniek per tenant; de organisatiecode kiest de tenant'
   const as = async (username, password, tenant) => {
     const r = await loginFrom(base, nextIp(), username, password, tenant);
     assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    const c = client(base);
+    const c = createClient(base);
     for (const kv of r.cookie.split('; ').filter(Boolean)) { const k = kv.indexOf('='); c.jar.set(kv.slice(0, k), kv.slice(k + 1)); }
     return Object.assign(c, { loginBody: r.body });
   };

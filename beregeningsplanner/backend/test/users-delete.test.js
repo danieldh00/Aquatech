@@ -4,28 +4,10 @@ const assert = require('node:assert');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createApp } = require('../src/server');
+const { createClient } = require('./helpers/http-client');
 
 const PW = 'Tuin-Plan-2026!';
 const plan = (name) => ({ meta: { name }, areas: [], elements: [], sprinklers: [], zones: [] });
-
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    let json = null;
-    try { json = JSON.parse(await res.text()); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), patch: (p, b) => call('PATCH', p, b), del: (p) => call('DELETE', p) };
-}
 
 async function setup() {
   const db = openDb();
@@ -38,7 +20,7 @@ async function setup() {
   const server = await new Promise((resolve) => { const s = createApp({ secret: 'x'.repeat(64), db }).listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username, org) => {
-    const c = client(base);
+    const c = createClient(base);
     assert.strictEqual((await c.post('/api/auth/login', { username, password: PW, ...(org ? { org } : {}) })).status, 200);
     return c;
   };
@@ -62,7 +44,7 @@ test('beheerder verwijdert een gebruiker; plannen en offertes blijven bewaard', 
     assert.deepStrictEqual(out.body.moved, { plans: 1, quotes: 1, work_orders: 0 });
     assert.strictEqual(store.getUser(ids.ina), null);
     assert.strictEqual((await ina.get('/api/me')).body.user, null, 'sessie is weg');
-    assert.strictEqual((await client(`http://127.0.0.1:${server.address().port}`).post('/api/auth/login', { username: 'ina', password: PW })).status, 401);
+    assert.strictEqual((await createClient(`http://127.0.0.1:${server.address().port}`).post('/api/auth/login', { username: 'ina', password: PW })).status, 401);
 
     // Plan en offerte staan nu op naam van "Verwijderde gebruiker".
     const heir = db.prepare("SELECT * FROM users WHERE tenant_id = ? AND username = 'verwijderd~'").get(tid);

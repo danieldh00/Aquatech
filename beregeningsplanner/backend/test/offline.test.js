@@ -11,6 +11,7 @@ const { createStore } = require('../src/platform/store');
 const { createIdempotency } = require('../src/beveiliging/idempotency');
 const { sitePhotoPng } = require('../src/platform/test-data');
 const Core = require('../../frontend/shared/offline-core.js');
+const { createClient } = require('./helpers/http-client');
 
 const FRONT = path.join(__dirname, '..', '..', 'frontend');
 const SECRET = 'o'.repeat(64);
@@ -98,29 +99,6 @@ test('offline-core: drieweg samenvoegen per veld en per werkstap', () => {
 
 // ---------- Openbare bestanden en pagina's ----------
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body, headers = {}) {
-    const h = { ...headers };
-    if (jar.size) h.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) h['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json, text, headers: res.headers };
-  }
-  return {
-    get: (p, h) => call('GET', p, undefined, h), post: (p, b, h) => call('POST', p, b ?? {}, h),
-    put: (p, b, h) => call('PUT', p, b, h), patch: (p, b, h) => call('PATCH', p, b, h),
-  };
-}
-
 async function setup() {
   const db = openDb();
   const store = createStore(db);
@@ -131,7 +109,7 @@ async function setup() {
   const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username, org = '') => {
-    const c = client(base);
+    const c = createClient(base);
     assert.strictEqual((await c.post('/api/auth/login', { username, password: pw, organization: org })).status, 200);
     return c;
   };
@@ -148,7 +126,7 @@ async function workOrder(c) {
 test('app: manifest, service worker en iconen zonder inloggen, zonder gegevens', async () => {
   const { server, base } = await setup();
   try {
-    const anon = client(base);
+    const anon = createClient(base);
     const man = await anon.get('/manifest.json');
     assert.strictEqual(man.status, 200);
     assert.strictEqual(man.body.start_url, './', 'relatief (padprefix achter een proxy)');

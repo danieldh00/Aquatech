@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const { createApp } = require('../src/server');
 const { openDb, MIGRATIONS, schemaVersion } = require('../src/database/db');
 const { COOKIE_NAME } = require('../src/beveiliging/auth');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'y'.repeat(64);
 const GUESTS = { accessCode: '', env: { GUEST_ACCESS: 'true' } };
@@ -17,35 +18,6 @@ function start(opts = {}) {
       resolve({ server, base: `http://127.0.0.1:${server.address().port}` });
     });
   });
-}
-
-// Kleine client die cookies onthoudt (zoals een browser).
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      const v = kv.slice(i + 1);
-      if (v) jar.set(kv.slice(0, i), v); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return {
-    jar,
-    get: (p) => call('GET', p),
-    post: (p, b) => call('POST', p, b ?? {}),
-    put: (p, b) => call('PUT', p, b),
-    patch: (p, b) => call('PATCH', p, b),
-    del: (p) => call('DELETE', p),
-  };
 }
 
 const plan = (name, extra = {}) => ({
@@ -60,7 +32,7 @@ const plan = (name, extra = {}) => ({
 test('zonder toegangscode: elke gast ziet alleen de eigen plannen, geen historie', async () => {
   const { server, base } = await start(GUESTS);
   try {
-    const a = client(base), b = client(base);
+    const a = createClient(base), b = createClient(base);
     assert.strictEqual((await a.get('/api/me')).body.guest, true);
     const created = await a.post('/api/plans', { data: plan('Tuin A') });
     assert.strictEqual(created.status, 201);
@@ -84,10 +56,10 @@ test('zonder toegangscode: elke gast ziet alleen de eigen plannen, geen historie
     for (const p of ['/api/admin/history', '/api/admin/users', '/api/admin/plans']) {
       assert.strictEqual((await a.get(p)).status, 403, p);
     }
-    assert.strictEqual((await client(base).get('/api/admin/history')).status, 401);
+    assert.strictEqual((await createClient(base).get('/api/admin/history')).status, 401);
 
     // Vervalste gast-cookie telt niet.
-    const c = client(base);
+    const c = createClient(base);
     c.jar.set('aquatech_guest', `${me.user.id}.nep`);
     assert.deepStrictEqual((await c.get('/api/plans')).body.items, []);
   } finally {
@@ -98,7 +70,7 @@ test('zonder toegangscode: elke gast ziet alleen de eigen plannen, geen historie
 test('met toegangscode: geen gasten, plannen alleen na inloggen', async () => {
   const { server, base } = await start();
   try {
-    const anon = client(base);
+    const anon = createClient(base);
     assert.strictEqual((await anon.post('/api/plans', { data: plan('X') })).status, 401);
     assert.ok(!anon.jar.has('aquatech_guest'));
     assert.deepStrictEqual((await anon.get('/api/plans')).body.items, []);
@@ -110,7 +82,7 @@ test('met toegangscode: geen gasten, plannen alleen na inloggen', async () => {
 test('beheerder maakt gebruikers aan en ziet de historie van alle aanvragen', async () => {
   const { server, base } = await start();
   try {
-    const admin = client(base);
+    const admin = createClient(base);
     assert.strictEqual((await admin.post('/api/auth/login', { code: 'geheim' })).status, 200);
     assert.strictEqual((await admin.get('/api/me')).body.user.role, 'beheerder');
 
@@ -120,7 +92,7 @@ test('beheerder maakt gebruikers aan en ziet de historie van alle aanvragen', as
     assert.strictEqual((await admin.post('/api/admin/users', { username: 'piet', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false })).status, 400);
     await admin.post('/api/admin/users', { username: 'kees', role: 'klant', password: 'Gras-Pomp-2027!', mustChangePassword: false });
 
-    const p = client(base), k = client(base);
+    const p = createClient(base), k = createClient(base);
     assert.strictEqual((await p.post('/api/auth/login', { username: 'piet', password: 'fout-fout' })).status, 401);
     assert.strictEqual((await p.post('/api/auth/login', { username: 'Piet', password: 'Tuin-Plan-2026!' })).status, 200);
     await k.post('/api/auth/login', { username: 'kees', password: 'Gras-Pomp-2027!' });
@@ -178,10 +150,10 @@ test('beheerder maakt gebruikers aan en ziet de historie van alle aanvragen', as
 test('uitgeschakelde gebruiker of nieuw wachtwoord: sessie vervalt', async () => {
   const { server, base } = await start();
   try {
-    const admin = client(base);
+    const admin = createClient(base);
     await admin.post('/api/auth/login', { code: 'geheim' });
     const u = (await admin.post('/api/admin/users', { username: 'anna', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false })).body;
-    const a = client(base);
+    const a = createClient(base);
     await a.post('/api/auth/login', { username: 'anna', password: 'Tuin-Plan-2026!' });
     assert.strictEqual((await a.get('/api/me')).body.user.username, 'anna');
 
@@ -212,7 +184,7 @@ test('oude ondertekende sessie-cookie (van voor de serversessies) geeft geen toe
   try {
     const hmac = (v) => crypto.createHmac('sha256', SECRET).update(v).digest('base64url');
     const payload = `${Date.now()}.${hmac('code:geheim').slice(0, 16)}`;
-    const c = client(base);
+    const c = createClient(base);
     c.jar.set(COOKIE_NAME, `${payload}.${hmac(payload)}`);
     assert.strictEqual((await c.get('/api/me')).body.user, null);
     assert.strictEqual((await c.get('/api/admin/history')).status, 401);
@@ -250,7 +222,7 @@ test('database blijft bewaard na herstart en migreert niet dubbel', () => {
 test('API is ook relatief vanuit een module bereikbaar (beregening/api/...)', async () => {
   const { server, base } = await start(GUESTS);
   try {
-    const a = client(base);
+    const a = createClient(base);
     const made = await a.post('/beregening/api/plans', { data: plan('Via module') });
     assert.strictEqual(made.status, 201);
     assert.strictEqual((await a.get('/beheer/api/plans')).body.items[0].id, made.body.id);
@@ -265,10 +237,10 @@ test('API is ook relatief vanuit een module bereikbaar (beregening/api/...)', as
 test('plannenoverzicht: samenvatting per plan; beheerder ziet alles plus historie', async () => {
   const { server, base } = await start();
   try {
-    const admin = client(base);
+    const admin = createClient(base);
     await admin.post('/api/auth/login', { code: 'geheim' });
     await admin.post('/api/admin/users', { username: 'joop', displayName: 'Joop', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false });
-    const j = client(base);
+    const j = createClient(base);
     await j.post('/api/auth/login', { username: 'joop', password: 'Tuin-Plan-2026!' });
     const a = (await j.post('/api/plans', { data: plan('Tuin A', { background: { dataUrl: 'data:image/png;base64,AAAA' } }) })).body;
     const b = (await j.post('/api/plans', { data: plan('Tuin B') })).body;

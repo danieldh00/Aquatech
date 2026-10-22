@@ -7,29 +7,10 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { sanitizeNews, unreadCount, Releases } = require('../src/platform/news');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'n'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
-
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (/Max-Age=0/.test(c)) jar.delete(kv.slice(0, i)); else jar.set(kv.slice(0, i), kv.slice(i + 1));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json, text };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b), del: (p) => call('DELETE', p) };
-}
 
 async function setup(opts = {}) {
   const db = openDb();
@@ -45,7 +26,7 @@ async function setup(opts = {}) {
   const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, ...opts }).listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username, org) => {
-    const c = client(base);
+    const c = createClient(base);
     const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
     assert.strictEqual(r.status, 200, JSON.stringify(r.body));
     return c;
@@ -168,7 +149,7 @@ test('nieuws: rechten en tenantscheiding', async () => {
     const kees = await as('kees');
     const klaas = await as('klaas');
     // Zonder inloggen niets.
-    assert.strictEqual((await client(base).get('/api/news')).status, 401);
+    assert.strictEqual((await createClient(base).get('/api/news')).status, 401);
     // Zonder het recht nieuws geen plaatsen, wijzigen of verwijderen.
     assert.strictEqual((await kees.post('/api/news', { title: 'x', body: 'y' })).status, 403);
     assert.strictEqual((await klaas.post('/api/news', { title: 'x', body: 'y' })).status, 403);

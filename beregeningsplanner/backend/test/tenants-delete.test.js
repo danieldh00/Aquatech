@@ -6,6 +6,7 @@ const path = require('path');
 const { createApp } = require('../src/server');
 const { openDb, isPg, listTables, tableColumns } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -16,32 +17,6 @@ function start(db, opts = {}) {
       resolve({ server, base: `http://127.0.0.1:${server.address().port}` });
     });
   });
-}
-
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      const v = kv.slice(i + 1);
-      if (v) jar.set(kv.slice(0, i), v); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return {
-    get: (p) => call('GET', p),
-    post: (p, b) => call('POST', p, b ?? {}),
-    del: (p, b) => call('DELETE', p, b),
-    login: (username, password, tenant) => call('POST', '/api/auth/login', { username, password, tenant }),
-  };
 }
 
 const plan = (name) => ({
@@ -63,11 +38,11 @@ test('hoofdbeheerder verwijdert een tenant met testomgevingen en al zijn gegeven
   const db = await platformDb();
   const { server, base } = await start(db);
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', PW);
     assert.strictEqual((await baas.post('/api/plans', { data: plan('Plan van Aquatech') })).status, 201);
     const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
-    const piet = client(base);
+    const piet = createClient(base);
     assert.strictEqual((await piet.login('piet', 'Gras-Pomp-2027!', 'groen')).status, 200);
     assert.strictEqual((await piet.post('/api/plans', { data: plan('Tuin van Groen') })).status, 201);
     const env = (await baas.post(`/api/platform/tenants/${t.id}/environments`, { name: 'Test', copyPlans: true })).body.tenant;
@@ -112,7 +87,7 @@ test('de hoofdtenant kan niet worden verwijderd', async () => {
   const db = await platformDb();
   const { server, base } = await start(db);
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', PW);
     const main = (await baas.get('/api/platform/tenants')).body.items[0];
     const out = await baas.del(`/api/platform/tenants/${main.id}`, { confirm: 'default' });
@@ -127,7 +102,7 @@ test('geaccordeerde offerte alleen verwijderen met het offertenummer', async () 
   const db = await platformDb();
   const { server, base } = await start(db);
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', PW);
     const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen' })).body.tenant;
     const env = (await baas.post(`/api/platform/tenants/${t.id}/environments`, { name: 'Test' })).body.tenant;
@@ -156,7 +131,7 @@ test('hoofdbeheerder verwijdert een back-up; ongeldige namen niet', async () => 
   const db = await platformDb();
   const { server, base } = await start(db, { backupDir: dir });
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', PW);
     const made = await baas.post('/api/admin/backups');
     assert.strictEqual(made.status, 201);

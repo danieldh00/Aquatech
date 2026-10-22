@@ -5,6 +5,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createWorkLogStore, Core } = require('../src/uitvoering/worklog');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'w'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -40,26 +41,6 @@ test('kern: uren uit begin/eind/pauze of direct, materiaal met retour, totalen t
   assert.strictEqual(t.extraMaterials, 1);
 });
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b), patch: (p, b) => call('PATCH', p, b), del: (p) => call('DELETE', p) };
-}
-
 async function setup() {
   const db = openDb();
   const store = createStore(db);
@@ -75,7 +56,7 @@ async function setup() {
   const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username, tenant) => {
-    const c = client(base);
+    const c = createClient(base);
     assert.strictEqual((await c.post('/api/auth/login', { username, password: PW, tenant })).status, 200, username);
     return c;
   };

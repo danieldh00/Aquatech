@@ -18,36 +18,6 @@ function start(db, opts = {}) {
   });
 }
 
-// Kleine client die cookies onthoudt (zoals een browser).
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      const v = kv.slice(i + 1);
-      if (v) jar.set(kv.slice(0, i), v); else jar.delete(kv.slice(0, i));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return {
-    jar,
-    get: (p) => call('GET', p),
-    post: (p, b) => call('POST', p, b ?? {}),
-    put: (p, b) => call('PUT', p, b),
-    patch: (p, b) => call('PATCH', p, b),
-    del: (p) => call('DELETE', p),
-    login: (username, password, tenant) => call('POST', '/api/auth/login', { username, password, tenant }),
-  };
-}
-
 const plan = (name) => ({
   meta: { name, customer: 'Fam. Jansen', address: 'Dorpsstraat 1' },
   areas: [{ id: 'a1', type: 'lawn', pts: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }, { x: 0, y: 5 }] }],
@@ -64,6 +34,7 @@ async function platformDb() {
 
 const { buildTestData, lawnHeads } = require('../src/platform/test-data');
 const { summarize } = require('../src/platform/store');
+const { createClient } = require('./helpers/http-client');
 
 test('testdata: tuinen met zones, offertes met regels en geldige gebruikersnamen', () => {
   const set = buildTestData({ slug: 'groen-test', profile: { hourlyRate: 55, vatRate: 21, validDays: 30 }, today: new Date('2026-10-18T12:00:00Z') });
@@ -94,14 +65,14 @@ test('sproeiers kop-aan-kop: hoeken 90°, randen 180°, midden 360°', () => {
 test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen en leegmaken', async () => {
   const { server, base } = await start(await platformDb());
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
     const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
     const env = (await baas.post(`/api/platform/tenants/${t.id}/environments`, { name: 'Test' })).body.tenant;
 
     // Nooit in live, en alleen voor hoofdbeheerders.
     assert.strictEqual((await baas.post(`/api/platform/tenants/${t.id}/testdata`)).status, 409);
-    const piet = client(base);
+    const piet = createClient(base);
     await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
     assert.strictEqual((await piet.post(`/api/platform/tenants/${env.id}/testdata`)).status, 403);
 
@@ -113,7 +84,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     const name = (suffix) => accounts.find((a) => a.username.endsWith(`.${suffix}`)).username;
 
     // Een testklant komt direct in de testomgeving en ziet alleen het eigene.
-    const klant = client(base);
+    const klant = createClient(base);
     assert.strictEqual((await klant.login(name('klant2'), password, 'groen')).status, 200);
     const me = (await klant.get('/api/me')).body;
     assert.strictEqual(me.tenant.id, env.id);
@@ -124,7 +95,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.strictEqual((await klant.get('/api/admin/users')).status, 403);
 
     // Klantportaal: klant1 heeft een opgeleverde werkorder, klant4 een ingeplande.
-    const devries = client(base);
+    const devries = createClient(base);
     await devries.login(name('klant1'), password, 'groen');
     const p1 = (await devries.get('/api/portal')).body;
     // Plus de werkorder uit zijn melding (winterklaar maken), ingepland.
@@ -134,7 +105,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     const done = p1.workorders.find((w) => w.status === 'gereed');
     const dossier = (await devries.get(`/api/portal/workorders/${done.id}`)).body;
     assert.ok(dossier.report.notes && dossier.report.completedOn && dossier.steps.every((st) => st.done));
-    const vanberg = client(base);
+    const vanberg = createClient(base);
     await vanberg.login(name('klant4'), password, 'groen');
     const p4 = (await vanberg.get('/api/portal')).body;
     assert.deepStrictEqual(p4.workorders.map((w) => w.status), ['gepland']);
@@ -142,7 +113,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.strictEqual(p4.workorders[0].appointment.state, 'ander_moment', 'reactie uit de planning zichtbaar');
 
     // De installateur ziet alle plannen en offertes van de testomgeving.
-    const inst = client(base);
+    const inst = createClient(base);
     await inst.login(name('installateur'), password, env.slug);
     assert.strictEqual((await inst.get('/api/plans?all=1')).body.items.length, counts.plans);
     // Ter controle: de tekening zonder account en het plan van klant1; elk plan met een offerte is goedgekeurd.
@@ -156,7 +127,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.strictEqual(customers.length, 4, 'de testklanten om een offerte aan te koppelen');
 
     // De testbeheerder beheert alleen de testaccounts, nooit live.
-    const bea = client(base);
+    const bea = createClient(base);
     await bea.login(name('beheerder'), password, 'groen');
     const all = (await bea.get('/api/admin/users')).body.items;
     // Plus de gast die zonder account een tekening indiende.
@@ -184,11 +155,11 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.strictEqual(again.status, 201);
     assert.notStrictEqual(again.body.password, password);
     assert.strictEqual((await klant.get('/api/me')).body.user, null);
-    assert.strictEqual((await client(base).login(name('klant2'), again.body.password, 'groen')).status, 200);
+    assert.strictEqual((await createClient(base).login(name('klant2'), again.body.password, 'groen')).status, 200);
 
     // Leegmaken ruimt de testaccounts op.
     assert.strictEqual((await baas.post(`/api/platform/tenants/${env.id}/reset`)).status, 200);
-    assert.strictEqual((await client(base).login(name('klant2'), again.body.password, 'groen')).status, 401);
+    assert.strictEqual((await createClient(base).login(name('klant2'), again.body.password, 'groen')).status, 401);
     assert.strictEqual((await baas.get('/api/platform/tenants')).body.items.find((x) => x.id === t.id).environments[0].planCount, 0);
   } finally {
     server.close();
@@ -199,7 +170,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
   const db = await platformDb();
   const { server, base } = await start(db);
   try {
-    const baas = client(base);
+    const baas = createClient(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
     const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!' } })).body.tenant;
     const env = (await baas.post(`/api/platform/tenants/${t.id}/environments`, { name: 'Test' })).body.tenant;
@@ -213,7 +184,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
     assert.strictEqual(counts.appointments, 3);
     assert.ok(counts.products > 40);
 
-    const inst = client(base);
+    const inst = createClient(base);
     await inst.login(accounts.find((a) => a.username.endsWith('.installateur')).username, password, 'groen');
     const list = (await inst.get('/api/quotes?all=1')).body.items;
     assert.deepStrictEqual([...new Set(list.map((q) => q.status))].sort(), ['afgewezen', 'akkoord', 'concept', 'verzonden']);

@@ -8,6 +8,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const Core = require('../../frontend/offertes/quote-core.js');
+const { createClient } = require('./helpers/http-client');
 
 // Plannerbibliotheken in een sandbox, zoals de offertemodule ze laadt.
 const FRONT = path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js');
@@ -127,24 +128,6 @@ const SIG = (() => {
   const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 0 })), chunk('IEND', Buffer.alloc(0))]);
   return `data:image/png;base64,${png.toString('base64')}`;
 })();
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    let json = null;
-    try { json = JSON.parse(await res.text()); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b), del: (p) => call('DELETE', p) };
-}
 
 async function setup({ mailerFor } = {}) {
   const db = openDb();
@@ -158,7 +141,7 @@ async function setup({ mailerFor } = {}) {
   const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, ...(mailerFor ? { mailerFor } : {}) }).listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username) => {
-    const c = client(base);
+    const c = createClient(base);
     assert.strictEqual((await c.post('/api/auth/login', { username, password: 'Tuin-Plan-2026!' })).status, 200);
     return c;
   };
@@ -168,7 +151,7 @@ async function setup({ mailerFor } = {}) {
 test('API: offertes aanmaken, nummeren, afschermen en verwijderen', async () => {
   const { server, base, as } = await setup();
   try {
-    assert.strictEqual((await client(base).post('/api/quotes', { data: {} })).status, 401);
+    assert.strictEqual((await createClient(base).post('/api/quotes', { data: {} })).status, 401);
     const piet = await as('piet'), kees = await as('kees'), baas = await as('baas');
     const year = new Date().getFullYear();
     const data = { title: 'Beregening tuin', date: `${year}-03-01`, customer: { name: 'Fam. Jansen' }, planId: 'plan-1',
@@ -316,7 +299,7 @@ test('digitale offerte: link, openbare pagina, opties, tekenen, vastleggen en e-
   const mailerFor = (settings) => createMailer(settings, { resolveHost: async (h) => h, createTransport: () => ({ sendMail: async (m) => { sent.push(m); return {}; } }) });
   const { server, base, as, tid, db } = await setup({ mailerFor });
   try {
-    const piet = await as('piet'), baas = await as('baas'), anon = client(base);
+    const piet = await as('piet'), baas = await as('baas'), anon = createClient(base);
     const pub = async (token, method = 'GET', body, query = '') => {
       const res = await fetch(`${base}/api/public/quote${method === 'POST' ? '/respond' : ''}${query}`, {
         method, headers: { 'X-Offerte-Token': token, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,

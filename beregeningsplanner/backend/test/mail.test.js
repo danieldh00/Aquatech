@@ -7,27 +7,9 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createMailer, sanitizeMail } = require('../src/platform/mailer');
 const { createWanIp } = require('../src/platform/wan-ip');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 'test-secret-mail-0123456789abcdef';
-
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    let json = null;
-    try { json = JSON.parse(await res.text()); } catch { /* geen JSON */ }
-    return { status: res.status, body: json };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b) };
-}
 
 test('WAN-IP: omgeving gaat voor, opzoeken met terugval, onthouden en alleen openbaar IPv4', async () => {
   let t = 1_000_000;
@@ -76,13 +58,13 @@ test('API: e-mail en WAN-IP alleen voor beheerders, wachtwoord nooit terug', asy
   const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, wanIp, mailerFor }).listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username) => {
-    const c = client(base);
+    const c = createClient(base);
     assert.strictEqual((await c.post('/api/auth/login', { username, password: 'Tuin-Plan-2026!' })).status, 200);
     return c;
   };
   try {
     const baas = await as('baas'), kees = await as('kees');
-    assert.strictEqual((await client(base).get('/api/admin/wan-ip')).status, 401);
+    assert.strictEqual((await createClient(base).get('/api/admin/wan-ip')).status, 401);
     assert.strictEqual((await kees.get('/api/admin/wan-ip')).status, 403);
     assert.strictEqual((await kees.put('/api/admin/mail', { config: { host: 'smtp.x' } })).status, 403);
     const ip = await baas.get('/api/admin/wan-ip');

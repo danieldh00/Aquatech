@@ -7,6 +7,7 @@ const { createStore } = require('../src/platform/store');
 const { createVault } = require('../src/beveiliging/vault');
 const { inspectImage, cleanJpeg } = require('../src/uitvoering/photos');
 const { sitePhotoPng } = require('../src/platform/test-data');
+const { createClient } = require('./helpers/http-client');
 
 // Kleine JPEG-structuur: JFIF, EXIF met GPS-gegevens, frame (SOF0 640x480), scan.
 function fakeJpeg({ exif = true } = {}) {
@@ -56,26 +57,6 @@ test('vault: bestanden versleuteld met de context als AAD', () => {
 
 // ---------- API ----------
 const SECRET = 'z'.repeat(64);
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (kv.slice(i + 1)) jar.set(kv.slice(0, i), kv.slice(i + 1)); else jar.delete(kv.slice(0, i));
-    }
-    const type = res.headers.get('content-type') || '';
-    const raw = Buffer.from(await res.arrayBuffer());
-    let json = null;
-    if (type.includes('json')) { try { json = JSON.parse(raw.toString('utf8')); } catch { /* geen JSON */ } }
-    return { status: res.status, body: json, raw, type };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b ?? {}), put: (p, b) => call('PUT', p, b), patch: (p, b) => call('PATCH', p, b), del: (p) => call('DELETE', p) };
-}
 
 async function setup() {
   const db = openDb();
@@ -89,7 +70,7 @@ async function setup() {
   const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const as = async (username) => {
-    const c = client(base);
+    const c = createClient(base);
     assert.strictEqual((await c.post('/api/auth/login', { username, password: pw })).status, 200);
     return c;
   };
@@ -154,7 +135,7 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
     assert.strictEqual((await klaas.get(`/api/portal/photos/${up.body.id}?thumb=1`)).type, 'image/png');
     assert.strictEqual((await klaas.get(`/api/portal/photos/${hidden.id}`)).status, 404, 'niet zichtbaar gezet');
     assert.strictEqual((await piet.get(`/api/portal/photos/${up.body.id}`)).status, 404, 'andere klant');
-    assert.strictEqual((await client(base).get(`/api/portal/photos/${up.body.id}`)).status, 401);
+    assert.strictEqual((await createClient(base).get(`/api/portal/photos/${up.body.id}`)).status, 401);
     assert.strictEqual((await baas.get(`/api/portal/photos/${hidden.id}`)).status, 200, 'medewerker ziet alles');
     assert.strictEqual((await klaas.get(`/api/workorders/${wo.id}/photos`)).status, 403);
     // Het opleverdossier in het portaal toont alleen de zichtbare foto's, met de portaal-URL.

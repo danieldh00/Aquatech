@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore, preferencesOf } = require('../src/platform/store');
+const { createClient } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -20,28 +21,8 @@ async function start() {
   });
 }
 
-function client(base) {
-  const jar = new Map();
-  async function call(method, p, body) {
-    const headers = {};
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    for (const c of res.headers.getSetCookie()) {
-      const [kv] = c.split(';');
-      const i = kv.indexOf('=');
-      if (/Max-Age=0/.test(c)) jar.delete(kv.slice(0, i)); else jar.set(kv.slice(0, i), kv.slice(i + 1));
-    }
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* geen JSON */ }
-    return { status: res.status, body: json, text };
-  }
-  return { get: (p) => call('GET', p), post: (p, b) => call('POST', p, b), put: (p, b) => call('PUT', p, b) };
-}
-
 async function login(base, username, password = PW) {
-  const c = client(base);
+  const c = createClient(base, { emptyJsonBody: false });
   const r = await c.post('/api/auth/login', { username, password });
   assert.strictEqual(r.status, 200, JSON.stringify(r.body));
   return c;
@@ -105,9 +86,9 @@ test('Mijn profiel: gegevens en voorkeuren wijzigen', async () => {
 test('Mijn profiel: niet zonder eigen account, pagina bereikbaar', async () => {
   const { server, base } = await start();
   try {
-    assert.strictEqual((await client(base).get('/api/account/profile')).status, 400);
+    assert.strictEqual((await createClient(base, { emptyJsonBody: false }).get('/api/account/profile')).status, 400);
     // Met de toegangscode is er geen eigen profiel.
-    const code = client(base);
+    const code = createClient(base, { emptyJsonBody: false });
     assert.strictEqual((await code.post('/api/auth/login', { code: 'Toegang-Code-2026!' })).status, 200);
     assert.strictEqual((await code.get('/api/account/profile')).status, 400);
     assert.strictEqual((await code.put('/api/account/profile', { displayName: 'X' })).status, 400);
