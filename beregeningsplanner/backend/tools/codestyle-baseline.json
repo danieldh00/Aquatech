@@ -5,8 +5,6 @@
     "backend/src/beregening/plan-analyzer.js",
     "backend/src/beregening/recognitions.js",
     "backend/src/beregening/sprinklers.js",
-    "backend/src/platform/ai-usage.js",
-    "backend/src/platform/roles.js",
     "backend/src/platform/store.js",
     "backend/src/platform/test-data.js",
     "backend/src/server.js",
