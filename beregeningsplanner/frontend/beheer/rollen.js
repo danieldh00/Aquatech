@@ -2,116 +2,165 @@
 // eigen rollen toevoegen (API /api/admin/roles, zie backend/src/platform/roles.js).
 // Rollen gelden voor de hele organisatie, ook in de testomgevingen.
 (function () {
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  /**
+   * Zoekt het eerste element bij een CSS-selector.
+   * @param {string} selector CSS-selector.
+   * @param {ParentNode} [root] Waarbinnen gezocht wordt (standaard de pagina).
+   * @returns {Element|null} Het element.
+   */
+  const $ = (selector, root = document) => root.querySelector(selector);
+  /**
+   * Maakt tekst veilig voor HTML.
+   * @param {*} value De tekst (null/undefined = leeg).
+   * @returns {string} De tekst met &, <, >, " en ' als entiteit.
+   */
+  const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
   const Roles = window.AquatechRoles;
   const state = { roles: [], editable: true };
+  /** Toont een melding; wordt door init vervangen door die van Beheer. */
   let toast = () => {};
+  /** Wordt aangeroepen na het laden van de rollen; door init vervangen. */
   let onChange = () => {};
 
-  async function api(path, opts = {}) {
+  /**
+   * Roept de beheer-API aan.
+   * @param {string} path Pad onder api/admin/, bijv. "roles".
+   * @param {object} [requestOptions] Opties voor fetch; `body` wordt als JSON verstuurd.
+   * @returns {Promise<object>} Het antwoord (fout = Error met de melding van de server).
+   */
+  async function api(path, requestOptions = {}) {
     const res = await fetch(`../api/admin/${path}`, {
       cache: 'no-store',
-      ...opts,
-      headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      ...requestOptions,
+      headers: requestOptions.body ? { 'Content-Type': 'application/json' } : undefined,
+      body: requestOptions.body ? JSON.stringify(requestOptions.body) : undefined,
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
     return body;
   }
 
-  const badge = (r) => (r.locked ? '<span class="pill">vast</span>' : r.builtin ? `<span class="pill">${r.customized ? 'standaard, aangepast' : 'standaard'}</span>` : '<span class="pill bijgewerkt">eigen rol</span>');
-  // Rechten die in Beheer aan of uit kunnen (beheer en hoofdbeheer niet).
-  const shownRights = () => Roles.RIGHTS.filter((r) => !Roles.RIGHT_INFO[r].locked);
+  /**
+   * Label bij een rol: vast, standaard (aangepast) of eigen rol.
+   * @param {object} role De rol.
+   * @returns {string} HTML van het label.
+   */
+  const badge = (role) => (role.locked ? '<span class="pill">vast</span>' : role.builtin ? `<span class="pill">${role.customized ? 'standaard, aangepast' : 'standaard'}</span>` : '<span class="pill bijgewerkt">eigen rol</span>');
+  /**
+   * Rechten die in Beheer aan of uit kunnen (beheer en hoofdbeheer niet).
+   * @returns {string[]} De sleutels van die rechten.
+   */
+  const shownRights = () => Roles.RIGHTS.filter((right) => !Roles.RIGHT_INFO[right].locked);
 
-  // Tabel: rechten als rijen, rollen als kolommen; een vinkje slaat direct op.
+  /** Tekent de tabel met rechten als rijen en rollen als kolommen; een vinkje slaat direct op. */
   function renderMatrix() {
     const roles = state.roles;
-    const head = roles.map((r) => `<th class="role-col" title="${esc(r.description)}">${esc(r.label)}<span class="sub">${esc(Roles.KINDS[r.kind] || r.kind)}</span></th>`).join('');
+    const head = roles.map((role) => `<th class="role-col" title="${esc(role.description)}">${esc(role.label)}<span class="sub">${esc(Roles.KINDS[role.kind] || role.kind)}</span></th>`).join('');
     const rows = shownRights().map((right) => {
       const info = Roles.RIGHT_INFO[right];
-      const cells = roles.map((r) => {
-        if (!Roles.rightsForKind(r.kind).includes(right)) return '<td class="cell na" title="Niet voor deze soort rol">–</td>';
-        const on = r.rights.includes(right);
-        const dis = r.locked || !state.editable;
-        return `<td class="cell"><input type="checkbox" data-role="${esc(r.key)}" data-right="${esc(right)}"${on ? ' checked' : ''}${dis ? ' disabled' : ''}
-          aria-label="${esc(`${info.label} voor ${r.label}`)}"></td>`;
+      const cells = roles.map((role) => {
+        if (!Roles.rightsForKind(role.kind).includes(right)) return '<td class="cell na" title="Niet voor deze soort rol">–</td>';
+        const enabled = role.rights.includes(right);
+        const disabled = role.locked || !state.editable;
+        return `<td class="cell"><input type="checkbox" data-role="${esc(role.key)}" data-right="${esc(right)}"${enabled ? ' checked' : ''}${disabled ? ' disabled' : ''}
+          aria-label="${esc(`${info.label} voor ${role.label}`)}"></td>`;
       }).join('');
       return `<tr><td class="wrap"><b>${esc(info.label)}</b><span class="sub">${esc(info.description)}</span></td>${cells}</tr>`;
     }).join('');
-    const admin = `<tr class="off"><td class="wrap"><b>${esc(Roles.RIGHT_INFO.beheer.label)}</b><span class="sub">${esc(Roles.RIGHT_INFO.beheer.description)} Alleen de rol beheerder.</span></td>${roles.map((r) => `<td class="cell">${r.rights.includes('beheer') ? '✓' : ''}</td>`).join('')}</tr>`;
-    const tbl = $('#r-matrix');
-    tbl.innerHTML = `<thead><tr><th>Recht</th>${head}</tr></thead><tbody>${rows}${admin}</tbody>`;
-    tbl.querySelectorAll('input[data-right]').forEach((c) => {
-      c.onchange = async () => {
-        const r = state.roles.find((x) => x.key === c.dataset.role);
+    const admin = `<tr class="off"><td class="wrap"><b>${esc(Roles.RIGHT_INFO.beheer.label)}</b><span class="sub">${esc(Roles.RIGHT_INFO.beheer.description)} Alleen de rol beheerder.</span></td>${roles.map((role) => `<td class="cell">${role.rights.includes('beheer') ? '✓' : ''}</td>`).join('')}</tr>`;
+    const table = $('#r-matrix');
+    table.innerHTML = `<thead><tr><th>Recht</th>${head}</tr></thead><tbody>${rows}${admin}</tbody>`;
+    table.querySelectorAll('input[data-right]').forEach((checkbox) => {
+      /**
+       * Zet het recht aan of uit voor de rol (met wat het nodig heeft of wat ervan afhangt) en laadt opnieuw.
+       * @returns {Promise<void>}
+       */
+      checkbox.onchange = async () => {
+        const role = state.roles.find((candidate) => candidate.key === checkbox.dataset.role);
         // Aan: wat het recht nodig heeft gaat mee aan; uit: wat ervan afhangt gaat mee uit.
-        const rights = c.checked ? Roles.withNeeds([...r.rights, c.dataset.right]) : Roles.withoutDependents(r.rights, c.dataset.right);
+        const rights = checkbox.checked ? Roles.withNeeds([...role.rights, checkbox.dataset.right]) : Roles.withoutDependents(role.rights, checkbox.dataset.right);
         try {
-          await api(`roles/${encodeURIComponent(r.key)}`, { method: 'PATCH', body: { rights } });
-          toast(`${Roles.RIGHT_INFO[c.dataset.right].label} ${c.checked ? 'aan' : 'uit'} voor ${r.label}`);
-        } catch (e) { toast(e.message, true); }
+          await api(`roles/${encodeURIComponent(role.key)}`, { method: 'PATCH', body: { rights } });
+          toast(`${Roles.RIGHT_INFO[checkbox.dataset.right].label} ${checkbox.checked ? 'aan' : 'uit'} voor ${role.label}`);
+        } catch (error) { toast(error.message, true); }
         load();
       };
     });
   }
 
-  // Per rol: naam en omschrijving, terugzetten of verwijderen.
+  /** Tekent per rol een kaart met naam en omschrijving, terugzetten of verwijderen. */
   function renderList() {
     const box = $('#r-list');
-    box.innerHTML = state.roles.map((r) => `
-      <form class="card-form role-card" data-key="${esc(r.key)}">
-        <div class="role-head"><h3>${esc(r.label)}</h3>${badge(r)}<span class="muted small">${r.userCount} gebruiker${r.userCount === 1 ? '' : 's'} · code <code>${esc(r.key)}</code></span></div>
+    box.innerHTML = state.roles.map((role) => `
+      <form class="card-form role-card" data-key="${esc(role.key)}">
+        <div class="role-head"><h3>${esc(role.label)}</h3>${badge(role)}<span class="muted small">${role.userCount} gebruiker${role.userCount === 1 ? '' : 's'} · code <code>${esc(role.key)}</code></span></div>
         <div class="row">
-          <label>Naam<input name="label" maxlength="40" required value="${esc(r.label)}"${state.editable ? '' : ' disabled'}></label>
-          <label class="grow">Omschrijving<input name="description" maxlength="300" value="${esc(r.description)}"${state.editable ? '' : ' disabled'}></label>
+          <label>Naam<input name="label" maxlength="40" required value="${esc(role.label)}"${state.editable ? '' : ' disabled'}></label>
+          <label class="grow">Omschrijving<input name="description" maxlength="300" value="${esc(role.description)}"${state.editable ? '' : ' disabled'}></label>
           ${state.editable ? `<button class="btn primary" type="submit">Opslaan</button>
-          ${r.builtin && r.customized ? '<button class="btn" type="button" data-reset>Terug naar standaard</button>' : ''}
-          ${!r.builtin ? '<button class="btn danger" type="button" data-del>Verwijderen</button>' : ''}` : ''}
+          ${role.builtin && role.customized ? '<button class="btn" type="button" data-reset>Terug naar standaard</button>' : ''}
+          ${!role.builtin ? '<button class="btn danger" type="button" data-del>Verwijderen</button>' : ''}` : ''}
         </div>
         <div class="err" role="alert"></div>
       </form>`).join('');
-    box.querySelectorAll('form[data-key]').forEach((f) => {
-      const r = state.roles.find((x) => x.key === f.dataset.key);
-      f.onsubmit = async (ev) => {
-        ev.preventDefault();
-        $('.err', f).textContent = '';
+    box.querySelectorAll('form[data-key]').forEach((form) => {
+      const role = state.roles.find((candidate) => candidate.key === form.dataset.key);
+      /**
+       * Slaat naam en omschrijving van de rol op.
+       * @param {SubmitEvent} event Het verzenden.
+       * @returns {Promise<void>}
+       */
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        $('.err', form).textContent = '';
         try {
-          await api(`roles/${encodeURIComponent(r.key)}`, { method: 'PATCH', body: { label: f.label.value, description: f.description.value } });
+          await api(`roles/${encodeURIComponent(role.key)}`, { method: 'PATCH', body: { label: form.label.value, description: form.description.value } });
           toast('Rol opgeslagen');
           load();
-        } catch (e) { $('.err', f).textContent = e.message; }
+        } catch (error) { $('.err', form).textContent = error.message; }
       };
-      const reset = $('[data-reset]', f);
+      const reset = $('[data-reset]', form);
       if (reset) {
+        /**
+         * Zet een standaardrol na bevestiging terug naar de standaardnaam en -rechten.
+         * @returns {Promise<void>}
+         */
         reset.onclick = async () => {
-          if (!confirm(`${r.label} terugzetten naar de standaardnaam en -rechten?`)) return;
-          try { await api(`roles/${encodeURIComponent(r.key)}`, { method: 'DELETE' }); toast('Rol teruggezet'); } catch (e) { toast(e.message, true); }
+          if (!confirm(`${role.label} terugzetten naar de standaardnaam en -rechten?`)) return;
+          try { await api(`roles/${encodeURIComponent(role.key)}`, { method: 'DELETE' }); toast('Rol teruggezet'); } catch (error) { toast(error.message, true); }
           load();
         };
       }
-      const del = $('[data-del]', f);
-      if (del) {
-        del.onclick = async () => {
-          if (!confirm(`De rol ${r.label} verwijderen?`)) return;
-          try { await api(`roles/${encodeURIComponent(r.key)}`, { method: 'DELETE' }); toast('Rol verwijderd'); } catch (e) { $('.err', f).textContent = e.message; return; }
+      const deleteButton = $('[data-del]', form);
+      if (deleteButton) {
+        /**
+         * Verwijdert een eigen rol na bevestiging.
+         * @returns {Promise<void>}
+         */
+        deleteButton.onclick = async () => {
+          if (!confirm(`De rol ${role.label} verwijderen?`)) return;
+          try { await api(`roles/${encodeURIComponent(role.key)}`, { method: 'DELETE' }); toast('Rol verwijderd'); } catch (error) { $('.err', form).textContent = error.message; return; }
           load();
         };
       }
     });
   }
 
+  /** Vult het formulier voor een nieuwe rol (keuzelijst "overnemen van"). */
   function renderForm() {
-    const f = $('#r-form');
-    f.hidden = !state.editable;
-    const cur = f.copyOf.value;
-    f.copyOf.innerHTML = '<option value="">Geen (alles uit)</option>' + state.roles.filter((r) => !r.locked)
-      .map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join('');
-    f.copyOf.value = state.roles.some((r) => r.key === cur) ? cur : '';
+    const form = $('#r-form');
+    form.hidden = !state.editable;
+    const current = form.copyOf.value;
+    form.copyOf.innerHTML = '<option value="">Geen (alles uit)</option>' + state.roles.filter((role) => !role.locked)
+      .map((role) => `<option value="${esc(role.key)}">${esc(role.label)}</option>`).join('');
+    form.copyOf.value = state.roles.some((role) => role.key === current) ? current : '';
     $('#r-readonly').hidden = state.editable;
   }
 
+  /**
+   * Laadt de rollen en tekent formulier, tabel en kaarten.
+   * @returns {Promise<void>}
+   */
   async function load() {
     try {
       const out = await api('roles');
@@ -121,30 +170,39 @@
       renderMatrix();
       renderList();
       onChange(state.roles);
-    } catch (e) {
-      $('#r-matrix').innerHTML = `<tr><td class="empty">Kan de rollen niet laden (${esc(e.message)}).</td></tr>`;
+    } catch (error) {
+      $('#r-matrix').innerHTML = `<tr><td class="empty">Kan de rollen niet laden (${esc(error.message)}).</td></tr>`;
     }
   }
 
-  async function add(ev) {
-    ev.preventDefault();
-    const f = ev.target;
+  /**
+   * Voegt een nieuwe rol toe, eventueel met de rechten van een bestaande rol van dezelfde soort.
+   * @param {SubmitEvent} event Het verzenden.
+   * @returns {Promise<void>}
+   */
+  async function add(event) {
+    event.preventDefault();
+    const form = event.target;
     $('#r-err').textContent = '';
-    const from = state.roles.find((r) => r.key === f.copyOf.value);
+    const source = state.roles.find((role) => role.key === form.copyOf.value);
     // Overnemen van een rol van een andere soort kan niet: dan begint de rol leeg.
-    const body = { label: f.label.value, description: f.description.value, kind: f.kind.value };
-    if (from && from.kind === f.kind.value) body.copyOf = from.key;
+    const body = { label: form.label.value, description: form.description.value, kind: form.kind.value };
+    if (source && source.kind === form.kind.value) body.copyOf = source.key;
     try {
       const role = await api('roles', { method: 'POST', body });
-      f.reset();
+      form.reset();
       toast(`Rol ${role.label} toegevoegd; zet hieronder de rechten aan`);
       load();
-    } catch (e) { $('#r-err').textContent = e.message; }
+    } catch (error) { $('#r-err').textContent = error.message; }
   }
 
-  function init(opts = {}) {
-    toast = opts.toast || toast;
-    onChange = opts.onChange || onChange;
+  /**
+   * Koppelt het formulier (één keer, door Beheer).
+   * @param {object} [options] { toast, onChange }.
+   */
+  function init(options = {}) {
+    toast = options.toast || toast;
+    onChange = options.onChange || onChange;
     $('#r-form').onsubmit = add;
   }
 
