@@ -17,71 +17,99 @@
 //   meteen heen, zonder eerst het dashboard op te bouwen.
 (function (root) {
   const script = document.currentScript;
-  const src = script && script.src ? script.src : '';
-  // Pad naar de app-root, afgeleid van dit script (shared/common.js).
-  const fromApp = (rel) => (src ? new URL(`../${rel}`, src).href : rel);
-  const version = src ? new URL(src).search : '';
+  const scriptUrl = script && script.src ? script.src : '';
+  /**
+   * Maakt van een pad vanaf de app-root een volledige URL (afgeleid van dit
+   * script, shared/common.js).
+   * @param {string} relativePath Pad vanaf de app-root, bijv. "api/me".
+   * @returns {string} De URL (zonder scriptadres het pad zelf).
+   */
+  const fromApp = (relativePath) => (scriptUrl ? new URL(`../${relativePath}`, scriptUrl).href : relativePath);
+  const version = scriptUrl ? new URL(scriptUrl).search : '';
 
   // ---------- Gedeelde verzoeken ----------
   const cache = {};
-  // Antwoord als JSON (null bij een fout of offline). Iedere aanroeper krijgt
-  // een eigen kopie; `fresh` haalt het opnieuw op (bijv. na opslaan).
+  /**
+   * Haalt een gedeeld verzoek op als JSON (null bij een fout of offline). Iedere
+   * aanroeper krijgt een eigen kopie; `fresh` haalt het opnieuw op (bijv. na opslaan).
+   * @param {string} path Pad vanaf de app-root, bijv. "api/me".
+   * @param {object} [options] { fresh } = opnieuw ophalen.
+   * @returns {Promise<object|null>} Een kopie van het antwoord.
+   */
   function getJson(path, { fresh = false } = {}) {
     if (location.protocol === 'file:') return Promise.resolve(null);
     if (fresh || !cache[path]) {
       cache[path] = fetch(fromApp(path), { cache: 'no-store' })
-        .then((r) => (r.ok ? r.json() : null))
+        .then((response) => (response.ok ? response.json() : null))
         .catch(() => null);
     }
-    return cache[path].then((v) => (v == null ? null : JSON.parse(JSON.stringify(v))));
+    return cache[path].then((data) => (data == null ? null : JSON.parse(JSON.stringify(data))));
   }
 
   // ---------- Excel op aanvraag ----------
   let excelLoading = null;
+  /**
+   * Laadt de Excel-bibliotheek (ExcelJS) pas bij de eerste export.
+   * @returns {Promise<object|null>} ExcelJS, of null als laden mislukt.
+   */
   function excel() {
     if (root.ExcelJS) return Promise.resolve(root.ExcelJS);
     if (!excelLoading) {
       excelLoading = new Promise((resolve) => {
-        const s = document.createElement('script');
-        s.src = fromApp(`beregening/vendor/exceljs.min.js${version}`);
-        s.onload = () => resolve(root.ExcelJS || null);
-        s.onerror = () => { excelLoading = null; s.remove(); resolve(null); };
-        document.head.appendChild(s);
+        const scriptTag = document.createElement('script');
+        scriptTag.src = fromApp(`beregening/vendor/exceljs.min.js${version}`);
+        /**
+         * Geeft ExcelJS door zodra het script geladen is.
+         * @returns {void}
+         */
+        scriptTag.onload = () => resolve(root.ExcelJS || null);
+        /** Laden mislukt: script weg, volgende keer opnieuw proberen. */
+        scriptTag.onerror = () => { excelLoading = null; scriptTag.remove(); resolve(null); };
+        document.head.appendChild(scriptTag);
       });
     }
     return excelLoading;
   }
 
   // ---------- Terug naar de herkomst ----------
-  // { href, label, go() } als de vorige pagina een ander deel van de app was.
+  /**
+   * Terugknop naar de herkomst: { href, label, go() } als de vorige pagina een
+   * ander deel van de app was.
+   * @returns {{href: string, label: string, go: Function}|null} De terugknop, of null.
+   */
   function origin() {
     try {
-      const ref = document.referrer ? new URL(document.referrer) : null;
-      if (!ref || ref.origin !== location.origin || ref.pathname === location.pathname) return null;
+      const referrer = document.referrer ? new URL(document.referrer) : null;
+      if (!referrer || referrer.origin !== location.origin || referrer.pathname === location.pathname) return null;
       const appRoot = new URL(fromApp('')).pathname;
-      if (!ref.pathname.startsWith(appRoot)) return null;
-      const seg = ref.pathname.slice(appRoot.length).split('/')[0];
-      if (seg === 'login' || seg === 'wachtwoord') return null;
-      const mod = (root.AquatechModules || []).find((m) => m.href === `${seg}/`);
-      const name = seg === '' || seg === 'index.html' ? 'Overzicht' : seg === 'profiel' ? 'Mijn profiel' : mod ? mod.title : 'Terug';
+      if (!referrer.pathname.startsWith(appRoot)) return null;
+      const section = referrer.pathname.slice(appRoot.length).split('/')[0];
+      if (section === 'login' || section === 'wachtwoord') return null;
+      const module = (root.AquatechModules || []).find((candidate) => candidate.href === `${section}/`);
+      const name = section === '' || section === 'index.html' ? 'Overzicht' : section === 'profiel' ? 'Mijn profiel' : module ? module.title : 'Terug';
       const entry = location.href;
       return {
-        href: ref.href,
+        href: referrer.href,
         label: `← ${name}`,
-        // Zelfde tabblad, nog op de binnenkomst: echt terug (de vorige pagina
-        // staat dan vaak nog klaar). Anders gewoon erheen.
+        /**
+         * Gaat terug: echt terug in hetzelfde tabblad als we nog op de binnenkomst staan
+         * (de vorige pagina staat dan vaak nog klaar), anders gewoon naar de vorige pagina.
+         */
         go() {
           if (location.href === entry && history.length > 1) history.back();
-          else location.href = ref.href;
+          else location.href = referrer.href;
         },
       };
-    } catch (e) { return null; }
+    } catch (error) { return null; }
   }
 
-  // Terug op een pagina uit de cache van de browser (knop Terug): `fn` laadt
-  // de gegevens opnieuw, zodat bijv. een gewijzigde status meteen klopt.
-  function onReturn(fn) {
-    root.addEventListener('pageshow', (e) => { if (e.persisted) fn(); });
+  /**
+   * Terug op een pagina uit de cache van de browser (knop Terug): `reload` laadt
+   * de gegevens opnieuw, zodat bijv. een gewijzigde status meteen klopt.
+   * @param {Function} reload Functie die de gegevens opnieuw laadt.
+   */
+  function onReturn(reload) {
+    root.addEventListener('pageshow', (event) => { if (event.persisted) reload(); });
   }
 
   // ---------- Startpagina ----------
@@ -91,7 +119,7 @@
   let leaving = false;
   if (start) {
     let first = false;
-    try { first = !sessionStorage.getItem(STARTED); sessionStorage.setItem(STARTED, '1'); } catch (e) { /* geen opslag */ }
+    try { first = !sessionStorage.getItem(STARTED); sessionStorage.setItem(STARTED, '1'); } catch (error) { /* geen opslag */ }
     const href = start.getAttribute('content');
     if (first && href && /^[a-z0-9-]+\/$/.test(href)) {
       leaving = true;
@@ -102,11 +130,16 @@
   // ---------- Installeerbare app en offline ----------
   // Manifest en iconen voor "Zet op beginscherm" (in de kop, ook op pagina's
   // die ze niet zelf noemen).
-  if (src && location.protocol !== 'file:') {
-    const add = (tag, attrs) => {
-      const el = document.createElement(tag);
-      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-      document.head.appendChild(el);
+  if (scriptUrl && location.protocol !== 'file:') {
+    /**
+     * Voegt een element met attributen toe aan de kop van de pagina.
+     * @param {string} tag Tagnaam, bijv. "link".
+     * @param {object} attributes Attributen als naam → waarde.
+     */
+    const add = (tag, attributes) => {
+      const element = document.createElement(tag);
+      for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, value);
+      document.head.appendChild(element);
     };
     if (!document.querySelector('link[rel="manifest"]')) add('link', { rel: 'manifest', href: fromApp('manifest.json') });
     add('link', { rel: 'apple-touch-icon', href: fromApp('shared/icons/apple-touch-icon.png') });
@@ -118,15 +151,24 @@
     }
   }
 
-  // Vraag aan de service worker ({ type: 'status' } enz.); null zonder.
-  function offline(msg, timeout = 4000) {
-    const sw = navigator.serviceWorker && navigator.serviceWorker.controller;
-    if (!sw) return Promise.resolve(null);
+  /**
+   * Stelt de service worker een vraag ({ type: 'status' } enz.).
+   * @param {object} message De vraag.
+   * @param {number} [timeout] Wachttijd in ms.
+   * @returns {Promise<*>} Het antwoord, of null zonder service worker of na de wachttijd.
+   */
+  function offline(message, timeout = 4000) {
+    const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!worker) return Promise.resolve(null);
     return new Promise((resolve) => {
-      const ch = new MessageChannel();
-      const t = setTimeout(() => resolve(null), timeout);
-      ch.port1.onmessage = (e) => { clearTimeout(t); resolve(e.data); };
-      sw.postMessage(msg, [ch.port2]);
+      const channel = new MessageChannel();
+      const timer = setTimeout(() => resolve(null), timeout);
+      /**
+       * Antwoord van de service worker binnen.
+       * @param {MessageEvent} event Het bericht.
+       */
+      channel.port1.onmessage = (event) => { clearTimeout(timer); resolve(event.data); };
+      worker.postMessage(message, [channel.port2]);
     });
   }
 

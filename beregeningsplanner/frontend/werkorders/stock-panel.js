@@ -4,15 +4,41 @@
 // de werkorder; afboeken vanzelf als hij Gereed wordt, of hier met de hand
 // (alles wat gereserveerd staat, of per regel een aantal; negatief = retour).
 (function () {
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const nl = (v) => (Number(v) || 0).toLocaleString('nl-NL', { maximumFractionDigits: 3 });
+  /**
+   * Maakt tekst veilig voor HTML.
+   * @param {*} value De tekst (null/undefined = leeg).
+   * @returns {string} De tekst met &, <, >, " en ' als entiteit.
+   */
+  const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+  /**
+   * Getal in Nederlandse notatie (hoogstens 3 decimalen).
+   * @param {*} value Het getal.
+   * @returns {string} Bijv. "1.234,5".
+   */
+  const formatNumber = (value) => (Number(value) || 0).toLocaleString('nl-NL', { maximumFractionDigits: 3 });
+  /**
+   * Datum en tijd in het Nederlands.
+   * @param {string} iso Tijdstip als ISO-tekst.
+   * @returns {string} Bijv. "22 okt 2026 10:15" (leeg zonder tijdstip).
+   */
   const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : '');
   const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
-  const state = { wo: null, data: null, opts: {}, seq: 0 };
-  const $ = (sel) => document.querySelector(sel);
+  const state = { workOrder: null, data: null, options: {}, seq: 0 };
+  /**
+   * Zoekt het eerste element bij een CSS-selector.
+   * @param {string} selector CSS-selector.
+   * @returns {Element|null} Het element.
+   */
+  const $ = (selector) => document.querySelector(selector);
 
-  async function api(url, { method = 'GET', body } = {}) {
-    const res = await fetch(`../api/${url}`, {
+  /**
+   * Roept de API aan (relatief vanaf werkorders/).
+   * @param {string} path Pad onder api/.
+   * @param {object} [options] { method, body }; body gaat als JSON.
+   * @returns {Promise<object>} Het antwoord (fout = Error met `code`).
+   */
+  async function api(path, { method = 'GET', body } = {}) {
+    const res = await fetch(`../api/${path}`, {
       method, cache: 'no-store',
       headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -21,98 +47,143 @@
     if (!res.ok) throw Object.assign(new Error(out.message || `HTTP ${res.status}`), { code: out.error });
     return out;
   }
-  const toast = (msg, err) => (state.opts.toast ? state.opts.toast(msg, err) : null);
+  /**
+   * Toont een melding via de werkorderpagina (als die een toast meegaf).
+   * @param {string} message De melding.
+   * @param {boolean} [isError] true = foutmelding.
+   * @returns {*} Wat de toast teruggeeft (null zonder toast).
+   */
+  const toast = (message, isError) => (state.options.toast ? state.options.toast(message, isError) : null);
 
-  function statusOf(l) {
-    if (l.shortage > 0) return `<span class="pill st-short">Tekort ${esc(nl(l.shortage))}</span>`;
-    if (l.needed > 0 && l.issued >= l.needed) return '<span class="pill st-done">Afgeboekt</span>';
-    if (l.reserved > 0) return '<span class="pill st-ok">Gereserveerd</span>';
-    if (!l.needed && l.issued) return '<span class="pill">Extra</span>';
+  /**
+   * Statuslabel van een artikelregel: tekort, afgeboekt, gereserveerd of extra.
+   * @param {object} line Artikelregel uit de voorraad-API.
+   * @returns {string} HTML van het label.
+   */
+  function statusOf(line) {
+    if (line.shortage > 0) return `<span class="pill st-short">Tekort ${esc(formatNumber(line.shortage))}</span>`;
+    if (line.needed > 0 && line.issued >= line.needed) return '<span class="pill st-done">Afgeboekt</span>';
+    if (line.reserved > 0) return '<span class="pill st-ok">Gereserveerd</span>';
+    if (!line.needed && line.issued) return '<span class="pill">Extra</span>';
     return '<span class="pill">–</span>';
   }
 
+  /** Tekent de artikelregels, de ontbrekende artikelen en de boekingen op deze werkorder. */
   function render() {
-    const el = $('#st-body');
-    const d = state.data;
-    if (!el || !d) return;
-    const stockLink = state.opts.manage ? '../voorraad/' : null;
-    const open = ['open', 'gepland', 'bezig'].includes(d.workOrder.status);
-    const reserved = d.lines.reduce((s, l) => s + (l.reserved > 0 ? 1 : 0), 0);
-    const short = d.lines.filter((l) => l.shortage > 0).length;
-    $('#st-summary').textContent = d.lines.length
-      ? `${reserved} van ${d.lines.length} artikelen gereserveerd${short ? ` · tekort bij ${short}` : ''}`
+    const container = $('#st-body');
+    const stock = state.data;
+    if (!container || !stock) return;
+    const stockLink = state.options.manage ? '../voorraad/' : null;
+    const open = ['open', 'gepland', 'bezig'].includes(stock.workOrder.status);
+    const reserved = stock.lines.reduce((count, line) => count + (line.reserved > 0 ? 1 : 0), 0);
+    const shortCount = stock.lines.filter((line) => line.shortage > 0).length;
+    $('#st-summary').textContent = stock.lines.length
+      ? `${reserved} van ${stock.lines.length} artikelen gereserveerd${shortCount ? ` · tekort bij ${shortCount}` : ''}`
       : '';
-    const rows = d.lines.map((l) => `<tr data-code="${esc(l.code)}"${l.shortage > 0 ? ' class="bad"' : ''}>
-      <td><b>${esc(l.code)}</b><span class="sub">${esc(l.name)}${l.location ? ` · ${esc(l.location)}` : ''}</span></td>
-      <td class="num">${esc(nl(l.needed))} ${esc(l.unit)}</td>
-      <td class="num">${esc(nl(l.issued))}</td>
-      <td class="num">${esc(nl(l.reserved))}</td>
-      <td class="num">${esc(nl(l.onHand))}<span class="sub">vrij ${esc(nl(l.available))}</span></td>
-      <td>${statusOf(l)}</td>
-      <td class="st-act"><input type="number" step="any" inputmode="decimal" aria-label="Aantal" placeholder="${l.needed > l.issued ? esc(nl(l.needed - l.issued)) : ''}">
+    const rows = stock.lines.map((line) => `<tr data-code="${esc(line.code)}"${line.shortage > 0 ? ' class="bad"' : ''}>
+      <td><b>${esc(line.code)}</b><span class="sub">${esc(line.name)}${line.location ? ` · ${esc(line.location)}` : ''}</span></td>
+      <td class="num">${esc(formatNumber(line.needed))} ${esc(line.unit)}</td>
+      <td class="num">${esc(formatNumber(line.issued))}</td>
+      <td class="num">${esc(formatNumber(line.reserved))}</td>
+      <td class="num">${esc(formatNumber(line.onHand))}<span class="sub">vrij ${esc(formatNumber(line.available))}</span></td>
+      <td>${statusOf(line)}</td>
+      <td class="st-act"><input type="number" step="any" inputmode="decimal" aria-label="Aantal" placeholder="${line.needed > line.issued ? esc(formatNumber(line.needed - line.issued)) : ''}">
         <button class="btn small" data-issue>Afboeken</button><button class="btn small ghost" data-return title="Terug op voorraad">Retour</button></td>
     </tr>`).join('');
-    const missing = d.notInStock.length
-      ? `<p class="muted small">Niet op voorraad bijgehouden: ${d.notInStock.map((m) => `<span class="code">${esc(m.code)}</span>`).join(' ')}${stockLink ? ` · <a href="${stockLink}?codes=${encodeURIComponent(d.notInStock.map((m) => m.code).join(','))}">Op voorraad nemen</a>` : ''}</p>`
+    const missing = stock.notInStock.length
+      ? `<p class="muted small">Niet op voorraad bijgehouden: ${stock.notInStock.map((material) => `<span class="code">${esc(material.code)}</span>`).join(' ')}${stockLink ? ` · <a href="${stockLink}?codes=${encodeURIComponent(stock.notInStock.map((material) => material.code).join(','))}">Op voorraad nemen</a>` : ''}</p>`
       : '';
-    const moves = d.movements.length ? `<details class="st-moves"><summary>Geboekt op deze werkorder (${d.movements.length})</summary>
-      <table class="grid"><tbody>${d.movements.map((m) => `<tr><td>${esc(when(m.createdAt))}</td><td>${esc(KINDS[m.kind] || m.kind)}</td>
-        <td><span class="code">${esc(m.code)}</span> ${esc(m.name)}</td><td class="num">${esc(nl(-m.qty))} ${esc(m.unit)}</td><td class="muted">${esc(m.userName)}${m.note ? ` · ${esc(m.note)}` : ''}</td></tr>`).join('')}</tbody></table></details>` : '';
-    el.innerHTML = d.lines.length || d.notInStock.length ? `${d.lines.length ? `<div class="tablewrap"><table class="grid st-lines">
+    const moves = stock.movements.length ? `<details class="st-moves"><summary>Geboekt op deze werkorder (${stock.movements.length})</summary>
+      <table class="grid"><tbody>${stock.movements.map((movement) => `<tr><td>${esc(when(movement.createdAt))}</td><td>${esc(KINDS[movement.kind] || movement.kind)}</td>
+        <td><span class="code">${esc(movement.code)}</span> ${esc(movement.name)}</td><td class="num">${esc(formatNumber(-movement.qty))} ${esc(movement.unit)}</td><td class="muted">${esc(movement.userName)}${movement.note ? ` · ${esc(movement.note)}` : ''}</td></tr>`).join('')}</tbody></table></details>` : '';
+    container.innerHTML = stock.lines.length || stock.notInStock.length ? `${stock.lines.length ? `<div class="tablewrap"><table class="grid st-lines">
         <thead><tr><th>Artikel</th><th class="num">Nodig</th><th class="num">Afgeboekt</th><th class="num">Gereserveerd</th><th class="num">Op voorraad</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows}</tbody></table></div>` : ''}
       ${missing}
-      ${d.usage ? '<p class="muted small">Het geregistreerde materiaalverbruik wordt van de voorraad afgeboekt; bij Gereed vervalt de rest van de reservering.</p>'
+      ${stock.usage ? '<p class="muted small">Het geregistreerde materiaalverbruik wordt van de voorraad afgeboekt; bij Gereed vervalt de rest van de reservering.</p>'
         : open && reserved ? '<p class="muted small">Wordt de werkorder Gereed, dan wordt wat nog gereserveerd staat vanzelf afgeboekt.</p>' : ''}
       ${reserved ? '<div class="row"><button class="btn" data-issue-all>Alles afboeken wat gereserveerd staat</button></div>' : ''}
       ${moves}`
       : `<p class="muted small">Geen materialen met een artikelcode op deze werkorder.${stockLink ? ' Voorraad bijhouden doe je in <a href="../voorraad/">Voorraadbeheer</a>.' : ''}</p>`;
-    el.querySelectorAll('tr[data-code]').forEach((tr) => {
-      const input = tr.querySelector('input');
-      const go = (sign) => {
-        const v = Number(String(input.value || input.placeholder).replace(',', '.'));
-        if (!(v > 0)) { toast('Vul een aantal in.', true); return; }
-        issue([{ code: tr.dataset.code, qty: sign * v }], sign > 0 ? 'Afgeboekt' : 'Retour geboekt');
+    container.querySelectorAll('tr[data-code]').forEach((row) => {
+      const input = row.querySelector('input');
+      /**
+       * Boekt het ingevulde (of voorgestelde) aantal af of terug.
+       * @param {number} sign 1 = afboeken, -1 = retour.
+       */
+      const book = (sign) => {
+        const quantity = Number(String(input.value || input.placeholder).replace(',', '.'));
+        if (!(quantity > 0)) { toast('Vul een aantal in.', true); return; }
+        issue([{ code: row.dataset.code, qty: sign * quantity }], sign > 0 ? 'Afgeboekt' : 'Retour geboekt');
       };
-      tr.querySelector('[data-issue]').onclick = () => go(1);
-      tr.querySelector('[data-return]').onclick = () => go(-1);
+      /**
+       * Boekt het aantal af.
+       * @returns {void}
+       */
+      row.querySelector('[data-issue]').onclick = () => book(1);
+      /**
+       * Boekt het aantal terug (retour).
+       * @returns {void}
+       */
+      row.querySelector('[data-return]').onclick = () => book(-1);
     });
-    const all = el.querySelector('[data-issue-all]');
-    if (all) all.onclick = () => issue(undefined, 'Gereserveerde materialen afgeboekt');
-  }
-
-  async function issue(lines, done) {
-    try {
-      state.data = await api(`stock/workorders/${encodeURIComponent(state.wo.id)}/issue`, { method: 'POST', body: lines ? { lines } : {} });
-      render();
-      toast(done);
-    } catch (e) {
-      toast(e.message, true);
+    const issueAllButton = container.querySelector('[data-issue-all]');
+    if (issueAllButton) {
+      /**
+       * Boekt alles af wat gereserveerd staat.
+       * @returns {Promise<void>}
+       */
+      issueAllButton.onclick = () => issue(undefined, 'Gereserveerde materialen afgeboekt');
     }
   }
 
-  async function refresh(wo = state.wo) {
-    if (!wo || !$('#st-card')) return;
-    state.wo = wo;
-    const seq = ++state.seq;
+  /**
+   * Boekt materialen af (of retour) en tekent het blok opnieuw.
+   * @param {object[]} [lines] [{ code, qty }]; zonder lines alles wat gereserveerd staat.
+   * @param {string} doneMessage Melding na gelukt boeken.
+   * @returns {Promise<void>}
+   */
+  async function issue(lines, doneMessage) {
     try {
-      const data = await api(`stock/workorders/${encodeURIComponent(wo.id)}`);
-      if (seq !== state.seq) return;
+      state.data = await api(`stock/workorders/${encodeURIComponent(state.workOrder.id)}/issue`, { method: 'POST', body: lines ? { lines } : {} });
+      render();
+      toast(doneMessage);
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
+  /**
+   * Haalt de voorraad van de werkorder opnieuw op; een ouder antwoord wordt genegeerd.
+   * @param {object} [workOrder] De werkorder (standaard de huidige).
+   * @returns {Promise<void>}
+   */
+  async function refresh(workOrder = state.workOrder) {
+    if (!workOrder || !$('#st-card')) return;
+    state.workOrder = workOrder;
+    const requestNumber = ++state.seq;
+    try {
+      const data = await api(`stock/workorders/${encodeURIComponent(workOrder.id)}`);
+      if (requestNumber !== state.seq) return;
       state.data = data;
       $('#st-card').hidden = false;
       render();
-    } catch (e) {
-      if (seq === state.seq) $('#st-card').hidden = true;
+    } catch (error) {
+      if (requestNumber === state.seq) $('#st-card').hidden = true;
     }
   }
 
-  // opts: { toast, manage (recht 'voorraad': link naar Voorraadbeheer) }
-  function open(wo, opts = {}) {
-    state.opts = opts;
+  /**
+   * Opent het voorraadblok voor een werkorder.
+   * @param {object} workOrder De werkorder.
+   * @param {object} [options] { toast, manage (recht 'voorraad': link naar Voorraadbeheer) }.
+   */
+  function open(workOrder, options = {}) {
+    state.options = options;
     state.data = null;
     const body = $('#st-body');
     if (body) body.innerHTML = '<p class="muted small">Voorraad laden…</p>';
-    refresh(wo);
+    refresh(workOrder);
   }
 
   window.WorkOrderStock = { open, refresh };
