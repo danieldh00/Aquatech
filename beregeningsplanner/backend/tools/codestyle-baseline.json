@@ -19,7 +19,6 @@
     "frontend/offertes/offertes.js",
     "frontend/planning/planning.js",
     "frontend/voorraad/voorraad.js",
-    "frontend/werkorders/werkorders.js",
-    "frontend/werkorders/worklog.js"
+    "frontend/werkorders/werkorders.js"
   ]
 }
