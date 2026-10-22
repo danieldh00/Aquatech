@@ -12,89 +12,125 @@ const { invoicePdf, invoiceFileName } = require('./invoice-pdf');
 const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 
 const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
+/**
+ * Zet een ISO-datum om naar de Nederlandse schrijfwijze.
+ * @param {string} iso Datum als ISO-tekst (alleen het datumdeel telt).
+ * @returns {string} Bijv. "5-3-2026", of leeg.
+ */
 const day = (iso) => {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
-  return m ? `${Number(m[3])}-${Number(m[2])}-${m[1]}` : '';
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  return match ? `${Number(match[3])}-${Number(match[2])}-${match[1]}` : '';
 };
 
 /**
- * ctx: { invoices, settingsFor(tid), mailerFor(settings), colorsOf(tid), mailBody(profile, paragraphs) }.
+ * Maakt de verzender voor facturen per e-mail.
+ * @param {object} ctx invoices, settingsFor(tenantId), mailerFor(settings), colorsOf(tenantId) en mailBody(profile, paragraphs).
+ * @returns {{ send: Function, autoSend: Function, draft: Function, pdfOf: Function }} De verzendfuncties.
  */
 function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () => ({}), mailBody }) {
-  const confOf = (settings) => Core.sanitizeSettings(settings.get('invoicing'));
+  /**
+   * De gecontroleerde factuurinstellingen van een organisatie.
+   * @param {object} settings De instellingen van de tenant.
+   * @returns {object} Instelling invoicing, opgeschoond.
+   */
+  const invoicingOf = (settings) => Core.sanitizeSettings(settings.get('invoicing'));
 
-  function pdfOf(tenantId, inv) {
+  /**
+   * De factuur als PDF met het profiel, de instellingen en de kleuren van de organisatie.
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} invoice De factuur (met data).
+   * @returns {Buffer} De PDF.
+   */
+  function pdfOf(tenantId, invoice) {
     const settings = settingsFor(tenantId);
-    return invoicePdf(inv, { profile: settings.get('quoteProfile'), settings: confOf(settings), colors: colorsOf(tenantId) });
+    return invoicePdf(invoice, { profile: settings.get('quoteProfile'), settings: invoicingOf(settings), colors: colorsOf(tenantId) });
   }
 
-  /** Waarden voor {veld} in onderwerp en tekst. */
-  function valuesOf(inv, profile, conf) {
-    const d = inv.data;
-    const credit = inv.kind === 'credit';
-    const t = Core.totals(d, conf);
+  /**
+   * Waarden voor {veld} in onderwerp en tekst.
+   * @param {object} invoice De factuur (met data).
+   * @param {object} profile Het bedrijfsprofiel.
+   * @param {object} invoicing De factuurinstellingen.
+   * @returns {object} Veldnaam → tekst (klant, nummer, datum, bedrag, betaling, ...).
+   */
+  function valuesOf(invoice, profile, invoicing) {
+    const details = invoice.data;
+    const credit = invoice.kind === 'credit';
+    const totals = Core.totals(details, invoicing);
     return {
-      klant: d.customer.contact || d.customer.name || 'klant',
-      nummer: inv.number || '(concept)',
-      datum: day(d.date),
-      vervaldatum: day(d.dueDate),
-      bedrag: EUR.format(t.total),
+      klant: details.customer.contact || details.customer.name || 'klant',
+      nummer: invoice.number || '(concept)',
+      datum: day(details.date),
+      vervaldatum: day(details.dueDate),
+      bedrag: EUR.format(totals.total),
       bedrijf: profile.companyName || '',
       soort: credit ? 'Creditfactuur' : 'Factuur',
       soort_klein: credit ? 'creditfactuur' : 'factuur',
       betaling: credit ? 'Het bedrag verrekenen wij met u.'
-        : inv.status === 'betaald' ? 'Deze factuur is al voldaan, dank u wel.'
-          : Core.paymentText(conf, { number: inv.number, iban: profile.iban, dueDate: day(d.dueDate) }),
+        : invoice.status === 'betaald' ? 'Deze factuur is al voldaan, dank u wel.'
+          : Core.paymentText(invoicing, { number: invoice.number, iban: profile.iban, dueDate: day(details.dueDate) }),
     };
   }
 
-  /** Standaard onderwerp en tekst voor het verzendformulier. */
-  function draft(tenantId, inv) {
+  /**
+   * Standaard ontvanger, onderwerp en tekst voor het verzendformulier.
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} invoice De factuur (met data).
+   * @returns {{ to: string, subject: string, message: string }} Het concept.
+   */
+  function draft(tenantId, invoice) {
     const settings = settingsFor(tenantId);
-    const conf = confOf(settings);
-    const v = valuesOf(inv, settings.get('quoteProfile'), conf);
-    return { to: inv.data.customer.email || '', subject: Core.fillText(conf.mailSubject, v), message: Core.fillText(conf.mailText, v) };
+    const invoicing = invoicingOf(settings);
+    const values = valuesOf(invoice, settings.get('quoteProfile'), invoicing);
+    return { to: invoice.data.customer.email || '', subject: Core.fillText(invoicing.mailSubject, values), message: Core.fillText(invoicing.mailText, values) };
   }
 
   /**
-   * Versturen. opts: { to (lijst), subject, message, bcc }; zonder = de
-   * standaard uit de instellingen naar het adres van de klant. Gooit een fout
-   * met code (not_configured, invalid_to, not_final, send_failed).
+   * Verstuurt een definitieve factuur met de PDF als bijlage. Zonder opties
+   * gaat de standaardtekst naar het adres van de klant. Een mislukte
+   * verzending komt op de factuur (send_error).
+   * @param {string} tenantId Id van de tenant.
+   * @param {string} id Id van de factuur.
+   * @param {{ to?: string[], subject?: string, message?: string, bcc?: string }} [options] Eigen ontvangers, onderwerp, tekst en bcc.
+   * @returns {Promise<object>} De bijgewerkte factuur. Gooit een fout met code not_found, not_final, not_configured, invalid_to of send_failed.
    */
-  async function send(tenantId, id, opts = {}) {
-    const inv = invoices.get(tenantId, id);
-    if (!inv) throw Object.assign(new Error('Factuur niet gevonden.'), { code: 'not_found' });
-    if (inv.status === 'concept') throw Object.assign(new Error('Maak de factuur eerst definitief.'), { code: 'not_final' });
+  async function send(tenantId, id, options = {}) {
+    const invoice = invoices.get(tenantId, id);
+    if (!invoice) throw Object.assign(new Error('Factuur niet gevonden.'), { code: 'not_found' });
+    if (invoice.status === 'concept') throw Object.assign(new Error('Maak de factuur eerst definitief.'), { code: 'not_final' });
     const settings = settingsFor(tenantId);
     const mailer = mailerFor(settings);
     if (!mailer.configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld (Beheer → Instellingen → E-mail).'), { code: 'not_configured' });
-    const d = draft(tenantId, inv);
-    const to = (opts.to && opts.to.length ? opts.to : [d.to]).filter(validEmail);
+    const defaults = draft(tenantId, invoice);
+    const to = (options.to && options.to.length ? options.to : [defaults.to]).filter(validEmail);
     if (!to.length) throw Object.assign(new Error('Geen geldig e-mailadres van de klant.'), { code: 'invalid_to' });
-    const p = settings.get('quoteProfile');
-    const message = String(opts.message || d.message).slice(0, 5000);
+    const profile = settings.get('quoteProfile');
+    const message = String(options.message || defaults.message).slice(0, 5000);
     try {
       await mailer.send({
-        to, replyTo: p.email, bcc: opts.bcc,
-        subject: String(opts.subject || d.subject).slice(0, 300),
-        ...mailBody(p, message.split(/\n{2,}/)),
-        attachments: [{ filename: invoiceFileName(inv), content: pdfOf(tenantId, inv), contentType: 'application/pdf' }],
+        to, replyTo: profile.email, bcc: options.bcc,
+        subject: String(options.subject || defaults.subject).slice(0, 300),
+        ...mailBody(profile, message.split(/\n{2,}/)),
+        attachments: [{ filename: invoiceFileName(invoice), content: pdfOf(tenantId, invoice), contentType: 'application/pdf' }],
       });
-    } catch (err) {
-      invoices.markSent(tenantId, inv.id, '', `Versturen mislukt: ${err.message}`);
-      throw Object.assign(new Error(`Versturen mislukt: ${err.message}`), { code: 'send_failed' });
+    } catch (error) {
+      invoices.markSent(tenantId, invoice.id, '', `Versturen mislukt: ${error.message}`);
+      throw Object.assign(new Error(`Versturen mislukt: ${error.message}`), { code: 'send_failed' });
     }
-    invoices.markSent(tenantId, inv.id, to.join(', '));
-    return invoices.get(tenantId, inv.id);
+    invoices.markSent(tenantId, invoice.id, to.join(', '));
+    return invoices.get(tenantId, invoice.id);
   }
 
   /**
-   * Na definitief: automatisch versturen als dat aan staat en er een
-   * mailserver en een adres zijn. Geeft { sent, error } en gooit nooit.
+   * Verstuurt een factuur automatisch na definitief als dat aan staat en er
+   * een mailserver en een adres zijn. Gooit nooit.
+   * @param {string} tenantId Id van de tenant.
+   * @param {string} id Id van de factuur.
+   * @returns {Promise<{ sent: boolean, error?: string }>} Of hij verstuurd is, en anders de foutcode.
    */
   async function autoSend(tenantId, id) {
     const settings = settingsFor(tenantId);
-    if (!confOf(settings).autoSend) return { sent: false };
+    if (!invoicingOf(settings).autoSend) return { sent: false };
     if (!mailerFor(settings).configured()) {
       invoices.markSent(tenantId, id, '', 'Niet automatisch verstuurd: er is geen mailserver ingesteld.');
       return { sent: false, error: 'not_configured' };
@@ -102,9 +138,9 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
     try {
       await send(tenantId, id);
       return { sent: true };
-    } catch (err) {
-      if (err.code === 'invalid_to') invoices.markSent(tenantId, id, '', 'Niet automatisch verstuurd: de klant heeft geen geldig e-mailadres.');
-      return { sent: false, error: err.code || 'send_failed' };
+    } catch (error) {
+      if (error.code === 'invalid_to') invoices.markSent(tenantId, id, '', 'Niet automatisch verstuurd: de klant heeft geen geldig e-mailadres.');
+      return { sent: false, error: error.code || 'send_failed' };
     }
   }
 

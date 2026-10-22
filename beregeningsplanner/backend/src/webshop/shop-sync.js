@@ -28,25 +28,69 @@ const { transaction } = require('../database/db');
 const { fetchProducts, updateProducts, SourceError } = require('./woocommerce');
 
 const DEBOUNCE_MS = 3000;
-const round2 = (n) => Math.round(n * 100) / 100;
-const key = (s) => String(s || '').trim().toUpperCase();
+/**
+ * Rondt af op twee decimalen.
+ * @param {number} value Het getal.
+ * @returns {number} Afgerond.
+ */
+const round2 = (value) => Math.round(value * 100) / 100;
+/**
+ * Maakt een sku of code vergelijkbaar (getrimd, hoofdletters).
+ * @param {*} value De sku of code.
+ * @returns {string} De sleutel.
+ */
+const normalizeKey = (value) => String(value || '').trim().toUpperCase();
 
-/** Prijs in de webshop (zoals opgeslagen) omrekenen naar excl. btw met het tarief van het artikel. */
-const exclOf = (raw, vatRate, cfg) => round2(cfg.pricesIncludeTax ? raw / (1 + (Number(vatRate) || 0) / 100) : raw);
-const rawOf = (excl, vatRate, cfg) => round2(cfg.pricesIncludeTax ? excl * (1 + (Number(vatRate) || 0) / 100) : excl);
+/**
+ * Rekent een prijs uit de webshop (zoals opgeslagen) om naar excl. btw met het tarief van het artikel.
+ * @param {number} raw Prijs zoals de webshop hem opslaat.
+ * @param {number} vatRate Btw-tarief van het artikel.
+ * @param {object} shopConfig De koppelinstelling (pricesIncludeTax).
+ * @returns {number} Prijs excl. btw.
+ */
+const exclOf = (raw, vatRate, shopConfig) => round2(shopConfig.pricesIncludeTax ? raw / (1 + (Number(vatRate) || 0) / 100) : raw);
+/**
+ * Rekent een prijs excl. btw om naar hoe de webshop hem opslaat.
+ * @param {number} excl Prijs excl. btw.
+ * @param {number} vatRate Btw-tarief van het artikel.
+ * @param {object} shopConfig De koppelinstelling (pricesIncludeTax).
+ * @returns {number} Prijs voor de webshop.
+ */
+const rawOf = (excl, vatRate, shopConfig) => round2(shopConfig.pricesIncludeTax ? excl * (1 + (Number(vatRate) || 0) / 100) : excl);
 
+/**
+ * Maakt de tweerichtingssynchronisatie tussen voorraadartikelen en webshop.
+ * @param {object} ctx db, shop (shop.js), stock (stock.js), settingsFor(tenantId), fetchImpl en log.
+ * @returns {{ sync: Function, run: Function, schedule: Function, runAll: Function, exclOf: Function, rawOf: Function }} De synchronisatiefuncties.
+ */
 function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console }) {
-  const q = (sql) => db.prepare(sql);
+  /**
+   * Bereidt een SQL-opdracht voor.
+   * @param {string} sql De SQL.
+   * @returns {object} De voorbereide opdracht.
+   */
+  const prepare = (sql) => db.prepare(sql);
   const running = new Map();
   const timers = new Map();
 
+  /**
+   * De koppelinstelling van een omgeving met de sleutels.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {object} shopSource plus consumerKey en consumerSecret.
+   */
   const configOf = (tenantId) => {
-    const s = settingsFor(tenantId);
-    const src = s.get('shopSource');
-    return { ...src, consumerKey: s.get('shopConsumerKey'), consumerSecret: s.get('shopConsumerSecret') };
+    const settings = settingsFor(tenantId);
+    const source = settings.get('shopSource');
+    return { ...source, consumerKey: settings.get('shopConsumerKey'), consumerSecret: settings.get('shopConsumerSecret') };
   };
 
-  const itemsOf = (tenantId, onlyDirty) => q(`SELECT i.id, i.code, i.on_hand, i.sale_price, i.vat_rate, i.shop_product_id, i.shop_dirty,
+  /**
+   * Voorraadartikelen die met de webshop meedoen, met gereserveerd aantal en of er al boekingen zijn.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {boolean} onlyDirty Alleen gewijzigde, al gekoppelde artikelen.
+   * @returns {object[]} De artikelrijen.
+   */
+  const itemsOf = (tenantId, onlyDirty) => prepare(`SELECT i.id, i.code, i.on_hand, i.sale_price, i.vat_rate, i.shop_product_id, i.shop_dirty,
       i.shop_price_seen, i.shop_stock_seen, COALESCE(r.qty, 0) AS reserved,
       EXISTS (SELECT 1 FROM stock_movements m WHERE m.tenant_id = i.tenant_id AND m.item_id = i.id) AS moved
     FROM stock_items i
@@ -54,84 +98,92 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     WHERE i.tenant_id = ? AND i.archived = 0 AND i.shop_sync = 1${onlyDirty ? ' AND i.shop_dirty = 1 AND i.shop_product_id IS NOT NULL' : ''}`)
     .all(tenantId, tenantId);
 
+  /**
+   * Maakt een functie die bij een voorraadartikel het webshopproduct zoekt
+   * (handmatige koppeling code → sku, aquatech_code, of sku = code).
+   * @param {object[]} products De webshopproducten.
+   * @param {object} [mapping] Handmatige koppeling code → sku.
+   * @returns {Function} item → product of null.
+   */
   function matcher(products, mapping = {}) {
     const byId = new Map(), bySku = new Map(), byCode = new Map();
-    for (const p of products) {
-      byId.set(String(p.id), p);
-      if (p.sku && !bySku.has(key(p.sku))) bySku.set(key(p.sku), p);
-      if (p.code && !byCode.has(key(p.code))) byCode.set(key(p.code), p);
+    for (const product of products) {
+      byId.set(String(product.id), product);
+      if (product.sku && !bySku.has(normalizeKey(product.sku))) bySku.set(normalizeKey(product.sku), product);
+      if (product.code && !byCode.has(normalizeKey(product.code))) byCode.set(normalizeKey(product.code), product);
     }
-    const byMapping = new Map(Object.entries(mapping || {}).map(([c, sku]) => [key(c), key(sku)]));
+    const byMapping = new Map(Object.entries(mapping || {}).map(([code, sku]) => [normalizeKey(code), normalizeKey(sku)]));
     return (item) => {
-      const m = byMapping.get(item.code);
-      return (m && bySku.get(m)) || byCode.get(item.code) || bySku.get(item.code) || null;
+      const mappedSku = byMapping.get(item.code);
+      return (mappedSku && bySku.get(mappedSku)) || byCode.get(item.code) || bySku.get(item.code) || null;
     };
   }
 
   /**
-   * Eén synchronisatie. full: alle producten ophalen (en de productlijst van
-   * de catalogus bijwerken); anders alleen de gewijzigde, gekoppelde
-   * artikelen. Geeft een samenvatting.
+   * Eén synchronisatie: voorraad en prijs uit de webshop verwerken en terugschrijven wat er veranderd is.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ full?: boolean, user?: object }} [options] full: alle producten ophalen (en de catalogus bijwerken), anders alleen de gewijzigde, gekoppelde artikelen; user voor de voorraadboekingen.
+   * @returns {Promise<object>} Samenvatting (linked, unlinked, soldInShop, pricesFromShop, updated, failed) of { skipped }.
    */
   async function sync(tenantId, { full = true, user = null } = {}) {
-    const cfg = configOf(tenantId);
-    if (!cfg.url) return { skipped: 'not_configured' };
-    if (!full && !cfg.push) return { skipped: 'no_push' };
+    const shopConfig = configOf(tenantId);
+    if (!shopConfig.url) return { skipped: 'not_configured' };
+    if (!full && !shopConfig.push) return { skipped: 'no_push' };
     const items = itemsOf(tenantId, !full);
     if (!full && !items.length) return { skipped: 'nothing' };
     const products = full
-      ? await fetchProducts(cfg, { fetchImpl })
-      : await fetchProducts(cfg, { fetchImpl, ids: items.map((i) => i.shop_product_id) });
+      ? await fetchProducts(shopConfig, { fetchImpl })
+      : await fetchProducts(shopConfig, { fetchImpl, ids: items.map((item) => item.shop_product_id) });
     if (full) shop.replaceProducts(tenantId, products, new Date().toISOString());
-    const match = matcher(products, cfg.mapping);
-    const byId = new Map(products.map((p) => [String(p.id), p]));
-    const pushStock = Boolean(cfg.push && cfg.pushStock !== false && cfg.mode === 'rest');
+    const match = matcher(products, shopConfig.mapping);
+    const byId = new Map(products.map((product) => [String(product.id), product]));
+    const pushStock = Boolean(shopConfig.push && shopConfig.pushStock !== false && shopConfig.mode === 'rest');
     const summary = { linked: 0, unlinked: 0, soldInShop: 0, pricesFromShop: 0, updated: 0, failed: 0 };
     const updates = [];
-    const t = new Date().toISOString();
+    const timestamp = new Date().toISOString();
 
     transaction(db, () => {
-      for (const it of items) {
-        const p = (it.shop_product_id && byId.get(String(it.shop_product_id))) || (full ? match(it) : null);
-        if (!p) {
-          if (full && it.shop_product_id) {
-            q(`UPDATE stock_items SET shop_product_id = NULL, shop_price_seen = NULL, shop_stock_seen = NULL, shop_dirty = 0,
-              shop_error = 'Niet (meer) gevonden in de webshop.' WHERE tenant_id = ? AND id = ?`).run(tenantId, it.id);
+      for (const item of items) {
+        const product = (item.shop_product_id && byId.get(String(item.shop_product_id))) || (full ? match(item) : null);
+        if (!product) {
+          if (full && item.shop_product_id) {
+            prepare(`UPDATE stock_items SET shop_product_id = NULL, shop_price_seen = NULL, shop_stock_seen = NULL, shop_dirty = 0,
+              shop_error = 'Niet (meer) gevonden in de webshop.' WHERE tenant_id = ? AND id = ?`).run(tenantId, item.id);
             summary.unlinked++;
           }
           continue;
         }
-        const first = String(it.shop_product_id || '') !== String(p.id);
+        const first = String(item.shop_product_id || '') !== String(product.id);
         if (first) summary.linked++;
-        let onHand = Number(it.on_hand) || 0;
-        let salePrice = it.sale_price == null ? null : Number(it.sale_price);
-        let priceSeen = first ? null : it.shop_price_seen;
-        let stockSeen = first ? null : it.shop_stock_seen;
+        let onHand = Number(item.on_hand) || 0;
+        let salePrice = item.sale_price == null ? null : Number(item.sale_price);
+        let priceSeen = first ? null : item.shop_price_seen;
+        let stockSeen = first ? null : item.shop_stock_seen;
 
         // 1. Voorraad uit de webshop: verkocht (of aangepast) sinds de vorige keer.
-        if (pushStock && p.stockQty != null) {
-          if (stockSeen != null && p.stockQty !== Number(stockSeen)) {
-            const delta = p.stockQty - Number(stockSeen);
-            stock.book(tenantId, it.id, delta, {
+        if (pushStock && product.stockQty != null) {
+          if (stockSeen != null && product.stockQty !== Number(stockSeen)) {
+            const delta = product.stockQty - Number(stockSeen);
+            stock.book(tenantId, item.id, delta, {
               kind: delta < 0 ? 'afboeking' : 'correctie', source: 'webshop', user,
               note: delta < 0 ? `Verkocht via de webshop (${-delta})` : 'Voorraad aangepast in de webshop',
             });
             onHand += delta;
             if (delta < 0) summary.soldInShop += -delta;
-          } else if (stockSeen == null && onHand === 0 && !Number(it.moved) && p.stockQty > 0) {
-            stock.book(tenantId, it.id, p.stockQty, { kind: 'telling', source: 'webshop', user, note: 'Beginstand uit de webshop' });
-            onHand = p.stockQty;
+          } else if (stockSeen == null && onHand === 0 && !Number(item.moved) && product.stockQty > 0) {
+            stock.book(tenantId, item.id, product.stockQty, { kind: 'telling', source: 'webshop', user, note: 'Beginstand uit de webshop' });
+            onHand = product.stockQty;
           }
         }
 
         // 2. Prijs.
-        const raw = p.rawRegular != null ? p.rawRegular : null;
+        const raw = product.rawRegular != null ? product.rawRegular : null;
         if (raw != null) {
-          const shopChanged = priceSeen != null && Math.abs(raw - Number(priceSeen)) >= 0.005 && !Number(it.shop_dirty);
-          if (!cfg.push || salePrice == null || shopChanged) {
-            const excl = exclOf(raw, it.vat_rate, cfg);
+          const shopChanged = priceSeen != null && Math.abs(raw - Number(priceSeen)) >= 0.005 && !Number(item.shop_dirty);
+          if (!shopConfig.push || salePrice == null || shopChanged) {
+            const excl = exclOf(raw, item.vat_rate, shopConfig);
             if (salePrice == null || Math.abs(excl - salePrice) >= 0.005) {
-              q('UPDATE stock_items SET sale_price = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(excl, t, tenantId, it.id);
+              prepare('UPDATE stock_items SET sale_price = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(excl, timestamp, tenantId, item.id);
               salePrice = excl;
               summary.pricesFromShop++;
             }
@@ -139,50 +191,50 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
         }
 
         // 3. Wat de webshop moet krijgen.
-        const u = { id: String(p.id), itemId: it.id };
-        if (cfg.push && salePrice != null) {
-          const want = rawOf(salePrice, it.vat_rate, cfg);
-          if (raw == null || Math.abs(want - raw) >= 0.005) { u.price = salePrice; u.vatRate = it.vat_rate; }
-          u.priceSeen = want;
+        const update = { id: String(product.id), itemId: item.id };
+        if (shopConfig.push && salePrice != null) {
+          const want = rawOf(salePrice, item.vat_rate, shopConfig);
+          if (raw == null || Math.abs(want - raw) >= 0.005) { update.price = salePrice; update.vatRate = item.vat_rate; }
+          update.priceSeen = want;
         } else {
-          u.priceSeen = raw;
+          update.priceSeen = raw;
         }
         if (pushStock) {
-          const want = Math.max(0, Math.floor(onHand - Number(it.reserved || 0) + 1e-9));
-          if (p.stockQty == null || p.stockQty !== want) u.stockQty = want;
-          u.stockSeen = want;
+          const want = Math.max(0, Math.floor(onHand - Number(item.reserved || 0) + 1e-9));
+          if (product.stockQty == null || product.stockQty !== want) update.stockQty = want;
+          update.stockSeen = want;
         } else {
-          u.stockSeen = p.stockQty;
+          update.stockSeen = product.stockQty;
         }
-        q(`UPDATE stock_items SET shop_product_id = ?, shop_synced_at = ?, shop_error = '' WHERE tenant_id = ? AND id = ?`).run(String(p.id), t, tenantId, it.id);
-        updates.push(u);
+        prepare(`UPDATE stock_items SET shop_product_id = ?, shop_synced_at = ?, shop_error = '' WHERE tenant_id = ? AND id = ?`).run(String(product.id), timestamp, tenantId, item.id);
+        updates.push(update);
       }
     });
 
     // 4. Terugschrijven (buiten de transactie: dat is een netwerkverzoek).
-    const send = updates.filter((u) => u.price != null || u.stockQty != null);
+    const send = updates.filter((update) => update.price != null || update.stockQty != null);
     let results = new Map();
     let sendError = null;
     if (send.length) {
       try {
-        results = new Map((await updateProducts(cfg, send, { fetchImpl })).map((r) => [r.id, r]));
-      } catch (err) {
-        if (!(err instanceof SourceError)) throw err;
-        sendError = err.message;
+        results = new Map((await updateProducts(shopConfig, send, { fetchImpl })).map((result) => [result.id, result]));
+      } catch (error) {
+        if (!(error instanceof SourceError)) throw error;
+        sendError = error.message;
       }
     }
     transaction(db, () => {
-      for (const u of updates) {
-        const sent = u.price != null || u.stockQty != null;
-        const r = sent ? results.get(u.id) : { ok: true };
-        if (r && r.ok) {
+      for (const update of updates) {
+        const sent = update.price != null || update.stockQty != null;
+        const result = sent ? results.get(update.id) : { ok: true };
+        if (result && result.ok) {
           if (sent) summary.updated++;
-          q(`UPDATE stock_items SET shop_price_seen = ?, shop_stock_seen = ?, shop_dirty = 0, shop_error = '', shop_synced_at = ?
-            WHERE tenant_id = ? AND id = ?`).run(u.priceSeen ?? null, u.stockSeen ?? null, t, tenantId, u.itemId);
+          prepare(`UPDATE stock_items SET shop_price_seen = ?, shop_stock_seen = ?, shop_dirty = 0, shop_error = '', shop_synced_at = ?
+            WHERE tenant_id = ? AND id = ?`).run(update.priceSeen ?? null, update.stockSeen ?? null, timestamp, tenantId, update.itemId);
         } else {
           summary.failed++;
-          q("UPDATE stock_items SET shop_dirty = 1, shop_error = ? WHERE tenant_id = ? AND id = ?")
-            .run(String(sendError || (r && r.error) || 'Niet bijgewerkt in de webshop.').slice(0, 300), tenantId, u.itemId);
+          prepare("UPDATE stock_items SET shop_dirty = 1, shop_error = ? WHERE tenant_id = ? AND id = ?")
+            .run(String(sendError || (result && result.error) || 'Niet bijgewerkt in de webshop.').slice(0, 300), tenantId, update.itemId);
         }
       }
     });
@@ -190,41 +242,53 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     return summary;
   }
 
-  /** Eén synchronisatie tegelijk per omgeving; een volgende wacht op de lopende. */
-  function run(tenantId, opts = {}) {
-    const prev = running.get(tenantId) || Promise.resolve();
-    const next = prev.catch(() => {}).then(() => sync(tenantId, opts));
+  /**
+   * Eén synchronisatie tegelijk per omgeving; een volgende wacht op de lopende.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} [options] Zie sync.
+   * @returns {Promise<object>} Het resultaat van sync.
+   */
+  function run(tenantId, options = {}) {
+    const previous = running.get(tenantId) || Promise.resolve();
+    const next = previous.catch(() => {}).then(() => sync(tenantId, options));
     running.set(tenantId, next);
     next.finally(() => { if (running.get(tenantId) === next) running.delete(tenantId); }).catch(() => {});
     return next;
   }
 
-  /** Na een wijziging: over enkele seconden de gewijzigde artikelen naar de webshop. */
+  /**
+   * Na een wijziging: over enkele seconden de gewijzigde artikelen naar de webshop.
+   * @param {string} tenantId Id van de omgeving.
+   */
   function schedule(tenantId) {
     if (timers.has(tenantId)) return;
-    let cfg;
-    try { cfg = configOf(tenantId); } catch { return; }
-    if (!cfg.url || !cfg.push) return;
+    let shopConfig;
+    try { shopConfig = configOf(tenantId); } catch { return; }
+    if (!shopConfig.url || !shopConfig.push) return;
     const timer = setTimeout(() => {
       timers.delete(tenantId);
-      run(tenantId, { full: false }).catch((err) => log.warn(`Webshop (${tenantId}): terugschrijven mislukt: ${err.code || err.message}`));
+      run(tenantId, { full: false }).catch((error) => log.warn(`Webshop (${tenantId}): terugschrijven mislukt: ${error.code || error.message}`));
     }, DEBOUNCE_MS);
     if (timer.unref) timer.unref();
     timers.set(tenantId, timer);
   }
 
-  /** Alle omgevingen met terugschrijven aan (elke 10 minuten vanuit server.js). */
+  /**
+   * Synchroniseert alle omgevingen met terugschrijven aan (elke 10 minuten vanuit server.js).
+   * @param {string[]} tenantIds De omgevingen.
+   * @returns {Promise<object>} Resultaat per omgeving.
+   */
   async function runAll(tenantIds) {
     const out = {};
     for (const id of tenantIds) {
-      let cfg;
-      try { cfg = configOf(id); } catch { continue; }
-      if (!cfg.url || !cfg.push) continue;
+      let shopConfig;
+      try { shopConfig = configOf(id); } catch { continue; }
+      if (!shopConfig.url || !shopConfig.push) continue;
       try {
         out[id] = await run(id, { full: true });
-      } catch (err) {
-        log.warn(`Webshop (${id}): synchronisatie mislukt: ${err.code || err.message}`);
-        if (err instanceof SourceError) shop.setStatus(id, { error: err.message });
+      } catch (error) {
+        log.warn(`Webshop (${id}): synchronisatie mislukt: ${error.code || error.message}`);
+        if (error instanceof SourceError) shop.setStatus(id, { error: error.message });
       }
     }
     return out;

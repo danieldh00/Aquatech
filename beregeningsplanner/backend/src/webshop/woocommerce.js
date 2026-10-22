@@ -17,6 +17,12 @@ const TIMEOUT_MS = 15000;
 const MAX_BYTES = 10 * 1024 * 1024;
 
 class SourceError extends Error {
+  /**
+   * Fout bij het praten met de webshop, met een code voor de frontend en de HTTP-status.
+   * @param {string} code Foutcode, bijv. 'unreachable' of 'invalid_url'.
+   * @param {string} message Melding voor de gebruiker.
+   * @param {number} [status] HTTP-status (standaard 502).
+   */
   constructor(code, message, status = 502) {
     super(message);
     this.code = code;
@@ -29,15 +35,25 @@ class SourceError extends Error {
 // het opslaan; bij het ophalen wordt de naam ook opgezocht (netguard.js).
 const PRIVATE_HOST = /^(localhost|.*\.local|.*\.internal|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|\[?::1\]?$|\[?f[cd][0-9a-f]{2}:)/i;
 
-// SHOP_ALLOW_INSECURE=1 staat ook http en lokale adressen toe: alleen voor
-// tests en ontwikkelen tegen een lokale webshop.
+/**
+ * Of http en lokale adressen zijn toegestaan (SHOP_ALLOW_INSECURE=1: alleen
+ * voor tests en ontwikkelen tegen een lokale webshop).
+ * @returns {boolean} True als onveilige adressen mogen.
+ */
 const insecureAllowed = () => process.env.SHOP_ALLOW_INSECURE === '1';
 
+/**
+ * Controleert en normaliseert het webadres van een webshop: https en geen
+ * intern adres (tenzij onveilig is toegestaan), zonder inloggegevens.
+ * @param {string} raw Het ingevulde adres.
+ * @param {{ allowInsecure?: boolean }} [options] Ook http en lokale adressen toestaan.
+ * @returns {string} Herkomst + pad zonder slash aan het eind.
+ */
 function normalizeBaseUrl(raw, { allowInsecure = insecureAllowed() } = {}) {
   let url;
   try {
     url = new URL(String(raw || '').trim());
-  } catch (err) {
+  } catch (error) {
     throw new SourceError('invalid_url', 'Ongeldig webadres van de webshop.', 400);
   }
   if (url.username || url.password) throw new SourceError('invalid_url', 'Zet geen inloggegevens in het webadres.', 400);
@@ -50,6 +66,14 @@ function normalizeBaseUrl(raw, { allowInsecure = insecureAllowed() } = {}) {
   return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
 }
 
+/**
+ * Vraagt JSON op bij de webshop (geen omleidingen, met time-out en groottegrens).
+ * @param {string} url Het adres.
+ * @param {object} headers Extra koppen (bijv. Authorization).
+ * @param {Function} fetchImpl De fetch-functie.
+ * @param {{ method?: string, body?: object }} [request] Methode en body.
+ * @returns {Promise<{ body: *, totalPages: number }>} Het antwoord en het aantal pagina's (kop x-wp-totalpages).
+ */
 async function getJson(url, headers, fetchImpl, { method = 'GET', body } = {}) {
   let res;
   try {
@@ -59,9 +83,9 @@ async function getJson(url, headers, fetchImpl, { method = 'GET', body } = {}) {
       body: body === undefined ? undefined : JSON.stringify(body),
       redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-  } catch (err) {
-    const msg = err.name === 'TimeoutError' ? 'De webshop reageert niet (time-out).' : 'De webshop is niet bereikbaar (of stuurt door naar een ander adres: vul het juiste adres in).';
-    throw new SourceError('unreachable', msg);
+  } catch (error) {
+    const message = error.name === 'TimeoutError' ? 'De webshop reageert niet (time-out).' : 'De webshop is niet bereikbaar (of stuurt door naar een ander adres: vul het juiste adres in).';
+    throw new SourceError('unreachable', message);
   }
   if (res.status === 401 || res.status === 403) {
     throw new SourceError('unauthorized', method === 'GET'
@@ -74,70 +98,103 @@ async function getJson(url, headers, fetchImpl, { method = 'GET', body } = {}) {
   if (text.length > MAX_BYTES) throw new SourceError('too_large', 'Antwoord van de webshop is te groot.');
   try {
     return { body: JSON.parse(text), totalPages: Number(res.headers.get('x-wp-totalpages')) || 0 };
-  } catch (err) {
+  } catch (error) {
     throw new SourceError('invalid_json', 'De webshop gaf geen geldige JSON terug.');
   }
 }
 
-const num = (v) => {
-  const n = Number(String(v ?? '').replace(',', '.'));
-  return Number.isFinite(n) ? n : null;
+/**
+ * Leest een getal, ook met een komma.
+ * @param {*} value De invoer.
+ * @returns {number|null} Het getal, of null.
+ */
+const toNumber = (value) => {
+  const parsed = Number(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
 };
-const round2 = (n) => Math.round(n * 100) / 100;
-const exTax = (price, cfg) => (price == null ? null : round2(cfg.pricesIncludeTax ? price / (1 + cfg.vatRate / 100) : price));
+/**
+ * Rondt af op twee decimalen.
+ * @param {number} value Het getal.
+ * @returns {number} Afgerond.
+ */
+const round2 = (value) => Math.round(value * 100) / 100;
+/**
+ * Prijs exclusief btw (de webshop kan inclusief rekenen).
+ * @param {number|null} price De prijs uit de webshop.
+ * @param {object} shop De koppelinstelling (pricesIncludeTax, vatRate).
+ * @returns {number|null} De prijs excl. btw.
+ */
+const exTax = (price, shop) => (price == null ? null : round2(shop.pricesIncludeTax ? price / (1 + shop.vatRate / 100) : price));
 
-function fromStoreApi(p, cfg) {
-  const pr = p.prices || {};
-  const minor = Number.isInteger(pr.currency_minor_unit) ? pr.currency_minor_unit : 2;
-  const raw = num(pr.price);
+/**
+ * Zet een product uit de Store API om naar het eigen formaat.
+ * @param {object} product Het product.
+ * @param {object} shop De koppelinstelling.
+ * @returns {object} id, sku, name, price (excl. btw), currency, url, image, inStock, categories en code.
+ */
+function fromStoreApi(product, shop) {
+  const prices = product.prices || {};
+  const minor = Number.isInteger(prices.currency_minor_unit) ? prices.currency_minor_unit : 2;
+  const raw = toNumber(prices.price);
   return {
-    id: String(p.id),
-    sku: String(p.sku || ''),
-    name: String(p.name || ''),
-    price: exTax(raw == null ? null : raw / 10 ** minor, cfg),
+    id: String(product.id),
+    sku: String(product.sku || ''),
+    name: String(product.name || ''),
+    price: exTax(raw == null ? null : raw / 10 ** minor, shop),
     regularPrice: null,
     rawRegular: null,
     stockQty: null,
-    currency: pr.currency_code || 'EUR',
-    url: String(p.permalink || ''),
-    image: p.images?.[0]?.src || '',
-    inStock: p.is_in_stock !== false,
-    categories: (p.categories || []).map((c) => c.name).filter(Boolean),
+    currency: prices.currency_code || 'EUR',
+    url: String(product.permalink || ''),
+    image: product.images?.[0]?.src || '',
+    inStock: product.is_in_stock !== false,
+    categories: (product.categories || []).map((category) => category.name).filter(Boolean),
     code: '',
   };
 }
 
-function fromRestV3(p, cfg) {
-  const meta = (p.meta_data || []).find((m) => m.key === 'aquatech_code');
-  const regular = num(p.regular_price);
+/**
+ * Zet een product uit de REST API v3 om naar het eigen formaat, met normale prijs, voorraad en meta aquatech_code.
+ * @param {object} product Het product.
+ * @param {object} shop De koppelinstelling.
+ * @returns {object} id, sku, name, price, regularPrice, rawRegular, stockQty, currency, url, image, inStock, categories en code.
+ */
+function fromRestV3(product, shop) {
+  const meta = (product.meta_data || []).find((entry) => entry.key === 'aquatech_code');
+  const regular = toNumber(product.regular_price);
   return {
-    id: String(p.id),
-    sku: String(p.sku || ''),
-    name: String(p.name || ''),
-    price: exTax(num(p.price), cfg),
+    id: String(product.id),
+    sku: String(product.sku || ''),
+    name: String(product.name || ''),
+    price: exTax(toNumber(product.price), shop),
     // Normale prijs (zonder actie) en voorraad zoals de webshop ze bijhoudt;
     // null = niet ingevuld of geen voorraadbeheer in de webshop.
-    regularPrice: regular == null ? null : exTax(regular, cfg),
+    regularPrice: regular == null ? null : exTax(regular, shop),
     // Zoals de webshop hem opslaat (incl. of excl. btw), om te vergelijken.
     rawRegular: regular,
-    stockQty: p.manage_stock && Number.isFinite(Number(p.stock_quantity)) ? Number(p.stock_quantity) : null,
+    stockQty: product.manage_stock && Number.isFinite(Number(product.stock_quantity)) ? Number(product.stock_quantity) : null,
     currency: 'EUR',
-    url: String(p.permalink || ''),
-    image: p.images?.[0]?.src || '',
-    inStock: p.stock_status !== 'outofstock',
-    categories: (p.categories || []).map((c) => c.name).filter(Boolean),
+    url: String(product.permalink || ''),
+    image: product.images?.[0]?.src || '',
+    inStock: product.stock_status !== 'outofstock',
+    categories: (product.categories || []).map((category) => category.name).filter(Boolean),
     code: meta ? String(meta.value || '').trim() : '',
   };
 }
 
-// Webadres controleren en opzoeken (geen intern adres).
-async function checkedBase(cfg, { allowInsecure, resolveHost }) {
-  const base = normalizeBaseUrl(cfg.url, { allowInsecure });
+/**
+ * Controleert het webadres en zoekt de naam op (geen intern adres).
+ * @param {object} shop De koppelinstelling (url).
+ * @param {{ allowInsecure: boolean, resolveHost: Function }} options Onveilige adressen toestaan en de functie die de naam opzoekt.
+ * @returns {Promise<string>} Het genormaliseerde adres.
+ */
+async function checkedBase(shop, { allowInsecure, resolveHost }) {
+  const base = normalizeBaseUrl(shop.url, { allowInsecure });
   if (!allowInsecure) {
     try {
       await resolveHost(new URL(base).hostname);
-    } catch (err) {
-      throw err.code === 'private_host'
+    } catch (error) {
+      throw error.code === 'private_host'
         ? new SourceError('invalid_url', 'Dit is geen openbaar webadres.', 400)
         : new SourceError('unreachable', 'De webshop is niet gevonden: controleer het webadres.');
     }
@@ -145,93 +202,109 @@ async function checkedBase(cfg, { allowInsecure, resolveHost }) {
   return base;
 }
 
-function restAuth(cfg) {
-  if (!cfg.consumerKey || !cfg.consumerSecret) throw new SourceError('missing_keys', 'Vul de consumer key en secret van de WooCommerce REST API in.', 400);
-  return { Authorization: `Basic ${Buffer.from(`${cfg.consumerKey}:${cfg.consumerSecret}`).toString('base64')}` };
+/**
+ * De kop Authorization voor de REST API.
+ * @param {object} shop De koppelinstelling (consumerKey en consumerSecret).
+ * @returns {{ Authorization: string }} De kop.
+ */
+function restAuth(shop) {
+  if (!shop.consumerKey || !shop.consumerSecret) throw new SourceError('missing_keys', 'Vul de consumer key en secret van de WooCommerce REST API in.', 400);
+  return { Authorization: `Basic ${Buffer.from(`${shop.consumerKey}:${shop.consumerSecret}`).toString('base64')}` };
 }
 
 /**
  * Haalt alle gepubliceerde producten op en zet ze om naar het eigen formaat.
- * @param cfg {url, mode: 'store'|'rest', consumerKey, consumerSecret, pricesIncludeTax, vatRate}
- * ids: alleen deze producten (REST v3), bijv. vlak voor het terugschrijven.
+ * @param {object} shop url, mode ('store'|'rest'), consumerKey, consumerSecret, pricesIncludeTax en vatRate.
+ * @param {object} [options] fetchImpl, allowInsecure, resolveHost en ids (alleen deze producten, REST v3; bijv. vlak voor het terugschrijven).
+ * @returns {Promise<object[]>} De producten.
  */
-async function fetchProducts(cfg, { fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress, ids = null } = {}) {
-  const base = await checkedBase(cfg, { allowInsecure, resolveHost });
-  const rest = cfg.mode === 'rest';
+async function fetchProducts(shop, { fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress, ids = null } = {}) {
+  const base = await checkedBase(shop, { allowInsecure, resolveHost });
+  const rest = shop.mode === 'rest';
   if (ids && !rest) throw new SourceError('rest_required', 'Terugschrijven naar de webshop kan alleen via de REST API.', 400);
-  const headers = rest ? restAuth(cfg) : {};
-  const path = rest ? '/wp-json/wc/v3/products' : '/wp-json/wc/store/v1/products';
-  const map = rest ? fromRestV3 : fromStoreApi;
+  const headers = rest ? restAuth(shop) : {};
+  const apiPath = rest ? '/wp-json/wc/v3/products' : '/wp-json/wc/store/v1/products';
+  const convert = rest ? fromRestV3 : fromStoreApi;
   const products = [];
   if (ids) {
     for (let i = 0; i < ids.length; i += PER_PAGE) {
-      const part = ids.slice(i, i + PER_PAGE).map(String).filter((v) => /^\d{1,20}$/.test(v));
+      const part = ids.slice(i, i + PER_PAGE).map(String).filter((id) => /^\d{1,20}$/.test(id));
       if (!part.length) continue;
-      const qs = new URLSearchParams({ per_page: String(PER_PAGE), include: part.join(',') });
-      const { body } = await getJson(`${base}${path}?${qs}`, headers, fetchImpl);
+      const query = new URLSearchParams({ per_page: String(PER_PAGE), include: part.join(',') });
+      const { body } = await getJson(`${base}${apiPath}?${query}`, headers, fetchImpl);
       if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen productlijst).');
-      products.push(...body.map((p) => map(p, cfg)));
+      products.push(...body.map((product) => convert(product, shop)));
     }
     return products;
   }
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const qs = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page) });
-    if (rest) qs.set('status', 'publish');
-    const { body, totalPages } = await getJson(`${base}${path}?${qs}`, headers, fetchImpl);
+    const query = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page) });
+    if (rest) query.set('status', 'publish');
+    const { body, totalPages } = await getJson(`${base}${apiPath}?${query}`, headers, fetchImpl);
     if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen productlijst).');
-    products.push(...body.map((p) => map(p, cfg)));
+    products.push(...body.map((product) => convert(product, shop)));
     if (body.length < PER_PAGE || (totalPages && page >= totalPages)) break;
   }
   return products;
 }
 
-/** Prijs voor de webshop: excl. btw uit Aquatech, incl. als de webshop zo rekent. */
-function shopPrice(priceExcl, vatRate, cfg) {
-  return round2(cfg.pricesIncludeTax ? priceExcl * (1 + (Number(vatRate) || 0) / 100) : priceExcl);
+/**
+ * Prijs voor de webshop: excl. btw uit Aquatech, incl. als de webshop zo rekent.
+ * @param {number} priceExcl Prijs excl. btw.
+ * @param {number} vatRate Btw-tarief in procenten.
+ * @param {object} shop De koppelinstelling (pricesIncludeTax).
+ * @returns {number} De prijs voor de webshop.
+ */
+function shopPrice(priceExcl, vatRate, shop) {
+  return round2(shop.pricesIncludeTax ? priceExcl * (1 + (Number(vatRate) || 0) / 100) : priceExcl);
 }
 
 /**
- * Schrijft prijs en/of voorraad terug (REST v3, batch van hooguit 100).
- * updates: [{ id, price (excl. btw), vatRate, stockQty }]; een veld dat
- * ontbreekt blijft in de webshop zoals het is. Geeft per product { id, ok,
- * error }.
+ * Schrijft prijs en/of voorraad terug (REST v3, batch van hooguit 100); een
+ * veld dat ontbreekt blijft in de webshop zoals het is.
+ * @param {object} shop De koppelinstelling.
+ * @param {{ id: string, price?: number, vatRate?: number, stockQty?: number }[]} updates Wijzigingen per product (prijs excl. btw).
+ * @param {object} [options] fetchImpl, allowInsecure en resolveHost.
+ * @returns {Promise<{ id: string, ok: boolean, error?: string }[]>} Uitkomst per product.
  */
-async function updateProducts(cfg, updates, { fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
-  if (cfg.mode !== 'rest') throw new SourceError('rest_required', 'Terugschrijven naar de webshop kan alleen via de REST API.', 400);
-  const base = await checkedBase(cfg, { allowInsecure, resolveHost });
-  const headers = restAuth(cfg);
+async function updateProducts(shop, updates, { fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
+  if (shop.mode !== 'rest') throw new SourceError('rest_required', 'Terugschrijven naar de webshop kan alleen via de REST API.', 400);
+  const base = await checkedBase(shop, { allowInsecure, resolveHost });
+  const headers = restAuth(shop);
   const out = [];
   for (let i = 0; i < updates.length; i += PER_PAGE) {
-    const part = updates.slice(i, i + PER_PAGE).map((u) => {
-      const p = { id: Number(u.id) };
-      if (u.price != null) p.regular_price = shopPrice(u.price, u.vatRate, cfg).toFixed(2);
-      if (u.stockQty != null) { p.manage_stock = true; p.stock_quantity = Math.max(0, Math.floor(u.stockQty)); }
-      return p;
+    const part = updates.slice(i, i + PER_PAGE).map((update) => {
+      const change = { id: Number(update.id) };
+      if (update.price != null) change.regular_price = shopPrice(update.price, update.vatRate, shop).toFixed(2);
+      if (update.stockQty != null) { change.manage_stock = true; change.stock_quantity = Math.max(0, Math.floor(update.stockQty)); }
+      return change;
     });
     const { body } = await getJson(`${base}/wp-json/wc/v3/products/batch`, headers, fetchImpl, { method: 'POST', body: { update: part } });
-    const done = new Map((Array.isArray(body && body.update) ? body.update : []).map((p) => [String(p.id), p]));
-    for (const p of part) {
-      const r = done.get(String(p.id));
-      out.push(r && !r.error ? { id: String(p.id), ok: true } : { id: String(p.id), ok: false, error: String((r && r.error && r.error.message) || 'niet bijgewerkt').slice(0, 200) });
+    const done = new Map((Array.isArray(body && body.update) ? body.update : []).map((product) => [String(product.id), product]));
+    for (const change of part) {
+      const result = done.get(String(change.id));
+      out.push(result && !result.error ? { id: String(change.id), ok: true } : { id: String(change.id), ok: false, error: String((result && result.error && result.error.message) || 'niet bijgewerkt').slice(0, 200) });
     }
   }
   return out;
 }
 
 /**
- * Bestellingen met een bepaalde status die sinds `after` (ISO-tijd) zijn
- * gewijzigd, oudste wijziging eerst (REST v3, leesrechten). Geeft de
- * bestellingen zoals WooCommerce ze stuurt; shop-orders.js zet ze om.
+ * Bestellingen met een bepaalde status die sinds `after` zijn gewijzigd,
+ * oudste wijziging eerst (REST v3, leesrechten). shop-orders.js zet ze om.
+ * @param {object} shop De koppelinstelling.
+ * @param {object} [options] status, after (ISO-tijd), fetchImpl, allowInsecure, resolveHost en maxPages.
+ * @returns {Promise<object[]>} De bestellingen zoals WooCommerce ze stuurt.
  */
-async function fetchOrders(cfg, { status = 'completed', after = '', fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress, maxPages = 10 } = {}) {
-  if (cfg.mode !== 'rest') throw new SourceError('rest_required', 'Bestellingen ophalen kan alleen via de REST API (met API-sleutels).', 400);
-  const base = await checkedBase(cfg, { allowInsecure, resolveHost });
-  const headers = restAuth(cfg);
+async function fetchOrders(shop, { status = 'completed', after = '', fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress, maxPages = 10 } = {}) {
+  if (shop.mode !== 'rest') throw new SourceError('rest_required', 'Bestellingen ophalen kan alleen via de REST API (met API-sleutels).', 400);
+  const base = await checkedBase(shop, { allowInsecure, resolveHost });
+  const headers = restAuth(shop);
   const orders = [];
   for (let page = 1; page <= maxPages; page++) {
-    const qs = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page), status, orderby: 'modified', order: 'asc', dates_are_gmt: 'true' });
-    if (after) qs.set('modified_after', after);
-    const { body, totalPages } = await getJson(`${base}/wp-json/wc/v3/orders?${qs}`, headers, fetchImpl);
+    const query = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page), status, orderby: 'modified', order: 'asc', dates_are_gmt: 'true' });
+    if (after) query.set('modified_after', after);
+    const { body, totalPages } = await getJson(`${base}/wp-json/wc/v3/orders?${query}`, headers, fetchImpl);
     if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen bestellingen).');
     orders.push(...body);
     if (body.length < PER_PAGE || (totalPages && page >= totalPages)) break;
@@ -239,28 +312,32 @@ async function fetchOrders(cfg, { status = 'completed', after = '', fetchImpl = 
   return orders;
 }
 
-/** Koppelinstelling (instelling shopSource) zonder sleutels; die staan apart en versleuteld. */
+/**
+ * Schoont de koppelinstelling (shopSource) op, zonder sleutels; die staan apart en versleuteld.
+ * @param {object} raw De invoer.
+ * @returns {object} type, url, mode, pricesIncludeTax, vatRate, push, pushStock en mapping.
+ */
 function sanitizeShop(raw) {
-  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   let url = '';
-  try { url = r.url ? normalizeBaseUrl(r.url) : ''; } catch { url = ''; }
-  const vat = Number(r.vatRate);
+  try { url = input.url ? normalizeBaseUrl(input.url) : ''; } catch { url = ''; }
+  const vat = Number(input.vatRate);
   const mapping = {};
-  if (r.mapping && typeof r.mapping === 'object' && !Array.isArray(r.mapping)) {
-    for (const [code, sku] of Object.entries(r.mapping).slice(0, 500)) {
+  if (input.mapping && typeof input.mapping === 'object' && !Array.isArray(input.mapping)) {
+    for (const [code, sku] of Object.entries(input.mapping).slice(0, 500)) {
       if (/^[A-Z0-9-]{1,40}$/.test(code) && typeof sku === 'string' && sku.trim()) mapping[code] = sku.trim().slice(0, 100);
     }
   }
   return {
     type: 'woocommerce',
     url,
-    mode: r.mode === 'rest' ? 'rest' : 'store',
-    pricesIncludeTax: r.pricesIncludeTax !== false,
+    mode: input.mode === 'rest' ? 'rest' : 'store',
+    pricesIncludeTax: input.pricesIncludeTax !== false,
     vatRate: [0, 9, 21].includes(vat) ? vat : 21,
     // Prijzen en voorraad uit Aquatech naar de webshop sturen (REST API met
     // schrijfrechten); uit = de webshop blijft leidend voor de prijzen.
-    push: r.mode === 'rest' && r.push === true,
-    pushStock: r.pushStock !== false,
+    push: input.mode === 'rest' && input.push === true,
+    pushStock: input.pushStock !== false,
     mapping,
   };
 }
