@@ -14,107 +14,140 @@ const BATCH = 200;
 // Tabellen met grote rijen (foto's) in kleinere porties, zodat het geheugen klein blijft.
 const BATCH_OF = { work_order_photos: 10 };
 
+/**
+ * Beschrijft alle tabellen van een database: de kolommen en de volgorde (primaire sleutel, anders alle kolommen).
+ * @param {object} db Databaseverbinding.
+ * @returns {Object<string, { columns: string[], order: string[] }>} Per tabelnaam de kolommen en de sorteervolgorde.
+ */
 function describe(db) {
   const tables = {};
   for (const name of listTables(db)) {
-    const cols = tableColumns(db, name);
-    const pk = cols.filter((c) => c.pk).map((c) => c.name);
-    tables[name] = { columns: cols.map((c) => c.name), order: pk.length ? pk : cols.map((c) => c.name) };
+    const columnInfo = tableColumns(db, name);
+    const primaryKey = columnInfo.filter((column) => column.pk).map((column) => column.name);
+    tables[name] = { columns: columnInfo.map((column) => column.name), order: primaryKey.length ? primaryKey : columnInfo.map((column) => column.name) };
   }
   return tables;
 }
 
+/**
+ * Loopt alle rijen van een tabel door in porties, op volgorde van de primaire sleutel.
+ * @param {object} db Databaseverbinding.
+ * @param {string} table Naam van de tabel.
+ * @param {{ columns: string[], order: string[] }} description Kolommen en volgorde (uit describe).
+ * @returns {Generator<object>} De rijen, één voor één.
+ */
 function* rowsOf(db, table, { columns, order }) {
   const sql = `SELECT ${columns.join(', ')} FROM ${table} ORDER BY ${order.join(', ')} LIMIT ? OFFSET ?`;
   const stmt = db.prepare(sql);
   const size = BATCH_OF[table] || BATCH;
-  for (let off = 0; ; off += size) {
-    const batch = stmt.all(size, off);
-    for (const r of batch) yield r;
+  for (let offset = 0; ; offset += size) {
+    const batch = stmt.all(size, offset);
+    for (const row of batch) yield row;
     if (batch.length < size) return;
   }
 }
 
-// Leesbare kopie van de hele database op één moment.
-function snapshot(db, fn) {
+/**
+ * Voert een functie uit binnen één leestransactie, zodat alles uit hetzelfde moment komt.
+ * @param {object} db Databaseverbinding.
+ * @param {Function} callback De functie die de database leest.
+ * @returns {*} Wat de functie teruggeeft.
+ */
+function snapshot(db, callback) {
   db.exec(isPg(db) ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN');
   try {
-    return fn();
+    return callback();
   } finally {
     db.exec('COMMIT');
   }
 }
 
-const value = (v) => (v === null || v === undefined ? null : typeof v === 'bigint' ? Number(v) : v);
+/**
+ * Maakt een waarde uit de database vergelijkbaar: undefined wordt null, BigInt wordt een gewoon getal.
+ * @param {*} raw De waarde uit de database.
+ * @returns {*} De genormaliseerde waarde.
+ */
+const value = (raw) => (raw === null || raw === undefined ? null : typeof raw === 'bigint' ? Number(raw) : raw);
 
-/** { tabel: { rows, sha256 } } over alle tabellen. */
+/**
+ * Vingerafdruk van alle tabellen: per tabel het aantal rijen en een SHA-256 over
+ * alle waarden (met hun type: "1" en 1 zijn niet hetzelfde).
+ * @param {object} db Databaseverbinding.
+ * @param {object} [tables] Beschrijving van de tabellen (standaard describe(db)).
+ * @returns {Object<string, { rows: number, sha256: string }>} Per tabelnaam aantal en hash.
+ */
 function fingerprint(db, tables = describe(db)) {
   return snapshot(db, () => {
     const out = {};
-    for (const [name, t] of Object.entries(tables)) {
-      const h = crypto.createHash('sha256');
+    for (const [name, table] of Object.entries(tables)) {
+      const hash = crypto.createHash('sha256');
       let rows = 0;
-      for (const r of rowsOf(db, name, t)) {
-        h.update(JSON.stringify(t.columns.map((c) => {
-          const v = value(r[c]);
+      for (const row of rowsOf(db, name, table)) {
+        hash.update(JSON.stringify(table.columns.map((column) => {
+          const cell = value(row[column]);
           // Type meenemen: "1" (tekst) en 1 (getal) zijn niet hetzelfde.
-          return v === null ? null : [typeof v, v];
+          return cell === null ? null : [typeof cell, cell];
         })));
-        h.update('\n');
+        hash.update('\n');
         rows++;
       }
-      out[name] = { rows, sha256: h.digest('hex') };
+      out[name] = { rows, sha256: hash.digest('hex') };
     }
     return out;
   });
 }
 
 /**
- * Kopieert alle rijen van `from` naar `to`. `to` moet hetzelfde schema
- * (dezelfde versie) hebben en leeg zijn. Geeft { tables, source, target }
- * (aantallen per tabel en de vingerafdrukken van beide kanten).
+ * Kopieert alle rijen van de ene database naar de andere en controleert daarna
+ * met de vingerafdrukken dat beide kanten exact gelijk zijn. Het doel moet
+ * hetzelfde schema (dezelfde versie) hebben en leeg zijn.
+ * @param {object} from Brondatabase.
+ * @param {object} to Doeldatabase.
+ * @param {{ log?: Function }} [options] Functie voor voortgangsregels.
+ * @returns {{ tables: Object<string, number>, source: object, target: object }} Aantallen per tabel en de vingerafdrukken van beide kanten.
+ * @throws {Error} Bij een ander schema, een niet-lege doeldatabase of een verschil na het kopiëren.
  */
 function copyDatabase(from, to, { log = () => {} } = {}) {
   if (from === to || (from.bridge && from.bridge === to.bridge)) throw new Error('Bron en doel moeten verschillende databases zijn.');
-  const vFrom = schemaVersion(from);
-  const vTo = schemaVersion(to);
-  if (vFrom !== vTo) throw new Error(`Schemaversie verschilt: bron ${vFrom}, doel ${vTo}. Werk eerst beide bij naar dezelfde versie van de app.`);
-  const src = describe(from);
-  const dst = describe(to);
-  const names = Object.keys(src).sort();
-  if (names.join() !== Object.keys(dst).sort().join()) {
-    throw new Error(`Tabellen verschillen: bron [${names.join(', ')}], doel [${Object.keys(dst).sort().join(', ')}].`);
+  const sourceVersion = schemaVersion(from);
+  const targetVersion = schemaVersion(to);
+  if (sourceVersion !== targetVersion) throw new Error(`Schemaversie verschilt: bron ${sourceVersion}, doel ${targetVersion}. Werk eerst beide bij naar dezelfde versie van de app.`);
+  const sourceTables = describe(from);
+  const targetTables = describe(to);
+  const names = Object.keys(sourceTables).sort();
+  if (names.join() !== Object.keys(targetTables).sort().join()) {
+    throw new Error(`Tabellen verschillen: bron [${names.join(', ')}], doel [${Object.keys(targetTables).sort().join(', ')}].`);
   }
-  for (const n of names) {
-    if (src[n].columns.join() !== dst[n].columns.join()) throw new Error(`Kolommen van ${n} verschillen: bron [${src[n].columns}], doel [${dst[n].columns}].`);
-    const filled = to.prepare(`SELECT COUNT(*) AS n FROM ${n}`).get().n;
-    if (filled) throw new Error(`Doeldatabase is niet leeg (${n}: ${filled} rijen). Kopieer alleen naar een lege database.`);
+  for (const name of names) {
+    if (sourceTables[name].columns.join() !== targetTables[name].columns.join()) throw new Error(`Kolommen van ${name} verschillen: bron [${sourceTables[name].columns}], doel [${targetTables[name].columns}].`);
+    const filled = to.prepare(`SELECT COUNT(*) AS n FROM ${name}`).get().n;
+    if (filled) throw new Error(`Doeldatabase is niet leeg (${name}: ${filled} rijen). Kopieer alleen naar een lege database.`);
   }
 
   const counts = {};
   snapshot(from, () => transaction(to, () => {
     // Volgorde van tabellen doet er niet toe: foreign keys pas bij COMMIT.
     deferForeignKeys(to);
-    for (const n of names) {
-      const { columns } = src[n];
-      const insert = to.prepare(`INSERT INTO ${n} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`);
+    for (const name of names) {
+      const { columns } = sourceTables[name];
+      const insert = to.prepare(`INSERT INTO ${name} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`);
       let rows = 0;
-      for (const r of rowsOf(from, n, src[n])) {
-        insert.run(...columns.map((c) => value(r[c])));
+      for (const row of rowsOf(from, name, sourceTables[name])) {
+        insert.run(...columns.map((column) => value(row[column])));
         rows++;
       }
-      counts[n] = rows;
-      log(`${n}: ${rows} rij(en)`);
+      counts[name] = rows;
+      log(`${name}: ${rows} rij(en)`);
     }
   }));
 
-  const a = fingerprint(from, src);
-  const b = fingerprint(to, src);
-  const diff = names.filter((n) => a[n].rows !== b[n].rows || a[n].sha256 !== b[n].sha256);
+  const sourcePrints = fingerprint(from, sourceTables);
+  const targetPrints = fingerprint(to, sourceTables);
+  const diff = names.filter((name) => sourcePrints[name].rows !== targetPrints[name].rows || sourcePrints[name].sha256 !== targetPrints[name].sha256);
   if (diff.length) {
-    throw new Error(`Controle mislukt, verschil in: ${diff.map((n) => `${n} (bron ${a[n].rows}, doel ${b[n].rows} rijen)`).join(', ')}.`);
+    throw new Error(`Controle mislukt, verschil in: ${diff.map((name) => `${name} (bron ${sourcePrints[name].rows}, doel ${targetPrints[name].rows} rijen)`).join(', ')}.`);
   }
-  return { tables: counts, source: a, target: b };
+  return { tables: counts, source: sourcePrints, target: targetPrints };
 }
 
 module.exports = { copyDatabase, fingerprint, describe };
