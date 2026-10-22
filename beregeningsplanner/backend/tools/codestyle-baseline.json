@@ -17,7 +17,6 @@
     "frontend/facturen/facturen.js",
     "frontend/hoofdbeheer/hoofdbeheer.js",
     "frontend/offertes/offertes.js",
-    "frontend/plannen/plannen.js",
     "frontend/planning/planning.js",
     "frontend/portaal/portaal.js",
     "frontend/sw.js",
