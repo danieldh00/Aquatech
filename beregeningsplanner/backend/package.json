@@ -1,13 +1,14 @@
 {
   "name": "beregeningsplanner-backend",
-  "version": "0.66.0",
+  "version": "0.66.1",
   "private": true,
   "description": "Aquatech-webserver: dashboard, modules, accounts en API",
   "main": "src/server.js",
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "codestyle": "node tools/codestyle.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
@@ -17,5 +18,9 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "acorn": "^8.19.0",
+    "acorn-walk": "^8.3.5"
   }
 }

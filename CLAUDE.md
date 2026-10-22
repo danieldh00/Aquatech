@@ -498,6 +498,39 @@ de PR-beschrijving kort hoe eraan voldaan is.
   via `?`, nooit tekst in SQL plakken.
 - Tests voor elke nieuwe route: andere tenant → 404, ontbrekend recht → 403.
 
+## Codestijl (wens Daniël 2026-10-22, geldt voor alle code)
+
+Daniël leest de code zelf na; hij moet zonder zoeken kunnen zien wat iets is.
+`test/codestyle.test.js` (met `tools/codestyle.js`, `npm run codestyle`)
+bewaakt de eerste twee regels voor elk eigen `.js`-bestand (backend `src/`,
+`test/`, `tools/` en `frontend/`, zonder `vendor/`).
+
+- **Duidelijke namen.** Variabelen, parameters en functies zeggen wat erin
+  zit of wat ze doen: `row`, `workOrder`, `tenantId`, `formatPrice`, niet
+  `r`, `wo`, `t`, `fmt`. Geen namen van één letter, behalve `i`/`j` als
+  teller, `x`/`y` als coördinaat, `_` voor een ongebruikte parameter en `$`
+  als querySelector-hulp. Ook geen cryptische afkortingen (`q`, `tx`, `el`,
+  `cb`, `tmp`, `str`); gangbare termen mogen (`req`/`res` in Express, `id`,
+  `url`, `db`, `pdf`). Sorteerfuncties: `(left, right) =>`. Fouten:
+  `catch (error)`. Namespaces/modules (`App`, `Catalog`, `Core`, `Roles`)
+  blijven zoals ze zijn.
+- **Elke functie een commentaarblok** (`/** ... */`, in het Nederlands) direct
+  erboven: wat de functie doet (één of twee zinnen), per parameter
+  `@param {type} naam uitleg` en `@returns {type} uitleg` als er iets
+  terugkomt. Geldt voor function-declaraties, `const naam = (…) => …`,
+  methoden en functies in een toegewezen/teruggegeven object; losse
+  callbacks als argument (`.map((row) => …)`, `addEventListener`) niet.
+  Een bestand begint met een kort kopcommentaar: wat erin staat.
+- **Mappenstructuur**: één map per module onder `frontend/`, gedeelde code in
+  `frontend/shared/`; backend per onderwerp in mappen onder `backend/src/`.
+  Geen losse bestanden (screenshots, exports) in de root van de repo; die
+  horen in de projectbestanden.
+- `tools/codestyle-baseline.json` somt de bestanden op die nog niet zijn
+  opgeschoond; die lijst wordt alleen korter. Een nieuw bestand moet meteen
+  voldoen. Raak je een bestand uit de lijst flink aan, schoon het dan op en
+  haal het eraf.
+- Opschonen verandert nooit het gedrag: alleen namen en commentaar.
+
 ## Harde regels
 
 - **Alle URL's in de frontend relatief** (`css/app.css`, nooit `/css/...`),

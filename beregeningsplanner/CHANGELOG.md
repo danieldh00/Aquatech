@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.66.1
+
+Codestijlregels vastgelegd en bewaakt (geen functionele wijziging).
+
+- **Codestijl** (CLAUDE.md, *Codestijl*): duidelijke namen (geen namen van
+  één letter, geen cryptische afkortingen) en een commentaarblok met
+  omschrijving, `@param` en `@returns` bij elke functie.
+- **Controle** `tools/codestyle.js` (acorn, devDependency) + `npm run
+  codestyle` en `test/codestyle.test.js`. Bestanden die nog niet zijn
+  opgeschoond staan in `tools/codestyle-baseline.json`; die lijst mag alleen
+  korter worden.
+- Losse screenshots en een export uit de root van de repo verwijderd.
+
 ## 0.66.0
 
 Sproeierbibliotheek (behuizing + nozzle) en grotere worp bij automatisch

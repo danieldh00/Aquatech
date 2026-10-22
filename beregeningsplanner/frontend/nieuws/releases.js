@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.66.1',
+      date: '2026-10-22',
+      title: 'Afspraken voor nette, leesbare code',
+      items: [],
+    },
+    {
       version: '0.66.0',
       date: '2026-10-21',
       title: 'Sproeiers kiezen uit een bibliotheek, en minder koppen met een grotere worp',
