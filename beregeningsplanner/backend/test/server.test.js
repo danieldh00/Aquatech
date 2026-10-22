@@ -1,3 +1,5 @@
+// Server: statische bestanden, modules, toegangscode, eerste beheerder, zijbalk en cache-koppen.
+
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -10,11 +12,19 @@ const { listen } = require('./helpers/http-client');
 
 const SECRET = 'x'.repeat(64);
 
+/**
+ * Start een testserver met toegangscode 'geheim'.
+ * @param {object} [opts] Extra opties voor createApp.
+ * @returns {Promise<{ server: import('http').Server, base: string }>} De server en zijn adres.
+ */
 function start(opts = {}) {
   return listen(createApp({ accessCode: 'geheim', secret: SECRET, ...opts }));
 }
 
-// Database met al een beheerder (anders verschijnt het instelscherm).
+/**
+ * Database met al een beheerder (anders verschijnt het instelscherm).
+ * @returns {Promise<object>} De database.
+ */
 async function dbWithAdmin() {
   const db = openDb();
   const store = createStore(db);
@@ -22,6 +32,12 @@ async function dbWithAdmin() {
   return db;
 }
 
+/**
+ * Logt in met de toegangscode.
+ * @param {string} base Adres van de testserver.
+ * @param {string} [code] De toegangscode.
+ * @returns {Promise<{ res: Response, cookie: string }>} Het antwoord en de sessie-cookie.
+ */
 async function login(base, code = 'geheim') {
   const res = await fetch(`${base}/api/auth/login`, {
     method: 'POST',
@@ -49,9 +65,9 @@ test('zonder inlog: inlogpagina in plaats van de planner, ook voor bestanden', a
   try {
     // De planner zelf (code, geen data) is openbaar voor een tekening zonder
     // account, maar alleen met ?tekenen; zonder dat de inlogpagina.
-    for (const p of ['/', '/beregening/', '/beheer/', '/beheer/beheer.js', '/offertes/offertes.js', '/een/pad']) {
-      const res = await fetch(base + p);
-      assert.strictEqual(res.status, 401, p);
+    for (const urlPath of ['/', '/beregening/', '/beheer/', '/beheer/beheer.js', '/offertes/offertes.js', '/een/pad']) {
+      const res = await fetch(base + urlPath);
+      assert.strictEqual(res.status, 401, urlPath);
       const html = await res.text();
       assert.match(html, /toegangscode/i);
       assert.doesNotMatch(html, /window\.App|class Editor/);
@@ -79,28 +95,28 @@ test('verkeerde code faalt, juiste code geeft toegang tot de planner', async () 
     const ok = await login(base);
     assert.strictEqual(ok.res.status, 200);
     assert.match(ok.cookie, /^aquatech_session=/);
-    for (const p of ['/', '/een/willekeurig/pad']) {
-      const res = await fetch(base + p, { headers: { cookie: ok.cookie } });
+    for (const urlPath of ['/', '/een/willekeurig/pad']) {
+      const res = await fetch(base + urlPath, { headers: { cookie: ok.cookie } });
       assert.strictEqual(res.status, 200);
       assert.match(await res.text(), /id="modules"/);
     }
-    for (const p of ['/beregening/', '/beregening/diep/pad']) {
-      const res = await fetch(base + p, { headers: { cookie: ok.cookie } });
+    for (const urlPath of ['/beregening/', '/beregening/diep/pad']) {
+      const res = await fetch(base + urlPath, { headers: { cookie: ok.cookie } });
       assert.strictEqual(res.status, 200);
       assert.match(await res.text(), /Beregeningsplanner/);
     }
     const css = await fetch(`${base}/beregening/css/app.css`, { headers: { cookie: ok.cookie } });
     assert.strictEqual(css.status, 200);
     // Na een update geen oude CSS/JS uit een cache: versie achter elke verwijzing
-    const v = `?v=${PKG.version}`;
-    for (const p of ['/beregening/', '/beregening/index.html', '/beregening/diep/pad', '/']) {
-      const res = await fetch(base + p, { headers: { cookie: ok.cookie } });
+    const versionQuery = `?v=${PKG.version}`;
+    for (const urlPath of ['/beregening/', '/beregening/index.html', '/beregening/diep/pad', '/']) {
+      const res = await fetch(base + urlPath, { headers: { cookie: ok.cookie } });
       assert.strictEqual(res.headers.get('cache-control'), 'no-cache');
       const html = await res.text();
-      assert.ok(html.includes(`shared/brand.css${v}"`), p);
-      assert.doesNotMatch(html, /(?:href|src)="[^"]+\.(?:css|js)"/, p);
+      assert.ok(html.includes(`shared/brand.css${versionQuery}"`), urlPath);
+      assert.doesNotMatch(html, /(?:href|src)="[^"]+\.(?:css|js)"/, urlPath);
     }
-    const versioned = await fetch(`${base}/beregening/css/app.css${v}`, { headers: { cookie: ok.cookie } });
+    const versioned = await fetch(`${base}/beregening/css/app.css${versionQuery}`, { headers: { cookie: ok.cookie } });
     assert.strictEqual(versioned.status, 200);
   } finally {
     server.close();
@@ -108,15 +124,15 @@ test('verkeerde code faalt, juiste code geeft toegang tot de planner', async () 
 });
 
 test('andere toegangscode maakt oude cookies ongeldig', async () => {
-  const a = await start();
-  const { cookie } = await login(a.base);
-  a.server.close();
-  const b = await start({ accessCode: 'nieuw' });
+  const first = await start();
+  const { cookie } = await login(first.base);
+  first.server.close();
+  const second = await start({ accessCode: 'nieuw' });
   try {
-    const res = await fetch(`${b.base}/`, { headers: { cookie } });
+    const res = await fetch(`${second.base}/`, { headers: { cookie } });
     assert.strictEqual(res.status, 401);
   } finally {
-    b.server.close();
+    second.server.close();
   }
 });
 
@@ -137,14 +153,14 @@ test('gasten aan en geen code: de planner is openbaar en inloggen is niet nodig'
 
 // Alle pagina's (dashboard + modules): scripts en stylesheets relatief en lokaal.
 const PAGES = ['index.html', ...fs.readdirSync(FRONTEND_DIR)
-  .filter((d) => fs.existsSync(path.join(FRONTEND_DIR, d, 'index.html')))
-  .map((d) => `${d}/index.html`)];
+  .filter((dir) => fs.existsSync(path.join(FRONTEND_DIR, dir, 'index.html')))
+  .map((dir) => `${dir}/index.html`)];
 
 test('alle scripts en stylesheets uit de pagina\'s bestaan en zijn relatief', () => {
   assert.ok(PAGES.includes('beregening/index.html'));
   for (const page of PAGES) {
     const html = fs.readFileSync(path.join(FRONTEND_DIR, page), 'utf8');
-    const refs = [...html.matchAll(/(?:src|href)="([^"#]+)"/g)].map((m) => m[1]);
+    const refs = [...html.matchAll(/(?:src|href)="([^"#]+)"/g)].map((match) => match[1]);
     assert.ok(refs.length >= 2, page);
     for (const ref of refs) {
       assert.ok(!ref.startsWith('/'), `${page}: ${ref} moet relatief zijn (padprefix achter een proxy)`);
@@ -157,16 +173,16 @@ test('alle scripts en stylesheets uit de pagina\'s bestaan en zijn relatief', ()
 test('dashboard: actieve modules wijzen relatief naar een bestaande module', () => {
   const modules = require(path.join(FRONTEND_DIR, 'dashboard', 'modules.js'));
   const ids = new Set();
-  for (const m of modules) {
-    assert.ok(/^[a-z0-9][a-z0-9-]*$/.test(m.id), m.id);
-    assert.ok(!ids.has(m.id), `dubbele module ${m.id}`);
-    ids.add(m.id);
-    assert.ok(['actief', 'gepland'].includes(m.status), m.id);
-    if (m.status !== 'actief') continue;
-    assert.strictEqual(m.href, `${m.id}/`, `${m.id}: href relatief en met slash`);
-    assert.ok(fs.existsSync(path.join(FRONTEND_DIR, m.id, 'index.html')), `${m.id}/index.html ontbreekt`);
+  for (const module of modules) {
+    assert.ok(/^[a-z0-9][a-z0-9-]*$/.test(module.id), module.id);
+    assert.ok(!ids.has(module.id), `dubbele module ${module.id}`);
+    ids.add(module.id);
+    assert.ok(['actief', 'gepland'].includes(module.status), module.id);
+    if (module.status !== 'actief') continue;
+    assert.strictEqual(module.href, `${module.id}/`, `${module.id}: href relatief en met slash`);
+    assert.ok(fs.existsSync(path.join(FRONTEND_DIR, module.id, 'index.html')), `${module.id}/index.html ontbreekt`);
   }
-  assert.ok(modules.some((m) => m.id === 'beregening' && m.status === 'actief'));
+  assert.ok(modules.some((module) => module.id === 'beregening' && module.status === 'actief'));
 });
 
 test('planner heeft een relatieve link terug naar het dashboard', () => {
@@ -177,10 +193,10 @@ test('planner heeft een relatieve link terug naar het dashboard', () => {
 test('module zonder slash: relatieve doorverwijzing, querystring blijft', async () => {
   const { server, base } = await start({ accessCode: '', env: { GUEST_ACCESS: 'true' }, db: await dbWithAdmin() });
   try {
-    for (const [p, loc] of [['/beregening', 'beregening/'], ['/beregening?x=1', 'beregening/?x=1']]) {
-      const res = await fetch(base + p, { redirect: 'manual' });
-      assert.strictEqual(res.status, 302, p);
-      assert.strictEqual(res.headers.get('location'), loc, p);
+    for (const [urlPath, loc] of [['/beregening', 'beregening/'], ['/beregening?x=1', 'beregening/?x=1']]) {
+      const res = await fetch(base + urlPath, { redirect: 'manual' });
+      assert.strictEqual(res.status, 302, urlPath);
+      assert.strictEqual(res.headers.get('location'), loc, urlPath);
     }
     // Geen module: gewoon het dashboard, geen doorverwijzing.
     const res = await fetch(`${base}/dashboard`, { redirect: 'manual' });
@@ -194,11 +210,16 @@ test('module zonder slash: relatieve doorverwijzing, querystring blijft', async 
 test('eerste start: instelscherm op elk pad, daarna inloggen met het nieuwe account', async () => {
   const { server, base } = await start({ accessCode: '', setupCode: 'ABCD-EFGH-JKLM' });
   try {
-    for (const p of ['/', '/beregening/', '/login']) {
-      const res = await fetch(base + p);
-      assert.match(await res.text(), /Beheerder aanmaken/, p);
+    for (const urlPath of ['/', '/beregening/', '/login']) {
+      const res = await fetch(base + urlPath);
+      assert.match(await res.text(), /Beheerder aanmaken/, urlPath);
     }
     assert.deepStrictEqual(await (await fetch(`${base}/api/setup`)).json(), { required: true, codeRequired: true, codeKind: 'installatiecode' });
+    /**
+     * Stuurt het formulier voor de eerste beheerder.
+     * @param {object} body De velden.
+     * @returns {Promise<Response>} Het fetch-antwoord.
+     */
     const post = (body) => fetch(`${base}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     // Zonder (juiste) installatiecode uit het serverlog lukt het niet.
     assert.strictEqual((await post({ username: 'daniel', displayName: 'Daniël', password: 'Tuin-Plan-2026!' })).status, 401);
@@ -227,6 +248,11 @@ test('eerste start met toegangscode: de code is nodig om de beheerder aan te mak
   const { server, base } = await start();
   try {
     assert.strictEqual((await (await fetch(`${base}/api/setup`)).json()).codeRequired, true);
+    /**
+     * Stuurt het formulier voor de eerste beheerder.
+     * @param {object} body De velden.
+     * @returns {Promise<Response>} Het fetch-antwoord.
+     */
     const post = (body) => fetch(`${base}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     assert.strictEqual((await post({ username: 'daniel', password: 'Tuin-Plan-2026!', code: 'fout' })).status, 401);
     assert.strictEqual((await post({ username: 'daniel', password: 'Tuin-Plan-2026!', code: 'geheim' })).status, 201);
@@ -242,7 +268,7 @@ test('de laatste actieve beheerder kan niet worden uitgeschakeld of gedegradeerd
     const { cookie } = await login(base);
     const headers = { cookie, 'Content-Type': 'application/json' };
     const users = (await (await fetch(`${base}/api/admin/users`, { headers })).json()).items;
-    const baas = users.find((u) => u.username === 'baas');
+    const baas = users.find((user) => user.username === 'baas');
     for (const body of [{ disabled: true }, { role: 'gebruiker' }]) {
       const res = await fetch(`${base}/api/admin/users/${baas.id}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
       assert.strictEqual(res.status, 409);
@@ -264,18 +290,28 @@ test('zijbalk: alleen voor beheerders, op elke modulepagina, met de juiste modul
   require(path.join(FRONTEND_DIR, 'dashboard', 'modules.js'));
   const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
   const tools = globalThis.AquatechModuleTools;
-  const rights = (u) => Roles.rightsOf(u);
+  /**
+   * Rechten van een gebruiker.
+   * @param {object} user De gebruiker (rol, platformAdmin).
+   * @returns {string[]} De rechten.
+   */
+  const rights = (user) => Roles.rightsOf(user);
   assert.ok(tools.usesSidebar(rights({ role: 'beheerder' })));
   assert.ok(tools.usesSidebar(rights({ role: 'klant', platformAdmin: true })));
   assert.ok(!tools.usesSidebar(rights({ role: 'installateur' })));
   assert.ok(!tools.usesSidebar(rights({ role: 'klant' })));
-  const ids = (list) => list.map((m) => m.id);
+  /**
+   * Id's van een lijst modules.
+   * @param {object[]} list De modules.
+   * @returns {string[]} De id's.
+   */
+  const ids = (list) => list.map((module) => module.id);
   assert.ok(ids(tools.visible(rights({ role: 'beheerder' }))).includes('beheer'));
   assert.ok(!ids(tools.visible(rights({ role: 'beheerder' }))).includes('hoofdbeheer'));
   // Uitgezette modules vallen weg, beheer blijft altijd staan.
   const off = ids(tools.visible(rights({ role: 'beheerder' }), { offertes: false, beheer: false }));
   assert.ok(!off.includes('offertes') && off.includes('beheer'));
-  for (const page of PAGES.filter((p) => p !== 'openbaar/offerte.html')) {
+  for (const page of PAGES.filter((page) => page !== 'openbaar/offerte.html')) {
     const html = fs.readFileSync(path.join(FRONTEND_DIR, page), 'utf8');
     const mod = html.indexOf('dashboard/modules.js');
     const nav = html.indexOf('shared/sidebar.js');
@@ -288,18 +324,23 @@ test('snelheid: scripts met versie blijven in de browsercache, Excel pas bij exp
   const { server, base } = await start({ db: await dbWithAdmin() });
   try {
     const { cookie } = await login(base);
-    const get = (p) => fetch(`${base}${p}`, { headers: { cookie } });
-    const v = encodeURIComponent(PKG.version);
-    assert.match((await get(`/shared/common.js?v=${v}`)).headers.get('cache-control'), /private, max-age=31536000, immutable/);
+    /**
+     * Haalt een pad op als ingelogde beheerder.
+     * @param {string} urlPath Pad.
+     * @returns {Promise<Response>} Het fetch-antwoord.
+     */
+    const get = (urlPath) => fetch(`${base}${urlPath}`, { headers: { cookie } });
+    const version = encodeURIComponent(PKG.version);
+    assert.match((await get(`/shared/common.js?v=${version}`)).headers.get('cache-control'), /private, max-age=31536000, immutable/);
     // Zonder (of met een oude) versie: elke keer controleren.
     assert.strictEqual((await get('/shared/common.js')).headers.get('cache-control'), 'no-cache');
     assert.strictEqual((await get('/shared/common.js?v=0.0.1')).headers.get('cache-control'), 'no-cache');
     // Het kleurthema kan wijzigen zonder nieuwe versie.
-    assert.strictEqual((await get(`/shared/theme.css?v=${v}`)).headers.get('cache-control'), 'no-cache');
+    assert.strictEqual((await get(`/shared/theme.css?v=${version}`)).headers.get('cache-control'), 'no-cache');
   } finally {
     server.close();
   }
-  for (const page of PAGES.filter((p) => !p.startsWith('openbaar/'))) {
+  for (const page of PAGES.filter((page) => !page.startsWith('openbaar/'))) {
     const html = fs.readFileSync(path.join(FRONTEND_DIR, page), 'utf8');
     assert.doesNotMatch(html, /exceljs\.min\.js/, `${page}: Excel via AquatechCommon.excel() laden`);
     const common = html.indexOf('shared/common.js');
