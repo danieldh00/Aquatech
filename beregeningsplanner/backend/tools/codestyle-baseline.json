@@ -3,7 +3,6 @@
   "files": [
     "frontend/beheer/aikosten.js",
     "frontend/beheer/beheer.js",
-    "frontend/beheer/sproeiers.js",
     "frontend/beregening/js/app.js",
     "frontend/beregening/js/autotrace.js",
     "frontend/beregening/js/bom.js",
@@ -16,7 +15,6 @@
     "frontend/beregening/js/planimport.js",
     "frontend/beregening/js/simulation.js",
     "frontend/beregening/js/sprinklerlib.js",
-    "frontend/dashboard/account.js",
     "frontend/dashboard/today.js",
     "frontend/facturen/facturen.js",
     "frontend/facturen/invoice-core.js",
