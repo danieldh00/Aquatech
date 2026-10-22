@@ -24,7 +24,6 @@
     "frontend/plannen/plannen.js",
     "frontend/planning/planning.js",
     "frontend/portaal/portaal.js",
-    "frontend/shared/offline-core.js",
     "frontend/sw.js",
     "frontend/uitbesteden/uitbesteden.js",
     "frontend/voorraad/voorraad.js",

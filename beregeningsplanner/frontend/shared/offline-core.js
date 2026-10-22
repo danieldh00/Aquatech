@@ -53,22 +53,35 @@
     /^api\/workorder-staff$/,
     /^api\/quote-profile$/,
   ];
-  const cacheable = (rel) => CACHEABLE.some((re) => re.test(String(rel || '')));
+  /**
+   * Geeft aan of een adres offline beschikbaar mag zijn.
+   * @param {string} relativePath Pad vanaf de app-root, met query.
+   * @returns {boolean} true als het in CACHEABLE staat.
+   */
+  const cacheable = (relativePath) => CACHEABLE.some((pattern) => pattern.test(String(relativePath || '')));
 
   // Bewaarde gegevens en wachtende wijzigingen niet eindeloos bewaren.
   const DATA_MAX_AGE_MS = 14 * 24 * 3600 * 1000;
   const QUEUE_MAX_AGE_MS = 30 * 24 * 3600 * 1000;
   const MAX_ATTEMPTS = 8;
 
-  /** Eigenaar van de offline gegevens: `<gebruiker>@<omgeving>`, of null. */
+  /**
+   * Eigenaar van de offline gegevens: `<gebruiker>@<omgeving>`, of null.
+   * @param {object} me Antwoord van api/me.
+   * @returns {string|null} De eigenaar (null voor gasten of zonder gebruiker).
+   */
   function ownerOf(me) {
-    const u = me && me.user;
-    if (!u || !u.id || u.kind === 'gast') return null;
-    const t = (me.tenant && me.tenant.id) || u.tenantId || '';
-    return `${u.id}@${t}`;
+    const user = me && me.user;
+    if (!user || !user.id || user.kind === 'gast') return null;
+    const tenantId = (me.tenant && me.tenant.id) || user.tenantId || '';
+    return `${user.id}@${tenantId}`;
   }
 
-  /** Mag deze gebruiker offline werken? Alleen eigen accounts met werkorders, niet tijdens impersonatie. */
+  /**
+   * Mag deze gebruiker offline werken? Alleen eigen accounts met werkorders, niet tijdens impersonatie.
+   * @param {object} me Antwoord van api/me.
+   * @returns {boolean} true als offline werken mag.
+   */
   function offlineAllowed(me) {
     return Boolean(ownerOf(me) && me.user.kind === 'account' && !me.impersonation
       && Array.isArray(me.rights) && me.rights.includes('werkorders'));
@@ -77,37 +90,58 @@
   // Een onbereikbare server (Cloudflare, tijdens een update) is hetzelfde als
   // geen verbinding: later opnieuw.
   const GATEWAY = new Set([502, 503, 504, 520, 521, 522, 523, 524, 530]);
+  /**
+   * Geeft aan of een status betekent dat de server onbereikbaar is.
+   * @param {number} status HTTP-status.
+   * @returns {boolean} true bij een gateway-fout.
+   */
   const unreachable = (status) => GATEWAY.has(Number(status));
 
   /**
    * Wat te doen met het antwoord op een verstuurde wijziging uit de wachtrij:
    * 'done' (weg uit de wachtrij), 'retry' (later opnieuw), 'auth' (eerst
    * opnieuw inloggen), 'conflict' (gebruiker kiest) of 'failed' (geweigerd).
+   * @param {number} status HTTP-status van het antwoord.
+   * @param {object} [body] JSON-body van het antwoord.
+   * @returns {string} 'done', 'retry', 'auth', 'conflict' of 'failed'.
    */
   function classify(status, body) {
-    const s = Number(status);
-    const code = body && body.error;
-    if (s >= 200 && s < 300) return 'done';
-    if (unreachable(s) || s === 429 || s === 408 || code === 'in_progress') return 'retry';
-    if (s === 401 || code === 'password_change_required') return 'auth';
-    if (s === 409 && code === 'conflict') return 'conflict';
+    const statusCode = Number(status);
+    const errorCode = body && body.error;
+    if (statusCode >= 200 && statusCode < 300) return 'done';
+    if (unreachable(statusCode) || statusCode === 429 || statusCode === 408 || errorCode === 'in_progress') return 'retry';
+    if (statusCode === 401 || errorCode === 'password_change_required') return 'auth';
+    if (statusCode === 409 && errorCode === 'conflict') return 'conflict';
     return 'failed';
   }
 
-  const isPlainObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  /**
+   * Geeft aan of een waarde een gewoon object is (geen array, geen null).
+   * @param {*} value De waarde.
+   * @returns {boolean} true bij een object.
+   */
+  const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+  /**
+   * Leest JSON zonder fout bij ongeldige tekst.
+   * @param {string} text De JSON-tekst.
+   * @returns {*} De waarde, of undefined als het geen JSON is.
+   */
   function parseJson(text) {
-    try { return JSON.parse(text); } catch (e) { return undefined; }
+    try { return JSON.parse(text); } catch (error) { return undefined; }
   }
 
   /**
    * Nieuwe wijziging samenvoegen met een wachtende met dezelfde sleutel. De
    * oudste basis (If-Base) blijft staan: daarop was de eerste wijziging
    * gebaseerd. JSON-objecten per veld samenvoegen (nieuw wint), anders vervangen.
+   * @param {object} older Wachtende wijziging.
+   * @param {object} newer Nieuwe wijziging met dezelfde sleutel.
+   * @returns {object} De samengevoegde wijziging (weer 'pending').
    */
   function merge(older, newer) {
-    const a = parseJson(older.body);
-    const b = parseJson(newer.body);
-    const body = isPlainObject(a) && isPlainObject(b) ? JSON.stringify({ ...a, ...b }) : newer.body;
+    const olderBody = parseJson(older.body);
+    const newerBody = parseJson(newer.body);
+    const body = isPlainObject(olderBody) && isPlainObject(newerBody) ? JSON.stringify({ ...olderBody, ...newerBody }) : newer.body;
     const headers = { ...older.headers, ...newer.headers };
     if (older.headers && older.headers[HEADERS.ifBase]) headers[HEADERS.ifBase] = older.headers[HEADERS.ifBase];
     return { ...older, ...newer, id: older.id, seq: older.seq, createdAt: older.createdAt, baseDoc: older.baseDoc !== undefined ? older.baseDoc : newer.baseDoc, headers, body, attempts: 0, state: 'pending', error: null };
@@ -117,37 +151,57 @@
    * Na een geslaagde wijziging: latere wachtende wijzigingen op hetzelfde item
    * die van dezelfde basis uitgingen krijgen de nieuwe updatedAt als basis
    * (anders zouden ze botsen met onze eigen vorige wijziging).
+   * @param {object[]} items De wachtrij (wordt aangepast).
+   * @param {object} sent De verstuurde wijziging.
+   * @param {object} response Antwoord van de server (met updatedAt).
+   * @returns {object[]} De aangepaste wijzigingen.
    */
   function rebase(items, sent, response) {
     const from = sent.headers && sent.headers[HEADERS.ifBase];
     const to = response && response.updatedAt;
     if (!sent.key || !to) return [];
     const changed = [];
-    for (const it of items) {
-      if (it.id === sent.id || it.key !== sent.key || !it.headers) continue;
-      const base = it.headers[HEADERS.ifBase];
+    for (const item of items) {
+      if (item.id === sent.id || item.key !== sent.key || !item.headers) continue;
+      const base = item.headers[HEADERS.ifBase];
       if (base && (!from || base === from)) {
-        it.headers[HEADERS.ifBase] = to;
+        item.headers[HEADERS.ifBase] = to;
         // Die wijziging bouwt nu voort op wat de server net teruggaf.
-        if (it.baseDoc !== undefined && isPlainObject(response)) it.baseDoc = response;
-        changed.push(it);
+        if (item.baseDoc !== undefined && isPlainObject(response)) item.baseDoc = response;
+        changed.push(item);
       }
     }
     return changed;
   }
 
-  /** Bewaarde GET bijwerken met een wachtende wijziging (Offline-Patch: merge). */
+  /**
+   * Bewaarde GET bijwerken met een wachtende wijziging (Offline-Patch: merge).
+   * @param {object} resource De bewaarde gegevens.
+   * @param {string} body JSON-body van de wijziging.
+   * @returns {object} De bijgewerkte gegevens (ongewijzigd als het geen objecten zijn).
+   */
   function applyPatch(resource, body) {
-    const b = parseJson(body);
-    if (!isPlainObject(resource) || !isPlainObject(b)) return resource;
+    const patch = parseJson(body);
+    if (!isPlainObject(resource) || !isPlainObject(patch)) return resource;
     const out = { ...resource };
-    for (const [k, v] of Object.entries(b)) if (k !== 'base') out[k] = v;
+    for (const [key, value] of Object.entries(patch)) if (key !== 'base') out[key] = value;
     return out;
   }
 
   // ---------- Drieweg samenvoegen ----------
-  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  const byId = (list) => Array.isArray(list) && list.every((x) => isPlainObject(x) && typeof x.id === 'string' && x.id);
+  /**
+   * Geeft aan of twee waarden gelijk zijn (via JSON).
+   * @param {*} left Eerste waarde.
+   * @param {*} right Tweede waarde.
+   * @returns {boolean} true als ze gelijk zijn.
+   */
+  const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+  /**
+   * Geeft aan of een lijst bestaat uit objecten met een tekst-id (zoals werkstappen).
+   * @param {*} list De waarde.
+   * @returns {boolean} true bij een lijst met id's.
+   */
+  const byId = (list) => Array.isArray(list) && list.every((item) => isPlainObject(item) && typeof item.id === 'string' && item.id);
 
   /**
    * Een offline wijziging (mine) die botst met een wijziging van een ander
@@ -156,49 +210,64 @@
    * beiden hetzelfde veld anders gewijzigd, dan is dat een conflict. Lijsten
    * met id's (werkstappen, materialen) per regel en per veld.
    * Geeft { value, conflicts: [paden] }.
+   * @param {*} base Versie waarop beide wijzigingen voortbouwden.
+   * @param {*} mine De offline wijziging.
+   * @param {*} theirs De wijziging van de ander.
+   * @param {string} [at] Pad van dit veld (voor de conflicten).
+   * @returns {{value: *, conflicts: string[]}} De samengevoegde waarde en de paden met een conflict.
    */
   function merge3(base, mine, theirs, at = '') {
     if (same(mine, theirs)) return { value: mine, conflicts: [] };
     if (same(mine, base)) return { value: theirs, conflicts: [] };
     if (same(theirs, base)) return { value: mine, conflicts: [] };
     if (isPlainObject(mine) && isPlainObject(theirs)) {
-      const b = isPlainObject(base) ? base : {};
+      const baseObject = isPlainObject(base) ? base : {};
       const value = {};
       const conflicts = [];
-      for (const k of new Set([...Object.keys(theirs), ...Object.keys(mine)])) {
-        const r = merge3(b[k], mine[k], theirs[k], at ? `${at}.${k}` : k);
-        if (r.value !== undefined) value[k] = r.value;
-        conflicts.push(...r.conflicts);
+      for (const key of new Set([...Object.keys(theirs), ...Object.keys(mine)])) {
+        const merged = merge3(baseObject[key], mine[key], theirs[key], at ? `${at}.${key}` : key);
+        if (merged.value !== undefined) value[key] = merged.value;
+        conflicts.push(...merged.conflicts);
       }
       return { value, conflicts };
     }
     if (byId(mine) && byId(theirs) && (base === undefined || byId(base))) {
-      const index = (list) => new Map((list || []).map((x) => [x.id, x]));
-      const B = index(base), M = index(mine), T = index(theirs);
+      /**
+       * Zet een lijst met id's om naar een Map op id.
+       * @param {object[]} list De lijst.
+       * @returns {Map<string, object>} De regels op id.
+       */
+      const index = (list) => new Map((list || []).map((item) => [item.id, item]));
+      const baseById = index(base), mineById = index(mine), theirsById = index(theirs);
       const conflicts = [];
       const out = [];
+      /**
+       * Voegt één regel (op id) samen; een weggehaalde regel blijft weg tenzij de andere kant hem wijzigde.
+       * @param {string} id Id van de regel.
+       * @returns {object|undefined} De regel, of undefined als hij weg moet.
+       */
       const take = (id) => {
-        const b = B.get(id), m = M.get(id), t = T.get(id);
+        const baseItem = baseById.get(id), mineItem = mineById.get(id), theirsItem = theirsById.get(id);
         const path = `${at}[${id}]`;
-        if (m && t) { const r = merge3(b, m, t, path); conflicts.push(...r.conflicts); return r.value; }
-        if (!m && !t) return undefined;
+        if (mineItem && theirsItem) { const merged = merge3(baseItem, mineItem, theirsItem, path); conflicts.push(...merged.conflicts); return merged.value; }
+        if (!mineItem && !theirsItem) return undefined;
         // Weggehaald aan de ene kant: weg, tenzij de andere kant hem wijzigde.
-        if (!m) { if (b && !same(b, t)) conflicts.push(path); return b ? undefined : t; }
-        if (b && !same(b, m)) conflicts.push(path);
-        return b ? undefined : m;
+        if (!mineItem) { if (baseItem && !same(baseItem, theirsItem)) conflicts.push(path); return baseItem ? undefined : theirsItem; }
+        if (baseItem && !same(baseItem, mineItem)) conflicts.push(path);
+        return baseItem ? undefined : mineItem;
       };
       // Volgorde van de ander aanhouden; nieuwe regels van mij op hun plek erachter.
-      const ids = [...T.keys()];
-      mine.forEach((x, i) => {
-        if (T.has(x.id) || B.has(x.id)) return;
-        const prev = i > 0 ? ids.indexOf(mine[i - 1].id) : -1;
-        ids.splice(prev + 1, 0, x.id);
+      const ids = [...theirsById.keys()];
+      mine.forEach((item, i) => {
+        if (theirsById.has(item.id) || baseById.has(item.id)) return;
+        const previousIndex = i > 0 ? ids.indexOf(mine[i - 1].id) : -1;
+        ids.splice(previousIndex + 1, 0, item.id);
       });
       for (const id of ids) {
-        const v = take(id);
-        if (v !== undefined) out.push(v);
+        const value = take(id);
+        if (value !== undefined) out.push(value);
       }
-      for (const id of M.keys()) if (!ids.includes(id)) { const v = take(id); if (v !== undefined) out.push(v); }
+      for (const id of mineById.keys()) if (!ids.includes(id)) { const value = take(id); if (value !== undefined) out.push(value); }
       return { value: out, conflicts };
     }
     return { value: mine, conflicts: [at || '(geheel)'] };
@@ -208,37 +277,49 @@
    * Botsende wijziging (body van de wachtrij) samenvoegen met de huidige
    * versie op de server. Alleen de velden uit de body tellen. Geeft
    * { body (tekst), conflicts } of null als het niet kan.
+   * @param {string} body JSON-body uit de wachtrij.
+   * @param {object} baseDoc Versie waarop de wijziging voortbouwde.
+   * @param {object} current Huidige versie op de server.
+   * @returns {{body: string, conflicts: string[]}|null} De nieuwe body en de conflicten, of null.
    */
   function rebaseBody(body, baseDoc, current) {
     const mine = parseJson(body);
     if (!isPlainObject(mine) || !isPlainObject(baseDoc) || !isPlainObject(current)) return null;
     const out = {};
     const conflicts = [];
-    for (const k of Object.keys(mine)) {
-      const r = merge3(baseDoc[k], mine[k], current[k], k);
-      out[k] = r.value;
-      conflicts.push(...r.conflicts);
+    for (const key of Object.keys(mine)) {
+      const merged = merge3(baseDoc[key], mine[key], current[key], key);
+      out[key] = merged.value;
+      conflicts.push(...merged.conflicts);
     }
     return { body: JSON.stringify(out), conflicts };
   }
 
-  /** Alleen de koppen die de wachtrij bewaart (kleine letters). */
+  /**
+   * Alleen de koppen die de wachtrij bewaart (kleine letters).
+   * @param {Function} get Leest een kop van het verzoek (naam → waarde).
+   * @returns {object} De koppen.
+   */
   function keepHeaders(get) {
     const out = {};
-    const ct = get('content-type');
-    if (ct) out['content-type'] = ct;
+    const contentType = get('content-type');
+    if (contentType) out['content-type'] = contentType;
     const base = get(HEADERS.base);
     if (base && base.length <= 64) out[HEADERS.ifBase] = base;
     return out;
   }
 
+  /**
+   * Nieuw willekeurig id (UUID als de browser dat kan).
+   * @returns {string} Het id.
+   */
   function newId() {
-    const c = typeof crypto !== 'undefined' ? crypto : null;
-    if (c && c.randomUUID) return c.randomUUID();
+    const cryptoApi = typeof crypto !== 'undefined' ? crypto : null;
+    if (cryptoApi && cryptoApi.randomUUID) return cryptoApi.randomUUID();
     const bytes = new Uint8Array(16);
-    if (c && c.getRandomValues) c.getRandomValues(bytes);
+    if (cryptoApi && cryptoApi.getRandomValues) cryptoApi.getRandomValues(bytes);
     else for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
-    return [...bytes].map((x) => x.toString(16).padStart(2, '0')).join('');
+    return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
   }
 
   // Namen van velden voor de melding bij een conflict.
@@ -248,22 +329,30 @@
     siteNotes: 'bijzonderheden locatie', steps: 'werkstappen', materials: 'materialen', report: 'oplevering',
     zones: 'zone-indeling', caption: 'bijschrift', kind: 'fase', customerVisible: 'zichtbaar voor de klant',
   };
-  /** Conflictpaden ('data.steps[s1].done') als korte tekst: 'werkstappen'. */
+  /**
+   * Conflictpaden ('data.steps[s1].done') als korte tekst: 'werkstappen'.
+   * @param {string[]} paths De paden.
+   * @returns {string[]} De veldnamen, zonder dubbele.
+   */
   function fieldNames(paths) {
     const names = [];
-    for (const p of paths || []) {
-      const segs = String(p).split(/[.[]/).filter((x) => x && x !== 'data');
-      const name = FIELDS[segs[0]] || segs[0] || 'gegevens';
+    for (const path of paths || []) {
+      const segments = String(path).split(/[.[]/).filter((part) => part && part !== 'data');
+      const name = FIELDS[segments[0]] || segments[0] || 'gegevens';
       if (!names.includes(name)) names.push(name);
     }
     return names;
   }
 
-  /** Korte omschrijving voor de gebruiker als er geen label is meegegeven. */
+  /**
+   * Korte omschrijving voor de gebruiker als er geen label is meegegeven.
+   * @param {object} item Wijziging uit de wachtrij.
+   * @returns {string} Het label, of bijv. "PUT workorders".
+   */
   function describe(item) {
     if (item.label) return item.label;
-    const m = String(item.url || '').match(/api\/([a-z-]+)/);
-    return `${item.method} ${m ? m[1] : 'wijziging'}`;
+    const match = String(item.url || '').match(/api\/([a-z-]+)/);
+    return `${item.method} ${match ? match[1] : 'wijziging'}`;
   }
 
   return {
