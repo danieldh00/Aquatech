@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.67.1',
+      date: '2026-10-22',
+      title: 'Afspraken voor nette, leesbare code',
+      items: [],
+    },
+    {
       version: '0.67.0',
       date: '2026-10-22',
       title: 'Automatisch het beste sproeiertype, en een rustigere indeling',
