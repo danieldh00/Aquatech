@@ -4,8 +4,6 @@
     "backend/test/localrecog.test.js",
     "backend/test/planner.test.js",
     "backend/test/quotes.test.js",
-    "backend/test/sprinklers.test.js",
-    "backend/test/tenants.test.js",
     "backend/test/testdata.test.js",
     "backend/test/workorders.test.js",
     "frontend/beheer/aikosten.js",
