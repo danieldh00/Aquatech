@@ -20,26 +20,45 @@ for (const [addr, prefix] of [
   ['fc00::', 7], ['fe80::', 10], ['ff00::', 8],
 ]) blocked6.addSubnet(addr, prefix, 'ipv6');
 
-// ALLOW_PRIVATE_HOSTS=1: ook lokale adressen (alleen voor tests/ontwikkelen).
+/**
+ * Of lokale adressen toch mogen (ALLOW_PRIVATE_HOSTS=1, alleen voor tests/ontwikkelen).
+ * @returns {boolean} true als lokale adressen zijn toegestaan.
+ */
 const privateAllowed = () => process.env.ALLOW_PRIVATE_HOSTS === '1';
 
+/**
+ * Of een IP-adres openbaar is (niet lokaal, privé, gereserveerd of multicast).
+ * @param {string} ip Een IPv4- of IPv6-adres.
+ * @returns {boolean} true bij een openbaar adres; false bij een privé adres of iets dat geen IP-adres is.
+ */
 function isPublicAddress(ip) {
-  const v = net.isIP(ip);
-  if (!v) return false;
-  return v === 6 ? !blocked6.check(ip, 'ipv6') : !blocked4.check(ip, 'ipv4');
+  const ipVersion = net.isIP(ip);
+  if (!ipVersion) return false;
+  return ipVersion === 6 ? !blocked6.check(ip, 'ipv6') : !blocked4.check(ip, 'ipv4');
 }
 
 class PrivateHostError extends Error {
+  /**
+   * Fout als een host naar een niet-openbaar adres wijst (code 'private_host').
+   * @param {string} host De opgezochte hostnaam.
+   */
   constructor(host) {
     super(`${host} is geen openbaar adres.`);
     this.code = 'private_host';
   }
 }
 
-/** Zoekt de naam op; geeft het eerste adres terug als álle adressen openbaar zijn. */
+/**
+ * Zoekt een hostnaam op en geeft het eerste adres terug, maar alleen als álle
+ * adressen openbaar zijn. De verbinding gaat daarna naar precies dat adres.
+ * @param {string} host Hostnaam of IP-adres (IPv6 mag tussen [ ]).
+ * @param {{ lookup?: Function }} [options] Eigen DNS-opzoekfunctie (voor tests).
+ * @returns {Promise<string>} Het openbare IP-adres.
+ * @throws {PrivateHostError} Als een adres niet openbaar is.
+ */
 async function publicAddress(host, { lookup = dns.lookup } = {}) {
   const name = String(host || '').replace(/^\[|\]$/g, '');
-  const addrs = net.isIP(name) ? [name] : (await lookup(name, { all: true, verbatim: true })).map((a) => a.address);
+  const addrs = net.isIP(name) ? [name] : (await lookup(name, { all: true, verbatim: true })).map((entry) => entry.address);
   if (!addrs.length || !addrs.every(isPublicAddress)) throw new PrivateHostError(name);
   return addrs[0];
 }

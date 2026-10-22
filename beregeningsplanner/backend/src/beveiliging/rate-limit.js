@@ -1,6 +1,12 @@
 // Eenvoudige in-memory rate limiter (vast venster per sleutel). `max` mag een
 // functie zijn, zodat een gewijzigde instelling meteen geldt. Genoeg voor
 // één Raspberry Pi met een handvol toestellen; geen externe afhankelijkheid.
+/**
+ * Maakt een Express-middleware die per sleutel (bijv. IP-adres) het aantal
+ * verzoeken binnen een tijdvenster begrenst; daarboven volgt 429 met Retry-After.
+ * @param {{ windowMs: number, max: number|Function, keyFn: Function }} options Lengte van het venster in ms, het maximum (of een functie (req) => maximum) en de functie (req) => sleutel.
+ * @returns {Function} De middleware (req, res, next).
+ */
 function createRateLimiter({ windowMs, max, keyFn }) {
   const hits = new Map();
 

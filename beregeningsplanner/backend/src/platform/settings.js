@@ -83,54 +83,78 @@ const FIELDS = {
 };
 
 class SettingsError extends Error {
+  /**
+   * Fout in een instelling, met het veld waar het om gaat (voor het formulier).
+   * @param {string} field Naam van de instelling.
+   * @param {string} message De foutmelding.
+   */
   constructor(field, message) {
     super(message);
     this.field = field;
   }
 }
 
-function coerce(def, raw) {
-  if (def.type === 'secret') return String(raw ?? '').trim();
-  if (def.type === 'bool') return raw === true || raw === 'true' || raw === 1 || raw === '1';
-  if (def.type === 'int') {
-    const n = Number(raw);
-    return Number.isFinite(n) ? Math.min(def.max, Math.max(def.min, Math.floor(n))) : def.default;
+/**
+ * Zet een opgeslagen of ingevoerde waarde om naar het type van de instelling
+ * (geheim, ja/nee, geheel getal binnen min/max, vlaggen, object via de eigen
+ * sanitize, keuzelijst).
+ * @param {object} definition Beschrijving van de instelling uit FIELDS.
+ * @param {*} raw De ruwe waarde.
+ * @returns {*} De waarde in het juiste type.
+ */
+function coerce(definition, raw) {
+  if (definition.type === 'secret') return String(raw ?? '').trim();
+  if (definition.type === 'bool') return raw === true || raw === 'true' || raw === 1 || raw === '1';
+  if (definition.type === 'int') {
+    const number = Number(raw);
+    return Number.isFinite(number) ? Math.min(definition.max, Math.max(definition.min, Math.floor(number))) : definition.default;
   }
-  if (def.type === 'flags') {
+  if (definition.type === 'flags') {
     const out = {};
-    if (raw && typeof raw === 'object') for (const [k, v] of Object.entries(raw)) if (/^[a-z0-9-]{1,40}$/.test(k)) out[k] = Boolean(v);
+    if (raw && typeof raw === 'object') for (const [flag, enabled] of Object.entries(raw)) if (/^[a-z0-9-]{1,40}$/.test(flag)) out[flag] = Boolean(enabled);
     return out;
   }
-  if (def.type === 'object') return def.sanitize(raw);
-  if (def.type === 'enum') return def.values.includes(raw) ? raw : def.default;
+  if (definition.type === 'object') return definition.sanitize(raw);
+  if (definition.type === 'enum') return definition.values.includes(raw) ? raw : definition.default;
   return raw;
 }
 
 /**
- * @param db        database uit db.js
- * @param tenantId  tenant waarvan de instellingen zijn
- * @param env       omgevingsvariabelen als startwaarden
+ * Maakt de instellingen van één tenant: leest ze uit de database (geheimen
+ * ontsleuteld) en houdt ze in het geheugen (één proces per database).
+ * @param {{ db: object, tenantId: string, env?: object, vault?: object }} options Database, tenant waarvan de instellingen zijn, omgevingsvariabelen als startwaarden en de kluis voor geheimen.
+ * @returns {{ get: Function, update: Function, view: Function, FIELDS: object }} De instellingenfuncties.
  */
 function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
-  // Geheimen staan als { enc: 'v1:…' } in de database; de tenant en de
-  // veldnaam wegen mee, zodat een versleutelde waarde niet naar een ander veld
-  // of een andere tenant te kopiëren is.
-  const ctx = (key) => `${tenantId}:${key}`;
-  const encode = (key, value) => JSON.stringify(FIELDS[key].type === 'secret' ? { enc: vault.seal(value, ctx(key)) } : value);
+  /**
+   * Context voor de versleuteling van een geheim: tenant en veldnaam wegen mee,
+   * zodat een versleutelde waarde niet naar een ander veld of een andere tenant
+   * te kopiëren is.
+   * @param {string} key Naam van de instelling.
+   * @returns {string} '<tenant>:<veld>'.
+   */
+  const secretContext = (key) => `${tenantId}:${key}`;
+  /**
+   * Zet een waarde om naar de tekst voor de database; een geheim als { enc: 'v1:…' }.
+   * @param {string} key Naam van de instelling.
+   * @param {*} value De waarde.
+   * @returns {string} JSON-tekst.
+   */
+  const encode = (key, value) => JSON.stringify(FIELDS[key].type === 'secret' ? { enc: vault.seal(value, secretContext(key)) } : value);
 
   // Eén proces per database: de waarden staan ook in het geheugen.
   let stored = {};
   const legacy = [];
   for (const row of db.prepare('SELECT key, value FROM settings WHERE tenant_id = ?').all(tenantId)) {
-    const def = FIELDS[row.key];
-    if (!def) continue;
+    const definition = FIELDS[row.key];
+    if (!definition) continue;
     try {
-      const v = JSON.parse(row.value);
-      if (def.type !== 'secret') stored[row.key] = v;
-      else if (v && typeof v === 'object' && typeof v.enc === 'string') stored[row.key] = vault.open(v.enc, ctx(row.key));
+      const parsed = JSON.parse(row.value);
+      if (definition.type !== 'secret') stored[row.key] = parsed;
+      else if (parsed && typeof parsed === 'object' && typeof parsed.enc === 'string') stored[row.key] = vault.open(parsed.enc, secretContext(row.key));
       else {
         // Van voor de versleuteling: meteen versleuteld opnieuw opslaan.
-        stored[row.key] = String(v ?? '');
+        stored[row.key] = String(parsed ?? '');
         legacy.push(row.key);
       }
     } catch {
@@ -138,42 +162,60 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
     }
   }
 
+  /**
+   * Waar de waarde van een instelling vandaan komt: database, omgeving of standaard.
+   * @param {string} key Naam van de instelling.
+   * @param {boolean} [ignoreStored] De database overslaan (voor de startwaarde).
+   * @returns {'instellingen'|'omgeving'|'standaard'} De bron.
+   */
   function source(key, ignoreStored = false) {
-    const def = FIELDS[key];
+    const definition = FIELDS[key];
     if (!ignoreStored && Object.prototype.hasOwnProperty.call(stored, key)) return 'instellingen';
-    const ev = def.env && env[def.env];
-    if (ev !== undefined && ev !== '') return 'omgeving';
+    const envValue = definition.env && env[definition.env];
+    if (envValue !== undefined && envValue !== '') return 'omgeving';
     return 'standaard';
   }
 
-  // initial = de startwaarde (omgeving of standaard), zonder wat in
-  // de database staat: daar gaat een veld naartoe bij 'terugzetten'.
+  /**
+   * De waarde van een instelling.
+   * @param {string} key Naam van de instelling.
+   * @param {boolean} [initial] true = de startwaarde (omgeving of standaard), zonder wat in de database staat; daar gaat een veld naartoe bij 'terugzetten'.
+   * @returns {*} De waarde.
+   * @throws {Error} Bij een onbekende instelling.
+   */
   function get(key, initial = false) {
-    const def = FIELDS[key];
-    if (!def) throw new Error(`Onbekende instelling ${key}`);
+    const definition = FIELDS[key];
+    if (!definition) throw new Error(`Onbekende instelling ${key}`);
     switch (source(key, initial)) {
-      case 'instellingen': return coerce(def, stored[key]);
-      case 'omgeving': return coerce(def, env[def.env]);
-      default: return def.type === 'flags' ? {} : def.type === 'object' ? coerce(def, def.default) : def.default;
+      case 'instellingen': return coerce(definition, stored[key]);
+      case 'omgeving': return coerce(definition, env[definition.env]);
+      default: return definition.type === 'flags' ? {} : definition.type === 'object' ? coerce(definition, definition.default) : definition.default;
     }
   }
 
+  /**
+   * Slaat gewijzigde velden op in de database (weggelaten velden worden verwijderd).
+   * @param {object} next Alle opgeslagen waarden na de wijziging.
+   * @param {string[]} changed Namen van de gewijzigde velden.
+   * @param {string|null} userId Wie de wijziging doet (updated_by).
+   * @returns {void}
+   */
   function save(next, changed, userId) {
-    const del = db.prepare('DELETE FROM settings WHERE tenant_id = ? AND key = ?');
-    const put = db.prepare(`INSERT INTO settings (tenant_id, key, value, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)
+    const deleteRow = db.prepare('DELETE FROM settings WHERE tenant_id = ? AND key = ?');
+    const upsertRow = db.prepare(`INSERT INTO settings (tenant_id, key, value, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT (tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`);
-    const at = new Date().toISOString();
+    const timestamp = new Date().toISOString();
     transaction(db, () => {
       for (const key of changed) {
-        if (Object.prototype.hasOwnProperty.call(next, key)) put.run(tenantId, key, encode(key, next[key]), at, userId || null);
-        else del.run(tenantId, key);
+        if (Object.prototype.hasOwnProperty.call(next, key)) upsertRow.run(tenantId, key, encode(key, next[key]), timestamp, userId || null);
+        else deleteRow.run(tenantId, key);
       }
     });
   }
 
   if (legacy.length) {
-    const upd = db.prepare('UPDATE settings SET value = ? WHERE tenant_id = ? AND key = ?');
-    transaction(db, () => { for (const key of legacy) upd.run(encode(key, stored[key]), tenantId, key); });
+    const updateRow = db.prepare('UPDATE settings SET value = ? WHERE tenant_id = ? AND key = ?');
+    transaction(db, () => { for (const key of legacy) updateRow.run(encode(key, stored[key]), tenantId, key); });
     console.log(`Geheimen versleuteld opgeslagen: ${legacy.join(', ')}`);
   }
 
@@ -181,8 +223,10 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
    * Wijzigingen uit het instellingenscherm. Geheimen: weglaten = ongewijzigd,
    * tekst = nieuwe waarde, '' = leegmaken. `reset: ['veld']` zet een veld terug
    * naar de startwaarde (omgeving of standaard).
-   * @param userId  wie de wijziging doet (voor updated_by)
-   * @returns lijst van gewijzigde velden
+   * @param {object} [patch] De gewijzigde velden (en eventueel reset).
+   * @param {string|null} [userId] Wie de wijziging doet (voor updated_by).
+   * @returns {string[]} De gewijzigde velden.
+   * @throws {SettingsError} Bij een onbekend veld of een ongeldige waarde.
    */
   function update(patch = {}, userId = null) {
     const next = { ...stored };
@@ -195,30 +239,30 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
     }
     for (const [key, raw] of Object.entries(patch)) {
       if (key === 'reset' || raw === undefined) continue;
-      const def = FIELDS[key];
-      if (!def) throw new SettingsError(key, `Onbekende instelling: ${key}`);
-      if (def.type === 'secret') {
+      const definition = FIELDS[key];
+      if (!definition) throw new SettingsError(key, `Onbekende instelling: ${key}`);
+      if (definition.type === 'secret') {
         if (typeof raw !== 'string') throw new SettingsError(key, 'Ongeldige waarde.');
-        const v = raw.trim();
-        if (v.length > (def.max || 500)) throw new SettingsError(key, 'Waarde is te lang.');
-        if (v && v.length < def.min) throw new SettingsError(key, `Minimaal ${def.min} tekens.`);
-        next[key] = v;
-      } else if (def.type === 'int') {
-        const n = raw;
-        if (typeof n !== 'number' || !Number.isInteger(n) || n < def.min || n > def.max) throw new SettingsError(key, `Kies een geheel getal van ${def.min} tot ${def.max}.`);
-        next[key] = n;
-      } else if (def.type === 'enum') {
-        if (!def.values.includes(raw)) throw new SettingsError(key, 'Kies een van de mogelijkheden.');
+        const value = raw.trim();
+        if (value.length > (definition.max || 500)) throw new SettingsError(key, 'Waarde is te lang.');
+        if (value && value.length < definition.min) throw new SettingsError(key, `Minimaal ${definition.min} tekens.`);
+        next[key] = value;
+      } else if (definition.type === 'int') {
+        const number = raw;
+        if (typeof number !== 'number' || !Number.isInteger(number) || number < definition.min || number > definition.max) throw new SettingsError(key, `Kies een geheel getal van ${definition.min} tot ${definition.max}.`);
+        next[key] = number;
+      } else if (definition.type === 'enum') {
+        if (!definition.values.includes(raw)) throw new SettingsError(key, 'Kies een van de mogelijkheden.');
         next[key] = raw;
-      } else if (def.type === 'bool') {
+      } else if (definition.type === 'bool') {
         if (typeof raw !== 'boolean') throw new SettingsError(key, 'Ongeldige waarde.');
         next[key] = raw;
-      } else if (def.type === 'flags') {
+      } else if (definition.type === 'flags') {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new SettingsError(key, 'Ongeldige waarde.');
-        next[key] = { ...get(key), ...coerce(def, raw) };
-      } else if (def.type === 'object') {
+        next[key] = { ...get(key), ...coerce(definition, raw) };
+      } else if (definition.type === 'object') {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new SettingsError(key, 'Ongeldige waarde.');
-        next[key] = coerce(def, raw);
+        next[key] = coerce(definition, raw);
       }
       changed.push(key);
     }
@@ -228,7 +272,11 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
     return unique;
   }
 
-  /** Overzicht voor het instellingenscherm. Geheimen gaan nooit volledig terug. */
+  /**
+   * Overzicht voor het instellingenscherm. Geheimen gaan nooit volledig terug:
+   * alleen of ze gezet zijn en zo nodig de laatste 4 tekens.
+   * @returns {Object<string, { value?: *, set?: boolean, hint?: string, source: string }>} Per instelling de waarde (of de stand van het geheim) en de bron.
+   */
   function view() {
     const out = {};
     for (const [key, def] of Object.entries(FIELDS)) {

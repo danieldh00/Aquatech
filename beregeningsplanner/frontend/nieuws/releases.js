@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.68.1',
+      date: '2026-10-22',
+      title: 'Opgeschoonde servercode (deel 1)',
+      items: [],
+    },
+    {
       version: '0.68.0',
       date: '2026-10-22',
       title: 'Automatisch plaatsen: zo groen mogelijk met zo min mogelijk koppen',
