@@ -47,18 +47,26 @@ const SETUP_PAGE = path.join(PAGES_DIR, 'setup.html');
 const PASSWORD_PAGE = path.join(PAGES_DIR, 'password.html');
 const PKG = require('../package.json');
 
-// De versie van de app staat in package.json.
+/**
+ * De versie van de app (uit package.json).
+ * @returns {string} Het versienummer.
+ */
 const readVersion = () => PKG.version;
 
-// Content-Security-Policy: alleen eigen scripts (plus de inline scripts van de
-// inlog- en instelpagina, op hash), geen frames, geen plug-ins. WebAssembly
-// (OCR) en workers/blobs (pdf.js, Tesseract, Excel-export) zijn nodig.
+/**
+ * SHA-256-hashes van de inline scripts in deze pagina's, voor de
+ * Content-Security-Policy hieronder: alleen eigen scripts (plus de inline
+ * scripts van de inlog- en instelpagina, op hash), geen frames, geen plug-ins.
+ * WebAssembly (OCR) en workers/blobs (pdf.js, Tesseract, Excel-export) zijn nodig.
+ * @param {string[]} files Paden van de HTML-pagina's.
+ * @returns {string[]} De hashes als CSP-bron ('sha256-...').
+ */
 function inlineScriptHashes(files) {
   const out = [];
-  for (const f of files) {
-    const html = fs.readFileSync(f, 'utf8');
-    for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
-      out.push(`'sha256-${crypto.createHash('sha256').update(m[1]).digest('base64')}'`);
+  for (const file of files) {
+    const html = fs.readFileSync(file, 'utf8');
+    for (const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
+      out.push(`'sha256-${crypto.createHash('sha256').update(match[1]).digest('base64')}'`);
     }
   }
   return out;
@@ -77,15 +85,23 @@ const CSP = [
   "frame-ancestors 'none'",
 ].join('; ');
 
-// Eenmalige installatiecode voor het eerste beheerdersaccount (zonder
-// toegangscode): staat alleen in het serverlog, zodat niet iedereen die als
-// eerste de publieke URL opent het beheer kan overnemen.
+/**
+ * Eenmalige installatiecode voor het eerste beheerdersaccount (zonder
+ * toegangscode): staat alleen in het serverlog, zodat niet iedereen die als
+ * eerste de publieke URL opent het beheer kan overnemen.
+ * @returns {string} Code als XXXX-XXXX-XXXX.
+ */
 function newSetupCode() {
   const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const chars = Array.from(crypto.randomBytes(12), (b) => abc[b % abc.length]).join('');
+  const chars = Array.from(crypto.randomBytes(12), (byte) => abc[byte % abc.length]).join('');
   return chars.match(/.{4}/g).join('-');
 }
-const normCode = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+/**
+ * Maakt een code vergelijkbaar: hoofdletters, alleen letters en cijfers.
+ * @param {*} code De ingevoerde code.
+ * @returns {string} De genormaliseerde code.
+ */
+const normalizeCode = (code) => String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 // Zonder inloggen bereikbaar: de openbare offertepagina (klant via een link
 // met token) en precies de bestanden die die pagina nodig heeft. Geen
@@ -101,12 +117,17 @@ const PUBLIC_FILES = new Set([
   '/sw.js', '/manifest.json', '/shared/offline-core.js',
   '/shared/icons/app-192.png', '/shared/icons/app-512.png', '/shared/icons/app-maskable-512.png', '/shared/icons/apple-touch-icon.png',
 ]);
+/**
+ * Is dit een openbaar bestand (zonder inloggen bereikbaar, zie PUBLIC_FILES)?
+ * @param {object} req Het verzoek.
+ * @returns {boolean} true als het mag.
+ */
 function isPublicAsset(req) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
-  let p;
-  try { p = decodeURIComponent(req.path); } catch { return false; }
-  if (p !== path.posix.normalize(p) || p.includes('\\')) return false;
-  return PUBLIC_FILES.has(p) || /^\/shared\/fonts\/montserrat-latin-\d{3}-normal\.woff2$/.test(p);
+  let decodedPath;
+  try { decodedPath = decodeURIComponent(req.path); } catch { return false; }
+  if (decodedPath !== path.posix.normalize(decodedPath) || decodedPath.includes('\\')) return false;
+  return PUBLIC_FILES.has(decodedPath) || /^\/shared\/fonts\/montserrat-latin-\d{3}-normal\.woff2$/.test(decodedPath);
 }
 
 // De planner zonder inloggen (tekening indienen, zie drawings.js): de pagina
@@ -114,17 +135,29 @@ function isPublicAsset(req) {
 // zit geen data in: zonder account blijft het plan in de browser tot het
 // wordt ingediend.
 const PLANNER_FILES = new Set(['/shared/common.js', '/shared/env.js', '/shared/sidebar.js', '/shared/sidebar.css', '/shared/schild-white.png', '/dashboard/modules.js']);
+/**
+ * De planner zonder inloggen (tekening indienen, zie drawings.js): de pagina
+ * alleen met ?tekenen (anders gewoon de inlogpagina), en de code ervan. Er
+ * zit geen data in: zonder account blijft het plan in de browser tot het
+ * wordt ingediend.
+ * @param {object} req Het verzoek.
+ * @returns {boolean} true als het verzoek bij de openbare planner hoort.
+ */
 function isPublicPlanner(req) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
-  let p;
-  try { p = decodeURIComponent(req.path); } catch { return false; }
-  if (p !== path.posix.normalize(p) || p.includes('\\')) return false;
-  if (p === '/beregening/' || p === '/beregening/index.html') return Object.prototype.hasOwnProperty.call(req.query, 'tekenen');
-  if (p === '/beregening') return Object.prototype.hasOwnProperty.call(req.query, 'tekenen');
-  return PLANNER_FILES.has(p) || (p.startsWith('/beregening/') && !p.endsWith('.html') && /\.[a-z0-9]+(\.gz)?$/i.test(p));
+  let decodedPath;
+  try { decodedPath = decodeURIComponent(req.path); } catch { return false; }
+  if (decodedPath !== path.posix.normalize(decodedPath) || decodedPath.includes('\\')) return false;
+  if (decodedPath === '/beregening/' || decodedPath === '/beregening/index.html') return Object.prototype.hasOwnProperty.call(req.query, 'tekenen');
+  if (decodedPath === '/beregening') return Object.prototype.hasOwnProperty.call(req.query, 'tekenen');
+  return PLANNER_FILES.has(decodedPath) || (decodedPath.startsWith('/beregening/') && !decodedPath.endsWith('.html') && /\.[a-z0-9]+(\.gz)?$/i.test(decodedPath));
 }
 
-// Een module is een map direct onder frontend/ met een eigen index.html.
+/**
+ * Een module is een map direct onder frontend/ met een eigen index.html.
+ * @param {string} name Naam van de map.
+ * @returns {boolean} true als het een module is.
+ */
 function isModule(name) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) return false;
   try {
@@ -134,16 +167,28 @@ function isModule(name) {
   }
 }
 
-// Pagina's krijgen de appversie achter elke lokale stylesheet en elk script
-// (`css/app.css?v=<versie>`). Zo laadt een telefoon na een update gegarandeerd
-// de nieuwe bestanden, ook als de browser of een proxy (Cloudflare) een oude
-// versie in de cache heeft; zonder dit kreeg iOS de nieuwe HTML met oude CSS.
+/**
+ * Pagina's krijgen de appversie achter elke lokale stylesheet en elk script
+ * (`css/app.css?v=<versie>`). Zo laadt een telefoon na een update gegarandeerd
+ * de nieuwe bestanden, ook als de browser of een proxy (Cloudflare) een oude
+ * versie in de cache heeft; zonder dit kreeg iOS de nieuwe HTML met oude CSS.
+ * @param {string} html De pagina.
+ * @param {string} version De appversie.
+ * @returns {string} De pagina met ?v=<versie> achter de lokale bestanden.
+ */
 function versionAssets(html, version) {
-  const v = encodeURIComponent(version);
-  return html.replace(/(<(?:link|script)\b[^>]*?\b(?:href|src)=")([^"?#:]+\.(?:css|js))(")/g, `$1$2?v=${v}$3`);
+  const versionParam = encodeURIComponent(version);
+  return html.replace(/(<(?:link|script)\b[^>]*?\b(?:href|src)=")([^"?#:]+\.(?:css|js))(")/g, `$1$2?v=${versionParam}$3`);
 }
 
-// `head`: extra regels direct na <head> (bijv. de startpagina, zie startPageOf).
+/**
+ * Stuurt een pagina met versienummers achter de bestanden.
+ * @param {object} res Het antwoord.
+ * @param {string} file Pad van de pagina.
+ * @param {string} version De appversie.
+ * @param {string} [head] Extra regels direct na <head> (bijv. de startpagina, zie startPageOf).
+ * @returns {void}
+ */
 function sendPage(res, file, version, head = '') {
   fs.readFile(file, 'utf8', (err, html) => {
     if (err) return res.status(404).end();
@@ -153,22 +198,29 @@ function sendPage(res, file, version, head = '') {
   });
 }
 
-// Scripts en stylesheets met de huidige versie (`?v=<versie>`, zie
-// versionAssets) veranderen nooit meer: de browser mag ze bewaren zonder bij
-// elke paginawissel opnieuw te vragen of ze nog kloppen. Een nieuwe versie
-// heeft een ander adres. `private`: alleen de browser, geen proxy (Cloudflare),
-// want de bestanden vallen achter de login.
+/**
+ * Scripts en stylesheets met de huidige versie (`?v=<versie>`, zie
+ * versionAssets) veranderen nooit meer: de browser mag ze bewaren zonder bij
+ * elke paginawissel opnieuw te vragen of ze nog kloppen. Een nieuwe versie
+ * heeft een ander adres. `private`: alleen de browser, geen proxy (Cloudflare),
+ * want de bestanden vallen achter de login.
+ * @param {string} version De appversie.
+ * @returns {Function} setHeaders voor express.static (res, file).
+ */
 function staticHeaders(version) {
-  const v = `v=${encodeURIComponent(version)}`;
+  const versionQuery = `v=${encodeURIComponent(version)}`;
   return (res, file) => {
-    const q = res.req && res.req.originalUrl ? res.req.originalUrl.split('?')[1] : '';
-    const fixed = q === v && /\.(css|js)$/.test(file);
+    const query = res.req && res.req.originalUrl ? res.req.originalUrl.split('?')[1] : '';
+    const fixed = query === versionQuery && /\.(css|js)$/.test(file);
     res.setHeader('Cache-Control', fixed ? 'private, max-age=31536000, immutable' : 'no-cache');
   };
 }
 
-// accessCode, anthropicApiKey en aiDailyLimit zijn alleen startwaarden (net als
-// env); de actuele waarden komen uit de instellingen.
+/**
+ * Bouwt de Express-app met alle routes en opslag.
+ * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch en wanIp (tests vervangen hiermee de buitenwereld).
+ * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
+ */
 function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, wanIp = createWanIp() }) {
   const version = readVersion();
   const database = db || openDb();
@@ -184,19 +236,29 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Instellingen per tenant (ook per testomgeving). De omgevingsvariabelen
   // gelden alleen als startwaarde voor de hoofdtenant en diens testomgevingen.
   const settingsCache = new Map();
+  /**
+   * De instellingen van een tenant (onthouden). De omgevingsvariabelen gelden
+   * alleen als startwaarde voor de hoofdtenant en diens testomgevingen.
+   * @param {string} tenantId Id van de tenant of omgeving.
+   * @returns {object} De instellingen (settings.js).
+   */
   function settingsFor(tenantId) {
-    let s = settingsCache.get(tenantId);
-    if (!s) {
-      const t = store.getTenant(tenantId);
-      const own = tenantId === tenant.id || (t && t.parent_id === tenant.id);
-      s = createSettings({ db: database, tenantId, env: own ? startEnv : {}, vault });
-      settingsCache.set(tenantId, s);
+    let tenantSettings = settingsCache.get(tenantId);
+    if (!tenantSettings) {
+      const tenantRow = store.getTenant(tenantId);
+      const own = tenantId === tenant.id || (tenantRow && tenantRow.parent_id === tenant.id);
+      tenantSettings = createSettings({ db: database, tenantId, env: own ? startEnv : {}, vault });
+      settingsCache.set(tenantId, tenantSettings);
     }
-    return s;
+    return tenantSettings;
   }
   const settings = settingsFor(tenant.id);
-  // Kleurthema (shared/theme.js): het eigen thema van de live-tenant (ook voor
-  // diens testomgevingen), anders het thema van de hoofdtenant voor iedereen.
+  /**
+   * Kleurthema (shared/theme.js): het eigen thema van de live-tenant (ook voor
+   * diens testomgevingen), anders het thema van de hoofdtenant voor iedereen.
+   * @param {string} [tenantId] Id van de omgeving (leeg = hoofdtenant).
+   * @returns {object} De kleuren.
+   */
   function themeFor(tenantId) {
     const home = tenantId ? homeOf(tenantId) : tenant.id;
     const own = home !== tenant.id ? settingsFor(home).get('theme') : {};
@@ -205,6 +267,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Inlog-, instel- en wachtwoordpagina: alles inline (geen toegang tot
   // bestanden), dus het thema als <style> in de kop.
   const authHtml = new Map();
+  /**
+   * Stuurt de inlog-, instel- of wachtwoordpagina: alles inline (geen toegang
+   * tot bestanden), dus het thema als <style> in de kop.
+   * @param {object} res Het antwoord.
+   * @param {string} file Pad van de pagina.
+   * @param {string} [tenantId] Omgeving voor het kleurthema.
+   * @returns {void}
+   */
   function sendAuthPage(res, file, tenantId) {
     if (!authHtml.has(file)) authHtml.set(file, fs.readFileSync(file, 'utf8'));
     const css = Theme.css(themeFor(tenantId));
@@ -212,28 +282,53 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.type('html').send(css ? html.replace('</head>', `  <style>${css}</style>\n</head>`) : html);
   }
   const installCode = setupCode || env.SETUP_CODE || newSetupCode();
+  /**
+   * De toegangscode van de hoofdtenant.
+   * @returns {string} De code (leeg = geen).
+   */
   const getAccessCode = () => settings.get('accessCode');
-  // Gasten (zonder inloggen) alleen als dat aanstaat en er geen code is.
+  /**
+   * Gasten (zonder inloggen) alleen als dat aanstaat en er geen code is.
+   * @returns {boolean} true als gasten mogen.
+   */
   const guestsAllowed = () => !getAccessCode() && settings.get('guestAccess');
   // Nog geen beheerder met een eigen account: eerst het instelscherm.
   // Is er eenmaal een actieve beheerder, dan blijft dat zo (de laatste
   // beheerder is niet uit te schakelen of te verwijderen): daarna niet bij elk
   // verzoek opnieuw tellen.
   let hasAdmin = false;
+  /**
+   * Nog geen beheerder met een eigen account: eerst het instelscherm. Is er
+   * eenmaal een actieve beheerder, dan blijft dat zo, dus daarna niet bij elk
+   * verzoek opnieuw tellen.
+   * @returns {boolean} true als het instelscherm nodig is.
+   */
   const needsSetup = () => {
     if (!hasAdmin) hasAdmin = store.countAdmins(tenant.id) > 0;
     return !hasAdmin;
   };
   const auth = createAuth({ secret, store, tenantId: tenant.id, getAccessCode,
     idleDays: () => settings.get('sessionIdleDays'), maxDays: () => settings.get('sessionMaxDays') });
-  // Standaard in het auditlog van de actieve omgeving (zonder inlog de hoofdtenant).
-  // Werkt een hoofdbeheerder als deze gebruiker (impersonatie), dan staat diens
-  // gebruikersnaam erbij.
+  /**
+   * Schrijft een regel in het auditlog, standaard van de actieve omgeving (zonder
+   * inlog de hoofdtenant). Werkt een hoofdbeheerder als deze gebruiker
+   * (impersonatie), dan staat diens gebruikersnaam erbij.
+   * @param {object} req Het verzoek.
+   * @param {string} action De actie.
+   * @param {object} [detail] Details (nooit geheimen).
+   * @param {string|null} [userId] Wie (standaard req.user).
+   * @param {string} [tenantId] Omgeving (standaard req.tenantId).
+   * @returns {void}
+   */
   const audit = (req, action, detail = {}, userId, tenantId) => store.audit({ tenantId: tenantId || req.tenantId || tenant.id,
     userId: userId === undefined ? req.user?.id || null : userId, action,
     detail: req.user?.impersonator ? { ...detail, impersonatie: req.user.impersonator.username } : detail, ip: remoteIp(req) });
   const impersonation = createImpersonation({ store, imp: createImpersonationStore(database), auth, audit, mainTenantId: tenant.id });
-  // Express 4 vangt geen afgewezen promises: doorgeven aan de foutafhandeling.
+  /**
+   * Express 4 vangt geen afgewezen promises: doorgeven aan de foutafhandeling.
+   * @param {Function} handler De async handler.
+   * @returns {Function} Middleware.
+   */
   const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
   // De AI-client volgt de API-sleutel en het model uit de instellingen van de
   // tenant (zonder herstart). Elke organisatie gebruikt haar eigen sleutel:
@@ -242,16 +337,27 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // nooit voor een andere organisatie. Een testomgeving zonder eigen sleutel
   // gebruikt sleutel en model van haar live-tenant (zelfde organisatie).
   const analyzers = new Map();
+  /**
+   * De omgeving waarvan de AI-sleutel en het model gelden: de eigen als die
+   * een sleutel heeft, anders (testomgeving) die van de live-tenant.
+   * @param {string} [tenantId] Id van de omgeving.
+   * @returns {string} Id van de omgeving met de AI-instellingen.
+   */
   function aiTenantOf(tenantId = tenant.id) {
     if (settingsFor(tenantId).get('anthropicApiKey')) return tenantId;
-    const t = store.getTenant(tenantId);
-    return t && t.environment === 'test' && t.parent_id ? t.parent_id : tenantId;
+    const tenantRow = store.getTenant(tenantId);
+    return tenantRow && tenantRow.environment === 'test' && tenantRow.parent_id ? tenantRow.parent_id : tenantId;
   }
+  /**
+   * De AI-client voor een omgeving (per model en sleutel onthouden).
+   * @param {string} [tenantId] Id van de omgeving.
+   * @returns {object} De plananalyse (planAnalyzer.js).
+   */
   function currentAnalyzer(tenantId = tenant.id) {
     if (analyzer) return analyzer;
-    const s = settingsFor(aiTenantOf(tenantId));
-    const key = s.get('anthropicApiKey');
-    const model = s.get('aiModel');
+    const aiSettings = settingsFor(aiTenantOf(tenantId));
+    const key = aiSettings.get('anthropicApiKey');
+    const model = aiSettings.get('aiModel');
     const cacheKey = `${model}|${key}`;
     let cached = analyzers.get(cacheKey);
     if (!cached) {
@@ -264,6 +370,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const aiUsage = createAiUsageStore(database);
   // Vaste AI-uitkomst per tekening en geleerde kleuren (zie recognitions.js).
   const recognitions = createRecognitionStore(database);
+  /**
+   * Staat AI-herkenning aan en is er een sleutel?
+   * @param {string} [tenantId] Id van de omgeving.
+   * @returns {boolean} true als herkennen kan.
+   */
   const aiAvailable = (tenantId = tenant.id) => settingsFor(tenantId).get('aiEnabled') && currentAnalyzer(tenantId).available;
 
   const app = express();
@@ -275,8 +386,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Modules roepen de API relatief aan ('api/...'), dus vanuit beregening/
   // komt dat binnen als /beregening/api/...: zelfde API, prefix eraf.
   app.use((req, res, next) => {
-    const m = /^\/([a-z0-9][a-z0-9-]*)(\/api\/.*)$/.exec(req.url);
-    if (m && isModule(m[1])) req.url = m[2];
+    const match = /^\/([a-z0-9][a-z0-9-]*)(\/api\/.*)$/.exec(req.url);
+    if (match && isModule(match[1])) req.url = match[2];
     next();
   });
   // Grote limiet alleen voor de plananalyse (afbeelding als base64).
@@ -352,11 +463,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const api = req.path.startsWith('/api/');
     const page = !/\.[a-z0-9]+$/i.test(req.path) || req.path.endsWith('.html');
     if (!api && (!page || (req.method !== 'GET' && req.method !== 'HEAD'))) return next();
-    const s = auth.session(req);
-    if (s?.via !== 'user' || !s.user.must_change_password || PASSWORD_OPEN.test(req.path)) return next();
+    const session = auth.session(req);
+    if (session?.via !== 'user' || !session.user.must_change_password || PASSWORD_OPEN.test(req.path)) return next();
     if (api) return res.status(403).json({ error: 'password_change_required', message: 'Kies eerst een nieuw wachtwoord.' });
     res.setHeader('Cache-Control', 'no-store');
-    sendAuthPage(res, PASSWORD_PAGE, s.user.tenant_id);
+    sendAuthPage(res, PASSWORD_PAGE, session.user.tenant_id);
   });
 
   // Inloggen: streng begrensd per IP (achter de tunnel is dat het
@@ -367,15 +478,25 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // account 15 minuten geblokkeerd (ook als de pogingen van veel IP's komen).
   const failures = new Map();
   const LOCK_MS = 15 * 60 * 1000;
+  /**
+   * Is deze gebruikersnaam (tijdelijk) geblokkeerd na te veel mislukte pogingen?
+   * @param {string} name Sleutel (bijv. de gebruikersnaam).
+   * @returns {boolean} true als hij geblokkeerd is.
+   */
   const lockedOut = (name) => {
-    const f = failures.get(name);
-    if (f && f.reset <= Date.now()) failures.delete(name);
+    const entry = failures.get(name);
+    if (entry && entry.reset <= Date.now()) failures.delete(name);
     return (failures.get(name)?.count || 0) >= 10;
   };
+  /**
+   * Telt een mislukte poging.
+   * @param {string} name Sleutel (bijv. de gebruikersnaam).
+   * @returns {void}
+   */
   const failed = (name) => {
-    const f = failures.get(name);
-    if (!f || f.reset <= Date.now()) failures.set(name, { count: 1, reset: Date.now() + LOCK_MS });
-    else f.count += 1;
+    const entry = failures.get(name);
+    if (!entry || entry.reset <= Date.now()) failures.set(name, { count: 1, reset: Date.now() + LOCK_MS });
+    else entry.count += 1;
   };
 
   app.get('/api/health', (req, res) => {
@@ -445,8 +566,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.post('/api/auth/logout', (req, res) => {
     impersonation.stop(req, res, 'uitgelogd');
-    const s = auth.session(req);
-    if (s) audit(req, 'uitgelogd', {}, s.user?.id || s.row.user_id, s.row.tenant_id);
+    const session = auth.session(req);
+    if (session) audit(req, 'uitgelogd', {}, session.user?.id || session.row.user_id, session.row.tenant_id);
     auth.clearCookie(req, res);
     clearEnvironment(req, res);
     res.json({ ok: true });
@@ -466,7 +587,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!req.is('application/json')) return res.status(415).json({ error: 'json_required', message: 'Verwacht JSON.' });
     if (!needsSetup()) return res.status(409).json({ error: 'already_setup', message: 'Er is al een beheerder. Log in met je account.' });
     const code = String(req.body?.code ?? '');
-    if (getAccessCode() ? !auth.checkCode(code) : !auth.safeEqual(normCode(code), normCode(installCode))) {
+    if (getAccessCode() ? !auth.checkCode(code) : !auth.safeEqual(normalizeCode(code), normalizeCode(installCode))) {
       audit(req, 'installatie_mislukt', {}, null);
       return res.status(401).json({ error: 'wrong_code', message: getAccessCode() ? 'Onjuiste toegangscode.' : 'Onjuiste installatiecode. Je vindt die in het serverlog (docker compose logs).' });
     }
@@ -491,16 +612,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // waar het account bij hoort. req.tenantId = de actieve omgeving (zonder
   // inlog de hoofdtenant). Alle gegevens (plannen, historie, instellingen)
   // gaan via req.tenantId; gebruikersbeheer via usersTenantOf(req).
+  /**
+   * Bepaalt wie het verzoek doet en zet req.user en req.tenantId.
+   * @param {object} req Het verzoek.
+   * @returns {object|null} De gebruiker, of null.
+   */
   function identify(req) {
     if (req.user !== undefined) return req.user;
-    const s = auth.session(req);
+    const session = auth.session(req);
     let user = null;
-    if (s?.via === 'code') user = store.systemUser(tenant.id, 'beheerder', 'Beheerder (toegangscode)');
-    else if (s?.via === 'user') user = s.user;
+    if (session?.via === 'code') user = store.systemUser(tenant.id, 'beheerder', 'Beheerder (toegangscode)');
+    else if (session?.via === 'user') user = session.user;
     else if (guestsAllowed()) {
       const gid = auth.guestId(req);
-      const g = gid && store.getUser(gid);
-      user = g && g.kind === 'gast' && g.tenant_id === tenant.id && !g.disabled ? g : null;
+      const guest = gid && store.getUser(gid);
+      user = guest && guest.kind === 'gast' && guest.tenant_id === tenant.id && !guest.disabled ? guest : null;
     }
     if (user) {
       const home = store.getTenant(user.tenant_id);
@@ -509,7 +635,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (user) {
       store.touchUser(user);
       // Een hoofdbeheerder kan tijdelijk als een andere gebruiker werken (zie impersonation.js).
-      const as = s?.via === 'user' && user.platform_admin ? impersonation.resolve(req, user) : null;
+      const as = session?.via === 'user' && user.platform_admin ? impersonation.resolve(req, user) : null;
       user = as || actingUser(req, user);
       user = withRights(user);
     }
@@ -527,42 +653,72 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const ENV_COOKIE = 'aquatech_env';
   const ENV_HINT = 'aquatech_env_hint';
 
-  // Rechten van de eigen rol zoals de organisatie die heeft ingesteld (Beheer
-  // > Rollen); roles.js valt terug op de standaard.
+  /**
+   * Rechten van de eigen rol zoals de organisatie die heeft ingesteld (Beheer
+   * > Rollen); roles.js valt terug op de standaard.
+   * @param {object} user De gebruiker.
+   * @returns {object} De gebruiker met rights.
+   */
   function withRights(user) {
     if (user.platform_admin) return user;
     return { ...user, rights: store.roles.rightsFor(user.home_tenant_id || user.tenant_id, user.role) };
   }
 
+  /**
+   * De gebruiker zoals die in de gekozen omgeving werkt (cookie aquatech_env).
+   * @param {object} req Het verzoek.
+   * @param {object} user Het account.
+   * @returns {object} De gebruiker met tenant_id = actieve omgeving en home_tenant_id = eigen tenant.
+   */
   function actingUser(req, user) {
     const base = { ...user, home_tenant_id: user.tenant_id };
     const raw = auth.readSigned(req, ENV_COOKIE, 'env');
     if (!raw) return base;
-    const [uid, tid] = raw.split(':');
-    if (uid !== user.id || !tid || tid === user.tenant_id) return base;
-    if (!store.accessibleTenants(user).some((t) => t.id === tid)) return base;
-    return { ...base, tenant_id: tid, role: user.platform_admin ? 'beheerder' : user.role };
+    const [cookieUserId, cookieTenantId] = raw.split(':');
+    if (cookieUserId !== user.id || !cookieTenantId || cookieTenantId === user.tenant_id) return base;
+    if (!store.accessibleTenants(user).some((accessible) => accessible.id === cookieTenantId)) return base;
+    return { ...base, tenant_id: cookieTenantId, role: user.platform_admin ? 'beheerder' : user.role };
   }
 
-  // Alleen wissen wat er is (de sessie-cookie blijft zo de eerste Set-Cookie).
-  // Toegankelijke omgevingen van een (werkende) gebruiker: op basis van het
-  // account in de eigen tenant, niet van de omgeving waar die nu werkt.
+  /**
+   * Toegankelijke omgevingen van een (werkende) gebruiker: op basis van het
+   * account in de eigen tenant, niet van de omgeving waar die nu werkt.
+   * @param {object} user De gebruiker.
+   * @returns {object[]} De omgevingen.
+   */
   const accessibleFor = (user) => store.accessibleTenants({ ...user, tenant_id: user.home_tenant_id || user.tenant_id });
 
+  /**
+   * Wist de omgevingscookies; alleen wat er is (de sessie-cookie blijft zo de eerste Set-Cookie).
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @returns {void}
+   */
   function clearEnvironment(req, res) {
     const cookies = parseCookies(req.headers.cookie);
     if (cookies[ENV_COOKIE]) auth.clearNamed(res, ENV_COOKIE);
     if (cookies[ENV_HINT]) auth.clearNamed(res, ENV_HINT);
   }
 
-  function environmentInfo(t) {
-    if (!t) return null;
-    const parent = t.parent_id ? store.getTenant(t.parent_id) : null;
-    return { ...store.tenantRow(t), parentName: parent ? parent.name : null };
+  /**
+   * Een omgeving voor de frontend, met de naam van de live-tenant.
+   * @param {object|null} tenantRow De tenant.
+   * @returns {object|null} De omgeving, of null.
+   */
+  function environmentInfo(tenantRow) {
+    if (!tenantRow) return null;
+    const parent = tenantRow.parent_id ? store.getTenant(tenantRow.parent_id) : null;
+    return { ...store.tenantRow(tenantRow), parentName: parent ? parent.name : null };
   }
 
 
   const guestLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: remoteIp });
+  /**
+   * De gebruiker, of (met gasten aan) een nieuwe gast; begrensd per IP.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @returns {object|null|undefined} De gebruiker; null zonder; undefined als de limiet al heeft geantwoord.
+   */
   function ensureUser(req, res) {
     const user = identify(req);
     if (user || !guestsAllowed()) return user;
@@ -576,6 +732,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     return req.user;
   }
 
+  /**
+   * Middleware: alleen met een gebruiker (of nieuwe gast).
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {Function} next Volgende stap.
+   * @returns {void}
+   */
   const requireUser = (req, res, next) => {
     const user = ensureUser(req, res);
     if (user === undefined) return; // limiet al beantwoord
@@ -595,6 +758,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     voorraad: 'Je rol heeft geen toegang tot voorraadbeheer.',
     portaal: 'Het klantportaal is er voor klanten.',
   };
+  /**
+   * Middleware die een recht eist (rechten per rol in frontend/shared/roles.js).
+   * @param {string} right Het recht.
+   * @returns {Function} Middleware.
+   */
   const requireRight = (right) => (req, res, next) => {
     const user = identify(req);
     if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
@@ -602,34 +770,57 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     next();
   };
   const requireAdmin = requireRight('beheer');
+  /**
+   * Middleware: alleen voor hoofdbeheerders.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {Function} next Volgende stap.
+   * @returns {void}
+   */
   const requirePlatformAdmin = (req, res, next) => {
     const user = identify(req);
     if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
     if (!user.platform_admin) return res.status(403).json({ error: 'forbidden', message: 'Alleen voor hoofdbeheerders.' });
     next();
   };
-  // Schrijven alleen met JSON (geen cross-site formulieren).
+  /**
+   * Middleware: schrijven alleen met JSON (geen cross-site formulieren).
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {Function} next Volgende stap.
+   * @returns {void}
+   */
   const requireJson = (req, res, next) => {
     if (req.is('application/json')) return next();
     res.status(415).json({ error: 'json_required', message: 'Verwacht JSON.' });
   };
+  /**
+   * Het IP-adres van de bezoeker (CF-Connecting-IP achter de tunnel).
+   * @param {object} req Het verzoek.
+   * @returns {string} Het adres.
+   */
   const ipOf = (req) => remoteIp(req);
 
+  /**
+   * De organisatiecode waarmee de gebruiker inlogt (leeg voor de hoofdtenant).
+   * @param {object|null} user De gebruiker.
+   * @returns {string} De code.
+   */
   const loginCodeOf = (user) => {
-    const t = user && store.getTenant(user.home_tenant_id || user.tenant_id);
-    return !t || t.slug === 'default' ? '' : t.slug;
+    const tenantRow = user && store.getTenant(user.home_tenant_id || user.tenant_id);
+    return !tenantRow || tenantRow.slug === 'default' ? '' : tenantRow.slug;
   };
 
   // ---------- Eigen wachtwoord wijzigen ----------
   // Met het huidige wachtwoord ter controle; daarna is de gebruiker op alle
   // andere toestellen uitgelogd en krijgt dit toestel een nieuwe sessie.
   app.post('/api/account/password', requireJson, wrap(async (req, res) => {
-    const s = auth.session(req);
-    if (s?.via !== 'user') return res.status(400).json({ error: 'no_account', message: 'Log in met je eigen account om je wachtwoord te wijzigen.' });
+    const session = auth.session(req);
+    if (session?.via !== 'user') return res.status(400).json({ error: 'no_account', message: 'Log in met je eigen account om je wachtwoord te wijzigen.' });
     if (identify(req)?.impersonation) return res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' });
-    const key = `wachtwoord:${s.user.id}`;
+    const key = `wachtwoord:${session.user.id}`;
     if (lockedOut(key)) return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen. Probeer het over een kwartier opnieuw.' });
-    const out = await store.changeOwnPassword(s.user.id, String(req.body?.currentPassword ?? '').slice(0, 1024), String(req.body?.newPassword ?? '').slice(0, 1024));
+    const out = await store.changeOwnPassword(session.user.id, String(req.body?.currentPassword ?? '').slice(0, 1024), String(req.body?.newPassword ?? '').slice(0, 1024));
     if (out.error) {
       if (out.wrong) failed(key);
       return res.status(out.status || 400).json({ error: out.wrong ? 'wrong_password' : 'invalid_password', message: out.error });
@@ -643,30 +834,41 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // ---------- Mijn profiel ----------
   // Naam, e-mail, telefoon en persoonlijke voorkeuren van het eigen account
   // (niet met de toegangscode, niet tijdens een impersonatie).
+  /**
+   * Het eigen account voor Mijn profiel; stuurt zelf een fout als dat er niet is.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @returns {object|null} De gebruiker, of null (antwoord al verstuurd).
+   */
   function profileOwner(req, res) {
-    const s = auth.session(req);
-    if (s?.via !== 'user') { res.status(400).json({ error: 'no_account', message: 'Log in met je eigen account om je profiel te bekijken.' }); return null; }
+    const session = auth.session(req);
+    if (session?.via !== 'user') { res.status(400).json({ error: 'no_account', message: 'Log in met je eigen account om je profiel te bekijken.' }); return null; }
     if (identify(req)?.impersonation) { res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' }); return null; }
-    return s.user;
+    return session.user;
   }
-  const profileOf = (u) => ({ user: store.publicUser(u), preferences: preferencesOf(u) });
+  /**
+   * Het profiel voor de API.
+   * @param {object} user De gebruiker.
+   * @returns {{ user: object, preferences: object }} Gegevens en voorkeuren.
+   */
+  const profileOf = (user) => ({ user: store.publicUser(user), preferences: preferencesOf(user) });
 
   app.get('/api/account/profile', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    const u = profileOwner(req, res);
+    const owner = profileOwner(req, res);
     // s.user is in dit verzoek net uit de database gelezen.
-    if (u) res.json(profileOf(u));
+    if (owner) res.json(profileOf(owner));
   });
 
   app.put('/api/account/profile', requireJson, (req, res) => {
-    const u = profileOwner(req, res);
-    if (!u) return;
+    const owner = profileOwner(req, res);
+    if (!owner) return;
     const input = {};
-    for (const k of ['displayName', 'email', 'phone', 'preferences']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
-    const out = store.updateProfile(u.id, input);
+    for (const field of ['displayName', 'email', 'phone', 'preferences']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
+    const out = store.updateProfile(owner.id, input);
     if (out.error) return res.status(400).json({ error: 'invalid_profile', field: out.field, message: out.error });
     // Welke velden, nooit de waarden (persoonsgegevens horen niet in het logboek).
-    audit(req, 'profiel_gewijzigd', { velden: Object.keys(input) }, u.id, u.tenant_id);
+    audit(req, 'profiel_gewijzigd', { velden: Object.keys(input) }, owner.id, owner.tenant_id);
     res.json(profileOf(out.user));
   });
 
@@ -713,6 +915,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     });
   });
 
+  /**
+   * De leesbare omgevingscookie (testlabel).
+   * @param {object} req Het verzoek.
+   * @returns {string|null} '<slug>|<naam>', of null.
+   */
   function parseHint(req) {
     const raw = parseCookies(req.headers.cookie)[ENV_HINT];
     return typeof raw === 'string' && raw ? raw : null;
@@ -730,8 +937,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const user = identify(req);
     if (!user || user.kind === 'gast') return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
     if (user.impersonator) return res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' });
-    const tid = String(req.body?.tenantId || '');
-    const target = accessibleFor(user).find((t) => t.id === tid);
+    const requestedId = String(req.body?.tenantId || '');
+    const target = accessibleFor(user).find((environment) => environment.id === requestedId);
     if (!target) return res.status(404).json({ error: 'not_found', message: 'Omgeving niet gevonden.' });
     clearEnvironment(req, res);
     if (target.id !== user.home_tenant_id) {
@@ -745,6 +952,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Plannen: alleen de eigen plannen ----------
   const planLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 900, keyFn: (req) => req.user?.id || remoteIp(req) });
+  /**
+   * Is dit een plan (object met areas)?
+   * @param {*} data De invoer.
+   * @returns {boolean} true als het een plan is.
+   */
   const validPlan = (data) => data && typeof data === 'object' && !Array.isArray(data) && Array.isArray(data.areas);
 
   // Eigen plannen; beheerders en installateurs met ?all=1 alle plannen van
@@ -791,14 +1003,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/admin', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); }, requireAdmin);
 
   app.get('/api/admin/history', (req, res) => {
-    const { limit, offset, user, q, action } = req.query;
-    res.json(store.listHistory(req.tenantId, { limit, offset, userId: user, search: q, action }));
+    const { limit, offset, user, q: search, action } = req.query;
+    res.json(store.listHistory(req.tenantId, { limit, offset, userId: user, search, action }));
   });
 
   app.get('/api/admin/history/:id', (req, res) => {
-    const h = store.getHistory(req.tenantId, req.params.id);
-    if (!h) return res.status(404).json({ error: 'not_found', message: 'Niet gevonden.' });
-    res.json(h);
+    const entry = store.getHistory(req.tenantId, req.params.id);
+    if (!entry) return res.status(404).json({ error: 'not_found', message: 'Niet gevonden.' });
+    res.json(entry);
   });
 
   app.get('/api/admin/plans', (req, res) => {
@@ -821,13 +1033,23 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json(plan);
   });
 
-  // Gebruikers horen bij de live-tenant; in een testomgeving dezelfde lijst.
-  // Testaccounts (zie test-data.js) horen bij de testomgeving zelf en beheren
-  // alleen de gebruikers daarvan, nooit die van live.
+  /**
+   * Waar de gebruikers staan: bij de live-tenant (ook in een testomgeving).
+   * Testaccounts (zie test-data.js) horen bij de testomgeving zelf en beheren
+   * alleen de gebruikers daarvan, nooit die van live.
+   * @param {object} req Het verzoek.
+   * @returns {string} Id van de tenant met de gebruikers.
+   */
   const usersTenantOf = (req) => (req.user && req.user.home_tenant_id === req.tenantId ? req.tenantId : homeOf(req.tenantId));
 
-  // Een hoofdbeheerder kan alleen door een (andere) hoofdbeheerder worden
-  // gewijzigd, uitgeschakeld of uitgelogd, niet door een beheerder van de tenant.
+  /**
+   * Een hoofdbeheerder kan alleen door een (andere) hoofdbeheerder worden
+   * gewijzigd, uitgeschakeld of uitgelogd, niet door een beheerder van de tenant.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {string} userId Id van de gebruiker.
+   * @returns {boolean} true als het geweigerd is (antwoord al verstuurd).
+   */
   function guardPlatformAdmin(req, res, userId) {
     const target = store.getUser(userId);
     if (!target || !target.platform_admin || req.user.platform_admin) return false;
@@ -843,16 +1065,33 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // ---------- Rollen (Beheer > Rollen, zie roles.js) ----------
   // Rollen gelden voor de hele organisatie (live en testomgevingen). Een
   // testaccount (dat in een testomgeving woont) kan ze zien maar niet wijzigen.
+  /**
+   * Mag deze gebruiker de rollen wijzigen? Stuurt anders zelf 403.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @returns {boolean} true als het mag.
+   */
   function rolesEditable(req, res) {
     const home = store.getTenant(req.user.home_tenant_id || req.user.tenant_id);
     if (req.user.platform_admin || !home || home.environment !== 'test') return true;
     res.status(403).json({ error: 'forbidden', message: 'Rollen gelden voor de hele organisatie; wijzig ze met een account van live.' });
     return false;
   }
-  const rolesView = (tid) => {
-    const counts = store.roles.userCounts(tid);
-    return store.roles.list(tid).map((r) => ({ ...r, userCount: counts[r.key] || 0 }));
+  /**
+   * De rollen met het aantal gebruikers per rol.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {object[]} De rollen.
+   */
+  const rolesView = (tenantId) => {
+    const counts = store.roles.userCounts(tenantId);
+    return store.roles.list(tenantId).map((role) => ({ ...role, userCount: counts[role.key] || 0 }));
   };
+  /**
+   * Stuurt een fout uit de rollenopslag terug.
+   * @param {object} res Het antwoord.
+   * @param {{ status?: number, code?: string, error: string, field?: string }} out De fout.
+   * @returns {void}
+   */
   const roleError = (res, out) => res.status(out.status || 400).json({ error: out.code || (out.status === 404 ? 'not_found' : 'invalid_role'), message: out.error, field: out.field || null });
 
   app.get('/api/admin/roles', (req, res) => {
@@ -874,11 +1113,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.patch('/api/admin/roles/:key', requireJson, (req, res) => {
     if (!rolesEditable(req, res)) return;
     const input = {};
-    for (const k of ['label', 'description', 'rights', 'kind']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
+    for (const field of ['label', 'description', 'rights', 'kind']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
     const out = store.roles.update(req.tenantId, req.params.key, input);
     if (out.error) return roleError(res, out);
-    const added = out.role.rights.filter((r) => !out.before.rights.includes(r));
-    const removed = out.before.rights.filter((r) => !out.role.rights.includes(r));
+    const added = out.role.rights.filter((right) => !out.before.rights.includes(right));
+    const removed = out.before.rights.filter((right) => !out.role.rights.includes(right));
     audit(req, 'rol_gewijzigd', { rol: out.role.key, fields: Object.keys(input), ...(added.length ? { aan: added } : {}), ...(removed.length ? { uit: removed } : {}) },
       undefined, store.roles.rootOf(req.tenantId));
     res.json(out.role);
@@ -905,7 +1144,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.patch('/api/admin/users/:id', requireJson, wrap(async (req, res) => {
     const input = {};
-    for (const k of ['displayName', 'role', 'disabled', 'password', 'username']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
+    for (const field of ['displayName', 'role', 'disabled', 'password', 'username']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
     withMustChange(input, req.body);
     const home = usersTenantOf(req);
     if (guardPlatformAdmin(req, res, req.params.id)) return;
@@ -915,15 +1154,27 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json(store.publicUser(out.user));
   }));
 
-  // Wachtwoord wijzigen na de eerste aanmelding: aan/uit te zetten, en standaard
-  // aan als een beheerder een nieuw wachtwoord instelt.
+  /**
+   * Wachtwoord wijzigen na de eerste aanmelding: aan/uit te zetten, en standaard
+   * aan als een beheerder een nieuw wachtwoord instelt.
+   * @param {object} input De wijzigingen (wordt aangevuld).
+   * @param {object} body Het verzoek.
+   * @returns {object} input.
+   */
   function withMustChange(input, body) {
     if (body?.mustChangePassword !== undefined) input.mustChangePassword = Boolean(body.mustChangePassword);
     else if (input.password !== undefined) input.mustChangePassword = true;
     return input;
   }
 
-  // Welke velden, nooit de waarden van een wachtwoord.
+  /**
+   * Auditregel voor een gewijzigde gebruiker: welke velden, nooit de waarden van een wachtwoord.
+   * @param {object} req Het verzoek.
+   * @param {object} user De gewijzigde gebruiker.
+   * @param {object} input De wijzigingen.
+   * @param {string} tenantId Tenant van de gebruiker.
+   * @returns {void}
+   */
   function auditUserChange(req, user, input, tenantId) {
     audit(req, 'gebruiker_gewijzigd', { userId: user.id, username: user.username, fields: Object.keys(input),
       ...(input.role !== undefined ? { role: input.role } : {}), ...(input.disabled !== undefined ? { disabled: Boolean(input.disabled) } : {}),
@@ -934,16 +1185,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Gebruiker op alle toestellen uitloggen.
   app.post('/api/admin/users/:id/logout', (req, res) => {
     const home = usersTenantOf(req);
-    const u = store.getUser(req.params.id);
-    if (!u || u.tenant_id !== home) return res.status(404).json({ error: 'not_found', message: 'Gebruiker niet gevonden.' });
-    if (guardPlatformAdmin(req, res, u.id)) return;
-    const n = store.revokeSessions(home, u.id);
-    audit(req, 'sessies_ingetrokken', { userId: u.id, username: u.username, count: n }, undefined, home);
-    res.json({ ok: true, revoked: n });
+    const target = store.getUser(req.params.id);
+    if (!target || target.tenant_id !== home) return res.status(404).json({ error: 'not_found', message: 'Gebruiker niet gevonden.' });
+    if (guardPlatformAdmin(req, res, target.id)) return;
+    const revoked = store.revokeSessions(home, target.id);
+    audit(req, 'sessies_ingetrokken', { userId: target.id, username: target.username, count: revoked }, undefined, home);
+    res.json({ ok: true, revoked });
   });
 
-  // Gebruiker definitief verwijderen. Niet jezelf (dan zit je zonder account),
-  // en een hoofdbeheerder alleen door een andere hoofdbeheerder.
+  /**
+   * Gebruiker definitief verwijderen. Niet jezelf (dan zit je zonder account),
+   * en een hoofdbeheerder alleen door een andere hoofdbeheerder.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {string} tenantId Tenant van de gebruiker.
+   * @param {string} userId Id van de gebruiker.
+   * @param {object} [extra] Extra details voor het auditlog.
+   * @returns {void}
+   */
   function deleteUser(req, res, tenantId, userId, extra = {}) {
     if (req.user && (req.user.id === userId || req.user.impersonator?.id === userId)) {
       return res.status(409).json({ error: 'invalid_user', message: 'Je kunt je eigen account niet verwijderen.' });
@@ -976,21 +1235,26 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // (Ook met de toegangscode van de hoofdtenant, zoals op een installatie
   // met één organisatie.)
   app.use('/api/admin/backups', (req, res, next) => {
-    const u = req.user;
-    if (u.platform_admin || (u.kind === 'systeem' && req.tenantId === tenant.id)) return next();
+    const user = req.user;
+    if (user.platform_admin || (user.kind === 'systeem' && req.tenantId === tenant.id)) return next();
     res.status(403).json({ error: 'forbidden', message: 'Alleen voor hoofdbeheerders.' });
   });
   let backupRunning = null;
+  /**
+   * Maakt een versleutelde back-up (één tegelijk) en ruimt oude op.
+   * @param {object|null} [req] Het verzoek (null = automatisch).
+   * @returns {Promise<object>} De back-up (name, size).
+   */
   async function runBackup(req = null) {
     if (!backupDir) throw Object.assign(new Error('Back-ups zijn niet ingesteld.'), { status: 501 });
     if (backupRunning) return backupRunning;
     backupRunning = (async () => {
       try {
-        const b = await backups.createBackup({ db: database, dir: backupDir, vault });
+        const backup = await backups.createBackup({ db: database, dir: backupDir, vault });
         backups.pruneBackups(backupDir, Math.max(1, settings.get('backupKeepDays')));
-        if (req) audit(req, 'backup_gemaakt', { name: b.name, size: b.size }, undefined, tenant.id);
-        else store.audit({ tenantId: tenant.id, action: 'backup_gemaakt', detail: { name: b.name, size: b.size, automatisch: true } });
-        return b;
+        if (req) audit(req, 'backup_gemaakt', { name: backup.name, size: backup.size }, undefined, tenant.id);
+        else store.audit({ tenantId: tenant.id, action: 'backup_gemaakt', detail: { name: backup.name, size: backup.size, automatisch: true } });
+        return backup;
       } finally {
         backupRunning = null;
       }
@@ -1050,7 +1314,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // Wie met de toegangscode is ingelogd, zou zichzelf buitensluiten door die
     // leeg te maken; met een beheerdersaccount kan het wel.
     const resets = Array.isArray(patch.reset) ? patch.reset : [];
-    const platformField = [...Object.keys(patch), ...resets].find((k) => FIELDS[k]?.platform || FIELDS[k]?.internal);
+    const platformField = [...Object.keys(patch), ...resets].find((key) => FIELDS[key]?.platform || FIELDS[key]?.internal);
     if (platformField) {
       return res.status(400).json({ error: 'invalid_setting', field: platformField,
         message: FIELDS[platformField].internal ? 'Deze instelling wijzig je in de module zelf.' : 'Deze instelling wijzig je in Hoofdbeheer.' });
@@ -1078,10 +1342,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Sleutel testen zonder kosten: vraagt alleen het model op.
   app.post('/api/admin/settings/test-ai', async (req, res, next) => {
-    const a = currentAnalyzer(req.tenantId);
-    if (!a.check) return res.status(501).json({ error: 'not_supported', message: 'Testen is niet beschikbaar.' });
+    const aiClient = currentAnalyzer(req.tenantId);
+    if (!aiClient.check) return res.status(501).json({ error: 'not_supported', message: 'Testen is niet beschikbaar.' });
     try {
-      res.json(await a.check());
+      res.json(await aiClient.check());
     } catch (err) {
       if (err instanceof AnalyzeError) return res.status(err.status === 502 ? 400 : err.status).json({ error: err.code, message: err.message });
       next(err);
@@ -1091,6 +1355,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // ---------- Beheer: AI-kosten (zie ai-usage.js) ----------
   // Een beheerder ziet de actieve omgeving; een hoofdbeheerder kan ook alle
   // organisaties samen (?scope=all) of één andere omgeving (?tenant=id) zien.
+  /**
+   * De omgevingen waarvan de AI-kosten worden gevraagd; stuurt bij een fout zelf het antwoord.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @returns {string[]|null|undefined} Ids, null = alle, undefined = antwoord al verstuurd.
+   */
   function aiUsageScope(req, res) {
     const all = req.query.scope === 'all';
     const other = typeof req.query.tenant === 'string' && req.query.tenant && req.query.tenant !== req.tenantId;
@@ -1110,9 +1380,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/api/admin/ai-usage', (req, res) => {
     const scope = aiUsageScope(req, res);
     if (scope === undefined) return;
-    const s = settingsFor(aiTenantOf(req.tenantId));
+    const aiSettings = settingsFor(aiTenantOf(req.tenantId));
     res.json({ ...aiUsage.summary(scope, req.query), scope: scope ? 'tenant' : 'all', platformAdmin: Boolean(req.user?.platform_admin),
-      model: s.get('aiModel'), eurCentsPerUsd: s.get('aiEurCentsPerUsd'), retentionDays: settingsFor(req.tenantId).get('auditRetentionDays') });
+      model: aiSettings.get('aiModel'), eurCentsPerUsd: aiSettings.get('aiEurCentsPerUsd'), retentionDays: settingsFor(req.tenantId).get('auditRetentionDays') });
   });
 
   app.get('/api/admin/ai-usage/requests', (req, res) => {
@@ -1137,15 +1407,31 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Limieten en dagteller per tenant (omgeving).
   const analyzeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: (req) => settingsFor(req.tenantId || tenant.id).get('aiHourlyPerIp'), keyFn: (req) => `${req.tenantId || tenant.id}|${remoteIp(req)}` });
   const dailyCounts = new Map();
+  /**
+   * De datum van vandaag (UTC).
+   * @returns {string} Datum als JJJJ-MM-DD.
+   */
   const today = () => new Date().toISOString().slice(0, 10);
+  /**
+   * De teller van AI-herkenningen van vandaag voor een omgeving.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ day: string, count: number }} De teller.
+   */
   function dailyFor(tenantId) {
-    let d = dailyCounts.get(tenantId);
-    if (!d || d.day !== today()) {
-      d = { day: today(), count: 0 };
-      dailyCounts.set(tenantId, d);
+    let counter = dailyCounts.get(tenantId);
+    if (!counter || counter.day !== today()) {
+      counter = { day: today(), count: 0 };
+      dailyCounts.set(tenantId, counter);
     }
-    return d;
+    return counter;
   }
+  /**
+   * Middleware: ingelogd, of gasten staan aan.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {Function} next Volgende stap.
+   * @returns {void}
+   */
   const requireAppAccess = (req, res, next) => {
     identify(req);
     if (guestsAllowed() || auth.isAuthenticated(req)) return next();
@@ -1161,9 +1447,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/plan/analyze', requireAppAccess, analyzeLimiter, async (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     const { image, width, height } = req.body || {};
-    const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(image || ''));
-    const w = Number(width), h = Number(height);
-    if (!m || !(w > 0 && h > 0 && w <= 8000 && h <= 8000)) {
+    const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(image || ''));
+    const imageWidth = Number(width), imageHeight = Number(height);
+    if (!match || !(imageWidth > 0 && imageHeight > 0 && imageWidth <= 8000 && imageHeight <= 8000)) {
       return res.status(400).json({ error: 'invalid_image', message: 'Ongeldige afbeelding.' });
     }
     const settings = settingsFor(req.tenantId);
@@ -1177,7 +1463,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // Dezelfde tekening (zelfde afbeelding, model en opdracht) geeft altijd
     // hetzelfde resultaat: de eerder bewaarde herkenning, zonder AI-kosten.
     // Met fresh: true herkent de AI opnieuw; die uitkomst geldt daarna.
-    const hash = imageHash(m[1], m[2]);
+    const hash = imageHash(match[1], match[2]);
     const aiModel = planAnalyzer.model || settingsFor(aiTenantOf(req.tenantId)).get('aiModel');
     if (req.body.fresh !== true) {
       const known = recognitions.findAi(req.tenantId, hash, aiModel, PROMPT_VERSION);
@@ -1189,19 +1475,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
     daily.count += 1;
     const started = Date.now();
-    // Elk verzoek dat de AI-dienst bereikt komt in het kostenoverzicht, ook
-    // als het mislukt (een weigering of te lang antwoord kost ook tokens).
+    /**
+     * Elk verzoek dat de AI-dienst bereikt komt in het kostenoverzicht, ook
+     * als het mislukt (een weigering of te lang antwoord kost ook tokens).
+     * @param {object|null} user Wie het vroeg.
+     * @param {{ model?: string, usage?: object, status?: string, detail?: object }} result Model, verbruik, status en details.
+     * @returns {void}
+     */
     const logUsage = (user, { model, usage, status = 'ok', detail = {} }) => {
       try {
         aiUsage.record({ tenantId: req.tenantId || tenant.id, userId: user ? user.id : null, feature: 'plan_analyse',
           model: model || planAnalyzer.model || settingsFor(aiTenantOf(req.tenantId)).get('aiModel'), status, usage: usage || {}, durationMs: Date.now() - started,
-          eurCentsPerUsd: settingsFor(aiTenantOf(req.tenantId)).get('aiEurCentsPerUsd'), detail: { width: w, height: h, ...detail } });
+          eurCentsPerUsd: settingsFor(aiTenantOf(req.tenantId)).get('aiEurCentsPerUsd'), detail: { width: imageWidth, height: imageHeight, ...detail } });
       } catch (err) {
         console.warn(`AI-verbruik niet vastgelegd: ${err.message}`);
       }
     };
     try {
-      const result = await planAnalyzer.analyze({ mediaType: m[1], data: m[2], width: w, height: h });
+      const result = await planAnalyzer.analyze({ mediaType: match[1], data: match[2], width: imageWidth, height: imageHeight });
       console.log(`Plan geanalyseerd: ${result.areas.length} vlakken, schaal ${result.scale.method || '-'} (${result.scale.confidence || '-'})`);
       const user = identify(req) || (guestsAllowed() ? ensureUser(req, res) : null);
       logUsage(user, { model: result.model, usage: result.usage,
@@ -1282,8 +1573,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const invoiceSender = createInvoiceSender({
     invoices: invoiceStore, settingsFor: (id) => settingsFor(id), mailerFor, mailBody,
     colorsOf: (id) => {
-      const v = Theme.vars(themeFor(id));
-      return { navy: v['--at-navy'], green: v['--at-green'], greenSoft: v['--at-green-soft'], teal: v['--at-teal'] };
+      const cssVars = Theme.vars(themeFor(id));
+      return { navy: cssVars['--at-navy'], green: cssVars['--at-green'], greenSoft: cssVars['--at-green-soft'], teal: cssVars['--at-teal'] };
     },
   });
   const shopOrders = createShopOrders({
@@ -1302,15 +1593,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     usageId: row.id, workOrderId: row.work_order_id, code: row.code, qty: row.deleted ? 0 : row.qty, user,
   }, { nested: true }));
   const serviceRequestStore = createServiceRequestStore(database, { vault, workorders: workOrderStore, photos: photoStore });
-  // Klant (of gast): ziet alleen berichten voor iedereen.
+  /**
+   * Klant (of gast): ziet alleen berichten voor iedereen.
+   * @param {object} req Het verzoek.
+   * @param {object|null} user De gebruiker.
+   * @returns {boolean} true voor een klant of gast.
+   */
   const isCustomer = (req, user) => !user || user.kind === 'gast' || (!user.platform_admin && store.roles.get(req.tenantId || user.tenant_id, user.role)?.kind === 'klant');
 
-  // Openbare links (offerte, afspraak): zonder inlog, dus de tenant volgt uit
-  // de offerte of werkorder, en een uitgeschakelde tenant geeft niets prijs.
+  /**
+   * Openbare links (offerte, afspraak): zonder inlog, dus de tenant volgt uit
+   * de offerte of werkorder, en een uitgeschakelde tenant geeft niets prijs.
+   * @param {string} id Id van de omgeving.
+   * @returns {boolean} true als de omgeving en haar live-tenant aan staan.
+   */
   const tenantActive = (id) => {
-    const t = store.getTenant(id);
-    const live = t && t.parent_id ? store.getTenant(t.parent_id) : t;
-    return Boolean(t && !t.disabled && live && !live.disabled);
+    const tenantRow = store.getTenant(id);
+    const live = tenantRow && tenantRow.parent_id ? store.getTenant(tenantRow.parent_id) : tenantRow;
+    return Boolean(tenantRow && !tenantRow.disabled && live && !live.disabled);
   };
   const publicLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: remoteIp });
 
@@ -1431,14 +1731,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   // ---------- Hoofdbeheer: alle tenants en hun testomgevingen ----------
-  // De live-tenant van een (test)omgeving.
+  /**
+   * De live-tenant van een (test)omgeving.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {string} Id van de live-tenant.
+   */
   function homeOf(tenantId) {
-    const t = store.getTenant(tenantId);
-    return t && t.environment === 'test' && t.parent_id ? t.parent_id : tenantId;
+    const tenantRow = store.getTenant(tenantId);
+    return tenantRow && tenantRow.environment === 'test' && tenantRow.parent_id ? tenantRow.parent_id : tenantId;
   }
 
   app.use('/api/platform', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); }, requirePlatformAdmin);
 
+  /**
+   * Stuurt een fout uit het tenantbeheer terug.
+   * @param {object} res Het antwoord.
+   * @param {{ status?: number, error: string }} out De fout.
+   * @returns {void}
+   */
   const platformError = (res, out) => res.status(out.status || 400).json({ error: 'invalid_tenant', message: out.error });
 
   app.get('/api/platform/tenants', (req, res) => {
@@ -1485,13 +1795,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/platform/tenants/:id/environments', requireJson, (req, res) => {
     // Geheimen zijn versleuteld per tenant: die niet als ruwe rij kopiëren,
     // maar opnieuw opslaan via de instellingen van de nieuwe omgeving.
-    const secrets = Object.keys(FIELDS).filter((k) => FIELDS[k].type === 'secret');
+    const secrets = Object.keys(FIELDS).filter((key) => FIELDS[key].type === 'secret');
     const out = store.createEnvironment(req.params.id, { name: req.body?.name, copyPlans: Boolean(req.body?.copyPlans), skipSettings: secrets });
     if (out.error) return platformError(res, out);
     const from = settingsFor(req.params.id);
     const view = from.view();
     const patch = {};
-    for (const k of secrets) if (view[k].source === 'instellingen' && from.get(k)) patch[k] = from.get(k);
+    for (const key of secrets) if (view[key].source === 'instellingen' && from.get(key)) patch[key] = from.get(key);
     if (Object.keys(patch).length) settingsFor(out.tenant.id).update(patch, req.user.id);
     audit(req, 'testomgeving_aangemaakt', { tenantId: out.tenant.id, parentId: req.params.id, slug: out.tenant.slug, copied: out.copied }, undefined, tenant.id);
     console.log(`Testomgeving ${out.tenant.name} (${out.tenant.slug}) aangemaakt door ${req.user.display_name}, ${out.copied} plannen gekopieerd`);
@@ -1510,16 +1820,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // zijn gegevens, gebruikers en testomgevingen; ter bevestiging moet de
   // tenantcode (slug) worden meegestuurd als { confirm }.
   app.delete('/api/platform/tenants/:id', (req, res) => {
-    const t = store.getTenant(req.params.id);
-    if (t && t.environment === 'live') {
-      if (t.id !== tenant.id && String(req.body?.confirm ?? req.query.confirm ?? '').trim().toLowerCase() !== t.slug) {
-        return res.status(400).json({ error: 'confirm_required', message: `Typ ter bevestiging de tenantcode "${t.slug}" over.` });
+    const tenantRow = store.getTenant(req.params.id);
+    if (tenantRow && tenantRow.environment === 'live') {
+      if (tenantRow.id !== tenant.id && String(req.body?.confirm ?? req.query.confirm ?? '').trim().toLowerCase() !== tenantRow.slug) {
+        return res.status(400).json({ error: 'confirm_required', message: `Typ ter bevestiging de tenantcode "${tenantRow.slug}" over.` });
       }
-      const out = store.deleteTenant(t.id, tenant.id);
+      const out = store.deleteTenant(tenantRow.id, tenant.id);
       if (out.error) return platformError(res, out);
       for (const id of out.ids) { settingsCache.delete(id); dailyCounts.delete(id); }
-      console.log(`Tenant ${t.name} (${t.slug}) verwijderd door ${req.user.display_name}, met ${out.ids.length - 1} testomgeving(en)`);
-      audit(req, 'tenant_verwijderd', { tenantId: t.id, slug: t.slug, name: t.name, environments: out.ids.length - 1, rows: out.counts }, undefined, tenant.id);
+      console.log(`Tenant ${tenantRow.name} (${tenantRow.slug}) verwijderd door ${req.user.display_name}, met ${out.ids.length - 1} testomgeving(en)`);
+      audit(req, 'tenant_verwijderd', { tenantId: tenantRow.id, slug: tenantRow.slug, name: tenantRow.name, environments: out.ids.length - 1, rows: out.counts }, undefined, tenant.id);
       return res.json({ ok: true, environments: out.ids.length - 1 });
     }
     const out = store.deleteEnvironment(req.params.id);
@@ -1531,41 +1841,38 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({ ok: true });
   });
 
-  // Testomgeving vullen met testdata: testaccounts per rol (één gedeeld,
-  // willekeurig wachtwoord dat alleen in dit antwoord staat), nepklanten,
-  // plannen en offertes. Wat er al in de testomgeving stond, gaat weg.
   // Kleurthema: standaard voor alle organisaties (hoofdtenant) en optioneel een
   // eigen thema per live-tenant. Leeg = huisstijl van AquaTech Service.
   app.get('/api/platform/theme', (req, res) => {
-    const tenants = store.listTenants().filter((t) => t.id !== tenant.id)
-      .map((t) => ({ id: t.id, name: t.name, slug: t.slug, theme: settingsFor(t.id).get('theme') }));
+    const tenants = store.listTenants().filter((candidate) => candidate.id !== tenant.id)
+      .map((candidate) => ({ id: candidate.id, name: candidate.name, slug: candidate.slug, theme: settingsFor(candidate.id).get('theme') }));
     res.json({ defaults: Theme.DEFAULTS, global: settings.get('theme'), mainTenantId: tenant.id, tenants });
   });
 
   app.put('/api/platform/theme', requireJson, (req, res) => {
-    const tid = req.body?.tenantId || tenant.id;
-    const t = store.getTenant(tid);
-    if (!t || t.environment !== 'live') return res.status(404).json({ error: 'not_found', message: 'Organisatie niet gevonden (een testomgeving volgt het thema van zijn tenant).' });
+    const targetId = req.body?.tenantId || tenant.id;
+    const tenantRow = store.getTenant(targetId);
+    if (!tenantRow || tenantRow.environment !== 'live') return res.status(404).json({ error: 'not_found', message: 'Organisatie niet gevonden (een testomgeving volgt het thema van zijn tenant).' });
     const raw = req.body?.colors;
-    const target = settingsFor(tid);
+    const target = settingsFor(targetId);
     if (raw == null || (typeof raw === 'object' && !Object.keys(raw).length)) {
       target.update({ reset: ['theme'] }, req.user.id);
     } else {
       if (typeof raw !== 'object' || Array.isArray(raw)) return res.status(400).json({ error: 'invalid_theme', message: 'Ongeldige kleuren.' });
-      for (const [k, v] of Object.entries(raw)) {
-        if (!Theme.FIELDS[k]) return res.status(400).json({ error: 'invalid_theme', field: k, message: `Onbekende kleur: ${k}` });
-        if (!Theme.hex(v)) return res.status(400).json({ error: 'invalid_theme', field: k, message: `${Theme.FIELDS[k].label}: geef een kleur als #rrggbb.` });
+      for (const [field, color] of Object.entries(raw)) {
+        if (!Theme.FIELDS[field]) return res.status(400).json({ error: 'invalid_theme', field, message: `Onbekende kleur: ${field}` });
+        if (!Theme.hex(color)) return res.status(400).json({ error: 'invalid_theme', field, message: `${Theme.FIELDS[field].label}: geef een kleur als #rrggbb.` });
       }
       const problem = Theme.problems(raw)[0];
       if (problem) return res.status(400).json({ error: 'invalid_theme', field: problem.field, message: problem.message });
       const colors = Theme.resolve(raw);
-      if (tid === tenant.id && Theme.isDefault(colors)) target.update({ reset: ['theme'] }, req.user.id);
+      if (targetId === tenant.id && Theme.isDefault(colors)) target.update({ reset: ['theme'] }, req.user.id);
       else target.update({ theme: colors }, req.user.id);
     }
     const theme = target.get('theme');
-    console.log(`Kleurthema van ${t.name} gewijzigd door ${req.user.display_name}: ${Object.keys(theme).length ? Object.values(theme).join(' ') : 'standaard'}`);
-    audit(req, 'thema_gewijzigd', { tenantId: tid, theme }, undefined, tenant.id);
-    res.json({ tenantId: tid, theme });
+    console.log(`Kleurthema van ${tenantRow.name} gewijzigd door ${req.user.display_name}: ${Object.keys(theme).length ? Object.values(theme).join(' ') : 'standaard'}`);
+    audit(req, 'thema_gewijzigd', { tenantId: targetId, theme }, undefined, tenant.id);
+    res.json({ tenantId: targetId, theme });
   });
 
   // ---------- Visma eAccounting: koppeling per omgeving, app-registratie in Hoofdbeheer ----------
@@ -1575,94 +1882,106 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => req.tenantId || tenant.id }),
   });
 
+  // Testomgeving vullen met testdata: testaccounts per rol (één gedeeld,
+  // willekeurig wachtwoord dat alleen in dit antwoord staat), nepklanten,
+  // plannen en offertes. Wat er al in de testomgeving stond, gaat weg.
   app.post('/api/platform/tenants/:id/testdata', requireJson, wrap(async (req, res) => {
-    const t = store.getTenant(req.params.id);
-    if (!t) return platformError(res, { error: 'Omgeving niet gevonden.', status: 404 });
-    if (t.environment !== 'test') return platformError(res, { error: 'Testdata kan alleen in een testomgeving.', status: 409 });
-    const profile = settingsFor(t.id).get('quoteProfile');
-    const set = testdata.buildTestData({ slug: t.slug, profile });
+    const tenantRow = store.getTenant(req.params.id);
+    if (!tenantRow) return platformError(res, { error: 'Omgeving niet gevonden.', status: 404 });
+    if (tenantRow.environment !== 'test') return platformError(res, { error: 'Testdata kan alleen in een testomgeving.', status: 409 });
+    const profile = settingsFor(tenantRow.id).get('quoteProfile');
+    const testSet = testdata.buildTestData({ slug: tenantRow.slug, profile });
     let password = testdata.newPassword();
-    while (set.accounts.some((a) => passwordProblem(password, a.username))) password = testdata.newPassword();
-    const out = store.seedEnvironment(t.id, set, { passwordHash: await hashPassword(password), numberPrefix: profile.numberPrefix || 'OF-' });
+    while (testSet.accounts.some((account) => passwordProblem(password, account.username))) password = testdata.newPassword();
+    const out = store.seedEnvironment(tenantRow.id, testSet, { passwordHash: await hashPassword(password), numberPrefix: profile.numberPrefix || 'OF-' });
     if (out.error) return platformError(res, out);
     // Klantlinks, reacties, werkorders en webshop via de echte opslaglogica.
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, settings: settingsFor(t.id) },
-      set, { users: out.byKey, quoteIds: out.quoteIds, tenantId: t.id },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, settings: settingsFor(tenantRow.id) },
+      testSet, { users: out.byKey, quoteIds: out.quoteIds, tenantId: tenantRow.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );
     const counts = { ...out.counts, ...extra };
-    console.log(`Testomgeving ${t.name} gevuld met testdata door ${req.user.display_name}`);
-    audit(req, 'testomgeving_gevuld', { tenantId: t.id, ...counts }, undefined, tenant.id);
+    console.log(`Testomgeving ${tenantRow.name} gevuld met testdata door ${req.user.display_name}`);
+    audit(req, 'testomgeving_gevuld', { tenantId: tenantRow.id, ...counts }, undefined, tenant.id);
     res.status(201).json({ accounts: out.users.map(store.publicUser), password, counts });
   }));
 
-  // Gebruikers van een tenant (accounts, zonder gasten) beheren. In een
-  // testomgeving zijn dat de testaccounts van die omgeving.
+  /**
+   * De tenant uit de URL voor gebruikersbeheer (accounts, zonder gasten; in een
+   * testomgeving de testaccounts van die omgeving). Stuurt zelf 404.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @returns {object|null} De tenant, of null.
+   */
   const userTenant = (req, res) => {
-    const t = store.getTenant(req.params.id);
-    if (!t) { res.status(404).json({ error: 'not_found', message: 'Tenant niet gevonden.' }); return null; }
-    return t;
+    const tenantRow = store.getTenant(req.params.id);
+    if (!tenantRow) { res.status(404).json({ error: 'not_found', message: 'Tenant niet gevonden.' }); return null; }
+    return tenantRow;
   };
 
   // Hoofdbeheerders wonen in de hoofdtenant: ze loggen in zonder organisatiecode.
   const HOOFD_ONLY = 'Hoofdbeheerders horen bij de hoofdtenant. Maak ze aan bij de gebruikers van de hoofdtenant.';
 
   app.get('/api/platform/tenants/:id/users', (req, res) => {
-    const t = userTenant(req, res);
+    const tenantRow = userTenant(req, res);
     // Met de supporttoestemming erbij (nodig om in live als de gebruiker te werken).
-    if (!t) return;
-    const users = store.listUsers(t.id, { includeGuests: false });
-    const grants = impersonation.activeGrants(users.map((u) => u.id));
-    res.json({ items: users.map((u) => ({ ...u, support: grants[u.id] || null })), roles: store.roles.list(t.id) });
+    if (!tenantRow) return;
+    const users = store.listUsers(tenantRow.id, { includeGuests: false });
+    const grants = impersonation.activeGrants(users.map((user) => user.id));
+    res.json({ items: users.map((user) => ({ ...user, support: grants[user.id] || null })), roles: store.roles.list(tenantRow.id) });
   });
 
   app.post('/api/platform/tenants/:id/users', requireJson, wrap(async (req, res) => {
-    const t = userTenant(req, res);
-    if (!t) return;
+    const tenantRow = userTenant(req, res);
+    if (!tenantRow) return;
     const { username, displayName, password } = req.body || {};
     const platformAdmin = Boolean(req.body?.platformAdmin);
-    if (platformAdmin && t.id !== tenant.id) return res.status(400).json({ error: 'invalid_user', message: HOOFD_ONLY });
+    if (platformAdmin && tenantRow.id !== tenant.id) return res.status(400).json({ error: 'invalid_user', message: HOOFD_ONLY });
     const role = platformAdmin ? 'beheerder' : req.body?.role;
-    const out = await store.createAccount(t.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password },
+    const out = await store.createAccount(tenantRow.id, { username: String(username || '').trim().toLowerCase(), displayName, role, password },
       { platformAdmin, mustChangePassword: req.body?.mustChangePassword !== false });
     if (out.error) return res.status(400).json({ error: 'invalid_user', message: out.error });
     audit(req, 'gebruiker_aangemaakt', { userId: out.user.id, username: out.user.username, role: out.user.role, door: 'hoofdbeheer',
-      ...(platformAdmin ? { hoofdbeheerder: true } : {}) }, undefined, t.id);
+      ...(platformAdmin ? { hoofdbeheerder: true } : {}) }, undefined, tenantRow.id);
     res.status(201).json(store.publicUser(out.user));
   }));
 
   app.patch('/api/platform/tenants/:id/users/:uid', requireJson, wrap(async (req, res) => {
-    const t = userTenant(req, res);
-    if (!t) return;
+    const tenantRow = userTenant(req, res);
+    if (!tenantRow) return;
     const input = {};
-    for (const k of ['displayName', 'role', 'disabled', 'password']) if (req.body?.[k] !== undefined) input[k] = req.body[k];
+    for (const field of ['displayName', 'role', 'disabled', 'password']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
     withMustChange(input, req.body);
     if (req.body?.platformAdmin !== undefined) {
       input.platformAdmin = Boolean(req.body.platformAdmin);
-      if (input.platformAdmin && t.id !== tenant.id) return res.status(400).json({ error: 'invalid_user', message: HOOFD_ONLY });
+      if (input.platformAdmin && tenantRow.id !== tenant.id) return res.status(400).json({ error: 'invalid_user', message: HOOFD_ONLY });
     }
-    const out = await store.updateAccount(t.id, req.params.uid, input);
+    const out = await store.updateAccount(tenantRow.id, req.params.uid, input);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_user', message: out.error });
-    auditUserChange(req, out.user, input, t.id);
+    auditUserChange(req, out.user, input, tenantRow.id);
     res.json(store.publicUser(out.user));
   }));
 
   app.delete('/api/platform/tenants/:id/users/:uid', (req, res) => {
-    const t = userTenant(req, res);
-    if (t) deleteUser(req, res, t.id, req.params.uid, { door: 'hoofdbeheer' });
+    const tenantRow = userTenant(req, res);
+    if (tenantRow) deleteUser(req, res, tenantRow.id, req.params.uid, { door: 'hoofdbeheer' });
   });
 
   impersonation.register(app, { identify, requireJson, clearEnvironment, wrap });
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
-  // Niet ingelogd: eerst het instelscherm zolang er geen beheerder is, anders
-  // de inlogpagina (op elk pad, zodat een herlaad na het inloggen meteen de
-  // gevraagde pagina toont). Alleen met gasten aan is de app zonder inloggen
-  // bereikbaar.
+  /**
+   * Niet ingelogd: eerst het instelscherm zolang er geen beheerder is, anders
+   * de inlogpagina (op elk pad, zodat een herlaad na het inloggen meteen de
+   * gevraagde pagina toont). Alleen met gasten aan is de app zonder inloggen
+   * bereikbaar.
+   * @param {object} req Het verzoek.
+   * @returns {string} Pad van de pagina.
+   */
   const authPage = (req) => (!auth.isAuthenticated(req) && needsSetup() ? SETUP_PAGE : LOGIN_PAGE);
 
   app.get('/login', (req, res) => {
@@ -1690,21 +2009,25 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.type('css').send(`/* Kleurthema (Hoofdbeheer > Kleuren). */\n${Theme.css(themeFor(req.tenantId))}`);
   });
 
-  // Startpagina uit Mijn profiel (voorkeur startPage) als module-URL
-  // ('planning/'), alleen als die module er voor deze gebruiker is. Het
-  // dashboard krijgt hem mee in de pagina; shared/common.js gaat er de eerste
-  // keer in een tabblad meteen heen, zonder het overzicht eerst op te bouwen.
+  /**
+   * Startpagina uit Mijn profiel (voorkeur startPage) als module-URL
+   * ('planning/'), alleen als die module er voor deze gebruiker is. Het
+   * dashboard krijgt hem mee in de pagina; shared/common.js gaat er de eerste
+   * keer in een tabblad meteen heen, zonder het overzicht eerst op te bouwen.
+   * @param {object} req Het verzoek.
+   * @returns {string|null} De module-URL, of null.
+   */
   function startPageOf(req) {
     const user = identify(req);
     if (!user || user.kind !== 'account' || user.impersonation) return null;
     const id = preferencesOf(user).startPage;
-    const m = id && MODULES.find((x) => x.id === id && x.status === 'actief' && x.href);
-    if (!m || !/^[a-z0-9-]+\/$/.test(m.href)) return null;
+    const startModule = id && MODULES.find((candidate) => candidate.id === id && candidate.status === 'actief' && candidate.href);
+    if (!startModule || !/^[a-z0-9-]+\/$/.test(startModule.href)) return null;
     const rights = Roles.rightsOf(user);
-    if (m.right && ![].concat(m.right).some((r) => rights.includes(r))) return null;
+    if (startModule.right && ![].concat(startModule.right).some((right) => rights.includes(right))) return null;
     const off = settingsFor(req.tenantId).get('modules') || {};
-    if (m.id !== 'beheer' && m.id !== 'hoofdbeheer' && off[m.id] === false) return null;
-    return m.href;
+    if (startModule.id !== 'beheer' && startModule.id !== 'hoofdbeheer' && off[startModule.id] === false) return null;
+    return startModule.href;
   }
 
   // Eigen wachtwoord wijzigen (ingelogd met een account).
@@ -1755,30 +2078,59 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   app.locals.settings = settings;
+  /**
+   * Is er al een beheerder met een eigen account?
+   * @returns {boolean} true als het instelscherm niet meer nodig is.
+   */
   app.locals.hasAdminAccount = () => !needsSetup();
   app.locals.setupCode = installCode;
-  // Onderhoud (elk uur vanuit main): bewaartermijnen toepassen.
-  // Per tenant en testomgeving, met de eigen bewaartermijnen.
+  /**
+   * Alle omgevingen: elke live-tenant met zijn testomgevingen.
+   * @returns {object[]} De tenants.
+   */
+  const allEnvironments = () => store.listTenants().flatMap((live) => [live, ...live.environments]);
+  /**
+   * De ids van alle omgevingen.
+   * @returns {string[]} De ids.
+   */
+  const allEnvironmentIds = () => allEnvironments().map((environment) => environment.id);
+  /**
+   * Onderhoud (elk uur vanuit main): bewaartermijnen toepassen, per tenant en
+   * testomgeving met de eigen bewaartermijnen.
+   * @returns {Object<string, number>} Aantal opgeruimde regels per soort.
+   */
   app.locals.maintenance = () => {
     const total = {};
-    for (const t of store.listTenants().flatMap((l) => [l, ...l.environments])) {
-      const s = settingsFor(t.id);
-      const r = store.applyRetention(t.id, { ipDays: s.get('ipRetentionDays'), auditDays: s.get('auditRetentionDays') });
-      r.aiUsage = aiUsage.prune(t.id, s.get('auditRetentionDays'));
-      for (const [k, v] of Object.entries(r)) total[k] = (total[k] || 0) + v;
+    for (const environment of allEnvironments()) {
+      const environmentSettings = settingsFor(environment.id);
+      const removed = store.applyRetention(environment.id, { ipDays: environmentSettings.get('ipRetentionDays'), auditDays: environmentSettings.get('auditRetentionDays') });
+      removed.aiUsage = aiUsage.prune(environment.id, environmentSettings.get('auditRetentionDays'));
+      for (const [kind, count] of Object.entries(removed)) total[kind] = (total[kind] || 0) + count;
     }
     return total;
   };
-  // Webshop: alle omgevingen met terugschrijven aan (elke 10 minuten vanuit main).
-  app.locals.shopSyncAll = () => shopSync.runAll(store.listTenants().flatMap((l) => [l, ...l.environments]).map((t) => t.id));
+  /**
+   * Webshop: alle omgevingen met terugschrijven aan (elke 10 minuten vanuit main).
+   * @returns {Promise<*>} Uitkomst per omgeving.
+   */
+  app.locals.shopSyncAll = () => shopSync.runAll(allEnvironmentIds());
   app.locals.shopSync = shopSync;
-  // Webshopbestellingen als factuur: alle omgevingen waar dat aan staat.
-  app.locals.shopOrdersAll = () => shopOrders.runAll(store.listTenants().flatMap((l) => [l, ...l.environments]).map((t) => t.id));
+  /**
+   * Webshopbestellingen als factuur: alle omgevingen waar dat aan staat.
+   * @returns {Promise<*>} Uitkomst per omgeving.
+   */
+  app.locals.shopOrdersAll = () => shopOrders.runAll(allEnvironmentIds());
   app.locals.shopOrders = shopOrders;
-  // Visma: omgevingen met automatisch doorsturen aan (vangnet naast het doorsturen direct na definitief).
-  app.locals.vismaAll = () => visma.runAll(store.listTenants().flatMap((l) => [l, ...l.environments]).map((t) => t.id));
+  /**
+   * Visma: omgevingen met automatisch doorsturen aan (vangnet naast het doorsturen direct na definitief).
+   * @returns {Promise<*>} Uitkomst per omgeving.
+   */
+  app.locals.vismaAll = () => visma.runAll(allEnvironmentIds());
   app.locals.visma = visma;
-  // Automatische back-up als de nieuwste ouder is dan een dag.
+  /**
+   * Automatische back-up als de nieuwste ouder is dan een dag.
+   * @returns {Promise<object|null>} De back-up, of null als het niet nodig was.
+   */
   app.locals.backupIfDue = async () => {
     if (!backupDir || settings.get('backupKeepDays') === 0) return null;
     const newest = backups.listBackups(backupDir)[0];
@@ -1806,16 +2158,20 @@ if (require.main === module) {
     console.log('Nog geen beheerder: open de app in de browser en maak het eerste beheerdersaccount aan.');
     if (!settings.get('accessCode')) console.log(`Installatiecode voor het eerste beheerdersaccount: ${app.locals.setupCode}`);
   }
+  /**
+   * Bewaartermijnen toepassen en zo nodig een back-up maken (elk uur).
+   * @returns {void}
+   */
   const runMaintenance = () => {
     try {
-      const r = app.locals.maintenance();
-      const n = Object.values(r).reduce((a, b) => a + b, 0);
-      if (n) console.log(`Bewaartermijnen toegepast: ${JSON.stringify(r)}`);
+      const removed = app.locals.maintenance();
+      const total = Object.values(removed).reduce((sum, count) => sum + count, 0);
+      if (total) console.log(`Bewaartermijnen toegepast: ${JSON.stringify(removed)}`);
     } catch (err) {
       console.error('Onderhoud mislukt:', err);
     }
     app.locals.backupIfDue()
-      .then((b) => { if (b) console.log(`Versleutelde back-up gemaakt: ${b.name} (${b.size} bytes) in ${backupDir}`); })
+      .then((backup) => { if (backup) console.log(`Versleutelde back-up gemaakt: ${backup.name} (${backup.size} bytes) in ${backupDir}`); })
       .catch((err) => console.error('Back-up mislukt:', err.message));
   };
   runMaintenance();
@@ -1844,17 +2200,26 @@ if (require.main === module) {
   }
 }
 
-// Draait de container als root, dan krijgt de gewone gebruiker `node` de
-// datamap en gaat het proces als die gebruiker verder: een lek in de app
-// geeft dan geen rootrechten in de container. RUN_AS_ROOT=1 slaat dit over.
+/**
+ * Draait de container als root, dan krijgt de gewone gebruiker `node` de
+ * datamap en gaat het proces als die gebruiker verder: een lek in de app
+ * geeft dan geen rootrechten in de container. RUN_AS_ROOT=1 slaat dit over.
+ * @param {string} dataDir De datamap.
+ * @returns {void}
+ */
 function dropPrivileges(dataDir) {
   if (typeof process.getuid !== 'function' || process.getuid() !== 0 || process.env.RUN_AS_ROOT === '1') return;
   const uid = Number(process.env.APP_UID) || 1000;
   const gid = Number(process.env.APP_GID) || 1000;
   try {
-    const walk = (p) => {
-      fs.lchownSync(p, uid, gid);
-      if (fs.lstatSync(p).isDirectory()) for (const f of fs.readdirSync(p)) walk(path.join(p, f));
+    /**
+     * Geeft een bestand of map (met alles erin) aan de gewone gebruiker.
+     * @param {string} target Pad van het bestand of de map.
+     * @returns {void}
+     */
+    const walk = (target) => {
+      fs.lchownSync(target, uid, gid);
+      if (fs.lstatSync(target).isDirectory()) for (const entry of fs.readdirSync(target)) walk(path.join(target, entry));
     };
     walk(dataDir);
     fs.chmodSync(dataDir, 0o700);
