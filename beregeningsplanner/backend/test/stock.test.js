@@ -12,6 +12,10 @@ const { createLogin, listen } = require('./helpers/http-client');
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
+/**
+ * Hoofdtenant met beheerder, installateur, planner en klant, plus een testserver.
+ * @returns {Promise<object>} db, server, as (inloggen) en main.
+ */
 async function setup() {
   const db = openDb();
   const store = createStore(db);
@@ -25,12 +29,18 @@ async function setup() {
   return { db, server, as, main };
 }
 
-async function workOrder(c, lines) {
-  const q = (await c.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1, Nunspeet' },
+/**
+ * Maakt een geaccordeerde offerte met materiaalregels en daaruit een werkorder.
+ * @param {object} client Ingelogde client.
+ * @param {Array<[string, number]>} lines Materiaal als [code, aantal].
+ * @returns {Promise<object>} De werkorder.
+ */
+async function workOrder(client, lines) {
+  const quote = (await client.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1, Nunspeet' },
     lines: [...lines.map(([code, qty]) => ({ section: 'materiaal', code, description: code, qty, unit: 'st', price: 1 })),
       { section: 'arbeid', description: 'Sleuven graven', qty: 4, unit: 'uur', price: 55 }] } })).body;
-  assert.strictEqual((await c.put(`/api/quotes/${q.id}`, { status: 'akkoord' })).status, 200);
-  const wo = await c.post('/api/workorders', { quoteId: q.id });
+  assert.strictEqual((await client.put(`/api/quotes/${quote.id}`, { status: 'akkoord' })).status, 200);
+  const wo = await client.post('/api/workorders', { quoteId: quote.id });
   assert.strictEqual(wo.status, 201, JSON.stringify(wo.body));
   return wo.body;
 }
@@ -43,7 +53,7 @@ test('voorraad: artikel opschonen en benodigd per code', () => {
   assert.strictEqual(sanitizeItem({ code: 'A', name: '' }).field, 'name');
   assert.strictEqual(sanitizeItem({ code: 'A', name: 'x', minQty: -1 }).field, 'minQty');
   const need = needsOf([{ code: 'pe-25', qty: 10 }, { code: 'PE-25', qty: 2.5 }, { code: '', qty: 3 }, { code: 'X', qty: -1 }]);
-  assert.deepStrictEqual([...need.entries()].map(([c, n]) => [c, n.qty]), [['PE-25', 12.5]]);
+  assert.deepStrictEqual([...need.entries()].map(([code, need]) => [code, need.qty]), [['PE-25', 12.5]]);
 });
 
 test('voorraad: reserveren vanuit de werkorder, afboeken bij Gereed, mutaties', async () => {
@@ -72,26 +82,31 @@ test('voorraad: reserveren vanuit de werkorder, afboeken bij Gereed, mutaties', 
     assert.strictEqual((await kees.post(`/api/stock/items/${pe.id}/movements`, { kind: 'correctie', qty: -2, note: 'Beschadigd' })).status, 201);
     const counted = (await kees.post(`/api/stock/items/${pe.id}/movements`, { kind: 'telling', qty: 95 })).body;
     assert.strictEqual(counted.onHand, 95);
-    assert.deepStrictEqual(counted.movements.map((m) => [m.kind, m.qty, m.balance]), [['telling', -3, 95], ['correctie', -2, 98], ['ontvangst', 100, 100]]);
+    assert.deepStrictEqual(counted.movements.map((movement) => [movement.kind, movement.qty, movement.balance]), [['telling', -3, 95], ['correctie', -2, 98], ['ontvangst', 100, 100]]);
     await kees.post(`/api/stock/items/${val.id}/movements`, { kind: 'ontvangst', qty: 2 });
 
     // Op de werkorder: nodig, gereserveerd, tekort en wat niet op voorraad is.
-    let s = (await kees.get(`/api/stock/workorders/${wo.id}`)).body;
-    const line = (code) => s.lines.find((l) => l.code === code);
+    let overview = (await kees.get(`/api/stock/workorders/${wo.id}`)).body;
+    /**
+     * Regel van de voorraadweergave voor één artikelcode.
+     * @param {string} code Artikelcode.
+     * @returns {object} De regel.
+     */
+    const line = (code) => overview.lines.find((line) => line.code === code);
     assert.deepStrictEqual([line('PE-25').needed, line('PE-25').reserved, line('PE-25').shortage], [50, 50, 0]);
     assert.deepStrictEqual([line('VAL-24V').needed, line('VAL-24V').shortage], [3, 1]);
-    assert.deepStrictEqual(s.notInStock.map((m) => m.code), ['TAPE']);
+    assert.deepStrictEqual(overview.notInStock.map((material) => material.code), ['TAPE']);
 
     // Materiaallijst aanpassen: de reservering volgt.
     const data = (await kees.get(`/api/workorders/${wo.id}`)).body.data;
-    data.materials.find((m) => m.code === 'PE-25').qty = 60;
+    data.materials.find((material) => material.code === 'PE-25').qty = 60;
     assert.strictEqual((await kees.put(`/api/workorders/${wo.id}`, { data })).status, 200);
     assert.strictEqual((await kees.get('/api/stock')).body.items.find((i) => i.code === 'PE-25').reserved, 60);
 
     // Met de hand afboeken (en een retour).
-    s = (await kees.post(`/api/stock/workorders/${wo.id}/issue`, { lines: [{ code: 'pe-25', qty: 40 }] })).body;
+    overview = (await kees.post(`/api/stock/workorders/${wo.id}/issue`, { lines: [{ code: 'pe-25', qty: 40 }] })).body;
     assert.deepStrictEqual([line('PE-25').issued, line('PE-25').reserved], [40, 20]);
-    s = (await kees.post(`/api/stock/workorders/${wo.id}/issue`, { lines: [{ code: 'PE-25', qty: -5 }] })).body;
+    overview = (await kees.post(`/api/stock/workorders/${wo.id}/issue`, { lines: [{ code: 'PE-25', qty: -5 }] })).body;
     assert.deepStrictEqual([line('PE-25').issued, line('PE-25').reserved], [35, 25]);
     assert.strictEqual((await kees.post(`/api/stock/workorders/${wo.id}/issue`, { lines: [{ code: 'TAPE', qty: 1 }] })).status, 400);
 
@@ -101,8 +116,8 @@ test('voorraad: reserveren vanuit de werkorder, afboeken bij Gereed, mutaties', 
     assert.strictEqual(items.find((i) => i.code === 'PE-25').onHand, 95 - 60);
     assert.strictEqual(items.find((i) => i.code === 'VAL-24V').onHand, -1, 'tekort wordt zichtbaar als negatieve stand');
     assert.ok(items.every((i) => i.reserved === 0));
-    s = (await kees.get(`/api/stock/workorders/${wo.id}`)).body;
-    assert.ok(s.movements.some((m) => m.source === 'gereed' && m.workOrderNumber === wo.number));
+    overview = (await kees.get(`/api/stock/workorders/${wo.id}`)).body;
+    assert.ok(overview.movements.some((movement) => movement.source === 'gereed' && movement.workOrderNumber === wo.number));
     // Nogmaals opslaan als gereed boekt niets dubbel.
     await kees.put(`/api/workorders/${wo.id}`, { status: 'gereed' });
     assert.strictEqual((await kees.get('/api/stock')).body.items.find((i) => i.code === 'PE-25').onHand, 35);
@@ -143,6 +158,10 @@ test('voorraad: verbruik boeken is idempotent per verbruiksregel; met verbruik v
     assert.strictEqual(item.reserved, 50);
     const stock = createStockStore(db);
     const user = { id: 'u1', display_name: 'Kees' };
+    /**
+     * Huidige stand van het artikel.
+     * @returns {number} Aantal op voorraad.
+     */
     const onHand = () => stock.get(main, item.id).onHand;
     const first = stock.syncUsage(main, { usageId: 'v1', workOrderId: wo.id, code: 'pe-25', qty: 30, user });
     assert.ok(first);

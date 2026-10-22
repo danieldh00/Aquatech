@@ -9,6 +9,10 @@ const { createClient, listen } = require('./helpers/http-client');
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
+/**
+ * Start een testserver met hoofdbeheerder 'baas'.
+ * @returns {Promise<{ store: object, server: import('http').Server, base: string }>} Store, server en adres.
+ */
 async function start() {
   const db = openDb();
   const store = createStore(db);
@@ -17,11 +21,18 @@ async function start() {
   return { store, ...(await listen(app)) };
 }
 
+/**
+ * Logt in zonder lege JSON-body bij andere POST's (zoals een browserformulier).
+ * @param {string} base Adres van de testserver.
+ * @param {string} username Gebruikersnaam.
+ * @param {string} password Wachtwoord.
+ * @returns {Promise<object>} De ingelogde client.
+ */
 async function login(base, username, password) {
-  const c = createClient(base, { emptyJsonBody: false });
-  const r = await c.post('/api/auth/login', { username, password });
-  assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-  return c;
+  const client = createClient(base, { emptyJsonBody: false });
+  const response = await client.post('/api/auth/login', { username, password });
+  assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+  return client;
 }
 
 test('gebruiker wijzigt zelf het wachtwoord; andere sessies vervallen', async () => {
@@ -44,7 +55,7 @@ test('gebruiker wijzigt zelf het wachtwoord; andere sessies vervallen', async ()
     assert.strictEqual((await tweede.get('/api/me')).body.user, null);
     assert.strictEqual((await createClient(base, { emptyJsonBody: false }).post('/api/auth/login', { username: 'jan', password: 'Gras-Pomp-2027!' })).status, 401);
     await login(base, 'jan', 'Haag-Slang-2028!');
-    const audit = (await baas.get('/api/admin/audit')).body.items.map((a) => a.action);
+    const audit = (await baas.get('/api/admin/audit')).body.items.map((entry) => entry.action);
     assert.ok(audit.includes('wachtwoord_gewijzigd'));
 
     // Met de toegangscode of als gast is er geen eigen wachtwoord.
@@ -61,20 +72,20 @@ test('nieuw account en reset door beheerder: eerst zelf een wachtwoord kiezen', 
     // Standaard aan bij een nieuw account.
     const piet = (await baas.post('/api/admin/users', { username: 'piet', displayName: 'Piet', role: 'installateur', password: 'Gras-Pomp-2027!' })).body;
     assert.strictEqual(piet.mustChangePassword, true);
-    const p = await login(base, 'piet', 'Gras-Pomp-2027!');
-    assert.strictEqual((await p.get('/api/me')).body.user.mustChangePassword, true);
+    const pietClient = await login(base, 'piet', 'Gras-Pomp-2027!');
+    assert.strictEqual((await pietClient.get('/api/me')).body.user.mustChangePassword, true);
     // Alles is dicht behalve de wachtwoordpagina.
-    const blocked = await p.get('/api/plans');
+    const blocked = await pietClient.get('/api/plans');
     assert.strictEqual(blocked.status, 403);
     assert.strictEqual(blocked.body.error, 'password_change_required');
-    assert.strictEqual((await p.get('/beregening/api/plans')).status, 403);
-    for (const page of ['/', '/beregening/', '/offertes/index.html']) assert.match((await p.get(page)).text, /id="new1"/, page);
-    assert.strictEqual((await p.get('/api/health')).status, 200);
+    assert.strictEqual((await pietClient.get('/beregening/api/plans')).status, 403);
+    for (const page of ['/', '/beregening/', '/offertes/index.html']) assert.match((await pietClient.get(page)).text, /id="new1"/, page);
+    assert.strictEqual((await pietClient.get('/api/health')).status, 200);
 
-    assert.strictEqual((await p.post('/api/account/password', { currentPassword: 'Gras-Pomp-2027!', newPassword: 'Haag-Slang-2028!' })).status, 200);
-    assert.strictEqual((await p.get('/api/me')).body.user.mustChangePassword, false);
-    assert.strictEqual((await p.get('/api/plans')).status, 200);
-    assert.doesNotMatch((await p.get('/')).text, /id="new1"/);
+    assert.strictEqual((await pietClient.post('/api/account/password', { currentPassword: 'Gras-Pomp-2027!', newPassword: 'Haag-Slang-2028!' })).status, 200);
+    assert.strictEqual((await pietClient.get('/api/me')).body.user.mustChangePassword, false);
+    assert.strictEqual((await pietClient.get('/api/plans')).status, 200);
+    assert.doesNotMatch((await pietClient.get('/')).text, /id="new1"/);
 
     // Reset door de beheerder zet de optie weer aan, tenzij die uit wordt gezet.
     assert.strictEqual((await baas.patch(`/api/admin/users/${piet.id}`, { password: 'Bloem-Perk-2029!' })).body.mustChangePassword, true);
@@ -93,8 +104,8 @@ test('nieuw account en reset door beheerder: eerst zelf een wachtwoord kiezen', 
     // Ook via het hoofdbeheer: nieuwe tenant met beheerder, standaard aan.
     const made = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'anna', password: 'Haag-Slang-2028!' } })).body;
     const users = (await baas.get(`/api/platform/tenants/${made.tenant.id}/users`)).body.items;
-    assert.strictEqual(users.find((u) => u.username === 'anna').mustChangePassword, true);
-    const audit = (await baas.get('/api/admin/audit')).body.items.find((a) => a.action === 'gebruiker_gewijzigd');
+    assert.strictEqual(users.find((user) => user.username === 'anna').mustChangePassword, true);
+    const audit = (await baas.get('/api/admin/audit')).body.items.find((entry) => entry.action === 'gebruiker_gewijzigd');
     assert.ok(!JSON.stringify(audit).includes('Vijver'), 'nooit het wachtwoord in de audit');
   } finally {
     server.close();

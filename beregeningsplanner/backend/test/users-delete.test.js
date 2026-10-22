@@ -7,8 +7,17 @@ const { createApp } = require('../src/server');
 const { createClient, listen, createLogin } = require('./helpers/http-client');
 
 const PW = 'Tuin-Plan-2026!';
+/**
+ * Maakt een leeg plan.
+ * @param {string} name Naam van het plan.
+ * @returns {object} De plangegevens.
+ */
 const plan = (name) => ({ meta: { name }, areas: [], elements: [], sprinklers: [], zones: [] });
 
+/**
+ * Database met hoofdbeheerder, beheerder, installateur en klant, plus een testserver.
+ * @returns {Promise<object>} server, as (inloggen), store, db, tid en ids (id per gebruikersnaam).
+ */
 async function setup() {
   const db = openDb();
   const store = createStore(db);
@@ -26,9 +35,9 @@ test('beheerder verwijdert een gebruiker; plannen en offertes blijven bewaard', 
   const { server, as, store, db, tid, ids } = await setup();
   try {
     const baas = await as('baas'), ina = await as('ina'), klaas = await as('klaas');
-    const p = (await ina.post('/api/plans', { data: plan('Tuin Ina') })).body;
+    const createdPlan = (await ina.post('/api/plans', { data: plan('Tuin Ina') })).body;
     const qt = (await ina.post('/api/quotes', { data: {} })).body;
-    assert.ok(p.id && qt.id);
+    assert.ok(createdPlan.id && qt.id);
 
     // Een installateur mag niet verwijderen.
     assert.strictEqual((await klaas.del(`/api/admin/users/${ids.ina}`)).status, 403);
@@ -44,13 +53,13 @@ test('beheerder verwijdert een gebruiker; plannen en offertes blijven bewaard', 
     // Plan en offerte staan nu op naam van "Verwijderde gebruiker".
     const heir = db.prepare("SELECT * FROM users WHERE tenant_id = ? AND username = 'verwijderd~'").get(tid);
     assert.strictEqual(heir.kind, 'systeem');
-    assert.strictEqual(db.prepare('SELECT owner_id FROM plans WHERE id = ?').get(p.id).owner_id, heir.id);
+    assert.strictEqual(db.prepare('SELECT owner_id FROM plans WHERE id = ?').get(createdPlan.id).owner_id, heir.id);
     assert.strictEqual(db.prepare('SELECT owner_id FROM quotes WHERE id = ?').get(qt.id).owner_id, heir.id);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM history WHERE user_id = ?').get(ids.ina).n, 0);
     const users = (await baas.get('/api/admin/users')).body.items;
-    assert.ok(!users.some((u) => u.username === 'ina'));
-    assert.strictEqual(users.find((u) => u.username === 'verwijderd~').planCount, 1);
-    const audit = (await baas.get('/api/admin/audit')).body.items.find((a) => a.action === 'gebruiker_verwijderd');
+    assert.ok(!users.some((user) => user.username === 'ina'));
+    assert.strictEqual(users.find((user) => user.username === 'verwijderd~').planCount, 1);
+    const audit = (await baas.get('/api/admin/audit')).body.items.find((entry) => entry.action === 'gebruiker_verwijderd');
     assert.strictEqual(audit.detail.username, 'ina');
 
     // Nog een keer: niet gevonden. Systeemgebruikers zijn niet te verwijderen.
@@ -84,7 +93,7 @@ test('niet jezelf, niet de laatste beheerder en een hoofdbeheerder alleen door e
     assert.strictEqual(klant.status, 201, JSON.stringify(klant.body));
     const gt = klant.body.tenant.id;
     const gbUsers = (await hoofd.get(`/api/platform/tenants/${gt}/users`)).body.items;
-    const gb = gbUsers.find((u) => u.username === 'gerrit');
+    const gb = gbUsers.find((user) => user.username === 'gerrit');
     assert.strictEqual((await hoofd.del(`/api/platform/tenants/${gt}/users/${gb.id}`)).status, 409, 'laatste beheerder');
     const ext = await hoofd.post(`/api/platform/tenants/${gt}/users`, { username: 'gerda', displayName: 'Gerda', role: 'beheerder', password: PW });
     assert.strictEqual(ext.status, 201);

@@ -12,22 +12,27 @@ const { createClient, createLogin, listen } = require('./helpers/http-client');
 const SECRET = 'test-secret-mail-0123456789abcdef';
 
 test('WAN-IP: omgeving gaat voor, opzoeken met terugval, onthouden en alleen openbaar IPv4', async () => {
-  let t = 1_000_000;
+  let currentTime = 1_000_000;
   const calls = [];
   const answers = { a: 'geen ip', b: '203.0.113.9', c: '93.184.215.14\n' };
-  const fetch = async (url) => { calls.push(url); if (url === 'x') throw new Error('weg'); return answers[url]; };
-  const wan = createWanIp({ fetch, env: {}, now: () => t, sources: ['x', 'a', 'b', 'c'] });
+  /**
+   * Nagebootste fetch: 'x' faalt, de rest geeft het vaste antwoord.
+   * @param {string} url Bron.
+   * @returns {Promise<string>} Het antwoord.
+   */
+  const fakeFetch = async (url) => { calls.push(url); if (url === 'x') throw new Error('weg'); return answers[url]; };
+  const wan = createWanIp({ fetch: fakeFetch, env: {}, now: () => currentTime, sources: ['x', 'a', 'b', 'c'] });
   const first = await wan.get();
   assert.strictEqual(first.ip, '93.184.215.14', 'ongeldig en documentatieadres overgeslagen');
   assert.strictEqual(first.source, 'opgezocht');
   assert.deepStrictEqual(calls, ['x', 'a', 'b', 'c']);
-  t += 30_000;
+  currentTime += 30_000;
   await wan.get({ refresh: true });
   assert.strictEqual(calls.length, 4, 'niet vaker dan eens per minuut opnieuw');
-  t += 60_000;
+  currentTime += 60_000;
   await wan.get({ refresh: true });
   assert.strictEqual(calls.length, 8);
-  assert.strictEqual((await createWanIp({ fetch, env: { WAN_IP: '8.8.4.4' } }).get()).source, 'omgeving');
+  assert.strictEqual((await createWanIp({ fetch: fakeFetch, env: { WAN_IP: '8.8.4.4' } }).get()).source, 'omgeving');
   await assert.rejects(createWanIp({ fetch: async () => '192.168.2.251', env: {} }).get(), { code: 'unavailable' });
 });
 
@@ -37,8 +42,8 @@ test('mailer: Exchange-connector zonder inlog, met verplichte TLS', async () => 
   assert.strictEqual(conf.user, '');
   assert.strictEqual(sanitizeMail({ mode: 'iets' }).mode, 'smtp');
   let used = null;
-  const settings = { get: (k) => (k === 'mailServer' ? { ...conf, user: 'x' } : 'wachtwoord') };
-  const mailer = createMailer(settings, { resolveHost: async () => '52.101.1.1', createTransport: (o) => { used = o; return { sendMail: async () => ({}) }; } });
+  const settings = { get: (key) => (key === 'mailServer' ? { ...conf, user: 'x' } : 'wachtwoord') };
+  const mailer = createMailer(settings, { resolveHost: async () => '52.101.1.1', createTransport: (options) => { used = options; return { sendMail: async () => ({}) }; } });
   await mailer.send({ to: 'klant@example.nl', subject: 's', text: 't' });
   assert.strictEqual(used.auth, undefined, 'geen inlog bij de connector');
   assert.strictEqual(used.requireTLS, true);
@@ -54,7 +59,12 @@ test('API: e-mail en WAN-IP alleen voor beheerders, wachtwoord nooit terug', asy
   let lookups = 0;
   const wanIp = createWanIp({ fetch: async () => { lookups++; return '93.184.215.14'; }, env: {} });
   const sent = [];
-  const mailerFor = (settings) => createMailer(settings, { resolveHost: async (h) => h, createTransport: (o) => ({ sendMail: async (m) => { sent.push({ ...m, auth: o.auth }); return {}; } }) });
+  /**
+   * Mailer die niets verstuurt maar elk bericht (met inlog) bewaart.
+   * @param {object} settings Instellingen van de omgeving.
+   * @returns {object} De mailer.
+   */
+  const mailerFor = (settings) => createMailer(settings, { resolveHost: async (host) => host, createTransport: (options) => ({ sendMail: async (message) => { sent.push({ ...message, auth: options.auth }); return {}; } }) });
   const { server, base } = await listen(createApp({ secret: SECRET, db, wanIp, mailerFor }));
   const as = createLogin(base, { password: 'Tuin-Plan-2026!' });
   try {

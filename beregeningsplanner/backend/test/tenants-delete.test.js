@@ -1,3 +1,5 @@
+// Organisaties verwijderen (alles met tenant_id, ook testomgevingen) en geaccordeerde offertes alleen met bevestiging.
+
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -11,16 +13,31 @@ const { createClient, listen } = require('./helpers/http-client');
 const SECRET = 'z'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
+/**
+ * Start een testserver op de gegeven database.
+ * @param {object} db De database.
+ * @param {object} [opts] Extra opties voor createApp.
+ * @returns {Promise<{ server: import('http').Server, base: string }>} De server en zijn adres.
+ */
 function start(db, opts = {}) {
   return listen(createApp({ secret: SECRET, db, ...opts }));
 }
 
+/**
+ * Maakt een eenvoudig plan met één gazon.
+ * @param {string} name Naam van het plan.
+ * @returns {object} De plangegevens.
+ */
 const plan = (name) => ({
   meta: { name, customer: 'Fam. Jansen', address: 'Dorpsstraat 1' },
   areas: [{ id: 'a1', type: 'lawn', pts: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }, { x: 0, y: 5 }] }],
   sprinklers: [], zones: [], elements: [],
 });
 
+/**
+ * Platform met een hoofdbeheerder ('baas') in de hoofdtenant.
+ * @returns {Promise<object>} De database.
+ */
 async function platformDb() {
   const db = openDb();
   const store = createStore(db);
@@ -28,7 +45,12 @@ async function platformDb() {
   return db;
 }
 
-const tenantTables = (db) => listTables(db).filter((n) => tableColumns(db, n).some((c) => c.name === 'tenant_id'));
+/**
+ * Alle tabellen met een kolom tenant_id.
+ * @param {object} db De database.
+ * @returns {string[]} De tabelnamen.
+ */
+const tenantTables = (db) => listTables(db).filter((table) => tableColumns(db, table).some((column) => column.name === 'tenant_id'));
 
 test('hoofdbeheerder verwijdert een tenant met testomgevingen en al zijn gegevens', async () => {
   const db = await platformDb();
@@ -37,29 +59,29 @@ test('hoofdbeheerder verwijdert een tenant met testomgevingen en al zijn gegeven
     const baas = createClient(base);
     await baas.login('baas', PW);
     assert.strictEqual((await baas.post('/api/plans', { data: plan('Plan van Aquatech') })).status, 201);
-    const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
+    const tenant = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
     const piet = createClient(base);
     assert.strictEqual((await piet.login('piet', 'Gras-Pomp-2027!', 'groen')).status, 200);
     assert.strictEqual((await piet.post('/api/plans', { data: plan('Tuin van Groen') })).status, 201);
-    const env = (await baas.post(`/api/platform/tenants/${t.id}/environments`, { name: 'Test', copyPlans: true })).body.tenant;
+    const env = (await baas.post(`/api/platform/tenants/${tenant.id}/environments`, { name: 'Test', copyPlans: true })).body.tenant;
     assert.strictEqual((await baas.post(`/api/platform/tenants/${env.id}/testdata`)).status, 201);
 
     // Alleen hoofdbeheerders; de beheerder van de tenant zelf niet.
-    assert.strictEqual((await piet.del(`/api/platform/tenants/${t.id}`, { confirm: 'groen' })).status, 403);
+    assert.strictEqual((await piet.del(`/api/platform/tenants/${tenant.id}`, { confirm: 'groen' })).status, 403);
     // Zonder (of met een verkeerde) tenantcode gebeurt er niets.
-    assert.strictEqual((await baas.del(`/api/platform/tenants/${t.id}`)).body.error, 'confirm_required');
-    assert.strictEqual((await baas.del(`/api/platform/tenants/${t.id}`, { confirm: 'groen-bv' })).status, 400);
-    assert.ok(createStore(db).getTenant(t.id));
+    assert.strictEqual((await baas.del(`/api/platform/tenants/${tenant.id}`)).body.error, 'confirm_required');
+    assert.strictEqual((await baas.del(`/api/platform/tenants/${tenant.id}`, { confirm: 'groen-bv' })).status, 400);
+    assert.ok(createStore(db).getTenant(tenant.id));
 
-    const out = await baas.del(`/api/platform/tenants/${t.id}`, { confirm: 'Groen ' });
+    const out = await baas.del(`/api/platform/tenants/${tenant.id}`, { confirm: 'Groen ' });
     assert.strictEqual(out.status, 200, JSON.stringify(out.body));
     assert.strictEqual(out.body.environments, 1);
 
-    for (const n of tenantTables(db)) {
-      const c = db.prepare(`SELECT COUNT(*) AS n FROM ${n} WHERE tenant_id IN (?, ?)`).get(t.id, env.id).n;
-      assert.strictEqual(c, 0, `${n} is leeg na verwijderen`);
+    for (const table of tenantTables(db)) {
+      const count = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id IN (?, ?)`).get(tenant.id, env.id).n;
+      assert.strictEqual(count, 0, `${table} is leeg na verwijderen`);
     }
-    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM tenants WHERE id IN (?, ?)').get(t.id, env.id).n, 0);
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM tenants WHERE id IN (?, ?)').get(tenant.id, env.id).n, 0);
     // PostgreSQL controleert foreign keys altijd (een fout had de COMMIT laten mislukken).
     if (!isPg(db)) {
       assert.deepStrictEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
@@ -73,7 +95,7 @@ test('hoofdbeheerder verwijdert een tenant met testomgevingen en al zijn gegeven
     assert.strictEqual((await baas.get('/api/plans')).body.items.length, 1);
     const tenants = (await baas.get('/api/platform/tenants')).body.items;
     assert.deepStrictEqual(tenants.map((x) => x.slug), ['default']);
-    assert.ok((await baas.get('/api/admin/audit')).body.items.some((a) => a.action === 'tenant_verwijderd'));
+    assert.ok((await baas.get('/api/admin/audit')).body.items.some((entry) => entry.action === 'tenant_verwijderd'));
   } finally {
     server.close();
   }
@@ -100,13 +122,13 @@ test('geaccordeerde offerte alleen verwijderen met het offertenummer', async () 
   try {
     const baas = createClient(base);
     await baas.login('baas', PW);
-    const t = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen' })).body.tenant;
-    const env = (await baas.post(`/api/platform/tenants/${t.id}/environments`, { name: 'Test' })).body.tenant;
+    const tenant = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen' })).body.tenant;
+    const env = (await baas.post(`/api/platform/tenants/${tenant.id}/environments`, { name: 'Test' })).body.tenant;
     assert.strictEqual((await baas.post(`/api/platform/tenants/${env.id}/testdata`)).status, 201);
     assert.strictEqual((await baas.post('/api/environment', { tenantId: env.id })).status, 200);
     const items = (await baas.get('/api/quotes?all=1')).body.items;
-    const accepted = items.find((q) => q.status === 'akkoord');
-    const other = items.find((q) => q.status === 'concept');
+    const accepted = items.find((quote) => quote.status === 'akkoord');
+    const other = items.find((quote) => quote.status === 'concept');
     assert.ok(accepted && other);
 
     const no = await baas.del(`/api/quotes/${accepted.id}`);

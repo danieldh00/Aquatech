@@ -39,8 +39,8 @@ test('klantweergave van een werkorder: geen uren, instructies of notities', () =
   for (const secret of ['Sleutel', 'Hond', 'Ploeg A', 'actualHours', 'picked', 'flowLph', '"hours"']) assert.ok(!json.includes(secret), `geen ${secret}`);
   assert.deepStrictEqual(out.progress, { steps: 2, done: 1, pct: 50 });
   assert.strictEqual(out.installer, 'Kees');
-  assert.deepStrictEqual(out.materials.map((m) => m.description), ['Sproeier'], 'geen negatieve regels');
-  assert.deepStrictEqual(out.steps.map((s) => [s.title, s.done, s.phaseLabel]), [['Sleuven', true, 'Uitvoering'], ['Inregelen', false, 'Oplevering']]);
+  assert.deepStrictEqual(out.materials.map((material) => material.description), ['Sproeier'], 'geen negatieve regels');
+  assert.deepStrictEqual(out.steps.map((step) => [step.title, step.done, step.phaseLabel]), [['Sleuven', true, 'Uitvoering'], ['Inregelen', false, 'Oplevering']]);
   assert.strictEqual(out.report.notes, 'Alles werkt');
   assert.strictEqual(out.appointment, undefined, 'zonder planning geen afspraakveld');
 });
@@ -67,10 +67,10 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
     const data = { title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1\nNunspeet' },
       lines: [{ section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 20, vat: 21 }, { section: 'arbeid', description: 'Sleuven graven', qty: 3, unit: 'uur', price: 55, vat: 21 }] };
     const concept = (await kees.post('/api/quotes', { data, customerId: klaasId })).body;
-    let p = (await klaas.get('/api/portal')).body;
-    assert.deepStrictEqual(p.plans.map((x) => x.title), ['Mijn tuin']);
-    assert.deepStrictEqual(p.quotes, [], 'concept is niet zichtbaar');
-    assert.strictEqual(p.contact.companyName, 'AquaTech Service');
+    let portal = (await klaas.get('/api/portal')).body;
+    assert.deepStrictEqual(portal.plans.map((x) => x.title), ['Mijn tuin']);
+    assert.deepStrictEqual(portal.quotes, [], 'concept is niet zichtbaar');
+    assert.strictEqual(portal.contact.companyName, 'AquaTech Service');
 
     await kees.put(`/api/quotes/${concept.id}`, { status: 'akkoord' });
     const wo = (await kees.post('/api/workorders', { quoteId: concept.id })).body;
@@ -80,25 +80,25 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
     await kees.put(`/api/quotes/${other.id}`, { status: 'akkoord' });
     const wo2 = (await kees.post('/api/workorders', { quoteId: other.id })).body;
 
-    p = (await klaas.get('/api/portal')).body;
-    assert.deepStrictEqual(p.quotes.map((x) => x.number), [concept.number]);
-    assert.deepStrictEqual(p.workorders.map((x) => x.number), [wo.number]);
-    assert.strictEqual(p.workorders[0].status, 'gepland');
-    assert.strictEqual(p.workorders[0].plannedDate, '2026-11-03');
-    assert.strictEqual(p.workorders[0].startTime, '08:00');
-    assert.ok(!JSON.stringify(p).includes('Sleutel'), 'geen interne instructies');
-    assert.strictEqual(p.workorders[0].appointment.state, 'wacht', 'ingepland zonder reactie: wacht op de klant');
+    portal = (await klaas.get('/api/portal')).body;
+    assert.deepStrictEqual(portal.quotes.map((x) => x.number), [concept.number]);
+    assert.deepStrictEqual(portal.workorders.map((x) => x.number), [wo.number]);
+    assert.strictEqual(portal.workorders[0].status, 'gepland');
+    assert.strictEqual(portal.workorders[0].plannedDate, '2026-11-03');
+    assert.strictEqual(portal.workorders[0].startTime, '08:00');
+    assert.ok(!JSON.stringify(portal).includes('Sleutel'), 'geen interne instructies');
+    assert.strictEqual(portal.workorders[0].appointment.state, 'wacht', 'ingepland zonder reactie: wacht op de klant');
     assert.strictEqual((await piet.post(`/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' })).status, 404);
-    const r = await klaas.post(`/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' });
-    assert.strictEqual(r.status, 200);
-    assert.deepStrictEqual([r.body.appointment.state, r.body.appointment.response.name], ['bevestigd', 'Klaas Jansen']);
+    const response = await klaas.post(`/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' });
+    assert.strictEqual(response.status, 200);
+    assert.deepStrictEqual([response.body.appointment.state, response.body.appointment.response.name], ['bevestigd', 'Klaas Jansen']);
     assert.strictEqual((await klaas.post(`/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' })).status, 409);
 
-    const d = await klaas.get(`/api/portal/workorders/${wo.id}`);
-    assert.strictEqual(d.status, 200);
-    assert.strictEqual(d.body.materials.length, 1);
-    assert.ok(d.body.steps.length >= 1);
-    assert.deepStrictEqual(d.body.photos, []);
+    const detail = await klaas.get(`/api/portal/workorders/${wo.id}`);
+    assert.strictEqual(detail.status, 200);
+    assert.strictEqual(detail.body.materials.length, 1);
+    assert.ok(detail.body.steps.length >= 1);
+    assert.deepStrictEqual(detail.body.photos, []);
     assert.strictEqual((await klaas.get(`/api/portal/workorders/${wo2.id}`)).status, 404, 'niet van deze klant');
     assert.strictEqual((await piet.get(`/api/portal/workorders/${wo.id}`)).status, 404, 'andere klant');
     const pp = (await piet.get('/api/portal')).body;
@@ -122,12 +122,12 @@ test('API: foto\'s en afspraak bevestigen via de optionele koppelingen', async (
   app.use(express.json());
   app.use((req, res, next) => { req.user = user; req.tenantId = 't1'; next(); });
   registerPortalRoutes(app, {
-    portal: { ownRow: (t, u, id) => (t === 't1' && u === 'u1' && id === 'w1' ? raw : null) },
+    portal: { ownRow: (tenantId, userId, id) => (tenantId === 't1' && userId === 'u1' && id === 'w1' ? raw : null) },
     store: { listPlans: () => [] },
     quotes: { list: () => [] },
     workorders: {
-      list: (t, { customerId }) => (t === 't1' && customerId === 'u1' ? [wo] : []),
-      get: (t, id, opts = {}) => (t === 't1' && id === 'w1' && (!opts.customerId || opts.customerId === 'u1') ? wo : null),
+      list: (tenantId, { customerId }) => (tenantId === 't1' && customerId === 'u1' ? [wo] : []),
+      get: (tenantId, id, options = {}) => (tenantId === 't1' && id === 'w1' && (!options.customerId || options.customerId === 'u1') ? wo : null),
       respond: (row, answer, input, meta) => {
         calls.push({ row, answer, input, meta });
         if (wo.appointment.state !== 'wacht') return { error: 'answered' };
@@ -135,29 +135,29 @@ test('API: foto\'s en afspraak bevestigen via de optionele koppelingen', async (
         return { row };
       },
     },
-    photos: { list: (t, id, opts) => (opts.customerOnly ? [{ id: 'f1', kind: 'oplevering', url: 'api/portal/photos/f1' }] : []) },
-    requireRight: (r) => (req, res, next) => (Roles.can(req.user, r) ? next() : res.status(403).end()),
+    photos: { list: (tenantId, id, options) => (options.customerOnly ? [{ id: 'f1', kind: 'oplevering', url: 'api/portal/photos/f1' }] : []) },
+    requireRight: (right) => (req, res, next) => (Roles.can(req.user, right) ? next() : res.status(403).end()),
     requireJson: (req, res, next) => next(),
     settingsOf: () => ({ get: () => ({ companyName: 'Bedrijf', iban: 'NL00GEHEIM' }) }),
     audit: () => {},
   });
   const { server, base } = await listen(app);
-  const c = createClient(base);
+  const client = createClient(base);
   try {
-    const p = (await c.get('/api/portal')).body;
-    assert.deepStrictEqual(p.features, { photos: true, appointments: true, requests: false });
-    assert.strictEqual(p.workorders[0].appointment.state, 'wacht');
-    assert.ok(!JSON.stringify(p.contact).includes('GEHEIM'), 'alleen contactgegevens');
-    assert.deepStrictEqual((await c.get('/api/portal/workorders/w1')).body.photos.map((f) => f.id), ['f1']);
-    assert.strictEqual((await c.post('/api/portal/workorders/w1/appointment', { answer: 'misschien' })).status, 400);
-    assert.strictEqual((await c.post('/api/portal/workorders/w9/appointment', { answer: 'bevestigd' })).status, 404);
-    const ok = await c.post('/api/portal/workorders/w1/appointment', { answer: 'bevestigd' });
+    const portal = (await client.get('/api/portal')).body;
+    assert.deepStrictEqual(portal.features, { photos: true, appointments: true, requests: false });
+    assert.strictEqual(portal.workorders[0].appointment.state, 'wacht');
+    assert.ok(!JSON.stringify(portal.contact).includes('GEHEIM'), 'alleen contactgegevens');
+    assert.deepStrictEqual((await client.get('/api/portal/workorders/w1')).body.photos.map((photo) => photo.id), ['f1']);
+    assert.strictEqual((await client.post('/api/portal/workorders/w1/appointment', { answer: 'misschien' })).status, 400);
+    assert.strictEqual((await client.post('/api/portal/workorders/w9/appointment', { answer: 'bevestigd' })).status, 404);
+    const ok = await client.post('/api/portal/workorders/w1/appointment', { answer: 'bevestigd' });
     assert.strictEqual(ok.status, 200);
     assert.deepStrictEqual(ok.body.appointment, { state: 'bevestigd', response: { answer: 'bevestigd', name: 'Klaas', reason: '', at: 'nu' } }, 'geen ip naar de klant');
     assert.strictEqual(calls[0].row, raw);
     assert.strictEqual(calls[0].meta.via, 'account');
     assert.strictEqual(calls[0].meta.userId, 'u1');
-    assert.strictEqual((await c.post('/api/portal/workorders/w1/appointment', { answer: 'bevestigd' })).status, 409);
+    assert.strictEqual((await client.post('/api/portal/workorders/w1/appointment', { answer: 'bevestigd' })).status, 409);
   } finally {
     server.close();
   }

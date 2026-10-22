@@ -9,6 +9,10 @@ const { createClient, listen } = require('./helpers/http-client');
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
+/**
+ * Start een testserver met beheerder 'baas' en klant 'klaas'.
+ * @returns {Promise<{ store: object, server: import('http').Server, base: string }>} Store, server en adres.
+ */
 async function start() {
   const db = openDb();
   const store = createStore(db);
@@ -19,11 +23,18 @@ async function start() {
   return { store, ...(await listen(app)) };
 }
 
+/**
+ * Logt in zonder lege JSON-body bij andere POST's (zoals een browserformulier).
+ * @param {string} base Adres van de testserver.
+ * @param {string} username Gebruikersnaam.
+ * @param {string} [password] Wachtwoord (standaard het testwachtwoord).
+ * @returns {Promise<object>} De ingelogde client.
+ */
 async function login(base, username, password = PW) {
-  const c = createClient(base, { emptyJsonBody: false });
-  const r = await c.post('/api/auth/login', { username, password });
-  assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-  return c;
+  const client = createClient(base, { emptyJsonBody: false });
+  const response = await client.post('/api/auth/login', { username, password });
+  assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+  return client;
 }
 
 test('voorkeuren: alleen bekende sleutels, altijd compleet', () => {
@@ -36,10 +47,10 @@ test('Mijn profiel: gegevens en voorkeuren wijzigen', async () => {
   const { server, base } = await start();
   try {
     const klaas = await login(base, 'klaas');
-    const p = await klaas.get('/api/account/profile');
-    assert.strictEqual(p.status, 200);
-    assert.deepStrictEqual(p.body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' });
-    assert.strictEqual(p.body.user.email, '');
+    const profile = await klaas.get('/api/account/profile');
+    assert.strictEqual(profile.status, 200);
+    assert.deepStrictEqual(profile.body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' });
+    assert.strictEqual(profile.body.user.email, '');
     assert.deepStrictEqual((await klaas.get('/api/me')).body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' });
 
     // Ongeldige invoer: niets opgeslagen, met het veld erbij.
@@ -68,14 +79,14 @@ test('Mijn profiel: gegevens en voorkeuren wijzigen', async () => {
 
     // Logboek: welke velden, nooit de waarden.
     const baas = await login(base, 'baas');
-    const items = (await baas.get('/api/admin/audit')).body.items.filter((a) => a.action === 'profiel_gewijzigd');
+    const items = (await baas.get('/api/admin/audit')).body.items.filter((entry) => entry.action === 'profiel_gewijzigd');
     assert.ok(items.length >= 3);
     assert.ok(!JSON.stringify(items).includes('voorbeeld.test') && !JSON.stringify(items).includes('12-34'), 'geen persoonsgegevens in het logboek');
     // De beheerder ziet de contactgegevens in het gebruikersoverzicht.
     await klaas.put('/api/account/profile', { email: 'klaas@voorbeeld.test' });
     const users = (await baas.get('/api/admin/users')).body;
     const list = users.items || users;
-    assert.strictEqual(list.find((u) => u.username === 'klaas').email, 'klaas@voorbeeld.test');
+    assert.strictEqual(list.find((user) => user.username === 'klaas').email, 'klaas@voorbeeld.test');
   } finally {
     server.close();
   }
@@ -106,6 +117,11 @@ test('startpagina: het dashboard krijgt hem mee, alleen als de module er voor de
   const { server, base } = await start();
   try {
     const klaas = await login(base, 'klaas');
+    /**
+     * Leest de startpagina uit de meta-tag van het dashboard.
+     * @param {string} html De HTML van de pagina.
+     * @returns {string|null} De startpagina, of null zonder meta-tag.
+     */
     const meta = (html) => (/<meta name="aquatech-start" content="([^"]*)">/.exec(html) || [])[1] || null;
     assert.strictEqual(meta((await klaas.get('/')).text), null);
     await klaas.put('/api/account/profile', { preferences: { startPage: 'portaal' } });

@@ -9,20 +9,30 @@ const { inspectImage, cleanJpeg } = require('../src/uitvoering/photos');
 const { sitePhotoPng } = require('../src/platform/test-data');
 const { createClient, createLogin, listen } = require('./helpers/http-client');
 
-// Kleine JPEG-structuur: JFIF, EXIF met GPS-gegevens, frame (SOF0 640x480), scan.
+/**
+ * Kleine JPEG-structuur: JFIF, EXIF met GPS-gegevens, frame (SOF0 640x480), scan.
+ * @param {{ exif?: boolean }} [options] exif: met EXIF-blok (standaard aan).
+ * @returns {Buffer} De JPEG.
+ */
 function fakeJpeg({ exif = true } = {}) {
-  const seg = (marker, body) => {
-    const len = Buffer.alloc(2); len.writeUInt16BE(body.length + 2);
-    return Buffer.concat([Buffer.from([0xff, marker]), len, body]);
+  /**
+   * Eén JPEG-segment: marker, lengte en inhoud.
+   * @param {number} marker Segmenttype (na 0xFF).
+   * @param {Buffer} body Inhoud.
+   * @returns {Buffer} Het segment.
+   */
+  const segment = (marker, body) => {
+    const length = Buffer.alloc(2); length.writeUInt16BE(body.length + 2);
+    return Buffer.concat([Buffer.from([0xff, marker]), length, body]);
   };
   const sof = Buffer.from([8, 0x01, 0xe0, 0x02, 0x80, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]);
   return Buffer.concat([
     Buffer.from([0xff, 0xd8]),
-    seg(0xe0, Buffer.from('JFIF\0\x01\x01\0\0\x01\0\x01\0\0', 'latin1')),
-    ...(exif ? [seg(0xe1, Buffer.from('Exif\0\0GPSLatitude 52.37 Nunspeet', 'latin1'))] : []),
-    seg(0xdb, Buffer.alloc(65, 1)),
-    seg(0xc0, sof),
-    seg(0xda, Buffer.from([1, 1, 0, 0, 0x3f, 0])),
+    segment(0xe0, Buffer.from('JFIF\0\x01\x01\0\0\x01\0\x01\0\0', 'latin1')),
+    ...(exif ? [segment(0xe1, Buffer.from('Exif\0\0GPSLatitude 52.37 Nunspeet', 'latin1'))] : []),
+    segment(0xdb, Buffer.alloc(65, 1)),
+    segment(0xc0, sof),
+    segment(0xda, Buffer.from([1, 1, 0, 0, 0x3f, 0])),
     Buffer.from([0x12, 0x34, 0x56, 0xff, 0x00, 0x78]),
     Buffer.from([0xff, 0xd9]),
   ]);
@@ -46,18 +56,22 @@ test('afbeelding herkennen: formaat en afmetingen uit de inhoud, EXIF/GPS uit JP
 });
 
 test('vault: bestanden versleuteld met de context als AAD', () => {
-  const v = createVault();
+  const vault = createVault();
   const buf = Buffer.from([0, 1, 2, 250, 255]);
-  const sealed = v.sealBytes(buf, 't1:foto:a:beeld');
+  const sealed = vault.sealBytes(buf, 't1:foto:a:beeld');
   assert.match(sealed, /^f1:/);
-  assert.deepStrictEqual(v.openBytes(sealed, 't1:foto:a:beeld'), buf);
-  assert.throws(() => v.openBytes(sealed, 't2:foto:a:beeld'), 'andere tenant: niet te openen');
+  assert.deepStrictEqual(vault.openBytes(sealed, 't1:foto:a:beeld'), buf);
+  assert.throws(() => vault.openBytes(sealed, 't2:foto:a:beeld'), 'andere tenant: niet te openen');
   assert.throws(() => createVault().openBytes(sealed, 't1:foto:a:beeld'), 'andere sleutel: niet te openen');
 });
 
 // ---------- API ----------
 const SECRET = 'z'.repeat(64);
 
+/**
+ * Tenant met beheerder, installateur en twee klanten, plus een testserver.
+ * @returns {Promise<object>} db, server, base en as (inloggen).
+ */
 async function setup() {
   const db = openDb();
   const store = createStore(db);
@@ -79,9 +93,9 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
   try {
     const kees = await as('kees'), baas = await as('baas'), klaas = await as('klaas'), piet = await as('piet');
     const klaasId = (await klaas.get('/api/me')).body.user.id;
-    const q = (await kees.post('/api/quotes', { data: { title: 'Aanleg beregening', customer: { name: 'Fam. Klaassen', address: 'Dorpsstraat 1\nNunspeet' }, lines } })).body;
-    await kees.put(`/api/quotes/${q.id}`, { status: 'akkoord', customerId: klaasId });
-    const wo = (await kees.post('/api/workorders', { quoteId: q.id })).body;
+    const quote = (await kees.post('/api/quotes', { data: { title: 'Aanleg beregening', customer: { name: 'Fam. Klaassen', address: 'Dorpsstraat 1\nNunspeet' }, lines } })).body;
+    await kees.put(`/api/quotes/${quote.id}`, { status: 'akkoord', customerId: klaasId });
+    const wo = (await kees.post('/api/workorders', { quoteId: quote.id })).body;
     // Tweede klant zonder account (dossier op naam).
     const q2 = (await kees.post('/api/quotes', { data: { title: 'Druppelslang border', customer: { name: 'Bakker' }, lines } })).body;
     await kees.put(`/api/quotes/${q2.id}`, { status: 'akkoord' });
@@ -122,7 +136,7 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
     assert.strictEqual((await kees.get(`/api/workorders/${wo2.id}/photos/${up.body.id}`)).status, 404, 'foto hoort bij een andere werkorder');
 
     const list = (await kees.get(`/api/workorders/${wo.id}/photos`)).body;
-    assert.deepStrictEqual(list.items.map((p) => p.id), [up.body.id, hidden.id]);
+    assert.deepStrictEqual(list.items.map((photo) => photo.id), [up.body.id, hidden.id]);
     assert.strictEqual(list.items[0].url, `api/workorders/${wo.id}/photos/${up.body.id}`);
 
     // Klantportaal: alleen zichtbare foto's van de eigen werkorder.
@@ -135,7 +149,7 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
     assert.strictEqual((await klaas.get(`/api/workorders/${wo.id}/photos`)).status, 403);
     // Het opleverdossier in het portaal toont alleen de zichtbare foto's, met de portaal-URL.
     const pw = (await klaas.get(`/api/portal/workorders/${wo.id}`)).body;
-    assert.deepStrictEqual(pw.photos.map((p) => [p.id, p.url]), [[up.body.id, `api/portal/photos/${up.body.id}`]]);
+    assert.deepStrictEqual(pw.photos.map((photo) => [photo.id, photo.url]), [[up.body.id, `api/portal/photos/${up.body.id}`]]);
     assert.ok(!('uploadedBy' in pw.photos[0]), 'geen medewerkersnaam naar de klant');
 
     // Wijzigen: zichtbaar zetten, bijschrift, soort.
@@ -146,20 +160,20 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
     // Dossiers: één per klant (account of naam).
     await kees.put(`/api/workorders/${wo.id}`, { status: 'gereed', data: { ...wo.data, report: { notes: 'Alles werkt', completedOn: '2026-05-02', signedBy: 'K. Klaassen' } } });
     assert.strictEqual((await klaas.get('/api/dossiers')).status, 403);
-    const ds = (await kees.get('/api/dossiers')).body.items;
-    assert.strictEqual(ds.length, 2);
-    const dk = ds.find((d) => d.account);
-    assert.deepStrictEqual([dk.key, dk.name, dk.installations, dk.completed, dk.photos, dk.lastCompletedOn], [`a-${klaasId}`, 'Fam. Klaassen', 1, 1, 2, '2026-05-02']);
-    const db2 = ds.find((d) => !d.account);
-    assert.match(db2.key, /^n-[0-9a-f]{16}$/);
-    const d = (await kees.get(`/api/dossiers/${encodeURIComponent(dk.key)}`)).body;
-    assert.strictEqual(d.customer.name, 'Fam. Klaassen');
-    assert.deepStrictEqual(d.addresses, ['Dorpsstraat 1, Nunspeet']);
-    assert.strictEqual(d.installations[0].report.signedBy, 'K. Klaassen');
-    assert.strictEqual(d.installations[0].photos.length, 2);
-    assert.deepStrictEqual(d.installations[0].materials.map((m) => m.description), ['Sproeier']);
-    assert.deepStrictEqual(d.quotes.map((x) => x.number), [q.number]);
-    assert.strictEqual((await kees.get(`/api/dossiers/${db2.key}`)).body.quotes.length, 1);
+    const dossiers = (await kees.get('/api/dossiers')).body.items;
+    assert.strictEqual(dossiers.length, 2);
+    const accountDossier = dossiers.find((dossier) => dossier.account);
+    assert.deepStrictEqual([accountDossier.key, accountDossier.name, accountDossier.installations, accountDossier.completed, accountDossier.photos, accountDossier.lastCompletedOn], [`a-${klaasId}`, 'Fam. Klaassen', 1, 1, 2, '2026-05-02']);
+    const nameDossier = dossiers.find((dossier) => !dossier.account);
+    assert.match(nameDossier.key, /^n-[0-9a-f]{16}$/);
+    const detail = (await kees.get(`/api/dossiers/${encodeURIComponent(accountDossier.key)}`)).body;
+    assert.strictEqual(detail.customer.name, 'Fam. Klaassen');
+    assert.deepStrictEqual(detail.addresses, ['Dorpsstraat 1, Nunspeet']);
+    assert.strictEqual(detail.installations[0].report.signedBy, 'K. Klaassen');
+    assert.strictEqual(detail.installations[0].photos.length, 2);
+    assert.deepStrictEqual(detail.installations[0].materials.map((material) => material.description), ['Sproeier']);
+    assert.deepStrictEqual(detail.quotes.map((x) => x.number), [quote.number]);
+    assert.strictEqual((await kees.get(`/api/dossiers/${nameDossier.key}`)).body.quotes.length, 1);
     assert.strictEqual((await kees.get('/api/dossiers/n-0000000000000000')).status, 404);
 
     // Verwijderen; definitief wissen van de werkorder neemt de foto's mee.
@@ -167,7 +181,7 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
     assert.strictEqual((await kees.get(`/api/workorders/${wo.id}/photos/${up.body.id}`)).status, 404);
     assert.strictEqual((await baas.del(`/api/admin/workorders/${wo.id}`)).status, 200);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM work_order_photos').get().n, 0);
-    const audit = db.prepare("SELECT action FROM audit WHERE action LIKE 'foto_%'").all().map((r) => r.action);
+    const audit = db.prepare("SELECT action FROM audit WHERE action LIKE 'foto_%'").all().map((row) => row.action);
     assert.ok(audit.includes('foto_toegevoegd') && audit.includes('foto_verwijderd'));
   } finally {
     server.close();
@@ -178,9 +192,9 @@ test('API: maximaal aantal foto\'s per werkorder en grote foto via de eigen limi
   const { db, server, as } = await setup();
   try {
     const kees = await as('kees');
-    const q = (await kees.post('/api/quotes', { data: { title: 'X', customer: { name: 'Y' }, lines } })).body;
-    await kees.put(`/api/quotes/${q.id}`, { status: 'akkoord' });
-    const wo = (await kees.post('/api/workorders', { quoteId: q.id })).body;
+    const quote = (await kees.post('/api/quotes', { data: { title: 'X', customer: { name: 'Y' }, lines } })).body;
+    await kees.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
+    const wo = (await kees.post('/api/workorders', { quoteId: quote.id })).body;
     // ~2 MB: groter dan de 1 MB van de werkorder-API, past binnen de fotolimiet.
     const big = Buffer.concat([fakeJpeg({ exif: false }).subarray(0, -2), Buffer.alloc(2 * 1024 * 1024, 7), Buffer.from([0xff, 0xd9])]);
     assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: big.toString('base64') })).status, 201);
@@ -191,9 +205,9 @@ test('API: maximaal aantal foto\'s per werkorder en grote foto via de eigen limi
     const ins = db.prepare(`INSERT INTO work_order_photos (id, tenant_id, work_order_id, uploaded_by, kind, caption, customer_visible, mime, width, height, size, taken_at, image, thumb, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (let i = 0; i < 99; i++) ins.run(`x${i}`, row.tenant_id, row.work_order_id, null, 'voor', '', 1, row.mime, 1, 1, 1, null, 'f1:a:b:c', 'f1:a:b:c', row.created_at);
-    const r = await kees.post(`/api/workorders/${wo.id}/photos`, { image: fakeJpeg().toString('base64') });
-    assert.strictEqual(r.status, 409);
-    assert.strictEqual(r.body.error, 'too_many_photos');
+    const response = await kees.post(`/api/workorders/${wo.id}/photos`, { image: fakeJpeg().toString('base64') });
+    assert.strictEqual(response.status, 409);
+    assert.strictEqual(response.body.error, 'too_many_photos');
   } finally {
     server.close();
   }

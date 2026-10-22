@@ -1,3 +1,5 @@
+// Impersonatie (meekijken als gebruiker) en supporttoegang voor de hoofdbeheerder.
+
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
@@ -7,17 +9,31 @@ const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
 
+/**
+ * Start een testserver op de gegeven database.
+ * @param {object} db De database.
+ * @param {object} [opts] Extra opties voor createApp.
+ * @returns {Promise<{ server: import('http').Server, base: string }>} De server en zijn adres.
+ */
 function start(db, opts = {}) {
   return listen(createApp({ secret: SECRET, db, ...opts }));
 }
 
+/**
+ * Maakt een eenvoudig plan met één gazon.
+ * @param {string} name Naam van het plan.
+ * @returns {object} De plangegevens.
+ */
 const plan = (name) => ({
   meta: { name, customer: 'Fam. Jansen', address: 'Dorpsstraat 1' },
   areas: [{ id: 'a1', type: 'lawn', pts: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }, { x: 0, y: 5 }] }],
   sprinklers: [], zones: [], elements: [],
 });
 
-// Platform met een hoofdbeheerder ('baas') in de hoofdtenant.
+/**
+ * Platform met een hoofdbeheerder ('baas') in de hoofdtenant.
+ * @returns {Promise<object>} De database.
+ */
 async function platformDb() {
   const db = openDb();
   const store = createStore(db);
@@ -26,10 +42,19 @@ async function platformDb() {
 }
 
 
+/**
+ * Leest de auditregels van één actie, met detail als object.
+ * @param {object} db De database.
+ * @param {string} action De auditactie.
+ * @returns {object[]} De regels, oudste eerst.
+ */
 const auditRows = (db, action) => db.prepare('SELECT * FROM audit WHERE action = ? ORDER BY created_at').all(action)
-  .map((r) => ({ ...r, detail: JSON.parse(r.detail) }));
+  .map((row) => ({ ...row, detail: JSON.parse(row.detail) }));
 
-// Hoofdtenant met 'baas', tenant Groen met beheerder piet en klant kees, en een testomgeving.
+/**
+ * Hoofdtenant met 'baas', tenant Groen met beheerder piet en klant kees, en een testomgeving.
+ * @returns {Promise<object>} db, server, base, baas (client), groen, test (omgeving), piet en kees.
+ */
 async function setup() {
   const db = await platformDb();
   const { server, base } = await start(db);
@@ -39,7 +64,7 @@ async function setup() {
   const kees = (await baas.post(`/api/platform/tenants/${groen.id}/users`, { username: 'kees', displayName: 'Kees', role: 'klant', password: 'Haag-Slang-2028!', mustChangePassword: false })).body;
   const test = (await baas.post(`/api/platform/tenants/${groen.id}/environments`, { name: 'Acceptatie' })).body.tenant;
   const users = (await baas.get(`/api/platform/tenants/${groen.id}/users`)).body.items;
-  const piet = users.find((u) => u.username === 'piet');
+  const piet = users.find((user) => user.username === 'piet');
   return { db, server, base, baas, groen, test, piet, kees };
 }
 
@@ -71,7 +96,7 @@ test('impersonatie in een testomgeving: zonder toestemming, met balk-cookie, ter
     // Auditlog: start in de testomgeving en in de hoofdtenant, met reden.
     const started = auditRows(db, 'impersonatie_gestart');
     const main = db.prepare("SELECT id FROM tenants WHERE slug = 'default'").get().id;
-    assert.deepStrictEqual(started.map((r) => r.tenant_id).sort(), [env.id, main].sort());
+    assert.deepStrictEqual(started.map((row) => row.tenant_id).sort(), [env.id, main].sort());
     assert.strictEqual(started[0].detail.gebruiker, 'piet');
     assert.strictEqual(started[0].detail.reden, 'Ticket 12');
 
@@ -100,15 +125,15 @@ test('impersonatie in live: alleen met toestemming van de gebruiker, intrekken s
     await pc.login('piet', 'Gras-Pomp-2027!', 'groen');
     assert.strictEqual((await pc.get('/api/support')).body.grant, null);
     assert.strictEqual((await pc.post('/api/support', { hours: 5 })).status, 400);
-    const g = await pc.post('/api/support', { hours: 1 });
-    assert.strictEqual(g.status, 201);
-    assert.ok(Date.parse(g.body.grant.expiresAt) - Date.now() <= 60 * 60 * 1000 + 5000);
-    assert.ok((await baas.get(`/api/platform/tenants/${groen.id}/users`)).body.items.find((u) => u.id === piet.id).support);
+    const granted = await pc.post('/api/support', { hours: 1 });
+    assert.strictEqual(granted.status, 201);
+    assert.ok(Date.parse(granted.body.grant.expiresAt) - Date.now() <= 60 * 60 * 1000 + 5000);
+    assert.ok((await baas.get(`/api/platform/tenants/${groen.id}/users`)).body.items.find((user) => user.id === piet.id).support);
 
     const ok = await baas.post('/api/platform/impersonate', { userId: piet.id, tenantId: groen.id });
     assert.strictEqual(ok.status, 201);
     assert.strictEqual(ok.body.live, true);
-    assert.ok(Date.parse(ok.body.expiresAt) <= Date.parse(g.body.grant.expiresAt), 'nooit langer dan de toestemming');
+    assert.ok(Date.parse(ok.body.expiresAt) <= Date.parse(granted.body.grant.expiresAt), 'nooit langer dan de toestemming');
     assert.strictEqual((await baas.get('/api/me')).body.user.username, 'piet');
 
     // Acties tijdens de impersonatie krijgen de hoofdbeheerder in het auditlog.
