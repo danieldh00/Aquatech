@@ -5,8 +5,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createApp } = require('../src/server');
-const { openDb, listTables, tableColumns } = require('../src/db');
-const { createStore } = require('../src/store');
+const { openDb, listTables, tableColumns } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
 
 const SECRET = 'z'.repeat(64);
 
@@ -62,8 +62,8 @@ async function platformDb() {
   return db;
 }
 
-const { buildTestData, lawnHeads } = require('../src/testdata');
-const { summarize } = require('../src/store');
+const { buildTestData, lawnHeads } = require('../src/platform/test-data');
+const { summarize } = require('../src/platform/store');
 
 test('testdata: tuinen met zones, offertes met regels en geldige gebruikersnamen', () => {
   const set = buildTestData({ slug: 'groen-test', profile: { hourlyRate: 55, vatRate: 21, validDays: 30 }, today: new Date('2026-10-18T12:00:00Z') });
@@ -267,7 +267,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
     assert.ok(cat.unmatched.length > 0, 'een paar artikelen staan niet in de nepwebshop');
 
     // Elke tabel met gegevens per tenant heeft testdata. Een nieuwe tabel?
-    // Dan hoort die in testdata.js (of, als het echt geen testdata is, hier
+    // Dan hoort die in test-data.js (of, als het echt geen testdata is, hier
     // in de uitzonderingen met de reden).
     const NO_TESTDATA = {
       sessions: 'ontstaan bij inloggen',
@@ -281,7 +281,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
     for (const n of tables) {
       if (NO_TESTDATA[n]) continue;
       const c = db.prepare(`SELECT COUNT(*) AS n FROM ${n} WHERE tenant_id = ?`).get(env.id).n;
-      assert.ok(c > 0, `tabel ${n} heeft geen testdata: vul hem in testdata.js`);
+      assert.ok(c > 0, `tabel ${n} heeft geen testdata: vul hem in test-data.js`);
     }
   } finally {
     server.close();

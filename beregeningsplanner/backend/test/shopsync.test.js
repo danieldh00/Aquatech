@@ -4,12 +4,12 @@
 process.env.SHOP_ALLOW_INSECURE = '1';
 const test = require('node:test');
 const assert = require('node:assert');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
-const { createStockStore } = require('../src/stock');
-const { createShopStore } = require('../src/shop');
-const { createShopSync } = require('../src/shopsync');
-const { sanitizeShop } = require('../src/woocommerce');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
+const { createStockStore } = require('../src/voorraad/stock');
+const { createShopStore } = require('../src/webshop/shop');
+const { createShopSync } = require('../src/webshop/shop-sync');
+const { sanitizeShop } = require('../src/webshop/woocommerce');
 
 // Nagebootste WooCommerce REST API v3: producten in een map, prijzen incl. btw.
 function fakeShop(products) {

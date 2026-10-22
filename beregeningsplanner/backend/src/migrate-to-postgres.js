@@ -13,9 +13,9 @@
 //   --check            niets kopiëren, alleen beide kanten vergelijken
 const fs = require('fs');
 const path = require('path');
-const { openSqlite, databaseUrl, schemaVersion } = require('./db');
-const { openPg } = require('./pgdb');
-const { copyDatabase, fingerprint, describe } = require('./dbcopy');
+const { openSqlite, databaseUrl, schemaVersion } = require('./database/db');
+const { openPg } = require('./database/pgdb');
+const { copyDatabase, fingerprint, describe } = require('./database/db-copy');
 
 function parseArgs(argv) {
   const out = { check: false };

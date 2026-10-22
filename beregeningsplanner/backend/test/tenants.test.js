@@ -5,10 +5,10 @@ const os = require('os');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 const { createApp } = require('../src/server');
-const { openDb, MIGRATIONS } = require('../src/db');
+const { openDb, MIGRATIONS } = require('../src/database/db');
 const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
 
-const { createStore } = require('../src/store');
+const { createStore } = require('../src/platform/store');
 
 const SECRET = 'z'.repeat(64);
 

@@ -1,6 +1,6 @@
 // Beheer > AI-kosten: verbruik en kosten van AI-verzoeken per periode,
 // gebruiker, functie en model, plus de losse verzoeken en een Excel-export
-// (API /api/admin/ai-usage, zie backend/src/aiusage.js). Een hoofdbeheerder
+// (API /api/admin/ai-usage, zie backend/src/platform/ai-usage.js). Een hoofdbeheerder
 // kan ook alle organisaties samen bekijken.
 (function () {
   const $ = (sel, root = document) => root.querySelector(sel);

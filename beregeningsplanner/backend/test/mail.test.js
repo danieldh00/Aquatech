@@ -3,10 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
-const { createMailer, sanitizeMail } = require('../src/mailer');
-const { createWanIp } = require('../src/wanip');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
+const { createMailer, sanitizeMail } = require('../src/platform/mailer');
+const { createWanIp } = require('../src/platform/wan-ip');
 
 const SECRET = 'test-secret-mail-0123456789abcdef';
 

@@ -5,7 +5,7 @@
 // Hieronder staan de standaardrollen. Een beheerder kan per organisatie
 // (live-tenant, testomgevingen volgen live) de naam, omschrijving en rechten
 // van een rol aanpassen en eigen rollen toevoegen (Beheer > Rollen, opslag in
-// backend/src/roles.js). De server zet de rechten van de eigen rol dan op
+// backend/src/platform/roles.js). De server zet de rechten van de eigen rol dan op
 // user.rights; rightsOf() gebruikt die als ze er zijn.
 //
 // - beheerder:    alles binnen de eigen organisatie (tenant): gebruikers,

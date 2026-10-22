@@ -1,6 +1,6 @@
 // Rekenkern van de werkregistratie: de uren en het materiaalverbruik die de
 // ploeg op een werkorder boekt. Gedeeld door de browser (formulier, totalen,
-// Excel) en de server (opschonen en controleren, zie backend/src/worklog.js).
+// Excel) en de server (opschonen en controleren, zie backend/src/uitvoering/worklog.js).
 // Geen afhankelijkheden.
 //
 // Een regel heeft een clientId (UUID uit de browser): dezelfde regel twee keer

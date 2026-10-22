@@ -2,8 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
 const { createApp } = require('../src/server');
 const Roles = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'roles.js'));
 

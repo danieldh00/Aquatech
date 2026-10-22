@@ -72,31 +72,40 @@ Het project wordt automatisch in de browser (localStorage) bewaard. Met **Opslaa
 ## Structuur
 
 ```
-docker-compose.yml, .env.example    de server als Docker-container (poort 3300)
-beregeningsplanner/                 de app (Dockerfile, backend, frontend)
+docker-compose.yml, .env.example     de server als Docker-container (poort 3300)
+deploy/apps01/                       uitrol op de server (update.sh, compose.yml)
+scripts/check_version.py             CI: versie moet omhoog bij een wijziging in de app
+beregeningsplanner/                  de app
   Dockerfile, CHANGELOG.md, DOCS.md
-  backend/src/server.js             express: dashboard + modules, login, /api/health, /api/plan/*
-  backend/src/planAnalyzer.js       plan lezen via de Claude API (schaal, vlakken, elementen)
-  backend/src/settings.js           instellingen (Beheer > Instellingen) in de database
-  backend/test/                     node --test
-  frontend/                         alle paden relatief (werkt ook onder een padprefix)
-    frontend/index.html          dashboard (startpagina)
-    frontend/dashboard/          opmaak, script en moduleregister (modules.js) van het dashboard
-    frontend/shared/             huisstijl voor alle modules: brand.css (kleuren, Montserrat), logo's
-  frontend/beregening/              module beregeningsplanner (bereikbaar op beregening/)
-    frontend/index.html          UI-opbouw
-    frontend/css/app.css         Opmaak
-    frontend/js/geometry.js      Geometrie (polygonen, afstanden, omsluitende rechthoek)
-    frontend/js/catalog.js       Producten, prijzen en technische uitgangspunten
-    frontend/js/planner.js       Automatische sproeierplaatsing (worpwijdte via simulatie)
-    frontend/js/planimport.js    Plan inlezen (JPG/PNG/PDF via pdf.js)
-    frontend/js/autotrace.js     Toverstaf (vlak op kleur uittrekken)
-    frontend/js/concept.js       Van herkend plan naar concept
-    frontend/js/localrecog.js    Lokale herkenning: vlakken op kleur, schaal via OCR (Tesseract)
-frontend/js/hydraulics.js    Zones, leidingtracé en drukverlies
-frontend/js/simulation.js    Neerslagsimulatie
-frontend/js/bom.js           Stuklijst en Excel-export
-frontend/js/editor.js        Canvas-editor (tekenen, selecteren, zoomen)
-frontend/js/app.js           Applicatielogica en panelen
-frontend/beregening/vendor/exceljs.min.js  ExcelJS 4.4.0 (MIT) voor .xlsx-export
+  backend/
+    src/server.js                    Express: pagina's, modules, login en alle /api-routes
+    src/backup.js                    versleutelde back-ups (ook als opdracht: node src/backup.js create)
+    src/migrate-to-postgres.js       overstap SQLite -> PostgreSQL (opdracht)
+    src/paths.js                     vaste mappen (frontend, pagina's)
+    src/paginas/                     inloggen, eerste beheerder, wachtwoord wijzigen
+    src/database/                    SQLite/PostgreSQL, schema en migraties, kopiëren
+    src/beveiliging/                 sessies, versleuteling, limieten, netwerkcontrole, meekijken
+    src/platform/                    gebruikers/tenants (store), instellingen, rollen, mail, nieuws, AI-kosten, testdata
+    src/beregening/                  plan herkennen (AI), geleerde herkenning, tekening indienen, sproeiers
+    src/verkoop/                     offertes, facturen (+ PDF en mail), debiteuren, Visma
+    src/webshop/                     WooCommerce: producten, synchronisatie, bestellingen
+    src/uitvoering/                  werkorders, uren/materiaal, foto's, uitbesteden, meldingen, klantportaal
+    src/voorraad/                    voorraadbeheer
+    test/                            node --test (ook tegen PostgreSQL met TEST_DATABASE_URL)
+    tools/codestyle.js               controle op de codestijl (npm run codestyle)
+  frontend/                          alle paden relatief, gewone <script>-tags (werkt ook via file://)
+    index.html, dashboard/           startpagina en moduleregister (dashboard/modules.js)
+    shared/                          huisstijl, zijbalk, rollen, thema, offline, gedeelde hulpfuncties
+    sw.js, manifest.json             offline werken (PWA)
+    beregening/                      de beregeningsplanner (index.html, css/, js/, vendor/)
+    beheer/, hoofdbeheer/            beheer van de organisatie en van het platform
+    offertes/, facturen/             verkoop (rekenkern: quote-core.js, invoice-core.js)
+    werkorders/, planning/           uitvoering (rekenkern: workorder-core.js, worklog-core.js)
+    voorraad/, uitbesteden/, meldingen/, klantdossier/, plannen/, nieuws/, profiel/, portaal/
+    openbaar/                        pagina's zonder login (digitale offerte, afspraak)
 ```
+
+Elke module is een map onder `frontend/` met een eigen `index.html`; de
+serverkant van een module staat in de map van het onderwerp onder
+`backend/src/`. Een `*-core.js` in de frontend is UMD en wordt ook door de
+server geladen (dezelfde berekening aan beide kanten).

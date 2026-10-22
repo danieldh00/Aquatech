@@ -4,8 +4,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createApp } = require('../src/server');
-const { openDb, isPg, listTables, tableColumns } = require('../src/db');
-const { createStore } = require('../src/store');
+const { openDb, isPg, listTables, tableColumns } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
 
 const SECRET = 'z'.repeat(64);
 const PW = 'Tuin-Plan-2026!';

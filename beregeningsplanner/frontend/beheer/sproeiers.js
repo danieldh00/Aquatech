@@ -1,7 +1,7 @@
 // Beheer > Sproeiers: de sproeierbibliotheek van de organisatie (behuizingen en
 // nozzles met worp, sproeihoeken, drukbereik en debiet). Downloaden als Excel
 // (de huidige bibliotheek is meteen het sjabloon), aangepast weer inlezen, of
-// terug naar de standaard. Opslag en controle: backend/src/sprinklers.js.
+// terug naar de standaard. Opslag en controle: backend/src/beregening/sprinklers.js.
 (function () {
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

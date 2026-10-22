@@ -1,6 +1,6 @@
 // AI-modellen, prijzen en functies, gedeeld door de server (require) en de
 // browser (window.AquatechAiModels). De server rekent hiermee de kosten van
-// elk AI-verzoek uit (tabel ai_usage, zie backend/src/aiusage.js); Beheer >
+// elk AI-verzoek uit (tabel ai_usage, zie backend/src/platform/ai-usage.js); Beheer >
 // Instellingen toont de keuzelijst en Beheer > AI-kosten de namen.
 //
 // Prijzen in dollar per miljoen tokens (tarieven van Anthropic). Lezen uit de

@@ -2,11 +2,11 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
-const { openDb } = require('../src/db');
-const { createStore } = require('../src/store');
-const { createVault } = require('../src/vault');
-const { inspectImage, cleanJpeg } = require('../src/photos');
-const { sitePhotoPng } = require('../src/testdata');
+const { openDb } = require('../src/database/db');
+const { createStore } = require('../src/platform/store');
+const { createVault } = require('../src/beveiliging/vault');
+const { inspectImage, cleanJpeg } = require('../src/uitvoering/photos');
+const { sitePhotoPng } = require('../src/platform/test-data');
 
 // Kleine JPEG-structuur: JFIF, EXIF met GPS-gegevens, frame (SOF0 640x480), scan.
 function fakeJpeg({ exif = true } = {}) {
