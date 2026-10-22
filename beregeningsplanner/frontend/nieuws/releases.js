@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.67.0',
+      date: '2026-10-22',
+      title: 'Automatisch het beste sproeiertype, en een rustigere indeling',
+      items: [
+        { text: 'Nieuw sproeiertype **Automatisch: beste type per gazon**: de planner rekent rotators, sproeiers en turbines door en kiest per gazon de indeling met de minste koppen, het minste water op terras en bestrating en de minste gele of droge plekken. Alleen wat in je assortiment zit en bij de waterdruk past. Dit is de standaard voor nieuwe plannen.', for: ['plannen'] },
+        { text: '**Automatisch plaatsen** is rustiger: geen kluitjes koppen meer op elk trapje of hoekje van een terrasrand, overbodige koppen gaan eruit en water dat ver naast het gazon valt (bijv. van turbines) telt volledig mee. Op een voorbeeldtuin met een getrapt terras gaat het van 20 naar 12 rotators met een gelijkmatigere neerslag.', for: ['plannen'] },
+        { text: 'De **neerslagkaart** kleurt elk gazon nu ten opzichte van zijn eigen gemiddelde. Een gazon met rotators naast een gazon met turbines kleurt daardoor niet meer onterecht geel.', for: ['plannen'] },
+      ],
+    },
+    {
       version: '0.66.0',
       date: '2026-10-21',
       title: 'Sproeiers kiezen uit een bibliotheek, en minder koppen met een grotere worp',

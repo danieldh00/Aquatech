@@ -30,11 +30,13 @@
     { id: 'bom', title: 'Stuklijst & export' },
   ];
 
+  const TYPE_PLURAL = { rotator: 'rotators', spray: 'sproeiers', rotor: 'turbines', strip: 'strooksproeiers' };
+
   function emptyState() {
     return {
       version: 1,
       meta: { name: 'Nieuw beregeningsplan', customer: '', address: '' },
-      settings: { pressure: 3.5, flow: 2.0, level: 'expert', targetMm: 20, sessions: 3, sprinklerType: 'rotator', radius: null,
+      settings: { pressure: 3.5, flow: 2.0, level: 'expert', targetMm: 20, sessions: 3, sprinklerType: 'auto', radius: null,
         methods: { bed: 'dripline', hedge: 'dripline', planter: 'drippers' }, bedSprinklerType: 'spray' },
       background: null,
       areas: [],
@@ -685,14 +687,15 @@
 
     autoPlace(areaIds) {
       const st = this.state;
-      const type = C.usableType(st.settings.sprinklerType);
       const lawns = st.areas.filter((a) => a.type === 'lawn' && a.pts.length >= 3 && (!areaIds || areaIds.includes(a.id)));
       if (!lawns.length) { this.toast('Teken eerst een gazonvlak (stap 2).', true); return; }
       this.checkpoint();
-      let count = this._placeSprinklers(lawns, type);
+      const chosen = [];
+      let count = this._placeSprinklers(lawns, st.settings.sprinklerType, chosen);
       if (!areaIds) count += this._syncBedSprinklers(true);
       this.commit();
-      this.toast(`${count} sproeiers geplaatst. Controleer de neerslagkaart.`);
+      const why = chosen.length ? ` Gekozen: ${chosen.map((c) => `${c.area} ${c.label}`).join(', ')}.` : '';
+      this.toast(`${count} sproeiers geplaatst.${why} Controleer de neerslagkaart.`);
     },
     /**
      * Sproeiers in beplanting/hagen in lijn brengen met de gekozen methode:
@@ -733,13 +736,26 @@
       const type = key.replace(/^bed-/, '');
       return k && C.bodies[k] && C.bodiesFor(type).some((b) => b.key === k) ? k : null;
     },
-    _placeSprinklers(lawns, type) {
+    /**
+     * Sproeiers op gazons plaatsen. Type `auto`: per gazon het beste type (rotators, sproeiers of
+     * turbines, binnen het assortiment en de druk); `chosen` krijgt dan per gazon de keuze.
+     */
+    _placeSprinklers(lawns, wanted, chosen = []) {
       const st = this.state;
+      const auto = wanted === 'auto';
+      const type = auto ? null : C.usableType(wanted);
       let count = 0;
       for (const a of lawns) {
         // verwijder bestaande sproeiers binnen of op de rand van dit vlak
         st.sprinklers = st.sprinklers.filter((s) => s.areaId || !(G.pointInPolygon(s, a.pts) || G.closestOnPolygon(s, a.pts).d < 0.05));
-        const heads = window.Planner.autoPlace(a.pts, type, { r: st.settings.radius || null, body: this._bodyFor(type) });
+        let heads;
+        if (auto) {
+          const types = ['rotator', 'spray', 'rotor'].filter((k) => C.typeAvailable(k));
+          const bodies = Object.fromEntries(types.map((k) => [k, this._bodyFor(k)]));
+          const res = window.Planner.bestPlace(a.pts, { types, bodies, pressure: st.settings.pressure });
+          heads = res.heads;
+          if (res.type) chosen.push({ area: a.name || 'gazon', type: res.type, label: TYPE_PLURAL[res.type] || res.type });
+        } else heads = window.Planner.autoPlace(a.pts, type, { r: st.settings.radius || null, body: this._bodyFor(type) });
         st.sprinklers.push(...heads);
         count += heads.length;
       }
@@ -1180,7 +1196,7 @@
         <label>Adres<input id="m-address" value="${esc(m.address)}"></label>
         <h3>Beregeningsmethode</h3>
         <p class="hint small">Kies per soort vlak hoe het water krijgt. Per vlak kun je hier later van afwijken (eigenschappenpaneel).</p>
-        <label>Gazon<select id="mth-lawn">${['rotator', 'spray', 'rotor'].map((k) => `<option value="${k}" ${s.sprinklerType === k ? 'selected' : ''}${C.typeAvailable(k) ? '' : ' disabled'}>${esc(C.sprinklerTypes[k].label)}${C.typeAvailable(k) ? '' : ' (niet in assortiment)'}</option>`).join('')}</select></label>
+        <label>Gazon<select id="mth-lawn"><option value="auto" ${s.sprinklerType === 'auto' ? 'selected' : ''}>Automatisch: beste type per gazon</option>${['rotator', 'spray', 'rotor'].map((k) => `<option value="${k}" ${s.sprinklerType === k ? 'selected' : ''}${C.typeAvailable(k) ? '' : ' disabled'}>${esc(C.sprinklerTypes[k].label)}${C.typeAvailable(k) ? '' : ' (niet in assortiment)'}</option>`).join('')}</select></label>
         ${['bed', 'hedge', 'planter'].map((type) => {
           const at = C.areaTypes[type];
           const cur = (s.methods && s.methods[type]) || at.defaultMethod;
@@ -1303,10 +1319,12 @@
     // --- Stap 4
     _panel_sprinklers() {
       const s = this.state.settings;
-      const types = ['rotator', 'spray', 'rotor'].map((k) => {
+      const auto = s.sprinklerType === 'auto';
+      const types = `<label class="radio"><input type="radio" name="stype" value="auto" ${auto ? 'checked' : ''}>
+          <span><b>Automatisch: beste type per gazon</b><br><span class="small">Rekent rotators, sproeiers en turbines door en kiest per gazon de indeling met de minste koppen, het minste water buiten het gazon en de minste droge/gele plekken, binnen je assortiment en de waterdruk.</span></span></label>` + ['rotator', 'spray', 'rotor'].map((k) => {
         const t = C.sprinklerTypes[k];
         const ok = C.typeAvailable(k);
-        return `<label class="radio${ok ? '' : ' off'}"><input type="radio" name="stype" value="${k}" ${C.usableType(s.sprinklerType) === k ? 'checked' : ''}${ok ? '' : ' disabled'}>
+        return `<label class="radio${ok ? '' : ' off'}"><input type="radio" name="stype" value="${k}" ${!auto && C.usableType(s.sprinklerType) === k ? 'checked' : ''}${ok ? '' : ' disabled'}>
           <span><b>${esc(t.label)}</b>${ok ? '' : ' <span class="small">(niet in je assortiment)</span>'}<br><span class="small">${G.nlShort(t.rMin, 1)}–${G.nlShort(t.rMax, 1)} m · ${t.pr} mm/u · min. ${G.nlShort(t.minBar, 1)} bar. ${esc(t.note)}</span></span></label>`;
       }).join('');
       const sim = this.editor.layers.heatmap ? this.sim : null;
@@ -1317,10 +1335,12 @@
       return `
         <h3>Sproeiertype</h3>
         ${types}
-        ${this._bodySelect('body-lawn', 'Behuizing gazon', s.sprinklerType)}
+        ${auto
+          ? ['rotator', 'spray', 'rotor'].filter((k) => C.typeAvailable(k)).map((k) => this._bodySelect(`body-lawn-${k}`, `Behuizing gazon (${C.sprinklerTypes[k].short.toLowerCase()})`, k)).join('')
+          : this._bodySelect('body-lawn', 'Behuizing gazon', C.usableType(s.sprinklerType))}
         ${this._bodySelect('body-bed', 'Behuizing beplanting', `bed-${s.bedSprinklerType || 'spray'}`)}
-        <label class="inline"><input type="checkbox" id="r-auto" ${s.radius ? '' : 'checked'}> Worpwijdte automatisch</label>
-        ${s.radius ? `<label>Worpwijdte (m)<input id="r-val" type="number" step="0.1" value="${s.radius}"></label>` : ''}
+        ${auto ? '' : `<label class="inline"><input type="checkbox" id="r-auto" ${s.radius ? '' : 'checked'}> Worpwijdte automatisch</label>
+        ${s.radius ? `<label>Worpwijdte (m)<input id="r-val" type="number" step="0.1" value="${s.radius}"></label>` : ''}`}
         <button id="auto-place" class="btn primary">Automatisch plaatsen</button>
         <p class="hint small">Plaatst sproeiers op alle gazons en in beplanting waarvoor <b>Sproeiers</b> als methode gekozen is (stap 1). Kop (MP-model), worp, sproeihoek en richting worden daarbij automatisch optimaal afgesteld, ook bij handmatig plaatsen en verslepen.</p>
         <button id="tune-spr" class="btn">Alle koppen opnieuw afstellen</button>
@@ -1349,8 +1369,8 @@
     _bind_sprinklers(el) {
       const s = this.state.settings;
       el.querySelectorAll('input[name=stype]').forEach((r) => { r.onchange = () => { s.sprinklerType = r.value; s.radius = null; this._save(); this.renderStepPanel(); }; });
-      $('#r-auto', el).onchange = (e) => { s.radius = e.target.checked ? null : C.sprinklerTypes[s.sprinklerType].rDefault; this._save(); this.renderStepPanel(); };
-      if ($('#r-val', el)) $('#r-val', el).onchange = (e) => { const t = C.sprinklerTypes[s.sprinklerType]; s.radius = Math.max(t.rMin, Math.min(t.rMax, +e.target.value || t.rDefault)); this._save(); this.renderStepPanel(); };
+      if ($('#r-auto', el)) $('#r-auto', el).onchange = (e) => { s.radius = e.target.checked ? null : C.sprinklerTypes[C.usableType(s.sprinklerType)].rDefault; this._save(); this.renderStepPanel(); };
+      if ($('#r-val', el)) $('#r-val', el).onchange = (e) => { const t = C.sprinklerTypes[C.usableType(s.sprinklerType)]; s.radius = Math.max(t.rMin, Math.min(t.rMax, +e.target.value || t.rDefault)); this._save(); this.renderStepPanel(); };
       $('#auto-place', el).onclick = () => this.autoPlace();
       $('#tune-spr', el).onclick = () => {
         if (!this.state.sprinklers.length) { this.toast('Plaats eerst sproeiers.', true); return; }
@@ -1363,7 +1383,7 @@
         const m = this._manualChoice();
         this.editor.setTool('sprinkler', { type: m.type, body: m.body, model: m.model });
       };
-      ['body-lawn', 'body-bed'].forEach((id) => {
+      ['body-lawn', 'body-lawn-rotator', 'body-lawn-spray', 'body-lawn-rotor', 'body-bed'].forEach((id) => {
         const sel = $(`#${id}`, el);
         if (!sel) return;
         sel.onchange = () => {

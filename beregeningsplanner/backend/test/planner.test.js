@@ -159,6 +159,70 @@ test('weergave: ingezoomd wordt alleen het zichtbare deel van de ondergrond gete
   }
 });
 
+// band om een terras met een getrapte binnenrand (trapjes van ruim een meter) en een schuine buitenrand
+const TERRAS = [[0, 0], [14, 0], [18, 2], [21, 5], [23, 9], [24, 14], [24, 20], [18, 20], [18, 15], [17, 15], [17, 13.8], [15.8, 13.8],
+  [15.8, 12.5], [14.5, 12.5], [14.5, 11], [8, 11], [8, 9.8], [6.5, 9.8], [6.5, 8.5], [0, 8.5]].map(([x, y]) => ({ x, y }));
+const minGap = (heads) => {
+  let m = Infinity;
+  for (let i = 0; i < heads.length; i++) for (let j = i + 1; j < heads.length; j++) m = Math.min(m, Math.hypot(heads[i].x - heads[j].x, heads[i].y - heads[j].y));
+  return m;
+};
+
+test('plaatsing: geen kluitjes koppen langs een getrapte rand, weinig gele plekken', () => {
+  // voorheen 20 rotators / 18 turbines met koppen op 1 m van elkaar op elk trapje
+  for (const [type, max] of [['rotator', 14], ['spray', 24], ['rotor', 11]]) {
+    const heads = P.autoPlace(TERRAS, type);
+    assert.ok(heads.length <= max, `${type}: ${heads.length} koppen (max ${max})`);
+    assert.ok(minGap(heads) > 2.5, `${type}: koppen op ${minGap(heads).toFixed(2)} m van elkaar`);
+    const st = stats(TERRAS, heads);
+    assert.ok(st.du > 0.72, `${type}: DU ${st.du}`);
+    assert.ok(st.dryPct < 2, `${type}: droog ${st.dryPct}%`);
+    const ev = P.evaluate(TERRAS, heads);
+    assert.ok(ev.lowPct < 6, `${type}: geel ${ev.lowPct}%`);
+  }
+});
+
+test('plaatsing: water buiten het gazon telt over de volle worp mee', () => {
+  const pts = rect(0, 0, 10, 4);
+  const near = P.evaluate(pts, [{ id: 'a', type: 'rotor', x: 5, y: 4, r: 3, start: 180, arc: 180 }]);
+  const far = P.evaluate(pts, [{ id: 'a', type: 'rotor', x: 5, y: 4, r: 12, start: 180, arc: 180 }]);
+  // halve cirkel van 12 m: ruim 200 m² valt buiten een gazon van 10 × 4 m
+  assert.ok(far.outsideM2 > 150, `${far.outsideM2} m² buiten`);
+  assert.ok(near.outsideM2 < far.outsideM2);
+});
+
+test('automatisch type: per gazon het beste sproeiertype, binnen de druk', () => {
+  // groot rechthoekig gazon: turbines met de minste koppen
+  const big = P.bestPlace(rect(0, 0, 25, 18), { pressure: 3.5 });
+  assert.strictEqual(big.type, 'rotor');
+  assert.strictEqual(big.results.map((r) => r.type).join(), 'rotator,spray,rotor');
+  const own = big.results.find((r) => r.type === 'rotor');
+  assert.ok(big.results.every((r) => r.score.cost >= own.score.cost), 'gekozen indeling is de goedkoopste');
+  assert.ok(big.heads.every((h) => h.type === 'rotor'));
+  // onregelmatig gazon langs een terras: turbines spuiten te veel naast het gazon, rotators winnen
+  const terras = P.bestPlace(TERRAS, { pressure: 3.5 });
+  assert.strictEqual(terras.type, 'rotator');
+  // klein L-vormig gazon: geen turbines
+  assert.notStrictEqual(P.bestPlace(L, { pressure: 3.5 }).type, 'rotor');
+  // te weinig druk voor rotators (2,8 bar aan de kop): die doen niet mee
+  const low = P.bestPlace(TERRAS, { pressure: 2.9 });
+  assert.ok(!low.results.some((r) => r.type === 'rotator'));
+  // alleen wat in het assortiment zit
+  assert.strictEqual(P.bestPlace(L, { types: ['spray'], pressure: 3.5 }).results.map((r) => r.type).join(), 'spray');
+});
+
+test('neerslagkaart: elk gazon t.o.v. zijn eigen gemiddelde (rotators naast turbines)', () => {
+  const a = rect(0, 0, 10, 8), b = rect(20, 0, 45, 18);
+  const state = {
+    areas: [{ type: 'lawn', pts: a }, { type: 'lawn', pts: b }],
+    sprinklers: [...P.autoPlace(a, 'rotator'), ...P.autoPlace(b, 'rotor')],
+  };
+  const sim = S.simulate(state, 0.25);
+  const own = sim.perArea.map((p) => p.stats.du);
+  assert.ok(sim.stats.du >= Math.min(...own) - 0.02, `DU ${sim.stats.du} vs per gazon ${own}`);
+  assert.ok(sim.areaMean[0] > 0 && sim.areaMean[1] > 0);
+});
+
 test('afstellen: te ruim ingestelde koppen worden bijgesteld, positie blijft', () => {
   const pts = rect(0, 0, 8, 6);
   const heads = [
