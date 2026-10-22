@@ -418,7 +418,8 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   Eigen regels per omgeving in tabel `sprinkler_library` (migratie 29,
   `backend/src/sprinklers.js`, alleen afwijkingen van de standaard), Excel via
   Beheer → Sproeiers (`beheer/sproeiers.js`). Automatisch plaatsen: kostenweging
-  `W` in planner.js (kop zwaar, DU pas onder 0,85), rechthoekig verband.
+  `WEIGHTS` in planner.js (groen = 85–130% van het gemiddelde, droog/nat
+  omliggend via `dry`/`wet`), type `auto` = `Planner.bestPlace` per gazon.
 - **Toverstaf** (`js/autotrace.js`) en PDF-import (`vendor/pdf.min.js`, pdf.js
   3.11.174 met `isEvalSupported: false`) werken volledig in de browser.
 - **Snelheid/navigatie** (0.46.0): `shared/common.js` in de `<head>` van elke

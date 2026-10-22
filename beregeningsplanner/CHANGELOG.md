@@ -4,13 +4,13 @@
 
 Automatisch plaatsen stuurt op een groene neerslagkaart.
 
-- **Kosten** (`W` in `planner.js`): elke cel buiten 85–130% van het gemiddelde
+- **Kosten** (`WEIGHTS` in `planner.js`): elke cel buiten 85–130% van het gemiddelde
   telt mee (`off` 2 per % te weinig, `offHigh` 1,5 per % te veel), droge
   plekken 6 per %. Water op vlakken *Moet droog blijven* telt 6×, op *Mag nat
   worden* ¼× (`dry`/`wet` in `autoPlace`/`bestPlace`/`tune`, uit
   `App._surroundings`).
 - **Zoeken**: koppen verschuiven bij het afstellen (binnenkop in 4
-  richtingen, randkop langs de rand, `variantsOf(h, ev)`), sproeihoek opnieuw
+  richtingen, randkop langs de rand, `variantsOf(head, grid)`), sproeihoek opnieuw
   uit de echte rand, worp ook 1,2×. Nieuwe indeling vanaf de rand
   (`layoutPerimeter`: hoeken, gelijke afstanden langs de rand, raster
   binnenin). Per afstand zowel de grove als de gewone vorm. Beste zes
@@ -21,6 +21,9 @@ Automatisch plaatsen stuurt op een groene neerslagkaart.
   89% → 97%; terrastuin 80% → 94%, onregelmatig gazon 78% → 94%. Een gazon
   van 20 × 15 m krijgt 12 i.p.v. 9 rotators: met 9 spuiten de randkoppen ruim
   25 m² naast het gazon.
+- `planner.js` volgt de codestijl (duidelijke namen, commentaarblok per
+  functie) en staat niet meer in `tools/codestyle-baseline.json`; uitkomst
+  van het plaatsen ongewijzigd.
 
 ## 0.67.1
 
