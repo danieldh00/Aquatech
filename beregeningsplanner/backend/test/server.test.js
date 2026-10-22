@@ -6,15 +6,12 @@ const { createApp, FRONTEND_DIR, versionAssets } = require('../src/server');
 const PKG = require('../package.json');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
+const { listen } = require('./helpers/http-client');
 
 const SECRET = 'x'.repeat(64);
 
 function start(opts = {}) {
-  return new Promise((resolve) => {
-    const server = createApp({ accessCode: 'geheim', secret: SECRET, ...opts }).listen(0, () => {
-      resolve({ server, base: `http://127.0.0.1:${server.address().port}` });
-    });
-  });
+  return listen(createApp({ accessCode: 'geheim', secret: SECRET, ...opts }));
 }
 
 // Database met al een beheerder (anders verschijnt het instelscherm).

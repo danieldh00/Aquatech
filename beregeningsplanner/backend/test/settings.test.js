@@ -11,7 +11,7 @@ const { createStore } = require('../src/platform/store');
 const { createSettings, SettingsError } = require('../src/platform/settings');
 const { createVault } = require('../src/beveiliging/vault');
 const crypto = require('crypto');
-const { createClient } = require('./helpers/http-client');
+const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
 const KEY = 'sk-ant-test-0123456789abcdefWXYZ';
@@ -25,11 +25,9 @@ function fakeAnalyzerFactory(calls = []) {
   });
 }
 
-function start(opts = {}) {
-  return new Promise((resolve) => {
-    const app = createApp({ accessCode: 'geheim', secret: SECRET, db: openDb(), createAnalyzer: fakeAnalyzerFactory(), ...opts });
-    const server = app.listen(0, () => resolve({ app, server, base: `http://127.0.0.1:${server.address().port}` }));
-  });
+async function start(opts = {}) {
+  const app = createApp({ accessCode: 'geheim', secret: SECRET, db: openDb(), createAnalyzer: fakeAnalyzerFactory(), ...opts });
+  return { app, ...(await listen(app)) };
 }
 
 async function admin(base, code = 'geheim') {

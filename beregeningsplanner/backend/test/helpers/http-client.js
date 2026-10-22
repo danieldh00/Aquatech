@@ -1,6 +1,8 @@
 // HTTP-client voor de API-tests: bewaart cookies zoals een browser (sessie,
 // gast, omgeving) en geeft per verzoek de status en de JSON terug. Gedeeld
-// door alle testbestanden die de server via fetch aanspreken.
+// door alle testbestanden die de server via fetch aanspreken; daarnaast
+// listen() (testserver starten) en createLogin() (ingelogde client per account).
+const assert = require('node:assert');
 
 /**
  * Werkt de cookiepot bij met de Set-Cookie-koppen van een antwoord. Een lege
@@ -103,6 +105,43 @@ function createClient(baseUrl, { jar = new Map(), emptyJsonBody = true, followRe
      * @returns {Promise<object>} Het antwoord.
      */
     login: (username, password, tenant = '') => request('POST', '/api/auth/login', { username, password, tenant }),
-  };}
+  };
+}
 
-module.exports = { createClient, storeCookies };
+/**
+ * Start een app op een vrije poort van 127.0.0.1.
+ * @param {import('express').Express} app De app uit createApp().
+ * @returns {Promise<{ server: import('http').Server, base: string }>} De server en zijn adres.
+ */
+function listen(app) {
+  return new Promise((resolve) => {
+    const server = app.listen(0, () => resolve({ server, base: `http://127.0.0.1:${server.address().port}` }));
+  });
+}
+
+/**
+ * Maakt een inlogfunctie voor één testserver: elke aanroep geeft een nieuwe,
+ * ingelogde client. Het inloggen moet slagen (anders faalt de test).
+ * @param {string} baseUrl Adres van de testserver.
+ * @param {{ password: string, extraBody?: object, organizationField?: string, clientOptions?: object }} options
+ *   password: wachtwoord van alle testaccounts; extraBody: extra velden in het
+ *   inlogverzoek; organizationField: naam van het veld voor de organisatiecode
+ *   (standaard tenant); clientOptions: opties voor createClient.
+ * @returns {(username: string, organization?: string) => Promise<object>} Inlogfunctie die de client teruggeeft.
+ */
+function createLogin(baseUrl, { password, extraBody = {}, organizationField = 'tenant', clientOptions = {} }) {
+  /**
+   * Logt in als een testaccount.
+   * @param {string} username Gebruikersnaam.
+   * @param {string} [organization] Organisatiecode (leeg = hoofdtenant).
+   * @returns {Promise<object>} De ingelogde client.
+   */
+  return async function loginAs(username, organization) {
+    const client = createClient(baseUrl, clientOptions);
+    const response = await client.post('/api/auth/login', { username, password, ...extraBody, [organizationField]: organization });
+    assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+    return client;
+  };
+}
+
+module.exports = { createClient, storeCookies, listen, createLogin };

@@ -13,7 +13,7 @@ const { PG_BASE_VERSION, PG_MIGRATIONS } = require('../src/database/pgschema');
 const { fingerprint, copyDatabase } = require('../src/database/db-copy');
 const { createStore } = require('../src/platform/store');
 const { createVault } = require('../src/beveiliging/vault');
-const { createClient } = require('./helpers/http-client');
+const { createClient, listen } = require('./helpers/http-client');
 
 const URL_ = process.env.TEST_DATABASE_URL;
 const needPg = { skip: !URL_ && 'zet TEST_DATABASE_URL voor tests tegen PostgreSQL' };
@@ -91,9 +91,7 @@ test('PostgreSQL-schema is gelijk aan het SQLite-schema', needPg, () => {
 });
 
 function start(db, vault) {
-  return new Promise((resolve) => {
-    const server = createApp({ secret: SECRET, db, vault }).listen(0, () => resolve({ server, base: `http://127.0.0.1:${server.address().port}` }));
-  });
+  return listen(createApp({ secret: SECRET, db, vault }));
 }
 
 // Wat een gebruiker in de app ziet; na de overstap moet dat exact gelijk zijn.

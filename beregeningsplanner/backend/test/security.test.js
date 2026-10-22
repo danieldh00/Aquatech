@@ -13,7 +13,7 @@ const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
 const { createStore, passwordProblem, hashPassword, verifyPassword, needsRehash } = require('../src/platform/store');
 const { createSettings } = require('../src/platform/settings');
 const { createVault, loadOrCreateMasterKey } = require('../src/beveiliging/vault');
-const { createClient } = require('./helpers/http-client');
+const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -23,10 +23,8 @@ async function start(opts = {}) {
   const store = createStore(db);
   // Zoals na het instelscherm: de eerste beheerder is hoofdbeheerder.
   if (!opts.noAdmin) await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  return new Promise((resolve) => {
-    const app = createApp({ secret: SECRET, db, ...opts });
-    const server = app.listen(0, () => resolve({ app, db, store, server, base: `http://127.0.0.1:${server.address().port}` }));
-  });
+  const app = createApp({ secret: SECRET, db, ...opts });
+  return { app, db, store, ...(await listen(app)) };
 }
 
 test('vault: versleutelen met context, geknoei en verkeerde context worden geweigerd', () => {

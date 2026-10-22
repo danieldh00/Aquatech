@@ -8,7 +8,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const Core = require('../../frontend/offertes/quote-core.js');
-const { createClient } = require('./helpers/http-client');
+const { createClient, createLogin, listen } = require('./helpers/http-client');
 
 // Plannerbibliotheken in een sandbox, zoals de offertemodule ze laadt.
 const FRONT = path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js');
@@ -138,13 +138,8 @@ async function setup({ mailerFor } = {}) {
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: 'Tuin-Plan-2026!' });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: 'Tuin-Plan-2026!' });
   await store.createAccount(tid, { username: 'mien', displayName: 'Mien', role: 'klant', password: 'Tuin-Plan-2026!' });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, ...(mailerFor ? { mailerFor } : {}) }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username) => {
-    const c = createClient(base);
-    assert.strictEqual((await c.post('/api/auth/login', { username, password: 'Tuin-Plan-2026!' })).status, 200);
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db, ...(mailerFor ? { mailerFor } : {}) }));
+  const as = createLogin(base, { password: 'Tuin-Plan-2026!' });
   return { server, base, as, store, tid, db };
 }
 

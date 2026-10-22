@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { createClient } = require('./helpers/http-client');
+const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'q'.repeat(64);
 const PASSWORD = 'Tuin-Plan-2026!';
@@ -44,8 +44,8 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
   const db = openDb();
   const store = createStore(db);
   await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PASSWORD });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
-  const c = createClient(`http://127.0.0.1:${server.address().port}`);
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const c = createClient(base);
   try {
     assert.strictEqual((await c.post('/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
     await c.get('/api/me');

@@ -7,7 +7,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { sanitizeNews, unreadCount, Releases } = require('../src/platform/news');
-const { createClient } = require('./helpers/http-client');
+const { createClient, createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 'n'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -23,14 +23,8 @@ async function setup(opts = {}) {
     const row = db.prepare('SELECT id FROM users WHERE username = ?').get(u);
     store.updateProfile(row.id, { email });
   }
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, ...opts }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org) => {
-    const c = createClient(base);
-    const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
-    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db, ...opts }));
+  const as = createLogin(base, { password: PW });
   return { db, store, server, base, as, main };
 }
 

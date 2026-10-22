@@ -6,7 +6,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { placeOf, previewOf, sanitizeOutsourcing } = require('../src/uitvoering/outsourcing');
-const { createClient } = require('./helpers/http-client');
+const { createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -18,14 +18,8 @@ async function setup() {
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org) => {
-    const c = createClient(base);
-    const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
-    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const as = createLogin(base, { password: PW });
   const baas = await as('baas');
   const orgs = {};
   for (const [slug, name, admin] of [['groen', 'Groen BV', 'piet'], ['blauw', 'Blauw BV', 'bram']]) {

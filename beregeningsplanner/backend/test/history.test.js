@@ -7,17 +7,13 @@ const crypto = require('crypto');
 const { createApp } = require('../src/server');
 const { openDb, MIGRATIONS, schemaVersion } = require('../src/database/db');
 const { COOKIE_NAME } = require('../src/beveiliging/auth');
-const { createClient } = require('./helpers/http-client');
+const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'y'.repeat(64);
 const GUESTS = { accessCode: '', env: { GUEST_ACCESS: 'true' } };
 
 function start(opts = {}) {
-  return new Promise((resolve) => {
-    const server = createApp({ accessCode: 'geheim', secret: SECRET, db: openDb(), ...opts }).listen(0, () => {
-      resolve({ server, base: `http://127.0.0.1:${server.address().port}` });
-    });
-  });
+  return listen(createApp({ accessCode: 'geheim', secret: SECRET, db: openDb(), ...opts }));
 }
 
 const plan = (name, extra = {}) => ({

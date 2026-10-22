@@ -8,7 +8,7 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { fetchProducts, normalizeBaseUrl, sanitizeShop } = require('../src/webshop/woocommerce');
 const { matchProducts, loadArticles } = require('../src/webshop/shop');
-const { createClient } = require('./helpers/http-client');
+const { createClient, createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 'w'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -95,13 +95,8 @@ test('API: beheerder stelt in en haalt op, catalogus per tenant, rechten', async
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
   await store.createAccount(other, { username: 'groenbaas', displayName: 'Groen', role: 'beheerder', password: PW });
   const shop = await startShop(paged(storeProducts(), '/wp-json/wc/store/v1/products'));
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, tenant) => {
-    const c = createClient(base);
-    assert.strictEqual((await c.post('/api/auth/login', { username, password: PW, tenant })).status, 200);
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const as = createLogin(base, { password: PW });
   try {
     const baas = await as('baas');
     const kees = await as('kees');

@@ -11,11 +11,7 @@ const { createStore } = require('../src/platform/store');
 const SECRET = 'z'.repeat(64);
 
 function start(db, opts = {}) {
-  return new Promise((resolve) => {
-    const server = createApp({ secret: SECRET, db, ...opts }).listen(0, () => {
-      resolve({ server, base: `http://127.0.0.1:${server.address().port}` });
-    });
-  });
+  return listen(createApp({ secret: SECRET, db, ...opts }));
 }
 
 const plan = (name) => ({
@@ -34,7 +30,7 @@ async function platformDb() {
 
 const { buildTestData, lawnHeads } = require('../src/platform/test-data');
 const { summarize } = require('../src/platform/store');
-const { createClient } = require('./helpers/http-client');
+const { createClient, listen } = require('./helpers/http-client');
 
 test('testdata: tuinen met zones, offertes met regels en geldige gebruikersnamen', () => {
   const set = buildTestData({ slug: 'groen-test', profile: { hourlyRate: 55, vatRate: 21, validDays: 30 }, today: new Date('2026-10-18T12:00:00Z') });

@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { createClient } = require('./helpers/http-client');
+const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -13,10 +13,8 @@ async function start() {
   const db = openDb();
   const store = createStore(db);
   await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  return new Promise((resolve) => {
-    const app = createApp({ secret: SECRET, db });
-    const server = app.listen(0, () => resolve({ store, server, base: `http://127.0.0.1:${server.address().port}` }));
-  });
+  const app = createApp({ secret: SECRET, db });
+  return { store, ...(await listen(app)) };
 }
 
 async function login(base, username, password) {

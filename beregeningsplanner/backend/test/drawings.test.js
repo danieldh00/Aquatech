@@ -7,12 +7,11 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { sanitizeSubmission, PER_IP_HOUR } = require('../src/beregening/drawings');
-const { createClient } = require('./helpers/http-client');
+const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'd'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
-const listen = (app) => new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
 const plan = (name = 'Tuin') => ({
   meta: { name }, settings: {}, elements: [], sprinklers: [], zones: [],
   areas: [{ id: 'a1', type: 'lawn', pts: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }, { x: 0, y: 5 }] }],
@@ -31,8 +30,7 @@ async function setup() {
   await store.createAccount(main.id, { username: 'klaas', displayName: 'Klaas Klant', role: 'klant', password: PW });
   const groen = store.createTenant({ name: 'Groen BV', slug: 'groen' }).tenant;
   await store.createAccount(groen.id, { username: 'gerrit', displayName: 'Gerrit', role: 'installateur', password: PW });
-  const server = await listen(createApp({ secret: SECRET, db }));
-  const base = `http://127.0.0.1:${server.address().port}`;
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
   return { db, store, main, groen, server, base };
 }
 

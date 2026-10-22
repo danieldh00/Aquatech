@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createApp } = require('../src/server');
-const { createClient } = require('./helpers/http-client');
+const { createClient, listen, createLogin } = require('./helpers/http-client');
 
 const PW = 'Tuin-Plan-2026!';
 const plan = (name) => ({ meta: { name }, areas: [], elements: [], sprinklers: [], zones: [] });
@@ -17,13 +17,8 @@ async function setup() {
   for (const [username, role, platformAdmin] of [['hoofd', 'beheerder', true], ['baas', 'beheerder'], ['ina', 'installateur'], ['klaas', 'klant']]) {
     ids[username] = (await store.createAccount(tid, { username, displayName: username, role, password: PW }, { platformAdmin })).user.id;
   }
-  const server = await new Promise((resolve) => { const s = createApp({ secret: 'x'.repeat(64), db }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org) => {
-    const c = createClient(base);
-    assert.strictEqual((await c.post('/api/auth/login', { username, password: PW, ...(org ? { org } : {}) })).status, 200);
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: 'x'.repeat(64), db }));
+  const as = createLogin(base, { password: PW, organizationField: 'org' });
   return { server, as, store, db, tid, ids };
 }
 

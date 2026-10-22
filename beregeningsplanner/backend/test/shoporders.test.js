@@ -13,7 +13,7 @@ const { createPdf, wrap, textWidth, encode } = require('../src/verkoop/pdf');
 const { invoicePdf } = require('../src/verkoop/invoice-pdf');
 
 const Core = require(path.join(__dirname, '..', '..', 'frontend', 'facturen', 'invoice-core.js'));
-const { createClient } = require('./helpers/http-client');
+const { createLogin, listen } = require('./helpers/http-client');
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
@@ -54,14 +54,8 @@ async function setup({ orders = [], mailOn = true } = {}) {
   const mail = { on: mailOn };
   const mailerFor = () => ({ configured: () => mail.on, send: async (m) => { sent.push(m); return {}; } });
   const shop = fakeShop(orders);
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, mailerFor, shopFetch: shop.fetchImpl }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org) => {
-    const c = createClient(base);
-    const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
-    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db, mailerFor, shopFetch: shop.fetchImpl }));
+  const as = createLogin(base, { password: PW });
   return { db, server, as, sent, mail, shop, main };
 }
 

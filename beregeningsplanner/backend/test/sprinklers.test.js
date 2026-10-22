@@ -9,6 +9,7 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 
 const Lib = require('../../frontend/beregening/js/sprinklerlib.js');
+const { createClient, createLogin, listen } = require('./helpers/http-client');
 const FRONT = path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js');
 const sandbox = { window: {}, console };
 vm.createContext(sandbox);
@@ -155,31 +156,15 @@ async function setup() {
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW }, { mustChangePassword: false });
   const groen = store.createTenant({ name: 'Groen BV', slug: 'groen' }).tenant;
   await store.createAccount(groen.id, { username: 'gert', displayName: 'Gert', role: 'beheerder', password: PW }, { mustChangePassword: false });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org) => {
-    const jar = new Map();
-    const call = async (method, p, body) => {
-      const headers = {};
-      if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-      if (body !== undefined) headers['Content-Type'] = 'application/json';
-      const res = await fetch(base + p, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-      for (const c of res.headers.getSetCookie()) { const [kv] = c.split(';'); const i = kv.indexOf('='); jar.set(kv.slice(0, i), kv.slice(i + 1)); }
-      return { status: res.status, body: await res.json().catch(() => null) };
-    };
-    if (username) {
-      const r = await call('POST', '/api/auth/login', { username, password: PW, tenant: org });
-      assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    }
-    return { get: (p) => call('GET', p), put: (p, b) => call('PUT', p, b), del: (p) => call('DELETE', p) };
-  };
-  return { db, server, as };
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const as = createLogin(base, { password: PW });
+  return { db, server, base, as };
 }
 
 test('API sproeierbibliotheek: inlezen, rechten, andere organisatie en terug naar standaard', async () => {
-  const { db, server, as } = await setup();
+  const { db, server, base, as } = await setup();
   try {
-    const anon = await as(null);
+    const anon = createClient(base);
     assert.strictEqual((await anon.get('/api/sprinkler-library')).status, 401);
     const baas = await as('baas');
     const kees = await as('kees');

@@ -2,16 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { validate, createPlanAnalyzer, SCHEMA } = require('../src/beregening/plan-analyzer');
+const { listen } = require('./helpers/http-client');
 
 const SECRET = 'x'.repeat(64);
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
 function start(opts = {}) {
-  return new Promise((resolve) => {
-    const server = createApp({ secret: SECRET, env: { GUEST_ACCESS: 'true' }, ...opts }).listen(0, () => {
-      resolve({ server, base: `http://127.0.0.1:${server.address().port}` });
-    });
-  });
+  return listen(createApp({ secret: SECRET, env: { GUEST_ACCESS: 'true' }, ...opts }));
 }
 const post = (base, body) => fetch(`${base}/api/plan/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 

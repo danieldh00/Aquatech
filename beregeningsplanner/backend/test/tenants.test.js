@@ -9,16 +9,12 @@ const { openDb, MIGRATIONS } = require('../src/database/db');
 const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
 
 const { createStore } = require('../src/platform/store');
-const { createClient } = require('./helpers/http-client');
+const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
 
 function start(db, opts = {}) {
-  return new Promise((resolve) => {
-    const server = createApp({ secret: SECRET, db, ...opts }).listen(0, () => {
-      resolve({ server, base: `http://127.0.0.1:${server.address().port}` });
-    });
-  });
+  return listen(createApp({ secret: SECRET, db, ...opts }));
 }
 
 const plan = (name) => ({

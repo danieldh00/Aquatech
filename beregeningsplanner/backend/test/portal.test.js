@@ -8,12 +8,11 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { registerPortalRoutes, customerWorkOrder } = require('../src/uitvoering/portal');
 const Roles = require('../../frontend/shared/roles.js');
-const { createClient } = require('./helpers/http-client');
+const { createClient, createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 'p'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
-const listen = (app) => new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
 
 test('rollen: alleen de klant (en de hoofdbeheerder) heeft het portaal', () => {
   assert.ok(Roles.can({ role: 'klant' }, 'portaal'));
@@ -53,13 +52,8 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas Jansen', role: 'klant', password: PW });
   await store.createAccount(tid, { username: 'piet', displayName: 'Piet', role: 'klant', password: PW });
-  const server = await listen(createApp({ secret: SECRET, db }));
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username) => {
-    const c = createClient(base);
-    assert.strictEqual((await c.post('/api/auth/login', { username, password: PW, mustChangePassword: false })).status, 200);
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const as = createLogin(base, { password: PW, extraBody: { mustChangePassword: false } });
   try {
     assert.strictEqual((await createClient(base).get('/api/portal')).status, 401);
     const kees = await as('kees'), klaas = await as('klaas'), piet = await as('piet');
@@ -147,8 +141,8 @@ test('API: foto\'s en afspraak bevestigen via de optionele koppelingen', async (
     settingsOf: () => ({ get: () => ({ companyName: 'Bedrijf', iban: 'NL00GEHEIM' }) }),
     audit: () => {},
   });
-  const server = await listen(app);
-  const c = createClient(`http://127.0.0.1:${server.address().port}`);
+  const { server, base } = await listen(app);
+  const c = createClient(base);
   try {
     const p = (await c.get('/api/portal')).body;
     assert.deepStrictEqual(p.features, { photos: true, appointments: true, requests: false });

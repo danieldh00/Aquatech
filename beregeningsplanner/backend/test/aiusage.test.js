@@ -11,7 +11,7 @@ const { createStore } = require('../src/platform/store');
 const { createAiUsageStore, sanitizeFilter } = require('../src/platform/ai-usage');
 const { AnalyzeError, createPlanAnalyzer } = require('../src/beregening/plan-analyzer');
 const AiModels = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'ai-models.js'));
-const { createClient } = require('./helpers/http-client');
+const { createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 'k'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -50,14 +50,8 @@ async function setup() {
   await store.createAccount(groen.id, { username: 'gijs', displayName: 'Gijs', role: 'installateur', password: PW }, { mustChangePassword: false });
   const ai = fakeAi();
   const app = createApp({ secret: SECRET, db, anthropicApiKey: 'sk-ant-platform-sleutel-van-daniel', createAnalyzer: ai.createAnalyzer });
-  const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org) => {
-    const c = createClient(base);
-    const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
-    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    return c;
-  };
+  const { server, base } = await listen(app);
+  const as = createLogin(base, { password: PW });
   return { db, store, server, base, as, main, groen, ai, app };
 }
 

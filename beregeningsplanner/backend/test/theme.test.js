@@ -4,15 +4,13 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const Theme = require('../../frontend/shared/theme.js');
-const { createClient } = require('./helpers/http-client');
+const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
 function start(db) {
-  return new Promise((resolve) => {
-    const server = createApp({ secret: SECRET, db }).listen(0, () => resolve({ server, base: `http://127.0.0.1:${server.address().port}` }));
-  });
+  return listen(createApp({ secret: SECRET, db }));
 }
 
 test('thema-kern: standaard, afleiding, contrast en opschonen', () => {

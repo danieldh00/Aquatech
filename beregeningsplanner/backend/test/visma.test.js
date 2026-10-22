@@ -7,7 +7,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { splitAddress, invoiceBody, sanitizeVismaApp, sanitizeVisma } = require('../src/verkoop/visma');
-const { createClient } = require('./helpers/http-client');
+const { listen, createLogin } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -76,14 +76,8 @@ async function setup() {
   await store.createAccount(main, { username: 'anna', displayName: 'Anna', role: 'beheerder', password: PW });
   const visma = fakeVisma();
   const app = createApp({ secret: SECRET, db, vismaFetch: visma.fetchImpl });
-  const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org) => {
-    const c = createClient(base, { followRedirects: false });
-    const r = await c.post('/api/auth/login', { username, password: PW, tenant: org });
-    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    return c;
-  };
+  const { server, base } = await listen(app);
+  const as = createLogin(base, { password: PW, clientOptions: { followRedirects: false } });
   return { db, app, server, as, visma, main };
 }
 

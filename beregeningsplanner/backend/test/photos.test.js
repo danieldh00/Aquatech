@@ -7,7 +7,7 @@ const { createStore } = require('../src/platform/store');
 const { createVault } = require('../src/beveiliging/vault');
 const { inspectImage, cleanJpeg } = require('../src/uitvoering/photos');
 const { sitePhotoPng } = require('../src/platform/test-data');
-const { createClient } = require('./helpers/http-client');
+const { createClient, createLogin, listen } = require('./helpers/http-client');
 
 // Kleine JPEG-structuur: JFIF, EXIF met GPS-gegevens, frame (SOF0 640x480), scan.
 function fakeJpeg({ exif = true } = {}) {
@@ -67,13 +67,8 @@ async function setup() {
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: pw });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: pw });
   await store.createAccount(tid, { username: 'piet', displayName: 'Piet', role: 'klant', password: pw });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username) => {
-    const c = createClient(base);
-    assert.strictEqual((await c.post('/api/auth/login', { username, password: pw })).status, 200);
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const as = createLogin(base, { password: pw });
   return { db, server, base, as };
 }
 

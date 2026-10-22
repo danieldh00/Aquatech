@@ -7,7 +7,7 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createMailer, sanitizeMail } = require('../src/platform/mailer');
 const { createWanIp } = require('../src/platform/wan-ip');
-const { createClient } = require('./helpers/http-client');
+const { createClient, createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 'test-secret-mail-0123456789abcdef';
 
@@ -55,13 +55,8 @@ test('API: e-mail en WAN-IP alleen voor beheerders, wachtwoord nooit terug', asy
   const wanIp = createWanIp({ fetch: async () => { lookups++; return '93.184.215.14'; }, env: {} });
   const sent = [];
   const mailerFor = (settings) => createMailer(settings, { resolveHost: async (h) => h, createTransport: (o) => ({ sendMail: async (m) => { sent.push({ ...m, auth: o.auth }); return {}; } }) });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db, wanIp, mailerFor }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username) => {
-    const c = createClient(base);
-    assert.strictEqual((await c.post('/api/auth/login', { username, password: 'Tuin-Plan-2026!' })).status, 200);
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db, wanIp, mailerFor }));
+  const as = createLogin(base, { password: 'Tuin-Plan-2026!' });
   try {
     const baas = await as('baas'), kees = await as('kees');
     assert.strictEqual((await createClient(base).get('/api/admin/wan-ip')).status, 401);

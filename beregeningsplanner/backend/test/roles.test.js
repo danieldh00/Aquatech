@@ -6,7 +6,7 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createApp } = require('../src/server');
 const Roles = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'roles.js'));
-const { createClient } = require('./helpers/http-client');
+const { createLogin, listen } = require('./helpers/http-client');
 
 const PW = 'Tuin-Plan-2026!';
 const plan = (name) => ({ meta: { name }, areas: [], elements: [], sprinklers: [], zones: [] });
@@ -20,13 +20,8 @@ async function setup() {
   await store.createAccount(tid, { username: 'ina', displayName: 'Ina', role: 'installateur', password: PW });
   await store.createAccount(tid, { username: 'ivo', displayName: 'Ivo', role: 'installateur', password: PW });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: PW });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: 'x'.repeat(64), db }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username) => {
-    const c = createClient(base);
-    assert.strictEqual((await c.post('/api/auth/login', { username, password: PW })).status, 200);
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: 'x'.repeat(64), db }));
+  const as = createLogin(base, { password: PW });
   return { server, as, store, tid };
 }
 

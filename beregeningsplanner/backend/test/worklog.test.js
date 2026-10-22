@@ -5,7 +5,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createWorkLogStore, Core } = require('../src/uitvoering/worklog');
-const { createClient } = require('./helpers/http-client');
+const { listen, createLogin } = require('./helpers/http-client');
 
 const SECRET = 'w'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -53,13 +53,8 @@ async function setup() {
   await mk(tid, 'pim', 'planner');
   await mk(tid, 'klaas', 'klant');
   await mk(other.id, 'vreemd', 'beheerder');
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, tenant) => {
-    const c = createClient(base);
-    assert.strictEqual((await c.post('/api/auth/login', { username, password: PW, tenant })).status, 200, username);
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const as = createLogin(base, { password: PW });
   return { db, server, as };
 }
 

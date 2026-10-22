@@ -11,7 +11,7 @@ const { createStore } = require('../src/platform/store');
 const { createIdempotency } = require('../src/beveiliging/idempotency');
 const { sitePhotoPng } = require('../src/platform/test-data');
 const Core = require('../../frontend/shared/offline-core.js');
-const { createClient } = require('./helpers/http-client');
+const { createClient, createLogin, listen } = require('./helpers/http-client');
 
 const FRONT = path.join(__dirname, '..', '..', 'frontend');
 const SECRET = 'o'.repeat(64);
@@ -106,13 +106,8 @@ async function setup() {
   await store.createAccount(tid, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: pw });
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: pw });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: pw });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, org = '') => {
-    const c = createClient(base);
-    assert.strictEqual((await c.post('/api/auth/login', { username, password: pw, organization: org })).status, 200);
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const as = createLogin(base, { password: pw, organizationField: 'organization' });
   return { db, store, server, base, as };
 }
 

@@ -8,7 +8,7 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { sitePhotoPng } = require('../src/platform/test-data');
 const { forCustomer } = require('../src/uitvoering/service-requests');
-const { createClient } = require('./helpers/http-client');
+const { createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 'm'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -23,14 +23,8 @@ async function setup() {
   await store.createAccount(main, { username: 'piet', displayName: 'Piet', role: 'klant', password: PW });
   const other = store.createTenant({ name: 'Blauw BV', slug: 'blauw' }).tenant;
   await store.createAccount(other.id, { username: 'bram', displayName: 'Bram', role: 'installateur', password: PW });
-  const server = await new Promise((resolve) => { const s = createApp({ secret: SECRET, db }).listen(0, () => resolve(s)); });
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const as = async (username, tenant) => {
-    const c = createClient(base);
-    const r = await c.post('/api/auth/login', { username, password: PW, tenant, mustChangePassword: false });
-    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    return c;
-  };
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const as = createLogin(base, { password: PW, extraBody: { mustChangePassword: false } });
   return { db, store, server, base, as };
 }
 
