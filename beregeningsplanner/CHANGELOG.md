@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.68.3
+
+Opschoonronde backend deel 3 (geen functionele wijziging): duidelijke namen
+en een commentaarblok bij elke functie. Daarmee is alle code in
+`backend/src/` opgeschoond.
+
+- `uitvoering/` (photos, service-requests, worklog, workorders).
+- `voorraad/stock.js` (`sumQty` voor reserveringstotalen).
+- `platform/test-data.js` (PNG-opbouw gedeeld in `pngFile`).
+- `server.js` (`allEnvironments`/`allEnvironmentIds` voor onderhoud en
+  synchronisatie over alle omgevingen).
+
 ## 0.68.2
 
 Opschoonronde backend deel 2 (geen functionele wijziging): duidelijke namen
