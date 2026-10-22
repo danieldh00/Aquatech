@@ -18,6 +18,11 @@ const { createClient, listen } = require('./helpers/http-client');
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
+/**
+ * Start een testserver; standaard met hoofdbeheerder 'baas' (zoals na het instelscherm).
+ * @param {{ db?: object, noAdmin?: boolean }} [opts] Eigen database, noAdmin: zonder beheerder; de rest gaat naar createApp.
+ * @returns {Promise<object>} app, db, store, server en base.
+ */
 async function start(opts = {}) {
   const db = opts.db || openDb();
   const store = createStore(db);
@@ -28,16 +33,16 @@ async function start(opts = {}) {
 }
 
 test('vault: versleutelen met context, geknoei en verkeerde context worden geweigerd', () => {
-  const v = createVault(crypto.randomBytes(32));
-  const sealed = v.seal('geheim', 't:veld');
-  assert.ok(v.isSealed(sealed));
-  assert.notStrictEqual(sealed, v.seal('geheim', 't:veld'), 'elke keer een nieuwe IV');
-  assert.strictEqual(v.open(sealed, 't:veld'), 'geheim');
-  assert.throws(() => v.open(sealed, 't:ander'));
-  const [a, b, c, d] = sealed.split(':');
-  const flipped = Buffer.from(d, 'base64url');
+  const vault = createVault(crypto.randomBytes(32));
+  const sealed = vault.seal('geheim', 't:veld');
+  assert.ok(vault.isSealed(sealed));
+  assert.notStrictEqual(sealed, vault.seal('geheim', 't:veld'), 'elke keer een nieuwe IV');
+  assert.strictEqual(vault.open(sealed, 't:veld'), 'geheim');
+  assert.throws(() => vault.open(sealed, 't:ander'));
+  const [version, iv, tag, ciphertext] = sealed.split(':');
+  const flipped = Buffer.from(ciphertext, 'base64url');
   flipped[0] ^= 1;
-  assert.throws(() => v.open([a, b, c, flipped.toString('base64url')].join(':'), 't:veld'));
+  assert.throws(() => vault.open([version, iv, tag, flipped.toString('base64url')].join(':'), 't:veld'));
 });
 
 test('hoofdsleutel: uit de omgeving, of eenmalig aangemaakt in de datamap (0600)', () => {
@@ -85,37 +90,37 @@ test('wachtwoordbeleid en sterkere hash met automatische upgrade', async () => {
   assert.match(passwordProblem('aaaaaaaaaaaaaa'), /voorspelbaar/);
   assert.match(passwordProblem('jan.devries-2026', 'jan.devries'), /gebruikersnaam/);
   assert.strictEqual(passwordProblem('paard batterij nietje'), null);
-  const h = await hashPassword(PW);
-  assert.match(h, /^scrypt\$131072\$8\$1\$/);
-  assert.ok(await verifyPassword(PW, h));
-  assert.ok(!(await verifyPassword('fout', h)));
+  const hash = await hashPassword(PW);
+  assert.match(hash, /^scrypt\$131072\$8\$1\$/);
+  assert.ok(await verifyPassword(PW, hash));
+  assert.ok(!(await verifyPassword('fout', hash)));
 
   // Een oude (lichtere) hash werkt nog en wordt bij het inloggen vervangen.
   const db = openDb();
   const store = createStore(db);
-  const t = store.ensureTenant();
-  const { user } = await store.createAccount(t.id, { username: 'oud', role: 'gebruiker', password: PW });
+  const tenant = store.ensureTenant();
+  const { user } = await store.createAccount(tenant.id, { username: 'oud', role: 'gebruiker', password: PW });
   const salt = crypto.randomBytes(16);
   const old = `scrypt$16384$8$1$${salt.toString('base64url')}$${crypto.scryptSync(PW, salt, 32, { N: 16384, r: 8, p: 1 }).toString('base64url')}`;
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(old, user.id);
-  assert.ok(await store.authenticate(t.id, 'oud', PW));
+  assert.ok(await store.authenticate(tenant.id, 'oud', PW));
   assert.ok(!needsRehash(store.getUser(user.id).password_hash));
 });
 
 test('sessies staan op de server: uitloggen en intrekken werkt meteen; token alleen als hash', async () => {
   const { server, base, db } = await start();
   try {
-    const a = createClient(base, { emptyJsonBody: false });
-    assert.strictEqual((await a.post('/api/auth/login', { username: 'baas', password: PW })).status, 200);
-    const token = a.jar.get('aquatech_session');
+    const baas = createClient(base, { emptyJsonBody: false });
+    assert.strictEqual((await baas.post('/api/auth/login', { username: 'baas', password: PW })).status, 200);
+    const token = baas.jar.get('aquatech_session');
     assert.ok(token && token.length >= 40);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE id_hash = ?').get(token).n, 0, 'geen leesbaar token in de database');
-    assert.strictEqual((await a.get('/api/admin/users')).status, 200);
+    assert.strictEqual((await baas.get('/api/admin/users')).status, 200);
 
     // Uitloggen: een gekopieerde cookie werkt daarna ook niet meer.
     const stolen = createClient(base, { emptyJsonBody: false });
     stolen.jar.set('aquatech_session', token);
-    await a.post('/api/auth/logout');
+    await baas.post('/api/auth/logout');
     assert.strictEqual((await stolen.get('/api/admin/users')).status, 401);
 
     // Beheerder logt iemand op alle toestellen uit.
@@ -125,7 +130,7 @@ test('sessies staan op de server: uitloggen en intrekken werkt meteen; token all
     const j = createClient(base, { emptyJsonBody: false });
     await j.post('/api/auth/login', { username: 'jan', password: 'Gras-Pomp-2027!' });
     assert.ok((await j.get('/api/me')).body.user);
-    assert.strictEqual((await admin.get('/api/admin/users')).body.items.find((u) => u.id === jan.id).sessionCount, 1);
+    assert.strictEqual((await admin.get('/api/admin/users')).body.items.find((user) => user.id === jan.id).sessionCount, 1);
     assert.strictEqual((await admin.post(`/api/admin/users/${jan.id}/logout`)).body.revoked, 1);
     assert.strictEqual((await j.get('/api/me')).body.user, null);
   } finally {
@@ -136,11 +141,11 @@ test('sessies staan op de server: uitloggen en intrekken werkt meteen; token all
 test('sessie verloopt na de ingestelde dagen zonder gebruik', async () => {
   const { server, base, db } = await start();
   try {
-    const a = createClient(base, { emptyJsonBody: false });
-    await a.post('/api/auth/login', { username: 'baas', password: PW });
+    const baas = createClient(base, { emptyJsonBody: false });
+    await baas.post('/api/auth/login', { username: 'baas', password: PW });
     const old = new Date(Date.now() - 15 * 86400000).toISOString();
     db.prepare('UPDATE sessions SET last_seen_at = ?').run(old);
-    assert.strictEqual((await a.get('/api/me')).body.user, null);
+    assert.strictEqual((await baas.get('/api/me')).body.user, null);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM sessions').get().n, 0, 'verlopen sessie opgeruimd');
   } finally {
     server.close();
@@ -152,9 +157,9 @@ test('blokkade per gebruikersnaam na herhaald mislukt inloggen, met auditlog', a
   try {
     // Elke poging van een ander "IP" is hier niet na te bootsen; de limiet per
     // IP (10) en per gebruiker (10) vallen samen, dus de 11e is 429.
-    const c = createClient(base, { emptyJsonBody: false });
-    for (let i = 0; i < 10; i++) assert.strictEqual((await c.post('/api/auth/login', { username: 'baas', password: 'fout' })).status, 401);
-    assert.strictEqual((await c.post('/api/auth/login', { username: 'baas', password: PW })).status, 429);
+    const baas = createClient(base, { emptyJsonBody: false });
+    for (let i = 0; i < 10; i++) assert.strictEqual((await baas.post('/api/auth/login', { username: 'baas', password: 'fout' })).status, 401);
+    assert.strictEqual((await baas.post('/api/auth/login', { username: 'baas', password: PW })).status, 429);
   } finally {
     server.close();
   }
@@ -177,16 +182,16 @@ test('blokkade per gebruikersnaam na herhaald mislukt inloggen, met auditlog', a
 test('bewaartermijnen: oude IP-adressen gewist, oude auditregels verwijderd', async () => {
   const db = openDb();
   const store = createStore(db);
-  const t = store.ensureTenant();
-  const { user } = await store.createAccount(t.id, { username: 'piet', role: 'gebruiker', password: PW });
+  const tenant = store.ensureTenant();
+  const { user } = await store.createAccount(tenant.id, { username: 'piet', role: 'gebruiker', password: PW });
   store.savePlan(user, null, { areas: [], meta: { name: 'Tuin', customer: 'Klant' } }, '10.0.0.1');
-  store.audit({ tenantId: t.id, userId: user.id, action: 'ingelogd', ip: '10.0.0.1' });
+  store.audit({ tenantId: tenant.id, userId: user.id, action: 'ingelogd', ip: '10.0.0.1' });
   const long = new Date(Date.now() - 400 * 86400000).toISOString();
   db.prepare('UPDATE history SET updated_at = ?').run(long);
   db.prepare('UPDATE audit SET created_at = ?').run(long);
-  const r = store.applyRetention(t.id, { ipDays: 90, auditDays: 365 });
-  assert.strictEqual(r.historyIps, 1);
-  assert.strictEqual(r.audit, 1);
+  const removed = store.applyRetention(tenant.id, { ipDays: 90, auditDays: 365 });
+  assert.strictEqual(removed.historyIps, 1);
+  assert.strictEqual(removed.audit, 1);
   assert.strictEqual(db.prepare('SELECT ip FROM history').get().ip, '');
 });
 
@@ -195,9 +200,9 @@ test('installatiecode is nodig voor het eerste beheerdersaccount', async () => {
   try {
     const code = app.locals.setupCode;
     assert.match(code, /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-    const c = createClient(base, { emptyJsonBody: false });
-    assert.strictEqual((await c.post('/api/setup', { username: 'daniel', password: PW })).status, 401);
-    assert.strictEqual((await c.post('/api/setup', { username: 'daniel', password: PW, code: code.toLowerCase() })).status, 201);
+    const client = createClient(base, { emptyJsonBody: false });
+    assert.strictEqual((await client.post('/api/setup', { username: 'daniel', password: PW })).status, 401);
+    assert.strictEqual((await client.post('/api/setup', { username: 'daniel', password: PW, code: code.toLowerCase() })).status, 201);
   } finally {
     server.close();
   }
@@ -206,8 +211,8 @@ test('installatiecode is nodig voor het eerste beheerdersaccount', async () => {
 test('beveiligingsheaders op pagina’s en API', async () => {
   const { server, base } = await start();
   try {
-    for (const p of ['/', '/api/health']) {
-      const res = await fetch(base + p);
+    for (const urlPath of ['/', '/api/health']) {
+      const res = await fetch(base + urlPath);
       const csp = res.headers.get('content-security-policy');
       assert.match(csp, /default-src 'self'/);
       assert.match(csp, /frame-ancestors 'none'/);
@@ -229,28 +234,28 @@ test('versleutelde back-up: onleesbaar zonder sleutel, terug te zetten met sleut
   try {
     const db = openDb();
     const store = createStore(db);
-    const t = store.ensureTenant();
-    const { user } = await store.createAccount(t.id, { username: 'piet', role: 'gebruiker', password: PW });
+    const tenant = store.ensureTenant();
+    const { user } = await store.createAccount(tenant.id, { username: 'piet', role: 'gebruiker', password: PW });
     store.savePlan(user, null, { areas: [], meta: { name: 'Tuin', customer: 'Familie Jansen' } }, '');
     const vault = createVault(crypto.randomBytes(32));
-    const b = await createBackup({ db, dir, vault });
-    assert.deepStrictEqual(listBackups(dir).map((x) => x.name), [b.name]);
-    assert.strictEqual(fs.statSync(path.join(dir, b.name)).mode & 0o777, 0o600);
-    assert.ok(!fs.readFileSync(path.join(dir, b.name)).includes('Familie Jansen'), 'versleuteld');
-    assert.deepStrictEqual(fs.readdirSync(dir), [b.name], 'geen tijdelijke bestanden over');
+    const backup = await createBackup({ db, dir, vault });
+    assert.deepStrictEqual(listBackups(dir).map((x) => x.name), [backup.name]);
+    assert.strictEqual(fs.statSync(path.join(dir, backup.name)).mode & 0o777, 0o600);
+    assert.ok(!fs.readFileSync(path.join(dir, backup.name)).includes('Familie Jansen'), 'versleuteld');
+    assert.deepStrictEqual(fs.readdirSync(dir), [backup.name], 'geen tijdelijke bestanden over');
 
     const out = path.join(dir, 'terug.db');
-    await decryptFile(path.join(dir, b.name), out, keyOf(vault));
+    await decryptFile(path.join(dir, backup.name), out, keyOf(vault));
     const restored = openSqlite(out);
     assert.strictEqual(restored.prepare('SELECT customer FROM plans').get().customer, 'Familie Jansen');
     restored.close();
 
-    await assert.rejects(decryptFile(path.join(dir, b.name), path.join(dir, 'fout.db'), keyOf(createVault(crypto.randomBytes(32)))));
+    await assert.rejects(decryptFile(path.join(dir, backup.name), path.join(dir, 'fout.db'), keyOf(createVault(crypto.randomBytes(32)))));
     assert.ok(!fs.existsSync(path.join(dir, 'fout.db')) && !fs.existsSync(path.join(dir, 'fout.db.part')));
 
     // Bewaartermijn: oude weg, de nieuwste blijft altijd.
     const old = path.join(dir, 'aquatech-20200101-000000.db.enc');
-    fs.copyFileSync(path.join(dir, b.name), old);
+    fs.copyFileSync(path.join(dir, backup.name), old);
     fs.utimesSync(old, new Date('2020-01-01'), new Date('2020-01-01'));
     assert.deepStrictEqual(pruneBackups(dir, 14), ['aquatech-20200101-000000.db.enc']);
     assert.deepStrictEqual(pruneBackups(dir, 0), []);
@@ -266,22 +271,22 @@ test('back-up-API alleen voor hoofdbeheerders; download alleen geldige namen', a
     assert.strictEqual((await createClient(base, { emptyJsonBody: false }).post('/api/admin/backups')).status, 401);
     // Een gewone beheerder (geen hoofdbeheerder): de back-up bevat alle tenants.
     await store.createAccount(store.ensureTenant().id, { username: 'tweede', role: 'beheerder', password: PW });
-    const b = createClient(base, { emptyJsonBody: false });
-    await b.post('/api/auth/login', { username: 'tweede', password: PW });
-    assert.strictEqual((await b.post('/api/admin/backups')).status, 403);
-    assert.strictEqual((await b.get('/api/admin/backups')).status, 403);
-    const a = createClient(base, { emptyJsonBody: false });
-    await a.post('/api/auth/login', { username: 'baas', password: PW });
-    const made = await a.post('/api/admin/backups');
+    const tweede = createClient(base, { emptyJsonBody: false });
+    await tweede.post('/api/auth/login', { username: 'tweede', password: PW });
+    assert.strictEqual((await tweede.post('/api/admin/backups')).status, 403);
+    assert.strictEqual((await tweede.get('/api/admin/backups')).status, 403);
+    const baas = createClient(base, { emptyJsonBody: false });
+    await baas.post('/api/auth/login', { username: 'baas', password: PW });
+    const made = await baas.post('/api/admin/backups');
     assert.strictEqual(made.status, 201);
-    const list = (await a.get('/api/admin/backups')).body;
+    const list = (await baas.get('/api/admin/backups')).body;
     assert.strictEqual(list.enabled, true);
     assert.strictEqual(list.items[0].name, made.body.name);
-    const dl = await fetch(`${base}/api/admin/backups/${made.body.name}`, { headers: { cookie: `aquatech_session=${a.jar.get('aquatech_session')}` } });
+    const dl = await fetch(`${base}/api/admin/backups/${made.body.name}`, { headers: { cookie: `aquatech_session=${baas.jar.get('aquatech_session')}` } });
     assert.strictEqual(dl.status, 200);
     assert.strictEqual(Buffer.from(await dl.arrayBuffer()).subarray(0, 4).toString(), 'AQBK');
-    assert.strictEqual((await a.get('/api/admin/backups/..%2Fmaster-key')).status, 404);
-    assert.ok((await a.get('/api/admin/audit')).body.items.some((x) => x.action === 'backup_gedownload'));
+    assert.strictEqual((await baas.get('/api/admin/backups/..%2Fmaster-key')).status, 404);
+    assert.ok((await baas.get('/api/admin/audit')).body.items.some((x) => x.action === 'backup_gedownload'));
   } finally {
     server.close();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -291,15 +296,15 @@ test('back-up-API alleen voor hoofdbeheerders; download alleen geldige namen', a
 test('plan definitief wissen haalt ook klantgegevens uit de historie', async () => {
   const { server, base, store, db } = await start();
   try {
-    const t = store.ensureTenant();
-    const { user } = await store.createAccount(t.id, { username: 'klaas', role: 'gebruiker', password: PW });
+    const tenant = store.ensureTenant();
+    const { user } = await store.createAccount(tenant.id, { username: 'klaas', role: 'gebruiker', password: PW });
     const plan = store.savePlan(user, null, { areas: [], meta: { name: 'Tuin Jansen', customer: 'Familie Jansen', address: 'Dorpsstraat 1' } }, '10.1.1.1');
     store.deletePlan(user, plan.id, '10.1.1.1');
-    const a = createClient(base, { emptyJsonBody: false });
-    await a.post('/api/auth/login', { username: 'baas', password: PW });
-    const r = await (async () => { const res = await fetch(`${base}/api/admin/plans/${plan.id}`, { method: 'DELETE', headers: { cookie: `aquatech_session=${a.jar.get('aquatech_session')}` } }); return { status: res.status, body: await res.json() }; })();
-    assert.strictEqual(r.status, 200);
-    assert.deepStrictEqual(r.body, { ok: true, plan: true, history: 2 });
+    const baas = createClient(base, { emptyJsonBody: false });
+    await baas.post('/api/auth/login', { username: 'baas', password: PW });
+    const response = await (async () => { const res = await fetch(`${base}/api/admin/plans/${plan.id}`, { method: 'DELETE', headers: { cookie: `aquatech_session=${baas.jar.get('aquatech_session')}` } }); return { status: res.status, body: await res.json() }; })();
+    assert.strictEqual(response.status, 200);
+    assert.deepStrictEqual(response.body, { ok: true, plan: true, history: 2 });
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM plans').get().n, 0);
     const dump = JSON.stringify(db.prepare('SELECT * FROM history').all());
     assert.doesNotMatch(dump, /Jansen|Dorpsstraat|10\.1\.1\.1/);
@@ -310,7 +315,13 @@ test('plan definitief wissen haalt ook klantgegevens uit de historie', async () 
 
 test('bezoekers-IP achter de tunnel: doorgegeven adres alleen van een proxy in het eigen netwerk', () => {
   const { remoteIp } = require('../src/beveiliging/auth');
-  const req = (sock, headers = {}) => ({ socket: { remoteAddress: sock }, headers });
+  /**
+   * Een nagebootst verzoek met socketadres en koppen.
+   * @param {string} socketAddress Adres van de directe verbinding.
+   * @param {object} [headers] Koppen.
+   * @returns {object} Het verzoek.
+   */
+  const req = (socketAddress, headers = {}) => ({ socket: { remoteAddress: socketAddress }, headers });
   assert.strictEqual(remoteIp(req('::ffff:172.18.0.3', { 'cf-connecting-ip': '203.0.114.7' })), '203.0.114.7');
   assert.strictEqual(remoteIp(req('172.18.0.3', { 'x-forwarded-for': '1.1.1.1, 8.8.4.4' })), '8.8.4.4', 'laatste hop, niet te vervalsen');
   assert.strictEqual(remoteIp(req('172.18.0.3', { 'cf-connecting-ip': 'geen-ip' })), '172.18.0.3');
@@ -320,8 +331,13 @@ test('bezoekers-IP achter de tunnel: doorgegeven adres alleen van een proxy in h
 test('inlogblokkade per IP geldt per bezoeker, niet voor iedereen achter de tunnel', async () => {
   const { server, base } = await start();
   try {
+    /**
+     * Probeert in te loggen met een fout wachtwoord vanaf een bezoekers-IP.
+     * @param {string} ip Doorgegeven IP (CF-Connecting-IP).
+     * @returns {Promise<number>} De HTTP-status.
+     */
     const login = (ip) => fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
-      body: JSON.stringify({ username: `x${ip}`, password: 'fout-fout-fout' }) }).then((r) => r.status);
+      body: JSON.stringify({ username: `x${ip}`, password: 'fout-fout-fout' }) }).then((response) => response.status);
     for (let i = 0; i < 10; i++) await login('198.51.99.1');
     assert.strictEqual(await login('198.51.99.1'), 429);
     assert.strictEqual(await login('198.51.99.2'), 401, 'andere bezoeker kan nog inloggen');
@@ -333,7 +349,12 @@ test('inlogblokkade per IP geldt per bezoeker, niet voor iedereen achter de tunn
 test('wijzigingen via de API vanaf een andere (sub)site worden geweigerd', async () => {
   const { server, base } = await start();
   try {
-    const post = (site) => fetch(`${base}/api/auth/logout`, { method: 'POST', headers: site ? { 'Sec-Fetch-Site': site } : {} }).then((r) => r.status);
+    /**
+     * Logt uit met de opgegeven Sec-Fetch-Site.
+     * @param {string|null} site Waarde van Sec-Fetch-Site (null = zonder kop).
+     * @returns {Promise<number>} De HTTP-status.
+     */
+    const post = (site) => fetch(`${base}/api/auth/logout`, { method: 'POST', headers: site ? { 'Sec-Fetch-Site': site } : {} }).then((response) => response.status);
     assert.strictEqual(await post('same-site'), 403);
     assert.strictEqual(await post('cross-site'), 403);
     assert.strictEqual(await post('same-origin'), 200);
@@ -351,18 +372,23 @@ test('mailserver en webshop alleen op een openbaar adres (geen toegang tot het e
     assert.strictEqual(isPublicAddress(ip), false, ip);
   }
   assert.ok(isPublicAddress('8.8.8.8') && isPublicAddress('2606:4700::1111'));
-  const lookup = (addrs) => async () => addrs.map((address) => ({ address }));
+  /**
+   * Nagebootste DNS-opzoeking die vaste adressen geeft.
+   * @param {string[]} addresses De adressen.
+   * @returns {Function} De opzoekfunctie.
+   */
+  const lookup = (addresses) => async () => addresses.map((address) => ({ address }));
   await assert.rejects(publicAddress('intern.example', { lookup: lookup(['93.184.215.14', '192.168.2.251']) }), { code: 'private_host' });
   assert.strictEqual(await publicAddress('smtp.example', { lookup: lookup(['93.184.215.14']) }), '93.184.215.14');
 
   const { createMailer } = require('../src/platform/mailer');
-  const settings = { get: (k) => (k === 'mailServer' ? { host: 'mail.intern', port: 25, from: 'a@b.nl' } : '') };
+  const settings = { get: (key) => (key === 'mailServer' ? { host: 'mail.intern', port: 25, from: 'a@b.nl' } : '') };
   let used = null;
   const mailer = createMailer(settings, { resolveHost: async () => { throw Object.assign(new Error('x'), { code: 'private_host' }); },
-    createTransport: (o) => { used = o; return { sendMail: async () => ({}) }; } });
+    createTransport: (options) => { used = options; return { sendMail: async () => ({}) }; } });
   await assert.rejects(mailer.send({ to: 'klant@example.nl', subject: 's', text: 't' }), /openbaar adres/);
   assert.strictEqual(used, null, 'geen verbinding gemaakt');
-  const ok = createMailer(settings, { resolveHost: async () => '93.184.215.14', createTransport: (o) => { used = o; return { sendMail: async () => ({}) }; } });
+  const ok = createMailer(settings, { resolveHost: async () => '93.184.215.14', createTransport: (options) => { used = options; return { sendMail: async () => ({}) }; } });
   await ok.send({ to: 'klant@example.nl', subject: 's', text: 't' });
   assert.strictEqual(used.host, '93.184.215.14');
   assert.strictEqual(used.servername, 'mail.intern', 'certificaat op naam gecontroleerd');
