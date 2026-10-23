@@ -38,8 +38,9 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `beregeningsplanner/` is gewijzigd) → `git push -u origin <branch>` → PR naar
   `master` → CI groen (`ci.yml` + `version.yml`) → wachten op de review van
   **CodeRabbit** (`.coderabbit.yaml`, verplicht via de ruleset op `master`):
-  elke opmerking oplossen of met reden beantwoorden, pas mergen als CodeRabbit
-  de PR heeft goedgekeurd. Daarna de branch verwijderen. Een volgende taak begint opnieuw vanaf
+  elke opmerking oplossen of met reden beantwoorden en daarna de discussie als
+  opgelost markeren; een betwiste opmerking zonder akkoord van CodeRabbit gaat
+  naar Daniël. Pas mergen als CodeRabbit de PR heeft goedgekeurd. Daarna de branch verwijderen. Een volgende taak begint opnieuw vanaf
   `origin/master`, niet vanaf een oude featurebranch.
 - Loopt `master` voor op je branch (andere sessie heeft gemerged): eerst
   `git merge origin/master` in je branch, conflicten oplossen, en de versie
