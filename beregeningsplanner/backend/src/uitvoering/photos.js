@@ -499,15 +499,16 @@ function registerPhotoRoutes(app, ctx) {
   const notFound = (res, what = 'Foto') => res.status(404).json({ error: 'not_found', message: `${what} niet gevonden.` });
 
   /**
-   * Stuurt een afbeelding; alleen de eigen browser mag hem een dag bewaren (een foto verandert nooit).
+   * Stuurt een afbeelding; standaard mag alleen de eigen browser hem een dag bewaren (een foto verandert nooit).
    * @param {object} res Het Express-antwoord.
    * @param {{ mime: string, body: Buffer }} file Het bestand.
+   * @param {string} [cacheControl] De Cache-Control-kop.
    */
-  function send(res, file) {
+  function send(res, file, cacheControl = 'private, max-age=86400') {
     res.setHeader('Content-Type', file.mime);
     res.setHeader('Content-Length', file.body.length);
     // Een foto verandert nooit (nieuwe foto = nieuw id); alleen de eigen browser bewaart hem.
-    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.setHeader('Cache-Control', cacheControl);
     res.setHeader('Content-Disposition', 'inline');
     res.end(file.body);
   }
@@ -550,7 +551,9 @@ function registerPhotoRoutes(app, ctx) {
     if (!Roles.can(user, 'werkorders') && !photos.customerOwns(tenantId, req.params.pid, user.id)) return notFound(res);
     const file = photos.file(tenantId, req.params.pid, { thumb: req.query.thumb === '1' });
     if (!file) return notFound(res);
-    send(res, file);
+    // Niet bewaren: zet de medewerker de foto weer op onzichtbaar of komt de
+    // offerte terug naar concept, dan moet de klant hem meteen kwijt zijn.
+    send(res, file, 'no-store');
   });
 
   // ---------- Klantdossiers (medewerkers) ----------

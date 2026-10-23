@@ -13,7 +13,7 @@ const { createSettings } = require('../src/platform/settings');
 const { createMailer } = require('../src/platform/mailer');
 const { remoteIp } = require('../src/beveiliging/auth');
 const { pinnedFetch, readLimited } = require('../src/beveiliging/pinned-fetch');
-const { copyDatabase } = require('../src/database/db-copy');
+const { copyDatabase, describe, rowsOf } = require('../src/database/db-copy');
 const { wrap, textWidth } = require('../src/verkoop/pdf');
 const { createClient, createLogin, listen } = require('./helpers/http-client');
 const OfflineCore = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'offline-core.js'));
@@ -262,4 +262,20 @@ test('back-up: kopiëren in porties na de laatste sleutel (geen OFFSET), alle ri
   const result = copyDatabase(from, to);
   assert.strictEqual(result.tables.audit, Number(prepare('SELECT COUNT(*) AS n FROM audit').get().n));
   assert.ok(!statements.some((sql) => /FROM audit .*OFFSET/.test(sql)), 'audit heeft een primaire sleutel');
+});
+
+test('back-up: primaire sleutel met een NULL (SQLite) valt terug op OFFSET, geen rij overgeslagen', { skip: PG && 'alleen SQLite' }, () => {
+  const db = openSqlite(':memory:');
+  db.exec('CREATE TABLE losse_sleutel (id TEXT PRIMARY KEY, waarde TEXT)');
+  db.exec("INSERT INTO losse_sleutel (id, waarde) VALUES (NULL, 'a'), ('b', 'b'), ('c', 'c')");
+  const description = describe(db).losse_sleutel;
+  assert.strictEqual(description.nullableKey, true);
+  assert.strictEqual([...rowsOf(db, 'losse_sleutel', description)].length, 3);
+});
+
+test('PDF: een letter met accent blijft bij het afbreken heel', () => {
+  const word = 'é'.repeat(400);
+  const lines = wrap(word, 60, 9);
+  assert.ok(lines.length > 1);
+  assert.ok(lines.every((line) => !/^\p{M}/u.test(line)), 'geen regel begint met een los accent');
 });

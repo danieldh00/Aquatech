@@ -29,6 +29,7 @@
     opts: {}, wo: null, log: null, tab: 'hours', edit: null, flushing: false,
     // Regels in de wachtrij van de service worker: { woId, type, body, queueId }.
     swPending: [],
+    owner: null, // wie er nu is ingelogd (currentOwner), voor de eigen wachtrij
   };
   const Off = () => (window.AquatechOffline && window.AquatechOffline.supported ? window.AquatechOffline : null);
   const toast = (msg, err) => (state.opts.toast ? state.opts.toast(msg, err) : null);
@@ -69,7 +70,13 @@
     const common = window.AquatechCommon;
     return common ? common.ownerOf(await common.getJson('api/me')) : null;
   }
-  const pendingFor = (woId, type) => readQueue().concat(state.swPending).filter((x) => x.woId === woId && x.type === type);
+  /**
+   * De wachtende regels van wie nu is ingelogd (state.owner); regels van een
+   * ander account op dit toestel blijven liggen en worden niet getoond.
+   * @returns {object[]} De eigen regels uit de wachtrij.
+   */
+  const ownQueue = () => readQueue().filter((item) => item.owner && item.owner === state.owner);
+  const pendingFor = (woId, type) => ownQueue().concat(state.swPending).filter((x) => x.woId === woId && x.type === type);
 
   // Wachtende regels van deze werkorder uit de wachtrij van de service worker.
   async function loadSwPending(wo) {
@@ -92,8 +99,8 @@
 
   /**
    * Wachtende regels versturen; stopt bij de eerste netwerkfout. Alleen regels
-   * van wie nu is ingelogd; een regel zonder eigenaar (oude versie) of van een
-   * ander account wordt niet onder deze gebruiker geboekt maar weggegooid.
+   * van wie nu is ingelogd; die van een ander account blijven liggen tot die
+   * weer inlogt. Een regel zonder eigenaar (oude versie) wordt weggegooid.
    */
   async function flush() {
     if (state.flushing) return;
@@ -103,11 +110,10 @@
     let sent = 0;
     try {
       const owner = await currentOwner();
+      state.owner = owner;
+      if (!owner) return;
       for (const item of list) {
-        if (item.owner && owner && item.owner !== owner) {
-          writeQueue(readQueue().filter((x) => x.body.clientId !== item.body.clientId));
-          continue;
-        }
+        if (item.owner && item.owner !== owner) continue;
         try {
           if (!item.owner) throw new Error('van een eerdere versie zonder eigenaar');
           await call(`api/workorders/${encodeURIComponent(item.woId)}/${item.type}`, { method: 'POST', body: item.body, owner: item.owner });
@@ -131,7 +137,10 @@
   // ---------- Laden en tekenen ----------
   async function load() {
     const wo = state.wo;
-    await loadSwPending(wo).catch(() => {});
+    await Promise.all([
+      loadSwPending(wo).catch(() => {}),
+      currentOwner().then((owner) => { state.owner = owner; }, () => {}),
+    ]);
     try {
       const out = await call(`api/workorders/${encodeURIComponent(wo.id)}/worklog`);
       if (state.wo !== wo) return;
@@ -275,7 +284,7 @@
     const card = $('#wl-card');
     if (!card || !state.wo || !state.log) return;
     // Wat in de wachtrij van de service worker staat, toont het knopje rechtsonder.
-    const queue = readQueue().filter((x) => x.woId === state.wo.id).length;
+    const queue = ownQueue().filter((x) => x.woId === state.wo.id).length;
     const s = summary();
     $('#wl-sum').textContent = s.t.minutes ? `${L.hoursText(s.t.minutes)} uur geboekt` : '';
     const body = $('#wl-body');
@@ -355,6 +364,7 @@
     } catch (e) {
       if (!(e instanceof Offline)) { toast(`Boeken mislukt: ${e.message}`, true); return; }
       const owner = await currentOwner();
+      state.owner = owner || state.owner;
       if (!owner || !writeQueue([...readQueue(), { woId: wo.id, type, body, owner, at: new Date().toISOString() }])) {
         toast('Geen verbinding en bewaren op dit toestel lukt niet.', true);
         return;
@@ -511,7 +521,7 @@
     return { hours: out.hours.length, materials: out.materials.length };
   }
 
-  window.WorkLog = { open, addSheets, exportPeriod, flush, pending: () => readQueue().length };
+  window.WorkLog = { open, addSheets, exportPeriod, flush, pending: () => ownQueue().length };
   // Bij het laden van de pagina: wat nog op dit toestel wacht alsnog versturen.
   if (navigator.onLine !== false) setTimeout(flush, 1500);
 })();

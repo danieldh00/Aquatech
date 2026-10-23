@@ -35,6 +35,7 @@
     ifBase: 'x-aquatech-if-base',
     queued: 'x-aquatech-queued',
     owner: 'x-aquatech-owner',
+    cacheOwner: 'x-aquatech-cache-owner', // van wie een bewaard antwoord is (sw.js)
     idempotency: 'idempotency-key',
     cachedAt: 'x-aquatech-cached-at',
   };

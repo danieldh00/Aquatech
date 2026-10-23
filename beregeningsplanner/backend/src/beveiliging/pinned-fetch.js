@@ -10,7 +10,7 @@ const http = require('http');
 const https = require('https');
 const net = require('net');
 const zlib = require('zlib');
-const { Readable } = require('stream');
+const { Readable, pipeline } = require('stream');
 
 class ResponseTooLargeError extends Error {
   /**
@@ -30,10 +30,14 @@ class ResponseTooLargeError extends Error {
  */
 function decoded(message) {
   const encoding = String(message.headers['content-encoding'] || '').trim().toLowerCase();
-  if (encoding === 'gzip' || encoding === 'x-gzip') return message.pipe(zlib.createGunzip());
-  if (encoding === 'deflate') return message.pipe(zlib.createInflate());
-  if (encoding === 'br') return message.pipe(zlib.createBrotliDecompress());
-  return message;
+  let decoder = null;
+  if (encoding === 'gzip' || encoding === 'x-gzip') decoder = zlib.createGunzip();
+  else if (encoding === 'deflate') decoder = zlib.createInflate();
+  else if (encoding === 'br') decoder = zlib.createBrotliDecompress();
+  if (!decoder) return message;
+  // pipeline geeft fouten en afbreken in beide richtingen door (pipe niet).
+  pipeline(message, decoder, () => {});
+  return decoder;
 }
 
 /**

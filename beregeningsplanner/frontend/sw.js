@@ -107,11 +107,16 @@ const rel = (url) => {
 };
 const json = (body, status = 200, extra = {}) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const noStore = (res) => /no-store/i.test(res.headers.get('Cache-Control') || '');
-async function stamp(res) {
+// Een bewaard antwoord krijgt de tijd en de eigenaar mee; ownedHit geeft het
+// alleen terug aan die eigenaar (ook als het wissen bij een gebruikerswissel
+// en een laat cache.put elkaar kruisen).
+async function stamp(res, owner) {
   const headers = new Headers(res.headers);
   headers.set(H.cachedAt, new Date().toISOString());
+  headers.set(H.cacheOwner, owner || '');
   return new Response(await res.clone().blob(), { status: res.status, statusText: res.statusText, headers });
 }
+const ownedHit = (hit, owner) => (hit && owner && hit.headers.get(H.cacheOwner) === owner ? hit : null);
 async function broadcast(msg) {
   const list = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
   for (const c of list) c.postMessage(msg);
@@ -246,7 +251,7 @@ async function me(req) {
     await setIdentity(next);
     if (next.allowed) {
       const cache = await caches.open(DATA);
-      await cache.put(req.url, await stamp(res));
+      await cache.put(req.url, await stamp(res, next.owner));
       if (await getMeta('precached') !== VERSION) precache();
     }
     await setMeta('needsLogin', undefined);
@@ -261,7 +266,7 @@ async function fromCache(req) {
   const id = await currentIdentity();
   if (!id.allowed) return null;
   const cache = await caches.open(DATA);
-  return (await cache.match(req.url)) || null;
+  return ownedHit(await cache.match(req.url), id.owner);
 }
 
 // Gegevens: eerst de server, zonder verbinding (of server onbereikbaar) de cache.
@@ -279,7 +284,7 @@ async function data(req) {
     const now = await currentIdentity();
     if (res.ok && now.allowed && owner && now.owner === owner) {
       const cache = await caches.open(DATA);
-      await cache.put(req.url, await stamp(res));
+      await cache.put(req.url, await stamp(res, owner));
     }
     return res;
   } catch (err) {
@@ -357,7 +362,8 @@ async function write(req, path) {
 }
 
 async function cachedJson(url) {
-  const hit = await (await caches.open(DATA)).match(new URL(url, self.registration.scope).href);
+  const id = await currentIdentity();
+  const hit = ownedHit(await (await caches.open(DATA)).match(new URL(url, self.registration.scope).href), id.owner);
   return hit ? hit.clone().json().catch(() => null) : null;
 }
 
@@ -380,7 +386,7 @@ async function autoMerge(item) {
 async function patchCache(item) {
   const cache = await caches.open(DATA);
   const url = new URL(item.url, self.registration.scope).href;
-  const hit = await cache.match(url);
+  const hit = ownedHit(await cache.match(url), item.owner);
   if (!hit) return;
   const resource = await hit.clone().json().catch(() => null);
   const next = Core.applyPatch(resource, item.body);
@@ -392,7 +398,7 @@ async function keepResponse(item, res) {
   const now = await currentIdentity();
   if (!now.allowed || now.owner !== item.owner) return;
   const cache = await caches.open(DATA);
-  await cache.put(new URL(item.url, self.registration.scope).href, await stamp(res));
+  await cache.put(new URL(item.url, self.registration.scope).href, await stamp(res, item.owner));
 }
 
 let flushing = null;

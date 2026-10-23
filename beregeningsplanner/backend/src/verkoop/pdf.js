@@ -75,7 +75,7 @@ function textWidth(text, size, bold = false) {
 }
 
 /**
- * Breekt een woord dat zelf te breed is hard af. Elk teken wordt één keer
+ * Breekt een woord dat zelf te breed is hard af. Elk teken (grafeemcluster) wordt één keer
  * gemeten (lineair), zodat een lang woord geen rekenwerk in het kwadraat kost.
  * @param {string} word Het woord.
  * @param {number} width Beschikbare breedte in punten.
@@ -87,7 +87,9 @@ function breakWord(word, width, size, bold) {
   const pieces = [];
   let piece = '';
   let pieceWidth = 0;
-  for (const character of word) {
+  // Per grafeemcluster (letter + combinerende tekens), zodat een accent niet
+  // los van zijn letter op de volgende regel belandt.
+  for (const [character] of word.matchAll(/\P{M}\p{M}*|\p{M}+/gu)) {
     const characterWidth = textWidth(character, size, bold);
     if (piece && pieceWidth + characterWidth > width) {
       pieces.push(piece);

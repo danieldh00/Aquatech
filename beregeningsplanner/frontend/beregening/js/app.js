@@ -234,15 +234,16 @@
       }
     },
     /**
-     * Leest het concept uit deze browser. Met een eigenaar wacht het tot
-     * api/me bekend is (_restoreOwnedDraft); zonder (file://, oude versie) meteen.
+     * Leest het concept uit deze browser. Op de server wacht het tot api/me
+     * bekend is (_restoreOwnedDraft); een concept zonder eigenaar (oude
+     * versie) wordt daar gewist. Alleen via file:// en bij ?tekenen meteen.
      */
     _load() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return;
         const data = JSON.parse(raw);
-        if (data && data.owner && location.protocol !== 'file:') {
+        if (data && !ANON && location.protocol !== 'file:') {
           this._pendingDraft = data;
           return;
         }
