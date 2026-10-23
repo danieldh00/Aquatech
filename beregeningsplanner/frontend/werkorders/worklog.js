@@ -76,6 +76,12 @@
    * @returns {object[]} De eigen regels uit de wachtrij.
    */
   const ownQueue = () => readQueue().filter((item) => item.owner && item.owner === state.owner);
+  /**
+   * De eigen wachtende regels (lokaal en in de service worker) van één werkorder en soort.
+   * @param {string} woId Id van de werkorder.
+   * @param {string} type 'hours' of 'materials'.
+   * @returns {object[]} De wachtende regels.
+   */
   const pendingFor = (woId, type) => ownQueue().concat(state.swPending).filter((x) => x.woId === woId && x.type === type);
 
   // Wachtende regels van deze werkorder uit de wachtrij van de service worker.

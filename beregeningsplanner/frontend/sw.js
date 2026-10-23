@@ -107,15 +107,26 @@ const rel = (url) => {
 };
 const json = (body, status = 200, extra = {}) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const noStore = (res) => /no-store/i.test(res.headers.get('Cache-Control') || '');
-// Een bewaard antwoord krijgt de tijd en de eigenaar mee; ownedHit geeft het
-// alleen terug aan die eigenaar (ook als het wissen bij een gebruikerswissel
-// en een laat cache.put elkaar kruisen).
+/**
+ * Maakt een kopie van een antwoord om te bewaren, met de tijd en de eigenaar
+ * als kop. ownedHit geeft het later alleen aan die eigenaar terug (ook als het
+ * wissen bij een gebruikerswissel en een laat cache.put elkaar kruisen).
+ * @param {Response} res Het antwoord van de server.
+ * @param {string|null} owner De eigenaar (`<user>@<tenant>`).
+ * @returns {Promise<Response>} Het te bewaren antwoord.
+ */
 async function stamp(res, owner) {
   const headers = new Headers(res.headers);
   headers.set(H.cachedAt, new Date().toISOString());
   headers.set(H.cacheOwner, owner || '');
   return new Response(await res.clone().blob(), { status: res.status, statusText: res.statusText, headers });
 }
+/**
+ * Geeft een bewaard antwoord alleen terug als het van deze eigenaar is.
+ * @param {Response|undefined} hit Het antwoord uit de cache.
+ * @param {string|null} owner De huidige eigenaar.
+ * @returns {Response|null} Het antwoord, of null als het van een ander (of niemand) is.
+ */
 const ownedHit = (hit, owner) => (hit && owner && hit.headers.get(H.cacheOwner) === owner ? hit : null);
 async function broadcast(msg) {
   const list = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
