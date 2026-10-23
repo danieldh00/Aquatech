@@ -21,6 +21,7 @@
   const NARROW_WIDTH = 3.0; // m; smaller => strooksproeiers
   const MIN_EDGE = 0.6; // m; kortere randjes van de vorm worden weggewerkt
   const SNAP = 0.5; // rasterpunten binnen deze fractie van de afstand tot de rand komen óp de rand
+  const MAX_GRID_CELLS = 250000; // meetraster per vlak: hoogstens zoveel cellen (geheugen, rekentijd)
   const PRESSURE_MARGIN = 0.2; // bar; nodig aan de kraan bovenop de kopdruk (leidingverlies, ventielen)
 
   /**
@@ -451,8 +452,11 @@
     const dryPolygons = ((surroundings && surroundings.dry) || []).filter((polygon) => polygon && polygon.length >= 3);
     const wetPolygons = ((surroundings && surroundings.wet) || []).filter((polygon) => polygon && polygon.length >= 3);
     const area = Geo.area(points);
-    const cell = clamp(Math.sqrt(area) / 30, 0.2, 0.6);
     const bounds = Geo.bbox(points);
+    // Vaste grens op het aantal rastercellen (geheugen en rekentijd): bij een
+    // heel groot of lang uitgerekt vlak worden de cellen groter.
+    const spanX = bounds.w + 2 * reach, spanY = bounds.h + 2 * reach;
+    const cell = Math.max(clamp(Math.sqrt(area) / 30, 0.2, 0.6), Math.sqrt((spanX * spanY) / MAX_GRID_CELLS));
     // raster iets verschoven, zodat er geen meetpunten precies op een rechte rand liggen
     const x0 = bounds.minX - reach + 0.37 * cell, y0 = bounds.minY - reach + 0.41 * cell;
     const nx = Math.ceil((bounds.w + 2 * reach) / cell) + 1, ny = Math.ceil((bounds.h + 2 * reach) / cell) + 1;

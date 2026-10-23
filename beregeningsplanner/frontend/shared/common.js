@@ -3,6 +3,7 @@
 //
 // - AquatechCommon.getJson('api/me'): één verzoek per pagina voor gegevens die
 //   kopbalk, zijbalk en module allemaal nodig hebben (api/me, api/config).
+// - AquatechCommon.ownerOf(me): van wie lokaal bewaarde gegevens zijn.
 // - AquatechCommon.excel(): de Excel-bibliotheek (bijna 1 MB) pas laden bij de
 //   eerste export in plaats van op elke pagina (null als dat niet lukt).
 // - AquatechCommon.origin(): kwam je via een link uit een ander deel van de app
@@ -44,6 +45,18 @@
         .catch(() => null);
     }
     return cache[path].then((data) => (data == null ? null : JSON.parse(JSON.stringify(data))));
+  }
+
+  /**
+   * Van wie gegevens op dit toestel zijn: `<gebruiker>@<omgeving>` uit api/me
+   * (zelfde vorm als de offline wachtrij en de server, kop X-Aquatech-Owner).
+   * @param {object|null} me Antwoord van api/me.
+   * @returns {string|null} De eigenaar, of null zonder gebruiker.
+   */
+  function ownerOf(me) {
+    const user = me && me.user;
+    if (!user || !user.id) return null;
+    return `${user.id}@${(me.tenant && me.tenant.id) || user.tenantId || ''}`;
   }
 
   // ---------- Excel op aanvraag ----------
@@ -172,5 +185,5 @@
     });
   }
 
-  root.AquatechCommon = { getJson, excel, origin, onReturn, leaving, offline };
+  root.AquatechCommon = { getJson, ownerOf, excel, origin, onReturn, leaving, offline };
 })(window);

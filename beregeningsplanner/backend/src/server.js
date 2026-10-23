@@ -308,7 +308,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     return !hasAdmin;
   };
   const auth = createAuth({ secret, store, tenantId: tenant.id, getAccessCode,
-    idleDays: () => settings.get('sessionIdleDays'), maxDays: () => settings.get('sessionMaxDays') });
+    // Sessieduur volgt de instellingen van de eigen tenant van het account.
+    idleDays: (tenantId = tenant.id) => settingsFor(tenantId).get('sessionIdleDays'),
+    maxDays: (tenantId = tenant.id) => settingsFor(tenantId).get('sessionMaxDays') });
   /**
    * Schrijft een regel in het auditlog, standaard van de actieve omgeving (zonder
    * inlog de hoofdtenant). Werkt een hoofdbeheerder als deze gebruiker
@@ -445,6 +447,18 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     next();
   });
 
+  // Offline wachtrij (frontend/sw.js, werkorders/worklog.js): een bewaarde
+  // wijziging draagt X-Aquatech-Owner (`<gebruiker>@<omgeving>` van wie hem
+  // maakte). Is er intussen iemand anders ingelogd in deze browser, dan wordt
+  // hij niet onder diens naam uitgevoerd.
+  app.use('/api', (req, res, next) => {
+    const owner = req.headers['x-aquatech-owner'];
+    if (owner === undefined || req.method === 'GET' || req.method === 'HEAD') return next();
+    const user = identify(req);
+    if (user && String(owner) === `${user.id}@${req.tenantId}`) return next();
+    res.status(409).json({ error: 'owner_mismatch', message: 'Deze wijziging is gemaakt door een andere gebruiker of in een andere omgeving.' });
+  });
+
   // Offline wachtrij (frontend/sw.js): een herhaald verzoek met dezelfde
   // Idempotency-Key wordt niet nog eens uitgevoerd (zie idempotency.js).
   const idempotency = createIdempotency();
@@ -481,13 +495,18 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   /**
    * Is deze gebruikersnaam (tijdelijk) geblokkeerd na te veel mislukte pogingen?
    * @param {string} name Sleutel (bijv. de gebruikersnaam).
+   * @param {number} [max] Aantal mislukte pogingen waarna de sleutel geblokkeerd is.
    * @returns {boolean} true als hij geblokkeerd is.
    */
-  const lockedOut = (name) => {
+  const lockedOut = (name, max = 10) => {
     const entry = failures.get(name);
     if (entry && entry.reset <= Date.now()) failures.delete(name);
-    return (failures.get(name)?.count || 0) >= 10;
+    return (failures.get(name)?.count || 0) >= max;
   };
+  // De toegangscode is één gedeeld geheim: naast de grens per IP ook een grens
+  // voor alle pogingen samen (een IP-adres is achter een proxy te vervalsen).
+  const CODE_KEY = 'toegangscode';
+  const CODE_MAX_FAILURES = 30;
   /**
    * Telt een mislukte poging.
    * @param {string} name Sleutel (bijv. de gebruikersnaam).
@@ -528,9 +547,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // Hoofdbeheerders horen bij de hoofdtenant, maar loggen ook in als er
       // nog een andere organisatiecode in het veld staat (de browser onthoudt
       // de vorige) of als ze de naam van de hoofdtenant intypen.
-      if (!user && home?.id !== tenant.id) {
+      // Die poging telt mee voor de gebruikersnaam in de hoofdtenant, los van
+      // de ingevulde code (anders geeft elke verzonnen code nieuwe pogingen).
+      const mainKey = `${tenant.id}:${username}`;
+      if (!user && home?.id !== tenant.id && !lockedOut(mainKey)) {
         const admin = await store.authenticate(tenant.id, username, password);
-        if (admin?.platform_admin) { user = admin; home = tenant; }
+        if (admin?.platform_admin) { user = admin; home = tenant; failures.delete(mainKey); }
+        else if (!admin) failed(mainKey);
       }
       if (!user) {
         failed(key);
@@ -539,8 +562,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       }
       failures.delete(key);
       // Testaccounts horen bij een testomgeving van de organisatie.
-      const own = store.getTenant(user.tenant_id);
-      if ((home.disabled || own?.disabled) && !user.platform_admin) {
+      if ((home.disabled || !organizationActive(user.tenant_id)) && !user.platform_admin) {
         audit(req, 'inloggen_geweigerd', { username, reden: 'tenant_uitgeschakeld' }, user.id, user.tenant_id);
         return res.status(403).json({ error: 'tenant_disabled', message: 'Deze organisatie is uitgeschakeld. Neem contact op met de beheerder van het platform.' });
       }
@@ -553,7 +575,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!getAccessCode()) {
       return res.status(400).json({ error: 'username_required', message: 'Vul je gebruikersnaam en wachtwoord in.' });
     }
+    if (lockedOut(CODE_KEY, CODE_MAX_FAILURES)) {
+      audit(req, 'inloggen_geblokkeerd', { via: 'toegangscode' }, null);
+      return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen met de toegangscode. Probeer het over een kwartier opnieuw.' });
+    }
     if (!auth.checkCode(String(req.body?.code ?? req.body?.password ?? ''))) {
+      failed(CODE_KEY);
       audit(req, 'inloggen_mislukt', { via: 'toegangscode' }, null);
       return res.status(401).json({ error: 'wrong_code', message: 'Onjuiste toegangscode.' });
     }
@@ -613,6 +640,20 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // inlog de hoofdtenant). Alle gegevens (plannen, historie, instellingen)
   // gaan via req.tenantId; gebruikersbeheer via usersTenantOf(req).
   /**
+   * Of de tenant van een account in gebruik is: bestaat, niet uitgeschakeld, en
+   * bij een testomgeving ook de organisatie erboven niet uitgeschakeld.
+   * @param {string} tenantId Id van de eigen tenant van het account.
+   * @returns {boolean} true als het account mag werken.
+   */
+  function organizationActive(tenantId) {
+    const home = store.getTenant(tenantId);
+    if (!home || home.disabled) return false;
+    if (!home.parent_id) return true;
+    const parent = store.getTenant(home.parent_id);
+    return Boolean(parent && !parent.disabled);
+  }
+
+  /**
    * Bepaalt wie het verzoek doet en zet req.user en req.tenantId.
    * @param {object} req Het verzoek.
    * @returns {object|null} De gebruiker, of null.
@@ -628,10 +669,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const guest = gid && store.getUser(gid);
       user = guest && guest.kind === 'gast' && guest.tenant_id === tenant.id && !guest.disabled ? guest : null;
     }
-    if (user) {
-      const home = store.getTenant(user.tenant_id);
-      if (!home || (home.disabled && !user.platform_admin)) user = null;
-    }
+    if (user && !organizationActive(user.tenant_id) && !(user.platform_admin && store.getTenant(user.tenant_id))) user = null;
     if (user) {
       store.touchUser(user);
       // Een hoofdbeheerder kan tijdelijk als een andere gebruiker werken (zie impersonation.js).
@@ -757,6 +795,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     nieuws: 'Je rol mag geen nieuwsberichten plaatsen.',
     voorraad: 'Je rol heeft geen toegang tot voorraadbeheer.',
     portaal: 'Het klantportaal is er voor klanten.',
+    plannen: 'Je rol heeft geen toegang tot de beregeningsplanner.',
   };
   /**
    * Middleware die een recht eist (rechten per rol in frontend/shared/roles.js).
@@ -770,6 +809,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     next();
   };
   const requireAdmin = requireRight('beheer');
+  /**
+   * Middleware: een gebruiker (of nieuwe gast) met het recht plannen.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {Function} next Volgende stap.
+   * @returns {void}
+   */
+  const requirePlans = (req, res, next) => requireUser(req, res, () => {
+    if (!Roles.can(req.user, 'plannen')) return res.status(403).json({ error: 'forbidden', message: FORBIDDEN.plannen });
+    next();
+  });
   /**
    * Middleware: alleen voor hoofdbeheerders.
    * @param {object} req Het verzoek.
@@ -868,7 +918,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const out = store.updateProfile(owner.id, input);
     if (out.error) return res.status(400).json({ error: 'invalid_profile', field: out.field, message: out.error });
     // Welke velden, nooit de waarden (persoonsgegevens horen niet in het logboek).
-    audit(req, 'profiel_gewijzigd', { velden: Object.keys(input) }, owner.id, owner.tenant_id);
+    if (out.changed.length) audit(req, 'profiel_gewijzigd', { velden: out.changed }, owner.id, owner.tenant_id);
     res.json(profileOf(out.user));
   });
 
@@ -964,7 +1014,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/api/plans', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const user = identify(req);
-    if (!user) return res.json({ items: [] });
+    if (!user || !Roles.can(user, 'plannen')) return res.json({ items: [] });
     const all = req.query.all === '1' && Roles.can(user, 'plannen.alle');
     res.json({ items: store.listPlans(req.tenantId, { ownerId: all ? null : user.id, reviewStatus: req.query.review || null }) });
   });
@@ -972,6 +1022,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/api/plans/:id', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const user = identify(req);
+    if (user && !Roles.can(user, 'plannen')) return res.status(403).json({ error: 'forbidden', message: FORBIDDEN.plannen });
     // Alleen de eigenaar (of beheerder/installateur); anders 404, zodat niet te zien is
     // of een plan van iemand anders bestaat.
     const plan = user && store.getPlan(user, req.params.id);
@@ -979,13 +1030,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json(plan);
   });
 
-  app.post('/api/plans', requireJson, requireUser, planLimiter, (req, res) => {
+  app.post('/api/plans', requireJson, requirePlans, planLimiter, (req, res) => {
     const data = req.body?.data;
     if (!validPlan(data)) return res.status(400).json({ error: 'invalid_plan', message: 'Ongeldig plan.' });
     res.status(201).json(store.savePlan(req.user, null, data, ipOf(req)));
   });
 
-  app.put('/api/plans/:id', requireJson, requireUser, planLimiter, (req, res) => {
+  app.put('/api/plans/:id', requireJson, requirePlans, planLimiter, (req, res) => {
     const data = req.body?.data;
     if (!validPlan(data)) return res.status(400).json({ error: 'invalid_plan', message: 'Ongeldig plan.' });
     const plan = store.savePlan(req.user, req.params.id, data, ipOf(req));
@@ -995,6 +1046,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.delete('/api/plans/:id', (req, res) => {
     const user = identify(req);
+    if (user && !Roles.can(user, 'plannen')) return res.status(403).json({ error: 'forbidden', message: FORBIDDEN.plannen });
     if (!user || !store.deletePlan(user, req.params.id, ipOf(req))) return res.status(404).json({ error: 'not_found', message: 'Plan niet gevonden.' });
     res.json({ ok: true });
   });
@@ -1433,8 +1485,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {void}
    */
   const requireAppAccess = (req, res, next) => {
-    identify(req);
-    if (guestsAllowed() || auth.isAuthenticated(req)) return next();
+    if (identify(req)) return next();
+    // Een sessie die identify() afwijst (uitgeschakelde organisatie) is geen gast.
+    if (guestsAllowed() && !auth.session(req)) return next();
     res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
   };
 
@@ -1616,7 +1669,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Tekening indienen zonder inloggen, plan ter controle, goedkeuren.
   registerDrawingRoutes(app, {
-    store, identify, requireUser, requireRight, requireJson, audit, remoteIp, tenantActive, publicLimiter, planLimiter, mailerFor,
+    store, identify, requireUser, requirePlans, requireRight, requireJson, audit, remoteIp, tenantActive, publicLimiter, planLimiter, mailerFor,
     settingsFor: (id) => settingsFor(id), canApprove: (user) => Roles.can(user, 'plannen.goedkeuren'),
   });
 

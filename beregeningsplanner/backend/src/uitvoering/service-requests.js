@@ -12,7 +12,7 @@
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { createMailer, validEmail } = require('../platform/mailer');
-const { inspectImage, fromBase64, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE } = require('./photos');
+const { inspectImage, fromBase64, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE, MAX_THUMB_SIDE } = require('./photos');
 const { mailBody } = require('../verkoop/quotes');
 
 const KINDS = { storing: 'Storing', onderhoud: 'Onderhoud', overig: 'Vraag of verzoek' };
@@ -241,6 +241,7 @@ function createServiceRequestStore(db, { vault, workorders, photos }) {
     if (input.thumb !== undefined && input.thumb !== null && input.thumb !== '') {
       const thumbBuffer = fromBase64(input.thumb);
       thumb = thumbBuffer && thumbBuffer.length <= MAX_THUMB_BYTES ? inspectImage(thumbBuffer) : null;
+      if (thumb && (thumb.width > MAX_THUMB_SIDE || thumb.height > MAX_THUMB_SIDE)) thumb = null;
       if (!thumb) return { error: 'invalid_photo', status: 400, message: 'Ongeldige miniatuur.' };
     }
     const id = crypto.randomUUID();
@@ -369,7 +370,12 @@ function createServiceRequestStore(db, { vault, workorders, photos }) {
         for (const photo of prepare('SELECT id FROM service_request_photos WHERE tenant_id = ? AND request_id = ? ORDER BY created_at, id').all(tenantId, requestRow.id)) {
           const image = photoFile(tenantId, requestRow.id, photo.id);
           const thumbnail = photoFile(tenantId, requestRow.id, photo.id, { thumb: true });
-          const out = photos.add(user, tenantId, workOrder.id, { image: image.body.toString('base64'), thumb: thumbnail.body.toString('base64'), kind: 'voor', caption: `Foto van de klant (melding ${requestRow.number})` });
+          const copyInput = { image: image.body.toString('base64'), kind: 'voor', caption: `Foto van de klant (melding ${requestRow.number})` };
+          // Een oudere melding kan de bronfoto als miniatuur hebben (groter dan
+          // MAX_THUMB_SIDE); dan zonder miniatuur kopiëren, zodat de foto niet wegvalt.
+          const thumbnailImage = thumbnail.body.length <= MAX_THUMB_BYTES ? inspectImage(thumbnail.body) : null;
+          if (thumbnailImage && thumbnailImage.width <= MAX_THUMB_SIDE && thumbnailImage.height <= MAX_THUMB_SIDE) copyInput.thumb = thumbnail.body.toString('base64');
+          const out = photos.add(user, tenantId, workOrder.id, copyInput);
           if (!out.error) copied++;
         }
       }

@@ -95,15 +95,30 @@
      * @returns {string} Bijv. "20261022T080000".
      */
     const stamp = (date, time) => `${date.replace(/-/g, '')}T${time.replace(':', '')}00`;
+    /**
+     * Tekst als iCalendar-waarde (RFC 5545 TEXT): backslash, komma, puntkomma en
+     * regeleinden ontsnapt, zodat tekst nooit een nieuwe regel of afspraak wordt.
+     * @param {*} value De tekst.
+     * @returns {string} De ontsnapte tekst.
+     */
+    const icsText = (value) => String(value == null ? '' : value)
+      .replace(/\\/g, '\\\\').replace(/[,;]/g, (character) => `\\${character}`)
+      .replace(/\r\n|\r|\n/g, '\\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '');
+    /**
+     * Alleen veilige tekens voor een UID (geen spaties, regeleinden of scheidingstekens).
+     * @param {*} value De tekst.
+     * @returns {string} De opgeschoonde tekst.
+     */
+    const icsToken = (value) => String(value == null ? '' : value).replace(/[^A-Za-z0-9._-]/g, '');
     const lastDate = appointment.dates[appointment.dates.length - 1];
     const allDay = !appointment.startTime;
     const lines = [
       'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//AquaTech//Afspraak//NL', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT',
-      `UID:${appointment.number}-${appointment.plannedDate}@aquatech`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
+      `UID:${icsToken(appointment.number)}-${icsToken(appointment.plannedDate)}@aquatech`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
       allDay ? `DTSTART;VALUE=DATE:${appointment.plannedDate.replace(/-/g, '')}` : `DTSTART;TZID=Europe/Amsterdam:${stamp(appointment.plannedDate, appointment.startTime)}`,
       allDay ? `DTEND;VALUE=DATE:${WorkOrderCore.addDays(lastDate, 1).replace(/-/g, '')}` : `DTEND;TZID=Europe/Amsterdam:${stamp(lastDate, appointment.endTime || appointment.startTime)}`,
-      `SUMMARY:${(profile.companyName ? `${profile.companyName}: ` : '')}${appointment.title}`.replace(/[,;]/g, (character) => `\\${character}`),
-      appointment.address ? `LOCATION:${appointment.address.replace(/\n/g, ', ').replace(/[,;]/g, (character) => `\\${character}`)}` : '',
+      `SUMMARY:${icsText(`${profile.companyName ? `${profile.companyName}: ` : ''}${appointment.title}`)}`,
+      appointment.address ? `LOCATION:${icsText(String(appointment.address).replace(/\r?\n/g, ', '))}` : '',
       'END:VEVENT', 'END:VCALENDAR',
     ].filter(Boolean);
     return new Blob([lines.join('\r\n')], { type: 'text/calendar' });

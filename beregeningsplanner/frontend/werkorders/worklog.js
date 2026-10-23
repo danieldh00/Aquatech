@@ -29,15 +29,18 @@
     opts: {}, wo: null, log: null, tab: 'hours', edit: null, flushing: false,
     // Regels in de wachtrij van de service worker: { woId, type, body, queueId }.
     swPending: [],
+    owner: null, // wie er nu is ingelogd (currentOwner), voor de eigen wachtrij
   };
   const Off = () => (window.AquatechOffline && window.AquatechOffline.supported ? window.AquatechOffline : null);
   const toast = (msg, err) => (state.opts.toast ? state.opts.toast(msg, err) : null);
 
   // ---------- Server ----------
   class Offline extends Error {}
-  async function call(url, { method = 'GET', body, offline } = {}) {
+  async function call(url, { method = 'GET', body, offline, owner } = {}) {
     let res;
     const extra = offline && Off() ? Off().headers(offline) : {};
+    // Uit de wachtrij: van wie de regel is (de server weigert hem onder een ander account).
+    if (owner) extra['X-Aquatech-Owner'] = owner;
     try {
       res = await fetch(`../${url}`, {
         method, cache: 'no-store',
@@ -59,7 +62,27 @@
   function writeQueue(list) {
     try { localStorage.setItem(queueKey(), JSON.stringify(list)); return true; } catch (e) { return false; }
   }
-  const pendingFor = (woId, type) => readQueue().concat(state.swPending).filter((x) => x.woId === woId && x.type === type);
+  /**
+   * Wie er nu is ingelogd, in de vorm van de offline wachtrij (shared/common.js ownerOf).
+   * @returns {Promise<string|null>} De eigenaar, of null als dat niet bekend is.
+   */
+  async function currentOwner() {
+    const common = window.AquatechCommon;
+    return common ? common.ownerOf(await common.getJson('api/me')) : null;
+  }
+  /**
+   * De wachtende regels van wie nu is ingelogd (state.owner); regels van een
+   * ander account op dit toestel blijven liggen en worden niet getoond.
+   * @returns {object[]} De eigen regels uit de wachtrij.
+   */
+  const ownQueue = () => readQueue().filter((item) => item.owner && item.owner === state.owner);
+  /**
+   * De eigen wachtende regels (lokaal en in de service worker) van één werkorder en soort.
+   * @param {string} woId Id van de werkorder.
+   * @param {string} type 'hours' of 'materials'.
+   * @returns {object[]} De wachtende regels.
+   */
+  const pendingFor = (woId, type) => ownQueue().concat(state.swPending).filter((x) => x.woId === woId && x.type === type);
 
   // Wachtende regels van deze werkorder uit de wachtrij van de service worker.
   async function loadSwPending(wo) {
@@ -80,7 +103,11 @@
     });
   }
 
-  /** Wachtende regels versturen; stopt bij de eerste netwerkfout. */
+  /**
+   * Wachtende regels versturen; stopt bij de eerste netwerkfout. Alleen regels
+   * van wie nu is ingelogd; die van een ander account blijven liggen tot die
+   * weer inlogt. Een regel zonder eigenaar (oude versie) wordt weggegooid.
+   */
   async function flush() {
     if (state.flushing) return;
     const list = readQueue();
@@ -88,12 +115,18 @@
     state.flushing = true;
     let sent = 0;
     try {
+      const owner = await currentOwner();
+      state.owner = owner;
+      if (!owner) return;
       for (const item of list) {
+        if (item.owner && item.owner !== owner) continue;
         try {
-          await call(`api/workorders/${encodeURIComponent(item.woId)}/${item.type}`, { method: 'POST', body: item.body });
+          if (!item.owner) throw new Error('van een eerdere versie zonder eigenaar');
+          await call(`api/workorders/${encodeURIComponent(item.woId)}/${item.type}`, { method: 'POST', body: item.body, owner: item.owner });
           sent++;
         } catch (e) {
-          if (e instanceof Offline) break;
+          // Geen verbinding, uitgelogd of intussen een ander account: de regel blijft liggen.
+          if (e instanceof Offline || e.status === 401 || e.code === 'owner_mismatch') break;
           toast(`Regel van ${shortDate(item.body.workDate || item.body.usedOn)} niet geboekt: ${e.message}`, true);
         }
         writeQueue(readQueue().filter((x) => x.body.clientId !== item.body.clientId));
@@ -111,6 +144,9 @@
   // ---------- Laden en tekenen ----------
   async function load() {
     const wo = state.wo;
+    // Eerst de eigenaar: de service worker werkt zijn identiteit bij via api/me
+    // en filtert de wachtrij daarop.
+    await currentOwner().then((owner) => { state.owner = owner; }, () => {});
     await loadSwPending(wo).catch(() => {});
     try {
       const out = await call(`api/workorders/${encodeURIComponent(wo.id)}/worklog`);
@@ -255,7 +291,7 @@
     const card = $('#wl-card');
     if (!card || !state.wo || !state.log) return;
     // Wat in de wachtrij van de service worker staat, toont het knopje rechtsonder.
-    const queue = readQueue().filter((x) => x.woId === state.wo.id).length;
+    const queue = ownQueue().filter((x) => x.woId === state.wo.id).length;
     const s = summary();
     $('#wl-sum').textContent = s.t.minutes ? `${L.hoursText(s.t.minutes)} uur geboekt` : '';
     const body = $('#wl-body');
@@ -334,7 +370,9 @@
       render();
     } catch (e) {
       if (!(e instanceof Offline)) { toast(`Boeken mislukt: ${e.message}`, true); return; }
-      if (!writeQueue([...readQueue(), { woId: wo.id, type, body, at: new Date().toISOString() }])) {
+      const owner = await currentOwner();
+      state.owner = owner || state.owner;
+      if (!owner || !writeQueue([...readQueue(), { woId: wo.id, type, body, owner, at: new Date().toISOString() }])) {
         toast('Geen verbinding en bewaren op dit toestel lukt niet.', true);
         return;
       }
@@ -490,7 +528,7 @@
     return { hours: out.hours.length, materials: out.materials.length };
   }
 
-  window.WorkLog = { open, addSheets, exportPeriod, flush, pending: () => readQueue().length };
+  window.WorkLog = { open, addSheets, exportPeriod, flush, pending: () => ownQueue().length };
   // Bij het laden van de pagina: wat nog op dit toestel wacht alsnog versturen.
   if (navigator.onLine !== false) setTimeout(flush, 1500);
 })();

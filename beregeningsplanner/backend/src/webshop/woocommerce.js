@@ -9,7 +9,9 @@
 // prijs en voorraad uit Aquatech naar de webshop (instelling shopSource.push,
 // zie shop.js syncStock).
 
+const net = require('net');
 const { publicAddress } = require('../beveiliging/netguard');
+const { pinnedFetch, readLimited } = require('../beveiliging/pinned-fetch');
 
 const PER_PAGE = 100;
 const MAX_PAGES = 50;
@@ -94,8 +96,14 @@ async function getJson(url, headers, fetchImpl, { method = 'GET', body } = {}) {
   }
   if (res.status === 404) throw new SourceError('not_found', 'Geen WooCommerce-API gevonden op dit adres.');
   if (!res.ok) throw new SourceError('bad_status', `De webshop antwoordt met status ${res.status}.`);
-  const text = await res.text();
-  if (text.length > MAX_BYTES) throw new SourceError('too_large', 'Antwoord van de webshop is te groot.');
+  let text;
+  try {
+    // Met een grens in bytes ná het uitpakken: lezen stopt zodra het te veel wordt.
+    text = await readLimited(res, MAX_BYTES);
+  } catch (error) {
+    if (error.code === 'too_large') throw new SourceError('too_large', 'Antwoord van de webshop is te groot.');
+    throw new SourceError('unreachable', 'De webshop brak de verbinding af.');
+  }
   try {
     return { body: JSON.parse(text), totalPages: Number(res.headers.get('x-wp-totalpages')) || 0 };
   } catch (error) {
@@ -183,23 +191,27 @@ function fromRestV3(product, shop) {
 }
 
 /**
- * Controleert het webadres en zoekt de naam op (geen intern adres).
+ * Controleert het webadres en zoekt de naam op (geen intern adres). De
+ * verbinding gaat daarna naar precies dat adres (pinned-fetch.js), zodat een
+ * tweede DNS-antwoord niet alsnog naar het eigen netwerk wijst.
  * @param {object} shop De koppelinstelling (url).
- * @param {{ allowInsecure: boolean, resolveHost: Function }} options Onveilige adressen toestaan en de functie die de naam opzoekt.
- * @returns {Promise<string>} Het genormaliseerde adres.
+ * @param {{ allowInsecure: boolean, resolveHost: Function, fetchImpl?: Function|null }} options Onveilige adressen toestaan, de functie die de naam opzoekt en een eigen fetch (tests).
+ * @returns {Promise<{ base: string, send: Function }>} Het genormaliseerde adres en de fetch-functie voor deze webshop.
  */
-async function checkedBase(shop, { allowInsecure, resolveHost }) {
+async function connectionFor(shop, { allowInsecure, resolveHost, fetchImpl = null }) {
   const base = normalizeBaseUrl(shop.url, { allowInsecure });
+  let address = null;
   if (!allowInsecure) {
     try {
-      await resolveHost(new URL(base).hostname);
+      address = await resolveHost(new URL(base).hostname);
     } catch (error) {
       throw error.code === 'private_host'
         ? new SourceError('invalid_url', 'Dit is geen openbaar webadres.', 400)
         : new SourceError('unreachable', 'De webshop is niet gevonden: controleer het webadres.');
     }
   }
-  return base;
+  const send = fetchImpl || (net.isIP(String(address || '')) ? pinnedFetch(address) : fetch);
+  return { base, send };
 }
 
 /**
@@ -218,8 +230,8 @@ function restAuth(shop) {
  * @param {object} [options] fetchImpl, allowInsecure, resolveHost en ids (alleen deze producten, REST v3; bijv. vlak voor het terugschrijven).
  * @returns {Promise<object[]>} De producten.
  */
-async function fetchProducts(shop, { fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress, ids = null } = {}) {
-  const base = await checkedBase(shop, { allowInsecure, resolveHost });
+async function fetchProducts(shop, { fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress, ids = null } = {}) {
+  const { base, send } = await connectionFor(shop, { allowInsecure, resolveHost, fetchImpl });
   const rest = shop.mode === 'rest';
   if (ids && !rest) throw new SourceError('rest_required', 'Terugschrijven naar de webshop kan alleen via de REST API.', 400);
   const headers = rest ? restAuth(shop) : {};
@@ -231,7 +243,7 @@ async function fetchProducts(shop, { fetchImpl = fetch, allowInsecure = insecure
       const part = ids.slice(i, i + PER_PAGE).map(String).filter((id) => /^\d{1,20}$/.test(id));
       if (!part.length) continue;
       const query = new URLSearchParams({ per_page: String(PER_PAGE), include: part.join(',') });
-      const { body } = await getJson(`${base}${apiPath}?${query}`, headers, fetchImpl);
+      const { body } = await getJson(`${base}${apiPath}?${query}`, headers, send);
       if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen productlijst).');
       products.push(...body.map((product) => convert(product, shop)));
     }
@@ -240,7 +252,7 @@ async function fetchProducts(shop, { fetchImpl = fetch, allowInsecure = insecure
   for (let page = 1; page <= MAX_PAGES; page++) {
     const query = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page) });
     if (rest) query.set('status', 'publish');
-    const { body, totalPages } = await getJson(`${base}${apiPath}?${query}`, headers, fetchImpl);
+    const { body, totalPages } = await getJson(`${base}${apiPath}?${query}`, headers, send);
     if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen productlijst).');
     products.push(...body.map((product) => convert(product, shop)));
     if (body.length < PER_PAGE || (totalPages && page >= totalPages)) break;
@@ -267,9 +279,9 @@ function shopPrice(priceExcl, vatRate, shop) {
  * @param {object} [options] fetchImpl, allowInsecure en resolveHost.
  * @returns {Promise<{ id: string, ok: boolean, error?: string }[]>} Uitkomst per product.
  */
-async function updateProducts(shop, updates, { fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
+async function updateProducts(shop, updates, { fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
   if (shop.mode !== 'rest') throw new SourceError('rest_required', 'Terugschrijven naar de webshop kan alleen via de REST API.', 400);
-  const base = await checkedBase(shop, { allowInsecure, resolveHost });
+  const { base, send } = await connectionFor(shop, { allowInsecure, resolveHost, fetchImpl });
   const headers = restAuth(shop);
   const out = [];
   for (let i = 0; i < updates.length; i += PER_PAGE) {
@@ -279,7 +291,7 @@ async function updateProducts(shop, updates, { fetchImpl = fetch, allowInsecure 
       if (update.stockQty != null) { change.manage_stock = true; change.stock_quantity = Math.max(0, Math.floor(update.stockQty)); }
       return change;
     });
-    const { body } = await getJson(`${base}/wp-json/wc/v3/products/batch`, headers, fetchImpl, { method: 'POST', body: { update: part } });
+    const { body } = await getJson(`${base}/wp-json/wc/v3/products/batch`, headers, send, { method: 'POST', body: { update: part } });
     const done = new Map((Array.isArray(body && body.update) ? body.update : []).map((product) => [String(product.id), product]));
     for (const change of part) {
       const result = done.get(String(change.id));
@@ -296,15 +308,15 @@ async function updateProducts(shop, updates, { fetchImpl = fetch, allowInsecure 
  * @param {object} [options] status, after (ISO-tijd), fetchImpl, allowInsecure, resolveHost en maxPages.
  * @returns {Promise<object[]>} De bestellingen zoals WooCommerce ze stuurt.
  */
-async function fetchOrders(shop, { status = 'completed', after = '', fetchImpl = fetch, allowInsecure = insecureAllowed(), resolveHost = publicAddress, maxPages = 10 } = {}) {
+async function fetchOrders(shop, { status = 'completed', after = '', fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress, maxPages = 10 } = {}) {
   if (shop.mode !== 'rest') throw new SourceError('rest_required', 'Bestellingen ophalen kan alleen via de REST API (met API-sleutels).', 400);
-  const base = await checkedBase(shop, { allowInsecure, resolveHost });
+  const { base, send } = await connectionFor(shop, { allowInsecure, resolveHost, fetchImpl });
   const headers = restAuth(shop);
   const orders = [];
   for (let page = 1; page <= maxPages; page++) {
     const query = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page), status, orderby: 'modified', order: 'asc', dates_are_gmt: 'true' });
     if (after) query.set('modified_after', after);
-    const { body, totalPages } = await getJson(`${base}/wp-json/wc/v3/orders?${query}`, headers, fetchImpl);
+    const { body, totalPages } = await getJson(`${base}/wp-json/wc/v3/orders?${query}`, headers, send);
     if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen bestellingen).');
     orders.push(...body);
     if (body.length < PER_PAGE || (totalPages && page >= totalPages)) break;

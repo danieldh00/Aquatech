@@ -793,12 +793,19 @@
       if (S < 8) step = 10; else if (S < 20) step = 5; else if (S > 120) step = 0.5;
       const tl = this.toWorld(0, 0), br = this.toWorld(w, h);
       ctx.lineWidth = 1;
-      for (let x = Math.floor(tl.x / step) * step; x <= br.x; x += step) {
+      // Met een telling in plaats van x += step: bij heel grote coördinaten
+      // verandert x anders niet meer en blijft de lus eindeloos doorgaan.
+      const firstX = Math.floor(tl.x / step), firstY = Math.floor(tl.y / step);
+      const countX = Math.floor(br.x / step) - firstX, countY = Math.floor(br.y / step) - firstY;
+      if (!Number.isFinite(countX) || !Number.isFinite(countY) || countX > 4000 || countY > 4000) return;
+      for (let i = 0; i <= countX; i++) {
+        const x = (firstX + i) * step;
         const sx = Math.round((x - this.view.x) * S) + 0.5;
         ctx.strokeStyle = Math.abs(x % (step * 5)) < 1e-6 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.05)';
         ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, h); ctx.stroke();
       }
-      for (let y = Math.floor(tl.y / step) * step; y <= br.y; y += step) {
+      for (let j = 0; j <= countY; j++) {
+        const y = (firstY + j) * step;
         const sy = Math.round((y - this.view.y) * S) + 0.5;
         ctx.strokeStyle = Math.abs(y % (step * 5)) < 1e-6 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.05)';
         ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(w, sy); ctx.stroke();

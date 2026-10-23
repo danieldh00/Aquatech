@@ -107,11 +107,27 @@ const rel = (url) => {
 };
 const json = (body, status = 200, extra = {}) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
 const noStore = (res) => /no-store/i.test(res.headers.get('Cache-Control') || '');
-async function stamp(res) {
+/**
+ * Maakt een kopie van een antwoord om te bewaren, met de tijd en de eigenaar
+ * als kop. ownedHit geeft het later alleen aan die eigenaar terug (ook als het
+ * wissen bij een gebruikerswissel en een laat cache.put elkaar kruisen).
+ * @param {Response} res Het antwoord van de server.
+ * @param {string|null} owner De eigenaar (`<user>@<tenant>`).
+ * @returns {Promise<Response>} Het te bewaren antwoord.
+ */
+async function stamp(res, owner) {
   const headers = new Headers(res.headers);
   headers.set(H.cachedAt, new Date().toISOString());
+  headers.set(H.cacheOwner, owner || '');
   return new Response(await res.clone().blob(), { status: res.status, statusText: res.statusText, headers });
 }
+/**
+ * Geeft een bewaard antwoord alleen terug als het van deze eigenaar is.
+ * @param {Response|undefined} hit Het antwoord uit de cache.
+ * @param {string|null} owner De huidige eigenaar.
+ * @returns {Response|null} Het antwoord, of null als het van een ander (of niemand) is.
+ */
+const ownedHit = (hit, owner) => (hit && owner && hit.headers.get(H.cacheOwner) === owner ? hit : null);
 async function broadcast(msg) {
   const list = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
   for (const c of list) c.postMessage(msg);
@@ -179,7 +195,8 @@ self.addEventListener('fetch', (e) => {
       return;
     }
     if (path === 'api/auth/logout' && req.method === 'POST') { e.respondWith(logout(req)); return; }
-    if (req.headers.get(H.queue)) e.respondWith(write(req, path));
+    // Alleen de bekende werkorder-wijzigingen mogen in de wachtrij (offline-core QUEUEABLE).
+    if (req.headers.get(H.queue) && Core.queueable(path.split('?')[0], req.method)) e.respondWith(write(req, path));
     return;
   }
   if (req.method !== 'GET') return;
@@ -245,7 +262,7 @@ async function me(req) {
     await setIdentity(next);
     if (next.allowed) {
       const cache = await caches.open(DATA);
-      await cache.put(req.url, await stamp(res));
+      await cache.put(req.url, await stamp(res, next.owner));
       if (await getMeta('precached') !== VERSION) precache();
     }
     await setMeta('needsLogin', undefined);
@@ -260,11 +277,14 @@ async function fromCache(req) {
   const id = await currentIdentity();
   if (!id.allowed) return null;
   const cache = await caches.open(DATA);
-  return (await cache.match(req.url)) || null;
+  return ownedHit(await cache.match(req.url), id.owner);
 }
 
 // Gegevens: eerst de server, zonder verbinding (of server onbereikbaar) de cache.
+// Een antwoord gaat alleen in de cache als nog dezelfde gebruiker ingelogd is
+// als bij het versturen (een laat antwoord van de vorige gebruiker niet).
 async function data(req) {
+  const owner = (await currentIdentity()).owner;
   try {
     const res = await fetch(req);
     if (Core.unreachable(res.status)) {
@@ -272,9 +292,10 @@ async function data(req) {
       if (hit) return hit;
     }
     if (res.status === 401) await setIdentity({ owner: null, allowed: false });
-    if (res.ok && (await currentIdentity()).allowed) {
+    const now = await currentIdentity();
+    if (res.ok && now.allowed && owner && now.owner === owner) {
       const cache = await caches.open(DATA);
-      await cache.put(req.url, await stamp(res));
+      await cache.put(req.url, await stamp(res, owner));
     }
     return res;
   } catch (err) {
@@ -352,7 +373,8 @@ async function write(req, path) {
 }
 
 async function cachedJson(url) {
-  const hit = await (await caches.open(DATA)).match(new URL(url, self.registration.scope).href);
+  const id = await currentIdentity();
+  const hit = ownedHit(await (await caches.open(DATA)).match(new URL(url, self.registration.scope).href), id.owner);
   return hit ? hit.clone().json().catch(() => null) : null;
 }
 
@@ -375,7 +397,7 @@ async function autoMerge(item) {
 async function patchCache(item) {
   const cache = await caches.open(DATA);
   const url = new URL(item.url, self.registration.scope).href;
-  const hit = await cache.match(url);
+  const hit = ownedHit(await cache.match(url), item.owner);
   if (!hit) return;
   const resource = await hit.clone().json().catch(() => null);
   const next = Core.applyPatch(resource, item.body);
@@ -384,9 +406,10 @@ async function patchCache(item) {
 }
 
 async function keepResponse(item, res) {
-  if (!(await currentIdentity()).allowed) return;
+  const now = await currentIdentity();
+  if (!now.allowed || now.owner !== item.owner) return;
   const cache = await caches.open(DATA);
-  await cache.put(new URL(item.url, self.registration.scope).href, await stamp(res));
+  await cache.put(new URL(item.url, self.registration.scope).href, await stamp(res, item.owner));
 }
 
 let flushing = null;
@@ -406,7 +429,8 @@ async function doFlush() {
     inFlight.add(item.id);
     let res;
     try {
-      res = await send(item, { [H.queued]: '1' });
+      // Met de eigenaar: de server voert hem niet uit onder iemand anders die nu is ingelogd.
+      res = await send(item, { [H.queued]: '1', [H.owner]: item.owner });
     } catch (err) {
       inFlight.delete(item.id);
       break; // nog steeds geen verbinding

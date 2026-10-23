@@ -17,6 +17,44 @@ const { isPublicAddress } = require('./netguard');
  */
 const plainIp = (raw) => (raw.startsWith('::ffff:') && net.isIPv4(raw.slice(7)) ? raw.slice(7) : raw);
 
+// Optioneel: TRUSTED_PROXIES (komma's; IP-adressen of CIDR, bijv.
+// "172.18.0.0/16,127.0.0.1"). Dan worden de doorgegeven koppen alleen van die
+// adressen geloofd; zonder de variabele van elk niet-openbaar adres.
+let trustedProxies = { source: null, list: null };
+/**
+ * De lijst met vertrouwde proxy's uit TRUSTED_PROXIES (opnieuw gelezen als de variabele verandert).
+ * @returns {net.BlockList|null} De adressen, of null als de variabele leeg is.
+ */
+function trustedProxyList() {
+  const source = String(process.env.TRUSTED_PROXIES || '').trim();
+  if (trustedProxies.source === source) return trustedProxies.list;
+  let list = null;
+  for (const entry of source.split(',').map((part) => part.trim()).filter(Boolean)) {
+    const [address, prefix] = entry.split('/');
+    const family = net.isIP(address);
+    if (!family) continue;
+    list = list || new net.BlockList();
+    const type = family === 6 ? 'ipv6' : 'ipv4';
+    try {
+      if (prefix === undefined) list.addAddress(address, type);
+      else list.addSubnet(address, Number(prefix), type);
+    } catch (error) { /* ongeldige regel overslaan */ }
+  }
+  trustedProxies = { source, list };
+  return list;
+}
+
+/**
+ * Of de koppen met het adres van de bezoeker van deze socket geloofd mogen worden.
+ * @param {string} socketIp Adres van de directe verbinding.
+ * @returns {boolean} true bij een vertrouwde proxy.
+ */
+function trustedProxy(socketIp) {
+  const list = trustedProxyList();
+  if (!list) return !isPublicAddress(socketIp);
+  return list.check(socketIp, net.isIP(socketIp) === 6 ? 'ipv6' : 'ipv4');
+}
+
 /**
  * Het IP-adres van de bezoeker. Komt het verzoek van een proxy in het eigen
  * netwerk (de Cloudflare-tunnel draait als container naast de app), dan is het
@@ -32,7 +70,7 @@ function remoteIp(req) {
   if (req._remoteIp !== undefined) return req._remoteIp;
   const socketIp = plainIp(req.socket?.remoteAddress || '');
   let ip = socketIp;
-  if (socketIp && !isPublicAddress(socketIp)) {
+  if (socketIp && trustedProxy(socketIp)) {
     const cloudflareIp = String(req.headers?.['cf-connecting-ip'] || '').trim();
     const forwardedIp = String(req.headers?.['x-forwarded-for'] || '').split(',').map((part) => part.trim()).filter(Boolean).pop() || '';
     const proxiedIp = net.isIP(cloudflareIp) ? cloudflareIp : net.isIP(forwardedIp) ? forwardedIp : '';
@@ -94,7 +132,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * Uitloggen, een nieuw wachtwoord, uitschakelen of een nieuwe toegangscode
  * beëindigt een sessie dus meteen. Een sessie verloopt na idleDays() zonder
  * gebruik en hoe dan ook na maxDays().
- * @param {object} options secret (geheim voor handtekeningen), store, tenantId (hoofdtenant), getAccessCode, idleDays en maxDays (functies, dagen).
+ * @param {object} options secret (geheim voor handtekeningen), store, tenantId (hoofdtenant), getAccessCode, idleDays en maxDays (functies: id van de tenant van de sessie → dagen).
  * @returns {object} De functies voor sessies, cookies, gasten en de toegangscode.
  */
 function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 14, maxDays = () => 30 }) {
@@ -130,7 +168,7 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
     // Een account-sessie hoort bij de eigen tenant van het account (multitenant).
     const sessionTenant = subject === 'code' ? tenantId : store.getUser(userId).tenant_id;
     return store.createSession({
-      tenantId: sessionTenant, userId, via: subject === 'code' ? 'code' : 'user', fingerprint, maxMs: maxDays() * DAY_MS,
+      tenantId: sessionTenant, userId, via: subject === 'code' ? 'code' : 'user', fingerprint, maxMs: maxDays(sessionTenant) * DAY_MS,
       ip: req ? remoteIp(req) : '', userAgent: req?.headers?.['user-agent'] || '',
     });
   }
@@ -150,8 +188,8 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
     if (row.via === 'code' && row.tenant_id !== tenantId) return null;
     const currentTime = Date.now();
     const expired = Date.parse(row.expires_at) <= currentTime
-      || Date.parse(row.created_at) + maxDays() * DAY_MS <= currentTime
-      || Date.parse(row.last_seen_at) + idleDays() * DAY_MS <= currentTime;
+      || Date.parse(row.created_at) + maxDays(row.tenant_id) * DAY_MS <= currentTime
+      || Date.parse(row.last_seen_at) + idleDays(row.tenant_id) * DAY_MS <= currentTime;
     if (expired) { store.dropSession(row); return null; }
     if (row.via === 'code') {
       if (!getAccessCode() || !safeEqual(row.fingerprint, codeFingerprint())) { store.dropSession(row); return null; }
@@ -303,7 +341,8 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
     const old = parseCookies(req.headers.cookie)[COOKIE_NAME];
     if (old) { store.deleteSession(old); assetSessions.delete(assetKey(old)); }
     req._session = undefined;
-    appendCookie(res, cookieAttrs(req, COOKIE_NAME, issue(subject, req), maxDays() * DAY_MS));
+    const sessionTenant = subject === 'code' ? tenantId : store.getUser(subject)?.tenant_id || tenantId;
+    appendCookie(res, cookieAttrs(req, COOKIE_NAME, issue(subject, req), maxDays(sessionTenant) * DAY_MS));
   }
 
   /**

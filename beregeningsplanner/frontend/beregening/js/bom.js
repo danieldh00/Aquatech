@@ -218,10 +218,17 @@
     const lvl = C.levels[state.settings.level] || C.levels.expert;
     const totalArea = state.areas.filter((a) => a.type === 'lawn').reduce((s, a) => s + G.area(a.pts), 0);
     const meta = state.meta || {};
+    /**
+     * Een veld uit het project altijd als tekst: een object (bijv. { formula })
+     * zou ExcelJS als formule in het werkblad zetten.
+     * @param {*} value De waarde uit state.meta.
+     * @returns {string} De tekst (leeg als het geen tekst of getal is).
+     */
+    const metaText = (value) => (typeof value === 'string' || typeof value === 'number' ? String(value) : '');
     [
-      ['Beregeningsplan', meta.name || 'Nieuw project'],
-      ['Klant', meta.customer || ''],
-      ['Adres', meta.address || ''],
+      ['Beregeningsplan', metaText(meta.name) || 'Nieuw project'],
+      ['Klant', metaText(meta.customer)],
+      ['Adres', metaText(meta.address)],
       ['Datum', fmtDate(new Date())],
       ['Uitvoeringsniveau', `${lvl.label} – ${lvl.desc}`],
       [],

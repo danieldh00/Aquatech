@@ -455,6 +455,11 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   afhandelen; server: `Idempotency-Key` werkt generiek (`idempotency.js`),
   conflictcontrole met `ifBaseOf(req)` → 409 `conflict`. Nieuwe GET die offline
   moet werken: in `CACHEABLE`. Nieuwe pagina offline: `PRECACHE_PAGES` in sw.js.
+  Nieuwe schrijfactie in de wachtrij: ook in `QUEUEABLE` (offline-core). Een
+  verzonden item draagt `X-Aquatech-Owner` (`<user>@<tenant>`, `AquatechCommon.ownerOf`);
+  de server weigert een andere eigenaar (409 `owner_mismatch`, 0.69.0).
+  Lokaal bewaarde gegevens (planner-concept, terugval-wachtrij) bewaren hun
+  eigenaar en worden alleen aan die gebruiker getoond/verstuurd.
 - Health: `GET /api/health` (versie uit `package.json`).
 
 ## Checklist voor elke nieuwe feature (zonder dat Daniël erom vraagt)

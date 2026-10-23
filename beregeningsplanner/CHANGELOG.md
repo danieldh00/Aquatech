@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.69.0
+
+Beveiligingsronde naar aanleiding van een geautomatiseerde code-analyse (24
+bevindingen opgelost; de PDF-decoder van pdf.js in `vendor/` blijft zoals hij is).
+
+- **Offline wachtrij**: een bewaarde wijziging draagt `X-Aquatech-Owner`
+  (`<gebruiker>@<omgeving>`); de server voert hem niet uit als er intussen
+  iemand anders is ingelogd (409 `owner_mismatch`). Alleen de bekende
+  werkorder-wijzigingen mogen nog in de wachtrij (`QUEUEABLE` in
+  offline-core). Een laat antwoord van de vorige gebruiker komt niet meer in
+  de offline cache. De terugval-wachtrij van de urenregistratie bewaart de
+  eigenaar per regel; regels zonder eigenaar of van een ander account worden
+  niet onder de huidige gebruiker geboekt.
+- **Planner**: het lokale concept bewaart van wie het is en wordt alleen aan
+  die gebruiker getoond (ook op het dashboard); uitloggen wist het. Plangegevens
+  uit bestand, server of tekening worden opgeschoond (`sanitizePlan`: tekst
+  blijft tekst, getallen binnen bereik, coördinaten binnen 5 km, elke zone één
+  keer) en waarden in invoervelden ge-escaped. Rasterlijnen met een telling
+  (geen eindeloze lus bij grote coördinaten), meetraster van automatisch
+  plaatsen hoogstens 250.000 cellen, projectvelden altijd als tekst in Excel.
+- **Plannen** vereisen het recht `plannen` (lijst, openen, opslaan,
+  verwijderen, ter controle aanbieden, klantportaal).
+- **Uitgeschakelde organisatie**: ook accounts in haar testomgevingen worden
+  geweigerd, en de AI-route accepteert geen afgewezen sessie meer.
+- **Inloggen**: een hoofdbeheerder telt mislukte pogingen in de hoofdtenant,
+  welke organisatiecode er ook staat; de toegangscode heeft een totaalgrens
+  (30 per kwartier); optioneel `TRUSTED_PROXIES` voor de doorgegeven IP-kop.
+- **Sessieduur** (`sessionIdleDays`/`sessionMaxDays`) volgt de eigen
+  organisatie van het account in plaats van de hoofdtenant.
+- **Foto's**: een klant haalt een losse foto alleen op als de offerte niet
+  verwijderd en geen concept is (zelfde regel als het dossier); miniaturen
+  hoogstens 1024 px (werkorder en melding).
+- **Mail**: zonder SSL/TLS is STARTTLS nu altijd verplicht (`requireTLS`).
+- **Webshop**: verbinding naar precies het goedgekeurde IP-adres
+  (`beveiliging/pinned-fetch.js`, hostnaam blijft voor certificaat en SNI);
+  antwoorden worden met een grens na uitpakken gelezen.
+- **Afspraak (.ics)**: tekst volgens RFC 5545 ontsnapt; werkordertitel op één regel.
+- **PDF**: afbreken van lange woorden lineair in plaats van kwadratisch.
+- **Back-up/overstap**: kopiëren in porties na de laatste sleutel (keyset)
+  in plaats van OFFSET; een profiel opslaan zonder wijziging schrijft geen
+  auditregel meer.
+
 ## 0.68.6
 
 Opschoonronde frontend, deel 2 (geen functionele wijziging): duidelijke namen

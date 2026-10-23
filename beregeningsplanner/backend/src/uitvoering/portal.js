@@ -16,6 +16,7 @@ const { FRONTEND_DIR } = require('../paths');
 const { forCustomer } = require('./service-requests');
 
 const Core = require(path.join(FRONTEND_DIR, 'werkorders', 'workorder-core.js'));
+const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 
 /**
  * Maakt de opslag voor het klantportaal.
@@ -146,7 +147,8 @@ function registerPortalRoutes(app, ctx) {
     res.json({
       user: { displayName: user.display_name || user.displayName || '', kind: user.kind, phone: user.phone || '' },
       contact: contactOf(settingsOf(req).get('quoteProfile')),
-      plans: store.listPlans(tenantId, { ownerId: user.id }),
+      // Plannen alleen met het recht plannen (een organisatie kan het de klant afnemen).
+      plans: Roles.can(user, 'plannen') ? store.listPlans(tenantId, { ownerId: user.id }) : [],
       quotes: quotes.list(tenantId, { customerId: user.id }),
       workorders: workOrdersOf(req),
       // Eigen meldingen (storing, onderhoud), zie service-requests.js.
