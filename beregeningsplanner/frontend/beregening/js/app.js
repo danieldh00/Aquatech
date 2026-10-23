@@ -49,6 +49,87 @@
     };
   }
 
+  // Een plan komt ook uit een bestand, de server of een ingediende tekening:
+  // nooit zomaar vertrouwen. Tekst blijft tekst, getallen zijn eindige getallen
+  // binnen een redelijk bereik, en coördinaten liggen binnen een paar
+  // kilometer (anders lopen raster en berekeningen vast).
+  const MAX_COORDINATE_M = 5000;
+
+  /**
+   * Een eindig getal binnen [min, max], anders de standaardwaarde.
+   * @param {*} value De invoer.
+   * @param {number} min Ondergrens.
+   * @param {number} max Bovengrens.
+   * @param {*} fallback Waarde bij ongeldige invoer.
+   * @returns {*} Het getal, of fallback.
+   */
+  function finiteIn(value, min, max, fallback) {
+    const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+    return Number.isFinite(number) && number >= min && number <= max ? number : fallback;
+  }
+
+  /**
+   * Of een punt eindige coördinaten binnen het toegestane bereik heeft.
+   * @param {*} point Het punt ({ x, y }).
+   * @returns {boolean} true als het punt bruikbaar is.
+   */
+  const validPoint = (point) => Boolean(point) && finiteIn(point.x, -MAX_COORDINATE_M, MAX_COORDINATE_M, null) !== null
+    && finiteIn(point.y, -MAX_COORDINATE_M, MAX_COORDINATE_M, null) !== null;
+
+  /**
+   * Schoont plangegevens op vóór gebruik: tekstvelden in meta als tekst,
+   * getallen in de instellingen en de ondergrond binnen hun bereik, geen
+   * onderdelen met ongeldige coördinaten en elke zone maar één keer.
+   * @param {object} data De plangegevens (bestand, server of lokaal concept).
+   * @returns {object} Een opgeschoonde kopie.
+   */
+  function sanitizePlan(data) {
+    const base = emptyState();
+    const source = data && typeof data === 'object' ? data : {};
+    const meta = { ...base.meta };
+    for (const [key, value] of Object.entries(source.meta && typeof source.meta === 'object' ? source.meta : {})) {
+      if (typeof value === 'string') meta[key] = value.slice(0, 500);
+      else if (typeof value === 'number' || typeof value === 'boolean') meta[key] = value;
+    }
+    const settings = { ...base.settings, ...(source.settings && typeof source.settings === 'object' ? source.settings : {}) };
+    settings.pressure = finiteIn(settings.pressure, 0.5, 15, base.settings.pressure);
+    settings.flow = finiteIn(settings.flow, 0.1, 50, base.settings.flow);
+    settings.targetMm = finiteIn(settings.targetMm, 1, 200, base.settings.targetMm);
+    settings.sessions = finiteIn(settings.sessions, 1, 21, base.settings.sessions);
+    settings.radius = finiteIn(settings.radius, 0.5, 40, null);
+    if (settings.wandTol !== undefined) settings.wandTol = finiteIn(settings.wandTol, 0, 255, undefined);
+    let background = source.background && typeof source.background === 'object' ? { ...source.background } : null;
+    if (background) {
+      background.x = finiteIn(background.x, -MAX_COORDINATE_M, MAX_COORDINATE_M, 0);
+      background.y = finiteIn(background.y, -MAX_COORDINATE_M, MAX_COORDINATE_M, 0);
+      background.scale = finiteIn(background.scale, 1e-6, 100, null);
+      background.opacity = finiteIn(background.opacity, 0.1, 1, 0.6);
+      if (typeof background.dataUrl !== 'string' || !background.scale) background = null;
+    }
+    /**
+     * Alleen objecten uit een lijst; een naam die geen tekst is wordt leeg.
+     * @param {*} value De lijst uit het plan.
+     * @returns {object[]} De onderdelen.
+     */
+    const list = (value) => (Array.isArray(value) ? value.filter((item) => item && typeof item === 'object')
+      .map((item) => (item.name === undefined || typeof item.name === 'string' ? item : { ...item, name: '' })) : []);
+    const seenZones = new Set();
+    return {
+      ...source,
+      meta,
+      settings,
+      background,
+      areas: list(source.areas).filter((area) => Array.isArray(area.pts) && area.pts.every(validPoint)),
+      elements: list(source.elements).filter(validPoint),
+      sprinklers: list(source.sprinklers).filter(validPoint),
+      zones: list(source.zones).filter((zone) => {
+        if (seenZones.has(zone.id)) return false;
+        seenZones.add(zone.id);
+        return true;
+      }),
+    };
+  }
+
   const App = {
     state: emptyState(),
     step: 0,
@@ -74,7 +155,7 @@
           if (['bom', 'sprinklers'].includes(STEPS[this.step].id)) this.renderStepPanel();
         });
       }
-      this._loadRights().then(() => this._initReview());
+      this._loadRights().then(() => { this._restoreOwnedDraft(); this._initReview(); });
       this._openFromUrl();
       window.addEventListener('beforeunload', () => this._flushSync());
     },
@@ -135,35 +216,68 @@
       this._saveLocal();
       this._scheduleSync();
     },
+    /**
+     * Bewaart het concept in deze browser, met de eigenaar erbij (wie er was
+     * ingelogd), zodat een volgende gebruiker van de browser het niet te zien krijgt.
+     */
     _saveLocal() {
+      if (this._pendingDraft) return; // eerst kijken of het bewaarde concept van deze gebruiker is
+      const owner = this._owner || undefined;
       try {
-        const data = { ...this.state, calc: null, step: this.step };
+        const data = { ...this.state, calc: null, step: this.step, owner };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       } catch (e) {
         // Opslag vol (bijv. grote achtergrond) of geblokkeerd: zonder achtergrond proberen
         try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...this.state, calc: null, background: null, step: this.step }));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...this.state, calc: null, background: null, step: this.step, owner }));
         } catch (e2) { /* negeren */ }
       }
     },
+    /**
+     * Leest het concept uit deze browser. Met een eigenaar wacht het tot
+     * api/me bekend is (_restoreOwnedDraft); zonder (file://, oude versie) meteen.
+     */
     _load() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return;
         const data = JSON.parse(raw);
+        if (data && data.owner && location.protocol !== 'file:') {
+          this._pendingDraft = data;
+          return;
+        }
         this._apply(data);
         this.step = Math.min(STEPS.length - 1, data.step || 0);
       } catch (e) { /* negeren */ }
     },
+    /**
+     * Na api/me: het bewaarde concept alleen tonen als het van deze gebruiker
+     * (en omgeving) is; van iemand anders wordt het gewist.
+     */
+    _restoreOwnedDraft() {
+      const draft = this._pendingDraft;
+      // api/me niet gelukt (geen verbinding): niet tonen en niet overschrijven.
+      if (!draft || !this.me) return;
+      this._pendingDraft = null;
+      if (!this._owner || draft.owner !== this._owner) {
+        try { localStorage.removeItem(STORAGE_KEY); } catch (error) { /* geen opslag */ }
+        return;
+      }
+      // Intussen een ander plan geopend (?plan=, kopie of bestand): dat gaat voor.
+      const current = this.state;
+      if (current.serverId || current.areas.length || current.sprinklers.length) return;
+      this._apply(draft);
+      this.step = Math.min(STEPS.length - 1, draft.step || 0);
+      this.editor.selection = null;
+      this.editor.bgImg = null;
+      this.renderSteps();
+      this.showStep(this.step);
+      this.recalc();
+      this.editor.render();
+      this.refreshBackground().then(() => this.editor.fit());
+    },
     _apply(data) {
-      const base = emptyState();
-      this.state = {
-        ...base,
-        ...data,
-        meta: { ...base.meta, ...(data.meta || {}) },
-        settings: { ...base.settings, ...(data.settings || {}) },
-        calc: null,
-      };
+      this.state = { ...emptyState(), ...sanitizePlan(data), calc: null };
     },
 
     // ---------- Mijn plannen (opslag op de server) ----------
@@ -224,6 +338,8 @@
         const me = await window.AquatechCommon.getJson('api/me');
         if (me) this.rights = me.rights || [];
         this.me = me;
+        // Van wie het lokale concept is (gebruiker + omgeving).
+        this._owner = window.AquatechCommon.ownerOf(me);
         // Ingelogd met ?tekenen: gewoon de planner met Mijn plannen.
         if (ANON && me && me.user) location.replace(location.pathname);
         return;
@@ -1210,11 +1326,11 @@
         <label>Adres<input id="m-address" value="${esc(m.address)}"></label>
         <h3>Beregeningsmethode</h3>
         <p class="hint small">Kies per soort vlak hoe het water krijgt. Per vlak kun je hier later van afwijken (eigenschappenpaneel).</p>
-        <label>Gazon<select id="mth-lawn"><option value="auto" ${s.sprinklerType === 'auto' ? 'selected' : ''}>Automatisch: beste type per gazon</option>${['rotator', 'spray', 'rotor'].map((k) => `<option value="${k}" ${s.sprinklerType === k ? 'selected' : ''}${C.typeAvailable(k) ? '' : ' disabled'}>${esc(C.sprinklerTypes[k].label)}${C.typeAvailable(k) ? '' : ' (niet in assortiment)'}</option>`).join('')}</select></label>
+        <label>Gazon<select id="mth-lawn"><option value="auto" ${s.sprinklerType === 'auto' ? 'selected' : ''}>Automatisch: beste type per gazon</option>${['rotator', 'spray', 'rotor'].map((k) => `<option value="${esc(k)}" ${s.sprinklerType === k ? 'selected' : ''}${C.typeAvailable(k) ? '' : ' disabled'}>${esc(C.sprinklerTypes[k].label)}${C.typeAvailable(k) ? '' : ' (niet in assortiment)'}</option>`).join('')}</select></label>
         ${['bed', 'hedge', 'planter'].map((type) => {
           const at = C.areaTypes[type];
           const cur = (s.methods && s.methods[type]) || at.defaultMethod;
-          return `<label>${esc(at.label)}<select data-mth="${type}">${at.methods.map((k) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${esc(C.methods[k].label)}</option>`).join('')}</select></label>`;
+          return `<label>${esc(at.label)}<select data-mth="${type}">${at.methods.map((k) => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(C.methods[k].label)}</option>`).join('')}</select></label>`;
         }).join('')}
         <h3>Plan</h3>
         <p class="hint">Laad een tuinontwerp, plattegrond, schets of luchtfoto (JPG, PNG of PDF). De planner leest de schaal en de vlakken en maakt een concept met sproeiers, zones en leidingen dat je daarna aanpast.</p>
@@ -1237,7 +1353,7 @@
           <p class="hint small">Huidige schaal: plan is ${fmt((bg.width || (this.editor.bgImg && this.editor.bgImg.naturalWidth) || 0) * bg.scale)} m breed.</p>
           <button id="bg-cal" class="btn">Schaal kalibreren</button>
           <p class="hint">Trek een lijn over een bekende maat (bijv. gevel of tegelpad) en voer de lengte in.</p>
-          <label>Transparantie <input id="bg-op" type="range" min="0.1" max="1" step="0.05" value="${bg.opacity}"></label>
+          <label>Transparantie <input id="bg-op" type="range" min="0.1" max="1" step="0.05" value="${esc(bg.opacity)}"></label>
           <button id="bg-del" class="btn danger">Ondergrond verwijderen</button>` : ''}
       `;
     },
@@ -1289,7 +1405,7 @@
       return `
         <p class="hint">Teken eerst het gazon, daarna beplanting en hagen (druppelirrigatie) en vlakken die nat mogen worden of droog moeten blijven.</p>
         ${btns}
-        ${this.state.background ? `<label>Gevoeligheid toverstaf <input id="wand-tol" type="range" min="10" max="120" step="5" value="${this.state.settings.wandTol || 40}"></label>
+        ${this.state.background ? `<label>Gevoeligheid toverstaf <input id="wand-tol" type="range" min="10" max="120" step="5" value="${esc(this.state.settings.wandTol || 40)}"></label>
         <p class="hint small"><b>Toverstaf:</b> klik midden in een vlak op het plan; de planner trekt de rand met dezelfde kleur uit. Te veel? Verlaag de gevoeligheid. Te weinig? Verhoog hem.</p>` : ''}
         <p class="hint small"><b>Vrije vorm:</b> klik punten, sluit door op het eerste punt te klikken, dubbel te klikken of Enter. Backspace = laatste punt weg, Shift = hoeken van 45°, Alt = niet op het raster uitlijnen.<br>
         <b>Bewerken:</b> selecteer een vlak; sleep hoekpunten of de middenpunten van randen (nieuw hoekpunt).</p>
@@ -1318,8 +1434,8 @@
         <p class="hint">Plaats de wateraansluiting, de beregeningscomputer en de ventielkast. Waterpunten (tappunten) worden op de hoofdleiding aangesloten.</p>
         ${btns}
         <h3>Wateraansluiting</h3>
-        <label>Dynamische waterdruk (bar)<input id="s-pressure" type="number" step="0.1" min="1" max="10" value="${s.pressure}"></label>
-        <label>Beschikbaar debiet (m³/u)<input id="s-flow" type="number" step="0.1" min="0.3" max="20" value="${s.flow}"></label>
+        <label>Dynamische waterdruk (bar)<input id="s-pressure" type="number" step="0.1" min="1" max="10" value="${esc(s.pressure)}"></label>
+        <label>Beschikbaar debiet (m³/u)<input id="s-flow" type="number" step="0.1" min="0.3" max="20" value="${esc(s.flow)}"></label>
         <p class="hint small"><b>Emmertest:</b> vul een emmer van 10 liter bij volledig geopende kraan en meet de tijd t (s). Debiet = 36 / t m³/u (bijv. 18 s → 2,0 m³/u). Meet de druk met een manometer terwijl de kraan open staat.</p>
         <p class="hint small">Max. debiet per zone: <b>${fmt(Hy.maxZoneLph(this.state) / 1000, 2)} m³/u</b> (${Math.round(C.hydraulics.zoneFlowFactor * 100)}% van het beschikbare debiet).</p>
       `;
@@ -1338,7 +1454,7 @@
           <span><b>Automatisch: beste type per gazon</b><br><span class="small">Rekent rotators, sproeiers en turbines door en kiest per gazon de indeling met de minste koppen, het minste water buiten het gazon en de minste droge/gele plekken, binnen je assortiment en de waterdruk.</span></span></label>` + ['rotator', 'spray', 'rotor'].map((k) => {
         const t = C.sprinklerTypes[k];
         const ok = C.typeAvailable(k);
-        return `<label class="radio${ok ? '' : ' off'}"><input type="radio" name="stype" value="${k}" ${!auto && C.usableType(s.sprinklerType) === k ? 'checked' : ''}${ok ? '' : ' disabled'}>
+        return `<label class="radio${ok ? '' : ' off'}"><input type="radio" name="stype" value="${esc(k)}" ${!auto && C.usableType(s.sprinklerType) === k ? 'checked' : ''}${ok ? '' : ' disabled'}>
           <span><b>${esc(t.label)}</b>${ok ? '' : ' <span class="small">(niet in je assortiment)</span>'}<br><span class="small">${G.nlShort(t.rMin, 1)}–${G.nlShort(t.rMax, 1)} m · ${t.pr} mm/u · min. ${G.nlShort(t.minBar, 1)} bar. ${esc(t.note)}</span></span></label>`;
       }).join('');
       const sim = this.editor.layers.heatmap ? this.sim : null;
@@ -1354,7 +1470,7 @@
           : this._bodySelect('body-lawn', 'Behuizing gazon', C.usableType(s.sprinklerType))}
         ${this._bodySelect('body-bed', 'Behuizing beplanting', `bed-${s.bedSprinklerType || 'spray'}`)}
         ${auto ? '' : `<label class="inline"><input type="checkbox" id="r-auto" ${s.radius ? '' : 'checked'}> Worpwijdte automatisch</label>
-        ${s.radius ? `<label>Worpwijdte (m)<input id="r-val" type="number" step="0.1" value="${s.radius}"></label>` : ''}`}
+        ${s.radius ? `<label>Worpwijdte (m)<input id="r-val" type="number" step="0.1" value="${esc(s.radius)}"></label>` : ''}`}
         <button id="auto-place" class="btn primary">Automatisch plaatsen</button>
         <p class="hint small">Plaatst sproeiers op alle gazons en in beplanting waarvoor <b>Sproeiers</b> als methode gekozen is (stap 1). Kop (MP-model), worp, sproeihoek en richting worden daarbij automatisch optimaal afgesteld, ook bij handmatig plaatsen en verslepen.</p>
         <button id="tune-spr" class="btn">Alle koppen opnieuw afstellen</button>
@@ -1465,7 +1581,7 @@
       const total = rows.reduce((t, r) => t + r.total, 0);
       const sched = this.state.calc ? BOM.schedule(this.state) : [];
       const levels = Object.entries(C.levels).map(([k, l]) => `
-        <label class="radio"><input type="radio" name="level" value="${k}" ${s.level === k ? 'checked' : ''}><span><b>${l.label}</b> – <span class="small">${esc(l.desc)}</span></span></label>`).join('');
+        <label class="radio"><input type="radio" name="level" value="${esc(k)}" ${s.level === k ? 'checked' : ''}><span><b>${l.label}</b> – <span class="small">${esc(l.desc)}</span></span></label>`).join('');
       return `
         <h3>Uitvoeringsniveau</h3>
         ${levels}
@@ -1479,8 +1595,8 @@
           : '<button id="btn-quote" class="btn">Offerte maken van dit plan</button>') : ''}
         <h3>Beregeningsschema</h3>
         <div class="row">
-          <label>Weekgift (mm)<input id="t-mm" type="number" min="5" max="50" value="${s.targetMm}"></label>
-          <label>Beurten/week<input id="t-ses" type="number" min="1" max="7" value="${s.sessions}"></label>
+          <label>Weekgift (mm)<input id="t-mm" type="number" min="5" max="50" value="${esc(s.targetMm)}"></label>
+          <label>Beurten/week<input id="t-ses" type="number" min="1" max="7" value="${esc(s.sessions)}"></label>
         </div>
         ${sched.length ? `<table class="list"><tr><th>Zone</th><th>mm/u</th><th>min/beurt</th></tr>
           ${sched.map((x) => `<tr><td><span class="swatch" style="background:${x.zone.color}"></span>${esc(x.zone.name)}</td><td class="num">${fmt(x.pr, 0)}</td><td class="num">${Math.round(x.minutesSession)}</td></tr>`).join('')}</table>` : ''}
@@ -1536,13 +1652,13 @@
     },
     _propsArea(a) {
       const va = this.editor.activeVertex && this.editor.activeVertex.id === a.id ? this.editor.activeVertex : null;
-      const opts = Object.entries(C.areaTypes).map(([k, t]) => `<option value="${k}" ${a.type === k ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
+      const opts = Object.entries(C.areaTypes).map(([k, t]) => `<option value="${esc(k)}" ${a.type === k ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
       let extra = '';
       const at = C.areaTypes[a.type];
       if (at.methods && a.pts.length >= 3) {
         const method = Hy.methodOf(this.state, a);
         const def = (this.state.settings.methods && this.state.settings.methods[a.type]) || at.defaultMethod;
-        const mOpts = `<option value="">Standaard (${esc(C.methods[def].label)})</option>` + at.methods.map((k) => `<option value="${k}" ${a.method === k ? 'selected' : ''}>${esc(C.methods[k].label)}</option>`).join('');
+        const mOpts = `<option value="">Standaard (${esc(C.methods[def].label)})</option>` + at.methods.map((k) => `<option value="${esc(k)}" ${a.method === k ? 'selected' : ''}>${esc(C.methods[k].label)}</option>`).join('');
         extra = `<label>Beregening<select data-f="method">${mOpts}</select></label><p class="hint small">${esc(C.methods[method].desc)}</p>`;
         if (method === 'dripline') {
           const di = Hy.dripInfo(a, method);
@@ -1574,20 +1690,20 @@
     },
     _propsSprinkler(s) {
       const t = C.sprinklerTypes[s.type];
-      const typeOpts = Object.entries(C.sprinklerTypes).map(([k, tt]) => `<option value="${k}" ${s.type === k ? 'selected' : ''}${C.typeAvailable(k) || s.type === k ? '' : ' disabled'}>${esc(tt.label)}${C.typeAvailable(k) ? '' : ' (niet in assortiment)'}</option>`).join('');
-      const zoneOpts = `<option value="">– geen –</option>` + this.state.zones.map((z) => `<option value="${z.id}" ${s.zone === z.id ? 'selected' : ''}>${esc(z.name)} (${esc(C.groups[z.group].label)})</option>`).join('');
+      const typeOpts = Object.entries(C.sprinklerTypes).map(([k, tt]) => `<option value="${esc(k)}" ${s.type === k ? 'selected' : ''}${C.typeAvailable(k) || s.type === k ? '' : ' disabled'}>${esc(tt.label)}${C.typeAvailable(k) ? '' : ' (niet in assortiment)'}</option>`).join('');
+      const zoneOpts = `<option value="">– geen –</option>` + this.state.zones.map((z) => `<option value="${esc(z.id)}" ${s.zone === z.id ? 'selected' : ''}>${esc(z.name)} (${esc(C.groups[z.group].label)})</option>`).join('');
       let p = null;
       if (this.state.calc) this.state.calc.zones.forEach((zr) => (zr.members || []).forEach((m) => { if (m.ref === s) p = m.pressure; }));
       const geom = s.type === 'strip'
-        ? `<label>Breedte (m)<input data-f="width" type="number" step="0.1" min="${t.wMin}" max="${t.wMax}" value="${s.width}"></label>
-           <label>Lengte (m)<input data-f="len" type="number" step="0.1" min="${t.lMin}" max="${t.lMax}" value="${s.len}"></label>`
+        ? `<label>Breedte (m)<input data-f="width" type="number" step="0.1" min="${t.wMin}" max="${t.wMax}" value="${esc(s.width)}"></label>
+           <label>Lengte (m)<input data-f="len" type="number" step="0.1" min="${t.lMin}" max="${t.lMax}" value="${esc(s.len)}"></label>`
         : this._propsHead(s);
       const minBar = C.headMinBar(s);
       return `
         <h3>Sproeier</h3>
         <label>Type<select data-f="type">${typeOpts}</select></label>
         ${geom}
-        <label>Richting (°)<input data-f="start" type="number" step="5" value="${s.start}"></label>
+        <label>Richting (°)<input data-f="start" type="number" step="5" value="${esc(s.start)}"></label>
         <div class="row"><button class="btn sm" data-rot="-15">⟲ 15°</button><button class="btn sm" data-rot="15">⟳ 15°</button><button class="btn sm" data-rot="90">⟳ 90°</button></div>
         <label>Zone<select data-f="zone">${zoneOpts}</select></label>
         <table class="kv">
@@ -1650,8 +1766,8 @@
       const presets = n ? [...new Set(n.arcs.flatMap((a) => [Math.max(10, a[0]), a[1]]))] : [90, 180, 270, 360];
       return `${bodies.length ? `<label>Behuizing<select data-f="body">${bodyOpts}</select></label>` : ''}
            <label>Nozzle<select data-f="model">${nozOpts}</select></label>
-           <label>Worpwijdte (m) <span class="small">${G.nlShort(hr.rMin, 1)}–${G.nlShort(hr.rMax, 1)}${n ? ' (stelschroef)' : ''}</span><input data-f="r" type="number" step="0.1" min="${hr.rMin}" max="${hr.rMax}" value="${s.r}"></label>
-           <label>Sproeihoek (°)${n ? ` <span class="small">sector ${range(set[0], set[1])}</span>` : ''}<input data-f="arc" type="number" step="5" min="${n ? Math.max(10, n.arcs[0][0]) : 10}" max="${n ? n.arcs[n.arcs.length - 1][1] : 360}" value="${s.arc}"></label>
+           <label>Worpwijdte (m) <span class="small">${G.nlShort(hr.rMin, 1)}–${G.nlShort(hr.rMax, 1)}${n ? ' (stelschroef)' : ''}</span><input data-f="r" type="number" step="0.1" min="${hr.rMin}" max="${hr.rMax}" value="${esc(s.r)}"></label>
+           <label>Sproeihoek (°)${n ? ` <span class="small">sector ${range(set[0], set[1])}</span>` : ''}<input data-f="arc" type="number" step="5" min="${n ? Math.max(10, n.arcs[0][0]) : 10}" max="${n ? n.arcs[n.arcs.length - 1][1] : 360}" value="${esc(s.arc)}"></label>
            <div class="row">${presets.map((a) => `<button class="btn sm" data-arc="${a}">${a}°</button>`).join('')}</div>
            <p class="hint small">${n ? `Instelling: ${esc(C.headSetting(s))}${body ? ` op ${esc(body.name)}` : ''}. ` : ''}Sleep in de tekening aan de grepen om worp en sproeihoek${n ? ' binnen dit bereik' : ''} in te regelen.</p>`;
     },
@@ -1667,8 +1783,8 @@
       return `
         <h3>${esc(et.label)}</h3>
         ${e.kind === 'source' ? `
-          <label>Waterdruk (bar)<input data-s="pressure" type="number" step="0.1" value="${s.pressure}"></label>
-          <label>Debiet (m³/u)<input data-s="flow" type="number" step="0.1" value="${s.flow}"></label>` : ''}
+          <label>Waterdruk (bar)<input data-s="pressure" type="number" step="0.1" value="${esc(s.pressure)}"></label>
+          <label>Debiet (m³/u)<input data-s="flow" type="number" step="0.1" value="${esc(s.flow)}"></label>` : ''}
         <table class="kv"><tr><td>Positie</td><td>${fmt(e.x, 2)}, ${fmt(e.y, 2)} m</td></tr></table>
         <button class="btn danger" data-act="delete">Verwijderen</button>`;
     },

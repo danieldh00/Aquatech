@@ -83,8 +83,9 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
     const transport = createTransport({
       host: address, servername: server.host, port: server.port, secure: server.secure,
       auth: server.mode !== 'connector' && server.user ? { user: server.user, pass: password } : undefined,
-      // De connector herkent de server aan zijn IP; dan moet STARTTLS wel lukken.
-      requireTLS: server.mode === 'connector' && !server.secure ? true : undefined,
+      // Zonder SSL/TLS (465) moet STARTTLS lukken: nooit wachtwoord of mail
+      // onversleuteld versturen als een tussenpersoon STARTTLS weglaat.
+      requireTLS: !server.secure ? true : undefined,
       // Nooit zonder geldig certificaat; de verbinding loopt niet eindeloos.
       tls: { rejectUnauthorized: true },
       connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 20000,

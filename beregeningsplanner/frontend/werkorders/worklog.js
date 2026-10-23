@@ -35,9 +35,11 @@
 
   // ---------- Server ----------
   class Offline extends Error {}
-  async function call(url, { method = 'GET', body, offline } = {}) {
+  async function call(url, { method = 'GET', body, offline, owner } = {}) {
     let res;
     const extra = offline && Off() ? Off().headers(offline) : {};
+    // Uit de wachtrij: van wie de regel is (de server weigert hem onder een ander account).
+    if (owner) extra['X-Aquatech-Owner'] = owner;
     try {
       res = await fetch(`../${url}`, {
         method, cache: 'no-store',
@@ -58,6 +60,14 @@
   }
   function writeQueue(list) {
     try { localStorage.setItem(queueKey(), JSON.stringify(list)); return true; } catch (e) { return false; }
+  }
+  /**
+   * Wie er nu is ingelogd, in de vorm van de offline wachtrij (shared/common.js ownerOf).
+   * @returns {Promise<string|null>} De eigenaar, of null als dat niet bekend is.
+   */
+  async function currentOwner() {
+    const common = window.AquatechCommon;
+    return common ? common.ownerOf(await common.getJson('api/me')) : null;
   }
   const pendingFor = (woId, type) => readQueue().concat(state.swPending).filter((x) => x.woId === woId && x.type === type);
 
@@ -80,7 +90,11 @@
     });
   }
 
-  /** Wachtende regels versturen; stopt bij de eerste netwerkfout. */
+  /**
+   * Wachtende regels versturen; stopt bij de eerste netwerkfout. Alleen regels
+   * van wie nu is ingelogd; een regel zonder eigenaar (oude versie) of van een
+   * ander account wordt niet onder deze gebruiker geboekt maar weggegooid.
+   */
   async function flush() {
     if (state.flushing) return;
     const list = readQueue();
@@ -88,13 +102,19 @@
     state.flushing = true;
     let sent = 0;
     try {
+      const owner = await currentOwner();
       for (const item of list) {
+        if (item.owner && owner && item.owner !== owner) {
+          writeQueue(readQueue().filter((x) => x.body.clientId !== item.body.clientId));
+          continue;
+        }
         try {
-          await call(`api/workorders/${encodeURIComponent(item.woId)}/${item.type}`, { method: 'POST', body: item.body });
+          if (!item.owner) throw new Error('van een eerdere versie zonder eigenaar');
+          await call(`api/workorders/${encodeURIComponent(item.woId)}/${item.type}`, { method: 'POST', body: item.body, owner: item.owner });
           sent++;
         } catch (e) {
-          if (e instanceof Offline) break;
-          toast(`Regel van ${shortDate(item.body.workDate || item.body.usedOn)} niet geboekt: ${e.message}`, true);
+          if (e instanceof Offline || e.status === 401) break;
+          if (e.code !== 'owner_mismatch') toast(`Regel van ${shortDate(item.body.workDate || item.body.usedOn)} niet geboekt: ${e.message}`, true);
         }
         writeQueue(readQueue().filter((x) => x.body.clientId !== item.body.clientId));
       }
@@ -334,7 +354,8 @@
       render();
     } catch (e) {
       if (!(e instanceof Offline)) { toast(`Boeken mislukt: ${e.message}`, true); return; }
-      if (!writeQueue([...readQueue(), { woId: wo.id, type, body, at: new Date().toISOString() }])) {
+      const owner = await currentOwner();
+      if (!owner || !writeQueue([...readQueue(), { woId: wo.id, type, body, owner, at: new Date().toISOString() }])) {
         toast('Geen verbinding en bewaren op dit toestel lukt niet.', true);
         return;
       }

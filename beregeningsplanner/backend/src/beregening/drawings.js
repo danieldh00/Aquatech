@@ -57,10 +57,10 @@ function sanitizeSubmission(body) {
 /**
  * Registreert de routes voor tekeningen indienen en plannen controleren.
  * @param {object} app De Express-app.
- * @param {object} ctx store, identify, requireUser, requireRight, requireJson, audit, settingsFor(tenantId), tenantActive(id), mailerFor(settings), remoteIp, publicLimiter en planLimiter.
+ * @param {object} ctx store, identify, requirePlans (gebruiker met het recht plannen), requireRight, requireJson, audit, settingsFor(tenantId), tenantActive(id), mailerFor(settings), remoteIp, publicLimiter en planLimiter.
  */
 function registerDrawingRoutes(app, ctx) {
-  const { store, identify, requireUser, requireRight, requireJson, audit, settingsFor, remoteIp, publicLimiter } = ctx;
+  const { store, identify, requirePlans, requireRight, requireJson, audit, settingsFor, remoteIp, publicLimiter } = ctx;
   const tenantActive = ctx.tenantActive || (() => true);
   const mailerFor = ctx.mailerFor || ((settings) => createMailer(settings));
   const planLimiter = ctx.planLimiter || ((req, res, next) => next());
@@ -140,7 +140,7 @@ function registerDrawingRoutes(app, ctx) {
   }
 
   // Eigen plan ter controle aanbieden (klant, of een medewerker namens hem).
-  app.post('/api/plans/:id/review-request', requireJson, requireUser, planLimiter, (req, res) => {
+  app.post('/api/plans/:id/review-request', requireJson, requirePlans, planLimiter, (req, res) => {
     const review = store.requestReview(req.user, req.params.id, text(req.body?.question, LIMITS.question));
     if (!review) return notFound(res);
     audit(req, 'plan_ter_controle', { planId: req.params.id });

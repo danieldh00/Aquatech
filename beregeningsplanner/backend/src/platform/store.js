@@ -316,7 +316,7 @@ function createStore(db) {
    * De gebruiker wijzigt zijn eigen naam, contactgegevens en voorkeuren. Alleen meegegeven velden veranderen.
    * @param {string} id Id van de gebruiker.
    * @param {object} [input] displayName, email, phone en/of preferences.
-   * @returns {{ user: object }|{ error: string, field: string|null }} De bijgewerkte gebruiker of een foutmelding.
+   * @returns {{ user: object, changed: string[] }|{ error: string, field: string|null }} De bijgewerkte gebruiker en de gewijzigde velden, of een foutmelding.
    */
   function updateProfile(id, input = {}) {
     const user = getUser(id);
@@ -339,9 +339,17 @@ function createStore(db) {
       next.phone = phone;
     }
     const prefs = input.preferences !== undefined ? cleanPreferences(input.preferences, preferencesOf(user)) : preferencesOf(user);
+    // Alleen wat echt anders is (zonder wijziging ook geen schrijfactie of auditregel).
+    const changed = [
+      next.display_name !== user.display_name && 'displayName',
+      next.email !== (user.email || '') && 'email',
+      next.phone !== (user.phone || '') && 'phone',
+      JSON.stringify(prefs) !== JSON.stringify(preferencesOf(user)) && 'preferences',
+    ].filter(Boolean);
+    if (!changed.length) return { user, changed };
     prepare('UPDATE users SET display_name = ?, email = ?, phone = ?, preferences = ? WHERE id = ?')
       .run(next.display_name, next.email, next.phone, JSON.stringify(prefs), user.id);
-    return { user: getUser(user.id) };
+    return { user: getUser(user.id), changed };
   }
 
   /**

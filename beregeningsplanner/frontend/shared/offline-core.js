@@ -34,6 +34,7 @@
     base: 'x-aquatech-base',
     ifBase: 'x-aquatech-if-base',
     queued: 'x-aquatech-queued',
+    owner: 'x-aquatech-owner',
     idempotency: 'idempotency-key',
     cachedAt: 'x-aquatech-cached-at',
   };
@@ -59,6 +60,24 @@
    * @returns {boolean} true als het in CACHEABLE staat.
    */
   const cacheable = (relativePath) => CACHEABLE.some((pattern) => pattern.test(String(relativePath || '')));
+
+  // Wijzigingen die in de wachtrij mogen (methode + pad vanaf de app-root):
+  // alleen wat de werkorderpagina's offline doen. Al het andere gaat gewoon
+  // naar de server, ook met de kop X-Aquatech-Offline.
+  const ID = '[A-Za-z0-9-]{1,64}';
+  const QUEUEABLE = [
+    { methods: ['PUT', 'PATCH'], pattern: new RegExp(`^api/workorders/${ID}$`) },
+    { methods: ['POST'], pattern: new RegExp(`^api/workorders/${ID}/(photos|hours|materials)$`) },
+    { methods: ['PATCH'], pattern: new RegExp(`^api/workorders/${ID}/photos/${ID}$`) },
+  ];
+  /**
+   * Geeft aan of een wijziging in de offline wachtrij mag.
+   * @param {string} relativePath Pad vanaf de app-root, zonder query.
+   * @param {string} method HTTP-methode.
+   * @returns {boolean} true als hij in QUEUEABLE staat.
+   */
+  const queueable = (relativePath, method) => QUEUEABLE.some((rule) => rule.methods.includes(String(method || '').toUpperCase())
+    && rule.pattern.test(String(relativePath || '')));
 
   // Bewaarde gegevens en wachtende wijzigingen niet eindeloos bewaren.
   const DATA_MAX_AGE_MS = 14 * 24 * 3600 * 1000;
@@ -112,6 +131,8 @@
     if (unreachable(statusCode) || statusCode === 429 || statusCode === 408 || errorCode === 'in_progress') return 'retry';
     if (statusCode === 401 || errorCode === 'password_change_required') return 'auth';
     if (statusCode === 409 && errorCode === 'conflict') return 'conflict';
+    // Gemaakt door een andere gebruiker (of in een andere omgeving): niet opnieuw proberen.
+    if (errorCode === 'owner_mismatch') return 'failed';
     return 'failed';
   }
 
@@ -356,7 +377,7 @@
   }
 
   return {
-    HEADERS, CACHEABLE, cacheable, DATA_MAX_AGE_MS, QUEUE_MAX_AGE_MS, MAX_ATTEMPTS,
+    HEADERS, CACHEABLE, cacheable, QUEUEABLE, queueable, DATA_MAX_AGE_MS, QUEUE_MAX_AGE_MS, MAX_ATTEMPTS,
     ownerOf, offlineAllowed, unreachable, classify, merge, rebase, merge3, rebaseBody, fieldNames, applyPatch, keepHeaders, newId, describe, parseJson,
   };
 });

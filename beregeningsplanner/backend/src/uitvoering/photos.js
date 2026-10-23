@@ -21,6 +21,8 @@ const MAX_PER_WORK_ORDER = 100;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_THUMB_BYTES = 300 * 1024;
 const MAX_SIDE = 8000;
+// Een miniatuur is klein (de browser maakt hem op 480 px): een grote "miniatuur" weigeren.
+const MAX_THUMB_SIDE = 1024;
 /**
  * Het huidige moment.
  * @returns {string} Tijdstip als ISO-tekst.
@@ -238,6 +240,7 @@ function createPhotoStore(db, { vault }) {
     if (input.thumb !== undefined && input.thumb !== null && input.thumb !== '') {
       const thumbBuffer = fromBase64(input.thumb);
       thumb = thumbBuffer && thumbBuffer.length <= MAX_THUMB_BYTES ? inspectImage(thumbBuffer) : null;
+      if (thumb && (thumb.width > MAX_THUMB_SIDE || thumb.height > MAX_THUMB_SIDE)) thumb = null;
       if (!thumb) return { error: 'invalid_photo', status: 400, message: 'Ongeldige miniatuur.' };
     }
     const kind = KINDS[input.kind] ? input.kind : 'oplevering';
@@ -304,7 +307,8 @@ function createPhotoStore(db, { vault }) {
   }
 
   /**
-   * Mag deze klant de foto zien: zichtbaar gezet en de werkorder hoort via de offerte (of zijn melding) bij hem.
+   * Mag deze klant de foto zien: zichtbaar gezet en de werkorder hoort via de offerte (niet verwijderd,
+   * geen concept: zelfde regel als het opleverdossier) of via zijn melding bij hem.
    * @param {string} tenantId Id van de tenant.
    * @param {string} id Id van de foto.
    * @param {string} userId Id van de klant.
@@ -313,7 +317,8 @@ function createPhotoStore(db, { vault }) {
   function customerOwns(tenantId, id, userId) {
     return Boolean(prepare(`SELECT 1 AS ok FROM work_order_photos p JOIN work_orders w ON w.id = p.work_order_id AND w.deleted_at IS NULL
       WHERE p.tenant_id = ? AND p.id = ? AND p.customer_visible = 1
-        AND (EXISTS (SELECT 1 FROM quotes o WHERE o.id = w.quote_id AND o.tenant_id = w.tenant_id AND o.customer_id = ?)
+        AND (EXISTS (SELECT 1 FROM quotes o WHERE o.id = w.quote_id AND o.tenant_id = w.tenant_id
+          AND o.deleted_at IS NULL AND o.customer_id = ? AND o.status <> 'concept')
         OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?))`)
       .get(tenantId, String(id), String(userId), String(userId)));
   }
@@ -562,4 +567,4 @@ function registerPhotoRoutes(app, ctx) {
   });
 }
 
-module.exports = { createPhotoStore, createDossierStore, registerPhotoRoutes, inspectImage, cleanJpeg, fromBase64, KINDS, MAX_PER_WORK_ORDER, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE };
+module.exports = { createPhotoStore, createDossierStore, registerPhotoRoutes, inspectImage, cleanJpeg, fromBase64, KINDS, MAX_PER_WORK_ORDER, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE, MAX_THUMB_SIDE };

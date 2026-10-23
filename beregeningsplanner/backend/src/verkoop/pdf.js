@@ -75,6 +75,33 @@ function textWidth(text, size, bold = false) {
 }
 
 /**
+ * Breekt een woord dat zelf te breed is hard af. Elk teken wordt één keer
+ * gemeten (lineair), zodat een lang woord geen rekenwerk in het kwadraat kost.
+ * @param {string} word Het woord.
+ * @param {number} width Beschikbare breedte in punten.
+ * @param {number} size Lettergrootte in punten.
+ * @param {boolean} bold Vet.
+ * @returns {string[]} De stukken; elk past (behalve een los teken dat breder is dan de regel).
+ */
+function breakWord(word, width, size, bold) {
+  const pieces = [];
+  let piece = '';
+  let pieceWidth = 0;
+  for (const character of word) {
+    const characterWidth = textWidth(character, size, bold);
+    if (piece && pieceWidth + characterWidth > width) {
+      pieces.push(piece);
+      piece = '';
+      pieceWidth = 0;
+    }
+    piece += character;
+    pieceWidth += characterWidth;
+  }
+  pieces.push(piece);
+  return pieces;
+}
+
+/**
  * Breekt tekst af op woorden zodat elke regel binnen de breedte past (ook bij harde enters); een te lang woord wordt hard afgebroken.
  * @param {string} text De tekst.
  * @param {number} width Beschikbare breedte in punten.
@@ -88,19 +115,15 @@ function wrap(text, width, size, bold = false) {
     let line = '';
     for (const word of para.split(/\s+/).filter(Boolean)) {
       const next = line ? `${line} ${word}` : word;
-      if (textWidth(next, size, bold) <= width || !line) {
+      if (textWidth(next, size, bold) <= width) {
         line = next;
-        // Een woord dat zelf te lang is, hard afbreken.
-        while (textWidth(line, size, bold) > width && line.length > 1) {
-          let cut = line.length - 1;
-          while (cut > 1 && textWidth(line.slice(0, cut), size, bold) > width) cut--;
-          lines.push(line.slice(0, cut));
-          line = line.slice(cut);
-        }
-      } else {
-        lines.push(line);
-        line = word;
+        continue;
       }
+      if (line) lines.push(line);
+      // Een woord dat zelf te lang is, hard afbreken; het laatste stuk begint de nieuwe regel.
+      const pieces = textWidth(word, size, bold) > width ? breakWord(word, width, size, bold) : [word];
+      lines.push(...pieces.slice(0, -1));
+      line = pieces[pieces.length - 1];
     }
     lines.push(line);
   }

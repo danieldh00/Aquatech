@@ -94,8 +94,14 @@
         if (waiting && !confirm(`Er ${waiting === 1 ? 'staat nog 1 wijziging' : `staan nog ${waiting} wijzigingen`} op dit toestel die nog niet ${waiting === 1 ? 'is' : 'zijn'} verstuurd. Bij uitloggen ${waiting === 1 ? 'gaat die' : 'gaan die'} verloren. Toch uitloggen?`)) return;
         try { await fetch(`${base}api/auth/logout`, { method: 'POST' }); } catch (error) { /* negeren */ }
         if (common && common.offline) await common.offline({ type: 'wipe' }, 1500);
-        // Ook de oude wachtrij van de urenregistratie (zonder service worker).
-        try { Object.keys(localStorage).filter((key) => key.startsWith('aquatech_worklog_queue')).forEach((key) => localStorage.removeItem(key)); } catch (error) { /* geen opslag */ }
+        // Ook de oude wachtrij van de urenregistratie (zonder service worker) en
+        // het lokale concept van de planner (staat ook op de server bij Mijn plannen);
+        // een tekening zonder account (-tekenen) blijft.
+        try {
+          Object.keys(localStorage)
+            .filter((key) => key.startsWith('aquatech_worklog_queue') || (key.startsWith('aquatech-beregeningsplanner-v1') && !key.endsWith('-tekenen')))
+            .forEach((key) => localStorage.removeItem(key));
+        } catch (error) { /* geen opslag */ }
         // Na opnieuw inloggen weer naar de eigen startpagina (zie dashboard.js).
         try { sessionStorage.removeItem('aquatech_started'); } catch (error) { /* geen opslag */ }
         location.href = base || './';

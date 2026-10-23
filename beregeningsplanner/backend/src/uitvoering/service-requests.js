@@ -12,7 +12,7 @@
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { createMailer, validEmail } = require('../platform/mailer');
-const { inspectImage, fromBase64, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE } = require('./photos');
+const { inspectImage, fromBase64, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE, MAX_THUMB_SIDE } = require('./photos');
 const { mailBody } = require('../verkoop/quotes');
 
 const KINDS = { storing: 'Storing', onderhoud: 'Onderhoud', overig: 'Vraag of verzoek' };
@@ -241,6 +241,7 @@ function createServiceRequestStore(db, { vault, workorders, photos }) {
     if (input.thumb !== undefined && input.thumb !== null && input.thumb !== '') {
       const thumbBuffer = fromBase64(input.thumb);
       thumb = thumbBuffer && thumbBuffer.length <= MAX_THUMB_BYTES ? inspectImage(thumbBuffer) : null;
+      if (thumb && (thumb.width > MAX_THUMB_SIDE || thumb.height > MAX_THUMB_SIDE)) thumb = null;
       if (!thumb) return { error: 'invalid_photo', status: 400, message: 'Ongeldige miniatuur.' };
     }
     const id = crypto.randomUUID();

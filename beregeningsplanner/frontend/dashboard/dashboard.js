@@ -48,11 +48,17 @@
     $('#modules').innerHTML = html;
   }
 
-  /** Toont het laatst bewerkte plan uit de localStorage van de planner (per browser). */
-  function renderRecent() {
+  /**
+   * Toont het laatst bewerkte plan uit de localStorage van de planner (per
+   * browser), alleen als dat concept van de ingelogde gebruiker is.
+   * @param {object|null} me Antwoord van api/me.
+   */
+  function renderRecent(me) {
     let data = null;
     try { data = JSON.parse(localStorage.getItem(`aquatech-beregeningsplanner-v1${window.AquatechEnv ? window.AquatechEnv.storageSuffix() : ''}`) || 'null'); } catch (error) { /* geen opslag */ }
     if (!data || !data.meta) return;
+    const common = window.AquatechCommon;
+    if (!common || !data.owner || data.owner !== common.ownerOf(me)) return;
     const areas = (data.areas || []).length;
     const sprinklers = (data.sprinklers || []).length;
     if (!areas && !sprinklers) return;
@@ -143,10 +149,10 @@
   if (window.AquatechCommon && window.AquatechCommon.leaving) return;
 
   renderModules(null);
-  renderRecent();
 
   Promise.all([window.AquatechAccount.load(''), loadConfig()]).then(([me]) => {
     renderModules(me);
+    renderRecent(me);
     renderNews(me);
     if (window.AquatechToday && window.AquatechToday.start(me)) greet(me);
     renderMyPlans(me);

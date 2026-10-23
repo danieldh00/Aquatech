@@ -30,6 +30,13 @@
    */
   const limitText = (value, max) => String(value == null ? '' : value).slice(0, max);
   /**
+   * Tekst op één regel (zonder regeleinden), ingekort tot max tekens.
+   * @param {*} value De invoer.
+   * @param {number} max Maximaal aantal tekens.
+   * @returns {string} De tekst.
+   */
+  const oneLine = (value, max) => limitText(String(value == null ? '' : value).replace(/[\r\n]+/g, ' '), max);
+  /**
    * Getal begrensd tussen min en max.
    * @param {*} value De invoer.
    * @param {number} min Ondergrens.
@@ -165,7 +172,7 @@
      */
     const cleanList = (value, cleanItem) => (Array.isArray(value) ? value : []).slice(0, MAX_ITEMS).map(cleanItem);
     return {
-      title: limitText(fields.title, 200),
+      title: oneLine(fields.title, 200),
       quoteId: limitText(fields.quoteId, 64),
       quoteNumber: limitText(fields.quoteNumber, 40),
       planId: limitText(fields.planId, 64),

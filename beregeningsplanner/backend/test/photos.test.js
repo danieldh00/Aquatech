@@ -117,6 +117,7 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
     assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: Buffer.from('<svg/>').toString('base64') })).status, 400);
     assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: 'niet base64!' })).status, 400);
     assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: jpeg.toString('base64'), thumb: Buffer.from('x'.repeat(40)).toString('base64') })).status, 400);
+    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: jpeg.toString('base64'), thumb: sitePhotoPng('te breed', 1, 1100, 40).toString('base64') })).status, 400, 'miniatuur te groot');
     assert.strictEqual((await kees.post('/api/workorders/bestaat-niet/photos', { image: jpeg.toString('base64') })).status, 404);
 
     // Versleuteld in de database: geen JPEG/PNG-bytes in de rij.
@@ -146,6 +147,13 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
     assert.strictEqual((await piet.get(`/api/portal/photos/${up.body.id}`)).status, 404, 'andere klant');
     assert.strictEqual((await createClient(base).get(`/api/portal/photos/${up.body.id}`)).status, 401);
     assert.strictEqual((await baas.get(`/api/portal/photos/${hidden.id}`)).status, 200, 'medewerker ziet alles');
+    // Offerte terug naar concept of verwijderd: dan ook geen losse foto's meer (zelfde regel als het dossier).
+    db.prepare("UPDATE quotes SET status = 'concept' WHERE id = ?").run(quote.id);
+    assert.strictEqual((await klaas.get(`/api/portal/photos/${up.body.id}`)).status, 404, 'offerte is concept');
+    db.prepare("UPDATE quotes SET status = 'akkoord', deleted_at = ? WHERE id = ?").run(new Date().toISOString(), quote.id);
+    assert.strictEqual((await klaas.get(`/api/portal/photos/${up.body.id}`)).status, 404, 'offerte is verwijderd');
+    db.prepare('UPDATE quotes SET deleted_at = NULL WHERE id = ?').run(quote.id);
+    assert.strictEqual((await klaas.get(`/api/portal/photos/${up.body.id}`)).status, 200);
     assert.strictEqual((await klaas.get(`/api/workorders/${wo.id}/photos`)).status, 403);
     // Het opleverdossier in het portaal toont alleen de zichtbare foto's, met de portaal-URL.
     const pw = (await klaas.get(`/api/portal/workorders/${wo.id}`)).body;

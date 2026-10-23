@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.69.0',
+      date: '2026-10-23',
+      title: 'Veiligheid verder aangescherpt',
+      items: [
+        { text: 'Log je uit, of gebruikt iemand anders daarna dezelfde browser, dan blijft het **lokale concept van de planner** van jou: een volgende gebruiker ziet het niet meer.', for: ['plannen'] },
+        { text: 'Wijzigingen die **zonder verbinding** zijn bewaard, worden alleen nog verstuurd onder het account dat ze maakte.', for: ['werkorders'] },
+        { text: 'De beregeningsplanner is alleen nog te gebruiken met het recht **Beregeningsplanner** (Beheer > Rollen).', for: ['beheer'] },
+      ],
+    },
+    {
       version: '0.68.6',
       date: '2026-10-22',
       title: 'Opgeschoonde code (deel 2 van de schermen)',

@@ -17,33 +17,50 @@ const BATCH_OF = { work_order_photos: 10 };
 /**
  * Beschrijft alle tabellen van een database: de kolommen en de volgorde (primaire sleutel, anders alle kolommen).
  * @param {object} db Databaseverbinding.
- * @returns {Object<string, { columns: string[], order: string[] }>} Per tabelnaam de kolommen en de sorteervolgorde.
+ * @returns {Object<string, { columns: string[], order: string[], keyed: boolean }>} Per tabelnaam de kolommen, de sorteervolgorde en of die een primaire sleutel is.
  */
 function describe(db) {
   const tables = {};
   for (const name of listTables(db)) {
     const columnInfo = tableColumns(db, name);
     const primaryKey = columnInfo.filter((column) => column.pk).map((column) => column.name);
-    tables[name] = { columns: columnInfo.map((column) => column.name), order: primaryKey.length ? primaryKey : columnInfo.map((column) => column.name) };
+    tables[name] = { columns: columnInfo.map((column) => column.name), order: primaryKey.length ? primaryKey : columnInfo.map((column) => column.name), keyed: primaryKey.length > 0 };
   }
   return tables;
 }
 
 /**
- * Loopt alle rijen van een tabel door in porties, op volgorde van de primaire sleutel.
+ * Loopt alle rijen van een tabel door in porties, op volgorde van de primaire
+ * sleutel. Elke portie gaat verder na de laatste sleutel van de vorige
+ * (keyset), zodat de database eerdere rijen niet steeds opnieuw overslaat;
+ * alleen een tabel zonder primaire sleutel gebruikt OFFSET.
  * @param {object} db Databaseverbinding.
  * @param {string} table Naam van de tabel.
- * @param {{ columns: string[], order: string[] }} description Kolommen en volgorde (uit describe).
+ * @param {{ columns: string[], order: string[], keyed?: boolean }} description Kolommen, volgorde en of die een primaire sleutel is (uit describe).
  * @returns {Generator<object>} De rijen, één voor één.
  */
-function* rowsOf(db, table, { columns, order }) {
-  const sql = `SELECT ${columns.join(', ')} FROM ${table} ORDER BY ${order.join(', ')} LIMIT ? OFFSET ?`;
-  const stmt = db.prepare(sql);
+function* rowsOf(db, table, { columns, order, keyed = false }) {
   const size = BATCH_OF[table] || BATCH;
-  for (let offset = 0; ; offset += size) {
-    const batch = stmt.all(size, offset);
+  const base = `SELECT ${columns.join(', ')} FROM ${table}`;
+  const ordering = `ORDER BY ${order.join(', ')} LIMIT ?`;
+  if (!keyed) {
+    const statement = db.prepare(`${base} ${ordering} OFFSET ?`);
+    for (let offset = 0; ; offset += size) {
+      const batch = statement.all(size, offset);
+      for (const row of batch) yield row;
+      if (batch.length < size) return;
+    }
+  }
+  const key = order.length === 1 ? order[0] : `(${order.join(', ')})`;
+  const marks = order.length === 1 ? '?' : `(${order.map(() => '?').join(', ')})`;
+  const first = db.prepare(`${base} ${ordering}`);
+  const after = db.prepare(`${base} WHERE ${key} > ${marks} ${ordering}`);
+  let batch = first.all(size);
+  for (;;) {
     for (const row of batch) yield row;
     if (batch.length < size) return;
+    const last = batch[batch.length - 1];
+    batch = after.all(...order.map((column) => last[column]), size);
   }
 }
 

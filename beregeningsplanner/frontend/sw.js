@@ -179,7 +179,8 @@ self.addEventListener('fetch', (e) => {
       return;
     }
     if (path === 'api/auth/logout' && req.method === 'POST') { e.respondWith(logout(req)); return; }
-    if (req.headers.get(H.queue)) e.respondWith(write(req, path));
+    // Alleen de bekende werkorder-wijzigingen mogen in de wachtrij (offline-core QUEUEABLE).
+    if (req.headers.get(H.queue) && Core.queueable(path.split('?')[0], req.method)) e.respondWith(write(req, path));
     return;
   }
   if (req.method !== 'GET') return;
@@ -264,7 +265,10 @@ async function fromCache(req) {
 }
 
 // Gegevens: eerst de server, zonder verbinding (of server onbereikbaar) de cache.
+// Een antwoord gaat alleen in de cache als nog dezelfde gebruiker ingelogd is
+// als bij het versturen (een laat antwoord van de vorige gebruiker niet).
 async function data(req) {
+  const owner = (await currentIdentity()).owner;
   try {
     const res = await fetch(req);
     if (Core.unreachable(res.status)) {
@@ -272,7 +276,8 @@ async function data(req) {
       if (hit) return hit;
     }
     if (res.status === 401) await setIdentity({ owner: null, allowed: false });
-    if (res.ok && (await currentIdentity()).allowed) {
+    const now = await currentIdentity();
+    if (res.ok && now.allowed && owner && now.owner === owner) {
       const cache = await caches.open(DATA);
       await cache.put(req.url, await stamp(res));
     }
@@ -384,7 +389,8 @@ async function patchCache(item) {
 }
 
 async function keepResponse(item, res) {
-  if (!(await currentIdentity()).allowed) return;
+  const now = await currentIdentity();
+  if (!now.allowed || now.owner !== item.owner) return;
   const cache = await caches.open(DATA);
   await cache.put(new URL(item.url, self.registration.scope).href, await stamp(res));
 }
@@ -406,7 +412,8 @@ async function doFlush() {
     inFlight.add(item.id);
     let res;
     try {
-      res = await send(item, { [H.queued]: '1' });
+      // Met de eigenaar: de server voert hem niet uit onder iemand anders die nu is ingelogd.
+      res = await send(item, { [H.queued]: '1', [H.owner]: item.owner });
     } catch (err) {
       inFlight.delete(item.id);
       break; // nog steeds geen verbinding
