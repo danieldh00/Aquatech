@@ -125,8 +125,9 @@
           await call(`api/workorders/${encodeURIComponent(item.woId)}/${item.type}`, { method: 'POST', body: item.body, owner: item.owner });
           sent++;
         } catch (e) {
-          if (e instanceof Offline || e.status === 401) break;
-          if (e.code !== 'owner_mismatch') toast(`Regel van ${shortDate(item.body.workDate || item.body.usedOn)} niet geboekt: ${e.message}`, true);
+          // Geen verbinding, uitgelogd of intussen een ander account: de regel blijft liggen.
+          if (e instanceof Offline || e.status === 401 || e.code === 'owner_mismatch') break;
+          toast(`Regel van ${shortDate(item.body.workDate || item.body.usedOn)} niet geboekt: ${e.message}`, true);
         }
         writeQueue(readQueue().filter((x) => x.body.clientId !== item.body.clientId));
       }
@@ -143,10 +144,10 @@
   // ---------- Laden en tekenen ----------
   async function load() {
     const wo = state.wo;
-    await Promise.all([
-      loadSwPending(wo).catch(() => {}),
-      currentOwner().then((owner) => { state.owner = owner; }, () => {}),
-    ]);
+    // Eerst de eigenaar: de service worker werkt zijn identiteit bij via api/me
+    // en filtert de wachtrij daarop.
+    await currentOwner().then((owner) => { state.owner = owner; }, () => {});
+    await loadSwPending(wo).catch(() => {});
     try {
       const out = await call(`api/workorders/${encodeURIComponent(wo.id)}/worklog`);
       if (state.wo !== wo) return;
