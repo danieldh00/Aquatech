@@ -1,0 +1,64 @@
+# Instellingen voor CodeRabbit-reviews op pull requests naar master.
+# Schema: https://coderabbit.ai/integrations/schema.v2.json
+language: nl-NL
+reviews:
+  profile: chill
+  # Keurt de PR goed als alle opmerkingen zijn opgelost, anders "changes requested".
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  path_filters:
+    - "!**/vendor/**"
+    - "!**/package-lock.json"
+    - "!beregeningsplanner/backend/test/fixtures/**"
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - master
+  path_instructions:
+    - path: "**/*.js"
+      instructions: |
+        Codestijl van dit project (zie CLAUDE.md, bewaakt door test/codestyle.test.js):
+        - Duidelijke namen voor variabelen, parameters en functies (row, workOrder,
+          tenantId, formatPrice), niet r, wo, t, fmt. Geen namen van één letter behalve
+          i/j als teller, x/y als coördinaat, _ voor een ongebruikte parameter en $ als
+          querySelector-hulp. Geen cryptische afkortingen (q, tx, el, cb, tmp, str);
+          req/res, id, url, db en pdf mogen. Sorteerfuncties (left, right) =>, fouten
+          catch (error). Namespaces als App, Catalog, Core en Roles blijven zoals ze zijn.
+        - Elke functie heeft direct erboven een /** ... */-commentaarblok in het
+          Nederlands: wat de functie doet, @param {type} naam per parameter en
+          @returns {type} als er iets terugkomt. Losse callbacks als argument en korte
+          functies op één regel in een object zijn uitgezonderd.
+        - Elk bestand begint met een kort kopcommentaar over wat erin staat.
+        - Opschonen verandert nooit het gedrag: alleen namen en commentaar.
+    - path: "beregeningsplanner/backend/src/**"
+      instructions: |
+        - Mappen per onderwerp: database/, beveiliging/, platform/, beregening/,
+          verkoop/, webshop/, uitvoering/, voorraad/, paginas/. In de root van src/
+          alleen server.js, backup.js, migrate-to-postgres.js en paths.js. Bestandsnamen
+          in kebab-case.
+        - Queries: geen SELECT * of t.*, geen query per regel (N+1), grote kolommen niet
+          in overzichten, nieuwe WHERE/ORDER BY op groeiende tabellen met een index met
+          tenant_id vooraan. SQL moet werken in SQLite én PostgreSQL; een nieuwe migratie
+          staat in MIGRATIONS (db.js) én PG_MIGRATIONS (pgschema.js).
+        - Beveiliging: elke query filtert op tenant_id = req.tenantId, id's uit de URL
+          altijd samen met de tenant opzoeken, rechten met requireRight, openbare of dure
+          endpoints met createRateLimiter, parameters altijd via ?, geheimen nooit in
+          logs, audit-detail of frontend. Uitgaande verbindingen naar door een tenant
+          ingevulde hosts via netguard.publicAddress.
+    - path: "beregeningsplanner/frontend/**"
+      instructions: |
+        - Alle URL's relatief (css/app.css, nooit /css/...), geen CDN's, gewone
+          <script>-tags (geen ES-modules).
+        - Kleuren in CSS via --at-*-variabelen, nooit hardcoded.
+        - api/me en api/config alleen via getJson; links naar een item direct (?id=).
+        - UI-teksten in het Nederlands; exports als Excel (.xlsx), geen CSV.
+    - path: "beregeningsplanner/backend/test/**"
+      instructions: |
+        Nieuwe routes hebben tests voor een andere tenant (404) en een ontbrekend recht
+        (403). Gedeelde hulpcode uit test/helpers/ gebruiken, geen eigen testclient.
+chat:
+  auto_reply: true

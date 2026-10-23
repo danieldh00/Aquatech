@@ -36,8 +36,10 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   ```
 - Werkwijze per taak: wijzigen → `npm test` → versie-bump + changelog (als
   `beregeningsplanner/` is gewijzigd) → `git push -u origin <branch>` → PR naar
-  `master` → mergen zodra CI groen is (`ci.yml` + `version.yml`).
-  Daarna de branch verwijderen. Een volgende taak begint opnieuw vanaf
+  `master` → CI groen (`ci.yml` + `version.yml`) → wachten op de review van
+  **CodeRabbit** (`.coderabbit.yaml`, verplicht via de ruleset op `master`):
+  elke opmerking oplossen of met reden beantwoorden, pas mergen als CodeRabbit
+  de PR heeft goedgekeurd. Daarna de branch verwijderen. Een volgende taak begint opnieuw vanaf
   `origin/master`, niet vanaf een oude featurebranch.
 - Loopt `master` voor op je branch (andere sessie heeft gemerged): eerst
   `git merge origin/master` in je branch, conflicten oplossen, en de versie
