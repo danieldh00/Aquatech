@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.70.0
+
+Bestelvoorstel bij lage voorraad.
+
+- **Voorraadbeheer**: nieuwe kolom `stock_items.reorder_qty` (migratie 30,
+  SQLite en PostgreSQL), in het artikel als *Bestellen tot* (leeg = 2×
+  minimum; lager dan het minimum telt als 2× minimum).
+- `GET /api/stock/reorder` (recht `voorraad`, per omgeving): artikelen waarvan
+  beschikbaar (stand − gereserveerd) onder het minimum ligt, met
+  `target`, `orderQty` (aanvullen tot `target`, naar boven afgerond op hele
+  eenheden), `amount` (op inkoopprijs) en het totaal. Eén query (`list`).
+- Knop **Bestelvoorstel** maakt er een Excel van (tabblad *Bestelvoorstel*,
+  met totaalregel); de gewone voorraadexport heeft de kolom *Bestellen tot*.
+- Testdata vult *Bestellen tot* bij een deel van de artikelen.
+
 ## 0.69.0
 
 Beveiligingsronde naar aanleiding van een geautomatiseerde code-analyse (24

@@ -50,6 +50,7 @@
           <button class="btn primary" id="b-new">+ Artikel</button>
           <button class="btn" id="b-import">Uit catalogus</button>
           <button class="btn" id="b-shop">Uit webshop</button>
+          <button class="btn" id="b-reorder" title="Excel met wat er onder de minimumvoorraad zit en hoeveel je moet bestellen">Bestelvoorstel</button>
           <button class="btn" id="b-export">Excel-export</button>
         </div>
 
@@ -64,6 +65,7 @@
             <label>Locatie<input name="location" maxlength="60" placeholder="Bijv. magazijn A3, bus 1"></label>
             <label>Beginvoorraad<input name="onHand" type="number" min="0" step="any" inputmode="decimal"></label>
             <label>Minimumvoorraad<input name="minQty" type="number" min="0" step="any" inputmode="decimal"></label>
+            <label title="Het bestelvoorstel vult aan tot dit aantal; leeg = 2× minimum">Bestellen tot<input name="reorderQty" type="number" min="0" step="any" inputmode="decimal" placeholder="2× minimum"></label>
             <label>Inkoopprijs (€, excl. btw)<input name="costPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
           </div>
           <div class="row">
@@ -162,6 +164,7 @@
           <div class="row">
             <label>Locatie<input name="location" maxlength="60"></label>
             <label>Minimumvoorraad<input name="minQty" type="number" min="0" step="any" inputmode="decimal"></label>
+            <label title="Het bestelvoorstel vult aan tot dit aantal; leeg = 2× minimum">Bestellen tot<input name="reorderQty" type="number" min="0" step="any" inputmode="decimal" placeholder="2× minimum"></label>
             <label>Inkoopprijs (€)<input name="costPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
           </div>
           <div class="row">
