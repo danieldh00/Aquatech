@@ -5,7 +5,6 @@
     "frontend/beregening/js/bom.js",
     "frontend/beregening/js/catalog.js",
     "frontend/beregening/js/editor.js",
-    "frontend/beregening/js/geometry.js",
     "frontend/beregening/js/hydraulics.js",
     "frontend/beregening/js/localrecog.js",
     "frontend/beregening/js/sprinklerlib.js"
