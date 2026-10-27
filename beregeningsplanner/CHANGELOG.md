@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.69.1
+
+Opschoonronde frontend deel 3: duidelijke namen en een commentaarblok bij elke
+functie, zonder gedragswijziging. Opgeschoond: `sw.js`, `portaal/portaal.js`,
+`werkorders/worklog.js`, `planning/planning.js`, `voorraad/voorraad.js`,
+`hoofdbeheer/hoofdbeheer.js`, `beheer/beheer.js`, `facturen/facturen.js`,
+`offertes/offertes.js` en `werkorders/werkorders.js`; ze staan niet meer in
+`tools/codestyle-baseline.json`. De wijzigingen uit 0.69.0 (eigenaar in de
+offline wachtrij) zijn in de opgeschoonde `sw.js` en `worklog.js` meegenomen.
+
 ## 0.69.0
 
 Beveiligingsronde naar aanleiding van een geautomatiseerde code-analyse (24
