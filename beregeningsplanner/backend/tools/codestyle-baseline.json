@@ -6,7 +6,6 @@
     "frontend/beregening/js/catalog.js",
     "frontend/beregening/js/editor.js",
     "frontend/beregening/js/hydraulics.js",
-    "frontend/beregening/js/localrecog.js",
-    "frontend/beregening/js/sprinklerlib.js"
+    "frontend/beregening/js/localrecog.js"
   ]
 }
