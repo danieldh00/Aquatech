@@ -73,6 +73,7 @@
     const d = state.data;
     const name = d.user && d.user.kind !== 'gast' ? d.user.displayName : '';
     $('#p-welcome').textContent = name ? `Welkom, ${name}` : 'Mijn portaal';
+    renderSeason(d);
     renderTodo(d);
     renderRequests(d);
     renderWork(d);
@@ -82,6 +83,58 @@
     if (!d.quotes.length && !d.workorders.length && !d.plans.length && !(d.requests || []).length) {
       message('Er staat nog niets voor u klaar. Zodra wij een offerte voor u hebben opgesteld of werkzaamheden hebben ingepland, ziet u die hier.');
     } else message('');
+  }
+
+  /**
+   * Toont de lopende seizoensherinneringen (voorjaar opstarten, najaar
+   * winterklaar) met een knop om onderhoud aan te vragen, en het vinkje voor de mails.
+   * @param {object} portal Het overzicht uit api/portal.
+   * @returns {void}
+   */
+  function renderSeason(portal) {
+    const reminders = portal.reminders || [];
+    const canRequest = Boolean(portal.features && portal.features.requests);
+    $('#season').innerHTML = reminders.map((reminder) => `
+      <div class="card season">
+        <h3>${esc(reminder.title)}</h3>
+        <div>${esc(reminder.text)}</div>
+        ${canRequest ? `<div class="actions"><button class="btn primary" data-season="${esc(reminder.key)}">Afspraak aanvragen</button></div>` : ''}
+      </div>`).join('');
+    $('#season-mail').checked = portal.reminderMails === true;
+    $('#season-mail-row').hidden = !portal.user || portal.user.kind !== 'account';
+    $('#s-season').hidden = !portal.remindersEnabled || (!reminders.length && $('#season-mail-row').hidden);
+  }
+
+  /**
+   * Opent het meldformulier als onderhoudsverzoek voor een seizoensherinnering.
+   * @param {string} key Sleutel van de herinnering.
+   * @returns {void}
+   */
+  function requestSeasonService(key) {
+    const reminder = (state.data.reminders || []).find((item) => item.key === key);
+    if (!reminder || !state.data.features.requests) return;
+    openForm();
+    const requestForm = form();
+    requestForm.kind.value = 'onderhoud';
+    requestForm.subject.value = reminder.title;
+    syncKind();
+    requestForm.description.focus();
+  }
+
+  /**
+   * Zet de seizoensherinneringen per mail aan of uit (voorkeur in het profiel).
+   * @param {boolean} wanted true = wel mails.
+   * @returns {Promise<void>}
+   */
+  async function saveSeasonMail(wanted) {
+    try {
+      await api('../api/account/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preferences: { seasonReminders: wanted } }) });
+      state.data.reminderMails = wanted;
+      toast(wanted ? 'U krijgt de herinneringen per e-mail.' : 'U krijgt geen herinneringen meer per e-mail.');
+    } catch (error) {
+      $('#season-mail').checked = !wanted;
+      toast(`Opslaan mislukt (${error.message}).`, true);
+    }
   }
 
   function renderTodo(d) {
@@ -428,7 +481,10 @@
       if (b) openDetail(b.dataset.open);
       const r = e.target.closest('main [data-req]');
       if (r) openRequest(r.dataset.req);
+      const season = e.target.closest('main [data-season]');
+      if (season) requestSeasonService(season.dataset.season);
     });
+    $('#season-mail').onchange = (event) => saveSeasonMail(event.target.checked);
     $('#r-new').onclick = openForm;
     $('#r-close').onclick = closeForm;
     $('#r-cancel').onclick = closeForm;
@@ -452,6 +508,9 @@
     const mr = /^#melding=([\w-]+)$/.exec(location.hash);
     if (mr && state.data) openRequest(mr[1]);
     if (location.hash === '#melden' && state.data && state.data.features.requests) openForm();
+    // Vanuit de mail met een seizoensherinnering: ?herinnering=<sleutel>.
+    const seasonKey = new URLSearchParams(location.search).get('herinnering');
+    if (seasonKey && state.data) requestSeasonService(seasonKey);
   }
 
   init();

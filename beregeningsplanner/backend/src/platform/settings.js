@@ -5,6 +5,7 @@ const { sanitizeMail } = require('./mailer');
 const { sanitizeShop } = require('../webshop/woocommerce');
 const { sanitizeOutsourcing } = require('../uitvoering/outsourcing');
 const { sanitizeInvoicing } = require('../verkoop/invoices');
+const { sanitizeSeasonReminders } = require('../uitvoering/season-reminders');
 const { sanitizeVisma, sanitizeVismaApp } = require('../verkoop/visma');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -67,6 +68,9 @@ const FIELDS = {
   // omzetcategorieën per omzetgroep en btw-tarief met grootboekrekening
   // voor de export naar de boekhouding.
   invoicing: { type: 'object', default: {}, sanitize: sanitizeInvoicing },
+  // Seizoensherinneringen voor klanten (season-reminders.js): aan/uit, adres
+  // van het klantportaal voor de knop in de mail, en de herinneringen.
+  seasonReminders: { type: 'object', default: {}, sanitize: sanitizeSeasonReminders },
   // Kleurthema (shared/theme.js): alleen door een hoofdbeheerder te kiezen via
   // Hoofdbeheer (platform: niet via Beheer > Instellingen). In de hoofdtenant
   // geldt het voor alle organisaties, in een live-tenant als eigen thema.

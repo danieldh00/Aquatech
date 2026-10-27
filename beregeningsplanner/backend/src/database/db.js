@@ -775,6 +775,19 @@ const MIGRATIONS = [
     UNIQUE (tenant_id, kind, key)
   );
   `,
+  // 30: seizoensherinneringen (season-reminders.js): welke klant welke
+  // herinnering in welk jaar al per mail kreeg (nooit twee keer dezelfde).
+  `
+  CREATE TABLE season_reminders_sent (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    user_id      TEXT NOT NULL REFERENCES users(id),
+    reminder_key TEXT NOT NULL,
+    year         INTEGER NOT NULL,
+    sent_at      TEXT NOT NULL,
+    UNIQUE (tenant_id, user_id, reminder_key, year)
+  );
+  `,
 ];
 
 /**

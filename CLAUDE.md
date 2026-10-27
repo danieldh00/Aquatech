@@ -400,6 +400,14 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `workorders.createReceived` (werkorder zonder offerte); de klant ziet een
   werkorder als `quotes.customer_id` **of** `service_requests.customer_id` =
   klant (`OF_CUSTOMER` in workorders.js, `portal.ownRow`, `photos.customerOwns`).
+- **Seizoensherinneringen** (0.70.0, `backend/src/uitvoering/season-reminders.js`,
+  tabel `season_reminders_sent`, migratie 30): instelling `seasonReminders`
+  {enabled, portalUrl, items [{key, title, month, day, text}]} in Beheer →
+  Instellingen. Elk uur (`app.locals.seasonRemindersAll`) mail via de
+  tenant-mailserver aan klanten met e-mail + werkorder in die omgeving, één
+  keer per sleutel per jaar (tot 21 dagen na de datum). Portaal: `reminders`
+  (60 dagen), knop opent het meldformulier als onderhoud
+  (`portaal/?herinnering=<key>`), afmelden via voorkeur `seasonReminders`.
 - **Vaste AI-uitkomst + leren** (0.56.0, `backend/src/beregening/recognitions.js`, tabel
   `plan_recognitions`, migratie 22): `/api/plan/analyze` bewaart per omgeving
   onder SHA-256 van de afbeelding + model + `PROMPT_VERSION` (plan-analyzer.js)

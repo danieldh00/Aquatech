@@ -375,6 +375,7 @@
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
+    renderSeason(view.seasonReminders.value);
     const out = $('#s-outsourcing');
     const o = view.outsourcing.value;
     out.send.checked = o.send;
@@ -428,6 +429,44 @@
     } catch (e) {
       toast(`Kan de instellingen niet laden: ${e.message}`, true);
     }
+  }
+
+  const MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
+  /**
+   * Vult het formulier Seizoensherinneringen: aan/uit, portaaladres (standaard
+   * het portaal van deze installatie) en per herinnering titel, datum en tekst.
+   * @param {object} config De instelling seasonReminders.
+   * @returns {void}
+   */
+  function renderSeason(config) {
+    const seasonForm = $('#s-season');
+    seasonForm.enabled.checked = config.enabled;
+    seasonForm.portalUrl.value = config.portalUrl || new URL('../portaal/', location.href).href;
+    $('#s-season-items').innerHTML = config.items.map((item) => `
+      <fieldset class="season-item" data-key="${esc(item.key)}">
+        <div class="row">
+          <label>Onderwerp<input name="title" maxlength="100" required value="${esc(item.title)}"></label>
+          <label>Dag<input name="day" type="number" min="1" max="31" step="1" required value="${item.day}"></label>
+          <label>Maand<select name="month">${MONTHS.map((month, index) => `<option value="${index + 1}"${index + 1 === item.month ? ' selected' : ''}>${month}</option>`).join('')}</select></label>
+        </div>
+        <label>Tekst in de mail en het portaal<textarea name="text" rows="3" maxlength="1000">${esc(item.text)}</textarea></label>
+      </fieldset>`).join('');
+  }
+
+  /**
+   * Leest het formulier Seizoensherinneringen uit.
+   * @returns {object} De instelling seasonReminders.
+   */
+  function readSeason() {
+    const seasonForm = $('#s-season');
+    const items = [...seasonForm.querySelectorAll('.season-item')].map((fieldset) => ({
+      key: fieldset.dataset.key,
+      title: fieldset.querySelector('[name="title"]').value.trim(),
+      day: Number(fieldset.querySelector('[name="day"]').value),
+      month: Number(fieldset.querySelector('[name="month"]').value),
+      text: fieldset.querySelector('[name="text"]').value.trim(),
+    }));
+    return { enabled: seasonForm.enabled.checked, portalUrl: seasonForm.portalUrl.value.trim(), items };
   }
 
   async function saveSettings(form, patch, msg) {
@@ -521,6 +560,11 @@
       const patch = {};
       for (const k of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays']) patch[k] = Number(sec[k].value);
       saveSettings(sec, patch, 'Instellingen opgeslagen');
+    };
+    const seasonForm = $('#s-season');
+    seasonForm.onsubmit = (event) => {
+      event.preventDefault();
+      saveSettings(seasonForm, { seasonReminders: readSeason() }, 'Seizoensherinneringen opgeslagen');
     };
     const out = $('#s-outsourcing');
     out.onsubmit = (ev) => {

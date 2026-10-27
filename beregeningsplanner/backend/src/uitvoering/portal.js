@@ -11,9 +11,12 @@
 // - ctx.photos: opleverfoto's per werkorder (photos.list met customerOnly);
 // - workorders.respond: een afspraak bevestigen of om een ander moment vragen;
 // - ctx.requests: eigen meldingen (storing, onderhoud; service-requests.js).
+// Seizoensherinneringen (season-reminders.js) staan bovenaan als ze lopen.
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { forCustomer } = require('./service-requests');
+const { portalReminders } = require('./season-reminders');
+const { preferencesOf } = require('../platform/store');
 
 const Core = require(path.join(FRONTEND_DIR, 'werkorders', 'workorder-core.js'));
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
@@ -144,9 +147,14 @@ function registerPortalRoutes(app, ctx) {
     res.setHeader('Cache-Control', 'no-store');
     const tenantId = tenantOf(req);
     const user = req.user;
+    const settings = settingsOf(req);
     res.json({
       user: { displayName: user.display_name || user.displayName || '', kind: user.kind, phone: user.phone || '' },
-      contact: contactOf(settingsOf(req).get('quoteProfile')),
+      contact: contactOf(settings.get('quoteProfile')),
+      // Lopende seizoensherinneringen en of de klant ze per mail wil krijgen.
+      reminders: portalReminders(settings.get('seasonReminders')),
+      remindersEnabled: Boolean(settings.get('seasonReminders')?.enabled),
+      reminderMails: user.kind === 'account' && preferencesOf(user).seasonReminders !== false,
       // Plannen alleen met het recht plannen (een organisatie kan het de klant afnemen).
       plans: Roles.can(user, 'plannen') ? store.listPlans(tenantId, { ownerId: user.id }) : [],
       quotes: quotes.list(tenantId, { customerId: user.id }),

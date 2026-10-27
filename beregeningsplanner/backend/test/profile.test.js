@@ -38,9 +38,9 @@ async function login(base, username, password = PW) {
 }
 
 test('voorkeuren: alleen bekende sleutels, altijd compleet', () => {
-  assert.deepStrictEqual(preferencesOf({ preferences: '{"startPage":"planning","mailCopy":true,"x":1}' }), { startPage: 'planning', mailCopy: true, newsSeenAt: '', seenRelease: '' });
-  assert.deepStrictEqual(preferencesOf({ preferences: 'kapot' }), { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' });
-  assert.deepStrictEqual(preferencesOf({ preferences: '{"startPage":"../x","mailCopy":"ja"}' }), { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' });
+  assert.deepStrictEqual(preferencesOf({ preferences: '{"startPage":"planning","mailCopy":true,"x":1}' }), { startPage: 'planning', mailCopy: true, newsSeenAt: '', seenRelease: '', seasonReminders: true });
+  assert.deepStrictEqual(preferencesOf({ preferences: 'kapot' }), { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '', seasonReminders: true });
+  assert.deepStrictEqual(preferencesOf({ preferences: '{"startPage":"../x","mailCopy":"ja"}' }), { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '', seasonReminders: true });
 });
 
 test('Mijn profiel: gegevens en voorkeuren wijzigen', async () => {
@@ -49,9 +49,9 @@ test('Mijn profiel: gegevens en voorkeuren wijzigen', async () => {
     const klaas = await login(base, 'klaas');
     const profile = await klaas.get('/api/account/profile');
     assert.strictEqual(profile.status, 200);
-    assert.deepStrictEqual(profile.body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' });
+    assert.deepStrictEqual(profile.body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '', seasonReminders: true });
     assert.strictEqual(profile.body.user.email, '');
-    assert.deepStrictEqual((await klaas.get('/api/me')).body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' });
+    assert.deepStrictEqual((await klaas.get('/api/me')).body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '', seasonReminders: true });
 
     // Ongeldige invoer: niets opgeslagen, met het veld erbij.
     const bad = await klaas.put('/api/account/profile', { email: 'geen-adres' });
@@ -66,10 +66,10 @@ test('Mijn profiel: gegevens en voorkeuren wijzigen', async () => {
     assert.strictEqual(ok.body.user.displayName, 'Klaas Vaak');
     assert.strictEqual(ok.body.user.email, 'klaas@voorbeeld.test');
     assert.strictEqual(ok.body.user.phone, '+31 (0)6 12-34 56 78');
-    assert.deepStrictEqual(ok.body.preferences, { startPage: 'portaal', mailCopy: false, newsSeenAt: '', seenRelease: '' });
+    assert.deepStrictEqual(ok.body.preferences, { startPage: 'portaal', mailCopy: false, newsSeenAt: '', seenRelease: '', seasonReminders: true });
     // Alleen meegegeven velden veranderen; voorkeuren worden samengevoegd.
     const more = await klaas.put('/api/account/profile', { preferences: { mailCopy: true } });
-    assert.deepStrictEqual(more.body.preferences, { startPage: 'portaal', mailCopy: true, newsSeenAt: '', seenRelease: '' });
+    assert.deepStrictEqual(more.body.preferences, { startPage: 'portaal', mailCopy: true, newsSeenAt: '', seenRelease: '', seasonReminders: true });
     assert.strictEqual(more.body.user.email, 'klaas@voorbeeld.test');
     const me = (await klaas.get('/api/me')).body;
     assert.strictEqual(me.user.displayName, 'Klaas Vaak');
