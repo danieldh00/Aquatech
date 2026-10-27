@@ -10,6 +10,8 @@ functie, zonder gedragswijziging. Opgeschoond: `sw.js`, `portaal/portaal.js`,
 `tools/codestyle-baseline.json`. De wijzigingen uit 0.69.0 (eigenaar in de
 offline wachtrij) zijn in de opgeschoonde `sw.js` en `worklog.js` meegenomen.
 
+- `body-parser` 1.20.9 (lockfile; `npm audit` meldde GHSA-27r3-jxmh-p828).
+
 ## 0.69.0
 
 Beveiligingsronde naar aanleiding van een geautomatiseerde code-analyse (24
