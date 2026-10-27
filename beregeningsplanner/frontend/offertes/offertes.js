@@ -1012,7 +1012,7 @@
       state.mail = Boolean(out.mail);
     } else {
       // Gast zonder account (nog niets bewaard): standaardwaarden van de server ontbreken.
-      state.profile = { companyName: 'AquaTech Service', hourlyRate: 55, validDays: 30, vatRate: 21, markupPct: 0, callOutFee: 0, intro: '', terms: '' };
+      state.profile = { companyName: 'AquaTech Service', hourlyRate: 55, hourlyCost: 0, validDays: 30, vatRate: 21, markupPct: 0, callOutFee: 0, intro: '', terms: '' };
     }
     $('#l-status').innerHTML = '<option value="">Alle statussen</option>' + [...Object.keys(Q.STATUSES), 'verlopen']
       .map((s) => `<option value="${s}">${esc(statusLabel(s))}</option>`).join('');

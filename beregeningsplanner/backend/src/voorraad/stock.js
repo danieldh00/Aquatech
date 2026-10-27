@@ -754,17 +754,17 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * Verkoopgegevens per code (facturen, catalogus).
    * @param {string} tenantId Id van de omgeving.
    * @param {string[]|null} [codes] Alleen deze codes (null = alle niet-gearchiveerde).
-   * @returns {Object<string, object>} Per code: id, name, unit, salePrice, vatRate en revenueGroup.
+   * @returns {Object<string, object>} Per code: id, name, unit, salePrice, costPrice, vatRate en revenueGroup.
    */
   function saleInfo(tenantId, codes = null) {
     const wanted = codes ? [...new Set(codes.map(normalizeCode))].filter(Boolean) : null;
     if (wanted && !wanted.length) return {};
     const rows = wanted
-      ? prepare(`SELECT id, code, name, unit, sale_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND code IN (${placeholders(wanted.length)})`).all(tenantId, ...wanted)
-      : prepare('SELECT id, code, name, unit, sale_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND archived = 0').all(tenantId);
+      ? prepare(`SELECT id, code, name, unit, sale_price, cost_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND code IN (${placeholders(wanted.length)})`).all(tenantId, ...wanted)
+      : prepare('SELECT id, code, name, unit, sale_price, cost_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND archived = 0').all(tenantId);
     const out = {};
     for (const row of rows) {
-      out[row.code] = { id: row.id, name: row.name, unit: row.unit, salePrice: row.sale_price == null ? null : Number(row.sale_price), vatRate: Number(row.vat_rate), revenueGroup: row.revenue_group };
+      out[row.code] = { id: row.id, name: row.name, unit: row.unit, salePrice: row.sale_price == null ? null : Number(row.sale_price), costPrice: row.cost_price == null ? null : Number(row.cost_price), vatRate: Number(row.vat_rate), revenueGroup: row.revenue_group };
     }
     return out;
   }

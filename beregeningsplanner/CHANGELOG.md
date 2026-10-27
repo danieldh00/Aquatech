@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.70.0
+
+Nacalculatie per werkorder.
+
+- Blok **Nacalculatie** op de werkorder (`werkorders/costing-panel.js`, kern
+  `werkorders/costing-core.js`, UMD): begroot uit de geaccordeerde offerte
+  (zonder offerte: werkstappen en materiaallijst) tegenover de geboekte uren
+  en het materiaalverbruik, met verschil per onderdeel en per artikel.
+  Kosten = uren × kostprijs per uur + verbruik × inkoopprijs uit de voorraad;
+  opbrengst = definitieve/betaalde facturen van de werkorder (credit negatief),
+  anders de offerte netto. Marge in euro en procent; waarschuwingen bij
+  ontbrekende kost-/inkoopprijzen of conceptfacturen. Excel-export
+  (samenvatting + materiaal), geen CSV.
+- API `GET /api/workorders/:id/costing` (`backend/src/uitvoering/costing.js`),
+  nieuw recht **nacalculatie** (standaard alleen beheerder, `needs`
+  werkorders). Vast aantal queries (`test/queries.test.js`), geen migratie.
+- Bedrijfsgegevens: nieuw veld **Kostprijs per uur** (`quoteProfile.hourlyCost`,
+  standaard 0 = niet ingevuld). `stock.saleInfo` geeft ook `costPrice`.
+
 ## 0.69.0
 
 Beveiligingsronde naar aanleiding van een geautomatiseerde code-analyse (24

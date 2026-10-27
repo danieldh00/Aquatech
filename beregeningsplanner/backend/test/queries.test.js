@@ -154,6 +154,11 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.strictEqual((await client.get(`/api/worklog?from=${day}&to=${day}`)).status, 200);
     assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
+    // Nacalculatie: vast aantal queries, ongeacht het aantal boekingen en artikelen
+    // (sessie + werkorder + melding + offerte + uren + materiaal + facturen; zonder artikelcodes geen voorraadquery).
+    probe.reset();
+    assert.strictEqual((await client.get(`/api/workorders/${wo.id}/costing`)).status, 200);
+    assert.strictEqual(probe.stats.queries, 7, probe.stats.sql.join('\n'));
     // Het werkorderoverzicht telt de geboekte uren met twee queries, niet per werkorder.
     probe.reset();
     assert.strictEqual((await client.get('/api/workorders')).body.items[0].logged.minutes, 300);

@@ -25,13 +25,14 @@ const PROFILE_TEXT = {
   companyName: 120, address: 400, email: 160, phone: 40, website: 160, kvk: 20, vatNumber: 30, iban: 40,
   numberPrefix: 12, intro: 4000, terms: 6000,
 };
-const PROFILE_NUMBERS = { hourlyRate: [0, 10000], validDays: [1, 365], vatRate: [0, 21], markupPct: [-100, 1000], callOutFee: [0, 100000] };
+const PROFILE_NUMBERS = { hourlyRate: [0, 10000], hourlyCost: [0, 10000], validDays: [1, 365], vatRate: [0, 21], markupPct: [-100, 1000], callOutFee: [0, 100000] };
 const PROFILE_DEFAULTS = {
   companyName: 'AquaTech Service', address: '', email: '', phone: '', website: 'aquatechservice.nl', kvk: '', vatNumber: '', iban: '',
   numberPrefix: 'OF-',
   intro: 'Naar aanleiding van ons gesprek bieden wij u vrijblijvend de aanleg aan van een automatisch beregeningssysteem, volgens het ontwerp dat wij voor uw tuin hebben gemaakt.',
   terms: 'Alle bedragen zijn in euro\'s. Deze offerte is geldig tot de genoemde datum. Meerwerk voeren wij alleen in overleg uit, op basis van nacalculatie. Graafwerk gaat uit van een normaal bewerkbare grond zonder obstakels of kabels en leidingen in het tracé. Na akkoord plannen wij de werkzaamheden in overleg in.',
-  hourlyRate: 55, validDays: 30, vatRate: 21, markupPct: 0, callOutFee: 0,
+  // hourlyCost: kostprijs per uur voor de nacalculatie (0 = niet ingevuld).
+  hourlyRate: 55, hourlyCost: 0, validDays: 30, vatRate: 21, markupPct: 0, callOutFee: 0,
 };
 
 /**
