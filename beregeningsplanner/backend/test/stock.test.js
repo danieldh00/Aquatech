@@ -249,18 +249,21 @@ test('voorraad: bestelvoorstel vult aan tot Bestellen tot (leeg = 2× minimum), 
     // Met Bestellen tot en een reservering: beschikbaar 4 − 3 = 1, aanvullen tot 20,5 = 19,5 → 20 hele eenheden.
     await kees.post('/api/stock/items', { code: 'VAL-24V', name: 'Klep', minQty: 2, reorderQty: 20.5, onHand: 4 });
     await workOrder(kees, [['VAL-24V', 3]]);
+    // Minimum 0 maar meer gereserveerd dan er ligt: het tekort (2) komt erin.
+    await kees.post('/api/stock/items', { code: 'BOX-STD', name: 'Kleppenput', onHand: 1 });
+    await workOrder(kees, [['BOX-STD', 3]]);
     // Gearchiveerd telt niet mee.
     const old = (await kees.post('/api/stock/items', { code: 'OUD', name: 'Oud', minQty: 5 })).body;
     await kees.put(`/api/stock/items/${old.id}`, { archived: true });
 
     const proposal = (await kees.get('/api/stock/reorder')).body;
     assert.deepStrictEqual(proposal.items.map((item) => [item.code, item.available, item.target, item.orderQty, item.amount]),
-      [['PE-25', 3, 10, 7, 5.95], ['VAL-24V', 1, 20.5, 20, null]]);
+      [['BOX-STD', -2, 0, 2, null], ['PE-25', 3, 10, 7, 5.95], ['VAL-24V', 1, 20.5, 20, null]]);
     assert.strictEqual(proposal.total, 5.95);
     // Bestellen tot leegmaken: terug naar 2× minimum.
-    const valve = proposal.items[1];
+    const valve = proposal.items[2];
     assert.strictEqual((await kees.put(`/api/stock/items/${valve.id}`, { reorderQty: '' })).body.reorderQty, null);
-    assert.strictEqual((await kees.get('/api/stock/reorder')).body.items[1].orderQty, 3);
+    assert.strictEqual((await kees.get('/api/stock/reorder')).body.items[2].orderQty, 3);
   } finally {
     server.close();
   }

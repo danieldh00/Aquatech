@@ -780,7 +780,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
 
   /**
    * Bestelvoorstel: niet-gearchiveerde artikelen waarvan beschikbaar (stand −
-   * gereserveerd) onder het minimum ligt, met het aantal om aan te vullen tot
+   * gereserveerd) onder het minimum ligt (ook een tekort bij minimum 0), met het aantal om aan te vullen tot
    * "bestellen tot" (leeg of lager dan het minimum = 2× minimum), naar boven
    * afgerond op hele eenheden.
    * @param {string} tenantId Id van de omgeving.
@@ -788,7 +788,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   function reorderProposal(tenantId) {
     let total = null;
-    const items = list(tenantId).filter((item) => item.low).map((item) => {
+    const items = list(tenantId).filter((item) => item.available < item.minQty).map((item) => {
       const target = item.reorderQty != null && item.reorderQty >= item.minQty ? item.reorderQty : round3(item.minQty * 2);
       const orderQty = Math.ceil(round3(target - item.available));
       const amount = item.costPrice == null ? null : Math.round(orderQty * item.costPrice * 100) / 100;
