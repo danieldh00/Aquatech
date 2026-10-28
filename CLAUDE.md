@@ -332,7 +332,9 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   er verbruik is (`syncUsage`, idempotent per verbruiksregel; vanuit
   `workLogStore.hook` met `{ nested: true }`, want `transaction` nest niet). Blok Voorraad op de
   werkorder: `werkorders/stock-panel.js`, API `/api/stock/workorders/:id`
-  (recht `werkorders`).
+  (recht `werkorders`). Bestelvoorstel (0.70.0, migratie 30): `reorder_qty`
+  (*Bestellen tot*, leeg = 2× minimum), `GET /api/stock/reorder`
+  (`stock.reorderProposal`), Excel in de browser.
 - **Verkoop, webshop en facturen** (0.61.0, Brincr vervangen deel 1; migratie 26):
   `stock_items` heeft `sale_price`/`vat_rate`/`revenue_group` (Aquatech = bron).
   `backend/src/webshop/shop-sync.js`: tweerichting met WooCommerce REST v3

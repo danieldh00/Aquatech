@@ -23,6 +23,9 @@
 //   is de bron: prijs en voorraad gaan naar de webshop (shop-sync.js). Elke
 //   wijziging van prijs of stand zet shop_dirty, onDirty start dan het
 //   terugschrijven.
+// - Bestelvoorstel (migratie 30): artikelen waarvan beschikbaar onder het
+//   minimum zakt, met het aantal om aan te vullen tot reorder_qty ("bestellen
+//   tot"; leeg = 2× minimum), afgerond naar boven op hele eenheden.
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { loadArticles } = require('../webshop/shop');
@@ -110,6 +113,11 @@ function sanitizeItem(raw, { partial = false } = {}) {
     if (!Number.isFinite(minQty) || minQty < 0 || minQty > MAX_QTY) return { error: 'Ongeldige minimumvoorraad.', field: 'minQty' };
     out.minQty = round3(minQty);
   }
+  if (!partial || input.reorderQty !== undefined) {
+    const reorderQty = input.reorderQty === '' || input.reorderQty == null ? null : Number(input.reorderQty);
+    if (reorderQty !== null && (!Number.isFinite(reorderQty) || reorderQty < 0 || reorderQty > MAX_QTY)) return { error: 'Ongeldig aantal bij Bestellen tot.', field: 'reorderQty' };
+    out.reorderQty = reorderQty === null ? null : round3(reorderQty);
+  }
   if (!partial || input.costPrice !== undefined) {
     const costPrice = input.costPrice === '' || input.costPrice == null ? null : Number(input.costPrice);
     if (costPrice !== null && (!Number.isFinite(costPrice) || costPrice < 0 || costPrice > MAX_QTY)) return { error: 'Ongeldige inkoopprijs.', field: 'costPrice' };
@@ -158,7 +166,7 @@ function needsOf(materials) {
  * Maakt de opslag voor voorraadartikelen, mutaties en reserveringen.
  * @param {object} db De database.
  * @param {{ articles?: Function, onDirty?: Function }} [options] Catalogus van de planner; aanroep na een wijziging voor de webshop.
- * @returns {object} list, get, create, update, remove, move, importCatalog, importShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode en onDirty.
+ * @returns {object} list, get, create, update, remove, move, importCatalog, importShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal en onDirty.
  */
 function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) {
   /**
@@ -176,7 +184,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   const dirty = (tenantId) => { if (dirtyHook) dirtyHook(tenantId); };
   const SALE_COLS = 'sale_price, vat_rate, revenue_group, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error';
-  const ITEM_COLS = `id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}`;
+  const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}`;
   const MOVE_COLS = 'm.id, m.item_id, m.kind, m.qty, m.balance, m.work_order_id, m.work_order_number, m.source, m.note, m.user_name, m.created_at';
 
   /**
@@ -190,7 +198,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const onHand = round3(itemRow.on_hand);
     const reservedQty = round3(reserved);
     return {
-      id: itemRow.id, code: itemRow.code, name: itemRow.name, unit: itemRow.unit, location: itemRow.location, minQty: round3(itemRow.min_qty), onHand,
+      id: itemRow.id, code: itemRow.code, name: itemRow.name, unit: itemRow.unit, location: itemRow.location, minQty: round3(itemRow.min_qty),
+      reorderQty: itemRow.reorder_qty == null ? null : round3(itemRow.reorder_qty), onHand,
       reserved: reservedQty, available: round3(onHand - reservedQty), orders: Number(orders) || 0,
       costPrice: itemRow.cost_price == null ? null : Number(itemRow.cost_price),
       value: itemRow.cost_price == null ? null : Math.round(onHand * itemRow.cost_price * 100) / 100,
@@ -220,7 +229,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {object[]} De artikelen, op code.
    */
   function list(tenantId, { archived = false } = {}) {
-    return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
+    return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
         i.sale_price, i.vat_rate, i.revenue_group, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders
       FROM stock_items i
@@ -321,10 +330,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       if (findCode(tenantId, fields.code)) return { error: 'Er is al een voorraadartikel met deze code.', field: 'code', status: 409 };
       const id = crypto.randomUUID();
       const timestamp = currentTimestamp();
-      prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
+      prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
            sale_price, vat_rate, revenue_group, shop_sync)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?)`)
-        .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0);
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?)`)
+        .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0);
       const start = Number(raw && raw.onHand);
       if (Number.isFinite(start) && start > 0 && start <= MAX_QTY) book(tenantId, id, start, { kind: 'ontvangst', note: 'Beginvoorraad', user });
       return { id };
@@ -357,17 +366,17 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         if (used) return { error: 'De code van een artikel dat al op werkorders is gereserveerd of afgeboekt, kan niet meer veranderen.', field: 'code', status: 409 };
       }
       const merged = {
-        code: existing.code, name: existing.name, unit: existing.unit, location: existing.location, minQty: existing.min_qty, costPrice: existing.cost_price, notes: existing.notes,
+        code: existing.code, name: existing.name, unit: existing.unit, location: existing.location, minQty: existing.min_qty, reorderQty: existing.reorder_qty, costPrice: existing.cost_price, notes: existing.notes,
         salePrice: existing.sale_price, vatRate: Number(existing.vat_rate), revenueGroup: existing.revenue_group, shopSync: Boolean(Number(existing.shop_sync)), ...fields,
       };
       const archived = raw && raw.archived !== undefined ? (raw.archived ? 1 : 0) : existing.archived;
       // Andere prijs of btw (of weer meesturen): opnieuw naar de webshop.
       const toShop = (merged.salePrice ?? null) !== (existing.sale_price ?? null) || merged.vatRate !== Number(existing.vat_rate) || (merged.shopSync && !Number(existing.shop_sync));
-      prepare(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, cost_price = ?, notes = ?, archived = ?, updated_at = ?,
+      prepare(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, reorder_qty = ?, cost_price = ?, notes = ?, archived = ?, updated_at = ?,
            sale_price = ?, vat_rate = ?, revenue_group = ?, shop_sync = ?,
            shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
          WHERE tenant_id = ? AND id = ?`)
-        .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0,
+        .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0,
           toShop && merged.shopSync ? 1 : 0, tenantId, existing.id);
       if (archived && !existing.archived) prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
       return { item: get(tenantId, existing.id), toShop };
@@ -770,6 +779,26 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Bestelvoorstel: niet-gearchiveerde artikelen waarvan beschikbaar (stand −
+   * gereserveerd) onder het minimum ligt (ook een tekort bij minimum 0), met het aantal om aan te vullen tot
+   * "bestellen tot" (leeg of lager dan het minimum = 2× minimum), naar boven
+   * afgerond op hele eenheden.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ items: object[], total: number|null }} De regels (artikel plus orderQty, target en amount) en het totaal op inkoopprijs.
+   */
+  function reorderProposal(tenantId) {
+    let total = null;
+    const items = list(tenantId).filter((item) => item.available < item.minQty).map((item) => {
+      const target = item.reorderQty != null && item.reorderQty >= item.minQty ? item.reorderQty : round3(item.minQty * 2);
+      const orderQty = Math.ceil(round3(target - item.available));
+      const amount = item.costPrice == null ? null : Math.round(orderQty * item.costPrice * 100) / 100;
+      if (amount != null) total = Math.round(((total || 0) + amount) * 100) / 100;
+      return { ...item, target, orderQty, amount };
+    });
+    return { items, total };
+  }
+
+  /**
    * Meldt de webshopkoppeling aan voor wijzigingen (vervangt onDirty uit de opties).
    * @param {Function} handler Aanroep met het tenant-id.
    * @returns {void}
@@ -781,7 +810,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   return {
     list, get, create, update, remove, move, importCatalog, importShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
-    onDirty: setDirtyHook,
+    reorderProposal, onDirty: setDirtyHook,
   };
 }
 
@@ -833,6 +862,12 @@ function registerStockRoutes(app, ctx) {
   app.get('/api/stock/reservations', requireStock, (req, res) => {
     noStore(res);
     res.json({ items: stock.reservations(tenantOf(req)) });
+  });
+
+  // Bestelvoorstel: wat onder het minimum zit en hoeveel er bij moet (de Excel maakt de browser).
+  app.get('/api/stock/reorder', requireStock, (req, res) => {
+    noStore(res);
+    res.json(stock.reorderProposal(tenantOf(req)));
   });
 
   app.get('/api/stock/movements', requireStock, (req, res) => {

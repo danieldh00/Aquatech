@@ -611,6 +611,10 @@ const PG_MIGRATIONS = [
     UNIQUE (tenant_id, kind, key)
   );
   `,
+  // 30: bestelvoorstel: aanvullen tot (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN reorder_qty DOUBLE PRECISION;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
