@@ -150,7 +150,7 @@
     // Werkelijke arbeid tegen hetzelfde tarief als de begroting: het gemiddelde
     // uurtarief van de offerteregels in uren, anders het uurtarief uit het profiel.
     // Vaste arbeidsposten (geen uren) worden niet geboekt: werkelijk = begroot.
-    const labourRate = plannedHours > 0 && plannedHourAmount > 0 ? round2(plannedHourAmount / plannedHours) : hourlyRate;
+    const labourRate = quoteData && plannedHours > 0 ? round2(plannedHourAmount / plannedHours) : hourlyRate;
     const fixedLabour = quoteData ? round2(plannedLabour - plannedHourAmount) : 0;
     const actualLabour = round2(actualHours * labourRate + fixedLabour);
     // Overige posten (voorrijkosten e.d.) worden niet geboekt: werkelijk = begroot.

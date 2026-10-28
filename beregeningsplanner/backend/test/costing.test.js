@@ -72,6 +72,9 @@ test('kern: begroot uit de offerte, werkelijk uit boekingen, kosten, opbrengst e
     logged: { hours: [{ minutes: 300 }], materials: [] },
   });
   assert.deepStrictEqual([fixedPost.labour.hourlyRate, fixedPost.actual.labour, fixedPost.budget.labour], [50, 350, 300]);
+  // Uren in de offerte voor € 0 (bijv. garantie): tarief 0, niet het profieltarief.
+  const freeHours = Core.compute({ workOrder: { data: {} }, quote: { data: { lines: [{ section: 'arbeid', qty: 2, unit: 'uur', price: 0 }] } }, logged: { hours: [{ minutes: 120 }], materials: [] }, hourlyRate: 50 });
+  assert.deepStrictEqual([freeHours.labour.hourlyRate, freeHours.actual.labour], [0, 0]);
 
   // Zonder offerte en zonder verkoopprijs: waarschuwing, waarde € 0.
   const noPrice = Core.compute({ workOrder: { data: { materials: [{ code: 'X-1', description: 'Iets', qty: 2 }] } }, quote: null, logged: { hours: [], materials: [] } });
