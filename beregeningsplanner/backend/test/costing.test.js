@@ -66,6 +66,13 @@ test('kern: begroot uit de offerte, werkelijk uit boekingen, kosten, opbrengst e
   });
   assert.deepStrictEqual([quoteRate.labour.hourlyRate, quoteRate.actual.labour, quoteRate.budget.labour], [70, 140, 140]);
 
+  // Een vaste arbeidspost telt niet mee in het uurtarief; werkelijk = begroot voor die post.
+  const fixedPost = Core.compute({
+    workOrder: { data: {} }, quote: { data: { lines: [{ section: 'arbeid', qty: 4, unit: 'uur', price: 50 }, { section: 'arbeid', qty: 1, unit: 'post', price: 100 }] } },
+    logged: { hours: [{ minutes: 300 }], materials: [] },
+  });
+  assert.deepStrictEqual([fixedPost.labour.hourlyRate, fixedPost.actual.labour, fixedPost.budget.labour], [50, 350, 300]);
+
   // Zonder offerte en zonder verkoopprijs: waarschuwing, waarde € 0.
   const noPrice = Core.compute({ workOrder: { data: { materials: [{ code: 'X-1', description: 'Iets', qty: 2 }] } }, quote: null, logged: { hours: [], materials: [] } });
   assert.strictEqual(noPrice.materials[0].plannedAmount, 0);

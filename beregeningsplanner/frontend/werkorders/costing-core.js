@@ -80,6 +80,8 @@
     };
     let plannedHours = 0;
     let plannedLabour = 0;
+    // Bedrag van alleen de urenregels (voor het uurtarief); vaste arbeidsposten tellen als werkelijk = begroot.
+    let plannedHourAmount = 0;
     let plannedOther = 0;
     let discountPct = 0;
     if (quoteData) {
@@ -88,7 +90,10 @@
         const amount = round2((Number(line.qty) || 0) * (Number(line.price) || 0));
         if (line.section === 'arbeid') {
           plannedLabour += amount;
-          if (isHours(line)) plannedHours += Number(line.qty) || 0;
+          if (isHours(line)) {
+            plannedHours += Number(line.qty) || 0;
+            plannedHourAmount += amount;
+          }
         } else if (line.section === 'materiaal' && keyOf(line)) {
           const material = materialFor(line);
           material.plannedQty += Number(line.qty) || 0;
@@ -144,8 +149,10 @@
     const budgetSubtotal = round2(plannedLabour + budgetMaterials + plannedOther);
     // Werkelijke arbeid tegen hetzelfde tarief als de begroting: het gemiddelde
     // uurtarief van de offerteregels in uren, anders het uurtarief uit het profiel.
-    const labourRate = plannedHours > 0 && plannedLabour > 0 ? round2(plannedLabour / plannedHours) : hourlyRate;
-    const actualLabour = round2(actualHours * labourRate);
+    // Vaste arbeidsposten (geen uren) worden niet geboekt: werkelijk = begroot.
+    const labourRate = plannedHours > 0 && plannedHourAmount > 0 ? round2(plannedHourAmount / plannedHours) : hourlyRate;
+    const fixedLabour = quoteData ? round2(plannedLabour - plannedHourAmount) : 0;
+    const actualLabour = round2(actualHours * labourRate + fixedLabour);
     // Overige posten (voorrijkosten e.d.) worden niet geboekt: werkelijk = begroot.
     const actualSubtotal = round2(actualLabour + actualMaterials + plannedOther);
     const budgetDiscount = round2(budgetSubtotal * discountPct / 100);
