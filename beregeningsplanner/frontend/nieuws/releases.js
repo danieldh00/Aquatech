@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.70.0',
+      date: '2026-10-28',
+      title: 'Installatiedossier per locatie',
+      items: [
+        { text: 'In **Klantdossiers** staat nu ook een overzicht **per locatie**: per adres de tekening, offertes, werkorders, opleverfoto\'s, meldingen en de gebruikte materialen bij elkaar.', for: ['werkorders'] },
+        { text: 'In uw **portaal** ziet u per adres het **installatiedossier**: wat er is aangelegd, de foto\'s van de oplevering en uw meldingen.', for: ['portaal'] },
+      ],
+    },
+    {
       version: '0.69.0',
       date: '2026-10-23',
       title: 'Veiligheid verder aangescherpt',

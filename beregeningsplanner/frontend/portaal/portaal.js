@@ -79,6 +79,7 @@
     renderQuotes(d);
     renderPlans(d);
     renderContact(d);
+    if (window.PortalLocations) window.PortalLocations.render(d);
     if (!d.quotes.length && !d.workorders.length && !d.plans.length && !(d.requests || []).length) {
       message('Er staat nog niets voor u klaar. Zodra wij een offerte voor u hebben opgesteld of werkzaamheden hebben ingepland, ziet u die hier.');
     } else message('');
@@ -451,6 +452,8 @@
     if (m && state.data) openDetail(m[1]);
     const mr = /^#melding=([\w-]+)$/.exec(location.hash);
     if (mr && state.data) openRequest(mr[1]);
+    const locationMatch = /^#locatie=(l-[0-9a-f]+)$/.exec(location.hash);
+    if (locationMatch && state.data && window.PortalLocations) window.PortalLocations.open(locationMatch[1]);
     if (location.hash === '#melden' && state.data && state.data.features.requests) openForm();
   }
 

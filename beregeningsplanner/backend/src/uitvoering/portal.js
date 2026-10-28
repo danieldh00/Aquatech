@@ -14,6 +14,7 @@
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { forCustomer } = require('./service-requests');
+const { locationKey } = require('./photos');
 
 const Core = require(path.join(FRONTEND_DIR, 'werkorders', 'workorder-core.js'));
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
@@ -63,7 +64,7 @@ function customerWorkOrder(workOrder, { detail = false } = {}) {
   const progress = workOrder.progress || Core.progress(details);
   const out = {
     id: workOrder.id, number: workOrder.number, status: workOrder.status, statusLabel: Core.STATUSES[workOrder.status] || workOrder.status,
-    title: workOrder.title, address: workOrder.address, quoteId: workOrder.quoteId, quoteNumber: workOrder.quoteNumber, planId: workOrder.planId,
+    title: workOrder.title, address: workOrder.address, location: locationKey(workOrder.address), quoteId: workOrder.quoteId, quoteNumber: workOrder.quoteNumber, planId: workOrder.planId,
     plannedDate: workOrder.plannedDate || '', startTime: workOrder.startTime || '', endTime: details.endTime || '', days: details.days || null,
     installer: workOrder.assignee ? workOrder.assignee.displayName : '',
     progress: { steps: progress.steps, done: progress.done, pct: progress.pct },
@@ -152,7 +153,7 @@ function registerPortalRoutes(app, ctx) {
       quotes: quotes.list(tenantId, { customerId: user.id }),
       workorders: workOrdersOf(req),
       // Eigen meldingen (storing, onderhoud), zie service-requests.js.
-      requests: ctx.requests ? ctx.requests.list(tenantId, { customerId: user.id }).map(forCustomer) : [],
+      requests: ctx.requests ? ctx.requests.list(tenantId, { customerId: user.id }).map((request) => ({ ...forCustomer(request), location: locationKey(request.address) })) : [],
       features: { photos: Boolean(ctx.photos), appointments: typeof workorders.respond === 'function', requests: Boolean(ctx.requests) },
     });
   });

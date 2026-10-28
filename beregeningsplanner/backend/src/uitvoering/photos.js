@@ -205,16 +205,21 @@ function createPhotoStore(db, { vault }) {
    * Foto's van meerdere werkorders in één query.
    * @param {string} tenantId Id van de tenant.
    * @param {string[]} workOrderIds De werkorders.
+   * @param {{ customerOnly?: boolean }} [options] customerOnly: alleen foto's die de klant mag zien (met portaal-URL).
    * @returns {object} Werkorder-id → lijst foto's.
    */
-  function listMany(tenantId, workOrderIds) {
+  function listMany(tenantId, workOrderIds, { customerOnly = false } = {}) {
     const out = {};
     for (const id of workOrderIds) out[id] = [];
     if (!workOrderIds.length) return out;
     const rows = prepare(`SELECT ${META}, u.display_name AS uploader_name FROM work_order_photos p LEFT JOIN users u ON u.id = p.uploaded_by
-      WHERE p.tenant_id = ? AND p.work_order_id IN (${workOrderIds.map(() => '?').join(', ')}) ORDER BY p.created_at, p.id`)
+      WHERE p.tenant_id = ? AND p.work_order_id IN (${workOrderIds.map(() => '?').join(', ')})${customerOnly ? ' AND p.customer_visible = 1' : ''} ORDER BY p.created_at, p.id`)
       .all(tenantId, ...workOrderIds.map(String));
-    for (const row of rows) out[row.work_order_id].push(meta(row, staffUrl));
+    for (const row of rows) {
+      const photo = meta(row, customerOnly ? portalUrl : staffUrl);
+      if (customerOnly) delete photo.uploadedBy;
+      out[row.work_order_id].push(photo);
+    }
     return out;
   }
 
@@ -342,6 +347,53 @@ const normalizeName = (name) => String(name || '').trim().toLowerCase().replace(
 const nameKey = (name) => `n-${crypto.createHash('sha256').update(normalizeName(name)).digest('hex').slice(0, 16)}`;
 
 /**
+ * Maakt een adres vergelijkbaar: kleine letters, zonder leestekens, postcode
+ * aaneen ("1234 AB" = "1234ab") en enkele spaties.
+ * @param {string} address Het adres.
+ * @returns {string} Het genormaliseerde adres.
+ */
+const normalizeAddress = (address) => String(address || '').toLowerCase().replace(/[.,;\n\r]+/g, ' ')
+  .replace(/\b(\d{4})\s+([a-z]{2})\b/g, '$1$2').replace(/\s+/g, ' ').trim();
+/**
+ * Sleutel van een locatie (installatiedossier per adres): een hash van het adres.
+ * @param {string} address Het adres.
+ * @returns {string|null} "l-" plus 16 tekens hex, of null zonder adres.
+ */
+const locationKey = (address) => {
+  const normalized = normalizeAddress(address);
+  return normalized ? `l-${crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16)}` : null;
+};
+
+/**
+ * De opleverdatum van een werkorder.
+ * @param {object} row De werkorderrij met data (gelezen JSON).
+ * @returns {string} Datum (JJJJ-MM-DD), of leeg.
+ */
+const completedOf = (row) => row.data.report?.completedOn || (row.status === 'gereed' ? row.updated_at.slice(0, 10) : '');
+
+/**
+ * Eén installatie (werkorder) zoals een dossier hem toont: gegevens,
+ * oplevering, ontwerp, zones, geplaatste materialen en foto's.
+ * @param {object} row De werkorderrij (COLS van de dossieropslag) met gelezen data.
+ * @param {object[]} photoList De foto's van deze werkorder.
+ * @returns {object} De installatie.
+ */
+function installationOf(row, photoList) {
+  const details = row.data;
+  return {
+    id: row.id, number: row.number, status: row.status, title: row.title, address: row.address, location: locationKey(row.address),
+    plannedDate: row.planned_date || '', completedOn: completedOf(row),
+    assignee: row.assignee_name || '', crew: details.crew || '',
+    quoteId: row.quote_id || null, quoteNumber: details.quoteNumber || '', planId: details.planId || null, planTitle: details.planTitle || '',
+    report: { notes: details.report?.notes || '', completedOn: details.report?.completedOn || '', signedBy: details.report?.signedBy || '' },
+    design: details.design || null, zones: details.zones || [],
+    materials: (details.materials || []).map((material) => ({ code: material.code, description: material.description, qty: material.qty, unit: material.unit })),
+    steps: { total: (details.steps || []).length, done: (details.steps || []).filter((step) => step.done).length },
+    photos: photoList || [],
+  };
+}
+
+/**
  * Maakt de opslag voor klantdossiers (werkorders per klant).
  * @param {object} db De database.
  * @param {{ photos: object }} stores De foto-opslag.
@@ -391,13 +443,6 @@ function createDossierStore(db, { photos }) {
   }
 
   /**
-   * De opleverdatum van een werkorder.
-   * @param {object} row De werkorderrij met data.
-   * @returns {string} Datum (JJJJ-MM-DD), of leeg.
-   */
-  const completedOf = (row) => row.data.report?.completedOn || (row.status === 'gereed' ? row.updated_at.slice(0, 10) : '');
-
-  /**
    * Alle klanten met een werkorder: één regel per dossier, laatst actief eerst.
    * @param {string} tenantId Id van de tenant.
    * @returns {object[]} De dossiers met aantallen.
@@ -437,20 +482,7 @@ function createDossierStore(db, { photos }) {
     const latest = [...mine].sort((left, right) => right.updated_at.localeCompare(left.updated_at))[0];
     const customer = latest.data.customer || {};
     const accountId = latest.customer_id || null;
-    const installations = mine.map((row) => {
-      const details = row.data;
-      return {
-        id: row.id, number: row.number, status: row.status, title: row.title, address: row.address,
-        plannedDate: row.planned_date || '', completedOn: completedOf(row),
-        assignee: row.assignee_name || '', crew: details.crew || '',
-        quoteId: row.quote_id || null, quoteNumber: details.quoteNumber || '', planId: details.planId || null, planTitle: details.planTitle || '',
-        report: { notes: details.report?.notes || '', completedOn: details.report?.completedOn || '', signedBy: details.report?.signedBy || '' },
-        design: details.design || null, zones: details.zones || [],
-        materials: (details.materials || []).map((material) => ({ code: material.code, description: material.description, qty: material.qty, unit: material.unit })),
-        steps: { total: (details.steps || []).length, done: (details.steps || []).filter((step) => step.done).length },
-        photos: photosOf[row.id],
-      };
-    });
+    const installations = mine.map((row) => installationOf(row, photosOf[row.id]));
     const quoteIds = [...new Set(mine.map((row) => row.quote_id).filter(Boolean))];
     const args = [tenantId];
     let where = 'tenant_id = ? AND deleted_at IS NULL AND (';
@@ -570,4 +602,4 @@ function registerPhotoRoutes(app, ctx) {
   });
 }
 
-module.exports = { createPhotoStore, createDossierStore, registerPhotoRoutes, inspectImage, cleanJpeg, fromBase64, KINDS, MAX_PER_WORK_ORDER, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE, MAX_THUMB_SIDE };
+module.exports = { createPhotoStore, createDossierStore, registerPhotoRoutes, installationOf, completedOf, locationKey, inspectImage, cleanJpeg, fromBase64, KINDS, MAX_PER_WORK_ORDER, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE, MAX_THUMB_SIDE };

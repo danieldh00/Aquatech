@@ -31,8 +31,12 @@
   <main id="list-view" class="dash wide">
     <section class="intro">
       <h1>Klantdossiers</h1>
-      <p class="muted">Per klant alle installaties: wanneer en door wie opgeleverd, het ontwerp en de zones, de geplaatste materialen en de foto's van voor, tijdens en na de aanleg. Druk een dossier af als opleverrapport of sla het op als PDF.</p>
+      <p class="muted">Per klant of per locatie (adres) alle installaties: wanneer en door wie opgeleverd, het ontwerp en de zones, de geplaatste materialen en de foto's van voor, tijdens en na de aanleg. Per locatie ook de meldingen, offertes en het verbruikte materiaal. Druk een dossier af als opleverrapport of sla het op als PDF.</p>
     </section>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="klanten" role="tab">Per klant</button>
+      <button class="tab" data-view="locaties" role="tab">Per locatie</button>
+    </nav>
     <div id="l-stats" class="stats" hidden></div>
     <div class="filters">
       <input id="l-search" type="search" placeholder="Zoek op klant of adres">

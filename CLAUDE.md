@@ -263,6 +263,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (`dashboard/today.js`, recht `werkorders`), API `GET /api/my-day`
   (`workorders.day`: elke werkdag via `Core.workDays`, `next`, fototelling
   via `ctx.photoCounts`). `werkorders/?id=…#fotos` springt naar de foto's.
+- **Installatiedossier per locatie** (0.70.0, `backend/src/uitvoering/locations.js`):
+  geen tabel; locatie = adres van werkorder/melding via `locationKey`
+  (photos.js, `l-<sha256>`). `GET /api/locations[/:key]` (recht `werkorders`,
+  weergave *Per locatie* in `klantdossier/`, `?locatie=`) en
+  `GET /api/portal/locations/:key` (klant, zonder bedragen/verbruik/interne
+  velden; `portaal/locaties.js`). Portaal-werkorders en -meldingen hebben `location`.
 - **Klantportaal** (`frontend/portaal/`, 0.37.0, recht `portaal`: alleen
   klant): `backend/src/uitvoering/portal.js`, `GET /api/portal` (plannen, offertes,
   werkorders, contact) en `/api/portal/workorders/:id` (opleverdossier via
