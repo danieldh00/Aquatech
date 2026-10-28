@@ -151,7 +151,7 @@ test('verzendronde: geweigerd adres blokkeert de rest niet, rondes lopen niet ov
      * @returns {Promise<void>}
      */
     send: async (message) => {
-      if (/^(een|twee|drie)@/.test(message.to)) throw Object.assign(new Error('550 onbekend'), { code: 'EENVELOPE', responseCode: 550 });
+      if (/^(een|twee|drie)@/.test(message.to)) throw Object.assign(new Error('550 onbekend'), { code: 'EENVELOPE', command: 'RCPT TO', responseCode: 550, permanent: true });
       if (message.to.startsWith('vier') && !release) await new Promise((resolve) => { release = resolve; });
       sent.push(message.to);
     },
@@ -169,4 +169,14 @@ test('verzendronde: geweigerd adres blokkeert de rest niet, rondes lopen niet ov
   assert.deepStrictEqual((await first).t1, { sent: 2, skipped: 0, failed: 3 });
   assert.deepStrictEqual(sent, ['vier@voorbeeld.test', 'vijf@voorbeeld.test']);
   assert.deepStrictEqual(await runner.runAll(['t1'], today), {}, 'geweigerde adressen komen niet terug');
+
+  // Een geweigerde afzender ligt niet aan de klant: niemand vastleggen, ronde stoppen.
+  customers.push({ id: 'zes', displayName: 'zes', email: 'zes@voorbeeld.test', preferences: '{}' }, { id: 'zeven', displayName: 'zeven', email: 'zeven@voorbeeld.test', preferences: '{}' });
+  /**
+   * Mailserver die de afzender weigert.
+   * @returns {Promise<void>}
+   */
+  mailer.send = async () => { throw Object.assign(new Error('550 afzender'), { code: 'EENVELOPE', command: 'MAIL FROM', responseCode: 550, permanent: true }); };
+  assert.deepStrictEqual((await runner.runAll(['t1'], today)).t1, { sent: 0, skipped: 0, failed: 1 });
+  assert.ok(!marked.has('zes') && !marked.has('zeven'), 'klanten blijven aan de beurt');
 });

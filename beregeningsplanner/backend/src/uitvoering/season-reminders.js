@@ -166,13 +166,15 @@ function createSeasonReminderStore(db, { roles }) {
 
 /**
  * Of een mailfout definitief is voor dit adres: de mailserver weigerde de
- * ontvanger met een 5xx-code (nodemailer: code EENVELOPE). Een fout met de
- * verbinding of het inloggen telt niet, die lost zich later misschien op.
- * @param {Error & { code?: string, responseCode?: number }} error De fout van mailer.send.
- * @returns {boolean} true als opnieuw proberen geen zin heeft.
+ * ontvanger (RCPT TO) met een 5xx-code (nodemailer: code EENVELOPE). Een
+ * geweigerde afzender (MAIL FROM), de verbinding of het inloggen telt niet:
+ * dat ligt niet aan de klant.
+ * @param {Error & { code?: string, command?: string, responseCode?: number, permanent?: boolean }} error De fout van mailer.send.
+ * @returns {boolean} true als opnieuw proberen voor deze klant geen zin heeft.
  */
 function permanentFailure(error) {
-  return error.code === 'EENVELOPE' && Number(error.responseCode) >= 500 && Number(error.responseCode) < 600;
+  const rejected = error.permanent === true || (Number(error.responseCode) >= 500 && Number(error.responseCode) < 600 && Number(error.responseCode) !== 503);
+  return error.code === 'EENVELOPE' && error.command === 'RCPT TO' && rejected;
 }
 
 /**
@@ -223,6 +225,8 @@ function createSeasonReminderRunner(reminders, { settingsFor, mailerFor, userTen
           result.sent++;
         } catch (error) {
           result.failed++;
+          // Afzender geweigerd: geldt voor elke klant, dus deze ronde stoppen.
+          if (error.command === 'MAIL FROM') return result;
           // Adres definitief geweigerd: vastleggen, anders blokkeert deze klant de rest.
           if (permanentFailure(error)) {
             reminders.markSent(tenantId, customer.id, item.key, year);
