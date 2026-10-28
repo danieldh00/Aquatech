@@ -55,6 +55,8 @@
 
   // view: 'klanten' of 'locaties'; dossier = open klantdossier, location = open installatiedossier.
   const state = { me: null, profile: null, view: 'klanten', items: [], locations: [], sort: { key: 'lastActivity', dir: -1 }, dossier: null, location: null };
+  // Telt elke navigatie; een lader die terugkomt na een nieuwere navigatie doet niets.
+  let routeVersion = 0;
 
   /**
    * Toont een melding onderin beeld (3,5 s).
@@ -182,11 +184,14 @@
    * @returns {Promise<void>}
    */
   async function loadList() {
+    const version = routeVersion;
     const byLocation = state.view === 'locaties';
     try {
       const items = (await api(byLocation ? 'locations' : 'dossiers')).items || [];
+      if (version !== routeVersion) return;
       if (byLocation) state.locations = items; else state.items = items;
     } catch (error) {
+      if (version !== routeVersion) return;
       if (byLocation) state.locations = []; else state.items = [];
       toast(`Dossiers laden mislukt: ${error.message}`, true);
     }
@@ -435,17 +440,22 @@
    * @returns {Promise<void>}
    */
   async function loadLocation(key) {
+    const version = routeVersion;
     state.dossier = null;
     $('#list-view').hidden = true;
     $('#detail-view').hidden = false;
     $('#d-body').innerHTML = '<p class="muted">Installatiedossier laden…</p>';
     try {
-      state.location = await api(`locations/${encodeURIComponent(key)}`);
+      const location = await api(`locations/${encodeURIComponent(key)}`);
+      // Intussen naar een andere weergave gegaan: dit antwoord is verouderd.
+      if (version !== routeVersion) return;
+      state.location = location;
       renderLocation();
       window.scrollTo(0, 0);
       // Focus naar de kop, zodat toetsenbord en schermlezer bij het geopende dossier staan.
       $('#d-body h1').focus();
     } catch (error) {
+      if (version !== routeVersion) return;
       toast(`Kan het installatiedossier niet openen: ${error.message}`, true);
       navigate('weergave=locaties');
     }
@@ -497,15 +507,19 @@
    * @returns {Promise<void>}
    */
   async function loadDossier(key) {
+    const version = routeVersion;
     state.location = null;
     $('#list-view').hidden = true;
     $('#detail-view').hidden = false;
     $('#d-body').innerHTML = '<p class="muted">Dossier laden…</p>';
     try {
-      state.dossier = await api(`dossiers/${encodeURIComponent(key)}`);
+      const dossier = await api(`dossiers/${encodeURIComponent(key)}`);
+      if (version !== routeVersion) return;
+      state.dossier = dossier;
       renderDossier();
       window.scrollTo(0, 0);
     } catch (error) {
+      if (version !== routeVersion) return;
       toast(`Kan het dossier niet openen: ${error.message}`, true);
       navigate('');
     }
@@ -545,6 +559,7 @@
    * @returns {Promise<void>|undefined}
    */
   function route() {
+    routeVersion++;
     const params = searchParams();
     if (params.get('klant')) return loadDossier(params.get('klant'));
     if (params.get('locatie')) return loadLocation(params.get('locatie'));
