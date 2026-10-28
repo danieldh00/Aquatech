@@ -20,6 +20,26 @@ Seizoensherinneringen voor klanten (voorjaar opstarten, najaar winterklaar).
   uit te zetten (voorkeur `seasonReminders`).
 - Testdata: klanten met een installatie kregen vorig najaar de herinnering.
 
+## 0.70.2
+
+Installatiedossier per locatie: alles van één adres bij elkaar.
+
+- **Klantdossiers**: tweede weergave *Per locatie* (`?weergave=locaties`,
+  detail `?locatie=<sleutel>`) met per adres de installaties (oplevering,
+  ontwerp, zones, foto's), plannen, offertes, meldingen en de materialen
+  (geplaatst volgens de werkorder en verbruikt volgens de urenregistratie).
+  Excel-export van de locaties; afdrukken als opleverrapport. Adressen in het
+  klantdossier linken naar het installatiedossier.
+- **Klantportaal**: blok *Mijn installaties per adres* met het dossier van de
+  eigen werkorders en meldingen, zonder bedragen, verbruik, uren, interne
+  notities en interne foto's (`#locatie=<sleutel>` opent het direct).
+- Geen nieuwe tabel of migratie: de locatie is het adres, vergelijkbaar
+  gemaakt met `locationKey` (photos.js: kleine letters, zonder leestekens,
+  postcode en huisnummertoevoeging aaneen, SHA-256). Store en routes in `uitvoering/locations.js`:
+  `GET /api/locations[/:key]` (recht `werkorders`) en
+  `GET /api/portal/locations/:key` (recht `portaal`, zelfde klantregel als
+  `OF_CUSTOMER` in workorders.js). Vast aantal queries (id's per omgeving,
+  daarna `IN (...)`), getest in `queries.test.js`.
 
 ## 0.70.1
 

@@ -140,6 +140,7 @@
     renderQuotes(portal);
     renderPlans(portal);
     renderContact(portal);
+    if (window.PortalLocations) window.PortalLocations.render(portal);
     if (!portal.quotes.length && !portal.workorders.length && !portal.plans.length && !(portal.requests || []).length) {
       message('Er staat nog niets voor u klaar. Zodra wij een offerte voor u hebben opgesteld of werkzaamheden hebben ingepland, ziet u die hier.');
     } else message('');
@@ -716,6 +717,8 @@
     if (workOrderMatch && state.data) openDetail(workOrderMatch[1]);
     const requestMatch = /^#melding=([\w-]+)$/.exec(location.hash);
     if (requestMatch && state.data) openRequest(requestMatch[1]);
+    const locationMatch = /^#locatie=(l-[0-9a-f]+)$/.exec(location.hash);
+    if (locationMatch && state.data && window.PortalLocations) window.PortalLocations.open(locationMatch[1]);
     if (location.hash === '#melden' && state.data && state.data.features.requests) openForm();
     // Vanuit de mail met een seizoensherinnering: ?herinnering=<sleutel>.
     const seasonKey = new URLSearchParams(location.search).get('herinnering');

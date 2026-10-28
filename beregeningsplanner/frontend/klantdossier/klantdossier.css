@@ -29,6 +29,7 @@
 .inst table.mini th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .inst table.mini td.num, .inst table.mini th.num { text-align: right; }
 .inst table.mini tr.bad td { color: #c62828; }
+.loc-links a { display: block; }
 .d-foot { color: var(--muted); font-size: 12px; margin-top: 16px; }
 
 @media (max-width: 760px) {
