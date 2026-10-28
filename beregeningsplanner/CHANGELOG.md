@@ -17,7 +17,7 @@ Nacalculatie per werkorder.
   nieuw recht **nacalculatie** (standaard alleen beheerder, `needs`
   werkorders). Vast aantal queries (`test/queries.test.js`), geen migratie.
 - Bedrijfsgegevens: nieuw veld **Kostprijs per uur** (`quoteProfile.hourlyCost`,
-  standaard 0 = niet ingevuld). `stock.saleInfo` geeft ook `costPrice`.
+  standaard 0 = niet ingevuld). `stock.saleInfo(..., { withCost: true })` geeft ook `costPrice` (alleen voor de nacalculatie); `hourlyCost` gaat niet naar klanten of de openbare offerte.
 
 ## 0.69.0
 

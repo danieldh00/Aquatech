@@ -263,7 +263,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `werkorders/costing-core.js` (UMD, `compute`), route `GET
   /api/workorders/:id/costing` in `backend/src/uitvoering/costing.js` (hergebruikt
   `invoices.workOrder/quote/list`, `workLogStore.list`, `stock.saleInfo` met
-  `costPrice`), blok + Excel in `werkorders/costing-panel.js`. Kostprijs per
+  `{ withCost: true }`; `costPrice`/`hourlyCost` nooit naar facturen-API of klanten), blok + Excel in `werkorders/costing-panel.js`. Kostprijs per
   uur = `quoteProfile.hourlyCost`. Geen eigen tabel.
 - **Startscherm installateur** (0.42.0): blok *Vandaag* op het dashboard
   (`dashboard/today.js`, recht `werkorders`), API `GET /api/my-day`

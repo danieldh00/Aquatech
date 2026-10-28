@@ -92,6 +92,9 @@ test('API: nacalculatie alleen met het recht, andere tenant 404, met kostprijs u
     await kees.post(`/api/workorders/${workOrder.id}/hours`, { workDate: day, hours: 5 });
     await kees.post(`/api/workorders/${workOrder.id}/materials`, { usedOn: day, code: 'PE-25', description: 'PE-buis', unit: 'm', qty: 55 });
 
+    // Inkoopprijzen gaan niet mee met de verkoopgegevens voor facturen.
+    const articles = (await baas.get('/api/invoices/articles')).body.articles;
+    assert.strictEqual(articles['PE-25'].costPrice, undefined);
     // De kostprijs per uur is intern: niet voor een installateur zonder nacalculatie.
     assert.strictEqual((await kees.get('/api/quote-profile')).body.profile.hourlyCost, undefined);
     assert.strictEqual((await baas.get('/api/quote-profile')).body.profile.hourlyCost, 30);

@@ -1730,7 +1730,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerCostingRoutes(app, {
     requireRight, invoices: invoiceStore,
     loggedOf: (tenantId, workOrderId) => workLogStore.list(tenantId, workOrderId),
-    articlesOf: (tenantId, codes) => stockStore.saleInfo(tenantId, codes),
+    articlesOf: (tenantId, codes) => stockStore.saleInfo(tenantId, codes, { withCost: true }),
     profileOf: (req) => settingsFor(req.tenantId || tenant.id).get('quoteProfile'),
   });
 
