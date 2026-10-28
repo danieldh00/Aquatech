@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.72.1
+
+- Klantportaal: geen melding "Er staat nog niets voor u klaar" meer als er alleen een seizoensherinnering staat.
+- Test voor de verzendronde: na drie tijdelijke fouten stopt de ronde zonder iemand vast te leggen; een volgende ronde probeert het opnieuw.
+
 ## 0.72.0
 
 Seizoensherinneringen voor klanten (voorjaar opstarten, najaar winterklaar).

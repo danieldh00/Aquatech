@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.72.1',
+      date: '2026-10-28',
+      title: 'Kleine verbetering klantportaal',
+      items: [],
+    },
+    {
       version: '0.72.0',
       date: '2026-10-28',
       title: 'Seizoensherinneringen voor klanten',
