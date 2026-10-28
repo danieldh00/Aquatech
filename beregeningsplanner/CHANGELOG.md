@@ -14,6 +14,8 @@ Seizoensherinneringen voor klanten (voorjaar opstarten, najaar winterklaar).
   een werkorder in die omgeving (via offerte of melding). Tabel
   `season_reminders_sent` (migratie 31) houdt bij wie welke herinnering in
   welk jaar kreeg; hoogstens 100 mails per omgeving per ronde.
+  Een testomgeving mailt alleen haar eigen testaccounts (nooit live-klanten),
+  een uitgeschakelde organisatie niets.
 - **Klantportaal**: blok *Seizoensonderhoud* (twee maanden na de datum) met
   *Afspraak aanvragen* (meldformulier als onderhoud, ook via
   `portaal/?herinnering=<sleutel>` uit de mail) en een vinkje om de mails

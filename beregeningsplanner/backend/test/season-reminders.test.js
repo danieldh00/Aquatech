@@ -109,6 +109,24 @@ test('verzendronde: één mail per klant per jaar, alleen met installatie in de 
     // Een volgende ronde stuurt niets opnieuw.
     assert.deepStrictEqual(await app.locals.seasonRemindersAll(new Date('2026-03-17T08:00:00Z')), {});
     assert.strictEqual(sent.length, 1);
+
+    // Testomgeving erft de instellingen, maar mailt geen echte klant met een werkorder daar.
+    const testEnvironment = store.createEnvironment(main, { name: 'Test' }).tenant;
+    assert.strictEqual((await anne.post('/api/environment', { tenantId: testEnvironment.id })).status, 200);
+    await install(anne, piet.user ? piet.user.id : piet.id);
+    const testRound = await app.locals.seasonRemindersAll(new Date('2026-03-17T08:00:00Z'));
+    assert.strictEqual(testRound[testEnvironment.id], undefined);
+    assert.strictEqual(sent.length, 1);
+
+    // Een uitgeschakelde organisatie verstuurt niets, ook niet met herinneringen aan.
+    await store.createAccount(other.id, { username: 'bea', displayName: 'Bea', role: 'beheerder', password: PW });
+    const beaClient = await as('bea', 'blauw');
+    assert.strictEqual((await beaClient.put('/api/admin/settings', { seasonReminders: { enabled: true, items: sanitizeSeasonReminders({}).items } })).status, 200);
+    store.updateTenant(other.id, { disabled: true });
+    assert.strictEqual((await app.locals.seasonRemindersAll(new Date('2026-03-17T08:00:00Z')))[other.id], undefined);
+    store.updateTenant(other.id, { disabled: false });
+    assert.deepStrictEqual((await app.locals.seasonRemindersAll(new Date('2026-03-17T08:00:00Z')))[other.id], { sent: 1, skipped: 0, failed: 0 });
+    assert.strictEqual(sent.at(-1).to, 'bas@voorbeeld.test');
   } finally {
     server.close();
   }

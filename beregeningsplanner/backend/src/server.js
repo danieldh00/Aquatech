@@ -2187,17 +2187,18 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   app.locals.vismaAll = () => visma.runAll(allEnvironmentIds());
   app.locals.visma = visma;
-  // Seizoensherinneringen (season-reminders.js); klanten wonen in de
-  // live-tenant of (testaccounts) in de testomgeving zelf.
+  // Seizoensherinneringen (season-reminders.js). Alleen klanten die in de
+  // omgeving zelf wonen: een testomgeving mailt dus alleen haar testaccounts,
+  // nooit echte klanten van de live-tenant.
   const seasonReminders = createSeasonReminderRunner(seasonReminderStore, {
-    settingsFor: (id) => settingsFor(id), mailerFor, userTenantsOf: (id) => [...new Set([homeOf(id), id])],
+    settingsFor: (id) => settingsFor(id), mailerFor, userTenantsOf: (id) => [id],
   });
   /**
-   * Seizoensherinneringen in alle omgevingen versturen (elk uur vanuit main).
+   * Seizoensherinneringen in alle actieve omgevingen versturen (elk uur vanuit main).
    * @param {Date} [today] De dag (tests).
    * @returns {Promise<object>} Aantallen per omgeving.
    */
-  app.locals.seasonRemindersAll = async (today) => seasonReminders.runAll(allEnvironmentIds(), today);
+  app.locals.seasonRemindersAll = async (today) => seasonReminders.runAll(allEnvironmentIds().filter(tenantActive), today);
   /**
    * Automatische back-up als de nieuwste ouder is dan een dag.
    * @returns {Promise<object|null>} De back-up, of null als het niet nodig was.

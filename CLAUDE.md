@@ -412,7 +412,8 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   tabel `season_reminders_sent`, migratie 31): instelling `seasonReminders`
   {enabled, portalUrl, items [{key, title, month, day, text}]} in Beheer →
   Instellingen. Elk uur (`app.locals.seasonRemindersAll`) mail via de
-  tenant-mailserver aan klanten met e-mail + werkorder in die omgeving, één
+  tenant-mailserver aan klanten die in die omgeving wonen (test = alleen
+  testaccounts; uitgeschakelde tenants overgeslagen) met e-mail + werkorder, één
   keer per sleutel per jaar (tot 21 dagen na de datum). Portaal: `reminders`
   (60 dagen), knop opent het meldformulier als onderhoud
   (`portaal/?herinnering=<key>`), afmelden via voorkeur `seasonReminders`.
