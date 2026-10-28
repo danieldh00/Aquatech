@@ -47,11 +47,12 @@ async function workOrder(client, lines) {
 
 test('voorraad: artikel opschonen en benodigd per code', () => {
   assert.deepStrictEqual(sanitizeItem({ code: ' pe-25 ', name: ' PE-buis ', minQty: '5', costPrice: '0.849' }).value,
-    { code: 'PE-25', name: 'PE-buis', unit: 'st', location: '', notes: '', minQty: 5, costPrice: 0.85, salePrice: null, vatRate: 21, revenueGroup: 'producten', shopSync: true });
+    { code: 'PE-25', name: 'PE-buis', unit: 'st', location: '', notes: '', minQty: 5, reorderQty: null, costPrice: 0.85, salePrice: null, vatRate: 21, revenueGroup: 'producten', shopSync: true });
   assert.strictEqual(sanitizeItem({ code: '', name: 'x' }).field, 'code');
   assert.strictEqual(sanitizeItem({ code: 'A B;C', name: 'x' }).field, 'code');
   assert.strictEqual(sanitizeItem({ code: 'A', name: '' }).field, 'name');
   assert.strictEqual(sanitizeItem({ code: 'A', name: 'x', minQty: -1 }).field, 'minQty');
+  assert.strictEqual(sanitizeItem({ code: 'A', name: 'x', reorderQty: 'veel' }).field, 'reorderQty');
   const need = needsOf([{ code: 'pe-25', qty: 10 }, { code: 'PE-25', qty: 2.5 }, { code: '', qty: 3 }, { code: 'X', qty: -1 }]);
   assert.deepStrictEqual([...need.entries()].map(([code, need]) => [code, need.qty]), [['PE-25', 12.5]]);
 });
@@ -211,6 +212,7 @@ test('voorraad: rechten en scheiding tussen organisaties', async () => {
     // Planner: geen voorraadbeheer, wel de voorraad van een werkorder.
     assert.strictEqual((await pien.get('/api/stock')).status, 403);
     assert.strictEqual((await pien.post('/api/stock/items', { code: 'X', name: 'X' })).status, 403);
+    assert.strictEqual((await pien.get('/api/stock/reorder')).status, 403);
     assert.strictEqual((await pien.get(`/api/stock/workorders/${wo.id}`)).status, 200);
     // Klant: niets.
     assert.strictEqual((await klant.get('/api/stock')).status, 403);
@@ -222,6 +224,7 @@ test('voorraad: rechten en scheiding tussen organisaties', async () => {
     assert.strictEqual(made.status, 201, JSON.stringify(made.body));
     const piet = await as('piet', 'groen');
     assert.deepStrictEqual((await piet.get('/api/stock')).body.items, []);
+    assert.deepStrictEqual((await piet.get('/api/stock/reorder')).body, { items: [], total: null });
     assert.strictEqual((await piet.get(`/api/stock/items/${item.id}`)).status, 404);
     assert.strictEqual((await piet.put(`/api/stock/items/${item.id}`, { name: 'Gekaapt' })).status, 404);
     assert.strictEqual((await piet.post(`/api/stock/items/${item.id}/movements`, { kind: 'ontvangst', qty: 1 })).status, 404);
@@ -230,6 +233,37 @@ test('voorraad: rechten en scheiding tussen organisaties', async () => {
     assert.strictEqual((await piet.post(`/api/stock/workorders/${wo.id}/issue`, {})).status, 404);
     // Een eigen artikel met dezelfde code mag in de andere organisatie.
     assert.strictEqual((await piet.post('/api/stock/items', { code: 'PE-25', name: 'PE-buis' })).status, 201);
+  } finally {
+    server.close();
+  }
+});
+
+test('voorraad: bestelvoorstel vult aan tot Bestellen tot (leeg = 2× minimum), gereserveerd telt mee', async () => {
+  const { server, as } = await setup();
+  try {
+    const kees = await as('kees');
+    // Ruim voorraad: niet in het voorstel.
+    await kees.post('/api/stock/items', { code: 'VOL', name: 'Genoeg', minQty: 2, onHand: 10, costPrice: 1 });
+    // Onder het minimum, zonder Bestellen tot: aanvullen tot 2× minimum (10 − 3 = 7).
+    await kees.post('/api/stock/items', { code: 'PE-25', name: 'PE-buis', unit: 'm', minQty: 5, onHand: 3, costPrice: 0.85 });
+    // Met Bestellen tot en een reservering: beschikbaar 4 − 3 = 1, aanvullen tot 20,5 = 19,5 → 20 hele eenheden.
+    await kees.post('/api/stock/items', { code: 'VAL-24V', name: 'Klep', minQty: 2, reorderQty: 20.5, onHand: 4 });
+    await workOrder(kees, [['VAL-24V', 3]]);
+    // Minimum 0 maar meer gereserveerd dan er ligt: het tekort (2) komt erin.
+    await kees.post('/api/stock/items', { code: 'BOX-STD', name: 'Kleppenput', onHand: 1 });
+    await workOrder(kees, [['BOX-STD', 3]]);
+    // Gearchiveerd telt niet mee.
+    const old = (await kees.post('/api/stock/items', { code: 'OUD', name: 'Oud', minQty: 5 })).body;
+    await kees.put(`/api/stock/items/${old.id}`, { archived: true });
+
+    const proposal = (await kees.get('/api/stock/reorder')).body;
+    assert.deepStrictEqual(proposal.items.map((item) => [item.code, item.available, item.target, item.orderQty, item.amount]),
+      [['BOX-STD', -2, 0, 2, null], ['PE-25', 3, 10, 7, 5.95], ['VAL-24V', 1, 20.5, 20, null]]);
+    assert.strictEqual(proposal.total, 5.95);
+    // Bestellen tot leegmaken: terug naar 2× minimum.
+    const valve = proposal.items[2];
+    assert.strictEqual((await kees.put(`/api/stock/items/${valve.id}`, { reorderQty: '' })).body.reorderQty, null);
+    assert.strictEqual((await kees.get('/api/stock/reorder')).body.items[2].orderQty, 3);
   } finally {
     server.close();
   }

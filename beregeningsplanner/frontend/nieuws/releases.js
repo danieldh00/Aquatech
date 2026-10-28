@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.70.0',
+      date: '2026-10-27',
+      title: 'Bestelvoorstel bij lage voorraad',
+      items: [
+        { text: 'In **Voorraadbeheer** maakt de knop **Bestelvoorstel** een Excel met elk artikel dat onder de minimumvoorraad zit en hoeveel je moet bestellen. Per artikel stel je in tot welk aantal je aanvult (**Bestellen tot**, leeg = 2× het minimum).', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '0.69.1',
       date: '2026-10-27',
       title: 'Opgeschoonde code (deel 3 van de schermen)',
