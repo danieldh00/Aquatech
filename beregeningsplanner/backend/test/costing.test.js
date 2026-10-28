@@ -67,6 +67,11 @@ test('kern: begroot uit de offerte, werkelijk uit boekingen, kosten, opbrengst e
   const noPrice = Core.compute({ workOrder: { data: { materials: [{ code: 'X-1', description: 'Iets', qty: 2 }] } }, quote: null, logged: { hours: [], materials: [] } });
   assert.strictEqual(noPrice.materials[0].plannedAmount, 0);
   assert.ok(noPrice.warnings.some((warning) => warning.includes('Geen verkoopprijs voor X-1')));
+
+  // Alleen een retour (negatief verbruik) zonder prijzen: ook dan waarschuwen.
+  const returned = Core.compute({ workOrder: { data: {} }, quote: null, logged: { hours: [], materials: [{ code: 'Y-1', qty: -1 }] } });
+  assert.ok(returned.warnings.some((warning) => warning.includes('Geen verkoopprijs voor Y-1')));
+  assert.ok(returned.warnings.some((warning) => warning.includes('Geen inkoopprijs in de voorraad voor Y-1')));
 });
 
 test('API: nacalculatie alleen met het recht, andere tenant 404, met kostprijs uit profiel en voorraad', async () => {

@@ -125,10 +125,10 @@
       let price = material.price;
       if (price === null) {
         price = article && article.salePrice != null ? article.salePrice : 0;
-        if (!(article && article.salePrice != null) && (material.usedQty > 0 || material.plannedQty > 0)) missingPrice.push(material.code || material.description);
+        if (!(article && article.salePrice != null) && (material.usedQty !== 0 || material.plannedQty > 0)) missingPrice.push(material.code || material.description);
       }
       const costPrice = article && article.costPrice != null ? article.costPrice : null;
-      if (costPrice === null && material.usedQty > 0) missingCost.push(material.code || material.description);
+      if (costPrice === null && material.usedQty !== 0) missingCost.push(material.code || material.description);
       const plannedQty = round2(material.plannedQty);
       const usedQty = round2(material.usedQty);
       return {

@@ -154,8 +154,10 @@
    * @returns {Promise<void>}
    */
   async function exportXlsx() {
-    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
+    // Vastleggen vóór het laden van ExcelJS: intussen kan een andere werkorder openen.
     const costing = state.data;
+    if (!costing) return;
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     try {
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'AquaTech Service';
