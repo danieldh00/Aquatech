@@ -29,6 +29,7 @@ const { createInvoiceSender } = require('./verkoop/invoice-mail');
 const { createInvoiceStore, registerInvoiceRoutes } = require('./verkoop/invoices');
 const { createVisma, registerVismaRoutes } = require('./verkoop/visma');
 const { createPortalStore, registerPortalRoutes } = require('./uitvoering/portal');
+const { createLocationStore, registerLocationRoutes } = require('./uitvoering/locations');
 const { createServiceRequestStore, registerServiceRequestRoutes } = require('./uitvoering/service-requests');
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./uitvoering/outsourcing');
 const { createStockStore, registerStockRoutes } = require('./voorraad/stock');
@@ -1759,6 +1760,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Foto's bij werkorders en klantdossiers (zie photos.js) ----------
   registerPhotoRoutes(app, { photos: photoStore, dossiers: dossierStore, requireRight, requireUser, requireJson, identify, audit });
+
+  // ---------- Installatiedossier per locatie (zie locations.js) ----------
+  registerLocationRoutes(app, { locations: createLocationStore(database, { photos: photoStore }), requireRight, createRateLimiter, remoteIp });
 
   // ---------- Klantportaal (module Portaal, zie portal.js) ----------
   const portalStore = createPortalStore(database);
