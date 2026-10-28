@@ -3,7 +3,7 @@
 ## 0.72.1
 
 - Klantportaal: geen melding "Er staat nog niets voor u klaar" meer als er alleen een seizoensherinnering staat.
-- Test voor de verzendronde: na drie tijdelijke fouten stopt de ronde zonder iemand vast te leggen; een volgende ronde probeert het opnieuw.
+- Test voor de verzendronde: na drie tijdelijke fouten stopt de ronde. Tijdelijk geweigerde ontvangers worden niet vastgelegd en komen in een volgende ronde opnieuw aan de beurt.
 
 ## 0.72.0
 
