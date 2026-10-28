@@ -142,8 +142,15 @@
       checkbox.checked = wanted;
       toast(wanted ? 'U krijgt de herinneringen per e-mail.' : 'U krijgt geen herinneringen meer per e-mail.');
     } catch (error) {
-      state.seasonMail = !wanted;
-      checkbox.checked = !wanted;
+      // Onzeker of de server het toch opsloeg: de opgeslagen stand opnieuw ophalen.
+      delete state.seasonMail;
+      try {
+        const profile = await api('../api/account/profile');
+        state.data.reminderMails = profile.preferences.seasonReminders !== false;
+      } catch (reloadError) {
+        state.data.reminderMails = !wanted;
+      }
+      checkbox.checked = state.data.reminderMails;
       toast(`Opslaan mislukt (${error.message}).`, true);
     } finally {
       checkbox.disabled = false;
