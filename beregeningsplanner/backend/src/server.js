@@ -1729,8 +1729,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Nacalculatie per werkorder: begroot tegenover werkelijk, kosten en marge.
   registerCostingRoutes(app, {
     requireRight, invoices: invoiceStore,
-    loggedOf: (tid, woId) => workLogStore.list(tid, woId),
-    articlesOf: (tid, codes) => stockStore.saleInfo(tid, codes),
+    loggedOf: (tenantId, workOrderId) => workLogStore.list(tenantId, workOrderId),
+    articlesOf: (tenantId, codes) => stockStore.saleInfo(tenantId, codes),
     profileOf: (req) => settingsFor(req.tenantId || tenant.id).get('quoteProfile'),
   });
 

@@ -26,6 +26,18 @@ const PROFILE_TEXT = {
   numberPrefix: 12, intro: 4000, terms: 6000,
 };
 const PROFILE_NUMBERS = { hourlyRate: [0, 10000], hourlyCost: [0, 10000], validDays: [1, 365], vatRate: [0, 21], markupPct: [-100, 1000], callOutFee: [0, 100000] };
+// Velden van het profiel die alleen intern zijn (nacalculatie), nooit naar klanten.
+const INTERNAL_PROFILE_FIELDS = ['hourlyCost'];
+/**
+ * Het bedrijfsprofiel zonder de interne velden, voor klanten en openbare pagina's.
+ * @param {object} profile Het bedrijfsprofiel (quoteProfile).
+ * @returns {object} Een kopie zonder INTERNAL_PROFILE_FIELDS.
+ */
+const withoutInternal = (profile) => {
+  const out = { ...profile };
+  for (const field of INTERNAL_PROFILE_FIELDS) delete out[field];
+  return out;
+};
 const PROFILE_DEFAULTS = {
   companyName: 'AquaTech Service', address: '', email: '', phone: '', website: 'aquatechservice.nl', kvk: '', vatNumber: '', iban: '',
   numberPrefix: 'OF-',
@@ -652,12 +664,15 @@ function registerQuoteRoutes(app, ctx) {
   const badCustomer = (res) => res.status(400).json({ error: 'invalid_customer', message: 'Onbekend klantaccount.' });
 
   // Bedrijfsgegevens en standaardwaarden voor op de offerte (geen geheimen).
-  // Ook een klant heeft ze nodig om de offerte te kunnen tonen.
+  // Ook een klant heeft ze nodig om de offerte te kunnen tonen; de interne
+  // kostprijs per uur alleen voor wie beheert of de nacalculatie ziet.
   app.get('/api/quote-profile', (req, res) => {
     const user = identify(req);
     if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
     const settings = settingsOf(req);
-    res.json({ profile: settings.get('quoteProfile'), canEdit: Roles.can(user, 'beheer'), mail: Roles.can(user, 'offertes') && mailerFor(settings).configured() });
+    const profile = settings.get('quoteProfile');
+    const internal = Roles.can(user, 'beheer') || Roles.can(user, 'nacalculatie');
+    res.json({ profile: internal ? profile : withoutInternal(profile), canEdit: Roles.can(user, 'beheer'), mail: Roles.can(user, 'offertes') && mailerFor(settings).configured() });
   });
 
   app.put('/api/quote-profile', requireJson, requireAdmin, (req, res) => {
@@ -863,7 +878,7 @@ function registerQuoteRoutes(app, ctx) {
     if (!quoteRow) return;
     if (req.query.preview !== '1') quotes.markViewed(quoteRow);
     const settings = settingsForTenant(quoteRow.tenant_id);
-    res.json({ quote: quotes.publicView(quoteRow), profile: settings.get('quoteProfile'), theme: themeOf(quoteRow.tenant_id) });
+    res.json({ quote: quotes.publicView(quoteRow), profile: withoutInternal(settings.get('quoteProfile')), theme: themeOf(quoteRow.tenant_id) });
   });
 
   app.post('/api/public/quote/respond', publicLimiter, requireJson, (req, res) => {

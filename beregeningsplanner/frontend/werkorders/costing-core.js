@@ -5,10 +5,11 @@
 // Excel-export). Geen afhankelijkheden.
 //
 // Bedragen zijn excl. btw. "Waarde" = tegen verkoopprijs (offerteprijs, anders
-// verkoopprijs uit de voorraad), "kosten" = geboekte uren × kostprijs per uur
+// verkoopprijs uit de voorraad; arbeid tegen het uurtarief van de offerte), "kosten" = geboekte uren × kostprijs per uur
 // plus verbruikt materiaal × inkoopprijs. De opbrengst is wat er definitief is
 // gefactureerd (creditnota's tellen negatief mee); zolang er niets
-// gefactureerd is, telt de offerte (netto, na korting).
+// gefactureerd is, telt de offerte (netto, na korting), en zonder offerte een
+// schatting uit de werkorder (revenueSource 'schatting').
 (function (root) {
   /**
    * Rondt af op twee decimalen.
@@ -43,7 +44,7 @@
    *   logged     { hours: [{ minutes }], materials: [{ code, description, unit, qty }] }
    *   articles   per code { name, salePrice, costPrice } (voorraad)
    *   invoices   [{ number, status, subtotal }] van deze werkorder
-   *   hourlyRate uurtarief excl. btw; hourlyCost kostprijs per uur
+   *   hourlyRate uurtarief excl. btw (zonder uren in de offerte); hourlyCost kostprijs per uur
    * @returns {object} { source, labour, materials, other, budget, actual, cost, invoiced, revenue, revenueSource, margin, marginPct, warnings }.
    */
   function compute(input) {
@@ -104,9 +105,10 @@
         if (!keyOf(line)) continue;
         const material = materialFor(line);
         const article = articleOf(line.code);
-        if (material.price === null) material.price = article && article.salePrice != null ? article.salePrice : 0;
+        // Geen verkoopprijs: price blijft null, zodat de waarschuwing hieronder volgt.
+        if (material.price === null && article && article.salePrice != null) material.price = article.salePrice;
         material.plannedQty += Number(line.qty) || 0;
-        material.plannedAmount += (Number(line.qty) || 0) * material.price;
+        material.plannedAmount += (Number(line.qty) || 0) * (material.price || 0);
       }
     }
 
@@ -123,7 +125,7 @@
       let price = material.price;
       if (price === null) {
         price = article && article.salePrice != null ? article.salePrice : 0;
-        if (!(article && article.salePrice != null) && material.usedQty > 0) missingPrice.push(material.code || material.description);
+        if (!(article && article.salePrice != null) && (material.usedQty > 0 || material.plannedQty > 0)) missingPrice.push(material.code || material.description);
       }
       const costPrice = article && article.costPrice != null ? article.costPrice : null;
       if (costPrice === null && material.usedQty > 0) missingCost.push(material.code || material.description);
@@ -140,7 +142,10 @@
     const budgetMaterials = round2(materialRows.reduce((sum, row) => sum + row.plannedAmount, 0));
     const actualMaterials = round2(materialRows.reduce((sum, row) => sum + row.usedAmount, 0));
     const budgetSubtotal = round2(plannedLabour + budgetMaterials + plannedOther);
-    const actualLabour = round2(actualHours * hourlyRate);
+    // Werkelijke arbeid tegen hetzelfde tarief als de begroting: het gemiddelde
+    // uurtarief van de offerteregels in uren, anders het uurtarief uit het profiel.
+    const labourRate = plannedHours > 0 && plannedLabour > 0 ? round2(plannedLabour / plannedHours) : hourlyRate;
+    const actualLabour = round2(actualHours * labourRate);
     // Overige posten (voorrijkosten e.d.) worden niet geboekt: werkelijk = begroot.
     const actualSubtotal = round2(actualLabour + actualMaterials + plannedOther);
     const budgetDiscount = round2(budgetSubtotal * discountPct / 100);
@@ -159,7 +164,8 @@
       concepts: (fields.invoices || []).filter((invoice) => invoice.status === 'concept').length,
       numbers: final.map((invoice) => invoice.number).filter(Boolean),
     };
-    const revenueSource = final.length ? 'factuur' : 'offerte';
+    // Zonder factuur en zonder offerte is de opbrengst een schatting uit de werkorder.
+    const revenueSource = final.length ? 'factuur' : quoteData ? 'offerte' : 'schatting';
     const revenue = final.length ? invoiced.amount : budget.net;
     const margin = round2(revenue - cost.total);
 
@@ -173,7 +179,7 @@
       source: quoteData ? 'offerte' : 'werkorder',
       labour: {
         plannedHours: round2(plannedHours), actualHours: round2(actualHours), diffHours: round2(actualHours - plannedHours),
-        hourlyRate, hourlyCost, plannedAmount: budget.labour, actualAmount: actualLabour, cost: labourCost,
+        hourlyRate: labourRate, hourlyCost, plannedAmount: budget.labour, actualAmount: actualLabour, cost: labourCost,
       },
       materials: materialRows,
       discountPct,

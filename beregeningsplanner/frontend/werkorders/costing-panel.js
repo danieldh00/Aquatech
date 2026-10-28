@@ -52,6 +52,17 @@
    */
   const toast = (message, isError) => (state.options.toast ? state.options.toast(message, isError) : null);
 
+  /**
+   * Omschrijving van de opbrengst: gefactureerd, volgens offerte of een schatting.
+   * @param {object} costing De nacalculatie.
+   * @returns {string} De omschrijving (platte tekst).
+   */
+  const revenueLabelOf = (costing) => {
+    if (costing.revenueSource === 'factuur') return `Gefactureerd (${costing.invoiced.numbers.join(', ') || costing.invoiced.count})`;
+    if (costing.revenueSource === 'offerte') return 'Opbrengst volgens offerte (nog niet gefactureerd)';
+    return 'Geschatte opbrengst (geen offerte en nog niet gefactureerd)';
+  };
+
   /** Tekent de samenvatting, de materiaalregels en de waarschuwingen. */
   function render() {
     const container = $('#nc-body');
@@ -68,24 +79,22 @@
       <td class="num">${esc(formatEuro(material.usedAmount))}</td>
       <td class="num">${material.usedCost == null ? '<span class="muted">–</span>' : esc(formatEuro(material.usedCost))}</td>
     </tr>`).join('');
-    const revenueLabel = costing.revenueSource === 'factuur'
-      ? `Gefactureerd (${esc(costing.invoiced.numbers.join(', ') || costing.invoiced.count)})`
-      : 'Opbrengst volgens offerte (nog niet gefactureerd)';
+    const revenueLabel = revenueLabelOf(costing);
     container.innerHTML = `<div class="tablewrap"><table class="grid nc-table">
         <thead><tr><th></th><th class="num">Begroot</th><th class="num">Werkelijk</th><th class="num">Verschil</th></tr></thead>
         <tbody>
           <tr><td>Uren</td><td class="num">${esc(formatNumber(labour.plannedHours))}</td><td class="num">${esc(formatNumber(labour.actualHours))}</td>${diffCell(labour.diffHours, formatNumber)}</tr>
-          <tr><td>Arbeid (à ${esc(formatEuro(labour.hourlyRate))})</td><td class="num">${esc(formatEuro(budget.labour))}</td><td class="num">${esc(formatEuro(actual.labour))}</td>${diffCell(actual.labour - budget.labour, formatEuro)}</tr>
+          <tr><td>Arbeid (à ${esc(formatEuro(labour.hourlyRate))} per uur)</td><td class="num">${esc(formatEuro(budget.labour))}</td><td class="num">${esc(formatEuro(actual.labour))}</td>${diffCell(actual.labour - budget.labour, formatEuro)}</tr>
           <tr><td>Materiaal</td><td class="num">${esc(formatEuro(budget.materials))}</td><td class="num">${esc(formatEuro(actual.materials))}</td>${diffCell(actual.materials - budget.materials, formatEuro)}</tr>
           ${budget.other ? `<tr><td>Overig</td><td class="num">${esc(formatEuro(budget.other))}</td><td class="num">${esc(formatEuro(actual.other))}</td><td class="num muted">0</td></tr>` : ''}
           ${discountRow}
           <tr class="nc-total"><td>Waarde (excl. btw)</td><td class="num">${esc(formatEuro(budget.net))}</td><td class="num">${esc(formatEuro(actual.net))}</td>${diffCell(actual.net - budget.net, formatEuro)}</tr>
         </tbody></table></div>
       <div class="tablewrap"><table class="grid nc-table nc-result"><tbody>
-        <tr><td>${revenueLabel}</td><td class="num">${esc(formatEuro(costing.revenue))}</td></tr>
+        <tr><td>${esc(revenueLabel)}</td><td class="num">${esc(formatEuro(costing.revenue))}</td></tr>
         <tr><td>Kosten arbeid (${esc(formatNumber(labour.actualHours))} u × ${esc(formatEuro(labour.hourlyCost))})</td><td class="num">−${esc(formatEuro(cost.labour))}</td></tr>
         <tr><td>Kosten materiaal (inkoopprijs)</td><td class="num">−${esc(formatEuro(cost.materials))}</td></tr>
-        <tr class="nc-total"><td>Marge${cost.complete ? '' : ' <span class="muted small">(kosten onvolledig)</span>'}</td><td class="num ${costing.margin < 0 ? 'nc-bad' : 'nc-good'}">${esc(formatEuro(costing.margin))}${costing.marginPct == null ? '' : ` · ${esc(formatNumber(costing.marginPct))}%`}</td></tr>
+        <tr class="nc-total"><td>${costing.revenueSource === 'schatting' ? 'Geschatte marge' : 'Marge'}${cost.complete ? '' : ' <span class="muted small">(kosten onvolledig)</span>'}</td><td class="num ${costing.margin < 0 ? 'nc-bad' : 'nc-good'}">${esc(formatEuro(costing.margin))}${costing.marginPct == null ? '' : ` · ${esc(formatNumber(costing.marginPct))}%`}</td></tr>
       </tbody></table></div>
       ${costing.materials.length ? `<details class="nc-materials"><summary>Materiaal per artikel (${costing.materials.length})</summary><div class="tablewrap"><table class="grid">
         <thead><tr><th>Artikel</th><th class="num">Begroot</th><th class="num">Verbruikt</th><th class="num">Verschil</th><th class="num">Waarde</th><th class="num">Kosten</th></tr></thead>
@@ -191,10 +200,10 @@
         row.getCell('actual').numFmt = EURO;
         return row;
       };
-      addAmount(costing.revenueSource === 'factuur' ? `Gefactureerd (${costing.invoiced.numbers.join(', ')})` : 'Opbrengst volgens offerte', costing.revenue);
+      addAmount(revenueLabelOf(costing), costing.revenue);
       addAmount(`Kosten arbeid (${labour.actualHours} u × ${labour.hourlyCost})`, -cost.labour);
       addAmount('Kosten materiaal (inkoopprijs)', -cost.materials);
-      addAmount(cost.complete ? 'Marge' : 'Marge (kosten onvolledig)', costing.margin).font = { bold: true };
+      addAmount(`${costing.revenueSource === 'schatting' ? 'Geschatte marge' : 'Marge'}${cost.complete ? '' : ' (kosten onvolledig)'}`, costing.margin).font = { bold: true };
       if (costing.marginPct != null) summary.addRow({ part: 'Marge %', actual: costing.marginPct / 100 }).getCell('actual').numFmt = '0.0%';
       summary.addRow({});
       summary.addRow({ part: `Werkorder ${costing.workOrder.number}${costing.quote ? ` · offerte ${costing.quote.number}` : ''}` });

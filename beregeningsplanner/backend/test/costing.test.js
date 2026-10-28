@@ -54,6 +54,19 @@ test('kern: begroot uit de offerte, werkelijk uit boekingen, kosten, opbrengst e
   });
   assert.deepStrictEqual([withoutQuote.source, withoutQuote.labour.plannedHours, withoutQuote.budget.labour, withoutQuote.budget.materials], ['werkorder', 3.5, 210, 30]);
   assert.ok(withoutQuote.warnings.some((warning) => warning.includes('kostprijs per uur')));
+  assert.strictEqual(withoutQuote.revenueSource, 'schatting', 'zonder offerte en factuur is de opbrengst een schatting');
+
+  // Werkelijke arbeid tegen het tarief van de offerte, niet tegen het profiel.
+  const quoteRate = Core.compute({
+    workOrder: { data: {} }, quote: { data: { lines: [{ section: 'arbeid', qty: 2, unit: 'uur', price: 70 }] } },
+    logged: { hours: [{ minutes: 120 }], materials: [] }, hourlyRate: 50,
+  });
+  assert.deepStrictEqual([quoteRate.labour.hourlyRate, quoteRate.actual.labour, quoteRate.budget.labour], [70, 140, 140]);
+
+  // Zonder offerte en zonder verkoopprijs: waarschuwing, waarde € 0.
+  const noPrice = Core.compute({ workOrder: { data: { materials: [{ code: 'X-1', description: 'Iets', qty: 2 }] } }, quote: null, logged: { hours: [], materials: [] } });
+  assert.strictEqual(noPrice.materials[0].plannedAmount, 0);
+  assert.ok(noPrice.warnings.some((warning) => warning.includes('Geen verkoopprijs voor X-1')));
 });
 
 test('API: nacalculatie alleen met het recht, andere tenant 404, met kostprijs uit profiel en voorraad', async () => {
@@ -71,20 +84,23 @@ test('API: nacalculatie alleen met het recht, andere tenant 404, met kostprijs u
     assert.strictEqual((await baas.put('/api/quote-profile', { profile: { hourlyRate: 50, hourlyCost: 30 } })).body.profile.hourlyCost, 30);
     const quote = (await baas.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen' }, lines } })).body;
     await baas.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
-    const wo = (await baas.post('/api/workorders', { quoteId: quote.id })).body;
+    const workOrder = (await baas.post('/api/workorders', { quoteId: quote.id })).body;
     assert.strictEqual((await baas.post('/api/stock/import', { codes: ['PE-25'] })).status, 200);
     const pipe = (await baas.get('/api/stock')).body.items.find((item) => item.code === 'PE-25');
     assert.strictEqual((await baas.put(`/api/stock/items/${pipe.id}`, { costPrice: 1 })).status, 200);
     const day = new Date().toISOString().slice(0, 10);
-    await kees.post(`/api/workorders/${wo.id}/hours`, { workDate: day, hours: 5 });
-    await kees.post(`/api/workorders/${wo.id}/materials`, { usedOn: day, code: 'PE-25', description: 'PE-buis', unit: 'm', qty: 55 });
+    await kees.post(`/api/workorders/${workOrder.id}/hours`, { workDate: day, hours: 5 });
+    await kees.post(`/api/workorders/${workOrder.id}/materials`, { usedOn: day, code: 'PE-25', description: 'PE-buis', unit: 'm', qty: 55 });
 
-    const url = `/api/workorders/${wo.id}/costing`;
+    // De kostprijs per uur is intern: niet voor een installateur zonder nacalculatie.
+    assert.strictEqual((await kees.get('/api/quote-profile')).body.profile.hourlyCost, undefined);
+    assert.strictEqual((await baas.get('/api/quote-profile')).body.profile.hourlyCost, 30);
+    const url = `/api/workorders/${workOrder.id}/costing`;
     assert.strictEqual((await kees.get(url)).status, 403, 'installateur heeft standaard geen nacalculatie');
     assert.strictEqual((await vreemd.get(url)).status, 404, 'andere organisatie');
     assert.strictEqual((await baas.get('/api/workorders/bestaat-niet/costing')).status, 404);
     const costing = (await baas.get(url)).body;
-    assert.deepStrictEqual([costing.workOrder.number, costing.quote.number], [wo.number, quote.number]);
+    assert.deepStrictEqual([costing.workOrder.number, costing.quote.number], [workOrder.number, quote.number]);
     assert.deepStrictEqual([costing.labour.actualHours, costing.cost.labour, costing.cost.materials, costing.cost.complete], [5, 150, 55, true]);
     assert.deepStrictEqual([costing.revenue, costing.margin], [325, 120]);
   } finally {
