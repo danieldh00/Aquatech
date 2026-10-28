@@ -2,8 +2,9 @@
    een opleverdossier per werkorder. Basis uit dashboard.css en beheer.css. */
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
-.card.season { border-left: 4px solid var(--at-green, #19924f); }
-.season-mail { display: flex; gap: 8px; align-items: center; margin-top: 10px; color: var(--muted); font-size: 14px; }
+.card.season { border-left: 4px solid var(--at-green); }
+.season-mail { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 14px; }
+.season-mail[hidden] { display: none; }
 .card.todo { border-left: 4px solid var(--at-teal, #2cb0c0); }
 .card h3 { margin: 0; font-size: 16px; color: var(--primary-dark); }
 .card .meta { color: var(--muted); font-size: 13px; }

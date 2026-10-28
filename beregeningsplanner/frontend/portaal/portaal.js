@@ -107,16 +107,19 @@
 
   /**
    * Opent het meldformulier als onderhoudsverzoek voor een seizoensherinnering.
+   * Loopt de herinnering niet meer (oude link uit een mail), dan opent het
+   * gewone onderhoudsformulier met een melding.
    * @param {string} key Sleutel van de herinnering.
    * @returns {void}
    */
   function requestSeasonService(key) {
+    if (!state.data.features.requests) return;
     const reminder = (state.data.reminders || []).find((item) => item.key === key);
-    if (!reminder || !state.data.features.requests) return;
+    if (!reminder) toast('Deze herinnering loopt niet meer. U kunt hier gewoon onderhoud aanvragen.');
     openForm();
     const requestForm = form();
     requestForm.kind.value = 'onderhoud';
-    requestForm.subject.value = reminder.title;
+    requestForm.subject.value = reminder ? reminder.title : '';
     syncKind();
     requestForm.description.focus();
   }
@@ -127,13 +130,18 @@
    * @returns {Promise<void>}
    */
   async function saveSeasonMail(wanted) {
+    const checkbox = $('#season-mail');
+    // Eén wijziging tegelijk, zodat de laatste klik ook de opgeslagen stand is.
+    checkbox.disabled = true;
     try {
       await api('../api/account/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preferences: { seasonReminders: wanted } }) });
       state.data.reminderMails = wanted;
       toast(wanted ? 'U krijgt de herinneringen per e-mail.' : 'U krijgt geen herinneringen meer per e-mail.');
     } catch (error) {
-      $('#season-mail').checked = !wanted;
+      checkbox.checked = !wanted;
       toast(`Opslaan mislukt (${error.message}).`, true);
+    } finally {
+      checkbox.disabled = false;
     }
   }
 

@@ -2193,7 +2193,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @param {Date} [today] De dag (tests).
    * @returns {Promise<object>} Aantallen per omgeving.
    */
-  app.locals.seasonRemindersAll = (today) => seasonReminders.runAll(allEnvironmentIds(), today);
+  app.locals.seasonRemindersAll = async (today) => seasonReminders.runAll(allEnvironmentIds(), today);
   /**
    * Automatische back-up als de nieuwste ouder is dan een dag.
    * @returns {Promise<object|null>} De back-up, of null als het niet nodig was.
