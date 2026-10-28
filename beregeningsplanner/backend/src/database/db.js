@@ -775,7 +775,12 @@ const MIGRATIONS = [
     UNIQUE (tenant_id, kind, key)
   );
   `,
-  // 30: seizoensherinneringen (season-reminders.js): welke klant welke
+  // 30: bestelvoorstel (stock.js): per voorraadartikel tot welke stand je
+  // bijbestelt als het onder de minimumvoorraad zakt (leeg = 2× minimum).
+  `
+  ALTER TABLE stock_items ADD COLUMN reorder_qty REAL;
+  `,
+  // 31: seizoensherinneringen (season-reminders.js): welke klant welke
   // herinnering in welk jaar al per mail kreeg (nooit twee keer dezelfde).
   `
   CREATE TABLE season_reminders_sent (

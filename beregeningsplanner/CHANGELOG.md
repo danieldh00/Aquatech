@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.70.0
+## 0.71.0
 
 Seizoensherinneringen voor klanten (voorjaar opstarten, najaar winterklaar).
 
@@ -12,7 +12,7 @@ Seizoensherinneringen voor klanten (voorjaar opstarten, najaar winterklaar).
   onderhoud, `app.locals.seasonRemindersAll`): tot 21 dagen na de datum een
   mail via de eigen mailserver aan actieve klantaccounts met e-mailadres en
   een werkorder in die omgeving (via offerte of melding). Tabel
-  `season_reminders_sent` (migratie 30) houdt bij wie welke herinnering in
+  `season_reminders_sent` (migratie 31) houdt bij wie welke herinnering in
   welk jaar kreeg; hoogstens 100 mails per omgeving per ronde.
 - **Klantportaal**: blok *Seizoensonderhoud* (twee maanden na de datum) met
   *Afspraak aanvragen* (meldformulier als onderhoud, ook via
@@ -20,6 +20,32 @@ Seizoensherinneringen voor klanten (voorjaar opstarten, najaar winterklaar).
   uit te zetten (voorkeur `seasonReminders`).
 - Testdata: klanten met een installatie kregen vorig najaar de herinnering.
 
+
+## 0.70.1
+
+Opschoonronde planner (laatste deel): duidelijke namen en een commentaarblok
+bij elke functie in `beregening/js/`, zonder gedragswijziging. Opgeschoond:
+`planimport.js`, `autotrace.js`, `concept.js`, `simulation.js`, `geometry.js`,
+`sprinklerlib.js`, `hydraulics.js`, `bom.js`, `catalog.js`, `editor.js`,
+`localrecog.js` en `app.js`. Exportnamen, opgeslagen sleutels en
+eigenschappen van het datamodel (zoals `pts`, `r`, `w`/`h` in uitvoer) zijn
+ongewijzigd. `tools/codestyle-baseline.json` is nu leeg: alle eigen code
+voldoet aan de codestijl.
+
+## 0.70.0
+
+Bestelvoorstel bij lage voorraad.
+
+- **Voorraadbeheer**: nieuwe kolom `stock_items.reorder_qty` (migratie 30,
+  SQLite en PostgreSQL), in het artikel als *Bestellen tot* (leeg = 2×
+  minimum; lager dan het minimum telt als 2× minimum).
+- `GET /api/stock/reorder` (recht `voorraad`, per omgeving): artikelen waarvan
+  beschikbaar (stand − gereserveerd) onder het minimum ligt, met
+  `target`, `orderQty` (aanvullen tot `target`, naar boven afgerond op hele
+  eenheden), `amount` (op inkoopprijs) en het totaal. Eén query (`list`).
+- Knop **Bestelvoorstel** maakt er een Excel van (tabblad *Bestelvoorstel*,
+  met totaalregel); de gewone voorraadexport heeft de kolom *Bestellen tot*.
+- Testdata vult *Bestellen tot* bij een deel van de artikelen.
 ## 0.69.1
 
 Opschoonronde frontend deel 3: duidelijke namen en een commentaarblok bij elke

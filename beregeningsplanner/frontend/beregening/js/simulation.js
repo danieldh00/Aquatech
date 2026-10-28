@@ -2,132 +2,158 @@
 (function () {
   'use strict';
 
-  const G = window.Geo;
-  const C = window.Catalog;
+  const Geo = window.Geo;
+  const Catalog = window.Catalog;
 
   // Neerslag per kop (uit de nozzle van de bibliotheek) onthouden zolang de instelling gelijk blijft.
   const prCache = new WeakMap();
-  function prOf(s) {
-    const sig = `${s.type}|${s.r}|${s.arc}|${s.model || ''}|${s.body || ''}`;
-    const hit = prCache.get(s);
-    if (hit && hit.sig === sig) return hit.pr;
-    const pr = C.headPr ? C.headPr(s) : C.sprinklerTypes[s.type].pr;
-    prCache.set(s, { sig, pr });
-    return pr;
+  /**
+   * Geeft de neerslag van een sproeikop (uit de nozzle van de bibliotheek), onthouden zolang de instelling gelijk blijft.
+   * @param {object} sprinkler de sproeier
+   * @returns {number} neerslag in mm/u
+   */
+  function prOf(sprinkler) {
+    const signature = `${sprinkler.type}|${sprinkler.r}|${sprinkler.arc}|${sprinkler.model || ''}|${sprinkler.body || ''}`;
+    const hit = prCache.get(sprinkler);
+    if (hit && hit.sig === signature) return hit.pr;
+    const precipitation = Catalog.headPr ? Catalog.headPr(sprinkler) : Catalog.sprinklerTypes[sprinkler.type].pr;
+    prCache.set(sprinkler, { sig: signature, pr: precipitation });
+    return precipitation;
   }
 
-  /** Neerslag [mm/h] van één sproeier op punt p. */
-  function precipAt(s, p) {
-    const t = C.sprinklerTypes[s.type];
-    if (!t) return 0;
-    const dx = p.x - s.x, dy = p.y - s.y;
-    if (s.type === 'strip') {
-      const a = G.rad(s.start);
-      const u = { x: Math.cos(a), y: Math.sin(a) };
-      const along = dx * u.x + dy * u.y;
-      const perp = -dx * u.y + dy * u.x;
-      return Math.abs(along) <= s.len / 2 && perp >= 0 && perp <= s.width ? t.pr : 0;
+  /**
+   * Berekent de neerslag van één sproeier op een punt.
+   * @param {object} sprinkler de sproeier
+   * @param {{x: number, y: number}} point het punt in meters
+   * @returns {number} neerslag in mm/u
+   */
+  function precipAt(sprinkler, point) {
+    const sprinklerType = Catalog.sprinklerTypes[sprinkler.type];
+    if (!sprinklerType) return 0;
+    const deltaX = point.x - sprinkler.x, deltaY = point.y - sprinkler.y;
+    if (sprinkler.type === 'strip') {
+      const angle = Geo.rad(sprinkler.start);
+      const direction = { x: Math.cos(angle), y: Math.sin(angle) };
+      const along = deltaX * direction.x + deltaY * direction.y;
+      const across = -deltaX * direction.y + deltaY * direction.x;
+      return Math.abs(along) <= sprinkler.len / 2 && across >= 0 && across <= sprinkler.width ? sprinklerType.pr : 0;
     }
-    const d = Math.hypot(dx, dy);
-    if (d > s.r) return 0;
-    if (s.arc < 359.9 && d > 1e-6 && !G.inArc(G.angleOf({ x: dx, y: dy }), s.start, s.arc)) return 0;
+    const distance = Math.hypot(deltaX, deltaY);
+    if (distance > sprinkler.r) return 0;
+    if (sprinkler.arc < 359.9 && distance > 1e-6 && !Geo.inArc(Geo.angleOf({ x: deltaX, y: deltaY }), sprinkler.start, sprinkler.arc)) return 0;
     // Driehoeksprofiel; volume-equivalent met PR bij kop-tot-kop vierkantsverband
-    return ((3 * prOf(s)) / Math.PI) * (1 - d / s.r);
+    return ((3 * prOf(sprinkler)) / Math.PI) * (1 - distance / sprinkler.r);
   }
 
-  function reach(s) {
-    return s.type === 'strip' ? Math.hypot(s.len / 2, s.width) : s.r;
+  /**
+   * Geeft hoe ver een sproeier reikt.
+   * @param {object} sprinkler de sproeier
+   * @returns {number} afstand in meters
+   */
+  function reach(sprinkler) {
+    return sprinkler.type === 'strip' ? Math.hypot(sprinkler.len / 2, sprinkler.width) : sprinkler.r;
   }
 
   /**
    * Simuleert neerslag op alle gazonvlakken en controleert overspray op 'droog'-vlakken.
-   * @returns {{cell, minX, minY, nx, ny, values:Float32Array, mask:Uint8Array, stats, perArea}}
+   * @param {object} state de planstand (vlakken en sproeiers)
+   * @param {number} cellSize celgrootte in meters (standaard 0,25)
+   * @returns {object|null} raster (cellX, cellY, minX, minY, nx, ny, values, mask, areaIdx, areaMean), statistiek (null zonder rastercellen in een gazon), per gazon en overspray; null zonder geldig gazonvlak én zonder sproeiers
    */
-  function simulate(state, cell = 0.25) {
-    const lawns = state.areas.filter((a) => a.type === 'lawn' && a.pts.length >= 3);
-    const dry = state.areas.filter((a) => a.type === 'dry' && a.pts.length >= 3);
-    const pts = [];
-    lawns.forEach((a) => pts.push(...a.pts));
-    state.sprinklers.forEach((s) => {
-      const r = reach(s);
-      pts.push({ x: s.x - r, y: s.y - r }, { x: s.x + r, y: s.y + r });
+  function simulate(state, cellSize = 0.25) {
+    const lawns = state.areas.filter((area) => area.type === 'lawn' && area.pts.length >= 3);
+    const dry = state.areas.filter((area) => area.type === 'dry' && area.pts.length >= 3);
+    const points = [];
+    lawns.forEach((area) => points.push(...area.pts));
+    state.sprinklers.forEach((sprinkler) => {
+      const radius = reach(sprinkler);
+      points.push({ x: sprinkler.x - radius, y: sprinkler.y - radius }, { x: sprinkler.x + radius, y: sprinkler.y + radius });
     });
-    if (!pts.length) return null;
-    const bb = G.bbox(pts);
-    const nx = Math.min(1200, Math.ceil(bb.w / cell) + 1);
-    const ny = Math.min(1200, Math.ceil(bb.h / cell) + 1);
-    const cx = bb.w / Math.max(1, nx - 1) || cell;
-    const cy = bb.h / Math.max(1, ny - 1) || cell;
-    const values = new Float32Array(nx * ny);
-    const mask = new Uint8Array(nx * ny); // 1 = gazon, 2 = droog-vlak
-    const areaIdx = new Int16Array(nx * ny).fill(-1);
+    if (!points.length) return null;
+    const bounds = Geo.bbox(points);
+    const columns = Math.min(1200, Math.ceil(bounds.w / cellSize) + 1);
+    const rows = Math.min(1200, Math.ceil(bounds.h / cellSize) + 1);
+    const cellX = bounds.w / Math.max(1, columns - 1) || cellSize;
+    const cellY = bounds.h / Math.max(1, rows - 1) || cellSize;
+    const values = new Float32Array(columns * rows);
+    const mask = new Uint8Array(columns * rows); // 1 = gazon, 2 = droog-vlak
+    const areaIdx = new Int16Array(columns * rows).fill(-1);
 
-    for (let j = 0; j < ny; j++) {
-      for (let i = 0; i < nx; i++) {
-        const p = { x: bb.minX + i * cx, y: bb.minY + j * cy };
-        const k = j * nx + i;
-        for (let a = 0; a < lawns.length; a++) {
-          if (G.pointInPolygon(p, lawns[a].pts)) { mask[k] = 1; areaIdx[k] = a; break; }
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < columns; i++) {
+        const point = { x: bounds.minX + i * cellX, y: bounds.minY + j * cellY };
+        const index = j * columns + i;
+        for (let areaIndex = 0; areaIndex < lawns.length; areaIndex++) {
+          if (Geo.pointInPolygon(point, lawns[areaIndex].pts)) { mask[index] = 1; areaIdx[index] = areaIndex; break; }
         }
-        if (!mask[k] && dry.some((d) => G.pointInPolygon(p, d.pts))) mask[k] = 2;
+        if (!mask[index] && dry.some((dryArea) => Geo.pointInPolygon(point, dryArea.pts))) mask[index] = 2;
       }
     }
 
-    for (const s of state.sprinklers) {
-      const r = reach(s);
-      const i0 = Math.max(0, Math.floor((s.x - r - bb.minX) / cx));
-      const i1 = Math.min(nx - 1, Math.ceil((s.x + r - bb.minX) / cx));
-      const j0 = Math.max(0, Math.floor((s.y - r - bb.minY) / cy));
-      const j1 = Math.min(ny - 1, Math.ceil((s.y + r - bb.minY) / cy));
-      for (let j = j0; j <= j1; j++) {
-        for (let i = i0; i <= i1; i++) {
-          const v = precipAt(s, { x: bb.minX + i * cx, y: bb.minY + j * cy });
-          if (v) values[j * nx + i] += v;
+    for (const sprinkler of state.sprinklers) {
+      const radius = reach(sprinkler);
+      const firstColumn = Math.max(0, Math.floor((sprinkler.x - radius - bounds.minX) / cellX));
+      const lastColumn = Math.min(columns - 1, Math.ceil((sprinkler.x + radius - bounds.minX) / cellX));
+      const firstRow = Math.max(0, Math.floor((sprinkler.y - radius - bounds.minY) / cellY));
+      const lastRow = Math.min(rows - 1, Math.ceil((sprinkler.y + radius - bounds.minY) / cellY));
+      for (let j = firstRow; j <= lastRow; j++) {
+        for (let i = firstColumn; i <= lastColumn; i++) {
+          const value = precipAt(sprinkler, { x: bounds.minX + i * cellX, y: bounds.minY + j * cellY });
+          if (value) values[j * columns + i] += value;
         }
       }
     }
 
-    const statsFor = (filter) => {
-      const arr = [];
-      for (let k = 0; k < values.length; k++) if (filter(k)) arr.push(values[k]);
-      if (!arr.length) return null;
-      arr.sort((a, b) => a - b);
-      const mean = arr.reduce((s, v) => s + v, 0) / arr.length;
-      const q = arr.slice(0, Math.max(1, Math.floor(arr.length / 4)));
-      const lq = q.reduce((s, v) => s + v, 0) / q.length;
-      const dryCells = arr.filter((v) => v < 0.3 * mean).length;
+    /**
+     * Berekent de statistiek over de cellen die het filter doorlaat.
+     * @param {function(number): boolean} isIncluded zegt per celindex of hij meetelt
+     * @returns {object|null} gemiddelde, min, max, DU, droog- en dekkingspercentage en aantal cellen; null zonder cellen
+     */
+    const statsFor = (isIncluded) => {
+      const cellValues = [];
+      for (let index = 0; index < values.length; index++) if (isIncluded(index)) cellValues.push(values[index]);
+      if (!cellValues.length) return null;
+      cellValues.sort((left, right) => left - right);
+      const mean = cellValues.reduce((sum, value) => sum + value, 0) / cellValues.length;
+      const lowestQuarter = cellValues.slice(0, Math.max(1, Math.floor(cellValues.length / 4)));
+      const lowQuarterMean = lowestQuarter.reduce((sum, value) => sum + value, 0) / lowestQuarter.length;
+      const dryCells = cellValues.filter((value) => value < 0.3 * mean).length;
       return {
         mean,
-        min: arr[0],
-        max: arr[arr.length - 1],
-        du: mean > 0 ? lq / mean : 0,
-        dryPct: (dryCells / arr.length) * 100,
-        coveredPct: (arr.filter((v) => v > 0).length / arr.length) * 100,
-        cells: arr.length,
+        min: cellValues[0],
+        max: cellValues[cellValues.length - 1],
+        du: mean > 0 ? lowQuarterMean / mean : 0,
+        dryPct: (dryCells / cellValues.length) * 100,
+        coveredPct: (cellValues.filter((value) => value > 0).length / cellValues.length) * 100,
+        cells: cellValues.length,
       };
     };
 
-    const perArea = lawns.map((a, idx) => ({ area: a, stats: statsFor((k) => mask[k] === 1 && areaIdx[k] === idx) }));
+    const perArea = lawns.map((area, areaIndex) => ({ area, stats: statsFor((index) => mask[index] === 1 && areaIdx[index] === areaIndex) }));
     // Elk gazon draait in eigen zones zo lang als nodig (rotators langer dan sproeiers), dus de
     // verdeling telt per gazon: elke cel t.o.v. het gemiddelde van zijn eigen gazon.
-    const areaMean = perArea.map((p) => (p.stats && p.stats.mean > 0 ? p.stats.mean : 0));
-    const stats = statsFor((k) => mask[k] === 1);
+    const areaMean = perArea.map((entry) => (entry.stats && entry.stats.mean > 0 ? entry.stats.mean : 0));
+    const stats = statsFor((index) => mask[index] === 1);
     if (stats && lawns.length > 1) {
-      const rel = [];
-      for (let k = 0; k < values.length; k++) if (mask[k] === 1) rel.push(areaMean[areaIdx[k]] > 0 ? values[k] / areaMean[areaIdx[k]] : 0);
-      rel.sort((a, b) => a - b);
-      const q = rel.slice(0, Math.max(1, Math.floor(rel.length / 4)));
-      stats.du = q.reduce((t, v) => t + v, 0) / q.length;
-      stats.dryPct = (rel.filter((v) => v < 0.3).length / rel.length) * 100;
+      const relative = [];
+      for (let index = 0; index < values.length; index++) if (mask[index] === 1) relative.push(areaMean[areaIdx[index]] > 0 ? values[index] / areaMean[areaIdx[index]] : 0);
+      relative.sort((left, right) => left - right);
+      const lowestQuarter = relative.slice(0, Math.max(1, Math.floor(relative.length / 4)));
+      stats.du = lowestQuarter.reduce((sum, value) => sum + value, 0) / lowestQuarter.length;
+      stats.dryPct = (relative.filter((value) => value < 0.3).length / relative.length) * 100;
     }
     let oversprayCells = 0;
-    for (let k = 0; k < values.length; k++) if (mask[k] === 2 && values[k] > 0) oversprayCells++;
-    const overspray = oversprayCells * cx * cy;
+    for (let index = 0; index < values.length; index++) if (mask[index] === 2 && values[index] > 0) oversprayCells++;
+    const overspray = oversprayCells * cellX * cellY;
 
-    return { cellX: cx, cellY: cy, minX: bb.minX, minY: bb.minY, nx, ny, values, mask, areaIdx, areaMean, stats, perArea, overspray };
+    return { cellX, cellY, minX: bounds.minX, minY: bounds.minY, nx: columns, ny: rows, values, mask, areaIdx, areaMean, stats, perArea, overspray };
   }
 
-  /** Kleurenschaal: 0 = rood, 50% = geel, 100% = groen, 150%+ = blauw (t.o.v. gemiddelde). */
+  /**
+   * Geeft de kleur bij een neerslag t.o.v. het gemiddelde: 0 = rood, 50% = geel, 100% = groen, 150%+ = blauw.
+   * @param {number} ratio neerslag gedeeld door het gemiddelde
+   * @returns {number[]} kleur als [rood, groen, blauw]
+   */
   function colorFor(ratio) {
     const stops = [
       [0, [211, 47, 47]],
@@ -139,40 +165,44 @@
     if (ratio <= stops[0][0]) return stops[0][1];
     for (let i = 1; i < stops.length; i++) {
       if (ratio <= stops[i][0]) {
-        const [a, ca] = stops[i - 1];
-        const [b, cb] = stops[i];
-        const t = (ratio - a) / (b - a);
-        return ca.map((c, k) => Math.round(c + (cb[k] - c) * t));
+        const [lowerStop, lowerColor] = stops[i - 1];
+        const [upperStop, upperColor] = stops[i];
+        const fraction = (ratio - lowerStop) / (upperStop - lowerStop);
+        return lowerColor.map((channel, channelIndex) => Math.round(channel + (upperColor[channelIndex] - channel) * fraction));
       }
     }
     return stops[stops.length - 1][1];
   }
 
-  /** Rendert het resultaat naar een (kleine) canvas voor overlay. */
-  function toCanvas(sim) {
-    const cv = document.createElement('canvas');
-    cv.width = sim.nx;
-    cv.height = sim.ny;
-    const ctx = cv.getContext('2d');
-    const img = ctx.createImageData(sim.nx, sim.ny);
-    const ref = sim.stats && sim.stats.mean > 0 ? sim.stats.mean : 1;
-    for (let k = 0; k < sim.values.length; k++) {
-      const m = sim.mask[k];
-      const v = sim.values[k];
-      const o = k * 4;
-      if (m === 1) {
-        const am = sim.areaMean && sim.areaIdx ? sim.areaMean[sim.areaIdx[k]] : 0;
-        const c = colorFor(v / (am > 0 ? am : ref));
-        img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 190;
-      } else if (v > 0) {
+  /**
+   * Tekent het resultaat op een (klein) canvas voor de overlay.
+   * @param {object} result uitkomst van simulate
+   * @returns {HTMLCanvasElement} het canvas
+   */
+  function toCanvas(result) {
+    const canvas = document.createElement('canvas');
+    canvas.width = result.nx;
+    canvas.height = result.ny;
+    const context = canvas.getContext('2d');
+    const imageData = context.createImageData(result.nx, result.ny);
+    const reference = result.stats && result.stats.mean > 0 ? result.stats.mean : 1;
+    for (let index = 0; index < result.values.length; index++) {
+      const maskValue = result.mask[index];
+      const value = result.values[index];
+      const offset = index * 4;
+      if (maskValue === 1) {
+        const areaMeanValue = result.areaMean && result.areaIdx ? result.areaMean[result.areaIdx[index]] : 0;
+        const color = colorFor(value / (areaMeanValue > 0 ? areaMeanValue : reference));
+        imageData.data[offset] = color[0]; imageData.data[offset + 1] = color[1]; imageData.data[offset + 2] = color[2]; imageData.data[offset + 3] = 190;
+      } else if (value > 0) {
         // overspray buiten gazon
-        const bad = m === 2;
-        img.data[o] = bad ? 183 : 100; img.data[o + 1] = bad ? 28 : 181; img.data[o + 2] = bad ? 28 : 246;
-        img.data[o + 3] = bad ? 170 : 60;
+        const isDry = maskValue === 2;
+        imageData.data[offset] = isDry ? 183 : 100; imageData.data[offset + 1] = isDry ? 28 : 181; imageData.data[offset + 2] = isDry ? 28 : 246;
+        imageData.data[offset + 3] = isDry ? 170 : 60;
       }
     }
-    ctx.putImageData(img, 0, 0);
-    return cv;
+    context.putImageData(imageData, 0, 0);
+    return canvas;
   }
 
   window.Simulation = { simulate, precipAt, toCanvas, colorFor };

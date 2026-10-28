@@ -283,7 +283,7 @@
       try {
         const item = await api('stock/items', { method: 'POST', body: {
           code: formElement.code.value, name: formElement.name.value, unit: formElement.unit.value, location: formElement.location.value,
-          onHand: num(formElement.onHand.value), minQty: num(formElement.minQty.value), costPrice: num(formElement.costPrice.value),
+          onHand: num(formElement.onHand.value), minQty: num(formElement.minQty.value), reorderQty: num(formElement.reorderQty.value), costPrice: num(formElement.costPrice.value),
           salePrice: num(formElement.salePrice.value), vatRate: Number(formElement.vatRate.value), revenueGroup: formElement.revenueGroup.value, shopSync: formElement.shopSync.checked,
         } });
         formElement.hidden = true;
@@ -421,6 +421,7 @@
     const formElement = $('#edit-form');
     for (const key of ['code', 'name', 'unit', 'location', 'notes']) formElement[key].value = item[key] || '';
     formElement.minQty.value = item.minQty || '';
+    formElement.reorderQty.value = item.reorderQty == null ? '' : item.reorderQty;
     formElement.costPrice.value = item.costPrice == null ? '' : item.costPrice;
     formElement.salePrice.value = item.salePrice == null ? '' : item.salePrice;
     formElement.vatRate.value = String(item.vatRate);
@@ -530,7 +531,7 @@
       try {
         state.item = { ...state.item, ...await api(`stock/items/${encodeURIComponent(state.item.id)}`, { method: 'PUT', body: {
           code: editForm.code.value, name: editForm.name.value, unit: editForm.unit.value, location: editForm.location.value, notes: editForm.notes.value,
-          minQty: num(editForm.minQty.value), costPrice: num(editForm.costPrice.value),
+          minQty: num(editForm.minQty.value), reorderQty: num(editForm.reorderQty.value), costPrice: num(editForm.costPrice.value),
           salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
         } }) };
         renderItem();
@@ -653,6 +654,7 @@
         { header: 'Gereserveerd', key: 'reserved', width: 13, style: quantityStyle },
         { header: 'Beschikbaar', key: 'available', width: 13, style: quantityStyle },
         { header: 'Minimum', key: 'minQty', width: 11, style: quantityStyle },
+        { header: 'Bestellen tot', key: 'reorderQty', width: 13, style: quantityStyle },
         { header: 'Bijbestellen', key: 'low', width: 12 },
         { header: 'Inkoopprijs', key: 'costPrice', width: 12, style: { numFmt: '€ #,##0.00' } },
         { header: 'Waarde', key: 'value', width: 12, style: { numFmt: '€ #,##0.00' } },
@@ -664,13 +666,14 @@
         { header: 'Notities', key: 'notes', width: 30 },
       ];
       const GROUPS = { producten: 'Producten', arbeid: 'Arbeid', overig: 'Overig' };
-      for (const item of visible()) {
+      const items = visible();
+      for (const item of items) {
         worksheet.addRow({ ...item, low: item.low ? 'ja' : '', archived: item.archived ? 'ja' : '', costPrice: item.costPrice, value: item.value, salePrice: item.salePrice,
           vat: `${item.vatRate}%`, group: GROUPS[item.revenueGroup] || item.revenueGroup,
           shop: !item.shopSync ? 'niet' : item.shop.error ? 'fout' : item.shop.productId ? `product ${item.shop.productId}` : 'niet gekoppeld' });
       }
       worksheet.getRow(1).font = { bold: true };
-      worksheet.autoFilter = { from: 'A1', to: 'Q1' };
+      worksheet.autoFilter = `A1:R${items.length + 1}`;
       const reservedSheet = excelWorkbook.addWorksheet('Gereserveerd', { views: [{ state: 'frozen', ySplit: 1 }] });
       reservedSheet.columns = [
         { header: 'Werkorder', key: 'wo', width: 14 }, { header: 'Titel', key: 'title', width: 30 }, { header: 'Klant', key: 'customer', width: 24 },
@@ -705,6 +708,48 @@
       await save(excelWorkbook, `voorraadmutaties-${$('#m-from').value || 'begin'}-${$('#m-to').value || stamp()}.xlsx`);
     } finally {
       exportButton.disabled = false;
+    }
+  }
+
+  /**
+   * Bestelvoorstel als Excel: per artikel onder het minimum hoeveel er bij
+   * moet om aan te vullen tot "bestellen tot" (de server rekent het uit).
+   * @returns {Promise<void>}
+   */
+  async function exportReorder() {
+    const button = $('#b-reorder');
+    button.disabled = true;
+    try {
+      const proposal = await api('stock/reorder');
+      if (!proposal.items.length) { toast('Niets te bestellen: alle artikelen zitten op of boven de minimumvoorraad.'); return; }
+      const excelWorkbook = await workbook();
+      if (!excelWorkbook) return;
+      const sheet = excelWorkbook.addWorksheet('Bestelvoorstel', { views: [{ state: 'frozen', ySplit: 1 }] });
+      const quantity = { numFmt: '#,##0.###' };
+      const euro = { numFmt: '€ #,##0.00' };
+      sheet.columns = [
+        { header: 'Artikelcode', key: 'code', width: 16 },
+        { header: 'Omschrijving', key: 'name', width: 44 },
+        { header: 'Eenheid', key: 'unit', width: 9 },
+        { header: 'Locatie', key: 'location', width: 18 },
+        { header: 'Op voorraad', key: 'onHand', width: 13, style: quantity },
+        { header: 'Gereserveerd', key: 'reserved', width: 13, style: quantity },
+        { header: 'Beschikbaar', key: 'available', width: 13, style: quantity },
+        { header: 'Minimum', key: 'minQty', width: 11, style: quantity },
+        { header: 'Bestellen tot', key: 'target', width: 13, style: quantity },
+        { header: 'Te bestellen', key: 'orderQty', width: 13, style: quantity },
+        { header: 'Inkoopprijs', key: 'costPrice', width: 12, style: euro },
+        { header: 'Bedrag', key: 'amount', width: 12, style: euro },
+      ];
+      for (const item of proposal.items) sheet.addRow(item);
+      const totalRow = sheet.addRow({ name: 'Totaal (artikelen met inkoopprijs)', amount: proposal.total });
+      totalRow.font = { bold: true };
+      sheet.getRow(1).font = { bold: true };
+      // Filter over de kop en de artikelregels, zonder de totaalregel.
+      sheet.autoFilter = `A1:L${proposal.items.length + 1}`;
+      await save(excelWorkbook, `bestelvoorstel-${stamp()}.xlsx`);
+    } finally {
+      button.disabled = false;
     }
   }
 
@@ -755,6 +800,11 @@
      * @returns {Promise<void>}
      */
     $('#b-export').onclick = () => exportStock().catch((error) => toast(`Export mislukt: ${error.message}`, true));
+    /**
+     * Maakt het bestelvoorstel als Excel.
+     * @returns {Promise<void>}
+     */
+    $('#b-reorder').onclick = () => exportReorder().catch((error) => toast(`Bestelvoorstel mislukt: ${error.message}`, true));
     /**
      * Exporteert de mutaties.
      * @returns {Promise<void>}

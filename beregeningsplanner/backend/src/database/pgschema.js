@@ -611,7 +611,11 @@ const PG_MIGRATIONS = [
     UNIQUE (tenant_id, kind, key)
   );
   `,
-  // 30: seizoensherinneringen (zie db.js).
+  // 30: bestelvoorstel: aanvullen tot (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN reorder_qty DOUBLE PRECISION;
+  `,
+  // 31: seizoensherinneringen (zie db.js).
   `
   CREATE TABLE season_reminders_sent (
     id           ${TEXT_TYPE} PRIMARY KEY,
