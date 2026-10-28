@@ -107,9 +107,9 @@
    * @param {string} html de melding (HTML)
    */
   function message(html) {
-    const el = $('#p-message');
-    el.innerHTML = html;
-    el.hidden = !html;
+    const messageBox = $('#p-message');
+    messageBox.innerHTML = html;
+    messageBox.hidden = !html;
   }
 
   /**
