@@ -46,6 +46,9 @@ test('kern: begroot uit de offerte, werkelijk uit boekingen, kosten, opbrengst e
     invoices: [{ number: 'F-1', status: 'definitief', subtotal: 400 }, { number: 'F-2', status: 'betaald', subtotal: -50 }, { status: 'concept', subtotal: 999 }],
   });
   assert.deepStrictEqual([invoiced.revenueSource, invoiced.revenue, invoiced.invoiced.numbers, invoiced.invoiced.concepts], ['factuur', 350, ['F-1', 'F-2'], 1]);
+  // Alleen een creditnota: verlies zonder (misleidend) margepercentage.
+  const creditOnly = Core.compute({ workOrder: { data: {} }, quote: null, logged: { hours: [], materials: [] }, invoices: [{ status: 'definitief', subtotal: -100 }] });
+  assert.deepStrictEqual([creditOnly.margin, creditOnly.marginPct], [-100, null]);
 
   // Zonder offerte: werkstappen en materiaallijst van de werkorder.
   const withoutQuote = Core.compute({

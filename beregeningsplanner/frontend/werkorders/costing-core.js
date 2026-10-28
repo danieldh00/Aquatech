@@ -184,7 +184,7 @@
       materials: materialRows,
       discountPct,
       budget, actual, cost, invoiced, revenue: round2(revenue), revenueSource,
-      margin, marginPct: revenue ? round2((margin / revenue) * 100) : null,
+      margin, marginPct: revenue > 0 ? round2((margin / revenue) * 100) : null,
       warnings,
     };
   }
