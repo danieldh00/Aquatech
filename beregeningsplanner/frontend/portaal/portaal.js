@@ -117,8 +117,12 @@
    * @returns {Promise<void>}
    */
   async function load() {
+    // Een GET die na alle opslagen van het mailvinkje start, toont de stand van de server.
+    const saveCountAtStart = state.seasonSaveCount || 0;
+    const savingAtStart = Boolean(state.seasonSaving);
     try {
       state.data = await api('../api/portal');
+      if (!savingAtStart && !state.seasonSaving && (state.seasonSaveCount || 0) === saveCountAtStart) delete state.seasonMail;
     } catch (error) {
       if (error.status === 401) message('Log in om uw portaal te zien. <a href="../login">Inloggen</a>');
       else if (error.status === 403) message('Het klantportaal is er voor klanten. Medewerkers vinden offertes en werkorders in hun eigen modules. <a href="../">Naar het overzicht</a>');
@@ -197,6 +201,8 @@
     // Eén wijziging tegelijk, zodat de laatste klik ook de opgeslagen stand is.
     checkbox.disabled = true;
     state.seasonMail = wanted;
+    state.seasonSaving = true;
+    state.seasonSaveCount = (state.seasonSaveCount || 0) + 1;
     try {
       await api('../api/account/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preferences: { seasonReminders: wanted } }) });
       state.data.reminderMails = wanted;
@@ -214,6 +220,7 @@
       checkbox.checked = state.data.reminderMails;
       toast(`Opslaan mislukt (${error.message}).`, true);
     } finally {
+      state.seasonSaving = false;
       checkbox.disabled = false;
     }
   }
