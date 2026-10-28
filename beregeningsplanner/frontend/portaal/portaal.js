@@ -145,7 +145,7 @@
     renderPlans(portal);
     renderContact(portal);
     if (window.PortalLocations) window.PortalLocations.render(portal);
-    if (!portal.quotes.length && !portal.workorders.length && !portal.plans.length && !(portal.requests || []).length) {
+    if (!portal.quotes.length && !portal.workorders.length && !portal.plans.length && !(portal.requests || []).length && !(portal.reminders || []).length) {
       message('Er staat nog niets voor u klaar. Zodra wij een offerte voor u hebben opgesteld of werkzaamheden hebben ingepland, ziet u die hier.');
     } else message('');
   }

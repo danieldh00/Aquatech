@@ -197,4 +197,27 @@ test('verzendronde: geweigerd adres blokkeert de rest niet, rondes lopen niet ov
   mailer.send = async () => { throw Object.assign(new Error('550 afzender'), { code: 'EENVELOPE', command: 'MAIL FROM', responseCode: 550, permanent: true }); };
   assert.deepStrictEqual((await runner.runAll(['t1'], today)).t1, { sent: 0, skipped: 0, failed: 1 });
   assert.ok(!marked.has('zes') && !marked.has('zeven'), 'klanten blijven aan de beurt');
+
+  // Na drie tijdelijke fouten stopt de ronde; niemand vastgelegd, de volgende ronde probeert ze opnieuw.
+  customers.push({ id: 'acht', displayName: 'acht', email: 'acht@voorbeeld.test', preferences: '{}' }, { id: 'negen', displayName: 'negen', email: 'negen@voorbeeld.test', preferences: '{}' });
+  const attempted = [];
+  /**
+   * Mailserver die elk adres tijdelijk weigert.
+   * @param {{ to: string }} message Het bericht.
+   * @returns {Promise<void>}
+   */
+  mailer.send = async (message) => {
+    attempted.push(message.to);
+    throw Object.assign(new Error('421 probeer later'), { code: 'EENVELOPE', command: 'RCPT TO', responseCode: 421 });
+  };
+  assert.deepStrictEqual((await runner.runAll(['t1'], today)).t1, { sent: 0, skipped: 0, failed: 3 });
+  assert.deepStrictEqual(attempted, ['zes@voorbeeld.test', 'zeven@voorbeeld.test', 'acht@voorbeeld.test'], 'de vierde ontvanger komt niet aan de beurt');
+  assert.ok(['zes', 'zeven', 'acht', 'negen'].every((id) => !marked.has(id)), 'tijdelijke fouten worden niet vastgelegd');
+  /**
+   * Mailserver die weer werkt.
+   * @param {{ to: string }} message Het bericht.
+   * @returns {Promise<void>}
+   */
+  mailer.send = async (message) => { sent.push(message.to); };
+  assert.deepStrictEqual((await runner.runAll(['t1'], today)).t1, { sent: 4, skipped: 0, failed: 0 });
 });
