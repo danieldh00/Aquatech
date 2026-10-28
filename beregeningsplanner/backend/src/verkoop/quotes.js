@@ -961,4 +961,4 @@ function registerQuoteRoutes(app, ctx) {
   });
 }
 
-module.exports = { createQuoteStore, registerQuoteRoutes, sanitizeProfile, PROFILE_DEFAULTS, Core, validShareBase, validSignature, mailBody };
+module.exports = { createQuoteStore, registerQuoteRoutes, sanitizeProfile, withoutInternal, PROFILE_DEFAULTS, Core, validShareBase, validSignature, mailBody };
