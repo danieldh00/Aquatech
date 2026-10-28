@@ -10,7 +10,8 @@ Nacalculatie per werkorder.
   en het materiaalverbruik, met verschil per onderdeel en per artikel.
   Kosten = uren × kostprijs per uur + verbruik × inkoopprijs uit de voorraad;
   opbrengst = definitieve/betaalde facturen van de werkorder (credit negatief),
-  anders de offerte netto. Marge in euro en procent; waarschuwingen bij
+  anders de offerte netto of, zonder offerte, een schatting uit de
+  werkorderbegroting. Marge in euro en procent; waarschuwingen bij
   ontbrekende kost-/inkoopprijzen of conceptfacturen. Excel-export
   (samenvatting + materiaal), geen CSV.
 - API `GET /api/workorders/:id/costing` (`backend/src/uitvoering/costing.js`),
