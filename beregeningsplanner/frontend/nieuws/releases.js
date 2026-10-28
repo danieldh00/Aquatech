@@ -22,6 +22,12 @@
       ],
     },
     {
+      version: '0.69.1',
+      date: '2026-10-27',
+      title: 'Opgeschoonde code (deel 3 van de schermen)',
+      items: [],
+    },
+    {
       version: '0.69.0',
       date: '2026-10-23',
       title: 'Veiligheid verder aangescherpt',

@@ -18,6 +18,17 @@ Nacalculatie per werkorder.
   werkorders). Vast aantal queries (`test/queries.test.js`), geen migratie.
 - Bedrijfsgegevens: nieuw veld **Kostprijs per uur** (`quoteProfile.hourlyCost`,
   standaard 0 = niet ingevuld). `stock.saleInfo(..., { withCost: true })` geeft ook `costPrice` (alleen voor de nacalculatie); `hourlyCost` gaat niet naar klanten of de openbare offerte.
+## 0.69.1
+
+Opschoonronde frontend deel 3: duidelijke namen en een commentaarblok bij elke
+functie, zonder gedragswijziging. Opgeschoond: `sw.js`, `portaal/portaal.js`,
+`werkorders/worklog.js`, `planning/planning.js`, `voorraad/voorraad.js`,
+`hoofdbeheer/hoofdbeheer.js`, `beheer/beheer.js`, `facturen/facturen.js`,
+`offertes/offertes.js` en `werkorders/werkorders.js`; ze staan niet meer in
+`tools/codestyle-baseline.json`. De wijzigingen uit 0.69.0 (eigenaar in de
+offline wachtrij) zijn in de opgeschoonde `sw.js` en `worklog.js` meegenomen.
+
+- `body-parser` 1.20.9 (lockfile; `npm audit` meldde GHSA-27r3-jxmh-p828).
 
 ## 0.69.0
 
