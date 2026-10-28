@@ -160,12 +160,16 @@
     try {
       res = await fetch(`../api/portal/locations/${encodeURIComponent(key)}`, { cache: 'no-store' });
     } catch (error) {
-      showError(error.message || 'geen verbinding');
+      showError('geen verbinding');
       return;
     }
-    const body = await res.json().catch(() => ({}));
+    const body = await res.json().catch(() => null);
     if (!res.ok) {
-      showError(body.message || `HTTP ${res.status}`);
+      showError((body && body.message) || `HTTP ${res.status}`);
+      return;
+    }
+    if (!body) {
+      showError('het antwoord van de server is onleesbaar');
       return;
     }
     state.dossier = body;

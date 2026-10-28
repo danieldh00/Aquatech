@@ -410,7 +410,7 @@
     $('#d-body').innerHTML = `
       <header class="d-head">
         <img src="../shared/logo-white.png" alt="${esc(profile.companyName || 'AquaTech Service')}">
-        <div class="d-title"><h1>Installatiedossier ${esc(dossier.address)}</h1><span class="sub">${done} van ${dossier.installations.length} installaties opgeleverd · ${dossier.requests.length} meldingen · ${photoCount} foto's · bijgewerkt ${esc(day(new Date().toISOString()))}</span></div>
+        <div class="d-title"><h1 tabindex="-1">Installatiedossier ${esc(dossier.address)}</h1><span class="sub">${done} van ${dossier.installations.length} installaties opgeleverd · ${dossier.requests.length} meldingen · ${photoCount} foto's · bijgewerkt ${esc(day(new Date().toISOString()))}</span></div>
         <div class="d-company">${esc(company)}</div>
       </header>
       <section class="card-form">
@@ -443,6 +443,8 @@
       state.location = await api(`locations/${encodeURIComponent(key)}`);
       renderLocation();
       window.scrollTo(0, 0);
+      // Focus naar de kop, zodat toetsenbord en schermlezer bij het geopende dossier staan.
+      $('#d-body h1').focus();
     } catch (error) {
       toast(`Kan het installatiedossier niet openen: ${error.message}`, true);
       navigate('weergave=locaties');
@@ -590,6 +592,8 @@
         return renderList();
       }
       const link = event.target.closest('a[href^="?locatie="]');
+      // Ctrl/Cmd/Shift-klik: de browser opent de link zelf (nieuw tabblad of venster).
+      if (link && (event.ctrlKey || event.metaKey || event.shiftKey)) return;
       if (link) { event.preventDefault(); return navigate(link.getAttribute('href').slice(1)); }
       const row = event.target.closest('tr[data-id]');
       if (row) navigate(`${state.view === 'locaties' ? 'locatie' : 'klant'}=${encodeURIComponent(row.dataset.id)}`);
