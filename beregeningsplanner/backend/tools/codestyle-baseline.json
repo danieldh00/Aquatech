@@ -1,7 +1,6 @@
 {
   "toelichting": "Bestanden die nog niet aan de codestijlregels voldoen (zie CLAUDE.md, Codestijl). Deze lijst mag alleen korter worden: een opgeschoond bestand gaat eraf, een nieuw bestand komt er nooit op.",
   "files": [
-    "frontend/beheer/beheer.js",
     "frontend/beregening/js/app.js",
     "frontend/beregening/js/autotrace.js",
     "frontend/beregening/js/bom.js",
@@ -13,15 +12,6 @@
     "frontend/beregening/js/localrecog.js",
     "frontend/beregening/js/planimport.js",
     "frontend/beregening/js/simulation.js",
-    "frontend/beregening/js/sprinklerlib.js",
-    "frontend/facturen/facturen.js",
-    "frontend/hoofdbeheer/hoofdbeheer.js",
-    "frontend/offertes/offertes.js",
-    "frontend/planning/planning.js",
-    "frontend/portaal/portaal.js",
-    "frontend/sw.js",
-    "frontend/voorraad/voorraad.js",
-    "frontend/werkorders/werkorders.js",
-    "frontend/werkorders/worklog.js"
+    "frontend/beregening/js/sprinklerlib.js"
   ]
 }

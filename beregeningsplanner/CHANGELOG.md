@@ -14,6 +14,17 @@ Bestelvoorstel bij lage voorraad.
 - Knop **Bestelvoorstel** maakt er een Excel van (tabblad *Bestelvoorstel*,
   met totaalregel); de gewone voorraadexport heeft de kolom *Bestellen tot*.
 - Testdata vult *Bestellen tot* bij een deel van de artikelen.
+## 0.69.1
+
+Opschoonronde frontend deel 3: duidelijke namen en een commentaarblok bij elke
+functie, zonder gedragswijziging. Opgeschoond: `sw.js`, `portaal/portaal.js`,
+`werkorders/worklog.js`, `planning/planning.js`, `voorraad/voorraad.js`,
+`hoofdbeheer/hoofdbeheer.js`, `beheer/beheer.js`, `facturen/facturen.js`,
+`offertes/offertes.js` en `werkorders/werkorders.js`; ze staan niet meer in
+`tools/codestyle-baseline.json`. De wijzigingen uit 0.69.0 (eigenaar in de
+offline wachtrij) zijn in de opgeschoonde `sw.js` en `worklog.js` meegenomen.
+
+- `body-parser` 1.20.9 (lockfile; `npm audit` meldde GHSA-27r3-jxmh-p828).
 
 ## 0.69.0
 
