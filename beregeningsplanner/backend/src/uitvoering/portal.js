@@ -145,15 +145,27 @@ function registerPortalRoutes(app, ctx) {
     res.setHeader('Cache-Control', 'no-store');
     const tenantId = tenantOf(req);
     const user = req.user;
+    const workOrders = workOrdersOf(req);
+    // Locatie van een melding: het eigen adres, anders dat van de gekoppelde installatie of werkorder (zoals locations.js).
+    const locationOfWorkOrder = new Map(workOrders.map((workOrder) => [workOrder.id, workOrder.location]));
+    /**
+     * Een melding voor de klant, met de sleutel van zijn locatie.
+     * @param {object} request De melding.
+     * @returns {object} De melding zonder interne notitie, met location.
+     */
+    const withLocation = (request) => ({
+      ...forCustomer(request),
+      location: locationKey(request.address) || locationOfWorkOrder.get(request.installation?.id) || locationOfWorkOrder.get(request.workOrder?.id) || null,
+    });
     res.json({
       user: { displayName: user.display_name || user.displayName || '', kind: user.kind, phone: user.phone || '' },
       contact: contactOf(settingsOf(req).get('quoteProfile')),
       // Plannen alleen met het recht plannen (een organisatie kan het de klant afnemen).
       plans: Roles.can(user, 'plannen') ? store.listPlans(tenantId, { ownerId: user.id }) : [],
       quotes: quotes.list(tenantId, { customerId: user.id }),
-      workorders: workOrdersOf(req),
+      workorders: workOrders,
       // Eigen meldingen (storing, onderhoud), zie service-requests.js.
-      requests: ctx.requests ? ctx.requests.list(tenantId, { customerId: user.id }).map((request) => ({ ...forCustomer(request), location: locationKey(request.address) })) : [],
+      requests: ctx.requests ? ctx.requests.list(tenantId, { customerId: user.id }).map(withLocation) : [],
       features: { photos: Boolean(ctx.photos), appointments: typeof workorders.respond === 'function', requests: Boolean(ctx.requests) },
     });
   });

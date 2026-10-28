@@ -25,6 +25,7 @@ async function setup() {
   await store.createAccount(main, { username: 'piet', displayName: 'Piet', role: 'klant', password: PW });
   const other = store.createTenant({ name: 'Blauw BV', slug: 'blauw' }).tenant;
   await store.createAccount(other.id, { username: 'bram', displayName: 'Bram', role: 'installateur', password: PW });
+  await store.createAccount(other.id, { username: 'bea', displayName: 'Bea', role: 'klant', password: PW });
   const { server, base } = await listen(createApp({ secret: SECRET, db }));
   const as = createLogin(base, { password: PW, extraBody: { mustChangePassword: false } });
   return { db, server, as };
@@ -40,7 +41,7 @@ test('locatiesleutel: zelfde adres met andere schrijfwijze, leeg adres geen sleu
 test('installatiedossier per locatie: medewerker ziet alles, klant alleen zijn deel', async () => {
   const { db, server, as } = await setup();
   try {
-    const kees = await as('kees'), klaas = await as('klaas'), piet = await as('piet'), bram = await as('bram', 'blauw');
+    const kees = await as('kees'), klaas = await as('klaas'), piet = await as('piet'), bram = await as('bram', 'blauw'), bea = await as('bea', 'blauw');
     const klaasId = (await klaas.get('/api/me')).body.user.id;
 
     // Twee installaties op hetzelfde adres (anders geschreven) en één elders.
@@ -65,6 +66,8 @@ test('installatiedossier per locatie: medewerker ziet alles, klant alleen zijn d
     assert.strictEqual(materialUse.status, 201);
     // Melding van Klaas op hetzelfde adres; Piet meldt op een eigen adres.
     assert.strictEqual((await klaas.post('/api/portal/requests', { subject: 'Lek', description: 'Er lekt water bij de kraan.', address: 'dorpsstraat 1 8071 ab nunspeet' })).status, 201);
+    // Melding zonder adres maar aan een installatie gekoppeld: hoort bij het adres van die installatie.
+    assert.strictEqual((await klaas.post('/api/portal/requests', { subject: 'Zone 2', description: 'Zone 2 gaat niet meer aan.', installationId: first.id })).status, 201);
     assert.strictEqual((await piet.post('/api/portal/requests', { subject: 'Onderhoud', description: 'Graag winterklaar maken.', address: 'Kerkplein 2, Ermelo' })).status, 201);
 
     // Overzicht: drie locaties, het dubbele adres één keer.
@@ -72,13 +75,13 @@ test('installatiedossier per locatie: medewerker ziet alles, klant alleen zijn d
     const items = (await kees.get('/api/locations')).body.items;
     assert.strictEqual(items.length, 3);
     const home = items.find((item) => item.key === locationKey('Dorpsstraat 1, 8071 AB Nunspeet'));
-    assert.deepStrictEqual([home.installations, home.completed, home.requests, home.openRequests], [2, 1, 1, 1]);
+    assert.deepStrictEqual([home.installations, home.completed, home.requests, home.openRequests], [2, 1, 2, 2]);
     assert.strictEqual(home.lastCompletedOn, '2026-10-01');
 
     // Detail voor de medewerker: beide installaties, melding, offertes met bedrag, geplaatst + verbruikt.
     const staff = (await kees.get(`/api/locations/${home.key}`)).body;
     assert.deepStrictEqual(staff.installations.map((installation) => installation.id).sort(), [first.id, second.id].sort());
-    assert.strictEqual(staff.requests.length, 1);
+    assert.strictEqual(staff.requests.length, 2);
     assert.strictEqual(staff.quotes.length, 2);
     assert.ok(staff.quotes.every((quote) => quote.totalIncl > 0));
     const sprinkler = staff.materials.find((material) => material.code === 'SPR');
@@ -101,11 +104,14 @@ test('installatiedossier per locatie: medewerker ziet alles, klant alleen zijn d
     // Het portaal geeft per werkorder de locatie mee.
     const overview = (await klaas.get('/api/portal')).body;
     assert.ok(overview.workorders.some((workOrder) => workOrder.location === home.key));
+    assert.strictEqual(overview.requests.length, 2);
     assert.ok(overview.requests.every((request) => request.location === home.key));
 
     // Andere organisatie en onbekende sleutels: 404.
     assert.strictEqual((await bram.get(`/api/locations/${home.key}`)).status, 404);
     assert.strictEqual((await bram.get('/api/locations')).body.items.length, 0);
+    assert.strictEqual((await bea.get(`/api/portal/locations/${home.key}`)).status, 404, 'klant van een andere organisatie');
+    assert.strictEqual((await klaas.get(`/api/locations/${home.key}`)).status, 403, 'klant heeft geen recht werkorders');
     assert.strictEqual((await kees.get('/api/locations/l-0000000000000000')).status, 404);
     assert.strictEqual((await kees.get('/api/locations/onzin')).status, 404);
   } finally {

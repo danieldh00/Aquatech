@@ -126,7 +126,7 @@ function createLocationStore(db, { photos }) {
     const locationOfWorkOrder = new Map(workOrderRows.map((row) => [row.id, locationKey(row.address)]));
     const workOrderIds = workOrderRows.filter((row) => locationOfWorkOrder.get(row.id) === key).map((row) => row.id);
     const requestRows = prepare(`SELECT sr.id, sr.address, sr.installation_id, sr.work_order_id FROM service_requests sr
-      WHERE sr.tenant_id = ?${customerId ? ' AND sr.customer_id = ?' : ''}`).all(tenantId, ...(customerId ? [String(customerId)] : []));
+      WHERE sr.tenant_id = ?${customerId ? ' AND sr.customer_id = ?' : " AND sr.status <> 'ingetrokken'"}`).all(tenantId, ...(customerId ? [String(customerId)] : []));
     const requestIds = requestRows.filter((row) => requestLocation(row, locationOfWorkOrder) === key).map((row) => row.id);
     return { workOrderIds, requestIds };
   }
@@ -251,10 +251,12 @@ function createLocationStore(db, { photos }) {
  * 'werkorders') via /api/locations, de klant (recht 'portaal') via
  * /api/portal/locations/:key.
  * @param {object} app De Express-app.
- * @param {object} ctx locations en requireRight.
+ * @param {object} ctx locations, requireRight, createRateLimiter en remoteIp.
  */
 function registerLocationRoutes(app, ctx) {
-  const { locations, requireRight } = ctx;
+  const { locations, requireRight, createRateLimiter, remoteIp } = ctx;
+  // Elk verzoek leest alle adressen van de omgeving: begrensd per bezoeker.
+  const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: remoteIp });
   /**
    * De actieve omgeving van het verzoek.
    * @param {object} req Het Express-verzoek.
@@ -268,19 +270,19 @@ function registerLocationRoutes(app, ctx) {
    */
   const notFound = (res) => res.status(404).json({ error: 'not_found', message: 'Installatiedossier niet gevonden.' });
 
-  app.get('/api/locations', requireRight('werkorders'), (req, res) => {
+  app.get('/api/locations', requireRight('werkorders'), limiter, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json({ items: locations.list(tenantOf(req)) });
   });
 
-  app.get('/api/locations/:key', requireRight('werkorders'), (req, res) => {
+  app.get('/api/locations/:key', requireRight('werkorders'), limiter, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const dossier = locations.get(tenantOf(req), req.params.key);
     if (!dossier) return notFound(res);
     res.json(dossier);
   });
 
-  app.get('/api/portal/locations/:key', requireRight('portaal'), (req, res) => {
+  app.get('/api/portal/locations/:key', requireRight('portaal'), limiter, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const dossier = locations.get(tenantOf(req), req.params.key, { customerId: req.user.id });
     if (!dossier) return notFound(res);

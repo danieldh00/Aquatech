@@ -45,7 +45,8 @@
       return byKey.get(key);
     };
     for (const workOrder of data.workorders || []) {
-      if (!workOrder.location) continue;
+      // Een geannuleerde werkorder hoort niet in het dossier (de server laat hem ook weg).
+      if (!workOrder.location || workOrder.status === 'geannuleerd') continue;
       const location = locationFor(workOrder.location, workOrder.address);
       location.installations++;
       if (workOrder.status === 'gereed') location.completed++;
@@ -145,13 +146,26 @@
    * @returns {Promise<void>}
    */
   async function open(key) {
-    const res = await fetch(`../api/portal/locations/${encodeURIComponent(key)}`, { cache: 'no-store' });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
+    /**
+     * Toont een foutmelding onderin beeld (3,5 s).
+     * @param {string} reason Wat er misging.
+     */
+    const showError = (reason) => {
       const toast = $('#toast');
-      toast.textContent = `Kan het installatiedossier niet openen: ${body.message || `HTTP ${res.status}`}`;
+      toast.textContent = `Kan het installatiedossier niet openen: ${reason}`;
       toast.className = 'toast show err';
       setTimeout(() => { toast.className = 'toast'; }, 3500);
+    };
+    let res;
+    try {
+      res = await fetch(`../api/portal/locations/${encodeURIComponent(key)}`, { cache: 'no-store' });
+    } catch (error) {
+      showError(error.message || 'geen verbinding');
+      return;
+    }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showError(body.message || `HTTP ${res.status}`);
       return;
     }
     state.dossier = body;

@@ -105,7 +105,7 @@
     { key: 'lastActivity', label: 'Laatste activiteit', value: (dossier) => dossier.lastActivity, html: (dossier) => esc(when(dossier.lastActivity)) },
   ];
   const LOCATION_COLUMNS = [
-    { key: 'address', label: 'Adres', value: (location) => location.address.toLowerCase(), html: (location) => `<b>${esc(location.address)}</b>`, cls: 'wrap' },
+    { key: 'address', label: 'Adres', value: (location) => location.address.toLowerCase(), html: (location) => `<a href="?locatie=${encodeURIComponent(location.key)}"><b>${esc(location.address)}</b></a>`, cls: 'wrap' },
     { key: 'customers', label: 'Klant', value: (location) => (location.customers[0] || '').toLowerCase(), html: (location) => esc(location.customers.join(' · ') || '–'), cls: 'wrap' },
     { key: 'installations', label: 'Installaties', value: (location) => location.installations, html: (location) => (location.installations ? `${location.completed} van ${location.installations} opgeleverd` : '–'), cls: 'num' },
     { key: 'requests', label: 'Meldingen', value: (location) => location.openRequests * 1000 + location.requests, html: (location) => (location.requests ? `${location.openRequests} open van ${location.requests}` : '–'), cls: 'num' },
@@ -156,7 +156,10 @@
     const all = itemsOfView();
     const byLocation = state.view === 'locaties';
     const COLUMNS = columnsOfView();
-    document.querySelectorAll('.tabs .tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.view === state.view));
+    document.querySelectorAll('.tabs .tab').forEach((tab) => {
+      tab.classList.toggle('active', tab.dataset.view === state.view);
+      tab.setAttribute('aria-pressed', String(tab.dataset.view === state.view));
+    });
     const head = `<thead><tr>${COLUMNS.map((column) => `<th data-sort="${column.key}" class="${column.cls === 'num' ? 'num ' : ''}${state.sort.key === column.key ? (state.sort.dir > 0 ? 'asc' : 'desc') : ''}">${esc(column.label)}</th>`).join('')}</tr></thead>`;
     const body = items.length
       ? items.map((dossier) => `<tr data-id="${esc(dossier.key)}">${COLUMNS.map((column) => `<td class="${column.cls || ''}">${column.html(dossier)}</td>`).join('')}</tr>`).join('')
@@ -586,6 +589,8 @@
         state.sort = { key: header.dataset.sort, dir: state.sort.key === header.dataset.sort ? -state.sort.dir : 1 };
         return renderList();
       }
+      const link = event.target.closest('a[href^="?locatie="]');
+      if (link) { event.preventDefault(); return navigate(link.getAttribute('href').slice(1)); }
       const row = event.target.closest('tr[data-id]');
       if (row) navigate(`${state.view === 'locaties' ? 'locatie' : 'klant'}=${encodeURIComponent(row.dataset.id)}`);
     };

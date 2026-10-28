@@ -1754,7 +1754,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerPhotoRoutes(app, { photos: photoStore, dossiers: dossierStore, requireRight, requireUser, requireJson, identify, audit });
 
   // ---------- Installatiedossier per locatie (zie locations.js) ----------
-  registerLocationRoutes(app, { locations: createLocationStore(database, { photos: photoStore }), requireRight });
+  registerLocationRoutes(app, { locations: createLocationStore(database, { photos: photoStore }), requireRight, createRateLimiter, remoteIp });
 
   // ---------- Klantportaal (module Portaal, zie portal.js) ----------
   const portalStore = createPortalStore(database);
