@@ -1,6 +1,4 @@
 {
   "toelichting": "Bestanden die nog niet aan de codestijlregels voldoen (zie CLAUDE.md, Codestijl). Deze lijst mag alleen korter worden: een opgeschoond bestand gaat eraf, een nieuw bestand komt er nooit op.",
-  "files": [
-    "frontend/beregening/js/app.js"
-  ]
+  "files": []
 }
