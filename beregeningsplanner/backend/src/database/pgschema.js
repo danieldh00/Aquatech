@@ -615,6 +615,18 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE stock_items ADD COLUMN reorder_qty DOUBLE PRECISION;
   `,
+  // 31: seizoensherinneringen (zie db.js).
+  `
+  CREATE TABLE season_reminders_sent (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    user_id      ${TEXT_TYPE} NOT NULL ${references('users(id)')},
+    reminder_key ${TEXT_TYPE} NOT NULL,
+    year         BIGINT NOT NULL,
+    sent_at      ${TEXT_TYPE} NOT NULL,
+    UNIQUE (tenant_id, user_id, reminder_key, year)
+  );
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

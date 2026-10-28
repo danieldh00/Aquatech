@@ -531,6 +531,7 @@
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
+    renderSeason(view.seasonReminders.value);
     const outsourcingForm = $('#s-outsourcing');
     const outsourcing = view.outsourcing.value;
     outsourcingForm.send.checked = outsourcing.send;
@@ -601,6 +602,46 @@
     } catch (error) {
       toast(`Kan de instellingen niet laden: ${error.message}`, true);
     }
+  }
+
+  // Februari altijd 28, net als op de server: de datum moet elk jaar bestaan.
+  const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
+  /**
+   * Vult het formulier Seizoensherinneringen: aan/uit, portaaladres (standaard
+   * het portaal van deze installatie) en per herinnering titel, datum en tekst.
+   * @param {object} config De instelling seasonReminders.
+   * @returns {void}
+   */
+  function renderSeason(config) {
+    const seasonForm = $('#s-season');
+    seasonForm.enabled.checked = config.enabled;
+    seasonForm.portalUrl.value = config.portalUrl || new URL('../portaal/', location.href).href;
+    $('#s-season-items').innerHTML = config.items.map((item) => `
+      <fieldset class="season-item" data-key="${esc(item.key)}">
+        <div class="row">
+          <label>Onderwerp<input name="title" maxlength="100" required value="${esc(item.title)}"></label>
+          <label>Dag<input name="day" type="number" min="1" max="31" step="1" required value="${item.day}"></label>
+          <label>Maand<select name="month">${MONTHS.map((month, index) => `<option value="${index + 1}"${index + 1 === item.month ? ' selected' : ''}>${month}</option>`).join('')}</select></label>
+        </div>
+        <label>Tekst in de mail en het portaal<textarea name="text" rows="3" maxlength="1000">${esc(item.text)}</textarea></label>
+      </fieldset>`).join('');
+  }
+
+  /**
+   * Leest het formulier Seizoensherinneringen uit.
+   * @returns {object} De instelling seasonReminders.
+   */
+  function readSeason() {
+    const seasonForm = $('#s-season');
+    const items = [...seasonForm.querySelectorAll('.season-item')].map((fieldset) => ({
+      key: fieldset.dataset.key,
+      title: fieldset.querySelector('[name="title"]').value.trim(),
+      day: Number(fieldset.querySelector('[name="day"]').value),
+      month: Number(fieldset.querySelector('[name="month"]').value),
+      text: fieldset.querySelector('[name="text"]').value.trim(),
+    }));
+    return { enabled: seasonForm.enabled.checked, portalUrl: seasonForm.portalUrl.value.trim(), items };
   }
 
   /**
@@ -730,6 +771,22 @@
       const patch = {};
       for (const key of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays']) patch[key] = Number(securityForm[key].value);
       saveSettings(securityForm, patch, 'Instellingen opgeslagen');
+    };
+    const seasonForm = $('#s-season');
+    /**
+     * Slaat de seizoensherinneringen op.
+     * @param {SubmitEvent} event het verzenden
+     */
+    seasonForm.onsubmit = (event) => {
+      event.preventDefault();
+      const config = readSeason();
+      // De server maakt van 31 februari 28 februari; liever meteen melden.
+      const wrongDate = config.items.find((item) => item.day > MONTH_DAYS[item.month - 1]);
+      if (wrongDate) {
+        $('.err', seasonForm).textContent = `${wrongDate.title || 'Herinnering'}: ${MONTHS[wrongDate.month - 1]} heeft maar ${MONTH_DAYS[wrongDate.month - 1]} dagen.`;
+        return;
+      }
+      saveSettings(seasonForm, { seasonReminders: config }, 'Seizoensherinneringen opgeslagen');
     };
     const outsourcingForm = $('#s-outsourcing');
     /**

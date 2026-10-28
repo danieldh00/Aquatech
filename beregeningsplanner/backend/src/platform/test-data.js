@@ -591,14 +591,14 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, imageWidth = 480, imageHeig
  * @returns {object} Aantallen per soort aangemaakte gegevens.
  */
 function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, requests, invoices, sprinklers } = stores;
+  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, requests, invoices, sprinklers, seasonReminders } = stores;
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
    * @returns {object} De voorbereide opdracht.
    */
   const prepare = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0 };
   const seededWos = [];
   // Werkorder per plan (voor meldingen over die installatie).
   const woByPlan = {};
@@ -759,6 +759,15 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
       prepare('UPDATE service_request_photos SET created_at = ? WHERE request_id = ?').run(testSet.day(requestSpec.at), id);
       counts.requests++;
     });
+  }
+  // Seizoensherinneringen: de klanten met een installatie kregen vorig najaar
+  // de herinnering "winterklaar maken" (aanzetten doet de beheerder zelf).
+  if (seasonReminders) {
+    const lastYear = new Date().getUTCFullYear() - 1;
+    for (const customer of seasonReminders.recipients(seeded.tenantId, [seeded.tenantId], 'najaar', lastYear, 50)) {
+      seasonReminders.markSent(seeded.tenantId, customer.id, 'najaar', lastYear, `${lastYear}-10-01T07:00:00.000Z`);
+      counts.seasonReminders++;
+    }
   }
   // Eigen sproeierbibliotheek: een eigen behuizing (pop-up 20 cm) en een eigen prijs voor de MP3000.
   if (sprinklers && testSet.sprinklerLibrary) {

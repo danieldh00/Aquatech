@@ -126,3 +126,7 @@ table.grid.matrix td.na { color: var(--line); }
 dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 12px 0 0; font-size: 14px; }
 dl.kv dt { color: var(--muted); }
 dl.kv dd { margin: 0; }
+
+/* Seizoensherinneringen: één blok per herinnering. */
+.season-item { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 10px; display: grid; gap: 8px; }
+.season-item textarea { font: inherit; }

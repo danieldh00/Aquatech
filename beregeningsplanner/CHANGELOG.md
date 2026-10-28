@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.72.0
+
+Seizoensherinneringen voor klanten (voorjaar opstarten, najaar winterklaar).
+
+- **Instelling** `seasonReminders` per omgeving (Beheer → Instellingen):
+  aan/uit (standaard uit), adres van het klantportaal voor de knop in de mail
+  en de herinneringen (sleutel, onderwerp, dag/maand, tekst; standaard
+  voorjaar 15 maart en najaar 1 oktober).
+- **Verzendronde** (`uitvoering/season-reminders.js`, elk uur vanuit het
+  onderhoud, `app.locals.seasonRemindersAll`): tot 21 dagen na de datum een
+  mail via de eigen mailserver aan actieve klantaccounts met e-mailadres en
+  een werkorder in die omgeving (via offerte of melding). Tabel
+  `season_reminders_sent` (migratie 31) houdt bij wie welke herinnering in
+  welk jaar kreeg; hoogstens 100 mails per omgeving per ronde.
+  Een testomgeving mailt alleen haar eigen testaccounts (nooit live-klanten),
+  een uitgeschakelde organisatie niets.
+- **Klantportaal**: blok *Seizoensonderhoud* (twee maanden na de datum) met
+  *Afspraak aanvragen* (meldformulier als onderhoud, ook via
+  `portaal/?herinnering=<sleutel>` uit de mail) en een vinkje om de mails
+  uit te zetten (voorkeur `seasonReminders`).
+- Testdata: klanten met een installatie kregen vorig najaar de herinnering.
 ## 0.71.0
 
 Nacalculatie per werkorder.

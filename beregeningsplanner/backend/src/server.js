@@ -32,6 +32,7 @@ const { createPortalStore, registerPortalRoutes } = require('./uitvoering/portal
 const { createLocationStore, registerLocationRoutes } = require('./uitvoering/locations');
 const { createServiceRequestStore, registerServiceRequestRoutes } = require('./uitvoering/service-requests');
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./uitvoering/outsourcing');
+const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uitvoering/season-reminders');
 const { createStockStore, registerStockRoutes } = require('./voorraad/stock');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
@@ -1766,6 +1767,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Klantportaal (module Portaal, zie portal.js) ----------
   const portalStore = createPortalStore(database);
+  // Verstuurde seizoensherinneringen (season-reminders.js; de verzendronde staat onderaan).
+  const seasonReminderStore = createSeasonReminderStore(database, { roles: store.roles });
   registerPortalRoutes(app, {
     portal: portalStore, store, quotes: quoteStore, workorders: workOrderStore, photos: photoStore, requests: serviceRequestStore,
     requireRight, requireJson, audit, remoteIp, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
@@ -1964,7 +1967,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, settings: settingsFor(tenantRow.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, settings: settingsFor(tenantRow.id) },
       testSet, { users: out.byKey, quoteIds: out.quoteIds, tenantId: tenantRow.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );
@@ -2192,6 +2195,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   app.locals.vismaAll = () => visma.runAll(allEnvironmentIds());
   app.locals.visma = visma;
+  // Seizoensherinneringen (season-reminders.js). Alleen klanten die in de
+  // omgeving zelf wonen: een testomgeving mailt dus alleen haar testaccounts,
+  // nooit echte klanten van de live-tenant.
+  const seasonReminders = createSeasonReminderRunner(seasonReminderStore, {
+    settingsFor: (id) => settingsFor(id), mailerFor, userTenantsOf: (id) => [id],
+  });
+  /**
+   * Seizoensherinneringen in alle actieve omgevingen versturen (elk uur vanuit main).
+   * @param {Date} [today] De dag (tests).
+   * @returns {Promise<object>} Aantallen per omgeving.
+   */
+  app.locals.seasonRemindersAll = async (today) => {
+    // Uit één lijst (geen query per omgeving): een uitgeschakelde organisatie slaat ook haar testomgevingen over.
+    const activeIds = store.listTenants().filter((live) => !live.disabled)
+      .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
+      .map((environment) => environment.id);
+    return seasonReminders.runAll(activeIds, today);
+  };
   /**
    * Automatische back-up als de nieuwste ouder is dan een dag.
    * @returns {Promise<object|null>} De back-up, of null als het niet nodig was.
@@ -2235,6 +2256,9 @@ if (require.main === module) {
     } catch (err) {
       console.error('Onderhoud mislukt:', err);
     }
+    app.locals.seasonRemindersAll()
+      .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
+      .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));
     app.locals.backupIfDue()
       .then((backup) => { if (backup) console.log(`Versleutelde back-up gemaakt: ${backup.name} (${backup.size} bytes) in ${backupDir}`); })
       .catch((err) => console.error('Back-up mislukt:', err.message));

@@ -117,8 +117,12 @@
    * @returns {Promise<void>}
    */
   async function load() {
+    // Een GET die na alle opslagen van het mailvinkje start, toont de stand van de server.
+    const saveCountAtStart = state.seasonSaveCount || 0;
+    const savingAtStart = Boolean(state.seasonSaving);
     try {
       state.data = await api('../api/portal');
+      if (!savingAtStart && !state.seasonSaving && (state.seasonSaveCount || 0) === saveCountAtStart) delete state.seasonMail;
     } catch (error) {
       if (error.status === 401) message('Log in om uw portaal te zien. <a href="../login">Inloggen</a>');
       else if (error.status === 403) message('Het klantportaal is er voor klanten. Medewerkers vinden offertes en werkorders in hun eigen modules. <a href="../">Naar het overzicht</a>');
@@ -133,6 +137,7 @@
     const portal = state.data;
     const name = portal.user && portal.user.kind !== 'gast' ? portal.user.displayName : '';
     $('#p-welcome').textContent = name ? `Welkom, ${name}` : 'Mijn portaal';
+    renderSeason(portal);
     renderTodo(portal);
     renderRequests(portal);
     renderWork(portal);
@@ -143,6 +148,81 @@
     if (!portal.quotes.length && !portal.workorders.length && !portal.plans.length && !(portal.requests || []).length) {
       message('Er staat nog niets voor u klaar. Zodra wij een offerte voor u hebben opgesteld of werkzaamheden hebben ingepland, ziet u die hier.');
     } else message('');
+  }
+
+  /**
+   * Toont de lopende seizoensherinneringen (voorjaar opstarten, najaar
+   * winterklaar) met een knop om onderhoud aan te vragen, en het vinkje voor de mails.
+   * @param {object} portal Het overzicht uit api/portal.
+   * @returns {void}
+   */
+  function renderSeason(portal) {
+    const reminders = portal.reminders || [];
+    const canRequest = Boolean(portal.features && portal.features.requests);
+    $('#season').innerHTML = reminders.map((reminder) => `
+      <div class="card season">
+        <h3>${esc(reminder.title)}</h3>
+        <div>${esc(reminder.text)}</div>
+        ${canRequest ? `<div class="actions"><button class="btn primary" data-season="${esc(reminder.key)}">Afspraak aanvragen</button></div>` : ''}
+      </div>`).join('');
+    // Een eerder gestart GET mag een net opgeslagen of nog lopende keuze niet terugzetten.
+    if (state.seasonMail !== undefined) portal.reminderMails = state.seasonMail;
+    $('#season-mail').checked = portal.reminderMails === true;
+    $('#season-mail-row').hidden = !portal.user || portal.user.kind !== 'account';
+    $('#s-season').hidden = !portal.remindersEnabled || (!reminders.length && $('#season-mail-row').hidden);
+  }
+
+  /**
+   * Opent het meldformulier als onderhoudsverzoek voor een seizoensherinnering.
+   * Loopt de herinnering niet meer (oude link uit een mail), dan opent het
+   * gewone onderhoudsformulier met een melding.
+   * @param {string} key Sleutel van de herinnering.
+   * @returns {void}
+   */
+  function requestSeasonService(key) {
+    if (!state.data.features.requests) return;
+    const reminder = (state.data.reminders || []).find((item) => item.key === key);
+    if (!reminder) toast('Deze herinnering loopt niet meer. U kunt hier gewoon onderhoud aanvragen.');
+    openForm();
+    const requestForm = form();
+    requestForm.kind.value = 'onderhoud';
+    requestForm.subject.value = reminder ? reminder.title : '';
+    syncKind();
+    requestForm.description.focus();
+  }
+
+  /**
+   * Zet de seizoensherinneringen per mail aan of uit (voorkeur in het profiel).
+   * @param {boolean} wanted true = wel mails.
+   * @returns {Promise<void>}
+   */
+  async function saveSeasonMail(wanted) {
+    const checkbox = $('#season-mail');
+    // Eén wijziging tegelijk, zodat de laatste klik ook de opgeslagen stand is.
+    checkbox.disabled = true;
+    state.seasonMail = wanted;
+    state.seasonSaving = true;
+    state.seasonSaveCount = (state.seasonSaveCount || 0) + 1;
+    try {
+      await api('../api/account/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preferences: { seasonReminders: wanted } }) });
+      state.data.reminderMails = wanted;
+      checkbox.checked = wanted;
+      toast(wanted ? 'U krijgt de herinneringen per e-mail.' : 'U krijgt geen herinneringen meer per e-mail.');
+    } catch (error) {
+      // Onzeker of de server het toch opsloeg: de opgeslagen stand opnieuw ophalen.
+      delete state.seasonMail;
+      try {
+        const profile = await api('../api/account/profile');
+        state.data.reminderMails = profile.preferences.seasonReminders !== false;
+      } catch (reloadError) {
+        state.data.reminderMails = !wanted;
+      }
+      checkbox.checked = state.data.reminderMails;
+      toast(`Opslaan mislukt (${error.message}).`, true);
+    } finally {
+      state.seasonSaving = false;
+      checkbox.disabled = false;
+    }
   }
 
   /**
@@ -609,7 +689,15 @@
       if (openButton) openDetail(openButton.dataset.open);
       const requestButton = event.target.closest('main [data-req]');
       if (requestButton) openRequest(requestButton.dataset.req);
+      const seasonButton = event.target.closest('main [data-season]');
+      if (seasonButton) requestSeasonService(seasonButton.dataset.season);
     });
+    /**
+     * Slaat het vinkje voor de herinneringsmails op.
+     * @param {Event} event de wijziging
+     * @returns {Promise<void>}
+     */
+    $('#season-mail').onchange = (event) => saveSeasonMail(event.target.checked);
     $('#r-new').onclick = openForm;
     $('#r-close').onclick = closeForm;
     $('#r-cancel').onclick = closeForm;
@@ -639,6 +727,9 @@
     const locationMatch = /^#locatie=(l-[0-9a-f]+)$/.exec(location.hash);
     if (locationMatch && state.data && window.PortalLocations) window.PortalLocations.open(locationMatch[1]);
     if (location.hash === '#melden' && state.data && state.data.features.requests) openForm();
+    // Vanuit de mail met een seizoensherinnering: ?herinnering=<sleutel>.
+    const seasonKey = new URLSearchParams(location.search).get('herinnering');
+    if (seasonKey && state.data) requestSeasonService(seasonKey);
   }
 
   init();

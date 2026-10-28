@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.72.0',
+      date: '2026-10-28',
+      title: 'Seizoensherinneringen voor klanten',
+      items: [
+        { text: 'Klanten met een installatie krijgen in het voorjaar en het najaar een **herinnering per mail** om de beregening op te starten of winterklaar te maken. Zet het aan en pas de datums en teksten aan in Beheer > Instellingen.', for: ['beheer'] },
+        { text: 'In je portaal staat in het voorjaar en najaar een **herinnering voor onderhoud**, met een knop om direct een afspraak aan te vragen. Wil je de mails niet meer? Zet ze uit met het vinkje eronder.', for: ['portaal'] },
+      ],
+    },
+    {
       version: '0.71.0',
       date: '2026-10-28',
       title: 'Nacalculatie per werkorder',

@@ -233,7 +233,8 @@ function withoutBackground(data) {
 // Persoonlijke voorkeuren staan als JSON in users.preferences; alleen deze
 // sleutels (met hun standaardwaarde) worden bewaard.
 // newsSeenAt/seenRelease: vorige bezoek aan Nieuws (zie news.js), niet in het profielformulier.
-const PREFERENCES = { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '' };
+// seasonReminders: klant wil seizoensherinneringen per mail (season-reminders.js, uit te zetten in het portaal).
+const PREFERENCES = { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '', seasonReminders: true };
 const EMAIL = /^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[^\s@<>()",;:]+$/;
 const PHONE = /^\+?[0-9 ()./-]{6,25}$/;
 
@@ -248,6 +249,7 @@ function cleanPreferences(input, base = PREFERENCES) {
   const out = { ...PREFERENCES, ...base };
   if (requested.startPage !== undefined) out.startPage = /^[a-z0-9-]{0,40}$/.test(String(requested.startPage)) ? String(requested.startPage) : '';
   if (requested.mailCopy !== undefined) out.mailCopy = requested.mailCopy === true;
+  if (requested.seasonReminders !== undefined) out.seasonReminders = requested.seasonReminders !== false;
   if (requested.newsSeenAt !== undefined) out.newsSeenAt = /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(String(requested.newsSeenAt)) ? String(requested.newsSeenAt) : '';
   if (requested.seenRelease !== undefined) out.seenRelease = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(requested.seenRelease)) ? String(requested.seenRelease) : '';
   return out;
@@ -548,6 +550,7 @@ function createStore(db) {
       prepare('DELETE FROM impersonations WHERE admin_id = ? OR user_id = ?').run(user.id, user.id);
       prepare('DELETE FROM support_grants WHERE user_id = ?').run(user.id);
       prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+      prepare('DELETE FROM season_reminders_sent WHERE user_id = ?').run(user.id);
       prepare('DELETE FROM users WHERE id = ?').run(user.id);
       return { user: user, moved };
     });
@@ -809,6 +812,7 @@ function createStore(db) {
     prepare('DELETE FROM history WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM audit WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM sessions WHERE tenant_id = ?').run(tenantId);
+    prepare('DELETE FROM season_reminders_sent WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM work_order_photos WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM work_order_hours WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM work_order_materials WHERE tenant_id = ?').run(tenantId);
