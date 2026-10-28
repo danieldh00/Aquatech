@@ -222,7 +222,9 @@ function createLocationStore(db, { photos }) {
           id: installation.id, number: installation.number, status: installation.status, statusLabel: WorkOrderCore.STATUSES[installation.status] || installation.status,
           title: installation.title, address: installation.address, plannedDate: installation.plannedDate, completedOn: installation.completedOn,
           installer: installation.assignee, quoteId: installation.quoteId, quoteNumber: installation.quoteNumber, planTitle: installation.planTitle,
-          report: installation.report, design: installation.design,
+          // Alleen het opleverrapport zoals het portaal het ook toont (portal.js customerWorkOrder).
+          report: { notes: installation.report?.notes || '', completedOn: installation.report?.completedOn || '', signedBy: installation.report?.signedBy || '' },
+          design: installation.design,
           zones: installation.zones.map((zone) => ({ name: zone.name, kind: zone.kind, parts: zone.parts })),
           photos: installation.photos,
         })),

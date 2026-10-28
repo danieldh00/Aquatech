@@ -348,12 +348,13 @@ const nameKey = (name) => `n-${crypto.createHash('sha256').update(normalizeName(
 
 /**
  * Maakt een adres vergelijkbaar: kleine letters, zonder leestekens, postcode
- * aaneen ("1234 AB" = "1234ab") en enkele spaties.
+ * aaneen ("1234 AB" = "1234ab"), huisnummer met toevoeging aaneen ("1-A" = "1a")
+ * en enkele spaties.
  * @param {string} address Het adres.
  * @returns {string} Het genormaliseerde adres.
  */
-const normalizeAddress = (address) => String(address || '').toLowerCase().replace(/[.,;\n\r]+/g, ' ')
-  .replace(/\b(\d{4})\s+([a-z]{2})\b/g, '$1$2').replace(/\s+/g, ' ').trim();
+const normalizeAddress = (address) => String(address || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ')
+  .replace(/\b(\d{4}) ([a-z]{2})\b/g, '$1$2').replace(/\b(\d+) ([a-z])\b/g, '$1$2').trim();
 /**
  * Sleutel van een locatie (installatiedossier per adres): een hash van het adres.
  * @param {string} address Het adres.

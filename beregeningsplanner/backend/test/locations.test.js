@@ -36,6 +36,8 @@ test('locatiesleutel: zelfde adres met andere schrijfwijze, leeg adres geen sleu
   assert.notStrictEqual(locationKey('Dorpsstraat 1, Nunspeet'), locationKey('Dorpsstraat 3, Nunspeet'));
   assert.match(locationKey('Dorpsstraat 1'), /^l-[0-9a-f]{16}$/);
   assert.strictEqual(locationKey('  '), null);
+  assert.strictEqual(locationKey('Dorpsstraat 1-A, Nunspeet'), locationKey('dorpsstraat 1a nunspeet'));
+  assert.strictEqual(locationKey('Dorpsstraat 1 A, Nunspeet'), locationKey('Dorpsstraat 1A Nunspeet'));
 });
 
 test('installatiedossier per locatie: medewerker ziet alles, klant alleen zijn deel', async () => {
