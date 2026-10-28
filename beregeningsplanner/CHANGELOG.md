@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.71.0
+## 0.72.0
 
 Seizoensherinneringen voor klanten (voorjaar opstarten, najaar winterklaar).
 
@@ -21,6 +21,25 @@ Seizoensherinneringen voor klanten (voorjaar opstarten, najaar winterklaar).
   `portaal/?herinnering=<sleutel>` uit de mail) en een vinkje om de mails
   uit te zetten (voorkeur `seasonReminders`).
 - Testdata: klanten met een installatie kregen vorig najaar de herinnering.
+## 0.71.0
+
+Nacalculatie per werkorder.
+
+- Blok **Nacalculatie** op de werkorder (`werkorders/costing-panel.js`, kern
+  `werkorders/costing-core.js`, UMD): begroot uit de geaccordeerde offerte
+  (zonder offerte: werkstappen en materiaallijst) tegenover de geboekte uren
+  en het materiaalverbruik, met verschil per onderdeel en per artikel.
+  Kosten = uren × kostprijs per uur + verbruik × inkoopprijs uit de voorraad;
+  opbrengst = definitieve/betaalde facturen van de werkorder (credit negatief),
+  anders de offerte netto of, zonder offerte, een schatting uit de
+  werkorderbegroting. Marge in euro en procent; waarschuwingen bij
+  ontbrekende kost-/inkoopprijzen of conceptfacturen. Excel-export
+  (samenvatting + materiaal), geen CSV.
+- API `GET /api/workorders/:id/costing` (`backend/src/uitvoering/costing.js`),
+  nieuw recht **nacalculatie** (standaard alleen beheerder, `needs`
+  werkorders). Vast aantal queries (`test/queries.test.js`), geen migratie.
+- Bedrijfsgegevens: nieuw veld **Kostprijs per uur** (`quoteProfile.hourlyCost`,
+  standaard 0 = niet ingevuld). `stock.saleInfo(..., { withCost: true })` geeft ook `costPrice` (alleen voor de nacalculatie); `hourlyCost` gaat niet naar klanten of de openbare offerte.
 
 ## 0.70.2
 

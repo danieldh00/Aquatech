@@ -445,6 +445,7 @@
     if (window.WorkOrderPhotos) window.WorkOrderPhotos.open(workOrder, { toast, statusOf: () => $('#e-status').value });
     if (window.WorkOrderStock) window.WorkOrderStock.open(workOrder, { toast, manage: (state.me.rights || []).includes('voorraad') });
     if (window.WorkLog) window.WorkLog.open(workOrder, { toast, staff: () => state.staff });
+    if (window.WorkOrderCosting) window.WorkOrderCosting.open(workOrder, { toast, allowed: (state.me.rights || []).includes('nacalculatie') });
     // ?id=…#fotos (startscherm): meteen naar de foto's.
     if (location.hash === '#fotos') $('#ph-card').scrollIntoView();
     else window.scrollTo(0, 0);

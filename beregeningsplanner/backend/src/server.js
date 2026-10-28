@@ -19,6 +19,7 @@ const { createWanIp } = require('./platform/wan-ip');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./uitvoering/workorders');
 const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('./uitvoering/photos');
 const { createWorkLogStore, registerWorkLogRoutes } = require('./uitvoering/worklog');
+const { registerCostingRoutes } = require('./uitvoering/costing');
 const { createImpersonationStore, createImpersonation } = require('./beveiliging/impersonation');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
 const { createShopSync } = require('./webshop/shop-sync');
@@ -1727,6 +1728,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => req.tenantId || tenant.id }),
   });
   registerDebtorRoutes(app, { debtors: debtorStore, requireRight, requireJson, audit });
+  // Nacalculatie per werkorder: begroot tegenover werkelijk, kosten en marge.
+  registerCostingRoutes(app, {
+    requireRight, invoices: invoiceStore,
+    loggedOf: (tenantId, workOrderId) => workLogStore.list(tenantId, workOrderId),
+    articlesOf: (tenantId, codes) => stockStore.saleInfo(tenantId, codes, { withCost: true }),
+    profileOf: (req) => settingsFor(req.tenantId || tenant.id).get('quoteProfile'),
+  });
 
   // ---------- Opdrachten uitbesteden aan andere organisaties (zie outsourcing.js) ----------
   registerOutsourcingRoutes(app, {
