@@ -13,12 +13,26 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '0.70.0',
-      date: '2026-10-27',
+      version: '0.71.0',
+      date: '2026-10-28',
       title: 'Nacalculatie per werkorder',
       items: [
         { text: 'Op elke werkorder staat nu een **Nacalculatie**: begroot volgens de offerte naast de geboekte uren en het materiaalverbruik, met het verschil, de kosten, wat er gefactureerd is en de marge. Ook als Excel te downloaden.', for: ['nacalculatie'] },
         { text: 'Vul bij Offertes > Bedrijfsgegevens de **kostprijs per uur** in en in de voorraad de inkoopprijzen, dan klopt de marge.', for: ['nacalculatie'] },
+      ],
+    },
+    {
+      version: '0.70.1',
+      date: '2026-10-28',
+      title: 'Opgeschoonde code (planner)',
+      items: [],
+    },
+    {
+      version: '0.70.0',
+      date: '2026-10-27',
+      title: 'Bestelvoorstel bij lage voorraad',
+      items: [
+        { text: 'In **Voorraadbeheer** maakt de knop **Bestelvoorstel** een Excel met elk artikel dat onder de minimumvoorraad zit en hoeveel je moet bestellen. Per artikel stel je in tot welk aantal je aanvult (**Bestellen tot**, leeg = 2× het minimum).', for: ['voorraad'] },
       ],
     },
     {

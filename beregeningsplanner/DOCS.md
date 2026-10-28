@@ -549,6 +549,11 @@ van de werkorder. Daardoor is alles vanzelf gekoppeld.
   afgeboekt. Is er op de werkorder materiaalverbruik geregistreerd, dan boekt
   dat verbruik de voorraad af en vervalt bij Gereed alleen de rest van de
   reservering.
+- **Bestelvoorstel**: de knop *Bestelvoorstel* maakt een Excel met elk
+  artikel waarvan *beschikbaar* onder de minimumvoorraad zit, en hoeveel je
+  moet bestellen om aan te vullen tot *Bestellen tot* (per artikel in te
+  stellen; leeg = 2× het minimum), naar boven afgerond op hele eenheden. Met
+  het bedrag op inkoopprijs en een totaal.
 - **Excel-export**: de voorraadlijst (met een tabblad Gereserveerd) en de
   mutaties over een gekozen periode.
 

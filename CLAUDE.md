@@ -259,7 +259,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   voor collega's en na Gereed), `client_id` maakt POST idempotent (offline
   wachtrij in `worklog.js`), urenstaat `GET /api/worklog` → Excel.
   Voorraad haakt in via `workLogStore.hook(fn)` → `stock_movement_id`.
-- **Nacalculatie** (0.70.0, recht `nacalculatie`: standaard beheerder): kern
+- **Nacalculatie** (0.71.0, recht `nacalculatie`: standaard beheerder): kern
   `werkorders/costing-core.js` (UMD, `compute`), route `GET
   /api/workorders/:id/costing` in `backend/src/uitvoering/costing.js` (hergebruikt
   `invoices.workOrder/quote/list`, `workLogStore.list`, `stock.saleInfo` met
@@ -338,7 +338,9 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   er verbruik is (`syncUsage`, idempotent per verbruiksregel; vanuit
   `workLogStore.hook` met `{ nested: true }`, want `transaction` nest niet). Blok Voorraad op de
   werkorder: `werkorders/stock-panel.js`, API `/api/stock/workorders/:id`
-  (recht `werkorders`).
+  (recht `werkorders`). Bestelvoorstel (0.70.0, migratie 30): `reorder_qty`
+  (*Bestellen tot*, leeg = 2× minimum), `GET /api/stock/reorder`
+  (`stock.reorderProposal`), Excel in de browser.
 - **Verkoop, webshop en facturen** (0.61.0, Brincr vervangen deel 1; migratie 26):
   `stock_items` heeft `sale_price`/`vat_rate`/`revenue_group` (Aquatech = bron).
   `backend/src/webshop/shop-sync.js`: tweerichting met WooCommerce REST v3

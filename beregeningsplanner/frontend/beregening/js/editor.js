@@ -2,10 +2,15 @@
 (function () {
   'use strict';
 
-  const G = window.Geo;
-  const C = window.Catalog;
+  const Geo = window.Geo;
+  const Catalog = window.Catalog;
 
   class Editor {
+    /**
+     * Maakt de editor op een canvas en koppelt de muis-, touch- en toetsenbordbediening.
+     * @param {HTMLCanvasElement} canvas het tekenvlak
+     * @param {object} app de planner-app (state, acties en terugmeldingen)
+     */
     constructor(canvas, app) {
       this.cv = canvas;
       this.ctx = canvas.getContext('2d');
@@ -37,54 +42,82 @@
       this.resize();
     }
 
+    /**
+     * De actuele planstand van de app.
+     * @returns {object} de planstand
+     */
     get state() { return this.app.state; }
 
     // ---------- Transformaties ----------
-    toScreen(p) { return { x: (p.x - this.view.x) * this.view.scale, y: (p.y - this.view.y) * this.view.scale }; }
-    toWorld(sx, sy) { return { x: sx / this.view.scale + this.view.x, y: sy / this.view.scale + this.view.y }; }
+    /**
+     * Rekent een punt in meters om naar schermpixels.
+     * @param {{x: number, y: number}} point punt in meters
+     * @returns {{x: number, y: number}} punt in schermpixels
+     */
+    toScreen(point) { return { x: (point.x - this.view.x) * this.view.scale, y: (point.y - this.view.y) * this.view.scale }; }
+    /**
+     * Rekent schermpixels om naar een punt in meters.
+     * @param {number} screenX x in schermpixels
+     * @param {number} screenY y in schermpixels
+     * @returns {{x: number, y: number}} punt in meters
+     */
+    toWorld(screenX, screenY) { return { x: screenX / this.view.scale + this.view.x, y: screenY / this.view.scale + this.view.y }; }
 
+    /** Past het canvas aan de maat van het omliggende element aan (ook voor scherpe weergave op retina) en tekent opnieuw. */
     resize() {
-      const r = this.cv.parentElement.getBoundingClientRect();
+      const rect = this.cv.parentElement.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      this.cv.width = Math.max(1, Math.floor(r.width * dpr));
-      this.cv.height = Math.max(1, Math.floor(r.height * dpr));
-      this.cv.style.width = `${r.width}px`;
-      this.cv.style.height = `${r.height}px`;
+      this.cv.width = Math.max(1, Math.floor(rect.width * dpr));
+      this.cv.height = Math.max(1, Math.floor(rect.height * dpr));
+      this.cv.style.width = `${rect.width}px`;
+      this.cv.style.height = `${rect.height}px`;
       this.dpr = dpr;
-      this.w = r.width;
-      this.h = r.height;
+      this.w = rect.width;
+      this.h = rect.height;
       this.render();
     }
 
-    zoomAt(sx, sy, factor) {
-      const before = this.toWorld(sx, sy);
+    /**
+     * Zoomt in of uit rond een schermpunt; dat punt blijft op dezelfde plek staan.
+     * @param {number} screenX x van het zoompunt in schermpixels
+     * @param {number} screenY y van het zoompunt in schermpixels
+     * @param {number} factor zoomfactor (groter dan 1 = inzoomen)
+     */
+    zoomAt(screenX, screenY, factor) {
+      const before = this.toWorld(screenX, screenY);
       this.view.scale = Math.max(2, Math.min(400, this.view.scale * factor));
-      const after = this.toWorld(sx, sy);
+      const after = this.toWorld(screenX, screenY);
       this.view.x += before.x - after.x;
       this.view.y += before.y - after.y;
       this.render();
     }
 
+    /** Zoomt zo dat alle vlakken, sproeiers, elementen en de ondergrond in beeld passen. */
     fit() {
-      const pts = [];
-      this.state.areas.forEach((a) => pts.push(...a.pts));
-      this.state.sprinklers.forEach((s) => pts.push(s));
-      this.state.elements.forEach((e) => pts.push(e));
+      const points = [];
+      this.state.areas.forEach((area) => points.push(...area.pts));
+      this.state.sprinklers.forEach((sprinkler) => points.push(sprinkler));
+      this.state.elements.forEach((element) => points.push(element));
       const bg = this.state.background;
       if (bg && bg.dataUrl && this.bgImg) {
-        pts.push({ x: bg.x, y: bg.y }, { x: bg.x + this.bgImg.width * bg.scale, y: bg.y + this.bgImg.height * bg.scale });
+        points.push({ x: bg.x, y: bg.y }, { x: bg.x + this.bgImg.width * bg.scale, y: bg.y + this.bgImg.height * bg.scale });
       }
-      if (!pts.length) { this.view = { x: -2, y: -2, scale: 40 }; this.render(); return; }
-      const bb = G.bbox(pts);
+      if (!points.length) { this.view = { x: -2, y: -2, scale: 40 }; this.render(); return; }
+      const box = Geo.bbox(points);
       const pad = 1.5;
-      const sx = this.w / (bb.w + 2 * pad || 10);
-      const sy = this.h / (bb.h + 2 * pad || 10);
-      this.view.scale = Math.max(2, Math.min(200, Math.min(sx, sy)));
-      this.view.x = bb.minX - pad - (this.w / this.view.scale - bb.w - 2 * pad) / 2;
-      this.view.y = bb.minY - pad - (this.h / this.view.scale - bb.h - 2 * pad) / 2;
+      const scaleX = this.w / (box.w + 2 * pad || 10);
+      const scaleY = this.h / (box.h + 2 * pad || 10);
+      this.view.scale = Math.max(2, Math.min(200, Math.min(scaleX, scaleY)));
+      this.view.x = box.minX - pad - (this.w / this.view.scale - box.w - 2 * pad) / 2;
+      this.view.y = box.minY - pad - (this.h / this.view.scale - box.h - 2 * pad) / 2;
       this.render();
     }
 
+    /**
+     * Kiest een gereedschap en breekt een lopende tekening af.
+     * @param {string} tool gereedschap (select, pan, polygon, rect, element, wand, sprinkler, calibrate, measure)
+     * @param {object} opts opties van het gereedschap (zoals vlaktype of sproeiertype)
+     */
     setTool(tool, opts = {}) {
       this.tool = tool;
       this.toolOpts = opts;
@@ -96,12 +129,16 @@
       this.render();
     }
 
+    /** Zet de muisaanwijzer die bij het gereedschap past. */
     _cursor() {
-      const t = this.tool;
-      this.cv.style.cursor = t === 'pan' || this.panHold || this.spaceDown ? 'grab' : t === 'select' ? 'default' : 'crosshair';
+      const tool = this.tool;
+      this.cv.style.cursor = tool === 'pan' || this.panHold || this.spaceDown ? 'grab' : tool === 'select' ? 'default' : 'crosshair';
     }
 
-    /** Is er een teken- of plaatsgereedschap actief (alles behalve selecteren/schuiven)? */
+    /**
+     * Is er een teken- of plaatsgereedschap actief (alles behalve selecteren/schuiven)?
+     * @returns {boolean} true tijdens tekenen of plaatsen
+     */
     isDrawing() { return this.tool !== 'select' && this.tool !== 'pan'; }
 
     /**
@@ -116,221 +153,271 @@
       this.render();
     }
 
-    /** Verschuift het beeld met een aantal schermpixels. */
+    /**
+     * Verschuift het beeld met een aantal schermpixels.
+     * @param {number} dx verschuiving horizontaal in schermpixels
+     * @param {number} dy verschuiving verticaal in schermpixels
+     */
     panBy(dx, dy) {
       this.view.x += dx / this.view.scale;
       this.view.y += dy / this.view.scale;
       this.render();
     }
 
-    /** Tolerantie in schermpixels; ruimer bij bediening met de vinger. */
+    /**
+     * Tolerantie in schermpixels; ruimer bij bediening met de vinger.
+     * @param {number} px tolerantie voor de muis
+     * @returns {number} tolerantie voor het huidige invoerapparaat
+     */
     _tol(px) { return this.touch ? Math.round(px * 2.2) : px; }
 
-    snapPoint(p, ev) {
-      let q = { x: p.x, y: p.y };
+    /**
+     * Vangt een punt: op een bestaand hoekpunt, met Shift op een veelvoud van 45° vanaf het vorige punt, en op het raster (Alt = niet).
+     * @param {{x: number, y: number}} point punt in meters
+     * @param {Event} [event] muisgebeurtenis (voor Shift/Alt)
+     * @returns {{x: number, y: number, snapped?: boolean}} het gevangen punt; `snapped` alleen als een bestaand hoekpunt is geraakt
+     */
+    snapPoint(point, event) {
+      let result = { x: point.x, y: point.y };
       // Snap naar bestaande hoekpunten
       const tol = this._tol(8) / this.view.scale;
-      for (const a of this.state.areas) {
-        for (const v of a.pts) if (G.dist(v, p) < tol) return { x: v.x, y: v.y, snapped: true };
+      for (const area of this.state.areas) {
+        for (const vertex of area.pts) if (Geo.dist(vertex, point) < tol) return { x: vertex.x, y: vertex.y, snapped: true };
       }
       if (this.draft && this.draft.length) {
-        for (const v of this.draft) if (G.dist(v, p) < tol) return { x: v.x, y: v.y, snapped: true };
-        if (ev && ev.shiftKey) {
+        for (const vertex of this.draft) if (Geo.dist(vertex, point) < tol) return { x: vertex.x, y: vertex.y, snapped: true };
+        if (event && event.shiftKey) {
           const last = this.draft[this.draft.length - 1];
-          const d = G.sub(p, last);
-          const ang = Math.round(Math.atan2(d.y, d.x) / (Math.PI / 4)) * (Math.PI / 4);
-          const l = G.len(d);
-          q = { x: last.x + Math.cos(ang) * l, y: last.y + Math.sin(ang) * l };
+          const delta = Geo.sub(point, last);
+          const angle = Math.round(Math.atan2(delta.y, delta.x) / (Math.PI / 4)) * (Math.PI / 4);
+          const length = Geo.len(delta);
+          result = { x: last.x + Math.cos(angle) * length, y: last.y + Math.sin(angle) * length };
         }
       }
-      if (this.snap && !(ev && ev.altKey)) {
-        const s = this.gridStep;
-        q = { x: Math.round(q.x / s) * s, y: Math.round(q.y / s) * s };
+      if (this.snap && !(event && event.altKey)) {
+        const step = this.gridStep;
+        result = { x: Math.round(result.x / step) * step, y: Math.round(result.y / step) * step };
       }
-      return q;
+      return result;
     }
 
     // ---------- Hit-testing ----------
-    hitTest(w) {
+    /**
+     * Zoekt wat er onder een punt ligt: greep, hoekpunt, element, sproeier of vlak.
+     * @param {{x: number, y: number}} world punt in meters
+     * @returns {object|null} wat geraakt is ({kind, id, ...}) of null
+     */
+    hitTest(world) {
       const tol = this._tol(7) / this.view.scale;
       // Hoekpunten en middens van het geselecteerde vlak gaan voor: er staan
       // vaak sproeiers op de rand, die mogen het bewerken niet blokkeren.
       if (this.selection && this.selection.kind === 'area') {
-        const a = this.state.areas.find((x) => x.id === this.selection.id);
-        if (a) {
+        const area = this.state.areas.find((candidate) => candidate.id === this.selection.id);
+        if (area) {
           let best = null;
-          for (let i = 0; i < a.pts.length; i++) {
-            const d = G.dist(a.pts[i], w);
-            if (d < tol && (!best || d < best.d)) best = { d, hit: { kind: 'vertex', id: a.id, index: i } };
+          for (let i = 0; i < area.pts.length; i++) {
+            const distance = Geo.dist(area.pts[i], world);
+            if (distance < tol && (!best || distance < best.d)) best = { d: distance, hit: { kind: 'vertex', id: area.id, index: i } };
           }
           if (best) return best.hit;
-          for (let i = 0; i < a.pts.length; i++) {
-            const b = a.pts[(i + 1) % a.pts.length];
-            const mid = { x: (a.pts[i].x + b.x) / 2, y: (a.pts[i].y + b.y) / 2 };
-            if (G.dist(mid, w) < tol) return { kind: 'midpoint', id: a.id, index: i };
+          for (let i = 0; i < area.pts.length; i++) {
+            const next = area.pts[(i + 1) % area.pts.length];
+            const mid = { x: (area.pts[i].x + next.x) / 2, y: (area.pts[i].y + next.y) / 2 };
+            if (Geo.dist(mid, world) < tol) return { kind: 'midpoint', id: area.id, index: i };
           }
         }
       }
-      for (const e of [...this.state.elements].reverse()) {
-        if (G.dist(e, w) < Math.max(tol * 1.5, 0.35)) return { kind: 'element', id: e.id };
+      for (const element of [...this.state.elements].reverse()) {
+        if (Geo.dist(element, world) < Math.max(tol * 1.5, 0.35)) return { kind: 'element', id: element.id };
       }
       // grepen van de geselecteerde sproeier (worp en sproeihoek)
       if (this.selection && this.selection.kind === 'sprinkler') {
-        const s = this.state.sprinklers.find((x) => x.id === this.selection.id);
-        if (s) for (const h of this.sprinklerHandles(s)) if (G.dist(h, w) < tol * 1.4) return { kind: 'handle', id: s.id, which: h.which };
+        const sprinkler = this.state.sprinklers.find((candidate) => candidate.id === this.selection.id);
+        if (sprinkler) for (const handle of this.sprinklerHandles(sprinkler)) if (Geo.dist(handle, world) < tol * 1.4) return { kind: 'handle', id: sprinkler.id, which: handle.which };
       }
-      for (const s of [...this.state.sprinklers].reverse()) {
-        if (G.dist(s, w) < Math.max(tol, 0.25)) return { kind: 'sprinkler', id: s.id };
+      for (const sprinkler of [...this.state.sprinklers].reverse()) {
+        if (Geo.dist(sprinkler, world) < Math.max(tol, 0.25)) return { kind: 'sprinkler', id: sprinkler.id };
       }
       // kleinste vlak eerst (zodat bedden binnen een gazon selecteerbaar zijn)
-      const hits = this.state.areas.filter((a) => a.pts.length >= 3 && G.pointInPolygon(w, a.pts));
-      hits.sort((a, b) => G.area(a.pts) - G.area(b.pts));
+      const hits = this.state.areas.filter((area) => area.pts.length >= 3 && Geo.pointInPolygon(world, area.pts));
+      hits.sort((left, right) => Geo.area(left.pts) - Geo.area(right.pts));
       if (hits.length) return { kind: 'area', id: hits[0].id };
       return null;
     }
 
-    /** Grepen van een sproeier: worp (midden van de boog) en begin/einde van de sproeihoek. */
-    sprinklerHandles(s) {
-      if (s.type === 'strip' || !(s.r > 0)) return [];
-      const at = (deg, which) => ({ x: s.x + Math.cos(G.rad(deg)) * s.r, y: s.y + Math.sin(G.rad(deg)) * s.r, which });
-      if (s.arc >= 359.9) return [at(s.start, 'r')];
-      return [at(s.start + s.arc / 2, 'r'), at(s.start, 'a0'), at(s.start + s.arc, 'a1')];
+    /**
+     * Grepen van een sproeier: worp (midden van de boog) en begin/einde van de sproeihoek.
+     * @param {object} sprinkler de sproeier
+     * @returns {Array<{x: number, y: number, which: string}>} de grepen ('r', 'a0', 'a1')
+     */
+    sprinklerHandles(sprinkler) {
+      if (sprinkler.type === 'strip' || !(sprinkler.r > 0)) return [];
+      /**
+       * Punt op de worpcirkel onder een hoek, als greep.
+       * @param {number} deg hoek in graden
+       * @param {string} which soort greep
+       * @returns {{x: number, y: number, which: string}} de greep
+       */
+      const handleAt = (deg, which) => ({ x: sprinkler.x + Math.cos(Geo.rad(deg)) * sprinkler.r, y: sprinkler.y + Math.sin(Geo.rad(deg)) * sprinkler.r, which });
+      if (sprinkler.arc >= 359.9) return [handleAt(sprinkler.start, 'r')];
+      return [handleAt(sprinkler.start + sprinkler.arc / 2, 'r'), handleAt(sprinkler.start, 'a0'), handleAt(sprinkler.start + sprinkler.arc, 'a1')];
     }
 
-    /** Slepen aan een greep: worp of sproeihoek aanpassen (rotators binnen het bereik van hun kop). */
-    _dragHandle(s, which, w, free) {
-      const t = C.headRange(s);
-      const snapDeg = (a) => (free ? Math.round(a) : Math.round(a / 5) * 5);
+    /**
+     * Slepen aan een greep: worp of sproeihoek aanpassen (rotators binnen het bereik van hun kop).
+     * @param {object} sprinkler de sproeier (wordt aangepast)
+     * @param {string} which de greep ('r' = worp, 'a0' = begin, 'a1' = einde van de sproeihoek)
+     * @param {{x: number, y: number}} world muispositie in meters
+     * @param {boolean} free zonder afronding (Alt ingedrukt)
+     */
+    _dragHandle(sprinkler, which, world, free) {
+      const range = Catalog.headRange(sprinkler);
+      /**
+       * Rondt een hoek af op hele graden (vrij) of op 5°.
+       * @param {number} degrees hoek in graden
+       * @returns {number} afgeronde hoek
+       */
+      const snapDegrees = (degrees) => (free ? Math.round(degrees) : Math.round(degrees / 5) * 5);
       if (which === 'r') {
-        const r = G.dist(s, w);
-        s.r = Math.max(t.rMin, Math.min(t.rMax, free ? Math.round(r * 100) / 100 : Math.round(r * 10) / 10));
-        C.fitRotator(s);
+        const radius = Geo.dist(sprinkler, world);
+        sprinkler.r = Math.max(range.rMin, Math.min(range.rMax, free ? Math.round(radius * 100) / 100 : Math.round(radius * 10) / 10));
+        Catalog.fitRotator(sprinkler);
         return;
       }
-      const ang = snapDeg(G.angleOf(G.sub(w, s)));
+      const angle = snapDegrees(Geo.angleOf(Geo.sub(world, sprinkler)));
       if (which === 'a1') {
-        s.arc = Math.max(10, G.normDeg(ang - s.start) || 360);
-        C.fitRotator(s);
+        sprinkler.arc = Math.max(10, Geo.normDeg(angle - sprinkler.start) || 360);
+        Catalog.fitRotator(sprinkler);
       } else {
-        const end = s.start + s.arc;
-        s.start = G.normDeg(ang);
-        s.arc = Math.max(10, G.normDeg(end - s.start) || 360);
-        C.fitRotator(s);
-        s.start = Math.round(G.normDeg(end - s.arc)); // einde blijft staan, ook als de sector de hoek begrenst
+        const end = sprinkler.start + sprinkler.arc;
+        sprinkler.start = Geo.normDeg(angle);
+        sprinkler.arc = Math.max(10, Geo.normDeg(end - sprinkler.start) || 360);
+        Catalog.fitRotator(sprinkler);
+        sprinkler.start = Math.round(Geo.normDeg(end - sprinkler.arc)); // einde blijft staan, ook als de sector de hoek begrenst
       }
     }
 
     // ---------- Events ----------
+    /** Koppelt de muis-, touch-, wiel- en toetsenbordgebeurtenissen aan de editor. */
     _bind() {
       const cv = this.cv;
-      cv.addEventListener('contextmenu', (e) => e.preventDefault());
+      cv.addEventListener('contextmenu', (event) => event.preventDefault());
       // Scrollwiel/touchpad schuift het plan (Shift = horizontaal); Ctrl/Cmd +
       // scrollen of knijpen op het touchpad zoomt. Werkt ook tijdens het tekenen.
-      cv.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const r = cv.getBoundingClientRect();
-        if (e.ctrlKey || e.metaKey) {
-          this.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-Math.max(-60, Math.min(60, e.deltaY)) * 0.004));
+      cv.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const rect = cv.getBoundingClientRect();
+        if (event.ctrlKey || event.metaKey) {
+          this.zoomAt(event.clientX - rect.left, event.clientY - rect.top, Math.exp(-Math.max(-60, Math.min(60, event.deltaY)) * 0.004));
           return;
         }
-        const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.h : 1;
-        let dx = e.deltaX * k, dy = e.deltaY * k;
-        if (e.shiftKey && !dx) { dx = dy; dy = 0; }
+        const unitFactor = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? this.h : 1;
+        let dx = event.deltaX * unitFactor, dy = event.deltaY * unitFactor;
+        if (event.shiftKey && !dx) { dx = dy; dy = 0; }
         this.panBy(dx, dy);
-        this._move(e);
+        this._move(event);
       }, { passive: false });
 
-      cv.addEventListener('pointerdown', (e) => this._down(e));
-      cv.addEventListener('pointermove', (e) => this._move(e));
-      cv.addEventListener('pointerup', (e) => this._up(e));
-      cv.addEventListener('pointercancel', (e) => this._cancel(e));
+      cv.addEventListener('pointerdown', (event) => this._down(event));
+      cv.addEventListener('pointermove', (event) => this._move(event));
+      cv.addEventListener('pointerup', (event) => this._up(event));
+      cv.addEventListener('pointercancel', (event) => this._cancel(event));
       // Geen 'ghost click' na een tik: anders landt de klik op het paneel dat net onder de vinger verschijnt
-      cv.addEventListener('touchend', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
-      cv.addEventListener('dblclick', (e) => this._dbl(e));
+      cv.addEventListener('touchend', (event) => { if (event.cancelable) event.preventDefault(); }, { passive: false });
+      cv.addEventListener('dblclick', (event) => this._dbl(event));
       window.addEventListener('resize', () => this.resize());
       // Paneel in- of uitklappen (mobiel) verandert de canvasmaat zonder window-resize
       if (window.ResizeObserver) new ResizeObserver(() => this.resize()).observe(cv.parentElement);
-      window.addEventListener('keydown', (e) => {
-        if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
-        if (e.code === 'Space') { this.spaceDown = true; cv.style.cursor = 'grab'; e.preventDefault(); }
+      window.addEventListener('keydown', (event) => {
+        if (event.target && /INPUT|SELECT|TEXTAREA/.test(event.target.tagName)) return;
+        if (event.code === 'Space') { this.spaceDown = true; cv.style.cursor = 'grab'; event.preventDefault(); }
         const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-        if (arrows[e.key] && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          const step = e.shiftKey ? this.w / 2 : 80;
-          this.panBy(arrows[e.key][0] * step, arrows[e.key][1] * step);
-          e.preventDefault();
+        if (arrows[event.key] && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          const step = event.shiftKey ? this.w / 2 : 80;
+          this.panBy(arrows[event.key][0] * step, arrows[event.key][1] * step);
+          event.preventDefault();
         }
-        if (e.key === 'Escape') {
+        if (event.key === 'Escape') {
           if (this.draft) { this.draft = null; this.render(); } else this.setTool('select');
         }
-        if (e.key === 'Enter' && this.draft) this._finishPolygon();
-        if (e.key === 'Backspace' && this.draft && this.draft.length) { this.undoPoint(); e.preventDefault(); }
-        else if ((e.key === 'Delete' || e.key === 'Backspace') && !this.draft && this.activeVertex) { this.removeVertex(); e.preventDefault(); }
-        else if ((e.key === 'Delete' || e.key === 'Backspace') && !this.draft && this.selection) { this.app.deleteSelection(); e.preventDefault(); }
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? this.app.redo() : this.app.undo(); }
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); this.app.redo(); }
+        if (event.key === 'Enter' && this.draft) this._finishPolygon();
+        if (event.key === 'Backspace' && this.draft && this.draft.length) { this.undoPoint(); event.preventDefault(); }
+        else if ((event.key === 'Delete' || event.key === 'Backspace') && !this.draft && this.activeVertex) { this.removeVertex(); event.preventDefault(); }
+        else if ((event.key === 'Delete' || event.key === 'Backspace') && !this.draft && this.selection) { this.app.deleteSelection(); event.preventDefault(); }
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? this.app.redo() : this.app.undo(); }
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') { event.preventDefault(); this.app.redo(); }
       });
-      window.addEventListener('keyup', (e) => {
-        if (e.code === 'Space') { this.spaceDown = false; this._cursor(); }
+      window.addEventListener('keyup', (event) => {
+        if (event.code === 'Space') { this.spaceDown = false; this._cursor(); }
       });
     }
 
-    _evPos(e) {
-      const r = this.cv.getBoundingClientRect();
-      const sx = e.clientX - r.left, sy = e.clientY - r.top;
-      const w = this.toWorld(sx, sy);
-      return { sx, sy, w };
+    /**
+     * Positie van een muisgebeurtenis op het scherm en in meters.
+     * @param {MouseEvent} event de gebeurtenis
+     * @returns {{sx: number, sy: number, w: {x: number, y: number}}} schermpositie en punt in meters
+     */
+    _evPos(event) {
+      const rect = this.cv.getBoundingClientRect();
+      const sx = event.clientX - rect.left, sy = event.clientY - rect.top;
+      const world = this.toWorld(sx, sy);
+      return { sx, sy, w: world };
     }
 
-    _down(e) {
-      const { sx, sy, w } = this._evPos(e);
-      this.cv.setPointerCapture(e.pointerId);
-      const touch = e.pointerType === 'touch';
+    /**
+     * Begin van een klik of aanraking: tekent, plaatst, selecteert of start slepen/verschuiven.
+     * @param {PointerEvent} event de gebeurtenis
+     */
+    _down(event) {
+      const { sx, sy, w: world } = this._evPos(event);
+      this.cv.setPointerCapture(event.pointerId);
+      const touch = event.pointerType === 'touch';
       if (touch !== this.touch) { this.touch = touch; this.app.onToolChanged(this.tool, this.toolOpts); }
-      this.pointers.set(e.pointerId, { x: sx, y: sy });
+      this.pointers.set(event.pointerId, { x: sx, y: sy });
       if (this.pointers.size >= 2) { this._startPinch(); return; }
       if (this.gestureLock) return;
-      this.mouse = { x: sx, y: sy, wx: w.x, wy: w.y };
-      if (e.button === 1 || e.button === 2 || this.tool === 'pan' || this.spaceDown || this.panHold) {
+      this.mouse = { x: sx, y: sy, wx: world.x, wy: world.y };
+      if (event.button === 1 || event.button === 2 || this.tool === 'pan' || this.spaceDown || this.panHold) {
         this.drag = { mode: 'pan', sx, sy, vx: this.view.x, vy: this.view.y };
         this.cv.style.cursor = 'grabbing';
         return;
       }
-      const t = this.tool;
+      const tool = this.tool;
       // Vinger: tikken plaatst een punt of element (bij loslaten), slepen verschuift het plan.
       // Zo zet een tweevinger-pinch nooit per ongeluk een punt neer.
-      if (touch && (t === 'polygon' || t === 'element' || t === 'wand' || t === 'sprinkler')) {
-        this.drag = { mode: 'tap', sx, sy, vx: this.view.x, vy: this.view.y, w: t === 'polygon' ? this.snapPoint(w, e) : w };
+      if (touch && (tool === 'polygon' || tool === 'element' || tool === 'wand' || tool === 'sprinkler')) {
+        this.drag = { mode: 'tap', sx, sy, vx: this.view.x, vy: this.view.y, w: tool === 'polygon' ? this.snapPoint(world, event) : world };
         this.mouse = { x: sx, y: sy, wx: this.drag.w.x, wy: this.drag.w.y };
         this.render();
         return;
       }
-      if (t === 'polygon') {
-        const p = this.snapPoint(w, e);
-        if (!this.draft) this.draft = [p];
-        else if (this.draft.length >= 3 && G.dist(p, this.draft[0]) < this._tol(10) / this.view.scale) this._finishPolygon();
-        else this.draft.push(p);
+      if (tool === 'polygon') {
+        const point = this.snapPoint(world, event);
+        if (!this.draft) this.draft = [point];
+        else if (this.draft.length >= 3 && Geo.dist(point, this.draft[0]) < this._tol(10) / this.view.scale) this._finishPolygon();
+        else this.draft.push(point);
         this.render();
         return;
       }
-      if (t === 'rect' || t === 'calibrate' || t === 'measure') {
-        const p = t === 'rect' ? this.snapPoint(w, e) : w;
-        this.drag = { mode: t, start: p, end: p };
+      if (tool === 'rect' || tool === 'calibrate' || tool === 'measure') {
+        const point = tool === 'rect' ? this.snapPoint(world, event) : world;
+        this.drag = { mode: tool, start: point, end: point };
         return;
       }
-      if (t === 'element') {
-        this.app.placeElement(this.toolOpts.kind, w);
+      if (tool === 'element') {
+        this.app.placeElement(this.toolOpts.kind, world);
         return;
       }
-      if (t === 'wand') {
-        this.app.wandAt(w, this.toolOpts.areaType);
+      if (tool === 'wand') {
+        this.app.wandAt(world, this.toolOpts.areaType);
         return;
       }
-      if (t === 'sprinkler') {
-        this.app.placeSprinkler(this.toolOpts.type, w, this.toolOpts);
+      if (tool === 'sprinkler') {
+        this.app.placeSprinkler(this.toolOpts.type, world, this.toolOpts);
         return;
       }
       // select
-      const hit = this.hitTest(w);
+      const hit = this.hitTest(world);
       if (hit && hit.kind === 'handle') {
         this.drag = { mode: 'handle', id: hit.id, which: hit.which, moved: false, sx, sy };
         return;
@@ -342,9 +429,9 @@
         return;
       }
       if (hit && hit.kind === 'midpoint') {
-        const a = this.state.areas.find((x) => x.id === hit.id);
+        const area = this.state.areas.find((candidate) => candidate.id === hit.id);
         this.app.checkpoint();
-        a.pts.splice(hit.index + 1, 0, this.snapPoint(w, e));
+        area.pts.splice(hit.index + 1, 0, this.snapPoint(world, event));
         this._setActiveVertex({ id: hit.id, index: hit.index + 1 });
         this.drag = { mode: 'vertex', id: hit.id, index: hit.index + 1, moved: true, noCheckpoint: true };
         this.render();
@@ -355,8 +442,8 @@
       this.app.onSelectionChanged();
       if (hit) {
         const obj = this.app.findObject(hit);
-        const orig = hit.kind === 'area' ? obj.pts.map((p) => ({ ...p })) : { x: obj.x, y: obj.y };
-        this.drag = { mode: 'move', hit, start: w, orig, moved: false, withHeads: hit.kind === 'area' && e.altKey };
+        const orig = hit.kind === 'area' ? obj.pts.map((point) => ({ ...point })) : { x: obj.x, y: obj.y };
+        this.drag = { mode: 'move', hit, start: world, orig, moved: false, withHeads: hit.kind === 'area' && event.altKey };
       } else if (touch) {
         // vinger op een lege plek: slepen verschuift het plan
         this.drag = { mode: 'pan', sx, sy, vx: this.view.x, vy: this.view.y };
@@ -364,64 +451,68 @@
       this.render();
     }
 
-    _move(e) {
-      const { sx, sy, w } = this._evPos(e);
-      if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, { x: sx, y: sy });
+    /**
+     * Beweging van muis of vinger: verschuift, sleept of werkt de hover bij.
+     * @param {PointerEvent} event de gebeurtenis
+     */
+    _move(event) {
+      const { sx, sy, w: world } = this._evPos(event);
+      if (this.pointers.has(event.pointerId)) this.pointers.set(event.pointerId, { x: sx, y: sy });
       if (this.pinch) { this._updatePinch(); return; }
       if (this.gestureLock) return;
-      this.mouse = { x: sx, y: sy, wx: w.x, wy: w.y };
-      this.app.onMouseMove(w);
-      const d = this.drag;
-      if (d) {
-        if (d.mode === 'pan') {
-          this.view.x = d.vx - (sx - d.sx) / this.view.scale;
-          this.view.y = d.vy - (sy - d.sy) / this.view.scale;
-        } else if (d.mode === 'tap') {
-          if (!d.panning && Math.hypot(sx - d.sx, sy - d.sy) > 10) d.panning = true;
-          if (d.panning) {
-            this.view.x = d.vx - (sx - d.sx) / this.view.scale;
-            this.view.y = d.vy - (sy - d.sy) / this.view.scale;
+      this.mouse = { x: sx, y: sy, wx: world.x, wy: world.y };
+      this.app.onMouseMove(world);
+      const drag = this.drag;
+      if (drag) {
+        if (drag.mode === 'pan') {
+          this.view.x = drag.vx - (sx - drag.sx) / this.view.scale;
+          this.view.y = drag.vy - (sy - drag.sy) / this.view.scale;
+        } else if (drag.mode === 'tap') {
+          if (!drag.panning && Math.hypot(sx - drag.sx, sy - drag.sy) > 10) drag.panning = true;
+          if (drag.panning) {
+            this.view.x = drag.vx - (sx - drag.sx) / this.view.scale;
+            this.view.y = drag.vy - (sy - drag.sy) / this.view.scale;
           }
           // voorbeeldlijn blijft naar het getikte punt wijzen
-          const ps = this.toScreen(d.w);
-          this.mouse = { x: ps.x, y: ps.y, wx: d.w.x, wy: d.w.y };
-        } else if (d.mode === 'rect') {
-          d.end = this.snapPoint(w, e);
-        } else if (d.mode === 'calibrate' || d.mode === 'measure') {
-          d.end = w;
-        } else if (d.mode === 'vertex') {
-          if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < (this.touch ? 6 : 1)) return;
-          if (!d.moved && !d.noCheckpoint) this.app.checkpoint();
-          d.moved = true;
-          const a = this.state.areas.find((x) => x.id === d.id);
-          a.pts[d.index] = this.snapPoint(w, e);
+          const screenPoint = this.toScreen(drag.w);
+          this.mouse = { x: screenPoint.x, y: screenPoint.y, wx: drag.w.x, wy: drag.w.y };
+        } else if (drag.mode === 'rect') {
+          drag.end = this.snapPoint(world, event);
+        } else if (drag.mode === 'calibrate' || drag.mode === 'measure') {
+          drag.end = world;
+        } else if (drag.mode === 'vertex') {
+          if (!drag.moved && Math.hypot(sx - drag.sx, sy - drag.sy) < (this.touch ? 6 : 1)) return;
+          if (!drag.moved && !drag.noCheckpoint) this.app.checkpoint();
+          drag.moved = true;
+          const area = this.state.areas.find((candidate) => candidate.id === drag.id);
+          area.pts[drag.index] = this.snapPoint(world, event);
           this.app.invalidate();
-        } else if (d.mode === 'handle') {
-          if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < (this.touch ? 6 : 1)) return;
-          if (!d.moved) this.app.checkpoint();
-          d.moved = true;
-          const s = this.state.sprinklers.find((x) => x.id === d.id);
-          if (s) this._dragHandle(s, d.which, w, e.altKey);
+        } else if (drag.mode === 'handle') {
+          if (!drag.moved && Math.hypot(sx - drag.sx, sy - drag.sy) < (this.touch ? 6 : 1)) return;
+          if (!drag.moved) this.app.checkpoint();
+          drag.moved = true;
+          const sprinkler = this.state.sprinklers.find((candidate) => candidate.id === drag.id);
+          if (sprinkler) this._dragHandle(sprinkler, drag.which, world, event.altKey);
           this.app.invalidate();
-        } else if (d.mode === 'move') {
-          const dx = w.x - d.start.x, dy = w.y - d.start.y;
-          if (!d.moved && Math.hypot(dx, dy) * this.view.scale < this._tol(3)) return;
-          if (!d.moved) this.app.checkpoint();
-          d.moved = true;
-          const obj = this.app.findObject(d.hit);
-          if (d.hit.kind === 'area') {
+        } else if (drag.mode === 'move') {
+          const dx = world.x - drag.start.x, dy = world.y - drag.start.y;
+          if (!drag.moved && Math.hypot(dx, dy) * this.view.scale < this._tol(3)) return;
+          if (!drag.moved) this.app.checkpoint();
+          drag.moved = true;
+          const obj = this.app.findObject(drag.hit);
+          if (drag.hit.kind === 'area') {
             let ox = dx, oy = dy;
-            if (this.snap && !e.altKey) { ox = Math.round(dx / this.gridStep) * this.gridStep; oy = Math.round(dy / this.gridStep) * this.gridStep; }
-            obj.pts = d.orig.map((p) => ({ x: p.x + ox, y: p.y + oy }));
+            if (this.snap && !event.altKey) { ox = Math.round(dx / this.gridStep) * this.gridStep; oy = Math.round(dy / this.gridStep) * this.gridStep; }
+            obj.pts = drag.orig.map((point) => ({ x: point.x + ox, y: point.y + oy }));
           } else {
-            obj.x = d.orig.x + dx;
-            obj.y = d.orig.y + dy;
-            if (this.snap && !e.altKey && d.hit.kind === 'sprinkler') {
+            obj.x = drag.orig.x + dx;
+            obj.y = drag.orig.y + dy;
+            if (this.snap && !event.altKey && drag.hit.kind === 'sprinkler') {
               // snap sproeier op dichtstbijzijnde vlakrand als dichtbij
               const tol = this._tol(8) / this.view.scale;
-              for (const a of this.state.areas) {
-                const c = G.closestOnPolygon(obj, a.pts);
-                if (c.d < tol) { obj.x = c.pt.x; obj.y = c.pt.y; break; }
+              for (const area of this.state.areas) {
+                const closest = Geo.closestOnPolygon(obj, area.pts);
+                if (closest.d < tol) { obj.x = closest.pt.x; obj.y = closest.pt.y; break; }
               }
             }
           }
@@ -430,61 +521,69 @@
         this.render();
         return;
       }
-      if (e.pointerType === 'touch') return;
+      if (event.pointerType === 'touch') return;
       if (this.draft || this.tool !== 'select') { this.render(); return; }
-      const hov = this.hitTest(w);
-      const changed = JSON.stringify(hov) !== JSON.stringify(this.hover);
-      this.hover = hov;
-      this.cv.style.cursor = hov ? (hov.kind === 'vertex' || hov.kind === 'midpoint' ? 'pointer' : hov.kind === 'handle' ? 'crosshair' : 'move') : 'default';
+      const hovered = this.hitTest(world);
+      const changed = JSON.stringify(hovered) !== JSON.stringify(this.hover);
+      this.hover = hovered;
+      this.cv.style.cursor = hovered ? (hovered.kind === 'vertex' || hovered.kind === 'midpoint' ? 'pointer' : hovered.kind === 'handle' ? 'crosshair' : 'move') : 'default';
       if (changed) this.render();
     }
 
-    _up(e) {
-      this.pointers.delete(e.pointerId);
+    /**
+     * Einde van een klik of aanraking: rondt het slepen af (vlak toevoegen, kalibreren, meten of vastleggen).
+     * @param {PointerEvent} event de gebeurtenis
+     */
+    _up(event) {
+      this.pointers.delete(event.pointerId);
       if (this.pinch || this.gestureLock) {
         if (this.pointers.size < 2) this.pinch = null;
         if (!this.pointers.size) this.gestureLock = false;
         this.render();
         return;
       }
-      const d = this.drag;
+      const drag = this.drag;
       this.drag = null;
-      if (!d) return;
-      if (d.mode === 'pan') { this._cursor(); return; }
-      if (d.mode === 'tap') {
-        if (!d.panning) this._tap(d.w);
+      if (!drag) return;
+      if (drag.mode === 'pan') { this._cursor(); return; }
+      if (drag.mode === 'tap') {
+        if (!drag.panning) this._tap(drag.w);
         this.render();
         return;
       }
-      if (d.mode === 'rect') {
-        const a = d.start, b = d.end;
-        if (Math.abs(a.x - b.x) > 0.2 && Math.abs(a.y - b.y) > 0.2) {
+      if (drag.mode === 'rect') {
+        const startCorner = drag.start, endCorner = drag.end;
+        if (Math.abs(startCorner.x - endCorner.x) > 0.2 && Math.abs(startCorner.y - endCorner.y) > 0.2) {
           this.app.addArea(this.toolOpts.areaType, [
-            { x: a.x, y: a.y }, { x: b.x, y: a.y }, { x: b.x, y: b.y }, { x: a.x, y: b.y },
+            { x: startCorner.x, y: startCorner.y }, { x: endCorner.x, y: startCorner.y }, { x: endCorner.x, y: endCorner.y }, { x: startCorner.x, y: endCorner.y },
           ]);
         }
         this.render();
         return;
       }
-      if (d.mode === 'calibrate') {
-        const len = G.dist(d.start, d.end);
-        if (len > 0.01) this.app.calibrate(len);
+      if (drag.mode === 'calibrate') {
+        const length = Geo.dist(drag.start, drag.end);
+        if (length > 0.01) this.app.calibrate(length);
         this.render();
         return;
       }
-      if (d.mode === 'measure') {
-        this.lastMeasure = { a: d.start, b: d.end };
+      if (drag.mode === 'measure') {
+        this.lastMeasure = { a: drag.start, b: drag.end };
         this.render();
         return;
       }
-      if ((d.mode === 'move' || d.mode === 'vertex' || d.mode === 'handle') && d.moved) {
-        if (d.mode === 'move' && d.hit.kind === 'sprinkler') this.app.afterSprinklerMoved(d.hit.id);
+      if ((drag.mode === 'move' || drag.mode === 'vertex' || drag.mode === 'handle') && drag.moved) {
+        if (drag.mode === 'move' && drag.hit.kind === 'sprinkler') this.app.afterSprinklerMoved(drag.hit.id);
         this.app.commit();
       }
     }
 
-    _cancel(e) {
-      this.pointers.delete(e.pointerId);
+    /**
+     * Geannuleerde aanraking: vingers vergeten en het slepen afbreken.
+     * @param {PointerEvent} event de gebeurtenis
+     */
+    _cancel(event) {
+      this.pointers.delete(event.pointerId);
       if (this.pointers.size < 2) this.pinch = null;
       if (!this.pointers.size) this.gestureLock = false;
       this._abortDrag();
@@ -493,64 +592,80 @@
 
     /** Breekt een lopende sleepactie af (tweede vinger of geannuleerd gebaar). */
     _abortDrag() {
-      const d = this.drag;
+      const drag = this.drag;
       this.drag = null;
-      if (d && (d.mode === 'move' || d.mode === 'vertex' || d.mode === 'handle') && d.moved) this.app.commit();
+      if (drag && (drag.mode === 'move' || drag.mode === 'vertex' || drag.mode === 'handle') && drag.moved) this.app.commit();
     }
 
-    /** Tik met de vinger in een teken- of plaatsgereedschap. */
-    _tap(w) {
-      const t = this.tool;
-      if (t === 'polygon') {
-        if (!this.draft) this.draft = [w];
-        else if (this.draft.length >= 3 && G.dist(w, this.draft[0]) < this._tol(10) / this.view.scale) this._finishPolygon();
-        else this.draft.push(w);
-      } else if (t === 'element') this.app.placeElement(this.toolOpts.kind, w);
-      else if (t === 'wand') this.app.wandAt(w, this.toolOpts.areaType);
-      else if (t === 'sprinkler') this.app.placeSprinkler(this.toolOpts.type, w, this.toolOpts);
+    /**
+     * Tik met de vinger in een teken- of plaatsgereedschap.
+     * @param {{x: number, y: number}} world getikt punt in meters
+     */
+    _tap(world) {
+      const tool = this.tool;
+      if (tool === 'polygon') {
+        if (!this.draft) this.draft = [world];
+        else if (this.draft.length >= 3 && Geo.dist(world, this.draft[0]) < this._tol(10) / this.view.scale) this._finishPolygon();
+        else this.draft.push(world);
+      } else if (tool === 'element') this.app.placeElement(this.toolOpts.kind, world);
+      else if (tool === 'wand') this.app.wandAt(world, this.toolOpts.areaType);
+      else if (tool === 'sprinkler') this.app.placeSprinkler(this.toolOpts.type, world, this.toolOpts);
     }
 
     // ---------- Pinch (twee vingers: zoomen en verschuiven) ----------
+    /**
+     * Afstand en midden van de twee vingers.
+     * @returns {{dist: number, mid: {x: number, y: number}}} afstand en middelpunt in schermpixels
+     */
     _pinchInfo() {
-      const [a, b] = [...this.pointers.values()];
-      return { dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+      const [first, second] = [...this.pointers.values()];
+      return { dist: Math.max(1, Math.hypot(first.x - second.x, first.y - second.y)), mid: { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 } };
     }
 
+    /** Begint een pinch-gebaar (twee vingers): onthoudt afstand, ankerpunt en zoom. */
     _startPinch() {
       this._abortDrag();
       this.gestureLock = true;
-      const p = this._pinchInfo();
-      this.pinch = { dist: p.dist, anchor: this.toWorld(p.mid.x, p.mid.y), scale: this.view.scale };
+      const info = this._pinchInfo();
+      this.pinch = { dist: info.dist, anchor: this.toWorld(info.mid.x, info.mid.y), scale: this.view.scale };
       this.render();
     }
 
+    /** Werkt zoom en positie bij tijdens een pinch-gebaar. */
     _updatePinch() {
       if (this.pointers.size < 2) return;
-      const p = this._pinchInfo();
-      const pc = this.pinch;
+      const info = this._pinchInfo();
+      const pinch = this.pinch;
       // het wereldpunt onder het beginmidden blijft onder het huidige midden van de vingers
-      this.view.scale = Math.max(2, Math.min(400, pc.scale * (p.dist / pc.dist)));
-      this.view.x = pc.anchor.x - p.mid.x / this.view.scale;
-      this.view.y = pc.anchor.y - p.mid.y / this.view.scale;
+      this.view.scale = Math.max(2, Math.min(400, pinch.scale * (info.dist / pinch.dist)));
+      this.view.x = pinch.anchor.x - info.mid.x / this.view.scale;
+      this.view.y = pinch.anchor.y - info.mid.y / this.view.scale;
       this.render();
     }
 
-    /** Onthoudt het aangetikte hoekpunt; het eigenschappenpaneel toont dan 'Punt verwijderen'. */
-    _setActiveVertex(v) {
-      const changed = JSON.stringify(v) !== JSON.stringify(this.activeVertex);
-      this.activeVertex = v;
+    /**
+     * Onthoudt het aangetikte hoekpunt; het eigenschappenpaneel toont dan 'Punt verwijderen'.
+     * @param {{id: string, index: number}|null} vertex vlak-id en index van het hoekpunt
+     */
+    _setActiveVertex(vertex) {
+      const changed = JSON.stringify(vertex) !== JSON.stringify(this.activeVertex);
+      this.activeVertex = vertex;
       if (changed) this.app.onSelectionChanged();
     }
 
-    /** Verwijdert het aangetikte hoekpunt van het geselecteerde vlak (minimaal 3 blijven). */
-    removeVertex(v = this.activeVertex) {
-      const a = v && this.state.areas.find((x) => x.id === v.id);
-      if (!a || !a.pts[v.index]) return false;
-      if (a.pts.length <= 3) { this.app.toast('Een vlak heeft minimaal 3 punten. Verwijder het vlak of teken het opnieuw.', true); return false; }
+    /**
+     * Verwijdert het aangetikte hoekpunt van het geselecteerde vlak (minimaal 3 blijven).
+     * @param {{id: string, index: number}} vertex vlak-id en index van het hoekpunt
+     * @returns {boolean} true als het punt verwijderd is
+     */
+    removeVertex(vertex = this.activeVertex) {
+      const area = vertex && this.state.areas.find((candidate) => candidate.id === vertex.id);
+      if (!area || !area.pts[vertex.index]) return false;
+      if (area.pts.length <= 3) { this.app.toast('Een vlak heeft minimaal 3 punten. Verwijder het vlak of teken het opnieuw.', true); return false; }
       this.app.checkpoint();
-      a.pts.splice(v.index, 1);
+      area.pts.splice(vertex.index, 1);
       this.activeVertex = null;
-      this.app.areaShapeChanged(a.id);
+      this.app.areaShapeChanged(area.id);
       return true;
     }
 
@@ -570,29 +685,34 @@
       if (this.draft && !this.toolOpts.redrawId) { this.draft = null; this.panHold = false; this._cursor(); this.render(); } else this.setTool('select');
     }
 
-    _dbl(e) {
+    /**
+     * Dubbelklik: hoekpunt verwijderen of de getekende vorm sluiten.
+     * @param {MouseEvent} event de gebeurtenis
+     */
+    _dbl(event) {
       if (this.touch) return; // dubbeltik op touch: niet als 'sluiten' opvatten
-      if (this.tool === 'select' && this.activeVertex && e) {
+      if (this.tool === 'select' && this.activeVertex && event) {
         // dubbelklik op een hoekpunt van het geselecteerde vlak: punt weg
-        const hit = this.hitTest(this._evPos(e).w);
+        const hit = this.hitTest(this._evPos(event).w);
         if (hit && hit.kind === 'vertex') { this.removeVertex({ id: hit.id, index: hit.index }); return; }
       }
       if (this.tool === 'polygon' && this.draft) {
         // dubbelklik voegt een extra punt toe bij mousedown; verwijder duplicaat
         if (this.draft.length >= 2) {
-          const n = this.draft.length;
-          if (G.dist(this.draft[n - 1], this.draft[n - 2]) < 1e-6) this.draft.pop();
+          const count = this.draft.length;
+          if (Geo.dist(this.draft[count - 1], this.draft[count - 2]) < 1e-6) this.draft.pop();
         }
         this._finishPolygon();
       }
     }
 
+    /** Sluit de getekende vorm: nieuw vlak, of de nieuwe vorm van een opnieuw getekend vlak. */
     _finishPolygon() {
-      const pts = this.draft || [];
+      const points = this.draft || [];
       this.draft = null;
       this.panHold = false;
       this._cursor();
-      const clean = pts.filter((p, i) => i === 0 || G.dist(p, pts[i - 1]) > 1e-6);
+      const clean = points.filter((point, i) => i === 0 || Geo.dist(point, points[i - 1]) > 1e-6);
       if (clean.length >= 3 && this.toolOpts.redrawId) {
         // 'Opnieuw tekenen': zelfde vlak (naam, type, zone) met de nieuwe vorm
         const id = this.toolOpts.redrawId;
@@ -605,6 +725,7 @@
     }
 
     // ---------- Rendering ----------
+    /** Vraagt een nieuwe tekening aan (hooguit één per beeldverversing) en werkt tekenbalk en legenda bij. */
     render() {
       if (this.app.updateDrawBar) this.app.updateDrawBar();
       if (this.app.updateLegend) this.app.updateLegend();
@@ -612,55 +733,67 @@
       this._raf = requestAnimationFrame(() => { this._raf = null; this.draw(this.ctx, this.w, this.h, this.dpr); });
     }
 
-    /** Tekent de volledige scène; herbruikbaar voor export naar PNG. */
-    draw(ctx, w, h, dpr = 1, opts = {}) {
-      const st = this.state;
+    /**
+     * Tekent de volledige scène; herbruikbaar voor export naar PNG.
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {number} width breedte in CSS-pixels
+     * @param {number} height hoogte in CSS-pixels
+     * @param {number} dpr pixelverhouding van het scherm
+     * @param {{noGrid: boolean, noScale: boolean}} opts raster of schaalbalk weglaten
+     */
+    draw(ctx, width, height, dpr = 1, opts = {}) {
+      const planState = this.state;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = '#fafafa';
-      ctx.fillRect(0, 0, w, h);
-      const S = this.view.scale;
-      const T = (p) => this.toScreen(p);
+      ctx.fillRect(0, 0, width, height);
+      const scale = this.view.scale;
+      /**
+       * Rekent een punt in meters om naar schermpixels.
+       * @param {{x: number, y: number}} point punt in meters
+       * @returns {{x: number, y: number}} punt in schermpixels
+       */
+      const toScreenPoint = (point) => this.toScreen(point);
 
       // Achtergrond
-      if (this.layers.background && st.background && st.background.dataUrl && this.bgImg && this.bgImg.complete) {
-        const bg = st.background;
-        const r = this._bgSource(bg, w, h);
-        if (r) {
+      if (this.layers.background && planState.background && planState.background.dataUrl && this.bgImg && this.bgImg.complete) {
+        const bg = planState.background;
+        const source = this._bgSource(bg, width, height);
+        if (source) {
           ctx.globalAlpha = bg.opacity != null ? bg.opacity : 0.6;
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(this.bgImg, r.sx, r.sy, r.sw, r.sh, r.dx, r.dy, r.dw, r.dh);
+          ctx.drawImage(this.bgImg, source.sx, source.sy, source.sw, source.sh, source.dx, source.dy, source.dw, source.dh);
           ctx.globalAlpha = 1;
         }
       }
 
-      if (!opts.noGrid) this._grid(ctx, w, h);
+      if (!opts.noGrid) this._grid(ctx, width, height);
 
       // Vlakken
-      for (const a of st.areas) {
-        if (a.pts.length < 2) continue;
-        const at = C.areaTypes[a.type] || C.areaTypes.lawn;
+      for (const area of planState.areas) {
+        if (area.pts.length < 2) continue;
+        const areaType = Catalog.areaTypes[area.type] || Catalog.areaTypes.lawn;
         ctx.beginPath();
-        a.pts.forEach((p, i) => { const s = T(p); i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y); });
+        area.pts.forEach((point, i) => { const screenPoint = toScreenPoint(point); i ? ctx.lineTo(screenPoint.x, screenPoint.y) : ctx.moveTo(screenPoint.x, screenPoint.y); });
         ctx.closePath();
-        ctx.fillStyle = at.fill;
+        ctx.fillStyle = areaType.fill;
         ctx.fill();
-        const sel = this.selection && this.selection.kind === 'area' && this.selection.id === a.id;
-        const hov = this.hover && this.hover.kind === 'area' && this.hover.id === a.id;
-        ctx.strokeStyle = sel ? '#ff6f00' : at.stroke;
+        const selected = this.selection && this.selection.kind === 'area' && this.selection.id === area.id;
+        const hovered = this.hover && this.hover.kind === 'area' && this.hover.id === area.id;
+        ctx.strokeStyle = selected ? '#ff6f00' : areaType.stroke;
         // rand op elk zoomniveau goed zichtbaar op een drukke tekening
-        ctx.lineWidth = sel ? 3 : hov ? 2.5 : 2;
-        if (a.type === 'wet') ctx.setLineDash([6, 4]);
+        ctx.lineWidth = selected ? 3 : hovered ? 2.5 : 2;
+        if (area.type === 'wet') ctx.setLineDash([6, 4]);
         ctx.stroke();
         ctx.setLineDash([]);
-        const method = window.Hydraulics.methodOf(st, a);
-        if (method === 'dripline') this._dripHatch(ctx, a);
-        else if (method === 'drippers') this._drippersDots(ctx, a);
-        if (a.zone && window.Hydraulics.isDripMethod(method)) {
-          const z = st.zones.find((zz) => zz.id === a.zone);
-          if (z) {
+        const method = window.Hydraulics.methodOf(planState, area);
+        if (method === 'dripline') this._dripHatch(ctx, area);
+        else if (method === 'drippers') this._drippersDots(ctx, area);
+        if (area.zone && window.Hydraulics.isDripMethod(method)) {
+          const zone = planState.zones.find((candidate) => candidate.id === area.zone);
+          if (zone) {
             ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 5; ctx.stroke();
-            ctx.strokeStyle = z.color; ctx.lineWidth = 3; ctx.setLineDash([2, 3]); ctx.stroke(); ctx.setLineDash([]);
+            ctx.strokeStyle = zone.color; ctx.lineWidth = 3; ctx.setLineDash([2, 3]); ctx.stroke(); ctx.setLineDash([]);
           }
         }
       }
@@ -668,318 +801,377 @@
       // Neerslagkaart
       if (this.layers.heatmap && this.heat) {
         const sim = this.heat.sim;
-        const p = T({ x: sim.minX - sim.cellX / 2, y: sim.minY - sim.cellY / 2 });
+        const corner = toScreenPoint({ x: sim.minX - sim.cellX / 2, y: sim.minY - sim.cellY / 2 });
         ctx.imageSmoothingEnabled = true;
-        ctx.drawImage(this.heat.canvas, p.x, p.y, sim.nx * sim.cellX * S, sim.ny * sim.cellY * S);
+        ctx.drawImage(this.heat.canvas, corner.x, corner.y, sim.nx * sim.cellX * scale, sim.ny * sim.cellY * scale);
       }
 
       // Leidingen
-      if (this.layers.pipes && st.calc) {
-        for (const pp of st.calc.pipes) {
-          const a = T(pp.a), b = T(pp.b);
-          const z = st.zones.find((zz) => zz.id === pp.zone);
-          const lw = Math.max(1.5, (pp.dn / 25) * 2.2);
-          if (pp.outlet) ctx.setLineDash([5, 3]);
+      if (this.layers.pipes && planState.calc) {
+        for (const pipe of planState.calc.pipes) {
+          const from = toScreenPoint(pipe.a), to = toScreenPoint(pipe.b);
+          const zone = planState.zones.find((candidate) => candidate.id === pipe.zone);
+          const lineWidth = Math.max(1.5, (pipe.dn / 25) * 2.2);
+          if (pipe.outlet) ctx.setLineDash([5, 3]);
           // witte rand eronder: de leiding blijft zichtbaar op gazon en tekening
           ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-          ctx.lineWidth = lw + 3;
-          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-          ctx.strokeStyle = pp.main ? '#01579b' : pp.outlet ? '#00838f' : z ? z.color : '#555';
-          ctx.lineWidth = lw;
-          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          ctx.lineWidth = lineWidth + 3;
+          ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
+          ctx.strokeStyle = pipe.main ? '#01579b' : pipe.outlet ? '#00838f' : zone ? zone.color : '#555';
+          ctx.lineWidth = lineWidth;
+          ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
           ctx.setLineDash([]);
-          if (this.layers.labels && S > 25 && pp.len > 1.5) {
-            const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-            this._label(ctx, `${pp.dn}`, m.x, m.y, '#fff', ctx.strokeStyle, 9);
+          if (this.layers.labels && scale > 25 && pipe.len > 1.5) {
+            const middle = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+            this._label(ctx, `${pipe.dn}`, middle.x, middle.y, '#fff', ctx.strokeStyle, 9);
           }
         }
       }
 
       // Worpbereik van sproeiers
       if (this.layers.coverage) {
-        for (const s of st.sprinklers) this._coverage(ctx, s);
+        for (const sprinkler of planState.sprinklers) this._coverage(ctx, sprinkler);
       }
 
       // Sproeierkoppen
-      for (const s of st.sprinklers) this._head(ctx, s);
+      for (const sprinkler of planState.sprinklers) this._head(ctx, sprinkler);
 
       // Grepen van de geselecteerde sproeier
       if (this.selection && this.selection.kind === 'sprinkler') {
-        const s = st.sprinklers.find((x) => x.id === this.selection.id);
-        if (s) this._sprinklerGrips(ctx, s);
+        const sprinkler = planState.sprinklers.find((candidate) => candidate.id === this.selection.id);
+        if (sprinkler) this._sprinklerGrips(ctx, sprinkler);
       }
 
       // Systeemelementen
-      for (const e of st.elements) this._element(ctx, e);
+      for (const element of planState.elements) this._element(ctx, element);
 
       // Geselecteerd vlak: hoekpunten + randmaten
       if (this.selection && this.selection.kind === 'area') {
-        const a = st.areas.find((x) => x.id === this.selection.id);
-        if (a) this._areaHandles(ctx, a);
+        const area = planState.areas.find((candidate) => candidate.id === this.selection.id);
+        if (area) this._areaHandles(ctx, area);
       }
 
       // Concept-polygoon. Op touch alleen een voorbeeldlijn zolang de vinger een nieuw punt vasthoudt.
-      const dr = this.drag;
-      const tapPt = dr && dr.mode === 'tap' && !dr.panning && this.tool === 'polygon' ? dr.w : null;
+      const activeDrag = this.drag;
+      const tapPt = activeDrag && activeDrag.mode === 'tap' && !activeDrag.panning && this.tool === 'polygon' ? activeDrag.w : null;
       if (this.draft && this.draft.length) {
         const live = !this.touch || tapPt;
-        const m = tapPt || this.snapPoint({ x: this.mouse.wx, y: this.mouse.wy });
+        const target = tapPt || this.snapPoint({ x: this.mouse.wx, y: this.mouse.wy });
         ctx.strokeStyle = '#ff6f00';
         ctx.lineWidth = 2;
         ctx.setLineDash([6, 4]);
         ctx.beginPath();
-        this.draft.forEach((p, i) => { const s = T(p); i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y); });
-        const ms = T(m);
-        if (live) ctx.lineTo(ms.x, ms.y);
+        this.draft.forEach((point, i) => { const screenPoint = toScreenPoint(point); i ? ctx.lineTo(screenPoint.x, screenPoint.y) : ctx.moveTo(screenPoint.x, screenPoint.y); });
+        const targetScreen = toScreenPoint(target);
+        if (live) ctx.lineTo(targetScreen.x, targetScreen.y);
         ctx.stroke();
         ctx.setLineDash([]);
-        this.draft.forEach((p) => { const s = T(p); ctx.fillStyle = '#ff6f00'; ctx.fillRect(s.x - 3, s.y - 3, 6, 6); });
+        this.draft.forEach((point) => { const screenPoint = toScreenPoint(point); ctx.fillStyle = '#ff6f00'; ctx.fillRect(screenPoint.x - 3, screenPoint.y - 3, 6, 6); });
         const last = this.draft[this.draft.length - 1];
-        const off = this.touch ? 34 : 12; // label niet onder de vinger
-        if (live) this._label(ctx, `${G.nl(G.dist(last, m), 2)} m`, ms.x + off, ms.y - off, '#ff6f00', '#fff', this.touch ? 13 : 11);
+        const offset = this.touch ? 34 : 12; // label niet onder de vinger
+        if (live) this._label(ctx, `${Geo.nl(Geo.dist(last, target), 2)} m`, targetScreen.x + offset, targetScreen.y - offset, '#ff6f00', '#fff', this.touch ? 13 : 11);
         if (this.touch && this.draft.length >= 3) {
           // vangzone van het eerste punt: hier tikken sluit de vorm
-          const f = T(this.draft[0]);
+          const firstPoint = toScreenPoint(this.draft[0]);
           ctx.strokeStyle = '#ff6f00'; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.arc(f.x, f.y, this._tol(10), 0, Math.PI * 2);
+          ctx.beginPath(); ctx.arc(firstPoint.x, firstPoint.y, this._tol(10), 0, Math.PI * 2);
           ctx.fillStyle = 'rgba(255,111,0,0.15)'; ctx.fill(); ctx.stroke();
         }
       }
       if (tapPt) {
-        const ms = T(tapPt);
+        const tapScreen = toScreenPoint(tapPt);
         ctx.strokeStyle = '#ff6f00'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(ms.x, ms.y, 8, 0, Math.PI * 2); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(ms.x - 14, ms.y); ctx.lineTo(ms.x + 14, ms.y); ctx.moveTo(ms.x, ms.y - 14); ctx.lineTo(ms.x, ms.y + 14); ctx.stroke();
+        ctx.beginPath(); ctx.arc(tapScreen.x, tapScreen.y, 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(tapScreen.x - 14, tapScreen.y); ctx.lineTo(tapScreen.x + 14, tapScreen.y); ctx.moveTo(tapScreen.x, tapScreen.y - 14); ctx.lineTo(tapScreen.x, tapScreen.y + 14); ctx.stroke();
       }
 
-      const d = this.drag;
-      if (d && (d.mode === 'rect')) {
-        const a = T(d.start), b = T(d.end);
+      const drag = this.drag;
+      if (drag && (drag.mode === 'rect')) {
+        const from = toScreenPoint(drag.start), to = toScreenPoint(drag.end);
         ctx.strokeStyle = '#ff6f00'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
-        ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+        ctx.strokeRect(Math.min(from.x, to.x), Math.min(from.y, to.y), Math.abs(from.x - to.x), Math.abs(from.y - to.y));
         ctx.setLineDash([]);
-        this._label(ctx, `${G.nl(Math.abs(d.end.x - d.start.x), 2)} × ${G.nl(Math.abs(d.end.y - d.start.y), 2)} m`, b.x + 12, b.y - 12, '#ff6f00', '#fff', 11);
+        this._label(ctx, `${Geo.nl(Math.abs(drag.end.x - drag.start.x), 2)} × ${Geo.nl(Math.abs(drag.end.y - drag.start.y), 2)} m`, to.x + 12, to.y - 12, '#ff6f00', '#fff', 11);
       }
-      const ml = d && (d.mode === 'calibrate' || d.mode === 'measure') ? { a: d.start, b: d.end } : this.tool === 'measure' ? this.lastMeasure : null;
-      if (ml) {
-        const a = T(ml.a), b = T(ml.b);
-        ctx.strokeStyle = d && d.mode === 'calibrate' ? '#d81b60' : '#6a1b9a';
+      const measureLine = drag && (drag.mode === 'calibrate' || drag.mode === 'measure') ? { a: drag.start, b: drag.end } : this.tool === 'measure' ? this.lastMeasure : null;
+      if (measureLine) {
+        const from = toScreenPoint(measureLine.a), to = toScreenPoint(measureLine.b);
+        ctx.strokeStyle = drag && drag.mode === 'calibrate' ? '#d81b60' : '#6a1b9a';
         ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-        this._label(ctx, `${G.nl(G.dist(ml.a, ml.b), 2)} m`, (a.x + b.x) / 2, (a.y + b.y) / 2 - 12, ctx.strokeStyle, '#fff', 11);
+        ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
+        this._label(ctx, `${Geo.nl(Geo.dist(measureLine.a, measureLine.b), 2)} m`, (from.x + to.x) / 2, (from.y + to.y) / 2 - 12, ctx.strokeStyle, '#fff', 11);
       }
 
-      if (!opts.noScale) this._scaleBar(ctx, w, h);
+      if (!opts.noScale) this._scaleBar(ctx, width, height);
     }
 
     /**
      * Alleen het zichtbare deel van de ondergrond (bronrechthoek in beeldpixels + doel op het scherm).
      * Ingezoomd zou het hele beeld vele malen groter dan het canvas getekend worden; Safari op de
      * iPhone verliest dan fijne lijnen en zet de tekening soms verschoven neer.
+     * @param {object} bg de ondergrond (x, y, scale)
+     * @param {number} width breedte van het canvas in CSS-pixels
+     * @param {number} height hoogte van het canvas in CSS-pixels
+     * @returns {object|null} bron (sx, sy, sw, sh) en doel (dx, dy, dw, dh), of null als niets zichtbaar is
      */
-    _bgSource(bg, w, h) {
-      const img = this.bgImg, S = this.view.scale, k = bg.scale * S; // schermpx per beeldpx
-      if (!(k > 0)) return null;
-      const o = this.toScreen({ x: bg.x, y: bg.y });
-      const sx = Math.max(0, Math.floor(-o.x / k)), sy = Math.max(0, Math.floor(-o.y / k));
-      const ex = Math.min(img.width, Math.ceil((w - o.x) / k)), ey = Math.min(img.height, Math.ceil((h - o.y) / k));
+    _bgSource(bg, width, height) {
+      const image = this.bgImg, scale = this.view.scale, pixelScale = bg.scale * scale; // schermpx per beeldpx
+      if (!(pixelScale > 0)) return null;
+      const origin = this.toScreen({ x: bg.x, y: bg.y });
+      const sx = Math.max(0, Math.floor(-origin.x / pixelScale)), sy = Math.max(0, Math.floor(-origin.y / pixelScale));
+      const ex = Math.min(image.width, Math.ceil((width - origin.x) / pixelScale)), ey = Math.min(image.height, Math.ceil((height - origin.y) / pixelScale));
       if (ex <= sx || ey <= sy) return null;
-      return { sx, sy, sw: ex - sx, sh: ey - sy, dx: o.x + sx * k, dy: o.y + sy * k, dw: (ex - sx) * k, dh: (ey - sy) * k };
+      return { sx, sy, sw: ex - sx, sh: ey - sy, dx: origin.x + sx * pixelScale, dy: origin.y + sy * pixelScale, dw: (ex - sx) * pixelScale, dh: (ey - sy) * pixelScale };
     }
 
-    _grid(ctx, w, h) {
-      const S = this.view.scale;
+    /**
+     * Tekent het raster; de stap volgt het zoomniveau.
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {number} width breedte in CSS-pixels
+     * @param {number} height hoogte in CSS-pixels
+     */
+    _grid(ctx, width, height) {
+      const scale = this.view.scale;
       let step = 1;
-      if (S < 8) step = 10; else if (S < 20) step = 5; else if (S > 120) step = 0.5;
-      const tl = this.toWorld(0, 0), br = this.toWorld(w, h);
+      if (scale < 8) step = 10; else if (scale < 20) step = 5; else if (scale > 120) step = 0.5;
+      const topLeft = this.toWorld(0, 0), bottomRight = this.toWorld(width, height);
       ctx.lineWidth = 1;
       // Met een telling in plaats van x += step: bij heel grote coördinaten
       // verandert x anders niet meer en blijft de lus eindeloos doorgaan.
-      const firstX = Math.floor(tl.x / step), firstY = Math.floor(tl.y / step);
-      const countX = Math.floor(br.x / step) - firstX, countY = Math.floor(br.y / step) - firstY;
+      const firstX = Math.floor(topLeft.x / step), firstY = Math.floor(topLeft.y / step);
+      const countX = Math.floor(bottomRight.x / step) - firstX, countY = Math.floor(bottomRight.y / step) - firstY;
       if (!Number.isFinite(countX) || !Number.isFinite(countY) || countX > 4000 || countY > 4000) return;
       for (let i = 0; i <= countX; i++) {
         const x = (firstX + i) * step;
-        const sx = Math.round((x - this.view.x) * S) + 0.5;
+        const screenX = Math.round((x - this.view.x) * scale) + 0.5;
         ctx.strokeStyle = Math.abs(x % (step * 5)) < 1e-6 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.05)';
-        ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, h); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(screenX, 0); ctx.lineTo(screenX, height); ctx.stroke();
       }
       for (let j = 0; j <= countY; j++) {
         const y = (firstY + j) * step;
-        const sy = Math.round((y - this.view.y) * S) + 0.5;
+        const screenY = Math.round((y - this.view.y) * scale) + 0.5;
         ctx.strokeStyle = Math.abs(y % (step * 5)) < 1e-6 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.05)';
-        ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(w, sy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, screenY); ctx.lineTo(width, screenY); ctx.stroke();
       }
     }
 
-    _dripHatch(ctx, a) {
-      const spacing = a.type === 'hedge' ? C.drip.rowSpacingHedge : a.type === 'planter' ? C.drip.rowSpacingPlanter : C.drip.rowSpacingBed;
-      const S = this.view.scale;
-      if (spacing * S < 4) return;
-      const rect = G.minWidthRect(a.pts);
+    /**
+     * Tekent de rijen druppelslang als arcering in een vlak.
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {object} area het vlak
+     */
+    _dripHatch(ctx, area) {
+      const spacing = area.type === 'hedge' ? Catalog.drip.rowSpacingHedge : area.type === 'planter' ? Catalog.drip.rowSpacingPlanter : Catalog.drip.rowSpacingBed;
+      const scale = this.view.scale;
+      if (spacing * scale < 4) return;
+      const rect = Geo.minWidthRect(area.pts);
       ctx.save();
       ctx.beginPath();
-      a.pts.forEach((p, i) => { const s = this.toScreen(p); i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y); });
+      area.pts.forEach((point, i) => { const screenPoint = this.toScreen(point); i ? ctx.lineTo(screenPoint.x, screenPoint.y) : ctx.moveTo(screenPoint.x, screenPoint.y); });
       ctx.closePath();
       ctx.clip();
       ctx.strokeStyle = 'rgba(62,39,35,0.55)';
       ctx.lineWidth = 1;
       ctx.setLineDash([2, 4]);
-      for (let v = rect.minV + spacing / 2; v < rect.maxV; v += spacing) {
-        const p1 = this.toScreen(G.add(G.mul(rect.u, rect.minU), G.mul(rect.v, v)));
-        const p2 = this.toScreen(G.add(G.mul(rect.u, rect.maxU), G.mul(rect.v, v)));
+      for (let offset = rect.minV + spacing / 2; offset < rect.maxV; offset += spacing) {
+        const p1 = this.toScreen(Geo.add(Geo.mul(rect.u, rect.minU), Geo.mul(rect.v, offset)));
+        const p2 = this.toScreen(Geo.add(Geo.mul(rect.u, rect.maxU), Geo.mul(rect.v, offset)));
         ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
       }
       ctx.restore();
     }
 
-    /** Druppelaars: stippen op de plantafstand. */
-    _drippersDots(ctx, a) {
-      const S = this.view.scale;
-      const per = a.type === 'planter' ? C.drippers.perM2Planter : C.drippers.perM2Bed;
-      const step = 1 / Math.sqrt(per);
-      if (step * S < 6) return;
-      const bb = G.bbox(a.pts);
+    /**
+     * Druppelaars: stippen op de plantafstand.
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {object} area het vlak
+     */
+    _drippersDots(ctx, area) {
+      const scale = this.view.scale;
+      const perSquareMetre = area.type === 'planter' ? Catalog.drippers.perM2Planter : Catalog.drippers.perM2Bed;
+      const step = 1 / Math.sqrt(perSquareMetre);
+      if (step * scale < 6) return;
+      const box = Geo.bbox(area.pts);
       ctx.fillStyle = 'rgba(62,39,35,0.7)';
-      for (let y = bb.minY + step / 2; y < bb.maxY; y += step) {
-        for (let x = bb.minX + step / 2; x < bb.maxX; x += step) {
-          if (!G.pointInPolygon({ x, y }, a.pts)) continue;
-          const p = this.toScreen({ x, y });
-          ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2); ctx.fill();
+      for (let y = box.minY + step / 2; y < box.maxY; y += step) {
+        for (let x = box.minX + step / 2; x < box.maxX; x += step) {
+          if (!Geo.pointInPolygon({ x, y }, area.pts)) continue;
+          const screenPoint = this.toScreen({ x, y });
+          ctx.beginPath(); ctx.arc(screenPoint.x, screenPoint.y, 2, 0, Math.PI * 2); ctx.fill();
         }
       }
     }
 
-    _zoneColor(s) {
-      const z = s.zone && this.state.zones.find((zz) => zz.id === s.zone);
-      return z ? z.color : C.sprinklerTypes[s.type].color;
+    /**
+     * Kleur van de zone van een sproeier, anders de kleur van zijn type.
+     * @param {object} sprinkler de sproeier
+     * @returns {string} kleur (#rrggbb)
+     */
+    _zoneColor(sprinkler) {
+      const zone = sprinkler.zone && this.state.zones.find((candidate) => candidate.id === sprinkler.zone);
+      return zone ? zone.color : Catalog.sprinklerTypes[sprinkler.type].color;
     }
 
-    _coverage(ctx, s) {
-      const S = this.view.scale;
-      const p = this.toScreen(s);
-      const col = this._zoneColor(s);
-      ctx.fillStyle = this.layers.heatmap ? 'transparent' : col + '22';
-      ctx.strokeStyle = col + (this.layers.heatmap ? '55' : '88');
+    /**
+     * Tekent het worpbereik van een sproeier (cirkel, sector of strook).
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {object} sprinkler de sproeier
+     */
+    _coverage(ctx, sprinkler) {
+      const scale = this.view.scale;
+      const center = this.toScreen(sprinkler);
+      const color = this._zoneColor(sprinkler);
+      ctx.fillStyle = this.layers.heatmap ? 'transparent' : color + '22';
+      ctx.strokeStyle = color + (this.layers.heatmap ? '55' : '88');
       ctx.lineWidth = 1;
       ctx.beginPath();
-      if (s.type === 'strip') {
-        const a = G.rad(s.start);
-        const u = { x: Math.cos(a), y: Math.sin(a) }, n = { x: -u.y, y: u.x };
-        const c = [G.add(s, G.mul(u, -s.len / 2)), G.add(s, G.mul(u, s.len / 2))];
-        const pts = [c[0], c[1], G.add(c[1], G.mul(n, s.width)), G.add(c[0], G.mul(n, s.width))].map((q) => this.toScreen(q));
-        pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+      if (sprinkler.type === 'strip') {
+        const angle = Geo.rad(sprinkler.start);
+        const direction = { x: Math.cos(angle), y: Math.sin(angle) }, normal = { x: -direction.y, y: direction.x };
+        const ends = [Geo.add(sprinkler, Geo.mul(direction, -sprinkler.len / 2)), Geo.add(sprinkler, Geo.mul(direction, sprinkler.len / 2))];
+        const corners = [ends[0], ends[1], Geo.add(ends[1], Geo.mul(normal, sprinkler.width)), Geo.add(ends[0], Geo.mul(normal, sprinkler.width))].map((point) => this.toScreen(point));
+        corners.forEach((point, i) => (i ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
         ctx.closePath();
-      } else if (s.arc >= 359.9) {
-        ctx.arc(p.x, p.y, s.r * S, 0, Math.PI * 2);
+      } else if (sprinkler.arc >= 359.9) {
+        ctx.arc(center.x, center.y, sprinkler.r * scale, 0, Math.PI * 2);
       } else {
-        ctx.moveTo(p.x, p.y);
-        ctx.arc(p.x, p.y, s.r * S, G.rad(s.start), G.rad(s.start + s.arc));
+        ctx.moveTo(center.x, center.y);
+        ctx.arc(center.x, center.y, sprinkler.r * scale, Geo.rad(sprinkler.start), Geo.rad(sprinkler.start + sprinkler.arc));
         ctx.closePath();
       }
       ctx.fill();
       ctx.stroke();
     }
 
-    _head(ctx, s) {
-      const p = this.toScreen(s);
-      const sel = this.selection && this.selection.kind === 'sprinkler' && this.selection.id === s.id;
-      const col = this._zoneColor(s);
-      const rad = 5;
+    /**
+     * Tekent een sproeierkop met richting en (ingezoomd) worp en hoek.
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {object} sprinkler de sproeier
+     */
+    _head(ctx, sprinkler) {
+      const center = this.toScreen(sprinkler);
+      const selected = this.selection && this.selection.kind === 'sprinkler' && this.selection.id === sprinkler.id;
+      const color = this._zoneColor(sprinkler);
+      const dotRadius = 5;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, rad + (sel ? 2 : 0), 0, Math.PI * 2);
-      ctx.fillStyle = col;
+      ctx.arc(center.x, center.y, dotRadius + (selected ? 2 : 0), 0, Math.PI * 2);
+      ctx.fillStyle = color;
       ctx.fill();
-      ctx.lineWidth = sel ? 3 : 1.5;
-      ctx.strokeStyle = sel ? '#ff6f00' : '#fff';
+      ctx.lineWidth = selected ? 3 : 1.5;
+      ctx.strokeStyle = selected ? '#ff6f00' : '#fff';
       ctx.stroke();
       // richtingsindicator
-      if (s.type !== 'strip' && s.arc < 359.9) {
-        const mid = G.rad(s.start + s.arc / 2);
-        ctx.strokeStyle = col;
+      if (sprinkler.type !== 'strip' && sprinkler.arc < 359.9) {
+        const mid = Geo.rad(sprinkler.start + sprinkler.arc / 2);
+        ctx.strokeStyle = color;
         ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + Math.cos(mid) * 12, p.y + Math.sin(mid) * 12); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(center.x, center.y); ctx.lineTo(center.x + Math.cos(mid) * 12, center.y + Math.sin(mid) * 12); ctx.stroke();
       }
       if (this.layers.labels && this.view.scale > 30) {
-        const t = C.sprinklerTypes[s.type];
-        const txt = s.type === 'strip' ? `${G.nlShort(s.width, 1)} × ${G.nlShort(s.len, 1)} m` : `${G.nlShort(s.r, 1)} m · ${s.arc}°`;
+        const sprinklerType = Catalog.sprinklerTypes[sprinkler.type];
+        const text = sprinkler.type === 'strip' ? `${Geo.nlShort(sprinkler.width, 1)} × ${Geo.nlShort(sprinkler.len, 1)} m` : `${Geo.nlShort(sprinkler.r, 1)} m · ${sprinkler.arc}°`;
         ctx.font = '10px system-ui, sans-serif';
         ctx.fillStyle = '#263238';
-        ctx.fillText(txt, p.x + 7, p.y - 6);
-        void t;
+        ctx.fillText(text, center.x + 7, center.y - 6);
+        void sprinklerType;
       }
     }
 
-    _sprinklerGrips(ctx, s) {
-      const p = this.toScreen(s);
-      const hs = this.touch ? 8 : 5;
-      for (const h of this.sprinklerHandles(s)) {
-        const q = this.toScreen(h);
+    /**
+     * Tekent de grepen van de geselecteerde sproeier en tijdens het slepen de instelling.
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {object} sprinkler de sproeier
+     */
+    _sprinklerGrips(ctx, sprinkler) {
+      const center = this.toScreen(sprinkler);
+      const gripSize = this.touch ? 8 : 5;
+      for (const handle of this.sprinklerHandles(sprinkler)) {
+        const handlePoint = this.toScreen(handle);
         ctx.strokeStyle = '#ff6f00';
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
-        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(center.x, center.y); ctx.lineTo(handlePoint.x, handlePoint.y); ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = h.which === 'r' ? '#ff6f00' : '#fff';
+        ctx.fillStyle = handle.which === 'r' ? '#ff6f00' : '#fff';
         ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(q.x, q.y, hs, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(handlePoint.x, handlePoint.y, gripSize, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       }
-      const d = this.drag;
-      if (d && d.mode === 'handle' && d.id === s.id) {
-        const txt = C.nozzleOf(s) ? C.headSetting(s) : `${G.nl(s.r, 1)} m · ${s.arc}°`;
-        this._label(ctx, txt, p.x, p.y - 22, '#e65100', '#fff', this.touch ? 13 : 11);
+      const drag = this.drag;
+      if (drag && drag.mode === 'handle' && drag.id === sprinkler.id) {
+        const text = Catalog.nozzleOf(sprinkler) ? Catalog.headSetting(sprinkler) : `${Geo.nl(sprinkler.r, 1)} m · ${sprinkler.arc}°`;
+        this._label(ctx, text, center.x, center.y - 22, '#e65100', '#fff', this.touch ? 13 : 11);
       }
     }
 
-    _element(ctx, e) {
-      const et = C.elementTypes[e.kind];
-      const p = this.toScreen(e);
-      const sel = this.selection && this.selection.kind === 'element' && this.selection.id === e.id;
-      const sz = 11;
-      ctx.fillStyle = et.color;
-      ctx.strokeStyle = sel ? '#ff6f00' : '#fff';
-      ctx.lineWidth = sel ? 3 : 2;
+    /**
+     * Tekent een systeemelement (wateraansluiting, ventielkast, computer, tappunt).
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {object} element het element
+     */
+    _element(ctx, element) {
+      const elementType = Catalog.elementTypes[element.kind];
+      const center = this.toScreen(element);
+      const selected = this.selection && this.selection.kind === 'element' && this.selection.id === element.id;
+      const size = 11;
+      ctx.fillStyle = elementType.color;
+      ctx.strokeStyle = selected ? '#ff6f00' : '#fff';
+      ctx.lineWidth = selected ? 3 : 2;
       ctx.beginPath();
-      if (e.kind === 'valvebox') ctx.rect(p.x - sz, p.y - sz * 0.75, sz * 2, sz * 1.5);
-      else if (e.kind === 'source') { ctx.moveTo(p.x, p.y - sz); ctx.lineTo(p.x + sz, p.y); ctx.lineTo(p.x, p.y + sz); ctx.lineTo(p.x - sz, p.y); ctx.closePath(); }
-      else ctx.arc(p.x, p.y, sz * 0.85, 0, Math.PI * 2);
+      if (element.kind === 'valvebox') ctx.rect(center.x - size, center.y - size * 0.75, size * 2, size * 1.5);
+      else if (element.kind === 'source') { ctx.moveTo(center.x, center.y - size); ctx.lineTo(center.x + size, center.y); ctx.lineTo(center.x, center.y + size); ctx.lineTo(center.x - size, center.y); ctx.closePath(); }
+      else ctx.arc(center.x, center.y, size * 0.85, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 11px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(et.short, p.x, p.y + 0.5);
+      ctx.fillText(elementType.short, center.x, center.y + 0.5);
       ctx.textAlign = 'start';
       ctx.textBaseline = 'alphabetic';
     }
 
-    _areaHandles(ctx, a) {
+    /**
+     * Tekent de hoekpunten, middens en randmaten van het geselecteerde vlak.
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {object} area het vlak
+     */
+    _areaHandles(ctx, area) {
       ctx.fillStyle = '#fff';
       ctx.strokeStyle = '#ff6f00';
       ctx.lineWidth = 1.5;
-      const hs = this.touch ? 7 : 4;
-      const av = this.activeVertex && this.activeVertex.id === a.id ? this.activeVertex.index : -1;
-      for (let i = 0; i < a.pts.length; i++) {
-        const p = this.toScreen(a.pts[i]);
-        ctx.fillStyle = i === av ? '#ff6f00' : '#fff';
-        ctx.fillRect(p.x - hs, p.y - hs, hs * 2, hs * 2);
-        ctx.strokeRect(p.x - hs, p.y - hs, hs * 2, hs * 2);
-        const b = a.pts[(i + 1) % a.pts.length];
-        const mid = this.toScreen({ x: (a.pts[i].x + b.x) / 2, y: (a.pts[i].y + b.y) / 2 });
+      const gripSize = this.touch ? 7 : 4;
+      const activeIndex = this.activeVertex && this.activeVertex.id === area.id ? this.activeVertex.index : -1;
+      for (let i = 0; i < area.pts.length; i++) {
+        const corner = this.toScreen(area.pts[i]);
+        ctx.fillStyle = i === activeIndex ? '#ff6f00' : '#fff';
+        ctx.fillRect(corner.x - gripSize, corner.y - gripSize, gripSize * 2, gripSize * 2);
+        ctx.strokeRect(corner.x - gripSize, corner.y - gripSize, gripSize * 2, gripSize * 2);
+        const next = area.pts[(i + 1) % area.pts.length];
+        const mid = this.toScreen({ x: (area.pts[i].x + next.x) / 2, y: (area.pts[i].y + next.y) / 2 });
         ctx.beginPath(); ctx.arc(mid.x, mid.y, this.touch ? 6 : 3, 0, Math.PI * 2); ctx.fillStyle = '#ffcc80'; ctx.fill(); ctx.fillStyle = '#fff';
-        if (this.layers.labels) this._label(ctx, `${G.nl(G.dist(a.pts[i], b), 2)} m`, mid.x, mid.y - 12, '#e65100', '#fff', 10);
+        if (this.layers.labels) this._label(ctx, `${Geo.nl(Geo.dist(area.pts[i], next), 2)} m`, mid.x, mid.y - 12, '#e65100', '#fff', 10);
       }
     }
 
-    _label(ctx, text, x, y, fg, bg, size = 10) {
+    /**
+     * Tekent een tekstlabel met achtergrond, gecentreerd op een punt.
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {string} text de tekst
+     * @param {number} x midden in schermpixels
+     * @param {number} y midden in schermpixels
+     * @param {string} textColor tekstkleur
+     * @param {string} backgroundColor achtergrondkleur
+     * @param {number} size lettergrootte in pixels
+     */
+    _label(ctx, text, x, y, textColor, backgroundColor, size = 10) {
       ctx.font = `${size}px system-ui, sans-serif`;
-      const w = ctx.measureText(text).width + 6;
-      ctx.fillStyle = bg;
+      const boxWidth = ctx.measureText(text).width + 6;
+      ctx.fillStyle = backgroundColor;
       ctx.globalAlpha = 0.85;
-      ctx.fillRect(x - w / 2, y - size / 2 - 3, w, size + 5);
+      ctx.fillRect(x - boxWidth / 2, y - size / 2 - 3, boxWidth, size + 5);
       ctx.globalAlpha = 1;
-      ctx.fillStyle = fg;
+      ctx.fillStyle = textColor;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(text, x, y);
@@ -987,129 +1179,155 @@
       ctx.textBaseline = 'alphabetic';
     }
 
-    _scaleBar(ctx, w, h) {
-      const S = this.view.scale;
+    /**
+     * Tekent de schaalbalk linksonder.
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {number} width breedte in CSS-pixels
+     * @param {number} height hoogte in CSS-pixels
+     */
+    _scaleBar(ctx, width, height) {
+      const scale = this.view.scale;
       const candidates = [0.5, 1, 2, 5, 10, 20, 50];
-      const len = candidates.find((c) => c * S > 80) || 50;
-      const x = 16, y = h - 18;
+      const length = candidates.find((candidate) => candidate * scale > 80) || 50;
+      const x = 16, y = height - 18;
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillRect(x - 6, y - 16, len * S + 40, 26);
+      ctx.fillRect(x - 6, y - 16, length * scale + 40, 26);
       ctx.strokeStyle = '#263238';
       ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + len * S, y); ctx.moveTo(x, y - 5); ctx.lineTo(x, y + 5); ctx.moveTo(x + len * S, y - 5); ctx.lineTo(x + len * S, y + 5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + length * scale, y); ctx.moveTo(x, y - 5); ctx.lineTo(x, y + 5); ctx.moveTo(x + length * scale, y - 5); ctx.lineTo(x + length * scale, y + 5); ctx.stroke();
       ctx.fillStyle = '#263238';
       ctx.font = '11px system-ui, sans-serif';
-      ctx.fillText(`${G.nlShort(len, 1)} m`, x + len * S + 6, y + 4);
+      ctx.fillText(`${Geo.nlShort(length, 1)} m`, x + length * scale + 6, y + 4);
     }
 
     /**
      * Legenda van wat er in het plan staat: vlaktypes (met oppervlak),
      * beregeningswijze in beplanting, zones en systeemelementen. Zonder
      * vlakken alle vlaktypes, als sleutel bij het tekenen.
+     * @returns {Array<{title: string, items: object[]}>} de onderdelen van de legenda
      */
     legend() {
-      const st = this.state;
-      const fmt = (v) => Number(v).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      const planState = this.state;
+      /**
+       * Getal met één decimaal in Nederlandse notatie.
+       * @param {number} value het getal
+       * @returns {string} de tekst
+       */
+      const formatNumber = (value) => Number(value).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
       const sections = [];
-      const areas = st.areas.filter((a) => a.pts.length >= 3 && C.areaTypes[a.type]);
+      const areas = planState.areas.filter((area) => area.pts.length >= 3 && Catalog.areaTypes[area.type]);
       const total = {};
-      for (const a of areas) total[a.type] = (total[a.type] || 0) + G.area(a.pts);
-      const types = Object.keys(C.areaTypes).filter((k) => !areas.length || total[k] != null);
+      for (const area of areas) total[area.type] = (total[area.type] || 0) + Geo.area(area.pts);
+      const types = Object.keys(Catalog.areaTypes).filter((typeKey) => !areas.length || total[typeKey] != null);
       sections.push({
         title: 'Vlakken',
-        items: types.map((k) => {
-          const t = C.areaTypes[k];
-          return { swatch: 'area', fill: t.fill, stroke: t.stroke, dashed: k === 'wet', label: t.label, sub: total[k] != null ? `${fmt(total[k])} m²` : '' };
+        items: types.map((typeKey) => {
+          const areaType = Catalog.areaTypes[typeKey];
+          return { swatch: 'area', fill: areaType.fill, stroke: areaType.stroke, dashed: typeKey === 'wet', label: areaType.label, sub: total[typeKey] != null ? `${formatNumber(total[typeKey])} m²` : '' };
         }),
       });
-      const methods = new Set(areas.map((a) => window.Hydraulics.methodOf(st, a)));
-      const irr = [];
-      if (methods.has('dripline')) irr.push({ swatch: 'dripline', label: C.methods.dripline.label });
-      if (methods.has('drippers')) irr.push({ swatch: 'drippers', label: C.methods.drippers.label });
-      if (st.sprinklers.length) irr.push({ swatch: 'sprinkler', color: '#455a64', label: 'Sproeier met bereik' });
-      if (irr.length) sections.push({ title: 'Beregening', items: irr });
-      const zones = st.zones.filter((z) => st.sprinklers.some((s) => s.zone === z.id) || st.areas.some((a) => a.zone === z.id));
+      const methods = new Set(areas.map((area) => window.Hydraulics.methodOf(planState, area)));
+      const irrigationItems = [];
+      if (methods.has('dripline')) irrigationItems.push({ swatch: 'dripline', label: Catalog.methods.dripline.label });
+      if (methods.has('drippers')) irrigationItems.push({ swatch: 'drippers', label: Catalog.methods.drippers.label });
+      if (planState.sprinklers.length) irrigationItems.push({ swatch: 'sprinkler', color: '#455a64', label: 'Sproeier met bereik' });
+      if (irrigationItems.length) sections.push({ title: 'Beregening', items: irrigationItems });
+      const zones = planState.zones.filter((zone) => planState.sprinklers.some((sprinkler) => sprinkler.zone === zone.id) || planState.areas.some((area) => area.zone === zone.id));
       if (zones.length) {
         sections.push({
           title: 'Zones',
-          items: zones.map((z) => ({ swatch: 'zone', color: z.color, label: z.name, sub: C.groups[z.group] ? C.groups[z.group].label : '' })),
+          items: zones.map((zone) => ({ swatch: 'zone', color: zone.color, label: zone.name, sub: Catalog.groups[zone.group] ? Catalog.groups[zone.group].label : '' })),
         });
       }
-      const kinds = Object.keys(C.elementTypes).filter((k) => st.elements.some((e) => e.kind === k));
+      const kinds = Object.keys(Catalog.elementTypes).filter((kind) => planState.elements.some((element) => element.kind === kind));
       if (kinds.length) {
         sections.push({
           title: 'Elementen',
-          items: kinds.map((k) => ({ swatch: 'element', kind: k, color: C.elementTypes[k].color, short: C.elementTypes[k].short, label: C.elementTypes[k].label })),
+          items: kinds.map((kind) => ({ swatch: 'element', kind: kind, color: Catalog.elementTypes[kind].color, short: Catalog.elementTypes[kind].short, label: Catalog.elementTypes[kind].label })),
         });
       }
       return sections;
     }
 
-    /** Tekent een legendasymbool (ook gebruikt door de export). */
-    _legendSwatch(ctx, it, x, y, w, h) {
+    /**
+     * Tekent een legendasymbool (ook gebruikt door de export).
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {object} item regel uit de legenda
+     * @param {number} x links in pixels
+     * @param {number} y boven in pixels
+     * @param {number} width breedte in pixels
+     * @param {number} height hoogte in pixels
+     */
+    _legendSwatch(ctx, item, x, y, width, height) {
       ctx.save();
-      if (it.swatch === 'area' || it.swatch === 'dripline' || it.swatch === 'drippers') {
-        const at = it.swatch === 'area' ? it : C.areaTypes.bed;
-        ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, h);
-        ctx.fillStyle = at.fill; ctx.fillRect(x, y, w, h);
-        ctx.strokeStyle = at.stroke; ctx.lineWidth = 1.25;
-        if (it.dashed) ctx.setLineDash([4, 3]);
-        ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      if (item.swatch === 'area' || item.swatch === 'dripline' || item.swatch === 'drippers') {
+        const style = item.swatch === 'area' ? item : Catalog.areaTypes.bed;
+        ctx.fillStyle = '#fff'; ctx.fillRect(x, y, width, height);
+        ctx.fillStyle = style.fill; ctx.fillRect(x, y, width, height);
+        ctx.strokeStyle = style.stroke; ctx.lineWidth = 1.25;
+        if (item.dashed) ctx.setLineDash([4, 3]);
+        ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
         ctx.setLineDash([]);
         ctx.strokeStyle = 'rgba(62,39,35,0.55)'; ctx.fillStyle = 'rgba(62,39,35,0.7)';
-        if (it.swatch === 'dripline') {
+        if (item.swatch === 'dripline') {
           ctx.setLineDash([2, 3]);
-          for (const yy of [y + h * 0.33, y + h * 0.67]) { ctx.beginPath(); ctx.moveTo(x + 2, yy); ctx.lineTo(x + w - 2, yy); ctx.stroke(); }
-        } else if (it.swatch === 'drippers') {
-          for (const xx of [x + w * 0.25, x + w * 0.5, x + w * 0.75]) { ctx.beginPath(); ctx.arc(xx, y + h / 2, 1.8, 0, Math.PI * 2); ctx.fill(); }
+          for (const rowY of [y + height * 0.33, y + height * 0.67]) { ctx.beginPath(); ctx.moveTo(x + 2, rowY); ctx.lineTo(x + width - 2, rowY); ctx.stroke(); }
+        } else if (item.swatch === 'drippers') {
+          for (const dotX of [x + width * 0.25, x + width * 0.5, x + width * 0.75]) { ctx.beginPath(); ctx.arc(dotX, y + height / 2, 1.8, 0, Math.PI * 2); ctx.fill(); }
         }
-      } else if (it.swatch === 'zone' || it.swatch === 'sprinkler') {
-        const cx = x + w / 2, cy = y + h / 2;
-        if (it.swatch === 'sprinkler') {
-          ctx.strokeStyle = it.color; ctx.lineWidth = 1; ctx.setLineDash([3, 2]);
-          ctx.beginPath(); ctx.arc(cx, cy, h / 2, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      } else if (item.swatch === 'zone' || item.swatch === 'sprinkler') {
+        const cx = x + width / 2, cy = y + height / 2;
+        if (item.swatch === 'sprinkler') {
+          ctx.strokeStyle = item.color; ctx.lineWidth = 1; ctx.setLineDash([3, 2]);
+          ctx.beginPath(); ctx.arc(cx, cy, height / 2, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
         }
-        ctx.fillStyle = it.swatch === 'zone' ? it.color : '#fff';
-        ctx.strokeStyle = it.color; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(cx, cy, it.swatch === 'zone' ? h / 2 - 1 : 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      } else if (it.swatch === 'element') {
-        ctx.translate(x + w / 2 - this.toScreen({ x: 0, y: 0 }).x, y + h / 2 - this.toScreen({ x: 0, y: 0 }).y);
-        this._element(ctx, { kind: it.kind, x: 0, y: 0 });
+        ctx.fillStyle = item.swatch === 'zone' ? item.color : '#fff';
+        ctx.strokeStyle = item.color; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(cx, cy, item.swatch === 'zone' ? height / 2 - 1 : 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      } else if (item.swatch === 'element') {
+        ctx.translate(x + width / 2 - this.toScreen({ x: 0, y: 0 }).x, y + height / 2 - this.toScreen({ x: 0, y: 0 }).y);
+        this._element(ctx, { kind: item.kind, x: 0, y: 0 });
       }
       ctx.restore();
     }
 
-    /** Legenda als vak rechts van de tekening (PNG/Excel-export). */
-    _legendPanel(ctx, x, y, w) {
+    /**
+     * Legenda als vak rechts van de tekening (PNG/Excel-export).
+     * @param {CanvasRenderingContext2D} ctx tekencontext
+     * @param {number} x links in pixels
+     * @param {number} y boven in pixels
+     * @param {number} width breedte in pixels
+     */
+    _legendPanel(ctx, x, y, width) {
       const sections = this.legend();
       const pad = 14, row = 22;
-      let h = pad + 20;
-      for (const sec of sections) h += 22 + sec.items.length * row + 6;
-      h += pad - 6;
+      let height = pad + 20;
+      for (const section of sections) height += 22 + section.items.length * row + 6;
+      height += pad - 6;
       ctx.fillStyle = 'rgba(255,255,255,0.96)';
       ctx.strokeStyle = '#cfd8dc'; ctx.lineWidth = 1;
-      ctx.fillRect(x, y, w, h); ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      ctx.fillRect(x, y, width, height); ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#172f5e';
       ctx.font = 'bold 15px system-ui, sans-serif';
       let cy = y + pad + 8;
       ctx.fillText('Legenda', x + pad, cy);
       cy += 20;
-      for (const sec of sections) {
+      for (const section of sections) {
         ctx.fillStyle = '#607d8b';
         ctx.font = 'bold 11px system-ui, sans-serif';
-        ctx.fillText(sec.title.toUpperCase(), x + pad, cy + 6);
+        ctx.fillText(section.title.toUpperCase(), x + pad, cy + 6);
         cy += 22;
-        for (const it of sec.items) {
-          this._legendSwatch(ctx, it, x + pad, cy - 7, 26, 16);
+        for (const item of section.items) {
+          this._legendSwatch(ctx, item, x + pad, cy - 7, 26, 16);
           ctx.textBaseline = 'middle';
           ctx.fillStyle = '#263238';
           ctx.font = '13px system-ui, sans-serif';
-          ctx.fillText(it.label, x + pad + 36, cy + 1, w - pad * 2 - 36 - (it.sub ? 70 : 0));
-          if (it.sub) {
+          ctx.fillText(item.label, x + pad + 36, cy + 1, width - pad * 2 - 36 - (item.sub ? 70 : 0));
+          if (item.sub) {
             ctx.fillStyle = '#607d8b';
             ctx.textAlign = 'end';
-            ctx.fillText(it.sub, x + w - pad, cy + 1);
+            ctx.fillText(item.sub, x + width - pad, cy + 1);
             ctx.textAlign = 'start';
           }
           cy += row;
@@ -1119,20 +1337,25 @@
       ctx.textBaseline = 'alphabetic';
     }
 
-    /** Exporteert het plan als PNG (dataURL), passend gezoomd, met legenda rechts. */
+    /**
+     * Exporteert het plan als PNG (dataURL), passend gezoomd, met legenda rechts.
+     * @param {number} width breedte in pixels
+     * @param {number} height hoogte in pixels
+     * @returns {string} de afbeelding als data-URL
+     */
     exportPng(width = 1500, height = 1000) {
-      const saved = { ...this.view }, sw = this.w, sh = this.h, sel = this.selection;
-      const lw = Math.round(Math.max(260, Math.min(360, width * 0.2)));
-      this.w = width - lw; this.h = height; this.selection = null;
+      const saved = { ...this.view }, savedWidth = this.w, savedHeight = this.h, savedSelection = this.selection;
+      const legendWidth = Math.round(Math.max(260, Math.min(360, width * 0.2)));
+      this.w = width - legendWidth; this.h = height; this.selection = null;
       this.fit();
-      const cv = document.createElement('canvas');
-      cv.width = width; cv.height = height;
-      const ctx = cv.getContext('2d');
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
       this.draw(ctx, width, height, 1, { noGrid: false });
-      this._legendPanel(ctx, width - lw + 8, 16, lw - 24);
-      this.view = saved; this.w = sw; this.h = sh; this.selection = sel;
+      this._legendPanel(ctx, width - legendWidth + 8, 16, legendWidth - 24);
+      this.view = saved; this.w = savedWidth; this.h = savedHeight; this.selection = savedSelection;
       this.render();
-      return cv.toDataURL('image/png');
+      return canvas.toDataURL('image/png');
     }
   }
 

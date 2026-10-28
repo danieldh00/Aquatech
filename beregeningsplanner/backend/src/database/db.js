@@ -775,6 +775,11 @@ const MIGRATIONS = [
     UNIQUE (tenant_id, kind, key)
   );
   `,
+  // 30: bestelvoorstel (stock.js): per voorraadartikel tot welke stand je
+  // bijbestelt als het onder de minimumvoorraad zakt (leeg = 2× minimum).
+  `
+  ALTER TABLE stock_items ADD COLUMN reorder_qty REAL;
+  `,
 ];
 
 /**

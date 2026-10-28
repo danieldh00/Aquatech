@@ -822,7 +822,7 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
       if (item.code === 'EIGEN-ZAND') return;
       const cost = Math.round((2 + (itemIndex % 9) * 3.15) * 100) / 100;
       // Verkoopprijs ongeveer 1,6 x de inkoop (Aquatech is de bron voor de webshop).
-      const meta = { location: itemIndex % 2 ? 'Bus 1' : `Magazijn ${String.fromCharCode(65 + (itemIndex % 4))}${1 + (itemIndex % 5)}`, minQty: Math.ceil(want / 2), costPrice: cost, salePrice: Math.round(cost * 160) / 100 };
+      const meta = { location: itemIndex % 2 ? 'Bus 1' : `Magazijn ${String.fromCharCode(65 + (itemIndex % 4))}${1 + (itemIndex % 5)}`, minQty: Math.ceil(want / 2), reorderQty: itemIndex % 3 ? null : want * 2, costPrice: cost, salePrice: Math.round(cost * 160) / 100 };
       stock.update(tenantId, item.id, meta);
       // Genoeg voor alles, behalve het tekortartikel (half zoveel).
       const qty = item.code === short ? Math.max(1, Math.floor(want / 2)) : Math.ceil(want * 1.5) + 2;
