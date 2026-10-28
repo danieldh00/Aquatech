@@ -28,6 +28,7 @@ const { validEmail } = require('../platform/mailer');
 const { preferencesOf } = require('../platform/store');
 const { invoiceFileName } = require('./invoice-pdf');
 const { SourceError } = require('../webshop/woocommerce');
+const { withoutInternal } = require('./quotes');
 
 const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 
@@ -466,7 +467,8 @@ function registerInvoiceRoutes(app, ctx) {
 
   // Instellingen en artikelen vóór /:id.
   app.get('/api/invoices/settings', requireInvoices, (req, res) => {
-    const profile = settingsOf(req).get('quoteProfile');
+    // Zonder interne velden (kostprijs per uur): facturen hebben die niet nodig.
+    const profile = withoutInternal(settingsOf(req).get('quoteProfile'));
     const shop = ctx.shopOf ? ctx.shopOf(req) : {};
     res.json({
       settings: invoicingOf(req), profile: profile, groups: Core.GROUPS, rates: Core.VAT_RATES, shopStatuses: Core.SHOP_STATUSES,

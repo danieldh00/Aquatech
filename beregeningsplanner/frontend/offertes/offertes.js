@@ -1285,7 +1285,7 @@
       state.mail = Boolean(profileResult.mail);
     } else {
       // Gast zonder account (nog niets bewaard): standaardwaarden van de server ontbreken.
-      state.profile = { companyName: 'AquaTech Service', hourlyRate: 55, validDays: 30, vatRate: 21, markupPct: 0, callOutFee: 0, intro: '', terms: '' };
+      state.profile = { companyName: 'AquaTech Service', hourlyRate: 55, hourlyCost: 0, validDays: 30, vatRate: 21, markupPct: 0, callOutFee: 0, intro: '', terms: '' };
     }
     $('#l-status').innerHTML = '<option value="">Alle statussen</option>' + [...Object.keys(QuoteCore.STATUSES), 'verlopen']
       .map((status) => `<option value="${status}">${esc(statusLabel(status))}</option>`).join('');

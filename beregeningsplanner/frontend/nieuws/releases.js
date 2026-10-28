@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.71.0',
+      date: '2026-10-28',
+      title: 'Nacalculatie per werkorder',
+      items: [
+        { text: 'Op elke werkorder staat nu een **Nacalculatie**: begroot volgens de offerte naast de geboekte uren en het materiaalverbruik, met het verschil, de kosten, wat er gefactureerd is en de marge. Ook als Excel te downloaden.', for: ['nacalculatie'] },
+        { text: 'Vul bij Offertes > Bedrijfsgegevens de **kostprijs per uur** in en in de voorraad de inkoopprijzen, dan klopt de marge.', for: ['nacalculatie'] },
+      ],
+    },
+    {
       version: '0.70.2',
       date: '2026-10-28',
       title: 'Installatiedossier per locatie',

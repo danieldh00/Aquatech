@@ -13,6 +13,7 @@
   --at-green-soft: #e7f5ed;
   --at-green-light: #5fd08f;
   --at-teal: #2cb0c0;
+  --at-danger: #c62828;
   --at-font: Montserrat, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   accent-color: var(--at-green);
 }
