@@ -604,6 +604,8 @@
     }
   }
 
+  // Februari altijd 28, net als op de server: de datum moet elk jaar bestaan.
+  const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   const MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
   /**
    * Vult het formulier Seizoensherinneringen: aan/uit, portaaladres (standaard
@@ -777,7 +779,14 @@
      */
     seasonForm.onsubmit = (event) => {
       event.preventDefault();
-      saveSettings(seasonForm, { seasonReminders: readSeason() }, 'Seizoensherinneringen opgeslagen');
+      const config = readSeason();
+      // De server maakt van 31 februari 28 februari; liever meteen melden.
+      const wrongDate = config.items.find((item) => item.day > MONTH_DAYS[item.month - 1]);
+      if (wrongDate) {
+        $('.err', seasonForm).textContent = `${wrongDate.title || 'Herinnering'}: ${MONTHS[wrongDate.month - 1]} heeft maar ${MONTH_DAYS[wrongDate.month - 1]} dagen.`;
+        return;
+      }
+      saveSettings(seasonForm, { seasonReminders: config }, 'Seizoensherinneringen opgeslagen');
     };
     const outsourcingForm = $('#s-outsourcing');
     /**

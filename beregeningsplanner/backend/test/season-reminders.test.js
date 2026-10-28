@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { sanitizeSeasonReminders, activeItems, portalReminders } = require('../src/uitvoering/season-reminders');
+const { sanitizeSeasonReminders, activeItems, portalReminders, createSeasonReminderRunner } = require('../src/uitvoering/season-reminders');
 const { createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
@@ -112,4 +112,61 @@ test('verzendronde: één mail per klant per jaar, alleen met installatie in de 
   } finally {
     server.close();
   }
+});
+
+test('verzendronde: geweigerd adres blokkeert de rest niet, rondes lopen niet over elkaar', async () => {
+  const customers = ['een', 'twee', 'drie', 'vier', 'vijf'].map((name) => ({ id: name, displayName: name, email: `${name}@voorbeeld.test`, preferences: '{}' }));
+  const marked = new Set();
+  const reminders = {
+    /**
+     * Nagebootste ontvangers: iedereen die nog niets kreeg, op volgorde.
+     * @param {string} _tenantId Omgeving (niet gebruikt).
+     * @param {string[]} _userTenantIds Omgevingen van de klanten (niet gebruikt).
+     * @param {string} _key Sleutel (niet gebruikt).
+     * @param {number} _year Jaar (niet gebruikt).
+     * @param {number} limit Hoogstens zoveel.
+     * @returns {object[]} De klanten.
+     */
+    recipients: (_tenantId, _userTenantIds, _key, _year, limit) => customers.filter((customer) => !marked.has(customer.id)).slice(0, limit),
+    /**
+     * Legt vast dat een klant is afgehandeld.
+     * @param {string} _tenantId Omgeving (niet gebruikt).
+     * @param {string} userId Id van de klant.
+     * @returns {void}
+     */
+    markSent: (_tenantId, userId) => { marked.add(userId); },
+  };
+  const config = sanitizeSeasonReminders({ enabled: true, items: [{ key: 'voorjaar', title: 'Voorjaar', month: 3, day: 15 }] });
+  const sent = [];
+  let release = null;
+  const mailer = {
+    /**
+     * Altijd ingesteld.
+     * @returns {boolean} true.
+     */
+    configured: () => true,
+    /**
+     * Weigert de eerste drie adressen definitief; 'vier' wacht tot de test hem loslaat.
+     * @param {{ to: string }} message Het bericht.
+     * @returns {Promise<void>}
+     */
+    send: async (message) => {
+      if (/^(een|twee|drie)@/.test(message.to)) throw Object.assign(new Error('550 onbekend'), { code: 'EENVELOPE', responseCode: 550 });
+      if (message.to.startsWith('vier') && !release) await new Promise((resolve) => { release = resolve; });
+      sent.push(message.to);
+    },
+  };
+  const runner = createSeasonReminderRunner(reminders, {
+    settingsFor: () => ({ get: (key) => (key === 'seasonReminders' ? config : {}) }),
+    mailerFor: () => mailer,
+    userTenantsOf: (tenantId) => [tenantId],
+  });
+  const today = new Date('2026-03-16T08:00:00Z');
+  const first = runner.runAll(['t1'], today);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepStrictEqual(await runner.runAll(['t1'], today), {}, 'tweede ronde tijdens de eerste: overgeslagen');
+  release();
+  assert.deepStrictEqual((await first).t1, { sent: 2, skipped: 0, failed: 3 });
+  assert.deepStrictEqual(sent, ['vier@voorbeeld.test', 'vijf@voorbeeld.test']);
+  assert.deepStrictEqual(await runner.runAll(['t1'], today), {}, 'geweigerde adressen komen niet terug');
 });

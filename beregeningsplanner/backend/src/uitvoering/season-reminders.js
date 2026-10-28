@@ -165,12 +165,25 @@ function createSeasonReminderStore(db, { roles }) {
 }
 
 /**
+ * Of een mailfout definitief is voor dit adres: de mailserver weigerde de
+ * ontvanger met een 5xx-code (nodemailer: code EENVELOPE). Een fout met de
+ * verbinding of het inloggen telt niet, die lost zich later misschien op.
+ * @param {Error & { code?: string, responseCode?: number }} error De fout van mailer.send.
+ * @returns {boolean} true als opnieuw proberen geen zin heeft.
+ */
+function permanentFailure(error) {
+  return error.code === 'EENVELOPE' && Number(error.responseCode) >= 500 && Number(error.responseCode) < 600;
+}
+
+/**
  * Maakt de verzendronde voor alle omgevingen.
  * @param {object} reminders De opslag uit createSeasonReminderStore.
  * @param {{ settingsFor: Function, mailerFor: Function, userTenantsOf: Function }} options Instellingen en mailer per omgeving, en waar de klanten van een omgeving wonen.
  * @returns {{ runAll: Function, runEnvironment: Function }} De verzendfuncties.
  */
 function createSeasonReminderRunner(reminders, { settingsFor, mailerFor, userTenantsOf }) {
+  let running = false;
+
   /**
    * Verstuurt de herinneringen die in één omgeving aan de beurt zijn.
    * @param {string} tenantId Id van de omgeving.
@@ -186,6 +199,7 @@ function createSeasonReminderRunner(reminders, { settingsFor, mailerFor, userTen
     if (!mailer.configured()) return result;
     const profile = settings.get('quoteProfile') || {};
     let budget = MAILS_PER_RUN;
+    let transientFailures = 0;
     for (const { item, year } of activeItems(config, today, MAIL_WINDOW_DAYS)) {
       if (budget <= 0) break;
       for (const customer of reminders.recipients(tenantId, userTenantsOf(tenantId), item.key, year, budget)) {
@@ -208,9 +222,15 @@ function createSeasonReminderRunner(reminders, { settingsFor, mailerFor, userTen
           reminders.markSent(tenantId, customer.id, item.key, year);
           result.sent++;
         } catch (error) {
-          // Volgende ronde opnieuw (bijvoorbeeld als de mailserver even weg is).
           result.failed++;
-          if (result.failed >= 3) return result;
+          // Adres definitief geweigerd: vastleggen, anders blokkeert deze klant de rest.
+          if (permanentFailure(error)) {
+            reminders.markSent(tenantId, customer.id, item.key, year);
+            continue;
+          }
+          // Tijdelijke fout (mailserver even weg): volgende ronde opnieuw.
+          transientFailures++;
+          if (transientFailures >= 3) return result;
         }
       }
     }
@@ -224,16 +244,24 @@ function createSeasonReminderRunner(reminders, { settingsFor, mailerFor, userTen
    * @returns {Promise<Object<string, object>>} Aantallen per omgeving waar iets gebeurde.
    */
   async function runAll(tenantIds, today = new Date()) {
+    // Loopt de vorige ronde nog (veel mails, trage server), dan deze overslaan:
+    // twee rondes tegelijk kunnen dezelfde klant kiezen en dubbel mailen.
+    if (running) return {};
+    running = true;
     const out = {};
-    for (const tenantId of tenantIds) {
-      try {
-        const result = await runEnvironment(tenantId, today);
-        if (result.sent || result.skipped || result.failed) out[tenantId] = result;
-      } catch (error) {
-        out[tenantId] = { error: error.message };
+    try {
+      for (const tenantId of tenantIds) {
+        try {
+          const result = await runEnvironment(tenantId, today);
+          if (result.sent || result.skipped || result.failed) out[tenantId] = result;
+        } catch (error) {
+          out[tenantId] = { error: error.message };
+        }
       }
+      return out;
+    } finally {
+      running = false;
     }
-    return out;
   }
 
   return { runAll, runEnvironment };
