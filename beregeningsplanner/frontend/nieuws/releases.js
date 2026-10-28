@@ -13,13 +13,33 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '0.70.0',
+      version: '0.70.2',
       date: '2026-10-28',
       title: 'Installatiedossier per locatie',
       items: [
         { text: 'In **Klantdossiers** staat nu ook een overzicht **per locatie**: per adres de tekening, offertes, werkorders, opleverfoto\'s, meldingen en de gebruikte materialen bij elkaar.', for: ['werkorders'] },
         { text: 'In uw **portaal** ziet u per adres het **installatiedossier**: wat er is aangelegd, de foto\'s van de oplevering en uw meldingen.', for: ['portaal'] },
       ],
+    },
+    {
+      version: '0.70.1',
+      date: '2026-10-28',
+      title: 'Opgeschoonde code (planner)',
+      items: [],
+    },
+    {
+      version: '0.70.0',
+      date: '2026-10-27',
+      title: 'Bestelvoorstel bij lage voorraad',
+      items: [
+        { text: 'In **Voorraadbeheer** maakt de knop **Bestelvoorstel** een Excel met elk artikel dat onder de minimumvoorraad zit en hoeveel je moet bestellen. Per artikel stel je in tot welk aantal je aanvult (**Bestellen tot**, leeg = 2× het minimum).', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '0.69.1',
+      date: '2026-10-27',
+      title: 'Opgeschoonde code (deel 3 van de schermen)',
+      items: [],
     },
     {
       version: '0.69.0',

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.70.0
+## 0.70.2
 
 Installatiedossier per locatie: alles van één adres bij elkaar.
 
@@ -15,11 +15,48 @@ Installatiedossier per locatie: alles van één adres bij elkaar.
   notities en interne foto's (`#locatie=<sleutel>` opent het direct).
 - Geen nieuwe tabel of migratie: de locatie is het adres, vergelijkbaar
   gemaakt met `locationKey` (photos.js: kleine letters, zonder leestekens,
-  postcode aaneen, SHA-256). Store en routes in `uitvoering/locations.js`:
+  postcode en huisnummertoevoeging aaneen, SHA-256). Store en routes in `uitvoering/locations.js`:
   `GET /api/locations[/:key]` (recht `werkorders`) en
   `GET /api/portal/locations/:key` (recht `portaal`, zelfde klantregel als
   `OF_CUSTOMER` in workorders.js). Vast aantal queries (id's per omgeving,
   daarna `IN (...)`), getest in `queries.test.js`.
+
+## 0.70.1
+
+Opschoonronde planner (laatste deel): duidelijke namen en een commentaarblok
+bij elke functie in `beregening/js/`, zonder gedragswijziging. Opgeschoond:
+`planimport.js`, `autotrace.js`, `concept.js`, `simulation.js`, `geometry.js`,
+`sprinklerlib.js`, `hydraulics.js`, `bom.js`, `catalog.js`, `editor.js`,
+`localrecog.js` en `app.js`. Exportnamen, opgeslagen sleutels en
+eigenschappen van het datamodel (zoals `pts`, `r`, `w`/`h` in uitvoer) zijn
+ongewijzigd. `tools/codestyle-baseline.json` is nu leeg: alle eigen code
+voldoet aan de codestijl.
+
+## 0.70.0
+
+Bestelvoorstel bij lage voorraad.
+
+- **Voorraadbeheer**: nieuwe kolom `stock_items.reorder_qty` (migratie 30,
+  SQLite en PostgreSQL), in het artikel als *Bestellen tot* (leeg = 2×
+  minimum; lager dan het minimum telt als 2× minimum).
+- `GET /api/stock/reorder` (recht `voorraad`, per omgeving): artikelen waarvan
+  beschikbaar (stand − gereserveerd) onder het minimum ligt, met
+  `target`, `orderQty` (aanvullen tot `target`, naar boven afgerond op hele
+  eenheden), `amount` (op inkoopprijs) en het totaal. Eén query (`list`).
+- Knop **Bestelvoorstel** maakt er een Excel van (tabblad *Bestelvoorstel*,
+  met totaalregel); de gewone voorraadexport heeft de kolom *Bestellen tot*.
+- Testdata vult *Bestellen tot* bij een deel van de artikelen.
+## 0.69.1
+
+Opschoonronde frontend deel 3: duidelijke namen en een commentaarblok bij elke
+functie, zonder gedragswijziging. Opgeschoond: `sw.js`, `portaal/portaal.js`,
+`werkorders/worklog.js`, `planning/planning.js`, `voorraad/voorraad.js`,
+`hoofdbeheer/hoofdbeheer.js`, `beheer/beheer.js`, `facturen/facturen.js`,
+`offertes/offertes.js` en `werkorders/werkorders.js`; ze staan niet meer in
+`tools/codestyle-baseline.json`. De wijzigingen uit 0.69.0 (eigenaar in de
+offline wachtrij) zijn in de opgeschoonde `sw.js` en `worklog.js` meegenomen.
+
+- `body-parser` 1.20.9 (lockfile; `npm audit` meldde GHSA-27r3-jxmh-p828).
 
 ## 0.69.0
 
