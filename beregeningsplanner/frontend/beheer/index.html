@@ -227,7 +227,7 @@
           <h3>Seizoensherinneringen</h3>
           <p class="muted small">Klanten met een installatie (een werkorder) en een e-mailadres krijgen op de gekozen datum één keer per jaar een mail via de mailserver hierboven, en zien de herinnering twee maanden lang in hun portaal met een knop om onderhoud aan te vragen. Klanten kunnen de mails zelf uitzetten in hun portaal.</p>
           <label class="chk"><input type="checkbox" name="enabled"> Seizoensherinneringen versturen</label>
-          <label>Adres van het klantportaal (voor de knop in de mail)<input name="portalUrl" type="url" maxlength="300" placeholder="https://…/portaal/"></label>
+          <label>Adres van het klantportaal (voor de knop in de mail)<input name="portalUrl" type="url" maxlength="300" pattern="https?://.+/portaal/" title="Het adres moet eindigen op /portaal/" placeholder="https://…/portaal/"></label>
           <div id="s-season-items"></div>
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
