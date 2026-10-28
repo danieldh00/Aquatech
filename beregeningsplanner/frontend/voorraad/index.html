@@ -65,7 +65,7 @@
             <label>Locatie<input name="location" maxlength="60" placeholder="Bijv. magazijn A3, bus 1"></label>
             <label>Beginvoorraad<input name="onHand" type="number" min="0" step="any" inputmode="decimal"></label>
             <label>Minimumvoorraad<input name="minQty" type="number" min="0" step="any" inputmode="decimal"></label>
-            <label title="Het bestelvoorstel vult aan tot dit aantal; leeg = 2× minimum">Bestellen tot<input name="reorderQty" type="number" min="0" step="any" inputmode="decimal" placeholder="2× minimum"></label>
+            <label title="Het bestelvoorstel vult aan tot dit aantal; leeg of lager dan het minimum = 2× minimum">Bestellen tot<input name="reorderQty" type="number" min="0" step="any" inputmode="decimal" placeholder="2× minimum"></label>
             <label>Inkoopprijs (€, excl. btw)<input name="costPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
           </div>
           <div class="row">
@@ -164,7 +164,7 @@
           <div class="row">
             <label>Locatie<input name="location" maxlength="60"></label>
             <label>Minimumvoorraad<input name="minQty" type="number" min="0" step="any" inputmode="decimal"></label>
-            <label title="Het bestelvoorstel vult aan tot dit aantal; leeg = 2× minimum">Bestellen tot<input name="reorderQty" type="number" min="0" step="any" inputmode="decimal" placeholder="2× minimum"></label>
+            <label title="Het bestelvoorstel vult aan tot dit aantal; leeg of lager dan het minimum = 2× minimum">Bestellen tot<input name="reorderQty" type="number" min="0" step="any" inputmode="decimal" placeholder="2× minimum"></label>
             <label>Inkoopprijs (€)<input name="costPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
           </div>
           <div class="row">

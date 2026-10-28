@@ -744,7 +744,8 @@
       const totalRow = sheet.addRow({ name: 'Totaal (artikelen met inkoopprijs)', amount: proposal.total });
       totalRow.font = { bold: true };
       sheet.getRow(1).font = { bold: true };
-      sheet.autoFilter = { from: 'A1', to: 'L1' };
+      // Filter over de kop en de artikelregels, zonder de totaalregel.
+      sheet.autoFilter = `A1:L${proposal.items.length + 1}`;
       await save(excelWorkbook, `bestelvoorstel-${stamp()}.xlsx`);
     } finally {
       button.disabled = false;
