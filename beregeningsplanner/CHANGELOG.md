@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.70.1
+
+Opschoonronde planner (laatste deel): duidelijke namen en een commentaarblok
+bij elke functie in `beregening/js/`, zonder gedragswijziging. Opgeschoond:
+`planimport.js`, `autotrace.js`, `concept.js`, `simulation.js`, `geometry.js`,
+`sprinklerlib.js`, `hydraulics.js`, `bom.js`, `catalog.js`, `editor.js`,
+`localrecog.js` en `app.js`. Exportnamen, opgeslagen sleutels en
+eigenschappen van het datamodel (zoals `pts`, `r`, `w`/`h` in uitvoer) zijn
+ongewijzigd. `tools/codestyle-baseline.json` is nu leeg: alle eigen code
+voldoet aan de codestijl.
+
 ## 0.70.0
 
 Bestelvoorstel bij lage voorraad.

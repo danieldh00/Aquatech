@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '0.70.1',
+      date: '2026-10-28',
+      title: 'Opgeschoonde code (planner)',
+      items: [],
+    },
+    {
       version: '0.70.0',
       date: '2026-10-27',
       title: 'Bestelvoorstel bij lage voorraad',
