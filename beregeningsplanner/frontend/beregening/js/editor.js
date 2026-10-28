@@ -175,7 +175,7 @@
      * Vangt een punt: op een bestaand hoekpunt, met Shift op een veelvoud van 45° vanaf het vorige punt, en op het raster (Alt = niet).
      * @param {{x: number, y: number}} point punt in meters
      * @param {Event} [event] muisgebeurtenis (voor Shift/Alt)
-     * @returns {{x: number, y: number, snapped: boolean}} het gevangen punt
+     * @returns {{x: number, y: number, snapped?: boolean}} het gevangen punt; `snapped` alleen als een bestaand hoekpunt is geraakt
      */
     snapPoint(point, event) {
       let result = { x: point.x, y: point.y };

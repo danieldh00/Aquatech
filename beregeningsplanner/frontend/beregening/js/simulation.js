@@ -58,7 +58,7 @@
    * Simuleert neerslag op alle gazonvlakken en controleert overspray op 'droog'-vlakken.
    * @param {object} state de planstand (vlakken en sproeiers)
    * @param {number} cellSize celgrootte in meters (standaard 0,25)
-   * @returns {object|null} raster (cellX, cellY, minX, minY, nx, ny, values, mask, areaIdx, areaMean), statistiek, per gazon en overspray; null zonder gazon of sproeiers
+   * @returns {object|null} raster (cellX, cellY, minX, minY, nx, ny, values, mask, areaIdx, areaMean), statistiek (null zonder rastercellen in een gazon), per gazon en overspray; null zonder geldig gazonvlak én zonder sproeiers
    */
   function simulate(state, cellSize = 0.25) {
     const lawns = state.areas.filter((area) => area.type === 'lawn' && area.pts.length >= 3);

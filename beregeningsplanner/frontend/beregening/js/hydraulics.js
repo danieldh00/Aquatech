@@ -28,40 +28,40 @@
   /**
    * Drukverlies (Hazen-Williams) in bar voor een leidinglengte, debiet en binnendiameter.
    * @param {number} lengthM lengte in meters
-   * @param {number} qLph debiet in l/u
-   * @param {number} dMm binnendiameter in mm
+   * @param {number} flowLph debiet in l/u
+   * @param {number} innerDiameterMm binnendiameter in mm
    * @returns {number} drukverlies in bar (met toeslag voor hulpstukken)
    */
-  function lossBar(lengthM, qLph, dMm) {
-    if (lengthM <= 0 || qLph <= 0) return 0;
-    const flowM3s = qLph / 3.6e6; // m³/s
-    const diameterM = dMm / 1000;
+  function lossBar(lengthM, flowLph, innerDiameterMm) {
+    if (lengthM <= 0 || flowLph <= 0) return 0;
+    const flowM3s = flowLph / 3.6e6; // m³/s
+    const diameterM = innerDiameterMm / 1000;
     const headLossM = (10.67 * lengthM * Math.pow(flowM3s, 1.852)) / (Math.pow(HydraulicsSettings.hazenC, 1.852) * Math.pow(diameterM, 4.87));
     return (headLossM / 10.197) * HydraulicsSettings.minorLossFactor;
   }
 
   /**
    * Stroomsnelheid in een leiding.
-   * @param {number} qLph debiet in l/u
-   * @param {number} dMm binnendiameter in mm
+   * @param {number} flowLph debiet in l/u
+   * @param {number} innerDiameterMm binnendiameter in mm
    * @returns {number} snelheid in m/s
    */
-  function velocity(qLph, dMm) {
-    const flowM3s = qLph / 3.6e6;
-    const crossSection = Math.PI * Math.pow(dMm / 2000, 2);
+  function velocity(flowLph, innerDiameterMm) {
+    const flowM3s = flowLph / 3.6e6;
+    const crossSection = Math.PI * Math.pow(innerDiameterMm / 2000, 2);
     return flowM3s / crossSection;
   }
 
   /**
    * Kiest de kleinste leiding waarin de stroomsnelheid binnen het maximum blijft.
-   * @param {number} qLph debiet in l/u
+   * @param {number} flowLph debiet in l/u
    * @param {number} minNominal kleinste toegestane nominale maat (standaard 25)
    * @returns {object} de leiding uit de catalogus (de grootste als niets past)
    */
-  function pickPipe(qLph, minNominal = 25) {
+  function pickPipe(flowLph, minNominal = 25) {
     for (const pipe of Catalog.pipes) {
       if (pipe.dn < minNominal) continue;
-      if (velocity(qLph, pipe.id) <= HydraulicsSettings.maxVelocity) return pipe;
+      if (velocity(flowLph, pipe.id) <= HydraulicsSettings.maxVelocity) return pipe;
     }
     return Catalog.pipes[Catalog.pipes.length - 1];
   }
