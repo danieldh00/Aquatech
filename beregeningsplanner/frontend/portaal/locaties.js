@@ -25,7 +25,8 @@
   const QUOTE_STATUS = { verzonden: 'Wacht op uw reactie', akkoord: 'Akkoord', afgewezen: 'Afgewezen', verlopen: 'Verlopen' };
   const PHOTO_KIND = { voor: 'Voor de aanleg', tijdens: 'Tijdens de aanleg', oplevering: 'Bij oplevering' };
 
-  const state = { dossier: null };
+  // latestRequest telt elke klik; een ouder antwoord dan de laatste klik wordt genegeerd.
+  const state = { dossier: null, latestRequest: 0 };
 
   /**
    * De locaties van de klant uit het portaaloverzicht: één per adres.
@@ -146,6 +147,7 @@
    * @returns {Promise<void>}
    */
   async function open(key) {
+    const requestNumber = ++state.latestRequest;
     /**
      * Toont een foutmelding onderin beeld (3,5 s).
      * @param {string} reason Wat er misging.
@@ -160,10 +162,12 @@
     try {
       res = await fetch(`../api/portal/locations/${encodeURIComponent(key)}`, { cache: 'no-store' });
     } catch (error) {
+      if (requestNumber !== state.latestRequest) return;
       showError('geen verbinding');
       return;
     }
     const body = await res.json().catch(() => null);
+    if (requestNumber !== state.latestRequest) return;
     if (!res.ok) {
       showError((body && body.message) || `HTTP ${res.status}`);
       return;
