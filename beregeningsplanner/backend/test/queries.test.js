@@ -140,7 +140,7 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     // Werkregistratie: vaste aantallen queries, ongeacht het aantal regels
     // (sessie + werkorder + uren + materiaal; urenstaat: sessie + uren + materiaal).
     const lines = [{ id: 'a', section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 10 }];
-    const qid = (await client.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen' }, lines } })).body.id;
+    const qid = (await client.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1, Nunspeet' }, lines } })).body.id;
     await client.put(`/api/quotes/${qid}`, { status: 'akkoord' });
     const wo = (await client.post('/api/workorders', { quoteId: qid })).body;
     const day = new Date().toISOString().slice(0, 10);
@@ -154,6 +154,14 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.strictEqual((await client.get(`/api/worklog?from=${day}&to=${day}`)).status, 200);
     assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
+    // Installatiedossier per locatie: vast aantal queries, niet per werkorder of melding.
+    probe.reset();
+    const locations = (await client.get('/api/locations')).body.items;
+    assert.strictEqual(locations.length, 1);
+    assert.ok(probe.stats.queries <= 4, probe.stats.sql.join('\n'));
+    probe.reset();
+    assert.strictEqual((await client.get(`/api/locations/${locations[0].key}`)).body.materials[0].used, 5);
+    assert.ok(probe.stats.queries <= 7, probe.stats.sql.join('\n'));
     // Het werkorderoverzicht telt de geboekte uren met twee queries, niet per werkorder.
     probe.reset();
     assert.strictEqual((await client.get('/api/workorders')).body.items[0].logged.minutes, 300);

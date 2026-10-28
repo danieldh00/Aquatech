@@ -2,6 +2,8 @@
 // het ontwerp, de zones, de geplaatste materialen en de foto's. Overzicht als
 // tabel (Excel-export), een dossier af te drukken als opleverrapport (PDF via
 // de browser). Gegevens uit /api/dossiers; alleen beheerders en installateurs.
+// Tweede weergave: het installatiedossier per locatie (adres) met ook de
+// meldingen, offertes, plannen en het verbruikte materiaal (/api/locations).
 (function () {
   const WorkOrderCore = window.WorkOrderCore;
   const KINDS = window.WorkOrderPhotos.KINDS;
@@ -51,7 +53,10 @@
   const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : '');
   const QUOTE_STATUS = { concept: 'Concept', verzonden: 'Verzonden', akkoord: 'Akkoord', afgewezen: 'Afgewezen', verlopen: 'Verlopen' };
 
-  const state = { me: null, profile: null, items: [], sort: { key: 'lastActivity', dir: -1 }, dossier: null };
+  // view: 'klanten' of 'locaties'; dossier = open klantdossier, location = open installatiedossier.
+  const state = { me: null, profile: null, view: 'klanten', items: [], locations: [], sort: { key: 'lastActivity', dir: -1 }, dossier: null, location: null };
+  // Telt elke navigatie; een lader die terugkomt na een nieuwere navigatie doet niets.
+  let routeVersion = 0;
 
   /**
    * Toont een melding onderin beeld (3,5 s).
@@ -93,7 +98,7 @@
   }
 
   // ---------- Overzicht ----------
-  const COLUMNS = [
+  const CUSTOMER_COLUMNS = [
     { key: 'name', label: 'Klant', value: (dossier) => dossier.name.toLowerCase(), html: (dossier) => `<b>${esc(dossier.name)}</b>${dossier.account ? '<span class="badge-acc" title="Heeft een klantaccount (portaal)">account</span>' : ''}` },
     { key: 'address', label: 'Adres', value: (dossier) => dossier.addresses[0] || '', html: (dossier) => esc(dossier.addresses.join(' · ') || '–'), cls: 'wrap' },
     { key: 'installations', label: 'Installaties', value: (dossier) => dossier.installations, html: (dossier) => `${dossier.completed} van ${dossier.installations} opgeleverd`, cls: 'num' },
@@ -101,6 +106,33 @@
     { key: 'lastCompletedOn', label: 'Laatst opgeleverd', value: (dossier) => dossier.lastCompletedOn || '', html: (dossier) => esc(shortDate(dossier.lastCompletedOn) || '–') },
     { key: 'lastActivity', label: 'Laatste activiteit', value: (dossier) => dossier.lastActivity, html: (dossier) => esc(when(dossier.lastActivity)) },
   ];
+  const LOCATION_COLUMNS = [
+    { key: 'address', label: 'Adres', value: (location) => location.address.toLowerCase(), html: (location) => `<a href="?locatie=${encodeURIComponent(location.key)}"><b>${esc(location.address)}</b></a>`, cls: 'wrap' },
+    { key: 'customers', label: 'Klant', value: (location) => (location.customers[0] || '').toLowerCase(), html: (location) => esc(location.customers.join(' · ') || '–'), cls: 'wrap' },
+    { key: 'installations', label: 'Installaties', value: (location) => location.installations, html: (location) => (location.installations ? `${location.completed} van ${location.installations} opgeleverd` : '–'), cls: 'num' },
+    { key: 'requests', label: 'Meldingen', value: (location) => location.openRequests * 1000 + location.requests, html: (location) => (location.requests ? `${location.openRequests} open van ${location.requests}` : '–'), cls: 'num' },
+    { key: 'photos', label: "Foto's", value: (location) => location.photos, html: (location) => (location.photos ? String(location.photos) : '–'), cls: 'num' },
+    { key: 'lastCompletedOn', label: 'Laatst opgeleverd', value: (location) => location.lastCompletedOn || '', html: (location) => esc(shortDate(location.lastCompletedOn) || '–') },
+    { key: 'lastActivity', label: 'Laatste activiteit', value: (location) => location.lastActivity, html: (location) => esc(when(location.lastActivity)) },
+  ];
+  /**
+   * De kolommen van de gekozen weergave.
+   * @returns {object[]} De kolommen.
+   */
+  const columnsOfView = () => (state.view === 'locaties' ? LOCATION_COLUMNS : CUSTOMER_COLUMNS);
+  /**
+   * Alle regels van de gekozen weergave (klanten of locaties).
+   * @returns {object[]} De regels.
+   */
+  const itemsOfView = () => (state.view === 'locaties' ? state.locations : state.items);
+  /**
+   * De doorzoekbare tekst van een regel.
+   * @param {object} item Een klant of locatie.
+   * @returns {string} De tekst in kleine letters.
+   */
+  const searchTextOf = (item) => (state.view === 'locaties'
+    ? [item.address, ...item.customers]
+    : [item.name, ...item.addresses, item.account ? item.account.displayName : '']).join(' ').toLowerCase();
 
   /**
    * De dossiers die bij zoekterm en filter passen, gesorteerd op de gekozen kolom.
@@ -109,10 +141,11 @@
   function visible() {
     const term = $('#l-search').value.trim().toLowerCase();
     const onlyCompleted = $('#l-done').checked;
-    const column = COLUMNS.find((candidate) => candidate.key === state.sort.key) || COLUMNS[0];
-    return state.items
+    const columns = columnsOfView();
+    const column = columns.find((candidate) => candidate.key === state.sort.key) || columns[0];
+    return itemsOfView()
       .filter((dossier) => !onlyCompleted || dossier.completed > 0)
-      .filter((dossier) => !term || [dossier.name, ...dossier.addresses, dossier.account ? dossier.account.displayName : ''].join(' ').toLowerCase().includes(term))
+      .filter((dossier) => !term || searchTextOf(dossier).includes(term))
       .sort((left, right) => {
         const leftValue = column.value(left), rightValue = column.value(right);
         return (leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0) * state.sort.dir;
@@ -122,17 +155,27 @@
   /** Tekent de tabel met dossiers en de kerncijfers. */
   function renderList() {
     const items = visible();
+    const all = itemsOfView();
+    const byLocation = state.view === 'locaties';
+    const COLUMNS = columnsOfView();
+    document.querySelectorAll('.tabs .tab').forEach((tab) => {
+      tab.classList.toggle('active', tab.dataset.view === state.view);
+      tab.setAttribute('aria-pressed', String(tab.dataset.view === state.view));
+    });
     const head = `<thead><tr>${COLUMNS.map((column) => `<th data-sort="${column.key}" class="${column.cls === 'num' ? 'num ' : ''}${state.sort.key === column.key ? (state.sort.dir > 0 ? 'asc' : 'desc') : ''}">${esc(column.label)}</th>`).join('')}</tr></thead>`;
     const body = items.length
       ? items.map((dossier) => `<tr data-id="${esc(dossier.key)}">${COLUMNS.map((column) => `<td class="${column.cls || ''}">${column.html(dossier)}</td>`).join('')}</tr>`).join('')
-      : `<tr><td class="empty" colspan="${COLUMNS.length}">${state.items.length ? 'Geen klanten gevonden met dit filter.' : 'Nog geen dossiers. Een dossier ontstaat zodra er voor een klant een werkorder is.'}</td></tr>`;
+      : `<tr><td class="empty" colspan="${COLUMNS.length}">${all.length ? `Geen ${byLocation ? 'locaties' : 'klanten'} gevonden met dit filter.`
+        : byLocation ? 'Nog geen locaties. Een locatie ontstaat zodra een werkorder of melding een adres heeft.' : 'Nog geen dossiers. Een dossier ontstaat zodra er voor een klant een werkorder is.'}</td></tr>`;
     $('#l-table').innerHTML = head + `<tbody>${body}</tbody>`;
-    $('#l-count').textContent = `${items.length} van ${state.items.length} klanten`;
-    const totals = state.items.reduce((sum, dossier) => ({ installations: sum.installations + dossier.installations, completed: sum.completed + dossier.completed, photos: sum.photos + dossier.photos }), { installations: 0, completed: 0, photos: 0 });
-    $('#l-stats').hidden = !state.items.length;
-    $('#l-stats').innerHTML = `<div class="stat"><b>${state.items.length}</b><span>klanten</span></div>
+    $('#l-count').textContent = `${items.length} van ${all.length} ${byLocation ? 'locaties' : 'klanten'}`;
+    const totals = all.reduce((sum, dossier) => ({ installations: sum.installations + dossier.installations, completed: sum.completed + dossier.completed, photos: sum.photos + dossier.photos, openRequests: sum.openRequests + (dossier.openRequests || 0) }),
+      { installations: 0, completed: 0, photos: 0, openRequests: 0 });
+    $('#l-stats').hidden = !all.length;
+    $('#l-stats').innerHTML = `<div class="stat"><b>${all.length}</b><span>${byLocation ? 'locaties' : 'klanten'}</span></div>
       <div class="stat"><b>${totals.completed}</b><span>installaties opgeleverd</span></div>
       <div class="stat"><b>${totals.installations - totals.completed}</b><span>in uitvoering of gepland</span></div>
+      ${byLocation ? `<div class="stat"><b>${totals.openRequests}</b><span>open meldingen</span></div>` : ''}
       <div class="stat"><b>${totals.photos}</b><span>foto's</span></div>`;
   }
 
@@ -141,10 +184,15 @@
    * @returns {Promise<void>}
    */
   async function loadList() {
+    const version = routeVersion;
+    const byLocation = state.view === 'locaties';
     try {
-      state.items = (await api('dossiers')).items || [];
+      const items = (await api(byLocation ? 'locations' : 'dossiers')).items || [];
+      if (version !== routeVersion) return;
+      if (byLocation) state.locations = items; else state.items = items;
     } catch (error) {
-      state.items = [];
+      if (version !== routeVersion) return;
+      if (byLocation) state.locations = []; else state.items = [];
       toast(`Dossiers laden mislukt: ${error.message}`, true);
     }
     renderList();
@@ -157,6 +205,7 @@
   async function exportXlsx() {
     if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     const items = visible();
+    if (state.view === 'locaties') return exportLocations(items);
     try {
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'AquaTech Service';
@@ -193,6 +242,54 @@
       link.click();
       setTimeout(() => { URL.revokeObjectURL(link.href); link.remove(); }, 1000);
       toast(`${items.length} klanten geëxporteerd`);
+    } catch (error) {
+      toast(`Export mislukt: ${error.message}`, true);
+    }
+  }
+
+  /**
+   * Exporteert de getoonde locaties naar Excel.
+   * @param {object[]} items De locaties.
+   * @returns {Promise<void>}
+   */
+  async function exportLocations(items) {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'AquaTech Service';
+      workbook.created = new Date();
+      const worksheet = workbook.addWorksheet('Locaties', { views: [{ state: 'frozen', ySplit: 1 }] });
+      worksheet.columns = [
+        { header: 'Adres', key: 'address', width: 44 },
+        { header: 'Klant(en)', key: 'customers', width: 30 },
+        { header: 'Installaties', key: 'installations', width: 12 },
+        { header: 'Opgeleverd', key: 'completed', width: 12 },
+        { header: 'Meldingen', key: 'requests', width: 11 },
+        { header: 'Open meldingen', key: 'openRequests', width: 15 },
+        { header: "Foto's", key: 'photos', width: 9 },
+        { header: 'Laatst opgeleverd', key: 'lastCompletedOn', width: 18 },
+        { header: 'Laatste activiteit', key: 'lastActivity', width: 20 },
+      ];
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF172F5E' } };
+      for (const location of items) {
+        worksheet.addRow({
+          address: location.address, customers: location.customers.join('; '), installations: location.installations, completed: location.completed,
+          requests: location.requests, openRequests: location.openRequests, photos: location.photos,
+          lastCompletedOn: location.lastCompletedOn ? new Date(`${location.lastCompletedOn}T12:00:00`) : null,
+          lastActivity: location.lastActivity ? new Date(location.lastActivity) : null,
+        });
+      }
+      worksheet.getColumn('lastCompletedOn').numFmt = 'dd-mm-yyyy';
+      worksheet.getColumn('lastActivity').numFmt = 'dd-mm-yyyy hh:mm';
+      worksheet.autoFilter = { from: 'A1', to: 'I1' };
+      const blob = new Blob([await workbook.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `installatiedossiers_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => { URL.revokeObjectURL(link.href); link.remove(); }, 1000);
+      toast(`${items.length} locaties geëxporteerd`);
     } catch (error) {
       toast(`Export mislukt: ${error.message}`, true);
     }
@@ -265,7 +362,7 @@
         <a class="no-print small" href="../werkorders/?id=${encodeURIComponent(installationRecord.id)}">Werkorder ${esc(installationRecord.number)} openen</a>
       </div>
       <div class="inst-info">
-        ${field('Adres', esc(installationRecord.address))}
+        ${field('Adres', installationRecord.location ? `<a href="?locatie=${encodeURIComponent(installationRecord.location)}" title="Installatiedossier van deze locatie">${esc(installationRecord.address)}</a>` : esc(installationRecord.address))}
         ${field('Opgeleverd op', esc(day(installationRecord.completedOn)) || (installationRecord.status === 'gereed' ? '' : '<span class="muted">Nog niet opgeleverd</span>'))}
         ${field('Afgetekend door (klant)', esc(report.signedBy))}
         ${field('Uitgevoerd door', esc([...new Set([installationRecord.assignee, installationRecord.crew].filter(Boolean))].join(', ')))}
@@ -280,6 +377,94 @@
       ${photoTiles(installationRecord, internal)}
       ${zones}${materials}
     </section>`;
+  }
+
+  /**
+   * De adressen van een klantdossier, elk met een link naar het installatiedossier van die locatie.
+   * @param {object} dossier Het klantdossier.
+   * @returns {string} HTML.
+   */
+  function addressLinks(dossier) {
+    return `<span class="loc-links">${dossier.addresses.map((address) => {
+      const match = dossier.installations.find((installationRecord) => installationRecord.address === address && installationRecord.location);
+      return match ? `<a href="?locatie=${encodeURIComponent(match.location)}" title="Installatiedossier van deze locatie">${esc(address)}</a>` : `<span>${esc(address)}</span>`;
+    }).join('')}</span>`;
+  }
+
+  /** Tekent het installatiedossier van de gekozen locatie (ook de afdrukversie). */
+  function renderLocation() {
+    const dossier = state.location;
+    const internal = $('#d-internal').checked;
+    const profile = state.profile || {};
+    const company = [profile.companyName, profile.address, [profile.phone, profile.email].filter(Boolean).join(' · ')].filter(Boolean).join('\n');
+    const done = dossier.installations.filter((installationRecord) => installationRecord.status === 'gereed').length;
+    const photoCount = dossier.installations.reduce((sum, installationRecord) => sum + installationRecord.photos.filter((photo) => internal || photo.customerVisible).length, 0);
+    document.title = `Installatiedossier ${dossier.address} – AquaTech Service`;
+    const customers = dossier.customers.map((customer) => (customer.dossierKey
+      ? `<a href="?klant=${encodeURIComponent(customer.dossierKey)}">${esc(customer.name)}</a>`
+      : esc(customer.name))).join('<br>');
+    const plans = dossier.plans.map((plan) => `<a href="../beregening/?plan=${encodeURIComponent(plan.id)}">${esc(plan.title)}</a>`).join('<br>');
+    const materials = dossier.materials.length ? `<section class="card-form inst"><h3>Materialen op deze locatie</h3>
+      <table class="mini"><thead><tr><th>Code</th><th>Omschrijving</th><th class="num">Geplaatst (werkorder)</th><th class="num">Verbruikt (geboekt)</th><th>Eenh.</th></tr></thead><tbody>
+      ${dossier.materials.map((material) => `<tr><td>${esc(material.code)}</td><td>${esc(material.description)}</td><td class="num">${material.placed ? formatNumber(material.placed) : '–'}</td><td class="num">${material.used ? formatNumber(material.used) : '–'}</td><td>${esc(material.unit)}</td></tr>`).join('')}
+      </tbody></table></section>` : '';
+    const requests = dossier.requests.length ? `<section class="card-form inst"><h3>Meldingen</h3>
+      <table class="mini"><thead><tr><th>Nummer</th><th>Soort</th><th>Onderwerp</th><th>Status</th><th>Gemeld</th></tr></thead><tbody>
+      ${dossier.requests.map((request) => `<tr><td><a href="../meldingen/?id=${encodeURIComponent(request.id)}">${esc(request.number)}</a></td><td>${esc(request.kindLabel)}${request.urgent ? ' (spoed)' : ''}</td><td>${esc(request.subject)}</td><td>${esc(request.statusLabel)}</td><td>${esc(shortDate(request.createdAt))}</td></tr>`).join('')}
+      </tbody></table></section>` : '';
+    $('#d-body').innerHTML = `
+      <header class="d-head">
+        <img src="../shared/logo-white.png" alt="${esc(profile.companyName || 'AquaTech Service')}">
+        <div class="d-title"><h1 tabindex="-1">Installatiedossier ${esc(dossier.address)}</h1><span class="sub">${done} van ${dossier.installations.length} installaties opgeleverd · ${dossier.requests.length} meldingen · ${photoCount} foto's · bijgewerkt ${esc(day(new Date().toISOString()))}</span></div>
+        <div class="d-company">${esc(company)}</div>
+      </header>
+      <section class="card-form">
+        <h3>Locatie</h3>
+        <div class="d-cust">
+          ${field('Adres', esc(dossier.address))}
+          ${field('Klant(en)', customers)}
+          ${field('Tekening / plan', plans)}
+        </div>
+      </section>
+      ${dossier.installations.map((installationRecord) => installation(installationRecord, internal)).join('')}
+      ${requests}${materials}
+      ${dossier.quotes.length ? `<section class="card-form no-print"><h3>Offertes</h3><table class="mini grid"><thead><tr><th>Nummer</th><th>Omschrijving</th><th>Status</th><th class="num">Totaal incl. btw</th><th>Datum</th></tr></thead><tbody>
+        ${dossier.quotes.map((quote) => `<tr><td><a href="../offertes/?id=${encodeURIComponent(quote.id)}">${esc(quote.number)}</a></td><td>${esc(quote.title)}</td><td>${esc(QUOTE_STATUS[quote.status] || quote.status)}</td><td class="num">${esc(eur(quote.totalIncl))}</td><td>${esc(shortDate(quote.createdAt))}</td></tr>`).join('')}
+        </tbody></table></section>` : ''}
+      <p class="d-foot">${esc([profile.companyName, profile.website].filter(Boolean).join(' · '))}</p>`;
+  }
+
+  /**
+   * Haalt een installatiedossier op en toont het.
+   * @param {string} key Sleutel van de locatie (l-<hash>).
+   * @returns {Promise<void>}
+   */
+  async function loadLocation(key) {
+    const version = routeVersion;
+    state.dossier = null;
+    $('#list-view').hidden = true;
+    $('#detail-view').hidden = false;
+    $('#d-body').innerHTML = '<p class="muted">Installatiedossier laden…</p>';
+    try {
+      const location = await api(`locations/${encodeURIComponent(key)}`);
+      // Intussen naar een andere weergave gegaan: dit antwoord is verouderd.
+      if (version !== routeVersion) return;
+      state.location = location;
+      renderLocation();
+      window.scrollTo(0, 0);
+      // Focus naar de kop, zodat toetsenbord en schermlezer bij het geopende dossier staan.
+      $('#d-body h1').focus();
+    } catch (error) {
+      if (version !== routeVersion) return;
+      toast(`Kan het installatiedossier niet openen: ${error.message}`, true);
+      navigate('weergave=locaties');
+    }
+  }
+
+  /** Tekent het open dossier opnieuw (klant of locatie). */
+  function renderOpen() {
+    if (state.location) renderLocation();
+    else if (state.dossier) renderDossier();
   }
 
   /** Tekent het dossier van de gekozen klant (ook de afdrukversie). */
@@ -305,7 +490,7 @@
           ${field('Contactpersoon', esc(customer.contact))}
           ${field('Telefoon', customer.phone ? `<a href="tel:${esc(customer.phone.replace(/[^\d+]/g, ''))}">${esc(customer.phone)}</a>` : '')}
           ${field('E-mail', customer.email ? `<a href="mailto:${esc(customer.email)}">${esc(customer.email)}</a>` : '')}
-          ${field('Adres(sen)', dossier.addresses.map(esc).join('<br>'))}
+          ${field('Adres(sen)', addressLinks(dossier))}
           ${field('Klantportaal', dossier.account ? `account ${esc(dossier.account.displayName)}` : '<span class="muted">geen klantaccount</span>')}
         </div>
       </section>
@@ -322,14 +507,19 @@
    * @returns {Promise<void>}
    */
   async function loadDossier(key) {
+    const version = routeVersion;
+    state.location = null;
     $('#list-view').hidden = true;
     $('#detail-view').hidden = false;
     $('#d-body').innerHTML = '<p class="muted">Dossier laden…</p>';
     try {
-      state.dossier = await api(`dossiers/${encodeURIComponent(key)}`);
+      const dossier = await api(`dossiers/${encodeURIComponent(key)}`);
+      if (version !== routeVersion) return;
+      state.dossier = dossier;
       renderDossier();
       window.scrollTo(0, 0);
     } catch (error) {
+      if (version !== routeVersion) return;
       toast(`Kan het dossier niet openen: ${error.message}`, true);
       navigate('');
     }
@@ -349,7 +539,7 @@
     collapsed.forEach((details) => { details.open = true; });
     window.addEventListener('afterprint', () => collapsed.forEach((details) => { details.open = false; }), { once: true });
     const previousTitle = document.title;
-    document.title = `Opleverrapport ${state.dossier.customer.name || ''}`.trim();
+    document.title = `Opleverrapport ${state.location ? state.location.address : state.dossier.customer.name || ''}`.trim();
     window.print();
     setTimeout(() => { document.title = previousTitle; }, 500);
   }
@@ -357,6 +547,7 @@
   /** Toont de lijst met dossiers. */
   function showList() {
     state.dossier = null;
+    state.location = null;
     document.title = 'Klantdossiers – AquaTech Service';
     $('#detail-view').hidden = true;
     $('#list-view').hidden = false;
@@ -364,12 +555,17 @@
   }
 
   /**
-   * Toont het dossier uit ?klant= of anders de lijst.
+   * Toont het dossier uit ?klant= of ?locatie=, of anders de lijst (?weergave=locaties: per locatie).
    * @returns {Promise<void>|undefined}
    */
   function route() {
-    const key = searchParams().get('klant');
-    if (key) return loadDossier(key);
+    routeVersion++;
+    const params = searchParams();
+    if (params.get('klant')) return loadDossier(params.get('klant'));
+    if (params.get('locatie')) return loadLocation(params.get('locatie'));
+    const view = params.get('weergave') === 'locaties' ? 'locaties' : 'klanten';
+    if (view !== state.view) state.sort = { key: 'lastActivity', dir: -1 };
+    state.view = view;
     showList();
   }
 
@@ -392,7 +588,7 @@
     api('quote-profile').then((response) => {
       if (!response || !response.profile) return;
       state.profile = response.profile;
-      if (state.dossier) renderDossier();
+      renderOpen();
     }).catch(() => {});
     let searchTimer;
     /** Zoekt na een korte pauze in het typen. */
@@ -410,22 +606,30 @@
         state.sort = { key: header.dataset.sort, dir: state.sort.key === header.dataset.sort ? -state.sort.dir : 1 };
         return renderList();
       }
+      const link = event.target.closest('a[href^="?locatie="]');
+      // Ctrl/Cmd/Shift-klik: de browser opent de link zelf (nieuw tabblad of venster).
+      if (link && (event.ctrlKey || event.metaKey || event.shiftKey)) return;
+      if (link) { event.preventDefault(); return navigate(link.getAttribute('href').slice(1)); }
       const row = event.target.closest('tr[data-id]');
-      if (row) navigate(`klant=${encodeURIComponent(row.dataset.id)}`);
+      if (row) navigate(`${state.view === 'locaties' ? 'locatie' : 'klant'}=${encodeURIComponent(row.dataset.id)}`);
     };
+    document.querySelectorAll('.tabs .tab').forEach((tab) => {
+      /** Wisselt tussen per klant en per locatie. */
+      tab.onclick = () => { navigate(tab.dataset.view === 'locaties' ? 'weergave=locaties' : ''); };
+    });
     /**
      * Terug naar de lijst.
      * @returns {void}
      */
-    $('#d-back').onclick = () => navigate('');
+    $('#d-back').onclick = () => navigate(state.location ? 'weergave=locaties' : '');
     $('#d-print').onclick = printDossier;
     /** Toont of verbergt de interne foto's. */
-    $('#d-internal').onchange = () => { if (state.dossier) renderDossier(); };
+    $('#d-internal').onchange = renderOpen;
     $('#d-body').addEventListener('click', (event) => {
       const tile = event.target.closest('.ph-tile');
       if (!tile || !event.target.closest('.ph-img')) return;
       const internal = $('#d-internal').checked;
-      const installationRecord = state.dossier.installations.find((candidate) => candidate.id === tile.dataset.inst);
+      const installationRecord = (state.location || state.dossier).installations.find((candidate) => candidate.id === tile.dataset.inst);
       const list = Object.keys(KINDS).flatMap((kind) => installationRecord.photos.filter((photo) => photo.kind === kind && (internal || photo.customerVisible)));
       window.PhotoViewer.show(list.map((photo) => ({ src: `../${photo.url}`, caption: photo.caption || KINDS[photo.kind], sub: [KINDS[photo.kind], when(photo.takenAt || photo.createdAt), installationRecord.number].join(' · ') })),
         list.findIndex((photo) => photo.id === tile.dataset.photo));

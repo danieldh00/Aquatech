@@ -14,6 +14,7 @@
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { forCustomer } = require('./service-requests');
+const { locationKey } = require('./photos');
 
 const Core = require(path.join(FRONTEND_DIR, 'werkorders', 'workorder-core.js'));
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
@@ -63,7 +64,7 @@ function customerWorkOrder(workOrder, { detail = false } = {}) {
   const progress = workOrder.progress || Core.progress(details);
   const out = {
     id: workOrder.id, number: workOrder.number, status: workOrder.status, statusLabel: Core.STATUSES[workOrder.status] || workOrder.status,
-    title: workOrder.title, address: workOrder.address, quoteId: workOrder.quoteId, quoteNumber: workOrder.quoteNumber, planId: workOrder.planId,
+    title: workOrder.title, address: workOrder.address, location: locationKey(workOrder.address), quoteId: workOrder.quoteId, quoteNumber: workOrder.quoteNumber, planId: workOrder.planId,
     plannedDate: workOrder.plannedDate || '', startTime: workOrder.startTime || '', endTime: details.endTime || '', days: details.days || null,
     installer: workOrder.assignee ? workOrder.assignee.displayName : '',
     progress: { steps: progress.steps, done: progress.done, pct: progress.pct },
@@ -144,15 +145,27 @@ function registerPortalRoutes(app, ctx) {
     res.setHeader('Cache-Control', 'no-store');
     const tenantId = tenantOf(req);
     const user = req.user;
+    const workOrders = workOrdersOf(req);
+    // Locatie van een melding: het eigen adres, anders dat van de gekoppelde installatie of werkorder (zoals locations.js).
+    const locationOfWorkOrder = new Map(workOrders.map((workOrder) => [workOrder.id, workOrder.location]));
+    /**
+     * Een melding voor de klant, met de sleutel van zijn locatie.
+     * @param {object} request De melding.
+     * @returns {object} De melding zonder interne notitie, met location.
+     */
+    const withLocation = (request) => ({
+      ...forCustomer(request),
+      location: locationKey(request.address) || locationOfWorkOrder.get(request.installation?.id) || locationOfWorkOrder.get(request.workOrder?.id) || null,
+    });
     res.json({
       user: { displayName: user.display_name || user.displayName || '', kind: user.kind, phone: user.phone || '' },
       contact: contactOf(settingsOf(req).get('quoteProfile')),
       // Plannen alleen met het recht plannen (een organisatie kan het de klant afnemen).
       plans: Roles.can(user, 'plannen') ? store.listPlans(tenantId, { ownerId: user.id }) : [],
       quotes: quotes.list(tenantId, { customerId: user.id }),
-      workorders: workOrdersOf(req),
+      workorders: workOrders,
       // Eigen meldingen (storing, onderhoud), zie service-requests.js.
-      requests: ctx.requests ? ctx.requests.list(tenantId, { customerId: user.id }).map(forCustomer) : [],
+      requests: ctx.requests ? ctx.requests.list(tenantId, { customerId: user.id }).map(withLocation) : [],
       features: { photos: Boolean(ctx.photos), appointments: typeof workorders.respond === 'function', requests: Boolean(ctx.requests) },
     });
   });
