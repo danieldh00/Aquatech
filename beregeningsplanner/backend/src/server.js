@@ -2239,7 +2239,7 @@ if (require.main === module) {
     }
     app.locals.seasonRemindersAll()
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
-      .catch((err) => console.error('Seizoensherinneringen mislukt:', err.message));
+      .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));
     app.locals.backupIfDue()
       .then((backup) => { if (backup) console.log(`Versleutelde back-up gemaakt: ${backup.name} (${backup.size} bytes) in ${backupDir}`); })
       .catch((err) => console.error('Back-up mislukt:', err.message));

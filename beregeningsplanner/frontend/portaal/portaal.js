@@ -100,6 +100,8 @@
         <div>${esc(reminder.text)}</div>
         ${canRequest ? `<div class="actions"><button class="btn primary" data-season="${esc(reminder.key)}">Afspraak aanvragen</button></div>` : ''}
       </div>`).join('');
+    // Een eerder gestart GET mag een net opgeslagen of nog lopende keuze niet terugzetten.
+    if (state.seasonMail !== undefined) portal.reminderMails = state.seasonMail;
     $('#season-mail').checked = portal.reminderMails === true;
     $('#season-mail-row').hidden = !portal.user || portal.user.kind !== 'account';
     $('#s-season').hidden = !portal.remindersEnabled || (!reminders.length && $('#season-mail-row').hidden);
@@ -133,11 +135,14 @@
     const checkbox = $('#season-mail');
     // Eén wijziging tegelijk, zodat de laatste klik ook de opgeslagen stand is.
     checkbox.disabled = true;
+    state.seasonMail = wanted;
     try {
       await api('../api/account/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preferences: { seasonReminders: wanted } }) });
       state.data.reminderMails = wanted;
+      checkbox.checked = wanted;
       toast(wanted ? 'U krijgt de herinneringen per e-mail.' : 'U krijgt geen herinneringen meer per e-mail.');
     } catch (error) {
+      state.seasonMail = !wanted;
       checkbox.checked = !wanted;
       toast(`Opslaan mislukt (${error.message}).`, true);
     } finally {
