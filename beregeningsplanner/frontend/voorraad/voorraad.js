@@ -666,13 +666,14 @@
         { header: 'Notities', key: 'notes', width: 30 },
       ];
       const GROUPS = { producten: 'Producten', arbeid: 'Arbeid', overig: 'Overig' };
-      for (const item of visible()) {
+      const items = visible();
+      for (const item of items) {
         worksheet.addRow({ ...item, low: item.low ? 'ja' : '', archived: item.archived ? 'ja' : '', costPrice: item.costPrice, value: item.value, salePrice: item.salePrice,
           vat: `${item.vatRate}%`, group: GROUPS[item.revenueGroup] || item.revenueGroup,
           shop: !item.shopSync ? 'niet' : item.shop.error ? 'fout' : item.shop.productId ? `product ${item.shop.productId}` : 'niet gekoppeld' });
       }
       worksheet.getRow(1).font = { bold: true };
-      worksheet.autoFilter = { from: 'A1', to: 'R1' };
+      worksheet.autoFilter = `A1:R${items.length + 1}`;
       const reservedSheet = excelWorkbook.addWorksheet('Gereserveerd', { views: [{ state: 'frozen', ySplit: 1 }] });
       reservedSheet.columns = [
         { header: 'Werkorder', key: 'wo', width: 14 }, { header: 'Titel', key: 'title', width: 30 }, { header: 'Klant', key: 'customer', width: 24 },
