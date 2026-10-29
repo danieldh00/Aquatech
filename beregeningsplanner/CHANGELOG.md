@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Planner: het eigenschappenpaneel rechts (en de lege strook die het opleverde) verdwijnt zolang er niets geselecteerd is en er geen aandachtspunten zijn; de tekening gebruikt de volle breedte. Het paneel is 260 px i.p.v. 280 px.
+
 ## 0.72.1
 
 - Klantportaal: geen melding "Er staat nog niets voor u klaar" meer als er alleen een seizoensherinnering staat.

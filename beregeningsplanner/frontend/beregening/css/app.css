@@ -46,7 +46,10 @@ body {
 .topbar .btn.ghost:hover { background: rgba(255,255,255,0.12); }
 
 /* Layout */
-.layout { flex: 1; display: grid; grid-template-columns: 330px 1fr 280px; min-height: 0; }
+.layout { flex: 1; display: grid; grid-template-columns: 330px 1fr 260px; min-height: 0; }
+/* Zonder selectie of aandachtspunten geen lege strook rechts: de tekening krijgt de volle breedte */
+body:not(.has-sel):not(.has-warnings) .layout { grid-template-columns: 330px 1fr; }
+body:not(.has-sel):not(.has-warnings) .inspector { display: none; }
 .sidebar, .inspector { background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
 .sidebar { border-right: 1px solid var(--line); }
 .inspector { border-left: 1px solid var(--line); overflow-y: auto; }
@@ -248,7 +251,8 @@ table.list.missing td { color: var(--danger); }
     display: none; position: fixed; right: 10px; bottom: 34px; width: 320px; max-height: 65vh; z-index: 8;
     border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,0.2);
   }
-  body.has-sel .inspector { display: flex; }
+  body.has-sel .inspector,
+  body.has-warnings .inspector { display: flex; }
   .props-close { display: inline-flex; position: absolute; top: 6px; right: 6px; z-index: 1; }
   .inspector #props h3:first-child { margin-top: 4px; padding-right: 40px; }
 }

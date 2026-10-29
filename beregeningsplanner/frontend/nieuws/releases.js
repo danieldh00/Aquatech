@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.0.1',
+      date: '2026-10-29',
+      title: 'Planner gebruikt de volle breedte',
+      items: [],
+    },
+    {
       version: '0.72.1',
       date: '2026-10-28',
       title: 'Kleine verbetering klantportaal',
