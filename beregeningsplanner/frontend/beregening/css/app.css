@@ -46,7 +46,10 @@ body {
 .topbar .btn.ghost:hover { background: rgba(255,255,255,0.12); }
 
 /* Layout */
-.layout { flex: 1; display: grid; grid-template-columns: 330px 1fr 280px; min-height: 0; }
+.layout { flex: 1; display: grid; grid-template-columns: 330px 1fr 260px; min-height: 0; }
+/* Zonder selectie of aandachtspunten geen lege strook rechts: de tekening krijgt de volle breedte */
+body:not(.has-sel):not(.has-warnings) .layout { grid-template-columns: 330px 1fr; }
+body:not(.has-sel):not(.has-warnings) .inspector { display: none; }
 .sidebar, .inspector { background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
 .sidebar { border-right: 1px solid var(--line); }
 .inspector { border-left: 1px solid var(--line); overflow-y: auto; }

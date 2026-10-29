@@ -2393,6 +2393,7 @@
       const list = (this.conceptWarnings || []).concat(calc ? calc.warnings : []);
       if (this.sim && this.editor.layers.heatmap && this.sim.stats && this.sim.stats.dryPct > 6) list.push(`Droge plekken: ${formatNumber(this.sim.stats.dryPct)}% van het gazon krijgt te weinig water.`);
       if (this.sim && this.editor.layers.heatmap && this.sim.overspray > 0.5) list.push(`Er valt water op ${formatNumber(this.sim.overspray)} m² die droog moet blijven.`);
+      document.body.classList.toggle('has-warnings', list.length > 0);
       warningsBox.innerHTML = list.length ? `<h3>Aandachtspunten</h3><ul>${list.map((warning) => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>` : '';
     },
 

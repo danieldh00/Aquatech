@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.0.1',
+      date: '2026-10-29',
+      title: 'Planner gebruikt de volle breedte',
+      items: [
+        { text: 'In de beregeningsplanner is de tekening nu breder: de lege strook rechts verdwijnt zolang er niets geselecteerd is en er geen aandachtspunten zijn. De legenda heeft daardoor meer ruimte.', for: ['plannen'] },
+      ],
+    },
+    {
       version: '0.72.1',
       date: '2026-10-28',
       title: 'Kleine verbetering klantportaal',
