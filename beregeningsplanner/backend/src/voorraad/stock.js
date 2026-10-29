@@ -41,6 +41,8 @@ const LIST_LIMIT = 200;
 const GROUPS = { producten: 'Producten', arbeid: 'Arbeid', overig: 'Overig' };
 const VAT_RATES = [21, 9, 0];
 const EXPORT_LIMIT = 10000;
+/** Hoogstens zoveel id's per IN (...) bij bulkwijzigingen (ruim onder de parameterlimiet). */
+const BATCH = 500;
 
 /**
  * Het huidige moment.
@@ -547,16 +549,19 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
           sale_price, vat_rate, revenue_group, shop_sync, shop_product_id)
         VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, 21, 'producten', 1, ?)`);
       for (const { product, code } of fresh) put.run(crypto.randomUUID(), tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, product.price == null ? null : Math.round(product.price * 100) / 100, String(product.id));
-      const restoreIds = restore.map((item) => item.id);
-      const archiveIds = archive.map((item) => item.id);
-      if (restoreIds.length) prepare(`UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND id IN (${placeholders(restoreIds.length)})`).run(timestamp, tenantId, ...restoreIds);
-      if (archiveIds.length) {
-        prepare(`UPDATE stock_items SET archived = 1, shop_product_id = NULL, shop_dirty = 0, updated_at = ? WHERE tenant_id = ? AND id IN (${placeholders(archiveIds.length)})`).run(timestamp, tenantId, ...archiveIds);
-        prepare(`DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${placeholders(archiveIds.length)})`).run(tenantId, ...archiveIds);
+      for (let start = 0; start < restore.length; start += BATCH) {
+        const ids = restore.slice(start, start + BATCH).map((item) => item.id);
+        prepare(`UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND id IN (${placeholders(ids.length)})`).run(timestamp, tenantId, ...ids);
       }
+      for (let start = 0; start < archive.length; start += BATCH) {
+        const ids = archive.slice(start, start + BATCH).map((item) => item.id);
+        prepare(`UPDATE stock_items SET archived = 1, shop_dirty = 0, updated_at = ? WHERE tenant_id = ? AND id IN (${placeholders(ids.length)})`).run(timestamp, tenantId, ...ids);
+        prepare(`DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${placeholders(ids.length)})`).run(tenantId, ...ids);
+      }
+      // In dezelfde transactie, zodat een herstelde of nieuwe regel nooit zonder reservering actief blijft.
+      const reopened = [...fresh.map((entry) => entry.code), ...restore.map((item) => item.code)];
+      if (reopened.length) resyncOpen(tenantId, reopened, { nested: true });
     });
-    const reopened = [...fresh.map((entry) => entry.code), ...restore.map((item) => item.code)];
-    if (reopened.length) resyncOpen(tenantId, reopened);
     return { created: fresh.length, restored: restore.length, archived: archive.length, skipped };
   }
 
@@ -649,16 +654,17 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * Alle open werkorders opnieuw reserveren (bijv. na een nieuw voorraadartikel).
    * @param {string} tenantId Id van de omgeving.
    * @param {string[]|null} [codes] Alleen werkorders met een van deze codes.
+   * @param {{ nested?: boolean }} [options] Binnen de transactie van de aanroeper.
    * @returns {number} Aantal bijgewerkte werkorders.
    */
-  function resyncOpen(tenantId, codes = null) {
+  function resyncOpen(tenantId, codes = null, { nested = false } = {}) {
     const rows = prepare(`SELECT id, number, status, data, deleted_at FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL
       AND status IN (${placeholders(OPEN.length)})`).all(tenantId, ...OPEN);
     const want = codes ? new Set(codes.map(normalizeCode)) : null;
     let count = 0;
     for (const workOrder of rows) {
       if (want && ![...needsOf(JSON.parse(workOrder.data).materials).keys()].some((code) => want.has(code))) continue;
-      syncWorkOrder(tenantId, workOrder.id, workOrder);
+      syncWorkOrder(tenantId, workOrder.id, workOrder, { nested });
       count++;
     }
     return count;
