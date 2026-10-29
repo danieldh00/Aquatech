@@ -25,6 +25,10 @@ Opzet van de eigen webshop (stap 1, alleen lezen), als module van dit systeem.
   (volgen later).
 - Tests: `test/storefront.test.js`.
 
+## 1.1.1
+
+- Inloggen met een testaccount (`<testomgeving>.<naam>`) werkt ook als de organisatiecode leeg of verkeerd is, bijvoorbeeld doordat de browser de code van de hoofdbeheerder onthoudt. De testomgeving wordt dan uit de gebruikersnaam gehaald (alleen testomgevingen).
+
 ## 1.0.1
 
 - Planner: het eigenschappenpaneel rechts (en de lege strook die het opleverde) verdwijnt zolang er niets geselecteerd is en er geen aandachtspunten zijn; de tekening gebruikt de volle breedte. Het paneel is 260 px i.p.v. 280 px.

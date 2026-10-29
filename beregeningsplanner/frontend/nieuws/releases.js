@@ -21,6 +21,14 @@
       ],
     },
     {
+      version: '1.1.1',
+      date: '2026-10-29',
+      title: 'Inloggen met testaccounts',
+      items: [
+        { text: 'Inloggen met een **testaccount** (bijv. klant) lukt nu ook als de organisatiecode leeg is of van de vorige keer komt.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.0.1',
       date: '2026-10-29',
       title: 'Planner gebruikt de volle breedte',

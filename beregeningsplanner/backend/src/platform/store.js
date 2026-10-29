@@ -1015,6 +1015,20 @@ function createStore(db) {
   }
 
   /**
+   * De organisatie (live-tenant) waarvan een testomgeving een account met deze
+   * gebruikersnaam heeft. Testaccounts hebben platformbreed unieke namen
+   * (<ingekorte slug>.<naam>); gewone gebruikersnamen leiden hier nooit heen.
+   * @param {string} username De gebruikersnaam.
+   * @returns {{ home: object, environmentId: string }|null} De live-tenant en het id van de testomgeving, of null.
+   */
+  function loginTenantOfTestAccount(username) {
+    const row = prepare(`SELECT t.id, t.parent_id FROM users u JOIN tenants t ON t.id = u.tenant_id
+       WHERE u.username = ? AND u.kind = 'account' AND t.environment = 'test' AND t.parent_id IS NOT NULL LIMIT 1`).get(String(username || '').trim().toLowerCase());
+    const home = row ? getTenant(row.parent_id) : null;
+    return home ? { home, environmentId: row.id } : null;
+  }
+
+  /**
    * Controleert gebruikersnaam en wachtwoord binnen de organisatie (live-tenant
    * en zijn testomgevingen; dezelfde naam kan in andere organisaties voorkomen).
    * Rekent ook zonder gebruiker een hash uit (gelijke looptijd) en vervangt een
@@ -1612,7 +1626,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
     createSession, findSessionWithUser, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
     planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing,
