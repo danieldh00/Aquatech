@@ -158,6 +158,7 @@ test('webshop-instelling alleen in de hoofdtenant', async () => {
   const other = await createLogin(base, { password: PW })('tuinman', 'groen');
   const view = await other.get('/api/admin/settings');
   assert.strictEqual(view.body.storefrontAllowed, false);
+  assert.ok(!('storefront' in view.body.settings), 'veld niet in de response van andere tenants');
   const refused = await other.put('/api/admin/settings', { storefront: true });
   assert.strictEqual(refused.status, 400);
   assert.strictEqual(refused.body.field, 'storefront');

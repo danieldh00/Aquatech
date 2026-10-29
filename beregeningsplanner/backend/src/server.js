@@ -1374,7 +1374,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/api/admin/settings', (req, res) => {
     // aiFromLive: testomgeving zonder eigen sleutel gebruikt die van live.
     const aiFrom = aiTenantOf(req.tenantId);
-    res.json({ settings: settingsFor(req.tenantId).view(), via: auth.session(req)?.via || null,
+    const settings = settingsFor(req.tenantId).view();
+    if (req.tenantId !== tenant.id) delete settings.storefront;
+    res.json({ settings, via: auth.session(req)?.via || null,
       // De eigen webshop (winkel/) toont alleen de hoofdtenant: de schakelaar hoort alleen daar.
       storefrontAllowed: req.tenantId === tenant.id,
       aiFromLive: aiFrom !== req.tenantId && Boolean(settingsFor(aiFrom).get('anthropicApiKey')) });

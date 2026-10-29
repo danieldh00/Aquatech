@@ -528,7 +528,7 @@
     accessForm.guestAccess.checked = view.guestAccess.value;
     accessForm.guestAccess.disabled = code.set;
     accessForm.drawingRequests.checked = view.drawingRequests.value;
-    accessForm.storefront.checked = view.storefront.value;
+    accessForm.storefront.checked = Boolean(view.storefront?.value);
     accessForm.storefront.closest('label').hidden = !state.storefrontAllowed;
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
