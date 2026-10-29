@@ -56,7 +56,7 @@ test('catalogus: unieke slugs, categorieën en prijs incl. btw', () => {
   assert.strictEqual(catalog.products[1].categoryName, 'Overig');
   assert.strictEqual(catalog.products[1].image, '');
   assert.strictEqual(catalog.products[0].image, 'https://x.nl/a.jpg');
-  assert.deepStrictEqual(catalog.categories.map((category) => category.slug), ['overig', 'sproeiers']);
+  catalog.categories.forEach((category, index) => assert.match(category.slug, [/^overig-[0-9a-f]{6}$/, /^sproeiers-[0-9a-f]{6}$/][index]));
   const clash = buildCatalog([
     { code: 'C', name: 'x', on_hand: 1, reserved: 1, sale_price: 1, vat_rate: 21, categories: '["Tuin & huis"]' },
     { code: 'D', name: 'y', on_hand: 3, reserved: 1, sale_price: 1, vat_rate: 21, categories: '["Tuin en huis"]' },
@@ -75,6 +75,8 @@ test('catalogus: unieke slugs, categorieën en prijs incl. btw', () => {
    */
   const slugOf = (catalog, name) => catalog.categories.find((category) => category.name === name).slug;
   assert.strictEqual(slugOf(clash, 'Tuin & huis'), slugOf(reversed, 'Tuin & huis'), 'slug onafhankelijk van volgorde');
+  const single = buildCatalog([{ code: 'C', name: 'x', on_hand: 1, sale_price: 1, vat_rate: 21, categories: '["Tuin & huis"]' }]);
+  assert.strictEqual(slugOf(single, 'Tuin & huis'), slugOf(clash, 'Tuin & huis'), 'slug blijft gelijk na catalogusgroei');
   assert.strictEqual(buildCatalog([{ code: 'E', name: 'z', on_hand: 0.8, reserved: 0.8000000001, sale_price: 1, vat_rate: 21, categories: '[]' }]).products[0].inStock, false);
   assert.deepStrictEqual(clash.products.map((product) => product.inStock), [false, true], 'beschikbaar = stand min reserveringen');
 });
@@ -101,7 +103,8 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
   assert.match(home.headers.get('content-security-policy'), /default-src 'none'/);
   assert.ok(!/<script/i.test(home.text));
 
-  const category = await anonymous.get('/winkel/categorie/leidingen/');
+  const categorySlug = home.text.match(/href="categorie\/(leidingen-[0-9a-f]{6})\//)[1];
+  const category = await anonymous.get(`/winkel/categorie/${categorySlug}/`);
   assert.strictEqual(category.status, 200);
   assert.match(category.text, /PE buis 25 mm/);
 

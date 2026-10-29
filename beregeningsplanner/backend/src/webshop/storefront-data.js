@@ -49,9 +49,10 @@ function safeImageUrl(url) {
 
 /**
  * Geeft elke categorie een slug die alleen van haar eigen naam afhangt: de
- * slug van de naam, en bij categorieën waarvan de slug samenvalt (bijv.
- * "Tuin & huis" en "Tuin en huis") elk de slug plus een korte vingerafdruk van
- * de naam, zodat de volgorde van de producten er niet toe doet.
+ * slug van de naam plus een korte vingerafdruk van de naam. Zo blijft de url
+ * gelijk als er categorieën bijkomen, ook bij namen waarvan de slug samenvalt
+ * (bijv. "Tuin & huis" en "Tuin en huis"), en doet de volgorde van de producten
+ * er niet toe.
  * @param {Map<string, object>} categories Categorieën per naam (kleine letters); krijgen een `slug`.
  * @returns {void}
  */
@@ -63,7 +64,7 @@ function assignCategorySlugs(categories) {
   }
   for (const [base, group] of bySlug) {
     for (const category of group) {
-      category.slug = group.length === 1 ? base : `${base}-${crypto.createHash('sha256').update(category.key).digest('hex').slice(0, 6)}`;
+      category.slug = `${base}-${crypto.createHash('sha256').update(category.key).digest('hex').slice(0, 6)}`;
       delete category.key;
     }
   }
