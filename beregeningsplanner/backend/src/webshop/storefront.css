@@ -1,29 +1,37 @@
-/* Eigen webshop (storefront.js): bovenop brand.css (kleuren --at-*, Montserrat). */
+/* Eigen webshop (storefront.js): bovenop brand.css (kleuren --at-*, Montserrat).
+   De neutrale kleuren staan hier één keer als --at-*-variabele. */
+:root {
+  --at-white: #fff;
+  --at-ink: #1c2433;
+  --at-muted: #5b6577;
+  --at-line: #dde3ec;
+  --at-page: #f5f7fa;
+}
 * { box-sizing: border-box; }
-body { margin: 0; font-family: var(--at-font); color: #1c2433; background: #f5f7fa; line-height: 1.5; }
+body { margin: 0; font-family: var(--at-font); color: var(--at-ink); background: var(--at-page); line-height: 1.5; }
 a { color: var(--at-navy); }
 h1 { color: var(--at-navy); font-size: 1.7rem; margin: 0.4em 0; }
 h2 { color: var(--at-navy); font-size: 1.2rem; margin: 1.6em 0 0.6em; }
 
 .shop-head { background: var(--at-navy); padding: 12px 16px; }
-.shop-brand { display: inline-flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; font-weight: 700; }
+.shop-brand { display: inline-flex; align-items: center; gap: 12px; color: var(--at-white); text-decoration: none; font-weight: 700; }
 .shop-brand img { display: block; height: 30px; width: auto; }
 .shop-main { max-width: 1100px; margin: 0 auto; padding: 16px; min-height: 60vh; }
-.shop-foot { text-align: center; color: #5b6577; font-size: 0.85rem; padding: 24px 16px; }
+.shop-foot { text-align: center; color: var(--at-muted); font-size: 0.85rem; padding: 24px 16px; }
 
-.hero { background: var(--at-navy); color: #fff; border-radius: 12px; padding: 28px 24px; }
-.hero h1 { color: #fff; margin-top: 0; }
+.hero { background: var(--at-navy); color: var(--at-white); border-radius: 12px; padding: 28px 24px; }
+.hero h1 { color: var(--at-white); margin-top: 0; }
 .hero p { margin: 0; max-width: 40em; }
 
-.crumbs { font-size: 0.9rem; color: #5b6577; margin-bottom: 4px; }
+.crumbs { font-size: 0.9rem; color: var(--at-muted); margin-bottom: 4px; }
 
 .category-grid, .product-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-.category-tile { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: #fff; border: 1px solid #dde3ec; border-left: 4px solid var(--at-teal); border-radius: 8px; text-decoration: none; }
-.category-tile span { color: #5b6577; font-size: 0.85rem; }
+.category-tile { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: var(--at-white); border: 1px solid var(--at-line); border-left: 4px solid var(--at-teal); border-radius: 8px; text-decoration: none; }
+.category-tile span { color: var(--at-muted); font-size: 0.85rem; }
 .category-tile:hover, .product-card:hover { border-color: var(--at-green); }
 
-.product-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: #fff; border: 1px solid #dde3ec; border-radius: 8px; text-decoration: none; color: inherit; }
-.product-image { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: #fff; overflow: hidden; }
+.product-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 8px; text-decoration: none; color: inherit; }
+.product-image { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: var(--at-white); overflow: hidden; }
 .product-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .no-image { width: 60%; height: 60%; border-radius: 8px; background: var(--at-green-soft); }
 .product-name { font-weight: 600; color: var(--at-navy); }
@@ -32,10 +40,10 @@ h2 { color: var(--at-navy); font-size: 1.2rem; margin: 1.6em 0 0.6em; }
 .stock.in { color: var(--at-green-dark); }
 .stock.out { color: var(--at-danger); }
 
-.product-detail { display: grid; gap: 24px; grid-template-columns: 1fr; background: #fff; border: 1px solid #dde3ec; border-radius: 12px; padding: 16px; margin-top: 8px; }
-.product-image.large { background: #fff; max-height: 420px; }
-.sku { color: #5b6577; margin: 0 0 8px; }
+.product-detail { display: grid; gap: 24px; grid-template-columns: 1fr; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 12px; padding: 16px; margin-top: 8px; }
+.product-image.large { background: var(--at-white); max-height: 420px; }
+.sku { color: var(--at-muted); margin: 0 0 8px; }
 .price { font-size: 1.6rem; font-weight: 700; margin: 8px 0; }
-.price small { font-size: 0.8rem; font-weight: 400; color: #5b6577; }
+.price small { font-size: 0.8rem; font-weight: 400; color: var(--at-muted); }
 .note { margin-top: 16px; padding: 10px 12px; background: var(--at-green-soft); border-radius: 8px; }
 @media (min-width: 720px) { .product-detail { grid-template-columns: 1fr 1fr; padding: 24px; } }

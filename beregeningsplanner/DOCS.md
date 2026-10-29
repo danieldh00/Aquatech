@@ -566,9 +566,9 @@ voorraadartikelen van de hoofdtenant die een verkoopprijs hebben, niet
 gearchiveerd zijn en *Naar de webshop* aan hebben. Categorie en afbeelding
 komen uit het gekoppelde WooCommerce-product (na een synchronisatie); zonder
 koppeling staat een artikel onder *Overig*. Pagina's: `winkel/` (start),
-`winkel/categorie/<slug>/` en `winkel/product/<slug>/`; de slug volgt de
-naam (bij dubbele namen komt de artikelcode erbij). Prijzen zijn incl. btw;
-van de voorraad zie je alleen *Op voorraad* of *Niet op voorraad*. De code
+`winkel/categorie/<slug>/` en `winkel/product/<slug>/`; de slug bestaat uit naam en artikelcode, zodat
+de url van een artikel gelijk blijft als er artikelen bijkomen. Prijzen zijn incl. btw;
+van de voorraad zie je alleen *Op voorraad* of *Niet op voorraad* (stand min reserveringen voor werkorders). De code
 staat in `backend/src/webshop/storefront*.js` en is een Express-router die
 later ook op een eigen domein of in een eigen container kan draaien.
 

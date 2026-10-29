@@ -61,7 +61,7 @@ function createStorefront({ db, tenantId, settingsFor }) {
    */
   const sendPage = (res, status, html) => {
     res.status(status);
-    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.setHeader('Cache-Control', 'no-cache');
     res.type('html').send(html);
   };
 

@@ -50,18 +50,24 @@ test('catalogus: unieke slugs, categorieën en prijs incl. btw', () => {
     { code: 'A', name: 'Sproeier', unit: 'st', on_hand: 1, sale_price: 10, vat_rate: 21, categories: '["Sproeiers"]', image: 'https://x.nl/a.jpg' },
     { code: 'B', name: 'Sproeier', unit: 'st', on_hand: 0, sale_price: 20, vat_rate: 9, categories: 'kapot', image: 'javascript:alert(1)' },
   ]);
-  assert.deepStrictEqual(catalog.products.map((product) => product.slug), ['sproeier', 'sproeier-b']);
+  assert.deepStrictEqual(catalog.products.map((product) => product.slug), ['sproeier-a', 'sproeier-b']);
   assert.strictEqual(catalog.products[0].priceIncl, 12.1);
   assert.strictEqual(catalog.products[1].priceIncl, 21.8);
   assert.strictEqual(catalog.products[1].categoryName, 'Overig');
   assert.strictEqual(catalog.products[1].image, '');
   assert.strictEqual(catalog.products[0].image, 'https://x.nl/a.jpg');
   assert.deepStrictEqual(catalog.categories.map((category) => category.slug), ['overig', 'sproeiers']);
+  const clash = buildCatalog([
+    { code: 'C', name: 'x', on_hand: 1, reserved: 1, sale_price: 1, vat_rate: 21, categories: '["Tuin & huis"]' },
+    { code: 'D', name: 'y', on_hand: 3, reserved: 1, sale_price: 1, vat_rate: 21, categories: '["Tuin en huis"]' },
+  ]);
+  assert.deepStrictEqual(clash.categories.map((category) => category.slug).sort(), ['tuin-en-huis', 'tuin-en-huis-2']);
+  assert.deepStrictEqual(clash.products.map((product) => product.inStock), [false, true], 'beschikbaar = stand min reserveringen');
 });
 
 test('webshop staat standaard uit en dan is niets bereikbaar', async () => {
   const { anonymous } = await setup();
-  for (const urlPath of ['/winkel/', '/winkel/product/pe-buis-25-mm/', '/winkel/assets/winkel.css']) {
+  for (const urlPath of ['/winkel/', '/winkel/product/pe-buis-25-mm-buis-25/', '/winkel/assets/winkel.css']) {
     assert.strictEqual((await anonymous.get(urlPath)).status, 404, urlPath);
   }
 });
@@ -76,7 +82,7 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
   assert.strictEqual(home.status, 200);
   assert.match(home.type, /text\/html/);
   assert.match(home.text, /Leidingen/);
-  assert.match(home.text, /product\/pe-buis-25-mm\//);
+  assert.match(home.text, /product\/pe-buis-25-mm-buis-25\//);
   assert.ok(!home.text.includes('Alleen intern') && !home.text.includes('Niet naar de shop'));
   assert.match(home.headers.get('content-security-policy'), /default-src 'none'/);
   assert.ok(!/<script/i.test(home.text));
@@ -85,14 +91,14 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
   assert.strictEqual(category.status, 200);
   assert.match(category.text, /PE buis 25 mm/);
 
-  const product = await anonymous.get('/winkel/product/pe-buis-25-mm/');
+  const product = await anonymous.get('/winkel/product/pe-buis-25-mm-buis-25/');
   assert.strictEqual(product.status, 200);
   assert.match(product.text, /€ 1,82/);
   assert.match(product.text, /Op voorraad/);
   assert.match(product.text, /https:\/\/shop\.test\/buis\.jpg/);
   assert.match(product.text, /Artikelnummer: BUIS-25/);
 
-  const spr = await anonymous.get('/winkel/product/sproeier-pro/');
+  const spr = await anonymous.get('/winkel/product/sproeier-b-pro-b-spr-1/');
   assert.strictEqual(spr.status, 200);
   assert.ok(!/GEHEIM|Magazijn A|4,5/.test(spr.text), 'geen interne gegevens');
   assert.match(spr.text, /&lt;b&gt;Pro&lt;\/b&gt;|Sproeier/);
@@ -102,9 +108,9 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
 test('webshop: assets, doorverwijzing, 404 en alleen lezen', async () => {
   const { base, admin, anonymous } = await setup();
   await admin.put('/api/admin/settings', { storefront: true });
-  const noSlash = await createClient(base, { followRedirects: false }).get('/winkel/product/pe-buis-25-mm');
+  const noSlash = await createClient(base, { followRedirects: false }).get('/winkel/product/pe-buis-25-mm-buis-25');
   assert.strictEqual(noSlash.status, 302);
-  assert.strictEqual(noSlash.location, 'pe-buis-25-mm/');
+  assert.strictEqual(noSlash.location, 'pe-buis-25-mm-buis-25/');
   const root = await createClient(base, { followRedirects: false }).get('/winkel');
   assert.strictEqual(root.status, 302);
   assert.strictEqual(root.location, 'winkel/');

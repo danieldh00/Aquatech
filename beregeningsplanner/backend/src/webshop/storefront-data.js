@@ -54,25 +54,35 @@ function safeImageUrl(url) {
 function buildCatalog(rows) {
   const sorted = [...rows].sort((left, right) => String(left.name).localeCompare(String(right.name), 'nl') || String(left.code).localeCompare(String(right.code), 'nl'));
   const usedSlugs = new Set();
+  const usedCategorySlugs = new Set();
   const categories = new Map();
   const products = sorted.map((row) => {
-    const base = slugify(row.name) || slugify(row.code) || 'artikel';
+    // De slug volgt naam én artikelcode (de code is uniek en blijft gelijk), zodat
+    // de url van een artikel niet verandert als er artikelen bijkomen.
+    const base = slugify(`${row.name} ${row.code}`) || 'artikel';
     let slug = base;
-    if (usedSlugs.has(slug)) slug = slugify(`${base}-${row.code}`) || `${base}-2`;
     for (let counter = 2; usedSlugs.has(slug); counter += 1) slug = `${base}-${counter}`;
     usedSlugs.add(slug);
     const categoryName = categoryNameOf(row.categories);
-    const categorySlug = slugify(categoryName) || 'overig';
-    const category = categories.get(categorySlug) || { slug: categorySlug, name: categoryName, count: 0 };
+    const categoryKey = categoryName.toLowerCase();
+    let category = categories.get(categoryKey);
+    if (!category) {
+      const baseCategorySlug = slugify(categoryName) || 'overig';
+      let categorySlug = baseCategorySlug;
+      for (let counter = 2; usedCategorySlugs.has(categorySlug); counter += 1) categorySlug = `${baseCategorySlug}-${counter}`;
+      usedCategorySlugs.add(categorySlug);
+      category = { slug: categorySlug, name: categoryName, count: 0 };
+      categories.set(categoryKey, category);
+    }
     category.count += 1;
-    categories.set(categorySlug, category);
+    const categorySlug = category.slug;
     const priceExcl = Number(row.sale_price);
     const vatRate = Number(row.vat_rate ?? 21);
     return {
       slug, code: String(row.code), name: String(row.name), unit: String(row.unit || 'st'),
       categorySlug, categoryName, priceExcl, vatRate,
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
-      inStock: Number(row.on_hand) > 0, image: safeImageUrl(row.image),
+      inStock: Number(row.on_hand) - Number(row.reserved || 0) > 0, image: safeImageUrl(row.image),
     };
   });
   const categoryList = [...categories.values()].sort((left, right) => left.name.localeCompare(right.name, 'nl'));
@@ -98,10 +108,11 @@ function createStorefrontData(db) {
     catalogOf(tenantId) {
       const cached = cache.get(tenantId);
       if (cached && cached.until > Date.now()) return cached.catalog;
-      const rows = db.prepare(`SELECT i.code, i.name, i.unit, i.on_hand, i.sale_price, i.vat_rate, p.categories, p.image
+      const rows = db.prepare(`SELECT i.code, i.name, i.unit, i.on_hand, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.vat_rate, p.categories, p.image
         FROM stock_items i
+        LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
         LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
-        WHERE i.tenant_id = ? AND i.archived = 0 AND i.shop_sync = 1 AND i.sale_price IS NOT NULL`).all(tenantId);
+        WHERE i.tenant_id = ? AND i.archived = 0 AND i.shop_sync = 1 AND i.sale_price IS NOT NULL`).all(tenantId, tenantId);
       const catalog = buildCatalog(rows);
       cache.set(tenantId, { catalog, until: Date.now() + CACHE_MS });
       return catalog;
