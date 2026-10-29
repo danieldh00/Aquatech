@@ -558,6 +558,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         if (admin?.platform_admin) { user = admin; home = tenant; failures.delete(mainKey); }
         else if (!admin) failed(mainKey);
       }
+      // Testaccounts heten <slug van de testomgeving>.<naam>: met een verkeerde of
+      // vergeten organisatiecode (de browser onthoudt de vorige) zoeken we in die
+      // testomgeving. Alleen testomgevingen, zodat live-gebruikersnamen niet raden.
+      const testSlug = /^([a-z0-9-]+)\.[a-z0-9]+$/.exec(username)?.[1];
+      const testEnvironment = !user && testSlug && testSlug !== orgCode ? store.loginTenant(testSlug) : null;
+      if (testEnvironment && store.getTenantBySlug(testSlug)?.environment === 'test') {
+        const testUser = await store.authenticate(testEnvironment.id, username, password);
+        if (testUser) { user = testUser; home = testEnvironment; }
+      }
       if (!user) {
         failed(key);
         audit(req, 'inloggen_mislukt', { username, organisatie: orgCode }, null, home?.id);
