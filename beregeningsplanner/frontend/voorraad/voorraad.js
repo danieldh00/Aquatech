@@ -314,7 +314,7 @@
     try {
       const result = await api('stock/import-shop', { method: 'POST', body: {} });
       bar.value = 1;
-      $('#shop-text').textContent = `Klaar: ${result.created} nieuw, ${result.restored} teruggezet, ${result.archived} gearchiveerd (niet in de webshop)${result.skipped ? `, ${result.skipped} overgeslagen` : ''}.`;
+      $('#shop-text').textContent = `Klaar: ${result.created} nieuw, ${result.restored} teruggezet, ${result.archived} gearchiveerd (niet in de webshop)${result.skippedProducts ? `, ${result.skippedProducts} overgeslagen (geen geldige code)` : ''}.`;
       await load();
     } catch (error) {
       bar.value = 0;

@@ -176,3 +176,17 @@ test('webshop: alles uit de webshop wordt voorraad, rest gearchiveerd en weer te
   assert.strictEqual((await sync.run(tid)).restored, 1);
   assert.deepStrictEqual(stock.list(tid).map((item) => item.code).sort(), ['PE-25', 'WC-22']);
 });
+
+test('webshop: nieuwe artikelen krijgen normale prijs en btw van de koppeling; product zonder voorraadbeheer blijft zo', async () => {
+  const products = new Map([product(31, 'ACT-1', '12.10', null)]);
+  products.get('31').sale_price = '9.99';
+  const { tid, stock, sync, fake } = setup(products, { url: 'http://shop.test', mode: 'rest', push: true, pricesIncludeTax: true, vatRate: 9 });
+  const first = await sync.run(tid);
+  assert.strictEqual(first.created, 1);
+  assert.strictEqual(first.skippedProducts, 0);
+  const item = stock.list(tid).find((entry) => entry.code === 'ACT-1');
+  assert.strictEqual(item.vatRate, 9);
+  assert.strictEqual(item.salePrice, 11.1);
+  assert.strictEqual(products.get('31').manage_stock, false, 'voorraadbeheer in de webshop blijft uit');
+  assert.ok(!fake.calls.some((call) => call.method === 'POST'), 'niets teruggeschreven');
+});

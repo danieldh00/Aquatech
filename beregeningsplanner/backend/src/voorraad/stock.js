@@ -517,9 +517,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {string} tenantId Id van de omgeving.
    * @param {object[]} products Alle producten uit de webshop.
    * @param {Function} matchProduct Functie item ({ code }) → webshopproduct of null.
-   * @returns {{ created: number, restored: number, archived: number, skipped: number }} Aantallen.
+   * @param {{ vatRate?: number, priceOf?: Function }} [options] Btw-tarief van nieuwe artikelen en product → verkoopprijs excl. btw.
+   * @returns {{ created: number, restored: number, archived: number, skippedProducts: number }} Aantallen.
    */
-  function mirrorShop(tenantId, products, matchProduct) {
+  function mirrorShop(tenantId, products, matchProduct, { vatRate = 21, priceOf = (product) => product.price } = {}) {
     const items = prepare('SELECT id, code, archived, shop_product_id FROM stock_items WHERE tenant_id = ?').all(tenantId);
     const timestamp = currentTimestamp();
     const matchedProducts = new Set();
@@ -536,19 +537,19 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       }
     }
     const fresh = [];
-    let skipped = 0;
+    let skippedProducts = 0;
     for (const product of products) {
       if (matchedProducts.has(String(product.id))) continue;
       const code = shopCodeOf(product);
-      if (!code || code.length > 40 || !/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code) || seenCodes.has(code)) { skipped++; continue; }
+      if (!code || code.length > 40 || !/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code) || seenCodes.has(code)) { skippedProducts++; continue; }
       seenCodes.add(code);
       fresh.push({ product, code });
     }
     transaction(db, () => {
       const put = prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
           sale_price, vat_rate, revenue_group, shop_sync, shop_product_id)
-        VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, 21, 'producten', 1, ?)`);
-      for (const { product, code } of fresh) put.run(crypto.randomUUID(), tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, product.price == null ? null : Math.round(product.price * 100) / 100, String(product.id));
+        VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, ?, 'producten', 1, ?)`);
+      for (const { product, code } of fresh) put.run(crypto.randomUUID(), tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, priceOf(product) == null ? null : Math.round(priceOf(product) * 100) / 100, vatRate, String(product.id));
       for (let start = 0; start < restore.length; start += BATCH) {
         const ids = restore.slice(start, start + BATCH).map((item) => item.id);
         prepare(`UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND id IN (${placeholders(ids.length)})`).run(timestamp, tenantId, ...ids);
@@ -562,7 +563,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const reopened = [...fresh.map((entry) => entry.code), ...restore.map((item) => item.code)];
       if (reopened.length) resyncOpen(tenantId, reopened, { nested: true });
     });
-    return { created: fresh.length, restored: restore.length, archived: archive.length, skipped };
+    return { created: fresh.length, restored: restore.length, archived: archive.length, skippedProducts };
   }
 
   /**
@@ -985,6 +986,7 @@ function registerStockRoutes(app, ctx) {
       try {
         const out = await ctx.syncShop(tenantOf(req), req.user);
         if (out.skipped) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Webshop).' });
+        if (out.mirror === false) return res.status(409).json({ error: 'mirror_off', message: 'De instelling "Webshop bepaalt de artikellijst" staat uit (Beheer → Webshop); er is niets overgenomen.' });
         audit(req, 'voorraad_webshop_overgenomen', { created: out.created, archived: out.archived });
         return res.json(out);
       } catch (error) {
