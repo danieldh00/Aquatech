@@ -13,11 +13,19 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.2.0',
+      version: '1.3.1',
       date: '2026-10-29',
       title: 'Eerste opzet eigen webshop',
       items: [
         { text: 'De eigen webshop heeft een eerste opzet: een openbare startpagina, categorieën en productpagina\'s op winkel/ (alleen bekijken, nog niet bestellen). Zet hem aan in Beheer → Instellingen → Toegang.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.3.0',
+      date: '2026-10-29',
+      title: 'Voorraad vult zich uit de webshop',
+      items: [
+        { text: 'Met een webshopkoppeling neemt **Alles uit webshop** in Voorraadbeheer alle producten over, ook zonder SKU (die krijgen de code WC-<id>). Artikelen die niet in de webshop staan worden gearchiveerd.', for: ['voorraad'] },
       ],
     },
     {

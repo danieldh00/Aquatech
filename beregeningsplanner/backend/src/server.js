@@ -1731,7 +1731,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   // ---------- Voorraadbeheer: reserveren en afboeken op werkorders (zie stock.js) ----------
-  registerStockRoutes(app, { stock: stockStore, requireRight, requireJson, audit, shopProductsOf: (tid) => shopStore.products(tid) });
+  registerStockRoutes(app, { stock: stockStore, requireRight, requireJson, audit, shopProductsOf: (tid) => shopStore.products(tid),
+    syncShop: (tid, user) => shopSync.run(tid, { full: true, user }),
+    importLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }) });
 
   // ---------- Facturen en export naar de boekhouding (zie invoices.js) ----------
   registerInvoiceRoutes(app, {

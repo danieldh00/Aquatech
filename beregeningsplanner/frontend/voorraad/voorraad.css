@@ -4,7 +4,7 @@
 .tab .count:not(:empty) { display: inline-block; min-width: 18px; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--at-green); color: #fff; font-size: 12px; line-height: 18px; text-align: center; }
 .card-form label.grow { flex: 1 1 260px; }
 .card-form label.grow input { width: 100%; }
-#new-form, #import-form, #shop-form { border-left: 4px solid var(--at-teal); }
+#new-form, #import-form, #shop-dialog { border-left: 4px solid var(--at-teal); }
 td .sub { display: block; font-size: 12px; color: var(--muted); white-space: normal; }
 td .code, .code { font-family: ui-monospace, monospace; font-size: 12px; }
 table.grid tr.low td.avail { color: var(--danger, #c62828); font-weight: 600; }
