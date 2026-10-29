@@ -558,14 +558,19 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         if (admin?.platform_admin) { user = admin; home = tenant; failures.delete(mainKey); }
         else if (!admin) failed(mainKey);
       }
-      // Testaccounts heten <slug van de testomgeving>.<naam>: met een verkeerde of
-      // vergeten organisatiecode (de browser onthoudt de vorige) zoeken we in die
-      // testomgeving. Alleen testomgevingen, zodat live-gebruikersnamen niet raden.
-      const testSlug = /^([a-z0-9-]+)\.[a-z0-9]+$/.exec(username)?.[1];
-      const testEnvironment = !user && testSlug && testSlug !== orgCode ? store.loginTenant(testSlug) : null;
-      if (testEnvironment && store.getTenantBySlug(testSlug)?.environment === 'test') {
-        const testUser = await store.authenticate(testEnvironment.id, username, password);
-        if (testUser) { user = testUser; home = testEnvironment; }
+      // Testaccounts hebben platformbreed unieke namen: met een verkeerde of
+      // vergeten organisatiecode (de browser onthoudt de vorige) zoeken we in de
+      // testomgeving waar de naam bij hoort, met een eigen blokkering per omgeving.
+      const testAccount = !user ? store.loginTenantOfTestAccount(username) : null;
+      if (testAccount && testAccount.home.id !== home?.id) {
+        const testKey = `${testAccount.home.id}:${username}`;
+        if (lockedOut(testKey)) {
+          audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, testAccount.home.id);
+          return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
+        }
+        const testUser = await store.authenticate(testAccount.home.id, username, password);
+        if (testUser) { user = testUser; home = testAccount.home; failures.delete(testKey); }
+        else failed(testKey);
       }
       if (!user) {
         failed(key);
