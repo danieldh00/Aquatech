@@ -57,6 +57,7 @@
     form.consumerSecret.value = '';
     form.push.checked = Boolean(source.push);
     form.pushStock.checked = source.pushStock !== false;
+    form.mirror.checked = source.mirror !== false;
     /** Toont de sleutelvelden en het pushblok alleen bij de REST-koppeling. */
     const toggleRestFields = () => { $('#w-keys').style.display = form.mode.value === 'rest' ? '' : 'none'; $('#w-push-box').style.display = form.mode.value === 'rest' ? '' : 'none'; form.pushStock.disabled = !form.push.checked; };
     toggleRestFields();
@@ -129,7 +130,7 @@
         const [code, sku] = line.split('=').map((part) => (part || '').trim());
         if (code && sku) mapping[code.toUpperCase()] = sku;
       }
-      const body = { url: form.url.value.trim(), mode: form.mode.value, pricesIncludeTax: form.pricesIncludeTax.checked, vatRate: Number(form.vatRate.value), mapping, push: form.push.checked, pushStock: form.pushStock.checked };
+      const body = { url: form.url.value.trim(), mode: form.mode.value, pricesIncludeTax: form.pricesIncludeTax.checked, vatRate: Number(form.vatRate.value), mapping, push: form.push.checked, pushStock: form.pushStock.checked, mirror: form.mirror.checked };
       if (form.consumerKey.value.trim()) body.consumerKey = form.consumerKey.value.trim();
       if (form.consumerSecret.value.trim()) body.consumerSecret = form.consumerSecret.value.trim();
       try {

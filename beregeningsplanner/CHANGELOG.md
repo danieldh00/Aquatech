@@ -13,6 +13,7 @@ Webshop leidend voor de voorraadlijst.
   intact blijven; reserveringen vervallen. Staat een product later weer in de
   webshop, dan komt het artikel terug. Artikelen met een bestaande
   productkoppeling blijven gekoppeld, ook als de sku wijzigt.
+- **Aquatech als toekomstige bron**: instelling *Webshop bepaalt de artikellijst* (Beheer → Webshop, standaard aan). Uit = geen automatisch aanmaken of archiveren meer; het WooCommerce product-ID blijft per artikel bewaard voor terugschrijven.
 - **Voortgangsvenster** met balk bij het overnemen; de keuzelijst met
   producten is vervallen. Zonder webshopkoppeling verandert er niets.
 

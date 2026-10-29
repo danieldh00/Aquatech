@@ -142,7 +142,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       : await fetchProducts(shopConfig, { fetchImpl, ids: dirtyItems.map((item) => item.shop_product_id) });
     if (full) shop.replaceProducts(tenantId, products, new Date().toISOString());
     const match = matcher(products, shopConfig.mapping);
-    const mirrored = full ? stock.mirrorShop(tenantId, products, match) : null;
+    const mirrored = full && shopConfig.mirror !== false ? stock.mirrorShop(tenantId, products, match) : null;
     const items = full ? itemsOf(tenantId, false) : dirtyItems;
     const byId = new Map(products.map((product) => [String(product.id), product]));
     const pushStock = Boolean(shopConfig.push && shopConfig.pushStock !== false && shopConfig.mode === 'rest');

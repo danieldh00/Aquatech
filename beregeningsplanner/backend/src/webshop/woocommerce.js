@@ -352,6 +352,9 @@ function sanitizeShop(raw) {
     // schrijfrechten); uit = de webshop blijft leidend voor de prijzen.
     push: input.mode === 'rest' && input.push === true,
     pushStock: input.pushStock !== false,
+    // De webshop bepaalt welke artikelen er zijn (nieuwe producten worden artikel,
+    // ontbrekende worden gearchiveerd). Uit = Aquatech is de bron van de artikellijst.
+    mirror: input.mirror !== false,
     mapping,
   };
 }
