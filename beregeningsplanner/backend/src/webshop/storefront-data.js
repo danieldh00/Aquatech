@@ -83,7 +83,10 @@ function buildCatalog(rows) {
   const products = sorted.map((row) => {
     // De slug volgt naam én artikelcode (de code is uniek en blijft gelijk), zodat
     // de url van een artikel niet verandert als er artikelen bijkomen.
-    const base = slugify(`${row.name} ${row.code}`) || 'artikel';
+    // De code blijft volledig buiten de afkapping; alleen de naam wordt ingekort.
+    const codeSlug = slugify(row.code);
+    const namePart = slugify(row.name).slice(0, Math.max(0, 80 - codeSlug.length - 1)).replace(/-+$/g, '');
+    const base = [namePart, codeSlug].filter(Boolean).join('-') || 'artikel';
     let slug = base;
     for (let counter = 2; usedSlugs.has(slug); counter += 1) slug = `${base}-${counter}`;
     usedSlugs.add(slug);

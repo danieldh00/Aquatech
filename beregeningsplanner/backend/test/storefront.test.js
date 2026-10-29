@@ -51,6 +51,13 @@ test('catalogus: unieke slugs, categorieën en prijs incl. btw', () => {
     { code: 'B', name: 'Sproeier', unit: 'st', on_hand: 0, sale_price: 20, vat_rate: 9, categories: 'kapot', image: 'javascript:alert(1)' },
   ]);
   assert.deepStrictEqual(catalog.products.map((product) => product.slug), ['sproeier-a', 'sproeier-b']);
+  const longName = 'A'.repeat(76);
+  const longSlugs = buildCatalog([
+    { code: 'SPR-1', name: longName, unit: 'st', on_hand: 1, sale_price: 10, vat_rate: 21, categories: '[]', image: '' },
+    { code: 'SPR-2', name: longName, unit: 'st', on_hand: 1, sale_price: 10, vat_rate: 21, categories: '[]', image: '' },
+  ]).products.map((product) => product.slug);
+  assert.ok(longSlugs[0].endsWith('-spr-1') && longSlugs[1].endsWith('-spr-2'), 'code blijft buiten de afkapping');
+  assert.ok(longSlugs.every((slug) => slug.length <= 80));
   assert.strictEqual(catalog.products[0].priceIncl, 12.1);
   assert.strictEqual(catalog.products[1].priceIncl, 21.8);
   assert.strictEqual(catalog.products[1].categoryName, 'Overig');
