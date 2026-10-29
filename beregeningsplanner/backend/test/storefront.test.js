@@ -61,7 +61,21 @@ test('catalogus: unieke slugs, categorieën en prijs incl. btw', () => {
     { code: 'C', name: 'x', on_hand: 1, reserved: 1, sale_price: 1, vat_rate: 21, categories: '["Tuin & huis"]' },
     { code: 'D', name: 'y', on_hand: 3, reserved: 1, sale_price: 1, vat_rate: 21, categories: '["Tuin en huis"]' },
   ]);
-  assert.deepStrictEqual(clash.categories.map((category) => category.slug).sort(), ['tuin-en-huis', 'tuin-en-huis-2']);
+  assert.strictEqual(new Set(clash.categories.map((category) => category.slug)).size, 2);
+  assert.ok(clash.categories.every((category) => /^tuin-en-huis-[0-9a-f]{6}$/.test(category.slug)));
+  const reversed = buildCatalog([
+    { code: 'D', name: 'y', on_hand: 3, reserved: 1, sale_price: 1, vat_rate: 21, categories: '["Tuin en huis"]' },
+    { code: 'C', name: 'x', on_hand: 1, reserved: 1, sale_price: 1, vat_rate: 21, categories: '["Tuin & huis"]' },
+  ]);
+  /**
+   * De slug van een categorie op naam.
+   * @param {object} catalog De catalogus.
+   * @param {string} name De categorienaam.
+   * @returns {string} De slug.
+   */
+  const slugOf = (catalog, name) => catalog.categories.find((category) => category.name === name).slug;
+  assert.strictEqual(slugOf(clash, 'Tuin & huis'), slugOf(reversed, 'Tuin & huis'), 'slug onafhankelijk van volgorde');
+  assert.strictEqual(buildCatalog([{ code: 'E', name: 'z', on_hand: 0.8, reserved: 0.8000000001, sale_price: 1, vat_rate: 21, categories: '[]' }]).products[0].inStock, false);
   assert.deepStrictEqual(clash.products.map((product) => product.inStock), [false, true], 'beschikbaar = stand min reserveringen');
 });
 

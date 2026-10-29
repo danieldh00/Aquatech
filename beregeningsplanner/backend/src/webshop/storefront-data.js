@@ -3,6 +3,8 @@
 // opgehaalde webshopproducten (shop_products). Alleen lezen; interne velden
 // (inkoopprijs, locatie, notities, aantallen) komen er nooit in.
 
+const crypto = require('crypto');
+
 /** Hoe lang (ms) een opgebouwde catalogus per omgeving wordt hergebruikt. */
 const CACHE_MS = 30 * 1000;
 /** Categorie voor artikelen zonder categorie in de webshop. */
@@ -46,6 +48,28 @@ function safeImageUrl(url) {
 }
 
 /**
+ * Geeft elke categorie een slug die alleen van haar eigen naam afhangt: de
+ * slug van de naam, en bij categorieën waarvan de slug samenvalt (bijv.
+ * "Tuin & huis" en "Tuin en huis") elk de slug plus een korte vingerafdruk van
+ * de naam, zodat de volgorde van de producten er niet toe doet.
+ * @param {Map<string, object>} categories Categorieën per naam (kleine letters); krijgen een `slug`.
+ * @returns {void}
+ */
+function assignCategorySlugs(categories) {
+  const bySlug = new Map();
+  for (const category of categories.values()) {
+    const base = slugify(category.name) || 'overig';
+    bySlug.set(base, [...(bySlug.get(base) || []), category]);
+  }
+  for (const [base, group] of bySlug) {
+    for (const category of group) {
+      category.slug = group.length === 1 ? base : `${base}-${crypto.createHash('sha256').update(category.key).digest('hex').slice(0, 6)}`;
+      delete category.key;
+    }
+  }
+}
+
+/**
  * Bouwt de catalogus uit rijen van de database: unieke slugs voor producten
  * en categorieën, categorie-indeling en prijs inclusief btw.
  * @param {object[]} rows Rijen met id, code, name, unit, on_hand, sale_price, vat_rate, categories en image.
@@ -54,7 +78,6 @@ function safeImageUrl(url) {
 function buildCatalog(rows) {
   const sorted = [...rows].sort((left, right) => String(left.name).localeCompare(String(right.name), 'nl') || String(left.code).localeCompare(String(right.code), 'nl'));
   const usedSlugs = new Set();
-  const usedCategorySlugs = new Set();
   const categories = new Map();
   const products = sorted.map((row) => {
     // De slug volgt naam én artikelcode (de code is uniek en blijft gelijk), zodat
@@ -65,26 +88,23 @@ function buildCatalog(rows) {
     usedSlugs.add(slug);
     const categoryName = categoryNameOf(row.categories);
     const categoryKey = categoryName.toLowerCase();
-    let category = categories.get(categoryKey);
-    if (!category) {
-      const baseCategorySlug = slugify(categoryName) || 'overig';
-      let categorySlug = baseCategorySlug;
-      for (let counter = 2; usedCategorySlugs.has(categorySlug); counter += 1) categorySlug = `${baseCategorySlug}-${counter}`;
-      usedCategorySlugs.add(categorySlug);
-      category = { slug: categorySlug, name: categoryName, count: 0 };
-      categories.set(categoryKey, category);
-    }
+    const category = categories.get(categoryKey) || { key: categoryKey, name: categoryName, count: 0 };
     category.count += 1;
-    const categorySlug = category.slug;
+    categories.set(categoryKey, category);
     const priceExcl = Number(row.sale_price);
     const vatRate = Number(row.vat_rate ?? 21);
     return {
       slug, code: String(row.code), name: String(row.name), unit: String(row.unit || 'st'),
-      categorySlug, categoryName, priceExcl, vatRate,
+      categoryKey, categoryName, priceExcl, vatRate,
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
-      inStock: Number(row.on_hand) - Number(row.reserved || 0) > 0, image: safeImageUrl(row.image),
+      inStock: Math.round((Number(row.on_hand) - Number(row.reserved || 0)) * 1000) / 1000 > 0, image: safeImageUrl(row.image),
     };
   });
+  assignCategorySlugs(categories);
+  for (const product of products) {
+    product.categorySlug = categories.get(product.categoryKey).slug;
+    delete product.categoryKey;
+  }
   const categoryList = [...categories.values()].sort((left, right) => left.name.localeCompare(right.name, 'nl'));
   return { products, categories: categoryList };
 }
