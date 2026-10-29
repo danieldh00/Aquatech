@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0
+## 1.3.0
 
 Webshop leidend voor de voorraadlijst.
 
@@ -16,6 +16,10 @@ Webshop leidend voor de voorraadlijst.
 - **Aquatech als toekomstige bron**: instelling *Webshop bepaalt de artikellijst* (Beheer → Webshop, standaard aan). Uit = geen automatisch aanmaken of archiveren meer; het WooCommerce product-ID blijft per artikel bewaard voor terugschrijven.
 - **Voortgangsvenster** met balk bij het overnemen; de keuzelijst met
   producten is vervallen. Zonder webshopkoppeling verandert er niets.
+
+## 1.1.1
+
+- Inloggen met een testaccount (`<testomgeving>.<naam>`) werkt ook als de organisatiecode leeg of verkeerd is, bijvoorbeeld doordat de browser de code van de hoofdbeheerder onthoudt. De testomgeving wordt dan uit de gebruikersnaam gehaald (alleen testomgevingen).
 
 ## 1.0.1
 

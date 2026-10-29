@@ -558,12 +558,29 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         if (admin?.platform_admin) { user = admin; home = tenant; failures.delete(mainKey); }
         else if (!admin) failed(mainKey);
       }
+      // Testaccounts hebben platformbreed unieke namen: met een verkeerde of
+      // vergeten organisatiecode (de browser onthoudt de vorige) zoeken we in de
+      // testomgeving waar de naam bij hoort, met een eigen blokkering per omgeving.
+      const testAccount = !user ? store.loginTenantOfTestAccount(username) : null;
+      if (testAccount && testAccount.home.id !== home?.id) {
+        const testKey = `${testAccount.home.id}:${username}`;
+        if (lockedOut(testKey)) {
+          audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, testAccount.home.id);
+          return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
+        }
+        const testUser = await store.authenticate(testAccount.home.id, username, password);
+        if (testUser) { user = testUser; home = testAccount.home; failures.delete(testKey); }
+        else failed(testKey);
+      } else if (!user && !testAccount) {
+        // Onbekende naam: toch een hash uitrekenen, zodat de looptijd niet verraadt of een testaccount bestaat.
+        await store.authenticate(null, username, password);
+      }
       if (!user) {
         failed(key);
         audit(req, 'inloggen_mislukt', { username, organisatie: orgCode }, null, home?.id);
         return res.status(401).json({ error: 'wrong_login', message: 'Onjuiste organisatiecode, gebruikersnaam of wachtwoord.' });
       }
-      failures.delete(key);
+      failures.delete(`${home?.id || orgCode}:${username}`);
       // Testaccounts horen bij een testomgeving van de organisatie.
       if ((home.disabled || !organizationActive(user.tenant_id)) && !user.platform_admin) {
         audit(req, 'inloggen_geweigerd', { username, reden: 'tenant_uitgeschakeld' }, user.id, user.tenant_id);
