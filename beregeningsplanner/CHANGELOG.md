@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0
+## 1.2.0
 
 Opzet van de eigen webshop (stap 1, alleen lezen), als module van dit systeem.
 

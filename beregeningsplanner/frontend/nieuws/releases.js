@@ -13,7 +13,7 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.1.0',
+      version: '1.2.0',
       date: '2026-10-29',
       title: 'Eerste opzet eigen webshop',
       items: [
