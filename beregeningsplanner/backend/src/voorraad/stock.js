@@ -528,9 +528,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const product = matchProduct(item);
       if (product) {
         matchedProducts.add(String(product.id));
-        if (item.archived) restore.push(item.id);
+        if (item.archived) restore.push(item);
       } else if (!item.archived) {
-        archive.push(item.id);
+        archive.push(item);
       }
     }
     const fresh = [];
@@ -547,13 +547,16 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
           sale_price, vat_rate, revenue_group, shop_sync, shop_product_id)
         VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, 21, 'producten', 1, ?)`);
       for (const { product, code } of fresh) put.run(crypto.randomUUID(), tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, product.price == null ? null : Math.round(product.price * 100) / 100, String(product.id));
-      const unarchive = prepare('UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND id = ?');
-      for (const id of restore) unarchive.run(timestamp, tenantId, id);
-      const hide = prepare('UPDATE stock_items SET archived = 1, shop_product_id = NULL, shop_dirty = 0, updated_at = ? WHERE tenant_id = ? AND id = ?');
-      const release = prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?');
-      for (const id of archive) { hide.run(timestamp, tenantId, id); release.run(tenantId, id); }
+      const restoreIds = restore.map((item) => item.id);
+      const archiveIds = archive.map((item) => item.id);
+      if (restoreIds.length) prepare(`UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND id IN (${placeholders(restoreIds.length)})`).run(timestamp, tenantId, ...restoreIds);
+      if (archiveIds.length) {
+        prepare(`UPDATE stock_items SET archived = 1, shop_product_id = NULL, shop_dirty = 0, updated_at = ? WHERE tenant_id = ? AND id IN (${placeholders(archiveIds.length)})`).run(timestamp, tenantId, ...archiveIds);
+        prepare(`DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${placeholders(archiveIds.length)})`).run(tenantId, ...archiveIds);
+      }
     });
-    if (fresh.length) resyncOpen(tenantId, fresh.map((entry) => entry.code));
+    const reopened = [...fresh.map((entry) => entry.code), ...restore.map((item) => item.code)];
+    if (reopened.length) resyncOpen(tenantId, reopened);
     return { created: fresh.length, restored: restore.length, archived: archive.length, skipped };
   }
 

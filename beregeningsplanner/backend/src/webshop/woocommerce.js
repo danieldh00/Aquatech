@@ -249,14 +249,16 @@ async function fetchProducts(shop, { fetchImpl = null, allowInsecure = insecureA
     }
     return products;
   }
+  let complete = false;
   for (let page = 1; page <= MAX_PAGES; page++) {
     const query = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page) });
     if (rest) query.set('status', 'publish');
     const { body, totalPages } = await getJson(`${base}${apiPath}?${query}`, headers, send);
     if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen productlijst).');
     products.push(...body.map((product) => convert(product, shop)));
-    if (body.length < PER_PAGE || (totalPages && page >= totalPages)) break;
+    if (body.length < PER_PAGE || (totalPages && page >= totalPages)) { complete = true; break; }
   }
+  if (!complete) throw new SourceError('too_many_products', `De webshop heeft meer dan ${MAX_PAGES * PER_PAGE} producten; ophalen is gestopt zodat er niets wordt gearchiveerd.`);
   return products;
 }
 
