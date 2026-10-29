@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.3.0',
+      date: '2026-10-29',
+      title: 'Voorraad vult zich uit de webshop',
+      items: [
+        { text: 'Met een webshopkoppeling neemt **Alles uit webshop** in Voorraadbeheer alle producten over, ook zonder SKU (die krijgen de code WC-<id>). Artikelen die niet in de webshop staan worden gearchiveerd.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.1.1',
       date: '2026-10-29',
       title: 'Inloggen met testaccounts',

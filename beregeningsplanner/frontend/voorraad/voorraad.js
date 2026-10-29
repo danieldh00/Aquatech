@@ -298,59 +298,37 @@
 
   // ---------- Uit de webshop ----------
   /**
-   * Opent de lijst met webshopproducten om op voorraad te nemen.
+   * Neemt alles uit de webshop over (volle synchronisatie) in een venster met
+   * voortgangsbalk; artikelen die niet in de webshop staan worden gearchiveerd.
    * @returns {Promise<void>}
    */
-  async function openShop() {
-    const formElement = $('#shop-form');
-    $('#new-form').hidden = true;
-    $('#import-form').hidden = true;
-    $('.err', formElement).textContent = '';
-    $('#sh-search').value = '';
-    $('#sh-list').innerHTML = '<p class="muted small">Laden…</p>';
-    formElement.hidden = false;
+  async function importShop() {
+    const dialog = $('#shop-dialog');
+    const button = $('#b-shop');
+    const bar = $('#shop-bar');
+    $('#shop-text').textContent = 'Producten ophalen uit de webshop en de voorraad bijwerken…';
+    $('#shop-close').hidden = true;
+    bar.removeAttribute('value');
+    dialog.showModal();
+    button.disabled = true;
     try {
-      const items = (await api('stock/shop-products')).items;
-      $('#sh-list').innerHTML = items.length ? items.map((product) => (product.code
-        ? `<label data-s="${esc(`${product.code} ${product.name}`.toLowerCase())}"><input type="checkbox" value="${esc(product.id)}"> <span><span class="code">${esc(product.code)}</span> ${esc(product.name)} <span class="muted">${esc(eur(product.price))}</span></span></label>`
-        : `<label class="have"><input type="checkbox" disabled> <span>${esc(product.name)} (geen SKU: vul die eerst in de webshop in)</span></label>`)).join('')
-        : '<p class="muted small">Alle producten uit de webshop staan al in de voorraad, of er zijn nog geen producten opgehaald (Beheer → Webshop).</p>';
+      const result = await api('stock/import-shop', { method: 'POST', body: {} });
+      bar.value = 1;
+      $('#shop-text').textContent = `Klaar: ${result.created} nieuw, ${result.restored} teruggezet, ${result.archived} gearchiveerd (niet in de webshop)${result.skippedProducts ? `, ${result.skippedProducts} overgeslagen (geen geldige code)` : ''}.`;
+      await load();
     } catch (error) {
-      $('.err', formElement).textContent = error.message;
+      bar.value = 0;
+      $('#shop-text').textContent = `Overnemen mislukt: ${error.message}`;
+    } finally {
+      button.disabled = false;
+      $('#shop-close').hidden = false;
     }
   }
 
-  /** Koppelt het formulier "Uit de webshop". */
+  /** Koppelt de knop om het venster te sluiten. */
   function setupShop() {
-    const formElement = $('#shop-form');
-    /** Sluit het formulier. */
-    $('[data-cancel]', formElement).onclick = () => { formElement.hidden = true; };
-    /** Filtert de lijst op de zoekterm. */
-    $('#sh-search').oninput = () => {
-      const term = $('#sh-search').value.trim().toLowerCase();
-      formElement.querySelectorAll('#sh-list label[data-s]').forEach((label) => { label.hidden = Boolean(term) && !label.dataset.s.includes(term); });
-    };
-    /** Vinkt alle zichtbare producten aan. */
-    $('#sh-all').onclick = () => { formElement.querySelectorAll('#sh-list label[data-s]:not([hidden]) input').forEach((input) => { input.checked = true; }); };
-    /**
-     * Neemt de gekozen webshopproducten op voorraad.
-     * @param {SubmitEvent} event het verzenden
-     * @returns {Promise<void>}
-     */
-    formElement.onsubmit = async (event) => {
-      event.preventDefault();
-      const ids = [...formElement.querySelectorAll('#sh-list input:checked:not([disabled])')].map((input) => input.value);
-      const errorBox = $('.err', formElement);
-      if (!ids.length) { errorBox.textContent = 'Kies een of meer producten.'; return; }
-      try {
-        const result = await api('stock/import-shop', { method: 'POST', body: { ids } });
-        formElement.hidden = true;
-        toast(`${result.created} product${result.created === 1 ? '' : 'en'} overgenomen`);
-        await load();
-      } catch (error) {
-        errorBox.textContent = error.message;
-      }
-    };
+    /** Sluit het venster. */
+    $('#shop-close').onclick = () => { $('#shop-dialog').close(); };
   }
 
   /**
@@ -360,7 +338,6 @@
   function openImport(preselect = []) {
     const formElement = $('#import-form');
     $('#new-form').hidden = true;
-    $('#shop-form').hidden = true;
     $('.err', formElement).textContent = '';
     const have = new Set(state.items.map((item) => item.code));
     const preselected = new Set(preselect.map((code) => code.toUpperCase()));
@@ -794,7 +771,7 @@
      * Opent het formulier "Uit de webshop".
      * @returns {Promise<void>}
      */
-    $('#b-shop').onclick = () => openShop();
+    $('#b-shop').onclick = () => importShop();
     /**
      * Exporteert de voorraad.
      * @returns {Promise<void>}

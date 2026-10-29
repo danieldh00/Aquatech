@@ -149,3 +149,44 @@ test('webshop: zonder terugschrijven blijft de webshop leidend; fouten blijven z
   assert.strictEqual(products.get('21').regular_price, '3.63');
   assert.strictEqual(stock.get(tid, it.id).shop.error, '');
 });
+
+test('webshop: alles uit de webshop wordt voorraad, rest gearchiveerd en weer teruggezet', async () => {
+  const products = new Map([product(21, 'PE-25', '2.42', 4), product(22, '', '10.00', null)]);
+  const { tid, stock, sync } = setup(products, { url: 'http://shop.test', mode: 'rest', push: false, pricesIncludeTax: true, vatRate: 21 });
+  const user = { id: null, display_name: 'Test' };
+  const oud = stock.create(tid, user, { code: 'OUD-1', name: 'Oud artikel' }).item;
+
+  const first = await sync.run(tid);
+  assert.strictEqual(first.created, 2);
+  assert.strictEqual(first.archived, 1);
+  assert.strictEqual(stock.get(tid, oud.id).archived, true);
+  const codes = stock.list(tid).map((item) => item.code).sort();
+  assert.deepStrictEqual(codes, ['PE-25', 'WC-22']);
+
+  // Tweede ronde: niets nieuw, product zonder sku blijft op dezelfde regel.
+  const second = await sync.run(tid);
+  assert.strictEqual(second.created, 0);
+  assert.strictEqual(second.archived, 0);
+
+  // Product verdwijnt uit de webshop: gearchiveerd; komt terug: hersteld.
+  const gone = products.get('21');
+  products.delete('21');
+  assert.strictEqual((await sync.run(tid)).archived, 1);
+  products.set('21', gone);
+  assert.strictEqual((await sync.run(tid)).restored, 1);
+  assert.deepStrictEqual(stock.list(tid).map((item) => item.code).sort(), ['PE-25', 'WC-22']);
+});
+
+test('webshop: nieuwe artikelen krijgen normale prijs en btw van de koppeling; product zonder voorraadbeheer blijft zo', async () => {
+  const products = new Map([product(31, 'ACT-1', '12.10', null)]);
+  products.get('31').sale_price = '9.99';
+  const { tid, stock, sync, fake } = setup(products, { url: 'http://shop.test', mode: 'rest', push: true, pricesIncludeTax: true, vatRate: 9 });
+  const first = await sync.run(tid);
+  assert.strictEqual(first.created, 1);
+  assert.strictEqual(first.skippedProducts, 0);
+  const item = stock.list(tid).find((entry) => entry.code === 'ACT-1');
+  assert.strictEqual(item.vatRate, 9);
+  assert.strictEqual(item.salePrice, 11.1);
+  assert.strictEqual(products.get('31').manage_stock, false, 'voorraadbeheer in de webshop blijft uit');
+  assert.ok(!fake.calls.some((call) => call.method === 'POST'), 'niets teruggeschreven');
+});

@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.3.0
+
+Webshop leidend voor de voorraadlijst.
+
+- **Alles overnemen**: bij een webshopkoppeling maakt elke volle synchronisatie
+  (knop *Alles uit webshop* in Voorraadbeheer, Beheer → Webshop en elke 10
+  minuten, ook zonder terugschrijven) van elk webshopproduct een voorraadartikel.
+  Producten zonder sku of `aquatech_code` krijgen de code `WC-<product-id>`.
+- **Opruimen**: artikelen die niet (meer) in de webshop staan worden
+  *gearchiveerd*, niet verwijderd, zodat werkorders, offertes en facturen
+  intact blijven; reserveringen vervallen. Staat een product later weer in de
+  webshop, dan komt het artikel terug. Artikelen met een bestaande
+  productkoppeling blijven gekoppeld, ook als de sku wijzigt.
+- **Aquatech als toekomstige bron**: instelling *Webshop bepaalt de artikellijst* (Beheer → Webshop, standaard aan). Uit = geen automatisch aanmaken of archiveren meer; het WooCommerce product-ID blijft per artikel bewaard voor terugschrijven.
+- **Voortgangsvenster** met balk bij het overnemen; de keuzelijst met
+  producten is vervallen. Zonder webshopkoppeling verandert er niets.
+
 ## 1.1.1
 
 - Inloggen met een testaccount (`<testomgeving>.<naam>`) werkt ook als de organisatiecode leeg of verkeerd is, bijvoorbeeld doordat de browser de code van de hoofdbeheerder onthoudt. De testomgeving wordt dan uit de gebruikersnaam gehaald (alleen testomgevingen).
