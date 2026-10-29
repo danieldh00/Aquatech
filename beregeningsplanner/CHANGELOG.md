@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.0
+
+Webshop leidend voor de voorraadlijst.
+
+- **Alles overnemen**: bij een webshopkoppeling maakt elke volle synchronisatie
+  (knop *Alles uit webshop* in Voorraadbeheer, Beheer → Webshop en elke 10
+  minuten, ook zonder terugschrijven) van elk webshopproduct een voorraadartikel.
+  Producten zonder sku of `aquatech_code` krijgen de code `WC-<product-id>`.
+- **Opruimen**: artikelen die niet (meer) in de webshop staan worden
+  *gearchiveerd*, niet verwijderd, zodat werkorders, offertes en facturen
+  intact blijven; reserveringen vervallen. Staat een product later weer in de
+  webshop, dan komt het artikel terug. Artikelen met een bestaande
+  productkoppeling blijven gekoppeld, ook als de sku wijzigt.
+- **Voortgangsvenster** met balk bij het overnemen; de keuzelijst met
+  producten is vervallen. Zonder webshopkoppeling verandert er niets.
+
 ## 0.72.1
 
 - Klantportaal: geen melding "Er staat nog niets voor u klaar" meer als er alleen een seizoensherinnering staat.

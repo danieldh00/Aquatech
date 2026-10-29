@@ -6,6 +6,10 @@
 // code (handmatige koppeling code -> sku, het productveld aquatech_code, of
 // sku = code), net als bij de catalogus van de planner (shop.js).
 //
+// Bij een volle synchronisatie is de webshop leidend voor de lijst zelf: elk
+// webshopproduct met een code of sku wordt een voorraadartikel en artikelen
+// die niet in de webshop staan worden gearchiveerd (stock.mirrorShop).
+//
 // Met shopSource.push aan is Aquatech de bron:
 // - Prijs: de verkoopprijs (excl. btw) gaat naar de normale prijs van het
 //   product (incl. btw als de webshop zo rekent, met het btw-tarief van het
@@ -114,6 +118,8 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     }
     const byMapping = new Map(Object.entries(mapping || {}).map(([code, sku]) => [normalizeKey(code), normalizeKey(sku)]));
     return (item) => {
+      const linked = item.shop_product_id && byId.get(String(item.shop_product_id));
+      if (linked) return linked;
       const mappedSku = byMapping.get(item.code);
       return (mappedSku && bySku.get(mappedSku)) || byCode.get(item.code) || bySku.get(item.code) || null;
     };
@@ -123,22 +129,24 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    * Eén synchronisatie: voorraad en prijs uit de webshop verwerken en terugschrijven wat er veranderd is.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ full?: boolean, user?: object }} [options] full: alle producten ophalen (en de catalogus bijwerken), anders alleen de gewijzigde, gekoppelde artikelen; user voor de voorraadboekingen.
-   * @returns {Promise<object>} Samenvatting (linked, unlinked, soldInShop, pricesFromShop, updated, failed) of { skipped }.
+   * @returns {Promise<object>} Samenvatting (created, restored, archived, skipped, linked, unlinked, soldInShop, pricesFromShop, updated, failed) of { skipped }.
    */
   async function sync(tenantId, { full = true, user = null } = {}) {
     const shopConfig = configOf(tenantId);
     if (!shopConfig.url) return { skipped: 'not_configured' };
     if (!full && !shopConfig.push) return { skipped: 'no_push' };
-    const items = itemsOf(tenantId, !full);
-    if (!full && !items.length) return { skipped: 'nothing' };
+    const dirtyItems = full ? null : itemsOf(tenantId, true);
+    if (!full && !dirtyItems.length) return { skipped: 'nothing' };
     const products = full
       ? await fetchProducts(shopConfig, { fetchImpl })
-      : await fetchProducts(shopConfig, { fetchImpl, ids: items.map((item) => item.shop_product_id) });
+      : await fetchProducts(shopConfig, { fetchImpl, ids: dirtyItems.map((item) => item.shop_product_id) });
     if (full) shop.replaceProducts(tenantId, products, new Date().toISOString());
     const match = matcher(products, shopConfig.mapping);
+    const mirrored = full ? stock.mirrorShop(tenantId, products, match) : null;
+    const items = full ? itemsOf(tenantId, false) : dirtyItems;
     const byId = new Map(products.map((product) => [String(product.id), product]));
     const pushStock = Boolean(shopConfig.push && shopConfig.pushStock !== false && shopConfig.mode === 'rest');
-    const summary = { linked: 0, unlinked: 0, soldInShop: 0, pricesFromShop: 0, updated: 0, failed: 0 };
+    const summary = { created: 0, restored: 0, archived: 0, skipped: 0, ...mirrored, linked: 0, unlinked: 0, soldInShop: 0, pricesFromShop: 0, updated: 0, failed: 0 };
     const updates = [];
     const timestamp = new Date().toISOString();
 
@@ -274,7 +282,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   }
 
   /**
-   * Synchroniseert alle omgevingen met terugschrijven aan (elke 10 minuten vanuit server.js).
+   * Synchroniseert alle omgevingen met een webshopkoppeling (elke 10 minuten vanuit server.js).
    * @param {string[]} tenantIds De omgevingen.
    * @returns {Promise<object>} Resultaat per omgeving.
    */
@@ -283,7 +291,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     for (const id of tenantIds) {
       let shopConfig;
       try { shopConfig = configOf(id); } catch { continue; }
-      if (!shopConfig.url || !shopConfig.push) continue;
+      if (!shopConfig.url) continue;
       try {
         out[id] = await run(id, { full: true });
       } catch (error) {

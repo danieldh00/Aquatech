@@ -60,6 +60,14 @@ const round3 = (value) => Math.round((Number(value) || 0) * 1000) / 1000;
  */
 const normalizeCode = (value) => String(value ?? '').trim().toUpperCase();
 /**
+ * De voorraadcode van een webshopproduct: aquatech_code, anders de sku, anders
+ * WC-<product-id> (zodat ook producten zonder sku mee kunnen).
+ * @param {{ id: *, code?: string, sku?: string }} product Het webshopproduct.
+ * @returns {string} De code in hoofdletters.
+ */
+const shopCodeOf = (product) => normalizeCode(product.code || product.sku) || `WC-${String(product.id).trim()}`;
+
+/**
  * Maakt van een waarde nette tekst zonder stuurtekens, getrimd en ingekort.
  * @param {*} value De invoer.
  * @param {number} maxLength Maximaal aantal tekens.
@@ -166,7 +174,7 @@ function needsOf(materials) {
  * Maakt de opslag voor voorraadartikelen, mutaties en reserveringen.
  * @param {object} db De database.
  * @param {{ articles?: Function, onDirty?: Function }} [options] Catalogus van de planner; aanroep na een wijziging voor de webshop.
- * @returns {object} list, get, create, update, remove, move, importCatalog, importShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal en onDirty.
+ * @returns {object} list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal en onDirty.
  */
 function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) {
   /**
@@ -466,7 +474,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
 
   /**
    * Producten uit de webshop als voorraadartikel overnemen (nog niet bestaande
-   * codes). Code = het veld aquatech_code of de sku; prijs = de webshopprijs
+   * codes). Code = het veld aquatech_code, de sku of WC-<id>; prijs = de webshopprijs
    * (excl. btw). De stand komt bij de volgende synchronisatie uit de webshop.
    * @param {string} tenantId Id van de omgeving.
    * @param {object[]} products De webshopproducten.
@@ -481,7 +489,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const fresh = [];
     const seen = new Set();
     for (const product of chosen) {
-      const code = normalizeCode(product.code || product.sku);
+      const code = shopCodeOf(product);
       if (!code || code.length > 40 || !/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code) || seen.has(code)) { skipped.push(product.name); continue; }
       seen.add(code);
       fresh.push({ product, code });
@@ -497,6 +505,56 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     });
     if (todo.length) resyncOpen(tenantId, todo.map((entry) => entry.code));
     return { created: todo.length, existing: have.size, skipped };
+  }
+
+  /**
+   * Maakt de voorraadlijst gelijk aan de webshop: elk webshopproduct met een
+   * code of sku wordt een voorraadartikel (nieuw, of een gearchiveerd artikel
+   * komt terug), artikelen die niet in de webshop staan worden gearchiveerd
+   * (nooit verwijderd: werkorders, offertes en facturen houden hun regels).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object[]} products Alle producten uit de webshop.
+   * @param {Function} matchProduct Functie item ({ code }) → webshopproduct of null.
+   * @returns {{ created: number, restored: number, archived: number, skipped: number }} Aantallen.
+   */
+  function mirrorShop(tenantId, products, matchProduct) {
+    const items = prepare('SELECT id, code, archived, shop_product_id FROM stock_items WHERE tenant_id = ?').all(tenantId);
+    const timestamp = currentTimestamp();
+    const matchedProducts = new Set();
+    const restore = [];
+    const archive = [];
+    const seenCodes = new Set(items.map((item) => item.code));
+    for (const item of items) {
+      const product = matchProduct(item);
+      if (product) {
+        matchedProducts.add(String(product.id));
+        if (item.archived) restore.push(item.id);
+      } else if (!item.archived) {
+        archive.push(item.id);
+      }
+    }
+    const fresh = [];
+    let skipped = 0;
+    for (const product of products) {
+      if (matchedProducts.has(String(product.id))) continue;
+      const code = shopCodeOf(product);
+      if (!code || code.length > 40 || !/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code) || seenCodes.has(code)) { skipped++; continue; }
+      seenCodes.add(code);
+      fresh.push({ product, code });
+    }
+    transaction(db, () => {
+      const put = prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
+          sale_price, vat_rate, revenue_group, shop_sync, shop_product_id)
+        VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, 21, 'producten', 1, ?)`);
+      for (const { product, code } of fresh) put.run(crypto.randomUUID(), tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, product.price == null ? null : Math.round(product.price * 100) / 100, String(product.id));
+      const unarchive = prepare('UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND id = ?');
+      for (const id of restore) unarchive.run(timestamp, tenantId, id);
+      const hide = prepare('UPDATE stock_items SET archived = 1, shop_product_id = NULL, shop_dirty = 0, updated_at = ? WHERE tenant_id = ? AND id = ?');
+      const release = prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?');
+      for (const id of archive) { hide.run(timestamp, tenantId, id); release.run(tenantId, id); }
+    });
+    if (fresh.length) resyncOpen(tenantId, fresh.map((entry) => entry.code));
+    return { created: fresh.length, restored: restore.length, archived: archive.length, skipped };
   }
 
   /**
@@ -810,7 +868,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   return {
-    list, get, create, update, remove, move, importCatalog, importShop, movements, reservations: reservationsOf,
+    list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
     reorderProposal, onDirty: setDirtyHook,
   };
@@ -907,12 +965,25 @@ function registerStockRoutes(app, ctx) {
     const products = ctx.shopProductsOf ? ctx.shopProductsOf(tenantOf(req)) : [];
     const have = new Set(stock.list(tenantOf(req), { archived: true }).flatMap((item) => [item.code, item.shop.productId ? `#${item.shop.productId}` : '']));
     res.json({
-      items: products.filter((product) => !have.has(`#${product.id}`) && !have.has(normalizeCode(product.code || product.sku)))
-        .map((product) => ({ id: product.id, sku: product.sku, code: normalizeCode(product.code || product.sku), name: product.name, price: product.price, inStock: product.inStock })),
+      items: products.filter((product) => !have.has(`#${product.id}`) && !have.has(shopCodeOf(product)))
+        .map((product) => ({ id: product.id, sku: product.sku, code: shopCodeOf(product), name: product.name, price: product.price, inStock: product.inStock })),
     });
   });
 
-  app.post('/api/stock/import-shop', requireJson, requireStock, (req, res) => {
+  // Zonder ids: alles uit de webshop overnemen (volle synchronisatie, zie shop-sync.js).
+  app.post('/api/stock/import-shop', requireJson, requireStock, ctx.importLimiter || ((req, res, next) => next()), async (req, res, next) => {
+    if (!Array.isArray(req.body?.ids) && ctx.syncShop) {
+      try {
+        const out = await ctx.syncShop(tenantOf(req), req.user);
+        if (out.skipped) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Webshop).' });
+        audit(req, 'voorraad_webshop_overgenomen', { created: out.created, archived: out.archived });
+        return res.json(out);
+      } catch (error) {
+        return res.status(502).json({ error: 'shop_error', message: String(error.message || 'De webshop is niet bereikbaar.').slice(0, 300) });
+      }
+    }
+    next();
+  }, (req, res) => {
     const out = stock.importShop(tenantOf(req), ctx.shopProductsOf ? ctx.shopProductsOf(tenantOf(req)) : [], req.body?.ids);
     if (out.error) return fail(res, out);
     if (out.created) audit(req, 'voorraad_webshop_overgenomen', { created: out.created });

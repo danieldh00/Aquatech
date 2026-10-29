@@ -49,7 +49,7 @@
           <span class="spacer"></span>
           <button class="btn primary" id="b-new">+ Artikel</button>
           <button class="btn" id="b-import">Uit catalogus</button>
-          <button class="btn" id="b-shop">Uit webshop</button>
+          <button class="btn" id="b-shop" title="Neemt alle producten uit de webshop over; artikelen die niet in de webshop staan worden gearchiveerd">Alles uit webshop</button>
           <button class="btn" id="b-reorder" title="Excel met wat er onder de minimumvoorraad zit en hoeveel je moet bestellen">Bestelvoorstel</button>
           <button class="btn" id="b-export">Excel-export</button>
         </div>
@@ -97,20 +97,12 @@
           <div class="err" role="alert"></div>
         </form>
 
-        <form id="shop-form" class="card-form" hidden novalidate>
-          <h3>Producten uit de webshop overnemen</h3>
-          <p class="muted small">Producten uit de webshop die nog geen voorraadartikel zijn. De artikelcode wordt de SKU (of het veld <code>aquatech_code</code>), de verkoopprijs de webshopprijs; de stand komt bij de volgende synchronisatie uit de webshop.</p>
-          <div class="filters">
-            <input id="sh-search" type="search" placeholder="Zoek in de webshop">
-            <button class="btn small" type="button" id="sh-all">Alles kiezen</button>
-          </div>
-          <div id="sh-list" class="i-list"></div>
-          <div class="row">
-            <button class="btn primary" type="submit">Overnemen</button>
-            <button class="btn" type="button" data-cancel>Annuleren</button>
-          </div>
-          <div class="err" role="alert"></div>
-        </form>
+        <dialog id="shop-dialog" class="card-form">
+          <h3>Webshop overnemen</h3>
+          <p id="shop-text" class="small"></p>
+          <progress id="shop-bar" max="1" style="width:100%"></progress>
+          <div class="row"><button class="btn" id="shop-close" type="button" hidden>Sluiten</button></div>
+        </dialog>
 
         <div class="tablewrap"><table class="grid" id="s-table"></table></div>
       </section>
