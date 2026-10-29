@@ -1417,7 +1417,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       console.log(`Instellingen gewijzigd door ${req.user?.display_name || 'beheerder'}: ${changed.join(', ')}`);
       audit(req, 'instellingen_gewijzigd', { fields: changed });
     }
-    res.json({ settings: settings.view(), changed });
+    const responseSettings = settings.view();
+    if (req.tenantId !== tenant.id) delete responseSettings.storefront;
+    res.json({ settings: responseSettings, changed });
   });
 
   // Sleutel testen zonder kosten: vraagt alleen het model op.

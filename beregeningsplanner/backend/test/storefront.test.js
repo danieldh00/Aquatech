@@ -162,5 +162,8 @@ test('webshop-instelling alleen in de hoofdtenant', async () => {
   const refused = await other.put('/api/admin/settings', { storefront: true });
   assert.strictEqual(refused.status, 400);
   assert.strictEqual(refused.body.field, 'storefront');
+  const saved = await other.put('/api/admin/settings', { drawingRequests: false });
+  assert.strictEqual(saved.status, 200);
+  assert.ok(!('storefront' in saved.body.settings), 'veld ook niet in de PUT-response');
   assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
 });
