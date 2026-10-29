@@ -555,7 +555,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       }
       for (let start = 0; start < archive.length; start += BATCH) {
         const ids = archive.slice(start, start + BATCH).map((item) => item.id);
-        prepare(`UPDATE stock_items SET archived = 1, shop_dirty = 0, updated_at = ? WHERE tenant_id = ? AND id IN (${placeholders(ids.length)})`).run(timestamp, tenantId, ...ids);
+        prepare(`UPDATE stock_items SET archived = 1, updated_at = ? WHERE tenant_id = ? AND id IN (${placeholders(ids.length)})`).run(timestamp, tenantId, ...ids);
         prepare(`DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${placeholders(ids.length)})`).run(tenantId, ...ids);
       }
       // In dezelfde transactie, zodat een herstelde of nieuwe regel nooit zonder reservering actief blijft.
