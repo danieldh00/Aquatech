@@ -56,6 +56,7 @@ test('catalogus: unieke slugs, categorieën en prijs incl. btw', () => {
   assert.strictEqual(catalog.products[1].categoryName, 'Overig');
   assert.strictEqual(catalog.products[1].image, '');
   assert.strictEqual(catalog.products[0].image, 'https://x.nl/a.jpg');
+  assert.strictEqual(catalog.categories.length, 2);
   catalog.categories.forEach((category, index) => assert.match(category.slug, [/^overig-[0-9a-f]{6}$/, /^sproeiers-[0-9a-f]{6}$/][index]));
   const clash = buildCatalog([
     { code: 'C', name: 'x', on_hand: 1, reserved: 1, sale_price: 1, vat_rate: 21, categories: '["Tuin & huis"]' },
