@@ -67,7 +67,7 @@ const normalizeCode = (value) => String(value ?? '').trim().toUpperCase();
  * @param {{ id: *, code?: string, sku?: string }} product Het webshopproduct.
  * @returns {string} De code in hoofdletters.
  */
-const shopCodeOf = (product) => normalizeCode(product.code || product.sku) || `WC-${String(product.id).trim()}`;
+const shopCodeOf = (product) => normalizeCode(product.code) || normalizeCode(product.sku) || `WC-${String(product.id).trim()}`;
 
 /**
  * Maakt van een waarde nette tekst zonder stuurtekens, getrimd en ingekort.
