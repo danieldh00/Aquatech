@@ -1022,8 +1022,12 @@ function createStore(db) {
    * @returns {{ home: object, environmentId: string }|null} De live-tenant en het id van de testomgeving, of null.
    */
   function loginTenantOfTestAccount(username) {
+    const name = String(username || '').trim().toLowerCase();
+    // Het voorvoegsel voor de punt is het (ingekorte) begin van de slug van de testomgeving.
+    const prefix = /^([a-z0-9-]+)\.[a-z0-9]+$/.exec(name)?.[1];
+    if (!prefix) return null;
     const row = prepare(`SELECT t.id, t.parent_id FROM users u JOIN tenants t ON t.id = u.tenant_id
-       WHERE u.username = ? AND u.kind = 'account' AND t.environment = 'test' AND t.parent_id IS NOT NULL LIMIT 1`).get(String(username || '').trim().toLowerCase());
+       WHERE u.username = ? AND u.kind = 'account' AND t.environment = 'test' AND t.parent_id IS NOT NULL AND t.slug LIKE ? ORDER BY t.slug LIMIT 1`).get(name, `${prefix}%`);
     const home = row ? getTenant(row.parent_id) : null;
     return home ? { home, environmentId: row.id } : null;
   }
