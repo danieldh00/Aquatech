@@ -109,6 +109,11 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.strictEqual((await klant.post(`/api/quotes/${mine[0].id}/respond`, { answer: 'afgewezen', name: 'Testklant', reason: 'test' })).status, 200, 'akkoord vraagt een handtekening; afwijzen niet');
     assert.strictEqual((await klant.get('/api/admin/users')).status, 403);
 
+    // Zonder (of met een verkeerde) organisatiecode vindt de login de testomgeving via de gebruikersnaam.
+    const zonderCode = createClient(base);
+    assert.strictEqual((await zonderCode.login(usernameOf('klant3'), password, '')).status, 200, 'lege code');
+    assert.strictEqual((await zonderCode.get('/api/me')).body.tenant.id, env.id);
+
     // Klantportaal: klant1 heeft een opgeleverde werkorder, klant4 een ingeplande.
     const devries = createClient(base);
     await devries.login(usernameOf('klant1'), password, 'groen');
