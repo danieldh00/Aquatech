@@ -21,6 +21,7 @@ const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('.
 const { createWorkLogStore, registerWorkLogRoutes } = require('./uitvoering/worklog');
 const { registerCostingRoutes } = require('./uitvoering/costing');
 const { createImpersonationStore, createImpersonation } = require('./beveiliging/impersonation');
+const { createStorefront } = require('./webshop/storefront');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
 const { createShopSync } = require('./webshop/shop-sync');
 const { createShopOrders } = require('./webshop/shop-orders');
@@ -2056,6 +2057,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.setHeader('Cache-Control', 'no-store');
     sendAuthPage(res, authPage(req));
   });
+
+  // Eigen webshop (alleen lezen, openbaar, zie webshop/storefront.js); uit
+  // zolang de instelling `storefront` van de hoofdtenant uit staat.
+  app.use('/winkel', createStorefront({ db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id) }));
 
   // Scripts, stylesheets, lettertypen en afbeeldingen (geen HTML, geen API).
   const STATIC_ASSET = /\.(js|css|png|jpe?g|svg|webp|gif|ico|woff2?|map|json|traineddata(\.gz)?|wasm)$/i;

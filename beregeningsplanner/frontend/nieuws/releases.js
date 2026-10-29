@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.1.0',
+      date: '2026-10-29',
+      title: 'Eerste opzet eigen webshop',
+      items: [
+        { text: 'De eigen webshop heeft een eerste opzet: een openbare startpagina, categorieën en productpagina\'s op winkel/ (alleen bekijken, nog niet bestellen). Zet hem aan in Beheer → Instellingen → Toegang.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.0.1',
       date: '2026-10-29',
       title: 'Planner gebruikt de volle breedte',
