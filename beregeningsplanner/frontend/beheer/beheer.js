@@ -529,6 +529,7 @@
     accessForm.guestAccess.disabled = code.set;
     accessForm.drawingRequests.checked = view.drawingRequests.value;
     accessForm.storefront.checked = view.storefront.value;
+    accessForm.storefront.closest('label').hidden = !state.storefrontAllowed;
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
@@ -599,6 +600,7 @@
     try {
       const result = await api('settings');
       state.aiFromLive = Boolean(result.aiFromLive);
+      state.storefrontAllowed = Boolean(result.storefrontAllowed);
       renderSettings(result.settings);
     } catch (error) {
       toast(`Kan de instellingen niet laden: ${error.message}`, true);

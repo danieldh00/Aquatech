@@ -148,3 +148,18 @@ test('webshop: assets, doorverwijzing, 404 en alleen lezen', async () => {
 
   assert.strictEqual((await anonymous.post('/winkel/', {})).status, 405);
 });
+
+test('webshop-instelling alleen in de hoofdtenant', async () => {
+  const { base, db, admin } = await setup();
+  assert.strictEqual((await admin.get('/api/admin/settings')).body.storefrontAllowed, true);
+  const store = createStore(db);
+  const groen = store.createTenant({ name: 'Groen', slug: 'groen' }).tenant.id;
+  await store.createAccount(groen, { username: 'tuinman', displayName: 'Tuinman', role: 'beheerder', password: PW });
+  const other = await createLogin(base, { password: PW })('tuinman', 'groen');
+  const view = await other.get('/api/admin/settings');
+  assert.strictEqual(view.body.storefrontAllowed, false);
+  const refused = await other.put('/api/admin/settings', { storefront: true });
+  assert.strictEqual(refused.status, 400);
+  assert.strictEqual(refused.body.field, 'storefront');
+  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
+});

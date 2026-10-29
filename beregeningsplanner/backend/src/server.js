@@ -1375,6 +1375,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // aiFromLive: testomgeving zonder eigen sleutel gebruikt die van live.
     const aiFrom = aiTenantOf(req.tenantId);
     res.json({ settings: settingsFor(req.tenantId).view(), via: auth.session(req)?.via || null,
+      // De eigen webshop (winkel/) toont alleen de hoofdtenant: de schakelaar hoort alleen daar.
+      storefrontAllowed: req.tenantId === tenant.id,
       aiFromLive: aiFrom !== req.tenantId && Boolean(settingsFor(aiFrom).get('anthropicApiKey')) });
   });
 
@@ -1391,6 +1393,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (platformField) {
       return res.status(400).json({ error: 'invalid_setting', field: platformField,
         message: FIELDS[platformField].internal ? 'Deze instelling wijzig je in de module zelf.' : 'Deze instelling wijzig je in Hoofdbeheer.' });
+    }
+    if (req.tenantId !== tenant.id && [...Object.keys(patch), ...resets].includes('storefront')) {
+      return res.status(400).json({ error: 'invalid_setting', field: 'storefront', message: 'De eigen webshop geldt alleen voor de hoofdtenant.' });
     }
     const codeAfter = patch.accessCode !== undefined ? String(patch.accessCode).trim()
       : resets.includes('accessCode') ? settings.get('accessCode', true) : oldCode;
