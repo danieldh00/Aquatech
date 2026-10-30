@@ -372,7 +372,7 @@
         } });
         formElement.hidden = true;
         toast(`${item.code} toegevoegd`);
-        await Promise.all([load(), loadUnits()]);
+        await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
       } catch (error) {
         errorBox.textContent = error.message;
         if (error.field && formElement[error.field]) formElement[error.field].focus();
@@ -399,7 +399,7 @@
       const result = await api('stock/import-shop', { method: 'POST', body: {} });
       bar.value = 1;
       $('#shop-text').textContent = `Klaar: ${result.created} nieuw, ${result.restored} teruggezet, ${result.archived} gearchiveerd (niet in de webshop)${result.skippedProducts ? `, ${result.skippedProducts} overgeslagen (geen geldige code)` : ''}.`;
-      await Promise.all([load(), loadUnits()]);
+      await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
     } catch (error) {
       bar.value = 0;
       $('#shop-text').textContent = `Overnemen mislukt: ${error.message}`;
@@ -459,7 +459,7 @@
         const result = await api('stock/import', { method: 'POST', body: { codes } });
         formElement.hidden = true;
         toast(`${result.created} artikel${result.created === 1 ? '' : 'en'} op voorraad genomen`);
-        await Promise.all([load(), loadUnits()]);
+        await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
       } catch (error) {
         errorBox.textContent = error.message;
       }
@@ -596,9 +596,9 @@
           minQty: num(editForm.minQty.value), reorderQty: num(editForm.reorderQty.value), costPrice: num(editForm.costPrice.value),
           salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
         } }) };
-        await loadUnits();
-        renderItem();
         toast('Opgeslagen');
+        await loadUnits().catch((error) => toast(error.message, true));
+        renderItem();
       } catch (error) {
         errorBox.textContent = error.message;
       }
