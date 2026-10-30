@@ -947,6 +947,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     return transaction(db, () => {
       const found = units(tenantId).find((unit) => unit.id === String(id));
       if (!found) return { error: 'Eenheid niet gevonden.', status: 404 };
+      if (units(tenantId).length === 1) return { error: 'Er moet minstens één eenheid overblijven.', status: 409 };
       if (found.items) return { error: `Deze eenheid wordt nog door ${found.items} artikel${found.items === 1 ? '' : 'en'} gebruikt.`, status: 409 };
       prepare('DELETE FROM stock_units WHERE tenant_id = ? AND id = ?').run(tenantId, found.id);
       return { name: found.name };

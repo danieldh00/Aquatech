@@ -308,6 +308,12 @@ test('voorraad: eenheden beheren, een gebruikte eenheid blijft staan, andere org
     const other = (await piet.get('/api/stock/units')).body.items;
     assert.ok(!other.some((unit) => unit.name === 'Pallet'));
     assert.strictEqual((await piet.del(`/api/stock/units/${used.id}`)).status, 404);
+    // De laatste eenheid blijft staan (anders zou de standaardlijst terugkomen).
+    for (const unit of other.slice(0, -1)) assert.strictEqual((await piet.del(`/api/stock/units/${unit.id}`)).status, 200);
+    const last = (await piet.get('/api/stock/units')).body.items;
+    assert.strictEqual(last.length, 1);
+    assert.strictEqual((await piet.del(`/api/stock/units/${last[0].id}`)).status, 409);
+    assert.strictEqual((await piet.get('/api/stock/units')).body.items.length, 1);
   } finally {
     server.close();
   }

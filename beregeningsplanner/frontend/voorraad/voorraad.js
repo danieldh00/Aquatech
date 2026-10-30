@@ -256,7 +256,7 @@
    */
   function fillUnits(extra = '') {
     const names = state.units.map((unit) => unit.name);
-    if (extra && !names.some((name) => name.toLowerCase() === extra.toLowerCase())) names.push(extra);
+    if (extra && !names.includes(extra)) names.push(extra);
     document.querySelectorAll('select[data-units]').forEach((select) => {
       const keep = select.value;
       select.innerHTML = names.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
