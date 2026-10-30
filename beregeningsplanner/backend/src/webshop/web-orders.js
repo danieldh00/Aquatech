@@ -472,11 +472,12 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
     res.json({ order, invoice: invoices ? invoices.invoiceFor(req.tenantId, order.id) : null });
   });
 
-  app.post('/api/admin/web-orders/:id/invoice', (req, res) => {
+  app.post('/api/admin/web-orders/:id/invoice', async (req, res) => {
     if (!invoices) return res.status(404).json({ error: 'not_found', message: 'Facturen staan niet aan.' });
     const out = invoices.ensureInvoice(req.tenantId, req.params.id, req.user);
     if (out.error) return res.status(out.status || 400).json({ error: 'invoice_failed', message: out.error });
-    if (out.created) audit(req, 'webshop_bestelling_factuur', { number: out.invoice.number });
+    if (out.created || out.finalizedNow) audit(req, 'webshop_bestelling_factuur', { number: out.invoice.number });
+    await invoices.mailIfFinalized(req.tenantId, out);
     res.json({ invoice: out.invoice, created: out.created });
   });
 

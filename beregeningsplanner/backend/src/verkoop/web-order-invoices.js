@@ -64,7 +64,7 @@ function fromWebOrder(order, articles, settings) {
 /**
  * Maakt het factureren van webshopbestellingen.
  * @param {{ orders: object, invoices: object, debtors?: object, stock?: object, sender?: object, settingsFor: Function, log?: object }} ctx De opslagen en hulpfuncties van de server (settingsFor(tenantId) geeft de instellingen van een omgeving).
- * @returns {{ invoiceFor: Function, ensureInvoice: Function, onShipped: Function }} De functies.
+ * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, onShipped: Function }} De functies.
  */
 function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null, sender = null, settingsFor, log = console }) {
   /**
@@ -94,15 +94,26 @@ function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null
    * @param {string} tenantId Id van de omgeving.
    * @param {string} orderId Id van de bestelling.
    * @param {object|null} user Wie het doet.
-   * @returns {{ invoice?: object, created?: boolean, error?: string, status?: number }} De factuur, of een foutmelding.
+   * @returns {{ invoice?: object, created?: boolean, finalizedNow?: boolean, error?: string, status?: number }} De factuur (finalizedNow: hij is door deze aanroep definitief geworden), of een foutmelding.
    */
   function ensureInvoice(tenantId, orderId, user) {
     const order = orders.get(tenantId, orderId);
     if (!order) return { error: 'Bestelling niet gevonden.', status: 404 };
     if (!['verzonden', 'afgerond'].includes(order.status)) return { error: 'Een factuur kan pas als de bestelling is verzonden.', status: 409 };
     const existing = invoiceFor(tenantId, order.id);
-    if (existing) return { invoice: existing, created: false };
     const settings = settingsOf(tenantId);
+    if (existing) {
+      // Een concept dat bleef staan doordat definitief maken mislukte, alsnog afmaken.
+      if (existing.status !== 'concept' || !order.invoiceError || !settings.webOrders.finalize) return { invoice: existing, created: false };
+      const finalized = invoices.finalize(tenantId, user, existing.id, settings, { skipStock: true });
+      if (!finalized || finalized.error) {
+        const reason = finalized && finalized.error ? finalized.error : 'Factuur niet gevonden.';
+        orders.updateData(tenantId, order.id, { invoiceError: String(reason).slice(0, 300) });
+        return { error: `Factuur definitief maken mislukt: ${reason}`, status: 500 };
+      }
+      orders.updateData(tenantId, order.id, { invoiceError: null });
+      return { invoice: invoiceFor(tenantId, order.id), created: false, finalizedNow: true };
+    }
     if (!settings.webOrders.enabled) return { error: 'Facturen voor webshopbestellingen staan uit (Facturen → Instellingen).', status: 409 };
     try {
       const articles = stock ? stock.saleInfo(tenantId, order.lines.map((line) => line.code).filter(Boolean)) : {};
@@ -114,7 +125,8 @@ function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null
         if (finalized && finalized.error) throw new Error(finalized.error);
       }
       orders.updateData(tenantId, order.id, { invoiceError: null });
-      return { invoice: invoiceFor(tenantId, order.id), created: true };
+      const invoice = invoiceFor(tenantId, order.id);
+      return { invoice, created: true, finalizedNow: invoice.status === 'definitief' };
     } catch (error) {
       // Tegelijk al gemaakt (unieke index op de bestelling): de bestaande factuur is goed.
       const raced = /unique|constraint/i.test(error.message) ? invoiceFor(tenantId, order.id) : null;
@@ -122,6 +134,18 @@ function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null
       orders.updateData(tenantId, order.id, { invoiceError: String(error.message || error).slice(0, 300) });
       return { error: `Factuur maken mislukt: ${error.message}`, status: 500 };
     }
+  }
+
+  /**
+   * Mailt de factuur als hij zojuist definitief is geworden en automatisch
+   * mailen aan staat (instelling autoSend). Een mailfout wordt alleen gelogd.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ invoice?: object, finalizedNow?: boolean }} outcome Het resultaat van ensureInvoice.
+   * @returns {Promise<void>} Klaar als de mail is verstuurd of overgeslagen.
+   */
+  async function mailIfFinalized(tenantId, outcome) {
+    if (!outcome.finalizedNow || !sender) return;
+    try { await sender.autoSend(tenantId, outcome.invoice.id); } catch (error) { log.warn(`Factuur ${outcome.invoice.number} mailen mislukt: ${error.message}`); }
   }
 
   /**
@@ -136,12 +160,10 @@ function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null
   async function onShipped(tenantId, order, user) {
     const out = ensureInvoice(tenantId, order.id, user);
     if (out.error) { log.warn(`Factuur bij ${order.number}: ${out.error}`); return; }
-    if (out.created && out.invoice.status === 'definitief' && sender) {
-      try { await sender.autoSend(tenantId, out.invoice.id); } catch (error) { log.warn(`Factuur ${out.invoice.number} mailen mislukt: ${error.message}`); }
-    }
+    await mailIfFinalized(tenantId, out);
   }
 
-  return { invoiceFor, ensureInvoice, onShipped };
+  return { invoiceFor, ensureInvoice, mailIfFinalized, onShipped };
 }
 
 module.exports = { createWebOrderInvoices, fromWebOrder, invoiceKey };

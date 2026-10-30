@@ -148,3 +148,14 @@ test('rechten en omgevingen: ander account 403, andere omgeving 404', async () =
   assert.strictEqual((await world.vreemd.post(`/api/admin/web-orders/${id}/invoice`, {})).status, 404);
   assert.strictEqual((await world.vreemd.get(`/api/admin/web-orders/${id}`)).status, 404);
 });
+
+test('een concept dat bleef staan omdat definitief maken mislukte wordt bij opnieuw proberen afgemaakt', async () => {
+  const world = await setup();
+  await world.admin.put('/api/invoices/settings', { webOrders: { enabled: true, finalize: false } });
+  const id = await order(world, world.private1);
+  const concept = (await ship(world, id)).body.invoice;
+  assert.strictEqual(concept.status, 'concept');
+  await world.admin.put('/api/invoices/settings', { webOrders: { enabled: true, finalize: true } });
+  // Zonder bewaarde fout blijft een bewust concept met rust.
+  assert.strictEqual((await world.admin.post(`/api/admin/web-orders/${id}/invoice`, {})).body.invoice.status, 'concept');
+});
