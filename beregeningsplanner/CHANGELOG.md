@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.4.0
+
+Voorraadbeheer is overal hernoemd naar **Artikelen**; de werking, de opslag en
+het recht `voorraad` blijven gelijk.
+
+- **Module**: map `frontend/voorraad/` is `frontend/artikelen/` (`artikelen.js`,
+  `artikelen.css`), adres `artikelen/`. De oude adressen `voorraad`, `voorraad/`
+  en `voorraad/…` (met querystring) sturen relatief door naar `artikelen/…`.
+- **Backend**: `backend/src/voorraad/` is `backend/src/artikelen/`. API
+  (`/api/stock…`), tabellen, recht en module-sleutel `voorraad` (instelling
+  `modules`) blijven ongewijzigd, zodat bestaande rollen en instellingen
+  blijven werken.
+- Teksten en verwijzingen aangepast in de rolomschrijving, werkorders,
+  planner, Beheer → Webshop, facturen en de artikelkiezer.
+
 ## 1.3.9
 
 Beheer en de zijbalk zijn overzichtelijker ingedeeld; niets verandert aan de

@@ -90,7 +90,7 @@ beregeningsplanner/                  de app
     src/verkoop/                     offertes, facturen (+ PDF en mail), debiteuren, Visma
     src/webshop/                     WooCommerce: producten, synchronisatie, bestellingen
     src/uitvoering/                  werkorders, uren/materiaal, foto's, uitbesteden, meldingen, klantportaal
-    src/voorraad/                    voorraadbeheer
+    src/artikelen/                    artikelen en voorraad
     test/                            node --test (ook tegen PostgreSQL met TEST_DATABASE_URL)
     tools/codestyle.js               controle op de codestijl (npm run codestyle)
   frontend/                          alle paden relatief, gewone <script>-tags (werkt ook via file://)
@@ -101,7 +101,7 @@ beregeningsplanner/                  de app
     beheer/, hoofdbeheer/            beheer van de organisatie en van het platform
     offertes/, facturen/             verkoop (rekenkern: quote-core.js, invoice-core.js)
     werkorders/, planning/           uitvoering (rekenkern: workorder-core.js, worklog-core.js)
-    voorraad/, uitbesteden/, meldingen/, klantdossier/, plannen/, nieuws/, profiel/, portaal/
+    artikelen/, uitbesteden/, meldingen/, klantdossier/, plannen/, nieuws/, profiel/, portaal/
     openbaar/                        pagina's zonder login (digitale offerte, afspraak)
 ```
 

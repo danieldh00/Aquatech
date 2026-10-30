@@ -71,7 +71,7 @@
     if (!source.url) { statusBox.textContent = 'Geen webshop gekoppeld: de planner en offertes gebruiken de indicatieve standaardprijzen.'; return; }
     statusBox.innerHTML = `
       ${syncStatus && syncStatus.syncedAt ? `<p>Laatst opgehaald: <b>${esc(when(syncStatus.syncedAt))}</b> · ${syncStatus.productCount} producten · <b>${view.matchedCount} van ${view.articleCount}</b> artikelen van de planner gekoppeld.</p>` : '<p>Nog geen producten opgehaald.</p>'}
-      ${source.push ? '<p>Prijzen' + (source.pushStock !== false ? ' en voorraad' : '') + ' gaan vanuit Voorraadbeheer naar de webshop. Per artikel zie je de stand in <a href="../voorraad/">Voorraadbeheer</a>.</p>' : ''}
+      ${source.push ? '<p>Prijzen' + (source.pushStock !== false ? ' en voorraad' : '') + ' gaan vanuit Artikelen naar de webshop. Per artikel zie je de stand in <a href="../artikelen/">Artikelen</a>.</p>' : ''}
       ${view.stockSync && !view.stockSync.skipped ? `<p>Voorraadartikelen: ${view.stockSync.linked} nieuw gekoppeld, ${view.stockSync.updated} bijgewerkt in de webshop, ${view.stockSync.pricesFromShop} prijzen uit de webshop overgenomen, ${view.stockSync.soldInShop} verkocht via de webshop afgeboekt${view.stockSync.failed ? `, <b>${view.stockSync.failed} mislukt</b>` : ''}.</p>` : ''}
       ${syncStatus && syncStatus.lastError ? `<p class="err">Laatste poging (${esc(when(syncStatus.lastAttemptAt))}) mislukt: ${esc(syncStatus.lastError)}</p>` : ''}
       ${view.unmatched && view.unmatched.length && syncStatus && syncStatus.syncedAt ? `<details><summary>Nog niet gekoppeld (${view.unmatched.length})</summary><p class="small">${view.unmatched.map(esc).join(', ')}</p></details>` : ''}`;

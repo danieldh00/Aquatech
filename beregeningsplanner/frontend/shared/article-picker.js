@@ -166,7 +166,7 @@
     const variant = chosenVariant();
     dialog.querySelector('.ap-result').innerHTML = variant
       ? `<b class="code">${esc(variant.code)}</b> ${esc(variant.name)}<br>${esc(eur(variant.salePrice)) || 'geen prijs'} · ${esc(nl(variant.available))} ${esc(variant.unit || current.article.unit)} beschikbaar`
-      : (current.article && !current.article.variants.length ? 'Dit hoofdartikel heeft geen actieve varianten. Maak ze aan in Voorraadbeheer.' : 'Deze combinatie bestaat niet.');
+      : (current.article && !current.article.variants.length ? 'Dit hoofdartikel heeft geen actieve varianten. Maak ze aan in Artikelen.' : 'Deze combinatie bestaat niet.');
     dialog.querySelector('.ap-add').disabled = !variant;
   }
 

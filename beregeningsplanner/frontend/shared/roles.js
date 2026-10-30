@@ -11,7 +11,7 @@
 // - beheerder:    alles binnen de eigen organisatie (tenant): gebruikers,
 //                 instellingen, historie, alle plannen, offertes en werkorders.
 //                 Plaatst nieuwsberichten voor de collega's (pagina Nieuws).
-//                 Beheert de voorraad (ook installateurs).
+//                 Beheert de artikelen en de voorraad (ook installateurs).
 //                 Ook opdrachten uitbesteden aan of aannemen van een andere
 //                 organisatie (als dat in de instellingen aan staat).
 //                 De rechten van deze rol liggen vast.
@@ -46,7 +46,7 @@
     planning: { label: 'Planning', description: 'Werkorders inplannen in de agenda en de afspraaklink naar de klant sturen.', kind: ['medewerker'], needs: ['werkorders'] },
     uitvoerder: { label: 'Uitvoerder', description: 'Kan als uitvoerder aan een werkorder worden toegewezen en staat als kolom in de planning.', kind: ['medewerker'], needs: ['werkorders'] },
     nieuws: { label: 'Nieuwsberichten plaatsen', description: 'Berichten plaatsen op de pagina Nieuws voor de collega\'s (of ook voor klanten), eventueel ook per e-mail.', kind: ['medewerker'] },
-    voorraad: { label: 'Voorraadbeheer', description: 'De voorraad beheren: artikelen, ontvangsten, tellingen, correcties en wat er op werkorders gereserveerd en afgeboekt is.', kind: ['medewerker'] },
+    voorraad: { label: 'Artikelen', description: 'De voorraad beheren: artikelen, ontvangsten, tellingen, correcties en wat er op werkorders gereserveerd en afgeboekt is.', kind: ['medewerker'] },
     nacalculatie: { label: 'Nacalculatie', description: 'Per werkorder de begroting uit de offerte naast de geboekte uren, het materiaalverbruik en de facturen zien, met kosten en marge.', kind: ['medewerker'], needs: ['werkorders'] },
     facturen: { label: 'Facturen', description: 'Facturen maken vanuit werkorders of als losse verkoop, crediteren, betalingen bijhouden en exporteren naar de boekhouding.', kind: ['medewerker'] },
     uitbesteden: { label: 'Uitbesteden', description: 'Opdrachten uitbesteden aan of aannemen van een andere organisatie (als dat in de instellingen aan staat).', kind: ['medewerker'], needs: ['werkorders'] },

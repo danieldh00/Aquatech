@@ -1,4 +1,4 @@
-/* Voorraadbeheer: overzicht, reserveringen, mutaties en een artikel. */
+/* Artikelen: overzicht, reserveringen, mutaties en een artikel. */
 .filters .spacer { flex: 1; }
 .filters label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
 .tab .count:not(:empty) { display: inline-block; min-width: 18px; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--at-green); color: #fff; font-size: 12px; line-height: 18px; text-align: center; }

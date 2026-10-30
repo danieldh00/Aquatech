@@ -340,8 +340,8 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `handoverOf` → `workorders.createReceived` (werkorder zonder offerte). De
   uitbesteder ziet alleen `execution` (status, planning, stappen). Werkorder-API
   geeft `outsourcing` mee (`ctx.outsourcingOf`).
-- **Voorraadbeheer** (0.59.0, module `frontend/voorraad/`, recht `voorraad`:
-  beheerder + installateur): `backend/src/voorraad/stock.js`, tabellen `stock_items`
+- **Voorraadbeheer / Artikelen** (0.59.0; hernoemd in 1.4.0, module `frontend/artikelen/`, recht `voorraad`:
+  beheerder + installateur): `backend/src/artikelen/stock.js`, tabellen `stock_items`
   (code uniek per tenant = catalogus-/stuklijstcode, `on_hand`),
   `stock_movements` (logboek met `balance`, `source` `gereed`|`handmatig`|
   `verbruik:<id>`) en `stock_reservations` (migratie 24). Reserveren =
@@ -576,7 +576,7 @@ bewaakt de eerste twee regels voor elk eigen `.js`-bestand (backend `src/`,
 - **Mappenstructuur**: één map per module onder `frontend/`, gedeelde code in
   `frontend/shared/`. Backend per onderwerp onder `backend/src/`: `database/`,
   `beveiliging/`, `platform/` (store, instellingen, rollen, mail, nieuws),
-  `beregening/`, `verkoop/`, `webshop/`, `uitvoering/`, `voorraad/`,
+  `beregening/`, `verkoop/`, `webshop/`, `uitvoering/`, `artikelen/`,
   `paginas/` (HTML die de server vult); in de root van `src/` alleen de
   opdrachten `server.js`, `backup.js`, `migrate-to-postgres.js` en `paths.js`
   (`FRONTEND_DIR`, `PAGES_DIR`: nooit zelf `'..'` tellen naar de frontend).

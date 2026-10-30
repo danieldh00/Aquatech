@@ -1,4 +1,4 @@
-// Voorraadbeheer: artikelen op voorraad, het logboek van mutaties en de
+// Artikelen (voorheen Voorraadbeheer): artikelen op voorraad, het logboek van mutaties en de
 // reserveringen per werkorder (tabellen stock_items, stock_movements,
 // stock_reservations, migratie 23). Alles per omgeving (req.tenantId).
 //

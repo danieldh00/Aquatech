@@ -1,4 +1,4 @@
-// Voorraadbeheer: overzicht van de voorraad (stand, gereserveerd, beschikbaar),
+// Artikelen: overzicht van de voorraad (stand, gereserveerd, beschikbaar),
 // de reserveringen van open werkorders, het logboek met mutaties en per
 // artikel (?id=) de gegevens, mutaties boeken (ontvangst, telling, correctie)
 // en de geschiedenis. Gegevens uit /api/stock (recht 'voorraad'). Artikelcodes
@@ -531,7 +531,7 @@
   function renderItem() {
     const item = state.item;
     $('#d-title').innerHTML = `<span class="code">${esc(item.code)}</span> ${esc(item.name)}${item.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}`;
-    document.title = `${item.code} – Voorraadbeheer`;
+    document.title = `${item.code} – Artikelen`;
     $('#d-stats').innerHTML = [
       [`${nl(item.onHand)} ${item.unit}`, 'op voorraad'],
       [nl(item.reserved), `gereserveerd (${item.orders} werkorder${item.orders === 1 ? '' : 's'})`],
@@ -659,7 +659,7 @@
   function showList() {
     $('#v-item').hidden = true;
     $('#v-list').hidden = false;
-    document.title = 'Voorraadbeheer – AquaTech Service';
+    document.title = 'Artikelen – AquaTech Service';
   }
 
   /** Koppelt de knoppen en formulieren van het artikelscherm. */
@@ -1035,7 +1035,7 @@
       const deniedBox = $('#v-denied');
       deniedBox.hidden = false;
       deniedBox.innerHTML = me.user && me.user.kind !== 'gast'
-        ? 'Je rol heeft geen toegang tot voorraadbeheer. <a href="../">Terug naar het overzicht</a>'
+        ? 'Je rol heeft geen toegang tot Artikelen. <a href="../">Terug naar het overzicht</a>'
         : 'Log eerst in. <a href="../login">Inloggen</a>';
       return;
     }

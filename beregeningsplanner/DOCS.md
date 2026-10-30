@@ -522,9 +522,9 @@ omschrijving als instructie, het ontwerp en de zones van de gekozen
 installatie en de foto's van de klant. De klant ziet die werkorder daarna in
 zijn portaal en kan de afspraak daar bevestigen.
 
-## Voorraadbeheer
+## Artikelen (voorheen Voorraadbeheer)
 
-Module **Voorraadbeheer** (recht *Voorraadbeheer*: standaard beheerder en
+Module **Artikelen** (adres `artikelen/`, recht *Artikelen*: standaard beheerder en
 installateur). Een voorraadartikel heeft een **artikelcode**: dezelfde codes
 als de catalogus, de stuklijst van de planner, de offerte en de materiaallijst
 van de werkorder. Daardoor is alles vanzelf gekoppeld.
@@ -594,7 +594,7 @@ controleert de rechten zelf. De standaardrollen staan in
   rijen en de rollen als kolommen; een vinkje slaat direct op en geldt bij
   het volgende verzoek. Rechten: Beregeningsplanner, Alle plannen, Offertes
   opstellen, Alle offertes, Werkorders en klantdossiers, Planning, Uitvoerder
-  (kan worden toegewezen en is een kolom in de planning), Voorraadbeheer, Uitbesteden, en voor klantrollen
+  (kan worden toegewezen en is een kolom in de planning), Artikelen, Uitbesteden, en voor klantrollen
   Eigen offertes en Klantportaal. Een recht dat een ander nodig heeft (bijv.
   Planning → Werkorders) gaat automatisch mee aan; uitzetten neemt de
   afhankelijke rechten mee. Naam en omschrijving van elke rol zijn aan te
