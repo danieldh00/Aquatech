@@ -56,10 +56,11 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
    * @param {string} file Pad van het bestand.
    * @param {string} type Content-Type.
    * @param {boolean} versioned Of het adres een versie bevat.
+   * @param {number} unversionedSeconds Hoe lang (s) zonder versie in het adres gecachet mag worden.
    * @returns {void}
    */
-  const sendAsset = (res, file, type, versioned) => {
-    res.setHeader('Cache-Control', versioned ? 'public, max-age=31536000, immutable' : 'public, max-age=300');
+  const sendAsset = (res, file, type, versioned, unversionedSeconds = 300) => {
+    res.setHeader('Cache-Control', versioned ? 'public, max-age=31536000, immutable' : `public, max-age=${unversionedSeconds}`);
     res.type(type);
     fs.createReadStream(file).on('error', () => res.status(404).end()).pipe(res);
   };
@@ -100,7 +101,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
   });
   router.get('/assets/fonts/:name', (req, res) => {
     if (!FONT_FILE.test(req.params.name)) return res.status(404).end();
-    sendAsset(res, path.join(SHARED_DIR, 'fonts', req.params.name), 'font/woff2', true);
+    sendAsset(res, path.join(SHARED_DIR, 'fonts', req.params.name), 'font/woff2', Boolean(req.query.v), 86400);
   });
 
   router.get('/', (req, res) => {

@@ -205,6 +205,12 @@ test('categorieën worden in hoofdcategorieën gegroepeerd', () => {
   assert.deepStrictEqual(catalog.groups.map((group) => group.slug), ['beregening', 'elektra', 'pomp-techniek']);
   assert.strictEqual(catalog.groups.find((group) => group.slug === 'pomp-techniek').count, 2);
   assert.deepStrictEqual(catalog.featured.map((product) => product.code), ['B', 'A', 'D'], 'met foto, eerst op voorraad en om en om per groep; zonder voorraad als aanvulling');
+  const crowded = buildCatalog([
+    ...Array.from({ length: 9 }, (_, index) => ({ code: `S${index}`, name: `Op voorraad ${index}`, on_hand: 1, sale_price: 1, vat_rate: 21, categories: '["Dompelpompen"]', image: `https://x.nl/s${index}.jpg` })),
+    { code: 'U', name: 'Uitverkocht', on_hand: 0, sale_price: 1, vat_rate: 21, categories: '["Elektra"]', image: 'https://x.nl/u.jpg' },
+  ]);
+  assert.strictEqual(crowded.featured.length, 8);
+  assert.ok(crowded.featured.every((product) => product.inStock), 'bij genoeg voorraad komt een uitverkocht product er niet tussen');
   const soldOut = buildCatalog([{ code: 'E', name: 'Op', on_hand: 0, sale_price: 1, vat_rate: 21, categories: '["Dompelpompen"]', image: 'https://x.nl/e.jpg' }]);
   assert.deepStrictEqual(soldOut.featured.map((product) => product.code), ['E'], 'de startpagina blijft gevuld als alles uitverkocht is');
 });
@@ -254,6 +260,9 @@ test('webshop: assets met versie in het adres, startpagina in de opzet van aquat
   assert.match(versioned.headers.get('cache-control'), /max-age=31536000, immutable/);
   const unversioned = await anonymous.get('/winkel/assets/winkel.css');
   assert.match(unversioned.headers.get('cache-control'), /max-age=300$/, 'zonder versie maar kort cachen');
+  const font = 'montserrat-latin-400-normal.woff2';
+  assert.doesNotMatch((await anonymous.get(`/winkel/assets/fonts/${font}`)).headers.get('cache-control'), /immutable/, 'lettertype zonder versie niet immutable');
+  assert.match((await anonymous.get(`/winkel/assets/fonts/${font}?v=${version}`)).headers.get('cache-control'), /immutable/);
   for (const name of ['hero-tuin.jpg', 'merk-rainbird.png', 'usp-prijzen.png', 'zakelijk-achtergrond.jpg', 'betaalmethoden.png']) {
     assert.strictEqual((await anonymous.get(`/winkel/assets/${name}?v=${version}`)).status, 200, name);
   }
