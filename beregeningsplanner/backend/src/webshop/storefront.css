@@ -256,3 +256,7 @@ a.shop-action:hover { background: var(--at-page); }
 .variant-order .button { flex: 1; padding: 8px 12px; }
 .product-info .variant-pick { margin: 8px 0 12px; }
 @media (max-width: 860px) { .variant-row { grid-template-columns: 80px minmax(0, 1fr); } .variant-row .product-image { width: 80px; height: 80px; } .variant-pick, .variant-buy { grid-column: 1 / -1; } }
+
+/* Keuze tussen alle producten en alleen wat op voorraad is. */
+.stock-filter { margin: 0 0 12px; color: var(--at-muted); font-size: 0.95rem; }
+.stock-filter a[aria-current] { color: var(--at-ink); font-weight: 700; text-decoration: none; }

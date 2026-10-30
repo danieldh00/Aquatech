@@ -268,16 +268,19 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
         return haystacks.some((haystack) => words.every((word) => haystack.toLowerCase().includes(word)));
       })
       : [];
-    sendPage(req, res, 200, () => searchPage(query, found, catalog.groups));
+    const onlyInStock = req.query.voorraad === '1';
+    sendPage(req, res, 200, () => searchPage(query, onlyInStock ? found.filter((product) => product.inStock) : found, catalog.groups, onlyInStock));
   });
 
   router.get('/categorie/:slug', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
-    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
+    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const catalog = data.catalogOf(tenantId);
     const category = catalog.categories.find((candidate) => candidate.slug === req.params.slug);
     if (!category) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
-    sendPage(req, res, 200, () => categoryPage(category, catalog.products.filter((product) => product.categorySlug === category.slug), catalog.groups));
+    const onlyInStock = req.query.voorraad === '1';
+    const inCategory = catalog.products.filter((product) => product.categorySlug === category.slug && (!onlyInStock || product.inStock));
+    sendPage(req, res, 200, () => categoryPage(category, inCategory, catalog.groups, onlyInStock));
   });
 
   router.get('/product/:slug', (req, res) => {
