@@ -869,6 +869,28 @@ const MIGRATIONS = [
   );
   CREATE INDEX shop_images_tenant ON shop_images (tenant_id, created_at);
   `,
+  // 37: bestellingen in de eigen webshop (web-orders.js). Eén rij per
+  // bestelling met de regels, het adres en de verzendgegevens als JSON in `data`;
+  // status nieuw | verzonden | afgerond | geannuleerd. De voorraadreservering van
+  // een open bestelling staat in stock_reservations (work_order_id 'order:<id>').
+  `
+  CREATE TABLE web_orders (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenants(id),
+    number        TEXT NOT NULL,
+    user_id       TEXT REFERENCES users(id),
+    status        TEXT NOT NULL DEFAULT 'nieuw',
+    customer_name TEXT NOT NULL,
+    email         TEXT NOT NULL,
+    total         REAL NOT NULL,
+    data          TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX web_orders_number ON web_orders (tenant_id, number);
+  CREATE INDEX web_orders_created ON web_orders (tenant_id, created_at);
+  CREATE INDEX web_orders_user ON web_orders (tenant_id, user_id, created_at);
+  `,
 ];
 
 /**

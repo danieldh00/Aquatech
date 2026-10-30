@@ -30,14 +30,14 @@ function formPage({ title, heading, form, aside, groups }) {
 
 /**
  * Inlogpagina.
- * @param {{ error?: string, login?: string, next?: string }} state Foutmelding, eerder ingevulde inlognaam en waar naartoe na het inloggen ('planner' of leeg).
+ * @param {{ error?: string, login?: string, next?: string }} state Foutmelding, eerder ingevulde inlognaam en waar naartoe na het inloggen ('planner', 'afrekenen' of leeg).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @returns {string} De HTML-pagina.
  */
 function loginPage({ error = '', login = '', next = '' } = {}, groups = []) {
   const form = `${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 <form method="post" action="./" class="account-form">
-${next === 'planner' ? '<input type="hidden" name="volgende" value="planner">' : ''}
+${next ? `<input type="hidden" name="volgende" value="${escapeHtml(next)}">` : ''}
 ${field({ name: 'login', label: 'E-mailadres of gebruikersnaam', value: login, autocomplete: 'username' })}
 ${field({ name: 'password', label: 'Wachtwoord', type: 'password', autocomplete: 'current-password' })}
 <button class="button" type="submit">Inloggen</button>
@@ -48,13 +48,14 @@ ${field({ name: 'password', label: 'Wachtwoord', type: 'password', autocomplete:
 
 /**
  * Registratiepagina.
- * @param {{ error?: string, displayName?: string, email?: string }} state Foutmelding en eerder ingevulde waarden.
+ * @param {{ error?: string, displayName?: string, email?: string, next?: string }} state Foutmelding, eerder ingevulde waarden en waar naartoe na het registreren ('afrekenen' of leeg).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @returns {string} De HTML-pagina.
  */
-function registerPage({ error = '', displayName = '', email = '' } = {}, groups = []) {
+function registerPage({ error = '', displayName = '', email = '', next = '' } = {}, groups = []) {
   const form = `${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 <form method="post" action="./" class="account-form">
+${next ? `<input type="hidden" name="volgende" value="${escapeHtml(next)}">` : ''}
 ${field({ name: 'displayName', label: 'Naam', value: displayName, autocomplete: 'name' })}
 ${field({ name: 'email', label: 'E-mailadres', type: 'email', value: email, autocomplete: 'email' })}
 ${field({ name: 'password', label: 'Wachtwoord', type: 'password', autocomplete: 'new-password', hint: 'Minimaal 12 tekens.' })}

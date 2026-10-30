@@ -15,6 +15,8 @@ const { createStorefrontData } = require('./storefront-data');
 const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
 const { DEFAULT_SITE } = require('./shop-content');
 const { loginPage, registerPage, accountPage, plannerPage } = require('./storefront-account-pages');
+const { cartPage, checkoutPage, checkoutLoginPage, orderPage } = require('./storefront-order-pages');
+const { readCart, writeCart, applyCartAction } = require('./storefront-cart');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
 const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
@@ -41,14 +43,16 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
 }
 /** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner). */
 const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner)\/?$/;
+/** Paden waar de winkelwagen en het afrekenformulier naartoe posten. */
+const ORDER_POSTS = /^\/(winkelwagen|afrekenen)\/?$/;
 const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function }} options db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard) en previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`).
+ * @param {{ db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function, orders?: object, orderMail?: object, onOrder?: Function }} options db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js) en onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/winkel', router).
  */
-function createStorefront({ db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false }) {
+function createStorefront({ db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false, orders = null, orderMail = null, onOrder = () => {} }) {
   const data = createStorefrontData(db);
   const router = express.Router();
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: remoteIp });
@@ -80,10 +84,11 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
    */
   const sendPage = (req, res, status, render) => {
     const preview = isPreview(req);
+    const ordering = orderingOn();
     res.status(status);
     if (preview) { res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Robots-Tag', 'noindex'); }
-    else if (!res.getHeader('Cache-Control')) res.setHeader('Cache-Control', 'no-cache');
-    const html = renderWith(contentOf(req), render);
+    else if (!res.getHeader('Cache-Control')) res.setHeader('Cache-Control', ordering ? 'private, no-cache' : 'no-cache');
+    const html = renderWith(contentOf(req), render, { ordering, cartCount: ordering ? readCart(req).reduce((total, line) => total + line.qty, 0) : 0 });
     res.type('html').send(html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : '')));
   };
   /**
@@ -103,12 +108,17 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
    * @returns {boolean} true als de instelling shopPlanner aan staat en de shop accounts heeft.
    */
   const plannerOn = () => Boolean(accounts) && settingsFor(tenantId).get('shopPlanner') !== false;
+  /**
+   * Of bestellen aan staat: de instelling shopOrdering, met accounts en een bestelopslag.
+   * @returns {boolean} true als klanten mogen bestellen.
+   */
+  const orderingOn = () => Boolean(orders) && Boolean(accounts) && settingsFor(tenantId).get('shopOrdering') === true;
 
   router.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', STOREFRONT_CSP);
     res.setHeader('Referrer-Policy', 'same-origin');
-    const accountPost = req.method === 'POST' && accounts && ACCOUNT_POSTS.test(req.path);
+    const accountPost = req.method === 'POST' && accounts && (ACCOUNT_POSTS.test(req.path) || (orders && ORDER_POSTS.test(req.path)));
     if (req.method !== 'GET' && req.method !== 'HEAD' && !accountPost) return res.status(405).set('Allow', 'GET, HEAD').end();
     const previewFile = Boolean(content) && /^\/(assets|media)\//.test(req.path) && previewAllowed(req);
     if (!settingsFor(tenantId).get('storefront') && !isPreview(req) && !previewFile) return res.status(404).type('text').send('Niet gevonden.');
@@ -169,22 +179,38 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
       res.setHeader('Cache-Control', 'no-store');
       sendWithGroups(req, res, 200, (groups) => accountPage(viewer, groups));
     });
+    /**
+     * Waar een bezoeker na inloggen of registreren naartoe gaat (het veld volgende): de planner, het afrekenen of het account.
+     * @param {*} value De waarde van het veld.
+     * @returns {string} 'planner', 'afrekenen' (alleen als bestellen aan staat) of ''.
+     */
+    const nextOf = (value) => (value === 'planner' || (value === 'afrekenen' && orderingOn()) ? value : '');
+    /**
+     * Het adres (relatief aan een pagina één niveau diep) waar een bezoeker naartoe gaat na inloggen of registreren.
+     * @param {string} next 'planner', 'afrekenen' of ''.
+     * @param {string} fallback Adres als er geen bestemming is.
+     * @returns {string} Het relatieve adres.
+     */
+    const destination = (next, fallback) => (next === 'planner' && plannerOn() ? '../../beregening/' : next === 'afrekenen' ? '../afrekenen/' : fallback);
     router.get('/inloggen', (req, res) => {
       if (withSlash(req, res)) return;
-      if (accounts.viewer(req)) return res.redirect(302, req.query.volgende === 'planner' ? '../../beregening/' : '../account/');
-      sendWithGroups(req, res, 200, (groups) => loginPage({ next: req.query.volgende === 'planner' ? 'planner' : '' }, groups));
+      const next = nextOf(req.query.volgende);
+      if (accounts.viewer(req)) return res.redirect(302, destination(next, '../account/'));
+      sendWithGroups(req, res, 200, (groups) => loginPage({ next }, groups));
     });
     router.get('/registreren', (req, res) => {
       if (withSlash(req, res)) return;
-      if (accounts.viewer(req)) return res.redirect(302, '../account/');
-      sendWithGroups(req, res, 200, (groups) => registerPage({}, groups));
+      const next = nextOf(req.query.volgende);
+      if (accounts.viewer(req)) return res.redirect(302, destination(next, '../account/'));
+      sendWithGroups(req, res, 200, (groups) => registerPage({ next: next === 'afrekenen' ? next : '' }, groups));
     });
     router.post('/inloggen', form, async (req, res, next) => {
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
       try {
         const out = await accounts.login(req, res, { login: req.body?.login, password: req.body?.password });
-        if (out.error) return sendWithGroups(req, res, out.status, (groups) => loginPage({ error: out.error, login: String(req.body?.login ?? '').slice(0, 200), next: req.body?.volgende === 'planner' ? 'planner' : '' }, groups));
-        res.redirect(303, out.user.must_change_password ? '../../wachtwoord' : req.body?.volgende === 'planner' && plannerOn() ? '../../beregening/' : '../account/');
+        const next = nextOf(req.body?.volgende);
+        if (out.error) return sendWithGroups(req, res, out.status, (groups) => loginPage({ error: out.error, login: String(req.body?.login ?? '').slice(0, 200), next }, groups));
+        res.redirect(303, out.user.must_change_password ? '../../wachtwoord' : destination(next, '../account/'));
       } catch (error) { next(error); }
     });
     router.post('/registreren', form, async (req, res, next) => {
@@ -192,8 +218,9 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
       try {
         const out = await accounts.register(req, res, req.body || {});
         if (out.skipped) return res.redirect(303, '../');
-        if (out.error) return sendWithGroups(req, res, out.status, (groups) => registerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200) }, groups));
-        res.redirect(303, '../account/');
+        const next = nextOf(req.body?.volgende) === 'afrekenen' ? 'afrekenen' : '';
+        if (out.error) return sendWithGroups(req, res, out.status, (groups) => registerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200), next }, groups));
+        res.redirect(303, destination(next, '../account/'));
       } catch (error) { next(error); }
     });
     router.get('/planner', (req, res) => {
@@ -217,6 +244,81 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
       accounts.logout(req, res);
       res.redirect(303, '../');
     });
+
+    if (orders) {
+      const orderLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `order:${remoteIp(req)}` });
+      /**
+       * Past de bestellimiet toe zonder JSON-antwoord.
+       * @param {object} req Het verzoek.
+       * @param {object} res Het antwoord.
+       * @returns {boolean} true als het verzoek geweigerd moet worden.
+       */
+      const orderLimited = (req, res) => {
+        let refused = false;
+        orderLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
+        return refused;
+      };
+      /**
+       * Antwoord als bestellen uit staat: de pagina bestaat dan niet.
+       * @param {object} req Het verzoek.
+       * @param {object} res Het antwoord.
+       * @returns {void}
+       */
+      const orderingOff = (req, res) => sendWithGroups(req, res, 404, (groups) => notFoundPage('../', groups));
+
+      router.get('/winkelwagen', (req, res) => {
+        if (withSlash(req, res)) return;
+        if (!orderingOn()) return orderingOff(req, res);
+        res.setHeader('Cache-Control', 'no-store');
+        const cart = orders.priceCart(tenantId, readCart(req));
+        sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups));
+      });
+      router.post('/winkelwagen', form, (req, res) => {
+        if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+        if (!orderingOn()) return orderingOff(req, res);
+        writeCart(req, res, applyCartAction(readCart(req), req.body || {}));
+        res.redirect(303, './');
+      });
+      router.get('/afrekenen', (req, res) => {
+        if (withSlash(req, res)) return;
+        if (!orderingOn()) return orderingOff(req, res);
+        res.setHeader('Cache-Control', 'no-store');
+        const cart = orders.priceCart(tenantId, readCart(req));
+        if (!cart.lines.length || !cart.ok) return res.redirect(302, '../winkelwagen/');
+        const viewer = accounts.viewer(req);
+        if (!viewer) return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups));
+        sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer }, groups));
+      });
+      router.post('/afrekenen', form, async (req, res, next) => {
+        if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+        if (!orderingOn()) return orderingOff(req, res);
+        const viewer = accounts.viewer(req);
+        if (!viewer) return res.redirect(303, './');
+        if (orderLimited(req, res)) return res.status(429).type('text').send('Te veel bestellingen vanaf dit adres. Probeer het later opnieuw.');
+        try {
+          const out = orders.place(tenantId, { id: viewer.id }, req.body, readCart(req));
+          if (out.cart) return res.redirect(303, '../winkelwagen/');
+          if (out.error) {
+            const cart = orders.priceCart(tenantId, readCart(req));
+            return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, error: out.error, values: req.body || {} }, groups));
+          }
+          writeCart(req, res, []);
+          onOrder(req, out.order);
+          if (orderMail) await orderMail.sendPlaced(tenantId, out.order);
+          res.redirect(303, `../bestelling/${out.order.id}/`);
+        } catch (error) { next(error); }
+      });
+      router.get('/bestelling/:id', (req, res) => {
+        if (withSlash(req, res)) return;
+        if (!orderingOn()) return orderingOff(req, res);
+        res.setHeader('Cache-Control', 'no-store');
+        const viewer = accounts.viewer(req);
+        if (!viewer) return res.redirect(302, '../../inloggen/');
+        const order = orders.getForUser(tenantId, viewer.id, req.params.id);
+        if (!order) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../../', groups));
+        sendWithGroups(req, res, 200, (groups) => orderPage(order, groups));
+      });
+    }
   }
 
   // Over ons: de standaardpagina, of een eigen versie uit Beheer (pagina "over-ons").

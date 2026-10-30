@@ -258,6 +258,7 @@
         <form id="s-shop" class="card-form settings">
           <h3>Eigen webshop (winkel/)</h3>
           <label class="chk"><input type="checkbox" name="storefront"> <span>Eigen webshop tonen op <code>winkel/</code> (openbaar, alleen bekijken): voorraadartikelen met verkoopprijs en <i>Naar webshop</i> aan, zonder bestellen. Alleen voor de hoofdtenant.</span></label>
+          <label class="chk"><input type="checkbox" name="shopOrdering"> <span>Bestellen in de webshop: winkelwagen en afrekenen voor ingelogde klanten (op rekening). Uit = de knop <i>In winkelwagen</i> blijft uitgeschakeld. Bestellingen zie je onder <i>Bestellingen</i>. Alleen voor de hoofdtenant.</span></label>
           <label class="chk"><input type="checkbox" name="shopPlanner"> <span>Kopje <i>Planner</i> in de webshop: een bezoeker maakt met naam, e-mail en wachtwoord een klantaccount en gaat meteen door naar de planner. Uit = kopje verborgen en de pagina geweigerd. Alleen voor de hoofdtenant.</span></label>
           <div class="err" role="alert"></div>
         </form>
@@ -306,6 +307,18 @@
           <h3>Status</h3>
           <div id="w-status" class="muted">Laden…</div>
         </div>
+      </section>
+      <section id="tab-bestellingen" class="tabpane" hidden>
+        <div class="filters">
+          <select id="wo-status" aria-label="Status"></select>
+          <input id="wo-search" type="search" placeholder="Zoek op nummer, naam of e-mail" aria-label="Zoeken">
+          <button id="wo-export" class="btn primary">Exporteer naar Excel</button>
+        </div>
+        <p class="muted small">Bestellingen uit de eigen webshop (winkel/). Een nieuwe bestelling reserveert de voorraad; <i>Verzonden</i> boekt de artikelen af, <i>Annuleren</i> geeft de reservering vrij. Betalen gaat op rekening.</p>
+        <p class="muted small" id="wo-counts"></p>
+        <div class="tablewrap"><table class="grid" id="wo-table"></table></div>
+        <div class="pager"><button id="wo-prev" class="btn small">Vorige</button> <span id="wo-info" class="muted small"></span> <button id="wo-next" class="btn small">Volgende</button></div>
+        <div id="wo-detail" class="card-form settings" hidden></div>
       </section>
       <section id="tab-shopinhoud" class="tabpane" hidden>
         <div id="sc-root" class="sc"><p class="muted">Laden…</p></div>
@@ -390,6 +403,7 @@
   <script src="indeling.js"></script>
   <script src="webshop.js"></script>
   <script src="webshop-inhoud.js"></script>
+  <script src="bestellingen.js"></script>
   <script src="sproeiers.js"></script>
   <script src="rollen.js"></script>
   <script src="aikosten.js"></script>

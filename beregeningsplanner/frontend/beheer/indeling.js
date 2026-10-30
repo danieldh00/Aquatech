@@ -9,6 +9,7 @@
     { title: 'Overzicht', sections: [
       { id: 'history', label: 'Aanvragen', pane: 'history', words: 'historie wijzigingen planherkenning export excel' },
       { id: 'plans', label: 'Plannen', pane: 'plans', words: 'plan overzicht alle gebruikers' },
+      { id: 'bestellingen', label: 'Webshopbestellingen', pane: 'bestellingen', words: 'bestellingen winkel webshop orders verzenden annuleren klant excel op rekening' },
     ] },
     { title: 'Organisatie & gebruikers', sections: [
       { id: 'users', label: 'Gebruikers', pane: 'users', words: 'account wachtwoord toevoegen bekijken als klant gasten inloglink organisatiecode' },

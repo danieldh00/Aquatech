@@ -34,6 +34,8 @@ const FIELDS = {
   // Vast kopje Planner in de navigatie van de webshop: een bezoeker maakt dan in
   // een paar velden een klantaccount en gaat door naar de planner.
   shopPlanner: { type: 'bool', default: true },
+  // Bestellen in de eigen webshop (winkelwagen, afrekenen op rekening). Standaard uit.
+  shopOrdering: { type: 'bool', default: false },
   anthropicApiKey: { type: 'secret', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
   aiEnabled: { type: 'bool', default: true },
   aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },

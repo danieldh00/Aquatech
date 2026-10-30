@@ -37,10 +37,10 @@ table.grid tr.off td { color: var(--muted); }
 .empty { padding: 20px; color: var(--muted); }
 
 .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #eceff1; color: var(--muted); }
-.pill.aangemaakt { background: #e8f5e9; color: #2e7d32; }
-.pill.bijgewerkt { background: var(--primary-soft); color: var(--primary-dark); }
-.pill.verwijderd { background: #ffebee; color: #c62828; }
-.pill.analyse { background: #fff3e0; color: #ef6c00; }
+.pill.aangemaakt, .pill.afgerond { background: #e8f5e9; color: #2e7d32; }
+.pill.bijgewerkt, .pill.nieuw { background: var(--primary-soft); color: var(--primary-dark); }
+.pill.verwijderd, .pill.geannuleerd { background: #ffebee; color: #c62828; }
+.pill.analyse, .pill.verzonden { background: #fff3e0; color: #ef6c00; }
 .pill.beheerder { background: #ede7f6; color: #5e35b1; }
 .pill.installateur { background: var(--primary-soft); color: var(--primary-dark); }
 .pill.klant { background: #e0f7fa; color: #00838f; }
@@ -191,3 +191,6 @@ dl.kv dd { margin: 0; }
 .sc-editor h2, .sc-editor h3 { text-transform: none; letter-spacing: normal; color: var(--at-navy); margin: 1em 0 0.4em; font-size: 1.3em; }
 .sc-editor h3 { font-size: 1.1em; }
 .sc-editor p, .sc-editor ul, .sc-editor ol { margin: 0 0 1em; }
+
+/* Bestellingen: klikbare regels en het detail eronder. */
+#wo-detail { margin-top: 16px; }

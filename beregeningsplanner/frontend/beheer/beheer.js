@@ -68,7 +68,7 @@
     tenant_verwijderd: 'Tenant verwijderd', testomgeving_verwijderd: 'Testomgeving verwijderd', werkorder_verwijderd: 'Werkorder verwijderd', werkorder_gewist: 'Werkorder definitief gewist',
     impersonatie_gestart: 'Hoofdbeheerder werkt als gebruiker', impersonatie_beeindigd: 'Impersonatie beëindigd',
     klantweergave_gestart: 'Beheerder bekijkt als klant', klantweergave_beeindigd: 'Bekijken als klant beëindigd',
-    webshop_gesynchroniseerd: 'Webshopproducten opgehaald', webshop_inhoud_concept: 'Webshop-inhoud: concept opgeslagen', webshop_inhoud_gepubliceerd: 'Webshop-inhoud gepubliceerd', webshop_inhoud_concept_verworpen: 'Webshop-inhoud: concept weggegooid', webshop_inhoud_teruggezet: 'Webshop-inhoud: vorige versie teruggezet', webshop_pagina_verwijderd: 'Webshoppagina verwijderd', webshop_afbeelding_toegevoegd: 'Webshopafbeelding geüpload', webshop_afbeelding_verwijderd: 'Webshopafbeelding verwijderd', sproeierbibliotheek_ingelezen: 'Sproeierbibliotheek ingelezen', sproeierbibliotheek_standaard: 'Sproeierbibliotheek naar standaard', support_toegang_verleend: 'Supporttoegang gegeven', support_toegang_ingetrokken: 'Supporttoegang ingetrokken',
+    webshop_gesynchroniseerd: 'Webshopproducten opgehaald', webshop_bestelling_geplaatst: 'Webshopbestelling geplaatst', webshop_bestelling_status: 'Webshopbestelling: status gewijzigd', webshop_inhoud_concept: 'Webshop-inhoud: concept opgeslagen', webshop_inhoud_gepubliceerd: 'Webshop-inhoud gepubliceerd', webshop_inhoud_concept_verworpen: 'Webshop-inhoud: concept weggegooid', webshop_inhoud_teruggezet: 'Webshop-inhoud: vorige versie teruggezet', webshop_pagina_verwijderd: 'Webshoppagina verwijderd', webshop_afbeelding_toegevoegd: 'Webshopafbeelding geüpload', webshop_afbeelding_verwijderd: 'Webshopafbeelding verwijderd', sproeierbibliotheek_ingelezen: 'Sproeierbibliotheek ingelezen', sproeierbibliotheek_standaard: 'Sproeierbibliotheek naar standaard', support_toegang_verleend: 'Supporttoegang gegeven', support_toegang_ingetrokken: 'Supporttoegang ingetrokken',
     opdracht_aangeboden: 'Opdracht uitbesteed (aangeboden)', opdracht_ingetrokken: 'Uitbesteding ingetrokken', opdracht_aangenomen: 'Opdracht aangenomen', opdracht_afgewezen: 'Opdracht afgewezen',
   };
 
@@ -574,6 +574,7 @@
     const shopForm = $('#s-shop');
     shopForm.storefront.checked = Boolean(view.storefront?.value);
     shopForm.shopPlanner.checked = view.shopPlanner?.value !== false;
+    shopForm.shopOrdering.checked = Boolean(view.shopOrdering?.value);
     shopForm.hidden = !state.storefrontAllowed;
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
@@ -781,6 +782,10 @@
     /** Zet de eigen webshop (winkel/) aan of uit. */
     shopForm.storefront.onchange = () => {
       saveSettings(shopForm, { storefront: shopForm.storefront.checked }, shopForm.storefront.checked ? 'Webshop staat aan' : 'Webshop staat uit');
+    };
+    /** Zet bestellen in de webshop aan of uit. */
+    shopForm.shopOrdering.onchange = () => {
+      saveSettings(shopForm, { shopOrdering: shopForm.shopOrdering.checked }, shopForm.shopOrdering.checked ? 'Bestellen in de webshop staat aan' : 'Bestellen in de webshop staat uit');
     };
     /** Zet het kopje Planner in de webshop aan of uit. */
     shopForm.shopPlanner.onchange = () => {
@@ -1073,6 +1078,7 @@
     if (section.pane === 'roles') window.BeheerRollen.load();
     if (section.pane === 'settings') loadSettings(section.id);
     if (section.pane === 'webshop') { loadSettings(section.id); window.BeheerWebshop.load(); }
+    if (section.pane === 'bestellingen') window.BeheerBestellingen.load();
     if (section.pane === 'shopinhoud') window.BeheerWebshopInhoud.load();
     if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
@@ -1138,6 +1144,7 @@
     initSettings();
     initMail();
     window.BeheerWebshop.init({ toast });
+    window.BeheerBestellingen.init({ toast });
     window.BeheerWebshopInhoud.init({ toast });
     window.BeheerSproeiers.init({ toast });
     window.BeheerRollen.init({ toast, onChange: setRoles });

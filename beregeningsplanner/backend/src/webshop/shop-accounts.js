@@ -33,13 +33,13 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
   /**
    * Wie is er ingelogd (met een eigen account)?
    * @param {object} req Het verzoek.
-   * @returns {{ displayName: string, username: string, email: string, isCustomer: boolean }|null} De gebruiker, of null.
+   * @returns {{ id: string, displayName: string, username: string, email: string, isCustomer: boolean }|null} De gebruiker, of null.
    */
   function viewer(req) {
     const session = auth.session(req);
     const user = session?.via === 'user' ? session.user : null;
     if (!user || user.kind !== 'account' || user.tenant_id !== tenant.id) return null;
-    return { displayName: user.display_name, username: user.username, email: user.email || '',
+    return { id: user.id, displayName: user.display_name, username: user.username, email: user.email || '',
       isCustomer: store.roles.keysOfKind(user.tenant_id, 'klant').includes(user.role) };
   }
 

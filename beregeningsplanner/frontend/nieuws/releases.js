@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.4.6',
+      date: '2026-10-30',
+      title: 'Bestellen in de webshop',
+      items: [
+        { text: 'Klanten kunnen in de webshop artikelen in de winkelwagen leggen en bestellen op rekening. Je zet dit aan bij Beheer, Webshop en WooCommerce.', for: ['beheer'] },
+        { text: 'Nieuwe bestellingen zie je bij Beheer, Webshopbestellingen. Een bestelling reserveert de voorraad; bij Verzonden worden de artikelen afgeboekt en bij Annuleren komt de voorraad weer vrij. De klant krijgt een bevestiging per mail.', for: ['beheer'] },
+        { text: 'Je kunt de bestellingen exporteren naar Excel.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.4.5',
       date: '2026-10-30',
       title: 'Voorraad in de webshop',
