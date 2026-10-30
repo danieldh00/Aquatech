@@ -410,7 +410,7 @@
        * Opent de sectie Rollen.
        * @param {MouseEvent} event de klik
        */
-      rolesLink.onclick = (event) => { event.preventDefault(); showTab('roles'); };
+      rolesLink.onclick = (event) => { event.preventDefault(); showTab('roles', true); };
     }
   }
 
@@ -503,7 +503,7 @@
     });
     table.querySelectorAll('[data-hist]').forEach((button) => {
       /** Toont de aanvragen van deze gebruiker. */
-      button.onclick = () => { $('#h-user').value = button.dataset.hist; state.offset = 0; showTab('history'); loadHistory(); };
+      button.onclick = () => { $('#h-user').value = button.dataset.hist; state.offset = 0; showTab('history', true); loadHistory(); };
     });
   }
 
@@ -1041,13 +1041,14 @@
 
   // ---------- Algemeen ----------
   /**
-   * Toont een sectie van Beheer en laadt wat erop staat.
+   * Toont een sectie van Beheer en laadt wat erop staat. Een sectie waar de gebruiker geen toegang toe heeft (Back-ups zonder hoofdbeheer) valt terug op Aanvragen.
    * @param {string} name sleutel van de sectie (zie indeling.js; oude adressen als `settings` werken ook)
+   * @param {boolean} [push] true = een nieuwe stap in de browsergeschiedenis (menukeuze), anders de huidige vervangen (starten, terugknop).
    */
-  function showTab(name) {
-    const id = window.BeheerIndeling.resolve(name);
-    if (!id) return;
-    const section = window.BeheerIndeling.find(id);
+  function showTab(name, push = false) {
+    const wanted = window.BeheerIndeling.find(window.BeheerIndeling.resolve(name));
+    if (!wanted) return;
+    const section = wanted.needs === 'backups' && !state.backups ? window.BeheerIndeling.find('history') : wanted;
     window.BeheerIndeling.show(section);
     if (section.pane === 'plans') loadPlans();
     if (section.pane === 'users') loadUsers();
@@ -1057,7 +1058,8 @@
     if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
     if (section.pane === 'audit') loadAudit();
-    try { window.history.replaceState(null, '', `#${id}`); } catch (error) { /* file:// */ }
+    if (location.hash === `#${section.id}`) return;
+    try { window.history[push ? 'pushState' : 'replaceState'](null, '', `#${section.id}`); } catch (error) { /* file:// */ }
   }
 
   /**
@@ -1091,7 +1093,11 @@
        * @returns {boolean} true als de sectie in het menu hoort.
        */
       allowed: (section) => section.needs !== 'backups' || state.backups,
-      onSelect: showTab,
+      /**
+       * Opent de gekozen sectie als nieuwe stap in de browsergeschiedenis.
+       * @param {string} id Sleutel van de sectie.
+       */
+      onSelect: (id) => showTab(id, true),
     });
     let searchTimer;
     /** Zoekt kort na het typen opnieuw in de historie. */

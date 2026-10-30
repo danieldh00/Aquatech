@@ -47,7 +47,7 @@ a.at-nav-item:focus-visible, .at-nav-collapse:focus-visible, .at-nav-toggle:focu
 }
 .at-nav-sec-head:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
 .at-nav-sec-head:focus-visible { outline: 2px solid var(--at-teal); outline-offset: 1px; }
-.at-nav-sec-head .at-nav-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.6); }
+.at-nav-sec-head .at-nav-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: inherit; }
 .at-nav-chevron { width: 16px; height: 16px; flex: none; transition: transform 0.15s; }
 .at-nav-sec.open .at-nav-chevron { transform: rotate(180deg); }
 .at-nav-sec-body { display: none; }
@@ -67,8 +67,8 @@ body.has-nav .topbar .home-link { display: none; }
 body.nav-compact .at-nav { width: var(--at-nav-w-compact); }
 body.nav-compact .at-nav-label, body.nav-compact .at-nav-logo { display: none; }
 /* Ingeklapte zijbalk: alleen iconen, dus de groepen staan altijd open en het kopje wordt een streepje */
-body.nav-compact .at-nav-sec-head { height: 1px; margin: 8px 10px; padding: 0; overflow: hidden; background: rgba(255, 255, 255, 0.15); pointer-events: none; }
-body.nav-compact .at-nav-sec-head .at-nav-chevron { display: none; }
+body.nav-compact .at-nav-sec-head { display: none; }
+body.nav-compact .at-nav-sec { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.15); }
 body.nav-compact .at-nav-sec-body { display: flex; }
 body.nav-compact .at-nav-group { height: 1px; margin: 8px 10px; overflow: hidden; color: transparent; background: rgba(255, 255, 255, 0.15); }
 body.nav-compact .at-nav-mark { display: block; }
@@ -84,8 +84,8 @@ body.nav-compact .at-nav-collapse .ico { transform: rotate(180deg); }
   }
   body.nav-open .at-nav { transform: none; visibility: visible; transition: transform 0.2s ease; }
   body.nav-compact .at-nav-label, body.nav-compact .at-nav-logo { display: revert; }
-  body.nav-compact .at-nav-sec-head { height: auto; margin: 0; padding: 8px 10px; background: none; pointer-events: auto; }
-  body.nav-compact .at-nav-sec-head .at-nav-chevron { display: block; }
+  body.nav-compact .at-nav-sec-head { display: flex; }
+  body.nav-compact .at-nav-sec { margin-top: 0; padding-top: 0; border-top: 0; }
   body.nav-compact .at-nav-sec:not(.open) .at-nav-sec-body { display: none; }
   body.nav-compact .at-nav-group { height: auto; margin: 12px 10px 4px; color: rgba(255, 255, 255, 0.5); background: none; }
   body.nav-compact .at-nav-mark { display: none; }

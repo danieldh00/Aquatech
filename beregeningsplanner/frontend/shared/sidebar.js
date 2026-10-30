@@ -162,6 +162,8 @@
         const head = event.target.closest('.at-nav-sec-head');
         if (!head) return;
         const group = head.closest('.at-nav-sec');
+        // De groep met de huidige pagina blijft open, anders verdwijnt de actieve link.
+        if (group.querySelector('[aria-current="page"]')) return;
         const open = group.classList.toggle('open');
         head.setAttribute('aria-expanded', String(open));
         const saved = readOpenGroups();
