@@ -793,6 +793,17 @@ const MIGRATIONS = [
     UNIQUE (tenant_id, user_id, reminder_key, year)
   );
   `,
+  // 32: artikeleenheden (stock.js): de lijst eenheden (st, m, rol, ...) per
+  // omgeving waaruit het voorraadartikel er een kiest.
+  `
+  CREATE TABLE stock_units (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    name       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (tenant_id, name)
+  );
+  `,
 ];
 
 /**

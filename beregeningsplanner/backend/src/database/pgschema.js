@@ -627,6 +627,16 @@ const PG_MIGRATIONS = [
     UNIQUE (tenant_id, user_id, reminder_key, year)
   );
   `,
+  // 32: artikeleenheden (zie db.js).
+  `
+  CREATE TABLE stock_units (
+    id         ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id  ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    name       ${TEXT_TYPE} NOT NULL,
+    created_at ${TEXT_TYPE} NOT NULL,
+    UNIQUE (tenant_id, name)
+  );
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

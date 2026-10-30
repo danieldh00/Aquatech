@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.3.2',
+      date: '2026-10-30',
+      title: 'Eenheden beheren',
+      items: [
+        { text: 'In Voorraadbeheer kies je de eenheid van een artikel nu uit een lijst. Via de knop **Eenheden** maak je zelf eenheden aan (bijv. rol of pallet). De knoppen op de artikelpagina hebben ook meer ruimte gekregen.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.3.1',
       date: '2026-10-29',
       title: 'Eerste opzet eigen webshop',

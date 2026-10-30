@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.3.2
+
+Artikeleenheden beheren en een ruimere indeling van de artikelpagina.
+
+- **Eenheden** (`stock_units`, migratie 32 in `MIGRATIONS` en `PG_MIGRATIONS`):
+  per omgeving een lijst eenheden (standaard st, m, m², rol, set, zak, kg, l,
+  uur plus wat artikelen al gebruiken). API `GET|POST /api/stock/units` en
+  `DELETE /api/stock/units/:id` (recht `voorraad`, dubbel = 409, in gebruik =
+  409). Een artikel met een nieuwe eenheid (API, import) zet die vanzelf in de
+  lijst.
+- **Voorraadbeheer**: het veld *Eenheid* (nieuw artikel en artikelpagina) is
+  een keuzelijst; knop *Eenheden* opent het beheer (toevoegen, verwijderen).
+- **Opmaak**: meer ruimte tussen velden en knoppen (Boeken, Opslaan,
+  Verwijderen) in de formulieren van Voorraadbeheer.
+- Tests: `test/stock.test.js`; testdata krijgt een eigen eenheid.
+
 ## 1.3.1
 
 Opzet van de eigen webshop (stap 1, alleen lezen), als module van dit systeem.

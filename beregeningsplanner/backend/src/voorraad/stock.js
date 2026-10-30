@@ -88,6 +88,8 @@ const isDate = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.tes
  * @returns {number} Het totaal.
  */
 const sumQty = (rows) => rows.reduce((sum, row) => sum + row.qty, 0);
+/** Eenheden die een nieuwe omgeving meekrijgt. */
+const DEFAULT_UNITS = ['st', 'm', 'm²', 'rol', 'set', 'zak', 'kg', 'l', 'uur'];
 /**
  * Vraagtekens voor een SQL IN (...)-lijst.
  * @param {number} count Aantal waarden.
@@ -338,6 +340,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const fields = checked.value;
     const out = transaction(db, () => {
       if (findCode(tenantId, fields.code)) return { error: 'Er is al een voorraadartikel met deze code.', field: 'code', status: 409 };
+      rememberUnit(tenantId, fields.unit);
       const id = crypto.randomUUID();
       const timestamp = currentTimestamp();
       prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
@@ -375,6 +378,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
           .get(tenantId, existing.id, tenantId, existing.id).n;
         if (used) return { error: 'De code van een artikel dat al op werkorders is gereserveerd of afgeboekt, kan niet meer veranderen.', field: 'code', status: 409 };
       }
+      if (fields.unit) rememberUnit(tenantId, fields.unit);
       const merged = {
         code: existing.code, name: existing.name, unit: existing.unit, location: existing.location, minQty: existing.min_qty, reorderQty: existing.reorder_qty, costPrice: existing.cost_price, notes: existing.notes,
         salePrice: existing.sale_price, vatRate: Number(existing.vat_rate), revenueGroup: existing.revenue_group, shopSync: Boolean(Number(existing.shop_sync)), ...fields,
@@ -877,7 +881,84 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     dirtyHook = handler;
   }
 
+  /**
+   * De eenheden van de omgeving. De eerste keer wordt de lijst gevuld met de
+   * standaardeenheden en de eenheden die artikelen al hebben.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ id: string, name: string }[]} De eenheden, alfabetisch.
+   */
+  function unitRows(tenantId) {
+    let rows = prepare('SELECT id, name FROM stock_units WHERE tenant_id = ?').all(tenantId);
+    if (!rows.length) {
+      const inUse = prepare('SELECT DISTINCT unit FROM stock_items WHERE tenant_id = ?').all(tenantId).map((row) => row.unit);
+      const seen = new Set();
+      const timestamp = currentTimestamp();
+      for (const name of [...DEFAULT_UNITS, ...inUse]) {
+        if (!name || seen.has(name.toLowerCase())) continue;
+        seen.add(name.toLowerCase());
+        prepare('INSERT INTO stock_units (id, tenant_id, name, created_at) VALUES (?, ?, ?, ?)').run(crypto.randomUUID(), tenantId, name, timestamp);
+      }
+      rows = prepare('SELECT id, name FROM stock_units WHERE tenant_id = ?').all(tenantId);
+    }
+    return rows.sort((left, right) => left.name.localeCompare(right.name, 'nl'));
+  }
+
+  /**
+   * De eenheden met per eenheid het aantal artikelen dat hem gebruikt.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ id: string, name: string, items: number }[]} De eenheden.
+   */
+  function units(tenantId) {
+    const rows = unitRows(tenantId);
+    const counts = new Map(prepare('SELECT unit, COUNT(*) AS n FROM stock_items WHERE tenant_id = ? GROUP BY unit').all(tenantId).map((row) => [String(row.unit).toLowerCase(), Number(row.n)]));
+    return rows.map((row) => ({ id: row.id, name: row.name, items: counts.get(row.name.toLowerCase()) || 0 }));
+  }
+
+  /**
+   * Voegt een eenheid toe (een bestaande, ook met andere hoofdletters, blijft zoals hij is).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {*} rawName De naam, bijv. 'rol'.
+   * @returns {{ unit?: object, error?: string, field?: string, status?: number }} De eenheid, of een fout.
+   */
+  function addUnit(tenantId, rawName) {
+    const name = cleanText(rawName, 12);
+    if (!name) return { error: 'Vul een eenheid in.', field: 'name' };
+    return transaction(db, () => {
+      if (unitRows(tenantId).some((row) => row.name.toLowerCase() === name.toLowerCase())) return { error: 'Deze eenheid bestaat al.', field: 'name', status: 409 };
+      const id = crypto.randomUUID();
+      prepare('INSERT INTO stock_units (id, tenant_id, name, created_at) VALUES (?, ?, ?, ?)').run(id, tenantId, name, currentTimestamp());
+      return { unit: { id, name, items: 0 } };
+    });
+  }
+
+  /**
+   * Verwijdert een eenheid die geen artikel meer gebruikt.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de eenheid.
+   * @returns {{ name?: string, error?: string, status?: number }} De verwijderde naam, of een fout (404 of 409).
+   */
+  function removeUnit(tenantId, id) {
+    return transaction(db, () => {
+      const found = units(tenantId).find((unit) => unit.id === String(id));
+      if (!found) return { error: 'Eenheid niet gevonden.', status: 404 };
+      if (found.items) return { error: `Deze eenheid wordt nog door ${found.items} artikel${found.items === 1 ? '' : 'en'} gebruikt.`, status: 409 };
+      prepare('DELETE FROM stock_units WHERE tenant_id = ? AND id = ?').run(tenantId, found.id);
+      return { name: found.name };
+    });
+  }
+
+  /**
+   * Zet een eenheid die een artikel gebruikt (bijv. via een import of de API) ook in de lijst.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} name De eenheid.
+   * @returns {void}
+   */
+  function rememberUnit(tenantId, name) {
+    if (name && !unitRows(tenantId).some((row) => row.name.toLowerCase() === name.toLowerCase())) addUnit(tenantId, name);
+  }
+
   return {
+    units, addUnit, removeUnit,
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
     reorderProposal, onDirty: setDirtyHook,
@@ -927,6 +1008,26 @@ function registerStockRoutes(app, ctx) {
   app.get('/api/stock', requireStock, (req, res) => {
     noStore(res);
     res.json({ items: stock.list(tenantOf(req), { archived: req.query.archived === '1' }), kinds: KINDS, groups: GROUPS });
+  });
+
+  // Eenheden (st, m, rol, ...) waaruit een artikel er een kiest.
+  app.get('/api/stock/units', requireStock, (req, res) => {
+    noStore(res);
+    res.json({ items: stock.units(tenantOf(req)) });
+  });
+
+  app.post('/api/stock/units', requireJson, requireStock, (req, res) => {
+    const out = stock.addUnit(tenantOf(req), req.body?.name);
+    if (out.error) return fail(res, out);
+    audit(req, 'voorraad_eenheid_aangemaakt', { name: out.unit.name });
+    res.status(201).json(out.unit);
+  });
+
+  app.delete('/api/stock/units/:id', requireStock, (req, res) => {
+    const out = stock.removeUnit(tenantOf(req), req.params.id);
+    if (out.error) return out.status === 404 ? notFound(res, 'Eenheid') : fail(res, out);
+    audit(req, 'voorraad_eenheid_verwijderd', { name: out.name });
+    res.json({ deleted: true });
   });
 
   app.get('/api/stock/reservations', requireStock, (req, res) => {
