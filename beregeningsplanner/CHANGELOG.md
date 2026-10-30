@@ -6,8 +6,9 @@ Bekijken als klant (klantweergave): een beheerder ziet de app in een
 testomgeving precies zoals een klant hem ziet, om te testen.
 
 - **Server** (`beveiliging/impersonation.js`): `GET|POST
-  /api/admin/view-as-customer` (recht `beheer`). Alleen in een testomgeving
-  (live: 403 `test_only`), alleen accounts met een klantrol (`keysOfKind
+  /api/admin/view-as-customer` (recht `beheer`). Alleen in een testomgeving:
+  in live geeft GET `{ available: false }` en weigert POST het starten met
+  403 `test_only`. Alleen accounts met een klantrol (`keysOfKind
   'klant'`) van de eigen organisatie (de testomgeving zelf of de live-tenant
   erboven; anders 404), geen wachtwoord of toestemming van de klant nodig.
   Zelfde cookie-mechanisme als de impersonatie van de hoofdbeheerder, met
