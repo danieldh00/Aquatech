@@ -93,7 +93,7 @@ function navigation(groups, root) {
   }
   const allGroups = groups.map((group) => `<li><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a></li>`).join('');
   const search = `<li class="nav-all"><span class="nav-all-button" tabindex="0">Product zoeken${ICONS.down}</span><ul class="nav-drop">${allGroups}</ul></li>`;
-  const about = '<li class="nav-about"><a href="https://aquatechservice.nl">Over ons</a></li>';
+  const about = `<li class="nav-about"><a href="${root}over-ons/">Over ons</a></li>`;
   const desktop = groups.map((group) => `<li class="nav-group"><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a><ul class="nav-drop">${subItems(group)}</ul></li>`).join('');
   const mobile = groups.map((group) => `<li><details><summary>${escapeHtml(group.name)}</summary><ul><li><a href="${root}groep/${escapeHtml(group.slug)}/">Alles in ${escapeHtml(group.name)}</a></li>${subItems(group)}</ul></details></li>`).join('');
   return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${search}${about}${desktop}<!--planner:${root}--></ul></nav>
@@ -129,7 +129,7 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
       <input type="search" name="q" value="${escapeHtml(query)}" placeholder="Zoek op product of artikelnummer" aria-label="Zoeken" maxlength="80">
       <button type="submit" aria-label="Zoeken">${ICONS.search}</button>
     </form>
-    <a class="shop-phone" href="${PHONE_LINK}">${ICONS.phone}<span><small>Klantenservice</small><strong>${PHONE}</strong></span></a>
+    <a class="shop-phone" href="${PHONE_LINK}" aria-label="Klantenservice ${PHONE}">${ICONS.phone}<span><small>Klantenservice</small><strong>${PHONE}</strong></span></a>
     <div class="shop-actions">
       <a class="shop-action" href="${root}account/" title="Inloggen of mijn account">${ICONS.user}<span>Account</span></a>
       <span class="shop-action cart" aria-disabled="true" title="De winkelwagen volgt binnenkort">${ICONS.cart}<span>Winkelwagen</span><b>0</b></span>
@@ -145,7 +145,7 @@ ${body}
     <div><strong>Aquatechshop.nl</strong><p>K.v.k.: 88438252<br>Oenenburgweg 218, 8072 GP Nunspeet<br><a href="mailto:${EMAIL}">${EMAIL}</a><br><a href="${PHONE_LINK}">${PHONE}</a></p></div>
     <div><strong>Productgroepen</strong><ul>${footerGroups}</ul></div>
     <div><strong>Account</strong><ul><li><a href="${root}account/">Mijn account</a></li><li><a href="${root}account/">Inloggen of registreren</a></li></ul></div>
-    <div><strong>Over ons</strong><p>Beregening, leidingen en pompen voor tuin en bedrijf, van AquaTech Service in Nunspeet.</p><p><a href="https://aquatechservice.nl">Over AquaTech Service</a></p></div>
+    <div><strong>Over ons</strong><p>Beregening, leidingen en pompen voor tuin en bedrijf, van AquaTech Service in Nunspeet.</p><p><a href="${root}over-ons/">Lees ons verhaal</a></p></div>
   </div>
   <div class="foot-note"><span>Alle prijzen zijn inclusief btw.</span><img src="${assetUrl(root, 'betaalmethoden.png')}" alt="Betaalmethoden" width="286" height="26" loading="lazy"></div>
 </footer>
@@ -164,7 +164,7 @@ function productCard(product, root) {
   const image = product.image ? `<img src="${escapeHtml(product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
   return `<a class="product-card" href="${root}product/${escapeHtml(product.slug)}/">
   <span class="product-image">${image}</span>
-  <span class="product-name">${escapeHtml(product.name)}</span>
+  <span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span>
   <span class="product-price">${escapeHtml(formatPrice(product.priceIncl))}</span>
   <span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span>
 </a>`;
@@ -200,7 +200,7 @@ function groupShowcase(group, products) {
  * @returns {string} HTML van de regel.
  */
 function productRow(product, root) {
-  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${escapeHtml(product.image)}" alt="" loading="lazy"></span><span><span class="product-name">${escapeHtml(product.name)}</span><span class="product-price">${escapeHtml(formatPrice(product.priceIncl))}</span></span></a>`;
+  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${escapeHtml(product.image)}" alt="" loading="lazy"></span><span class="product-row-text"><span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span><span class="product-price">${escapeHtml(formatPrice(product.priceIncl))}</span><span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span></span></a>`;
 }
 
 /**
@@ -308,6 +308,36 @@ function productPage(product, groups) {
 }
 
 /**
+ * Pagina Over ons: het verhaal van Aquatechshop.nl, overgenomen van de
+ * gelijknamige pagina op aquatechshop.nl.
+ * @param {object[]} groups Alle hoofdcategorieën (voor menu en voet).
+ * @returns {string} De HTML-pagina.
+ */
+function aboutPage(groups) {
+  const root = '../';
+  const blocks = [
+    ['over-ons-verhaal.png', 'Aquatechshop.nl', 'Aquatechshop.nl is ontstaan vanuit HVT Beregening, een gespecialiseerd bedrijf in beregenings- en watertechniek. Dankzij de ervaring in de sector kunnen wij onze klanten optimaal van dienst zijn. Korte lijnen, klanttevredenheid en efficiëntie zijn onze uitgangspunten.'],
+    ['over-ons-tarieven.png', 'Scherpe tarieven', 'Wij zijn totaalleverancier voor bedrijven, particulieren en organisaties. Door de goede en veelal rechtstreekse relaties met fabrikanten en leveranciers kunnen wij bewezen materialen en techniek leveren tegen zeer scherpe prijzen. Met ons koopt u als het ware de vruchten van een goed netwerk in combinatie met vakkennis en ervaring.'],
+    ['over-ons-technische-dienst.png', 'Eigen technische dienst', 'HVT Beregening is onze eigen technische dienst. Voor installatie en/of uitgebreid advies kunt u daarom ook bij ons terecht: <a href="https://www.hvtberegening.nl">www.hvtberegening.nl</a>'],
+  ];
+  const values = [
+    ['Kwaliteit', 'Bewezen en beproefde producten'],
+    ['Betrouwbaar', 'Verbeter uw werk door samen te werken met een ervaren en betrouwbare partner.'],
+    ['Levering op locatie', 'Bezorging bij u op locatie, om u te ontzorgen'],
+    ['Persoonlijke aandacht', 'Of je nu een professional, ondernemer of particulier bent, maatwerk vinden wij belangrijk.'],
+  ];
+  const body = `<section class="about-hero"><img src="${assetUrl(root, 'over-ons-hero.webp')}" alt="" width="1440" height="511"><div class="about-hero-text"><h1>Over ons</h1><p>Ons verhaal</p></div></section>
+<div class="wrap">
+<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a> › <span>Over ons</span></nav>
+<div class="about-blocks">${blocks.map(([icon, heading, text]) => `<section class="about-block"><img src="${assetUrl(root, icon)}" alt="" width="64" height="64" loading="lazy"><div><h2>${heading}</h2><p>${text}</p></div></section>`).join('')}</div>
+<h2 class="centered">Waarom Aquatechshop?</h2>
+<div class="about-values">${values.map(([heading, text]) => `<div class="about-value"><strong>${heading}</strong><span>${text}</span></div>`).join('')}</div>
+<p class="about-claim">Kwaliteit, service en betaalbaarheid komen bij ons samen.</p>
+</div>`;
+  return layout({ root, groups, wide: true, title: `Over ons – ${SHOP_NAME}`, description: 'Aquatechshop.nl is ontstaan vanuit HVT Beregening: scherpe tarieven, een eigen technische dienst en levering op locatie.', body });
+}
+
+/**
  * Pagina voor een onbekende categorie of product.
  * @param {string} root Relatief pad naar de shop-startpagina.
  * @param {object[]} groups Alle hoofdcategorieën.
@@ -317,4 +347,4 @@ function notFoundPage(root, groups) {
   return layout({ root, groups, title: `Pagina niet gevonden – ${SHOP_NAME}`, description: 'Deze pagina bestaat niet.', body: `<h1>Pagina niet gevonden</h1><p><a href="${root || './'}">Terug naar de shop</a></p>` });
 }
 
-module.exports = { layout, homePage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };
+module.exports = { layout, homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };

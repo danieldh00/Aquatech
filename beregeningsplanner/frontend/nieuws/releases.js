@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.4.1',
+      date: '2026-10-30',
+      title: 'Webshop netter uitgelijnd en Over ons',
+      items: [
+        { text: 'In de webshop staan de producten en regels nu netjes op één lijn: titel, prijs en voorraad staan op elke kaart op dezelfde plek. De lichte streep boven de foto is weg.' },
+        { text: 'De webshop heeft een eigen pagina Over ons, met het verhaal van Aquatechshop.nl.' },
+      ],
+    },
+    {
       version: '1.4.0',
       date: '2026-10-30',
       title: 'Voorraadbeheer heet nu Artikelen',

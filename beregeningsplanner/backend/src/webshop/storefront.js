@@ -12,7 +12,7 @@ const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { remoteIp } = require('../beveiliging/auth');
 const { createStorefrontData } = require('./storefront-data');
-const { homePage, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
+const { homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
 const { loginPage, registerPage, accountPage, plannerPage } = require('./storefront-account-pages');
 
 /** Content-Security-Policy van de shop: geen scripts; afbeeldingen van de webshop komen van https-adressen. */
@@ -195,6 +195,12 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
       res.redirect(303, '../');
     });
   }
+
+  router.get('/over-ons', (req, res) => {
+    const pathname = req.originalUrl.split('?')[0];
+    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
+    sendPage(res, 200, aboutPage(data.catalogOf(tenantId).groups));
+  });
 
   router.get('/groep/:slug', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];

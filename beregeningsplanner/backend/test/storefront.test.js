@@ -272,3 +272,25 @@ test('webshop: assets met versie in het adres, startpagina in de opzet van aquat
   const product = await anonymous.get('/winkel/product/pe-buis-25-mm-buis-25/');
   assert.match(product.text, /<button class="button" type="button" disabled>In winkelwagen<\/button>/);
 });
+
+test('webshop: eigen pagina Over ons, vaste kaarthoogte en telefoonlink met naam', async () => {
+  const { admin, anonymous } = await setup();
+  await admin.put('/api/admin/settings', { storefront: true });
+  const { version } = require('../package.json');
+  const home = await anonymous.get('/winkel/');
+  assert.match(home.text, /href="over-ons\/"/, 'menu verwijst naar de eigen pagina');
+  assert.ok(!home.text.includes('aquatechservice.nl'), 'geen verwijzing meer naar aquatechservice.nl');
+  assert.match(home.text, /class="shop-phone" href="tel:\+31647212019" aria-label="Klantenservice 06 47212019"/);
+  const about = await anonymous.get('/winkel/over-ons/');
+  assert.strictEqual(about.status, 200);
+  for (const text of ['HVT Beregening', 'Scherpe tarieven', 'Eigen technische dienst', 'Waarom Aquatechshop?', 'Levering op locatie', `over-ons-hero.webp?v=${version}`]) {
+    assert.ok(about.text.includes(text), text);
+  }
+  assert.match((await anonymous.get('/winkel/over-ons')).text, /Waarom Aquatechshop\?/, 'ook zonder slash bereikbaar');
+  for (const name of ['over-ons-hero.webp', 'over-ons-verhaal.png', 'over-ons-tarieven.png', 'over-ons-technische-dienst.png']) {
+    assert.strictEqual((await anonymous.get(`/winkel/assets/${name}?v=${version}`)).status, 200, name);
+  }
+  const css = await anonymous.get(`/winkel/assets/winkel.css?v=${version}`);
+  assert.ok(!/\.shop-head \{[^}]*border-bottom/.test(css.text), 'geen streep onder de kopbalk');
+  assert.match(css.text, /\.product-name \{[^}]*min-height: 4\.5em/, 'titel van een kaart heeft een vaste hoogte');
+});
