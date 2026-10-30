@@ -3,11 +3,15 @@
 //    sleutels nodig; prijzen zoals de shop ze toont.
 //  - 'rest':  de REST API v3 (/wp-json/wc/v3/products) met consumer key en
 //    secret (alleen-lezen volstaat); geeft ook meta_data (aquatech_code).
-// Variaties van variabele producten worden in dit prototype niet opgehaald.
+// Variabele producten: via de REST API komen ook de variaties mee, elk als
+// eigen product met parentId (het variabele product) en de gekozen waarden
+// (attributes: [{ name, option }]). De Store API geeft geen variaties.
 //
 // Terugschrijven (updateProducts, alleen REST v3 met lees- en schrijfrechten):
 // prijs en voorraad uit Aquatech naar de webshop (instelling shopSource.push,
-// zie shop.js syncStock).
+// zie shop-sync.js); een variatie via /products/<id>/variations/batch.
+// Aanmaken (createProduct, createVariations): een artikel of hoofdartikel met
+// varianten uit Aquatech als nieuw product in de webshop.
 
 const net = require('net');
 const { publicAddress } = require('../beveiliging/netguard');
@@ -15,6 +19,7 @@ const { pinnedFetch, readLimited } = require('../beveiliging/pinned-fetch');
 
 const PER_PAGE = 100;
 const MAX_PAGES = 50;
+const MAX_VARIATION_PAGES = 5;
 const TIMEOUT_MS = 15000;
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -158,6 +163,9 @@ function fromStoreApi(product, shop) {
     inStock: product.is_in_stock !== false,
     categories: (product.categories || []).map((category) => category.name).filter(Boolean),
     code: '',
+    type: 'simple',
+    parentId: null,
+    attributes: [],
   };
 }
 
@@ -187,6 +195,46 @@ function fromRestV3(product, shop) {
     inStock: product.stock_status !== 'outofstock',
     categories: (product.categories || []).map((category) => category.name).filter(Boolean),
     code: meta ? String(meta.value || '').trim() : '',
+    type: product.type === 'variable' ? 'variable' : 'simple',
+    parentId: null,
+    // Alle kenmerken zoals de webshop ze heeft (ook die niet voor variaties zijn), om bij het aanvullen niets te verliezen.
+    attributes: (product.attributes || []).map((attribute) => ({
+      id: attribute.id, name: String(attribute.name || ''), position: attribute.position, visible: attribute.visible !== false,
+      variation: Boolean(attribute.variation), options: (attribute.options || []).map(String),
+    })),
+  };
+}
+
+/**
+ * Zet een variatie uit de REST API v3 om naar het eigen formaat: een product
+ * met parentId en de gekozen waarde per kenmerk.
+ * @param {object} variation De variatie.
+ * @param {object} parent Het variabele product erboven (zoals de webshop het stuurt; minstens id).
+ * @param {object} shop De koppelinstelling.
+ * @returns {object} Zoals fromRestV3, met type 'variation', parentId en attributes [{ name, option }].
+ */
+function fromRestV3Variation(variation, parent, shop) {
+  const meta = (variation.meta_data || []).find((entry) => entry.key === 'aquatech_code');
+  const regular = toNumber(variation.regular_price);
+  const attributes = (variation.attributes || []).map((attribute) => ({ name: String(attribute.name || ''), option: String(attribute.option || '') }));
+  const options = attributes.map((attribute) => attribute.option).filter(Boolean).join(', ');
+  return {
+    id: String(variation.id),
+    sku: String(variation.sku || ''),
+    name: `${String(parent.name || '')}${options ? ` – ${options}` : ''}`.trim(),
+    price: exTax(toNumber(variation.price), shop),
+    regularPrice: regular == null ? null : exTax(regular, shop),
+    rawRegular: regular,
+    stockQty: variation.manage_stock === true && Number.isFinite(Number(variation.stock_quantity)) ? Number(variation.stock_quantity) : null,
+    currency: 'EUR',
+    url: String(variation.permalink || parent.permalink || ''),
+    image: variation.image?.src || parent.images?.[0]?.src || '',
+    inStock: variation.stock_status !== 'outofstock',
+    categories: (parent.categories || []).map((category) => category.name).filter(Boolean),
+    code: meta ? String(meta.value || '').trim() : '',
+    type: 'variation',
+    parentId: String(parent.id),
+    attributes,
   };
 }
 
@@ -227,25 +275,42 @@ function restAuth(shop) {
 /**
  * Haalt alle gepubliceerde producten op en zet ze om naar het eigen formaat.
  * @param {object} shop url, mode ('store'|'rest'), consumerKey, consumerSecret, pricesIncludeTax en vatRate.
- * @param {object} [options] fetchImpl, allowInsecure, resolveHost en ids (alleen deze producten, REST v3; bijv. vlak voor het terugschrijven).
- * @returns {Promise<object[]>} De producten.
+ * @param {object} [options] fetchImpl, allowInsecure, resolveHost, ids (alleen deze producten, REST v3; bijv. vlak voor het terugschrijven) en variations ([{ id, parentId }]: alleen deze variaties).
+ * @returns {Promise<object[]>} De producten (bij REST met de variaties van variabele producten).
  */
-async function fetchProducts(shop, { fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress, ids = null } = {}) {
+async function fetchProducts(shop, { fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress, ids = null, variations = null } = {}) {
   const { base, send } = await connectionFor(shop, { allowInsecure, resolveHost, fetchImpl });
   const rest = shop.mode === 'rest';
-  if (ids && !rest) throw new SourceError('rest_required', 'Terugschrijven naar de webshop kan alleen via de REST API.', 400);
+  if ((ids || variations) && !rest) throw new SourceError('rest_required', 'Terugschrijven naar de webshop kan alleen via de REST API.', 400);
   const headers = rest ? restAuth(shop) : {};
   const apiPath = rest ? '/wp-json/wc/v3/products' : '/wp-json/wc/store/v1/products';
   const convert = rest ? fromRestV3 : fromStoreApi;
   const products = [];
-  if (ids) {
-    for (let i = 0; i < ids.length; i += PER_PAGE) {
-      const part = ids.slice(i, i + PER_PAGE).map(String).filter((id) => /^\d{1,20}$/.test(id));
+  const rawProducts = [];
+  if (ids || variations) {
+    const productIds = ids || [];
+    for (let i = 0; i < productIds.length; i += PER_PAGE) {
+      const part = productIds.slice(i, i + PER_PAGE).map(String).filter((id) => /^\d{1,20}$/.test(id));
       if (!part.length) continue;
       const query = new URLSearchParams({ per_page: String(PER_PAGE), include: part.join(',') });
       const { body } = await getJson(`${base}${apiPath}?${query}`, headers, send);
       if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen productlijst).');
       products.push(...body.map((product) => convert(product, shop)));
+    }
+    // Variaties per product erboven ophalen (de productenlijst geeft ze niet).
+    const byParent = new Map();
+    for (const variation of variations || []) {
+      if (!/^\d{1,20}$/.test(String(variation.parentId)) || !/^\d{1,20}$/.test(String(variation.id))) continue;
+      if (!byParent.has(String(variation.parentId))) byParent.set(String(variation.parentId), []);
+      byParent.get(String(variation.parentId)).push(String(variation.id));
+    }
+    for (const [parentId, variationIds] of byParent) {
+      for (let i = 0; i < variationIds.length; i += PER_PAGE) {
+        const query = new URLSearchParams({ per_page: String(PER_PAGE), include: variationIds.slice(i, i + PER_PAGE).join(',') });
+        const { body } = await getJson(`${base}${apiPath}/${parentId}/variations?${query}`, headers, send);
+        if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen variatielijst).');
+        products.push(...body.map((variation) => fromRestV3Variation(variation, { id: parentId }, shop)));
+      }
     }
     return products;
   }
@@ -256,10 +321,55 @@ async function fetchProducts(shop, { fetchImpl = null, allowInsecure = insecureA
     const { body, totalPages } = await getJson(`${base}${apiPath}?${query}`, headers, send);
     if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen productlijst).');
     products.push(...body.map((product) => convert(product, shop)));
+    rawProducts.push(...body);
     if (body.length < PER_PAGE || (totalPages && page >= totalPages)) { complete = true; break; }
   }
   if (!complete) throw new SourceError('too_many_products', `De webshop heeft meer dan ${MAX_PAGES * PER_PAGE} producten; ophalen is gestopt zodat er niets wordt gearchiveerd.`);
+  if (rest) {
+    // Variaties van variabele producten (per product een verzoek).
+    const variableProducts = rawProducts.filter((product) => product.type === 'variable');
+    for (const parent of variableProducts) products.push(...await fetchVariationsWith(base, headers, send, parent, shop));
+  }
   return products;
+}
+
+/**
+ * Haalt alle variaties van één variabel product op.
+ * @param {string} base Adres van de webshop.
+ * @param {object} headers Koppen (Authorization).
+ * @param {Function} send De fetch-functie.
+ * @param {object} parent Het variabele product zoals de webshop het stuurt (id, name, permalink, images, categories).
+ * @param {object} shop De koppelinstelling.
+ * @returns {Promise<object[]>} De variaties (fromRestV3Variation).
+ */
+async function fetchVariationsWith(base, headers, send, parent, shop) {
+  const out = [];
+  for (let page = 1; page <= MAX_VARIATION_PAGES; page++) {
+    const query = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page) });
+    const { body, totalPages } = await getJson(`${base}/wp-json/wc/v3/products/${Number(parent.id)}/variations?${query}`, headers, send);
+    if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen variatielijst).');
+    out.push(...body.map((variation) => fromRestV3Variation(variation, parent, shop)));
+    if (body.length < PER_PAGE || (totalPages && page >= totalPages)) return out;
+  }
+  throw new SourceError('too_many_products', `Een product in de webshop heeft meer dan ${MAX_VARIATION_PAGES * PER_PAGE} variaties; ophalen is gestopt zodat er niets wordt gearchiveerd.`);
+}
+
+/**
+ * Haalt de variaties van één product op (REST v3), bijv. om vóór het
+ * aanmaken te zien welke er al zijn.
+ * @param {object} shop De koppelinstelling.
+ * @param {string} productId Id van het variabele product.
+ * @param {object} [options] fetchImpl, allowInsecure en resolveHost.
+ * @returns {Promise<{ product: object, variations: object[] }>} Het product (fromRestV3) en zijn variaties.
+ */
+async function fetchProductWithVariations(shop, productId, { fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
+  if (shop.mode !== 'rest') throw new SourceError('rest_required', 'Dit kan alleen via de REST API.', 400);
+  if (!/^\d{1,20}$/.test(String(productId))) throw new SourceError('invalid_id', 'Ongeldig product-id.', 400);
+  const { base, send } = await connectionFor(shop, { allowInsecure, resolveHost, fetchImpl });
+  const headers = restAuth(shop);
+  const { body } = await getJson(`${base}/wp-json/wc/v3/products/${productId}`, headers, send);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen product).');
+  return { product: fromRestV3(body, shop), variations: body.type === 'variable' ? await fetchVariationsWith(base, headers, send, body, shop) : [] };
 }
 
 /**
@@ -286,19 +396,101 @@ async function updateProducts(shop, updates, { fetchImpl = null, allowInsecure =
   const { base, send } = await connectionFor(shop, { allowInsecure, resolveHost, fetchImpl });
   const headers = restAuth(shop);
   const out = [];
-  for (let i = 0; i < updates.length; i += PER_PAGE) {
-    const part = updates.slice(i, i + PER_PAGE).map((update) => {
-      const change = { id: Number(update.id) };
-      if (update.price != null) change.regular_price = shopPrice(update.price, update.vatRate, shop).toFixed(2);
-      if (update.stockQty != null) { change.manage_stock = true; change.stock_quantity = Math.max(0, Math.floor(update.stockQty)); }
-      return change;
-    });
-    const { body } = await getJson(`${base}/wp-json/wc/v3/products/batch`, headers, send, { method: 'POST', body: { update: part } });
-    const done = new Map((Array.isArray(body && body.update) ? body.update : []).map((product) => [String(product.id), product]));
-    for (const change of part) {
-      const result = done.get(String(change.id));
-      out.push(result && !result.error ? { id: String(change.id), ok: true } : { id: String(change.id), ok: false, error: String((result && result.error && result.error.message) || 'niet bijgewerkt').slice(0, 200) });
+  // Producten samen via /products/batch, variaties per product erboven.
+  const groups = new Map();
+  for (const update of updates) {
+    const key = update.parentId && /^\d{1,20}$/.test(String(update.parentId)) ? String(update.parentId) : '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(update);
+  }
+  for (const [parentId, group] of groups) {
+    const batchPath = parentId ? `/wp-json/wc/v3/products/${parentId}/variations/batch` : '/wp-json/wc/v3/products/batch';
+    for (let i = 0; i < group.length; i += PER_PAGE) {
+      const part = group.slice(i, i + PER_PAGE).map((update) => {
+        const change = { id: Number(update.id) };
+        if (update.price != null) change.regular_price = shopPrice(update.price, update.vatRate, shop).toFixed(2);
+        if (update.stockQty != null) { change.manage_stock = true; change.stock_quantity = Math.max(0, Math.floor(update.stockQty)); }
+        return change;
+      });
+      const { body } = await getJson(`${base}${batchPath}`, headers, send, { method: 'POST', body: { update: part } });
+      out.push(...batchResults(part, body && body.update));
     }
+  }
+  return out;
+}
+
+/**
+ * Uitkomst per regel van een batchverzoek (op volgorde, of op id als de webshop dat teruggeeft).
+ * @param {object[]} part De verstuurde regels (met id bij wijzigen).
+ * @param {*} results Wat de webshop teruggaf (lijst).
+ * @returns {{ id: string, ok: boolean, error?: string }[]} Uitkomst per regel.
+ */
+function batchResults(part, results) {
+  const list = Array.isArray(results) ? results : [];
+  const done = new Map(list.map((result) => [String(result.id), result]));
+  return part.map((change, index) => {
+    const result = change.id != null ? done.get(String(change.id)) : list[index];
+    const id = String(change.id ?? (result && result.id) ?? '');
+    return result && !result.error && result.id ? { id: String(result.id), ok: true } : { id, ok: false, error: String((result && result.error && result.error.message) || 'niet bijgewerkt').slice(0, 200) };
+  });
+}
+
+/**
+ * Maakt een nieuw product in de webshop (REST v3, schrijfrechten).
+ * @param {object} shop De koppelinstelling.
+ * @param {object} product Het product zoals WooCommerce het verwacht (name, type, sku, regular_price, attributes, ...).
+ * @param {object} [options] fetchImpl, allowInsecure en resolveHost.
+ * @returns {Promise<object>} Het aangemaakte product (fromRestV3).
+ */
+async function createProduct(shop, product, { fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
+  if (shop.mode !== 'rest') throw new SourceError('rest_required', 'Aanmaken in de webshop kan alleen via de REST API.', 400);
+  const { base, send } = await connectionFor(shop, { allowInsecure, resolveHost, fetchImpl });
+  const { body } = await getJson(`${base}/wp-json/wc/v3/products`, restAuth(shop), send, { method: 'POST', body: product });
+  if (!body || !body.id) throw new SourceError('invalid_json', 'De webshop heeft het product niet aangemaakt.');
+  return fromRestV3(body, shop);
+}
+
+/**
+ * Wijzigt de kenmerken van een product (bijv. nieuwe waarden voor nieuwe variaties).
+ * @param {object} shop De koppelinstelling.
+ * @param {string} productId Id van het product.
+ * @param {object[]} attributes De kenmerken zoals WooCommerce ze verwacht ({ id?, name, options, visible, variation, position }).
+ * @param {object} [options] fetchImpl, allowInsecure en resolveHost.
+ * @returns {Promise<void>}
+ */
+async function updateAttributes(shop, productId, attributes, { fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
+  if (!/^\d{1,20}$/.test(String(productId))) throw new SourceError('invalid_id', 'Ongeldig product-id.', 400);
+  const { base, send } = await connectionFor(shop, { allowInsecure, resolveHost, fetchImpl });
+  await getJson(`${base}/wp-json/wc/v3/products/${productId}`, restAuth(shop), send, { method: 'PUT', body: { attributes } });
+}
+
+/**
+ * Maakt variaties onder een variabel product (batch van hooguit 100).
+ * @param {object} shop De koppelinstelling.
+ * @param {string} productId Id van het variabele product.
+ * @param {{ sku: string, code: string, price?: number|null, vatRate?: number, stockQty?: number|null, values: Object<string, string> }[]} variations De nieuwe variaties (prijs excl. btw).
+ * @param {object} [options] fetchImpl, allowInsecure en resolveHost.
+ * @returns {Promise<{ id: string, ok: boolean, error?: string }[]>} Per variatie (zelfde volgorde) het nieuwe id of de fout.
+ */
+async function createVariations(shop, productId, variations, { fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
+  if (shop.mode !== 'rest') throw new SourceError('rest_required', 'Aanmaken in de webshop kan alleen via de REST API.', 400);
+  if (!/^\d{1,20}$/.test(String(productId))) throw new SourceError('invalid_id', 'Ongeldig product-id.', 400);
+  const { base, send } = await connectionFor(shop, { allowInsecure, resolveHost, fetchImpl });
+  const headers = restAuth(shop);
+  const out = [];
+  for (let i = 0; i < variations.length; i += PER_PAGE) {
+    const part = variations.slice(i, i + PER_PAGE).map((variation) => {
+      const create = {
+        sku: variation.sku,
+        attributes: Object.entries(variation.values).map(([name, option]) => ({ name, option })),
+        meta_data: [{ key: 'aquatech_code', value: variation.code }],
+      };
+      if (variation.price != null) create.regular_price = shopPrice(variation.price, variation.vatRate, shop).toFixed(2);
+      if (variation.stockQty != null) { create.manage_stock = true; create.stock_quantity = Math.max(0, Math.floor(variation.stockQty)); }
+      return create;
+    });
+    const { body } = await getJson(`${base}/wp-json/wc/v3/products/${productId}/variations/batch`, headers, send, { method: 'POST', body: { create: part } });
+    out.push(...batchResults(part, body && body.create));
   }
   return out;
 }
@@ -359,4 +551,4 @@ function sanitizeShop(raw) {
   };
 }
 
-module.exports = { fetchProducts, fetchOrders, updateProducts, shopPrice, normalizeBaseUrl, sanitizeShop, SourceError };
+module.exports = { fetchProducts, fetchProductWithVariations, fetchOrders, updateProducts, createProduct, updateAttributes, createVariations, shopPrice, normalizeBaseUrl, sanitizeShop, SourceError };

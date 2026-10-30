@@ -4,6 +4,9 @@
 // en de geschiedenis. Gegevens uit /api/stock (recht 'voorraad'). Artikelcodes
 // zijn die van de catalogus (window.Catalog), zodat stuklijst, offerte en
 // werkorder vanzelf aan de voorraad gekoppeld zijn. Export als Excel.
+// Een hoofdartikel met varianten (bijv. per maat) staat als één regel in de
+// lijst en klapt uit naar zijn varianten; op het hoofdartikel beheer je de
+// kenmerken, elke variant heeft een eigen code, prijs en voorraad.
 (function () {
   const WorkOrderCore = window.WorkOrderCore;
   const Catalog = window.Catalog || { articles: {} };
@@ -53,7 +56,7 @@
   const num = (value) => (String(value).trim() === '' ? null : Number(String(value).replace(',', '.')));
   const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 
-  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [] };
+  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set() };
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -98,8 +101,8 @@
    */
   const shopPill = (item) => {
     if (!item.shopSync) return '<span class="muted small">niet</span>';
-    if (!item.shop.productId) return '<span class="muted small">niet gekoppeld</span>';
     if (item.shop.error) return `<span class="pill low" title="${esc(item.shop.error)}">Fout</span>`;
+    if (!item.shop.productId) return '<span class="muted small">niet gekoppeld</span>';
     if (item.shop.pending) return '<span class="pill">Wordt bijgewerkt</span>';
     return `<span class="pill ok" title="${esc(item.shop.syncedAt ? `Bijgewerkt ${when(item.shop.syncedAt)}` : '')}">Gekoppeld</span>`;
   };
@@ -121,9 +124,56 @@
     return state.items.filter((item) => (!low || item.low) && (!term || `${item.code} ${item.name} ${item.location}`.toLowerCase().includes(term)));
   }
 
+  /**
+   * De regels van de voorraadtabel: gewone artikelen en hoofdartikelen, met
+   * de varianten eronder als het hoofdartikel open is (of als de zoekterm of
+   * het filter een variant vindt).
+   * @returns {{ item: object, variant?: boolean, open?: boolean, count?: number }[]} De regels in volgorde.
+   */
+  function stockRows() {
+    const term = $('#f-search').value.trim().toLowerCase();
+    const low = $('#f-low').checked;
+    /**
+     * Past een artikel bij de zoekterm en het filter?
+     * @param {object} item het artikel
+     * @returns {boolean} true als het in beeld moet
+     */
+    const matches = (item) => (!low || item.low) && (!term || `${item.code} ${item.name} ${item.location}`.toLowerCase().includes(term));
+    const parentIds = new Set(state.items.filter((item) => item.hasVariants).map((item) => item.id));
+    const variantsOf = new Map();
+    for (const item of state.items) {
+      if (!item.parentId || !parentIds.has(item.parentId)) continue;
+      if (!variantsOf.has(item.parentId)) variantsOf.set(item.parentId, []);
+      variantsOf.get(item.parentId).push(item);
+    }
+    const rows = [];
+    for (const item of state.items) {
+      if (item.parentId && parentIds.has(item.parentId)) continue;
+      if (!item.hasVariants) {
+        if (matches(item)) rows.push({ item });
+        continue;
+      }
+      const variants = variantsOf.get(item.id) || [];
+      const found = variants.filter(matches);
+      const filtered = Boolean(term || low);
+      if (!matches(item) && !found.length) continue;
+      const open = state.open.has(item.id) || (filtered && found.length > 0);
+      rows.push({ item, open, count: variants.filter((variant) => !variant.archived).length });
+      if (open) rows.push(...(filtered && found.length ? found : variants).map((variant) => ({ item: variant, variant: true })));
+    }
+    return rows;
+  }
+
+  /**
+   * De waarden van een variant als tekst.
+   * @param {object} item de variant (values)
+   * @returns {string} bijv. 'Maat: 16 mm'
+   */
+  const valuesText = (item) => Object.entries(item.values || {}).map(([name, value]) => `${name}: ${value}`).join(' · ');
+
   /** Tekent de tellers boven het overzicht. */
   function renderStats() {
-    const live = state.items.filter((item) => !item.archived);
+    const live = state.items.filter((item) => !item.archived && !item.hasVariants);
     const value = live.reduce((total, item) => total + (item.value || 0), 0);
     const orders = new Set(state.reservations.map((reservation) => reservation.workOrder.id)).size;
     $('#v-stats').innerHTML = [
@@ -143,25 +193,32 @@
       table.innerHTML = '<tbody><tr><td class="empty">Nog geen voorraadartikelen. Kies <b>Uit catalogus</b> om artikelen uit de stuklijst op voorraad te nemen, of <b>+ Artikel</b> voor een eigen artikel.</td></tr></tbody>';
       return;
     }
-    const items = visible();
+    const rows = stockRows();
     table.innerHTML = `<thead><tr><th>Artikel</th><th>Locatie</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Verkoopprijs</th><th>Webshop</th><th class="num">Waarde</th></tr></thead>
-      <tbody>${items.map((item) => `<tr data-id="${esc(item.id)}" class="${item.low ? 'low' : ''}${item.archived ? ' arch' : ''}">
-        <td class="wrap"><b class="code">${esc(item.code)}</b>${item.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(item.name)}</span></td>
+      <tbody>${rows.map(({ item, variant, open, count }) => `<tr data-id="${esc(item.id)}" class="${item.low ? 'low' : ''}${item.archived ? ' arch' : ''}${variant ? ' variant' : ''}${item.hasVariants ? ' parent' : ''}">
+        <td class="wrap">${item.hasVariants ? `<button class="toggle" data-toggle="${esc(item.id)}" aria-expanded="${open ? 'true' : 'false'}" title="${open ? 'Varianten verbergen' : 'Varianten tonen'}">${open ? '▾' : '▸'}</button>` : ''}<b class="code">${esc(item.code)}</b>${item.hasVariants ? ` <span class="pill">${count} variant${count === 1 ? '' : 'en'}</span>` : ''}${item.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(variant && valuesText(item) ? valuesText(item) : item.name)}</span></td>
         <td>${esc(item.location)}</td>
         <td class="num${item.onHand < 0 ? ' neg' : ''}">${esc(nl(item.onHand))} ${esc(item.unit)}</td>
         <td class="num">${item.reserved ? `${esc(nl(item.reserved))}<span class="sub">${item.orders} werkorder${item.orders === 1 ? '' : 's'}</span>` : ''}</td>
         <td class="num avail">${esc(nl(item.available))}${item.low ? ' <span class="pill low">Bijbestellen</span>' : ''}</td>
-        <td class="num">${item.minQty ? esc(nl(item.minQty)) : ''}</td>
-        <td class="num">${esc(eur(item.salePrice))}${item.salePrice != null && item.vatRate !== 21 ? `<span class="sub">${item.vatRate}% btw</span>` : ''}</td>
+        <td class="num">${item.minQty && !item.hasVariants ? esc(nl(item.minQty)) : ''}</td>
+        <td class="num">${item.hasVariants ? '' : `${esc(eur(item.salePrice))}${item.salePrice != null && item.vatRate !== 21 ? `<span class="sub">${item.vatRate}% btw</span>` : ''}`}</td>
         <td>${shopPill(item)}</td>
         <td class="num">${esc(eur(item.value))}</td>
       </tr>`).join('') || '<tr><td colspan="9" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
     table.querySelectorAll('tr[data-id]').forEach((row) => {
       /**
-       * Opent het artikel.
-       * @returns {Promise<void>}
+       * Opent het artikel, of klapt bij het pijltje de varianten uit of in.
+       * @param {MouseEvent} event de klik
+       * @returns {Promise<void>|undefined}
        */
-      row.onclick = () => openItem(row.dataset.id, true);
+      row.onclick = (event) => {
+        const toggle = event.target.closest('[data-toggle]');
+        if (!toggle) return openItem(row.dataset.id, true);
+        if (state.open.has(toggle.dataset.toggle)) state.open.delete(toggle.dataset.toggle); else state.open.add(toggle.dataset.toggle);
+        renderStock();
+        return undefined;
+      };
     });
   }
 
@@ -492,13 +549,21 @@
     formElement.vatRate.value = String(item.vatRate);
     formElement.revenueGroup.value = item.revenueGroup;
     formElement.shopSync.checked = item.shopSync;
-    $('#d-shop').innerHTML = !item.shop.productId ? (item.shopSync ? 'Nog niet gekoppeld aan een webshopproduct (koppelen gaat op SKU = artikelcode).' : '')
-      : item.shop.error ? `Webshop: <span class="err">${esc(item.shop.error)}</span>`
+    $('#d-shop').innerHTML = item.shop.error ? `Webshop: <span class="err">${esc(item.shop.error)}</span>`
+      : !item.shop.productId ? (item.shopSync ? 'Nog niet gekoppeld aan een webshopproduct (koppelen gaat op SKU = artikelcode).' : '')
         : item.shop.pending ? 'Webshop: wijziging wordt binnen enkele seconden verstuurd.'
           : `Webshop: gekoppeld (product ${esc(item.shop.productId)})${item.shop.syncedAt ? `, bijgewerkt ${esc(when(item.shop.syncedAt))}` : ''}.`;
     $('#d-remove').hidden = item.archived;
     $('#d-restore').hidden = !item.archived;
-    $('#move-form').hidden = item.archived;
+    $('#move-form').hidden = item.archived || item.hasVariants;
+    $('#d-parent-note').hidden = !item.hasVariants;
+    $('#d-publish').hidden = Boolean(item.shop.productId || !item.shopSync || item.parentId || item.archived);
+    $('#d-res-card').hidden = item.hasVariants;
+    $('#d-moves-card').hidden = item.hasVariants;
+    const variantOf = $('#d-variant-of');
+    variantOf.hidden = !item.parent;
+    variantOf.innerHTML = item.parent ? `Variant van <a href="./?id=${encodeURIComponent(item.parent.id)}" data-open="${esc(item.parent.id)}">${esc(item.parent.code)} ${esc(item.parent.name)}</a>${valuesText(item) ? ` · ${esc(valuesText(item))}` : ''}` : '';
+    renderVariants();
     $('#d-res').innerHTML = item.reservations.length ? `<thead><tr><th>Werkorder</th><th>Status</th><th>Gepland</th><th class="num">Gereserveerd</th></tr></thead>
       <tbody>${item.reservations.map((reservation) => `<tr><td class="wrap">${woLink(reservation.workOrder)}<span class="sub">${esc(reservation.workOrder.title)}</span></td>
         <td><span class="pill wo-${esc(reservation.workOrder.status)}">${esc((WorkOrderCore && WorkOrderCore.STATUSES[reservation.workOrder.status]) || reservation.workOrder.status)}</span></td>
@@ -512,13 +577,68 @@
   }
 
   /**
+   * Een regel van het kenmerkenformulier.
+   * @param {{ name: string, values: string[] }} attribute het kenmerk (leeg voor een nieuw)
+   * @returns {string} HTML van de regel
+   */
+  const attributeRow = (attribute) => `<div class="row v-attr">
+      <label>Kenmerk<input data-a="name" maxlength="40" value="${esc(attribute.name)}" placeholder="Bijv. Maat"></label>
+      <label class="grow">Waarden (met komma's)<input data-a="values" value="${esc(attribute.values.join(', '))}" placeholder="Bijv. 16 mm, 20 mm, 25 mm"></label>
+      <button class="btn ghost icon" type="button" data-del-attr title="Kenmerk weghalen">✕</button>
+    </div>`;
+
+  /** Tekent het blok Varianten: de kenmerken en de varianten van een hoofdartikel (niet bij een variant). */
+  function renderVariants() {
+    const item = state.item;
+    const card = $('#d-variants');
+    card.hidden = Boolean(item.parentId) || (item.archived && !item.hasVariants);
+    if (card.hidden) return;
+    const variants = item.variants || [];
+    $('#v-hint').textContent = item.hasVariants
+      ? 'Voeg waarden toe om nieuwe varianten te maken. Een variant weghalen doe je op de variant zelf.'
+      : 'Heeft dit artikel maten, kleuren of lengtes? Geef de kenmerken op; elke combinatie wordt een variant met een eigen code, prijs en voorraad. Kan alleen zolang dit artikel zelf geen voorraad of boekingen heeft.';
+    $('#v-attrs').innerHTML = (item.attributes.length ? item.attributes : [{ name: '', values: [] }]).map(attributeRow).join('');
+    $('#d-var-table').innerHTML = variants.length ? `<thead><tr><th>Variant</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Inkoopprijs</th><th class="num">Verkoopprijs</th><th>Webshop</th></tr></thead>
+      <tbody>${variants.map((variant) => `<tr data-id="${esc(variant.id)}" class="${variant.low ? 'low' : ''}${variant.archived ? ' arch' : ''}">
+        <td class="wrap"><a class="code variant-link" href="./?id=${esc(encodeURIComponent(variant.id))}">${esc(variant.code)}</a>${variant.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(valuesText(variant))}</span></td>
+        <td class="num${variant.onHand < 0 ? ' neg' : ''}">${esc(nl(variant.onHand))} ${esc(variant.unit)}</td>
+        <td class="num">${variant.reserved ? esc(nl(variant.reserved)) : ''}</td>
+        <td class="num avail">${esc(nl(variant.available))}${variant.low ? ' <span class="pill low">Bijbestellen</span>' : ''}</td>
+        <td class="num">${variant.minQty ? esc(nl(variant.minQty)) : ''}</td>
+        <td class="num">${esc(eur(variant.costPrice))}</td>
+        <td class="num">${esc(eur(variant.salePrice))}</td>
+        <td>${shopPill(variant)}</td></tr>`).join('')}</tbody>` : '';
+    $('#d-var-table').querySelectorAll('tr[data-id]').forEach((row) => {
+      /**
+       * Opent de variant.
+       * @returns {Promise<void>}
+       */
+      row.onclick = () => openItem(row.dataset.id, true);
+    });
+    $('#d-var-table').querySelectorAll('.variant-link').forEach((link) => {
+      /**
+       * Opent de variant via de link (ook met het toetsenbord), zonder de pagina te herladen.
+       * @param {MouseEvent} event de klik
+       * @returns {void}
+       */
+      link.onclick = (event) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey) { event.stopPropagation(); return; }
+        event.preventDefault();
+        event.stopPropagation();
+        openItem(link.closest('tr').dataset.id, true, null, { focus: true });
+      };
+    });
+  }
+
+  /**
    * Opent een artikel.
    * @param {string} id id van het artikel
    * @param {boolean} push true om het adres (?id=) in de geschiedenis te zetten
    * @param {Promise<object>|null} pending het al lopende verzoek om het artikel (of null)
+   * @param {{ focus?: boolean }} [options] focus: de focus naar de titel van het artikel (na een toetsenbord- of linkactie)
    * @returns {Promise<void>}
    */
-  async function openItem(id, push = false, pending = null) {
+  async function openItem(id, push = false, pending = null, { focus = false } = {}) {
     try {
       state.item = await (pending || api(`stock/items/${encodeURIComponent(id)}`));
     } catch (error) {
@@ -531,6 +651,8 @@
     $('#v-item').hidden = false;
     renderItem();
     window.scrollTo(0, 0);
+    const heading = focus ? $('#d-title') : null;
+    if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
   }
 
   /** Toont het overzicht in plaats van het artikel. */
@@ -624,6 +746,72 @@
       }
     };
     /**
+     * Opent het hoofdartikel vanaf een variant.
+     * @param {MouseEvent} event de klik
+     */
+    $('#d-variant-of').onclick = (event) => {
+      const link = event.target.closest('[data-open]');
+      if (!link) return;
+      event.preventDefault();
+      openItem(link.dataset.open, true);
+    };
+    const variantsForm = $('#variants-form');
+    /** Voegt een lege regel voor een kenmerk toe (hooguit drie). */
+    $('#v-add-attr').onclick = () => {
+      if ($('#v-attrs').children.length >= 3) { toast('Hooguit drie kenmerken per artikel.', true); return; }
+      $('#v-attrs').insertAdjacentHTML('beforeend', attributeRow({ name: '', values: [] }));
+    };
+    /**
+     * Haalt een kenmerk weg uit het formulier.
+     * @param {MouseEvent} event de klik
+     */
+    $('#v-attrs').onclick = (event) => {
+      const button = event.target.closest('[data-del-attr]');
+      if (button) button.closest('.v-attr').remove();
+    };
+    /**
+     * Slaat de kenmerken op; de server maakt de ontbrekende varianten aan.
+     * @param {SubmitEvent} event het verzenden
+     * @returns {Promise<void>}
+     */
+    variantsForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const errorBox = $('.err', variantsForm);
+      errorBox.textContent = '';
+      const attributes = [...variantsForm.querySelectorAll('.v-attr')].map((row) => ({
+        name: $('[data-a="name"]', row).value, values: $('[data-a="values"]', row).value.split(','),
+      })).filter((attribute) => attribute.name.trim() || attribute.values.some((value) => value.trim()));
+      if (!state.item.hasVariants && !attributes.length) { errorBox.textContent = 'Geef minstens één kenmerk met waarden op.'; return; }
+      try {
+        const result = await api(`stock/items/${encodeURIComponent(state.item.id)}/variants`, { method: 'PUT', body: { attributes } });
+        state.item = result;
+        renderItem();
+        toast(result.created || result.restored ? `${result.created} variant${result.created === 1 ? '' : 'en'} aangemaakt${result.restored ? `, ${result.restored} teruggezet` : ''}` : 'Opgeslagen');
+      } catch (error) {
+        errorBox.textContent = error.message;
+      }
+    };
+    /**
+     * Zet het artikel (met varianten) als nieuw product in de webshop.
+     * @returns {Promise<void>}
+     */
+    $('#d-publish').onclick = async () => {
+      const item = state.item;
+      if (!confirm(`${item.code} als nieuw product in de webshop zetten${item.hasVariants ? ' (met alle varianten)' : ''}? Het product is daarna meteen zichtbaar in de webshop.`)) return;
+      const button = $('#d-publish');
+      button.disabled = true;
+      try {
+        state.item = await api(`stock/items/${encodeURIComponent(item.id)}/publish`, { method: 'POST', body: {} });
+        renderItem();
+        const warning = state.item.published && state.item.published.warning;
+        toast(warning || 'In de webshop gezet', Boolean(warning));
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    };
+    /**
      * Zet een gearchiveerd artikel terug.
      * @returns {Promise<void>}
      */
@@ -714,6 +902,8 @@
       worksheet.columns = [
         { header: 'Artikelcode', key: 'code', width: 16 },
         { header: 'Omschrijving', key: 'name', width: 44 },
+        { header: 'Hoofdartikel', key: 'parent', width: 16 },
+        { header: 'Variant', key: 'variant', width: 22 },
         { header: 'Eenheid', key: 'unit', width: 9 },
         { header: 'Locatie', key: 'location', width: 18 },
         { header: 'Op voorraad', key: 'onHand', width: 13, style: quantityStyle },
@@ -732,14 +922,22 @@
         { header: 'Notities', key: 'notes', width: 30 },
       ];
       const GROUPS = { producten: 'Producten', arbeid: 'Arbeid', overig: 'Overig' };
-      const items = visible();
+      // Hoofdartikelen hebben geen eigen voorraad: alleen de varianten (met hun hoofdartikel) komen erin.
+      const codeOf = new Map(state.items.map((item) => [item.id, item.code]));
+      // Past het hoofdartikel bij de zoekterm, dan gaan al zijn varianten mee (zoals in het overzicht).
+      const matched = visible();
+      const matchedParents = new Set(matched.filter((item) => item.hasVariants).map((item) => item.id));
+      const matchedIds = new Set(matched.map((item) => item.id));
+      // Met "Alleen onder minimum" telt per variant het eigen minimum (zoals in het overzicht).
+      const lowOnly = $('#f-low').checked;
+      const items = state.items.filter((item) => !item.hasVariants && (matchedIds.has(item.id) || (item.parentId && matchedParents.has(item.parentId) && (!lowOnly || item.low))));
       for (const item of items) {
-        worksheet.addRow({ ...item, low: item.low ? 'ja' : '', archived: item.archived ? 'ja' : '', costPrice: item.costPrice, value: item.value, salePrice: item.salePrice,
+        worksheet.addRow({ ...item, parent: item.parentId ? codeOf.get(item.parentId) || '' : '', variant: valuesText(item), low: item.low ? 'ja' : '', archived: item.archived ? 'ja' : '', costPrice: item.costPrice, value: item.value, salePrice: item.salePrice,
           vat: `${item.vatRate}%`, group: GROUPS[item.revenueGroup] || item.revenueGroup,
           shop: !item.shopSync ? 'niet' : item.shop.error ? 'fout' : item.shop.productId ? `product ${item.shop.productId}` : 'niet gekoppeld' });
       }
       worksheet.getRow(1).font = { bold: true };
-      worksheet.autoFilter = `A1:R${items.length + 1}`;
+      worksheet.autoFilter = `A1:T${items.length + 1}`;
       const reservedSheet = excelWorkbook.addWorksheet('Gereserveerd', { views: [{ state: 'frozen', ySplit: 1 }] });
       reservedSheet.columns = [
         { header: 'Werkorder', key: 'wo', width: 14 }, { header: 'Titel', key: 'title', width: 30 }, { header: 'Klant', key: 'customer', width: 24 },

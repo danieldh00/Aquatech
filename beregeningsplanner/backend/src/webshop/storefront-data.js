@@ -136,7 +136,7 @@ function createStorefrontData(db) {
         FROM stock_items i
         LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
         LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
-        WHERE i.tenant_id = ? AND i.archived = 0 AND i.shop_sync = 1 AND i.sale_price IS NOT NULL`).all(tenantId, tenantId);
+        WHERE i.tenant_id = ? AND i.archived = 0 AND i.shop_sync = 1 AND i.has_variants = 0 AND i.sale_price IS NOT NULL`).all(tenantId, tenantId);
       const catalog = buildCatalog(rows);
       cache.set(tenantId, { catalog, until: Date.now() + CACHE_MS });
       return catalog;

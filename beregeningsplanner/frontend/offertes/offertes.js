@@ -703,8 +703,14 @@
     const kind = line.optional ? (line.selected ? 'aan' : 'optie') : 'vast';
     const kinds = [['vast', 'Vast'], ['optie', 'Optie'], ['aan', 'Optie (aan)']]
       .map(([key, label]) => `<option value="${key}"${key === kind ? ' selected' : ''}>${label}</option>`).join('');
+    // Code van een hoofdartikel: eerst een maat (variant) kiezen; bij een variant kan een andere maat.
+    const picker = window.ArticlePicker;
+    const parent = picker && line.code ? picker.parentOf(line.code) : null;
+    const variantOf = picker && line.code && !parent ? picker.parentOfVariant(line.code) : null;
+    const choose = parent ? '<button class="btn small primary ap-variant" data-pick-variant title="Dit artikel heeft varianten: kies de maat">Kies maat</button>'
+      : variantOf ? '<button class="btn small ghost ap-variant" data-pick-variant title="Een andere variant van dit artikel kiezen">Andere maat</button>' : '';
     return `<tr class="line${line.optional ? ` opt${line.selected ? '' : ' off'}` : ''}" data-line="${esc(line.id)}">
-      <td class="c-desc"><input data-l="description" value="${esc(line.description)}" maxlength="500" placeholder="Omschrijving">${line.code ? `<span class="code">${esc(line.code)}</span>` : ''}</td>
+      <td class="c-desc"><input data-l="description" value="${esc(line.description)}" maxlength="500" placeholder="Omschrijving">${line.code ? `<span class="code">${esc(line.code)}</span>` : ''}${choose}</td>
       <td class="c-qty"><input data-l="qty" class="num" type="number" step="any" value="${line.qty}" aria-label="Aantal"></td>
       <td class="c-unit"><input data-l="unit" value="${esc(line.unit)}" maxlength="12" aria-label="Eenheid"></td>
       <td class="c-price"><input data-l="price" class="num" type="number" step="0.01" value="${Number(line.price).toFixed(2)}" aria-label="Prijs per eenheid"></td>
@@ -719,12 +725,17 @@
   function renderLines() {
     const data = state.quote.data;
     const totals = QuoteCore.totals(data);
+    // De artikellijst (voor "Uit voorraad" en "Kies maat") één keer ophalen; daarna de regels opnieuw tekenen.
+    if (window.ArticlePicker && !state.articlesRequested) {
+      state.articlesRequested = true;
+      window.ArticlePicker.load('../').then((articles) => { if (articles.length && state.quote) renderLines(); });
+    }
     $('#e-lines').innerHTML = `<table class="lines">
       <thead><tr><th>Omschrijving</th><th class="num">Aantal</th><th>Eenh.</th><th class="num">Prijs</th><th>Btw</th><th>Soort</th><th class="num">Totaal</th><th></th></tr></thead>
       <tbody>${Object.entries(QuoteCore.SECTIONS).map(([key, label]) => `
         <tr class="section"><td colspan="8">${esc(label)}<span class="sum" data-sum="${key}">${eur(totals.bySection[key] || 0)}</span></td></tr>
         ${data.lines.filter((line) => line.section === key).map(lineRow).join('')}
-        <tr class="add"><td colspan="8"><button class="btn small" data-add="${key}">+ Regel ${esc(label.toLowerCase())}</button></td></tr>`).join('')}
+        <tr class="add"><td colspan="8"><button class="btn small" data-add="${key}">+ Regel ${esc(label.toLowerCase())}</button>${key === 'materiaal' && window.ArticlePicker ? ' <button class="btn small" data-pick-article title="Kies een artikel uit de voorraad, daarna de maat">+ Uit voorraad</button>' : ''}</td></tr>`).join('')}
       </tbody></table>`;
     renderTotals();
   }
@@ -857,6 +868,50 @@
         const input = $(`[data-line="${line.id}"] [data-l=description]`);
         if (input) input.focus();
         return changed();
+      }
+      if (event.target.closest('[data-pick-article]') && quote) {
+        window.ArticlePicker.open({
+          base: '../',
+          /**
+           * Zet het gekozen artikel (of de gekozen variant) als materiaalregel met verkoopprijs en btw.
+           * @param {object} article code, name, unit, salePrice en vatRate
+           */
+          onPick: (article) => {
+            if (state.quote !== quote || locked()) return;
+            const line = QuoteCore.sanitizeLine({ ...newLine('materiaal'), code: article.code, description: article.name, unit: article.unit || 'st',
+              price: article.salePrice == null ? 0 : article.salePrice, vat: article.vatRate == null ? state.profile.vatRate : article.vatRate });
+            let at = -1;
+            quote.data.lines.forEach((existing, i) => { if (existing.section === 'materiaal') at = i; });
+            quote.data.lines.splice(at < 0 ? quote.data.lines.length : at + 1, 0, line);
+            renderLines();
+            changed();
+          },
+        });
+        return undefined;
+      }
+      const pickVariant = event.target.closest('[data-pick-variant]');
+      if (pickVariant && quote) {
+        const line = quote.data.lines.find((candidate) => candidate.id === pickVariant.closest('[data-line]').dataset.line);
+        if (!line) return undefined;
+        const parent = window.ArticlePicker.parentOf(line.code) || window.ArticlePicker.parentOfVariant(line.code);
+        window.ArticlePicker.open({
+          base: '../', parentCode: parent ? parent.code : '', variantCode: line.code,
+          /**
+           * Vervangt de regel door de gekozen variant: code, omschrijving en (als bekend) prijs; aantal blijft.
+           * @param {object} article code, name, unit, salePrice en vatRate
+           */
+          onPick: (article) => {
+            if (state.quote !== quote || locked()) return;
+            line.code = article.code;
+            line.description = article.name;
+            if (article.unit) line.unit = article.unit;
+            if (article.salePrice != null) line.price = article.salePrice;
+            if (article.vatRate != null) line.vat = article.vatRate;
+            renderLines();
+            changed();
+          },
+        });
+        return undefined;
       }
       const deleteButton = event.target.closest('[data-del]');
       if (deleteButton && quote) {

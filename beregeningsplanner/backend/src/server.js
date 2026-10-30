@@ -829,6 +829,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!Roles.can(user, right)) return res.status(403).json({ error: 'forbidden', message: FORBIDDEN[right] || 'Geen toegang.' });
     next();
   };
+  /**
+   * Middleware die minstens één van de rechten eist.
+   * @param {string[]} rights De rechten.
+   * @returns {Function} Middleware.
+   */
+  const requireAnyRight = (rights) => (req, res, next) => {
+    const user = identify(req);
+    if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+    if (!rights.some((right) => Roles.can(user, right))) return res.status(403).json({ error: 'forbidden', message: FORBIDDEN[rights[0]] || 'Geen toegang.' });
+    next();
+  };
   const requireAdmin = requireRight('beheer');
   /**
    * Middleware: een gebruiker (of nieuwe gast) met het recht plannen.
@@ -1740,8 +1751,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   // ---------- Voorraadbeheer: reserveren en afboeken op werkorders (zie stock.js) ----------
-  registerStockRoutes(app, { stock: stockStore, requireRight, requireJson, audit, shopProductsOf: (tid) => shopStore.products(tid),
+  registerStockRoutes(app, { stock: stockStore, requireRight, requireAnyRight, requireJson, audit, shopProductsOf: (tid) => shopStore.products(tid),
     syncShop: (tid, user) => shopSync.run(tid, { full: true, user }),
+    publishToShop: (tid, itemId) => shopSync.publish(tid, itemId),
     importLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }) });
 
   // ---------- Facturen en export naar de boekhouding (zie invoices.js) ----------

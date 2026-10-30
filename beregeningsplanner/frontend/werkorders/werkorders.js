@@ -738,9 +738,15 @@
    * @returns {string} HTML van de regel
    */
   function materialRow(material) {
+    // Code van een hoofdartikel: eerst een maat (variant) kiezen; bij een variant kan een andere maat.
+    const picker = window.ArticlePicker;
+    const parent = picker && material.code ? picker.parentOf(material.code) : null;
+    const variantOf = picker && material.code && !parent ? picker.parentOfVariant(material.code) : null;
+    const choose = parent ? '<button class="btn small primary ap-variant" data-pick-variant title="Dit artikel heeft varianten: kies de maat">Kies maat</button>'
+      : variantOf ? '<button class="btn small ghost ap-variant" data-pick-variant title="Een andere variant van dit artikel kiezen">Andere maat</button>' : '';
     return `<tr class="line${material.picked ? ' done' : ''}" data-mat="${esc(material.id)}">
       <td class="c-chk"><input type="checkbox" data-m="picked"${material.picked ? ' checked' : ''} aria-label="Verzameld"></td>
-      <td class="c-desc"><input data-m="description" value="${esc(material.description)}" maxlength="500" placeholder="Omschrijving">${material.code ? `<span class="code">${esc(material.code)}</span>` : ''}</td>
+      <td class="c-desc"><input data-m="description" value="${esc(material.description)}" maxlength="500" placeholder="Omschrijving">${material.code ? `<span class="code">${esc(material.code)}</span>` : ''}${choose}</td>
       <td class="c-qty"><input data-m="qty" class="num" type="number" step="any" value="${material.qty}" aria-label="Aantal"></td>
       <td class="c-unit"><input data-m="unit" value="${esc(material.unit)}" maxlength="12" aria-label="Eenheid"></td>
       <td class="c-del"><button class="btn ghost icon" data-del-mat title="Regel verwijderen">✕</button></td>
@@ -750,10 +756,16 @@
   /** Toont de materiaallijst. */
   function renderMaterials() {
     const data = state.workOrder.data;
+    // De artikellijst (voor "Kies maat") één keer ophalen; daarna de lijst opnieuw tekenen.
+    if (window.ArticlePicker && !state.articlesRequested) {
+      state.articlesRequested = true;
+      window.ArticlePicker.load('../').then((articles) => { if (articles.length && state.workOrder) renderMaterials(); });
+    }
     $('#e-materials').innerHTML = `<table class="lines mats">
       <thead><tr><th></th><th>Omschrijving</th><th class="num">Aantal</th><th>Eenh.</th><th></th></tr></thead>
       <tbody>${data.materials.map(materialRow).join('') || '<tr><td colspan="5" class="muted">Geen materialen.</td></tr>'}
         <tr class="add"><td colspan="5"><button class="btn small" data-add-mat>+ Materiaal</button>
+          ${window.ArticlePicker ? '<button class="btn small" data-pick-article title="Kies een artikel uit de voorraad, daarna de maat">+ Uit voorraad</button>' : ''}
           <button class="btn small" data-pick-all>Alles verzameld</button></td></tr>
       </tbody></table>`;
   }
@@ -922,6 +934,48 @@
         const input = $(`[data-mat="${material.id}"] [data-m=description]`);
         if (input) input.focus();
         return changed();
+      }
+      if (event.target.closest('[data-pick-article]')) {
+        window.ArticlePicker.open({
+          base: '../',
+          /**
+           * Zet het gekozen artikel (of de gekozen variant) als materiaal op de werkorder.
+           * @param {object} article code, name en unit
+           */
+          onPick: (article) => {
+            if (state.workOrder !== workOrder) return;
+            workOrder.data.materials.push(WorkOrderCore.sanitizeMaterial({ id: newId('m'), code: article.code, description: article.name, qty: 1, unit: article.unit || 'st' }));
+            renderMaterials();
+            renderProgress();
+            changed();
+          },
+        });
+        return undefined;
+      }
+      const pickVariant = event.target.closest('[data-pick-variant]');
+      if (pickVariant) {
+        const material = workOrder.data.materials.find((candidate) => candidate.id === pickVariant.closest('[data-mat]').dataset.mat);
+        if (!material) return undefined;
+        const parent = window.ArticlePicker.parentOf(material.code) || window.ArticlePicker.parentOfVariant(material.code);
+        window.ArticlePicker.open({
+          base: '../', parentCode: parent ? parent.code : '', variantCode: material.code,
+          /**
+           * Vervangt de regel door de gekozen variant (aantal blijft).
+           * @param {object} article code, name en unit
+           */
+          onPick: (article) => {
+            if (state.workOrder !== workOrder) return;
+            // Een andere maat is een ander artikel: het is nog niet verzameld.
+            if (material.code !== article.code) material.picked = false;
+            material.code = article.code;
+            material.description = article.name;
+            if (article.unit) material.unit = article.unit;
+            renderMaterials();
+            renderProgress();
+            changed();
+          },
+        });
+        return undefined;
       }
       if (event.target.closest('[data-pick-all]')) {
         const all = workOrder.data.materials.every((material) => material.picked);

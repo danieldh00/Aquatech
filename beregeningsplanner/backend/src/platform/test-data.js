@@ -844,6 +844,16 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
       stock.move(tenantId, admin, first.id, { kind: 'telling', qty: Math.ceil((need.get(first.code) || 1) * 1.5) + 1, note: 'Kwartaaltelling' });
       stock.move(tenantId, admin, first.id, { kind: 'correctie', qty: -1, note: 'Beschadigd bij het laden' });
     }
+    // Artikel met varianten: een hoofdartikel met het kenmerk Lengte, elke
+    // lengte een eigen code, prijs en voorraad.
+    const hose = stock.create(tenantId, admin, { code: 'TUINSLANG', name: 'Tuinslang 1/2"', unit: 'st', costPrice: 14, salePrice: 24.95, minQty: 0 }, { resync: false });
+    if (hose.error) throw new Error(`Testdata: hoofdartikel mislukt (${hose.error})`);
+    const hoseVariants = stock.setVariants(tenantId, hose.item.id, [{ name: 'Lengte', values: ['15 m', '25 m', '50 m'] }]);
+    if (hoseVariants.error) throw new Error(`Testdata: varianten mislukt (${hoseVariants.error})`);
+    hoseVariants.item.variants.forEach((variant, variantIndex) => {
+      stock.update(tenantId, variant.id, { costPrice: [9.5, 14, 26][variantIndex], salePrice: [17.95, 24.95, 44.95][variantIndex], minQty: 2, reorderQty: 6 });
+      stock.move(tenantId, admin, variant.id, { kind: 'ontvangst', qty: [6, 4, 1][variantIndex], note: 'Pakbon slangen' });
+    });
     // Werkorders: gereed = alles afgeboekt, bezig = de helft, open = reserveren.
     for (const seededWorkOrder of seededWos) {
       const lines = [...new Map(seededWorkOrder.materials.filter((material) => material.code && material.qty > 0 && material.code.toUpperCase() !== skip)

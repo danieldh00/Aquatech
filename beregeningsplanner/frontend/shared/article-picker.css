@@ -1,0 +1,22 @@
+/* Artikelkeuze (shared/article-picker.js): eerst het artikel, dan de maat. */
+.ap-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; border: 1px solid var(--line); border-radius: var(--radius, 10px); background: var(--panel, Canvas); color: var(--text); }
+.ap-dialog::backdrop { background: color-mix(in srgb, var(--at-navy) 45%, transparent); }
+.ap-form { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.ap-head { display: flex; align-items: center; gap: 8px; }
+.ap-head h3 { flex: 1; margin: 0; font-size: 17px; }
+.ap-close { border: 0; background: none; cursor: pointer; font-size: 18px; color: var(--muted); padding: 4px 8px; border-radius: 999px; }
+.ap-close:hover { background: color-mix(in srgb, var(--at-navy) 8%, transparent); }
+.ap-search { width: 100%; box-sizing: border-box; }
+.ap-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 50vh; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius, 10px); }
+.ap-list li + li { border-top: 1px solid var(--line); }
+.ap-list button { display: block; width: 100%; text-align: left; border: 0; background: none; cursor: pointer; padding: 9px 12px; font: inherit; color: inherit; }
+.ap-list button:hover, .ap-list button:focus-visible { background: color-mix(in srgb, var(--at-teal) 10%, transparent); }
+.ap-list .code, .ap-result .code { font-family: ui-monospace, monospace; font-size: 12px; }
+.ap-meta { display: block; font-size: 12px; color: var(--muted); }
+.ap-empty { padding: 12px; color: var(--muted); }
+.ap-attrs { display: flex; flex-wrap: wrap; gap: 12px; }
+.ap-attrs label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.ap-attrs select { min-width: 140px; }
+.ap-result { margin: 0; padding: 10px 12px; border-radius: var(--radius, 10px); background: color-mix(in srgb, var(--at-teal) 8%, transparent); font-size: 14px; }
+.ap-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+.c-desc .ap-variant { margin-left: 6px; }

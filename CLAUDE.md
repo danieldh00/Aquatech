@@ -362,6 +362,19 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   concept met negatieve regels. Losse verkoop boekt voorraad af (bron
   `factuur:<id>`). Export Visma als Excel (`exportRows`). Gepland: deel 3
   Visma eAccounting-API.
+- **Artikelen met varianten** (1.3.3, migratie 33): hoofdartikel
+  (`stock_items.has_variants`, kenmerken in `attributes` `[{ name, values }]`)
+  zonder eigen voorraad; elke combinatie is een variant (gewoon
+  voorraadartikel met `parent_id` + `variant_values`, eigen code/prijs/
+  voorraad). `stock.setVariants` (API `PUT /api/stock/items/:id/variants`)
+  maakt ontbrekende varianten aan; eenheid/btw/omzetgroep/archiveren volgen
+  het hoofdartikel. Hoofdartikel-code op een werkorder reserveert niets
+  (`chooseVariant`). Keuzelijst `GET /api/stock/articles` +
+  `shared/article-picker.js` (werkorder/offerte: eerst artikel, dan maat).
+  WooCommerce: variaties komen mee (REST), `shop_product_id` van een variant =
+  variatie-id, push via `/products/<id>/variations/batch`,
+  `createMissingVariations` + `publish` (knop *In webshop zetten*) maken
+  producten/variaties aan vanuit Aquatech.
 - **Debiteuren, webshopbestellingen, PDF en mail** (0.63.0, migratie 27):
   `debtors.js` (tabel `debtors`, `ensure` bij definitief, `match_key`),
   `shop-orders.js` (WooCommerce-bestellingen met status uit

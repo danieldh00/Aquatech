@@ -804,6 +804,27 @@ const MIGRATIONS = [
   );
   CREATE UNIQUE INDEX stock_units_tenant_name_ci ON stock_units (tenant_id, LOWER(name));
   `,
+  // 33: artikelen met varianten (stock.js). Een hoofdartikel (has_variants =
+  // 1) heeft geen eigen voorraad, alleen kenmerken (attributes: JSON
+  // [{ name, values }], bijv. Maat: 16 mm, 20 mm). Elke variant is een gewoon
+  // voorraadartikel met een eigen code, prijs en voorraad, met parent_id naar
+  // het hoofdartikel en zijn waarden (variant_values: JSON { Maat: '16 mm' }).
+  // Webshop: shop_product_id van een variant = id van de WooCommerce-variatie;
+  // shop_products bewaart bij een variatie het product erboven (parent_id) en
+  // de kenmerken (attributes) en het producttype (type: simple, variable of
+  // variation). archived_by_parent = 1: de variant is
+  // gearchiveerd omdat het hoofdartikel werd gearchiveerd (komt mee terug).
+  `
+  ALTER TABLE stock_items ADD COLUMN parent_id TEXT;
+  ALTER TABLE stock_items ADD COLUMN has_variants INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE stock_items ADD COLUMN attributes TEXT NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN variant_values TEXT NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN archived_by_parent INTEGER NOT NULL DEFAULT 0;
+  CREATE INDEX stock_items_parent ON stock_items (tenant_id, parent_id);
+  ALTER TABLE shop_products ADD COLUMN parent_id TEXT;
+  ALTER TABLE shop_products ADD COLUMN attributes TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE shop_products ADD COLUMN type TEXT NOT NULL DEFAULT '';
+  `,
 ];
 
 /**

@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.3.3',
+      date: '2026-10-30',
+      title: 'Artikelen met varianten',
+      items: [
+        { text: 'Een artikel kan nu **varianten** hebben, bijvoorbeeld per maat of lengte. Geef op de artikelpagina de kenmerken op (bijv. Maat: 16 mm, 20 mm); elke combinatie wordt een variant met een eigen code, prijs, inkoopprijs, voorraad, minimum en bestelniveau. In de voorraadlijst klap je een hoofdartikel uit naar zijn varianten.', for: ['voorraad'] },
+        { text: 'Met **+ Uit voorraad** kies je in een werkorder of offerte eerst het artikel en daarna de maat. Staat er een artikel met varianten op, dan zie je de knop **Kies maat**.', for: ['werkorders', 'offertes'] },
+        { text: 'De webshopkoppeling kent nu variabele producten: variaties komen als varianten binnen, prijs en voorraad gaan per variant heen en weer, en een nieuwe variant uit Aquatech verschijnt vanzelf in de webshop. Met **In webshop zetten** maak je een artikel (met varianten) als nieuw product in de webshop aan.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.3.2',
       date: '2026-10-30',
       title: 'Eenheden beheren',
