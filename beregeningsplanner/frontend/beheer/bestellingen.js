@@ -62,7 +62,7 @@
     const buttons = (NEXT[order.status] || []).map(([status, label]) => `<button class="btn ${status === 'geannuleerd' ? 'danger' : 'primary'}" data-status="${status}">${label}</button>`).join(' ');
     const mail = order.mail ? (order.mail.sent ? `Bevestiging verstuurd (${when(order.mail.at)})` : `Bevestiging niet verstuurd: ${esc(order.mail.error)}`) : 'Bevestiging nog niet verstuurd';
     box.innerHTML = `<h3>${esc(order.number)} <span class="pill ${esc(order.status)}">${esc(order.statusLabel)}</span></h3>
-      <p>${esc(order.customer.company ? `${order.customer.company} – ` : '')}${esc(order.customer.name)} · <a href="mailto:${esc(order.email)}">${esc(order.email)}</a>${order.customer.phone ? ` · ${esc(order.customer.phone)}` : ''}<br>
+      <p>${esc(order.customer.company ? `${order.customer.company} – ` : '')}${esc(order.customer.name)} · <a href="mailto:${esc(encodeURIComponent(order.email))}">${esc(order.email)}</a>${order.customer.phone ? ` · ${esc(order.customer.phone)}` : ''}<br>
       ${esc(order.address.street)}, ${esc(order.address.postcode)} ${esc(order.address.city)}</p>
       ${order.note ? `<p><b>Opmerking:</b> ${esc(order.note)}</p>` : ''}
       <div class="tablewrap"><table class="grid"><thead><tr><th>Artikel</th><th class="num">Aantal</th><th class="num">Prijs</th><th class="num">Totaal</th></tr></thead><tbody>${lines}${vat}
@@ -140,7 +140,12 @@
     if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     button.disabled = true;
     try {
-      const { items } = await api(`?status=${encodeURIComponent(state.status)}&q=${encodeURIComponent(state.query)}&lines=1&limit=2000`);
+      const items = [];
+      for (;;) {
+        const page = await api(`?status=${encodeURIComponent(state.status)}&q=${encodeURIComponent(state.query)}&lines=1&limit=500&offset=${items.length}`);
+        items.push(...page.items);
+        if (items.length >= page.total || !page.items.length) break;
+      }
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'Aquatech';
       const orders = workbook.addWorksheet('Bestellingen');

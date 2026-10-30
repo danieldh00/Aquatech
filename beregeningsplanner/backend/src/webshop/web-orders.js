@@ -19,8 +19,8 @@ const MAX_LINES = 40;
 const MAX_QTY = 99;
 /** Hoogstens zoveel bestellingen per pagina in Beheer. */
 const PAGE_LIMIT = 200;
-/** Hoogstens zoveel bestellingen in één export. */
-const EXPORT_LIMIT = 2000;
+/** Hoogstens zoveel bestellingen met regels per aanvraag (de export haalt meerdere pagina's op). */
+const EXPORT_LIMIT = 500;
 
 /**
  * Rondt af op twee decimalen.

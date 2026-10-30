@@ -19,13 +19,15 @@ const CHECKOUT = { name: 'Piet Tuin', company: '', email: 'piet@voorbeeld.nl', p
 
 /**
  * Hoofdtenant met beheerder, de webshop met bestellen aan en een paar artikelen.
- * @returns {Promise<object>} base, db, main, admin, sent (verstuurde mails) en shopper() dat een nieuwe klant registreert.
+ * @returns {Promise<object>} base, db, main, admin, vreemd (beheerder van een andere organisatie), sent (verstuurde mails) en shopper() dat een nieuwe klant registreert.
  */
 async function setup() {
   const db = openDb();
   const store = createStore(db);
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
+  const other = store.createTenant({ slug: 'ander', name: 'Ander BV' }).tenant;
+  await store.createAccount(other.id, { username: 'vreemd', displayName: 'Vreemd', role: 'beheerder', password: PW, mustChangePassword: false });
   const sent = [];
   /**
    * Nep-mailserver die de berichten bewaart.
@@ -53,7 +55,8 @@ async function setup() {
     assert.strictEqual(done.status, 303);
     return client;
   };
-  return { base, db, main, admin, sent, shopper };
+  const vreemd = await createLogin(base, { password: PW })('vreemd', 'ander');
+  return { base, db, main, admin, vreemd, sent, shopper };
 }
 
 /**
@@ -239,8 +242,8 @@ test('inloggen met volgende=afrekenen gaat terug naar het afrekenen', async () =
   assert.strictEqual(done.location, '../afrekenen/');
 });
 
-test('rechten: Beheer-API alleen voor beheerders, formulier van een andere site geweigerd', async () => {
-  const { base, admin, shopper } = await setup();
+test('rechten: Beheer-API alleen voor beheerders, andere organisatie 404, formulier van een andere site geweigerd', async () => {
+  const { base, admin, vreemd, shopper } = await setup();
   const customer = await shopper();
   await addToCart(base, customer, 'SPR-1', 1);
   assert.strictEqual((await postForm(base, customer, '/winkel/afrekenen/', CHECKOUT, { 'sec-fetch-site': 'cross-site' })).status, 403);
@@ -250,6 +253,23 @@ test('rechten: Beheer-API alleen voor beheerders, formulier van een andere site 
   assert.strictEqual((await customer.get('/api/admin/web-orders')).status, 403);
   const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
   assert.strictEqual((await customer.post(`/api/admin/web-orders/${orderId}/status`, { status: 'verzonden' })).status, 403);
+  // Een beheerder van een andere organisatie ziet de bestelling niet.
+  assert.strictEqual((await vreemd.get('/api/admin/web-orders')).body.total, 0);
+  assert.strictEqual((await vreemd.get(`/api/admin/web-orders/${orderId}`)).status, 404);
+  assert.strictEqual((await vreemd.post(`/api/admin/web-orders/${orderId}/status`, { status: 'verzonden' })).status, 404);
+  assert.strictEqual((await admin.get(`/api/admin/web-orders/${orderId}`)).status, 200);
   const unknown = await admin.get('/api/admin/web-orders/00000000-0000-0000-0000-000000000000');
   assert.strictEqual(unknown.status, 404);
+});
+
+test('een klant met bestellingen kan worden verwijderd; de bestelling blijft staan', async () => {
+  const { base, admin, shopper } = await setup();
+  const customer = await shopper();
+  await addToCart(base, customer, 'SPR-1', 1);
+  assert.strictEqual((await postForm(base, customer, '/winkel/afrekenen/', CHECKOUT)).status, 303);
+  const users = (await admin.get('/api/admin/users')).body.items;
+  const klant = users.find((user) => user.username !== 'baas' && user.role === 'klant');
+  const removed = await admin.del(`/api/admin/users/${klant.id}`);
+  assert.strictEqual(removed.status, 200, JSON.stringify(removed.body));
+  assert.strictEqual((await admin.get('/api/admin/web-orders')).body.total, 1);
 });

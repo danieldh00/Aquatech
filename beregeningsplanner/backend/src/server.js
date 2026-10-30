@@ -423,6 +423,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Een plan bevat de achtergrondafbeelding (base64).
   app.use('/api/plans', express.json({ limit: '12mb' }));
   // Een offerte met veel regels en lange teksten past niet in 16 kB.
+  // Status van een webshopbestelling wijzigen (web-orders.js): alleen { status }.
+  app.use('/api/admin/web-orders', express.json({ limit: '4kb' }));
   app.use('/api/quotes', express.json({ limit: '1mb' }));
   // Tekening indienen zonder inloggen (drawings.js): plan met achtergrond.
   app.use('/api/public/drawing', express.json({ limit: '8mb' }));
