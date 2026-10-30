@@ -6,7 +6,7 @@
 // reservering. Tabel web_orders (migratie 37); beheer via /api/admin/web-orders
 // (Beheer > Bestellingen). Alles per omgeving (tenantId).
 const crypto = require('crypto');
-const { transaction } = require('../database/db');
+const { transaction, isPg } = require('../database/db');
 const { validEmail } = require('../platform/mailer');
 
 /** Statussen van een bestelling met hun weergavenaam. */
@@ -173,6 +173,33 @@ function createWebOrderStore(db, { stock }) {
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
   /**
+   * Vergrendelt de voorraadartikelen van een winkelwagen tot het einde van de
+   * transactie, zodat twee gelijktijdige bestellingen niet dezelfde voorraad
+   * kunnen claimen (PostgreSQL). SQLite serialiseert al via BEGIN IMMEDIATE.
+   * Moet binnen een transactie lopen; vaste volgorde voorkomt deadlocks.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ code: string }[]} wanted De winkelwagen.
+   * @returns {void}
+   */
+  function lockItems(tenantId, wanted) {
+    if (!isPg(db)) return;
+    const codes = [...new Set(wanted.map((line) => String(line.code || '').trim().toUpperCase()).filter(Boolean))].sort().slice(0, MAX_LINES);
+    if (!codes.length) return;
+    prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND code IN (${codes.map(() => '?').join(', ')}) ORDER BY id FOR UPDATE`).all(tenantId, ...codes);
+  }
+
+  /**
+   * Leest de bestelling voor een wijziging; onder PostgreSQL met een rijslot tot het einde van de transactie.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {string} columns De kolommen om te lezen.
+   * @returns {object|undefined} De rij.
+   */
+  function readForUpdate(tenantId, id, columns) {
+    return prepare(`SELECT ${columns} FROM web_orders WHERE tenant_id = ? AND id = ?${isPg(db) ? ' FOR UPDATE' : ''}`).get(tenantId, String(id));
+  }
+
+  /**
    * Plaatst een bestelling: controleert prijzen en voorraad opnieuw, legt de
    * bestelling vast en reserveert de voorraad, alles in één transactie.
    * @param {string} tenantId Id van de omgeving.
@@ -185,6 +212,7 @@ function createWebOrderStore(db, { stock }) {
     const checked = sanitizeCheckout(rawFields);
     if (checked.error) return { error: checked.error, field: checked.field, status: 400 };
     return transaction(db, () => {
+      lockItems(tenantId, wanted);
       const cart = priceCart(tenantId, wanted);
       if (!cart.lines.length) return { error: 'Je winkelwagen is leeg.', status: 409, cart };
       if (!cart.ok) return { error: 'Een artikel in je winkelwagen is niet meer in de gevraagde hoeveelheid beschikbaar. Controleer je winkelwagen.', status: 409, cart };
@@ -265,7 +293,7 @@ function createWebOrderStore(db, { stock }) {
   function setStatus(tenantId, id, status, user) {
     if (!STATUSES[status]) return { error: 'Onbekende status.', status: 400 };
     return transaction(db, () => {
-      const row = prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND id = ?`).get(tenantId, String(id));
+      const row = readForUpdate(tenantId, id, `${COLUMNS}, data`);
       if (!row) return { error: 'Bestelling niet gevonden.', status: 404 };
       if (!TRANSITIONS[row.status].includes(status)) return { error: `Een bestelling met status ${STATUSES[row.status]} kan niet naar ${STATUSES[status]}.`, status: 409 };
       const data = JSON.parse(row.data);
@@ -286,9 +314,11 @@ function createWebOrderStore(db, { stock }) {
    * @returns {void}
    */
   function updateData(tenantId, id, patch) {
-    const row = prepare('SELECT data FROM web_orders WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
-    if (!row) return;
-    prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify({ ...JSON.parse(row.data), ...patch }), tenantId, String(id));
+    transaction(db, () => {
+      const row = readForUpdate(tenantId, id, 'data');
+      if (!row) return;
+      prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify({ ...JSON.parse(row.data), ...patch }), tenantId, String(id));
+    });
   }
 
   return { priceCart, place, get, getForUser, list, setStatus, updateData };
