@@ -44,7 +44,9 @@
     const user = me.user;
     if (user && user.kind !== 'gast' && me.impersonation) {
       // Een hoofdbeheerder werkt als deze gebruiker: in plaats van uitloggen terug naar het eigen account.
-      container.innerHTML = `<span title="Namens ${esc(me.impersonation.by)}">${esc(user.displayName)} <span class="role">· ${esc((user.roleLabel || user.role).toLowerCase())} (via ${esc(me.impersonation.by)})</span></span><button type="button" data-stop-imp title="Terug naar je eigen account">Eigen account</button>`;
+      // Bij een klantweergave (beheerder bekijkt als klant) terug naar Beheer.
+      const back = me.impersonation.mode === 'klant' ? ['Terug naar beheer', 'Terug naar Beheer als jezelf'] : ['Eigen account', 'Terug naar je eigen account'];
+      container.innerHTML = `<span title="Namens ${esc(me.impersonation.by)}">${esc(user.displayName)} <span class="role">· ${esc((user.roleLabel || user.role).toLowerCase())} (via ${esc(me.impersonation.by)})</span></span><button type="button" data-stop-imp title="${back[1]}">${back[0]}</button>`;
       /**
        * Stopt het werken namens een andere gebruiker.
        * @param {MouseEvent} event De klik.

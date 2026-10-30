@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.3.6',
+      date: '2026-10-30',
+      title: 'Bekijken als klant',
+      items: [
+        { text: 'In een testomgeving kun je in Beheer → Gebruikers de app bekijken zoals een klant hem ziet. Bovenin staat dan een balk met Terug naar beheer. Start en einde staan in het auditlog.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.3.5',
       date: '2026-10-30',
       title: 'Nieuw ontwerp voor de webshop',

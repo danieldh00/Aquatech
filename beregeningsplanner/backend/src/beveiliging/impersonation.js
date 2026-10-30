@@ -10,6 +10,12 @@
 // naast de gewone sessie van de hoofdbeheerder; bij elk verzoek wordt de rij in
 // `impersonations` opnieuw gecontroleerd (niet beëindigd, niet verlopen,
 // toestemming nog geldig). Terug naar het eigen account = die rij beëindigen.
+//
+// Klantweergave (mode 'klant', 1.3.6): een beheerder van een organisatie
+// bekijkt de app in een testomgeving precies zoals een klant hem ziet, om te
+// testen. Alleen in een testomgeving, alleen accounts met een klantrol van de
+// eigen organisatie, geen wachtwoord of toestemming van de klant nodig. Tijdens
+// de klantweergave heeft de beheerder alleen de rechten van de klant.
 const crypto = require('crypto');
 const { parseCookies } = require('./auth');
 
@@ -21,6 +27,11 @@ const GRANT_HOURS = [1, 4, 24, 72];
 const DEFAULT_GRANT_HOURS = 4;
 // Een impersonatie duurt hoogstens zo lang (daarna opnieuw starten).
 const MAX_IMPERSONATION_MS = 8 * HOUR_MS;
+// Een klantweergave duurt hoogstens zo lang.
+const MAX_CUSTOMER_VIEW_MS = 2 * HOUR_MS;
+// Soorten impersonatie (kolom impersonations.mode).
+const MODE_SUPPORT = 'support';
+const MODE_CUSTOMER = 'klant';
 
 /**
  * Huidig tijdstip als ISO-tekst.
@@ -97,18 +108,18 @@ function createImpersonationStore(db) {
 
   /**
    * Legt het begin van een impersonatie vast.
-   * @param {object} details tenantId (omgeving), adminId (hoofdbeheerder), userId (overgenomen gebruiker), grantId (toestemming, in live), reason en expiresAt.
+   * @param {object} details tenantId (omgeving), adminId (hoofdbeheerder of beheerder), userId (overgenomen gebruiker), grantId (toestemming, in live), reason, expiresAt en mode ('support' of 'klant').
    * @returns {object} De nieuwe rij uit impersonations.
    */
-  function start({ tenantId, adminId, userId, grantId = null, reason = '', expiresAt }) {
+  function start({ tenantId, adminId, userId, grantId = null, reason = '', expiresAt, mode = MODE_SUPPORT }) {
     const row = { id: newId(), tenant_id: tenantId, admin_id: adminId, user_id: userId, grant_id: grantId, reason,
-      started_at: currentTimestamp(), expires_at: expiresAt, ended_at: null, ended_reason: null };
-    prepare(`INSERT INTO impersonations (id, tenant_id, admin_id, user_id, grant_id, reason, started_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(row.id, tenantId, adminId, userId, grantId, reason, row.started_at, expiresAt);
+      started_at: currentTimestamp(), expires_at: expiresAt, ended_at: null, ended_reason: null, mode };
+    prepare(`INSERT INTO impersonations (id, tenant_id, admin_id, user_id, grant_id, reason, started_at, expires_at, mode)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(row.id, tenantId, adminId, userId, grantId, reason, row.started_at, expiresAt, mode);
     return row;
   }
 
-  const IMP_COLS = 'id, tenant_id, admin_id, user_id, grant_id, started_at, expires_at, ended_at';
+  const IMP_COLS = 'id, tenant_id, admin_id, user_id, grant_id, started_at, expires_at, ended_at, mode';
   /**
    * Haalt één impersonatie op.
    * @param {string} id Id van de impersonatie.
@@ -150,10 +161,11 @@ function createImpersonationStore(db) {
 
 /**
  * Routes voor supporttoegang en impersonatie, en de koppeling met identify() in server.js.
- * @param {object} deps store, impersonations (opslag van createImpersonationStore), auth, audit en mainTenantId.
+ * @param {object} deps store, impersonations (opslag van createImpersonationStore), auth, audit, mainTenantId,
+ *   canManage (admin, tenantId) => mag dit account deze omgeving beheren, en isCustomer (user) => heeft deze gebruiker een klantrol.
  * @returns {{ resolve: Function, stop: Function, syncHint: Function, register: Function, activeGrant: Function, activeGrants: Function }} De functies voor server.js.
  */
-function createImpersonation({ store, imp: impersonations, auth, audit, mainTenantId }) {
+function createImpersonation({ store, imp: impersonations, auth, audit, mainTenantId, canManage, isCustomer }) {
   /**
    * Mag deze gebruiker in deze omgeving worden overgenomen?
    * @param {object} admin De hoofdbeheerder.
@@ -182,6 +194,22 @@ function createImpersonation({ store, imp: impersonations, auth, audit, mainTena
   const isLive = (tenant) => tenant && tenant.environment !== 'test';
 
   /**
+   * Mag deze beheerder in deze omgeving als deze klant meekijken (klantweergave)?
+   * @param {object} admin Het account van de beheerder (zijn eigen tenant).
+   * @param {object|null} target De klant.
+   * @param {object|null} envTenant De omgeving waarin gewerkt wordt.
+   * @returns {string|null} Een foutmelding, of null als het mag.
+   */
+  function customerViewProblem(admin, target, envTenant) {
+    if (!envTenant || isLive(envTenant)) return 'Bekijken als klant kan alleen in een testomgeving.';
+    if (!canManage(admin, envTenant.id)) return 'Je beheert deze omgeving niet.';
+    const problem = targetProblem(admin, target, envTenant);
+    if (problem) return problem;
+    if (!isCustomer(target)) return 'Je kunt alleen meekijken als een klant.';
+    return null;
+  }
+
+  /**
    * Beëindigt een impersonatie en schrijft een auditregel (in de omgeving en, als dat een andere is, in de hoofdtenant).
    * @param {object} req Het Express-verzoek.
    * @param {object} row De impersonatie.
@@ -192,17 +220,22 @@ function createImpersonation({ store, imp: impersonations, auth, audit, mainTena
     if (!impersonations.end(row.id, reason)) return false;
     const target = store.getUser(row.user_id);
     const detail = { impersonatieId: row.id, gebruiker: target ? target.username : row.user_id, reden: reason };
+    if (row.mode === MODE_CUSTOMER) {
+      audit(req, 'klantweergave_beeindigd', detail, row.admin_id, row.tenant_id);
+      return true;
+    }
     audit(req, 'impersonatie_beeindigd', detail, row.admin_id, row.tenant_id);
     if (row.tenant_id !== mainTenantId) audit(req, 'impersonatie_beeindigd', detail, row.admin_id, mainTenantId);
     return true;
   }
 
   /**
-   * Werkt deze hoofdbeheerder nu als iemand anders? Controleert de cookie en de
-   * impersonatie (niet beëindigd, niet verlopen, toestemming nog geldig) en
-   * beëindigt hem als dat niet meer klopt.
+   * Werkt deze (hoofd)beheerder nu als iemand anders? Controleert de cookie en de
+   * impersonatie (niet beëindigd, niet verlopen, toestemming nog geldig; bij een
+   * klantweergave: nog steeds beheerder, testomgeving en klant) en beëindigt hem
+   * als dat niet meer klopt.
    * @param {object} req Het Express-verzoek.
-   * @param {object} admin De ingelogde hoofdbeheerder.
+   * @param {object} admin Het ingelogde account (in zijn eigen tenant).
    * @returns {object|null} De gebruiker zoals die in de omgeving van de impersonatie werkt (met impersonator en impersonation), of null.
    */
   function resolve(req, admin) {
@@ -214,9 +247,10 @@ function createImpersonation({ store, imp: impersonations, auth, audit, mainTena
     if (!row || row.admin_id !== admin.id || row.ended_at) return null;
     const target = store.getUser(row.user_id);
     const envTenant = store.getTenant(row.tenant_id);
+    const customerView = row.mode === MODE_CUSTOMER;
     let reason = null;
     if (Date.parse(row.expires_at) <= Date.now()) reason = 'verlopen';
-    else if (targetProblem(admin, target, envTenant)) reason = 'niet_meer_toegestaan';
+    else if (customerView ? customerViewProblem(admin, target, envTenant) : !admin.platform_admin || targetProblem(admin, target, envTenant)) reason = 'niet_meer_toegestaan';
     else if (isLive(envTenant)) {
       const activeGrant = row.grant_id && impersonations.activeGrant(target.id);
       if (!activeGrant || activeGrant.id !== row.grant_id) reason = 'toestemming_ingetrokken';
@@ -230,18 +264,19 @@ function createImpersonation({ store, imp: impersonations, auth, audit, mainTena
       tenant_id: row.tenant_id,
       home_tenant_id: target.tenant_id,
       impersonator: { id: admin.id, username: admin.username, display_name: admin.display_name },
-      impersonation: { id: row.id, expiresAt: row.expires_at, live: isLive(envTenant), tenantName: envTenant.name },
+      impersonation: { id: row.id, expiresAt: row.expires_at, live: isLive(envTenant), tenantName: envTenant.name, mode: customerView ? MODE_CUSTOMER : MODE_SUPPORT },
     };
   }
 
   /**
-   * Waarde van de leesbare hint-cookie: naam, eindtijd en live/test.
+   * Waarde van de leesbare hint-cookie: naam, eindtijd en soort (live, test of klant).
    * @param {object} user De overgenomen gebruiker (met impersonation).
-   * @returns {string} 'naam|eindtijd|live' of 'naam|eindtijd|test'.
+   * @returns {string} 'naam|eindtijd|live', 'naam|eindtijd|test' of 'naam|eindtijd|klant' (klantweergave).
    */
   const hintValue = (user) => {
     const impersonation = user.impersonation;
-    return `${user.display_name}|${impersonation.expiresAt}|${impersonation.live ? 'live' : 'test'}`;
+    const kind = impersonation.mode === MODE_CUSTOMER ? 'klant' : impersonation.live ? 'live' : 'test';
+    return `${user.display_name}|${impersonation.expiresAt}|${kind}`;
   };
 
   /**
@@ -277,18 +312,22 @@ function createImpersonation({ store, imp: impersonations, auth, audit, mainTena
    * @param {object} req Het Express-verzoek.
    * @param {object} res Het Express-antwoord.
    * @param {string} [reason] Reden van het einde.
-   * @returns {boolean} true als er een impersonatie is beëindigd.
+   * @returns {{ ended: boolean, mode: string|null }} Of er een impersonatie is beëindigd, en welke soort (of null).
    */
   function stop(req, res, reason = 'gestopt') {
     const raw = auth.readSigned(req, IMP_COOKIE, 'imp');
     let ended = false;
+    let mode = null;
     if (raw) {
       const [adminId, id] = raw.split(':');
       const row = id && impersonations.get(id);
-      if (row && row.admin_id === adminId && !row.ended_at) ended = finish(req, row, reason);
+      if (row && row.admin_id === adminId && !row.ended_at) {
+        ended = finish(req, row, reason);
+        mode = row.mode || MODE_SUPPORT;
+      }
     }
     clearCookies(req, res);
-    return ended;
+    return { ended, mode };
   }
 
   /**
@@ -387,7 +426,7 @@ function createImpersonation({ store, imp: impersonations, auth, audit, mainTena
       // Een eventuele vorige impersonatie in deze browser eerst afsluiten.
       stop(req, res, 'vervangen');
       clearEnvironment(req, res);
-      const row = impersonations.start({ tenantId: envTenant.id, adminId: admin.id, userId: target.id, grantId: grantRow ? grantRow.id : null,
+      const row = impersonations.start({ mode: MODE_SUPPORT, tenantId: envTenant.id, adminId: admin.id, userId: target.id, grantId: grantRow ? grantRow.id : null,
         reason, expiresAt: new Date(expires).toISOString() });
       auth.setSigned(req, res, IMP_COOKIE, `${admin.id}:${row.id}`, 'imp');
       const acting = { ...target, impersonation: { expiresAt: row.expires_at, live } };
@@ -401,12 +440,44 @@ function createImpersonation({ store, imp: impersonations, auth, audit, mainTena
       res.status(201).json({ ok: true, expiresAt: row.expires_at, live });
     });
 
+    // Klantweergave (beheerder): valt onder /api/admin, dus alleen met het
+    // recht beheer en niet tijdens een andere impersonatie (een klant heeft dat
+    // recht niet). De beheerder blijft in dezelfde testomgeving.
+    app.get('/api/admin/view-as-customer', (req, res) => {
+      const envTenant = store.getTenant(req.tenantId);
+      if (!envTenant || isLive(envTenant)) return res.json({ available: false, environment: null, items: [] });
+      // Testaccounts van deze omgeving eerst, dan de klanten van live.
+      res.json({ available: true, environment: envTenant.name, items: store.listCustomers([envTenant.id, envTenant.parent_id].filter(Boolean)) });
+    });
+
+    app.post('/api/admin/view-as-customer', requireJson, (req, res) => {
+      const admin = req.user;
+      if (admin.impersonator) return res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' });
+      const envTenant = store.getTenant(req.tenantId);
+      const target = store.getUser(String(req.body?.userId || ''));
+      // Een account buiten deze organisatie bestaat voor deze beheerder niet.
+      if (!target || !envTenant || (target.tenant_id !== envTenant.id && target.tenant_id !== envTenant.parent_id)) {
+        return res.status(404).json({ error: 'not_found', message: 'Gebruiker niet gevonden.' });
+      }
+      const account = { ...admin, tenant_id: admin.home_tenant_id || admin.tenant_id };
+      const problem = customerViewProblem(account, target, envTenant);
+      if (problem) return res.status(isLive(envTenant) ? 403 : 409).json({ error: isLive(envTenant) ? 'test_only' : 'not_allowed', message: problem });
+      stop(req, res, 'vervangen');
+      const row = impersonations.start({ tenantId: envTenant.id, adminId: admin.id, userId: target.id, mode: MODE_CUSTOMER,
+        expiresAt: new Date(Date.now() + MAX_CUSTOMER_VIEW_MS).toISOString() });
+      auth.setSigned(req, res, IMP_COOKIE, `${admin.id}:${row.id}`, 'imp');
+      auth.setPlain(req, res, IMP_HINT, hintValue({ ...target, impersonation: { expiresAt: row.expires_at, mode: MODE_CUSTOMER } }), { httpOnly: false });
+      audit(req, 'klantweergave_gestart', { impersonatieId: row.id, gebruiker: target.username, omgeving: `test: ${envTenant.name}`, tot: row.expires_at }, admin.id, envTenant.id);
+      res.status(201).json({ ok: true, expiresAt: row.expires_at });
+    });
+
     app.post('/api/impersonation/stop', (req, res) => {
       const user = identify(req);
-      const ended = stop(req, res, 'gestopt');
-      clearEnvironment(req, res);
+      const { ended, mode } = stop(req, res, 'gestopt');
+      // Na een klantweergave blijft de beheerder in zijn testomgeving.
+      if (mode !== MODE_CUSTOMER) clearEnvironment(req, res);
       if (user && user.impersonator) console.log(`${user.impersonator.display_name} werkt weer als zichzelf`);
-      res.json({ ok: true, ended });
+      res.json({ ok: true, ended, mode });
     });
   }
 
@@ -430,4 +501,4 @@ function createImpersonation({ store, imp: impersonations, auth, audit, mainTena
   };
 }
 
-module.exports = { createImpersonationStore, createImpersonation, IMP_COOKIE, IMP_HINT, GRANT_HOURS, MAX_IMPERSONATION_MS };
+module.exports = { createImpersonationStore, createImpersonation, IMP_COOKIE, IMP_HINT, GRANT_HOURS, MAX_IMPERSONATION_MS, MAX_CUSTOMER_VIEW_MS };

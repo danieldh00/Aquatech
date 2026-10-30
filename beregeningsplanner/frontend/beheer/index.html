@@ -63,6 +63,15 @@
       </section>
 
       <section id="tab-users" class="tabpane" hidden>
+        <form id="u-view" class="card-form" hidden>
+          <h3>Bekijken als klant</h3>
+          <p id="u-view-info" class="muted small"></p>
+          <div class="row" id="u-view-row">
+            <label>Klant<select name="userId" required></select></label>
+            <button class="btn primary" type="submit">Bekijk als klant</button>
+          </div>
+          <div id="u-view-err" class="err" role="alert"></div>
+        </form>
         <form id="u-form" class="card-form">
           <h3>Gebruiker toevoegen</h3>
           <div class="row">

@@ -67,6 +67,7 @@
     rol_aangemaakt: 'Rol aangemaakt', rol_gewijzigd: 'Rol gewijzigd', rol_verwijderd: 'Rol verwijderd', rol_teruggezet: 'Rol teruggezet naar standaard',
     tenant_verwijderd: 'Tenant verwijderd', testomgeving_verwijderd: 'Testomgeving verwijderd', werkorder_verwijderd: 'Werkorder verwijderd', werkorder_gewist: 'Werkorder definitief gewist',
     impersonatie_gestart: 'Hoofdbeheerder werkt als gebruiker', impersonatie_beeindigd: 'Impersonatie beëindigd',
+    klantweergave_gestart: 'Beheerder bekijkt als klant', klantweergave_beeindigd: 'Bekijken als klant beëindigd',
     webshop_gesynchroniseerd: 'Webshopproducten opgehaald', sproeierbibliotheek_ingelezen: 'Sproeierbibliotheek ingelezen', sproeierbibliotheek_standaard: 'Sproeierbibliotheek naar standaard', support_toegang_verleend: 'Supporttoegang gegeven', support_toegang_ingetrokken: 'Supporttoegang ingetrokken',
     opdracht_aangeboden: 'Opdracht uitbesteed (aangeboden)', opdracht_ingetrokken: 'Uitbesteding ingetrokken', opdracht_aangenomen: 'Opdracht aangenomen', opdracht_afgewezen: 'Opdracht afgewezen',
   };
@@ -348,6 +349,48 @@
       .map((user) => `<option value="${esc(user.id)}">${esc(user.displayName)}${user.kind === 'gast' ? ' (gast)' : ''}</option>`).join('');
     select.value = current;
     renderUsers();
+    loadCustomerView();
+  }
+
+  // ---------- Bekijken als klant (alleen in een testomgeving) ----------
+  /**
+   * Vult het blok Bekijken als klant: in een testomgeving de klanten om uit te
+   * kiezen, in live alleen de uitleg.
+   * @returns {Promise<void>}
+   */
+  async function loadCustomerView() {
+    const formElement = $('#u-view');
+    let view;
+    try { view = await api('view-as-customer'); } catch (error) { formElement.hidden = true; return; }
+    formElement.hidden = false;
+    // .row is flex, dus het attribuut hidden alleen werkt niet.
+    $('#u-view-row').style.display = view.available && view.items.length ? '' : 'none';
+    $('#u-view-info').textContent = !view.available
+      ? 'Wil je zien hoe de app er voor een klant uitziet? Dat kan alleen in een testomgeving: wissel via je naam rechtsboven naar een testomgeving.'
+      : view.items.length
+        ? `Bekijk de app in testomgeving ${view.environment} precies zoals een klant hem ziet. Je hebt dan alleen de rechten van die klant; met Terug naar beheer bovenin ben je weer jezelf. Start en einde komen in het auditlog.`
+        : `Er zijn nog geen klantaccounts. Maak een gebruiker met de rol Klant aan of vul de testomgeving met testgegevens.`;
+    formElement.userId.innerHTML = view.items.map((customer) => `<option value="${esc(customer.id)}">${esc(customer.displayName)} (${esc(customer.username)})</option>`).join('');
+  }
+
+  /**
+   * Start de klantweergave en opent het dashboard zoals de klant het ziet.
+   * @param {SubmitEvent} event het verzenden
+   * @returns {Promise<void>}
+   */
+  async function startCustomerView(event) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const button = formElement.querySelector('button[type="submit"]');
+    $('#u-view-err').textContent = '';
+    button.disabled = true;
+    try {
+      await api('view-as-customer', { method: 'POST', body: { userId: formElement.userId.value } });
+      location.href = '../';
+    } catch (error) {
+      $('#u-view-err').textContent = error.message;
+      button.disabled = false;
+    }
   }
 
   /**
@@ -1050,6 +1093,7 @@
     /** Volgende pagina van het auditlog. */
     $('#a-next').onclick = () => { state.auditOffset += PAGE; loadAudit(); };
     $('#u-form').onsubmit = addUser;
+    $('#u-view').onsubmit = startCustomerView;
     $('#u-guests').onchange = renderUsers;
     initSettings();
     initMail();

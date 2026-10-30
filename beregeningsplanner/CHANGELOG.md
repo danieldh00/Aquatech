@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.3.6
+
+Bekijken als klant (klantweergave): een beheerder ziet de app in een
+testomgeving precies zoals een klant hem ziet, om te testen.
+
+- **Server** (`beveiliging/impersonation.js`): `GET|POST
+  /api/admin/view-as-customer` (recht `beheer`). Alleen in een testomgeving:
+  in live geeft GET `{ available: false }` en weigert POST het starten met
+  403 `test_only`. Alleen accounts met een klantrol (`keysOfKind
+  'klant'`) van de eigen organisatie (de testomgeving zelf of de live-tenant
+  erboven; anders 404), geen wachtwoord of toestemming van de klant nodig.
+  Zelfde cookie-mechanisme als de impersonatie van de hoofdbeheerder, met
+  `impersonations.mode = 'klant'` (migratie 34), hoogstens 2 uur. Bij elk
+  verzoek opnieuw gecontroleerd: nog beheerder van die omgeving, omgeving nog
+  test en actief, doel nog een actieve klant; anders direct beëindigd.
+  `identify()` laat `resolve` nu voor elk account de cookie controleren.
+  Tijdens de klantweergave alleen de rechten van de klant (geen beheer, geen
+  omgevingswissel, geen nieuwe impersonatie). Auditlog
+  `klantweergave_gestart`/`klantweergave_beeindigd` in de testomgeving; acties
+  tijdens de weergave krijgen `impersonatie: <beheerder>`. Terug naar beheer
+  houdt de beheerder in dezelfde testomgeving.
+- **Frontend**: blok *Bekijken als klant* in Beheer → Gebruikers (in live alleen
+  uitleg), balk bovenin elke pagina "Je bekijkt als …" met *Terug naar beheer*
+  (`shared/env.js`, hint-cookie `…|klant`), knop in de kopbalk
+  (`dashboard/account.js`).
+
 ## 1.3.5
 
 Webshop (`winkel/`): een echt ontwerp in de stijl van aquatechshop.nl.

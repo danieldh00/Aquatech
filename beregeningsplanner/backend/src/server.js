@@ -329,7 +329,23 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const audit = (req, action, detail = {}, userId, tenantId) => store.audit({ tenantId: tenantId || req.tenantId || tenant.id,
     userId: userId === undefined ? req.user?.id || null : userId, action,
     detail: req.user?.impersonator ? { ...detail, impersonatie: req.user.impersonator.username } : detail, ip: remoteIp(req) });
-  const impersonation = createImpersonation({ store, imp: createImpersonationStore(database), auth, audit, mainTenantId: tenant.id });
+  const impersonation = createImpersonation({ store, imp: createImpersonationStore(database), auth, audit, mainTenantId: tenant.id,
+    /**
+     * Mag dit account deze omgeving beheren (recht beheer en de omgeving hoort bij zijn organisatie)?
+     * @param {object} account Het account in zijn eigen tenant.
+     * @param {string} tenantId Id van de omgeving.
+     * @returns {boolean} true als het mag.
+     */
+    canManage: (account, tenantId) => {
+      const withOwnRights = withRights(account);
+      return Roles.can(withOwnRights, 'beheer') && store.accessibleTenants(withOwnRights).some((accessible) => accessible.id === tenantId);
+    },
+    /**
+     * Heeft deze gebruiker een klantrol (soort klant in Beheer > Rollen)?
+     * @param {object} user De gebruiker.
+     * @returns {boolean} true bij een klant.
+     */
+    isCustomer: (user) => store.roles.keysOfKind(user.tenant_id, 'klant').includes(user.role) });
   /**
    * Express 4 vangt geen afgewezen promises: doorgeven aan de foutafhandeling.
    * @param {Function} handler De async handler.
@@ -693,8 +709,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (user && !organizationActive(user.tenant_id) && !(user.platform_admin && store.getTenant(user.tenant_id))) user = null;
     if (user) {
       store.touchUser(user);
-      // Een hoofdbeheerder kan tijdelijk als een andere gebruiker werken (zie impersonation.js).
-      const as = session?.via === 'user' && user.platform_admin ? impersonation.resolve(req, user) : null;
+      // Een hoofdbeheerder kan tijdelijk als een andere gebruiker werken, een
+      // beheerder in een testomgeving als een klant (zie impersonation.js).
+      const as = session?.via === 'user' ? impersonation.resolve(req, user) : null;
       user = as || actingUser(req, user);
       user = withRights(user);
     }
@@ -983,7 +1000,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       rights: user ? Roles.rightsOf(user) : guestsAllowed() ? store.roles.rightsFor(tenant.id, 'klant') : [],
       // Tijdens een impersonatie wordt er niet gewisseld (eerst terug naar het eigen account).
       environments: user && !imp ? accessibleFor(user).length : 0,
-      impersonation: imp ? { by: user.impersonator.display_name, expiresAt: imp.expiresAt, live: imp.live, environment: imp.tenantName } : null,
+      impersonation: imp ? { by: user.impersonator.display_name, expiresAt: imp.expiresAt, live: imp.live, environment: imp.tenantName, mode: imp.mode } : null,
       // Aantal nieuwe berichten en versies sinds het vorige bezoek aan Nieuws
       // (alleen met een eigen account; uit het geheugen, zie news.js).
       news: user?.kind === 'account' && !imp
