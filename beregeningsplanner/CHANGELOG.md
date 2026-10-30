@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.4.9
+
+Facturen en Visma voor bestellingen van de eigen webshop (stap 4 van de
+webshop-roadmap).
+
+- **Factuur bij Verzonden** (`backend/src/verkoop/web-order-invoices.js`): zodra
+  een bestelling op Verzonden gaat maakt Aquatech er een factuur van
+  (`shop_order_id` = `web:<bestelling>`, uniek per omgeving, dus één factuur
+  per bestelling; geen migratie nodig). Regels uit de bestelling (excl. btw,
+  tarief van de bestelling, verzendkosten als eigen regel), klant als
+  debiteur (gekoppeld aan het klantaccount), btw verlegd met vermelding en
+  btw-nummer op de factuur. De factuur wordt meteen definitief en boekt
+  geen voorraad af (dat gebeurde al bij Verzonden); e-mail (`autoSend`) en
+  Visma (`autoSync`) volgen de bestaande haken van definitief maken.
+- **Instelling** `invoicing.webOrders` {`enabled`, `finalize`} (standaard
+  allebei aan), te zetten in Facturen > Instellingen.
+- **Beheer > Bestellingen**: de factuur staat in het detail (link naar
+  Facturen); mislukt het maken, dan staat de fout erbij en maakt de knop
+  *Factuur maken* (`POST /api/admin/web-orders/:id/invoice`, idempotent) de
+  factuur opnieuw. `GET .../web-orders/:id` en de statusroute geven `invoice`
+  mee. Betaling blijft op rekening: de factuur wordt handmatig op betaald gezet.
+- Haak `webOrders.onShipped(hook)` in `web-orders.js`; fouten in de haak
+  laten de verzending ongemoeid.
+- Tests: `test/web-order-invoices.test.js`.
+
 ## 1.4.8
 
 Btw en prijzen voor particulieren en zakelijke klanten in de eigen webshop

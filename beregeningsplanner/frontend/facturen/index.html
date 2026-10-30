@@ -166,6 +166,10 @@
           </div>
           <label class="chk"><input type="checkbox" name="ordersFinalize"> Factuur meteen definitief maken (anders blijft hij concept om te controleren)</label>
           <p class="muted small">Per bestelling één factuur, met de klant als debiteur. Heeft de webshop de betaling al ontvangen (bijv. iDEAL), dan staat de factuur meteen op betaald. Bestellingen van vóór de datum hierboven worden overgeslagen (die zijn al gefactureerd).</p>
+          <h3>Bestellingen van de eigen webshop</h3>
+          <label class="chk"><input type="checkbox" name="webEnabled"> Bij Verzonden automatisch een factuur maken</label>
+          <label class="chk"><input type="checkbox" name="webFinalize"> Factuur meteen definitief maken (anders blijft hij concept om te controleren)</label>
+          <p class="muted small">De voorraad is dan al afgeboekt bij het verzenden. De factuur staat open (betaling op rekening) tot je hem hier op betaald zet; Visma en e-mail volgen de instellingen hierboven.</p>
           <h3>Omzetcategorieën</h3>
           <p class="muted small">Elke factuurregel hoort bij een omzetgroep (producten, arbeid, overig) en een btw-tarief. Vul per combinatie de naam en de grootboekrekening in zoals in Visma, bijv. <i>Omzet producten hoog</i> op 8000.</p>
           <div class="tablewrap"><table class="grid" id="s-cats"></table></div>

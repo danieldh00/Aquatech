@@ -53,9 +53,10 @@
   /**
    * Tekent het detail van een bestelling met knoppen voor de volgende status.
    * @param {object} order De bestelling (met regels, adres en verloop).
+   * @param {?{ id: string, number: string, status: string }} [invoice] De factuur van de bestelling, als die er is.
    * @returns {void}
    */
-  function renderDetail(order) {
+  function renderDetail(order, invoice = null) {
     const box = $('#wo-detail');
     const lines = order.lines.map((line) => `<tr><td>${esc(line.name)}<span class="sub">${esc(line.code)}</span></td><td class="num">${line.qty}</td><td class="num">${euro(line.unitIncl)}</td><td class="num">${euro(line.lineTotal)}</td></tr>`).join('');
     const vat = order.totals.byRate.map((row) => `<tr><td colspan="3">Waarvan ${row.rate}% btw over ${euro(row.excl)}</td><td class="num">${euro(row.vat)}</td></tr>`).join('');
@@ -65,6 +66,9 @@
     const canTrack = shipping && shipping.method === 'dpd' && ['verzonden', 'afgerond'].includes(order.status);
     const trackingForm = shipping && shipping.method === 'dpd' ? `<p>${shipping.tracking ? `Volgcode: <a href="${esc(shipping.tracking.url)}" target="_blank" rel="noopener">${esc(shipping.tracking.code)}</a> ` : 'Nog geen volgcode. '}${order.status === 'nieuw' ? '<input id="wo-tracking" placeholder="Volgcode DPD (optioneel)" maxlength="40"> <span class="muted small">wordt bij Verzonden vastgelegd</span>' : canTrack ? `<input id="wo-tracking" placeholder="Volgcode DPD" maxlength="40" value="${esc(shipping.tracking ? shipping.tracking.code : '')}"> <button class="btn" id="wo-tracking-save">Volgcode opslaan</button>` : ''}</p>` : '';
     const mail = order.mail ? (order.mail.sent ? `Bevestiging verstuurd (${when(order.mail.at)})` : `Bevestiging niet verstuurd: ${esc(order.mail.error)}`) : 'Bevestiging nog niet verstuurd';
+    const needsInvoice = ['verzonden', 'afgerond'].includes(order.status) && !invoice;
+    const invoiceLine = invoice ? `<p>Factuur: <a href="../facturen/?id=${encodeURIComponent(invoice.id)}">${esc(invoice.number || 'concept')}</a> (${esc(invoice.status)}${invoice.paidAt ? ', betaald' : ''})</p>`
+      : needsInvoice ? `<p>${order.invoiceError ? `Er is nog geen factuur: ${esc(order.invoiceError)} ` : 'Er is nog geen factuur. '}<button class="btn" id="wo-invoice">Factuur maken</button></p>` : '';
     box.innerHTML = `<h3>${esc(order.number)} <span class="pill ${esc(order.status)}">${esc(order.statusLabel)}</span></h3>
       <p>${esc(order.customer.company ? `${order.customer.company} – ` : '')}${esc(order.customer.name)} · <a href="mailto:${esc(mailtoAddress(order.email))}">${esc(order.email)}</a>${order.customer.phone ? ` · ${esc(order.customer.phone)}` : ''}<br>
       ${shipping && shipping.method === 'ophalen' ? 'Wordt opgehaald' : `${esc(order.address.street)}, ${esc(order.address.postcode)} ${esc(order.address.city)}${order.address.country && order.address.country !== 'NL' ? ` (${esc(order.address.country)})` : ''}`}</p>
@@ -73,11 +77,27 @@
       <div class="tablewrap"><table class="grid"><thead><tr><th>Artikel</th><th class="num">Aantal</th><th class="num">Prijs</th><th class="num">Totaal</th></tr></thead><tbody>${lines}${shippingRow}${vat}
         <tr><th colspan="3">${order.vat && order.vat.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num"><b>${euro(order.totals.total)}</b></td></tr></tbody></table></div>
       ${trackingForm}
+      ${invoiceLine}
       <p class="muted small">Betaling: op rekening · ${mail}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})`).join(' → ')}</p>
       <p>${buttons} <button class="btn" id="wo-close">Sluiten</button></p>`;
     box.hidden = false;
     /** Sluit het detail. */
     $('#wo-close').onclick = () => { box.hidden = true; state.openId = null; };
+    const makeInvoice = $('#wo-invoice');
+    if (makeInvoice) {
+      /**
+       * Maakt (opnieuw) de factuur van deze bestelling.
+       * @returns {Promise<void>}
+       */
+      makeInvoice.onclick = async () => {
+        makeInvoice.disabled = true;
+        try {
+          const out = await api(`/${encodeURIComponent(order.id)}/invoice`, { method: 'POST', body: {} });
+          toast('Factuur gemaakt');
+          open(order.id);
+        } catch (error) { toast(error.message, true); makeInvoice.disabled = false; }
+      };
+    }
     const saveTracking = $('#wo-tracking-save');
     if (saveTracking) {
       /**
@@ -89,7 +109,7 @@
         try {
           const out = await api(`/${encodeURIComponent(order.id)}/tracking`, { method: 'POST', body: { trackingCode: $('#wo-tracking').value } });
           toast('Volgcode opgeslagen');
-          renderDetail(out.order);
+          open(order.id);
         } catch (error) { toast(error.message, true); saveTracking.disabled = false; }
       };
     }
@@ -105,7 +125,7 @@
           const trackingInput = $('#wo-tracking');
           const out = await api(`/${encodeURIComponent(order.id)}/status`, { method: 'POST', body: { status: button.dataset.status, trackingCode: button.dataset.status === 'verzonden' && trackingInput ? trackingInput.value : '' } });
           toast(`Bestelling ${out.order.number} is ${out.order.statusLabel.toLowerCase()}`);
-          renderDetail(out.order);
+          renderDetail(out.order, out.invoice);
           load();
         } catch (error) { toast(error.message, true); button.disabled = false; }
       };
@@ -118,7 +138,7 @@
    * @returns {Promise<void>}
    */
   async function open(id) {
-    try { state.openId = id; renderDetail((await api(`/${encodeURIComponent(id)}`)).order); $('#wo-detail').scrollIntoView({ block: 'nearest' }); } catch (error) { toast(error.message, true); }
+    try { state.openId = id; const out = await api(`/${encodeURIComponent(id)}`); renderDetail(out.order, out.invoice); $('#wo-detail').scrollIntoView({ block: 'nearest' }); } catch (error) { toast(error.message, true); }
   }
 
   /**

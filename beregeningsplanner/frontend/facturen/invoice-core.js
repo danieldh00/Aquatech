@@ -101,7 +101,7 @@
   /**
    * Factuurinstellingen opschonen (instelling invoicing van de tenant).
    * @param {object} raw De opgeslagen of ingevulde instellingen.
-   * @returns {object} { prefix, paymentDays, paymentText, footer, categories, debtorStart, autoSend, mailSubject, mailText, shopOrders }.
+   * @returns {object} { prefix, paymentDays, paymentText, footer, categories, debtorStart, autoSend, mailSubject, mailText, shopOrders, webOrders }.
    */
   function sanitizeSettings(raw) {
     const fields = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -132,6 +132,7 @@
       mailSubject: typeof fields.mailSubject === 'string' && fields.mailSubject.trim() ? limitText(fields.mailSubject, 200).replace(/[\r\n]/g, ' ') : DEFAULT_SUBJECT,
       mailText: typeof fields.mailText === 'string' && fields.mailText.trim() ? limitText(fields.mailText, 4000) : DEFAULT_MAIL,
       shopOrders: sanitizeShopOrders(fields.shopOrders),
+      webOrders: sanitizeWebOrders(fields.webOrders),
     };
   }
 
@@ -155,6 +156,17 @@
       since: isDate(fields.since) ? fields.since : '',
       finalize: fields.finalize !== false,
     };
+  }
+
+  /**
+   * Bestellingen van de eigen webshop: of er bij Verzonden een factuur komt
+   * (standaard aan) en of die meteen definitief wordt (standaard aan).
+   * @param {object} raw De ingevulde instellingen.
+   * @returns {{enabled: boolean, finalize: boolean}} De opgeschoonde instellingen.
+   */
+  function sanitizeWebOrders(raw) {
+    const fields = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    return { enabled: fields.enabled !== false, finalize: fields.finalize !== false };
   }
 
   /**
