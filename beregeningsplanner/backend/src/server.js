@@ -119,7 +119,7 @@ const PUBLIC_FILES = new Set([
   // (en nadat) iemand is ingelogd (manifest en service worker worden zonder
   // cookies of buiten de sessie opgehaald).
   '/sw.js', '/manifest.json', '/shared/offline-core.js',
-  '/shared/icons/app-192.png', '/shared/icons/app-512.png', '/shared/icons/app-maskable-512.png', '/shared/icons/apple-touch-icon.png',
+  '/shared/icons/app-192.png', '/shared/icons/app-512.png', '/shared/icons/app-maskable-512.png', '/shared/icons/apple-touch-icon.png', '/shared/icons/favicon-48.png',
 ]);
 /**
  * Is dit een openbaar bestand (zonder inloggen bereikbaar, zie PUBLIC_FILES)?
@@ -138,7 +138,7 @@ function isPublicAsset(req) {
 // alleen met ?tekenen (anders gewoon de inlogpagina), en de code ervan. Er
 // zit geen data in: zonder account blijft het plan in de browser tot het
 // wordt ingediend.
-const PLANNER_FILES = new Set(['/shared/common.js', '/shared/env.js', '/shared/sidebar.js', '/shared/sidebar.css', '/shared/schild-white.png', '/dashboard/modules.js']);
+const PLANNER_FILES = new Set(['/shared/common.js', '/shared/env.js', '/shared/sidebar.js', '/shared/sidebar.css', '/shared/schild-white.png', '/shared/icons/logo-icon.png', '/dashboard/modules.js']);
 /**
  * De planner zonder inloggen (tekening indienen, zie drawings.js): de pagina
  * alleen met ?tekenen (anders gewoon de inlogpagina), en de code ervan. Er

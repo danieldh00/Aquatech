@@ -565,8 +565,11 @@ Toegang → *Eigen webshop tonen*; uit = overal 404. De shop toont de
 voorraadartikelen van de hoofdtenant die een verkoopprijs hebben, niet
 gearchiveerd zijn en *Naar de webshop* aan hebben. Categorie en afbeelding
 komen uit het gekoppelde WooCommerce-product (na een synchronisatie); zonder
-koppeling staat een artikel onder *Overig*. Pagina's: `winkel/` (start),
-`winkel/categorie/<slug>/` en `winkel/product/<slug>/`; de slug bestaat uit naam en artikelcode, zodat
+koppeling staat een artikel onder *Overig*. Ontwerp: woordmerk Aquatechshop.nl,
+zoekveld, menu van hoofdcategorieën (Beregening, Elektra, Pomp & techniek,
+Leidingen & toebehoren; ingedeeld op categorienaam in `storefront-data.js`),
+uitgelichte producten en een voet; de winkelwagen is nog een plaatshouder. Pagina's: `winkel/` (start),
+`winkel/groep/<slug>/`, `winkel/zoeken/?q=`, `winkel/categorie/<slug>/` en `winkel/product/<slug>/`; de slug bestaat uit naam en artikelcode, zodat
 de url van een artikel gelijk blijft als er artikelen bijkomen. Prijzen zijn incl. btw;
 van de voorraad zie je alleen *Op voorraad* of *Niet op voorraad* (stand min reserveringen voor werkorders). De code
 staat in `backend/src/webshop/storefront*.js` en is een Express-router die

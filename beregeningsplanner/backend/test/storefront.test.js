@@ -6,7 +6,8 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { buildCatalog, slugify } = require('../src/webshop/storefront-data');
+const { buildCatalog, slugify, groupOf } = require('../src/webshop/storefront-data');
+const { decodeHtmlEntities } = require('../src/webshop/html-entities');
 const { createLogin, createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'f'.repeat(64);
@@ -142,7 +143,8 @@ test('webshop: assets, doorverwijzing, 404 en alleen lezen', async () => {
 
   assert.strictEqual((await anonymous.get('/winkel/assets/winkel.css')).status, 200);
   assert.strictEqual((await anonymous.get('/winkel/assets/brand.css')).status, 200);
-  assert.strictEqual((await anonymous.get('/winkel/assets/logo-white.png')).status, 200);
+  assert.strictEqual((await anonymous.get('/winkel/assets/aquatechshop-logo.png')).status, 200);
+  assert.strictEqual((await anonymous.get('/winkel/assets/favicon.png')).status, 200);
   assert.strictEqual((await anonymous.get('/winkel/assets/fonts/montserrat-latin-400-normal.woff2')).status, 200);
   assert.strictEqual((await anonymous.get('/winkel/assets/fonts/..%2F..%2Fserver.js')).status, 404);
   assert.strictEqual((await anonymous.get('/winkel/assets/constructor')).status, 404);
@@ -173,4 +175,67 @@ test('webshop-instelling alleen in de hoofdtenant', async () => {
   assert.strictEqual(saved.status, 200);
   assert.ok(!('storefront' in saved.body.settings), 'veld ook niet in de PUT-response');
   assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
+});
+
+test('HTML-tekens in namen worden gelezen, niet dubbel getoond', () => {
+  assert.strictEqual(decodeHtmlEntities('Leidingen &amp; Slangen'), 'Leidingen & Slangen');
+  assert.strictEqual(decodeHtmlEntities('4&#8243; pomp &#x2013; DAB &eacute;'), '4″ pomp – DAB é');
+  assert.strictEqual(decodeHtmlEntities('Rain Bird&reg; &AMP; Co &Eacute;'), 'Rain Bird® & Co É');
+  assert.strictEqual(decodeHtmlEntities('&LT;b&GT; &Lt; &Gt;'), '<b> ≪ ≫', '&Lt; en &Gt; zijn andere tekens dan &lt; en &gt;');
+  assert.strictEqual(decodeHtmlEntities('&onbekend; &#99999999; 5 &lt; 6'), '&onbekend; &#99999999; 5 < 6');
+  const catalog = buildCatalog([{ code: 'K', name: 'Kraan &amp; koppeling', unit: 'st', on_hand: 1, sale_price: 1, vat_rate: 21, categories: '["(kogel) kranen &amp; toebehoren"]' }]);
+  assert.strictEqual(catalog.categories[0].name, '(kogel) kranen & toebehoren');
+  assert.strictEqual(catalog.products[0].name, 'Kraan & koppeling');
+});
+
+test('categorieën worden in hoofdcategorieën gegroepeerd', () => {
+  const expected = {
+    'Pop-up sproeiers': 'beregening', 'Druppelslang insteek koppelingen': 'beregening', 'Beregeningscomputers & regensensors': 'beregening',
+    'Elektra': 'elektra', '4" Franklin Electric bronpomp motoren': 'pomp-techniek', 'Expansievaten & toebehoren': 'pomp-techniek',
+    'Unidelta knie binnendraad tyleen koppeling': 'leidingen-toebehoren', '(kogel) kranen & toebehoren': 'leidingen-toebehoren',
+    'Leidingen & Slangen': 'leidingen-toebehoren', 'Iets anders': 'overig',
+  };
+  for (const [name, slug] of Object.entries(expected)) assert.strictEqual(groupOf(name).slug, slug, name);
+  const catalog = buildCatalog([
+    { code: 'A', name: 'Sproeier', on_hand: 1, sale_price: 1, vat_rate: 21, categories: '["Pop-up sproeiers"]', image: 'https://x.nl/a.jpg' },
+    { code: 'B', name: 'Pomp', on_hand: 1, sale_price: 1, vat_rate: 21, categories: '["Dompelpompen"]', image: 'https://x.nl/b.jpg' },
+    { code: 'C', name: 'Zonder foto', on_hand: 1, sale_price: 1, vat_rate: 21, categories: '["Dompelpompen"]' },
+    { code: 'D', name: 'Leeg', on_hand: 0, sale_price: 1, vat_rate: 21, categories: '["Elektra"]', image: 'https://x.nl/d.jpg' },
+  ]);
+  assert.deepStrictEqual(catalog.groups.map((group) => group.slug), ['beregening', 'elektra', 'pomp-techniek']);
+  assert.strictEqual(catalog.groups.find((group) => group.slug === 'pomp-techniek').count, 2);
+  assert.deepStrictEqual(catalog.featured.map((product) => product.code), ['B', 'A'], 'alleen met foto en op voorraad, om en om per groep');
+});
+
+test('webshop: hoofdcategorie, zoeken, kop en voet', async () => {
+  const { db, anonymous, admin, main } = await setup();
+  await admin.put('/api/admin/settings', { storefront: true });
+  db.prepare('INSERT INTO shop_products (tenant_id, id, name, image, categories) VALUES (?, ?, ?, ?, ?)').run(main, '77', 'x', 'https://shop.test/buis.jpg', '["Leidingen &amp; Slangen"]');
+  db.prepare("UPDATE stock_items SET shop_product_id = '77' WHERE tenant_id = ? AND code = 'BUIS-25'").run(main);
+
+  const home = await anonymous.get('/winkel/');
+  assert.match(home.text, /assets\/aquatechshop-logo\.png/);
+  assert.match(home.text, /rel="icon"/);
+  assert.match(home.text, /action="zoeken\/"/);
+  assert.match(home.text, /Leidingen &amp; Slangen/);
+  assert.ok(!home.text.includes('&amp;amp;'), 'geen dubbel gecodeerde tekens');
+  assert.match(home.text, /Uitgelichte producten/);
+  assert.match(home.text, /https:\/\/shop\.test\/buis\.jpg/);
+
+  const group = await anonymous.get('/winkel/groep/leidingen-toebehoren/');
+  assert.strictEqual(group.status, 200);
+  assert.match(group.text, /Leidingen &amp; toebehoren/);
+  assert.match(group.text, /Leidingen &amp; Slangen/);
+  assert.strictEqual((await anonymous.get('/winkel/groep/bestaat-niet/')).status, 404);
+
+  const found = await anonymous.get('/winkel/zoeken/?q=buis%2025');
+  assert.strictEqual(found.status, 200);
+  assert.match(found.text, /PE buis 25 mm/);
+  assert.ok(!found.text.includes('Sproeier'), 'alleen producten die passen');
+  const byCode = await anonymous.get('/winkel/zoeken/?q=spr-1');
+  assert.match(byCode.text, /Sproeier/);
+  assert.ok(!byCode.text.includes('Alleen intern'));
+  const scripted = await anonymous.get('/winkel/zoeken/?q=%3Cscript%3Ealert(1)%3C/script%3E');
+  assert.ok(!scripted.text.includes('<script>'), 'zoekterm wordt ontsnapt');
+  assert.strictEqual((await anonymous.get('/winkel/zoeken/')).status, 200);
 });

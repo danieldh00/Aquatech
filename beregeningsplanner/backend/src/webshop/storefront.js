@@ -1,6 +1,6 @@
 // Eigen webshop (stap 1, alleen lezen): openbare, server-side opgebouwde
-// pagina's voor de artikelen uit de voorraad: startpagina, categorie en
-// productpagina (/product/<slug>/, zoals WooCommerce). Geen winkelwagen,
+// pagina's voor de artikelen uit de voorraad: startpagina, hoofdcategorie
+// (/groep/), categorie, zoeken (/zoeken/) en productpagina (/product/<slug>/, zoals WooCommerce). Geen winkelwagen,
 // betaling of accounts. De shop is een Express-router die op een eigen
 // domein of onder een pad (bijv. /winkel/) kan worden gemonteerd en alleen
 // de gegevenslaag (storefront-data.js) nodig heeft; daardoor later ook als
@@ -12,12 +12,12 @@ const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { remoteIp } = require('../beveiliging/auth');
 const { createStorefrontData } = require('./storefront-data');
-const { homePage, categoryPage, productPage, notFoundPage } = require('./storefront-pages');
+const { homePage, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
 
 /** Content-Security-Policy van de shop: geen scripts; afbeeldingen van de webshop komen van https-adressen. */
 const STOREFRONT_CSP = [
   "default-src 'none'", "style-src 'self'", "img-src 'self' https:", "font-src 'self'",
-  "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'",
+  "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'",
 ].join('; ');
 
 const SHARED_DIR = path.join(FRONTEND_DIR, 'shared');
@@ -25,7 +25,8 @@ const SHARED_DIR = path.join(FRONTEND_DIR, 'shared');
 const ASSETS = {
   'brand.css': { file: path.join(SHARED_DIR, 'brand.css'), type: 'text/css; charset=utf-8' },
   'winkel.css': { file: path.join(__dirname, 'storefront.css'), type: 'text/css; charset=utf-8' },
-  'logo-white.png': { file: path.join(SHARED_DIR, 'logo-white.png'), type: 'image/png' },
+  'aquatechshop-logo.png': { file: path.join(__dirname, 'assets', 'aquatechshop-logo.png'), type: 'image/png' },
+  'favicon.png': { file: path.join(SHARED_DIR, 'icons', 'favicon-48.png'), type: 'image/png' },
 };
 const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
@@ -91,27 +92,49 @@ function createStorefront({ db, tenantId, settingsFor }) {
     sendPage(res, 200, homePage(data.catalogOf(tenantId)));
   });
 
+  router.get('/groep/:slug', (req, res) => {
+    const pathname = req.originalUrl.split('?')[0];
+    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
+    const catalog = data.catalogOf(tenantId);
+    const group = catalog.groups.find((candidate) => candidate.slug === req.params.slug);
+    if (!group) return sendPage(res, 404, notFoundPage('../../', catalog.groups));
+    sendPage(res, 200, groupPage(group, catalog.groups));
+  });
+
+  router.get('/zoeken', (req, res) => {
+    const pathname = req.originalUrl.split('?')[0];
+    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
+    const catalog = data.catalogOf(tenantId);
+    const query = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const found = words.length
+      ? catalog.products.filter((product) => words.every((word) => `${product.name} ${product.code} ${product.categoryName}`.toLowerCase().includes(word)))
+      : [];
+    sendPage(res, 200, searchPage(query, found, catalog.groups));
+  });
+
   router.get('/categorie/:slug', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
     const catalog = data.catalogOf(tenantId);
     const category = catalog.categories.find((candidate) => candidate.slug === req.params.slug);
-    if (!category) return sendPage(res, 404, notFoundPage('../../'));
-    sendPage(res, 200, categoryPage(category, catalog.products.filter((product) => product.categorySlug === category.slug)));
+    if (!category) return sendPage(res, 404, notFoundPage('../../', catalog.groups));
+    sendPage(res, 200, categoryPage(category, catalog.products.filter((product) => product.categorySlug === category.slug), catalog.groups));
   });
 
   router.get('/product/:slug', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
-    const product = data.catalogOf(tenantId).products.find((candidate) => candidate.slug === req.params.slug);
-    if (!product) return sendPage(res, 404, notFoundPage('../../'));
-    sendPage(res, 200, productPage(product));
+    const catalog = data.catalogOf(tenantId);
+    const product = catalog.products.find((candidate) => candidate.slug === req.params.slug);
+    if (!product) return sendPage(res, 404, notFoundPage('../../', catalog.groups));
+    sendPage(res, 200, productPage(product, catalog.groups));
   });
 
   router.use((req, res) => {
     const segments = req.path.split('/').filter(Boolean).length;
     const depth = req.path.endsWith('/') ? segments : Math.max(segments - 1, 0);
-    sendPage(res, 404, notFoundPage('../'.repeat(depth)));
+    sendPage(res, 404, notFoundPage('../'.repeat(depth), data.catalogOf(tenantId).groups));
   });
   router.clearCache = data.clearCache;
   return router;

@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.3.5',
+      date: '2026-10-30',
+      title: 'Nieuw ontwerp voor de webshop',
+      items: [
+        { text: 'De webshop heeft een echt ontwerp gekregen: kopbalk met zoekveld, menu met productgroepen en subcategorieën, uitgelichte producten met foto en een voet. Zoeken op productnaam of artikelnummer werkt al; de winkelwagen volgt later.', for: ['beheer'] },
+        { text: 'Tekens als &amp; staan niet meer letterlijk in categorie- en productnamen van de webshop.', for: ['beheer'] },
+        { text: 'Het nieuwe icoon staat als favicon in de browser en als logo in de ingeklapte zijbalk.' },
+      ],
+    },
+    {
       version: '1.3.4',
       date: '2026-10-30',
       title: 'Varianten: kleine correcties',

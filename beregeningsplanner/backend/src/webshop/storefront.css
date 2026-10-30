@@ -1,49 +1,126 @@
-/* Eigen webshop (storefront.js): bovenop brand.css (kleuren --at-*, Montserrat).
-   De neutrale kleuren staan hier één keer als --at-*-variabele. */
+/* Eigen webshop (storefront.js): bovenop brand.css (Montserrat, --at-font).
+   Kleuren van Aquatechshop.nl en de neutrale kleuren staan hier één keer als
+   --at-*-variabele; de shop laadt het app-thema niet. */
 :root {
+  --at-shop-navy: #1b3768;
+  --at-shop-navy-dark: #142a52;
+  --at-shop-teal: #37bac8;
+  --at-shop-green: #1a9f5b;
+  --at-shop-green-dark: #137f46;
+  --at-shop-green-soft: #e6f5ed;
   --at-white: #fff;
   --at-ink: #1c2433;
   --at-muted: #5b6577;
   --at-line: #dde3ec;
   --at-page: #f5f7fa;
+  --at-stock-out: #b3261e;
+  --at-shadow: rgba(20, 42, 82, 0.18);
+  --at-foot-text: rgba(255, 255, 255, 0.85);
+  --at-foot-line: rgba(255, 255, 255, 0.2);
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: var(--at-font); color: var(--at-ink); background: var(--at-page); line-height: 1.5; }
-a { color: var(--at-navy); }
-h1 { color: var(--at-navy); font-size: 1.7rem; margin: 0.4em 0; }
-h2 { color: var(--at-navy); font-size: 1.2rem; margin: 1.6em 0 0.6em; }
+a { color: var(--at-shop-navy); }
+h1 { color: var(--at-shop-navy); font-size: 1.7rem; margin: 0.4em 0; }
+h2 { color: var(--at-shop-navy); font-size: 1.25rem; margin: 2em 0 0.7em; }
+svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.muted { color: var(--at-muted); }
 
-.shop-head { background: var(--at-navy); padding: 12px 16px; }
-.shop-brand { display: inline-flex; align-items: center; gap: 12px; color: var(--at-white); text-decoration: none; font-weight: 700; }
-.shop-brand img { display: block; height: 30px; width: auto; }
-.shop-main { max-width: 1100px; margin: 0 auto; padding: 16px; min-height: 60vh; }
-.shop-foot { text-align: center; color: var(--at-muted); font-size: 0.85rem; padding: 24px 16px; }
+/* Kopbalk: logo, zoeken, account en winkelwagen, daaronder de productgroepen. */
+.shop-head { background: var(--at-white); border-bottom: 1px solid var(--at-line); position: relative; z-index: 10; }
+.shop-bar { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.shop-brand { display: block; flex: none; }
+.shop-brand img { display: block; height: 44px; width: auto; }
+.shop-search { flex: 1 1 280px; display: flex; min-width: 0; }
+.shop-search input { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border: 2px solid var(--at-shop-navy); border-right: 0; border-radius: 8px 0 0 8px; background: var(--at-white); color: var(--at-ink); }
+.shop-search input:focus { outline: 2px solid var(--at-shop-teal); outline-offset: 0; }
+.shop-search button { display: flex; align-items: center; justify-content: center; width: 48px; border: 0; border-radius: 0 8px 8px 0; background: var(--at-shop-green); color: var(--at-white); cursor: pointer; }
+.shop-search button:hover { background: var(--at-shop-green-dark); }
+.shop-actions { display: flex; gap: 6px; margin-left: auto; }
+.shop-action { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; color: var(--at-shop-navy); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+a.shop-action:hover { background: var(--at-page); }
+.shop-action.cart { cursor: default; opacity: 0.75; }
+.shop-action.cart b { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--at-shop-teal); color: var(--at-white); font-size: 0.8rem; }
 
-.hero { background: var(--at-navy); color: var(--at-white); border-radius: 12px; padding: 28px 24px; }
-.hero h1 { color: var(--at-white); margin-top: 0; }
+.shop-nav { background: var(--at-shop-navy); }
+.nav-bar { list-style: none; margin: 0 auto; padding: 0 16px; max-width: 1200px; display: flex; flex-wrap: wrap; }
+.nav-group { position: relative; }
+.nav-group > a { display: block; padding: 12px 18px; color: var(--at-white); text-decoration: none; font-weight: 600; }
+.nav-group:hover > a, .nav-group:focus-within > a { background: var(--at-shop-navy-dark); }
+.nav-drop { display: none; position: absolute; left: 0; top: 100%; z-index: 20; min-width: 280px; max-height: 70vh; overflow-y: auto; margin: 0; padding: 8px 0; list-style: none; background: var(--at-white); border: 1px solid var(--at-line); border-top: 3px solid var(--at-shop-teal); border-radius: 0 0 8px 8px; box-shadow: 0 10px 24px var(--at-shadow); }
+.nav-group:hover .nav-drop, .nav-group:focus-within .nav-drop { display: block; }
+.nav-drop a { display: block; padding: 7px 18px; text-decoration: none; font-size: 0.92rem; }
+.nav-drop a:hover { background: var(--at-shop-green-soft); }
+
+/* Smal scherm: één menuknop met uitklappende groepen. */
+.shop-menu { display: none; background: var(--at-shop-navy); color: var(--at-white); }
+.shop-menu > summary { display: flex; align-items: center; gap: 10px; padding: 12px 16px; font-weight: 600; cursor: pointer; list-style: none; }
+.shop-menu > summary::-webkit-details-marker { display: none; }
+.shop-menu ul { list-style: none; margin: 0; padding: 0; }
+.shop-menu > ul { background: var(--at-white); border-bottom: 1px solid var(--at-line); max-height: 70vh; overflow-y: auto; }
+.shop-menu li details > summary { padding: 12px 16px; font-weight: 600; color: var(--at-shop-navy); cursor: pointer; border-top: 1px solid var(--at-line); }
+.shop-menu li li a { display: block; padding: 9px 16px 9px 32px; text-decoration: none; font-size: 0.92rem; }
+@media (max-width: 800px) {
+  .shop-nav { display: none; }
+  .shop-menu { display: block; }
+  .shop-action span { display: none; }
+  .shop-action.cart b { display: inline-flex; }
+  .shop-bar { gap: 10px; }
+  .shop-brand img { height: 36px; }
+  .shop-search { order: 3; flex-basis: 100%; }
+}
+
+.shop-main { max-width: 1200px; margin: 0 auto; padding: 16px; min-height: 60vh; }
+
+/* Startpagina. */
+.hero { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; background: linear-gradient(120deg, var(--at-shop-navy) 40%, var(--at-shop-teal)); color: var(--at-white); border-radius: 12px; padding: 36px 28px; }
+.hero h1 { color: var(--at-white); font-size: 2rem; margin: 0 0 6px; }
 .hero p { margin: 0; max-width: 40em; }
-
+.button { display: inline-block; background: var(--at-shop-green); color: var(--at-white); text-decoration: none; font-weight: 700; padding: 12px 22px; border-radius: 8px; }
+.button:hover { background: var(--at-shop-green-dark); }
 .crumbs { font-size: 0.9rem; color: var(--at-muted); margin-bottom: 4px; }
 
-.category-grid, .product-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-.category-tile { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: var(--at-white); border: 1px solid var(--at-line); border-left: 4px solid var(--at-teal); border-radius: 8px; text-decoration: none; }
+.group-grid, .category-grid, .product-grid { display: grid; gap: 14px; }
+.group-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.category-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.product-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.group-card { display: flex; flex-direction: column; background: var(--at-white); border: 1px solid var(--at-line); border-top: 4px solid var(--at-shop-teal); border-radius: 8px; padding: 16px 18px; }
+.group-card h3 { margin: 0 0 8px; font-size: 1.1rem; }
+.group-card h3 a { text-decoration: none; }
+.group-card ul { list-style: none; margin: 0 0 12px; padding: 0; }
+.group-card li a { display: block; padding: 4px 0; color: var(--at-ink); text-decoration: none; font-size: 0.92rem; }
+.group-card li a:hover { color: var(--at-shop-green-dark); text-decoration: underline; }
+.group-card .more { margin-top: auto; font-weight: 600; font-size: 0.9rem; text-decoration: none; color: var(--at-shop-green-dark); }
+
+.category-tile { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: var(--at-white); border: 1px solid var(--at-line); border-left: 4px solid var(--at-shop-teal); border-radius: 8px; text-decoration: none; }
 .category-tile span { color: var(--at-muted); font-size: 0.85rem; }
-.category-tile:hover, .product-card:hover { border-color: var(--at-green); }
+.category-tile:hover, .product-card:hover { border-color: var(--at-shop-green); }
 
 .product-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 8px; text-decoration: none; color: inherit; }
 .product-image { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: var(--at-white); overflow: hidden; }
 .product-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.no-image { width: 60%; height: 60%; border-radius: 8px; background: var(--at-green-soft); }
-.product-name { font-weight: 600; color: var(--at-navy); }
+.no-image { width: 60%; height: 60%; border-radius: 8px; background: var(--at-shop-green-soft); }
+.product-name { font-weight: 600; color: var(--at-shop-navy); }
 .product-price { font-weight: 700; }
 .stock { font-size: 0.85rem; font-weight: 600; margin: 0; }
-.stock.in { color: var(--at-green-dark); }
-.stock.out { color: var(--at-danger); }
+.stock.in { color: var(--at-shop-green-dark); }
+.stock.out { color: var(--at-stock-out); }
 
 .product-detail { display: grid; gap: 24px; grid-template-columns: 1fr; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 12px; padding: 16px; margin-top: 8px; }
 .product-image.large { background: var(--at-white); max-height: 420px; }
 .sku { color: var(--at-muted); margin: 0 0 8px; }
 .price { font-size: 1.6rem; font-weight: 700; margin: 8px 0; }
 .price small { font-size: 0.8rem; font-weight: 400; color: var(--at-muted); }
-.note { margin-top: 16px; padding: 10px 12px; background: var(--at-green-soft); border-radius: 8px; }
+.note { margin-top: 16px; padding: 10px 12px; background: var(--at-shop-green-soft); border-radius: 8px; }
 @media (min-width: 720px) { .product-detail { grid-template-columns: 1fr 1fr; padding: 24px; } }
+
+/* Voet. */
+.shop-foot { background: var(--at-shop-navy); color: var(--at-foot-text); margin-top: 32px; padding: 28px 0 20px; font-size: 0.9rem; }
+.shop-foot a { color: var(--at-white); }
+.foot-grid { max-width: 1200px; margin: 0 auto; padding: 0 16px; display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.foot-grid strong { display: block; color: var(--at-white); margin-bottom: 8px; }
+.foot-grid p { margin: 0; }
+.foot-grid ul { list-style: none; margin: 0; padding: 0; }
+.foot-grid li { padding: 3px 0; }
+.foot-note { max-width: 1168px; margin: 20px auto 0; padding-top: 14px; border-top: 1px solid var(--at-foot-line); font-size: 0.8rem; }
+@media (max-width: 1232px) { .foot-note { margin-left: 16px; margin-right: 16px; } }

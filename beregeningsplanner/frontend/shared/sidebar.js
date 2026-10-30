@@ -126,7 +126,7 @@
       <div class="at-nav-head">
         <a class="at-nav-brand" href="${esc(base || './')}" title="Overzicht">
           <img class="at-nav-logo" src="${esc(base)}shared/logo-white.png" alt="AquaTech Service">
-          <img class="at-nav-mark" src="${esc(base)}shared/schild-white.png" alt="AquaTech Service">
+          <img class="at-nav-mark" src="${esc(base)}shared/icons/logo-icon.png" alt="AquaTech Service">
         </a>
         <button type="button" class="at-nav-close" aria-label="Menu sluiten" title="Menu sluiten">✕</button>
       </div>

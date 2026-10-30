@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.3.5
+
+Webshop (`winkel/`): een echt ontwerp in de stijl van aquatechshop.nl.
+
+- **Ontwerp** (`webshop/storefront-pages.js`, `storefront.css`): kopbalk met het
+  woordmerk Aquatechshop.nl, zoekveld, account en winkelwagen (nog zonder
+  werking), menu van hoofdcategorieën met uitklappers (alleen CSS; op een smal
+  scherm één menuknop), startpagina met hero, productgroepen met hun
+  subcategorieën en uitgelichte producten met foto, voet met navigatie.
+  Kleuren navy `#1b3768`, turquoise `#37bac8`, groen `#1a9f5b`.
+- **Hoofdcategorieën** (`storefront-data.js`, `groupOf`): WooCommerce geeft
+  alleen platte categorienamen; die worden op naam ingedeeld in Beregening,
+  Elektra, Pomp & techniek en Leidingen & toebehoren (zoals het menu van
+  aquatechshop.nl), de rest in Overig. Nieuwe pagina `groep/<slug>/`.
+  `featured` kiest om en om per groep producten met foto die op voorraad zijn.
+- **Zoeken** (`zoeken/?q=`): op naam, artikelnummer en categorie; CSP
+  `form-action 'self'`.
+- **HTML-tekens** (`webshop/html-entities.js`): `&amp;` e.d. in product- en
+  categorienamen worden bij de import (`woocommerce.js`) en bij het tonen
+  gelezen.
+- **Logo's**: icoon als favicon (shop, planner, login-, setup-, wachtwoord- en
+  openbare pagina's via `shared/common.js` of een eigen link) en als logo in de
+  ingeklapte zijbalk (`shared/icons/logo-icon.png`); de uitgeklapte zijbalk
+  houdt het AquaTech Service-logo.
+
 ## 1.3.4
 
 Varianten: drie correcties na de review van 1.3.3.

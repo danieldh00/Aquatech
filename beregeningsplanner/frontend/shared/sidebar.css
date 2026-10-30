@@ -20,7 +20,7 @@
 }
 .at-nav-brand { display: flex; align-items: center; min-width: 0; }
 .at-nav-logo { display: block; height: 28px; width: auto; max-width: 100%; }
-.at-nav-mark { display: none; height: 28px; width: auto; }
+.at-nav-mark { display: none; height: 32px; width: auto; }
 .at-nav-close { display: none; }
 .at-nav-list { display: flex; flex-direction: column; gap: 2px; }
 .at-nav-item, .at-nav-collapse {
