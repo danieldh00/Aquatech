@@ -1,6 +1,6 @@
 {
   "name": "beregeningsplanner-backend",
-  "version": "1.3.6",
+  "version": "1.3.7",
   "private": true,
   "description": "Aquatech-webserver: dashboard, modules, accounts en API",
   "main": "src/server.js",

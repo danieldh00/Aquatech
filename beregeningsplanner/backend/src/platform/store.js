@@ -459,6 +459,62 @@ function createStore(db) {
   }
 
   /**
+   * Zoekt het actieve account met dit e-mailadres in een tenant (alleen eigen accounts, geen gasten).
+   * @param {string} tenantId De tenant.
+   * @param {string} email Het e-mailadres.
+   * @returns {string[]} De id's van de gevonden accounts (hoogstens twee).
+   */
+  function accountIdsByEmail(tenantId, email) {
+    const address = String(email || '').trim().toLowerCase();
+    if (!address) return [];
+    return prepare("SELECT id FROM users WHERE tenant_id = ? AND email = ? AND kind = 'account' AND disabled = 0 LIMIT 2").all(tenantId, address).map((row) => row.id);
+  }
+
+  /**
+   * Vertaalt wat iemand bij het inloggen invult naar een gebruikersnaam: een
+   * e-mailadres van precies één account wordt de gebruikersnaam van dat account,
+   * al het andere blijft zoals het is.
+   * @param {string} tenantId De tenant.
+   * @param {string} login Gebruikersnaam of e-mailadres.
+   * @returns {string} De gebruikersnaam om mee in te loggen.
+   */
+  function loginNameFor(tenantId, login) {
+    const typed = String(login || '').trim().toLowerCase();
+    if (!typed.includes('@')) return typed;
+    const ids = accountIdsByEmail(tenantId, typed);
+    return ids.length === 1 ? getUser(ids[0]).username : typed;
+  }
+
+  /**
+   * Maakt een klantaccount aan voor iemand die zich in de webshop registreert:
+   * rol klant, e-mailadres ingevuld, gebruikersnaam afgeleid van het e-mailadres.
+   * Hetzelfde account werkt in de planner en het klantportaal.
+   * @param {string} tenantId De tenant van de webshop.
+   * @param {{ displayName: string, email: string, password: string }} input Naam, e-mailadres en gekozen wachtwoord.
+   * @returns {Promise<{ user: object }|{ error: string, field: string }>} Het account of een foutmelding met het veld.
+   */
+  async function createShopCustomer(tenantId, { displayName, email, password }) {
+    const name = String(displayName ?? '').replace(/\s+/g, ' ').trim();
+    if (!name) return { error: 'Vul je naam in.', field: 'displayName' };
+    if (name.length > 80) return { error: 'Je naam mag maximaal 80 tekens hebben.', field: 'displayName' };
+    const address = String(email ?? '').trim().toLowerCase();
+    if (!address || address.length > 200 || !EMAIL.test(address)) return { error: 'Vul een geldig e-mailadres in.', field: 'email' };
+    if (accountIdsByEmail(tenantId, address).length) return { error: 'Er is al een account met dit e-mailadres. Log in, of vraag een nieuw wachtwoord aan bij AquaTech Service.', field: 'email' };
+    const local = address.split('@')[0].replace(/[^a-z0-9._-]/g, '').replace(/^[^a-z0-9]+/, '').slice(0, 30);
+    const base = /^(gast-|ha-|beheerder$)/.test(local) || local.length < 3 ? `klant.${local}`.replace(/\.$/, '') : local;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const username = attempt === 0 ? base : `${base}-${crypto.randomInt(1000, 10000)}`;
+      const out = await createAccount(tenantId, { username, displayName: name, role: 'klant', password });
+      if (out.user) {
+        prepare('UPDATE users SET email = ? WHERE id = ?').run(address, out.user.id);
+        return { user: getUser(out.user.id) };
+      }
+      if (out.error !== 'Deze gebruikersnaam bestaat al.') return { error: out.error, field: /wachtwoord/i.test(out.error) ? 'password' : 'email' };
+    }
+    return { error: 'Er kon geen gebruikersnaam worden gemaakt. Probeer het opnieuw.', field: 'email' };
+  }
+
+  /**
    * Wijzigt een account. De laatste actieve beheerder en hoofdbeheerder blijven
    * dat; een nieuw wachtwoord of uitschakelen logt overal uit.
    * @param {string} tenantId De tenant.
@@ -1626,7 +1682,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, systemUser, createGuest, createAccount, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, systemUser, createGuest, createAccount, createShopCustomer, loginNameFor, accountIdsByEmail, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
     createSession, findSessionWithUser, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
     planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing,

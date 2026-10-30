@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.3.7
+
+Accounts in de webshop zijn de accounts van de planner: registreren of inloggen
+in `winkel/` maakt of gebruikt een account met de rol klant, met dezelfde
+sessie als de rest van de app. Geen aparte shop-accounts.
+
+- **Webshop** (`webshop/shop-accounts.js`, `storefront-account-pages.js`):
+  pagina's `inloggen/`, `registreren/`, `account/` en formulieren (POST, zonder
+  scripts; CSP ongewijzigd). Inloggen met gebruikersnaam of e-mailadres, alleen
+  in de tenant van de shop; registreren maakt een klant (gebruikersnaam
+  afgeleid van het e-mailadres, `store.createShopCustomer`), logt meteen in en
+  weigert een tweede account met hetzelfde e-mailadres. Beveiliging: limiet per
+  IP (inloggen 20 per 15 min, registreren 5 per uur), blokkering per
+  gebruikersnaam zoals het gewone inlogscherm, verborgen valstrikveld,
+  `Sec-Fetch-Site`-controle, wachtwoordbeleid van de app, auditlog
+  (`ingelogd`/`klant_geregistreerd` met `via: winkel`). Mijn account heeft knoppen
+  *Naar de planner*, *Mijn portaal* en *Mijn profiel*.
+- **Kopje Planner** in de navigatie van de shop (instelling `shopPlanner`,
+  standaard aan, Beheer → Instellingen → Toegang, alleen hoofdtenant): zonder
+  account een aanmeldformulier met alleen naam, e-mail en wachtwoord, daarna
+  direct naar de planner; met account meteen naar de planner. Uit = kopje
+  verborgen en `planner/` geeft 404.
+- **Database**: migratie 35 (index `users (tenant_id, email)`), ook in
+  `PG_MIGRATIONS`. `store.accountIdsByEmail`, `loginNameFor`.
+
 ## 1.3.6
 
 Bekijken als klant (klantweergave): een beheerder ziet de app in een

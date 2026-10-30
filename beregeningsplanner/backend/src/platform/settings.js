@@ -31,6 +31,9 @@ const FIELDS = {
   // Eigen webshop (webshop/storefront.js): openbare pagina's op /winkel/ met
   // de artikelen uit de voorraad. Standaard uit.
   storefront: { type: 'bool', default: false },
+  // Vast kopje Planner in de navigatie van de webshop: een bezoeker maakt dan in
+  // een paar velden een klantaccount en gaat door naar de planner.
+  shopPlanner: { type: 'bool', default: true },
   anthropicApiKey: { type: 'secret', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
   aiEnabled: { type: 'bool', default: true },
   aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },

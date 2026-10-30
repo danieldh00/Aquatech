@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.3.7',
+      date: '2026-10-30',
+      title: 'Account in de webshop',
+      items: [
+        { text: 'Klanten kunnen zich in de webshop registreren en inloggen. Het is hetzelfde account als in de planner en het klantportaal.' },
+        { text: 'In de webshop staat een kopje Planner: met alleen naam, e-mail en wachtwoord maak je een account en ga je meteen door naar de planner. Aan of uit te zetten in Beheer → Instellingen → Toegang.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.3.6',
       date: '2026-10-30',
       title: 'Bekijken als klant',
