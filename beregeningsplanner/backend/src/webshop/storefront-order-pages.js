@@ -11,17 +11,18 @@ const ROOT = '../';
  * De btw-regels onder een bedrag: per tarief het bedrag excl. btw en de btw.
  * @param {{ total: number, byRate: { rate: number, excl: number, vat: number }[] }} totals De totalen.
  * @param {boolean} [excl] true voor een zakelijke klant: eerst het totaal excl. btw, dan de btw per tarief.
+ * @param {boolean} [shifted] true als de btw is verlegd: het totaal is dan excl. btw en krijgt dat label.
  * @returns {string} HTML van de tabelrijen.
  */
-function totalRows(totals, excl = false) {
+function totalRows(totals, excl = false, shifted = false) {
   if (excl) {
     const subtotal = totals.byRate.reduce((sum, row) => sum + row.excl, 0);
     return `<tr class="sub"><th colspan="3" scope="row">Totaal excl. btw</th><td class="num">${escapeHtml(formatPrice(subtotal))}</td></tr>
 ${totals.byRate.filter((row) => row.rate > 0).map((row) => `<tr class="sub"><td colspan="3">Btw ${row.rate}% over ${escapeHtml(formatPrice(row.excl))}</td><td class="num">${escapeHtml(formatPrice(row.vat))}</td></tr>`).join('')}
-<tr class="total"><th colspan="3" scope="row">Totaal incl. btw</th><td class="num">${escapeHtml(formatPrice(totals.total))}</td></tr>`;
+<tr class="total"><th colspan="3" scope="row">${shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num">${escapeHtml(formatPrice(totals.total))}</td></tr>`;
   }
   return `${totals.byRate.map((row) => `<tr class="sub"><td colspan="3">Waarvan ${row.rate}% btw over ${escapeHtml(formatPrice(row.excl))}</td><td class="num">${escapeHtml(formatPrice(row.vat))}</td></tr>`).join('')}
-<tr class="total"><th colspan="3" scope="row">Totaal incl. btw</th><td class="num">${escapeHtml(formatPrice(totals.total))}</td></tr>`;
+<tr class="total"><th colspan="3" scope="row">${shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num">${escapeHtml(formatPrice(totals.total))}</td></tr>`;
 }
 
 /**
@@ -180,7 +181,7 @@ function orderPage(order, groups = []) {
   const body = `<section class="cart"><h1>Bedankt voor je bestelling</h1>
 <p>Je bestelling <strong>${escapeHtml(order.number)}</strong> is ontvangen. We sturen een bevestiging naar ${escapeHtml(order.email)}. Je bestelling gaat op rekening: je ontvangt de factuur van ons.</p>
 <div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Prijs${business ? ' excl. btw' : ''}</th><th class="num">Aantal</th><th class="num">Totaal${business ? ' excl. btw' : ''}</th></tr></thead>
-<tbody>${rows}</tbody><tfoot>${shippingRow(order.shipping, business)}${totalRows(order.totals, business)}</tfoot></table></div>
+<tbody>${rows}</tbody><tfoot>${shippingRow(order.shipping, business)}${totalRows(order.totals, business, Boolean(order.vat && order.vat.shifted))}</tfoot></table></div>
 ${vatNote}${deliveryBlock(order)}
 <p>Status: <strong>${escapeHtml(order.statusLabel)}</strong></p>
 <p><a class="button" href="${ROOT}">Verder winkelen</a></p></section>`;

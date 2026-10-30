@@ -135,6 +135,7 @@ test('btw verlegd naar een bedrijf met btw-nummer in een ander EU-land', async (
   const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
   const order = (await admin.get(`/api/admin/web-orders/${orderId}`)).body.order;
   assert.strictEqual(order.vat.shifted, true);
+  assert.match((await business.client.get(`/winkel/${placed.location.slice(3)}`)).text, /Totaal \(btw verlegd\)/);
   assert.strictEqual(order.total, 27.98, '2 × 8,00 + verzending 11,98 zonder btw');
   assert.deepStrictEqual(order.totals.byRate.map((row) => [row.rate, row.vat]), [[0, 0]]);
   assert.strictEqual(order.lines[0].vatRate, 0);

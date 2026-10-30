@@ -71,7 +71,7 @@
       ${order.customerGroup === 'zakelijk' ? `<p><b>Zakelijke klant</b>${order.vat && order.vat.number ? ` · btw-nummer ${esc(order.vat.number)}` : ''}${order.vat && order.vat.shifted ? ' · <b>btw verlegd</b> (factureren zonder btw)' : ''}. Bedragen hieronder zijn incl. btw, behalve bij verlegging.</p>` : ''}
       ${order.note ? `<p><b>Opmerking:</b> ${esc(order.note)}</p>` : ''}
       <div class="tablewrap"><table class="grid"><thead><tr><th>Artikel</th><th class="num">Aantal</th><th class="num">Prijs</th><th class="num">Totaal</th></tr></thead><tbody>${lines}${shippingRow}${vat}
-        <tr><th colspan="3">Totaal incl. btw</th><td class="num"><b>${euro(order.totals.total)}</b></td></tr></tbody></table></div>
+        <tr><th colspan="3">${order.vat && order.vat.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num"><b>${euro(order.totals.total)}</b></td></tr></tbody></table></div>
       ${trackingForm}
       <p class="muted small">Betaling: op rekening · ${mail}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})`).join(' → ')}</p>
       <p>${buttons} <button class="btn" id="wo-close">Sluiten</button></p>`;
@@ -196,15 +196,15 @@
         { header: 'Nummer', key: 'number', width: 16 }, { header: 'Besteld', key: 'at', width: 18, style: { numFmt: 'dd-mm-yyyy hh:mm' } }, { header: 'Status', key: 'status', width: 13 },
         { header: 'Klant', key: 'name', width: 26 }, { header: 'Bedrijf', key: 'company', width: 24 }, { header: 'E-mail', key: 'email', width: 28 }, { header: 'Telefoon', key: 'phone', width: 16 },
         { header: 'Adres', key: 'street', width: 28 }, { header: 'Postcode', key: 'postcode', width: 10 }, { header: 'Plaats', key: 'city', width: 18 },
-        { header: 'Totaal excl. btw', key: 'excl', width: 15, style: { numFmt: '€ #,##0.00' } }, { header: 'Btw', key: 'vat', width: 11, style: { numFmt: '€ #,##0.00' } }, { header: 'Totaal incl. btw', key: 'total', width: 15, style: { numFmt: '€ #,##0.00' } },
-        { header: 'Klantgroep', key: 'group', width: 12 }, { header: 'Btw-nummer', key: 'vatNumber', width: 18 }, { header: 'Btw verlegd', key: 'shifted', width: 11 }, { header: 'Verzending', key: 'shipping', width: 26 }, { header: 'Verzendkosten incl. btw', key: 'shippingPrice', width: 18, style: { numFmt: '€ #,##0.00' } }, { header: 'Volgcode', key: 'tracking', width: 20 },
+        { header: 'Totaal excl. btw', key: 'excl', width: 15, style: { numFmt: '€ #,##0.00' } }, { header: 'Btw', key: 'vat', width: 11, style: { numFmt: '€ #,##0.00' } }, { header: 'Totaal (incl. btw; excl. bij verlegging)', key: 'total', width: 15, style: { numFmt: '€ #,##0.00' } },
+        { header: 'Klantgroep', key: 'group', width: 12 }, { header: 'Btw-nummer', key: 'vatNumber', width: 18 }, { header: 'Btw verlegd', key: 'shifted', width: 11 }, { header: 'Verzending', key: 'shipping', width: 26 }, { header: 'Verzendkosten (incl. btw; excl. bij verlegging)', key: 'shippingPrice', width: 18, style: { numFmt: '€ #,##0.00' } }, { header: 'Volgcode', key: 'tracking', width: 20 },
         { header: 'Opmerking', key: 'note', width: 30 },
       ];
       const lines = workbook.addWorksheet('Regels');
       lines.columns = [
         { header: 'Nummer', key: 'number', width: 16 }, { header: 'Artikelnummer', key: 'code', width: 18 }, { header: 'Omschrijving', key: 'name', width: 40 }, { header: 'Aantal', key: 'qty', width: 9 },
         { header: 'Prijs excl. btw', key: 'unitExcl', width: 15, style: { numFmt: '€ #,##0.00' } }, { header: 'Btw %', key: 'vatRate', width: 8 },
-        { header: 'Prijs incl. btw', key: 'unitIncl', width: 15, style: { numFmt: '€ #,##0.00' } }, { header: 'Totaal incl. btw', key: 'lineTotal', width: 15, style: { numFmt: '€ #,##0.00' } },
+        { header: 'Prijs (incl. btw; excl. bij verlegging)', key: 'unitIncl', width: 15, style: { numFmt: '€ #,##0.00' } }, { header: 'Totaal (incl. btw; excl. bij verlegging)', key: 'lineTotal', width: 15, style: { numFmt: '€ #,##0.00' } },
       ];
       for (const order of items) {
         const vat = order.totals.byRate.reduce((sum, row) => sum + row.vat, 0);
