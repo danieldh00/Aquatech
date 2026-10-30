@@ -7,7 +7,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { totalsOf, sanitizeCheckout } = require('../src/webshop/web-orders');
-const { createLogin, createClient, listen, postForm } = require('./helpers/http-client');
+const { createLogin, createClient, listen, postForm, postCheckout } = require('./helpers/http-client');
 
 const SECRET = 'd'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -125,10 +125,10 @@ test('bestelling plaatsen reserveert de voorraad en stuurt een bevestiging', asy
   assert.match(cart.text, /€ 31,48/, 'totaal: 2 × 12,10 + 4 × 1,82');
   const checkout = await customer.get('/winkel/afrekenen/');
   assert.strictEqual(checkout.status, 200);
-  const bad = await postForm(base, customer, '/winkel/afrekenen/', { ...CHECKOUT, postcode: 'x' });
+  const bad = await postCheckout(base, customer, { ...CHECKOUT, postcode: 'x' });
   assert.strictEqual(bad.status, 400);
   assert.match(bad.text, /geldige postcode/);
-  const placed = await postForm(base, customer, '/winkel/afrekenen/', CHECKOUT);
+  const placed = await postCheckout(base, customer, CHECKOUT);
   assert.strictEqual(placed.status, 303);
   assert.match(placed.location, /^\.\.\/bestelling\/[0-9a-f-]{36}\/$/);
   const page = await customer.get(`/winkel/${placed.location.slice(3)}`);
@@ -157,7 +157,7 @@ test('verzonden boekt af en annuleren geeft de reservering vrij', async () => {
   const customer = await shopper();
   for (const qty of [2, 1]) {
     await addToCart(base, customer, 'SPR-1', qty);
-    assert.strictEqual((await postForm(base, customer, '/winkel/afrekenen/', CHECKOUT)).status, 303);
+    assert.strictEqual((await postCheckout(base, customer, CHECKOUT)).status, 303);
   }
   const orders = (await admin.get('/api/admin/web-orders')).body.items;
   assert.strictEqual(orders.length, 2);
@@ -189,7 +189,7 @@ test('te weinig voorraad en artikelen die niet te koop zijn houden de bestelling
   assert.match((await customer.get('/winkel/winkelwagen/')).text, /Nog maar 5 beschikbaar/);
   const toCart = await customer.get('/winkel/afrekenen/');
   assert.match(toCart.text, /Winkelwagen/, 'doorgestuurd naar de winkelwagen');
-  const refused = await postForm(base, customer, '/winkel/afrekenen/', CHECKOUT);
+  const refused = await postCheckout(base, customer, CHECKOUT);
   assert.strictEqual(refused.status, 303);
   assert.match(refused.location, /winkelwagen/);
   assert.strictEqual((await admin.get('/api/admin/web-orders')).body.total, 0);
@@ -223,7 +223,7 @@ test('zonder account niet afrekenen; een andere klant ziet de bestelling niet', 
   assert.match(login.text, /volgende=afrekenen/);
   assert.strictEqual((await postForm(base, visitor, '/winkel/afrekenen/', CHECKOUT)).location, './');
   await addToCart(base, customer, 'SPR-1', 1);
-  const placed = await postForm(base, customer, '/winkel/afrekenen/', CHECKOUT);
+  const placed = await postCheckout(base, customer, CHECKOUT);
   const other = await shopper();
   assert.strictEqual((await other.get(`/winkel/${placed.location.slice(3)}`)).status, 404);
   assert.strictEqual((await visitor.get(`/winkel/${placed.location.slice(3)}`)).status, 200, 'zonder sessie naar het inlogscherm');
@@ -246,9 +246,9 @@ test('rechten: Beheer-API alleen voor beheerders, andere organisatie 404, formul
   const { base, admin, vreemd, shopper } = await setup();
   const customer = await shopper();
   await addToCart(base, customer, 'SPR-1', 1);
-  assert.strictEqual((await postForm(base, customer, '/winkel/afrekenen/', CHECKOUT, { 'sec-fetch-site': 'cross-site' })).status, 403);
+  assert.strictEqual((await postCheckout(base, customer, CHECKOUT, { 'sec-fetch-site': 'cross-site' })).status, 403);
   assert.strictEqual((await postForm(base, customer, '/winkel/winkelwagen/', { action: 'clear' }, { 'sec-fetch-site': 'cross-site' })).status, 403);
-  const placed = await postForm(base, customer, '/winkel/afrekenen/', CHECKOUT);
+  const placed = await postCheckout(base, customer, CHECKOUT);
   assert.strictEqual(placed.status, 303);
   assert.strictEqual((await customer.get('/api/admin/web-orders')).status, 403);
   const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
@@ -267,7 +267,7 @@ test('een klant met bestellingen kan worden verwijderd; de bestelling blijft sta
   const { base, admin, shopper } = await setup();
   const customer = await shopper();
   await addToCart(base, customer, 'SPR-1', 1);
-  assert.strictEqual((await postForm(base, customer, '/winkel/afrekenen/', CHECKOUT)).status, 303);
+  assert.strictEqual((await postCheckout(base, customer, CHECKOUT)).status, 303);
   const users = (await admin.get('/api/admin/users')).body.items;
   const klant = users.find((user) => user.username !== 'baas' && user.role === 'klant');
   const removed = await admin.del(`/api/admin/users/${klant.id}`);

@@ -10,11 +10,19 @@ const ROOT = '../';
 /**
  * De btw-regels onder een bedrag: per tarief het bedrag excl. btw en de btw.
  * @param {{ total: number, byRate: { rate: number, excl: number, vat: number }[] }} totals De totalen.
+ * @param {boolean} [excl] true voor een zakelijke klant: eerst het totaal excl. btw, dan de btw per tarief.
+ * @param {boolean} [shifted] true als de btw is verlegd: het totaal is dan excl. btw en krijgt dat label.
  * @returns {string} HTML van de tabelrijen.
  */
-function totalRows(totals) {
+function totalRows(totals, excl = false, shifted = false) {
+  if (excl) {
+    const subtotal = totals.byRate.reduce((sum, row) => sum + row.excl, 0);
+    return `<tr class="sub"><th colspan="3" scope="row">Totaal excl. btw</th><td class="num">${escapeHtml(formatPrice(subtotal))}</td></tr>
+${totals.byRate.filter((row) => row.rate > 0).map((row) => `<tr class="sub"><td colspan="3">Btw ${row.rate}% over ${escapeHtml(formatPrice(row.excl))}</td><td class="num">${escapeHtml(formatPrice(row.vat))}</td></tr>`).join('')}
+<tr class="total"><th colspan="3" scope="row">${shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num">${escapeHtml(formatPrice(totals.total))}</td></tr>`;
+  }
   return `${totals.byRate.map((row) => `<tr class="sub"><td colspan="3">Waarvan ${row.rate}% btw over ${escapeHtml(formatPrice(row.excl))}</td><td class="num">${escapeHtml(formatPrice(row.vat))}</td></tr>`).join('')}
-<tr class="total"><th colspan="3" scope="row">Totaal incl. btw</th><td class="num">${escapeHtml(formatPrice(totals.total))}</td></tr>`;
+<tr class="total"><th colspan="3" scope="row">${shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num">${escapeHtml(formatPrice(totals.total))}</td></tr>`;
 }
 
 /**
@@ -30,17 +38,17 @@ function cartPage(cart, groups = []) {
   }
   const rows = cart.lines.map((line) => `<tr${line.enough ? '' : ' class="problem"'}>
     <td><strong>${escapeHtml(line.name)}</strong><br><small>Artikelnr.: ${escapeHtml(line.code)}</small>${line.enough ? '' : `<br><small class="stock out">${line.available > 0 ? `Nog maar ${escapeHtml(String(line.available))} beschikbaar` : 'Niet meer op voorraad'}</small>`}</td>
-    <td class="num">${escapeHtml(formatPrice(line.unitIncl))}</td>
+    <td class="num">${escapeHtml(formatPrice(cart.pricesExcl ? line.unitExcl : line.unitIncl))}</td>
     <td><form class="cart-qty" method="post" action="./"><input type="hidden" name="action" value="set"><input type="hidden" name="code" value="${escapeHtml(line.code)}"><input type="number" name="qty" value="${line.qty}" min="0" max="99" aria-label="Aantal ${escapeHtml(line.name)}"><button class="button secondary" type="submit">Wijzig</button></form></td>
-    <td class="num">${escapeHtml(formatPrice(line.lineTotal))}</td>
+    <td class="num">${escapeHtml(formatPrice(cart.pricesExcl ? line.lineExcl : line.lineTotal))}</td>
     <td><form method="post" action="./"><input type="hidden" name="action" value="remove"><input type="hidden" name="code" value="${escapeHtml(line.code)}"><button class="button secondary" type="submit" aria-label="Verwijder ${escapeHtml(line.name)}">Verwijder</button></form></td>
   </tr>`).join('');
   const missing = cart.missing.length ? `<div class="form-error" role="alert"><p>Niet meer te koop: ${cart.missing.map(escapeHtml).join(', ')}.</p>${cart.missing.map((code) => `<form class="inline" method="post" action="./"><input type="hidden" name="action" value="remove"><input type="hidden" name="code" value="${escapeHtml(code)}"><button class="button secondary" type="submit">Verwijder ${escapeHtml(code)}</button></form>`).join('')}</div>` : '';
   const body = `<section class="cart"><h1>Winkelwagen</h1>
 ${missing}
-<div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Prijs</th><th>Aantal</th><th class="num">Totaal</th><th></th></tr></thead>
-<tbody>${rows}</tbody><tfoot>${totalRows(cart.totals)}</tfoot></table></div>
-<p class="note">Verzendkosten worden bij het afrekenen berekend. Betalen kan op rekening.</p>
+<div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Prijs${cart.pricesExcl ? ' excl. btw' : ''}</th><th>Aantal</th><th class="num">Totaal${cart.pricesExcl ? ' excl. btw' : ''}</th><th></th></tr></thead>
+<tbody>${rows}</tbody><tfoot>${totalRows(cart.totals, cart.pricesExcl)}</tfoot></table></div>
+<p class="note">${cart.pricesExcl ? 'Je ziet zakelijke prijzen excl. btw. ' : ''}Verzendkosten worden bij het afrekenen berekend. Betalen kan op rekening.</p>
 <div class="cart-actions"><a class="button secondary" href="${ROOT}">Verder winkelen</a>
 ${cart.ok ? `<a class="button" href="${ROOT}afrekenen/">Naar afrekenen</a>` : '<span class="note">Pas eerst je winkelwagen aan om af te rekenen.</span>'}</div>
 </section>`;
@@ -81,24 +89,29 @@ ${options || '<p class="note">Er is op dit moment geen verzendmethode beschikbaa
 
 /**
  * De pagina Afrekenen: gegevens van de klant, de verzendmethode, het afleveradres en een overzicht van de bestelling.
- * @param {{ cart: object, quote: object, country: string, method: string, values?: object, error?: string, viewer: { displayName: string, email: string } }} state De geprijsde winkelwagen, de verzendopties, het gekozen land en de gekozen methode, eerder ingevulde waarden, een foutmelding en de ingelogde klant.
+ * @param {{ cart: object, quote: object, country: string, method: string, summary?: object|null, values?: object, error?: string, viewer: { displayName: string, email: string } }} state De geprijsde winkelwagen, de verzendopties, het gekozen land en de gekozen methode, de uitgerekende totalen (web-orders.js, orderTotals), eerder ingevulde waarden, een foutmelding en de ingelogde klant.
  * @param {object[]} groups Alle hoofdcategorieën.
  * @returns {string} De HTML-pagina.
  */
-function checkoutPage({ cart, quote, country, method, values = {}, error = '', viewer }, groups = []) {
+function checkoutPage({ cart, quote, country, method, summary = null, values = {}, error = '', viewer }, groups = []) {
   const value = { name: viewer.displayName, email: viewer.email, ...values };
   const chosen = quote.options.find((option) => option.method === method && option.available);
-  const summary = cart.lines.map((line) => `<li><span>${line.qty} × ${escapeHtml(line.name)}</span><span>${escapeHtml(formatPrice(line.lineTotal))}</span></li>`).join('');
-  const shippingPrice = chosen ? chosen.price : 0;
-  const shippingRow = chosen ? `<li><span>${escapeHtml(chosen.label)}</span><span>${chosen.price > 0 ? escapeHtml(formatPrice(chosen.price)) : 'Gratis'}</span></li>` : '';
+  const business = Boolean(cart.pricesExcl);
+  const items = (summary ? summary.lines : cart.lines).map((line) => `<li><span>${line.qty} × ${escapeHtml(line.name)}</span><span>${escapeHtml(formatPrice(business ? line.lineExcl : line.lineTotal))}</span></li>`).join('');
+  const shippingShown = summary ? (business ? summary.shipping.priceExcl : summary.shipping.price) : 0;
+  const shippingRow = chosen ? `<li><span>${escapeHtml(chosen.label)}</span><span>${chosen.price > 0 ? escapeHtml(formatPrice(shippingShown)) : 'Gratis'}</span></li>` : '';
+  const total = summary ? summary.totals.total : cart.totals.total;
+  const vatNote = summary && summary.shifted ? '<p class="note">Btw verlegd: je bestelling wordt zonder btw gefactureerd (intracommunautaire levering).</p>' : business ? '<p class="note">Prijzen excl. btw; de btw komt er bij het afrekenen bovenop. Heb je een btw-nummer van het land van aflevering (buiten Nederland), vul het in en de btw wordt verlegd.</p>' : '';
   const body = `<section class="cart checkout"><h1>Afrekenen</h1>
 ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 <div class="checkout-grid">
 <form method="post" action="./" class="account-form">
 <button type="submit" hidden>Bestelling plaatsen</button>
+<input type="hidden" name="expectedTotal" value="${escapeHtml(String(total))}">
 <h2>Je gegevens</h2>
 ${checkoutField({ name: 'name', label: 'Naam', value: value.name || '', autocomplete: 'name' })}
-${checkoutField({ name: 'company', label: 'Bedrijfsnaam (optioneel)', value: value.company || '', autocomplete: 'organization', required: false })}
+${checkoutField({ name: 'company', label: business ? 'Bedrijfsnaam' : 'Bedrijfsnaam (optioneel)', value: value.company || '', autocomplete: 'organization', required: business })}
+${business ? checkoutField({ name: 'vatNumber', label: 'Btw-nummer (optioneel, bijvoorbeeld BE0123456789)', value: value.vatNumber || '', autocomplete: 'off', required: false }) : ''}
 ${checkoutField({ name: 'email', label: 'E-mailadres', value: value.email || '', autocomplete: 'email', type: 'email' })}
 ${checkoutField({ name: 'phone', label: 'Telefoon (optioneel)', value: value.phone || '', autocomplete: 'tel', required: false, type: 'tel' })}
 ${shippingChoice(quote, country, method)}
@@ -111,8 +124,8 @@ ${checkoutField({ name: 'city', label: 'Woonplaats', value: value.city || '', au
 <p class="note">Je bestelling gaat op rekening: je ontvangt de factuur van ons.</p>
 <button class="button" type="submit" name="action" value="place">Bestelling plaatsen</button>
 </form>
-<aside class="checkout-summary"><h2>Je bestelling</h2><ul>${summary}${shippingRow}</ul>
-<p class="checkout-total"><span>Totaal incl. btw</span><strong>${escapeHtml(formatPrice(cart.totals.total + shippingPrice))}</strong></p>
+<aside class="checkout-summary"><h2>Je bestelling</h2><ul>${items}${shippingRow}</ul>
+<p class="checkout-total"><span>${business && !(summary && summary.shifted) ? 'Totaal incl. btw' : business ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</span><strong>${escapeHtml(formatPrice(total))}</strong></p>${vatNote}
 <p><a href="${ROOT}winkelwagen/">Winkelwagen aanpassen</a></p></aside>
 </div></section>`;
   return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Reken je bestelling af bij Aquatechshop.nl.', body, groups });
@@ -133,12 +146,14 @@ function checkoutLoginPage(groups = []) {
 
 /**
  * De regel met de verzendkosten onder de artikelen van een bestelling.
- * @param {{ label: string, price: number, free: boolean }|null} shipping De verzending van de bestelling (oudere bestellingen hebben geen).
+ * @param {{ label: string, price: number, priceExcl?: number, vatRate?: number, free: boolean }|null} shipping De verzending van de bestelling (oudere bestellingen hebben geen).
+ * @param {boolean} [excl] true voor een zakelijke bestelling: toon de verzendkosten excl. btw.
  * @returns {string} HTML van de tabelrij, of leeg.
  */
-function shippingRow(shipping) {
+function shippingRow(shipping, excl = false) {
   if (!shipping) return '';
-  return `<tr class="sub"><td colspan="3">${escapeHtml(shipping.label)}</td><td class="num">${shipping.price > 0 ? escapeHtml(formatPrice(shipping.price)) : 'Gratis'}</td></tr>`;
+  const shown = excl && shipping.priceExcl !== undefined ? shipping.priceExcl : shipping.price;
+  return `<tr class="sub"><td colspan="3">${escapeHtml(shipping.label)}</td><td class="num">${shipping.price > 0 ? escapeHtml(formatPrice(shown)) : 'Gratis'}</td></tr>`;
 }
 
 /**
@@ -160,12 +175,14 @@ function deliveryBlock(order) {
  * @returns {string} De HTML-pagina.
  */
 function orderPage(order, groups = []) {
-  const rows = order.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<br><small>Artikelnr.: ${escapeHtml(line.code)}</small></td><td class="num">${escapeHtml(formatPrice(line.unitIncl))}</td><td class="num">${line.qty}</td><td class="num">${escapeHtml(formatPrice(line.lineTotal))}</td></tr>`).join('');
+  const business = order.customerGroup === 'zakelijk';
+  const rows = order.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<br><small>Artikelnr.: ${escapeHtml(line.code)}</small></td><td class="num">${escapeHtml(formatPrice(business ? line.unitExcl : line.unitIncl))}</td><td class="num">${line.qty}</td><td class="num">${escapeHtml(formatPrice(business && line.lineExcl !== undefined ? line.lineExcl : line.lineTotal))}</td></tr>`).join('');
+  const vatNote = order.vat && order.vat.shifted ? `<p class="note">Btw verlegd naar de afnemer${order.vat.number ? ` (btw-nummer ${escapeHtml(order.vat.number)})` : ''}.</p>` : business && order.vat && order.vat.number ? `<p class="note">Btw-nummer: ${escapeHtml(order.vat.number)}</p>` : '';
   const body = `<section class="cart"><h1>Bedankt voor je bestelling</h1>
 <p>Je bestelling <strong>${escapeHtml(order.number)}</strong> is ontvangen. We sturen een bevestiging naar ${escapeHtml(order.email)}. Je bestelling gaat op rekening: je ontvangt de factuur van ons.</p>
-<div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Prijs</th><th class="num">Aantal</th><th class="num">Totaal</th></tr></thead>
-<tbody>${rows}</tbody><tfoot>${shippingRow(order.shipping)}${totalRows(order.totals)}</tfoot></table></div>
-${deliveryBlock(order)}
+<div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Prijs${business ? ' excl. btw' : ''}</th><th class="num">Aantal</th><th class="num">Totaal${business ? ' excl. btw' : ''}</th></tr></thead>
+<tbody>${rows}</tbody><tfoot>${shippingRow(order.shipping, business)}${totalRows(order.totals, business, Boolean(order.vat && order.vat.shifted))}</tfoot></table></div>
+${vatNote}${deliveryBlock(order)}
 <p>Status: <strong>${escapeHtml(order.statusLabel)}</strong></p>
 <p><a class="button" href="${ROOT}">Verder winkelen</a></p></section>`;
   return layout({ root: ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups });

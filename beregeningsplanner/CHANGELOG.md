@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.4.8
+
+Btw en prijzen voor particulieren en zakelijke klanten in de eigen webshop
+(stap 3 van de webshop-roadmap).
+
+- **Klantgroep** (`users.customer_group`, migratie 39, SQLite en PostgreSQL):
+  leeg = particulier, `zakelijk`. Een beheerder zet hem per klantaccount in Beheer >
+  Gebruikers (kolom *Klantgroep*, alleen bij klantrollen); `PATCH
+  /api/admin/users/:id` met `customerGroup`. Een klant kiest zijn groep niet zelf.
+- **Zakelijke prijs** (`stock_items.business_price`, excl. btw, optioneel) bij
+  Artikelen; zonder zakelijke prijs geldt de gewone verkoopprijs. Het wordt
+  niet naar WooCommerce teruggeschreven.
+- **Winkelwagen, afrekenen en bestelling** tonen aan een zakelijke klant de
+  prijzen excl. btw met het totaal excl. btw, de btw per tarief en het totaal incl.
+  btw (`totalsOf` rekent dan vanuit de bedragen excl.). Bedrijfsnaam is verplicht;
+  een optioneel btw-nummer wordt op formaat per EU-land gecontroleerd (`vat.js`).
+- **Btw verlegd**: een zakelijke klant met een geldig btw-nummer van het land van
+  aflevering, bij bezorging in een ander EU-land dan Nederland, krijgt de bestelling
+  (ook de verzendkosten) zonder btw. Het nummer wordt alleen op formaat gecontroleerd,
+  niet bij VIES; controleer het nummer zelf voor je de levering factureert. Ophalen
+  is altijd een levering in Nederland (gewone btw).
+- Bestelling: `customerGroup`, `vat` ({ number, shifted }), regels met `lineExcl`;
+  Beheer > Bestellingen toont groep, btw-nummer en verlegging; de Excel-export heeft
+  kolommen Klantgroep, Btw-nummer en Btw verlegd; de bevestigingsmail toont de
+  totalen excl. btw of *btw verlegd*.
+- Beperking: de productlijsten en productpagina's blijven de prijs incl. btw voor
+  iedereen tonen (ze zijn voor alle bezoekers hetzelfde); de zakelijke prijs verschijnt
+  in de winkelwagen.
+
 ## 1.4.7
 
 Verzending in de eigen webshop (stap 2 van de webshop-roadmap): ophalen en

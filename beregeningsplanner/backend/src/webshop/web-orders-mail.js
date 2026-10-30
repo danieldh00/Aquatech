@@ -17,7 +17,19 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
    * @param {object} order De bestelling (met regels).
    * @returns {string} De regels.
    */
-  const linesText = (order) => order.lines.map((line) => `${line.qty} × ${line.name} (${line.code}): ${EUR.format(line.lineTotal)}`).join('\n');
+  const linesText = (order) => order.lines.map((line) => `${line.qty} × ${line.name} (${line.code}): ${EUR.format(order.customerGroup === 'zakelijk' && line.lineExcl !== undefined ? line.lineExcl : line.lineTotal)}${order.customerGroup === 'zakelijk' ? ' excl. btw' : ''}`).join('\n');
+  /**
+   * De totalen als tekst: voor een zakelijke klant excl. btw, de btw en het totaal (of 'btw verlegd').
+   * @param {object} order De bestelling.
+   * @returns {string} Eén of meer regels.
+   */
+  const totalsText = (order) => {
+    if (order.customerGroup !== 'zakelijk') return `Totaal incl. btw: ${EUR.format(order.totals.total)}`;
+    if (order.vat && order.vat.shifted) return `Totaal (btw verlegd naar de afnemer${order.vat.number ? `, btw-nummer ${order.vat.number}` : ''}): ${EUR.format(order.totals.total)}`;
+    const excl = order.totals.byRate.reduce((sum, row) => sum + row.excl, 0);
+    const vatLines = order.totals.byRate.filter((row) => row.rate > 0).map((row) => `Btw ${row.rate}% over ${EUR.format(row.excl)}: ${EUR.format(row.vat)}`);
+    return [`Totaal excl. btw: ${EUR.format(excl)}`, ...vatLines, `Totaal incl. btw: ${EUR.format(order.totals.total)}`].join('\n');
+  };
   /**
    * Het afleveradres als tekst.
    * @param {object} order De bestelling.
@@ -32,7 +44,10 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
   const shippingText = (order) => {
     const shipping = order.shipping;
     if (shipping && shipping.method === 'ophalen') return `Verzending: ${shipping.label} (gratis)\nJe haalt de bestelling zelf op.`;
-    return `${shipping ? `Verzending: ${shipping.label} (${shipping.price > 0 ? EUR.format(shipping.price) : 'gratis'})\n\n` : ''}Afleveradres:\n${addressText(order)}`;
+    const shifted = Boolean(order.vat && order.vat.shifted);
+    const businessExclusive = order.customerGroup === 'zakelijk' && !shifted;
+    const priceText = shipping && shipping.price > 0 ? `${EUR.format(businessExclusive && shipping.priceExcl !== undefined ? shipping.priceExcl : shipping.price)}${businessExclusive ? ' excl. btw' : shifted ? ' (btw verlegd)' : ''}` : 'gratis';
+    return `${shipping ? `Verzending: ${shipping.label} (${priceText})\n\n` : ''}Afleveradres:\n${addressText(order)}`;
   };
 
   /**
@@ -54,7 +69,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     }
     if (!mailer.configured()) { orders.updateData(tenantId, order.id, { mail: { sent: false, error: 'Geen mailserver ingesteld.', at: new Date().toISOString() } }); return; }
     const profile = settings.get('quoteProfile') || {};
-    const details = `Bestelling ${order.number}\n\n${linesText(order)}\n\nTotaal incl. btw: ${EUR.format(order.totals.total)}\n\n${shippingText(order)}${order.note ? `\n\nJe opmerking: ${order.note}` : ''}`;
+    const details = `Bestelling ${order.number}\n\n${linesText(order)}\n\n${totalsText(order)}\n\n${shippingText(order)}${order.note ? `\n\nJe opmerking: ${order.note}` : ''}`;
     let error = '';
     try {
       const customerMail = mailBody(profile, [

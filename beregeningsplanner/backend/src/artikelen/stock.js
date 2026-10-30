@@ -265,6 +265,11 @@ function sanitizeItem(raw, { partial = false } = {}) {
     if (salePrice !== null && (!Number.isFinite(salePrice) || salePrice < 0 || salePrice > MAX_QTY)) return { error: 'Ongeldige verkoopprijs.', field: 'salePrice' };
     out.salePrice = salePrice === null ? null : Math.round(salePrice * 100) / 100;
   }
+  if (!partial || input.businessPrice !== undefined) {
+    const businessPrice = input.businessPrice === '' || input.businessPrice == null ? null : Number(input.businessPrice);
+    if (businessPrice !== null && (!Number.isFinite(businessPrice) || businessPrice < 0 || businessPrice > MAX_QTY)) return { error: 'Ongeldige zakelijke prijs.', field: 'businessPrice' };
+    out.businessPrice = businessPrice === null ? null : Math.round(businessPrice * 100) / 100;
+  }
   if (!partial || input.vatRate !== undefined) {
     const vatRate = input.vatRate === undefined || input.vatRate === '' || input.vatRate === null ? 21 : Number(input.vatRate);
     if (!VAT_RATES.includes(vatRate)) return { error: 'Kies een btw-tarief van 21, 9 of 0%.', field: 'vatRate' };
@@ -325,7 +330,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {void}
    */
   const dirty = (tenantId) => { if (dirtyHook) dirtyHook(tenantId); };
-  const SALE_COLS = 'sale_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error';
+  const SALE_COLS = 'sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error';
   const VARIANT_COLS = 'parent_id, has_variants, attributes, variant_values';
   const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}, ${VARIANT_COLS}`;
   const MOVE_COLS = 'm.id, m.item_id, m.kind, m.qty, m.balance, m.work_order_id, m.work_order_number, m.source, m.note, m.user_name, m.created_at';
@@ -347,7 +352,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       costPrice: itemRow.cost_price == null ? null : Number(itemRow.cost_price),
       value: itemRow.cost_price == null ? null : Math.round(onHand * itemRow.cost_price * 100) / 100,
       low: itemRow.min_qty > 0 && onHand - reservedQty < itemRow.min_qty, notes: itemRow.notes, archived: Boolean(itemRow.archived),
-      salePrice: itemRow.sale_price == null ? null : Number(itemRow.sale_price), vatRate: Number(itemRow.vat_rate ?? 21), revenueGroup: itemRow.revenue_group || 'producten',
+      salePrice: itemRow.sale_price == null ? null : Number(itemRow.sale_price), businessPrice: itemRow.business_price == null ? null : Number(itemRow.business_price), vatRate: Number(itemRow.vat_rate ?? 21), revenueGroup: itemRow.revenue_group || 'producten',
       weightGrams: itemRow.weight_grams == null ? null : Number(itemRow.weight_grams),
       shopSync: itemRow.shop_sync === undefined ? true : Boolean(Number(itemRow.shop_sync)),
       shop: { productId: itemRow.shop_product_id || null, pending: Boolean(Number(itemRow.shop_dirty)), syncedAt: itemRow.shop_synced_at || null, error: itemRow.shop_error || '' },
@@ -422,7 +427,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     let where = archived ? '' : ' AND i.archived = 0';
     if (parentId) { where += ' AND i.parent_id = ?'; args.push(String(parentId)); }
     return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
-        i.sale_price, i.vat_rate, i.revenue_group, i.weight_grams, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
+        i.sale_price, i.business_price, i.vat_rate, i.revenue_group, i.weight_grams, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
         i.parent_id, i.has_variants, i.attributes, i.variant_values,
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders, COALESCE(f.orders, 0) AS family_orders
       FROM stock_items i
@@ -539,9 +544,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const id = crypto.randomUUID();
       const timestamp = currentTimestamp();
       prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
-           sale_price, vat_rate, revenue_group, shop_sync, weight_grams)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null);
+           sale_price, business_price, vat_rate, revenue_group, shop_sync, weight_grams)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.businessPrice ?? null, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null);
       const start = Number(raw && raw.onHand);
       if (Number.isFinite(start) && start > 0 && start <= MAX_QTY) book(tenantId, id, start, { kind: 'ontvangst', note: 'Beginvoorraad', user });
       return { id };
@@ -576,7 +581,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       if (fields.unit) rememberUnit(tenantId, fields.unit);
       const merged = {
         code: existing.code, name: existing.name, unit: existing.unit, location: existing.location, minQty: existing.min_qty, reorderQty: existing.reorder_qty, costPrice: existing.cost_price, notes: existing.notes,
-        salePrice: existing.sale_price, vatRate: Number(existing.vat_rate), revenueGroup: existing.revenue_group, shopSync: Boolean(Number(existing.shop_sync)), weightGrams: existing.weight_grams ?? null, ...fields,
+        salePrice: existing.sale_price, businessPrice: existing.business_price ?? null, vatRate: Number(existing.vat_rate), revenueGroup: existing.revenue_group, shopSync: Boolean(Number(existing.shop_sync)), weightGrams: existing.weight_grams ?? null, ...fields,
       };
       const archived = raw && raw.archived !== undefined ? (raw.archived ? 1 : 0) : existing.archived;
       const isParent = Boolean(Number(existing.has_variants));
@@ -588,10 +593,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       // hoofdartikel heeft in de webshop geen eigen prijs of voorraad.
       const toShop = !isParent && ((merged.salePrice ?? null) !== (existing.sale_price ?? null) || merged.vatRate !== Number(existing.vat_rate) || (merged.shopSync && !Number(existing.shop_sync)));
       prepare(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, reorder_qty = ?, cost_price = ?, notes = ?, archived = ?, archived_by_parent = 0, updated_at = ?,
-           sale_price = ?, vat_rate = ?, revenue_group = ?, shop_sync = ?, weight_grams = ?,
+           sale_price = ?, business_price = ?, vat_rate = ?, revenue_group = ?, shop_sync = ?, weight_grams = ?,
            shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
          WHERE tenant_id = ? AND id = ?`)
-        .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0, merged.weightGrams,
+        .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.businessPrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0, merged.weightGrams,
           toShop && merged.shopSync ? 1 : 0, tenantId, existing.id);
       if (archived && !existing.archived) prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
       let variantsToShop = false;
@@ -718,8 +723,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const byKey = new Map(variants.map((variant) => [valuesKey(parseJson(variant.variant_values, {})), variant]));
       const taken = new Set(prepare('SELECT code FROM stock_items WHERE tenant_id = ?').all(tenantId).map((row) => row.code));
       const insert = prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
-          sale_price, vat_rate, revenue_group, shop_sync, parent_id, variant_values, weight_grams)
-        VALUES (?, ?, ?, ?, ?, '', 0, 0, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          sale_price, business_price, vat_rate, revenue_group, shop_sync, parent_id, variant_values, weight_grams)
+        VALUES (?, ?, ?, ?, ?, '', 0, 0, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       const created = [];
       let restored = 0;
       let removed = 0;
@@ -746,7 +751,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         for (let suffix = 2; taken.has(code); suffix++) code = `${base}-${suffix}`;
         taken.add(code);
         insert.run(crypto.randomUUID(), tenantId, code, variantName(existing.name, values), existing.unit, existing.cost_price, timestamp, timestamp,
-          existing.sale_price, existing.vat_rate, existing.revenue_group, existing.shop_sync, existing.id, JSON.stringify(values), existing.weight_grams ?? null);
+          existing.sale_price, existing.business_price ?? null, existing.vat_rate, existing.revenue_group, existing.shop_sync, existing.id, JSON.stringify(values), existing.weight_grams ?? null);
         created.push(code);
       }
       // Een gekoppeld hoofdartikel: de nieuwe varianten komen bij de volgende ronde in de webshop.

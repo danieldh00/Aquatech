@@ -17,6 +17,7 @@ const { DEFAULT_SITE } = require('./shop-content');
 const { loginPage, registerPage, accountPage, plannerPage } = require('./storefront-account-pages');
 const { cartPage, checkoutPage, checkoutLoginPage, orderPage } = require('./storefront-order-pages');
 const Shipping = require('./shipping');
+const Vat = require('./vat');
 const { readCart, writeCart, applyCartAction } = require('./storefront-cart');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
@@ -267,11 +268,21 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
        */
       const orderingOff = (req, res) => sendWithGroups(req, res, 404, (groups) => notFoundPage('../', groups));
 
+      /**
+       * De klantgroep van de ingelogde bezoeker (bepaalt de prijzen in de winkelwagen).
+       * @param {object} req Het verzoek.
+       * @returns {string} 'zakelijk', of een lege tekst (particulier of niet ingelogd).
+       */
+      const groupOf = (req) => {
+        const viewer = accounts.viewer(req);
+        return viewer && viewer.customerGroup === 'zakelijk' ? 'zakelijk' : '';
+      };
+
       router.get('/winkelwagen', (req, res) => {
         if (withSlash(req, res)) return;
         if (!orderingOn()) return orderingOff(req, res);
         res.setHeader('Cache-Control', 'no-store');
-        const cart = orders.priceCart(tenantId, readCart(req));
+        const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
         sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups));
       });
       router.post('/winkelwagen', form, (req, res) => {
@@ -300,14 +311,17 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
         const asking = String(input.shippingMethod || '');
         const available = quote.options.filter((option) => option.available);
         const method = available.some((option) => option.method === asking) ? asking : available.length ? available[0].method : '';
-        return { quote, country, method };
+        const chosen = available.find((option) => option.method === method);
+        const group = cart.pricesExcl ? 'zakelijk' : '';
+        const summary = chosen ? orders.orderTotals(cart, chosen, { group, country, vatNumber: Vat.normalizeVatNumber(input.vatNumber) }) : null;
+        return { quote, country, method, summary };
       };
 
       router.get('/afrekenen', (req, res) => {
         if (withSlash(req, res)) return;
         if (!orderingOn()) return orderingOff(req, res);
         res.setHeader('Cache-Control', 'no-store');
-        const cart = orders.priceCart(tenantId, readCart(req));
+        const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
         if (!cart.lines.length || !cart.ok) return res.redirect(302, '../winkelwagen/');
         const viewer = accounts.viewer(req);
         if (!viewer) return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups));
@@ -322,16 +336,29 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
         // Land wijzigen: alleen de pagina opnieuw tonen met de kosten voor dat land, zonder te bestellen.
         if (body.action === 'update') {
           res.setHeader('Cache-Control', 'no-store');
-          const cart = orders.priceCart(tenantId, readCart(req));
+          const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
           if (!cart.lines.length || !cart.ok) return res.redirect(303, '../winkelwagen/');
           return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, values: body, ...checkoutChoice(cart, body) }, groups));
         }
+        // Hoort het getoonde totaal niet bij de actuele invoer (btw-nummer, land, methode) of ontbreekt het? Dan eerst opnieuw tonen, zonder te bestellen.
+        {
+          const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
+          if (cart.lines.length && cart.ok) {
+            const choice = checkoutChoice(cart, body);
+            const shown = String(body.expectedTotal === undefined ? '' : body.expectedTotal).trim();
+            const current = choice.summary ? choice.summary.totals.total : null;
+            if (current !== null && (!/^\d+(\.\d+)?$/.test(shown) || Math.abs(Number(shown) - current) > 0.005)) {
+              res.setHeader('Cache-Control', 'no-store');
+              return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', values: body, ...choice }, groups));
+            }
+          }
+        }
         if (orderLimited(req, res)) return res.status(429).type('text').send('Te veel bestellingen vanaf dit adres. Probeer het later opnieuw.');
         try {
-          const out = orders.place(tenantId, { id: viewer.id }, body, readCart(req), shippingConfig());
+          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup }, body, readCart(req), shippingConfig(), Number(body.expectedTotal));
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
-            const cart = orders.priceCart(tenantId, readCart(req));
+            const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
             return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, error: out.error, values: body, ...checkoutChoice(cart, body) }, groups));
           }
           writeCart(req, res, []);

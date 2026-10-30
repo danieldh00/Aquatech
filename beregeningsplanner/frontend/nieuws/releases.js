@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.4.8',
+      date: '2026-10-30',
+      title: 'Zakelijke klanten in de webshop',
+      items: [
+        { text: 'Je kunt een klant als zakelijk markeren bij Beheer, Gebruikers (kolom Klantgroep). Zo iemand ziet in de winkelwagen de zakelijke prijs excl. btw en moet een bedrijfsnaam invullen.', for: ['beheer'] },
+        { text: 'Bij Artikelen vul je optioneel een zakelijke prijs excl. btw in. Zonder zakelijke prijs geldt de gewone verkoopprijs.', for: ['beheer', 'voorraad'] },
+        { text: 'Een zakelijke klant met een btw-nummer uit het land van aflevering (buiten Nederland, binnen de EU) krijgt de btw verlegd. We controleren alleen het formaat van het nummer; controleer het zelf voordat je factureert.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.4.7',
       date: '2026-10-30',
       title: 'Verzending in de webshop',

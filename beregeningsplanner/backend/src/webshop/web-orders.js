@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const { transaction, isPg } = require('../database/db');
 const { validEmail } = require('../platform/mailer');
 const Shipping = require('./shipping');
+const Vat = require('./vat');
 
 /** Statussen van een bestelling met hun weergavenaam. */
 const STATUSES = { nieuw: 'Nieuw', verzonden: 'Verzonden', afgerond: 'Afgerond', geannuleerd: 'Geannuleerd' };
@@ -45,15 +46,26 @@ const clean = (value, max) => Array.from(String(value == null ? '' : value).repl
 /**
  * Berekent de totalen van de regels: totaal incl. btw en per btw-tarief het
  * bedrag excl., de btw en het bedrag incl.
- * @param {{ vatRate: number, lineTotal: number }[]} lines De regels (lineTotal = incl. btw).
+ * Heeft elke regel van een tarief een bedrag excl. btw (`lineExcl`, zakelijke
+ * klanten), dan rekent dat tarief vanuit het bedrag excl.; anders vanuit incl.
+ * @param {{ vatRate: number, lineTotal: number, lineExcl?: number }[]} lines De regels (lineTotal = incl. btw).
  * @returns {{ total: number, byRate: { rate: number, excl: number, vat: number, incl: number }[] }} De totalen.
  */
 function totalsOf(lines) {
-  const byRate = new Map();
-  for (const line of lines) byRate.set(line.vatRate, round2((byRate.get(line.vatRate) || 0) + line.lineTotal));
-  const rows = [...byRate].sort((left, right) => right[0] - left[0]).map(([rate, incl]) => {
-    const vat = round2(incl - incl / (1 + rate / 100));
-    return { rate, excl: round2(incl - vat), vat, incl };
+  const groups = new Map();
+  for (const line of lines) {
+    const group = groups.get(line.vatRate) || { incl: 0, excl: 0, exclKnown: true };
+    group.incl = round2(group.incl + line.lineTotal);
+    if (line.lineExcl === undefined) group.exclKnown = false; else group.excl = round2(group.excl + line.lineExcl);
+    groups.set(line.vatRate, group);
+  }
+  const rows = [...groups].sort((left, right) => right[0] - left[0]).map(([rate, group]) => {
+    if (group.exclKnown) {
+      const vat = round2(group.excl * rate / 100);
+      return { rate, excl: group.excl, vat, incl: round2(group.excl + vat) };
+    }
+    const vat = round2(group.incl - group.incl / (1 + rate / 100));
+    return { rate, excl: round2(group.incl - vat), vat, incl: group.incl };
   });
   return { total: round2(rows.reduce((sum, row) => sum + row.incl, 0)), byRate: rows };
 }
@@ -61,18 +73,23 @@ function totalsOf(lines) {
 /**
  * Controleert de gegevens die de klant bij het afrekenen invult.
  * @param {object} raw De invoer (name, company, email, phone, street, postcode, city, note).
- * @param {{ method?: string, country?: string }} [shipping] De gekozen verzendmethode (ophalen of dpd) en het land; bij ophalen is een adres niet nodig.
+ * @param {{ method?: string, country?: string, group?: string }} [choice] De gekozen verzendmethode (ophalen of dpd), het land (bij ophalen is een adres niet nodig) en de klantgroep (zakelijk: bedrijfsnaam verplicht en een eventueel btw-nummer wordt gecontroleerd).
  * @returns {{ value?: object, error?: string, field?: string }} De opgeschoonde gegevens of een foutmelding.
  */
-function sanitizeCheckout(raw, { method = 'dpd', country = 'NL' } = {}) {
+function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', group = '' } = {}) {
   const input = raw && typeof raw === 'object' ? raw : {};
   const value = {
     name: clean(input.name, 80), company: clean(input.company, 80), email: clean(input.email, 200).toLowerCase(), phone: clean(input.phone, 30),
     street: clean(input.street, 120), postcode: clean(input.postcode, 10).toUpperCase(), city: clean(input.city, 60),
     note: Array.from(String(input.note == null ? '' : input.note).replace(/\r/g, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f]+/g, ' ').trim()).slice(0, 500).join(''),
+    vatNumber: group === 'zakelijk' ? Vat.normalizeVatNumber(input.vatNumber) : '',
   };
   if (value.name.length < 2) return { error: 'Vul je naam in.', field: 'name' };
   if (!validEmail(value.email)) return { error: 'Vul een geldig e-mailadres in.', field: 'email' };
+  if (group === 'zakelijk') {
+    if (value.company.length < 2) return { error: 'Vul de bedrijfsnaam in.', field: 'company' };
+    if (value.vatNumber && !Vat.validVatNumber(value.vatNumber)) return { error: 'Vul een geldig btw-nummer in, bijvoorbeeld NL123456789B01, of laat het leeg.', field: 'vatNumber' };
+  }
   if (method === 'ophalen') return { value };
   if (value.street.length < 3) return { error: 'Vul je straat en huisnummer in.', field: 'street' };
   if (!Shipping.validPostcode(country, value.postcode)) return { error: country === 'NL' ? 'Vul een geldige postcode in, bijvoorbeeld 8071 AB.' : 'Vul een geldige postcode in.', field: 'postcode' };
@@ -85,7 +102,7 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL' } = {}) {
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
  * @param {{ stock: object }} deps De voorraadopslag (reserveren en afboeken).
- * @returns {{ priceCart: Function, shippingQuote: Function, place: Function, get: Function, getForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function }} De functies.
+ * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function }} De functies.
  */
 function createWebOrderStore(db, { stock }) {
   /**
@@ -101,9 +118,11 @@ function createWebOrderStore(db, { stock }) {
    * webshop staan (Naar webshop aan, met verkoopprijs) tellen mee.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ code: string, qty: number }[]} wanted De gewenste artikelen en aantallen.
-   * @returns {{ lines: object[], missing: string[], totals: object, ok: boolean }} De regels (itemId, code, name, unit, qty, available, unitExcl, vatRate, unitIncl, lineTotal, enough, weightGrams), de codes die niet (meer) te koop zijn, de totalen en of er besteld kan worden.
+   * @param {{ group?: string }} [customer] De klantgroep: 'zakelijk' rekent met de zakelijke prijs (excl. btw, anders de verkoopprijs) en toont prijzen excl. btw.
+   * @returns {{ lines: object[], missing: string[], totals: object, ok: boolean, pricesExcl: boolean }} De regels (itemId, code, name, unit, qty, available, unitExcl, vatRate, unitIncl, lineTotal, enough, weightGrams en bij zakelijk lineExcl), de codes die niet (meer) te koop zijn, de totalen, of er besteld kan worden en of de prijzen excl. btw getoond worden.
    */
-  function priceCart(tenantId, wanted) {
+  function priceCart(tenantId, wanted, { group = '' } = {}) {
+    const business = group === 'zakelijk';
     const unique = new Map();
     for (const line of wanted) {
       const code = String(line.code || '').trim().toUpperCase();
@@ -111,7 +130,7 @@ function createWebOrderStore(db, { stock }) {
       if (code && qty >= 1) unique.set(code, Math.min(MAX_QTY, (unique.get(code) || 0) + qty));
     }
     const codes = [...unique.keys()].slice(0, MAX_LINES);
-    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.sale_price, i.vat_rate, i.weight_grams, i.variant_values, p.name AS parent_name, COALESCE(r.qty, 0) AS reserved
+    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, p.name AS parent_name, COALESCE(r.qty, 0) AS reserved
       FROM stock_items i
       LEFT JOIN stock_items p ON p.tenant_id = i.tenant_id AND p.id = i.parent_id
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
@@ -128,15 +147,17 @@ function createWebOrderStore(db, { stock }) {
       const label = Object.values(values).join(' / ');
       const qty = unique.get(code);
       const vatRate = Number(row.vat_rate ?? 21);
-      const unitExcl = Number(row.sale_price);
+      const unitExcl = business && row.business_price != null ? Number(row.business_price) : Number(row.sale_price);
       const unitIncl = round2(unitExcl * (1 + vatRate / 100));
+      const lineExcl = round2(unitExcl * qty);
       const available = Math.round((Number(row.on_hand) - Number(row.reserved)) * 1000) / 1000;
       lines.push({
         itemId: row.id, code: row.code, name: row.parent_name && label ? `${row.parent_name} (${label})` : row.name, unit: row.unit || 'st', qty, available,
-        unitExcl, vatRate, unitIncl, lineTotal: round2(unitIncl * qty), enough: available >= qty, weightGrams: row.weight_grams == null ? null : Number(row.weight_grams),
+        unitExcl, vatRate, unitIncl, lineTotal: business ? round2(lineExcl * (1 + vatRate / 100)) : round2(unitIncl * qty), enough: available >= qty,
+        weightGrams: row.weight_grams == null ? null : Number(row.weight_grams), ...(business ? { lineExcl } : {}),
       });
     }
-    return { lines, missing, totals: totalsOf(lines), ok: lines.length > 0 && !missing.length && lines.every((line) => line.enough) };
+    return { lines, missing, totals: totalsOf(lines), ok: lines.length > 0 && !missing.length && lines.every((line) => line.enough), pricesExcl: business };
   }
 
   /**
@@ -171,7 +192,7 @@ function createWebOrderStore(db, { stock }) {
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -215,26 +236,47 @@ function createWebOrderStore(db, { stock }) {
   }
 
   /**
+   * Rekent de regels, de verzendkosten en de totalen van een bestelling uit,
+   * met btw-verlegging als die van toepassing is (zie vat.js).
+   * @param {object} cart De geprijsde winkelwagen (priceCart, met dezelfde klantgroep).
+   * @param {object} option De gekozen verzendoptie (shippingQuote, options).
+   * @param {{ group: string, country: string, vatNumber: string }} customer Klantgroep, land van aflevering en genormaliseerd btw-nummer.
+   * @returns {{ lines: object[], shipping: { price: number, priceExcl: number, vatRate: number }, shifted: boolean, totals: object }} De regels (bij verlegging zonder btw), de verzendkosten incl. en excl. btw, of de btw is verlegd en de totalen.
+   */
+  function orderTotals(cart, option, { group, country, vatNumber }) {
+    const shifted = Vat.vatShifted({ group, method: option.method, country, vatNumber });
+    const lines = shifted ? cart.lines.map((line) => ({ ...line, vatRate: 0, unitIncl: line.unitExcl, lineTotal: line.lineExcl })) : cart.lines;
+    const shippingExcl = round2(option.price / (1 + Shipping.SHIPPING_VAT_RATE / 100));
+    const shippingRate = shifted ? 0 : Shipping.SHIPPING_VAT_RATE;
+    const business = group === 'zakelijk';
+    const shipping = { price: shifted ? shippingExcl : option.price, priceExcl: shippingExcl, vatRate: shippingRate };
+    const shippingLine = option.price > 0 ? [business ? { vatRate: shippingRate, lineExcl: shippingExcl, lineTotal: shifted ? shippingExcl : round2(shippingExcl * (1 + shippingRate / 100)) } : { vatRate: shippingRate, lineTotal: option.price }] : [];
+    return { lines, shipping, shifted, totals: totalsOf([...lines, ...shippingLine]) };
+  }
+
+  /**
    * Plaatst een bestelling: controleert prijzen, voorraad en verzending
    * opnieuw, legt de bestelling vast en reserveert de voorraad, alles in één
    * transactie.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ id: string }} user De klant die bestelt.
+   * @param {{ id: string, group?: string }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg).
    * @param {object} rawFields De gegevens van het afrekenformulier (zie sanitizeCheckout, plus shippingMethod en country).
    * @param {{ code: string, qty: number }[]} wanted De winkelwagen.
    * @param {object} [shippingConfig] De verzendinstelling (shipping.js); standaard de startwaarden.
+   * @param {?number} [expectedTotal] Het totaal dat de klant bevestigde; wijkt het berekende totaal af, dan volgt een fout (409) en wordt niet besteld.
    * @returns {{ order?: object, error?: string, field?: string, status?: number, cart?: object }} De bestelling, of een foutmelding (met de actuele winkelwagen bij een probleem met prijs of voorraad).
    */
-  function place(tenantId, user, rawFields, wanted, shippingConfig = Shipping.DEFAULT_CONFIG) {
+  function place(tenantId, user, rawFields, wanted, shippingConfig = Shipping.DEFAULT_CONFIG, expectedTotal = null) {
     const input = rawFields && typeof rawFields === 'object' ? rawFields : {};
     const method = String(input.shippingMethod || '');
     const country = method === 'ophalen' ? 'NL' : String(input.country || 'NL').toUpperCase();
     if (!['ophalen', 'dpd'].includes(method)) return { error: 'Kies een verzendmethode.', field: 'shippingMethod', status: 400 };
-    const checked = sanitizeCheckout(input, { method, country });
+    const group = user.group === 'zakelijk' ? 'zakelijk' : '';
+    const checked = sanitizeCheckout(input, { method, country, group });
     if (checked.error) return { error: checked.error, field: checked.field, status: 400 };
     return transaction(db, () => {
       lockItems(tenantId, wanted);
-      const cart = priceCart(tenantId, wanted);
+      const cart = priceCart(tenantId, wanted, { group });
       if (!cart.lines.length) return { error: 'Je winkelwagen is leeg.', status: 409, cart };
       if (!cart.ok) return { error: 'Een artikel in je winkelwagen is niet meer in de gevraagde hoeveelheid beschikbaar. Controleer je winkelwagen.', status: 409, cart };
       const quote = shippingQuote(cart, shippingConfig, country);
@@ -246,13 +288,15 @@ function createWebOrderStore(db, { stock }) {
       if (isPg(db)) prepare('SELECT pg_advisory_xact_lock(hashtext(?)) AS locked').get(`web-orders:${tenantId}:${timestamp.slice(0, 4)}`);
       const number = nextNumber(tenantId, timestamp.slice(0, 4));
       // De verzendkosten zijn een eigen regel in de btw-opbouw (alleen als ze niet gratis zijn).
-      const shippingLine = option.price > 0 ? [{ vatRate: Shipping.SHIPPING_VAT_RATE, lineTotal: option.price }] : [];
-      const totals = totalsOf([...cart.lines, ...shippingLine]);
+      const calculated = orderTotals(cart, option, { group, country, vatNumber: fields.vatNumber });
+      const totals = calculated.totals;
+      if (expectedTotal !== null && !(Math.abs(expectedTotal - totals.total) <= 0.005)) return { error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', status: 409 };
       const data = {
-        lines: cart.lines.map((line) => ({ itemId: line.itemId, code: line.code, name: line.name, unit: line.unit, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal })),
+        lines: calculated.lines.map((line) => ({ itemId: line.itemId, code: line.code, name: line.name, unit: line.unit, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal, ...(line.lineExcl !== undefined ? { lineExcl: line.lineExcl } : {}) })),
         customer: { name: fields.name, company: fields.company, email: fields.email, phone: fields.phone },
         address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' } : { street: fields.street, postcode: fields.postcode, city: fields.city, country },
-        shipping: { method, label: option.label, price: option.price, free: option.free && method === 'dpd', vatRate: Shipping.SHIPPING_VAT_RATE, weightGrams: quote.weightGrams, tracking: null },
+        shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method === 'dpd', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
+        customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted } : null,
         note: fields.note, totals, payment: 'op rekening',
         history: [{ at: timestamp, status: 'nieuw', by: fields.name }],
       };
@@ -377,7 +421,7 @@ function createWebOrderStore(db, { stock }) {
     });
   }
 
-  return { priceCart, shippingQuote, place, get, getForUser, list, setStatus, setTracking, updateData };
+  return { priceCart, shippingQuote, orderTotals, place, get, getForUser, list, setStatus, setTracking, updateData };
 }
 
 /**

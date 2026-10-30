@@ -161,4 +161,19 @@ async function postForm(base, client, urlPath, fields, headers = {}) {
   return { status: response.status, location: response.headers.get('location') || '', text: await response.text() };
 }
 
-module.exports = { createClient, storeCookies, listen, createLogin, postForm };
+/**
+ * Rekent een bestelling af zoals een browser: eerst het overzicht (action=update) ophalen en het getoonde
+ * totaal (`expectedTotal`) meesturen bij het plaatsen. Geeft het overzicht niet 200, dan wordt zonder totaal geplaatst.
+ * @param {string} base Adres van de testserver.
+ * @param {object} client De client (cookiepot).
+ * @param {object} fields De velden van het afrekenformulier.
+ * @param {object} [headers] Extra koppen.
+ * @returns {Promise<{ status: number, location: string, text: string }>} Het antwoord van het plaatsen.
+ */
+async function postCheckout(base, client, fields, headers = {}) {
+  const overview = await postForm(base, client, '/winkel/afrekenen/', { ...fields, action: 'update' }, headers);
+  const shown = overview.status === 200 ? overview.text.match(/name="expectedTotal" value="([^"]+)"/) : null;
+  return postForm(base, client, '/winkel/afrekenen/', { ...fields, ...(shown ? { expectedTotal: shown[1] } : {}) }, headers);
+}
+
+module.exports = { createClient, storeCookies, listen, createLogin, postForm, postCheckout };

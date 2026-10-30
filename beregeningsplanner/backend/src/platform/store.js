@@ -22,7 +22,7 @@ const withRequestCache = (callback) => requestCache.run(new Map(), callback);
 // Kolommen van users en tenants voor de sessiecontrole (één query per
 // verzoek: sessie + gebruiker + tenant).
 const USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'password_hash', 'disabled', 'created_at',
-  'last_seen_at', 'platform_admin', 'must_change_password', 'email', 'phone', 'preferences'];
+  'last_seen_at', 'platform_admin', 'must_change_password', 'email', 'phone', 'preferences', 'customer_group'];
 const TENANT_COLUMNS = ['id', 'slug', 'name', 'created_at', 'environment', 'parent_id', 'disabled', 'updated_at'];
 // Nergens SELECT *: een nieuwe (grote) kolom komt zo nooit ongemerkt mee.
 const USER_COLS = USER_COLUMNS.join(', ');
@@ -299,7 +299,7 @@ function createStore(db) {
   // ---------- Gebruikers ----------
   // Wat publicUser nodig heeft (zonder wachtwoord-hash en voorkeuren).
   const PUBLIC_USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'disabled', 'platform_admin',
-    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone'].map((column) => `u.${column}`).join(', ');
+    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group'].map((column) => `u.${column}`).join(', ');
 
   /**
    * Een gebruiker zoals de API hem toont (zonder wachtwoord-hash en voorkeuren).
@@ -311,7 +311,7 @@ function createStore(db) {
     return { id: user.id, tenantId: user.tenant_id, username: user.username, displayName: user.display_name, role: user.role, kind: user.kind,
       roleLabel: user.platform_admin ? 'Hoofdbeheerder' : roles.label(user.tenant_id, user.role),
       disabled: Boolean(user.disabled), platformAdmin: Boolean(user.platform_admin), mustChangePassword: Boolean(user.must_change_password), createdAt: user.created_at, lastSeenAt: user.last_seen_at,
-      email: user.email || '', phone: user.phone || '' };
+      email: user.email || '', phone: user.phone || '', customerGroup: user.customer_group || '' };
   }
 
   /**
@@ -538,6 +538,7 @@ function createStore(db) {
     const problem = validateAccount(tenantId, { ...input, username: input.username ?? (input.password !== undefined ? user.username : undefined) }, { partial: true });
     if (problem) return { error: problem };
     if (input.username !== undefined) return { error: 'De gebruikersnaam is niet te wijzigen.' };
+    if (input.customerGroup !== undefined && !['', 'zakelijk'].includes(input.customerGroup)) return { error: 'Onbekende klantgroep.' };
     // De laatste actieve beheerder blijft beheerder: anders verschijnt het
     // instelscherm voor een eerste beheerder weer voor iedereen.
     const losesAdmin = user.role === 'beheerder' && !user.disabled && ((input.role !== undefined && input.role !== 'beheerder') || input.disabled);
@@ -559,6 +560,7 @@ function createStore(db) {
       if (input.platformAdmin) prepare("UPDATE users SET role = 'beheerder' WHERE id = ?").run(user.id);
     }
     if (input.mustChangePassword !== undefined) prepare('UPDATE users SET must_change_password = ? WHERE id = ?').run(input.mustChangePassword ? 1 : 0, user.id);
+    if (input.customerGroup !== undefined) prepare('UPDATE users SET customer_group = ? WHERE id = ?').run(input.customerGroup, user.id);
     const newHash = input.password !== undefined ? await hashPassword(input.password) : null;
     if (newHash) prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
     // Nieuw wachtwoord of uitgeschakeld: op alle toestellen uitgelogd.
