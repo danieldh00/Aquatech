@@ -143,6 +143,7 @@
         <a id="d-back" class="btn" href="./">← Voorraad</a>
         <h1 id="d-title"></h1>
       </div>
+      <p id="d-variant-of" class="muted" hidden></p>
       <div id="d-stats" class="stats"></div>
       <div class="cols">
         <form id="move-form" class="card-form" novalidate>
@@ -178,21 +179,36 @@
             <label>Omzetgroep<select name="revenueGroup"><option value="producten">Producten</option><option value="arbeid">Arbeid</option><option value="overig">Overig</option></select></label>
             <label class="chk"><input type="checkbox" name="shopSync"> Naar de webshop</label>
           </div>
+          <p class="muted small" id="d-parent-note" hidden>Dit is een hoofdartikel: de voorraad zit bij de varianten. Eenheid, btw en omzetgroep gelden voor alle varianten; prijzen zijn de standaard voor nieuwe varianten.</p>
           <p class="muted small" id="d-shop"></p>
           <label>Notities<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
           <div class="row">
             <button class="btn primary" type="submit">Opslaan</button>
             <button class="btn danger" type="button" id="d-remove">Verwijderen</button>
             <button class="btn" type="button" id="d-restore" hidden>Terugzetten uit archief</button>
+            <button class="btn" type="button" id="d-publish" hidden title="Maakt dit artikel (met varianten) aan als nieuw product in de gekoppelde webshop">In webshop zetten</button>
           </div>
           <div class="err" role="alert"></div>
         </form>
       </div>
-      <section class="card-form">
+      <section class="card-form" id="d-variants" hidden>
+        <h3>Varianten</h3>
+        <p class="muted small" id="v-hint"></p>
+        <form id="variants-form" novalidate>
+          <div id="v-attrs"></div>
+          <div class="row">
+            <button class="btn small" type="button" id="v-add-attr">+ Kenmerk</button>
+            <button class="btn primary" type="submit">Varianten bijwerken</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
+        <div class="tablewrap"><table class="grid" id="d-var-table"></table></div>
+      </section>
+      <section class="card-form" id="d-res-card">
         <h3>Gereserveerd op werkorders</h3>
         <div class="tablewrap"><table class="grid" id="d-res"></table></div>
       </section>
-      <section class="card-form">
+      <section class="card-form" id="d-moves-card">
         <h3>Mutaties</h3>
         <div class="tablewrap"><table class="grid" id="d-moves"></table></div>
       </section>

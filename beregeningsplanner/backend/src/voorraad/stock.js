@@ -26,6 +26,14 @@
 // - Bestelvoorstel (migratie 30): artikelen waarvan beschikbaar onder het
 //   minimum zakt, met het aantal om aan te vullen tot reorder_qty ("bestellen
 //   tot"; leeg = 2× minimum), afgerond naar boven op hele eenheden.
+// - Varianten (migratie 33): een hoofdartikel (has_variants) heeft kenmerken
+//   (bijv. Maat: 16 mm, 20 mm) en zelf geen voorraad; elke combinatie is een
+//   variant: een gewoon voorraadartikel met eigen code, prijs, kostprijs,
+//   voorraad, minimum en bestelniveau (parent_id + variant_values). Werkorders,
+//   offertes en facturen gebruiken de code van de variant; staat de code van
+//   een hoofdartikel op een werkorder, dan moet er eerst een maat gekozen
+//   worden (forWorkOrder: chooseVariant). Eenheid, btw en omzetgroep volgen het
+//   hoofdartikel.
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { loadArticles } = require('../webshop/shop');
@@ -90,6 +98,123 @@ const isDate = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.tes
 const sumQty = (rows) => rows.reduce((sum, row) => sum + row.qty, 0);
 /** Eenheden die een nieuwe omgeving meekrijgt. */
 const DEFAULT_UNITS = ['st', 'm', 'm²', 'rol', 'set', 'zak', 'kg', 'l', 'uur'];
+/** Hoogstens zoveel kenmerken per hoofdartikel, waarden per kenmerk en varianten. */
+const MAX_ATTRIBUTES = 3;
+const MAX_VALUES = 30;
+const MAX_VARIANTS = 200;
+
+/**
+ * Leest JSON uit een tekstkolom.
+ * @param {string} text De opgeslagen tekst.
+ * @param {*} fallback Wat terugkomt bij lege of ongeldige tekst.
+ * @returns {*} De gelezen waarde.
+ */
+function parseJson(text, fallback) {
+  if (!text) return fallback;
+  try { return JSON.parse(text); } catch { return fallback; }
+}
+
+/**
+ * Schoont de kenmerken van een hoofdartikel op: hooguit drie kenmerken met
+ * een naam en een of meer unieke waarden.
+ * @param {*} raw De invoer: [{ name, values }] (values als lijst of tekst met komma's).
+ * @returns {{ value?: { name: string, values: string[] }[], error?: string, field?: string }} De kenmerken, of een fout.
+ */
+function sanitizeAttributes(raw) {
+  if (!Array.isArray(raw)) return { error: 'Geef de kenmerken op (bijv. Maat met de waarden 16 mm, 20 mm).', field: 'attributes' };
+  const out = [];
+  const names = new Set();
+  for (const entry of raw) {
+    const name = cleanText(entry && entry.name, 40);
+    const rawValues = Array.isArray(entry && entry.values) ? entry.values : String((entry && entry.values) ?? '').split(',');
+    const values = [];
+    const seen = new Set();
+    for (const rawValue of rawValues) {
+      const value = cleanText(rawValue, 40);
+      if (!value || seen.has(value.toLowerCase())) continue;
+      seen.add(value.toLowerCase());
+      values.push(value);
+    }
+    if (!name && !values.length) continue;
+    if (!name) return { error: 'Geef elk kenmerk een naam (bijv. Maat of Kleur).', field: 'attributes' };
+    if (names.has(name.toLowerCase())) return { error: `Het kenmerk ${name} staat er twee keer in.`, field: 'attributes' };
+    if (!values.length) return { error: `Geef het kenmerk ${name} een of meer waarden.`, field: 'attributes' };
+    if (values.length > MAX_VALUES) return { error: `Hooguit ${MAX_VALUES} waarden per kenmerk.`, field: 'attributes' };
+    names.add(name.toLowerCase());
+    out.push({ name, values });
+  }
+  if (out.length > MAX_ATTRIBUTES) return { error: `Hooguit ${MAX_ATTRIBUTES} kenmerken per artikel.`, field: 'attributes' };
+  if (out.reduce((total, attribute) => total * attribute.values.length, out.length ? 1 : 0) > MAX_VARIANTS) return { error: `Dat worden meer dan ${MAX_VARIANTS} varianten.`, field: 'attributes' };
+  return { value: out };
+}
+
+/**
+ * Alle combinaties van de waarden van de kenmerken.
+ * @param {{ name: string, values: string[] }[]} attributes De kenmerken.
+ * @returns {Object<string, string>[]} Per combinatie de waarde per kenmerk.
+ */
+function combinations(attributes) {
+  return attributes.reduce((partial, attribute) => partial.flatMap((combination) => attribute.values.map((value) => ({ ...combination, [attribute.name]: value }))), attributes.length ? [{}] : []);
+}
+
+/**
+ * De kenmerken van een variabel webshopproduct (alleen die voor variaties) in
+ * het formaat van het hoofdartikel.
+ * @param {{ attributes?: { name: string, options?: string[], variation?: boolean }[] }} product Het webshopproduct.
+ * @returns {{ name: string, values: string[] }[]} De kenmerken.
+ */
+function shopAttributesOf(product) {
+  const raw = (product.attributes || []).filter((attribute) => attribute && attribute.variation !== false && Array.isArray(attribute.options))
+    .map((attribute) => ({ name: attribute.name, values: attribute.options.slice(0, MAX_VALUES) }));
+  const checked = sanitizeAttributes(raw.slice(0, MAX_ATTRIBUTES));
+  return checked.error ? [] : checked.value;
+}
+
+/**
+ * Voegt de waarden van kenmerken uit de webshop toe aan die van het hoofdartikel (niets valt weg).
+ * @param {{ name: string, values: string[] }[]} current De kenmerken in Aquatech.
+ * @param {{ name: string, values: string[] }[]} incoming De kenmerken uit de webshop.
+ * @returns {{ name: string, values: string[] }[]} De samengevoegde kenmerken.
+ */
+function mergeAttributes(current, incoming) {
+  const out = current.map((attribute) => ({ name: attribute.name, values: [...attribute.values] }));
+  for (const attribute of incoming) {
+    const found = out.find((existing) => existing.name.toLowerCase() === attribute.name.toLowerCase());
+    if (!found) {
+      if (out.length < MAX_ATTRIBUTES) out.push({ name: attribute.name, values: [...attribute.values] });
+      continue;
+    }
+    for (const value of attribute.values) {
+      if (found.values.length < MAX_VALUES && !found.values.some((known) => known.toLowerCase() === value.toLowerCase())) found.values.push(value);
+    }
+  }
+  return out;
+}
+
+/**
+ * Een vaste sleutel voor de waarden van een variant (hoofdletterongevoelig, op naam van het kenmerk).
+ * @param {Object<string, string>} values Waarde per kenmerk.
+ * @returns {string} De sleutel.
+ */
+function valuesKey(values) {
+  return Object.entries(values || {}).map(([name, value]) => `${String(name).toLowerCase()}=${String(value).toLowerCase()}`).sort().join('|');
+}
+
+/**
+ * Een stukje artikelcode uit een waarde: hoofdletters, cijfers en . / +, zonder accenten.
+ * @param {string} value De waarde, bijv. '16 mm'.
+ * @returns {string} Bijv. '16MM'.
+ */
+const codePart = (value) => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9./+]/g, '') || 'X';
+
+/**
+ * De omschrijving van een variant: hoofdartikel met de waarden erachter.
+ * @param {string} parentName Omschrijving van het hoofdartikel.
+ * @param {Object<string, string>} values Waarde per kenmerk.
+ * @returns {string} Bijv. 'PE-buis 16 mm'.
+ */
+const variantName = (parentName, values) => cleanText(`${parentName} ${Object.values(values).join(' / ')}`, 200);
+
 /**
  * Vraagtekens voor een SQL IN (...)-lijst.
  * @param {number} count Aantal waarden.
@@ -178,7 +303,7 @@ function needsOf(materials) {
  * Maakt de opslag voor voorraadartikelen, mutaties en reserveringen.
  * @param {object} db De database.
  * @param {{ articles?: Function, onDirty?: Function }} [options] Catalogus van de planner; aanroep na een wijziging voor de webshop.
- * @returns {object} list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal en onDirty.
+ * @returns {object} list, get, create, update, remove, move, setVariants, articleChoices, importCatalog, importShop, mirrorShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal en onDirty.
  */
 function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) {
   /**
@@ -196,7 +321,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   const dirty = (tenantId) => { if (dirtyHook) dirtyHook(tenantId); };
   const SALE_COLS = 'sale_price, vat_rate, revenue_group, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error';
-  const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}`;
+  const VARIANT_COLS = 'parent_id, has_variants, attributes, variant_values';
+  const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}, ${VARIANT_COLS}`;
   const MOVE_COLS = 'm.id, m.item_id, m.kind, m.qty, m.balance, m.work_order_id, m.work_order_number, m.source, m.note, m.user_name, m.created_at';
 
   /**
@@ -219,7 +345,32 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       salePrice: itemRow.sale_price == null ? null : Number(itemRow.sale_price), vatRate: Number(itemRow.vat_rate ?? 21), revenueGroup: itemRow.revenue_group || 'producten',
       shopSync: itemRow.shop_sync === undefined ? true : Boolean(Number(itemRow.shop_sync)),
       shop: { productId: itemRow.shop_product_id || null, pending: Boolean(Number(itemRow.shop_dirty)), syncedAt: itemRow.shop_synced_at || null, error: itemRow.shop_error || '' },
+      parentId: itemRow.parent_id || null, hasVariants: Boolean(Number(itemRow.has_variants)),
+      attributes: Number(itemRow.has_variants) ? parseJson(itemRow.attributes, []) : [],
+      values: itemRow.parent_id ? parseJson(itemRow.variant_values, {}) : null,
       createdAt: itemRow.created_at, updatedAt: itemRow.updated_at,
+    };
+  };
+  /**
+   * Telt bij een hoofdartikel de varianten op: stand, gereserveerd,
+   * beschikbaar, werkorders en waarde; onder het minimum als een variant dat is.
+   * @param {object} parent Het hoofdartikel (shapeItem).
+   * @param {object[]} variants Zijn varianten (shapeItem), zonder de gearchiveerde.
+   * @returns {object} Het hoofdartikel met de totalen en variantCount.
+   */
+  const withTotals = (parent, variants) => {
+    /**
+     * Telt een veld van alle varianten op.
+     * @param {string} key Het veld, bijv. 'onHand'.
+     * @returns {number} Het totaal.
+     */
+    const total = (key) => round3(variants.reduce((sum, variant) => sum + (variant[key] || 0), 0));
+    const values = variants.filter((variant) => variant.value != null);
+    return {
+      ...parent, onHand: total('onHand'), reserved: total('reserved'), available: total('available'),
+      orders: variants.reduce((sum, variant) => sum + variant.orders, 0),
+      value: values.length ? Math.round(values.reduce((sum, variant) => sum + variant.value, 0) * 100) / 100 : null,
+      low: variants.some((variant) => variant.low), variantCount: variants.length,
     };
   };
   /**
@@ -241,13 +392,34 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {object[]} De artikelen, op code.
    */
   function list(tenantId, { archived = false } = {}) {
+    const items = listRows(tenantId, { archived });
+    const variantsOf = new Map();
+    for (const item of items) {
+      if (!item.parentId || item.archived) continue;
+      if (!variantsOf.has(item.parentId)) variantsOf.set(item.parentId, []);
+      variantsOf.get(item.parentId).push(item);
+    }
+    return items.map((item) => (item.hasVariants ? withTotals(item, variantsOf.get(item.id) || []) : item));
+  }
+
+  /**
+   * Artikelrijen met het gereserveerde aantal (som over open werkorders), in één query.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ archived?: boolean, parentId?: string|null }} [filters] Ook gearchiveerde; alleen de varianten van dit hoofdartikel.
+   * @returns {object[]} De artikelen (shapeItem), op code.
+   */
+  function listRows(tenantId, { archived = false, parentId = null } = {}) {
+    const args = [tenantId, tenantId];
+    let where = archived ? '' : ' AND i.archived = 0';
+    if (parentId) { where += ' AND i.parent_id = ?'; args.push(String(parentId)); }
     return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
         i.sale_price, i.vat_rate, i.revenue_group, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
+        i.parent_id, i.has_variants, i.attributes, i.variant_values,
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders
       FROM stock_items i
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
-      WHERE i.tenant_id = ?${archived ? '' : ' AND i.archived = 0'} ORDER BY i.code`)
-      .all(tenantId, tenantId).map((itemRow) => shapeItem(itemRow, itemRow.reserved, itemRow.orders));
+      WHERE i.tenant_id = ?${where} ORDER BY i.code`)
+      .all(...args).map((itemRow) => shapeItem(itemRow, itemRow.reserved, itemRow.orders));
   }
 
   /**
@@ -294,11 +466,19 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   function get(tenantId, id) {
     const itemRow = findItem(tenantId, id);
     if (!itemRow) return null;
+    if (Number(itemRow.has_variants)) {
+      // Hoofdartikel: geen eigen voorraad, wel de varianten met hun totalen.
+      const variants = listRows(tenantId, { archived: true, parentId: itemRow.id });
+      const parent = withTotals(shapeItem(itemRow), variants.filter((variant) => !variant.archived));
+      return { ...parent, variants, reservations: [], movements: [] };
+    }
     const reservations = reservationsOf(tenantId, itemRow.id);
     const item = shapeItem(itemRow, reservations.reduce((sum, reservation) => sum + reservation.qty, 0), reservations.length);
     const movements = prepare(`SELECT ${MOVE_COLS} FROM stock_movements m WHERE m.tenant_id = ? AND m.item_id = ? ORDER BY m.created_at DESC, m.id LIMIT ${LIST_LIMIT}`)
       .all(tenantId, itemRow.id).map(shapeMove);
-    return { ...item, reservations, movements };
+    const parentRow = itemRow.parent_id ? prepare('SELECT id, code, name, attributes, archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemRow.parent_id) : null;
+    const parent = parentRow ? { id: parentRow.id, code: parentRow.code, name: parentRow.name, attributes: parseJson(parentRow.attributes, []), archived: Boolean(parentRow.archived) } : null;
+    return { ...item, parent, reservations, movements };
   }
 
   /**
@@ -384,8 +564,14 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         salePrice: existing.sale_price, vatRate: Number(existing.vat_rate), revenueGroup: existing.revenue_group, shopSync: Boolean(Number(existing.shop_sync)), ...fields,
       };
       const archived = raw && raw.archived !== undefined ? (raw.archived ? 1 : 0) : existing.archived;
-      // Andere prijs of btw (of weer meesturen): opnieuw naar de webshop.
-      const toShop = (merged.salePrice ?? null) !== (existing.sale_price ?? null) || merged.vatRate !== Number(existing.vat_rate) || (merged.shopSync && !Number(existing.shop_sync));
+      const isParent = Boolean(Number(existing.has_variants));
+      if (!archived && existing.archived && existing.parent_id) {
+        const parentRow = prepare('SELECT archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, existing.parent_id);
+        if (parentRow && parentRow.archived) return { error: 'Zet eerst het hoofdartikel terug uit het archief.', status: 409 };
+      }
+      // Andere prijs of btw (of weer meesturen): opnieuw naar de webshop. Een
+      // hoofdartikel heeft in de webshop geen eigen prijs of voorraad.
+      const toShop = !isParent && ((merged.salePrice ?? null) !== (existing.sale_price ?? null) || merged.vatRate !== Number(existing.vat_rate) || (merged.shopSync && !Number(existing.shop_sync)));
       prepare(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, reorder_qty = ?, cost_price = ?, notes = ?, archived = ?, updated_at = ?,
            sale_price = ?, vat_rate = ?, revenue_group = ?, shop_sync = ?,
            shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
@@ -393,14 +579,63 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0,
           toShop && merged.shopSync ? 1 : 0, tenantId, existing.id);
       if (archived && !existing.archived) prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
-      return { item: get(tenantId, existing.id), toShop };
+      let variantsToShop = false;
+      if (isParent) variantsToShop = followParent(tenantId, existing, merged, archived);
+      return { item: get(tenantId, existing.id), toShop: toShop || variantsToShop };
     });
     if (out.toShop) dirty(tenantId);
     return out;
   }
 
   /**
-   * Verwijderen: zonder mutaties echt weg, anders gearchiveerd (het logboek blijft).
+   * Varianten volgen hun hoofdartikel: eenheid, btw en omzetgroep worden
+   * gelijk, en archiveren of terugzetten geldt voor alle varianten. Binnen de
+   * transactie van update.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} existing Het hoofdartikel zoals het was.
+   * @param {object} merged De nieuwe velden van het hoofdartikel.
+   * @param {number} archived 1 als het hoofdartikel nu gearchiveerd is.
+   * @returns {boolean} true als gekoppelde varianten opnieuw naar de webshop moeten (ander btw-tarief).
+   */
+  function followParent(tenantId, existing, merged, archived) {
+    const timestamp = currentTimestamp();
+    const vatChanged = merged.vatRate !== Number(existing.vat_rate);
+    prepare(`UPDATE stock_items SET unit = ?, vat_rate = ?, revenue_group = ?, updated_at = ?,
+        shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL AND shop_sync = 1 THEN 1 ELSE shop_dirty END
+      WHERE tenant_id = ? AND parent_id = ?`).run(merged.unit, merged.vatRate, merged.revenueGroup, timestamp, vatChanged ? 1 : 0, tenantId, existing.id);
+    if (archived && !existing.archived) {
+      prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id IN (SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?)').run(tenantId, tenantId, existing.id);
+      prepare('UPDATE stock_items SET archived = 1, updated_at = ? WHERE tenant_id = ? AND parent_id = ?').run(timestamp, tenantId, existing.id);
+    } else if (!archived && existing.archived) {
+      prepare('UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND parent_id = ?').run(timestamp, tenantId, existing.id);
+      const codes = prepare('SELECT code FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id).map((row) => row.code);
+      if (codes.length) resyncOpen(tenantId, codes, { nested: true });
+    }
+    return vatChanged;
+  }
+
+  /**
+   * Verwijdert of archiveert één artikel binnen een lopende transactie: zonder
+   * mutaties echt weg, anders gearchiveerd (het logboek blijft).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} row Het artikel (id).
+   * @returns {boolean} true als het gearchiveerd is in plaats van verwijderd.
+   */
+  function removeRow(tenantId, row) {
+    prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
+    const moved = prepare('SELECT EXISTS (SELECT 1 FROM stock_movements WHERE tenant_id = ? AND item_id = ?) AS n').get(tenantId, row.id).n;
+    if (moved) {
+      prepare('UPDATE stock_items SET archived = 1, updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, row.id);
+      return true;
+    }
+    prepare('DELETE FROM stock_items WHERE tenant_id = ? AND id = ?').run(tenantId, row.id);
+    return false;
+  }
+
+  /**
+   * Verwijderen: zonder mutaties echt weg, anders gearchiveerd (het logboek
+   * blijft). Een hoofdartikel neemt zijn varianten mee; het blijft zelf
+   * (gearchiveerd) bestaan zolang er een gearchiveerde variant is.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het artikel.
    * @returns {object|null} { deleted, code } of { archived, code }, of null.
@@ -409,15 +644,120 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     return transaction(db, () => {
       const existing = findItem(tenantId, id);
       if (!existing) return null;
-      prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
-      const moved = prepare('SELECT EXISTS (SELECT 1 FROM stock_movements WHERE tenant_id = ? AND item_id = ?) AS n').get(tenantId, existing.id).n;
-      if (moved) {
+      let keepParent = false;
+      if (Number(existing.has_variants)) {
+        for (const variant of prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id)) {
+          if (removeRow(tenantId, variant)) keepParent = true;
+        }
+      }
+      if (keepParent) {
         prepare('UPDATE stock_items SET archived = 1, updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, existing.id);
         return { archived: true, code: existing.code };
       }
-      prepare('DELETE FROM stock_items WHERE tenant_id = ? AND id = ?').run(tenantId, existing.id);
-      return { deleted: true, code: existing.code };
+      return removeRow(tenantId, existing) ? { archived: true, code: existing.code } : { deleted: true, code: existing.code };
     });
+  }
+
+  /**
+   * Maakt van een artikel een hoofdartikel met kenmerken en maakt de varianten
+   * aan die nog ontbreken (elke combinatie van waarden; een gearchiveerde
+   * variant met dezelfde waarden komt terug). Varianten krijgen de code van het
+   * hoofdartikel met de waarden erachter (bijv. PE-BUIS-16MM) en nemen eenheid,
+   * prijzen, btw, omzetgroep en webshopinstelling over. Kenmerken zonder
+   * varianten maken er weer een gewoon artikel van.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van het artikel.
+   * @param {*} rawAttributes De kenmerken: [{ name, values }].
+   * @returns {object} { item, created, restored }, of { error, field, status }.
+   */
+  function setVariants(tenantId, id, rawAttributes) {
+    const checked = sanitizeAttributes(rawAttributes);
+    if (checked.error) return checked;
+    const attributes = checked.value;
+    const out = transaction(db, () => {
+      const existing = findItem(tenantId, id);
+      if (!existing) return { error: 'not_found', status: 404 };
+      if (existing.parent_id) return { error: 'Een variant kan zelf geen varianten hebben.', status: 409 };
+      if (existing.archived) return { error: 'Dit artikel is gearchiveerd.', status: 409 };
+      const variants = prepare('SELECT id, code, archived, variant_values FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id);
+      const live = variants.filter((variant) => !variant.archived);
+      if (!Number(existing.has_variants)) {
+        // Een gewoon artikel met voorraad of boekingen blijft dat: die voorraad hoort bij geen enkele maat.
+        const used = Math.abs(Number(existing.on_hand)) > 0 || prepare('SELECT EXISTS (SELECT 1 FROM stock_movements WHERE tenant_id = ? AND item_id = ?) OR EXISTS (SELECT 1 FROM stock_reservations WHERE tenant_id = ? AND item_id = ?) AS n')
+          .get(tenantId, existing.id, tenantId, existing.id).n;
+        if (used && attributes.length) return { error: 'Dit artikel heeft al voorraad of boekingen. Maak een nieuw hoofdartikel en zet de varianten daaronder.', status: 409 };
+      }
+      const timestamp = currentTimestamp();
+      if (!attributes.length) {
+        if (live.length) return { error: 'Verwijder eerst de varianten; daarna kan dit weer een gewoon artikel worden.', field: 'attributes', status: 409 };
+        prepare("UPDATE stock_items SET has_variants = 0, attributes = '', updated_at = ? WHERE tenant_id = ? AND id = ?").run(timestamp, tenantId, existing.id);
+        return { created: [], restored: 0 };
+      }
+      const before = parseJson(existing.attributes, []).map((attribute) => attribute.name.toLowerCase()).join('|');
+      if (live.length && before !== attributes.map((attribute) => attribute.name.toLowerCase()).join('|')) {
+        return { error: 'Zolang er varianten zijn, kun je alleen waarden toevoegen of weghalen, niet de kenmerken zelf.', field: 'attributes', status: 409 };
+      }
+      const byKey = new Map(variants.map((variant) => [valuesKey(parseJson(variant.variant_values, {})), variant]));
+      const taken = new Set(prepare('SELECT code FROM stock_items WHERE tenant_id = ?').all(tenantId).map((row) => row.code));
+      const insert = prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
+          sale_price, vat_rate, revenue_group, shop_sync, parent_id, variant_values)
+        VALUES (?, ?, ?, ?, ?, '', 0, 0, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      const created = [];
+      let restored = 0;
+      for (const values of combinations(attributes)) {
+        const found = byKey.get(valuesKey(values));
+        if (found) {
+          if (found.archived) {
+            prepare('UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND id = ?').run(timestamp, tenantId, found.id);
+            created.push(found.code);
+            restored++;
+          }
+          continue;
+        }
+        const base = `${existing.code}-${Object.values(values).map(codePart).join('-')}`.slice(0, 37).replace(/[-. /+]+$/, '');
+        let code = base;
+        for (let suffix = 2; taken.has(code); suffix++) code = `${base}-${suffix}`;
+        taken.add(code);
+        insert.run(crypto.randomUUID(), tenantId, code, variantName(existing.name, values), existing.unit, existing.cost_price, timestamp, timestamp,
+          existing.sale_price, existing.vat_rate, existing.revenue_group, existing.shop_sync, existing.id, JSON.stringify(values));
+        created.push(code);
+      }
+      // Een gekoppeld hoofdartikel: de nieuwe varianten komen bij de volgende ronde in de webshop.
+      prepare(`UPDATE stock_items SET has_variants = 1, attributes = ?, updated_at = ?,
+          shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL AND shop_sync = 1 THEN 1 ELSE shop_dirty END
+        WHERE tenant_id = ? AND id = ?`).run(JSON.stringify(attributes), timestamp, created.length ? 1 : 0, tenantId, existing.id);
+      if (created.length) resyncOpen(tenantId, created, { nested: true });
+      return { created, restored, linked: Boolean(existing.shop_product_id && Number(existing.shop_sync)) };
+    });
+    if (out.error) return out;
+    if (out.linked && out.created.length) dirty(tenantId);
+    return { item: get(tenantId, id), created: out.created.length - out.restored, restored: out.restored };
+  }
+
+  /**
+   * De artikellijst om uit te kiezen (werkorder, offerte): gewone artikelen en
+   * hoofdartikelen met hun varianten, met verkoopprijs en beschikbaar aantal;
+   * zonder inkoopprijs of andere interne velden. Gearchiveerde artikelen niet.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {object[]} code, name, unit, salePrice, vatRate en available; een hoofdartikel ook attributes en variants (met values).
+   */
+  function articleChoices(tenantId) {
+    const items = listRows(tenantId);
+    /**
+     * De velden van een artikel die de keuzelijst nodig heeft.
+     * @param {object} item Het artikel (shapeItem).
+     * @returns {object} code, name, unit, salePrice, vatRate en available.
+     */
+    const pick = (item) => ({ code: item.code, name: item.name, unit: item.unit, salePrice: item.salePrice, vatRate: item.vatRate, available: item.available });
+    const parents = new Map(items.filter((item) => item.hasVariants).map((item) => [item.id, { ...pick(item), attributes: item.attributes, variants: [] }]));
+    const out = [];
+    for (const item of items) {
+      if (item.hasVariants) out.push(parents.get(item.id));
+      else if (item.parentId && parents.has(item.parentId)) parents.get(item.parentId).variants.push({ ...pick(item), values: item.values });
+      else out.push(pick(item));
+    }
+    for (const parent of parents.values()) parent.available = round3(parent.variants.reduce((sum, variant) => sum + variant.available, 0));
+    return out;
   }
 
   /**
@@ -444,6 +784,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const existing = findItem(tenantId, id);
       if (!existing) return { error: 'not_found', status: 404 };
       if (existing.archived) return { error: 'Dit artikel is gearchiveerd.', status: 409 };
+      if (Number(existing.has_variants)) return { error: 'Een hoofdartikel heeft zelf geen voorraad: boek op een variant.', status: 409 };
       const delta = kind === 'telling' ? round3(qty - existing.on_hand) : round3(qty);
       const movementId = book(tenantId, existing.id, delta, { kind, note: kind === 'telling' ? note || `Geteld: ${round3(qty)}` : note, user });
       return { movementId, delta, item: get(tenantId, existing.id) };
@@ -479,18 +820,70 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Zet webshopproducten in de voorraad (binnen de transactie van de
+   * aanroeper). Een variabel product wordt een hoofdartikel met kenmerken, zijn
+   * variaties worden varianten eronder; een variatie komt pas na zijn product.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ product: object, code: string }[]} fresh De nieuwe producten met hun voorraadcode.
+   * @param {Map<string, object>} parentItems Bestaande hoofdartikelen per webshop-product-id ({ id, name, has_variants, attributes }).
+   * @param {{ vatRate: number, priceOf: Function }} options Btw-tarief van nieuwe artikelen en product → verkoopprijs excl. btw.
+   * @returns {{ codes: string[], skipped: number }} De codes van de nieuwe artikelen en het aantal overgeslagen variaties.
+   */
+  function insertShopProducts(tenantId, fresh, parentItems, { vatRate, priceOf }) {
+    const timestamp = currentTimestamp();
+    const put = prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
+        sale_price, vat_rate, revenue_group, shop_sync, shop_product_id, parent_id, has_variants, attributes, variant_values)
+      VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, ?, 'producten', 1, ?, ?, ?, ?, ?)`);
+    const codes = [];
+    let skipped = 0;
+    const ordered = [...fresh.filter((entry) => !entry.product.parentId), ...fresh.filter((entry) => entry.product.parentId)];
+    for (const { product, code } of ordered) {
+      const price = priceOf(product);
+      const salePrice = price == null ? null : Math.round(price * 100) / 100;
+      if (product.type === 'variable') {
+        const attributes = shopAttributesOf(product);
+        const id = crypto.randomUUID();
+        put.run(id, tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, null, vatRate, String(product.id), null, 1, JSON.stringify(attributes), '');
+        parentItems.set(String(product.id), { id, name: cleanText(product.name, 200) || code, has_variants: 1, attributes: JSON.stringify(attributes) });
+      } else if (product.parentId) {
+        const parent = parentItems.get(String(product.parentId));
+        if (!parent || !Number(parent.has_variants)) { skipped++; continue; }
+        const values = {};
+        for (const attribute of product.attributes || []) if (attribute.name && attribute.option) values[cleanText(attribute.name, 40)] = cleanText(attribute.option, 40);
+        put.run(crypto.randomUUID(), tenantId, code, Object.keys(values).length ? variantName(parent.name, values) : cleanText(product.name, 200) || code, timestamp, timestamp,
+          salePrice, vatRate, String(product.id), parent.id, 0, '', JSON.stringify(values));
+      } else {
+        put.run(crypto.randomUUID(), tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, salePrice, vatRate, String(product.id), null, 0, '', '');
+      }
+      codes.push(code);
+    }
+    return { codes, skipped };
+  }
+
+  /**
+   * Bestaande artikelen die bij een variabel webshopproduct horen, per product-id.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {Map<string, object>} id, name, has_variants en attributes per webshop-product-id.
+   */
+  const parentItemsOf = (tenantId) => new Map(prepare('SELECT id, name, has_variants, attributes, shop_product_id FROM stock_items WHERE tenant_id = ? AND parent_id IS NULL AND shop_product_id IS NOT NULL')
+    .all(tenantId).map((row) => [String(row.shop_product_id), row]));
+
+  /**
    * Producten uit de webshop als voorraadartikel overnemen (nog niet bestaande
    * codes). Code = het veld aquatech_code, de sku of WC-<id>; prijs = de webshopprijs
-   * (excl. btw). De stand komt bij de volgende synchronisatie uit de webshop.
+   * (excl. btw). Een variabel product neemt zijn variaties mee als varianten.
+   * De stand komt bij de volgende synchronisatie uit de webshop.
    * @param {string} tenantId Id van de omgeving.
-   * @param {object[]} products De webshopproducten.
+   * @param {object[]} products De webshopproducten (met variaties).
    * @param {string[]} ids Ids van de gekozen producten.
    * @returns {object} { created, existing, skipped }, of { error, field }.
    */
   function importShop(tenantId, products, ids) {
     const want = new Set((Array.isArray(ids) ? ids : []).map(String).slice(0, 500));
     if (!want.size) return { error: 'Kies een of meer producten.', field: 'ids' };
-    const chosen = products.filter((product) => want.has(String(product.id)));
+    const chosen = products.filter((product) => want.has(String(product.id)) && !product.parentId);
+    const chosenIds = new Set(chosen.map((product) => String(product.id)));
+    chosen.push(...products.filter((product) => product.parentId && chosenIds.has(String(product.parentId))));
     const skipped = [];
     const fresh = [];
     const seen = new Set();
@@ -502,15 +895,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     }
     const have = new Set(fresh.length ? prepare(`SELECT code FROM stock_items WHERE tenant_id = ? AND code IN (${placeholders(fresh.length)})`).all(tenantId, ...fresh.map((entry) => entry.code)).map((row) => row.code) : []);
     const todo = fresh.filter((entry) => !have.has(entry.code));
-    transaction(db, () => {
-      const timestamp = currentTimestamp();
-      const put = prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
-          sale_price, vat_rate, revenue_group, shop_sync, shop_product_id)
-        VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, 21, 'producten', 1, ?)`);
-      for (const { product, code } of todo) put.run(crypto.randomUUID(), tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, product.price == null ? null : Math.round(product.price * 100) / 100, String(product.id));
-    });
-    if (todo.length) resyncOpen(tenantId, todo.map((entry) => entry.code));
-    return { created: todo.length, existing: have.size, skipped };
+    const out = transaction(db, () => insertShopProducts(tenantId, todo, parentItemsOf(tenantId), { vatRate: 21, priceOf: (product) => product.price }));
+    if (out.codes.length) resyncOpen(tenantId, out.codes);
+    return { created: out.codes.length, existing: have.size, skipped };
   }
 
   /**
@@ -518,42 +905,53 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * code of sku wordt een voorraadartikel (nieuw, of een gearchiveerd artikel
    * komt terug), artikelen die niet in de webshop staan worden gearchiveerd
    * (nooit verwijderd: werkorders, offertes en facturen houden hun regels).
+   * Een variabel product wordt een hoofdartikel, zijn variaties varianten; nieuwe
+   * waarden van een kenmerk in de webshop komen bij het hoofdartikel.
    * @param {string} tenantId Id van de omgeving.
-   * @param {object[]} products Alle producten uit de webshop.
+   * @param {object[]} products Alle producten uit de webshop (met variaties).
    * @param {Function} matchProduct Functie item ({ code }) → webshopproduct of null.
    * @param {{ vatRate?: number, priceOf?: Function }} [options] Btw-tarief van nieuwe artikelen en product → verkoopprijs excl. btw.
    * @returns {{ created: number, restored: number, archived: number, skippedProducts: number }} Aantallen.
    */
   function mirrorShop(tenantId, products, matchProduct, { vatRate = 21, priceOf = (product) => product.price } = {}) {
-    const items = prepare('SELECT id, code, archived, shop_product_id FROM stock_items WHERE tenant_id = ?').all(tenantId);
+    const items = prepare('SELECT id, code, name, archived, shop_product_id, parent_id, has_variants, attributes FROM stock_items WHERE tenant_id = ?').all(tenantId);
     const timestamp = currentTimestamp();
     const matchedProducts = new Set();
+    const parentItems = new Map();
     const restore = [];
     const archive = [];
+    const attributeUpdates = [];
     const seenCodes = new Set(items.map((item) => item.code));
     for (const item of items) {
       const product = matchProduct(item);
       if (product) {
         matchedProducts.add(String(product.id));
         if (item.archived) restore.push(item);
+        if (!product.parentId) parentItems.set(String(product.id), item);
+        if (product.type === 'variable' && Number(item.has_variants)) {
+          const merged = mergeAttributes(parseJson(item.attributes, []), shopAttributesOf(product));
+          if (JSON.stringify(merged) !== item.attributes) attributeUpdates.push({ id: item.id, attributes: JSON.stringify(merged) });
+        }
       } else if (!item.archived) {
         archive.push(item);
       }
     }
     const fresh = [];
     let skippedProducts = 0;
+    const productIds = new Set(products.map((product) => String(product.id)));
     for (const product of products) {
       if (matchedProducts.has(String(product.id))) continue;
       const code = shopCodeOf(product);
-      if (!code || code.length > 40 || !/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code) || seenCodes.has(code)) { skippedProducts++; continue; }
+      if (!code || code.length > 40 || !/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code) || seenCodes.has(code) || (product.parentId && !productIds.has(String(product.parentId)))) { skippedProducts++; continue; }
       seenCodes.add(code);
       fresh.push({ product, code });
     }
+    let createdCount = 0;
     transaction(db, () => {
-      const put = prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
-          sale_price, vat_rate, revenue_group, shop_sync, shop_product_id)
-        VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, ?, 'producten', 1, ?)`);
-      for (const { product, code } of fresh) put.run(crypto.randomUUID(), tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, priceOf(product) == null ? null : Math.round(priceOf(product) * 100) / 100, vatRate, String(product.id));
+      for (const update of attributeUpdates) prepare('UPDATE stock_items SET attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(update.attributes, timestamp, tenantId, update.id);
+      const inserted = insertShopProducts(tenantId, fresh, parentItems, { vatRate, priceOf });
+      createdCount = inserted.codes.length;
+      skippedProducts += inserted.skipped;
       for (let start = 0; start < restore.length; start += BATCH) {
         const ids = restore.slice(start, start + BATCH).map((item) => item.id);
         prepare(`UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND id IN (${placeholders(ids.length)})`).run(timestamp, tenantId, ...ids);
@@ -564,10 +962,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         prepare(`DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${placeholders(ids.length)})`).run(tenantId, ...ids);
       }
       // In dezelfde transactie, zodat een herstelde of nieuwe regel nooit zonder reservering actief blijft.
-      const reopened = [...fresh.map((entry) => entry.code), ...restore.map((item) => item.code)];
+      const reopened = [...inserted.codes, ...restore.map((item) => item.code)];
       if (reopened.length) resyncOpen(tenantId, reopened, { nested: true });
     });
-    return { created: fresh.length, restored: restore.length, archived: archive.length, skippedProducts };
+    return { created: createdCount, restored: restore.length, archived: archive.length, skippedProducts };
   }
 
   /**
@@ -602,7 +1000,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {object[]} De rijen.
    */
   const itemsFor = (tenantId, codes) => (codes.length
-    ? prepare(`SELECT ${ITEM_COLS} FROM stock_items WHERE tenant_id = ? AND archived = 0 AND code IN (${placeholders(codes.length)})`).all(tenantId, ...codes) : []);
+    ? prepare(`SELECT ${ITEM_COLS} FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 0 AND code IN (${placeholders(codes.length)})`).all(tenantId, ...codes) : []);
   /**
    * Netto afgeboekt per artikel voor deze werkorder (afboeking − retour).
    * @param {string} tenantId Id van de omgeving.
@@ -746,10 +1144,15 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       });
     }
     const stockCodes = new Set(items.map((item) => item.code));
-    const notInStock = [...need.entries()].filter(([code]) => !stockCodes.has(code)).map(([code, required]) => ({ code, description: required.description, qty: required.qty, unit: required.unit }));
+    // Code van een hoofdartikel: eerst een maat (variant) kiezen.
+    const missing = [...need.keys()].filter((code) => !stockCodes.has(code));
+    const parentRows = missing.length ? prepare(`SELECT code, name FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 1 AND code IN (${placeholders(missing.length)})`).all(tenantId, ...missing) : [];
+    const parentCodes = new Set(parentRows.map((row) => row.code));
+    const chooseVariant = parentRows.map((row) => ({ code: row.code, name: row.name, qty: need.get(row.code).qty, unit: need.get(row.code).unit }));
+    const notInStock = [...need.entries()].filter(([code]) => !stockCodes.has(code) && !parentCodes.has(code)).map(([code, required]) => ({ code, description: required.description, qty: required.qty, unit: required.unit }));
     lines.sort((left, right) => left.code.localeCompare(right.code));
     return {
-      workOrder: { id: workOrder.id, number: workOrder.number, status: workOrder.status }, lines, notInStock,
+      workOrder: { id: workOrder.id, number: workOrder.number, status: workOrder.status }, lines, notInStock, chooseVariant,
       usage: usageBooked(tenantId, workOrder.id),
       movements: movements(tenantId, { workOrderId: workOrder.id, limit: LIST_LIMIT }),
     };
@@ -818,7 +1221,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         if (item && earlier.item_id === item.id) continue;
         if (round3(earlier.qty)) last = book(tenantId, earlier.item_id, -earlier.qty, { kind: earlier.qty < 0 ? 'retour' : 'afboeking', workOrder, source, note: 'Verbruik gewijzigd', user });
       }
-      if (item && !item.archived) {
+      if (item && !item.archived && !Number(item.has_variants)) {
         const was = round3(-(previous.find((earlier) => earlier.item_id === item.id)?.qty || 0));
         const delta = round3((Number(qty) || 0) - was);
         if (delta) last = book(tenantId, item.id, -delta, { kind: delta > 0 ? 'afboeking' : 'retour', workOrder, source, note: 'Materiaalverbruik', user });
@@ -842,8 +1245,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const wanted = codes ? [...new Set(codes.map(normalizeCode))].filter(Boolean) : null;
     if (wanted && !wanted.length) return {};
     const rows = wanted
-      ? prepare(`SELECT id, code, name, unit, sale_price, cost_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND code IN (${placeholders(wanted.length)})`).all(tenantId, ...wanted)
-      : prepare('SELECT id, code, name, unit, sale_price, cost_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND archived = 0').all(tenantId);
+      ? prepare(`SELECT id, code, name, unit, sale_price, cost_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND has_variants = 0 AND code IN (${placeholders(wanted.length)})`).all(tenantId, ...wanted)
+      : prepare('SELECT id, code, name, unit, sale_price, cost_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 0').all(tenantId);
     const out = {};
     for (const row of rows) {
       out[row.code] = { id: row.id, name: row.name, unit: row.unit, salePrice: row.sale_price == null ? null : Number(row.sale_price), vatRate: Number(row.vat_rate), revenueGroup: row.revenue_group };
@@ -862,7 +1265,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   function reorderProposal(tenantId) {
     let total = null;
-    const items = list(tenantId).filter((item) => item.available < item.minQty).map((item) => {
+    const items = list(tenantId).filter((item) => !item.hasVariants && item.available < item.minQty).map((item) => {
       const target = item.reorderQty != null && item.reorderQty >= item.minQty ? item.reorderQty : round3(item.minQty * 2);
       const orderQty = Math.ceil(round3(target - item.available));
       const amount = item.costPrice == null ? null : Math.round(orderQty * item.costPrice * 100) / 100;
@@ -966,7 +1369,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   return {
-    units, addUnit, removeUnit,
+    units, addUnit, removeUnit, setVariants, articleChoices,
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
     reorderProposal, onDirty: setDirtyHook,
@@ -978,13 +1381,15 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
  * de voorraad van een werkorder bekijken en afboeken onder 'werkorders'.
  * Gegevens per omgeving via req.tenantId.
  * @param {object} app De Express-app.
- * @param {object} ctx { stock, requireRight, requireJson, audit, shopProductsOf? }.
+ * @param {object} ctx { stock, requireRight, requireAnyRight?, requireJson, audit, shopProductsOf?, syncShop?, publishToShop? }.
  * @returns {void}
  */
 function registerStockRoutes(app, ctx) {
   const { stock, requireRight, requireJson, audit } = ctx;
   const requireStock = requireRight('voorraad');
   const requireWorkOrders = requireRight('werkorders');
+  // De artikellijst om uit te kiezen hebben werkorders, offertes en de voorraad nodig.
+  const requirePicker = ctx.requireAnyRight ? ctx.requireAnyRight(['werkorders', 'offertes', 'voorraad']) : requireStock;
   /**
    * De actieve omgeving van het verzoek.
    * @param {object} req Het verzoek.
@@ -1038,6 +1443,12 @@ function registerStockRoutes(app, ctx) {
     res.json({ deleted: true });
   });
 
+  // Artikelen om uit te kiezen (eerst het artikel, dan de maat): zonder inkoopprijs.
+  app.get('/api/stock/articles', requirePicker, (req, res) => {
+    noStore(res);
+    res.json({ items: stock.articleChoices(tenantOf(req)) });
+  });
+
   app.get('/api/stock/reservations', requireStock, (req, res) => {
     noStore(res);
     res.json({ items: stock.reservations(tenantOf(req)) });
@@ -1083,9 +1494,11 @@ function registerStockRoutes(app, ctx) {
     noStore(res);
     const products = ctx.shopProductsOf ? ctx.shopProductsOf(tenantOf(req)) : [];
     const have = new Set(stock.list(tenantOf(req), { archived: true }).flatMap((item) => [item.code, item.shop.productId ? `#${item.shop.productId}` : '']));
+    const variationCount = new Map();
+    for (const product of products) if (product.parentId) variationCount.set(String(product.parentId), (variationCount.get(String(product.parentId)) || 0) + 1);
     res.json({
-      items: products.filter((product) => !have.has(`#${product.id}`) && !have.has(shopCodeOf(product)))
-        .map((product) => ({ id: product.id, sku: product.sku, code: shopCodeOf(product), name: product.name, price: product.price, inStock: product.inStock })),
+      items: products.filter((product) => !product.parentId && !have.has(`#${product.id}`) && !have.has(shopCodeOf(product)))
+        .map((product) => ({ id: product.id, sku: product.sku, code: shopCodeOf(product), name: product.name, price: product.price, inStock: product.inStock, variations: variationCount.get(String(product.id)) || 0 })),
     });
   });
 
@@ -1114,6 +1527,28 @@ function registerStockRoutes(app, ctx) {
     const out = stock.update(tenantOf(req), req.params.id, req.body);
     if (out.error) return fail(res, out);
     res.json(out.item);
+  });
+
+  // Kenmerken van een hoofdartikel; ontbrekende varianten worden aangemaakt.
+  app.put('/api/stock/items/:id/variants', requireJson, requireStock, (req, res) => {
+    const out = stock.setVariants(tenantOf(req), req.params.id, req.body?.attributes);
+    if (out.error) return fail(res, out);
+    audit(req, 'voorraad_varianten', { itemId: out.item.id, code: out.item.code, created: out.created, restored: out.restored });
+    res.json({ ...out.item, created: out.created, restored: out.restored });
+  });
+
+  // Artikel (met varianten) als nieuw product in de webshop zetten; Aquatech is de bron.
+  app.post('/api/stock/items/:id/publish', requireJson, requireStock, ctx.importLimiter || ((req, res, next) => next()), async (req, res) => {
+    if (!ctx.publishToShop) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Webshop).' });
+    try {
+      const out = await ctx.publishToShop(tenantOf(req), req.params.id, req.user);
+      if (out.error === 'not_found') return notFound(res);
+      if (out.error) return res.status(out.status || 409).json({ error: out.code || 'conflict', message: out.error });
+      audit(req, 'voorraad_naar_webshop', { itemId: req.params.id, productId: out.productId, variations: out.variations });
+      res.json({ ...stock.get(tenantOf(req), req.params.id), published: out });
+    } catch (error) {
+      res.status(502).json({ error: 'shop_error', message: String(error.message || 'De webshop is niet bereikbaar.').slice(0, 300) });
+    }
   });
 
   app.delete('/api/stock/items/:id', requireStock, (req, res) => {
@@ -1158,4 +1593,4 @@ function registerStockRoutes(app, ctx) {
   });
 }
 
-module.exports = { createStockStore, registerStockRoutes, sanitizeItem, needsOf, KINDS, GROUPS, VAT_RATES };
+module.exports = { createStockStore, registerStockRoutes, sanitizeItem, sanitizeAttributes, combinations, needsOf, KINDS, GROUPS, VAT_RATES };

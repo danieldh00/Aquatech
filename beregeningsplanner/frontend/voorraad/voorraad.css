@@ -43,3 +43,14 @@ table.grid tr[data-id]:hover td { background: var(--at-green-soft); }
 .chips .chip button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 999px; }
 .chips .chip button:hover { background: color-mix(in srgb, var(--at-danger) 12%, transparent); color: var(--at-danger); }
 .chips .chip button:disabled { opacity: 0.3; cursor: default; background: none; color: var(--muted); }
+
+/* Hoofdartikelen met varianten: uitklappen in de lijst, kenmerken op het artikel. */
+table.grid tr.parent td:first-child { font-weight: 600; }
+table.grid tr.variant td:first-child { padding-left: 34px; }
+table.grid tr.variant td { background: color-mix(in srgb, var(--at-teal) 5%, transparent); }
+table.grid .toggle { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 14px; width: 22px; padding: 0; margin-right: 4px; }
+table.grid .toggle:hover { color: var(--at-teal); }
+#d-variants { border-left: 4px solid var(--at-teal); }
+#d-variants .v-attr { align-items: flex-end; }
+#d-variants .tablewrap { margin-top: 14px; }
+#d-variant-of { margin: -6px 0 12px; }

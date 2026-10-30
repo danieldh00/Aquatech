@@ -1,5 +1,47 @@
 # Changelog
 
+## 1.3.3
+
+Artikelen met varianten (maat, lengte, kleur), ook in de webshopkoppeling.
+
+- **Datamodel** (migratie 33 in `MIGRATIONS` en `PG_MIGRATIONS`):
+  `stock_items.parent_id`, `has_variants`, `attributes` (kenmerken van het
+  hoofdartikel, JSON `[{ name, values }]`) en `variant_values` (waarden van een
+  variant, JSON); index `(tenant_id, parent_id)`. `shop_products` krijgt
+  `parent_id` en `attributes` voor WooCommerce-variaties.
+- **Voorraad** (`voorraad/stock.js`): `setVariants` maakt van een artikel
+  zonder voorraad/boekingen een hoofdartikel en maakt elke ontbrekende
+  combinatie aan als variant (code `<hoofdcode>-<waarden>`, prijzen, eenheid,
+  btw, omzetgroep en webshopinstelling van het hoofdartikel). Een variant is
+  een gewoon voorraadartikel (eigen code, prijs, kostprijs, voorraad, minimum,
+  bestellen tot); het hoofdartikel heeft geen eigen voorraad (mutaties 409),
+  toont de totalen en staat niet in het bestelvoorstel, de verkoopinfo of de
+  eigen webshop. Eenheid, btw en omzetgroep volgen het hoofdartikel;
+  archiveren/terugzetten en verwijderen nemen de varianten mee.
+- **Werkorders**: de code van een hoofdartikel reserveert niets;
+  `GET /api/stock/workorders/:id` geeft die regels als `chooseVariant`.
+- **API**: `PUT /api/stock/items/:id/variants` (recht `voorraad`),
+  `GET /api/stock/articles` (werkorders, offertes of voorraad; zonder
+  inkoopprijs) en `POST /api/stock/items/:id/publish` (artikel of hoofdartikel
+  als nieuw product in WooCommerce, recht `voorraad`, gelimiteerd).
+- **WooCommerce** (`webshop/woocommerce.js`, `shop-sync.js`): via de REST API
+  komen de variaties van variabele producten mee; een variabel product wordt
+  een hoofdartikel, variaties worden varianten (`shop_product_id` = id van de
+  variatie). Prijs en voorraad per variatie via
+  `/products/<id>/variations/batch`. Met *Aquatech is de bron* worden
+  ontbrekende variaties van een gekoppeld hoofdartikel aangemaakt (eerst
+  koppelen op sku of waarden, kenmerken van het product aangevuld, andere
+  kenmerken blijven staan).
+- **Voorraadbeheer**: hoofdartikel klapt uit in de lijst, blok *Varianten*
+  op de artikelpagina (kenmerken + varianten), knop *In webshop zetten*;
+  Excel-export met kolommen Hoofdartikel en Variant.
+- **Werkorder en offerte**: knop *+ Uit voorraad* (`shared/article-picker.js`):
+  eerst het artikel, dan per kenmerk de waarde; *Kies maat* bij een regel met
+  de code van een hoofdartikel. De planner kiest de maat zelf; varianten met
+  een catalogus-code tellen mee in het assortiment.
+- Tests: `test/variants.test.js`; testdata krijgt een tuinslang met drie
+  lengtes.
+
 ## 1.3.2
 
 Artikeleenheden beheren en een ruimere indeling van de artikelpagina.

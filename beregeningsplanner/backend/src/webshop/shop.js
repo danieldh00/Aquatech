@@ -93,14 +93,15 @@ function createShopStore(db) {
   function replaceProducts(tenantId, products, syncedAt) {
     transaction(db, () => {
       prepare('DELETE FROM shop_products WHERE tenant_id = ?').run(tenantId);
-      const insert = prepare(`INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      const insert = prepare(`INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories, parent_id, attributes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       const seen = new Set();
       for (const product of products) {
         if (seen.has(product.id)) continue;
         seen.add(product.id);
         insert.run(tenantId, product.id, product.sku.slice(0, 100), product.name.slice(0, 300), product.price, product.currency.slice(0, 3), product.url.slice(0, 1000),
-          product.image.slice(0, 1000), product.inStock ? 1 : 0, product.code.slice(0, 40), JSON.stringify(product.categories.slice(0, 20)));
+          product.image.slice(0, 1000), product.inStock ? 1 : 0, product.code.slice(0, 40), JSON.stringify(product.categories.slice(0, 20)),
+          product.parentId ? String(product.parentId) : null, JSON.stringify((product.attributes || []).slice(0, 10)));
       }
       setStatus(tenantId, { syncedAt, productCount: seen.size, error: null });
     });
@@ -131,14 +132,21 @@ function createShopStore(db) {
   };
 
   /**
-   * De opgehaalde producten van een tenant.
+   * De opgehaalde producten van een tenant, met variaties (parentId = het
+   * variabele product erboven; type 'variable' als er variaties onder hangen).
    * @param {string} tenantId Id van de tenant.
    * @returns {object[]} De producten.
    */
-  const products = (tenantId) => prepare('SELECT id, sku, name, price, currency, url, image, in_stock, code, categories FROM shop_products WHERE tenant_id = ?').all(tenantId).map((row) => ({
-    id: row.id, sku: row.sku, name: row.name, price: row.price, currency: row.currency, url: row.url, image: row.image,
-    inStock: Boolean(row.in_stock), code: row.code, categories: JSON.parse(row.categories || '[]'),
-  }));
+  const products = (tenantId) => {
+    const rows = prepare('SELECT id, sku, name, price, currency, url, image, in_stock, code, categories, parent_id, attributes FROM shop_products WHERE tenant_id = ?').all(tenantId);
+    const parents = new Set(rows.filter((row) => row.parent_id).map((row) => String(row.parent_id)));
+    return rows.map((row) => ({
+      id: row.id, sku: row.sku, name: row.name, price: row.price, currency: row.currency, url: row.url, image: row.image,
+      inStock: Boolean(row.in_stock), code: row.code, categories: JSON.parse(row.categories || '[]'),
+      parentId: row.parent_id || null, attributes: JSON.parse(row.attributes || '[]'),
+      type: row.parent_id ? 'variation' : parents.has(String(row.id)) ? 'variable' : 'simple',
+    }));
+  };
 
   /**
    * Wist de producten en de stand van een tenant (koppeling verwijderd).
