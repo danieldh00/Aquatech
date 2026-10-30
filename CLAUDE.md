@@ -381,6 +381,21 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   variatie-id, push via `/products/<id>/variations/batch`,
   `createMissingVariations` + `publish` (knop *In webshop zetten*) maken
   producten/variaties aan vanuit Aquatech.
+- **Online betalen in de eigen webshop** (1.5.3, Mollie): instelling
+  `shopPayment` {online, publicUrl, onAccount, holdHours} + geheim
+  `mollieApiKey` (alleen hoofdtenant, Beheer > Webshop > Betalen).
+  `webshop/mollie.js` (client, tests via `createApp({ mollieFetch })` en
+  `test/helpers/mollie-fake.js`), `webshop/web-payments.js` (start, sync,
+  expireUnpaid, optionsFor). Bestelling met `data.payment = 'online'` heeft
+  `data.pay` {status open|betaald|mislukt|verlopen, id, ids, checkoutUrl}; de
+  uitkomst komt altijd uit een opvraging bij Mollie (webhook `POST
+  /winkel/mollie/webhook/<bestelling>/` krijgt alleen het id, terugkeer
+  `?betaald=1` vraagt zelf op); overgang naar betaald één keer via
+  `web-orders.changePay`. Verzenden pas na betaling, bevestigingsmail pas na
+  betaling, factuur van online betaalde bestelling meteen betaald, onbetaald
+  vervalt na `holdHours` (`app.locals.webPaymentsExpire`, elk uur). Redirect
+  naar Mollie loopt via GET `bestelling/<id>/betalen/` (CSP `form-action
+  'self'` blokkeert een redirect direct vanuit het formulier).
 - **Debiteuren, webshopbestellingen, PDF en mail** (0.63.0, migratie 27):
   `debtors.js` (tabel `debtors`, `ensure` bij definitief, `match_key`),
   `shop-orders.js` (WooCommerce-bestellingen met status uit

@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.5.3
+
+Online betalen in de eigen webshop via Mollie (stap 8 van de webshop-roadmap).
+
+- **Betaalwijze bij het afrekenen**: online (iDEAL, kaart en wat in Mollie
+  aan staat) en/of op rekening. Instelling `shopPayment` (`online`,
+  `publicUrl`, `onAccount` iedereen | zakelijk | nooit, `holdHours`) en
+  geheim `mollieApiKey` (versleuteld, alleen hoofdtenant, Beheer > Webshop >
+  Betalen). Zonder online betalen blijft op rekening bestellen werken.
+- **Mollie-client** `webshop/mollie.js` (API v2: betaling aanmaken en
+  opvragen, `Idempotency-Key` per poging); tests gebruiken
+  `createApp({ mollieFetch })` en `test/helpers/mollie-fake.js`.
+- **Betaalstroom** `webshop/web-payments.js`: de bestelling krijgt
+  `data.pay` (open, betaald, mislukt, verlopen). Betaalpagina via
+  `bestelling/<id>/betalen/` (nieuwe betaling als de vorige mislukte),
+  webhook `POST mollie/webhook/<bestelling>/` (alleen het id komt mee; de
+  uitkomst, het bedrag en de bestelling uit de metadata controleren we bij
+  Mollie zelf) en terugkeer `?betaald=1` die de stand opvraagt. De overgang
+  naar betaald gebeurt één keer (`web-orders.changePay`, in een transactie).
+- **Bevestigingsmail** van een online bestelling gaat pas na de betaling;
+  de factuur van een online betaalde bestelling is meteen betaald.
+- **Verzenden pas na betaling** (409 bij een onbetaalde online bestelling);
+  een onbetaalde bestelling houdt de voorraad vast en vervalt na `holdHours`
+  (`app.locals.webPaymentsExpire`, elk uur); betaald na annuleren geeft
+  `refundNeeded` en een waarschuwing in Beheer (terugboeken via Mollie).
+- Beheer: formulier Betalen, betaalstatus in de bestellijst en het detail.
+
 ## 1.5.2
 
 Juridische pagina's in de eigen webshop (stap 7 van de webshop-roadmap).

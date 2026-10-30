@@ -50,6 +50,24 @@
     return body;
   }
 
+  /** Betaalstatus van een online bestelling in gewone woorden. */
+  const PAY_LABELS = { open: 'wacht op betaling', betaald: 'betaald', mislukt: 'betaling niet gelukt', verlopen: 'niet betaald, vervallen' };
+  /** Namen van de betaalmethoden van Mollie. */
+  const PAY_METHODS = { ideal: 'iDEAL', creditcard: 'creditcard', bancontact: 'Bancontact', paypal: 'PayPal', applepay: 'Apple Pay', banktransfer: 'overboeking' };
+
+  /**
+   * De betaling van een bestelling als tekst voor het detail.
+   * @param {object} order De bestelling (payment en pay).
+   * @returns {string} Bijv. "online betaald op 1 nov 2026 (iDEAL)" of "op rekening".
+   */
+  function paymentText(order) {
+    if (order.payment !== 'online' || !order.pay) return 'op rekening';
+    const pay = order.pay;
+    const method = PAY_METHODS[pay.method] || pay.method;
+    const refund = pay.refundNeeded ? ' · <b>betaald na annuleren: terugbetalen via Mollie</b>' : order.status === 'geannuleerd' && pay.status === 'betaald' ? ' · geannuleerd: betaling zelf terugboeken via Mollie' : '';
+    return `online via Mollie, ${esc(PAY_LABELS[pay.status] || pay.status)}${pay.status === 'betaald' ? ` op ${when(pay.paidAt)}${method ? ` (${esc(method)})` : ''}` : ''}${pay.mode === 'test' ? ' · testbetaling' : ''}${refund}`;
+  }
+
   /**
    * Tekent het detail van een bestelling met knoppen voor de volgende status.
    * @param {object} order De bestelling (met regels, adres en verloop).
@@ -60,7 +78,8 @@
     const box = $('#wo-detail');
     const lines = order.lines.map((line) => `<tr><td>${esc(line.name)}<span class="sub">${esc(line.code)}</span></td><td class="num">${line.qty}</td><td class="num">${euro(line.unitIncl)}</td><td class="num">${euro(line.lineTotal)}</td></tr>`).join('');
     const vat = order.totals.byRate.map((row) => `<tr><td colspan="3">Waarvan ${row.rate}% btw over ${euro(row.excl)}</td><td class="num">${euro(row.vat)}</td></tr>`).join('');
-    const buttons = (NEXT[order.status] || []).map(([status, label]) => `<button class="btn ${status === 'geannuleerd' ? 'danger' : 'primary'}" data-status="${status}">${label}</button>`).join(' ');
+    const unpaid = order.payment === 'online' && !(order.pay && order.pay.status === 'betaald');
+    const buttons = (NEXT[order.status] || []).filter(([status]) => !(status === 'verzonden' && unpaid)).map(([status, label]) => `<button class="btn ${status === 'geannuleerd' ? 'danger' : 'primary'}" data-status="${status}">${label}</button>`).join(' ');
     const shipping = order.shipping;
     const shippingRow = shipping ? `<tr><td colspan="3">${esc(shipping.label)}</td><td class="num">${shipping.price > 0 ? euro(shipping.price) : 'Gratis'}</td></tr>` : '';
     const canTrack = shipping && shipping.method === 'dpd' && ['verzonden', 'afgerond'].includes(order.status);
@@ -79,7 +98,7 @@
         <tr><th colspan="3">${order.vat && order.vat.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num"><b>${euro(order.totals.total)}</b></td></tr></tbody></table></div>
       ${trackingForm}
       ${invoiceLine}
-      <p class="muted small">Betaling: op rekening · ${mail}${shipMail ? ` · ${shipMail}` : ''}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})`).join(' → ')}</p>
+      <p class="muted small">Betaling: ${paymentText(order)} · ${mail}${shipMail ? ` · ${shipMail}` : ''}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})`).join(' → ')}</p>
       <p>${buttons} <button class="btn" id="wo-close">Sluiten</button></p>`;
     box.hidden = false;
     /** Sluit het detail. */
@@ -120,7 +139,7 @@
        * @returns {Promise<void>}
        */
       button.onclick = async () => {
-        if (button.dataset.status === 'geannuleerd' && !confirm('Bestelling annuleren? De reservering vervalt.')) return;
+        if (button.dataset.status === 'geannuleerd' && !confirm(order.pay && order.pay.status === 'betaald' ? 'Bestelling annuleren? De reservering vervalt. De betaling boek je zelf terug in Mollie.' : 'Bestelling annuleren? De reservering vervalt.')) return;
         button.disabled = true;
         try {
           const trackingInput = $('#wo-tracking');
@@ -157,7 +176,7 @@
       $('#wo-counts').textContent = Object.entries(out.counts).map(([key, count]) => `${out.statuses[key]}: ${count}`).join(' · ');
       table.innerHTML = !out.items.length ? '<tr><td class="empty">Geen bestellingen.</td></tr>'
         : `<thead><tr><th>Nummer</th><th>Besteld</th><th>Klant</th><th>E-mail</th><th class="num">Totaal</th><th>Status</th></tr></thead><tbody>${out.items.map((order) => `
-          <tr data-id="${esc(order.id)}" class="clickable"><td><a href="#bestellingen" data-open>${esc(order.number)}</a></td><td>${esc(when(order.createdAt))}</td><td>${esc(order.customerName)}</td><td>${esc(order.email)}</td><td class="num">${euro(order.total)}</td><td><span class="pill ${esc(order.status)}">${esc(order.statusLabel)}</span></td></tr>`).join('')}</tbody>`;
+          <tr data-id="${esc(order.id)}" class="clickable"><td><a href="#bestellingen" data-open>${esc(order.number)}</a></td><td>${esc(when(order.createdAt))}</td><td>${esc(order.customerName)}</td><td>${esc(order.email)}</td><td class="num">${euro(order.total)}</td><td><span class="pill ${esc(order.status)}">${esc(order.statusLabel)}</span>${order.payStatus && order.payStatus !== 'betaald' && order.status === 'nieuw' ? ` <span class="muted small">${esc(PAY_LABELS[order.payStatus] || order.payStatus)}</span>` : ''}</td></tr>`).join('')}</tbody>`;
       for (const link of table.querySelectorAll('[data-open]')) {
         /**
          * Opent het detail van de bestelling in deze regel.

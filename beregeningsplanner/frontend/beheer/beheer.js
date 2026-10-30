@@ -586,6 +586,7 @@
     shopForm.hidden = !state.storefrontAllowed;
     renderShipping(view.shopShipping?.value);
     $('#s-shipping').hidden = !state.storefrontAllowed;
+    renderPayment(view);
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
@@ -743,6 +744,25 @@
   }
 
   /**
+   * Vult het formulier Betalen met de opgeslagen instelling.
+   * @param {object} view De instellingen zoals de server ze toont (shopPayment en mollieApiKey).
+   * @returns {void}
+   */
+  function renderPayment(view) {
+    const form = $('#s-payment');
+    const payment = view.shopPayment?.value || {};
+    const key = view.mollieApiKey || {};
+    form.hidden = !state.storefrontAllowed;
+    form.online.checked = Boolean(payment.online);
+    form.publicUrl.value = payment.publicUrl || '';
+    form.onAccount.value = payment.onAccount || 'iedereen';
+    form.holdHours.value = payment.holdHours || 24;
+    const keyState = $('#s-payment-key-state');
+    keyState.textContent = key.set ? `Ingesteld${key.hint ? ` (${key.hint})` : ''}.` : 'Niet ingesteld: online betalen kan pas met een sleutel.';
+    keyState.className = `state ${key.set ? 'ok' : 'off'}`;
+  }
+
+  /**
    * Zet een prijs of bedrag om naar tekst met een komma.
    * @param {number} amount Het bedrag.
    * @returns {string} Bijv. "6,95".
@@ -877,6 +897,17 @@
     /** Zet bestellen in de webshop aan of uit. */
     shopForm.shopOrdering.onchange = () => {
       saveSettings(shopForm, { shopOrdering: shopForm.shopOrdering.checked }, shopForm.shopOrdering.checked ? 'Bestellen in de webshop staat aan' : 'Bestellen in de webshop staat uit');
+    };
+    const paymentForm = $('#s-payment');
+    /**
+     * Slaat de betaalinstelling op; een ingevulde API-sleutel gaat mee, een lege blijft ongewijzigd.
+     * @param {SubmitEvent} event het verzenden
+     */
+    paymentForm.onsubmit = (event) => {
+      event.preventDefault();
+      const patch = { shopPayment: { online: paymentForm.online.checked, publicUrl: paymentForm.publicUrl.value.trim(), onAccount: paymentForm.onAccount.value, holdHours: Number(paymentForm.holdHours.value) } };
+      if (paymentForm.mollieApiKey.value.trim()) patch.mollieApiKey = paymentForm.mollieApiKey.value.trim();
+      saveSettings(paymentForm, patch, 'Betalen opgeslagen');
     };
     const shippingForm = $('#s-shipping');
     /**

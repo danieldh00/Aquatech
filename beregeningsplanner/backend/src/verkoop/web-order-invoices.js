@@ -5,8 +5,9 @@
 // maken. Eén factuur per bestelling (shop_order_id = `web:<bestelling>`,
 // uniek per omgeving), dus opnieuw proberen is veilig. De voorraad is bij
 // Verzonden al afgeboekt (stock.issueOrder), de factuur boekt dus niets af.
-// Betaling is nu altijd "op rekening": de factuur blijft open tot een
-// beheerder hem in Facturen op betaald zet. Een afgeronde retour (web-returns.js)
+// Bij een bestelling op rekening blijft de factuur open tot een beheerder hem
+// in Facturen op betaald zet; een bestelling die online betaald is (Mollie,
+// web-payments.js) krijgt de factuur meteen op betaald, met de betaaldatum. Een afgeronde retour (web-returns.js)
 // krijgt een creditnota voor de teruggestuurde regels bij die factuur.
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -91,6 +92,19 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
   }
 
   /**
+   * Zet de definitieve factuur van een online betaalde bestelling op betaald (met de betaaldatum van Mollie).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} order De bestelling.
+   * @returns {void}
+   */
+  function settleIfPaidOnline(tenantId, order) {
+    if (order.payment !== 'online' || !order.pay || order.pay.status !== 'betaald') return;
+    const invoice = invoiceFor(tenantId, order.id);
+    if (!invoice || invoice.status !== 'definitief') return;
+    invoices.setPaid(tenantId, invoice.id, true, String(order.pay.paidAt || '').slice(0, 10));
+  }
+
+  /**
    * Zorgt dat de bestelling een factuur heeft: maakt hem aan (concept) en zet
    * hem zo ingesteld meteen op definitief. Heeft de bestelling al een factuur,
    * dan verandert er niets. Een fout wordt in de bestelling bewaard.
@@ -116,6 +130,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
         return { error: `Factuur definitief maken mislukt: ${reason}`, status: 500 };
       }
       orders.updateData(tenantId, order.id, { invoiceError: null });
+      settleIfPaidOnline(tenantId, order);
       return { invoice: invoiceFor(tenantId, order.id), created: false, finalizedNow: true };
     }
     if (!settings.webOrders.enabled) return { error: 'Facturen voor webshopbestellingen staan uit (Facturen → Instellingen).', status: 409 };
@@ -129,8 +144,9 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
         if (finalized && finalized.error) throw new Error(finalized.error);
       }
       orders.updateData(tenantId, order.id, { invoiceError: null });
+      settleIfPaidOnline(tenantId, order);
       const invoice = invoiceFor(tenantId, order.id);
-      return { invoice, created: true, finalizedNow: invoice.status === 'definitief' };
+      return { invoice, created: true, finalizedNow: ['definitief', 'betaald'].includes(invoice.status) };
     } catch (error) {
       // Tegelijk al gemaakt (unieke index op de bestelling): de bestaande factuur is goed.
       const raced = /unique|constraint/i.test(error.message) ? invoiceFor(tenantId, order.id) : null;
