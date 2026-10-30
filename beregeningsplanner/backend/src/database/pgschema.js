@@ -709,6 +709,11 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE stock_items ADD COLUMN weight_grams BIGINT;
   `,
+  // 39: zakelijke klantgroep en zakelijke prijs (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN customer_group TEXT NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN business_price DOUBLE PRECISION;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

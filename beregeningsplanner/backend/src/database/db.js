@@ -895,6 +895,11 @@ const MIGRATIONS = [
   `
   ALTER TABLE stock_items ADD COLUMN weight_grams INTEGER;
   `,
+  // 39: zakelijke klantgroep (users.customer_group: leeg = particulier, 'zakelijk') en zakelijke prijs per artikel (excl. btw) voor de webshop.
+  `
+  ALTER TABLE users ADD COLUMN customer_group TEXT NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN business_price REAL;
+  `,
 ];
 
 /**

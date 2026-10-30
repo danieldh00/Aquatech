@@ -419,7 +419,7 @@
     const showGuests = $('#u-guests').checked;
     const items = state.users.filter((user) => showGuests || user.kind !== 'gast');
     const table = $('#u-table');
-    table.innerHTML = `<thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Soort</th><th>Rol</th><th class="num">Plannen</th><th class="num">Aanvragen</th><th>Laatst actief</th><th class="num">Sessies</th><th title="De gebruiker moet bij de volgende aanmelding zelf een nieuw wachtwoord kiezen">Nieuw ww. verplicht</th><th></th></tr></thead><tbody>${items.map((user) => {
+    table.innerHTML = `<thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Soort</th><th>Rol</th><th class="num">Plannen</th><th class="num">Aanvragen</th><th>Laatst actief</th><th class="num">Sessies</th><th title="Zakelijke klanten zien in de webshop de zakelijke prijs excl. btw en kunnen btw verlegd krijgen">Klantgroep</th><th title="De gebruiker moet bij de volgende aanmelding zelf een nieuw wachtwoord kiezen">Nieuw ww. verplicht</th><th></th></tr></thead><tbody>${items.map((user) => {
       const editable = user.kind === 'account';
       return `<tr class="${user.disabled ? 'off' : ''}">
         <td>${esc(user.displayName)}${user.disabled ? ' <span class="pill">uitgeschakeld</span>' : ''}</td>
@@ -430,6 +430,7 @@
         <td class="num">${user.historyCount}</td>
         <td>${esc(when(user.lastSeenAt))}</td>
         <td class="num">${user.sessionCount || 0}</td>
+        <td>${editable && roleOf(user.role) && roleOf(user.role).kind === 'klant' ? `<select data-group="${esc(user.id)}" aria-label="Klantgroep"><option value="">Particulier</option><option value="zakelijk"${user.customerGroup === 'zakelijk' ? ' selected' : ''}>Zakelijk</option></select>` : ''}</td>
         <td>${editable ? `<input type="checkbox" data-mustchange="${esc(user.id)}"${user.mustChangePassword ? ' checked' : ''} aria-label="Wachtwoord wijzigen bij volgende aanmelding">` : ''}</td>
         <td>${user.sessionCount ? `<button class="btn small" data-logout="${esc(user.id)}">Uitloggen</button> ` : ''}${editable ? `<button class="btn small" data-pw="${esc(user.id)}">Wachtwoord</button> <button class="btn small" data-toggle="${esc(user.id)}">${user.disabled ? 'Inschakelen' : 'Uitschakelen'}</button>` : ''}
           ${user.historyCount ? `<button class="btn small" data-hist="${esc(user.id)}">Aanvragen</button>` : ''}
@@ -470,6 +471,13 @@
         const mustChangePassword = confirm('Moet de gebruiker na de eerste aanmelding met dit wachtwoord zelf een nieuw wachtwoord kiezen?\n\nOK = ja (aanbevolen), Annuleren = nee');
         patch(button.dataset.pw, { password, mustChangePassword }, 'Wachtwoord gewijzigd');
       };
+    });
+    table.querySelectorAll('[data-group]').forEach((select) => {
+      /**
+       * Slaat de klantgroep (particulier of zakelijk) op.
+       * @returns {Promise<void>}
+       */
+      select.onchange = () => patch(select.dataset.group, { customerGroup: select.value }, select.value === 'zakelijk' ? 'Zakelijke klant: zakelijke prijzen excl. btw' : 'Particuliere klant');
     });
     table.querySelectorAll('[data-mustchange]').forEach((checkbox) => {
       /**

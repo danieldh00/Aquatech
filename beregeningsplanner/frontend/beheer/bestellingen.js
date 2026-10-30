@@ -68,6 +68,7 @@
     box.innerHTML = `<h3>${esc(order.number)} <span class="pill ${esc(order.status)}">${esc(order.statusLabel)}</span></h3>
       <p>${esc(order.customer.company ? `${order.customer.company} – ` : '')}${esc(order.customer.name)} · <a href="mailto:${esc(mailtoAddress(order.email))}">${esc(order.email)}</a>${order.customer.phone ? ` · ${esc(order.customer.phone)}` : ''}<br>
       ${shipping && shipping.method === 'ophalen' ? 'Wordt opgehaald' : `${esc(order.address.street)}, ${esc(order.address.postcode)} ${esc(order.address.city)}${order.address.country && order.address.country !== 'NL' ? ` (${esc(order.address.country)})` : ''}`}</p>
+      ${order.customerGroup === 'zakelijk' ? `<p><b>Zakelijke klant</b>${order.vat && order.vat.number ? ` · btw-nummer ${esc(order.vat.number)}` : ''}${order.vat && order.vat.shifted ? ' · <b>btw verlegd</b> (factureren zonder btw)' : ''}. Bedragen hieronder zijn incl. btw, behalve bij verlegging.</p>` : ''}
       ${order.note ? `<p><b>Opmerking:</b> ${esc(order.note)}</p>` : ''}
       <div class="tablewrap"><table class="grid"><thead><tr><th>Artikel</th><th class="num">Aantal</th><th class="num">Prijs</th><th class="num">Totaal</th></tr></thead><tbody>${lines}${shippingRow}${vat}
         <tr><th colspan="3">Totaal incl. btw</th><td class="num"><b>${euro(order.totals.total)}</b></td></tr></tbody></table></div>
@@ -196,7 +197,7 @@
         { header: 'Klant', key: 'name', width: 26 }, { header: 'Bedrijf', key: 'company', width: 24 }, { header: 'E-mail', key: 'email', width: 28 }, { header: 'Telefoon', key: 'phone', width: 16 },
         { header: 'Adres', key: 'street', width: 28 }, { header: 'Postcode', key: 'postcode', width: 10 }, { header: 'Plaats', key: 'city', width: 18 },
         { header: 'Totaal excl. btw', key: 'excl', width: 15, style: { numFmt: '€ #,##0.00' } }, { header: 'Btw', key: 'vat', width: 11, style: { numFmt: '€ #,##0.00' } }, { header: 'Totaal incl. btw', key: 'total', width: 15, style: { numFmt: '€ #,##0.00' } },
-        { header: 'Verzending', key: 'shipping', width: 26 }, { header: 'Verzendkosten incl. btw', key: 'shippingPrice', width: 18, style: { numFmt: '€ #,##0.00' } }, { header: 'Volgcode', key: 'tracking', width: 20 },
+        { header: 'Klantgroep', key: 'group', width: 12 }, { header: 'Btw-nummer', key: 'vatNumber', width: 18 }, { header: 'Btw verlegd', key: 'shifted', width: 11 }, { header: 'Verzending', key: 'shipping', width: 26 }, { header: 'Verzendkosten incl. btw', key: 'shippingPrice', width: 18, style: { numFmt: '€ #,##0.00' } }, { header: 'Volgcode', key: 'tracking', width: 20 },
         { header: 'Opmerking', key: 'note', width: 30 },
       ];
       const lines = workbook.addWorksheet('Regels');
@@ -209,7 +210,7 @@
         const vat = order.totals.byRate.reduce((sum, row) => sum + row.vat, 0);
         orders.addRow({
           number: order.number, at: new Date(order.createdAt), status: order.statusLabel, name: order.customer.name, company: order.customer.company, email: order.email, phone: order.customer.phone,
-          street: order.address.street, postcode: order.address.postcode, city: order.address.city, excl: Math.round((order.total - vat) * 100) / 100, vat: Math.round(vat * 100) / 100, total: order.total, shipping: order.shipping ? order.shipping.label : '', shippingPrice: order.shipping ? order.shipping.price : 0,
+          street: order.address.street, postcode: order.address.postcode, city: order.address.city, excl: Math.round((order.total - vat) * 100) / 100, vat: Math.round(vat * 100) / 100, total: order.total, group: order.customerGroup === 'zakelijk' ? 'zakelijk' : 'particulier', vatNumber: order.vat ? order.vat.number : '', shifted: order.vat && order.vat.shifted ? 'ja' : '', shipping: order.shipping ? order.shipping.label : '', shippingPrice: order.shipping ? order.shipping.price : 0,
           tracking: order.shipping && order.shipping.tracking ? order.shipping.tracking.code : '', note: order.note,
         });
         for (const line of order.lines) lines.addRow({ number: order.number, code: line.code, name: line.name, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal });

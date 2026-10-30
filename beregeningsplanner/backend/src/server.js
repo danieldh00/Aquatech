@@ -1253,7 +1253,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.patch('/api/admin/users/:id', requireJson, wrap(async (req, res) => {
     const input = {};
-    for (const field of ['displayName', 'role', 'disabled', 'password', 'username']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
+    for (const field of ['displayName', 'role', 'disabled', 'password', 'username', 'customerGroup']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
     withMustChange(input, req.body);
     const home = usersTenantOf(req);
     if (guardPlatformAdmin(req, res, req.params.id)) return;

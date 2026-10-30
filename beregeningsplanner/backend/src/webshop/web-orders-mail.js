@@ -17,7 +17,18 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
    * @param {object} order De bestelling (met regels).
    * @returns {string} De regels.
    */
-  const linesText = (order) => order.lines.map((line) => `${line.qty} × ${line.name} (${line.code}): ${EUR.format(line.lineTotal)}`).join('\n');
+  const linesText = (order) => order.lines.map((line) => `${line.qty} × ${line.name} (${line.code}): ${EUR.format(order.customerGroup === 'zakelijk' && line.lineExcl !== undefined ? line.lineExcl : line.lineTotal)}${order.customerGroup === 'zakelijk' ? ' excl. btw' : ''}`).join('\n');
+  /**
+   * De totalen als tekst: voor een zakelijke klant excl. btw, de btw en het totaal (of 'btw verlegd').
+   * @param {object} order De bestelling.
+   * @returns {string} Eén of meer regels.
+   */
+  const totalsText = (order) => {
+    if (order.customerGroup !== 'zakelijk') return `Totaal incl. btw: ${EUR.format(order.totals.total)}`;
+    if (order.vat && order.vat.shifted) return `Totaal (btw verlegd naar de afnemer${order.vat.number ? `, btw-nummer ${order.vat.number}` : ''}): ${EUR.format(order.totals.total)}`;
+    const excl = order.totals.byRate.reduce((sum, row) => sum + row.excl, 0);
+    return `Totaal excl. btw: ${EUR.format(excl)}\nBtw: ${EUR.format(order.totals.total - excl)}\nTotaal incl. btw: ${EUR.format(order.totals.total)}`;
+  };
   /**
    * Het afleveradres als tekst.
    * @param {object} order De bestelling.
@@ -54,7 +65,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     }
     if (!mailer.configured()) { orders.updateData(tenantId, order.id, { mail: { sent: false, error: 'Geen mailserver ingesteld.', at: new Date().toISOString() } }); return; }
     const profile = settings.get('quoteProfile') || {};
-    const details = `Bestelling ${order.number}\n\n${linesText(order)}\n\nTotaal incl. btw: ${EUR.format(order.totals.total)}\n\n${shippingText(order)}${order.note ? `\n\nJe opmerking: ${order.note}` : ''}`;
+    const details = `Bestelling ${order.number}\n\n${linesText(order)}\n\n${totalsText(order)}\n\n${shippingText(order)}${order.note ? `\n\nJe opmerking: ${order.note}` : ''}`;
     let error = '';
     try {
       const customerMail = mailBody(profile, [
