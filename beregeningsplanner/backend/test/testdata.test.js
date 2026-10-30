@@ -269,6 +269,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
       roles: 'rollen horen bij de organisatie (live-tenant); een testomgeving gebruikt die van live',
       shop_content: 'de eigen webshop (blokken en pagina\'s) geldt alleen voor de hoofdtenant; een testomgeving heeft geen webshop',
       web_orders: 'bestellingen in de eigen webshop horen bij de hoofdtenant; een testomgeving heeft geen webshop',
+      web_returns: 'retouren horen bij bestellingen van de eigen webshop; een testomgeving heeft geen webshop',
       shop_images: 'afbeeldingen van de eigen webshop horen bij de hoofdtenant; een testomgeving heeft geen webshop',
     };
     const tables = listTables(db).filter((table) => tableColumns(db, table).some((column) => column.name === 'tenant_id'));

@@ -900,6 +900,25 @@ const MIGRATIONS = [
   ALTER TABLE users ADD COLUMN customer_group TEXT NOT NULL DEFAULT '';
   ALTER TABLE stock_items ADD COLUMN business_price REAL;
   `,
+  // 40: retouren van webshopbestellingen (web-returns.js). Eén rij per aanvraag met
+  // de regels, de reden en de afhandeling als JSON in `data`; status aangevraagd |
+  // goedgekeurd | afgewezen | ingetrokken | afgerond.
+  `
+  CREATE TABLE web_returns (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    order_id   TEXT NOT NULL REFERENCES web_orders(id),
+    user_id    TEXT REFERENCES users(id),
+    number     TEXT NOT NULL,
+    status     TEXT NOT NULL DEFAULT 'aangevraagd',
+    data       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX web_returns_number ON web_returns (tenant_id, number);
+  CREATE INDEX web_returns_order ON web_returns (tenant_id, order_id);
+  CREATE INDEX web_returns_status ON web_returns (tenant_id, status, created_at);
+  `,
 ];
 
 /**

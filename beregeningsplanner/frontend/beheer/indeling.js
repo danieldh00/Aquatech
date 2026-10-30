@@ -10,6 +10,7 @@
       { id: 'history', label: 'Aanvragen', pane: 'history', words: 'historie wijzigingen planherkenning export excel' },
       { id: 'plans', label: 'Plannen', pane: 'plans', words: 'plan overzicht alle gebruikers' },
       { id: 'bestellingen', label: 'Webshopbestellingen', pane: 'bestellingen', words: 'bestellingen winkel webshop orders verzenden annuleren klant excel op rekening' },
+      { id: 'retouren', label: 'Webshopretouren', pane: 'retouren', words: 'retouren retour terugsturen creditnota goedkeuren afwijzen winkel webshop klant excel' },
     ] },
     { title: 'Organisatie & gebruikers', sections: [
       { id: 'users', label: 'Gebruikers', pane: 'users', words: 'account wachtwoord toevoegen bekijken als klant gasten inloglink organisatiecode' },

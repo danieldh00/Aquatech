@@ -187,10 +187,10 @@ const formatDate = (iso) => {
  * plaatsen (`thanks`) met een bedankt, anders als onderdeel van de bestelhistorie.
  * @param {object} order De bestelling (met regels, adres, totalen en verloop).
  * @param {object[]} groups Alle hoofdcategorieën.
- * @param {{ thanks?: boolean, invoice?: ?{ number: string, status: string } }} [options] thanks: direct na het plaatsen; invoice: de definitieve factuur bij de bestelling (download als PDF).
+ * @param {{ thanks?: boolean, invoice?: ?{ number: string, status: string }, returnsHtml?: string }} [options] thanks: direct na het plaatsen; invoice: de definitieve factuur bij de bestelling (download als PDF); returnsHtml: het blok Retourneren (storefront-return-pages.js).
  * @returns {string} De HTML-pagina.
  */
-function orderPage(order, groups = [], { thanks = false, invoice = null } = {}) {
+function orderPage(order, groups = [], { thanks = false, invoice = null, returnsHtml = '' } = {}) {
   const business = order.customerGroup === 'zakelijk';
   const rows = order.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<br><small>Artikelnr.: ${escapeHtml(line.code)}</small></td><td class="num">${escapeHtml(formatPrice(business ? line.unitExcl : line.unitIncl))}</td><td class="num">${line.qty}</td><td class="num">${escapeHtml(formatPrice(business && line.lineExcl !== undefined ? line.lineExcl : line.lineTotal))}</td></tr>`).join('');
   const vatNote = order.vat && order.vat.shifted ? `<p class="note">Btw verlegd naar de afnemer${order.vat.number ? ` (btw-nummer ${escapeHtml(order.vat.number)})` : ''}.</p>` : business && order.vat && order.vat.number ? `<p class="note">Btw-nummer: ${escapeHtml(order.vat.number)}</p>` : '';
@@ -207,6 +207,7 @@ function orderPage(order, groups = [], { thanks = false, invoice = null } = {}) 
 ${vatNote}${deliveryBlock(order)}
 <p>Status: <strong>${escapeHtml(order.statusLabel)}</strong></p>
 ${invoiceBlock}${history}
+${returnsHtml}
 <p><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a> <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a></p></section>`;
   return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups });
 }

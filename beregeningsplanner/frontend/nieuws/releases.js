@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.5.1',
+      date: '2026-10-30',
+      title: 'Retouren in de webshop',
+      items: [
+        { text: 'Klanten kunnen binnen 14 dagen na verzending een retour aanvragen op hun bestelpagina: artikelen, aantal en reden. Ze kunnen een aangevraagde retour ook weer intrekken.', for: ['beheer'] },
+        { text: 'Bij Beheer, Webshopretouren keur je een retour goed of wijs je hem af. Bij Retour ontvangen gaan de artikelen terug op voorraad en maakt Aquatech de creditnota; de klant krijgt bij elke stap een mail.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.5.0',
       date: '2026-10-30',
       title: 'Verzendmail en bestelhistorie',

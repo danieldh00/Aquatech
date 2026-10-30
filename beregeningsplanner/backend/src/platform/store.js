@@ -601,6 +601,7 @@ function createStore(db) {
       }
       prepare('UPDATE quotes SET customer_id = NULL WHERE customer_id = ?').run(user.id);
       prepare('UPDATE web_orders SET user_id = NULL WHERE tenant_id = ? AND user_id = ?').run(user.tenant_id, user.id);
+      prepare('UPDATE web_returns SET user_id = NULL WHERE tenant_id = ? AND user_id = ?').run(user.tenant_id, user.id);
       prepare('UPDATE service_requests SET customer_id = NULL WHERE customer_id = ?').run(user.id);
       prepare('UPDATE service_requests SET handled_by = NULL WHERE handled_by = ?').run(user.id);
       prepare('UPDATE work_orders SET assignee_id = NULL WHERE assignee_id = ?').run(user.id);

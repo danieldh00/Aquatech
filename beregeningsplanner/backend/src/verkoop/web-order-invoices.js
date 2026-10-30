@@ -6,7 +6,8 @@
 // uniek per omgeving), dus opnieuw proberen is veilig. De voorraad is bij
 // Verzonden al afgeboekt (stock.issueOrder), de factuur boekt dus niets af.
 // Betaling is nu altijd "op rekening": de factuur blijft open tot een
-// beheerder hem in Facturen op betaald zet.
+// beheerder hem in Facturen op betaald zet. Een afgeronde retour (web-returns.js)
+// krijgt een creditnota voor de teruggestuurde regels bij die factuur.
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 
@@ -65,10 +66,10 @@ function fromWebOrder(order, articles, settings) {
 
 /**
  * Maakt het factureren van webshopbestellingen.
- * @param {{ orders: object, invoices: object, debtors?: object, stock?: object, sender?: object, settingsFor: Function, log?: object }} ctx De opslagen en hulpfuncties van de server (settingsFor(tenantId) geeft de instellingen van een omgeving).
- * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function }} De functies.
+ * @param {{ orders: object, invoices: object, returns?: object, debtors?: object, stock?: object, sender?: object, settingsFor: Function, log?: object }} ctx De opslagen en hulpfuncties van de server (settingsFor(tenantId) geeft de instellingen van een omgeving).
+ * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditReturn: Function }} De functies.
  */
-function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null, sender = null, settingsFor, log = console }) {
+function createWebOrderInvoices({ orders, invoices, returns = null, debtors = null, stock = null, sender = null, settingsFor, log = console }) {
   /**
    * De factuurinstellingen van een omgeving.
    * @param {string} tenantId Id van de omgeving.
@@ -181,7 +182,69 @@ function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null
     await mailIfFinalized(tenantId, out);
   }
 
-  return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped };
+  /**
+   * Maakt de creditnota voor een afgeronde retour: een creditfactuur bij de factuur
+   * van de bestelling met alleen de teruggestuurde regels, zo ingesteld meteen
+   * definitief en per mail verstuurd. De voorraad is al door de retour zelf
+   * teruggeboekt, de creditnota boekt dus niets. Heeft de retour al een creditnota,
+   * dan verandert er niets. Zonder definitieve factuur (of met facturen voor
+   * webshopbestellingen uit) wordt er niets gemaakt en staat dat bij de retour.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} returnId Id van de retour.
+   * @param {object|null} user Wie het doet.
+   * @returns {Promise<{ credit?: { invoiceId: string, number: string, status: string }, existing?: boolean, skipped?: string, error?: string, status?: number }>} De creditnota, of waarom er geen is.
+   */
+  async function creditReturn(tenantId, returnId, user) {
+    const record = returns ? returns.get(tenantId, returnId) : null;
+    if (!record) return { error: 'Retour niet gevonden.', status: 404 };
+    const settings = settingsOf(tenantId);
+    // Een creditnota die al definitief is blijft zoals hij is; een concept dat bleef staan (ook zonder foutmelding, bijvoorbeeld na een herstart) wordt alsnog afgemaakt, tenzij definitief maken uit staat.
+    if (record.credit && !(record.credit.status === 'concept' && settings.webOrders.finalize)) return { credit: record.credit, existing: true };
+    /**
+     * Legt vast waarom er (nog) geen creditnota is en meldt dat terug.
+     * @param {string} reason De reden.
+     * @returns {{ skipped: string }} De melding.
+     */
+    const skip = (reason) => { returns.updateData(tenantId, record.id, { creditError: reason }); return { skipped: reason }; };
+    if (!settings.webOrders.enabled) return skip('Facturen voor webshopbestellingen staan uit (Facturen → Instellingen): er is geen creditnota gemaakt.');
+    const found = invoiceFor(tenantId, record.orderId);
+    if (!found || found.status === 'concept') return skip('Er is nog geen definitieve factuur bij de bestelling: maak de creditnota zelf in Facturen zodra die er is.');
+    try {
+      const original = invoices.get(tenantId, found.id);
+      let created = record.credit ? invoices.get(tenantId, record.credit.invoiceId) : null;
+      if (!created) {
+        const draft = Core.creditOf(original);
+        const byCode = new Map(draft.lines.map((line) => [String(line.code || '').toUpperCase(), line]));
+        draft.lines = record.lines.map((line) => {
+          const match = byCode.get(String(line.code || '').toUpperCase());
+          return match ? { ...match, qty: -Math.abs(line.qty) } : null;
+        }).filter(Boolean);
+        if (!draft.lines.length) return skip('De teruggestuurde artikelen staan niet op de factuur: er is geen creditnota gemaakt.');
+        draft.intro = `Creditering van factuur ${original.number} voor retour ${record.number}`;
+        // Tussen het lezen van de retour en het vastleggen hieronder zit geen await en de database is synchroon: gelijktijdige aanvragen in dit proces kunnen er dus niet tussen komen, en een tweede aanvraag ziet de gekoppelde creditnota.
+        created = invoices.create(tenantId, user, draft, settings, { kind: 'credit', creditOf: original.id, customerId: original.customerId, debtorId: original.debtorId });
+        // Direct vastleggen: mislukt het definitief maken, dan maakt een volgende poging dit concept af in plaats van een tweede creditnota te maken.
+        returns.updateData(tenantId, record.id, { credit: { invoiceId: created.id, number: created.number, status: created.status } });
+      }
+      let outcome = { invoice: created, finalizedNow: false };
+      if (settings.webOrders.finalize && created.status === 'concept') {
+        const finalized = invoices.finalize(tenantId, user, created.id, settings, { skipStock: true });
+        if (finalized && finalized.error) throw new Error(finalized.error);
+        outcome = { invoice: finalized.invoice || invoices.get(tenantId, created.id), finalizedNow: true };
+      }
+      const saved = invoices.get(tenantId, created.id);
+      const credit = { invoiceId: saved.id, number: saved.number, status: saved.status };
+      returns.updateData(tenantId, record.id, { credit, creditError: '' });
+      await mailIfFinalized(tenantId, { invoice: saved, finalizedNow: outcome.finalizedNow });
+      return { credit };
+    } catch (error) {
+      const reason = `Creditnota maken mislukt: ${String(error.message || error).slice(0, 250)}`;
+      returns.updateData(tenantId, record.id, { creditError: reason });
+      return { error: reason, status: 500 };
+    }
+  }
+
+  return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped, creditReturn };
 }
 
 module.exports = { createWebOrderInvoices, fromWebOrder, invoiceKey };

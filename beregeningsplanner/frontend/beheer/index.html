@@ -334,6 +334,16 @@
         <div class="pager"><button id="wo-prev" class="btn small">Vorige</button> <span id="wo-info" class="muted small"></span> <button id="wo-next" class="btn small">Volgende</button></div>
         <div id="wo-detail" class="card-form settings" hidden></div>
       </section>
+      <section id="tab-retouren" class="tabpane" hidden>
+        <div class="filters">
+          <select id="wr-status" aria-label="Status"></select>
+          <button id="wr-export" class="btn primary">Exporteer naar Excel</button>
+        </div>
+        <p class="muted small">Retouren van webshopbestellingen. De klant vraagt ze binnen 14 dagen na verzending aan; hier keur je ze goed of wijs je ze af. Bij <i>Retour ontvangen</i> gaan de artikelen terug op voorraad en wordt de creditnota gemaakt.</p>
+        <div class="tablewrap"><table class="grid" id="wr-table"></table></div>
+        <div class="pager"><button id="wr-prev" class="btn small">Vorige</button> <span id="wr-info" class="muted small"></span> <button id="wr-next" class="btn small">Volgende</button></div>
+        <div id="wr-detail" class="card-form settings" hidden></div>
+      </section>
       <section id="tab-shopinhoud" class="tabpane" hidden>
         <div id="sc-root" class="sc"><p class="muted">Laden…</p></div>
       </section>
@@ -418,6 +428,7 @@
   <script src="webshop.js"></script>
   <script src="webshop-inhoud.js"></script>
   <script src="bestellingen.js"></script>
+  <script src="retouren.js"></script>
   <script src="sproeiers.js"></script>
   <script src="rollen.js"></script>
   <script src="aikosten.js"></script>

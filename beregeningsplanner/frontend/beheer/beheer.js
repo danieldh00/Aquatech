@@ -1184,6 +1184,7 @@
     if (section.pane === 'settings') loadSettings(section.id);
     if (section.pane === 'webshop') { loadSettings(section.id); window.BeheerWebshop.load(); }
     if (section.pane === 'bestellingen') window.BeheerBestellingen.load();
+    if (section.pane === 'retouren') window.BeheerRetouren.load();
     if (section.pane === 'shopinhoud') window.BeheerWebshopInhoud.load();
     if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
@@ -1250,6 +1251,7 @@
     initMail();
     window.BeheerWebshop.init({ toast });
     window.BeheerBestellingen.init({ toast });
+    window.BeheerRetouren.init({ toast });
     window.BeheerWebshopInhoud.init({ toast });
     window.BeheerSproeiers.init({ toast });
     window.BeheerRollen.init({ toast, onChange: setRoles });
