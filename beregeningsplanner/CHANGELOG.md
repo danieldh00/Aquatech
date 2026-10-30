@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.4
+
+Varianten: drie correcties na de review van 1.3.3.
+
+- **Facturen** (`verkoop/invoices.js`): een losse factuur met de code van een
+  hoofdartikel boekt niets af (een hoofdartikel heeft geen eigen voorraad);
+  gewone artikelen en varianten wel.
+- **Werkorders per hoofdartikel** (`voorraad/stock.js`): `listRows` telt in
+  dezelfde query `family_orders` (unieke `work_order_id` over de actieve
+  varianten); een werkorder met twee maten telt bij het hoofdartikel één keer.
+- **WooCommerce** (`webshop/woocommerce.js`): mislukt bij `createVariations`
+  een latere batch, dan blijven de resultaten van de eerdere batches bewaard en
+  krijgt alleen die batch een fout per variatie.
+
 ## 1.3.3
 
 Artikelen met varianten (maat, lengte, kleur), ook in de webshopkoppeling.
