@@ -11,7 +11,7 @@ const { createStore } = require('../src/platform/store');
 const { createStockStore, sanitizeAttributes, combinations } = require('../src/voorraad/stock');
 const { createShopStore } = require('../src/webshop/shop');
 const { createShopSync } = require('../src/webshop/shop-sync');
-const { sanitizeShop } = require('../src/webshop/woocommerce');
+const { sanitizeShop, createVariations } = require('../src/webshop/woocommerce');
 const { createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
@@ -97,7 +97,7 @@ test('varianten: hoofdartikel, totalen, mutaties alleen op een variant, bestelvo
 
 /**
  * Hoofdtenant met beheerder, installateur en klant, plus een testserver.
- * @returns {Promise<object>} server en as (inloggen).
+ * @returns {Promise<object>} server, db en as (inloggen).
  */
 async function setup() {
   const db = openDb();
@@ -108,11 +108,11 @@ async function setup() {
   await store.createAccount(main, { username: 'pien', displayName: 'Pien', role: 'planner', password: PW });
   await store.createAccount(main, { username: 'klant', displayName: 'Klant', role: 'klant', password: PW });
   const { server, base } = await listen(createApp({ secret: SECRET, db }));
-  return { server, as: createLogin(base, { password: PW }) };
+  return { server, db, as: createLogin(base, { password: PW }) };
 }
 
 test('varianten via de API: kenmerken, keuzelijst, werkorder kiest eerst een maat, rechten en andere organisatie', async () => {
-  const { server, as } = await setup();
+  const { server, db: stockDb, as } = await setup();
   try {
     const baas = await as('baas');
     const kees = await as('kees');
@@ -152,6 +152,22 @@ test('varianten via de API: kenmerken, keuzelijst, werkorder kiest eerst een maa
     stockOfOrder = (await kees.get(`/api/stock/workorders/${workOrder.id}`)).body;
     assert.deepStrictEqual(stockOfOrder.chooseVariant, []);
     assert.deepStrictEqual(stockOfOrder.lines.map((line) => [line.code, line.reserved]), [['SLANG-25M', 2]]);
+
+    // Twee maten op dezelfde werkorder: het hoofdartikel telt één werkorder.
+    full.data.materials.push({ ...full.data.materials[0], code: 'SLANG-15M', qty: 1 });
+    assert.strictEqual((await kees.put(`/api/workorders/${workOrder.id}`, { data: full.data })).status, 200);
+    assert.strictEqual((await kees.get(`/api/stock/items/${parent.id}`)).body.orders, 1);
+    assert.strictEqual((await kees.get('/api/stock')).body.items.find((item) => item.id === parent.id).orders, 1);
+    full.data.materials.pop();
+    assert.strictEqual((await kees.put(`/api/workorders/${workOrder.id}`, { data: full.data })).status, 200);
+
+    // Losse factuur met de code van het hoofdartikel: niets afgeboekt op het hoofdartikel.
+    const invoice = (await baas.post('/api/invoices', { data: { customer: { name: 'Balieklant' }, lines: [{ code: 'SLANG', description: 'Tuinslang', qty: 1, price: 20 }] } })).body;
+    assert.strictEqual((await baas.post(`/api/invoices/${invoice.id}/finalize`, {})).status, 200);
+    const parentAfter = (await kees.get(`/api/stock/items/${parent.id}`)).body;
+    assert.strictEqual(parentAfter.onHand, 0);
+    assert.deepStrictEqual(parentAfter.movements, []);
+    assert.strictEqual(stockDb.prepare('SELECT on_hand FROM stock_items WHERE id = ?').get(parent.id).on_hand, 0);
 
     // Andere organisatie: 404 op het hoofdartikel, eigen lege keuzelijst.
     const created = await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
@@ -413,4 +429,26 @@ test('varianten en WooCommerce: type van vóór de migratie is onbekend, variati
   const refused = stock.importShop(tenantId, shop.products(tenantId), ['11']);
   assert.match(refused.error, /Synchroniseer eerst/);
   assert.ok(!stock.findCode(tenantId, 'LOS'));
+});
+
+test('varianten en WooCommerce: mislukt een latere batch, dan blijven de eerder aangemaakte variaties bewaard', async () => {
+  let batch = 0;
+  /**
+   * Nagebootste webshop: de eerste batch slaagt, de tweede geeft een serverfout.
+   * @param {string} url Adres van het verzoek.
+   * @param {object} options Fetch-opties (body).
+   * @returns {Promise<object>} Antwoord zoals fetch het geeft.
+   */
+  const fetchImpl = async (url, options) => {
+    batch++;
+    if (batch > 1) return { ok: false, status: 500, headers: new Headers(), text: async () => '{"message":"Serverfout"}' };
+    const body = JSON.parse(options.body);
+    return { ok: true, status: 200, headers: new Headers(), text: async () => JSON.stringify({ create: body.create.map((_, index) => ({ id: 1000 + index })) }) };
+  };
+  const shopConfig = { ...sanitizeShop({ url: 'http://shop.test', mode: 'rest' }), consumerKey: 'ck_test_1234567890', consumerSecret: 'cs_test_1234567890' };
+  const variations = Array.from({ length: 101 }, (_, index) => ({ sku: `V-${index}`, code: `V-${index}`, values: { Maat: String(index) } }));
+  const results = await createVariations(shopConfig, '70', variations, { fetchImpl, allowInsecure: true });
+  assert.strictEqual(results.length, 101);
+  assert.strictEqual(results.filter((result) => result.ok).length, 100);
+  assert.strictEqual(results[100].ok, false);
 });

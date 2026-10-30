@@ -489,8 +489,14 @@ async function createVariations(shop, productId, variations, { fetchImpl = null,
       if (variation.stockQty != null) { create.manage_stock = true; create.stock_quantity = Math.max(0, Math.floor(variation.stockQty)); }
       return create;
     });
-    const { body } = await getJson(`${base}/wp-json/wc/v3/products/${productId}/variations/batch`, headers, send, { method: 'POST', body: { create: part } });
-    out.push(...batchResults(part, body && body.create));
+    try {
+      const { body } = await getJson(`${base}/wp-json/wc/v3/products/${productId}/variations/batch`, headers, send, { method: 'POST', body: { create: part } });
+      out.push(...batchResults(part, body && body.create));
+    } catch (error) {
+      // Mislukt een latere batch, dan blijven de eerdere resultaten bewaard en krijgt deze batch een fout per variatie.
+      if (!(error instanceof SourceError) || !out.length) throw error;
+      out.push(...part.map(() => ({ id: '', ok: false, error: String(error.message || 'niet aangemaakt').slice(0, 200) })));
+    }
   }
   return out;
 }
