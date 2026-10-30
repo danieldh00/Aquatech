@@ -4,11 +4,27 @@
 // (inkoopprijs, locatie, notities, aantallen) komen er nooit in.
 
 const crypto = require('crypto');
+const { decodeHtmlEntities } = require('./html-entities');
 
 /** Hoe lang (ms) een opgebouwde catalogus per omgeving wordt hergebruikt. */
 const CACHE_MS = 30 * 1000;
 /** Categorie voor artikelen zonder categorie in de webshop. */
 const FALLBACK_CATEGORY = 'Overig';
+/** Aantal uitgelichte producten op de startpagina. */
+const FEATURED_COUNT = 8;
+/**
+ * Hoofdcategorieën van de shop, zoals het menu van aquatechshop.nl. De
+ * webshop levert alleen platte categorienamen; een categorie komt in de eerste
+ * groep waarvan het patroon op de naam past (volgorde telt), anders in Overig.
+ */
+const GROUPS = [
+  { slug: 'beregening', name: 'Beregening', pattern: /sproei|druppel|driptape|beregening|regensensor|computer|verdeler|manifold|magneetklep|kleppenput/i },
+  { slug: 'elektra', name: 'Elektra', pattern: /^elektra/i },
+  { slug: 'pomp-techniek', name: 'Pomp & techniek', pattern: /pomp|bronkop|expansievat|aansluitkast|kabel|waterbehandeling|filter|^techniek/i },
+  { slug: 'leidingen-toebehoren', name: 'Leidingen & toebehoren', pattern: /tyleen|draadfitting|kraan|kranen|koppeling|pvc|leiding|slang|fitting|unidelta|muurplaat/i },
+];
+/** Hoofdcategorie voor wat nergens in past. */
+const OTHER_GROUP = { slug: 'overig', name: 'Overig' };
 
 /**
  * Maakt van een tekst een url-vriendelijke naam: kleine letters, cijfers en
@@ -32,8 +48,37 @@ function slugify(text) {
 function categoryNameOf(categoriesJson) {
   let names = [];
   try { names = JSON.parse(categoriesJson || '[]'); } catch { names = []; }
-  const first = Array.isArray(names) ? names.map((name) => String(name || '').trim()).find(Boolean) : '';
+  const first = Array.isArray(names) ? names.map((name) => decodeHtmlEntities(name).trim()).find(Boolean) : '';
   return first || FALLBACK_CATEGORY;
+}
+
+/**
+ * Bepaalt de hoofdcategorie van een categorie op haar naam.
+ * @param {string} categoryName De categorienaam.
+ * @returns {{ slug: string, name: string }} De hoofdcategorie (zie GROUPS), of Overig.
+ */
+function groupOf(categoryName) {
+  return GROUPS.find((group) => group.pattern.test(categoryName)) || OTHER_GROUP;
+}
+
+/**
+ * Kiest de uitgelichte producten voor de startpagina: producten met foto die
+ * op voorraad zijn, om en om uit elke hoofdcategorie zodat de selectie breed is.
+ * @param {object[]} products De producten (op naam gesorteerd, met groupSlug, image en inStock).
+ * @returns {object[]} Maximaal FEATURED_COUNT producten.
+ */
+function pickFeatured(products) {
+  const queues = new Map();
+  for (const product of products) {
+    if (!product.image || !product.inStock) continue;
+    queues.set(product.groupSlug, [...(queues.get(product.groupSlug) || []), product]);
+  }
+  const featured = [];
+  const lists = [...queues.values()];
+  for (let round = 0; featured.length < FEATURED_COUNT && lists.some((list) => round < list.length); round += 1) {
+    for (const list of lists) if (round < list.length && featured.length < FEATURED_COUNT) featured.push(list[round]);
+  }
+  return featured;
 }
 
 /**
@@ -74,7 +119,7 @@ function assignCategorySlugs(categories) {
  * Bouwt de catalogus uit rijen van de database: unieke slugs voor producten
  * en categorieën, categorie-indeling en prijs inclusief btw.
  * @param {object[]} rows Rijen met id, code, name, unit, on_hand, sale_price, vat_rate, categories en image.
- * @returns {{ products: object[], categories: object[] }} products (slug, code, name, unit, categorySlug, categoryName, priceExcl, priceIncl, vatRate, inStock, image) en categories (slug, name, count), beide op naam gesorteerd.
+ * @returns {{ products: object[], categories: object[], groups: object[], featured: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image) en categories (slug, name, count, groupSlug), beide op naam gesorteerd; groups = hoofdcategorieën met hun categorieën (slug, name, categories, count); featured = uitgelichte producten.
  */
 function buildCatalog(rows) {
   const sorted = [...rows].sort((left, right) => String(left.name).localeCompare(String(right.name), 'nl') || String(left.code).localeCompare(String(right.code), 'nl'));
@@ -92,14 +137,15 @@ function buildCatalog(rows) {
     usedSlugs.add(slug);
     const categoryName = categoryNameOf(row.categories);
     const categoryKey = categoryName.toLowerCase();
-    const category = categories.get(categoryKey) || { key: categoryKey, name: categoryName, count: 0 };
+    const group = groupOf(categoryName);
+    const category = categories.get(categoryKey) || { key: categoryKey, name: categoryName, count: 0, groupSlug: group.slug };
     category.count += 1;
     categories.set(categoryKey, category);
     const priceExcl = Number(row.sale_price);
     const vatRate = Number(row.vat_rate ?? 21);
     return {
-      slug, code: String(row.code), name: String(row.name), unit: String(row.unit || 'st'),
-      categoryKey, categoryName, priceExcl, vatRate,
+      slug, code: String(row.code), name: decodeHtmlEntities(row.name), unit: String(row.unit || 'st'),
+      categoryKey, categoryName, groupSlug: group.slug, priceExcl, vatRate,
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
       inStock: Math.round((Number(row.on_hand) - Number(row.reserved || 0)) * 1000) / 1000 > 0, image: safeImageUrl(row.image),
     };
@@ -110,7 +156,11 @@ function buildCatalog(rows) {
     delete product.categoryKey;
   }
   const categoryList = [...categories.values()].sort((left, right) => left.name.localeCompare(right.name, 'nl'));
-  return { products, categories: categoryList };
+  const groups = [...GROUPS, OTHER_GROUP].map((group) => {
+    const members = categoryList.filter((category) => category.groupSlug === group.slug);
+    return { slug: group.slug, name: group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0) };
+  }).filter((group) => group.categories.length);
+  return { products, categories: categoryList, groups, featured: pickFeatured(products) };
 }
 
 /**
@@ -127,7 +177,7 @@ function createStorefrontData(db) {
      * verkoopprijs die naar de webshop mogen (shop_sync), met categorie en
      * afbeelding van het gekoppelde webshopproduct. Eén query.
      * @param {string} tenantId De omgeving.
-     * @returns {{ products: object[], categories: object[] }} Zie buildCatalog.
+     * @returns {{ products: object[], categories: object[], groups: object[], featured: object[] }} Zie buildCatalog.
      */
     catalogOf(tenantId) {
       const cached = cache.get(tenantId);
@@ -149,4 +199,4 @@ function createStorefrontData(db) {
   };
 }
 
-module.exports = { createStorefrontData, buildCatalog, slugify, categoryNameOf, safeImageUrl, CACHE_MS };
+module.exports = { createStorefrontData, buildCatalog, slugify, categoryNameOf, groupOf, safeImageUrl, CACHE_MS };

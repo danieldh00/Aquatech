@@ -16,6 +16,7 @@
 const net = require('net');
 const { publicAddress } = require('../beveiliging/netguard');
 const { pinnedFetch, readLimited } = require('../beveiliging/pinned-fetch');
+const { decodeHtmlEntities } = require('./html-entities');
 
 const PER_PAGE = 100;
 const MAX_PAGES = 50;
@@ -152,7 +153,7 @@ function fromStoreApi(product, shop) {
   return {
     id: String(product.id),
     sku: String(product.sku || ''),
-    name: String(product.name || ''),
+    name: decodeHtmlEntities(product.name || ''),
     price: exTax(raw == null ? null : raw / 10 ** minor, shop),
     regularPrice: null,
     rawRegular: null,
@@ -161,7 +162,7 @@ function fromStoreApi(product, shop) {
     url: String(product.permalink || ''),
     image: product.images?.[0]?.src || '',
     inStock: product.is_in_stock !== false,
-    categories: (product.categories || []).map((category) => category.name).filter(Boolean),
+    categories: (product.categories || []).map((category) => decodeHtmlEntities(category.name)).filter(Boolean),
     code: '',
     type: 'simple',
     parentId: null,
@@ -181,7 +182,7 @@ function fromRestV3(product, shop) {
   return {
     id: String(product.id),
     sku: String(product.sku || ''),
-    name: String(product.name || ''),
+    name: decodeHtmlEntities(product.name || ''),
     price: exTax(toNumber(product.price), shop),
     // Normale prijs (zonder actie) en voorraad zoals de webshop ze bijhoudt;
     // null = niet ingevuld of geen voorraadbeheer in de webshop.
@@ -193,7 +194,7 @@ function fromRestV3(product, shop) {
     url: String(product.permalink || ''),
     image: product.images?.[0]?.src || '',
     inStock: product.stock_status !== 'outofstock',
-    categories: (product.categories || []).map((category) => category.name).filter(Boolean),
+    categories: (product.categories || []).map((category) => decodeHtmlEntities(category.name)).filter(Boolean),
     code: meta ? String(meta.value || '').trim() : '',
     type: product.type === 'variable' ? 'variable' : 'simple',
     parentId: null,
@@ -221,7 +222,7 @@ function fromRestV3Variation(variation, parent, shop) {
   return {
     id: String(variation.id),
     sku: String(variation.sku || ''),
-    name: `${String(parent.name || '')}${options ? ` – ${options}` : ''}`.trim(),
+    name: `${decodeHtmlEntities(parent.name || '')}${options ? ` – ${options}` : ''}`.trim(),
     price: exTax(toNumber(variation.price), shop),
     regularPrice: regular == null ? null : exTax(regular, shop),
     rawRegular: regular,
@@ -230,7 +231,7 @@ function fromRestV3Variation(variation, parent, shop) {
     url: String(variation.permalink || parent.permalink || ''),
     image: variation.image?.src || parent.images?.[0]?.src || '',
     inStock: variation.stock_status !== 'outofstock',
-    categories: (parent.categories || []).map((category) => category.name).filter(Boolean),
+    categories: (parent.categories || []).map((category) => decodeHtmlEntities(category.name)).filter(Boolean),
     code: meta ? String(meta.value || '').trim() : '',
     type: 'variation',
     parentId: String(parent.id),

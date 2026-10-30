@@ -155,6 +155,7 @@
       document.head.appendChild(element);
     };
     if (!document.querySelector('link[rel="manifest"]')) add('link', { rel: 'manifest', href: fromApp('manifest.json') });
+    if (!document.querySelector('link[rel="icon"]')) add('link', { rel: 'icon', type: 'image/png', href: fromApp('shared/icons/favicon-48.png') });
     add('link', { rel: 'apple-touch-icon', href: fromApp('shared/icons/apple-touch-icon.png') });
     add('meta', { name: 'apple-mobile-web-app-capable', content: 'yes' });
     add('meta', { name: 'mobile-web-app-capable', content: 'yes' });
