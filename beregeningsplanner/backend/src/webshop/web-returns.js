@@ -359,6 +359,7 @@ function createWebReturnStore(db, { orders, stock }) {
  * @returns {void}
  */
 function registerWebReturnRoutes(app, { returns, requireJson, audit, credits = null, mail = null }) {
+  const sendingCompletion = new Set();
   /**
    * Geeft een afwijzing van een async handler door aan Express.
    * @param {Function} handler De async handler (req, res).
@@ -400,9 +401,13 @@ function registerWebReturnRoutes(app, { returns, requireJson, audit, credits = n
     if (!found) return res.status(404).json({ error: 'not_found', message: 'Retour niet gevonden.' });
     if (found.status !== 'afgerond') return res.status(409).json({ error: 'not_completed', message: 'Rond de retour eerst af.' });
     if (found.mail && found.mail.kind === 'afgerond' && found.mail.sent) return res.status(409).json({ error: 'already_sent', message: 'De mail over de afgeronde retour is al verstuurd.' });
-    await mail.sendCompleted(req.tenantId, found);
+    // Eén verzendpoging tegelijk per retour: de database is synchroon en dit is één proces, dus een set is genoeg als claim.
+    const claim = `${req.tenantId}:${found.id}`;
+    if (sendingCompletion.has(claim)) return res.status(409).json({ error: 'in_progress', message: 'De mail wordt al verstuurd.' });
+    sendingCompletion.add(claim);
+    try { await mail.sendCompleted(req.tenantId, found); } finally { sendingCompletion.delete(claim); }
     const updated = returns.get(req.tenantId, found.id);
-    if (!updated.mail || !updated.mail.sent) return res.status(502).json({ error: 'mail_failed', message: (updated.mail && updated.mail.error) || 'Versturen mislukt.' });
+    if (!updated.mail || updated.mail.kind !== 'afgerond' || !updated.mail.sent) return res.status(502).json({ error: 'mail_failed', message: (updated.mail && updated.mail.kind === 'afgerond' && updated.mail.error) || 'Versturen mislukt.' });
     res.json({ return: updated });
   }));
 

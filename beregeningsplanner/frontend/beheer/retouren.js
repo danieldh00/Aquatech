@@ -72,7 +72,7 @@
     const lines = record.lines.map((line) => `<tr><td>${esc(line.name)}<span class="sub">${esc(line.code)}</span></td><td class="num">${line.qty}</td></tr>`).join('');
     const credit = record.credit ? `<p>Creditnota: <a href="../facturen/?id=${encodeURIComponent(record.credit.invoiceId)}">${esc(record.credit.number || 'concept')}</a> (${esc(record.credit.status)})</p>`
       : record.status === 'afgerond' ? `<p>${record.creditError ? `${esc(record.creditError)} ` : 'Er is nog geen creditnota. '}<button class="btn" id="wr-credit">Creditnota maken</button></p>` : '';
-    const resend = record.status === 'afgerond' && record.mail && !record.mail.sent ? ' <button class="btn" id="wr-resend">Mail opnieuw versturen</button>' : '';
+    const resend = record.status === 'afgerond' && !(record.mail && record.mail.kind === 'afgerond' && record.mail.sent) ? ' <button class="btn" id="wr-resend">Mail opnieuw versturen</button>' : '';
     const mail = (record.mail ? (record.mail.sent ? `Laatste mail (${esc(record.mail.kind)}) verstuurd ${when(record.mail.at)}` : `Laatste mail (${esc(record.mail.kind)}) niet verstuurd: ${esc(record.mail.error)}`) : 'Nog geen mail verstuurd') + resend;
     let actions = '';
     if (record.status === 'aangevraagd') {
