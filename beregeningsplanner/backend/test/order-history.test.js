@@ -137,6 +137,9 @@ test('bestelhistorie: alleen eigen bestellingen, niet zonder inloggen', async ()
   assert.match(own.text, /WEB-\d{4}-0001/);
   assert.doesNotMatch(own.text, /WEB-\d{4}-0002/, 'de bestelling van een ander staat er niet tussen');
   assert.match((await first.client.get('/winkel/account/')).text, /Mijn bestellingen/);
+  const beyond = await first.client.get('/winkel/bestellingen/?pagina=5');
+  assert.match(beyond.text, /Naar de eerste pagina/, 'een lege pagina verwijst terug naar pagina 1');
+  assert.doesNotMatch(beyond.text, /nog geen bestellingen/);
   const anonymous = await createClient(world.base).get('/winkel/bestellingen/');
   assert.match(anonymous.text, /Inloggen/, 'zonder sessie naar het inlogscherm');
   assert.doesNotMatch(anonymous.text, /WEB-\d{4}-0001/);

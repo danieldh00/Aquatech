@@ -222,8 +222,9 @@ function ordersPage(list, groups = [], { page = 1, pageSize = 25 } = {}) {
   const rows = list.items.map((order) => `<tr><td><a href="../bestelling/${escapeHtml(order.id)}/">${escapeHtml(order.number)}</a></td><td>${escapeHtml(formatDate(order.createdAt))}</td><td>${escapeHtml(order.statusLabel)}</td><td class="num">${escapeHtml(formatPrice(order.total))}</td></tr>`).join('');
   const pages = Math.max(1, Math.ceil(list.total / pageSize));
   const paging = pages > 1 ? `<p class="note">Pagina ${page} van ${pages}${page > 1 ? ` · <a href="?pagina=${page - 1}">Vorige</a>` : ''}${page < pages ? ` · <a href="?pagina=${page + 1}">Volgende</a>` : ''}</p>` : '';
+  const emptyNote = list.total > 0 ? '<p>Deze pagina bevat geen bestellingen. <a href="?pagina=1">Naar de eerste pagina</a></p>' : '<p>Je hebt nog geen bestellingen geplaatst.</p>';
   const body = `<section class="cart"><h1>Mijn bestellingen</h1>
-${list.items.length ? `<div class="tablewrap"><table class="cart-table"><thead><tr><th>Bestelling</th><th>Datum</th><th>Status</th><th class="num">Totaal</th></tr></thead><tbody>${rows}</tbody></table></div>${paging}` : '<p>Je hebt nog geen bestellingen geplaatst.</p>'}
+${list.items.length ? `<div class="tablewrap"><table class="cart-table"><thead><tr><th>Bestelling</th><th>Datum</th><th>Status</th><th class="num">Totaal</th></tr></thead><tbody>${rows}</tbody></table></div>${paging}` : emptyNote}
 <p><a class="button" href="${ROOT}">Verder winkelen</a> <a class="button secondary" href="../account/">Mijn account</a></p></section>`;
   return layout({ root: ROOT, title: 'Mijn bestellingen – Aquatechshop.nl', description: 'Je bestellingen bij Aquatechshop.nl.', body, groups });
 }
