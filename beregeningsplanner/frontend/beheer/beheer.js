@@ -746,7 +746,7 @@
    * @param {string} text De ingevoerde tekst.
    * @returns {number} Het getal (NaN als het geen getal is).
    */
-  const parseDecimal = (text) => Number(String(text).trim().replace(',', '.'));
+  const parseDecimal = (text) => (String(text).trim() === '' ? NaN : Number(String(text).trim().replace(',', '.')));
 
   /**
    * Tekent een regel (land) in het verzendformulier.
@@ -801,7 +801,7 @@
       const field = (name) => row.querySelector(`[data-f="${name}"]`).value;
       const tiers = field('tiers').split(';').map((part) => part.trim()).filter(Boolean).map((part) => {
         const [grams, price] = part.split('=');
-        const tier = { upToGrams: Number(String(grams).trim()), price: parseDecimal(price == null ? '' : price) };
+        const tier = { upToGrams: parseDecimal(grams == null ? '' : grams), price: parseDecimal(price == null ? '' : price) };
         if (!Number.isFinite(tier.upToGrams) || !Number.isFinite(tier.price)) throw new Error(`Weegklasse "${part}" is niet te lezen. Gebruik gram=prijs, bijvoorbeeld 2000=6,95.`);
         return tier;
       });
