@@ -260,3 +260,23 @@ a.shop-action:hover { background: var(--at-page); }
 /* Keuze tussen alle producten en alleen wat op voorraad is. */
 .stock-filter { margin: 0 0 12px; color: var(--at-muted); font-size: 0.95rem; }
 .stock-filter a[aria-current] { color: var(--at-ink); font-weight: 700; text-decoration: none; }
+
+/* Winkelwagen, afrekenen en bestelling. */
+.cart { max-width: 960px; margin: 24px auto; }
+.cart-table { width: 100%; border-collapse: collapse; background: var(--at-white); }
+.cart-table th, .cart-table td { padding: 10px 12px; border-bottom: 1px solid var(--at-line); text-align: left; vertical-align: top; }
+.cart-table .num { text-align: right; white-space: nowrap; }
+.cart-table tr.sub td { color: var(--at-muted); font-size: 0.85rem; }
+.cart-table tr.total th, .cart-table tr.total td { font-weight: 800; font-size: 1.05rem; }
+.cart-table tr.problem { background: var(--at-shop-green-soft); }
+.cart-qty { display: flex; gap: 6px; }
+.cart-qty input, .product-order input { width: 64px; font: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; }
+.cart-actions { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-top: 16px; }
+form.inline { display: inline-block; margin-right: 8px; }
+.product-order { display: flex; gap: 8px; margin: 12px 0; }
+.checkout-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; align-items: start; }
+.checkout-summary { padding: 16px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 12px; }
+.checkout-summary ul { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.checkout-summary li, .checkout-total { display: flex; justify-content: space-between; gap: 12px; }
+.form-field textarea { padding: 10px 12px; border: 1px solid var(--at-line); border-radius: 8px; font: inherit; font-weight: 400; }
+@media (max-width: 720px) { .checkout-grid { grid-template-columns: 1fr; } .cart-actions { flex-direction: column; align-items: stretch; } }

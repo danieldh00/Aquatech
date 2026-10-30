@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.4.6
+
+Winkelwagen en bestellen op rekening in de eigen webshop (stap 1 van de
+webshop-roadmap).
+
+- **Aan/uit**: instelling `shopOrdering` (Beheer > Webshop en WooCommerce, alleen
+  hoofdtenant, standaard uit). Uit = de knop *In winkelwagen* blijft zoals hij was.
+- **Winkelwagen** (`storefront-cart.js`): cookie met codes en aantallen, zonder
+  script; pagina's `winkelwagen/`, `afrekenen/` en `bestelling/<id>/`. Prijs,
+  btw en voorraad komen bij elke pagina en bij het plaatsen opnieuw uit de
+  database (`web-orders.js`, `priceCart`), nooit uit de cookie.
+- **Bestellen**: alleen ingelogd (inloggen/registreren sturen met `?volgende=afrekenen`
+  terug naar het afrekenen). Tabel `web_orders` (migratie 37, SQLite en
+  PostgreSQL), nummer `WEB-<jaar>-0001`. Een bestelling reserveert de voorraad
+  in `stock_reservations` (`work_order_id` `order:<id>`), dus de beschikbare
+  stand in de shop, Artikelen en WooCommerce klopt meteen.
+- **Status**: nieuw, verzonden, afgerond, geannuleerd. *Verzonden* boekt de
+  artikelen af (bron `bestelling:<nummer>`), *Annuleren* geeft de reservering vrij.
+- **Mail** (`web-orders-mail.js`): bevestiging aan de klant en melding aan het
+  bedrijfsadres uit het bedrijfsprofiel; een mislukte mail houdt de bestelling
+  niet tegen en staat bij de bestelling.
+- **Beheer > Webshopbestellingen**: lijst met filter en zoeken, detail, statusknoppen
+  en export naar Excel (bestellingen en regels). API `/api/admin/web-orders`.
+- Beperking: geen verzendkosten (komen in de volgende stap), alleen aflevering in
+  Nederland, betalen alleen op rekening; er is nog geen factuur per bestelling.
+
 ## 1.4.5
 
 Voorraadstand in de eigen webshop.

@@ -303,7 +303,7 @@ function needsOf(materials) {
  * Maakt de opslag voor voorraadartikelen, mutaties en reserveringen.
  * @param {object} db De database.
  * @param {{ articles?: Function, onDirty?: Function }} [options] Catalogus van de planner; aanroep na een wijziging voor de webshop.
- * @returns {object} list, get, create, update, remove, move, setVariants, articleChoices, importCatalog, importShop, mirrorShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal en onDirty.
+ * @returns {object} list, get, create, update, remove, move, setVariants, articleChoices, importCatalog, importShop, mirrorShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal, reserveOrder, releaseOrder, issueOrder en onDirty.
  */
 function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) {
   /**
@@ -452,10 +452,12 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   function reservationsOf(tenantId, itemId = null) {
     const args = [tenantId];
-    let sql = `SELECT r.item_id, r.work_order_id, r.qty, r.updated_at, w.number, w.title, w.customer, w.status, w.planned_date,
-        i.code, i.name, i.unit
+    let sql = `SELECT r.item_id, r.work_order_id, r.qty, r.updated_at, COALESCE(w.number, o.number) AS number,
+        COALESCE(w.title, CASE WHEN o.id IS NULL THEN NULL ELSE 'Webshopbestelling' END) AS title, COALESCE(w.customer, o.customer_name) AS customer,
+        COALESCE(w.status, o.status) AS status, w.planned_date, i.code, i.name, i.unit
       FROM stock_reservations r JOIN stock_items i ON i.id = r.item_id
       LEFT JOIN work_orders w ON w.id = r.work_order_id AND w.tenant_id = r.tenant_id
+      LEFT JOIN web_orders o ON r.work_order_id = 'order:' || o.id AND o.tenant_id = r.tenant_id
       WHERE r.tenant_id = ?`;
     if (itemId) { sql += ' AND r.item_id = ?'; args.push(String(itemId)); }
     return prepare(`${sql} ORDER BY w.planned_date, w.number`).all(...args).map((reservationRow) => ({
@@ -1115,6 +1117,50 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     }, nested);
   }
 
+  // ---------- Webshopbestellingen: reserveren en afboeken ----------
+  /**
+   * Reserveert voorraad voor een webshopbestelling. De reservering staat in
+   * stock_reservations onder work_order_id 'order:<id>', dus elke
+   * beschikbaarheidsberekening houdt er rekening mee. Moet binnen de
+   * transactie van de aanroeper lopen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} orderId Id van de bestelling.
+   * @param {{ itemId: string, qty: number }[]} lines Artikel en aantal.
+   * @returns {void}
+   */
+  function reserveOrder(tenantId, orderId, lines) {
+    const put = prepare('INSERT INTO stock_reservations (tenant_id, work_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, ?, ?)');
+    const timestamp = currentTimestamp();
+    for (const line of lines) put.run(tenantId, `order:${orderId}`, line.itemId, round3(line.qty), timestamp);
+    dirty(tenantId);
+  }
+
+  /**
+   * Laat de reservering van een webshopbestelling vervallen (annuleren of na het afboeken).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} orderId Id van de bestelling.
+   * @returns {void}
+   */
+  function releaseOrder(tenantId, orderId) {
+    prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, `order:${orderId}`);
+    dirty(tenantId);
+  }
+
+  /**
+   * Boekt de artikelen van een verzonden webshopbestelling af van de voorraad
+   * (bron 'bestelling:<nummer>') en laat de reservering vervallen. Moet binnen
+   * de transactie van de aanroeper lopen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ id: string, number: string }} order De bestelling.
+   * @param {{ itemId: string, qty: number }[]} lines Artikel en aantal.
+   * @param {object|null} user Wie de bestelling verzendt.
+   * @returns {void}
+   */
+  function issueOrder(tenantId, order, lines, user) {
+    for (const line of lines) book(tenantId, line.itemId, -line.qty, { kind: 'afboeking', source: `bestelling:${order.number}`, note: `Webshopbestelling ${order.number}`, user });
+    releaseOrder(tenantId, order.id);
+  }
+
   /**
    * Alle open werkorders opnieuw reserveren (bijv. na een nieuw voorraadartikel).
    * @param {string} tenantId Id van de omgeving.
@@ -1434,7 +1480,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     units, addUnit, removeUnit, setVariants, articleChoices,
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
-    reorderProposal, onDirty: setDirtyHook,
+    reorderProposal, reserveOrder, releaseOrder, issueOrder, onDirty: setDirtyHook,
   };
 }
 

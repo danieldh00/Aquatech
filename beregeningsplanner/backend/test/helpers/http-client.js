@@ -144,4 +144,21 @@ function createLogin(baseUrl, { password, extraBody = {}, organizationField = 't
   };
 }
 
-module.exports = { createClient, storeCookies, listen, createLogin };
+/**
+ * Verstuurt een formulier zoals een browser (urlencoded) met de cookies van een client.
+ * @param {string} base Adres van de testserver.
+ * @param {object} client De client (cookiepot).
+ * @param {string} urlPath Pad van het formulier.
+ * @param {object} fields De velden.
+ * @param {object} [headers] Extra koppen.
+ * @returns {Promise<{ status: number, location: string, text: string }>} Het antwoord (zonder redirect te volgen).
+ */
+async function postForm(base, client, urlPath, fields, headers = {}) {
+  const cookie = [...client.jar].map(([name, value]) => `${name}=${value}`).join('; ');
+  const response = await fetch(base + urlPath, { method: 'POST', redirect: 'manual', body: new URLSearchParams(fields),
+    headers: { 'content-type': 'application/x-www-form-urlencoded', ...(cookie ? { cookie } : {}), ...headers } });
+  storeCookies(client.jar, response.headers.getSetCookie());
+  return { status: response.status, location: response.headers.get('location') || '', text: await response.text() };
+}
+
+module.exports = { createClient, storeCookies, listen, createLogin, postForm };

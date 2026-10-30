@@ -33,18 +33,23 @@ function formatPrice(amount) {
 
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
+/** Of bestellen aan staat en hoeveel regels er in de winkelwagen van de bezoeker zitten (voor de pagina's die nu worden opgebouwd). */
+let activeShop = { ordering: false, cartCount: 0 };
 
 /**
  * Bouwt pagina's op met de inhoud uit Beheer. Het opbouwen is synchroon, dus
  * zolang `render` loopt hoort elke pagina bij deze inhoud; daarna geldt weer de vorige.
  * @param {{ site: object, pages: object[] }} content De inhoud (zie shop-content.js, publicContent).
  * @param {Function} render Functie die de pagina('s) opbouwt en iets teruggeeft.
+ * @param {{ ordering: boolean, cartCount: number }} [shop] Of bestellen aan staat en het aantal regels in de winkelwagen.
  * @returns {*} Wat `render` teruggeeft.
  */
-function renderWith(content, render) {
+function renderWith(content, render, shop = { ordering: false, cartCount: 0 }) {
   const previous = activeContent;
+  const previousShop = activeShop;
   activeContent = content;
-  try { return render(); } finally { activeContent = previous; }
+  activeShop = shop;
+  try { return render(); } finally { activeContent = previous; activeShop = previousShop; }
 }
 
 /**
@@ -175,7 +180,9 @@ ${site.notice.enabled && site.notice.text ? `<div class="shop-notice">${escapeHt
     ${phone ? `<a class="shop-phone" href="${phoneHref}" aria-label="Klantenservice ${escapeHtml(phone)}">${ICONS.phone}<span><small>Klantenservice</small><strong>${escapeHtml(phone)}</strong></span></a>` : ''}
     <div class="shop-actions">
       <a class="shop-action" href="${root}account/" title="Inloggen of mijn account">${ICONS.user}<span>Account</span></a>
-      <span class="shop-action cart" aria-disabled="true" title="De winkelwagen volgt binnenkort">${ICONS.cart}<span>Winkelwagen</span><b>0</b></span>
+      ${activeShop.ordering
+    ? `<a class="shop-action cart" href="${root}winkelwagen/" title="Naar je winkelwagen">${ICONS.cart}<span>Winkelwagen</span><b>${activeShop.cartCount}</b></a>`
+    : `<span class="shop-action cart" aria-disabled="true" title="De winkelwagen volgt binnenkort">${ICONS.cart}<span>Winkelwagen</span><b>0</b></span>`}
     </div>
   </div>
   ${navigation(groups, root)}
@@ -218,6 +225,22 @@ function productHref(root, product, variant) {
 }
 
 /**
+ * Het formulier om een artikel in de winkelwagen te leggen (alleen als bestellen aan staat; anders een uitgeschakelde knop).
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {string} code Artikelnummer van het artikel (of van de gekozen variant).
+ * @param {boolean} inStock Of het artikel op voorraad is.
+ * @param {string} className Klasse van het formulier.
+ * @returns {string} HTML.
+ */
+function orderForm(root, code, inStock, className) {
+  if (!activeShop.ordering) return `<div class="${className}"><input type="number" value="1" min="1" aria-label="Aantal" disabled><button class="button" type="button" disabled>In winkelwagen</button></div>`;
+  return `<form class="${className}" method="post" action="${root}winkelwagen/">
+      <input type="hidden" name="action" value="add"><input type="hidden" name="code" value="${escapeHtml(code)}" data-order-code>
+      <input type="number" name="qty" value="1" min="1" max="99" aria-label="Aantal"${inStock ? '' : ' disabled'}><button class="button" type="submit"${inStock ? '' : ' disabled'}>In winkelwagen</button>
+    </form>`;
+}
+
+/**
  * De regel van een hoofdartikel met varianten, in de opzet van een groothandel:
  * foto, naam, artikelnummer en kenmerken, een keuzelijst met uitvoeringen en
  * rechts prijs incl. btw, voorraad, aantal en winkelwagenknop. Zonder script
@@ -245,7 +268,7 @@ function variantRow(product, root) {
   <div class="variant-buy">
     <p class="variant-price"><strong data-variant-price>${escapeHtml(formatPrice(selected.priceIncl))}</strong> <small>incl. btw</small></p>
     <p class="stock ${selected.inStock ? 'in' : 'out'}" data-variant-stock>${selected.inStock ? 'Op voorraad' : 'Niet op voorraad'}</p>
-    <div class="variant-order"><input type="number" value="1" min="1" aria-label="Aantal" disabled><button class="button" type="button" disabled>In winkelwagen</button></div>
+    ${orderForm(root, selected.code, selected.inStock, 'variant-order')}
   </div>
 </div>`;
 }
@@ -448,8 +471,7 @@ function productPage(product, groups, chosenCode = '') {
     <p class="sku">Artikelnummer: ${escapeHtml(shown.code)}${chosen && chosen.meta ? ` | ${escapeHtml(chosen.meta)}` : ''}</p>
     <p class="price">${escapeHtml(formatPrice(shown.priceIncl))} <small>incl. ${shown.vatRate}% btw · per ${escapeHtml(product.unit)}</small></p>
     <p class="stock ${shown.inStock ? 'in' : 'out'}">${shown.inStock ? 'Op voorraad' : 'Niet op voorraad'}</p>
-    <button class="button" type="button" disabled>In winkelwagen</button>
-    <p class="note">Online bestellen volgt binnenkort.</p>
+    ${activeShop.ordering ? orderForm(root, shown.code, shown.inStock, 'product-order') : '<button class="button" type="button" disabled>In winkelwagen</button>\n    <p class="note">Online bestellen volgt binnenkort.</p>'}
     ${parentLink}
   </div>
 </article>`;

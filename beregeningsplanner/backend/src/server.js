@@ -26,6 +26,8 @@ const { createStorefront } = require('./webshop/storefront');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
 const { createShopSync } = require('./webshop/shop-sync');
 const { createShopContentStore, registerShopContentRoutes } = require('./webshop/shop-content');
+const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
+const { createOrderMailer } = require('./webshop/web-orders-mail');
 const { createShopOrders } = require('./webshop/shop-orders');
 const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
 const { createInvoiceSender } = require('./verkoop/invoice-mail');
@@ -421,6 +423,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Een plan bevat de achtergrondafbeelding (base64).
   app.use('/api/plans', express.json({ limit: '12mb' }));
   // Een offerte met veel regels en lange teksten past niet in 16 kB.
+  // Status van een webshopbestelling wijzigen (web-orders.js): alleen { status }.
+  app.use('/api/admin/web-orders', express.json({ limit: '4kb' }));
   app.use('/api/quotes', express.json({ limit: '1mb' }));
   // Tekening indienen zonder inloggen (drawings.js): plan met achtergrond.
   app.use('/api/public/drawing', express.json({ limit: '8mb' }));
@@ -1407,7 +1411,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // aiFromLive: testomgeving zonder eigen sleutel gebruikt die van live.
     const aiFrom = aiTenantOf(req.tenantId);
     const settings = settingsFor(req.tenantId).view();
-    if (req.tenantId !== tenant.id) { delete settings.storefront; delete settings.shopPlanner; }
+    if (req.tenantId !== tenant.id) { delete settings.storefront; delete settings.shopPlanner; delete settings.shopOrdering; }
     res.json({ settings, via: auth.session(req)?.via || null,
       // De eigen webshop (winkel/) toont alleen de hoofdtenant: de schakelaar hoort alleen daar.
       storefrontAllowed: req.tenantId === tenant.id,
@@ -1428,7 +1432,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return res.status(400).json({ error: 'invalid_setting', field: platformField,
         message: FIELDS[platformField].internal ? 'Deze instelling wijzig je in de module zelf.' : 'Deze instelling wijzig je in Hoofdbeheer.' });
     }
-    if (req.tenantId !== tenant.id && ['storefront', 'shopPlanner'].some((key) => [...Object.keys(patch), ...resets].includes(key))) {
+    if (req.tenantId !== tenant.id && ['storefront', 'shopPlanner', 'shopOrdering'].some((key) => [...Object.keys(patch), ...resets].includes(key))) {
       return res.status(400).json({ error: 'invalid_setting', field: 'storefront', message: 'De eigen webshop geldt alleen voor de hoofdtenant.' });
     }
     const codeAfter = patch.accessCode !== undefined ? String(patch.accessCode).trim()
@@ -1450,7 +1454,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       audit(req, 'instellingen_gewijzigd', { fields: changed });
     }
     const responseSettings = settings.view();
-    if (req.tenantId !== tenant.id) { delete responseSettings.storefront; delete responseSettings.shopPlanner; }
+    if (req.tenantId !== tenant.id) { delete responseSettings.storefront; delete responseSettings.shopPlanner; delete responseSettings.shopOrdering; }
     res.json({ settings: responseSettings, changed });
   });
 
@@ -1854,6 +1858,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   const shopContentStore = createShopContentStore(database, { vault });
+  const webOrders = createWebOrderStore(database, { stock: stockStore });
+  const webOrderMail = createOrderMailer({ orders: webOrders, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
+  registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit });
   registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id) });
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
   app.get('/api/config', (req, res) => {
@@ -2127,6 +2134,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
   app.use('/winkel', createStorefront({
     db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore,
+    orders: webOrders, orderMail: webOrderMail,
+    onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
     // Een beheerder van de hoofdorganisatie bekijkt het concept met ?voorbeeld=1.
     previewAllowed: (req) => {
       const user = identify(req);

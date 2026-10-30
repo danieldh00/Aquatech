@@ -17,6 +17,12 @@ function showChosenVariant(row) {
   stock.className = `stock ${option.dataset.stock}`;
   stock.textContent = option.dataset.stock === 'in' ? 'Op voorraad' : 'Niet op voorraad';
   for (const link of row.querySelectorAll('[data-variant-link]')) link.setAttribute('href', option.dataset.href);
+  const orderCode = row.querySelector('[data-order-code]');
+  if (orderCode) {
+    orderCode.value = option.dataset.code;
+    const inStock = option.dataset.stock === 'in';
+    for (const control of row.querySelectorAll('.variant-order input[name="qty"], .variant-order button')) control.disabled = !inStock;
+  }
 }
 
 document.documentElement.classList.add('js-on');

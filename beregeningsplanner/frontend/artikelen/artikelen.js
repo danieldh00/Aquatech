@@ -93,7 +93,7 @@
    * @param {object} workOrder werkorder met id en number
    * @returns {string} HTML van de link, of leeg zonder werkorder
    */
-  const woLink = (workOrder) => (workOrder && workOrder.id ? `<a href="../werkorders/?id=${encodeURIComponent(workOrder.id)}">${esc(workOrder.number || 'werkorder')}</a>` : '');
+  const woLink = (workOrder) => (workOrder && String(workOrder.id).startsWith('order:') ? esc(workOrder.number) : workOrder && workOrder.id ? `<a href="../werkorders/?id=${encodeURIComponent(workOrder.id)}">${esc(workOrder.number || 'werkorder')}</a>` : '');
   /**
    * Stand van de webshopkoppeling per artikel.
    * @param {object} item het voorraadartikel
