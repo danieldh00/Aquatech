@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.1
+
+Uitlijning van de webshop en een eigen pagina Over ons.
+
+- **Uitlijning** (`storefront.css`): de titel van een productkaart heeft een
+  vaste hoogte van drie regels (daarna afgekapt, volledige naam in het
+  `title`-attribuut), zodat prijs en voorraad op elke kaart op dezelfde lijn
+  staan. De regels in de kolommen op de startpagina hebben een vaste hoogte
+  (foto 80 px, titel twee regels, prijs en voorraadstand) en liggen daardoor
+  naast elkaar op één lijn.
+- **Kopbalk**: de lichte streep tussen het menu en de foto (rand onder
+  `.shop-head`) is weg. De telefoonlink heeft een `aria-label`, ook als de
+  tekst op een smal scherm verborgen is.
+- **Over ons** (`webshop/storefront-pages.js` `aboutPage`, route `over-ons/`):
+  eigen pagina met de tekst en afbeeldingen van aquatechshop.nl/over-ons/ in
+  plaats van een verwijzing naar aquatechservice.nl, in menu en voet.
+
 ## 1.4.0
 
 Voorraadbeheer is overal hernoemd naar **Artikelen**; de werking, de opslag en
