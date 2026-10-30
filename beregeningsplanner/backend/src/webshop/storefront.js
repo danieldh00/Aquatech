@@ -47,6 +47,8 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
 const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner)\/?$/;
 /** Paden waar de winkelwagen en het afrekenformulier naartoe posten. */
 const ORDER_POSTS = /^\/(winkelwagen|afrekenen)\/?$/;
+/** Aantal bestellingen per pagina in de bestelhistorie van een klant. */
+const HISTORY_PAGE = 25;
 const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
@@ -398,7 +400,8 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
         res.setHeader('Cache-Control', 'no-store');
         const viewer = accounts.viewer(req);
         if (!viewer) return res.redirect(302, '../inloggen/');
-        sendWithGroups(req, res, 200, (groups) => ordersPage(orders.listForUser(tenantId, viewer.id), groups));
+        const page = Math.max(1, Math.floor(Number(req.query.pagina)) || 1);
+        sendWithGroups(req, res, 200, (groups) => ordersPage(orders.listForUser(tenantId, viewer.id, { limit: HISTORY_PAGE, offset: (page - 1) * HISTORY_PAGE }), groups, { page, pageSize: HISTORY_PAGE }));
       });
     }
   }

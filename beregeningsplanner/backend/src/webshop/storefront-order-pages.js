@@ -6,6 +6,8 @@ const { layout, escapeHtml, formatPrice } = require('./storefront-pages');
 
 /** Relatief pad van deze pagina's naar de shop-startpagina. */
 const ROOT = '../';
+/** Relatief pad van het besteldetail (/winkel/bestelling/<id>/) naar de shop-startpagina. */
+const DETAIL_ROOT = '../../';
 /** Namen van de bestelstatussen voor het verloop (web-orders.js, STATUSES). */
 const STATUS_LABELS = { nieuw: 'Nieuw', verzonden: 'Verzonden', afgerond: 'Afgerond', geannuleerd: 'Geannuleerd' };
 
@@ -205,20 +207,23 @@ function orderPage(order, groups = [], { thanks = false, invoice = null } = {}) 
 ${vatNote}${deliveryBlock(order)}
 <p>Status: <strong>${escapeHtml(order.statusLabel)}</strong></p>
 ${invoiceBlock}${history}
-<p><a class="button" href="${ROOT}">Verder winkelen</a> <a class="button secondary" href="${ROOT}bestellingen/">Al mijn bestellingen</a></p></section>`;
-  return layout({ root: ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups });
+<p><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a> <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a></p></section>`;
+  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups });
 }
 
 /**
- * De bestelhistorie van de ingelogde klant: een tabel met elke bestelling en een link naar het detail.
- * @param {{ id: string, number: string, statusLabel: string, total: number, createdAt: string }[]} list De bestellingen, nieuwste eerst.
+ * De bestelhistorie van de ingelogde klant: een tabel met elke bestelling en een link naar het detail, met bladeren bij meer dan één pagina.
+ * @param {{ items: { id: string, number: string, statusLabel: string, total: number, createdAt: string }[], total: number }} list De bestellingen van deze pagina (nieuwste eerst) en het totaal aantal.
  * @param {object[]} groups Alle hoofdcategorieën.
+ * @param {{ page?: number, pageSize?: number }} [paging] Het paginanummer (vanaf 1) en het aantal per pagina.
  * @returns {string} De HTML-pagina.
  */
-function ordersPage(list, groups = []) {
-  const rows = list.map((order) => `<tr><td><a href="../bestelling/${escapeHtml(order.id)}/">${escapeHtml(order.number)}</a></td><td>${escapeHtml(formatDate(order.createdAt))}</td><td>${escapeHtml(order.statusLabel)}</td><td class="num">${escapeHtml(formatPrice(order.total))}</td></tr>`).join('');
+function ordersPage(list, groups = [], { page = 1, pageSize = 25 } = {}) {
+  const rows = list.items.map((order) => `<tr><td><a href="../bestelling/${escapeHtml(order.id)}/">${escapeHtml(order.number)}</a></td><td>${escapeHtml(formatDate(order.createdAt))}</td><td>${escapeHtml(order.statusLabel)}</td><td class="num">${escapeHtml(formatPrice(order.total))}</td></tr>`).join('');
+  const pages = Math.max(1, Math.ceil(list.total / pageSize));
+  const paging = pages > 1 ? `<p class="note">Pagina ${page} van ${pages}${page > 1 ? ` · <a href="?pagina=${page - 1}">Vorige</a>` : ''}${page < pages ? ` · <a href="?pagina=${page + 1}">Volgende</a>` : ''}</p>` : '';
   const body = `<section class="cart"><h1>Mijn bestellingen</h1>
-${list.length ? `<div class="tablewrap"><table class="cart-table"><thead><tr><th>Bestelling</th><th>Datum</th><th>Status</th><th class="num">Totaal</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p>Je hebt nog geen bestellingen geplaatst.</p>'}
+${list.items.length ? `<div class="tablewrap"><table class="cart-table"><thead><tr><th>Bestelling</th><th>Datum</th><th>Status</th><th class="num">Totaal</th></tr></thead><tbody>${rows}</tbody></table></div>${paging}` : '<p>Je hebt nog geen bestellingen geplaatst.</p>'}
 <p><a class="button" href="${ROOT}">Verder winkelen</a> <a class="button secondary" href="../account/">Mijn account</a></p></section>`;
   return layout({ root: ROOT, title: 'Mijn bestellingen – Aquatechshop.nl', description: 'Je bestellingen bij Aquatechshop.nl.', body, groups });
 }

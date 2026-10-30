@@ -337,12 +337,15 @@ function createWebOrderStore(db, { stock }) {
    * De bestellingen van één klant, nieuwste eerst (zonder regels; het detail haalt getForUser op).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} userId Id van de klant.
-   * @param {number} [limit] Hoogstens zoveel bestellingen (standaard 100).
-   * @returns {object[]} De bestellingen (id, nummer, status, totaal, datum).
+   * @param {{ limit?: number, offset?: number }} [paging] Hoogstens zoveel bestellingen (standaard 25, ten hoogste 200) vanaf deze plek.
+   * @returns {{ items: object[], total: number }} De bestellingen (id, nummer, status, totaal, datum) van deze pagina en het totaal aantal.
    */
-  function listForUser(tenantId, userId, limit = 100) {
-    return prepare(`SELECT ${COLUMNS} FROM web_orders WHERE tenant_id = ? AND user_id = ? ORDER BY created_at DESC, number DESC LIMIT ?`)
-      .all(tenantId, String(userId), Math.min(200, Math.max(1, Math.floor(Number(limit)) || 100))).map(shape);
+  function listForUser(tenantId, userId, { limit = 25, offset = 0 } = {}) {
+    const size = Math.min(200, Math.max(1, Math.floor(Number(limit)) || 25));
+    const start = Math.max(0, Math.floor(Number(offset)) || 0);
+    const total = Number(prepare('SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND user_id = ?').get(tenantId, String(userId)).n);
+    const items = prepare(`SELECT ${COLUMNS} FROM web_orders WHERE tenant_id = ? AND user_id = ? ORDER BY created_at DESC, number DESC LIMIT ? OFFSET ?`).all(tenantId, String(userId), size, start).map(shape);
+    return { items, total };
   }
 
   /**

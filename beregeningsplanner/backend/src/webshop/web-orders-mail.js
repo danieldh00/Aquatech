@@ -103,7 +103,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     const shipping = order.shipping || {};
     const pickup = shipping.method === 'ophalen';
     const tracking = !pickup && shipping.tracking ? shipping.tracking : null;
-    if (onlyNewTracking && (!tracking || (order.shipMail && order.shipMail.tracking === tracking.code))) return;
+    if (onlyNewTracking && (!tracking || (order.shipMail && order.shipMail.sent && order.shipMail.tracking === tracking.code))) return;
     /**
      * Legt de uitkomst van de verzendmail vast bij de bestelling.
      * @param {{ sent: boolean, error: string }} patch Of de mail is verstuurd en anders de fout.
