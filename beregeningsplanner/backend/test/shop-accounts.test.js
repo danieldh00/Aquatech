@@ -121,6 +121,14 @@ test('e-mailadres van een ander account is niet te kiezen in het profiel; volgen
   assert.match(failed.text, /name="volgende" value="planner"/);
 });
 
+test('gelijktijdige registraties met hetzelfde e-mailadres: één account', async () => {
+  const { store, main } = await setup();
+  const input = { displayName: 'Dubbel', email: 'dubbel@voorbeeld.nl', password: PW };
+  const results = await Promise.all([store.createShopCustomer(main, input), store.createShopCustomer(main, input)]);
+  assert.strictEqual(results.filter((result) => result.user).length, 1);
+  assert.strictEqual(store.accountIdsByEmail(main, 'dubbel@voorbeeld.nl').length, 1);
+});
+
 test('inloggen in de shop: fout wachtwoord en blokkering', async () => {
   const { base, store, main } = await setup();
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'klant', password: PW });

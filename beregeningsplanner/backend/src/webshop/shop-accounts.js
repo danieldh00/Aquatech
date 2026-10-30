@@ -38,7 +38,7 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
   function viewer(req) {
     const session = auth.session(req);
     const user = session?.via === 'user' ? session.user : null;
-    if (!user || user.kind !== 'account') return null;
+    if (!user || user.kind !== 'account' || user.tenant_id !== tenant.id) return null;
     return { displayName: user.display_name, username: user.username, email: user.email || '',
       isCustomer: store.roles.keysOfKind(user.tenant_id, 'klant').includes(user.role) };
   }

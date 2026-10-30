@@ -508,6 +508,12 @@ function createStore(db) {
       const out = await createAccount(tenantId, { username, displayName: name, role: 'klant', password });
       if (out.user) {
         prepare('UPDATE users SET email = ? WHERE id = ?').run(address, out.user.id);
+        // Twee gelijktijdige registraties kunnen allebei de controle hierboven passeren: het oudste account houdt het adres.
+        const owners = prepare("SELECT id FROM users WHERE tenant_id = ? AND email = ? AND kind = 'account' ORDER BY created_at, id").all(tenantId, address);
+        if (owners[0].id !== out.user.id) {
+          prepare('DELETE FROM users WHERE id = ?').run(out.user.id);
+          return { error: 'Er is al een account met dit e-mailadres. Log in, of vraag een nieuw wachtwoord aan bij AquaTech Service.', field: 'email' };
+        }
         return { user: getUser(out.user.id) };
       }
       if (out.error !== 'Deze gebruikersnaam bestaat al.') return { error: out.error, field: /wachtwoord/i.test(out.error) ? 'password' : 'email' };
