@@ -131,42 +131,127 @@ function assignCategorySlugs(categories) {
 }
 
 /**
+ * Leest de waarden van een variant (bijv. { Maat: '25 mm' }) uit het JSON-veld.
+ * @param {*} valuesJson De opgeslagen tekst.
+ * @returns {Object<string, string>} Kenmerknaam → waarde, leeg bij ongeldige invoer.
+ */
+function variantValuesOf(valuesJson) {
+  try {
+    const values = JSON.parse(valuesJson || '{}');
+    return values && typeof values === 'object' && !Array.isArray(values) ? values : {};
+  } catch { return {}; }
+}
+
+/**
+ * Leest de kenmerken van een hoofdartikel uit het JSON-veld en geeft de namen.
+ * @param {*} attributesJson De opgeslagen tekst, bijv. '[{"name":"Maat","values":["16 mm"]}]'.
+ * @returns {string[]} De kenmerknamen.
+ */
+function attributeNamesOf(attributesJson) {
+  try {
+    const attributes = JSON.parse(attributesJson || '[]');
+    return Array.isArray(attributes) ? attributes.map((attribute) => String(attribute && attribute.name || '').trim()).filter(Boolean) : [];
+  } catch { return []; }
+}
+
+/**
  * Bouwt de catalogus uit rijen van de database: unieke slugs voor producten
- * en categorieën, categorie-indeling en prijs inclusief btw.
- * @param {object[]} rows Rijen met id, code, name, unit, on_hand, sale_price, vat_rate, categories en image.
- * @returns {{ products: object[], categories: object[], groups: object[], featured: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image) en categories (slug, name, count, groupSlug), beide op naam gesorteerd; groups = hoofdcategorieën met hun categorieën (slug, name, categories, count); featured = uitgelichte producten.
+ * en categorieën, categorie-indeling en prijs inclusief btw. Varianten van een
+ * hoofdartikel (parent_id) komen als één regel in `products`, met hun keuzes
+ * in `variants`; elke variant blijft los bereikbaar via `variantProducts`.
+ * @param {object[]} rows Rijen met id, code, name, unit, on_hand, sale_price, vat_rate, categories en image; bij varianten parent_id en variant_values, bij hoofdartikelen has_variants=1 en attributes.
+ * @returns {{ products: object[], variantProducts: object[], categories: object[], groups: object[], featured: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image; bij een hoofdartikel met varianten ook `variants` [{ slug, code, label, meta, priceIncl, inStock, image }] en `attributeName`, met de laagste prijs en op voorraad als een variant dat is) en categories (slug, name, count, groupSlug), beide op naam gesorteerd; variantProducts = de varianten als gewoon product (met parentSlug en parentName); groups = hoofdcategorieën met hun categorieën (slug, name, categories, count); featured = uitgelichte producten.
  */
 function buildCatalog(rows) {
-  const sorted = [...rows].sort((left, right) => String(left.name).localeCompare(String(right.name), 'nl') || String(left.code).localeCompare(String(right.code), 'nl'));
+  /**
+   * Sorteert op naam, bij gelijke namen op artikelcode.
+   * @param {object} left Het eerste product of de eerste rij.
+   * @param {object} right Het tweede product of de tweede rij.
+   * @returns {number} Negatief, nul of positief.
+   */
+  const compareByName = (left, right) => String(left.name).localeCompare(String(right.name), 'nl') || String(left.code).localeCompare(String(right.code), 'nl');
+  const parentRows = new Map(rows.filter((row) => Number(row.has_variants)).map((row) => [row.id, row]));
+  const itemRows = rows.filter((row) => !Number(row.has_variants)).sort(compareByName);
   const usedSlugs = new Set();
-  const categories = new Map();
-  const products = sorted.map((row) => {
-    // De slug volgt naam én artikelcode (de code is uniek en blijft gelijk), zodat
-    // de url van een artikel niet verandert als er artikelen bijkomen.
-    // De code blijft volledig buiten de afkapping; alleen de naam wordt ingekort.
-    const codeSlug = slugify(row.code);
-    const namePart = slugify(row.name).slice(0, Math.max(0, 80 - codeSlug.length - 1)).replace(/-+$/g, '');
+  /**
+   * Geeft een unieke slug die volgt uit naam én artikelcode (de code is uniek en
+   * blijft gelijk), zodat de url van een artikel niet verandert als er artikelen
+   * bijkomen. De code blijft volledig buiten de afkapping; alleen de naam wordt ingekort.
+   * @param {string} name De naam.
+   * @param {string} code De artikelcode.
+   * @returns {string} De slug.
+   */
+  const uniqueSlug = (name, code) => {
+    const codeSlug = slugify(code);
+    const namePart = slugify(name).slice(0, Math.max(0, 80 - codeSlug.length - 1)).replace(/-+$/g, '');
     const base = [namePart, codeSlug].filter(Boolean).join('-') || 'artikel';
     let slug = base;
     for (let counter = 2; usedSlugs.has(slug); counter += 1) slug = `${base}-${counter}`;
     usedSlugs.add(slug);
+    return slug;
+  };
+  /**
+   * Zet een rij van de database om in een product (zonder categorie-indeling).
+   * @param {object} row De rij.
+   * @returns {object} Het product.
+   */
+  const toProduct = (row) => {
     const categoryName = categoryNameOf(row.categories);
-    const categoryKey = categoryName.toLowerCase();
-    const group = groupOf(categoryName);
-    const category = categories.get(categoryKey) || { key: categoryKey, name: categoryName, count: 0, groupSlug: group.slug };
-    category.count += 1;
-    categories.set(categoryKey, category);
     const priceExcl = Number(row.sale_price);
     const vatRate = Number(row.vat_rate ?? 21);
     return {
-      slug, code: String(row.code), name: decodeHtmlEntities(row.name), unit: String(row.unit || 'st'),
-      categoryKey, categoryName, groupSlug: group.slug, priceExcl, vatRate,
+      slug: uniqueSlug(row.name, row.code), code: String(row.code), name: decodeHtmlEntities(row.name), unit: String(row.unit || 'st'),
+      categoryKey: categoryName.toLowerCase(), categoryName, groupSlug: groupOf(categoryName).slug, priceExcl, vatRate,
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
       inStock: Math.round((Number(row.on_hand) - Number(row.reserved || 0)) * 1000) / 1000 > 0, image: safeImageUrl(row.image),
     };
-  });
-  assignCategorySlugs(categories);
+  };
+  const standalone = [];
+  const variantsOfParent = new Map();
+  const variantProducts = [];
+  for (const row of itemRows) {
+    const product = toProduct(row);
+    const parent = row.parent_id ? parentRows.get(row.parent_id) : null;
+    if (!parent) { standalone.push(product); continue; }
+    product.values = variantValuesOf(row.variant_values);
+    product.parentName = decodeHtmlEntities(parent.name);
+    variantProducts.push(product);
+    variantsOfParent.set(parent.id, [...(variantsOfParent.get(parent.id) || []), product]);
+  }
+  const listing = [...standalone];
+  for (const [parentId, variants] of variantsOfParent) {
+    const parent = parentRows.get(parentId);
+    variants.sort((left, right) => Object.values(left.values).join(' ').localeCompare(Object.values(right.values).join(' '), 'nl', { numeric: true }) || compareByName(left, right));
+    const attributeNames = attributeNamesOf(parent.attributes);
+    const cheapest = variants.reduce((lowest, variant) => (variant.priceIncl < lowest.priceIncl ? variant : lowest), variants[0]);
+    const categoryName = parent.categories ? categoryNameOf(parent.categories) : variants[0].categoryName;
+    const group = {
+      slug: uniqueSlug(parent.name, parent.code), code: String(parent.code), name: decodeHtmlEntities(parent.name), unit: String(parent.unit || variants[0].unit),
+      categoryKey: categoryName.toLowerCase(), categoryName, groupSlug: groupOf(categoryName).slug,
+      priceExcl: cheapest.priceExcl, vatRate: cheapest.vatRate, priceIncl: cheapest.priceIncl,
+      inStock: variants.some((variant) => variant.inStock), image: safeImageUrl(parent.image) || (variants.find((variant) => variant.image) || {}).image || '',
+      attributeName: attributeNames.length === 1 ? attributeNames[0] : 'Uitvoeringen',
+      variants: variants.map((variant) => ({
+        slug: variant.slug, code: variant.code, label: Object.values(variant.values).join(' / ') || variant.code,
+        meta: Object.entries(variant.values).map(([name, value]) => `${name}: ${value}`).join(' | '),
+        priceIncl: variant.priceIncl, vatRate: variant.vatRate, inStock: variant.inStock, image: variant.image,
+      })),
+    };
+    for (const variant of variants) {
+      variant.parentSlug = group.slug;
+      variant.categoryKey = group.categoryKey; variant.categoryName = group.categoryName; variant.groupSlug = group.groupSlug;
+    }
+    listing.push(group);
+  }
+  const products = listing.sort(compareByName);
+  const categories = new Map();
   for (const product of products) {
+    const category = categories.get(product.categoryKey) || { key: product.categoryKey, name: product.categoryName, count: 0, groupSlug: product.groupSlug };
+    category.count += 1;
+    categories.set(product.categoryKey, category);
+  }
+  assignCategorySlugs(categories);
+  for (const product of [...products, ...variantProducts]) {
     product.categorySlug = categories.get(product.categoryKey).slug;
     delete product.categoryKey;
   }
@@ -175,7 +260,7 @@ function buildCatalog(rows) {
     const members = categoryList.filter((category) => category.groupSlug === group.slug);
     return { slug: group.slug, name: group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0) };
   }).filter((group) => group.categories.length);
-  return { products, categories: categoryList, groups, featured: pickFeatured(products) };
+  return { products, variantProducts, categories: categoryList, groups, featured: pickFeatured(products) };
 }
 
 /**
@@ -197,11 +282,11 @@ function createStorefrontData(db) {
     catalogOf(tenantId) {
       const cached = cache.get(tenantId);
       if (cached && cached.until > Date.now()) return cached.catalog;
-      const rows = db.prepare(`SELECT i.code, i.name, i.unit, i.on_hand, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.vat_rate, p.categories, p.image
+      const rows = db.prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.vat_rate, p.categories, p.image
         FROM stock_items i
         LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
         LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
-        WHERE i.tenant_id = ? AND i.archived = 0 AND i.shop_sync = 1 AND i.has_variants = 0 AND i.sale_price IS NOT NULL`).all(tenantId, tenantId);
+        WHERE i.tenant_id = ? AND i.archived = 0 AND ((i.shop_sync = 1 AND i.has_variants = 0 AND i.sale_price IS NOT NULL) OR i.has_variants = 1)`).all(tenantId, tenantId);
       const catalog = buildCatalog(rows);
       cache.set(tenantId, { catalog, until: Date.now() + CACHE_MS });
       return catalog;

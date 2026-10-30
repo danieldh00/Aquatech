@@ -299,3 +299,54 @@ test('webshop: eigen pagina Over ons, vaste kaarthoogte en telefoonlink met naam
   assert.match(css.text, /\.product-row \{[^}]*min-height: 112px/, 'rij groeit mee met grotere tekst');
   assert.match(css.text, /\.product-card:focus-within \.product-name[^{]*\{[^}]*overflow: visible/, 'volledige naam bij focus of aanraking');
 });
+
+test('catalogus: varianten van een hoofdartikel worden één regel met keuzes, los bereikbaar', () => {
+  const catalog = buildCatalog([
+    { id: 'P', code: 'KOP', name: 'Koppeling', unit: 'st', on_hand: 0, has_variants: 1, attributes: '[{"name":"Maat","values":["25 mm","110 mm"]}]', categories: '["Koppelingen"]', image: 'https://x.nl/k.jpg' },
+    { id: 'V1', parent_id: 'P', code: 'KOP-110', name: 'Koppeling 110 mm', unit: 'st', on_hand: 0, sale_price: 30, vat_rate: 21, variant_values: '{"Maat":"110 mm"}' },
+    { id: 'V2', parent_id: 'P', code: 'KOP-25', name: 'Koppeling 25 mm', unit: 'st', on_hand: 4, sale_price: 5, vat_rate: 21, variant_values: '{"Maat":"25 mm"}' },
+    { id: 'S', code: 'LOS', name: 'Los artikel', unit: 'st', on_hand: 1, sale_price: 2, vat_rate: 21, categories: '["Koppelingen"]' },
+  ]);
+  assert.deepStrictEqual(catalog.products.map((product) => product.name), ['Koppeling', 'Los artikel']);
+  const group = catalog.products[0];
+  assert.deepStrictEqual(group.variants.map((variant) => variant.code), ['KOP-25', 'KOP-110'], 'varianten op maat gesorteerd');
+  assert.strictEqual(group.attributeName, 'Maat');
+  assert.strictEqual(group.priceIncl, 6.05, 'laagste prijs incl. btw');
+  assert.strictEqual(group.inStock, true);
+  assert.strictEqual(group.image, 'https://x.nl/k.jpg');
+  assert.strictEqual(catalog.categories[0].count, 2, 'een regel per hoofdartikel in de telling');
+  assert.deepStrictEqual(catalog.variantProducts.map((product) => product.parentSlug), [group.slug, group.slug]);
+});
+
+test('webshop: hoofdartikel met varianten als regel met keuzelijst en eigen script', async () => {
+  const { db, admin, anonymous, main } = await setup();
+  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
+  const parent = (await admin.post('/api/stock/items', { code: 'KOP', name: 'Koppeling pp', salePrice: 5 })).body;
+  const made = await admin.put(`/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Maat', values: ['25 mm', '32 mm'] }] });
+  assert.strictEqual(made.status, 200, JSON.stringify(made.body));
+  db.prepare("UPDATE stock_items SET sale_price = 7, shop_sync = 1, on_hand = 3 WHERE tenant_id = ? AND parent_id IS NOT NULL").run(main);
+  db.prepare("UPDATE stock_items SET shop_sync = 1 WHERE tenant_id = ? AND id = ?").run(main, parent.id);
+
+  const home = await anonymous.get('/winkel/');
+  const categorySlug = home.text.match(/href="categorie\/(overig-[0-9a-f]{6})\//)[1];
+  const list = await anonymous.get(`/winkel/categorie/${categorySlug}/`);
+  assert.strictEqual(list.text.match(/data-variant-row/g).length, 1, 'één regel voor het hoofdartikel');
+  assert.match(list.text, /2 varianten/);
+  assert.match(list.text, /<option value="[^"]+" data-code="[^"]+"[^>]*>25 mm<\/option>/);
+  assert.match(list.text, /<script src="\.\.\/\.\.\/assets\/varianten\.js\?v=[^"]+" defer><\/script>/);
+  assert.match(list.headers.get('content-security-policy'), /script-src 'self'/);
+  assert.ok(!list.text.includes('onclick'), 'geen inline script');
+  const script = await anonymous.get('/winkel/assets/varianten.js');
+  assert.strictEqual(script.status, 200);
+  assert.match(script.type, /javascript/);
+
+  const slug = list.text.match(/href="\.\.\/\.\.\/product\/([^/"]+)\/\?v=/)[1];
+  const code32 = list.text.match(/data-code="([^"]+)"[^>]*>32 mm<\/option>/)[1];
+  const chosen = await anonymous.get(`/winkel/product/${slug}/?v=${encodeURIComponent(code32)}`);
+  assert.strictEqual(chosen.status, 200);
+  assert.match(chosen.text, /<h1>Koppeling pp<\/h1>/);
+  assert.ok(chosen.text.includes(`Artikelnummer: ${code32} | Maat: 32 mm`), 'artikelnummer en kenmerk van de gekozen variant');
+  const found = await anonymous.get('/winkel/zoeken/?q=koppeling');
+  assert.strictEqual(found.text.match(/data-variant-row/g).length, 1);
+  assert.ok(!/<script/i.test((await anonymous.get('/winkel/')).text), 'startpagina laadt geen script');
+});

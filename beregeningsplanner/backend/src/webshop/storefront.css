@@ -236,3 +236,23 @@ a.shop-action:hover { background: var(--at-page); }
 .cms-page blockquote { margin: 1em 0; padding: 4px 16px; border-left: 4px solid var(--at-shop-teal); color: var(--at-muted); }
 .cms-page a { color: var(--at-shop-green-dark); text-decoration: underline; }
 @media (max-width: 520px) { .cms-page { padding: 16px; } }
+
+/* Hoofdartikelen met varianten: een regel met keuzelijst (zoals een groothandel). */
+.variant-row { grid-column: 1 / -1; display: grid; grid-template-columns: 96px minmax(0, 1fr) minmax(220px, 280px) minmax(200px, 240px); gap: 8px 20px; align-items: center; padding: 14px 16px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 12px; }
+.variant-row .product-image { width: 96px; height: 96px; aspect-ratio: auto; }
+.variant-row .product-name { display: block; min-height: 0; color: var(--at-shop-navy); text-decoration: none; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset; }
+.variant-row .product-name:hover { text-decoration: underline; }
+.variant-meta { margin: 4px 0 0; color: var(--at-muted); font-size: 0.9rem; }
+.variant-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.variant-pick label { display: flex; flex-direction: column; gap: 2px; flex: 1 1 140px; font-size: 0.75rem; color: var(--at-muted); }
+.variant-pick select { font: inherit; font-size: 1rem; color: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; background: var(--at-white); }
+.variant-count { font-size: 0.9rem; color: var(--at-muted); }
+.js-on .variant-go { display: none; }
+.variant-buy { display: flex; flex-direction: column; gap: 4px; }
+.variant-price { margin: 0; font-size: 1.1rem; }
+.variant-price small { font-size: 0.8rem; font-weight: 400; color: var(--at-muted); }
+.variant-order { display: flex; gap: 8px; align-items: stretch; }
+.variant-order input { width: 64px; font: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; }
+.variant-order .button { flex: 1; padding: 8px 12px; }
+.product-info .variant-pick { margin: 8px 0 12px; }
+@media (max-width: 860px) { .variant-row { grid-template-columns: 80px minmax(0, 1fr); } .variant-row .product-image { width: 80px; height: 80px; } .variant-pick, .variant-buy { grid-column: 1 / -1; } }

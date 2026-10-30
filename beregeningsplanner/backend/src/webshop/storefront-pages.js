@@ -142,10 +142,10 @@ function navigation(groups, root) {
 /**
  * Het kader om elke pagina: kop met logo, zoeken, winkelwagen en account,
  * menu van productgroepen, inhoud en voet.
- * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina).
+ * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean, variantScript?: boolean }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina) en variantScript = of de pagina het script voor de keuzelijsten van varianten laadt.
  * @returns {string} De volledige HTML-pagina.
  */
-function layout({ root, title, description, body, groups, query = '', wide = false }) {
+function layout({ root, title, description, body, groups, query = '', wide = false, variantScript = false }) {
   const home = root || './';
   const { site, pages } = activeContent;
   const phone = site.contact.phone;
@@ -162,7 +162,7 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
 <link rel="icon" type="image/png" href="${assetUrl(root, 'favicon.png')}">
 <link rel="stylesheet" href="${assetUrl(root, 'brand.css')}">
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
-</head>
+${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}</head>
 <body>
 ${site.notice.enabled && site.notice.text ? `<div class="shop-notice">${escapeHtml(site.notice.text)}</div>` : ''}
 <header class="shop-head">
@@ -198,6 +198,69 @@ ${body}
 }
 
 /**
+ * De prijs van een product; bij een hoofdartikel met varianten "Vanaf" de laagste prijs.
+ * @param {object} product Een product uit de catalogus.
+ * @returns {string} De opgemaakte en ontsnapte prijs.
+ */
+function priceText(product) {
+  return `${product.variants && product.variants.length > 1 ? 'Vanaf ' : ''}${escapeHtml(formatPrice(product.priceIncl))}`;
+}
+
+/**
+ * Adres van de productpagina, bij een hoofdartikel met een gekozen variant.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {object} product Het product.
+ * @param {object} [variant] De gekozen variant (alleen bij een hoofdartikel).
+ * @returns {string} Het relatieve adres.
+ */
+function productHref(root, product, variant) {
+  return `${root}product/${escapeHtml(product.slug)}/${variant ? `?v=${encodeURIComponent(variant.code)}` : ''}`;
+}
+
+/**
+ * De regel van een hoofdartikel met varianten, in de opzet van een groothandel:
+ * foto, naam, artikelnummer en kenmerken, een keuzelijst met uitvoeringen en
+ * rechts prijs incl. btw, voorraad, aantal en winkelwagenknop. Zonder script
+ * kiest de bezoeker met de knop Kies (opent de productpagina van die
+ * uitvoering); met het script wisselen artikelnummer, prijs en voorraad direct.
+ * @param {object} product Het hoofdartikel (variants, attributeName).
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @returns {string} HTML van de regel.
+ */
+function variantRow(product, root) {
+  const selected = product.variants.find((variant) => variant.inStock) || product.variants[0];
+  const image = product.image ? `<img src="${escapeHtml(product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
+  const options = product.variants.map((variant) => `<option value="${escapeHtml(variant.code)}" data-code="${escapeHtml(variant.code)}" data-meta="${escapeHtml(variant.meta)}" data-price="${escapeHtml(formatPrice(variant.priceIncl))}" data-stock="${variant.inStock ? 'in' : 'out'}" data-href="${productHref(root, product, variant)}"${variant === selected ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('');
+  return `<div class="variant-row" data-variant-row>
+  <a class="product-image" href="${productHref(root, product, selected)}" data-variant-link>${image}</a>
+  <div class="variant-main">
+    <a class="product-name" href="${productHref(root, product, selected)}" data-variant-link title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</a>
+    <p class="variant-meta">Artikelnr.: <span data-variant-code>${escapeHtml(selected.code)}</span><span data-variant-meta>${selected.meta ? ` | ${escapeHtml(selected.meta)}` : ''}</span></p>
+  </div>
+  <form class="variant-pick" method="get" action="${root}product/${escapeHtml(product.slug)}/">
+    <label>${escapeHtml(product.attributeName)}<select name="v" data-variant-select>${options}</select></label>
+    <span class="variant-count">${product.variants.length} varianten</span>
+    <button class="button secondary variant-go" type="submit">Kies</button>
+  </form>
+  <div class="variant-buy">
+    <p class="variant-price"><strong data-variant-price>${escapeHtml(formatPrice(selected.priceIncl))}</strong> <small>incl. btw</small></p>
+    <p class="stock ${selected.inStock ? 'in' : 'out'}" data-variant-stock>${selected.inStock ? 'Op voorraad' : 'Niet op voorraad'}</p>
+    <div class="variant-order"><input type="number" value="1" min="1" aria-label="Aantal" disabled><button class="button" type="button" disabled>In winkelwagen</button></div>
+  </div>
+</div>`;
+}
+
+/**
+ * Een product in een lijst: een regel met keuzelijst bij een hoofdartikel met varianten, anders een kaart.
+ * @param {object} product Een product uit de catalogus.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @returns {string} HTML.
+ */
+function listItem(product, root) {
+  return product.variants ? variantRow(product, root) : productCard(product, root);
+}
+
+/**
  * Een kaart in een productoverzicht: afbeelding, naam, prijs en voorraadstand.
  * @param {object} product Een product uit de catalogus.
  * @param {string} root Relatief pad naar de shop-startpagina.
@@ -208,7 +271,7 @@ function productCard(product, root) {
   return `<a class="product-card" href="${root}product/${escapeHtml(product.slug)}/">
   <span class="product-image">${image}</span>
   <span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span>
-  <span class="product-price">${escapeHtml(formatPrice(product.priceIncl))}</span>
+  <span class="product-price">${priceText(product)}</span>
   <span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span>
 </a>`;
 }
@@ -243,7 +306,7 @@ function groupShowcase(group, products) {
  * @returns {string} HTML van de regel.
  */
 function productRow(product, root) {
-  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${escapeHtml(product.image)}" alt="" loading="lazy"></span><span class="product-row-text"><span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span><span class="product-price">${escapeHtml(formatPrice(product.priceIncl))}</span><span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span></span></a>`;
+  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${escapeHtml(product.image)}" alt="" loading="lazy"></span><span class="product-row-text"><span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span><span class="product-price">${priceText(product)}</span><span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span></span></a>`;
 }
 
 /**
@@ -308,9 +371,9 @@ function categoryPage(category, products, groups) {
   const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a>${group ? ` › <a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : ''} › <span>${escapeHtml(category.name)}</span></nav>
 <h1>${escapeHtml(category.name)}</h1>
 <div class="product-grid">
-${products.map((product) => productCard(product, root)).join('\n')}
+${products.map((product) => listItem(product, root)).join('\n')}
 </div>`;
-  return layout({ root, title: `${category.name} – ${SHOP_NAME}`, description: `${category.name} van AquaTech Service: ${productCount(category.count)}.`, body, groups });
+  return layout({ root, variantScript: products.some((product) => product.variants), title: `${category.name} – ${SHOP_NAME}`, description: `${category.name} van AquaTech Service: ${productCount(category.count)}.`, body, groups });
 }
 
 /**
@@ -326,34 +389,48 @@ function searchPage(query, products, groups) {
   const body = `<h1>Zoeken</h1>
 ${query ? `<p class="muted">${productCount(products.length)} voor “${escapeHtml(query)}”${products.length > shown.length ? ` (de eerste ${shown.length} getoond)` : ''}.</p>` : '<p class="muted">Typ een productnaam of artikelnummer.</p>'}
 <div class="product-grid">
-${shown.map((product) => productCard(product, root)).join('\n')}
+${shown.map((product) => listItem(product, root)).join('\n')}
 </div>`;
-  return layout({ root, title: `Zoeken – ${SHOP_NAME}`, description: 'Zoek een product in de webshop van AquaTech Service.', body, groups, query });
+  return layout({ root, variantScript: shown.some((product) => product.variants), title: `Zoeken – ${SHOP_NAME}`, description: 'Zoek een product in de webshop van AquaTech Service.', body, groups, query });
 }
 
 /**
- * Productpagina: afbeelding, naam, artikelnummer, prijs en voorraadstand.
- * @param {object} product Het product uit de catalogus.
+ * Productpagina: afbeelding, naam, artikelnummer, prijs en voorraadstand. Bij een
+ * hoofdartikel met varianten een keuzelijst en de gegevens van de gekozen variant.
+ * @param {object} product Het product uit de catalogus (of een variant, met parentSlug en parentName).
  * @param {object[]} groups Alle hoofdcategorieën.
+ * @param {string} [chosenCode] Artikelnummer van de gekozen variant (alleen bij een hoofdartikel; anders de eerste op voorraad).
  * @returns {string} De HTML-pagina.
  */
-function productPage(product, groups) {
+function productPage(product, groups, chosenCode = '') {
   const root = '../../';
-  const image = product.image ? `<img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}">` : '<span class="no-image" aria-hidden="true"></span>';
+  const variants = product.variants || [];
+  const chosen = variants.length ? (variants.find((variant) => variant.code === chosenCode) || variants.find((variant) => variant.inStock) || variants[0]) : null;
+  const shown = chosen || product;
+  const imageUrl = (chosen && chosen.image) || product.image;
+  const image = imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}">` : '<span class="no-image" aria-hidden="true"></span>';
   const group = groups.find((candidate) => candidate.slug === product.groupSlug);
+  const picker = chosen ? `<form class="variant-pick" method="get" action="">
+      <label>${escapeHtml(product.attributeName)}<select name="v">${variants.map((variant) => `<option value="${escapeHtml(variant.code)}"${variant === chosen ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('')}</select></label>
+      <span class="variant-count">${variants.length} varianten</span>
+      <button class="button secondary" type="submit">Kies</button>
+    </form>` : '';
+  const parentLink = product.parentSlug ? `<p class="note"><a href="${root}product/${escapeHtml(product.parentSlug)}/?v=${encodeURIComponent(product.code)}">Alle uitvoeringen van ${escapeHtml(product.parentName)}</a></p>` : '';
   const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a>${group ? ` › <a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : ''} › <a href="${root}categorie/${escapeHtml(product.categorySlug)}/">${escapeHtml(product.categoryName)}</a> › <span>${escapeHtml(product.name)}</span></nav>
 <article class="product-detail">
   <div class="product-image large">${image}</div>
   <div class="product-info">
     <h1>${escapeHtml(product.name)}</h1>
-    <p class="sku">Artikelnummer: ${escapeHtml(product.code)}</p>
-    <p class="price">${escapeHtml(formatPrice(product.priceIncl))} <small>incl. ${product.vatRate}% btw · per ${escapeHtml(product.unit)}</small></p>
-    <p class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</p>
+    ${picker}
+    <p class="sku">Artikelnummer: ${escapeHtml(shown.code)}${chosen && chosen.meta ? ` | ${escapeHtml(chosen.meta)}` : ''}</p>
+    <p class="price">${escapeHtml(formatPrice(shown.priceIncl))} <small>incl. ${shown.vatRate}% btw · per ${escapeHtml(product.unit)}</small></p>
+    <p class="stock ${shown.inStock ? 'in' : 'out'}">${shown.inStock ? 'Op voorraad' : 'Niet op voorraad'}</p>
     <button class="button" type="button" disabled>In winkelwagen</button>
     <p class="note">Online bestellen volgt binnenkort.</p>
+    ${parentLink}
   </div>
 </article>`;
-  return layout({ root, title: `${product.name} – ${SHOP_NAME}`, description: `${product.name} (${formatPrice(product.priceIncl)} incl. btw) bij AquaTech Service.`, body, groups });
+  return layout({ root, title: `${product.name} – ${SHOP_NAME}`, description: `${product.name} (${formatPrice(shown.priceIncl)} incl. btw) bij AquaTech Service.`, body, groups });
 }
 
 /**
