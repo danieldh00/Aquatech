@@ -399,7 +399,7 @@
       const result = await api('stock/import-shop', { method: 'POST', body: {} });
       bar.value = 1;
       $('#shop-text').textContent = `Klaar: ${result.created} nieuw, ${result.restored} teruggezet, ${result.archived} gearchiveerd (niet in de webshop)${result.skippedProducts ? `, ${result.skippedProducts} overgeslagen (geen geldige code)` : ''}.`;
-      await load();
+      await Promise.all([load(), loadUnits()]);
     } catch (error) {
       bar.value = 0;
       $('#shop-text').textContent = `Overnemen mislukt: ${error.message}`;
@@ -459,7 +459,7 @@
         const result = await api('stock/import', { method: 'POST', body: { codes } });
         formElement.hidden = true;
         toast(`${result.created} artikel${result.created === 1 ? '' : 'en'} op voorraad genomen`);
-        await load();
+        await Promise.all([load(), loadUnits()]);
       } catch (error) {
         errorBox.textContent = error.message;
       }

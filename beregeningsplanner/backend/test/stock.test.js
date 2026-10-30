@@ -293,6 +293,13 @@ test('voorraad: eenheden beheren, een gebruikte eenheid blijft staan, andere org
     assert.strictEqual((await kees.del(`/api/stock/units/${made.body.id}`)).status, 200);
     assert.strictEqual((await kees.del(`/api/stock/units/${made.body.id}`)).status, 404);
 
+    // Een onbekende eenheid bij een nieuw artikel komt atomair in de lijst; ook via de catalogusimport.
+    assert.strictEqual((await kees.post('/api/stock/items', { code: 'BAK-1', name: 'Bak', unit: 'bak' })).status, 201);
+    await kees.post('/api/stock/import', { codes: ['PE-25'] });
+    const names = (await kees.get('/api/stock/units')).body.items.map((unit) => unit.name);
+    assert.ok(names.includes('bak') && names.includes('m'));
+    assert.strictEqual(names.filter((name) => name === 'bak').length, 1);
+
     // Rechten en scheiding tussen organisaties.
     assert.strictEqual((await pien.get('/api/stock/units')).status, 403);
     assert.strictEqual((await pien.post('/api/stock/units', { name: 'x' })).status, 403);

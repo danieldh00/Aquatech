@@ -41,5 +41,5 @@ table.grid tr[data-id]:hover td { background: var(--at-green-soft); }
 .chips .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; background: var(--panel); }
 .chips .chip small { color: var(--muted); }
 .chips .chip button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 999px; }
-.chips .chip button:hover { background: #fdecea; color: #b42318; }
+.chips .chip button:hover { background: color-mix(in srgb, var(--at-danger) 12%, transparent); color: var(--at-danger); }
 .chips .chip button:disabled { opacity: 0.3; cursor: default; background: none; color: var(--muted); }

@@ -883,21 +883,26 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
 
   /**
    * De eenheden van de omgeving. De eerste keer wordt de lijst gevuld met de
-   * standaardeenheden en de eenheden die artikelen al hebben.
+   * standaardeenheden; eenheden die artikelen gebruiken (ook via een import)
+   * maar nog niet in de lijst staan, worden erbij gezet.
    * @param {string} tenantId Id van de omgeving.
+   * @param {{ nested?: boolean }} [options] Binnen de transactie van de aanroeper.
    * @returns {{ id: string, name: string }[]} De eenheden, alfabetisch.
    */
-  function unitRows(tenantId) {
+  function unitRows(tenantId, { nested = false } = {}) {
     let rows = prepare('SELECT id, name FROM stock_units WHERE tenant_id = ?').all(tenantId);
-    if (!rows.length) {
-      const inUse = prepare('SELECT DISTINCT unit FROM stock_items WHERE tenant_id = ?').all(tenantId).map((row) => row.unit);
-      const seen = new Set();
-      const timestamp = currentTimestamp();
-      for (const name of [...DEFAULT_UNITS, ...inUse]) {
-        if (!name || seen.has(name.toLowerCase())) continue;
-        seen.add(name.toLowerCase());
-        prepare('INSERT INTO stock_units (id, tenant_id, name, created_at) VALUES (?, ?, ?, ?)').run(crypto.randomUUID(), tenantId, name, timestamp);
-      }
+    const inUse = prepare('SELECT DISTINCT unit FROM stock_items WHERE tenant_id = ?').all(tenantId).map((row) => row.unit);
+    const seen = new Set(rows.map((row) => row.name.toLowerCase()));
+    const missing = [...(rows.length ? [] : DEFAULT_UNITS), ...inUse].filter((name) => {
+      const known = !name || seen.has(name.toLowerCase());
+      seen.add(String(name).toLowerCase());
+      return !known;
+    });
+    if (missing.length) {
+      inTransaction(() => {
+        const timestamp = currentTimestamp();
+        for (const name of missing) prepare('INSERT INTO stock_units (id, tenant_id, name, created_at) VALUES (?, ?, ?, ?)').run(crypto.randomUUID(), tenantId, name, timestamp);
+      }, nested);
       rows = prepare('SELECT id, name FROM stock_units WHERE tenant_id = ?').all(tenantId);
     }
     return rows.sort((left, right) => left.name.localeCompare(right.name, 'nl'));
@@ -918,17 +923,18 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * Voegt een eenheid toe (een bestaande, ook met andere hoofdletters, blijft zoals hij is).
    * @param {string} tenantId Id van de omgeving.
    * @param {*} rawName De naam, bijv. 'rol'.
+   * @param {{ nested?: boolean }} [options] Binnen de transactie van de aanroeper.
    * @returns {{ unit?: object, error?: string, field?: string, status?: number }} De eenheid, of een fout.
    */
-  function addUnit(tenantId, rawName) {
+  function addUnit(tenantId, rawName, { nested = false } = {}) {
     const name = cleanText(rawName, 12);
     if (!name) return { error: 'Vul een eenheid in.', field: 'name' };
-    return transaction(db, () => {
-      if (unitRows(tenantId).some((row) => row.name.toLowerCase() === name.toLowerCase())) return { error: 'Deze eenheid bestaat al.', field: 'name', status: 409 };
+    return inTransaction(() => {
+      if (unitRows(tenantId, { nested: true }).some((row) => row.name.toLowerCase() === name.toLowerCase())) return { error: 'Deze eenheid bestaat al.', field: 'name', status: 409 };
       const id = crypto.randomUUID();
       prepare('INSERT INTO stock_units (id, tenant_id, name, created_at) VALUES (?, ?, ?, ?)').run(id, tenantId, name, currentTimestamp());
       return { unit: { id, name, items: 0 } };
-    });
+    }, nested);
   }
 
   /**
@@ -948,13 +954,13 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
-   * Zet een eenheid die een artikel gebruikt (bijv. via een import of de API) ook in de lijst.
+   * Zet een eenheid die een artikel gebruikt (bijv. via de API) ook in de lijst; draait binnen de transactie van create/update.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} name De eenheid.
    * @returns {void}
    */
   function rememberUnit(tenantId, name) {
-    if (name && !unitRows(tenantId).some((row) => row.name.toLowerCase() === name.toLowerCase())) addUnit(tenantId, name);
+    if (name && !unitRows(tenantId, { nested: true }).some((row) => row.name.toLowerCase() === name.toLowerCase())) addUnit(tenantId, name, { nested: true });
   }
 
   return {
