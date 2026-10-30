@@ -29,6 +29,8 @@ const { createShopContentStore, registerShopContentRoutes } = require('./webshop
 const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
+const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
+const { createReturnMailer } = require('./webshop/web-returns-mail');
 const { createShopOrders } = require('./webshop/shop-orders');
 const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
 const { createInvoiceSender } = require('./verkoop/invoice-mail');
@@ -1861,11 +1863,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopContentStore = createShopContentStore(database, { vault });
   const webOrders = createWebOrderStore(database, { stock: stockStore });
   const webOrderMail = createOrderMailer({ orders: webOrders, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
-  const webOrderInvoices = createWebOrderInvoices({ orders: webOrders, invoices: invoiceStore, debtors: debtorStore, stock: stockStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id) });
+  const webReturns = createWebReturnStore(database, { orders: webOrders, stock: stockStore });
+  const webReturnMail = createReturnMailer({ returns: webReturns, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
+  const webOrderInvoices = createWebOrderInvoices({ orders: webOrders, invoices: invoiceStore, returns: webReturns, debtors: debtorStore, stock: stockStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id) });
   webOrders.onShipped((tenantId, order, user) => webOrderInvoices.onShipped(tenantId, order, user));
   webOrders.onShipped((tenantId, order) => webOrderMail.sendShipment(tenantId, order));
   webOrders.onTracking((tenantId, order) => webOrderMail.sendShipment(tenantId, order, { onlyNewTracking: true }));
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices });
+  webReturns.onRequested((tenantId, record) => webReturnMail.sendRequested(tenantId, record));
+  webReturns.onDecided((tenantId, record) => webReturnMail.sendDecision(tenantId, record));
+  registerWebReturnRoutes(app, { returns: webReturns, requireJson, audit, credits: webOrderInvoices, mail: webReturnMail });
   registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id) });
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
   app.get('/api/config', (req, res) => {
@@ -2139,8 +2146,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
   app.use('/winkel', createStorefront({
     db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore,
-    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices,
+    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
+    onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
     // Een beheerder van de hoofdorganisatie bekijkt het concept met ?voorbeeld=1.
     previewAllowed: (req) => {
       const user = identify(req);

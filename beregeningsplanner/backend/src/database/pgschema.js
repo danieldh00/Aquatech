@@ -714,6 +714,23 @@ const PG_MIGRATIONS = [
   ALTER TABLE users ADD COLUMN customer_group ${TEXT_TYPE} NOT NULL DEFAULT '';
   ALTER TABLE stock_items ADD COLUMN business_price DOUBLE PRECISION;
   `,
+  // 40: retouren van webshopbestellingen (zie db.js).
+  `
+  CREATE TABLE web_returns (
+    id         ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id  ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    order_id   ${TEXT_TYPE} NOT NULL ${references('web_orders(id)')},
+    user_id    ${TEXT_TYPE} ${references('users(id)')},
+    number     ${TEXT_TYPE} NOT NULL,
+    status     ${TEXT_TYPE} NOT NULL DEFAULT 'aangevraagd',
+    data       ${TEXT_TYPE} NOT NULL,
+    created_at ${TEXT_TYPE} NOT NULL,
+    updated_at ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX web_returns_number ON web_returns (tenant_id, number);
+  CREATE INDEX web_returns_order ON web_returns (tenant_id, order_id);
+  CREATE INDEX web_returns_status ON web_returns (tenant_id, status, created_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

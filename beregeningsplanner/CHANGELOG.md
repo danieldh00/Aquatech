@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.5.1
+
+Retouren in de eigen webshop (stap 6 van de webshop-roadmap).
+
+- **Retour aanvragen** door de klant op de bestelpagina
+  (`/winkel/bestelling/:id/`, blok *Retourneren*): artikelen en aantallen
+  kiezen, een reden (niet meer nodig, verkeerd besteld, defect, anders) en
+  een toelichting. Kan binnen 14 dagen na verzending (`RETURN_DAYS`), alleen
+  voor de eigen bestelling en nooit meer dan er is verzonden min wat al in
+  een lopende of afgeronde retour zit. Een aangevraagde retour kan de klant
+  intrekken. Formulier-POST's `bestelling/:id/retour` en
+  `…/retour/:retourId/intrekken` met `Sec-Fetch-Site`-controle en limiet per
+  IP (20 per uur).
+- **Beheer > Webshopretouren** (`beheer/retouren.js`, API
+  `/api/admin/web-returns`): goedkeuren, afwijzen (met verplichte reden),
+  *Retour ontvangen en afronden* en Excel-export. Bij afronden gaan de
+  artikelen terug op voorraad (`stock.book`, soort `retour`, bron
+  `retour:<nummer>`) tenzij je dat uitzet (beschadigd).
+- **Creditnota** (`creditReturn` in `web-order-invoices.js`): bij afronden een
+  creditfactuur bij de factuur van de bestelling met alleen de teruggestuurde
+  regels (zonder verzendkosten), zo ingesteld meteen definitief en per mail
+  verstuurd; boekt de voorraad niet nog eens. Zonder (definitieve) factuur of
+  met facturen voor webshopbestellingen uit staat de reden bij de retour en
+  kan *Creditnota maken* later opnieuw. Eén creditnota per retour.
+- **Mails** (`web-returns-mail.js`): bevestiging aan de klant en melding aan het
+  bedrijf bij een aanvraag, het besluit (goedgekeurd met retouradres uit het
+  bedrijfsprofiel, of afgewezen met reden) en een bericht bij afronden.
+- Tabel `web_returns` (migratie 40, ook in `PG_MIGRATIONS`) met index op
+  bestelling en op status; bij verwijderen van een klant wordt `user_id` leeg.
+  Nummer `<bestelnummer>-R1`. Zonder testdata (testomgevingen hebben geen
+  webshop, zie `NO_TESTDATA`).
+- Tests: `test/web-returns.test.js`; de gedeelde opzet van de webshoptests staat
+  nu in `test/helpers/webshop-world.js`.
+
 ## 1.5.0
 
 Verzendmail en bestelhistorie in de eigen webshop (stap 5 van de
