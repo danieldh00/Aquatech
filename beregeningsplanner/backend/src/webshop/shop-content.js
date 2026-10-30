@@ -584,7 +584,7 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
       available: true, storefront: Boolean(settingsOf(req).get('storefront')),
       site: { ...stored.site, isDefault: !stored.site.published },
       pages: stored.pages, images: content.listImages(req.tenantId),
-      defaults: { site: DEFAULT_SITE, aboutBody: DEFAULT_ABOUT_BODY, legal: legalDefaults((stored.site.published && stored.site.published.contact) || DEFAULT_SITE.contact) }, assets: [...ASSET_NAMES].sort(),
+      defaults: { site: DEFAULT_SITE, aboutBody: DEFAULT_ABOUT_BODY, legal: legalDefaults(((stored.site.draft || stored.site.published) || {}).contact || DEFAULT_SITE.contact) }, assets: [...ASSET_NAMES].sort(),
     };
   }
   /**
