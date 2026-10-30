@@ -345,21 +345,25 @@ test('varianten en WooCommerce: artikel en hoofdartikel uit Aquatech als nieuw p
   assert.strictEqual(createdSimple.stock_quantity, 5);
   assert.strictEqual((await sync.publish(tenantId, simple.id)).status, 409);
 
-  // Een ander hoofdartikel met een ontbrekende variatie telt niet mee bij deze publicatie.
+  // Een ander, al gekoppeld hoofdartikel met een ontbrekende variatie telt niet mee bij deze publicatie.
   const other = stock.create(tenantId, USER, { code: 'DOP', name: 'Dop' }).item;
   stock.setVariants(tenantId, other.id, [{ name: 'Maat', values: ['1/2"'] }]);
+  const otherProduct = await sync.publish(tenantId, other.id);
+  stock.setVariants(tenantId, other.id, [{ name: 'Maat', values: ['1/2"', '3/4"'] }]);
   const variable = await sync.publish(tenantId, parent.id);
   assert.strictEqual(variable.variations, 2);
   assert.strictEqual(variable.warning, null);
-  assert.ok(stock.get(tenantId, other.id).variants.every((item) => !item.shop.productId));
+  assert.strictEqual(variations.get(otherProduct.productId).length, 1);
+  assert.ok(!stock.get(tenantId, other.id).variants.find((item) => item.values.Maat === '3/4"').shop.productId);
   assert.strictEqual(products.get(variable.productId).type, 'variable');
   assert.deepStrictEqual(variations.get(variable.productId).map((entry) => [entry.sku, entry.attributes[0].option, entry.regular_price]), [['SPROEIER-4M', '4 m', '12.10'], ['SPROEIER-8M', '8 m', '12.10']]);
   const variant = stock.get(tenantId, parent.id).variants[0];
   assert.strictEqual((await sync.publish(tenantId, variant.id)).status, 409);
 
-  // Een volle ronde daarna koppelt alles zonder iets dubbel aan te maken.
+  // Een volle ronde daarna koppelt alles zonder iets dubbel aan te maken; alleen de ontbrekende maat van DOP komt erbij.
   const round = await sync.run(tenantId);
-  assert.strictEqual(round.createdVariations, 0);
+  assert.strictEqual(round.createdVariations, 1);
+  assert.strictEqual(variations.get(otherProduct.productId).length, 2);
   assert.strictEqual(variations.get(variable.productId).length, 2);
   assert.ok(stock.get(tenantId, parent.id).variants.every((item) => item.shop.productId && !item.shop.error));
 });
