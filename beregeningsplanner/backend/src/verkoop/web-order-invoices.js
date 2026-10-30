@@ -1,0 +1,147 @@
+// Facturen bij bestellingen van de eigen webshop (module winkel). Zodra een
+// bestelling op Verzonden gaat maakt Aquatech er een factuur van, met een
+// debiteur, en zet hem desgewenst meteen op definitief (en verstuurd per
+// e-mail, instelling autoSend). Visma volgt via de gewone haak van definitief
+// maken. Eén factuur per bestelling (shop_order_id = `web:<bestelling>`,
+// uniek per omgeving), dus opnieuw proberen is veilig. De voorraad is bij
+// Verzonden al afgeboekt (stock.issueOrder), de factuur boekt dus niets af.
+// Betaling is nu altijd "op rekening": de factuur blijft open tot een
+// beheerder hem in Facturen op betaald zet.
+const path = require('path');
+const { FRONTEND_DIR } = require('../paths');
+
+const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
+
+/**
+ * Sleutel waaronder de factuur van een bestelling bij de facturen staat.
+ * @param {string} orderId Id van de bestelling.
+ * @returns {string} De waarde voor shop_order_id.
+ */
+const invoiceKey = (orderId) => `web:${orderId}`;
+
+/**
+ * Zet een webshopbestelling om naar factuurgegevens. Bedragen komen uit de
+ * bestelling (excl. btw per stuk, het tarief van de bestelling; bij btw
+ * verlegd 0% met een vermelding).
+ * @param {object} order De bestelling (web-orders.js, volledig).
+ * @param {object} articles Verkoopgegevens per code (stock.saleInfo) voor eenheid en omzetgroep.
+ * @param {object} settings De factuurinstellingen.
+ * @returns {object} De opgeschoonde factuurgegevens (Core.sanitize).
+ */
+function fromWebOrder(order, articles, settings) {
+  const customer = order.customer || {};
+  const address = order.address || {};
+  const company = String(customer.company || '').trim();
+  const shifted = Boolean(order.vat && order.vat.shifted);
+  const lines = order.lines.map((line) => {
+    const article = articles[String(line.code || '').toUpperCase()] || null;
+    return {
+      code: line.code, description: line.name, qty: line.qty, unit: line.unit || (article && article.unit) || 'st', price: line.unitExcl, vat: shifted ? 0 : line.vatRate,
+      group: article && article.revenueGroup ? article.revenueGroup : 'producten',
+    };
+  });
+  const shipping = order.shipping || null;
+  if (shipping && Number(shipping.priceExcl) > 0) {
+    lines.push({ code: '', description: `Verzendkosten (${shipping.label || 'DPD'})`, qty: 1, unit: '', price: shipping.priceExcl, vat: shifted ? 0 : shipping.vatRate, group: 'overig' });
+  }
+  const country = address.country && address.country !== 'NL' ? address.country : '';
+  const notes = [
+    shifted ? `BTW verlegd naar afnemer${order.vat.number ? ` (btw-nummer ${order.vat.number})` : ''}; levering naar een ander EU-land.` : '',
+    order.note ? `Opmerking bij de bestelling: ${order.note}` : '',
+  ].filter(Boolean).join('\n');
+  return Core.sanitize({
+    date: Core.today(),
+    reference: `Webshopbestelling ${order.number}`,
+    customer: {
+      name: company || customer.name, contact: company ? customer.name : '',
+      address: [address.street, [address.postcode, address.city].filter(Boolean).join('  '), country].filter(Boolean).join('\n'),
+      email: customer.email, phone: customer.phone, vatNumber: order.vat && order.vat.number ? order.vat.number : '',
+    },
+    notes, lines,
+  }, settings);
+}
+
+/**
+ * Maakt het factureren van webshopbestellingen.
+ * @param {{ orders: object, invoices: object, debtors?: object, stock?: object, sender?: object, settingsFor: Function, log?: object }} ctx De opslagen en hulpfuncties van de server (settingsFor(tenantId) geeft de instellingen van een omgeving).
+ * @returns {{ invoiceFor: Function, ensureInvoice: Function, onShipped: Function }} De functies.
+ */
+function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null, sender = null, settingsFor, log = console }) {
+  /**
+   * De factuurinstellingen van een omgeving.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {object} De opgeschoonde instellingen.
+   */
+  const settingsOf = (tenantId) => Core.sanitizeSettings(settingsFor(tenantId).get('invoicing'));
+
+  /**
+   * De factuur van een bestelling, als die er is.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} orderId Id van de bestelling.
+   * @returns {{ id: string, number: string, status: string, total: number, paidAt: ?string }|null} Kerngegevens van de factuur, of null.
+   */
+  function invoiceFor(tenantId, orderId) {
+    const invoiceId = invoices.byShopOrders(tenantId, [invoiceKey(orderId)]).get(invoiceKey(orderId));
+    if (!invoiceId) return null;
+    const invoice = invoices.get(tenantId, invoiceId);
+    return invoice ? { id: invoice.id, number: invoice.number, status: invoice.status, total: invoice.total, paidAt: invoice.paidAt } : null;
+  }
+
+  /**
+   * Zorgt dat de bestelling een factuur heeft: maakt hem aan (concept) en zet
+   * hem zo ingesteld meteen op definitief. Heeft de bestelling al een factuur,
+   * dan verandert er niets. Een fout wordt in de bestelling bewaard.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} orderId Id van de bestelling.
+   * @param {object|null} user Wie het doet.
+   * @returns {{ invoice?: object, created?: boolean, error?: string, status?: number }} De factuur, of een foutmelding.
+   */
+  function ensureInvoice(tenantId, orderId, user) {
+    const order = orders.get(tenantId, orderId);
+    if (!order) return { error: 'Bestelling niet gevonden.', status: 404 };
+    if (!['verzonden', 'afgerond'].includes(order.status)) return { error: 'Een factuur kan pas als de bestelling is verzonden.', status: 409 };
+    const existing = invoiceFor(tenantId, order.id);
+    if (existing) return { invoice: existing, created: false };
+    const settings = settingsOf(tenantId);
+    if (!settings.webOrders.enabled) return { error: 'Facturen voor webshopbestellingen staan uit (Facturen → Instellingen).', status: 409 };
+    try {
+      const articles = stock ? stock.saleInfo(tenantId, order.lines.map((line) => line.code).filter(Boolean)) : {};
+      const data = fromWebOrder(order, articles, settings);
+      const debtor = debtors ? debtors.ensure(tenantId, data.customer, { customerId: order.userId, source: 'webshop', start: settings.debtorStart }) : null;
+      const created = invoices.create(tenantId, user, data, settings, { shopOrderId: invoiceKey(order.id), customerId: order.userId, debtorId: debtor ? debtor.id : null });
+      if (settings.webOrders.finalize) {
+        const finalized = invoices.finalize(tenantId, user, created.id, settings, { skipStock: true });
+        if (finalized && finalized.error) throw new Error(finalized.error);
+      }
+      orders.updateData(tenantId, order.id, { invoiceError: null });
+      return { invoice: invoiceFor(tenantId, order.id), created: true };
+    } catch (error) {
+      // Tegelijk al gemaakt (unieke index op de bestelling): de bestaande factuur is goed.
+      const raced = /unique|constraint/i.test(error.message) ? invoiceFor(tenantId, order.id) : null;
+      if (raced) return { invoice: raced, created: false };
+      orders.updateData(tenantId, order.id, { invoiceError: String(error.message || error).slice(0, 300) });
+      return { error: `Factuur maken mislukt: ${error.message}`, status: 500 };
+    }
+  }
+
+  /**
+   * Haak voor web-orders.js: na Verzonden de factuur maken en eventueel mailen.
+   * Mislukt het, dan blijft de verzending staan (de fout staat bij de bestelling
+   * en met de knop in Beheer kan het opnieuw).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} order De bestelling die is verzonden.
+   * @param {object|null} user Wie de status wijzigde.
+   * @returns {Promise<void>} Klaar als de factuur is gemaakt en (zo ingesteld) verstuurd.
+   */
+  async function onShipped(tenantId, order, user) {
+    const out = ensureInvoice(tenantId, order.id, user);
+    if (out.error) { log.warn(`Factuur bij ${order.number}: ${out.error}`); return; }
+    if (out.created && out.invoice.status === 'definitief' && sender) {
+      try { await sender.autoSend(tenantId, out.invoice.id); } catch (error) { log.warn(`Factuur ${out.invoice.number} mailen mislukt: ${error.message}`); }
+    }
+  }
+
+  return { invoiceFor, ensureInvoice, onShipped };
+}
+
+module.exports = { createWebOrderInvoices, fromWebOrder, invoiceKey };

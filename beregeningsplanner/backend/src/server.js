@@ -27,6 +27,7 @@ const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop
 const { createShopSync } = require('./webshop/shop-sync');
 const { createShopContentStore, registerShopContentRoutes } = require('./webshop/shop-content');
 const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
+const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
 const { createShopOrders } = require('./webshop/shop-orders');
 const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
@@ -1860,7 +1861,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopContentStore = createShopContentStore(database, { vault });
   const webOrders = createWebOrderStore(database, { stock: stockStore });
   const webOrderMail = createOrderMailer({ orders: webOrders, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
-  registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit });
+  const webOrderInvoices = createWebOrderInvoices({ orders: webOrders, invoices: invoiceStore, debtors: debtorStore, stock: stockStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id) });
+  webOrders.onShipped((tenantId, order, user) => webOrderInvoices.onShipped(tenantId, order, user));
+  registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices });
   registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id) });
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
   app.get('/api/config', (req, res) => {

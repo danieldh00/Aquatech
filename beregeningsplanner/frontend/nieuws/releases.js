@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.4.9',
+      date: '2026-10-30',
+      title: 'Facturen voor webshopbestellingen',
+      items: [
+        { text: 'Zodra je een webshopbestelling op Verzonden zet, maakt Aquatech automatisch een definitieve factuur met de klant als debiteur. Bij btw verlegd staat dat op de factuur. Visma en het mailen van de factuur volgen je bestaande instellingen.', for: ['beheer', 'facturen'] },
+        { text: 'Bij Beheer, Bestellingen zie je de factuur van een bestelling en kun je hem zo nodig opnieuw laten maken. Zet de factuur zelf op betaald in Facturen zodra de klant heeft betaald.', for: ['beheer', 'facturen'] },
+        { text: 'In Facturen, Instellingen kies je of dit automatisch gebeurt en of de factuur meteen definitief wordt.', for: ['facturen'] },
+      ],
+    },
+    {
       version: '1.4.8',
       date: '2026-10-30',
       title: 'Zakelijke klanten in de webshop',

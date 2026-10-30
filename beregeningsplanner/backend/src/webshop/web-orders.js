@@ -102,9 +102,10 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', group = '' } = 
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
  * @param {{ stock: object }} deps De voorraadopslag (reserveren en afboeken).
- * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function }} De functies.
+ * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, onShipped: Function }} De functies.
  */
 function createWebOrderStore(db, { stock }) {
+  const shippedHooks = [];
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -192,7 +193,7 @@ function createWebOrderStore(db, { stock }) {
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, invoiceError: data.invoiceError || '' };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -365,6 +366,32 @@ function createWebOrderStore(db, { stock }) {
    * @returns {{ order?: object, error?: string, status?: number }} De bijgewerkte bestelling of een foutmelding.
    */
   function setStatus(tenantId, id, status, user, { trackingCode = '' } = {}) {
+    const out = changeStatus(tenantId, id, status, user, { trackingCode });
+    if (out.order && status === 'verzonden') {
+      for (const hook of shippedHooks) {
+        try { Promise.resolve(hook(tenantId, out.order, user)).catch((error) => console.warn(`Na verzenden: ${error.message}`)); } catch (error) { console.warn(`Na verzenden: ${error.message}`); }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Registreert een haak die na elke bestelling die op Verzonden gaat wordt aangeroepen (nadat de wijziging is vastgelegd).
+   * @param {Function} hook Functie (tenantId, order, user); mag een belofte geven, fouten worden alleen gelogd.
+   * @returns {void}
+   */
+  const onShipped = (hook) => { shippedHooks.push(hook); };
+
+  /**
+   * Legt de nieuwe status vast in één transactie (zie setStatus).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {string} status De nieuwe status.
+   * @param {object|null} user Wie de status wijzigt.
+   * @param {{ trackingCode?: string }} options De volgcode bij Verzonden.
+   * @returns {{ order?: object, error?: string, status?: number }} De bijgewerkte bestelling of een foutmelding.
+   */
+  function changeStatus(tenantId, id, status, user, { trackingCode }) {
     if (!STATUSES[status]) return { error: 'Onbekende status.', status: 400 };
     const tracking = String(trackingCode || '').trim() ? Shipping.trackingOf(trackingCode) : null;
     if (String(trackingCode || '').trim() && !tracking) return { error: 'Ongeldige volgcode (6 tot 40 letters, cijfers of streepjes).', status: 400 };
@@ -421,17 +448,17 @@ function createWebOrderStore(db, { stock }) {
     });
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, get, getForUser, list, setStatus, setTracking, updateData };
+  return { priceCart, shippingQuote, orderTotals, place, get, getForUser, list, setStatus, setTracking, updateData, onShipped };
 }
 
 /**
  * Registreert de API-routes van Beheer voor bestellingen (recht `beheer`,
  * door de poort van /api/admin; alles per omgeving van de beheerder).
  * @param {object} app De Express-app.
- * @param {{ orders: object, requireJson: Function, audit: Function }} ctx De opslag en hulpfuncties van de server.
+ * @param {{ orders: object, requireJson: Function, audit: Function, invoices?: object }} ctx De opslag en hulpfuncties van de server; met invoices (web-order-invoices.js) toont Beheer de factuur en kan hij opnieuw gemaakt worden.
  * @returns {void}
  */
-function registerWebOrderRoutes(app, { orders, requireJson, audit }) {
+function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = null }) {
   app.get('/api/admin/web-orders', (req, res) => {
     const out = orders.list(req.tenantId, {
       status: String(req.query.status || ''), query: String(req.query.q || ''), limit: req.query.limit, offset: req.query.offset, withLines: req.query.lines === '1',
@@ -442,14 +469,22 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit }) {
   app.get('/api/admin/web-orders/:id', (req, res) => {
     const order = orders.get(req.tenantId, req.params.id);
     if (!order) return res.status(404).json({ error: 'not_found', message: 'Bestelling niet gevonden.' });
-    res.json({ order });
+    res.json({ order, invoice: invoices ? invoices.invoiceFor(req.tenantId, order.id) : null });
+  });
+
+  app.post('/api/admin/web-orders/:id/invoice', (req, res) => {
+    if (!invoices) return res.status(404).json({ error: 'not_found', message: 'Facturen staan niet aan.' });
+    const out = invoices.ensureInvoice(req.tenantId, req.params.id, req.user);
+    if (out.error) return res.status(out.status || 400).json({ error: 'invoice_failed', message: out.error });
+    if (out.created) audit(req, 'webshop_bestelling_factuur', { number: out.invoice.number });
+    res.json({ invoice: out.invoice, created: out.created });
   });
 
   app.post('/api/admin/web-orders/:id/status', requireJson, (req, res) => {
     const out = orders.setStatus(req.tenantId, req.params.id, String(req.body?.status || ''), req.user, { trackingCode: String(req.body?.trackingCode || '') });
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_status', message: out.error });
     audit(req, 'webshop_bestelling_status', { number: out.order.number, status: out.order.status });
-    res.json({ order: out.order });
+    res.json({ order: out.order, invoice: invoices ? invoices.invoiceFor(req.tenantId, out.order.id) : null });
   });
 
   app.post('/api/admin/web-orders/:id/tracking', requireJson, (req, res) => {
