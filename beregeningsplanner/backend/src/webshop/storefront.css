@@ -14,6 +14,9 @@
   --at-line: #dde3ec;
   --at-page: #f5f7fa;
   --at-stock-out: #b3261e;
+  --at-shadow: rgba(20, 42, 82, 0.18);
+  --at-foot-text: rgba(255, 255, 255, 0.85);
+  --at-foot-line: rgba(255, 255, 255, 0.2);
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: var(--at-font); color: var(--at-ink); background: var(--at-page); line-height: 1.5; }
@@ -44,7 +47,7 @@ a.shop-action:hover { background: var(--at-page); }
 .nav-group { position: relative; }
 .nav-group > a { display: block; padding: 12px 18px; color: var(--at-white); text-decoration: none; font-weight: 600; }
 .nav-group:hover > a, .nav-group:focus-within > a { background: var(--at-shop-navy-dark); }
-.nav-drop { display: none; position: absolute; left: 0; top: 100%; z-index: 20; min-width: 280px; max-height: 70vh; overflow-y: auto; margin: 0; padding: 8px 0; list-style: none; background: var(--at-white); border: 1px solid var(--at-line); border-top: 3px solid var(--at-shop-teal); border-radius: 0 0 8px 8px; box-shadow: 0 10px 24px rgba(20, 42, 82, 0.18); }
+.nav-drop { display: none; position: absolute; left: 0; top: 100%; z-index: 20; min-width: 280px; max-height: 70vh; overflow-y: auto; margin: 0; padding: 8px 0; list-style: none; background: var(--at-white); border: 1px solid var(--at-line); border-top: 3px solid var(--at-shop-teal); border-radius: 0 0 8px 8px; box-shadow: 0 10px 24px var(--at-shadow); }
 .nav-group:hover .nav-drop, .nav-group:focus-within .nav-drop { display: block; }
 .nav-drop a { display: block; padding: 7px 18px; text-decoration: none; font-size: 0.92rem; }
 .nav-drop a:hover { background: var(--at-shop-green-soft); }
@@ -112,12 +115,12 @@ a.shop-action:hover { background: var(--at-page); }
 @media (min-width: 720px) { .product-detail { grid-template-columns: 1fr 1fr; padding: 24px; } }
 
 /* Voet. */
-.shop-foot { background: var(--at-shop-navy); color: rgba(255, 255, 255, 0.85); margin-top: 32px; padding: 28px 0 20px; font-size: 0.9rem; }
+.shop-foot { background: var(--at-shop-navy); color: var(--at-foot-text); margin-top: 32px; padding: 28px 0 20px; font-size: 0.9rem; }
 .shop-foot a { color: var(--at-white); }
 .foot-grid { max-width: 1200px; margin: 0 auto; padding: 0 16px; display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 .foot-grid strong { display: block; color: var(--at-white); margin-bottom: 8px; }
 .foot-grid p { margin: 0; }
 .foot-grid ul { list-style: none; margin: 0; padding: 0; }
 .foot-grid li { padding: 3px 0; }
-.foot-note { max-width: 1168px; margin: 20px auto 0; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.2); font-size: 0.8rem; }
+.foot-note { max-width: 1168px; margin: 20px auto 0; padding-top: 14px; border-top: 1px solid var(--at-foot-line); font-size: 0.8rem; }
 @media (max-width: 1232px) { .foot-note { margin-left: 16px; margin-right: 16px; } }

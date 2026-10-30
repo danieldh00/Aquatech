@@ -71,7 +71,8 @@ function pickFeatured(products) {
   const queues = new Map();
   for (const product of products) {
     if (!product.image || !product.inStock) continue;
-    queues.set(product.groupSlug, [...(queues.get(product.groupSlug) || []), product]);
+    if (!queues.has(product.groupSlug)) queues.set(product.groupSlug, []);
+    queues.get(product.groupSlug).push(product);
   }
   const featured = [];
   const lists = [...queues.values()];

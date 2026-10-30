@@ -180,6 +180,7 @@ test('webshop-instelling alleen in de hoofdtenant', async () => {
 test('HTML-tekens in namen worden gelezen, niet dubbel getoond', () => {
   assert.strictEqual(decodeHtmlEntities('Leidingen &amp; Slangen'), 'Leidingen & Slangen');
   assert.strictEqual(decodeHtmlEntities('4&#8243; pomp &#x2013; DAB &eacute;'), '4″ pomp – DAB é');
+  assert.strictEqual(decodeHtmlEntities('Rain Bird&reg; &AMP; Co &Eacute;'), 'Rain Bird® & Co É');
   assert.strictEqual(decodeHtmlEntities('&onbekend; &#99999999; 5 &lt; 6'), '&onbekend; &#99999999; 5 < 6');
   const catalog = buildCatalog([{ code: 'K', name: 'Kraan &amp; koppeling', unit: 'st', on_hand: 1, sale_price: 1, vat_rate: 21, categories: '["(kogel) kranen &amp; toebehoren"]' }]);
   assert.strictEqual(catalog.categories[0].name, '(kogel) kranen & toebehoren');
