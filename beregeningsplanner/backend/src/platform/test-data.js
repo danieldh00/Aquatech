@@ -664,7 +664,7 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
         const out = workorders.respond(row, appointment.answer, { name: appointment.name, reason: appointment.reason || '' }, who);
         if (out.error === 'past') {
           // Een afspraak in het verleden is toen bevestigd: zelf vastleggen.
-          prepare('UPDATE work_orders SET appointment = ? WHERE id = ?').run(JSON.stringify([{ answer: appointment.answer, name: appointment.name, reason: appointment.reason || '', at: testSet.day(appointment.at),
+          prepare('UPDATE work_orders SET appointment = ? WHERE id = ?').run(JSON.stringify([{ answer: appointment.answer, name: appointment.name, reason: appointment.reason || '', at: appointment.at === undefined ? new Date().toISOString() : testSet.day(appointment.at),
             moment: WoCore.moment(data), ...who, forwardedFor: '', userId: null }]), workOrder.id);
         } else if (out.error) {
           throw new Error(`Testdata: reactie op afspraak ${workOrder.number} mislukt (${out.error})`);

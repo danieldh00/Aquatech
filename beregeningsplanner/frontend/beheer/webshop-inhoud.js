@@ -240,11 +240,13 @@
         <button class="btn small danger" type="button" data-delete="${esc(page.slug)}">Verwijderen</button></td></tr>`;
     }).join('');
     const hasAbout = pages.some((page) => page.slug === 'over-ons');
+    const legalButtons = Object.values(state.view.defaults.legal || {}).filter((legal) => !pages.some((page) => page.slug === legal.slug))
+      .map((legal) => `<button class="btn" type="button" data-new="${esc(legal.slug)}">${esc(legal.title)} aanpassen</button>`).join(' ');
     return `<p class="muted small">Vaste pagina's zoals Klantenservice of Verzending &amp; retour. Een pagina staat op <code>winkel/pagina/&lt;naam&gt;/</code> en kan in het menu en/of de voet komen. Pas na Publiceren zien bezoekers de pagina.</p>
       <div class="row sc-toolbar"><button class="btn primary" type="button" data-new="1">Nieuwe pagina</button>
-      ${hasAbout ? '' : '<button class="btn" type="button" data-new="over-ons">Standaardpagina Over ons aanpassen</button>'}</div>
+      ${hasAbout ? '' : '<button class="btn" type="button" data-new="over-ons">Standaardpagina Over ons aanpassen</button>'} ${legalButtons}</div>
       <div class="tablewrap"><table class="grid"><thead><tr><th>Pagina</th><th>Stand</th><th>Laatst</th><th></th></tr></thead>
-      <tbody>${rows || '<tr><td class="empty" colspan="4">Nog geen eigen pagina\'s. De standaardpagina Over ons staat altijd in het menu.</td></tr>'}</tbody></table></div>`;
+      <tbody>${rows || '<tr><td class="empty" colspan="4">Nog geen eigen pagina\'s. De standaardpagina Over ons en de juridische pagina\'s (voorwaarden, privacy, herroepingsrecht) staan altijd in de webshop.</td></tr>'}</tbody></table></div>`;
   }
 
   /**
@@ -276,7 +278,7 @@
       ${statusLine(part)}
       <div class="row">
         ${textField('Titel', 'title', fields.title, { max: 120 })}
-        <label>Naam in het adres<input data-slug="1" value="${esc(slug)}" maxlength="60" pattern="[a-z0-9][a-z0-9-]{1,58}[a-z0-9]" ${isNew && slug !== 'over-ons' ? '' : 'readonly'} placeholder="bijv. klantenservice">
+        <label>Naam in het adres<input data-slug="1" value="${esc(slug)}" maxlength="60" pattern="[a-z0-9][a-z0-9-]{1,58}[a-z0-9]" ${isNew && slug !== 'over-ons' && !(state.view.defaults.legal || {})[slug] ? '' : 'readonly'} placeholder="bijv. klantenservice">
           <span class="hint">Kleine letters, cijfers en streepjes: winkel/pagina/<b>${esc(slug || 'naam')}</b>/</span></label>
       </div>
       ${textField('Korte omschrijving (voor zoekmachines)', 'description', fields.description, { max: 200 })}
@@ -531,7 +533,8 @@
   function openPage(slug, { isNew = false } = {}) {
     const part = state.view.pages.find((page) => page.slug === slug) || { hasDraft: false, canRevert: false, publishedAt: null };
     const stored = part.draft || part.published;
-    const fields = pageFields(stored || (slug === 'over-ons' ? { title: 'Over ons', body: state.view.defaults.aboutBody, menu: false, footer: false } : {}));
+    const legal = (state.view.defaults.legal || {})[slug];
+    const fields = pageFields(stored || (slug === 'over-ons' ? { title: 'Over ons', body: state.view.defaults.aboutBody, menu: false, footer: false } : legal ? { title: legal.title, description: legal.description, body: legal.body, menu: false, footer: false } : {}));
     state.editing = { slug, isNew, fields, part };
     render();
   }
@@ -554,7 +557,7 @@
       } else if (data.act) await runAction(data.act);
       else if (data.cmd) formatText(data.cmd);
       else if (data.insert) insertImage(data.insert);
-      else if (data.new) openPage(data.new === 'over-ons' ? 'over-ons' : '', { isNew: true });
+      else if (data.new) openPage(data.new === '1' ? '' : data.new, { isNew: true });
       else if (data.edit) openPage(data.edit);
       else if (data.back) { state.editing = null; render(); }
       else if (data.delete) {

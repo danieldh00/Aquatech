@@ -126,6 +126,7 @@ ${checkoutField({ name: 'postcode', label: 'Postcode', value: value.postcode || 
 ${checkoutField({ name: 'city', label: 'Woonplaats', value: value.city || '', autocomplete: 'address-level2', required: false })}
 <label class="form-field"><span>Opmerking (optioneel)</span><textarea name="note" rows="3" maxlength="500">${escapeHtml(value.note || '')}</textarea></label>
 <p class="note">Je bestelling gaat op rekening: je ontvangt de factuur van ons.</p>
+<label class="terms-check"><input type="checkbox" name="terms" value="ja" required${value.terms === 'ja' ? ' checked' : ''}><span>Ik ga akkoord met de <a href="${ROOT}pagina/algemene-voorwaarden/" target="_blank" rel="noopener">algemene voorwaarden</a> en heb de <a href="${ROOT}pagina/privacyverklaring/" target="_blank" rel="noopener">privacyverklaring</a> gelezen. Als consument heb je <a href="${ROOT}pagina/herroepingsrecht/" target="_blank" rel="noopener">herroepingsrecht</a>.</span></label>
 <button class="button" type="submit" name="action" value="place">Bestelling plaatsen</button>
 </form>
 <aside class="checkout-summary"><h2>Je bestelling</h2><ul>${items}${shippingRow}</ul>

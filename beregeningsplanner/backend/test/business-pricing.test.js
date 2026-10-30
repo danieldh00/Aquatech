@@ -151,7 +151,7 @@ test('btw verlegd naar een bedrijf met btw-nummer in een ander EU-land', async (
 test('verouderd totaal: eerst opnieuw tonen, pas daarna bestellen', async () => {
   const { base, admin, business } = await setup();
   await addToCart(base, business.client, 'BUS', 2);
-  const fields = { ...COMPANY, postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' };
+  const fields = { ...COMPANY, terms: 'ja', postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' };
   const stale = await postForm(base, business.client, '/winkel/afrekenen/', { ...fields, expectedTotal: '38.7' });
   assert.strictEqual(stale.status, 200, 'niet geplaatst');
   assert.match(stale.text, /Het totaal is bijgewerkt/);

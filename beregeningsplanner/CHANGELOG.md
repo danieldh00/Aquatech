@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.5.2
+
+Juridische pagina's in de eigen webshop (stap 7 van de webshop-roadmap).
+
+- **Standaardpagina's** `pagina/algemene-voorwaarden/`, `pagina/privacyverklaring/`
+  en `pagina/herroepingsrecht/` (met modelformulier), teksten in
+  `webshop/legal-pages.js` met de bedrijfsgegevens uit de contactblokken. Een
+  eigen pagina met dezelfde naam uit Beheer gaat voor. Links staan altijd in de
+  voet (`foot-legal`).
+- **Akkoord bij afrekenen**: verplicht vinkje (`terms`) met links naar de
+  drie pagina's; `web-orders.place` weigert zonder akkoord (400, veld `terms`)
+  en bewaart `data.consent` `{ terms, at }`.
+- Bevestigingsmail van de bestelling noemt het herroepingsrecht (consument,
+  14 dagen) en waar de voorwaarden staan.
+- Beheer > Webshop-inhoud > Pagina's: knoppen om de standaardtekst van de
+  drie pagina's te openen en aan te passen (`defaults.legal`).
+- Testhulp `postCheckout` stuurt standaard `terms: 'ja'` mee.
+- Testdata: een afspraakreactie in het verleden zonder vaste dag viel om zodra
+  het later op de dag was dan het geplande tijdstip (`Invalid time value`); die
+  krijgt nu het tijdstip van het vullen.
+
 ## 1.5.1
 
 Retouren in de eigen webshop (stap 6 van de webshop-roadmap).

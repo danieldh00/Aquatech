@@ -173,7 +173,7 @@ async function postForm(base, client, urlPath, fields, headers = {}) {
 async function postCheckout(base, client, fields, headers = {}) {
   const overview = await postForm(base, client, '/winkel/afrekenen/', { ...fields, action: 'update' }, headers);
   const shown = overview.status === 200 ? overview.text.match(/name="expectedTotal" value="([^"]+)"/) : null;
-  return postForm(base, client, '/winkel/afrekenen/', { ...fields, ...(shown ? { expectedTotal: shown[1] } : {}) }, headers);
+  return postForm(base, client, '/winkel/afrekenen/', { terms: 'ja', ...fields, ...(shown ? { expectedTotal: shown[1] } : {}) }, headers);
 }
 
 module.exports = { createClient, storeCookies, listen, createLogin, postForm, postCheckout };
