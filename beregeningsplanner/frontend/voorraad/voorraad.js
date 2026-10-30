@@ -615,7 +615,7 @@
         toast(result.archived ? `${item.code} gearchiveerd` : `${item.code} verwijderd`);
         history.pushState(null, '', './');
         showList();
-        await load();
+        await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
       } catch (error) {
         toast(error.message, true);
       }
