@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.3.1
+
+Opzet van de eigen webshop (stap 1, alleen lezen), als module van dit systeem.
+
+- **Openbare pagina's op `winkel/`** (`webshop/storefront.js`, router die ook
+  op een eigen domein of in een eigen container te monteren is): startpagina
+  met categorieën en producten, categoriepagina (`categorie/<slug>/`) en
+  productpagina (`product/<slug>/`, zoals WooCommerce). Server-side HTML
+  zonder scripts, eigen eenvoudig ontwerp in de AquaTech-huisstijl
+  (`--at-*`-kleuren, Montserrat, logo), alle adressen relatief.
+- **Gegevens** (`webshop/storefront-data.js`): niet-gearchiveerde
+  voorraadartikelen met verkoopprijs en *Naar webshop* aan; categorie en
+  afbeelding komen uit het gekoppelde webshopproduct (`shop_products`),
+  prijs wordt incl. btw getoond, voorraad alleen als op voorraad/niet.
+  Inkoopprijs, locatie, notities en aantallen komen er niet in. Eén query
+  (LEFT JOIN), 30 s cache per omgeving.
+- **Instelling** `storefront` (Beheer → Instellingen → Toegang, standaard
+  uit): zolang uit geeft `winkel/` overal 404. De shop toont de artikelen van
+  de hoofdtenant.
+- **Beveiliging**: alleen GET/HEAD, limiet per IP (240/min), eigen CSP
+  (geen scripts, afbeeldingen alleen https), namen ontsnapt, vaste lijst
+  bestanden voor assets/lettertypen. Geen winkelwagen, betaling of accounts
+  (volgen later).
+- Tests: `test/storefront.test.js`.
+
 ## 1.3.0
 
 Webshop leidend voor de voorraadlijst.

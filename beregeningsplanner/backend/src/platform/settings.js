@@ -28,6 +28,9 @@ const FIELDS = {
   // Bezoekers zonder account mogen een tekening maken en ter controle
   // indienen (knop op de inlogpagina, zie drawings.js).
   drawingRequests: { type: 'bool', default: true },
+  // Eigen webshop (webshop/storefront.js): openbare pagina's op /winkel/ met
+  // de artikelen uit de voorraad. Standaard uit.
+  storefront: { type: 'bool', default: false },
   anthropicApiKey: { type: 'secret', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
   aiEnabled: { type: 'bool', default: true },
   aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },

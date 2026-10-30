@@ -528,6 +528,8 @@
     accessForm.guestAccess.checked = view.guestAccess.value;
     accessForm.guestAccess.disabled = code.set;
     accessForm.drawingRequests.checked = view.drawingRequests.value;
+    accessForm.storefront.checked = Boolean(view.storefront?.value);
+    accessForm.storefront.closest('label').hidden = !state.storefrontAllowed;
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
@@ -598,6 +600,7 @@
     try {
       const result = await api('settings');
       state.aiFromLive = Boolean(result.aiFromLive);
+      state.storefrontAllowed = Boolean(result.storefrontAllowed);
       renderSettings(result.settings);
     } catch (error) {
       toast(`Kan de instellingen niet laden: ${error.message}`, true);
@@ -711,6 +714,10 @@
     /** Zet tekening indienen zonder account aan of uit. */
     accessForm.drawingRequests.onchange = () => {
       saveSettings(accessForm, { drawingRequests: accessForm.drawingRequests.checked }, accessForm.drawingRequests.checked ? 'Tekening indienen zonder account staat aan' : 'Tekening indienen zonder account staat uit');
+    };
+    /** Zet de eigen webshop (winkel/) aan of uit. */
+    accessForm.storefront.onchange = () => {
+      saveSettings(accessForm, { storefront: accessForm.storefront.checked }, accessForm.storefront.checked ? 'Webshop staat aan' : 'Webshop staat uit');
     };
     /**
      * Slaat een nieuwe toegangscode op.

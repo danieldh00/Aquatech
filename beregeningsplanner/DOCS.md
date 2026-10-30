@@ -557,6 +557,21 @@ van de werkorder. Daardoor is alles vanzelf gekoppeld.
 - **Excel-export**: de voorraadlijst (met een tabblad Gereserveerd) en de
   mutaties over een gekozen periode.
 
+## Eigen webshop (opzet)
+
+Openbare, alleen-lezen pagina's op `winkel/` (stap 1 van een eigen webshop;
+winkelwagen, betaling en varianten volgen). Aanzetten: Beheer → Instellingen →
+Toegang → *Eigen webshop tonen*; uit = overal 404. De shop toont de
+voorraadartikelen van de hoofdtenant die een verkoopprijs hebben, niet
+gearchiveerd zijn en *Naar de webshop* aan hebben. Categorie en afbeelding
+komen uit het gekoppelde WooCommerce-product (na een synchronisatie); zonder
+koppeling staat een artikel onder *Overig*. Pagina's: `winkel/` (start),
+`winkel/categorie/<slug>/` en `winkel/product/<slug>/`; de slug bestaat uit naam en artikelcode, zodat
+de url van een artikel gelijk blijft als er artikelen bijkomen. Prijzen zijn incl. btw;
+van de voorraad zie je alleen *Op voorraad* of *Niet op voorraad* (stand min reserveringen voor werkorders). De code
+staat in `backend/src/webshop/storefront*.js` en is een Express-router die
+later ook op een eigen domein of in een eigen container kan draaien.
+
 ## Gebruikers, rollen en historie van aanvragen
 
 Elke rol ziet op het dashboard alleen de modules die erbij horen; de server

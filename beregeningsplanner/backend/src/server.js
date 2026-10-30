@@ -21,6 +21,7 @@ const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('.
 const { createWorkLogStore, registerWorkLogRoutes } = require('./uitvoering/worklog');
 const { registerCostingRoutes } = require('./uitvoering/costing');
 const { createImpersonationStore, createImpersonation } = require('./beveiliging/impersonation');
+const { createStorefront } = require('./webshop/storefront');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
 const { createShopSync } = require('./webshop/shop-sync');
 const { createShopOrders } = require('./webshop/shop-orders');
@@ -1373,7 +1374,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/api/admin/settings', (req, res) => {
     // aiFromLive: testomgeving zonder eigen sleutel gebruikt die van live.
     const aiFrom = aiTenantOf(req.tenantId);
-    res.json({ settings: settingsFor(req.tenantId).view(), via: auth.session(req)?.via || null,
+    const settings = settingsFor(req.tenantId).view();
+    if (req.tenantId !== tenant.id) delete settings.storefront;
+    res.json({ settings, via: auth.session(req)?.via || null,
+      // De eigen webshop (winkel/) toont alleen de hoofdtenant: de schakelaar hoort alleen daar.
+      storefrontAllowed: req.tenantId === tenant.id,
       aiFromLive: aiFrom !== req.tenantId && Boolean(settingsFor(aiFrom).get('anthropicApiKey')) });
   });
 
@@ -1390,6 +1395,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (platformField) {
       return res.status(400).json({ error: 'invalid_setting', field: platformField,
         message: FIELDS[platformField].internal ? 'Deze instelling wijzig je in de module zelf.' : 'Deze instelling wijzig je in Hoofdbeheer.' });
+    }
+    if (req.tenantId !== tenant.id && [...Object.keys(patch), ...resets].includes('storefront')) {
+      return res.status(400).json({ error: 'invalid_setting', field: 'storefront', message: 'De eigen webshop geldt alleen voor de hoofdtenant.' });
     }
     const codeAfter = patch.accessCode !== undefined ? String(patch.accessCode).trim()
       : resets.includes('accessCode') ? settings.get('accessCode', true) : oldCode;
@@ -1409,7 +1417,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       console.log(`Instellingen gewijzigd door ${req.user?.display_name || 'beheerder'}: ${changed.join(', ')}`);
       audit(req, 'instellingen_gewijzigd', { fields: changed });
     }
-    res.json({ settings: settings.view(), changed });
+    const responseSettings = settings.view();
+    if (req.tenantId !== tenant.id) delete responseSettings.storefront;
+    res.json({ settings: responseSettings, changed });
   });
 
   // Sleutel testen zonder kosten: vraagt alleen het model op.
@@ -2075,6 +2085,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.setHeader('Cache-Control', 'no-store');
     sendAuthPage(res, authPage(req));
   });
+
+  // Eigen webshop (alleen lezen, openbaar, zie webshop/storefront.js); uit
+  // zolang de instelling `storefront` van de hoofdtenant uit staat.
+  app.use('/winkel', createStorefront({ db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id) }));
 
   // Scripts, stylesheets, lettertypen en afbeeldingen (geen HTML, geen API).
   const STATIC_ASSET = /\.(js|css|png|jpe?g|svg|webp|gif|ico|woff2?|map|json|traineddata(\.gz)?|wasm)$/i;
