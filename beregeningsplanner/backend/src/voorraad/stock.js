@@ -911,10 +911,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   /**
    * De eenheden met per eenheid het aantal artikelen dat hem gebruikt.
    * @param {string} tenantId Id van de omgeving.
+   * @param {{ nested?: boolean }} [options] Binnen de transactie van de aanroeper.
    * @returns {{ id: string, name: string, items: number }[]} De eenheden.
    */
-  function units(tenantId) {
-    const rows = unitRows(tenantId);
+  function units(tenantId, { nested = false } = {}) {
+    const rows = unitRows(tenantId, { nested });
     const counts = new Map(prepare('SELECT unit, COUNT(*) AS n FROM stock_items WHERE tenant_id = ? GROUP BY unit').all(tenantId).map((row) => [String(row.unit).toLowerCase(), Number(row.n)]));
     return rows.map((row) => ({ id: row.id, name: row.name, items: counts.get(row.name.toLowerCase()) || 0 }));
   }
@@ -945,9 +946,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   function removeUnit(tenantId, id) {
     return transaction(db, () => {
-      const found = units(tenantId).find((unit) => unit.id === String(id));
+      const found = units(tenantId, { nested: true }).find((unit) => unit.id === String(id));
       if (!found) return { error: 'Eenheid niet gevonden.', status: 404 };
-      if (units(tenantId).length === 1) return { error: 'Er moet minstens één eenheid overblijven.', status: 409 };
+      if (units(tenantId, { nested: true }).length === 1) return { error: 'Er moet minstens één eenheid overblijven.', status: 409 };
       if (found.items) return { error: `Deze eenheid wordt nog door ${found.items} artikel${found.items === 1 ? '' : 'en'} gebruikt.`, status: 409 };
       prepare('DELETE FROM stock_units WHERE tenant_id = ? AND id = ?').run(tenantId, found.id);
       return { name: found.name };

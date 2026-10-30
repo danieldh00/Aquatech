@@ -372,7 +372,7 @@
         } });
         formElement.hidden = true;
         toast(`${item.code} toegevoegd`);
-        await load();
+        await Promise.all([load(), loadUnits()]);
       } catch (error) {
         errorBox.textContent = error.message;
         if (error.field && formElement[error.field]) formElement[error.field].focus();
@@ -596,6 +596,7 @@
           minQty: num(editForm.minQty.value), reorderQty: num(editForm.reorderQty.value), costPrice: num(editForm.costPrice.value),
           salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
         } }) };
+        await loadUnits();
         renderItem();
         toast('Opgeslagen');
       } catch (error) {

@@ -800,9 +800,9 @@ const MIGRATIONS = [
     id         TEXT PRIMARY KEY,
     tenant_id  TEXT NOT NULL REFERENCES tenants(id),
     name       TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    UNIQUE (tenant_id, name)
+    created_at TEXT NOT NULL
   );
+  CREATE UNIQUE INDEX stock_units_tenant_name_ci ON stock_units (tenant_id, LOWER(name));
   `,
 ];
 

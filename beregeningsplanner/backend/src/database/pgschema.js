@@ -633,9 +633,9 @@ const PG_MIGRATIONS = [
     id         ${TEXT_TYPE} PRIMARY KEY,
     tenant_id  ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
     name       ${TEXT_TYPE} NOT NULL,
-    created_at ${TEXT_TYPE} NOT NULL,
-    UNIQUE (tenant_id, name)
+    created_at ${TEXT_TYPE} NOT NULL
   );
+  CREATE UNIQUE INDEX stock_units_tenant_name_ci ON stock_units (tenant_id, LOWER(name));
   `,
 ];
 
