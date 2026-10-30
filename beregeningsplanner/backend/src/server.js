@@ -1863,6 +1863,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const webOrderMail = createOrderMailer({ orders: webOrders, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
   const webOrderInvoices = createWebOrderInvoices({ orders: webOrders, invoices: invoiceStore, debtors: debtorStore, stock: stockStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id) });
   webOrders.onShipped((tenantId, order, user) => webOrderInvoices.onShipped(tenantId, order, user));
+  webOrders.onShipped((tenantId, order) => webOrderMail.sendShipment(tenantId, order));
+  webOrders.onTracking((tenantId, order) => webOrderMail.sendShipment(tenantId, order, { onlyNewTracking: true }));
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices });
   registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id) });
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
@@ -2137,7 +2139,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
   app.use('/winkel', createStorefront({
     db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore,
-    orders: webOrders, orderMail: webOrderMail,
+    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
     // Een beheerder van de hoofdorganisatie bekijkt het concept met ?voorbeeld=1.
     previewAllowed: (req) => {
