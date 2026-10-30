@@ -340,6 +340,17 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
           if (!cart.lines.length || !cart.ok) return res.redirect(303, '../winkelwagen/');
           return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, values: body, ...checkoutChoice(cart, body) }, groups));
         }
+        // Is het getoonde totaal door een wijziging (btw-nummer, land, methode) niet meer actueel? Dan eerst opnieuw tonen, zonder te bestellen.
+        if (body.expectedTotal !== undefined) {
+          const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
+          if (cart.lines.length && cart.ok) {
+            const choice = checkoutChoice(cart, body);
+            if (choice.summary && Math.abs(Number(body.expectedTotal) - choice.summary.totals.total) > 0.005) {
+              res.setHeader('Cache-Control', 'no-store');
+              return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', values: body, ...choice }, groups));
+            }
+          }
+        }
         if (orderLimited(req, res)) return res.status(429).type('text').send('Te veel bestellingen vanaf dit adres. Probeer het later opnieuw.');
         try {
           const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup }, body, readCart(req), shippingConfig());

@@ -106,6 +106,7 @@ ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 <div class="checkout-grid">
 <form method="post" action="./" class="account-form">
 <button type="submit" hidden>Bestelling plaatsen</button>
+<input type="hidden" name="expectedTotal" value="${escapeHtml(String(total))}">
 <h2>Je gegevens</h2>
 ${checkoutField({ name: 'name', label: 'Naam', value: value.name || '', autocomplete: 'name' })}
 ${checkoutField({ name: 'company', label: business ? 'Bedrijfsnaam' : 'Bedrijfsnaam (optioneel)', value: value.company || '', autocomplete: 'organization', required: business })}

@@ -146,6 +146,18 @@ test('btw verlegd naar een bedrijf met btw-nummer in een ander EU-land', async (
   assert.strictEqual((await admin.get(`/api/admin/web-orders/${second.id}`)).body.order.vat.shifted, false);
 });
 
+test('verouderd totaal: eerst opnieuw tonen, pas daarna bestellen', async () => {
+  const { base, admin, business } = await setup();
+  await addToCart(base, business.client, 'BUS', 2);
+  const fields = { ...COMPANY, postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' };
+  const stale = await postForm(base, business.client, '/winkel/afrekenen/', { ...fields, expectedTotal: '38.7' });
+  assert.strictEqual(stale.status, 200, 'niet geplaatst');
+  assert.match(stale.text, /Het totaal is bijgewerkt/);
+  assert.strictEqual((await admin.get('/api/admin/web-orders')).body.items.length, 0);
+  const placed = await postForm(base, business.client, '/winkel/afrekenen/', { ...fields, expectedTotal: '27.98' });
+  assert.strictEqual(placed.status, 303, placed.text);
+});
+
 test('particulier met btw-nummer in het formulier: genegeerd, gewoon btw', async () => {
   const { base, admin, private1 } = await setup();
   await addToCart(base, private1.client, 'BUS', 2);
