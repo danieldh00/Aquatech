@@ -459,6 +459,13 @@ function createWebOrderStore(db, { stock }) {
  * @returns {void}
  */
 function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = null }) {
+  /**
+   * Geeft een afwijzing van een async handler door aan Express.
+   * @param {Function} handler De async handler (req, res).
+   * @returns {Function} De handler voor Express.
+   */
+  const wrap = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+
   app.get('/api/admin/web-orders', (req, res) => {
     const out = orders.list(req.tenantId, {
       status: String(req.query.status || ''), query: String(req.query.q || ''), limit: req.query.limit, offset: req.query.offset, withLines: req.query.lines === '1',
@@ -472,14 +479,14 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
     res.json({ order, invoice: invoices ? invoices.invoiceFor(req.tenantId, order.id) : null });
   });
 
-  app.post('/api/admin/web-orders/:id/invoice', async (req, res) => {
+  app.post('/api/admin/web-orders/:id/invoice', wrap(async (req, res) => {
     if (!invoices) return res.status(404).json({ error: 'not_found', message: 'Facturen staan niet aan.' });
     const out = invoices.ensureInvoice(req.tenantId, req.params.id, req.user);
     if (out.error) return res.status(out.status || 400).json({ error: 'invoice_failed', message: out.error });
     if (out.created || out.finalizedNow) audit(req, 'webshop_bestelling_factuur', { number: out.invoice.number });
     await invoices.mailIfFinalized(req.tenantId, out);
     res.json({ invoice: out.invoice, created: out.created });
-  });
+  }));
 
   app.post('/api/admin/web-orders/:id/status', requireJson, (req, res) => {
     const out = orders.setStatus(req.tenantId, req.params.id, String(req.body?.status || ''), req.user, { trackingCode: String(req.body?.trackingCode || '') });

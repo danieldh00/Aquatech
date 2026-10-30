@@ -105,6 +105,7 @@ function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null
     if (existing) {
       // Een concept dat bleef staan doordat definitief maken mislukte, alsnog afmaken.
       if (existing.status !== 'concept' || !order.invoiceError || !settings.webOrders.finalize) return { invoice: existing, created: false };
+      if (!settings.webOrders.enabled) return { error: 'Facturen voor webshopbestellingen staan uit (Facturen → Instellingen).', status: 409 };
       const finalized = invoices.finalize(tenantId, user, existing.id, settings, { skipStock: true });
       if (!finalized || finalized.error) {
         const reason = finalized && finalized.error ? finalized.error : 'Factuur niet gevonden.';
