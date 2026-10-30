@@ -705,6 +705,10 @@ const PG_MIGRATIONS = [
   CREATE INDEX web_orders_created ON web_orders (tenant_id, created_at);
   CREATE INDEX web_orders_user ON web_orders (tenant_id, user_id, created_at);
   `,
+  // 38: gewicht per artikel (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN weight_grams BIGINT;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

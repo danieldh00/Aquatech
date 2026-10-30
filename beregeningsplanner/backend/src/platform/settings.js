@@ -3,6 +3,7 @@ const { createVault } = require('../beveiliging/vault');
 const { sanitizeProfile } = require('../verkoop/quotes');
 const { sanitizeMail } = require('./mailer');
 const { sanitizeShop } = require('../webshop/woocommerce');
+const { sanitizeShipping } = require('../webshop/shipping');
 const { sanitizeOutsourcing } = require('../uitvoering/outsourcing');
 const { sanitizeInvoicing } = require('../verkoop/invoices');
 const { sanitizeSeasonReminders } = require('../uitvoering/season-reminders');
@@ -36,6 +37,8 @@ const FIELDS = {
   shopPlanner: { type: 'bool', default: true },
   // Bestellen in de eigen webshop (winkelwagen, afrekenen op rekening). Standaard uit.
   shopOrdering: { type: 'bool', default: false },
+  // Verzending in de webshop: ophalen en DPD met tarieven per land en gewicht (webshop/shipping.js).
+  shopShipping: { type: 'object', default: {}, sanitize: sanitizeShipping },
   anthropicApiKey: { type: 'secret', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
   aiEnabled: { type: 'bool', default: true },
   aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },

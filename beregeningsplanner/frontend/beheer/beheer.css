@@ -194,3 +194,6 @@ dl.kv dd { margin: 0; }
 
 /* Bestellingen: klikbare regels en het detail eronder. */
 #wo-detail { margin-top: 16px; }
+
+.ship-zone { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.ship-zone input[data-f="tiers"] { flex: 1 1 260px; }

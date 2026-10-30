@@ -428,7 +428,7 @@
         const item = await api('stock/items', { method: 'POST', body: {
           code: formElement.code.value, name: formElement.name.value, unit: formElement.unit.value, location: formElement.location.value,
           onHand: num(formElement.onHand.value), minQty: num(formElement.minQty.value), reorderQty: num(formElement.reorderQty.value), costPrice: num(formElement.costPrice.value),
-          salePrice: num(formElement.salePrice.value), vatRate: Number(formElement.vatRate.value), revenueGroup: formElement.revenueGroup.value, shopSync: formElement.shopSync.checked,
+          salePrice: num(formElement.salePrice.value), vatRate: Number(formElement.vatRate.value), weightGrams: num(formElement.weightGrams.value), revenueGroup: formElement.revenueGroup.value, shopSync: formElement.shopSync.checked,
         } });
         formElement.hidden = true;
         toast(`${item.code} toegevoegd`);
@@ -547,6 +547,7 @@
     formElement.costPrice.value = item.costPrice == null ? '' : item.costPrice;
     formElement.salePrice.value = item.salePrice == null ? '' : item.salePrice;
     formElement.vatRate.value = String(item.vatRate);
+    formElement.weightGrams.value = item.weightGrams == null ? '' : item.weightGrams;
     formElement.revenueGroup.value = item.revenueGroup;
     formElement.shopSync.checked = item.shopSync;
     $('#d-shop').innerHTML = item.shop.error ? `Webshop: <span class="err">${esc(item.shop.error)}</span>`
@@ -719,7 +720,7 @@
         state.item = { ...state.item, ...await api(`stock/items/${encodeURIComponent(state.item.id)}`, { method: 'PUT', body: {
           code: editForm.code.value, name: editForm.name.value, unit: editForm.unit.value, location: editForm.location.value, notes: editForm.notes.value,
           minQty: num(editForm.minQty.value), reorderQty: num(editForm.reorderQty.value), costPrice: num(editForm.costPrice.value),
-          salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
+          salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), weightGrams: num(editForm.weightGrams.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
         } }) };
         toast('Opgeslagen');
         await loadUnits().catch((error) => toast(error.message, true));

@@ -24,6 +24,16 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
    * @returns {string} Naam, straat en postcode met plaats.
    */
   const addressText = (order) => [order.customer.company, order.customer.name, order.address.street, `${order.address.postcode} ${order.address.city}`].filter(Boolean).join('\n');
+  /**
+   * De verzending als tekst: de methode met kosten, en het adres of de ophaalmelding.
+   * @param {object} order De bestelling.
+   * @returns {string} Tekst voor in de mail.
+   */
+  const shippingText = (order) => {
+    const shipping = order.shipping;
+    if (shipping && shipping.method === 'ophalen') return `Verzending: ${shipping.label} (gratis)\nJe haalt de bestelling zelf op.`;
+    return `${shipping ? `Verzending: ${shipping.label} (${shipping.price > 0 ? EUR.format(shipping.price) : 'gratis'})\n\n` : ''}Afleveradres:\n${addressText(order)}`;
+  };
 
   /**
    * Stuurt de bevestiging naar de klant en de melding naar het bedrijf, en
@@ -44,7 +54,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     }
     if (!mailer.configured()) { orders.updateData(tenantId, order.id, { mail: { sent: false, error: 'Geen mailserver ingesteld.', at: new Date().toISOString() } }); return; }
     const profile = settings.get('quoteProfile') || {};
-    const details = `Bestelling ${order.number}\n\n${linesText(order)}\n\nTotaal incl. btw: ${EUR.format(order.totals.total)}\n\nAfleveradres:\n${addressText(order)}${order.note ? `\n\nJe opmerking: ${order.note}` : ''}`;
+    const details = `Bestelling ${order.number}\n\n${linesText(order)}\n\nTotaal incl. btw: ${EUR.format(order.totals.total)}\n\n${shippingText(order)}${order.note ? `\n\nJe opmerking: ${order.note}` : ''}`;
     let error = '';
     try {
       const customerMail = mailBody(profile, [

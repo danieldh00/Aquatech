@@ -576,6 +576,8 @@
     shopForm.shopPlanner.checked = view.shopPlanner?.value !== false;
     shopForm.shopOrdering.checked = Boolean(view.shopOrdering?.value);
     shopForm.hidden = !state.storefrontAllowed;
+    renderShipping(view.shopShipping?.value);
+    $('#s-shipping').hidden = !state.storefrontAllowed;
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
@@ -732,6 +734,87 @@
     }
   }
 
+  /**
+   * Zet een prijs of bedrag om naar tekst met een komma.
+   * @param {number} amount Het bedrag.
+   * @returns {string} Bijv. "6,95".
+   */
+  const decimalText = (amount) => String(amount).replace('.', ',');
+
+  /**
+   * Leest een getal met komma of punt.
+   * @param {string} text De ingevoerde tekst.
+   * @returns {number} Het getal (NaN als het geen getal is).
+   */
+  const parseDecimal = (text) => (String(text).trim() === '' ? NaN : Number(String(text).trim().replace(',', '.')));
+
+  /**
+   * Tekent een regel (land) in het verzendformulier.
+   * @param {{ country: string, name: string, freeFrom: number, tiers: { upToGrams: number, price: number }[] }} zone Het land met zijn tarieven.
+   * @returns {void}
+   */
+  function addShippingZone(zone) {
+    const row = document.createElement('div');
+    row.className = 'ship-zone';
+    row.innerHTML = `<input data-f="country" maxlength="2" size="3" placeholder="NL" aria-label="Landcode" value="${esc(zone.country)}">
+      <input data-f="name" maxlength="60" placeholder="Nederland" aria-label="Naam" value="${esc(zone.name)}">
+      <input data-f="freeFrom" size="8" placeholder="Gratis vanaf" aria-label="Gratis vanaf" value="${zone.freeFrom ? esc(decimalText(zone.freeFrom)) : ''}">
+      <input data-f="tiers" placeholder="2000=6,95; 5000=8,95" aria-label="Weegklassen" value="${esc(zone.tiers.map((tier) => `${tier.upToGrams}=${decimalText(tier.price)}`).join('; '))}">
+      <button type="button" class="btn danger" data-remove>Verwijder</button>`;
+    /**
+     * Verwijdert dit land uit het formulier.
+     * @returns {void}
+     */
+    row.querySelector('[data-remove]').onclick = () => row.remove();
+    $('#s-shipping-zones').appendChild(row);
+  }
+
+  /**
+   * Vult het verzendformulier met de opgeslagen instelling.
+   * @param {object} config De instelling shopShipping (ophalen en dpd).
+   * @returns {void}
+   */
+  function renderShipping(config) {
+    const form = $('#s-shipping');
+    if (!config || !config.pickup || !config.dpd) return;
+    form.pickupEnabled.checked = config.pickup.enabled;
+    form.pickupLabel.value = config.pickup.label;
+    form.pickupNote.value = config.pickup.note;
+    form.dpdEnabled.checked = config.dpd.enabled;
+    form.defaultWeightGrams.value = config.dpd.defaultWeightGrams;
+    $('#s-shipping-zones').innerHTML = '';
+    for (const zone of config.dpd.zones) addShippingZone(zone);
+  }
+
+  /**
+   * Leest de verzendinstelling uit het formulier.
+   * @returns {{ pickup: object, dpd: object }} De instelling; een weegklasse die niet te lezen is geeft een fout.
+   */
+  function readShipping() {
+    const form = $('#s-shipping');
+    const zones = [...$('#s-shipping-zones').children].map((row) => {
+      /**
+       * Leest een veld van dit land.
+       * @param {string} name Naam van het veld (data-f).
+       * @returns {string} De ingevoerde tekst.
+       */
+      const field = (name) => row.querySelector(`[data-f="${name}"]`).value;
+      const tiers = field('tiers').split(';').map((part) => part.trim()).filter(Boolean).map((part) => {
+        const [grams, price] = part.split('=');
+        const tier = { upToGrams: parseDecimal(grams == null ? '' : grams), price: parseDecimal(price == null ? '' : price) };
+        if (!Number.isFinite(tier.upToGrams) || !Number.isFinite(tier.price)) throw new Error(`Weegklasse "${part}" is niet te lezen. Gebruik gram=prijs, bijvoorbeeld 2000=6,95.`);
+        return tier;
+      });
+      const freeFrom = field('freeFrom').trim() ? parseDecimal(field('freeFrom')) : 0;
+      if (!Number.isFinite(freeFrom)) throw new Error('Gratis vanaf moet een bedrag zijn.');
+      return { country: field('country').trim().toUpperCase(), name: field('name').trim(), freeFrom, tiers };
+    });
+    return {
+      pickup: { enabled: form.pickupEnabled.checked, label: form.pickupLabel.value, note: form.pickupNote.value },
+      dpd: { enabled: form.dpdEnabled.checked, defaultWeightGrams: Number(form.defaultWeightGrams.value || 0), zones },
+    };
+  }
+
   /** Koppelt de formulieren en knoppen van Instellingen. */
   function initSettings() {
     const aiForm = $('#s-ai');
@@ -786,6 +869,20 @@
     /** Zet bestellen in de webshop aan of uit. */
     shopForm.shopOrdering.onchange = () => {
       saveSettings(shopForm, { shopOrdering: shopForm.shopOrdering.checked }, shopForm.shopOrdering.checked ? 'Bestellen in de webshop staat aan' : 'Bestellen in de webshop staat uit');
+    };
+    const shippingForm = $('#s-shipping');
+    /**
+     * Voegt een leeg land toe aan de verzendtarieven.
+     * @returns {void}
+     */
+    $('#s-shipping-add').onclick = () => addShippingZone({ country: '', name: '', freeFrom: 0, tiers: [] });
+    /**
+     * Slaat de verzendinstelling op.
+     * @param {SubmitEvent} event het verzenden
+     */
+    shippingForm.onsubmit = (event) => {
+      event.preventDefault();
+      try { saveSettings(shippingForm, { shopShipping: readShipping() }, 'Verzending opgeslagen'); } catch (error) { $('.err', shippingForm).textContent = error.message; }
     };
     /** Zet het kopje Planner in de webshop aan of uit. */
     shopForm.shopPlanner.onchange = () => {

@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.4.7
+
+Verzending in de eigen webshop (stap 2 van de webshop-roadmap): ophalen en
+bezorging door DPD.
+
+- **Instelling `shopShipping`** (`webshop/shipping.js`, alleen hoofdtenant, Beheer >
+  Webshop en WooCommerce > Verzending): ophalen (gratis, naam en toelichting),
+  DPD met tarieven per land en gewichtsklasse, gratis vanaf een bedrag per land en
+  een standaardgewicht voor artikelen zonder gewicht. Zonder instelling gelden
+  indicatieve startwaarden (DPD Nederland), zodat bestellen blijft werken.
+- **Gewicht per artikel** (`stock_items.weight_grams`, migratie 38, SQLite en
+  PostgreSQL), in te vullen bij Artikelen; varianten erven het gewicht van het
+  hoofdartikel bij aanmaken.
+- **Afrekenen**: de klant kiest ophalen (geen adres nodig) of DPD (land, kosten
+  of *Gratis*, of de reden waarom het niet kan, zoals te zwaar). De server
+  controleert de keuze opnieuw bij het plaatsen en rekent de verzendkosten (21%
+  btw) mee in het btw-overzicht en het totaal. Postcode wordt per land gecontroleerd.
+- **Bestelling**: `data.shipping` (methode, kosten, gewicht, volgcode), het land
+  bij het adres; verzending staat op de bevestigingspagina en in de mail.
+- **Track & trace**: bij *Verzonden* (of achteraf, `POST
+  /api/admin/web-orders/:id/tracking`) legt de beheerder de DPD-volgcode vast;
+  de klant ziet een link naar de volgpagina van DPD. Excel-export heeft kolommen
+  Verzending, Verzendkosten en Volgcode.
+- Beperking: de verzendkosten gelden voor één btw-tarief (21%); btw per
+  klantsoort volgt in 1.4.8.
+
 ## 1.4.6
 
 Winkelwagen en bestellen op rekening in de eigen webshop (stap 1 van de
