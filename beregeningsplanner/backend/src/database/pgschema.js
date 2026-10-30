@@ -643,6 +643,7 @@ const PG_MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN has_variants BIGINT NOT NULL DEFAULT 0;
   ALTER TABLE stock_items ADD COLUMN attributes ${TEXT_TYPE} NOT NULL DEFAULT '';
   ALTER TABLE stock_items ADD COLUMN variant_values ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN archived_by_parent BIGINT NOT NULL DEFAULT 0;
   CREATE INDEX stock_items_parent ON stock_items (tenant_id, parent_id);
   ALTER TABLE shop_products ADD COLUMN parent_id ${TEXT_TYPE};
   ALTER TABLE shop_products ADD COLUMN attributes ${TEXT_TYPE} NOT NULL DEFAULT '[]';

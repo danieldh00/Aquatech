@@ -30,7 +30,8 @@
 
   /**
    * Haalt de artikellijst op (één keer per pagina). Zonder recht of zonder
-   * verbinding blijft de lijst leeg.
+   * verbinding komt er een lege lijst terug en probeert de volgende keer het
+   * opnieuw.
    * @param {string} [base] pad naar de app-root, bijv. '../'
    * @returns {Promise<object[]>} de artikelen (hoofdartikelen met variants)
    */
@@ -38,7 +39,10 @@
     if (items) return Promise.resolve(items);
     if (!loading) {
       loading = fetch(`${base}api/stock/articles`, { cache: 'no-store' })
-        .then((response) => (response.ok ? response.json() : { items: [] }))
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        })
         .then((result) => { items = Array.isArray(result.items) ? result.items : []; return items; })
         .catch(() => { loading = null; return []; });
     }
@@ -52,7 +56,7 @@
    */
   function parentOf(code) {
     const wanted = String(code || '').toUpperCase();
-    return (items || []).find((article) => article.variants && article.variants.length && article.code === wanted) || null;
+    return (items || []).find((article) => article.variants && article.code === wanted) || null;
   }
 
   /**
@@ -88,7 +92,8 @@
       if (!button) return;
       const article = (items || []).find((candidate) => candidate.code === button.dataset.code);
       if (!article) return;
-      if (article.variants && article.variants.length) showVariants(article);
+      // Een hoofdartikel (ook zonder actieve varianten) heeft geen eigen voorraad en is zelf niet te kiezen.
+      if (article.variants) showVariants(article);
       else pick(article);
     };
     dialog.querySelector('.ap-attrs').onchange = renderResult;
@@ -108,7 +113,7 @@
     const found = (items || []).filter((article) => !term || `${article.code} ${article.name}`.toLowerCase().includes(term)).slice(0, 60);
     dialog.querySelector('.ap-list').innerHTML = found.map((article) => `<li><button type="button" data-code="${esc(article.code)}">
         <b class="code">${esc(article.code)}</b> ${esc(article.name)}
-        <span class="ap-meta">${article.variants && article.variants.length ? `${article.variants.length} varianten · kies daarna de ${esc((article.attributes || []).map((attribute) => attribute.name.toLowerCase()).join(' en ') || 'variant')}` : `${esc(eur(article.salePrice))} · ${esc(nl(article.available))} ${esc(article.unit)} beschikbaar`}</span>
+        <span class="ap-meta">${article.variants ? `${article.variants.length} varianten · kies daarna de ${esc((article.attributes || []).map((attribute) => attribute.name.toLowerCase()).join(' en ') || 'variant')}` : `${esc(eur(article.salePrice))} · ${esc(nl(article.available))} ${esc(article.unit)} beschikbaar`}</span>
       </button></li>`).join('') || `<li class="ap-empty">${items && items.length ? 'Niets gevonden.' : 'Geen voorraadartikelen beschikbaar (of geen verbinding).'}</li>`;
   }
 
@@ -135,7 +140,7 @@
     dialog.querySelector('.ap-step2').hidden = false;
     dialog.querySelector('.ap-attrs').innerHTML = (article.attributes || []).map((attribute) => {
       const values = attribute.values.filter((value) => article.variants.some((variant) => variant.values && variant.values[attribute.name] === value));
-      return `<label>${esc(attribute.name)}<select data-attr="${esc(attribute.name)}">${values.map((value) => `<option${preferred && preferred.values[attribute.name] === value ? ' selected' : ''}>${esc(value)}</option>`).join('')}</select></label>`;
+      return `<label>${esc(attribute.name)}<select data-attr="${esc(attribute.name)}">${values.map((value) => `<option value="${esc(value)}"${preferred && preferred.values[attribute.name] === value ? ' selected' : ''}>${esc(value)}</option>`).join('')}</select></label>`;
     }).join('');
     renderResult();
     const first = dialog.querySelector('.ap-attrs select');
@@ -159,7 +164,7 @@
     const variant = chosenVariant();
     dialog.querySelector('.ap-result').innerHTML = variant
       ? `<b class="code">${esc(variant.code)}</b> ${esc(variant.name)}<br>${esc(eur(variant.salePrice)) || 'geen prijs'} · ${esc(nl(variant.available))} ${esc(variant.unit || current.article.unit)} beschikbaar`
-      : 'Deze combinatie bestaat niet.';
+      : (current.article && !current.article.variants.length ? 'Dit hoofdartikel heeft geen actieve varianten. Maak ze aan in Voorraadbeheer.' : 'Deze combinatie bestaat niet.');
     dialog.querySelector('.ap-add').disabled = !variant;
   }
 

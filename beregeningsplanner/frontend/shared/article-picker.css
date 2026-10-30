@@ -1,5 +1,5 @@
 /* Artikelkeuze (shared/article-picker.js): eerst het artikel, dan de maat. */
-.ap-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; border: 1px solid var(--line); border-radius: var(--radius, 10px); background: var(--panel, #fff); color: var(--text); }
+.ap-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; border: 1px solid var(--line); border-radius: var(--radius, 10px); background: var(--panel, Canvas); color: var(--text); }
 .ap-dialog::backdrop { background: color-mix(in srgb, var(--at-navy) 45%, transparent); }
 .ap-form { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
 .ap-head { display: flex; align-items: center; gap: 8px; }

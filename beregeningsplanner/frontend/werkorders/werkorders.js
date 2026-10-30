@@ -965,10 +965,13 @@
            */
           onPick: (article) => {
             if (state.workOrder !== workOrder) return;
+            // Een andere maat is een ander artikel: het is nog niet verzameld.
+            if (material.code !== article.code) material.picked = false;
             material.code = article.code;
             material.description = article.name;
             if (article.unit) material.unit = article.unit;
             renderMaterials();
+            renderProgress();
             changed();
           },
         });

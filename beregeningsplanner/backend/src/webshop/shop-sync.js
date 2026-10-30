@@ -336,49 +336,72 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     }
     let done = 0;
     for (const [productId, variants] of byParent) {
-      const { product, variations } = await fetchProductWithVariations(shopConfig, productId, { fetchImpl });
-      const timestamp = new Date().toISOString();
-      const bySku = new Map(variations.filter((variation) => variation.sku).map((variation) => [normalizeKey(variation.sku), variation]));
-      const byValues = new Map(variations.map((variation) => [valuesKeyOf(Object.fromEntries(variation.attributes.map((attribute) => [attribute.name, attribute.option]))), variation]));
-      const toCreate = [];
-      for (const variant of variants) {
-        const values = parseValues(variant.variant_values);
-        const existing = bySku.get(normalizeKey(variant.code)) || byValues.get(valuesKeyOf(values));
-        if (existing) {
-          prepare(`UPDATE stock_items SET shop_product_id = ?, shop_dirty = 1, shop_error = '', shop_synced_at = ? WHERE tenant_id = ? AND id = ?`).run(existing.id, timestamp, tenantId, variant.id);
+      try {
+        done += await createVariationsOf(tenantId, shopConfig, productId, variants);
+      } catch (error) {
+        // Eén product dat niet lukt (weg uit de webshop, geen schrijfrechten) houdt de rest van de ronde niet tegen.
+        if (!(error instanceof SourceError)) throw error;
+        const message = `Variatie niet aangemaakt: ${error.message}`.slice(0, 300);
+        for (const variant of variants) prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?').run(message, tenantId, variant.id);
+      }
+    }
+    return done;
+  }
+
+  /**
+   * Koppelt of maakt de ontbrekende variaties van één webshopproduct: eerst op
+   * sku of waarden koppelen, dan de kenmerken van het product aanvullen en de
+   * rest als nieuwe variaties aanmaken.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} shopConfig De koppelinstelling.
+   * @param {number} productId Id van het product in de webshop.
+   * @param {object[]} variants De varianten zonder variatie-id (rijen uit createMissingVariations).
+   * @returns {Promise<number>} Aantal aangemaakte of gekoppelde variaties.
+   */
+  async function createVariationsOf(tenantId, shopConfig, productId, variants) {
+    let done = 0;
+    const { product, variations } = await fetchProductWithVariations(shopConfig, productId, { fetchImpl });
+    const timestamp = new Date().toISOString();
+    const bySku = new Map(variations.filter((variation) => variation.sku).map((variation) => [normalizeKey(variation.sku), variation]));
+    const byValues = new Map(variations.map((variation) => [valuesKeyOf(Object.fromEntries(variation.attributes.map((attribute) => [attribute.name, attribute.option]))), variation]));
+    const toCreate = [];
+    for (const variant of variants) {
+      const values = parseValues(variant.variant_values);
+      const existing = bySku.get(normalizeKey(variant.code)) || byValues.get(valuesKeyOf(values));
+      if (existing) {
+        prepare(`UPDATE stock_items SET shop_product_id = ?, shop_dirty = 1, shop_error = '', shop_synced_at = ? WHERE tenant_id = ? AND id = ?`).run(existing.id, timestamp, tenantId, variant.id);
+        done++;
+      } else {
+        toCreate.push({ variant, values });
+      }
+    }
+    if (!toCreate.length) return done;
+    // Kenmerken van het product aanvullen met de waarden van de nieuwe varianten.
+    const attributes = product.attributes.map((attribute) => ({ ...attribute, options: [...attribute.options] }));
+    let changed = false;
+    for (const { values } of toCreate) {
+      for (const [name, option] of Object.entries(values)) {
+        let attribute = attributes.find((existing) => existing.name.toLowerCase() === name.toLowerCase());
+        if (!attribute) { attribute = { name, options: [], visible: true, variation: true, position: attributes.length }; attributes.push(attribute); changed = true; }
+        if (!attribute.variation) { attribute.variation = true; changed = true; }
+        if (!attribute.options.some((known) => known.toLowerCase() === option.toLowerCase())) { attribute.options.push(option); changed = true; }
+      }
+    }
+    if (changed) await updateAttributes(shopConfig, productId, attributes.map(({ id, name, options, visible, variation, position }) => ({ ...(id ? { id } : { name }), name, options, visible, variation, position })), { fetchImpl });
+    const results = await createVariations(shopConfig, productId, toCreate.map(({ variant, values }) => ({ sku: variant.code, code: variant.code, values, ...offerOf(variant, shopConfig) })), { fetchImpl });
+    transaction(db, () => {
+      toCreate.forEach(({ variant }, index) => {
+        const result = results[index];
+        const offer = offerOf(variant, shopConfig);
+        if (result && result.ok) {
+          prepare(`UPDATE stock_items SET shop_product_id = ?, shop_price_seen = ?, shop_stock_seen = ?, shop_dirty = 0, shop_error = '', shop_synced_at = ?
+            WHERE tenant_id = ? AND id = ?`).run(result.id, offer.price == null ? null : rawOf(offer.price, offer.vatRate, shopConfig), offer.stockQty, timestamp, tenantId, variant.id);
           done++;
         } else {
-          toCreate.push({ variant, values });
+          prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?').run(`Variatie niet aangemaakt: ${(result && result.error) || 'onbekende fout'}`.slice(0, 300), tenantId, variant.id);
         }
-      }
-      if (!toCreate.length) continue;
-      // Kenmerken van het product aanvullen met de waarden van de nieuwe varianten.
-      const attributes = product.attributes.map((attribute) => ({ ...attribute, options: [...attribute.options] }));
-      let changed = false;
-      for (const { values } of toCreate) {
-        for (const [name, option] of Object.entries(values)) {
-          let attribute = attributes.find((existing) => existing.name.toLowerCase() === name.toLowerCase());
-          if (!attribute) { attribute = { name, options: [], visible: true, variation: true, position: attributes.length }; attributes.push(attribute); changed = true; }
-          if (!attribute.variation) { attribute.variation = true; changed = true; }
-          if (!attribute.options.some((known) => known.toLowerCase() === option.toLowerCase())) { attribute.options.push(option); changed = true; }
-        }
-      }
-      if (changed) await updateAttributes(shopConfig, productId, attributes.map(({ id, name, options, visible, variation, position }) => ({ ...(id ? { id } : { name }), name, options, visible, variation, position })), { fetchImpl });
-      const results = await createVariations(shopConfig, productId, toCreate.map(({ variant, values }) => ({ sku: variant.code, code: variant.code, values, ...offerOf(variant, shopConfig) })), { fetchImpl });
-      transaction(db, () => {
-        toCreate.forEach(({ variant }, index) => {
-          const result = results[index];
-          const offer = offerOf(variant, shopConfig);
-          if (result && result.ok) {
-            prepare(`UPDATE stock_items SET shop_product_id = ?, shop_price_seen = ?, shop_stock_seen = ?, shop_dirty = 0, shop_error = '', shop_synced_at = ?
-              WHERE tenant_id = ? AND id = ?`).run(result.id, offer.price == null ? null : rawOf(offer.price, offer.vatRate, shopConfig), offer.stockQty, timestamp, tenantId, variant.id);
-            done++;
-          } else {
-            prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?').run(`Variatie niet aangemaakt: ${(result && result.error) || 'onbekende fout'}`.slice(0, 300), tenantId, variant.id);
-          }
-        });
       });
-    }
+    });
     return done;
   }
 

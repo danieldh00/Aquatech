@@ -599,7 +599,7 @@
       : 'Heeft dit artikel maten, kleuren of lengtes? Geef de kenmerken op; elke combinatie wordt een variant met een eigen code, prijs en voorraad. Kan alleen zolang dit artikel zelf geen voorraad of boekingen heeft.';
     $('#v-attrs').innerHTML = (item.attributes.length ? item.attributes : [{ name: '', values: [] }]).map(attributeRow).join('');
     $('#d-var-table').innerHTML = variants.length ? `<thead><tr><th>Variant</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Inkoopprijs</th><th class="num">Verkoopprijs</th><th>Webshop</th></tr></thead>
-      <tbody>${variants.map((variant) => `<tr data-id="${esc(variant.id)}" class="${variant.low ? 'low' : ''}${variant.archived ? ' arch' : ''}">
+      <tbody>${variants.map((variant) => `<tr data-id="${esc(variant.id)}" tabindex="0" class="${variant.low ? 'low' : ''}${variant.archived ? ' arch' : ''}">
         <td class="wrap"><b class="code">${esc(variant.code)}</b>${variant.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(valuesText(variant))}</span></td>
         <td class="num${variant.onHand < 0 ? ' neg' : ''}">${esc(nl(variant.onHand))} ${esc(variant.unit)}</td>
         <td class="num">${variant.reserved ? esc(nl(variant.reserved)) : ''}</td>
@@ -614,6 +614,16 @@
        * @returns {Promise<void>}
        */
       row.onclick = () => openItem(row.dataset.id, true);
+      /**
+       * Opent de variant ook met Enter of spatie (toetsenbord).
+       * @param {KeyboardEvent} event de toets
+       * @returns {void}
+       */
+      row.onkeydown = (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        openItem(row.dataset.id, true);
+      };
     });
   }
 
@@ -907,7 +917,11 @@
       const GROUPS = { producten: 'Producten', arbeid: 'Arbeid', overig: 'Overig' };
       // Hoofdartikelen hebben geen eigen voorraad: alleen de varianten (met hun hoofdartikel) komen erin.
       const codeOf = new Map(state.items.map((item) => [item.id, item.code]));
-      const items = visible().filter((item) => !item.hasVariants);
+      // Past het hoofdartikel bij de zoekterm, dan gaan al zijn varianten mee (zoals in het overzicht).
+      const matched = visible();
+      const matchedParents = new Set(matched.filter((item) => item.hasVariants).map((item) => item.id));
+      const matchedIds = new Set(matched.map((item) => item.id));
+      const items = state.items.filter((item) => !item.hasVariants && (matchedIds.has(item.id) || (item.parentId && matchedParents.has(item.parentId))));
       for (const item of items) {
         worksheet.addRow({ ...item, parent: item.parentId ? codeOf.get(item.parentId) || '' : '', variant: valuesText(item), low: item.low ? 'ja' : '', archived: item.archived ? 'ja' : '', costPrice: item.costPrice, value: item.value, salePrice: item.salePrice,
           vat: `${item.vatRate}%`, group: GROUPS[item.revenueGroup] || item.revenueGroup,

@@ -572,7 +572,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       // Andere prijs of btw (of weer meesturen): opnieuw naar de webshop. Een
       // hoofdartikel heeft in de webshop geen eigen prijs of voorraad.
       const toShop = !isParent && ((merged.salePrice ?? null) !== (existing.sale_price ?? null) || merged.vatRate !== Number(existing.vat_rate) || (merged.shopSync && !Number(existing.shop_sync)));
-      prepare(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, reorder_qty = ?, cost_price = ?, notes = ?, archived = ?, updated_at = ?,
+      prepare(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, reorder_qty = ?, cost_price = ?, notes = ?, archived = ?, archived_by_parent = 0, updated_at = ?,
            sale_price = ?, vat_rate = ?, revenue_group = ?, shop_sync = ?,
            shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
          WHERE tenant_id = ? AND id = ?`)
@@ -605,10 +605,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       WHERE tenant_id = ? AND parent_id = ?`).run(merged.unit, merged.vatRate, merged.revenueGroup, timestamp, vatChanged ? 1 : 0, tenantId, existing.id);
     if (archived && !existing.archived) {
       prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id IN (SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?)').run(tenantId, tenantId, existing.id);
-      prepare('UPDATE stock_items SET archived = 1, updated_at = ? WHERE tenant_id = ? AND parent_id = ?').run(timestamp, tenantId, existing.id);
+      prepare('UPDATE stock_items SET archived = 1, archived_by_parent = 1, updated_at = ? WHERE tenant_id = ? AND parent_id = ? AND archived = 0').run(timestamp, tenantId, existing.id);
     } else if (!archived && existing.archived) {
-      prepare('UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND parent_id = ?').run(timestamp, tenantId, existing.id);
-      const codes = prepare('SELECT code FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id).map((row) => row.code);
+      // Alleen de varianten die met het hoofdartikel mee het archief in gingen; een los verwijderde variant blijft weg.
+      const codes = prepare('SELECT code FROM stock_items WHERE tenant_id = ? AND parent_id = ? AND archived_by_parent = 1').all(tenantId, existing.id).map((row) => row.code);
+      prepare('UPDATE stock_items SET archived = 0, archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND parent_id = ? AND archived_by_parent = 1').run(timestamp, tenantId, existing.id);
       if (codes.length) resyncOpen(tenantId, codes, { nested: true });
     }
     return vatChanged;
@@ -625,7 +626,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     const moved = prepare('SELECT EXISTS (SELECT 1 FROM stock_movements WHERE tenant_id = ? AND item_id = ?) AS n').get(tenantId, row.id).n;
     if (moved) {
-      prepare('UPDATE stock_items SET archived = 1, updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, row.id);
+      prepare('UPDATE stock_items SET archived = 1, archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, row.id);
       return true;
     }
     prepare('DELETE FROM stock_items WHERE tenant_id = ? AND id = ?').run(tenantId, row.id);
@@ -663,12 +664,14 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * aan die nog ontbreken (elke combinatie van waarden; een gearchiveerde
    * variant met dezelfde waarden komt terug). Varianten krijgen de code van het
    * hoofdartikel met de waarden erachter (bijv. PE-BUIS-16MM) en nemen eenheid,
-   * prijzen, btw, omzetgroep en webshopinstelling over. Kenmerken zonder
-   * varianten maken er weer een gewoon artikel van.
+   * prijzen, btw, omzetgroep en webshopinstelling over. Een variant waarvan
+   * een waarde is weggehaald gaat weg (met boekingen: gearchiveerd), net als
+   * bij verwijderen. Kenmerken zonder varianten maken er weer een gewoon
+   * artikel van.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het artikel.
    * @param {*} rawAttributes De kenmerken: [{ name, values }].
-   * @returns {object} { item, created, restored }, of { error, field, status }.
+   * @returns {object} { item, created, restored, removed }, of { error, field, status }.
    */
   function setVariants(tenantId, id, rawAttributes) {
     const checked = sanitizeAttributes(rawAttributes);
@@ -704,11 +707,20 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         VALUES (?, ?, ?, ?, ?, '', 0, 0, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?)`);
       const created = [];
       let restored = 0;
-      for (const values of combinations(attributes)) {
+      let removed = 0;
+      const wanted = combinations(attributes);
+      const wantedKeys = new Set(wanted.map(valuesKey));
+      // Een weggehaalde waarde: die varianten gaan weg (met boekingen: archief), net als bij verwijderen.
+      for (const variant of live) {
+        if (wantedKeys.has(valuesKey(parseJson(variant.variant_values, {})))) continue;
+        removeRow(tenantId, variant);
+        removed++;
+      }
+      for (const values of wanted) {
         const found = byKey.get(valuesKey(values));
         if (found) {
           if (found.archived) {
-            prepare('UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND id = ?').run(timestamp, tenantId, found.id);
+            prepare('UPDATE stock_items SET archived = 0, archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND id = ?').run(timestamp, tenantId, found.id);
             created.push(found.code);
             restored++;
           }
@@ -727,11 +739,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
           shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL AND shop_sync = 1 THEN 1 ELSE shop_dirty END
         WHERE tenant_id = ? AND id = ?`).run(JSON.stringify(attributes), timestamp, created.length ? 1 : 0, tenantId, existing.id);
       if (created.length) resyncOpen(tenantId, created, { nested: true });
-      return { created, restored, linked: Boolean(existing.shop_product_id && Number(existing.shop_sync)) };
+      return { created, restored, removed, linked: Boolean(existing.shop_product_id && Number(existing.shop_sync)) };
     });
     if (out.error) return out;
     if (out.linked && out.created.length) dirty(tenantId);
-    return { item: get(tenantId, id), created: out.created.length - out.restored, restored: out.restored };
+    return { item: get(tenantId, id), created: out.created.length - out.restored, restored: out.restored, removed: out.removed };
   }
 
   /**
@@ -1539,6 +1551,8 @@ function registerStockRoutes(app, ctx) {
 
   // Artikel (met varianten) als nieuw product in de webshop zetten; Aquatech is de bron.
   app.post('/api/stock/items/:id/publish', requireJson, requireStock, ctx.importLimiter || ((req, res, next) => next()), async (req, res) => {
+    // Eerst het artikel in deze omgeving: een id van een andere organisatie is 404, ook zonder webshop.
+    if (!stock.get(tenantOf(req), req.params.id)) return notFound(res);
     if (!ctx.publishToShop) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Webshop).' });
     try {
       const out = await ctx.publishToShop(tenantOf(req), req.params.id, req.user);

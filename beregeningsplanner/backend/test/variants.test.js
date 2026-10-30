@@ -65,14 +65,21 @@ test('varianten: hoofdartikel, totalen, mutaties alleen op een variant, bestelvo
   assert.strictEqual(stock.setVariants(tenantId, parent.id, [{ name: 'Diameter', values: ['16 mm'] }]).status, 409);
   assert.strictEqual(stock.setVariants(tenantId, parent.id, []).status, 409);
 
+  // Waarde weghalen: die variant gaat weg (zonder boekingen echt verwijderd).
+  const fewer = stock.setVariants(tenantId, parent.id, [{ name: 'Maat', values: ['16 mm', '20 mm'] }]);
+  assert.strictEqual(fewer.removed, 1);
+  assert.deepStrictEqual(fewer.item.variants.map((variant) => variant.code), ['PE-BUIS-16MM', 'PE-BUIS-20MM']);
+
   // Eenheid en btw volgen het hoofdartikel; archiveren neemt de varianten mee.
   stock.update(tenantId, parent.id, { unit: 'rol', vatRate: 21 });
   assert.ok(stock.get(tenantId, parent.id).variants.every((variant) => variant.unit === 'rol' && variant.vatRate === 21));
+  // Terugzetten brengt alleen de varianten terug die met het hoofdartikel mee gingen, niet een los verwijderde.
+  assert.deepStrictEqual(stock.remove(tenantId, large.id), { archived: true, code: 'PE-BUIS-20MM' });
   stock.update(tenantId, parent.id, { archived: true });
   assert.ok(stock.get(tenantId, parent.id).variants.every((variant) => variant.archived));
   assert.strictEqual(stock.update(tenantId, small.id, { archived: false }).status, 409);
   stock.update(tenantId, parent.id, { archived: false });
-  assert.ok(stock.get(tenantId, parent.id).variants.every((variant) => !variant.archived));
+  assert.deepStrictEqual(stock.get(tenantId, parent.id).variants.map((variant) => [variant.code, variant.archived]), [['PE-BUIS-16MM', false], ['PE-BUIS-20MM', true]]);
 
   // Een artikel met voorraad kan geen hoofdartikel worden; een variant ook niet.
   const used = stock.create(tenantId, USER, { code: 'SLANG', name: 'Slang', onHand: 3 }).item;
@@ -125,6 +132,10 @@ test('varianten via de API: kenmerken, keuzelijst, werkorder kiest eerst een maa
     assert.ok(!JSON.stringify(picker).includes('costPrice'));
     assert.strictEqual((await klant.get('/api/stock/articles')).status, 403);
     assert.strictEqual((await pien.put(`/api/stock/items/${parent.id}/variants`, { attributes: [] })).status, 403);
+    assert.strictEqual((await pien.post(`/api/stock/items/${parent.id}/publish`, {})).status, 403);
+    const unlinked = await kees.post(`/api/stock/items/${parent.id}/publish`, {});
+    assert.strictEqual(unlinked.status, 409);
+    assert.strictEqual(unlinked.body.error, 'not_configured');
 
     // Werkorder met de code van het hoofdartikel: eerst een maat kiezen; met de variant wordt er gereserveerd.
     const quote = (await kees.post('/api/quotes', { data: { title: 'Slang', customer: { name: 'Fam. Jansen' },
@@ -147,7 +158,7 @@ test('varianten via de API: kenmerken, keuzelijst, werkorder kiest eerst een maa
     assert.strictEqual(created.status, 201, JSON.stringify(created.body));
     const piet = await as('piet', 'groen');
     assert.strictEqual((await piet.put(`/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Lengte', values: ['50 m'] }] })).status, 404);
-    assert.strictEqual((await piet.post(`/api/stock/items/${parent.id}/publish`, {})).status, 409);
+    assert.strictEqual((await piet.post(`/api/stock/items/${parent.id}/publish`, {})).status, 404);
     assert.deepStrictEqual((await piet.get('/api/stock/articles')).body.items, []);
   } finally {
     server.close();
@@ -208,6 +219,7 @@ function fakeShop(products, variations) {
     match = path.match(/^\/products\/(\d+)$/);
     if (match) {
       const product = products.get(match[1]);
+      if (!product) return { ok: false, status: 404, headers: new Headers(), text: async () => '{}' };
       if (method === 'PUT') product.attributes = body.attributes.map((attribute, index) => ({ id: attribute.id || 50 + index, ...attribute }));
       return json(product);
     }
@@ -304,6 +316,13 @@ test('varianten en WooCommerce: variabel product wordt hoofdartikel, prijs en vo
   assert.deepStrictEqual(products.get('70').attributes.map((attribute) => [attribute.name, attribute.options]), [['Maat', ['20 mm', '25 mm', '32 mm']], ['Merk', ['Aquatech']]]);
   assert.strictEqual(stock.get(tenantId, added.id).shop.productId, String(created.id));
   assert.strictEqual(stock.list(tenantId, { archived: true }).filter((item) => item.archived).length, 0);
+
+  // Product weg uit de webshop terwijl er een nieuwe maat is: de ronde loopt door, de variant krijgt een melding.
+  products.delete('70');
+  stock.setVariants(tenantId, parent.id, [{ name: 'Maat', values: ['20 mm', '25 mm', '32 mm', '40 mm'] }]);
+  const newest = stock.get(tenantId, parent.id).variants.find((item) => item.values.Maat === '40 mm');
+  await sync.run(tenantId);
+  assert.match(stock.get(tenantId, newest.id).shop.error, /Variatie niet aangemaakt/);
 });
 
 test('varianten en WooCommerce: artikel en hoofdartikel uit Aquatech als nieuw product in de webshop', async () => {
