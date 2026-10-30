@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.4.4',
+      date: '2026-10-30',
+      title: 'Beheer overal gelijk uitgelijnd',
+      items: [
+        { text: 'In Beheer staat het menu links nu strak uitgelijnd en heeft de inhoud op elk tabblad dezelfde plek en breedte, zodat er bij het wisselen niets meer heen en weer springt.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.4.3',
       date: '2026-10-30',
       title: 'Artikelen met varianten in de webshop',

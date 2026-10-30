@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.4
+
+Beheer: dezelfde layout op elk tabblad.
+
+- `frontend/beheer/beheer.css`: één vaste container. Het zijmenu (zoekveld +
+  sectielijst) staat strak links; de inhoud rechts heeft op elke sectie
+  dezelfde positie en breedte (max. 1180 px, formulieren niet meer smaller
+  dan tabellen). `scrollbar-gutter: stable` voorkomt dat de inhoud
+  opschuift als een sectie een scrollbalk krijgt.
+
 ## 1.4.3
 
 Artikelen met varianten staan in de webshop als één regel met een keuzelijst.
