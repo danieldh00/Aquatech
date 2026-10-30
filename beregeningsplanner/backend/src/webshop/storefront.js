@@ -303,13 +303,9 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
             return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, error: out.error, values: req.body || {} }, groups));
           }
           writeCart(req, res, []);
-          try {
-            onOrder(req, out.order);
-            if (orderMail) await orderMail.sendPlaced(tenantId, out.order);
-          } catch (failure) {
-            // De bestelling staat al vast: een fout in audit of mail mag de klant niet naar een foutpagina sturen.
-            console.error(`Afhandeling van bestelling ${out.order.number} mislukt: ${failure.message}`);
-          }
+          // De bestelling staat al vast: een fout in audit of mail mag de klant niet naar een foutpagina sturen, en de ene stap niet de andere overslaan.
+          try { onOrder(req, out.order); } catch (failure) { console.error(`Audit van bestelling ${out.order.number} mislukt: ${failure.message}`); }
+          try { if (orderMail) await orderMail.sendPlaced(tenantId, out.order); } catch (failure) { console.error(`Mail van bestelling ${out.order.number} mislukt: ${failure.message}`); }
           res.redirect(303, `../bestelling/${out.order.id}/`);
         } catch (error) { next(error); }
       });

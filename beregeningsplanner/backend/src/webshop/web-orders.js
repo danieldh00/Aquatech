@@ -219,6 +219,7 @@ function createWebOrderStore(db, { stock }) {
       const fields = checked.value;
       const timestamp = currentTimestamp();
       const id = crypto.randomUUID();
+      if (isPg(db)) prepare('SELECT pg_advisory_xact_lock(hashtext(?)) AS locked').get(`web-orders:${tenantId}:${timestamp.slice(0, 4)}`);
       const number = nextNumber(tenantId, timestamp.slice(0, 4));
       const data = {
         lines: cart.lines.map((line) => ({ itemId: line.itemId, code: line.code, name: line.name, unit: line.unit, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal })),
