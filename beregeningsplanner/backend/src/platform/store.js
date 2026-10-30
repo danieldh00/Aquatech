@@ -333,7 +333,8 @@ function createStore(db) {
     if (input.email !== undefined) {
       const email = String(input.email ?? '').trim().toLowerCase();
       if (email && (email.length > 200 || !EMAIL.test(email))) return { error: 'Vul een geldig e-mailadres in.', field: 'email' };
-      if (email && accountIdsByEmail(user.tenant_id, email).some((otherId) => otherId !== user.id)) return { error: 'Er is al een account met dit e-mailadres.', field: 'email' };
+      const currentEmail = String(user.email || '').trim().toLowerCase();
+      if (email && email !== currentEmail && accountIdsByEmail(user.tenant_id, email).some((otherId) => otherId !== user.id)) return { error: 'Er is al een account met dit e-mailadres.', field: 'email' };
       next.email = email;
     }
     if (input.phone !== undefined) {

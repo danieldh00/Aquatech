@@ -129,6 +129,17 @@ test('gelijktijdige registraties met hetzelfde e-mailadres: één account', asyn
   assert.strictEqual(store.accountIdsByEmail(main, 'dubbel@voorbeeld.nl').length, 1);
 });
 
+test('profiel: ongewijzigd (gedeeld) e-mailadres blokkeert een andere wijziging niet', async () => {
+  const { base, db, main } = await setup();
+  const client = createClient(base);
+  await postForm(base, client, '/winkel/registreren/', { displayName: 'Deel', email: 'deel@voorbeeld.nl', password: PW, password2: PW, website: '' });
+  // Bestaande gegevens (bijv. uit de oude webshop) kunnen hetzelfde adres delen.
+  db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, password_hash, disabled, platform_admin, must_change_password, created_at, email) VALUES ('dubbel-1', ?, 'dubbel1', 'Dubbel', 'klant', 'account', 'x', 0, 0, 0, '2026-01-01', 'deel@voorbeeld.nl')").run(main);
+  const saved = await client.put('/api/account/profile', { email: 'Deel@Voorbeeld.nl ', phone: '0612345678' });
+  assert.strictEqual(saved.status, 200);
+  assert.strictEqual(saved.body.user.phone, '0612345678');
+});
+
 test('inloggen in de shop: fout wachtwoord en blokkering', async () => {
   const { base, store, main } = await setup();
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'klant', password: PW });
