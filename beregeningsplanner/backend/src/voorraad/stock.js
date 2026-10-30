@@ -923,6 +923,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const want = new Set((Array.isArray(ids) ? ids : []).map(String).slice(0, 500));
     if (!want.size) return { error: 'Kies een of meer producten.', field: 'ids' };
     const chosen = products.filter((product) => want.has(String(product.id)) && !product.parentId);
+    // Producten van vóór migratie 33 hebben nog geen bekend type; een variabel product zou anders een gewoon artikel worden.
+    if (chosen.some((product) => product.type === 'unknown')) return { error: 'Synchroniseer eerst de webshop opnieuw (Beheer → Webshop); van een of meer producten is het type nog onbekend.', field: 'ids' };
     const chosenIds = new Set(chosen.map((product) => String(product.id)));
     chosen.push(...products.filter((product) => product.parentId && chosenIds.has(String(product.parentId))));
     const skipped = [];

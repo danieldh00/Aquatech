@@ -389,3 +389,28 @@ test('varianten en WooCommerce: een eerder als gewoon artikel overgenomen variab
   assert.strictEqual(kept.onHand, 3);
   assert.match(kept.shop.error, /voorraad of boekingen/);
 });
+
+test('varianten en WooCommerce: type van vóór de migratie is onbekend, variatiekenmerken na het tiende blijven bewaard', () => {
+  const db = openDb();
+  const tenantId = createStore(db).ensureTenant().id;
+  const stock = createStockStore(db);
+  const shop = createShopStore(db);
+  const base = { sku: '', name: '', price: 1, currency: 'EUR', url: '', image: '', inStock: true, code: '', categories: [] };
+  const extra = Array.from({ length: 11 }, (_, index) => ({ name: `Extra ${index}`, variation: false, options: ['x'] }));
+  shop.replaceProducts(tenantId, [
+    { ...base, id: '10', sku: 'DOP', name: 'Dop', type: 'variable', attributes: [...extra, { name: 'Maat', variation: true, options: ['1/2"', '3/4"'] }] },
+    { ...base, id: '11', sku: 'LOS', name: 'Los', type: 'simple' },
+  ], new Date().toISOString());
+  const products = shop.products(tenantId);
+  const dop = products.find((product) => product.id === '10');
+  assert.ok(dop.attributes.some((attribute) => attribute.name === 'Maat' && attribute.variation), 'variatiekenmerk na het tiende kenmerk bewaard');
+  assert.strictEqual(products.find((product) => product.id === '11').type, 'simple');
+
+  // Een rij zonder type (zoals na migratie 33 voor oude producten) is onbekend en wordt niet overgenomen.
+  db.prepare("UPDATE shop_products SET type = '' WHERE tenant_id = ? AND id = '11'").run(tenantId);
+  const unknown = shop.products(tenantId).find((product) => product.id === '11');
+  assert.strictEqual(unknown.type, 'unknown');
+  const refused = stock.importShop(tenantId, shop.products(tenantId), ['11']);
+  assert.match(refused.error, /Synchroniseer eerst/);
+  assert.ok(!stock.findCode(tenantId, 'LOS'));
+});

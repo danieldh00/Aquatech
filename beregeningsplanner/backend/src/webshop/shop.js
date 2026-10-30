@@ -85,6 +85,17 @@ function createShopStore(db) {
   const prepare = (sql) => db.prepare(sql);
 
   /**
+   * Kiest de kenmerken die bewaard worden: eerst alle variatiekenmerken (die zijn nodig voor
+   * de varianten), daarna de overige, samen hooguit twintig.
+   * @param {object[]} attributes De kenmerken van het product.
+   * @returns {object[]} De te bewaren kenmerken.
+   */
+  function attributesToKeep(attributes) {
+    const list = Array.isArray(attributes) ? attributes : [];
+    return [...list.filter((attribute) => attribute.variation), ...list.filter((attribute) => !attribute.variation)].slice(0, 20);
+  }
+
+  /**
    * Vervangt alle opgehaalde producten van een tenant in één transactie.
    * @param {string} tenantId Id van de tenant.
    * @param {object[]} products De producten (fetchProducts).
@@ -101,7 +112,7 @@ function createShopStore(db) {
         seen.add(product.id);
         insert.run(tenantId, product.id, product.sku.slice(0, 100), product.name.slice(0, 300), product.price, product.currency.slice(0, 3), product.url.slice(0, 1000),
           product.image.slice(0, 1000), product.inStock ? 1 : 0, product.code.slice(0, 40), JSON.stringify(product.categories.slice(0, 20)),
-          product.parentId ? String(product.parentId) : null, JSON.stringify((product.attributes || []).slice(0, 10)),
+          product.parentId ? String(product.parentId) : null, JSON.stringify(attributesToKeep(product.attributes)),
           product.parentId ? 'variation' : product.type === 'variable' ? 'variable' : 'simple');
       }
       setStatus(tenantId, { syncedAt, productCount: seen.size, error: null });
@@ -145,8 +156,9 @@ function createShopStore(db) {
       id: row.id, sku: row.sku, name: row.name, price: row.price, currency: row.currency, url: row.url, image: row.image,
       inStock: Boolean(row.in_stock), code: row.code, categories: JSON.parse(row.categories || '[]'),
       parentId: row.parent_id || null, attributes: JSON.parse(row.attributes || '[]'),
-      // Bewaard type van de webshop (ook een variabel product zonder variaties); oudere rijen afleiden.
-      type: row.parent_id ? 'variation' : row.type === 'variable' || parents.has(String(row.id)) ? 'variable' : 'simple',
+      // Bewaard type van de webshop (ook een variabel product zonder variaties). Rijen van vóór
+      // migratie 33 hebben nog geen type: 'unknown' tot de volgende synchronisatie.
+      type: row.parent_id ? 'variation' : row.type === 'variable' || parents.has(String(row.id)) ? 'variable' : row.type === 'simple' ? 'simple' : 'unknown',
     }));
   };
 

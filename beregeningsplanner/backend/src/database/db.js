@@ -823,7 +823,7 @@ const MIGRATIONS = [
   CREATE INDEX stock_items_parent ON stock_items (tenant_id, parent_id);
   ALTER TABLE shop_products ADD COLUMN parent_id TEXT;
   ALTER TABLE shop_products ADD COLUMN attributes TEXT NOT NULL DEFAULT '[]';
-  ALTER TABLE shop_products ADD COLUMN type TEXT NOT NULL DEFAULT 'simple';
+  ALTER TABLE shop_products ADD COLUMN type TEXT NOT NULL DEFAULT '';
   `,
 ];
 

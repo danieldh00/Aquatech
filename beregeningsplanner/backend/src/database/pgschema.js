@@ -647,7 +647,7 @@ const PG_MIGRATIONS = [
   CREATE INDEX stock_items_parent ON stock_items (tenant_id, parent_id);
   ALTER TABLE shop_products ADD COLUMN parent_id ${TEXT_TYPE};
   ALTER TABLE shop_products ADD COLUMN attributes ${TEXT_TYPE} NOT NULL DEFAULT '[]';
-  ALTER TABLE shop_products ADD COLUMN type ${TEXT_TYPE} NOT NULL DEFAULT 'simple';
+  ALTER TABLE shop_products ADD COLUMN type ${TEXT_TYPE} NOT NULL DEFAULT '';
   `,
 ];
 
