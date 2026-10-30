@@ -263,9 +263,10 @@ function createWebOrderStore(db, { stock }) {
    * @param {object} rawFields De gegevens van het afrekenformulier (zie sanitizeCheckout, plus shippingMethod en country).
    * @param {{ code: string, qty: number }[]} wanted De winkelwagen.
    * @param {object} [shippingConfig] De verzendinstelling (shipping.js); standaard de startwaarden.
+   * @param {?number} [expectedTotal] Het totaal dat de klant bevestigde; wijkt het berekende totaal af, dan volgt een fout (409) en wordt niet besteld.
    * @returns {{ order?: object, error?: string, field?: string, status?: number, cart?: object }} De bestelling, of een foutmelding (met de actuele winkelwagen bij een probleem met prijs of voorraad).
    */
-  function place(tenantId, user, rawFields, wanted, shippingConfig = Shipping.DEFAULT_CONFIG) {
+  function place(tenantId, user, rawFields, wanted, shippingConfig = Shipping.DEFAULT_CONFIG, expectedTotal = null) {
     const input = rawFields && typeof rawFields === 'object' ? rawFields : {};
     const method = String(input.shippingMethod || '');
     const country = method === 'ophalen' ? 'NL' : String(input.country || 'NL').toUpperCase();
@@ -289,6 +290,7 @@ function createWebOrderStore(db, { stock }) {
       // De verzendkosten zijn een eigen regel in de btw-opbouw (alleen als ze niet gratis zijn).
       const calculated = orderTotals(cart, option, { group, country, vatNumber: fields.vatNumber });
       const totals = calculated.totals;
+      if (expectedTotal !== null && !(Math.abs(expectedTotal - totals.total) <= 0.005)) return { error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', status: 409 };
       const data = {
         lines: calculated.lines.map((line) => ({ itemId: line.itemId, code: line.code, name: line.name, unit: line.unit, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal, ...(line.lineExcl !== undefined ? { lineExcl: line.lineExcl } : {}) })),
         customer: { name: fields.name, company: fields.company, email: fields.email, phone: fields.phone },

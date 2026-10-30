@@ -355,7 +355,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
         }
         if (orderLimited(req, res)) return res.status(429).type('text').send('Te veel bestellingen vanaf dit adres. Probeer het later opnieuw.');
         try {
-          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup }, body, readCart(req), shippingConfig());
+          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup }, body, readCart(req), shippingConfig(), Number(body.expectedTotal));
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
             const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
