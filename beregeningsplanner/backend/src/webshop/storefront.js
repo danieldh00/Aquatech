@@ -65,7 +65,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
    */
   const sendPage = (res, status, html) => {
     res.status(status);
-    res.setHeader('Cache-Control', 'no-cache');
+    if (!res.getHeader('Cache-Control')) res.setHeader('Cache-Control', 'no-cache');
     res.type('html').send(html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : '')));
   };
   /**
@@ -134,6 +134,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
       if (withSlash(req, res)) return;
       const viewer = accounts.viewer(req);
       if (!viewer) return res.redirect(302, '../inloggen/');
+      res.setHeader('Cache-Control', 'no-store');
       sendWithGroups(res, 200, (groups) => accountPage(viewer, groups));
     });
     router.get('/inloggen', (req, res) => {
@@ -150,7 +151,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
       try {
         const out = await accounts.login(req, res, { login: req.body?.login, password: req.body?.password });
-        if (out.error) return sendWithGroups(res, out.status, (groups) => loginPage({ error: out.error, login: String(req.body?.login ?? '').slice(0, 200) }, groups));
+        if (out.error) return sendWithGroups(res, out.status, (groups) => loginPage({ error: out.error, login: String(req.body?.login ?? '').slice(0, 200), next: req.body?.volgende === 'planner' ? 'planner' : '' }, groups));
         res.redirect(303, out.user.must_change_password ? '../../wachtwoord' : req.body?.volgende === 'planner' && plannerOn() ? '../../beregening/' : '../account/');
       } catch (error) { next(error); }
     });

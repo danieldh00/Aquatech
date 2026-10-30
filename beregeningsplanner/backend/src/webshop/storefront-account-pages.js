@@ -59,7 +59,7 @@ ${field({ name: 'displayName', label: 'Naam', value: displayName, autocomplete: 
 ${field({ name: 'email', label: 'E-mailadres', type: 'email', value: email, autocomplete: 'email' })}
 ${field({ name: 'password', label: 'Wachtwoord', type: 'password', autocomplete: 'new-password', hint: 'Minimaal 12 tekens.' })}
 ${field({ name: 'password2', label: 'Wachtwoord herhalen', type: 'password', autocomplete: 'new-password' })}
-<input class="trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+<input class="trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
 <button class="button" type="submit">Account maken</button>
 </form>`;
   return formPage({ title: 'Registreren', heading: 'Account maken', form, groups,
@@ -99,7 +99,7 @@ ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 ${field({ name: 'displayName', label: 'Naam', value: displayName, autocomplete: 'name' })}
 ${field({ name: 'email', label: 'E-mailadres', type: 'email', value: email, autocomplete: 'email' })}
 ${field({ name: 'password', label: 'Wachtwoord', type: 'password', autocomplete: 'new-password', hint: 'Minimaal 12 tekens.' })}
-<input class="trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+<input class="trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
 <button class="button" type="submit">Account maken en naar de planner</button>
 </form>`;
   return formPage({ title: 'Planner', heading: 'Naar de planner', form, groups,

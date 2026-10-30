@@ -90,7 +90,11 @@ test('inloggen in de shop: e-mailadres of gebruikersnaam, bestaand planneraccoun
   const viaName = createClient(base);
   assert.strictEqual((await postForm(base, viaName, '/winkel/inloggen/', { login: 'jan.klant', password: PW })).location, '../account/');
   assert.strictEqual((await viaName.get('/api/me')).body.user.username, 'jan.klant');
-  assert.match((await viaName.get('/winkel/inloggen/')).location || '', /|/);
+  const noFollow = createClient(base, { jar: viaName.jar, followRedirects: false });
+  const loginPage = await noFollow.get('/winkel/inloggen/');
+  assert.strictEqual(loginPage.status, 302);
+  assert.strictEqual(loginPage.location, '../account/');
+  assert.strictEqual((await viaName.get('/winkel/account/')).headers.get('cache-control'), 'no-store');
   await postForm(base, viaName, '/winkel/uitloggen/', {});
   assert.strictEqual((await viaName.get('/winkel/account/')).status, 200, 'redirect gevolgd naar inlogpagina');
   assert.strictEqual((await viaName.get('/api/me')).body.user, null);
@@ -100,6 +104,21 @@ test('inloggen in de shop: e-mailadres of gebruikersnaam, bestaand planneraccoun
   const viaEmail = createClient(base);
   assert.strictEqual((await postForm(base, viaEmail, '/winkel/inloggen/', { login: 'ELS@voorbeeld.nl', password: PW })).status, 303);
   assert.strictEqual((await viaEmail.get('/api/me')).body.user.role, 'klant');
+});
+
+test('e-mailadres van een ander account is niet te kiezen in het profiel; volgende blijft na een fout', async () => {
+  const { base, store, main } = await setup();
+  await store.createAccount(main, { username: 'eerste', displayName: 'Eerste', role: 'klant', password: PW });
+  const first = await store.accountIdsByEmail(main, 'x@y.nl');
+  assert.strictEqual(first.length, 0);
+  await postForm(base, createClient(base), '/winkel/registreren/', { displayName: 'Een', email: 'een@voorbeeld.nl', password: PW, password2: PW, website: '' });
+  const other = createClient(base);
+  await postForm(base, other, '/winkel/registreren/', { displayName: 'Twee', email: 'twee@voorbeeld.nl', password: PW, password2: PW, website: '' });
+  const clash = await other.put('/api/account/profile', { email: 'een@voorbeeld.nl' });
+  assert.strictEqual(clash.status, 400);
+  assert.strictEqual(clash.body.field, 'email');
+  const failed = await postForm(base, createClient(base), '/winkel/inloggen/', { login: 'nobody', password: 'x', volgende: 'planner' });
+  assert.match(failed.text, /name="volgende" value="planner"/);
 });
 
 test('inloggen in de shop: fout wachtwoord en blokkering', async () => {
