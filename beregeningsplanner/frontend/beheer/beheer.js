@@ -637,12 +637,15 @@
 
   /**
    * Laadt de instellingen en wat de gekozen sectie extra nodig heeft (e-mail of, voor hoofdbeheerders, de back-ups).
+   * Alles wordt per paginabezoek één keer geladen, zodat wisselen tussen secties geen ingevulde maar nog niet opgeslagen velden wist;
+   * opslaan tekent de formulieren zelf opnieuw.
    * @param {string} [sectionId] De sectie die getoond wordt; leeg = alleen de instellingen zelf.
    * @returns {Promise<void>}
    */
   async function loadSettings(sectionId) {
     if (sectionId === 'backup' && state.backups) loadBackups();
-    if (sectionId === 'mail') loadMail();
+    if (sectionId === 'mail' && !state.mailLoaded) { state.mailLoaded = true; loadMail(); }
+    if (state.settings) return;
     try {
       const result = await api('settings');
       state.aiFromLive = Boolean(result.aiFromLive);
