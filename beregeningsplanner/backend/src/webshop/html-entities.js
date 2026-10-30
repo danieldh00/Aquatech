@@ -11,7 +11,7 @@ const NAMED_ENTITIES = {
   aacute: 'á', agrave: 'à', acirc: 'â', iacute: 'í', oacute: 'ó', ograve: 'ò', ocirc: 'ô', uacute: 'ú', ugrave: 'ù', ccedil: 'ç', szlig: 'ß',
   Eacute: 'É', Euml: 'Ë', Ouml: 'Ö', Uuml: 'Ü', Auml: 'Ä',
 };
-/** Tekens waarvan HTML ook de hoofdletterschrijving (&AMP;, &QUOT;) kent. */
+/** Tekens waarvan HTML ook de schrijfwijze in hoofdletters kent (&AMP;, &LT;); gemengde schrijfwijzen zoals &Lt; zijn andere tekens. */
 const CASE_INSENSITIVE = new Set(['amp', 'lt', 'gt', 'quot', 'nbsp', 'reg', 'copy']);
 
 /**
@@ -26,7 +26,7 @@ function decodeHtmlEntities(text) {
       return codePoint > 0 && codePoint <= 0x10ffff && !(codePoint >= 0xd800 && codePoint <= 0xdfff) ? String.fromCodePoint(codePoint) : match;
     }
     const key = Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, name) ? name : name.toLowerCase();
-    return Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, key) && (key === name || CASE_INSENSITIVE.has(key)) ? NAMED_ENTITIES[key] : match;
+    return Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, key) && (key === name || (CASE_INSENSITIVE.has(key) && name === name.toUpperCase())) ? NAMED_ENTITIES[key] : match;
   });
 }
 
