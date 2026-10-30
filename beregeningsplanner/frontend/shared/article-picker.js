@@ -29,22 +29,24 @@
   const nl = (value) => (Number(value) || 0).toLocaleString('nl-NL', { maximumFractionDigits: 3 });
 
   /**
-   * Haalt de artikellijst op (één keer per pagina). Zonder recht of zonder
-   * verbinding komt er een lege lijst terug en probeert de volgende keer het
-   * opnieuw.
+   * Haalt de artikellijst op. Zonder refresh hergebruikt hij een al geladen
+   * lijst; met refresh (bij elke opening van de keuze) haalt hij hem opnieuw,
+   * zodat een intussen gearchiveerde variant niet meer te kiezen is. Zonder
+   * recht of zonder verbinding komt er een lege lijst terug.
    * @param {string} [base] pad naar de app-root, bijv. '../'
+   * @param {boolean} [refresh] true om de lijst opnieuw op te halen
    * @returns {Promise<object[]>} de artikelen (hoofdartikelen met variants)
    */
-  function load(base = '../') {
-    if (items) return Promise.resolve(items);
+  function load(base = '../', refresh = false) {
+    if (items && !refresh) return Promise.resolve(items);
     if (!loading) {
       loading = fetch(`${base}api/stock/articles`, { cache: 'no-store' })
         .then((response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return response.json();
         })
-        .then((result) => { items = Array.isArray(result.items) ? result.items : []; return items; })
-        .catch(() => { loading = null; return []; });
+        .then((result) => { items = Array.isArray(result.items) ? result.items : []; loading = null; return items; })
+        .catch(() => { items = null; loading = null; return []; });
     }
     return loading;
   }
@@ -190,7 +192,7 @@
     dialog.querySelector('.ap-search').value = '';
     dialog.querySelector('.ap-list').innerHTML = '<li class="ap-empty">Laden…</li>';
     if (!dialog.open) dialog.showModal();
-    await load(base);
+    await load(base, true);
     const parent = parentCode ? parentOf(parentCode) : null;
     if (parent) showVariants(parent, variantCode);
     else showList();

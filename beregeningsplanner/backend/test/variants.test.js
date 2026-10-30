@@ -341,8 +341,13 @@ test('varianten en WooCommerce: artikel en hoofdartikel uit Aquatech als nieuw p
   assert.strictEqual(createdSimple.stock_quantity, 5);
   assert.strictEqual((await sync.publish(tenantId, simple.id)).status, 409);
 
+  // Een ander hoofdartikel met een ontbrekende variatie telt niet mee bij deze publicatie.
+  const other = stock.create(tenantId, USER, { code: 'DOP', name: 'Dop' }).item;
+  stock.setVariants(tenantId, other.id, [{ name: 'Maat', values: ['1/2"'] }]);
   const variable = await sync.publish(tenantId, parent.id);
   assert.strictEqual(variable.variations, 2);
+  assert.strictEqual(variable.warning, null);
+  assert.ok(stock.get(tenantId, other.id).variants.every((item) => !item.shop.productId));
   assert.strictEqual(products.get(variable.productId).type, 'variable');
   assert.deepStrictEqual(variations.get(variable.productId).map((entry) => [entry.sku, entry.attributes[0].option, entry.regular_price]), [['SPROEIER-4M', '4 m', '12.10'], ['SPROEIER-8M', '8 m', '12.10']]);
   const variant = stock.get(tenantId, parent.id).variants[0];
@@ -353,4 +358,26 @@ test('varianten en WooCommerce: artikel en hoofdartikel uit Aquatech als nieuw p
   assert.strictEqual(round.createdVariations, 0);
   assert.strictEqual(variations.get(variable.productId).length, 2);
   assert.ok(stock.get(tenantId, parent.id).variants.every((item) => item.shop.productId && !item.shop.error));
+});
+
+test('varianten en WooCommerce: een eerder als gewoon artikel overgenomen variabel product wordt hoofdartikel (zonder voorraad)', async () => {
+  const products = new Map([
+    ['70', { id: 70, type: 'variable', sku: 'KOPPELING', name: 'Koppeling', status: 'publish', regular_price: '', meta_data: [],
+      attributes: [{ id: 1, name: 'Maat', options: ['20 mm'], variation: true, visible: true, position: 0 }] }],
+    ['80', { id: 80, type: 'variable', sku: 'KNIE', name: 'Knie', status: 'publish', regular_price: '', meta_data: [],
+      attributes: [{ id: 1, name: 'Maat', options: ['20 mm'], variation: true, visible: true, position: 0 }] }],
+  ]);
+  const variations = new Map([['70', [variation(71, 'KOP-20', '20 mm', '2.42', 10)]], ['80', [variation(81, 'KNIE-20', '20 mm', '1.21', 5)]]]);
+  const { tenantId, stock, sync } = setupShop(products, variations, { url: 'http://shop.test', mode: 'rest', push: true, pricesIncludeTax: true, vatRate: 21 });
+  const empty = stock.create(tenantId, USER, { code: 'KOPPELING', name: 'Koppeling' }).item;
+  const used = stock.create(tenantId, USER, { code: 'KNIE', name: 'Knie', onHand: 3 }).item;
+
+  await sync.run(tenantId);
+  const promoted = stock.get(tenantId, empty.id);
+  assert.strictEqual(promoted.hasVariants, true);
+  assert.deepStrictEqual(promoted.variants.map((item) => [item.code, item.values.Maat]), [['KOP-20', '20 mm']]);
+  const kept = stock.get(tenantId, used.id);
+  assert.strictEqual(kept.hasVariants, false);
+  assert.strictEqual(kept.onHand, 3);
+  assert.match(kept.shop.error, /voorraad of boekingen/);
 });

@@ -599,8 +599,8 @@
       : 'Heeft dit artikel maten, kleuren of lengtes? Geef de kenmerken op; elke combinatie wordt een variant met een eigen code, prijs en voorraad. Kan alleen zolang dit artikel zelf geen voorraad of boekingen heeft.';
     $('#v-attrs').innerHTML = (item.attributes.length ? item.attributes : [{ name: '', values: [] }]).map(attributeRow).join('');
     $('#d-var-table').innerHTML = variants.length ? `<thead><tr><th>Variant</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Inkoopprijs</th><th class="num">Verkoopprijs</th><th>Webshop</th></tr></thead>
-      <tbody>${variants.map((variant) => `<tr data-id="${esc(variant.id)}" tabindex="0" class="${variant.low ? 'low' : ''}${variant.archived ? ' arch' : ''}">
-        <td class="wrap"><b class="code">${esc(variant.code)}</b>${variant.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(valuesText(variant))}</span></td>
+      <tbody>${variants.map((variant) => `<tr data-id="${esc(variant.id)}" class="${variant.low ? 'low' : ''}${variant.archived ? ' arch' : ''}">
+        <td class="wrap"><a class="code variant-link" href="./?id=${esc(encodeURIComponent(variant.id))}">${esc(variant.code)}</a>${variant.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(valuesText(variant))}</span></td>
         <td class="num${variant.onHand < 0 ? ' neg' : ''}">${esc(nl(variant.onHand))} ${esc(variant.unit)}</td>
         <td class="num">${variant.reserved ? esc(nl(variant.reserved)) : ''}</td>
         <td class="num avail">${esc(nl(variant.available))}${variant.low ? ' <span class="pill low">Bijbestellen</span>' : ''}</td>
@@ -614,15 +614,18 @@
        * @returns {Promise<void>}
        */
       row.onclick = () => openItem(row.dataset.id, true);
+    });
+    $('#d-var-table').querySelectorAll('.variant-link').forEach((link) => {
       /**
-       * Opent de variant ook met Enter of spatie (toetsenbord).
-       * @param {KeyboardEvent} event de toets
+       * Opent de variant via de link (ook met het toetsenbord), zonder de pagina te herladen.
+       * @param {MouseEvent} event de klik
        * @returns {void}
        */
-      row.onkeydown = (event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
+      link.onclick = (event) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey) { event.stopPropagation(); return; }
         event.preventDefault();
-        openItem(row.dataset.id, true);
+        event.stopPropagation();
+        openItem(link.closest('tr').dataset.id, true, null, { focus: true });
       };
     });
   }
@@ -632,9 +635,10 @@
    * @param {string} id id van het artikel
    * @param {boolean} push true om het adres (?id=) in de geschiedenis te zetten
    * @param {Promise<object>|null} pending het al lopende verzoek om het artikel (of null)
+   * @param {{ focus?: boolean }} [options] focus: de focus naar de titel van het artikel (na een toetsenbord- of linkactie)
    * @returns {Promise<void>}
    */
-  async function openItem(id, push = false, pending = null) {
+  async function openItem(id, push = false, pending = null, { focus = false } = {}) {
     try {
       state.item = await (pending || api(`stock/items/${encodeURIComponent(id)}`));
     } catch (error) {
@@ -647,6 +651,8 @@
     $('#v-item').hidden = false;
     renderItem();
     window.scrollTo(0, 0);
+    const heading = focus ? $('#d-title') : null;
+    if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
   }
 
   /** Toont het overzicht in plaats van het artikel. */
@@ -797,7 +803,8 @@
       try {
         state.item = await api(`stock/items/${encodeURIComponent(item.id)}/publish`, { method: 'POST', body: {} });
         renderItem();
-        toast('In de webshop gezet');
+        const warning = state.item.published && state.item.published.warning;
+        toast(warning || 'In de webshop gezet', Boolean(warning));
       } catch (error) {
         toast(error.message, true);
       } finally {
@@ -921,7 +928,9 @@
       const matched = visible();
       const matchedParents = new Set(matched.filter((item) => item.hasVariants).map((item) => item.id));
       const matchedIds = new Set(matched.map((item) => item.id));
-      const items = state.items.filter((item) => !item.hasVariants && (matchedIds.has(item.id) || (item.parentId && matchedParents.has(item.parentId))));
+      // Met "Alleen onder minimum" telt per variant het eigen minimum (zoals in het overzicht).
+      const lowOnly = $('#f-low').checked;
+      const items = state.items.filter((item) => !item.hasVariants && (matchedIds.has(item.id) || (item.parentId && matchedParents.has(item.parentId) && (!lowOnly || item.low))));
       for (const item of items) {
         worksheet.addRow({ ...item, parent: item.parentId ? codeOf.get(item.parentId) || '' : '', variant: valuesText(item), low: item.low ? 'ja' : '', archived: item.archived ? 'ja' : '', costPrice: item.costPrice, value: item.value, salePrice: item.salePrice,
           vat: `${item.vatRate}%`, group: GROUPS[item.revenueGroup] || item.revenueGroup,

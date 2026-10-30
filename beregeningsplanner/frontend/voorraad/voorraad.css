@@ -11,7 +11,7 @@ table.grid tr.low td.avail { color: var(--danger, #c62828); font-weight: 600; }
 table.grid tr.arch td { color: var(--muted); }
 table.grid td.neg { color: var(--danger, #c62828); }
 table.grid tr[data-id] { cursor: pointer; }
-table.grid tr[data-id]:hover td, table.grid tr[data-id]:focus-visible td { background: var(--at-green-soft); }
+table.grid tr[data-id]:hover td { background: var(--at-green-soft); }
 .pill.k-ontvangst, .pill.k-retour { background: var(--at-green-soft); color: var(--at-green-dark); }
 .pill.k-afboeking { background: var(--primary-soft); color: var(--primary-dark); }
 .pill.low { background: var(--danger, #c62828); color: #fff; }
@@ -54,3 +54,4 @@ table.grid .toggle:hover { color: var(--at-teal); }
 #d-variants .v-attr { align-items: flex-end; }
 #d-variants .tablewrap { margin-top: 14px; }
 #d-variant-of { margin: -6px 0 12px; }
+#d-var-table .variant-link { font-weight: 600; color: inherit; }

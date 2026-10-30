@@ -873,6 +873,35 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Maakt van een bestaand gewoon artikel dat aan een variabel webshopproduct
+   * gekoppeld is (van vóór de varianten) een hoofdartikel, zodat de variaties
+   * eronder kunnen komen. Alleen als het artikel geen voorraad, boekingen of
+   * reserveringen heeft; anders krijgt het een melding en blijft het zoals het
+   * is. Binnen een lopende transactie.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} item Het artikel (id); wordt bij omzetten bijgewerkt (has_variants, attributes).
+   * @param {object} product Het variabele webshopproduct.
+   * @returns {boolean} true als het artikel nu een hoofdartikel is.
+   */
+  function promoteToParent(tenantId, item, product) {
+    const row = prepare('SELECT on_hand, parent_id, has_variants FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, item.id);
+    if (!row || row.parent_id) return false;
+    if (Number(row.has_variants)) return true;
+    const used = Math.abs(Number(row.on_hand)) > 0 || prepare('SELECT EXISTS (SELECT 1 FROM stock_movements WHERE tenant_id = ? AND item_id = ?) OR EXISTS (SELECT 1 FROM stock_reservations WHERE tenant_id = ? AND item_id = ?) AS n')
+      .get(tenantId, item.id, tenantId, item.id).n;
+    if (used) {
+      prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?')
+        .run('In de webshop is dit een product met variaties, maar dit artikel heeft voorraad of boekingen. Maak een nieuw hoofdartikel en zet de varianten daaronder.', tenantId, item.id);
+      return false;
+    }
+    const attributes = JSON.stringify(shopAttributesOf(product));
+    prepare('UPDATE stock_items SET has_variants = 1, attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(attributes, currentTimestamp(), tenantId, item.id);
+    item.has_variants = 1;
+    item.attributes = attributes;
+    return true;
+  }
+
+  /**
    * Bestaande artikelen die bij een variabel webshopproduct horen, per product-id.
    * @param {string} tenantId Id van de omgeving.
    * @returns {Map<string, object>} id, name, has_variants en attributes per webshop-product-id.
@@ -907,7 +936,15 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     }
     const have = new Set(fresh.length ? prepare(`SELECT code FROM stock_items WHERE tenant_id = ? AND code IN (${placeholders(fresh.length)})`).all(tenantId, ...fresh.map((entry) => entry.code)).map((row) => row.code) : []);
     const todo = fresh.filter((entry) => !have.has(entry.code));
-    const out = transaction(db, () => insertShopProducts(tenantId, todo, parentItemsOf(tenantId), { vatRate: 21, priceOf: (product) => product.price }));
+    const out = transaction(db, () => {
+      const parentItems = parentItemsOf(tenantId);
+      // Een eerder als gewoon artikel overgenomen variabel product wordt (als dat veilig kan) een hoofdartikel.
+      for (const product of chosen) {
+        const item = product.type === 'variable' && parentItems.get(String(product.id));
+        if (item && !Number(item.has_variants)) promoteToParent(tenantId, item, product);
+      }
+      return insertShopProducts(tenantId, todo, parentItems, { vatRate: 21, priceOf: (product) => product.price });
+    });
     if (out.codes.length) resyncOpen(tenantId, out.codes);
     return { created: out.codes.length, existing: have.size, skipped };
   }
@@ -933,6 +970,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const restore = [];
     const archive = [];
     const attributeUpdates = [];
+    const legacyParents = [];
     const seenCodes = new Set(items.map((item) => item.code));
     for (const item of items) {
       const product = matchProduct(item);
@@ -940,7 +978,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         matchedProducts.add(String(product.id));
         if (item.archived) restore.push(item);
         if (!product.parentId) parentItems.set(String(product.id), item);
-        if (product.type === 'variable' && Number(item.has_variants)) {
+        if (product.type === 'variable' && !Number(item.has_variants) && !item.parent_id) legacyParents.push({ item, product });
+        else if (product.type === 'variable' && Number(item.has_variants)) {
           const merged = mergeAttributes(parseJson(item.attributes, []), shopAttributesOf(product));
           if (JSON.stringify(merged) !== item.attributes) attributeUpdates.push({ id: item.id, attributes: JSON.stringify(merged) });
         }
@@ -961,6 +1000,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     let createdCount = 0;
     transaction(db, () => {
       for (const update of attributeUpdates) prepare('UPDATE stock_items SET attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(update.attributes, timestamp, tenantId, update.id);
+      // Van vóór de varianten: een gewoon artikel bij een variabel product wordt (als dat veilig kan) een hoofdartikel.
+      for (const { item, product } of legacyParents) promoteToParent(tenantId, item, product);
       const inserted = insertShopProducts(tenantId, fresh, parentItems, { vatRate, priceOf });
       createdCount = inserted.codes.length;
       skippedProducts += inserted.skipped;

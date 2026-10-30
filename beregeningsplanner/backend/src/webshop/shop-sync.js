@@ -38,6 +38,9 @@
 const { transaction } = require('../database/db');
 const { fetchProducts, fetchProductWithVariations, updateProducts, createProduct, updateAttributes, createVariations, SourceError } = require('./woocommerce');
 
+// Melding bij een gewoon artikel dat in de webshop een product met variaties is (zie stock.promoteToParent).
+const VARIABLE_ON_PLAIN = 'In de webshop is dit een product met variaties, maar dit artikel heeft voorraad of boekingen. Maak een nieuw hoofdartikel en zet de varianten daaronder.';
+
 const DEBOUNCE_MS = 3000;
 /**
  * Rondt af op twee decimalen.
@@ -204,6 +207,12 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
           updates.push({ id: String(product.id), itemId: item.id, priceSeen: null, stockSeen: null });
           continue;
         }
+        if (product.type === 'variable') {
+          // Gewoon artikel bij een product met variaties (van vóór de varianten, met voorraad): alleen koppelen, geen prijs of stand.
+          prepare('UPDATE stock_items SET shop_product_id = ?, shop_synced_at = ?, shop_error = ? WHERE tenant_id = ? AND id = ?')
+            .run(String(product.id), timestamp, VARIABLE_ON_PLAIN, tenantId, item.id);
+          continue;
+        }
         let onHand = Number(item.on_hand) || 0;
         let salePrice = item.sale_price == null ? null : Number(item.sale_price);
         let priceSeen = first ? null : item.shop_price_seen;
@@ -318,16 +327,18 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    * met de nieuwe waarden). Alleen met push aan (Aquatech is de bron).
    * @param {string} tenantId Id van de omgeving.
    * @param {object} shopConfig De koppelinstelling.
+   * @param {{ parentItemId?: string|null, errors?: string[]|null }} [options] Alleen de varianten van dit hoofdartikel; lijst om fouten in te verzamelen.
    * @returns {Promise<number>} Aantal aangemaakte of gekoppelde variaties.
    */
-  async function createMissingVariations(tenantId, shopConfig) {
+  async function createMissingVariations(tenantId, shopConfig, { parentItemId = null, errors = null } = {}) {
     const rows = prepare(`SELECT v.id, v.code, v.sale_price, v.vat_rate, v.on_hand, v.variant_values, parent.id AS parent_item_id, parent.shop_product_id AS parent_product_id,
         parent.attributes, COALESCE(r.qty, 0) AS reserved
       FROM stock_items v
       JOIN stock_items parent ON parent.tenant_id = v.tenant_id AND parent.id = v.parent_id
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = v.id
       WHERE v.tenant_id = ? AND v.archived = 0 AND v.shop_sync = 1 AND v.shop_product_id IS NULL
-        AND parent.archived = 0 AND parent.shop_sync = 1 AND parent.shop_product_id IS NOT NULL`).all(tenantId, tenantId);
+        AND parent.archived = 0 AND parent.shop_sync = 1 AND parent.shop_product_id IS NOT NULL${parentItemId ? ' AND parent.id = ?' : ''}`)
+      .all(tenantId, tenantId, ...(parentItemId ? [parentItemId] : []));
     if (!rows.length) return 0;
     const byParent = new Map();
     for (const row of rows) {
@@ -337,11 +348,12 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     let done = 0;
     for (const [productId, variants] of byParent) {
       try {
-        done += await createVariationsOf(tenantId, shopConfig, productId, variants);
+        done += await createVariationsOf(tenantId, shopConfig, productId, variants, errors);
       } catch (error) {
         // Eén product dat niet lukt (weg uit de webshop, geen schrijfrechten) houdt de rest van de ronde niet tegen.
         if (!(error instanceof SourceError)) throw error;
         const message = `Variatie niet aangemaakt: ${error.message}`.slice(0, 300);
+        if (errors) errors.push(message);
         for (const variant of variants) prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?').run(message, tenantId, variant.id);
       }
     }
@@ -356,9 +368,10 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    * @param {object} shopConfig De koppelinstelling.
    * @param {number} productId Id van het product in de webshop.
    * @param {object[]} variants De varianten zonder variatie-id (rijen uit createMissingVariations).
+   * @param {string[]|null} [errors] Lijst om fouten per variatie in te verzamelen.
    * @returns {Promise<number>} Aantal aangemaakte of gekoppelde variaties.
    */
-  async function createVariationsOf(tenantId, shopConfig, productId, variants) {
+  async function createVariationsOf(tenantId, shopConfig, productId, variants, errors = null) {
     let done = 0;
     const { product, variations } = await fetchProductWithVariations(shopConfig, productId, { fetchImpl });
     const timestamp = new Date().toISOString();
@@ -398,7 +411,9 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
             WHERE tenant_id = ? AND id = ?`).run(result.id, offer.price == null ? null : rawOf(offer.price, offer.vatRate, shopConfig), offer.stockQty, timestamp, tenantId, variant.id);
           done++;
         } else {
-          prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?').run(`Variatie niet aangemaakt: ${(result && result.error) || 'onbekende fout'}`.slice(0, 300), tenantId, variant.id);
+          const message = `Variatie ${variant.code} niet aangemaakt: ${(result && result.error) || 'onbekende fout'}`.slice(0, 300);
+          if (errors) errors.push(message);
+          prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?').run(message, tenantId, variant.id);
         }
       });
     });
@@ -412,7 +427,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    * als variaties. Code = sku, plus het productveld aquatech_code.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
-   * @returns {Promise<object>} { productId, variations }, of { error, status, code }.
+   * @returns {Promise<object>} { productId, variations, warning }, of { error, status, code }.
    */
   async function publishNow(tenantId, itemId) {
     const shopConfig = configOf(tenantId);
@@ -433,8 +448,10 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       const attributes = parseValues(item.attributes, []).map((attribute, position) => ({ name: attribute.name, options: attribute.values, visible: true, variation: true, position }));
       const product = await createProduct(shopConfig, { name: item.name, type: 'variable', status: 'publish', sku: item.code, attributes, meta_data: meta }, { fetchImpl });
       prepare(`UPDATE stock_items SET shop_product_id = ?, shop_dirty = 0, shop_error = '', shop_synced_at = ? WHERE tenant_id = ? AND id = ?`).run(product.id, timestamp, tenantId, item.id);
-      const variations = await createMissingVariations(tenantId, shopConfig);
-      return { productId: product.id, variations };
+      // Alleen de varianten van dit hoofdartikel; wat niet lukt komt als waarschuwing terug.
+      const errors = [];
+      const variations = await createMissingVariations(tenantId, shopConfig, { parentItemId: item.id, errors });
+      return { productId: product.id, variations, warning: errors.length ? `Niet alle variaties zijn aangemaakt: ${errors.join('; ')}`.slice(0, 600) : null };
     }
     const offer = offerOf(item, shopConfig);
     const body = { name: item.name, type: 'simple', status: 'publish', sku: item.code, meta_data: meta };
