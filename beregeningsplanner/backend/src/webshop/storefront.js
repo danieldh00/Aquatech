@@ -258,18 +258,21 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const catalog = data.catalogOf(tenantId);
-    const query = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
+    const query = typeof req.query.q === 'string' ? Array.from(req.query.q.trim()).slice(0, 80).join('') : '';
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const onlyInStock = req.query.voorraad === '1';
     const found = words.length
       ? catalog.products.filter((product) => {
         const base = `${product.name} ${product.code} ${product.categoryName}`;
-        // Alle woorden moeten bij het hoofdartikel samen met één variant passen, niet verspreid over meerdere varianten.
-        const haystacks = (product.variants || []).length ? product.variants.map((variant) => `${base} ${variant.code} ${variant.label}`) : [base];
-        return haystacks.some((haystack) => words.every((word) => haystack.toLowerCase().includes(word)));
+        // Alle woorden moeten bij het hoofdartikel samen met één variant passen, niet verspreid over meerdere varianten;
+        // bij het voorraadfilter moet diezelfde variant ook op voorraad zijn.
+        const candidates = (product.variants || []).length
+          ? product.variants.map((variant) => ({ haystack: `${base} ${variant.code} ${variant.label}`, inStock: variant.inStock }))
+          : [{ haystack: base, inStock: product.inStock }];
+        return candidates.some((candidate) => (!onlyInStock || candidate.inStock) && words.every((word) => candidate.haystack.toLowerCase().includes(word)));
       })
       : [];
-    const onlyInStock = req.query.voorraad === '1';
-    sendPage(req, res, 200, () => searchPage(query, onlyInStock ? found.filter((product) => product.inStock) : found, catalog.groups, onlyInStock));
+    sendPage(req, res, 200, () => searchPage(query, found, catalog.groups, onlyInStock, isPreview(req)));
   });
 
   router.get('/categorie/:slug', (req, res) => {
@@ -280,7 +283,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
     if (!category) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
     const onlyInStock = req.query.voorraad === '1';
     const inCategory = catalog.products.filter((product) => product.categorySlug === category.slug && (!onlyInStock || product.inStock));
-    sendPage(req, res, 200, () => categoryPage(category, inCategory, catalog.groups, onlyInStock));
+    sendPage(req, res, 200, () => categoryPage(category, inCategory, catalog.groups, onlyInStock, isPreview(req)));
   });
 
   router.get('/product/:slug', (req, res) => {

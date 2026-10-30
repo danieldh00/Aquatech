@@ -363,9 +363,14 @@ ${categoryTiles(group.categories, root)}`;
  * @param {boolean} onlyInStock Of nu alleen wat op voorraad is getoond wordt.
  * @param {string} allQuery Querystring voor alle producten (zonder vraagteken, kan leeg zijn).
  * @param {string} stockQuery Querystring voor alleen op voorraad (zonder vraagteken).
+ * @param {boolean} [preview] Of het conceptvoorbeeld (`?voorbeeld=1`) in de links behouden blijft.
  * @returns {string} HTML van de keuze.
  */
-function stockFilter(onlyInStock, allQuery, stockQuery) {
+function stockFilter(onlyInStock, allQuery, stockQuery, preview = false) {
+  if (preview) {
+    allQuery = [allQuery, 'voorbeeld=1'].filter(Boolean).join('&amp;');
+    stockQuery = `${stockQuery}&amp;voorbeeld=1`;
+  }
   return `<p class="stock-filter">Toon: <a href="./${allQuery ? `?${allQuery}` : ''}"${onlyInStock ? '' : ' aria-current="true"'}>Alles</a> · <a href="./?${stockQuery}"${onlyInStock ? ' aria-current="true"' : ''}>Alleen op voorraad</a></p>`;
 }
 
@@ -375,14 +380,15 @@ function stockFilter(onlyInStock, allQuery, stockQuery) {
  * @param {object[]} products De producten in die categorie (bij onlyInStock al gefilterd).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {boolean} [onlyInStock] Of alleen producten op voorraad getoond worden.
+ * @param {boolean} [preview] Of het conceptvoorbeeld in de filterlinks behouden blijft.
  * @returns {string} De HTML-pagina.
  */
-function categoryPage(category, products, groups, onlyInStock = false) {
+function categoryPage(category, products, groups, onlyInStock = false, preview = false) {
   const root = '../../';
   const group = groups.find((candidate) => candidate.slug === category.groupSlug);
   const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a>${group ? ` › <a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : ''} › <span>${escapeHtml(category.name)}</span></nav>
 <h1>${escapeHtml(category.name)}</h1>
-${stockFilter(onlyInStock, '', 'voorraad=1')}
+${stockFilter(onlyInStock, '', 'voorraad=1', preview)}
 ${products.length ? '' : '<p class="muted">Geen producten op voorraad in deze categorie.</p>'}
 <div class="product-grid">
 ${products.map((product) => listItem(product, root)).join('\n')}
@@ -396,14 +402,15 @@ ${products.map((product) => listItem(product, root)).join('\n')}
  * @param {object[]} products De producten die passen (al gefilterd).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {boolean} [onlyInStock] Of alleen producten op voorraad getoond worden.
+ * @param {boolean} [preview] Of het conceptvoorbeeld in de filterlinks behouden blijft.
  * @returns {string} De HTML-pagina.
  */
-function searchPage(query, products, groups, onlyInStock = false) {
+function searchPage(query, products, groups, onlyInStock = false, preview = false) {
   const root = '../';
   const shown = products.slice(0, MAX_SEARCH_RESULTS);
   const body = `<h1>Zoeken</h1>
 ${query ? `<p class="muted">${productCount(products.length)} voor “${escapeHtml(query)}”${products.length > shown.length ? ` (de eerste ${shown.length} getoond)` : ''}.</p>` : '<p class="muted">Typ een productnaam of artikelnummer.</p>'}
-${query ? stockFilter(onlyInStock, `q=${encodeURIComponent(query)}`, `q=${encodeURIComponent(query)}&amp;voorraad=1`) : ''}
+${query ? stockFilter(onlyInStock, `q=${encodeURIComponent(query)}`, `q=${encodeURIComponent(query)}&amp;voorraad=1`, preview) : ''}
 <div class="product-grid">
 ${shown.map((product) => listItem(product, root)).join('\n')}
 </div>`;

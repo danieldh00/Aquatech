@@ -13,8 +13,8 @@ Voorraadstand in de eigen webshop.
   is (keuze *Alles / Alleen op voorraad*); de omleiding van `categorie/<slug>`
   naar `categorie/<slug>/` behoudt de querystring.
 - **Waarschijnlijke oorzaak 'alles niet op voorraad'** (live shop: 882 regels
-  niet, 0 wel op voorraad; de database zelf niet ingezien): geen fout in de
-  shop. Artikelen die uit
+  niet, 0 wel op voorraad; de database zelf niet ingezien): mogelijk geen fout in de
+  shop, maar nog te controleren op `on_hand`, reserveringen en synchronisatiestatus. Artikelen die uit
   WooCommerce zijn overgenomen krijgen alleen een beginstand als het product
   daar voorraadbeheer heeft (`manage_stock` met aantal) en de koppeling
   voorraad synchroniseert; anders blijft `on_hand` 0 totdat er geteld of
