@@ -3,7 +3,7 @@
 
 /** Benoemde tekens die in productnamen en categorieën voorkomen. */
 const NAMED_ENTITIES = {
-  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  amp: '&', lt: '<', gt: '>', Lt: '≪', Gt: '≫', quot: '"', apos: "'", nbsp: ' ',
   euro: '€', deg: '°', plusmn: '±', times: '×', frac12: '½', micro: 'µ', sup2: '²', sup3: '³',
   ndash: '–', mdash: '—', hellip: '…', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', prime: '′', Prime: '″',
   eacute: 'é', egrave: 'è', euml: 'ë', iuml: 'ï', ouml: 'ö', uuml: 'ü', auml: 'ä', ecirc: 'ê',
