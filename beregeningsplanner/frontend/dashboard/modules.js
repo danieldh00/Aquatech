@@ -13,13 +13,16 @@
 // platform). Zonder `right` ziet iedereen de module. Met `alt` krijgt wie
 // het recht `alt.right` heeft (en niet `alt.unless`) een andere titel en
 // omschrijving. `group: 'beheer'` zet een module in de zijbalk onder het
-// kopje Beheer. De API controleert de rechten ook zelf. Beheerders en
+// kopje Beheer. `navGroup` (top | ontwerpen | verkoop | uitvoering) plaatst een
+// module in de zijbalk bovenaan of in die inklapbare groep; zonder navGroup
+// staat de module los onder de groepen (zie GROUPS in shared/sidebar.js). De API controleert de rechten ook zelf. Beheerders en
 // hoofdbeheerders zien de modules in een vaste zijbalk (shared/sidebar.js)
 // in plaats van als tegels; een nieuwe module verschijnt daar vanzelf.
 (function (root) {
   const MODULES = [
     {
       id: 'portaal',
+      navGroup: 'top',
       title: 'Mijn portaal',
       description: 'Alles over uw tuinberegening op één plek: offertes, geplande afspraken, de voortgang van de aanleg, het opleverdossier met foto\'s en een storing of onderhoud melden.',
       href: 'portaal/',
@@ -29,6 +32,7 @@
     },
     {
       id: 'nieuws',
+      navGroup: 'top',
       title: 'Nieuws',
       description: 'Berichten van je organisatie en wat er nieuw is in de app sinds je vorige bezoek.',
       href: 'nieuws/',
@@ -37,6 +41,7 @@
     },
     {
       id: 'beregening',
+      navGroup: 'ontwerpen',
       title: 'Beregeningsplanner',
       description: 'Tuinberegening ontwerpen: vlakken tekenen of een plan laten herkennen, sproeiers, zones en leidingen, en een stuklijst met Excel-export.',
       href: 'beregening/',
@@ -46,6 +51,7 @@
     },
     {
       id: 'plannen',
+      navGroup: 'ontwerpen',
       title: 'Plannenoverzicht',
       description: 'Alle beregeningsplannen in één tabel: projectnaam, klant, adres, oppervlaktes, sproeiers en zones, met Excel-export. Installateurs en beheerders zien de plannen van de hele organisatie.',
       href: 'plannen/',
@@ -56,6 +62,7 @@
     },
     {
       id: 'offertes',
+      navGroup: 'verkoop',
       title: 'Offertes',
       description: 'Offertes opbouwen uit een beregeningsplan: stuklijst en arbeid worden overgenomen, met bewerkbare prijzen, korting en btw, klantgegevens en export als PDF of Excel.',
       href: 'offertes/',
@@ -67,6 +74,7 @@
     },
     {
       id: 'werkorders',
+      navGroup: 'uitvoering',
       title: 'Werkorders',
       description: 'Werkorders uit geaccordeerde offertes: uitvoeringsplan met werkstappen en uren, zone-indeling, materiaallijst om te verzamelen, planning, toewijzing en een werkbon als PDF of Excel.',
       href: 'werkorders/',
@@ -76,6 +84,7 @@
     },
     {
       id: 'meldingen',
+      navGroup: 'uitvoering',
       title: 'Meldingen',
       description: 'Storingen en onderhoudsverzoeken die klanten via hun portaal melden, met foto\'s: reageren en er met één klik een werkorder van maken.',
       href: 'meldingen/',
@@ -85,6 +94,7 @@
     },
     {
       id: 'klantdossier',
+      navGroup: 'verkoop',
       title: 'Klantdossiers',
       description: "Per klant alle installaties: oplevering, ontwerp en zones, geplaatste materialen en de foto's van voor, tijdens en na de aanleg. Af te drukken als opleverrapport (PDF).",
       href: 'klantdossier/',
@@ -94,6 +104,7 @@
     },
     {
       id: 'planning',
+      navGroup: 'uitvoering',
       title: 'Planning',
       description: 'Weekagenda van de werkorders per uitvoerder: inplannen door te slepen, en de klant bevestigt de afspraak via een link.',
       href: 'planning/',
@@ -103,7 +114,7 @@
     },
     {
       id: 'voorraad',
-      title: 'Voorraadbeheer',
+      title: 'Artikelen',
       description: 'Artikelen op voorraad met stand, locatie en minimumvoorraad. Werkorders reserveren hun materialen en boeken ze af bij verbruik of oplevering; ontvangsten, tellingen en correcties, met Excel-export.',
       href: 'voorraad/',
       icon: 'box',
@@ -112,6 +123,7 @@
     },
     {
       id: 'facturen',
+      navGroup: 'verkoop',
       title: 'Facturen',
       description: 'Facturen maken vanuit een werkorder of als losse verkoop, met doorlopende nummering, btw per regel en PDF. Crediteren, betalingen bijhouden en exporteren naar de boekhouding (Visma) per omzetcategorie.',
       href: 'facturen/',
@@ -121,6 +133,7 @@
     },
     {
       id: 'uitbesteden',
+      navGroup: 'uitvoering',
       title: 'Uitbesteden',
       description: 'Te veel werk? Bied een werkorder aan bij een andere organisatie op het platform, of neem opdrachten van anderen aan. Staat aan als de beheerder het in de instellingen aanzet.',
       href: 'uitbesteden/',

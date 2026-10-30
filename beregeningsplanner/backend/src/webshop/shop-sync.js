@@ -431,8 +431,8 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    */
   async function publishNow(tenantId, itemId) {
     const shopConfig = configOf(tenantId);
-    if (!shopConfig.url) return { error: 'Er is geen webshop gekoppeld (Beheer → Webshop).', code: 'not_configured', status: 409 };
-    if (shopConfig.mode !== 'rest' || !shopConfig.push) return { error: 'Zet in Beheer → Webshop de REST API aan met "Aquatech is de bron" (prijzen en voorraad terugschrijven).', code: 'no_push', status: 409 };
+    if (!shopConfig.url) return { error: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).', code: 'not_configured', status: 409 };
+    if (shopConfig.mode !== 'rest' || !shopConfig.push) return { error: 'Zet in Beheer → Integraties → Webshop de REST API aan met "Aquatech is de bron" (prijzen en voorraad terugschrijven).', code: 'no_push', status: 409 };
     const item = prepare(`SELECT i.id, i.code, i.name, i.sale_price, i.vat_rate, i.on_hand, i.archived, i.shop_sync, i.shop_product_id, i.parent_id, i.has_variants, i.attributes,
         COALESCE(r.qty, 0) AS reserved
       FROM stock_items i LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id

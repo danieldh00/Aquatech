@@ -1566,11 +1566,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
     const settings = settingsFor(req.tenantId);
     if (!settings.get('aiEnabled')) {
-      return res.status(409).json({ error: 'disabled', message: 'Automatisch herkennen met AI staat uit (Beheer > Instellingen). De lokale herkenning en tekenen werken wel.' });
+      return res.status(409).json({ error: 'disabled', message: 'Automatisch herkennen met AI staat uit (Beheer → Integraties → AI-herkenning). De lokale herkenning en tekenen werken wel.' });
     }
     const planAnalyzer = currentAnalyzer(req.tenantId);
     if (!planAnalyzer.available) {
-      return res.status(409).json({ error: 'not_configured', message: 'Automatisch herkennen is niet ingesteld: een beheerder kan de API-sleutel invullen bij Beheer > Instellingen.' });
+      return res.status(409).json({ error: 'not_configured', message: 'Automatisch herkennen is niet ingesteld: een beheerder kan de API-sleutel invullen bij Beheer → Integraties → AI-herkenning.' });
     }
     // Dezelfde tekening (zelfde afbeelding, model en opdracht) geeft altijd
     // hetzelfde resultaat: de eerder bewaarde herkenning, zonder AI-kosten.

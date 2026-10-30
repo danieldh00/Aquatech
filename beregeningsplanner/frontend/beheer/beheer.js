@@ -407,10 +407,10 @@
     const rolesLink = $('#u-roles [data-goto]');
     if (rolesLink) {
       /**
-       * Opent het tabblad Rollen.
+       * Opent de sectie Rollen.
        * @param {MouseEvent} event de klik
        */
-      rolesLink.onclick = (event) => { event.preventDefault(); showTab('roles'); };
+      rolesLink.onclick = (event) => { event.preventDefault(); showTab('roles', true); };
     }
   }
 
@@ -503,7 +503,7 @@
     });
     table.querySelectorAll('[data-hist]').forEach((button) => {
       /** Toont de aanvragen van deze gebruiker. */
-      button.onclick = () => { $('#h-user').value = button.dataset.hist; state.offset = 0; showTab('history'); loadHistory(); };
+      button.onclick = () => { $('#h-user').value = button.dataset.hist; state.offset = 0; showTab('history', true); loadHistory(); };
     });
   }
 
@@ -571,10 +571,10 @@
     accessForm.guestAccess.checked = view.guestAccess.value;
     accessForm.guestAccess.disabled = code.set;
     accessForm.drawingRequests.checked = view.drawingRequests.value;
-    accessForm.storefront.checked = Boolean(view.storefront?.value);
-    accessForm.storefront.closest('label').hidden = !state.storefrontAllowed;
-    accessForm.shopPlanner.checked = view.shopPlanner?.value !== false;
-    accessForm.shopPlanner.closest('label').hidden = !state.storefrontAllowed;
+    const shopForm = $('#s-shop');
+    shopForm.storefront.checked = Boolean(view.storefront?.value);
+    shopForm.shopPlanner.checked = view.shopPlanner?.value !== false;
+    shopForm.hidden = !state.storefrontAllowed;
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
@@ -636,12 +636,10 @@
   }
 
   /**
-   * Laadt de instellingen, de e-mail en (voor hoofdbeheerders) de back-ups.
+   * Haalt de instellingen op en tekent de formulieren; state.settings wordt pas gevuld als dat lukt.
    * @returns {Promise<void>}
    */
-  async function loadSettings() {
-    if (state.backups) loadBackups();
-    loadMail();
+  async function fetchSettings() {
     try {
       const result = await api('settings');
       state.aiFromLive = Boolean(result.aiFromLive);
@@ -650,6 +648,25 @@
     } catch (error) {
       toast(`Kan de instellingen niet laden: ${error.message}`, true);
     }
+  }
+
+  /**
+   * Laadt de instellingen en wat de gekozen sectie extra nodig heeft (e-mail of, voor hoofdbeheerders, de back-ups).
+   * Instellingen en e-mail worden per paginabezoek één keer succesvol geladen (een lopend verzoek wordt gedeeld), zodat wisselen tussen
+   * secties geen ingevulde maar nog niet opgeslagen velden wist; na een fout wordt het bij de volgende keer opnieuw geprobeerd.
+   * Opslaan tekent de formulieren zelf opnieuw.
+   * @param {string} [sectionId] De sectie die getoond wordt; leeg = alleen de instellingen zelf.
+   * @returns {Promise<void>}
+   */
+  async function loadSettings(sectionId) {
+    const pending = state.pending || (state.pending = {});
+    if (sectionId === 'backup' && state.backups) loadBackups();
+    if (sectionId === 'mail' && !state.mailLoaded && !pending.mail) {
+      pending.mail = loadMail().then((loaded) => { state.mailLoaded = loaded; }).finally(() => { pending.mail = null; });
+    }
+    if (state.settings) return;
+    if (!pending.settings) pending.settings = fetchSettings().finally(() => { pending.settings = null; });
+    await pending.settings;
   }
 
   // Februari altijd 28, net als op de server: de datum moet elk jaar bestaan.
@@ -760,13 +777,14 @@
     accessForm.drawingRequests.onchange = () => {
       saveSettings(accessForm, { drawingRequests: accessForm.drawingRequests.checked }, accessForm.drawingRequests.checked ? 'Tekening indienen zonder account staat aan' : 'Tekening indienen zonder account staat uit');
     };
+    const shopForm = $('#s-shop');
     /** Zet de eigen webshop (winkel/) aan of uit. */
-    accessForm.storefront.onchange = () => {
-      saveSettings(accessForm, { storefront: accessForm.storefront.checked }, accessForm.storefront.checked ? 'Webshop staat aan' : 'Webshop staat uit');
+    shopForm.storefront.onchange = () => {
+      saveSettings(shopForm, { storefront: shopForm.storefront.checked }, shopForm.storefront.checked ? 'Webshop staat aan' : 'Webshop staat uit');
     };
     /** Zet het kopje Planner in de webshop aan of uit. */
-    accessForm.shopPlanner.onchange = () => {
-      saveSettings(accessForm, { shopPlanner: accessForm.shopPlanner.checked }, accessForm.shopPlanner.checked ? 'Kopje Planner in de webshop staat aan' : 'Kopje Planner in de webshop staat uit');
+    shopForm.shopPlanner.onchange = () => {
+      saveSettings(shopForm, { shopPlanner: shopForm.shopPlanner.checked }, shopForm.shopPlanner.checked ? 'Kopje Planner in de webshop staat aan' : 'Kopje Planner in de webshop staat uit');
     };
     /**
      * Slaat een nieuwe toegangscode op.
@@ -869,7 +887,7 @@
   // ---------- E-mail (SMTP of Exchange-connector) ----------
   /**
    * Laadt de e-mailinstellingen in het formulier.
-   * @returns {Promise<void>}
+   * @returns {Promise<boolean>} true als het laden lukte.
    */
   async function loadMail() {
     const formElement = $('#s-mail');
@@ -885,8 +903,10 @@
       $('#m-state').textContent = ok ? 'De mailserver is ingesteld.' : 'Nog geen mailserver ingesteld.';
       $('#m-state').className = `state ${ok ? 'ok' : 'off'}`;
       mailMode();
+      return true;
     } catch (error) {
       $('#m-state').textContent = `Kan de e-mailinstellingen niet laden: ${error.message}`;
+      return false;
     }
   }
 
@@ -1039,21 +1059,25 @@
 
   // ---------- Algemeen ----------
   /**
-   * Toont een tabblad en laadt wat erop staat.
-   * @param {string} name naam van het tabblad
+   * Toont een sectie van Beheer en laadt wat erop staat. Een sectie waar de gebruiker geen toegang toe heeft (Back-ups zonder hoofdbeheer) valt terug op Aanvragen.
+   * @param {string} name sleutel van de sectie (zie indeling.js; oude adressen als `settings` werken ook)
+   * @param {boolean} [push] true = een nieuwe stap in de browsergeschiedenis (menukeuze), anders de huidige vervangen (starten, terugknop).
    */
-  function showTab(name) {
-    document.querySelectorAll('.tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === name));
-    document.querySelectorAll('.tabpane').forEach((pane) => { pane.hidden = pane.id !== `tab-${name}`; });
-    if (name === 'plans') loadPlans();
-    if (name === 'users') loadUsers();
-    if (name === 'roles') window.BeheerRollen.load();
-    if (name === 'settings') loadSettings();
-    if (name === 'webshop') window.BeheerWebshop.load();
-    if (name === 'sproeiers') window.BeheerSproeiers.load();
-    if (name === 'aikosten') window.BeheerAiKosten.load();
-    if (name === 'audit') loadAudit();
-    try { window.history.replaceState(null, '', `#${name}`); } catch (error) { /* file:// */ }
+  function showTab(name, push = false) {
+    const wanted = window.BeheerIndeling.find(window.BeheerIndeling.resolve(name));
+    if (!wanted) return;
+    const section = wanted.needs === 'backups' && !state.backups ? window.BeheerIndeling.find('history') : wanted;
+    window.BeheerIndeling.show(section);
+    if (section.pane === 'plans') loadPlans();
+    if (section.pane === 'users') loadUsers();
+    if (section.pane === 'roles') window.BeheerRollen.load();
+    if (section.pane === 'settings') loadSettings(section.id);
+    if (section.pane === 'webshop') { loadSettings(section.id); window.BeheerWebshop.load(); }
+    if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
+    if (section.pane === 'aikosten') window.BeheerAiKosten.load();
+    if (section.pane === 'audit') loadAudit();
+    if (location.hash === `#${section.id}`) return;
+    try { window.history[push ? 'pushState' : 'replaceState'](null, '', `#${section.id}`); } catch (error) { /* file:// */ }
   }
 
   /**
@@ -1080,9 +1104,18 @@
     $('#u-login').innerHTML = me.loginCode
       ? `Gebruikersnamen zijn uniek binnen deze organisatie. Gebruikers loggen in met organisatiecode <b>${esc(me.loginCode)}</b> (of via <a href="${esc(link)}">deze inloglink</a>, die de code al invult).`
       : 'Gebruikersnamen zijn uniek binnen deze organisatie. Gebruikers loggen in met een lege organisatiecode.';
-    document.querySelectorAll('.tab').forEach((tab) => {
-      /** Toont dit tabblad. */
-      tab.onclick = () => { showTab(tab.dataset.tab); };
+    window.BeheerIndeling.build({
+      /**
+       * Back-ups zijn alleen voor hoofdbeheerders zichtbaar.
+       * @param {object} section De sectie.
+       * @returns {boolean} true als de sectie in het menu hoort.
+       */
+      allowed: (section) => section.needs !== 'backups' || state.backups,
+      /**
+       * Opent de gekozen sectie als nieuwe stap in de browsergeschiedenis.
+       * @param {string} id Sleutel van de sectie.
+       */
+      onSelect: (id) => showTab(id, true),
     });
     let searchTimer;
     /** Zoekt kort na het typen opnieuw in de historie. */
@@ -1116,9 +1149,11 @@
     $('#detail').onclick = (event) => { if (event.target.id === 'detail') $('#detail').hidden = true; };
     await loadUsers().catch(() => {});
     loadHistory();
-    // Direct naar een tabblad via beheer/#settings.
-    const hash = location.hash.slice(1);
-    if (['plans', 'users', 'roles', 'settings', 'webshop', 'sproeiers', 'aikosten', 'audit'].includes(hash)) showTab(hash);
+    // Direct naar een sectie via beheer/#mail; zonder adres beginnen we bij de aanvragen.
+    const start = window.BeheerIndeling.resolve(location.hash.slice(1)) || 'history';
+    showTab(start);
+    /** Een ander adres (terugknop, bladwijzer, link vanuit een andere pagina) opent de bijbehorende sectie. */
+    window.addEventListener('hashchange', () => { showTab(location.hash.slice(1)); });
   }
 
   init();

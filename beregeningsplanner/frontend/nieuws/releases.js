@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.3.9',
+      date: '2026-10-30',
+      title: 'Beheer en menu overzichtelijker',
+      items: [
+        { text: 'Beheer heeft een eigen menu met zes groepen (Organisatie & gebruikers, Modules, Integraties, Toegang & beveiliging, Systeem en Overzicht). Elke instelling staat op één plek en je kunt ze opzoeken met het zoekveld.', for: ['beheer'] },
+        { text: 'Het menu links is opgedeeld in Ontwerpen, Verkoop en Uitvoering. Klik een kopje open of dicht; de app onthoudt wat je open had.', for: ['beheer'] },
+        { text: 'Voorraadbeheer heet in het menu nu Artikelen.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.3.8',
       date: '2026-10-30',
       title: 'Nieuwe opzet webshop',

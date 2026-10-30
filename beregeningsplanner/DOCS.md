@@ -120,7 +120,7 @@ planner automatisch de nozzle die bij worp en hoek de juiste neerslag geeft),
 neemt het gekozen huis en de nozzle over, de werkorder toont per kop ook de
 behuizing.
 
-Eigen gegevens: **Beheer → Sproeiers** → *Downloaden als Excel* geeft de hele
+Eigen gegevens: **Beheer → Modules → Planner: sproeierbibliotheek** → *Downloaden als Excel* geeft de hele
 bibliotheek (bladen Uitleg, Behuizingen, Nozzles, Prestaties); vul aan of pas
 aan met de tabellen van de fabrikant en lees het bestand weer in. Alleen
 regels die afwijken van de standaard worden opgeslagen (per omgeving); *Actief
@@ -195,7 +195,7 @@ lijntekeningen, schetsen en luchtfoto's.
 Hiervoor is een API-sleutel van Anthropic nodig:
 
 - Maak een sleutel aan op https://console.anthropic.com en vul hem in onder
-  **Beheer → Instellingen** (met **Sleutel testen** controleer je hem
+  **Beheer → Integraties → AI-herkenning** (met **Sleutel testen** controleer je hem
   zonder kosten). Hij werkt meteen, zonder herstart.
 - Elke analyse kost een paar dubbeltjes aan API-tegoed. Het maximum per dag
   (standaard 30, hele app) en per uur per IP-adres (standaard 10) stel je in
@@ -213,7 +213,7 @@ Hiervoor is een API-sleutel van Anthropic nodig:
 
 ### AI-kosten
 
-**Beheer → AI-kosten** (`.../beheer/#aikosten`) toont elk AI-verzoek: wie,
+**Beheer → Systeem → AI-kosten** (`.../beheer/#aikosten`) toont elk AI-verzoek: wie,
 welke functie, welk model, tokens in en uit (inclusief het denkwerk van het
 model), duur, resultaat en de geschatte kosten in euro's. Met totalen per
 dag of maand, per gebruiker, per functie en per model, en een
@@ -369,7 +369,7 @@ onderaan de PDF.
 **Optie (aan)**. Een niet gekozen optie telt niet mee in het totaal, de PDF en
 de Excel-export.
 
-**E-mail** (beheerder, **Beheer → Instellingen → E-mail**): kies de soort.
+**E-mail** (beheerder, **Beheer → Integraties → E-mail**): kies de soort.
 *SMTP met inlog*: SMTP-server, poort, STARTTLS of SSL/TLS, gebruikersnaam,
 wachtwoord (versleuteld opgeslagen, nooit getoond), afzender en antwoordadres.
 *Exchange Online-connector (op IP)*: geen inlog; de app verstuurt via het
@@ -424,7 +424,7 @@ werkorder definitief wissen (AVG).
 ### Uitbesteden aan andere organisaties
 
 Module **Uitbesteden**, alleen voor beheerders (recht `uitbesteden`). Staat
-pas aan als de beheerder het aanzet in Beheer → Instellingen → Uitbesteden:
+pas aan als de beheerder het aanzet in Beheer → Modules → Uitbesteden:
 *versturen* (zelf werk uitbesteden) en *ontvangen* (opdrachten van anderen
 aannemen) apart, plus een werkgebied dat andere organisaties zien. Een
 testomgeving werkt alleen met andere testomgevingen.
@@ -560,8 +560,8 @@ van de werkorder. Daardoor is alles vanzelf gekoppeld.
 ## Eigen webshop (opzet)
 
 Openbare, alleen-lezen pagina's op `winkel/` (stap 1 van een eigen webshop;
-winkelwagen, betaling en varianten volgen). Aanzetten: Beheer → Instellingen →
-Toegang → *Eigen webshop tonen*; uit = overal 404. De shop toont de
+winkelwagen, betaling en varianten volgen). Aanzetten: Beheer → Integraties →
+Webshop en WooCommerce → *Eigen webshop tonen*; uit = overal 404. De shop toont de
 voorraadartikelen van de hoofdtenant die een verkoopprijs hebben, niet
 gearchiveerd zijn en *Naar de webshop* aan hebben. Categorie en afbeelding
 komen uit het gekoppelde WooCommerce-product (na een synchronisatie); zonder
@@ -579,7 +579,7 @@ later ook op een eigen domein of in een eigen container kan draaien.
 
 Elke rol ziet op het dashboard alleen de modules die erbij horen; de server
 controleert de rechten zelf. De standaardrollen staan in
-`frontend/shared/roles.js`; een beheerder past ze aan onder **Beheer → Rollen**
+`frontend/shared/roles.js`; een beheerder past ze aan onder **Beheer → Organisatie & gebruikers → Rollen**
 (zie hieronder).
 
 | Rol | Mag | Wie |
@@ -590,7 +590,7 @@ controleert de rechten zelf. De standaardrollen staan in
 | **Planner** | werkorders inzien en bijwerken, inplannen in de planning, de afspraaklink naar de klant sturen en klantdossiers bekijken; geen offertes, plannen of beheer, en zelf geen uitvoerder | accounts met rol planner (sinds 0.49.0) |
 | **Klant** | alleen de eigen plannen, en de verzonden offertes voor zijn account inzien, afdrukken en accepteren of afwijzen | accounts met rol klant, en gasten |
 
-- **Rollen aanpassen** (**Beheer → Rollen**): een tabel met de rechten als
+- **Rollen aanpassen** (**Beheer → Organisatie & gebruikers → Rollen**): een tabel met de rechten als
   rijen en de rollen als kolommen; een vinkje slaat direct op en geldt bij
   het volgende verzoek. Rechten: Beregeningsplanner, Alle plannen, Offertes
   opstellen, Alle offertes, Werkorders en klantdossiers, Planning, Uitvoerder
@@ -631,7 +631,7 @@ controleert de rechten zelf. De standaardrollen staan in
   inloglink `login?org=<code>` die hem al invult). De browser onthoudt de
   code. Leeg = de hoofdorganisatie, waar ook de hoofdbeheerders inloggen.
 - **Gasten**: standaard uit; zonder inloggen zie je alleen de inlogpagina.
-  Zet je onder **Beheer → Instellingen** *Gasten zonder inloggen toestaan*
+  Zet je onder **Beheer → Toegang & beveiliging → Inloggen en bezoekers** *Gasten zonder inloggen toestaan*
   aan (en is er geen toegangscode), dan kan iedereen de planner gebruiken.
   Elke browser krijgt dan een eigen anonieme gebruiker en ziet alleen de
   eigen plannen.
@@ -756,8 +756,14 @@ maken.
 
 ## Instellingen
 
-Beheerders regelen alles onder **Beheer → Instellingen** (ook direct via
-`.../beheer/#settings`):
+Beheer is ingedeeld in zes groepen (zijmenu links, met een zoekveld):
+**Overzicht** (Aanvragen, Plannen), **Organisatie & gebruikers** (Gebruikers,
+Rollen), **Modules** (Modules aan/uit, Planner: sproeierbibliotheek,
+Uitbesteden, Seizoensherinneringen), **Integraties** (E-mail, AI-herkenning,
+Webshop en WooCommerce), **Toegang & beveiliging** (Inloggen en bezoekers,
+Sessies en bewaartermijnen, Auditlog) en **Systeem** (Back-ups, AI-kosten).
+Elke sectie heeft een eigen adres, bijvoorbeeld `.../beheer/#mail`,
+`#ai`, `#access`, `#modules` of `#backup`. De instellingen:
 
 | Instelling | Standaard |
 |---|---|

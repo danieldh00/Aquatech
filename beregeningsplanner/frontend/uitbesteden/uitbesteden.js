@@ -1,7 +1,7 @@
 // Uitbesteden: werkorders aanbieden aan andere organisaties op het platform
 // en opdrachten van anderen aannemen of afwijzen. Gegevens uit /api/outsourcing;
 // alleen voor beheerders (recht 'uitbesteden'), en alleen als versturen of
-// ontvangen in Beheer > Instellingen aan staat. Een nieuwe uitbesteding begint
+// ontvangen in Beheer > Modules > Uitbesteden aan staat. Een nieuwe uitbesteding begint
 // vanuit een werkorder (?wo=<id>).
 (function () {
   const WorkOrderCore = window.WorkOrderCore;
@@ -121,7 +121,7 @@
     $('#t-incoming').textContent = openCount ? String(openCount) : '';
     const list = $('#i-list');
     if (!state.data.settings.receive) {
-      list.innerHTML = '<p class="notice">Opdrachten ontvangen staat uit. Een beheerder zet het aan in <a href="../beheer/#settings">Beheer → Instellingen → Uitbesteden</a>.</p>';
+      list.innerHTML = '<p class="notice">Opdrachten ontvangen staat uit. Een beheerder zet het aan in <a href="../beheer/#outsourcing">Beheer → Modules → Uitbesteden</a>.</p>';
       return;
     }
     if (!items.length) {
@@ -223,7 +223,7 @@
     $('#t-outgoing').textContent = items.filter((offer) => offer.status === 'aangeboden' || offer.status === 'geaccepteerd').length || '';
     const table = $('#o-table');
     if (!items.length) {
-      table.innerHTML = `<tbody><tr><td class="empty">${state.data.settings.send ? 'Nog niets uitbesteed. Open een werkorder en kies in het menu ⋯ “Uitbesteden”.' : 'Uitbesteden staat uit. Een beheerder zet het aan in <a href="../beheer/#settings">Beheer → Instellingen → Uitbesteden</a>.'}</td></tr></tbody>`;
+      table.innerHTML = `<tbody><tr><td class="empty">${state.data.settings.send ? 'Nog niets uitbesteed. Open een werkorder en kies in het menu ⋯ “Uitbesteden”.' : 'Uitbesteden staat uit. Een beheerder zet het aan in <a href="../beheer/#outsourcing">Beheer → Modules → Uitbesteden</a>.'}</td></tr></tbody>`;
       return;
     }
     table.innerHTML = `<thead><tr><th>Werkorder</th><th>Aan</th><th>Status</th><th>Uitvoering</th><th>Aangeboden</th><th></th></tr></thead><tbody>${items.map((offer) => `<tr>
@@ -284,7 +284,7 @@
     const partners = state.data.partners || [];
     form.to.innerHTML = `<option value="">Alle organisaties die opdrachten ontvangen (${partners.length})</option>${partners
       .map((partner) => `<option value="${esc(partner.id)}">${esc(partner.name)}${partner.region ? ` – ${esc(partner.region)}` : ''}</option>`).join('')}`;
-    const blocked = !state.data.settings.send ? 'Uitbesteden staat uit voor je organisatie. Een beheerder zet het aan in Beheer → Instellingen → Uitbesteden.'
+    const blocked = !state.data.settings.send ? 'Uitbesteden staat uit voor je organisatie. Een beheerder zet het aan in Beheer → Modules → Uitbesteden.'
       : workOrder.outsourcing && workOrder.outsourcing.role === 'uitbesteed' ? `Deze werkorder is al ${workOrder.outsourcing.status === 'geaccepteerd' ? `uitbesteed aan ${workOrder.outsourcing.partner}` : 'aangeboden'}.`
         : workOrder.outsourcing && workOrder.outsourcing.role === 'aangenomen' ? `Deze werkorder hebben jullie aangenomen van ${workOrder.outsourcing.partner}; die kun je niet verder uitbesteden.`
           : !['open', 'gepland'].includes(workOrder.status) ? 'Alleen een werkorder met status Nieuw of Gepland kan worden uitbesteed.'
@@ -331,7 +331,7 @@
     const settings = state.data.settings;
     const offNotice = $('#u-off');
     offNotice.hidden = settings.send || settings.receive;
-    offNotice.innerHTML = 'Uitbesteden staat uit voor je organisatie. Zet versturen en/of ontvangen aan in <a href="../beheer/#settings">Beheer → Instellingen → Uitbesteden</a>.'
+    offNotice.innerHTML = 'Uitbesteden staat uit voor je organisatie. Zet versturen en/of ontvangen aan in <a href="../beheer/#outsourcing">Beheer → Modules → Uitbesteden</a>.'
       + (state.data.environment === 'test' ? ' Dit is een testomgeving: die werkt alleen met andere testomgevingen.' : '');
     $('#u-app').hidden = false;
     renderIncoming();

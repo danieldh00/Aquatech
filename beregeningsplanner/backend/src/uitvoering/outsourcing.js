@@ -407,7 +407,7 @@ function registerOutsourcingRoutes(app, ctx) {
    * @param {string} what Wat er uit staat (voor de melding).
    * @returns {object} Het antwoord.
    */
-  const off = (res, what) => res.status(409).json({ error: 'outsourcing_off', message: `${what} staat uit voor je organisatie. Een beheerder zet het aan in Beheer → Instellingen → Uitbesteden.` });
+  const off = (res, what) => res.status(409).json({ error: 'outsourcing_off', message: `${what} staat uit voor je organisatie. Een beheerder zet het aan in Beheer → Modules → Uitbesteden.` });
 
   /**
    * Organisaties die opdrachten ontvangen (zelfde soort omgeving, actief, niet zichzelf).

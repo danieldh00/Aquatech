@@ -270,7 +270,7 @@ function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, t
   });
 
   /**
-   * De koppeling en de stand voor Beheer → Webshop (sleutels alleen als "ingesteld" met de laatste tekens).
+   * De koppeling en de stand voor Beheer → Integraties → Webshop (sleutels alleen als "ingesteld" met de laatste tekens).
    * @param {object} req Het Express-verzoek.
    * @returns {object} source, consumerKey, consumerSecret, status, matchedCount, articleCount en unmatched.
    */
