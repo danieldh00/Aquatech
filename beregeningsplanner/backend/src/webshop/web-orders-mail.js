@@ -33,8 +33,15 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
    * @returns {Promise<void>}
    */
   async function sendPlaced(tenantId, order) {
-    const settings = settingsFor(tenantId);
-    const mailer = mailerFor(settings);
+    let settings;
+    let mailer;
+    try {
+      settings = settingsFor(tenantId);
+      mailer = mailerFor(settings);
+    } catch (failure) {
+      orders.updateData(tenantId, order.id, { mail: { sent: false, error: String(failure && failure.message || 'Versturen mislukt.').slice(0, 300), at: new Date().toISOString() } });
+      return;
+    }
     if (!mailer.configured()) { orders.updateData(tenantId, order.id, { mail: { sent: false, error: 'Geen mailserver ingesteld.', at: new Date().toISOString() } }); return; }
     const profile = settings.get('quoteProfile') || {};
     const details = `Bestelling ${order.number}\n\n${linesText(order)}\n\nTotaal incl. btw: ${EUR.format(order.totals.total)}\n\nAfleveradres:\n${addressText(order)}${order.note ? `\n\nJe opmerking: ${order.note}` : ''}`;
