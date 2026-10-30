@@ -204,7 +204,15 @@ test('categorieën worden in hoofdcategorieën gegroepeerd', () => {
   ]);
   assert.deepStrictEqual(catalog.groups.map((group) => group.slug), ['beregening', 'elektra', 'pomp-techniek']);
   assert.strictEqual(catalog.groups.find((group) => group.slug === 'pomp-techniek').count, 2);
-  assert.deepStrictEqual(catalog.featured.map((product) => product.code), ['B', 'A'], 'alleen met foto en op voorraad, om en om per groep');
+  assert.deepStrictEqual(catalog.featured.map((product) => product.code), ['B', 'A', 'D'], 'met foto, eerst op voorraad en om en om per groep; zonder voorraad als aanvulling');
+  const crowded = buildCatalog([
+    ...Array.from({ length: 9 }, (_, index) => ({ code: `S${index}`, name: `Op voorraad ${index}`, on_hand: 1, sale_price: 1, vat_rate: 21, categories: '["Dompelpompen"]', image: `https://x.nl/s${index}.jpg` })),
+    { code: 'U', name: 'Uitverkocht', on_hand: 0, sale_price: 1, vat_rate: 21, categories: '["Elektra"]', image: 'https://x.nl/u.jpg' },
+  ]);
+  assert.strictEqual(crowded.featured.length, 8);
+  assert.ok(crowded.featured.every((product) => product.inStock), 'bij genoeg voorraad komt een uitverkocht product er niet tussen');
+  const soldOut = buildCatalog([{ code: 'E', name: 'Op', on_hand: 0, sale_price: 1, vat_rate: 21, categories: '["Dompelpompen"]', image: 'https://x.nl/e.jpg' }]);
+  assert.deepStrictEqual(soldOut.featured.map((product) => product.code), ['E'], 'de startpagina blijft gevuld als alles uitverkocht is');
 });
 
 test('webshop: hoofdcategorie, zoeken, kop en voet', async () => {
@@ -219,7 +227,7 @@ test('webshop: hoofdcategorie, zoeken, kop en voet', async () => {
   assert.match(home.text, /action="zoeken\/"/);
   assert.match(home.text, /Leidingen &amp; Slangen/);
   assert.ok(!home.text.includes('&amp;amp;'), 'geen dubbel gecodeerde tekens');
-  assert.match(home.text, /Uitgelichte producten/);
+  assert.match(home.text, /Populaire producten/);
   assert.match(home.text, /https:\/\/shop\.test\/buis\.jpg/);
 
   const group = await anonymous.get('/winkel/groep/leidingen-toebehoren/');
@@ -238,4 +246,29 @@ test('webshop: hoofdcategorie, zoeken, kop en voet', async () => {
   const scripted = await anonymous.get('/winkel/zoeken/?q=%3Cscript%3Ealert(1)%3C/script%3E');
   assert.ok(!scripted.text.includes('<script>'), 'zoekterm wordt ontsnapt');
   assert.strictEqual((await anonymous.get('/winkel/zoeken/')).status, 200);
+});
+
+test('webshop: assets met versie in het adres, startpagina in de opzet van aquatechshop.nl', async () => {
+  const { admin, anonymous } = await setup();
+  await admin.put('/api/admin/settings', { storefront: true });
+  const { version } = require('../package.json');
+  const home = await anonymous.get('/winkel/');
+  for (const name of ['winkel.css', 'brand.css', 'aquatechshop-logo.png', 'hero-tuin.jpg', 'merk-dab.webp', 'usp-bezorgd.png', 'betaalmethoden.png']) {
+    assert.ok(home.text.includes(`assets/${name}?v=${version}`), `${name} linkt met de versie`);
+  }
+  const versioned = await anonymous.get(`/winkel/assets/winkel.css?v=${version}`);
+  assert.match(versioned.headers.get('cache-control'), /max-age=31536000, immutable/);
+  const unversioned = await anonymous.get('/winkel/assets/winkel.css');
+  assert.match(unversioned.headers.get('cache-control'), /max-age=300$/, 'zonder versie maar kort cachen');
+  const font = 'montserrat-latin-400-normal.woff2';
+  assert.doesNotMatch((await anonymous.get(`/winkel/assets/fonts/${font}`)).headers.get('cache-control'), /immutable/, 'lettertype zonder versie niet immutable');
+  assert.match((await anonymous.get(`/winkel/assets/fonts/${font}?v=${version}`)).headers.get('cache-control'), /immutable/);
+  for (const name of ['hero-tuin.jpg', 'merk-rainbird.png', 'usp-prijzen.png', 'zakelijk-achtergrond.jpg', 'betaalmethoden.png']) {
+    assert.strictEqual((await anonymous.get(`/winkel/assets/${name}?v=${version}`)).status, 200, name);
+  }
+  for (const text of ['shop-notice', '06 47212019', 'Product zoeken', 'Over ons', 'Assortiment', 'Onze merken', 'Scherpe zakelijke prijzen', 'zakelijk account aan', 'K.v.k.: 88438252']) {
+    assert.ok(home.text.includes(text), text);
+  }
+  const product = await anonymous.get('/winkel/product/pe-buis-25-mm-buis-25/');
+  assert.match(product.text, /<button class="button" type="button" disabled>In winkelwagen<\/button>/);
 });

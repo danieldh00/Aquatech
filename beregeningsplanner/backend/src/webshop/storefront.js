@@ -26,9 +26,14 @@ const SHARED_DIR = path.join(FRONTEND_DIR, 'shared');
 const ASSETS = {
   'brand.css': { file: path.join(SHARED_DIR, 'brand.css'), type: 'text/css; charset=utf-8' },
   'winkel.css': { file: path.join(__dirname, 'storefront.css'), type: 'text/css; charset=utf-8' },
-  'aquatechshop-logo.png': { file: path.join(__dirname, 'assets', 'aquatechshop-logo.png'), type: 'image/png' },
   'favicon.png': { file: path.join(SHARED_DIR, 'icons', 'favicon-48.png'), type: 'image/png' },
 };
+/** Afbeeldingen van de shop zelf (logo, hero, merken, pictogrammen) uit de map assets/ naast dit bestand. */
+const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp' };
+for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
+  const type = IMAGE_TYPES[path.extname(name)];
+  if (type) ASSETS[name] = { file: path.join(__dirname, 'assets', name), type };
+}
 /** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner). */
 const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner)\/?$/;
 const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
@@ -44,14 +49,18 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: remoteIp });
 
   /**
-   * Stuurt een bestand (CSS, logo, lettertype) met een dag cache.
+   * Stuurt een bestand (CSS, afbeelding, lettertype). Met `?v=<versie>` in het
+   * adres (zo linkt elke pagina) een jaar cache, want een nieuwe versie heeft een
+   * ander adres; zonder versie maar 5 minuten, zodat een oude CSS niet blijft hangen.
    * @param {object} res Het antwoord.
    * @param {string} file Pad van het bestand.
    * @param {string} type Content-Type.
+   * @param {boolean} versioned Of het adres een versie bevat.
+   * @param {number} unversionedSeconds Hoe lang (s) zonder versie in het adres gecachet mag worden.
    * @returns {void}
    */
-  const sendAsset = (res, file, type) => {
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+  const sendAsset = (res, file, type, versioned, unversionedSeconds = 300) => {
+    res.setHeader('Cache-Control', versioned ? 'public, max-age=31536000, immutable' : `public, max-age=${unversionedSeconds}`);
     res.type(type);
     fs.createReadStream(file).on('error', () => res.status(404).end()).pipe(res);
   };
@@ -88,11 +97,11 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
   router.get('/assets/:name', (req, res) => {
     const asset = Object.prototype.hasOwnProperty.call(ASSETS, req.params.name) ? ASSETS[req.params.name] : null;
     if (!asset) return res.status(404).end();
-    sendAsset(res, asset.file, asset.type);
+    sendAsset(res, asset.file, asset.type, Boolean(req.query.v));
   });
   router.get('/assets/fonts/:name', (req, res) => {
     if (!FONT_FILE.test(req.params.name)) return res.status(404).end();
-    sendAsset(res, path.join(SHARED_DIR, 'fonts', req.params.name), 'font/woff2');
+    sendAsset(res, path.join(SHARED_DIR, 'fonts', req.params.name), 'font/woff2', Boolean(req.query.v), 86400);
   });
 
   router.get('/', (req, res) => {

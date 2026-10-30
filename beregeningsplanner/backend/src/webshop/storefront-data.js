@@ -63,21 +63,35 @@ function groupOf(categoryName) {
 
 /**
  * Kiest de uitgelichte producten voor de startpagina: producten met foto die
- * op voorraad zijn, om en om uit elke hoofdcategorie zodat de selectie breed is.
+ * bij voorkeur op voorraad, om en om uit elke hoofdcategorie zodat de selectie breed is (zonder genoeg voorraad vult ze aan met producten met foto).
  * @param {object[]} products De producten (op naam gesorteerd, met groupSlug, image en inStock).
  * @returns {object[]} Maximaal FEATURED_COUNT producten.
  */
 function pickFeatured(products) {
-  const queues = new Map();
-  for (const product of products) {
-    if (!product.image || !product.inStock) continue;
-    if (!queues.has(product.groupSlug)) queues.set(product.groupSlug, []);
-    queues.get(product.groupSlug).push(product);
+  /**
+   * Kiest om en om uit elke hoofdcategorie producten met foto.
+   * @param {object[]} candidates De producten om uit te kiezen.
+   * @returns {object[]} Maximaal FEATURED_COUNT producten.
+   */
+  function interleave(candidates) {
+    const queues = new Map();
+    for (const product of candidates) {
+      if (!queues.has(product.groupSlug)) queues.set(product.groupSlug, []);
+      queues.get(product.groupSlug).push(product);
+    }
+    const picked = [];
+    const lists = [...queues.values()];
+    for (let round = 0; picked.length < FEATURED_COUNT && lists.some((list) => round < list.length); round += 1) {
+      for (const list of lists) if (round < list.length && picked.length < FEATURED_COUNT) picked.push(list[round]);
+    }
+    return picked;
   }
-  const featured = [];
-  const lists = [...queues.values()];
-  for (let round = 0; featured.length < FEATURED_COUNT && lists.some((list) => round < list.length); round += 1) {
-    for (const list of lists) if (round < list.length && featured.length < FEATURED_COUNT) featured.push(list[round]);
+  const withImage = products.filter((product) => product.image);
+  const featured = interleave(withImage.filter((product) => product.inStock));
+  // Te weinig op voorraad: vul aan met producten met foto, zodat de startpagina nooit leeg blijft.
+  if (featured.length < FEATURED_COUNT) {
+    const chosen = new Set(featured);
+    featured.push(...interleave(withImage.filter((product) => !chosen.has(product))).slice(0, FEATURED_COUNT - featured.length));
   }
   return featured;
 }
