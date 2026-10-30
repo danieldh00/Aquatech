@@ -22,7 +22,7 @@ Online betalen in de eigen webshop via Mollie (stap 8 van de webshop-roadmap).
 - **Bevestigingsmail** van een online bestelling gaat pas na de betaling;
   de factuur van een online betaalde bestelling is meteen betaald.
 - **Verzenden pas na betaling** (409 bij een onbetaalde online bestelling);
-  een onbetaalde bestelling houdt de voorraad vast en vervalt na `holdHours`
+  een onbetaalde online bestelling houdt de voorraad vast en vervalt na `holdHours`
   (`app.locals.webPaymentsExpire`, elk uur); betaald na annuleren geeft
   `refundNeeded` en een waarschuwing in Beheer (terugboeken via Mollie).
 - Beheer: formulier Betalen, betaalstatus in de bestellijst en het detail.

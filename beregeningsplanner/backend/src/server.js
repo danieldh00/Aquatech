@@ -1870,6 +1870,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const webOrderInvoices = createWebOrderInvoices({ orders: webOrders, invoices: invoiceStore, returns: webReturns, debtors: debtorStore, stock: stockStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id) });
   const webPayments = createWebPayments({ orders: webOrders, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id) });
   // Een online bestelling wordt pas bevestigd (mail aan klant en bedrijf) als hij betaald is.
+  webPayments.onPaid((tenantId, order) => store.audit({ tenantId, userId: order.userId || null, action: 'webshop_bestelling_betaald', detail: { number: order.number, total: order.total } }));
   webPayments.onPaid((tenantId, order) => webOrderMail.sendPlaced(tenantId, order));
   /**
    * Laat onbetaalde online webshopbestellingen vervallen die langer wachten dan de bewaartijd (elk uur).
@@ -2158,7 +2159,6 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
-    onPaid: (req, order) => audit(req, 'webshop_bestelling_betaald', { number: order.number, total: order.total }, order.userId, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
     // Een beheerder van de hoofdorganisatie bekijkt het concept met ?voorbeeld=1.
     previewAllowed: (req) => {

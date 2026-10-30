@@ -56,10 +56,10 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, onOrder?: Function, onPaid?: Function, onReturn?: Function }} options db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog), onPaid(req, order) = aanroep als een bestelling betaald blijkt (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
+ * @param {{ db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, onOrder?: Function, onReturn?: Function }} options db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/winkel', router).
  */
-function createStorefront({ db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onPaid = () => {}, onReturn = () => {} }) {
+function createStorefront({ db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onReturn = () => {} }) {
   const data = createStorefrontData(db);
   const router = express.Router();
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: remoteIp });
@@ -395,23 +395,13 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
             try {
               const synced = await payments.sync(tenantId, order.id);
               if (synced.order) order = orders.getForUser(tenantId, viewer.id, order.id) || order;
-              if (synced.becamePaid) onPaidSafely(req, order);
-            } catch (failure) { console.error(`Betaling van bestelling ${order.number} opvragen mislukt: ${failure.message}`); }
+                          } catch (failure) { console.error(`Betaling van bestelling ${order.number} opvragen mislukt: ${failure.message}`); }
           }
           const invoice = orderInvoices ? orderInvoices.invoiceFor(tenantId, order.id) : null;
           const payError = req.query.betaalfout === '1' ? 'De betaalpagina is nu niet bereikbaar. Probeer het zo opnieuw met de knop hieronder.' : '';
           sendWithGroups(req, res, 200, (groups) => orderPage(order, groups, { thanks: req.query.bedankt === '1' || (req.query.betaald === '1' && order.pay && order.pay.status === 'betaald'), invoice: invoice && invoice.status !== 'concept' ? invoice : null, returnsHtml: returnsHtmlOf(order), payError, autoPay: req.query.betalen === '1' }));
         } catch (error) { next(error); }
       });
-      /**
-       * Legt een betaald geworden bestelling vast in het auditlog; een fout daarin houdt de klant niet tegen.
-       * @param {object} req Het verzoek.
-       * @param {object} order De betaalde bestelling.
-       * @returns {void}
-       */
-      const onPaidSafely = (req, order) => {
-        try { onPaid(req, order); } catch (failure) { console.error(`Audit van betaling ${order.number} mislukt: ${failure.message}`); }
-      };
       if (payments) {
         const payLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 40, keyFn: (req) => `betalen:${remoteIp(req)}` });
         const webhookLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `mollie:${remoteIp(req)}` });
@@ -451,8 +441,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
           const paymentId = String(req.body && req.body.id || '');
           if (!validPaymentId(paymentId)) return res.status(200).end();
           try {
-            const synced = await payments.sync(tenantId, String(req.params.orderId), { paymentId });
-            if (synced.becamePaid) onPaidSafely(req, synced.order);
+            await payments.sync(tenantId, String(req.params.orderId), { paymentId });
           } catch (failure) {
             console.error(`Webhook van Mollie voor ${paymentId} mislukt: ${failure.message}`);
             return res.status(502).end();

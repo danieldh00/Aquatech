@@ -43,14 +43,14 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
   }
 
   /**
-   * Roept de haken aan nadat een bestelling betaald is; een fout in een haak houdt de rest niet tegen.
+   * Start de haken nadat een bestelling betaald is, zonder op de mail te wachten; een fout in een haak houdt de rest niet tegen.
    * @param {string} tenantId Id van de omgeving.
    * @param {object} order De betaalde bestelling.
-   * @returns {Promise<void>}
+   * @returns {void}
    */
-  async function runPaidHooks(tenantId, order) {
+  function runPaidHooks(tenantId, order) {
     for (const hook of paidHooks) {
-      try { await hook(tenantId, order); } catch (error) { log.warn(`Na betalen van ${order.number}: ${error.message}`); }
+      try { Promise.resolve(hook(tenantId, order)).catch((error) => log.warn(`Na betalen van ${order.number}: ${error.message}`)); } catch (error) { log.warn(`Na betalen van ${order.number}: ${error.message}`); }
     }
   }
 
@@ -76,7 +76,7 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
     });
     if (out.error) return { becamePaid: false };
     const becamePaid = Boolean(out.changed) && out.order.pay.status === 'betaald' && out.order.pay.paidId === payment.id;
-    if (becamePaid) await runPaidHooks(tenantId, out.order);
+    if (becamePaid) runPaidHooks(tenantId, out.order);
     return { order: out.order, becamePaid };
   }
 
