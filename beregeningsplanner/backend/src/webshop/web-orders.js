@@ -194,7 +194,7 @@ function createWebOrderStore(db, { stock }) {
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -276,6 +276,7 @@ function createWebOrderStore(db, { stock }) {
     const group = user.group === 'zakelijk' ? 'zakelijk' : '';
     const checked = sanitizeCheckout(input, { method, country, group });
     if (checked.error) return { error: checked.error, field: checked.field, status: 400 };
+    if (input.terms !== 'ja') return { error: 'Ga akkoord met de algemene voorwaarden om te bestellen.', field: 'terms', status: 400 };
     return transaction(db, () => {
       lockItems(tenantId, wanted);
       const cart = priceCart(tenantId, wanted, { group });
@@ -299,7 +300,7 @@ function createWebOrderStore(db, { stock }) {
         address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' } : { street: fields.street, postcode: fields.postcode, city: fields.city, country },
         shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method === 'dpd', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
         customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted } : null,
-        note: fields.note, totals, payment: 'op rekening',
+        note: fields.note, totals, payment: 'op rekening', consent: { terms: true, at: timestamp },
         history: [{ at: timestamp, status: 'nieuw', by: fields.name }],
       };
       prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)

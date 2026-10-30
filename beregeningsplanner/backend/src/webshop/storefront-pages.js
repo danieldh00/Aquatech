@@ -6,6 +6,7 @@
 
 const { version: SHOP_VERSION } = require('../../package.json');
 const { DEFAULT_SITE } = require('./shop-content');
+const { LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 
 const SHOP_NAME = 'Aquatechshop.nl';
 /** Maximaal aantal resultaten op de zoekpagina. */
@@ -155,7 +156,8 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
   const { site, pages } = activeContent;
   const phone = site.contact.phone;
   const phoneHref = phoneLink(phone);
-  const footerPages = pages.filter((page) => page.footer && page.slug !== 'over-ons');
+  const footerPages = pages.filter((page) => page.footer && page.slug !== 'over-ons' && !LEGAL_SLUGS.includes(page.slug));
+  const legalLinks = LEGAL_SLUGS.map((slug) => { const own = pages.find((page) => page.slug === slug); return `<a href="${root}pagina/${slug}/">${escapeHtml(own ? own.title : LEGAL_TITLES[slug])}</a>`; }).join('');
   const footerGroups = groups.map((group) => `<li><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a></li>`).join('');
   return `<!doctype html>
 <html lang="nl">
@@ -197,6 +199,7 @@ ${body}
     <div><strong>Account</strong><ul><li><a href="${root}account/">Mijn account</a></li><li><a href="${root}account/">Inloggen of registreren</a></li></ul></div>
     <div><strong>Over ons</strong><p>${escapeHtml(site.footer.about)}</p><p><a href="${root}over-ons/">Lees ons verhaal</a></p>${footerPages.length ? `<ul>${footerPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}</ul>` : ''}</div>
   </div>
+  <nav class="foot-legal" aria-label="Voorwaarden">${legalLinks}</nav>
   <div class="foot-note"><span>Alle prijzen zijn inclusief btw.</span><img src="${assetUrl(root, 'betaalmethoden.png')}" alt="Betaalmethoden" width="286" height="26" loading="lazy"></div>
 </footer>
 </body>

@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.5.2',
+      date: '2026-10-31',
+      title: 'Voorwaarden en privacy in de webshop',
+      items: [
+        { text: 'De webshop heeft nu algemene voorwaarden, een privacyverklaring en een pagina Herroepingsrecht met modelformulier, te vinden onderaan elke pagina. Het zijn standaardteksten: laat ze door de eigenaar controleren.', for: ['beheer'] },
+        { text: 'Bij Beheer, Webshop-inhoud, Pagina\'s pas je die teksten aan met de knop naast de pagina; na Publiceren gaat jouw versie voor.', for: ['beheer'] },
+        { text: 'Bij afrekenen moet de klant akkoord gaan met de voorwaarden. Dat akkoord (met tijdstip) wordt bij de bestelling bewaard.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.5.1',
       date: '2026-10-30',
       title: 'Retouren in de webshop',

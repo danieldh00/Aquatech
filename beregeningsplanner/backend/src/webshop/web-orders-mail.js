@@ -5,6 +5,7 @@
 // Bij Verzonden volgt een mail met de volgcode van DPD (of: klaar om op te
 // halen); komt de volgcode later, dan volgt één mail met die code (data.shipMail).
 const { validEmail } = require('../platform/mailer');
+const { WITHDRAWAL_DAYS } = require('./legal-pages');
 
 const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
 
@@ -77,6 +78,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
       const customerMail = mailBody(profile, [
         `Beste ${order.customer.name},`, 'Bedankt voor je bestelling. We hebben hem ontvangen en reserveren de artikelen voor je.',
         details, 'Je bestelling gaat op rekening: je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.',
+        `Als consument kun je binnen ${WITHDRAWAL_DAYS} dagen na ontvangst herroepen: log in en kies bij je bestelling Retour aanvragen, of antwoord op deze mail. Onze algemene voorwaarden, privacyverklaring en het herroepingsrecht met modelformulier staan onderaan elke pagina van de webshop.`,
       ]);
       await mailer.send({ to: order.email, subject: `Bevestiging van je bestelling ${order.number}`, text: customerMail.text, html: customerMail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
       if (validEmail(profile.email)) {

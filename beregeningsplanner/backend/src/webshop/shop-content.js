@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { inspectImage, fromBase64 } = require('../uitvoering/photos');
+const { legalDefaults } = require('./legal-pages');
 
 /** Bestanden in assets/ die als standaardafbeelding gekozen mogen worden. */
 const ASSET_NAMES = new Set(fs.readdirSync(path.join(__dirname, 'assets')).filter((name) => /\.(png|jpe?g|webp)$/i.test(name)));
@@ -583,7 +584,7 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
       available: true, storefront: Boolean(settingsOf(req).get('storefront')),
       site: { ...stored.site, isDefault: !stored.site.published },
       pages: stored.pages, images: content.listImages(req.tenantId),
-      defaults: { site: DEFAULT_SITE, aboutBody: DEFAULT_ABOUT_BODY }, assets: [...ASSET_NAMES].sort(),
+      defaults: { site: DEFAULT_SITE, aboutBody: DEFAULT_ABOUT_BODY, legal: legalDefaults((stored.site.published && stored.site.published.contact) || DEFAULT_SITE.contact) }, assets: [...ASSET_NAMES].sort(),
     };
   }
   /**

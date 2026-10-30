@@ -17,6 +17,7 @@ const { DEFAULT_SITE } = require('./shop-content');
 const { loginPage, registerPage, accountPage, plannerPage } = require('./storefront-account-pages');
 const { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage } = require('./storefront-order-pages');
 const { returnsBlock } = require('./storefront-return-pages');
+const { legalDefaults } = require('./legal-pages');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
 const { readCart, writeCart, applyCartAction } = require('./storefront-cart');
@@ -477,7 +478,8 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
   router.get('/pagina/:slug', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
-    const page = contentOf(req).pages.find((candidate) => candidate.slug === req.params.slug);
+    const site = contentOf(req).site;
+    const page = contentOf(req).pages.find((candidate) => candidate.slug === req.params.slug) || legalDefaults(site.contact)[req.params.slug];
     const groups = data.catalogOf(tenantId).groups;
     if (!page) return sendPage(req, res, 404, () => notFoundPage('../../', groups));
     sendPage(req, res, 200, () => contentPage(page, groups, '../../'));
