@@ -7,7 +7,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const Shipping = require('../src/webshop/shipping');
-const { createLogin, createClient, listen, postForm } = require('./helpers/http-client');
+const { createLogin, createClient, listen, postForm, postCheckout } = require('./helpers/http-client');
 
 const SECRET = 'e'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -128,7 +128,7 @@ test('afrekenen: ophalen, DPD met tarief, gratis vanaf, te zwaar en ander land',
   assert.strictEqual(be.status, 200);
   assert.match(be.text, /€ 14,50/);
   // Ophalen: geen adres nodig, gratis.
-  const pickup = await postForm(base, customer, '/winkel/afrekenen/', { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'ophalen', country: 'NL', action: 'place' });
+  const pickup = await postCheckout(base, customer, { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'ophalen', country: 'NL', action: 'place' });
   assert.strictEqual(pickup.status, 303, pickup.text);
   const pickupOrder = (await admin.get('/api/admin/web-orders')).body.items[0];
   const pickupDetail = (await admin.get(`/api/admin/web-orders/${pickupOrder.id}`)).body.order;
@@ -137,7 +137,7 @@ test('afrekenen: ophalen, DPD met tarief, gratis vanaf, te zwaar en ander land',
   assert.strictEqual(pickupDetail.address.street, '');
   // DPD binnen Nederland: 800 g valt in de klasse t/m 2 kg.
   await addToCart(base, customer, 'LICHT', 2);
-  const dpd = await postForm(base, customer, '/winkel/afrekenen/', { ...FIELDS, shippingMethod: 'dpd', country: 'NL', action: 'place' });
+  const dpd = await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'dpd', country: 'NL', action: 'place' });
   assert.strictEqual(dpd.status, 303, dpd.text);
   const dpdOrder = (await admin.get('/api/admin/web-orders')).body.items.find((order) => order.id !== pickupOrder.id);
   const dpdDetail = (await admin.get(`/api/admin/web-orders/${dpdOrder.id}`)).body.order;
@@ -146,25 +146,25 @@ test('afrekenen: ophalen, DPD met tarief, gratis vanaf, te zwaar en ander land',
   assert.strictEqual(dpdDetail.address.country, 'NL');
   // Gratis vanaf € 100.
   await addToCart(base, customer, 'LICHT', 10);
-  const free = await postForm(base, customer, '/winkel/afrekenen/', { ...FIELDS, shippingMethod: 'dpd', country: 'NL', action: 'place' });
+  const free = await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'dpd', country: 'NL', action: 'place' });
   assert.strictEqual(free.status, 303);
   const freeOrder = (await admin.get('/api/admin/web-orders')).body.items.find((order) => order.total === 121);
   assert.ok(freeOrder, 'geen verzendkosten boven € 100');
   // Te zwaar voor DPD in België, een postcode die niet bij het land past en een onbekende methode.
   await addToCart(base, customer, 'ZWAAR', 1);
-  const heavy = await postForm(base, customer, '/winkel/afrekenen/', { ...FIELDS, postcode: '9000', shippingMethod: 'dpd', country: 'BE', action: 'place' });
+  const heavy = await postCheckout(base, customer, { ...FIELDS, postcode: '9000', shippingMethod: 'dpd', country: 'BE', action: 'place' });
   assert.strictEqual(heavy.status, 400);
   assert.match(heavy.text, /te zwaar/);
-  assert.strictEqual((await postForm(base, customer, '/winkel/afrekenen/', { ...FIELDS, shippingMethod: 'dpd', country: 'FR', action: 'place' })).status, 400, 'geen tarief voor Frankrijk');
-  assert.strictEqual((await postForm(base, customer, '/winkel/afrekenen/', { ...FIELDS, shippingMethod: 'post', action: 'place' })).status, 400);
-  assert.strictEqual((await postForm(base, customer, '/winkel/afrekenen/', { ...FIELDS, postcode: '9000', shippingMethod: 'dpd', country: 'NL', action: 'place' })).status, 400, 'Belgische postcode in Nederland');
+  assert.strictEqual((await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'dpd', country: 'FR', action: 'place' })).status, 400, 'geen tarief voor Frankrijk');
+  assert.strictEqual((await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'post', action: 'place' })).status, 400);
+  assert.strictEqual((await postCheckout(base, customer, { ...FIELDS, postcode: '9000', shippingMethod: 'dpd', country: 'NL', action: 'place' })).status, 400, 'Belgische postcode in Nederland');
 });
 
 test('volgcode: bij verzonden of achteraf, alleen bij DPD; rechten en andere organisatie', async () => {
   const { base, admin, vreemd, shopper } = await setup();
   const customer = await shopper();
   await addToCart(base, customer, 'LICHT', 1);
-  const placed = await postForm(base, customer, '/winkel/afrekenen/', { ...FIELDS, shippingMethod: 'dpd', country: 'NL', action: 'place' });
+  const placed = await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'dpd', country: 'NL', action: 'place' });
   assert.strictEqual(placed.status, 303);
   const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
   const tracking = `/api/admin/web-orders/${orderId}/tracking`;
@@ -184,7 +184,7 @@ test('volgcode: bij verzonden of achteraf, alleen bij DPD; rechten en andere org
   assert.strictEqual((await vreemd.post(tracking, { trackingCode: '015012345678' })).status, 404);
   // Ophalen heeft geen volgcode.
   await addToCart(base, customer, 'LICHT', 1);
-  await postForm(base, customer, '/winkel/afrekenen/', { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'ophalen', action: 'place' });
+  await postCheckout(base, customer, { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'ophalen', action: 'place' });
   const pickupId = (await admin.get('/api/admin/web-orders')).body.items.find((order) => order.id !== orderId).id;
   await admin.post(`/api/admin/web-orders/${pickupId}/status`, { status: 'verzonden' });
   assert.strictEqual((await admin.post(`/api/admin/web-orders/${pickupId}/tracking`, { trackingCode: '015012345678' })).status, 409);

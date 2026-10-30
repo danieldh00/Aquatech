@@ -8,7 +8,7 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const Vat = require('../src/webshop/vat');
 const { totalsOf } = require('../src/webshop/web-orders');
-const { createLogin, createClient, listen, postForm } = require('./helpers/http-client');
+const { createLogin, createClient, listen, postForm, postCheckout } = require('./helpers/http-client');
 
 const SECRET = 'f'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -107,11 +107,11 @@ test('zakelijke klant ziet prijzen excl. btw en betaalt de zakelijke prijs; part
 test('zakelijke bestelling: bedrijfsnaam verplicht, btw-nummer gecontroleerd en btw in Nederland gewoon berekend', async () => {
   const { base, admin, business } = await setup();
   await addToCart(base, business.client, 'BUS', 2);
-  assert.strictEqual((await postForm(base, business.client, '/winkel/afrekenen/', { ...COMPANY, company: '' })).status, 400);
-  const badVat = await postForm(base, business.client, '/winkel/afrekenen/', { ...COMPANY, vatNumber: 'ABC' });
+  assert.strictEqual((await postCheckout(base, business.client, { ...COMPANY, company: '' })).status, 400);
+  const badVat = await postCheckout(base, business.client, { ...COMPANY, vatNumber: 'ABC' });
   assert.strictEqual(badVat.status, 400);
   assert.match(badVat.text, /btw-nummer/);
-  const placed = await postForm(base, business.client, '/winkel/afrekenen/', { ...COMPANY, vatNumber: 'nl 1234.56789 b01' });
+  const placed = await postCheckout(base, business.client, { ...COMPANY, vatNumber: 'nl 1234.56789 b01' });
   assert.strictEqual(placed.status, 303, placed.text);
   const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
   const order = (await admin.get(`/api/admin/web-orders/${orderId}`)).body.order;
@@ -130,7 +130,7 @@ test('btw verlegd naar een bedrijf met btw-nummer in een ander EU-land', async (
   const preview = await postForm(base, business.client, '/winkel/afrekenen/', { ...COMPANY, postcode: '9000', country: 'BE', vatNumber: 'BE0123456789', action: 'update' });
   assert.strictEqual(preview.status, 200);
   assert.match(preview.text, /Btw verlegd/);
-  const placed = await postForm(base, business.client, '/winkel/afrekenen/', { ...COMPANY, postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' });
+  const placed = await postCheckout(base, business.client, { ...COMPANY, postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' });
   assert.strictEqual(placed.status, 303, placed.text);
   const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
   const order = (await admin.get(`/api/admin/web-orders/${orderId}`)).body.order;
@@ -140,7 +140,7 @@ test('btw verlegd naar een bedrijf met btw-nummer in een ander EU-land', async (
   assert.strictEqual(order.lines[0].vatRate, 0);
   // Zonder btw-nummer van België geen verlegging.
   await addToCart(base, business.client, 'BUS', 2);
-  const plain = await postForm(base, business.client, '/winkel/afrekenen/', { ...COMPANY, postcode: '9000', country: 'BE' });
+  const plain = await postCheckout(base, business.client, { ...COMPANY, postcode: '9000', country: 'BE' });
   assert.strictEqual(plain.status, 303);
   const second = (await admin.get('/api/admin/web-orders')).body.items.find((item) => item.id !== orderId);
   assert.strictEqual((await admin.get(`/api/admin/web-orders/${second.id}`)).body.order.vat.shifted, false);
@@ -154,14 +154,21 @@ test('verouderd totaal: eerst opnieuw tonen, pas daarna bestellen', async () => 
   assert.strictEqual(stale.status, 200, 'niet geplaatst');
   assert.match(stale.text, /Het totaal is bijgewerkt/);
   assert.strictEqual((await admin.get('/api/admin/web-orders')).body.items.length, 0);
-  const placed = await postForm(base, business.client, '/winkel/afrekenen/', { ...fields, expectedTotal: '27.98' });
+  const missing = await postForm(base, business.client, '/winkel/afrekenen/', fields);
+  assert.strictEqual(missing.status, 200, 'zonder totaal ook niet geplaatst');
+  const invalid = await postForm(base, business.client, '/winkel/afrekenen/', { ...fields, expectedTotal: 'abc' });
+  assert.strictEqual(invalid.status, 200, 'ongeldig totaal ook niet geplaatst');
+  const shown = stale.text.match(/name="expectedTotal" value="([^"]+)"/);
+  assert.ok(shown, 'actueel totaal ontbreekt in het formulier');
+  assert.strictEqual(shown[1], '27.98');
+  const placed = await postForm(base, business.client, '/winkel/afrekenen/', { ...fields, expectedTotal: shown[1] });
   assert.strictEqual(placed.status, 303, placed.text);
 });
 
 test('particulier met btw-nummer in het formulier: genegeerd, gewoon btw', async () => {
   const { base, admin, private1 } = await setup();
   await addToCart(base, private1.client, 'BUS', 2);
-  const placed = await postForm(base, private1.client, '/winkel/afrekenen/', { ...COMPANY, company: '', postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' });
+  const placed = await postCheckout(base, private1.client, { ...COMPANY, company: '', postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' });
   assert.strictEqual(placed.status, 303, placed.text);
   const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
   const order = (await admin.get(`/api/admin/web-orders/${orderId}`)).body.order;
