@@ -293,4 +293,6 @@ test('webshop: eigen pagina Over ons, vaste kaarthoogte en telefoonlink met naam
   const css = await anonymous.get(`/winkel/assets/winkel.css?v=${version}`);
   assert.ok(!/\.shop-head \{[^}]*border-bottom/.test(css.text), 'geen streep onder de kopbalk');
   assert.match(css.text, /\.product-name \{[^}]*min-height: 4\.5em/, 'titel van een kaart heeft een vaste hoogte');
+  assert.match(css.text, /\.product-row \{[^}]*min-height: 112px/, 'rij groeit mee met grotere tekst');
+  assert.match(css.text, /\.product-card:focus-within \.product-name[^{]*\{[^}]*overflow: visible/, 'volledige naam bij focus of aanraking');
 });
