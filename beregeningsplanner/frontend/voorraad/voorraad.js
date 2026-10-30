@@ -101,8 +101,8 @@
    */
   const shopPill = (item) => {
     if (!item.shopSync) return '<span class="muted small">niet</span>';
-    if (!item.shop.productId) return '<span class="muted small">niet gekoppeld</span>';
     if (item.shop.error) return `<span class="pill low" title="${esc(item.shop.error)}">Fout</span>`;
+    if (!item.shop.productId) return '<span class="muted small">niet gekoppeld</span>';
     if (item.shop.pending) return '<span class="pill">Wordt bijgewerkt</span>';
     return `<span class="pill ok" title="${esc(item.shop.syncedAt ? `Bijgewerkt ${when(item.shop.syncedAt)}` : '')}">Gekoppeld</span>`;
   };
@@ -549,8 +549,8 @@
     formElement.vatRate.value = String(item.vatRate);
     formElement.revenueGroup.value = item.revenueGroup;
     formElement.shopSync.checked = item.shopSync;
-    $('#d-shop').innerHTML = !item.shop.productId ? (item.shopSync ? 'Nog niet gekoppeld aan een webshopproduct (koppelen gaat op SKU = artikelcode).' : '')
-      : item.shop.error ? `Webshop: <span class="err">${esc(item.shop.error)}</span>`
+    $('#d-shop').innerHTML = item.shop.error ? `Webshop: <span class="err">${esc(item.shop.error)}</span>`
+      : !item.shop.productId ? (item.shopSync ? 'Nog niet gekoppeld aan een webshopproduct (koppelen gaat op SKU = artikelcode).' : '')
         : item.shop.pending ? 'Webshop: wijziging wordt binnen enkele seconden verstuurd.'
           : `Webshop: gekoppeld (product ${esc(item.shop.productId)})${item.shop.syncedAt ? `, bijgewerkt ${esc(when(item.shop.syncedAt))}` : ''}.`;
     $('#d-remove').hidden = item.archived;

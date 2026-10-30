@@ -286,6 +286,10 @@ test('varianten en WooCommerce: variabel product wordt hoofdartikel, prijs en vo
     ['KOP-20', '20 mm', 2, 10, '71'], ['KOP-25', '25 mm', 3, 4, '72'],
   ]);
   assert.strictEqual(shop.products(tenantId).find((product) => product.id === '71').parentId, '70');
+  // Het type wordt bewaard: ook een variabel product zonder variaties blijft variabel.
+  const stored = { sku: 'LEEG', name: 'Leeg', price: null, currency: 'EUR', url: '', image: '', inStock: true, code: '', categories: [], attributes: [] };
+  shop.replaceProducts(tenantId, [{ ...stored, id: '99', type: 'variable' }], new Date().toISOString());
+  assert.strictEqual(shop.products(tenantId)[0].type, 'variable');
 
   // Aquatech → webshop: prijs van één variant via de variatie-batch.
   stock.update(tenantId, full.variants[0].id, { salePrice: 2.5 });
