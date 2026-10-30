@@ -35,7 +35,7 @@ const { createLocationStore, registerLocationRoutes } = require('./uitvoering/lo
 const { createServiceRequestStore, registerServiceRequestRoutes } = require('./uitvoering/service-requests');
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./uitvoering/outsourcing');
 const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uitvoering/season-reminders');
-const { createStockStore, registerStockRoutes } = require('./voorraad/stock');
+const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
 const { registerDrawingRoutes } = require('./beregening/drawings');
@@ -832,7 +832,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     planning: 'Alleen voor medewerkers met toegang tot de planning.',
     uitbesteden: 'Je rol heeft geen toegang tot uitbesteden.',
     nieuws: 'Je rol mag geen nieuwsberichten plaatsen.',
-    voorraad: 'Je rol heeft geen toegang tot voorraadbeheer.',
+    voorraad: 'Je rol heeft geen toegang tot Artikelen.',
     portaal: 'Het klantportaal is er voor klanten.',
     plannen: 'Je rol heeft geen toegang tot de beregeningsplanner.',
   };
@@ -2191,6 +2191,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // dashboard (zie frontend/dashboard/modules.js). De doorverwijzing naar de
   // module-URL met slash is relatief ("beregening/", niet "/beregening/"), zodat
   // de app ook onder een padprefix achter een reverse proxy werkt.
+  // Oude adressen van Voorraadbeheer (module hernoemd naar Artikelen in 1.4.0):
+  // `voorraad`, `voorraad/` en `voorraad/…` gaan relatief door naar `artikelen/…`.
+  app.get(/^\/voorraad(\/.*)?$/, (req, res, next) => {
+    const rest = req.path.slice('/voorraad'.length).replace(/\/index\.html$/, '/');
+    if (/\.[a-z0-9]+$/i.test(rest)) return next();
+    const qs = req.originalUrl.slice(req.path.length);
+    const target = rest === '' ? 'artikelen/' : `${'../'.repeat((rest.match(/\//g) || []).length)}artikelen${rest}`;
+    return res.redirect(302, `${target}${qs}`);
+  });
+
   app.get('*', (req, res) => {
     const segs = req.path.split('/').filter(Boolean);
     const mod = segs.length && isModule(segs[0]) ? segs[0] : null;

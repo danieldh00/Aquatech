@@ -73,7 +73,7 @@
     const container = $('#st-body');
     const stock = state.data;
     if (!container || !stock) return;
-    const stockLink = state.options.manage ? '../voorraad/' : null;
+    const stockLink = state.options.manage ? '../artikelen/' : null;
     const open = ['open', 'gepland', 'bezig'].includes(stock.workOrder.status);
     const reserved = stock.lines.reduce((count, line) => count + (line.reserved > 0 ? 1 : 0), 0);
     const shortCount = stock.lines.filter((line) => line.shortage > 0).length;
@@ -104,7 +104,7 @@
         : open && reserved ? '<p class="muted small">Wordt de werkorder Gereed, dan wordt wat nog gereserveerd staat vanzelf afgeboekt.</p>' : ''}
       ${reserved ? '<div class="row"><button class="btn" data-issue-all>Alles afboeken wat gereserveerd staat</button></div>' : ''}
       ${moves}`
-      : `<p class="muted small">Geen materialen met een artikelcode op deze werkorder.${stockLink ? ' Voorraad bijhouden doe je in <a href="../voorraad/">Voorraadbeheer</a>.' : ''}</p>`;
+      : `<p class="muted small">Geen materialen met een artikelcode op deze werkorder.${stockLink ? ' Voorraad bijhouden doe je in <a href="../artikelen/">Artikelen</a>.' : ''}</p>`;
     container.querySelectorAll('tr[data-code]').forEach((row) => {
       const input = row.querySelector('input');
       /**
@@ -176,7 +176,7 @@
   /**
    * Opent het voorraadblok voor een werkorder.
    * @param {object} workOrder De werkorder.
-   * @param {object} [options] { toast, manage (recht 'voorraad': link naar Voorraadbeheer) }.
+   * @param {object} [options] { toast, manage (recht 'voorraad': link naar Artikelen) }.
    */
   function open(workOrder, options = {}) {
     state.options = options;

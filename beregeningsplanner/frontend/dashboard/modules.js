@@ -116,7 +116,7 @@
       id: 'voorraad',
       title: 'Artikelen',
       description: 'Artikelen op voorraad met stand, locatie en minimumvoorraad. Werkorders reserveren hun materialen en boeken ze af bij verbruik of oplevering; ontvangsten, tellingen en correcties, met Excel-export.',
-      href: 'voorraad/',
+      href: 'artikelen/',
       icon: 'box',
       status: 'actief',
       right: 'voorraad',

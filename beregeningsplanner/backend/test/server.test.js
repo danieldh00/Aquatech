@@ -179,8 +179,9 @@ test('dashboard: actieve modules wijzen relatief naar een bestaande module', () 
     ids.add(module.id);
     assert.ok(['actief', 'gepland'].includes(module.status), module.id);
     if (module.status !== 'actief') continue;
-    assert.strictEqual(module.href, `${module.id}/`, `${module.id}: href relatief en met slash`);
-    assert.ok(fs.existsSync(path.join(FRONTEND_DIR, module.id, 'index.html')), `${module.id}/index.html ontbreekt`);
+    // De sleutel blijft stabiel (instelling `modules`); de map mag anders heten, zoals voorraad -> artikelen.
+    assert.match(module.href, /^[a-z0-9][a-z0-9-]*\/$/, `${module.id}: href relatief en met slash`);
+    assert.ok(fs.existsSync(path.join(FRONTEND_DIR, module.href, 'index.html')), `${module.href}index.html ontbreekt`);
   }
   assert.ok(modules.some((module) => module.id === 'beregening' && module.status === 'actief'));
 });
@@ -202,6 +203,28 @@ test('module zonder slash: relatieve doorverwijzing, querystring blijft', async 
     const res = await fetch(`${base}/dashboard`, { redirect: 'manual' });
     assert.strictEqual(res.status, 200);
     assert.match(await res.text(), /id="modules"/);
+  } finally {
+    server.close();
+  }
+});
+
+test('oude adressen van Voorraadbeheer gaan relatief door naar Artikelen', async () => {
+  const { server, base } = await start({ accessCode: '', env: { GUEST_ACCESS: 'true' }, db: await dbWithAdmin() });
+  try {
+    const cases = [
+      ['/voorraad', 'artikelen/'],
+      ['/voorraad?id=5', 'artikelen/?id=5'],
+      ['/voorraad/', '../artikelen/'],
+      ['/voorraad/?id=5', '../artikelen/?id=5'],
+      ['/voorraad/x', '../artikelen/x'],
+      ['/voorraad/index.html?id=5', '../artikelen/?id=5'],
+    ];
+    for (const [urlPath, loc] of cases) {
+      const res = await fetch(base + urlPath, { redirect: 'manual' });
+      assert.strictEqual(res.status, 302, urlPath);
+      assert.strictEqual(res.headers.get('location'), loc, urlPath);
+    }
+    assert.strictEqual((await fetch(`${base}/artikelen/`, { redirect: 'manual' })).status, 200);
   } finally {
     server.close();
   }

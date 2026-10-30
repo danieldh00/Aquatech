@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.4.0',
+      date: '2026-10-30',
+      title: 'Voorraadbeheer heet nu Artikelen',
+      items: [
+        { text: 'Voorraadbeheer heet overal Artikelen: in het menu, op het dashboard, in de rollen en in de verwijzingen vanuit werkorders, de planner en Beheer. Het adres is nu artikelen/; opgeslagen links naar het oude adres blijven werken.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.3.9',
       date: '2026-10-30',
       title: 'Beheer en menu overzichtelijker',
