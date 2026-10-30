@@ -356,9 +356,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * beschikbaar, werkorders en waarde; onder het minimum als een variant dat is.
    * @param {object} parent Het hoofdartikel (shapeItem).
    * @param {object[]} variants Zijn varianten (shapeItem), zonder de gearchiveerde.
+   * @param {number} orders Aantal verschillende werkorders met een reservering op een van de varianten.
    * @returns {object} Het hoofdartikel met de totalen en variantCount.
    */
-  const withTotals = (parent, variants) => {
+  const withTotals = (parent, variants, orders) => {
     /**
      * Telt een veld van alle varianten op.
      * @param {string} key Het veld, bijv. 'onHand'.
@@ -368,7 +369,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const values = variants.filter((variant) => variant.value != null);
     return {
       ...parent, onHand: total('onHand'), reserved: total('reserved'), available: total('available'),
-      orders: variants.reduce((sum, variant) => sum + variant.orders, 0),
+      orders: Number(orders) || 0,
       value: values.length ? Math.round(values.reduce((sum, variant) => sum + variant.value, 0) * 100) / 100 : null,
       low: variants.some((variant) => variant.low), variantCount: variants.length,
     };
@@ -399,27 +400,33 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       if (!variantsOf.has(item.parentId)) variantsOf.set(item.parentId, []);
       variantsOf.get(item.parentId).push(item);
     }
-    return items.map((item) => (item.hasVariants ? withTotals(item, variantsOf.get(item.id) || []) : item));
+    return items.map((item) => (item.hasVariants ? withTotals(item, variantsOf.get(item.id) || [], item.familyOrders) : item));
   }
 
   /**
    * Artikelrijen met het gereserveerde aantal (som over open werkorders), in één query.
+   * Bij een hoofdartikel en zijn varianten staat in familyOrders het aantal verschillende
+   * werkorders over alle actieve varianten (een werkorder met twee maten telt één keer).
    * @param {string} tenantId Id van de omgeving.
    * @param {{ archived?: boolean, parentId?: string|null }} [filters] Ook gearchiveerde; alleen de varianten van dit hoofdartikel.
-   * @returns {object[]} De artikelen (shapeItem), op code.
+   * @returns {object[]} De artikelen (shapeItem met familyOrders), op code.
    */
   function listRows(tenantId, { archived = false, parentId = null } = {}) {
-    const args = [tenantId, tenantId];
+    const args = [tenantId, tenantId, tenantId, tenantId];
     let where = archived ? '' : ' AND i.archived = 0';
     if (parentId) { where += ' AND i.parent_id = ?'; args.push(String(parentId)); }
     return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
         i.sale_price, i.vat_rate, i.revenue_group, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
         i.parent_id, i.has_variants, i.attributes, i.variant_values,
-        COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders
+        COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders, COALESCE(f.orders, 0) AS family_orders
       FROM stock_items i
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
+      LEFT JOIN (SELECT sibling.parent_id, COUNT(DISTINCT family.work_order_id) AS orders FROM stock_reservations family
+          JOIN stock_items sibling ON sibling.id = family.item_id AND sibling.tenant_id = ?
+          WHERE family.tenant_id = ? AND sibling.archived = 0 AND sibling.parent_id IS NOT NULL GROUP BY sibling.parent_id) f
+        ON f.parent_id = COALESCE(i.parent_id, i.id)
       WHERE i.tenant_id = ?${where} ORDER BY i.code`)
-      .all(...args).map((itemRow) => shapeItem(itemRow, itemRow.reserved, itemRow.orders));
+      .all(...args).map((itemRow) => ({ ...shapeItem(itemRow, itemRow.reserved, itemRow.orders), familyOrders: Number(itemRow.family_orders) || 0 }));
   }
 
   /**
@@ -469,7 +476,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     if (Number(itemRow.has_variants)) {
       // Hoofdartikel: geen eigen voorraad, wel de varianten met hun totalen.
       const variants = listRows(tenantId, { archived: true, parentId: itemRow.id });
-      const parent = withTotals(shapeItem(itemRow), variants.filter((variant) => !variant.archived));
+      const parent = withTotals(shapeItem(itemRow), variants.filter((variant) => !variant.archived), variants.length ? variants[0].familyOrders : 0);
       return { ...parent, variants, reservations: [], movements: [] };
     }
     const reservations = reservationsOf(tenantId, itemRow.id);

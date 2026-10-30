@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.3.4',
+      date: '2026-10-30',
+      title: 'Varianten: kleine correcties',
+      items: [
+        { text: 'Bij een hoofdartikel telt een werkorder met twee maten nu als één werkorder.', for: ['voorraad'] },
+        { text: 'Een losse factuur met de code van een hoofdartikel boekt geen voorraad meer af op het hoofdartikel; kies op de factuur de maat (variant).', for: ['facturen'] },
+      ],
+    },
+    {
       version: '1.3.3',
       date: '2026-10-30',
       title: 'Artikelen met varianten',

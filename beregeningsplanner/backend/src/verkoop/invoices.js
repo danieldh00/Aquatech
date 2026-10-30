@@ -263,7 +263,8 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
         if (!wantCredit || (original && Number(original.stock_booked))) {
           for (const line of data.lines) {
             const item = line.code ? stock.findCode(tenantId, line.code) : null;
-            if (!item || item.archived || !line.qty) continue;
+            // Een hoofdartikel heeft geen eigen voorraad; alleen gewone artikelen en varianten afboeken.
+            if (!item || item.archived || Number(item.has_variants) || !line.qty) continue;
             stock.book(tenantId, item.id, -line.qty, {
               kind: line.qty > 0 ? 'afboeking' : 'retour', source: `factuur:${row.id}`, user,
               note: `${wantCredit ? 'Creditfactuur' : 'Factuur'} ${number}`,
