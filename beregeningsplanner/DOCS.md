@@ -685,6 +685,17 @@ controleert de rechten zelf. De standaardrollen staan in
     Een hoofdbeheerder kan niet worden overgenomen, en tijdens een
     impersonatie kun je niet van omgeving wisselen of toestemming geven
     namens de gebruiker.
+- **Bekijken als klant** (klantweergave): een beheerder van een organisatie
+  kan in een **testomgeving** via **Beheer → Gebruikers → Bekijken als klant**
+  de app zien zoals een klant hem ziet (dashboard, portaal, offertes), om te
+  testen. In live kan dat niet (knop afwezig, de server weigert het).
+  - Alleen accounts met een klantrol van de eigen organisatie; geen
+    wachtwoord of toestemming van de klant nodig.
+  - Je hebt dan alleen de rechten van de klant. Bovenin elke pagina staat
+    een balk **Je bekijkt als …** met **Terug naar beheer**; je blijft daarna
+    in dezelfde testomgeving. Hoogstens 2 uur; uitloggen stopt het ook.
+  - Start en einde staan in het auditlog van de testomgeving, en wat je
+    als klant doet staat erin met jouw naam erbij.
 - **Historie** (**Beheer → Aanvragen**): elke aanvraag krijgt een regel met
   datum, gebruiker, plan, klant, adres, oppervlaktes, sproeiers en zones:
   een nieuw plan, wijzigingen (opeenvolgende wijzigingen van dezelfde

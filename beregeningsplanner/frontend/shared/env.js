@@ -35,9 +35,10 @@
     else bar.appendChild(badge);
   }
 
-  // Impersonatie: een hoofdbeheerder werkt als een andere gebruiker. De server
-  // zet dan de leesbare cookie `aquatech_imp_hint` (`<naam>|<verloopt>|live|test`).
-  // Op elke pagina staat zolang een balk met de knop terug naar het eigen account.
+  // Impersonatie: een hoofdbeheerder werkt als een andere gebruiker, of een
+  // beheerder bekijkt in een testomgeving de app als klant. De server zet dan de
+  // leesbare cookie `aquatech_imp_hint` (`<naam>|<verloopt>|live|test|klant`).
+  // Op elke pagina staat zolang een balk met de knop terug.
   const script = document.currentScript;
   /**
    * Adres relatief aan de map van de app (dit script staat in shared/).
@@ -48,7 +49,7 @@
 
   /**
    * Leest de impersonatie uit de cookie aquatech_imp_hint.
-   * @returns {{ name: string, expiresAt: string, live: boolean }|null} Naam, einde en omgeving, of null.
+   * @returns {{ name: string, expiresAt: string, live: boolean, customerView: boolean }|null} Naam, einde, omgeving en of het een klantweergave is, of null.
    */
   function readImpersonation() {
     const match = /(?:^|;\s*)aquatech_imp_hint=([^;]*)/.exec(document.cookie || '');
@@ -57,15 +58,15 @@
     try { raw = decodeURIComponent(match[1]); } catch (error) { return null; }
     const parts = raw.split('|');
     if (parts.length < 3) return null;
-    const live = parts.pop() === 'live';
+    const kind = parts.pop();
     const expiresAt = parts.pop();
-    return { name: parts.join('|'), expiresAt, live };
+    return { name: parts.join('|'), expiresAt, live: kind === 'live', customerView: kind === 'klant' };
   }
 
   const impersonation = readImpersonation();
 
   /**
-   * Stopt de impersonatie en gaat terug naar Hoofdbeheer.
+   * Stopt de impersonatie en gaat terug naar Hoofdbeheer (of na een klantweergave naar Beheer > Gebruikers).
    * @param {HTMLButtonElement} [button] De knop (wordt uitgezet).
    * @returns {Promise<void>}
    */
@@ -74,15 +75,48 @@
     try {
       await fetch(fromApp('../api/impersonation/stop'), { method: 'POST' });
     } catch (error) { /* toch terug: de server ruimt een verlopen impersonatie zelf op */ }
-    location.href = fromApp('../hoofdbeheer/');
+    location.href = fromApp(impersonation && impersonation.customerView ? '../beheer/#users' : '../hoofdbeheer/');
+  }
+
+  /**
+   * Tijdstip waarop de impersonatie afloopt, kort geschreven.
+   * @returns {string} Bijv. "do 14:30", of leeg.
+   */
+  function untilText() {
+    const until = new Date(impersonation.expiresAt);
+    return isNaN(until) ? '' : until.toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  /** Toont bovenin de balk "Je bekijkt als …" met de knop terug naar Beheer (klantweergave). */
+  function markCustomerView() {
+    document.documentElement.classList.add('customer-view');
+    const bar = document.createElement('div');
+    bar.className = 'imp-bar customer-view-bar';
+    bar.setAttribute('role', 'status');
+    const text = document.createElement('span');
+    text.className = 'imp-text';
+    const who = document.createElement('b');
+    who.textContent = impersonation.name;
+    const time = untilText();
+    text.append('Je bekijkt als ', who, ` · testomgeving${time ? ` · tot ${time}` : ''}`);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Terug naar beheer';
+    /**
+     * Stopt de klantweergave.
+     * @returns {Promise<void>}
+     */
+    button.onclick = () => stopImpersonation(button);
+    bar.append(text, button);
+    document.body.insertBefore(bar, document.body.firstChild);
   }
 
   /** Toont de balk "Je werkt als …" met de knop terug naar het eigen account. */
   function markImpersonation() {
     if (!impersonation || document.querySelector('.imp-bar')) return;
     document.documentElement.classList.add('impersonating');
-    const until = new Date(impersonation.expiresAt);
-    const time = isNaN(until) ? '' : until.toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    if (impersonation.customerView) { markCustomerView(); return; }
+    const time = untilText();
     const bar = document.createElement('div');
     bar.className = 'imp-bar';
     bar.setAttribute('role', 'status');

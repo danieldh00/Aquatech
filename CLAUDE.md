@@ -213,6 +213,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (planningmodule, `/schedule`, `/share`, `/send`) en `uitvoerder`
   (`workorders.staff`). Klantenlijsten via `keysOfKind('klant')`, nooit
   `role = 'klant'`. API `/api/admin/roles[/:key]`, UI `beheer/rollen.js`.
+- **Bekijken als klant** (1.3.6, `beveiliging/impersonation.js`, mode
+  `klant` in `impersonations`, migratie 34): beheerder (recht `beheer`) bekijkt
+  in een **testomgeving** (alleen daar, wens Daniël) de app als een klant van
+  de eigen organisatie; `/api/admin/view-as-customer`, balk bovenin via
+  `shared/env.js` (hint `…|klant`), audit `klantweergave_*`. De
+  supportimpersonatie van de hoofdbeheerder (mode `support`) blijft zoals hij was.
 - **Plannenoverzicht** (`frontend/plannen/`, voor iedereen): tabel uit
   `/api/plans` (eigen) of `/api/admin/plans` (beheerder, `?deleted=1`,
   `historyCount`); samenvatting per plan via `summarize()` op

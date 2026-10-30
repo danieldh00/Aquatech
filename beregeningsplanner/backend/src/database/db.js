@@ -825,6 +825,12 @@ const MIGRATIONS = [
   ALTER TABLE shop_products ADD COLUMN attributes TEXT NOT NULL DEFAULT '[]';
   ALTER TABLE shop_products ADD COLUMN type TEXT NOT NULL DEFAULT '';
   `,
+  // 34: klantweergave (impersonation.js): een beheerder bekijkt de app in een
+  // testomgeving als een klant. mode 'support' = hoofdbeheerder werkt als een
+  // gebruiker (zoals voorheen), 'klant' = beheerder bekijkt als klant.
+  `
+  ALTER TABLE impersonations ADD COLUMN mode TEXT NOT NULL DEFAULT 'support';
+  `,
 ];
 
 /**

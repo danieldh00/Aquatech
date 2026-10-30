@@ -211,3 +211,81 @@ test('impersonatie: verloopt vanzelf, stopt bij uitloggen en heeft grenzen', asy
     server.close();
   }
 });
+
+test('bekijken als klant: beheerder, alleen in een testomgeving, alleen klanten van de eigen organisatie', async () => {
+  const { db, server, base, baas, groen, test: env, piet, kees } = await setup();
+  try {
+    const pc = createClient(base);
+    await pc.login('piet', 'Gras-Pomp-2027!', 'groen');
+
+    // In live: niet beschikbaar, en de server weigert het.
+    assert.strictEqual((await pc.get('/api/admin/view-as-customer')).body.available, false);
+    const inLive = await pc.post('/api/admin/view-as-customer', { userId: kees.id });
+    assert.strictEqual(inLive.status, 403);
+    assert.strictEqual(inLive.body.error, 'test_only');
+
+    // In de testomgeving: de klanten van de organisatie staan klaar.
+    assert.strictEqual((await pc.post('/api/environment', { tenantId: env.id })).status, 200);
+    const list = (await pc.get('/api/admin/view-as-customer')).body;
+    assert.strictEqual(list.available, true);
+    assert.deepStrictEqual(list.items.map((customer) => customer.username), ['kees']);
+
+    // Niet als zichzelf of een andere medewerker, niet als een klant van een andere organisatie.
+    assert.strictEqual((await pc.post('/api/admin/view-as-customer', { userId: piet.id })).status, 409);
+    const blauw = (await baas.post('/api/platform/tenants', { name: 'Blauw BV', slug: 'blauw', admin: { username: 'bram', displayName: 'Bram', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
+    const vreemd = (await baas.post(`/api/platform/tenants/${blauw.id}/users`, { username: 'vreemd', displayName: 'Vreemd', role: 'klant', password: 'Haag-Slang-2028!', mustChangePassword: false })).body;
+    assert.strictEqual((await pc.post('/api/admin/view-as-customer', { userId: vreemd.id })).status, 404);
+
+    // Starten: daarna precies de klant, zonder beheerrechten.
+    const started = await pc.post('/api/admin/view-as-customer', { userId: kees.id });
+    assert.strictEqual(started.status, 201, JSON.stringify(started.body));
+    assert.match(decodeURIComponent(pc.jar.get('aquatech_imp_hint')), /^Kees\|.+\|klant$/);
+    const me = (await pc.get('/api/me')).body;
+    assert.strictEqual(me.user.username, 'kees');
+    assert.strictEqual(me.tenant.id, env.id);
+    assert.strictEqual(me.impersonation.mode, 'klant');
+    assert.strictEqual(me.impersonation.by, 'Piet');
+    assert.ok(!me.rights.includes('beheer'));
+    assert.ok(me.rights.includes('portaal'));
+    assert.strictEqual((await pc.get('/api/admin/users')).status, 403);
+    assert.strictEqual((await pc.post('/api/admin/view-as-customer', { userId: kees.id })).status, 403, 'geen klantweergave vanuit een klantweergave');
+    assert.strictEqual((await pc.post('/api/platform/impersonate', { userId: kees.id, tenantId: env.id })).status, 403);
+    assert.strictEqual((await pc.post('/api/environment', { tenantId: groen.id })).status, 409);
+    assert.strictEqual((await pc.get('/api/portal')).status, 200);
+
+    // Auditlog in de testomgeving; een gestolen cookie werkt niet in een andere sessie.
+    const startRows = auditRows(db, 'klantweergave_gestart');
+    assert.strictEqual(startRows.length, 1);
+    assert.strictEqual(startRows[0].tenant_id, env.id);
+    assert.strictEqual(startRows[0].user_id, piet.id);
+    assert.strictEqual(startRows[0].detail.gebruiker, 'kees');
+    baas.jar.set('aquatech_imp', pc.jar.get('aquatech_imp'));
+    assert.strictEqual((await baas.get('/api/me')).body.user.username, 'baas');
+
+    // Terug naar beheer: weer Piet, in dezelfde testomgeving.
+    const stopped = (await pc.post('/api/impersonation/stop')).body;
+    assert.strictEqual(stopped.ended, true);
+    assert.strictEqual(stopped.mode, 'klant');
+    const back = (await pc.get('/api/me')).body;
+    assert.strictEqual(back.user.username, 'piet');
+    assert.strictEqual(back.tenant.id, env.id);
+    assert.strictEqual(back.impersonation, null);
+    assert.strictEqual(auditRows(db, 'klantweergave_beeindigd')[0].detail.reden, 'gestopt');
+    assert.strictEqual(auditRows(db, 'impersonatie_gestart').length, 0, 'geen platformimpersonatie');
+
+    // Is de klant geen klant meer, dan stopt de klantweergave meteen.
+    await pc.post('/api/admin/view-as-customer', { userId: kees.id });
+    await baas.patch(`/api/platform/tenants/${groen.id}/users/${kees.id}`, { role: 'installateur' });
+    assert.strictEqual((await pc.get('/api/me')).body.user.username, 'piet');
+    assert.strictEqual(auditRows(db, 'klantweergave_beeindigd').at(-1).detail.reden, 'niet_meer_toegestaan');
+
+    // En hij verloopt vanzelf.
+    await baas.patch(`/api/platform/tenants/${groen.id}/users/${kees.id}`, { role: 'klant' });
+    assert.strictEqual((await pc.post('/api/admin/view-as-customer', { userId: kees.id })).status, 201);
+    db.prepare("UPDATE impersonations SET expires_at = '2000-01-01T00:00:00.000Z' WHERE ended_at IS NULL").run();
+    assert.strictEqual((await pc.get('/api/me')).body.user.username, 'piet');
+    assert.strictEqual(auditRows(db, 'klantweergave_beeindigd').at(-1).detail.reden, 'verlopen');
+  } finally {
+    server.close();
+  }
+});

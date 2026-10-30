@@ -649,6 +649,10 @@ const PG_MIGRATIONS = [
   ALTER TABLE shop_products ADD COLUMN attributes ${TEXT_TYPE} NOT NULL DEFAULT '[]';
   ALTER TABLE shop_products ADD COLUMN type ${TEXT_TYPE} NOT NULL DEFAULT '';
   `,
+  // 34: klantweergave (zie db.js).
+  `
+  ALTER TABLE impersonations ADD COLUMN mode ${TEXT_TYPE} NOT NULL DEFAULT 'support';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
