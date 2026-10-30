@@ -418,12 +418,13 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
         i.sale_price, i.vat_rate, i.revenue_group, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
         i.parent_id, i.has_variants, i.attributes, i.variant_values,
-        COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders,
-        CASE WHEN i.has_variants = 1 OR i.parent_id IS NOT NULL THEN (SELECT COUNT(DISTINCT family.work_order_id) FROM stock_reservations family
-          JOIN stock_items sibling ON sibling.id = family.item_id AND sibling.tenant_id = ?
-          WHERE family.tenant_id = ? AND sibling.archived = 0 AND sibling.parent_id = COALESCE(i.parent_id, i.id)) ELSE 0 END AS family_orders
+        COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders, COALESCE(f.orders, 0) AS family_orders
       FROM stock_items i
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
+      LEFT JOIN (SELECT sibling.parent_id, COUNT(DISTINCT family.work_order_id) AS orders FROM stock_reservations family
+          JOIN stock_items sibling ON sibling.id = family.item_id AND sibling.tenant_id = ?
+          WHERE family.tenant_id = ? AND sibling.archived = 0 AND sibling.parent_id IS NOT NULL GROUP BY sibling.parent_id) f
+        ON f.parent_id = COALESCE(i.parent_id, i.id)
       WHERE i.tenant_id = ?${where} ORDER BY i.code`)
       .all(...args).map((itemRow) => ({ ...shapeItem(itemRow, itemRow.reserved, itemRow.orders), familyOrders: Number(itemRow.family_orders) || 0 }));
   }
