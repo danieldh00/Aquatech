@@ -162,7 +162,7 @@ function normalizeSite(input, base = DEFAULT_SITE) {
       }),
     },
     business: {
-      enabled: flag(business.enabled, base.business.enabled), image: imageRef(business.image, base.business.image),
+      enabled: flag(business.enabled, base.business.enabled), image: business.image === '' ? '' : imageRef(business.image, base.business.image),
       title: cleanText(business.title, 120, base.business.title), text: cleanText(business.text, 300, base.business.text),
       button: cleanText(business.button, 40, base.business.button), link: 'link' in business ? linkRef(business.link) : base.business.link,
     },

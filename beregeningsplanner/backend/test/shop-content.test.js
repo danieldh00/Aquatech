@@ -65,6 +65,7 @@ test('normalizeSite vult aan met de standaard en weigert ongeldige waarden', () 
   assert.strictEqual(site.hero.title, 'Nieuwe kop');
   assert.strictEqual(site.hero.image, DEFAULT_SITE.hero.image, 'onbekend bestand valt terug op de standaard');
   assert.strictEqual(site.hero.link, '');
+  assert.strictEqual(normalizeSite({ business: { image: '' } }).business.image, '', 'zakelijk blok zonder afbeelding blijft leeg');
   assert.deepStrictEqual(site.benefits.items, [{ image: 'asset:usp-bezorgd.png', title: 'Snel', text: 'Morgen in huis' }]);
   assert.deepStrictEqual(site.brands.items, [{ image: 'asset:merk-dab.webp', name: 'DAB' }]);
   assert.strictEqual(site.contact.phone, '06-123 ');
@@ -116,8 +117,8 @@ test('blokken: concept, voorbeeld, publiceren en vorige versie terugzetten', asy
   assert.match((await admin.get('/winkel/?voorbeeld=1')).text, /Tuinseizoen is begonnen/);
 
   await admin.put('/api/admin/shop-content/site', { hero: { title: 'Tweede versie' } });
-  await admin.post('/api/admin/shop-content/site/publish', {});
-  assert.strictEqual(published.body.site.canRevert, false);
+  const republished = await admin.post('/api/admin/shop-content/site/publish', {});
+  assert.strictEqual(republished.body.site.canRevert, true);
   const reverted = await admin.post('/api/admin/shop-content/site/revert', {});
   assert.strictEqual(reverted.status, 200);
   assert.match((await anonymous.get('/winkel/')).text, /Tuinseizoen is begonnen/);
@@ -249,6 +250,16 @@ test('rechten en tenantgrenzen van de webshop-inhoud', async () => {
   assert.strictEqual((await other.post('/api/admin/shop-content/site/publish', {})).status, 404);
   assert.strictEqual((await other.post('/api/admin/shop-content/images', { data: PIXEL_PNG.toString('base64') })).status, 404);
   assert.match((await admin.get('/winkel/?voorbeeld=1')).text, /Geheim concept/);
+});
+
+test('webshop uit: beheerder ziet voorbeeld mét opmaak en afbeeldingen, bezoeker niets', async () => {
+  const { admin, anonymous } = await setup();
+  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: false })).status, 200);
+  assert.strictEqual((await anonymous.get('/winkel/assets/winkel.css')).status, 404);
+  assert.strictEqual((await anonymous.get('/winkel/?voorbeeld=1')).status, 404);
+  assert.strictEqual((await admin.get('/winkel/?voorbeeld=1')).status, 200);
+  assert.strictEqual((await admin.get('/winkel/assets/winkel.css')).status, 200);
+  assert.strictEqual((await admin.get('/winkel/')).status, 404, 'zonder voorbeeld ziet ook een beheerder de uitgeschakelde shop niet');
 });
 
 test('de webshop-inhoud heeft geen SELECT * en staat in de standaard-assets', () => {

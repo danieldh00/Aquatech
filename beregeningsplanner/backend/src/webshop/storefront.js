@@ -109,7 +109,8 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
     res.setHeader('Referrer-Policy', 'same-origin');
     const accountPost = req.method === 'POST' && accounts && ACCOUNT_POSTS.test(req.path);
     if (req.method !== 'GET' && req.method !== 'HEAD' && !accountPost) return res.status(405).set('Allow', 'GET, HEAD').end();
-    if (!settingsFor(tenantId).get('storefront') && !isPreview(req)) return res.status(404).type('text').send('Niet gevonden.');
+    const previewFile = Boolean(content) && /^\/(assets|media)\//.test(req.path) && previewAllowed(req);
+    if (!settingsFor(tenantId).get('storefront') && !isPreview(req) && !previewFile) return res.status(404).type('text').send('Niet gevonden.');
     next();
   });
   router.use(limiter);
