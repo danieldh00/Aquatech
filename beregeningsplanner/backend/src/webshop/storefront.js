@@ -261,7 +261,11 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
     const query = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const found = words.length
-      ? catalog.products.filter((product) => words.every((word) => `${product.name} ${product.code} ${product.categoryName}`.toLowerCase().includes(word)))
+      ? catalog.products.filter((product) => {
+        const variantText = (product.variants || []).map((variant) => `${variant.code} ${variant.label}`).join(' ');
+        const haystack = `${product.name} ${product.code} ${product.categoryName} ${variantText}`.toLowerCase();
+        return words.every((word) => haystack.includes(word));
+      })
       : [];
     sendPage(req, res, 200, () => searchPage(query, found, catalog.groups));
   });
@@ -279,10 +283,14 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
     const catalog = data.catalogOf(tenantId);
-    const product = catalog.products.find((candidate) => candidate.slug === req.params.slug) || catalog.variantProducts.find((candidate) => candidate.slug === req.params.slug);
+    const variant = catalog.variantProducts.find((candidate) => candidate.slug === req.params.slug);
+    const parent = variant && catalog.products.find((candidate) => candidate.slug === variant.parentSlug);
+    // Een variant krijgt de keuzelijst van zijn hoofdartikel en staat zelf geselecteerd.
+    const product = catalog.products.find((candidate) => candidate.slug === req.params.slug)
+      || (parent ? { ...variant, variants: parent.variants, attributeName: parent.attributeName } : variant);
     if (!product) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
-    const chosenCode = typeof req.query.v === 'string' ? req.query.v.slice(0, 80) : '';
-    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode));
+    const chosenCode = typeof req.query.v === 'string' ? req.query.v.slice(0, 80) : (variant ? variant.code : '');
+    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : '')));
   });
 
   router.use((req, res) => {

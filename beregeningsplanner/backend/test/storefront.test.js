@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { buildCatalog, slugify, groupOf } = require('../src/webshop/storefront-data');
+const { buildCatalog, slugify, groupOf, createStorefrontData } = require('../src/webshop/storefront-data');
 const { decodeHtmlEntities } = require('../src/webshop/html-entities');
 const { createLogin, createClient, listen } = require('./helpers/http-client');
 
@@ -346,6 +346,13 @@ test('webshop: hoofdartikel met varianten als regel met keuzelijst en eigen scri
   assert.strictEqual(chosen.status, 200);
   assert.match(chosen.text, /<h1>Koppeling pp<\/h1>/);
   assert.ok(chosen.text.includes(`Artikelnummer: ${code32} | Maat: 32 mm`), 'artikelnummer en kenmerk van de gekozen variant');
+  const byCode = await anonymous.get(`/winkel/zoeken/?q=${encodeURIComponent(code32)}`);
+  assert.strictEqual((byCode.text.match(/data-variant-row/g) || []).length, 1, 'zoeken op variantcode vindt het hoofdartikel');
+  const variantProduct = createStorefrontData(db).catalogOf(main).variantProducts.find((candidate) => candidate.code === code32);
+  const variantPage = await anonymous.get(`/winkel/product/${variantProduct.slug}/`);
+  assert.strictEqual(variantPage.status, 200);
+  assert.match(variantPage.text, new RegExp(`<option value="${code32}" selected>32 mm</option>`), 'variant staat geselecteerd');
+  assert.match(variantPage.text, /2 varianten/, 'variantpagina toont de keuzelijst van het hoofdartikel');
   const found = await anonymous.get('/winkel/zoeken/?q=koppeling');
   assert.strictEqual(found.text.match(/data-variant-row/g).length, 1);
   assert.ok(!/<script/i.test((await anonymous.get('/winkel/')).text), 'startpagina laadt geen script');

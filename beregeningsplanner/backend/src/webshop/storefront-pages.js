@@ -232,7 +232,7 @@ function variantRow(product, root) {
   const image = product.image ? `<img src="${escapeHtml(product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
   const options = product.variants.map((variant) => `<option value="${escapeHtml(variant.code)}" data-code="${escapeHtml(variant.code)}" data-meta="${escapeHtml(variant.meta)}" data-price="${escapeHtml(formatPrice(variant.priceIncl))}" data-stock="${variant.inStock ? 'in' : 'out'}" data-href="${productHref(root, product, variant)}"${variant === selected ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('');
   return `<div class="variant-row" data-variant-row>
-  <a class="product-image" href="${productHref(root, product, selected)}" data-variant-link>${image}</a>
+  <a class="product-image" href="${productHref(root, product, selected)}" data-variant-link tabindex="-1" aria-hidden="true">${image}</a>
   <div class="variant-main">
     <a class="product-name" href="${productHref(root, product, selected)}" data-variant-link title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</a>
     <p class="variant-meta">Artikelnr.: <span data-variant-code>${escapeHtml(selected.code)}</span><span data-variant-meta>${selected.meta ? ` | ${escapeHtml(selected.meta)}` : ''}</span></p>
