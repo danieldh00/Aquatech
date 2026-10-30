@@ -16,6 +16,7 @@ const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, s
 const { DEFAULT_SITE } = require('./shop-content');
 const { loginPage, registerPage, accountPage, plannerPage } = require('./storefront-account-pages');
 const { cartPage, checkoutPage, checkoutLoginPage, orderPage } = require('./storefront-order-pages');
+const Shipping = require('./shipping');
 const { readCart, writeCart, applyCartAction } = require('./storefront-cart');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
@@ -279,6 +280,29 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
         writeCart(req, res, applyCartAction(readCart(req), req.body || {}));
         res.redirect(303, './');
       });
+      /**
+       * De verzendinstelling van deze winkel (de instelling `shopShipping`, gesaneerd).
+       * @returns {object} De instelling met ophalen en DPD.
+       */
+      const shippingConfig = () => Shipping.sanitizeShipping(settingsFor(tenantId).get('shopShipping'));
+      /**
+       * Bepaalt het land en de verzendmethode die bij het afrekenen getoond worden.
+       * @param {object} cart De geprijsde winkelwagen.
+       * @param {object} input Het gekozen land en de gekozen methode (query of formulier).
+       * @returns {{ quote: object, country: string, method: string }} De opties, het land (een bezorgbaar land) en de methode (de gekozen, anders de eerste beschikbare).
+       */
+      const checkoutChoice = (cart, input) => {
+        const config = shippingConfig();
+        const countries = Shipping.countriesOf(config);
+        const asked = String(input.country || input.land || '').toUpperCase();
+        const country = countries.some((entry) => entry.code === asked) ? asked : countries.length ? countries[0].code : 'NL';
+        const quote = orders.shippingQuote(cart, config, country);
+        const asking = String(input.shippingMethod || '');
+        const available = quote.options.filter((option) => option.available);
+        const method = available.some((option) => option.method === asking) ? asking : available.length ? available[0].method : '';
+        return { quote, country, method };
+      };
+
       router.get('/afrekenen', (req, res) => {
         if (withSlash(req, res)) return;
         if (!orderingOn()) return orderingOff(req, res);
@@ -287,20 +311,28 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
         if (!cart.lines.length || !cart.ok) return res.redirect(302, '../winkelwagen/');
         const viewer = accounts.viewer(req);
         if (!viewer) return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups));
-        sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer }, groups));
+        sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, ...checkoutChoice(cart, req.query || {}) }, groups));
       });
       router.post('/afrekenen', form, async (req, res, next) => {
         if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
         if (!orderingOn()) return orderingOff(req, res);
         const viewer = accounts.viewer(req);
         if (!viewer) return res.redirect(303, './');
+        const body = req.body || {};
+        // Land wijzigen: alleen de pagina opnieuw tonen met de kosten voor dat land, zonder te bestellen.
+        if (body.action === 'update') {
+          res.setHeader('Cache-Control', 'no-store');
+          const cart = orders.priceCart(tenantId, readCart(req));
+          if (!cart.lines.length || !cart.ok) return res.redirect(303, '../winkelwagen/');
+          return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, values: body, ...checkoutChoice(cart, body) }, groups));
+        }
         if (orderLimited(req, res)) return res.status(429).type('text').send('Te veel bestellingen vanaf dit adres. Probeer het later opnieuw.');
         try {
-          const out = orders.place(tenantId, { id: viewer.id }, req.body, readCart(req));
+          const out = orders.place(tenantId, { id: viewer.id }, body, readCart(req), shippingConfig());
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
             const cart = orders.priceCart(tenantId, readCart(req));
-            return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, error: out.error, values: req.body || {} }, groups));
+            return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, error: out.error, values: body, ...checkoutChoice(cart, body) }, groups));
           }
           writeCart(req, res, []);
           // De bestelling staat al vast: een fout in audit of mail mag de klant niet naar een foutpagina sturen, en de ene stap niet de andere overslaan.

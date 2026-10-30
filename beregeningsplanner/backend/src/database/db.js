@@ -891,6 +891,10 @@ const MIGRATIONS = [
   CREATE INDEX web_orders_created ON web_orders (tenant_id, created_at);
   CREATE INDEX web_orders_user ON web_orders (tenant_id, user_id, created_at);
   `,
+  // 38: gewicht per artikel (gram) voor de verzendkosten in de webshop.
+  `
+  ALTER TABLE stock_items ADD COLUMN weight_grams INTEGER;
+  `,
 ];
 
 /**

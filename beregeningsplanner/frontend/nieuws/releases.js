@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.4.7',
+      date: '2026-10-30',
+      title: 'Verzending in de webshop',
+      items: [
+        { text: 'Klanten kiezen bij het afrekenen tussen ophalen (gratis, zonder adres) en bezorging door DPD. De verzendkosten hangen af van het land en het gewicht, en boven een bedrag naar keuze is bezorgen gratis.', for: ['beheer'] },
+        { text: 'Je stelt ophalen en de DPD-tarieven in bij Beheer, Webshop en WooCommerce, Verzending. Het gewicht per artikel vul je in bij Artikelen.', for: ['beheer'] },
+        { text: 'Bij Verzonden kun je de DPD-volgcode invullen (of later toevoegen). De klant ziet dan een link om het pakket te volgen.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.4.6',
       date: '2026-10-30',
       title: 'Bestellen in de webshop',

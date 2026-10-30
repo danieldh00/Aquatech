@@ -15,7 +15,7 @@ const servers = [];
 after(() => { for (const server of servers) server.close(); });
 
 /** Gegevens van het afrekenformulier die kloppen. */
-const CHECKOUT = { name: 'Piet Tuin', company: '', email: 'piet@voorbeeld.nl', phone: '0612345678', street: 'Tuinstraat 1', postcode: '8071ab', city: 'Nunspeet', note: 'Graag bellen' };
+const CHECKOUT = { name: 'Piet Tuin', company: '', email: 'piet@voorbeeld.nl', phone: '0612345678', street: 'Tuinstraat 1', postcode: '8071ab', city: 'Nunspeet', note: 'Graag bellen', shippingMethod: 'dpd', country: 'NL' };
 
 /**
  * Hoofdtenant met beheerder, de webshop met bestellen aan en een paar artikelen.
@@ -147,7 +147,7 @@ test('bestelling plaatsen reserveert de voorraad en stuurt een bevestiging', asy
   assert.strictEqual(list.body.items[0].status, 'nieuw');
   assert.strictEqual(list.body.counts.nieuw, 1);
   const detail = await admin.get(`/api/admin/web-orders/${list.body.items[0].id}`);
-  assert.strictEqual(detail.body.order.total, 31.48);
+  assert.strictEqual(detail.body.order.total, 43.43, '31,48 artikelen + 11,95 DPD (6 kg met standaardgewicht)');
   assert.strictEqual(detail.body.order.address.postcode, '8071 AB');
   assert.strictEqual(detail.body.order.mail.sent, true);
 });
