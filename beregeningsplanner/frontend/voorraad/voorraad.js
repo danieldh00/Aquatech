@@ -252,14 +252,15 @@
   /**
    * Vult de keuzelijsten Eenheid met de eenheden; een eenheid die een artikel al
    * heeft maar niet (meer) in de lijst staat blijft keuzemogelijk, net als de
-   * eenheid die op dat moment in een keuzelijst gekozen is.
+   * eenheid die op dat moment in een zichtbare keuzelijst gekozen is (verborgen
+   * formulieren beginnen opnieuw, zodat een verwijderde eenheid niet terugkomt).
    * @param {string} extra eenheid die altijd in de lijst moet staan (bijv. die van het geopende artikel)
    */
   function fillUnits(extra = '') {
     const names = state.units.map((unit) => unit.name);
     if (extra && !names.includes(extra)) names.push(extra);
     document.querySelectorAll('select[data-units]').forEach((select) => {
-      const keep = select.value;
+      const keep = select.offsetParent === null ? '' : select.value;
       const options = keep && !names.includes(keep) ? [...names, keep] : names;
       select.innerHTML = options.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
       select.value = options.includes(keep) ? keep : (options.includes('st') ? 'st' : options[0] || '');
