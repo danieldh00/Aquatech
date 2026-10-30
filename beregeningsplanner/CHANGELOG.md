@@ -33,6 +33,10 @@ Retouren in de eigen webshop (stap 6 van de webshop-roadmap).
   webshop, zie `NO_TESTDATA`).
 - Tests: `test/web-returns.test.js`; de gedeelde opzet van de webshoptests staat
   nu in `test/helpers/webshop-world.js`.
+- Een mislukte mail over de afgeronde retour is opnieuw te versturen met
+  de knop *Mail opnieuw versturen* (`POST /api/admin/web-returns/:id/completion-mail`).
+- Een creditconcept dat bleef staan (ook zonder foutmelding) wordt bij de
+  volgende poging alsnog definitief gemaakt, tenzij definitief maken uit staat.
 
 ## 1.5.0
 

@@ -33,7 +33,7 @@ async function until(check) {
 
 /**
  * Hoofdtenant met beheerder, een artikel, een tweede organisatie en twee klanten; mails worden onderschept.
- * @returns {Promise<object>} base, admin, vreemd, sent (verstuurde mails) en shoppers (twee klanten).
+ * @returns {Promise<object>} base, admin, vreemd, sent (verstuurde mails), mailFailing (zet .on aan om mails te laten mislukken) en shoppers (twee klanten).
  */
 async function setup() {
   const db = openDb();
@@ -43,11 +43,12 @@ async function setup() {
   const other = store.createTenant({ slug: 'ander', name: 'Ander BV' }).tenant;
   await store.createAccount(other.id, { username: 'vreemd', displayName: 'Vreemd', role: 'beheerder', password: PW, mustChangePassword: false });
   const sent = [];
+  const mailFailing = { on: false };
   /**
-   * Mailserver die elk bericht onderschept.
+   * Mailserver die elk bericht onderschept (of laat mislukken zolang mailFailing.on aan staat).
    * @returns {{ configured: Function, send: Function }} De nagebootste mailserver.
    */
-  const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
+  const mailerFor = () => ({ configured: () => true, send: async (message) => { if (mailFailing.on) throw new Error('Mailserver onbereikbaar'); sent.push(message); } });
   const { server, base } = await listen(createApp({ secret: SECRET, db, mailerFor }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
@@ -66,7 +67,7 @@ async function setup() {
     await postForm(base, client, '/winkel/registreren/', { displayName: `Klant ${counter}`, email: `k${counter}@voorbeeld.nl`, password: PW, password2: PW, website: '' });
     return { client };
   };
-  return { base, admin, vreemd: await createLogin(base, { password: PW })('vreemd', 'ander'), sent, shoppers: [await shopper(), await shopper()] };
+  return { base, admin, vreemd: await createLogin(base, { password: PW })('vreemd', 'ander'), sent, mailFailing, shoppers: [await shopper(), await shopper()] };
 }
 
 /**

@@ -394,6 +394,18 @@ function registerWebReturnRoutes(app, { returns, requireJson, audit, credits = n
     res.json({ return: finished, credit: credited });
   }));
 
+  app.post('/api/admin/web-returns/:id/completion-mail', requireJson, wrap(async (req, res) => {
+    if (!mail) return res.status(404).json({ error: 'not_found', message: 'E-mail staat niet aan.' });
+    const found = returns.get(req.tenantId, req.params.id);
+    if (!found) return res.status(404).json({ error: 'not_found', message: 'Retour niet gevonden.' });
+    if (found.status !== 'afgerond') return res.status(409).json({ error: 'not_completed', message: 'Rond de retour eerst af.' });
+    if (found.mail && found.mail.kind === 'afgerond' && found.mail.sent) return res.status(409).json({ error: 'already_sent', message: 'De mail over de afgeronde retour is al verstuurd.' });
+    await mail.sendCompleted(req.tenantId, found);
+    const updated = returns.get(req.tenantId, found.id);
+    if (!updated.mail || !updated.mail.sent) return res.status(502).json({ error: 'mail_failed', message: (updated.mail && updated.mail.error) || 'Versturen mislukt.' });
+    res.json({ return: updated });
+  }));
+
   app.post('/api/admin/web-returns/:id/credit', requireJson, wrap(async (req, res) => {
     if (!credits) return res.status(404).json({ error: 'not_found', message: 'Facturen staan niet aan.' });
     const found = returns.get(req.tenantId, req.params.id);

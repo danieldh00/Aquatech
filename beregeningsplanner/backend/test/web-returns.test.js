@@ -228,3 +228,21 @@ test('mislukt definitief maken van de creditnota: een nieuwe poging maakt het co
   assert.strictEqual(created, 1, 'één creditnota');
   assert.strictEqual((await credits.creditReturn('t', 'r1', null)).existing, true, 'daarna verandert er niets meer');
 });
+
+test('mislukte mail over de afgeronde retour kan opnieuw worden verstuurd', async () => {
+  const world = await setup();
+  const id = await shippedOrder(world);
+  assert.strictEqual((await requestReturn(world, id, { 'qty:BUS': '1', reason: 'defect' })).status, 303);
+  const record = await latestReturn(world.admin);
+  await world.admin.post(`/api/admin/web-returns/${record.id}/decision`, { approve: true });
+  world.mailFailing.on = true;
+  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/complete`, {})).status, 200);
+  await until(async () => { const found = (await world.admin.get(`/api/admin/web-returns/${record.id}`)).body; return found.return?.mail?.sent === false ? found : null; });
+  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 502, 'mailserver nog stuk');
+  assert.strictEqual((await world.vreemd.post(`/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 404, 'andere tenant');
+  world.mailFailing.on = false;
+  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 200);
+  assert.strictEqual(mailsWith(world.sent, /is ontvangen en afgehandeld/).length, 1);
+  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 409, 'niet twee keer');
+  assert.strictEqual((await world.shoppers[0].client.post(`/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 403);
+});
