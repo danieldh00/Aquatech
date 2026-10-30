@@ -44,7 +44,10 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
   const shippingText = (order) => {
     const shipping = order.shipping;
     if (shipping && shipping.method === 'ophalen') return `Verzending: ${shipping.label} (gratis)\nJe haalt de bestelling zelf op.`;
-    return `${shipping ? `Verzending: ${shipping.label} (${shipping.price > 0 ? `${EUR.format(shipping.price)}${order.vat && order.vat.shifted ? ' (btw verlegd)' : ''}` : 'gratis'})\n\n` : ''}Afleveradres:\n${addressText(order)}`;
+    const shifted = Boolean(order.vat && order.vat.shifted);
+    const businessExclusive = order.customerGroup === 'zakelijk' && !shifted;
+    const priceText = shipping && shipping.price > 0 ? `${EUR.format(businessExclusive && shipping.priceExcl !== undefined ? shipping.priceExcl : shipping.price)}${businessExclusive ? ' excl. btw' : shifted ? ' (btw verlegd)' : ''}` : 'gratis';
+    return `${shipping ? `Verzending: ${shipping.label} (${priceText})\n\n` : ''}Afleveradres:\n${addressText(order)}`;
   };
 
   /**
