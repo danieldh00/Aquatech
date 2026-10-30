@@ -252,6 +252,7 @@ test('rechten: Beheer-API alleen voor beheerders, andere organisatie 404, formul
   assert.strictEqual(placed.status, 303);
   assert.strictEqual((await customer.get('/api/admin/web-orders')).status, 403);
   const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
+  assert.strictEqual((await customer.get(`/api/admin/web-orders/${orderId}`)).status, 403);
   assert.strictEqual((await customer.post(`/api/admin/web-orders/${orderId}/status`, { status: 'verzonden' })).status, 403);
   // Een beheerder van een andere organisatie ziet de bestelling niet.
   assert.strictEqual((await vreemd.get('/api/admin/web-orders')).body.total, 0);

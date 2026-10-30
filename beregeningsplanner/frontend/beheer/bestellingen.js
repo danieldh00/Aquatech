@@ -62,7 +62,7 @@
     const buttons = (NEXT[order.status] || []).map(([status, label]) => `<button class="btn ${status === 'geannuleerd' ? 'danger' : 'primary'}" data-status="${status}">${label}</button>`).join(' ');
     const mail = order.mail ? (order.mail.sent ? `Bevestiging verstuurd (${when(order.mail.at)})` : `Bevestiging niet verstuurd: ${esc(order.mail.error)}`) : 'Bevestiging nog niet verstuurd';
     box.innerHTML = `<h3>${esc(order.number)} <span class="pill ${esc(order.status)}">${esc(order.statusLabel)}</span></h3>
-      <p>${esc(order.customer.company ? `${order.customer.company} – ` : '')}${esc(order.customer.name)} · <a href="mailto:${esc(encodeURIComponent(order.email))}">${esc(order.email)}</a>${order.customer.phone ? ` · ${esc(order.customer.phone)}` : ''}<br>
+      <p>${esc(order.customer.company ? `${order.customer.company} – ` : '')}${esc(order.customer.name)} · <a href="mailto:${esc(mailtoAddress(order.email))}">${esc(order.email)}</a>${order.customer.phone ? ` · ${esc(order.customer.phone)}` : ''}<br>
       ${esc(order.address.street)}, ${esc(order.address.postcode)} ${esc(order.address.city)}</p>
       ${order.note ? `<p><b>Opmerking:</b> ${esc(order.note)}</p>` : ''}
       <div class="tablewrap"><table class="grid"><thead><tr><th>Artikel</th><th class="num">Aantal</th><th class="num">Prijs</th><th class="num">Totaal</th></tr></thead><tbody>${lines}${vat}
@@ -132,6 +132,17 @@
   }
 
   /**
+   * Het adres voor een mailto-link: lokaal deel en domein afzonderlijk URI-gecodeerd, met een letterlijk @ ertussen (RFC 6068).
+   * @param {string} email Het e-mailadres.
+   * @returns {string} Het gecodeerde adres.
+   */
+  function mailtoAddress(email) {
+    const at = String(email).lastIndexOf('@');
+    if (at < 0) return encodeURIComponent(email);
+    return `${encodeURIComponent(email.slice(0, at))}@${encodeURIComponent(email.slice(at + 1))}`;
+  }
+
+  /**
    * Exporteert de bestellingen (met het gekozen filter) naar Excel: een blad met bestellingen en een blad met regels.
    * @returns {Promise<void>}
    */
@@ -140,9 +151,19 @@
     if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     button.disabled = true;
     try {
+      // Filter vastleggen en tijdens het ophalen controleren dat de dataset gelijk blijft (anders verschuift de offset).
+      const { status, query } = state;
       const items = [];
+      const seen = new Set();
+      let expectedTotal = null;
       for (;;) {
-        const page = await api(`?status=${encodeURIComponent(state.status)}&q=${encodeURIComponent(state.query)}&lines=1&limit=500&offset=${items.length}`);
+        const page = await api(`?status=${encodeURIComponent(status)}&q=${encodeURIComponent(query)}&lines=1&limit=500&offset=${items.length}`);
+        if (expectedTotal === null) expectedTotal = page.total;
+        if (page.total !== expectedTotal || page.items.some((order) => seen.has(order.id))) {
+          toast('De bestellingen zijn tijdens het exporteren gewijzigd. Start de export opnieuw.', true);
+          return;
+        }
+        for (const order of page.items) seen.add(order.id);
         items.push(...page.items);
         if (items.length >= page.total || !page.items.length) break;
       }
