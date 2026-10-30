@@ -25,6 +25,7 @@ test('btw-nummer: formaat, landvoorvoegsel en verleggen', () => {
   assert.ok(!Vat.validVatNumber('BE12') && !Vat.validVatNumber('XX123456789') && !Vat.validVatNumber(''));
   assert.ok(Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'BE', vatNumber: 'BE0123456789' }));
   assert.ok(Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'GR', vatNumber: 'EL123456789' }), 'Griekenland gebruikt EL');
+  assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'EL', vatNumber: 'EL123456789' }), 'EL is geen bestemmingscode');
   assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'NL', vatNumber: 'NL123456789B01' }), 'Nederland: gewoon btw');
   assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'BE', vatNumber: 'DE123456789' }), 'nummer van een ander land');
   assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'ophalen', country: 'NL', vatNumber: 'BE0123456789' }), 'ophalen is een levering in Nederland');

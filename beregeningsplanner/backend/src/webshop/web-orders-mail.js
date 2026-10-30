@@ -27,7 +27,8 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     if (order.customerGroup !== 'zakelijk') return `Totaal incl. btw: ${EUR.format(order.totals.total)}`;
     if (order.vat && order.vat.shifted) return `Totaal (btw verlegd naar de afnemer${order.vat.number ? `, btw-nummer ${order.vat.number}` : ''}): ${EUR.format(order.totals.total)}`;
     const excl = order.totals.byRate.reduce((sum, row) => sum + row.excl, 0);
-    return `Totaal excl. btw: ${EUR.format(excl)}\nBtw: ${EUR.format(order.totals.total - excl)}\nTotaal incl. btw: ${EUR.format(order.totals.total)}`;
+    const vatLines = order.totals.byRate.filter((row) => row.rate > 0).map((row) => `Btw ${row.rate}% over ${EUR.format(row.excl)}: ${EUR.format(row.vat)}`);
+    return [`Totaal excl. btw: ${EUR.format(excl)}`, ...vatLines, `Totaal incl. btw: ${EUR.format(order.totals.total)}`].join('\n');
   };
   /**
    * Het afleveradres als tekst.
@@ -43,7 +44,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
   const shippingText = (order) => {
     const shipping = order.shipping;
     if (shipping && shipping.method === 'ophalen') return `Verzending: ${shipping.label} (gratis)\nJe haalt de bestelling zelf op.`;
-    return `${shipping ? `Verzending: ${shipping.label} (${shipping.price > 0 ? EUR.format(shipping.price) : 'gratis'})\n\n` : ''}Afleveradres:\n${addressText(order)}`;
+    return `${shipping ? `Verzending: ${shipping.label} (${shipping.price > 0 ? `${EUR.format(shipping.price)}${order.vat && order.vat.shifted ? ' (btw verlegd)' : ''}` : 'gratis'})\n\n` : ''}Afleveradres:\n${addressText(order)}`;
   };
 
   /**

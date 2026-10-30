@@ -196,15 +196,15 @@
         { header: 'Nummer', key: 'number', width: 16 }, { header: 'Besteld', key: 'at', width: 18, style: { numFmt: 'dd-mm-yyyy hh:mm' } }, { header: 'Status', key: 'status', width: 13 },
         { header: 'Klant', key: 'name', width: 26 }, { header: 'Bedrijf', key: 'company', width: 24 }, { header: 'E-mail', key: 'email', width: 28 }, { header: 'Telefoon', key: 'phone', width: 16 },
         { header: 'Adres', key: 'street', width: 28 }, { header: 'Postcode', key: 'postcode', width: 10 }, { header: 'Plaats', key: 'city', width: 18 },
-        { header: 'Totaal excl. btw', key: 'excl', width: 15, style: { numFmt: '€ #,##0.00' } }, { header: 'Btw', key: 'vat', width: 11, style: { numFmt: '€ #,##0.00' } }, { header: 'Totaal (incl. btw; excl. bij verlegging)', key: 'total', width: 15, style: { numFmt: '€ #,##0.00' } },
-        { header: 'Klantgroep', key: 'group', width: 12 }, { header: 'Btw-nummer', key: 'vatNumber', width: 18 }, { header: 'Btw verlegd', key: 'shifted', width: 11 }, { header: 'Verzending', key: 'shipping', width: 26 }, { header: 'Verzendkosten (incl. btw; excl. bij verlegging)', key: 'shippingPrice', width: 18, style: { numFmt: '€ #,##0.00' } }, { header: 'Volgcode', key: 'tracking', width: 20 },
+        { header: 'Totaal excl. btw', key: 'excl', width: 15, style: { numFmt: '€ #,##0.00' } }, { header: 'Btw', key: 'vat', width: 11, style: { numFmt: '€ #,##0.00' } }, { header: 'Totaal (incl. btw; excl. bij verlegging)', key: 'total', width: 40, style: { numFmt: '€ #,##0.00' } },
+        { header: 'Klantgroep', key: 'group', width: 12 }, { header: 'Btw-nummer', key: 'vatNumber', width: 18 }, { header: 'Btw verlegd', key: 'shifted', width: 11 }, { header: 'Verzending', key: 'shipping', width: 26 }, { header: 'Verzendkosten (incl. btw; excl. bij verlegging)', key: 'shippingPrice', width: 46, style: { numFmt: '€ #,##0.00' } }, { header: 'Volgcode', key: 'tracking', width: 20 },
         { header: 'Opmerking', key: 'note', width: 30 },
       ];
       const lines = workbook.addWorksheet('Regels');
       lines.columns = [
         { header: 'Nummer', key: 'number', width: 16 }, { header: 'Artikelnummer', key: 'code', width: 18 }, { header: 'Omschrijving', key: 'name', width: 40 }, { header: 'Aantal', key: 'qty', width: 9 },
         { header: 'Prijs excl. btw', key: 'unitExcl', width: 15, style: { numFmt: '€ #,##0.00' } }, { header: 'Btw %', key: 'vatRate', width: 8 },
-        { header: 'Prijs (incl. btw; excl. bij verlegging)', key: 'unitIncl', width: 15, style: { numFmt: '€ #,##0.00' } }, { header: 'Totaal (incl. btw; excl. bij verlegging)', key: 'lineTotal', width: 15, style: { numFmt: '€ #,##0.00' } },
+        { header: 'Prijs (incl. btw; excl. bij verlegging)', key: 'unitIncl', width: 38, style: { numFmt: '€ #,##0.00' } }, { header: 'Totaal (incl. btw; excl. bij verlegging)', key: 'lineTotal', width: 40, style: { numFmt: '€ #,##0.00' } },
       ];
       for (const order of items) {
         const vat = order.totals.byRate.reduce((sum, row) => sum + row.vat, 0);

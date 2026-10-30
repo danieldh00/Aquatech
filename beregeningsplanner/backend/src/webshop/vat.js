@@ -43,12 +43,12 @@ function vatNumberFits(vatNumber, country) {
 }
 
 /**
- * Of de btw wordt verlegd: een bedrijf met een geldig btw-nummer van het land van aflevering, in een ander EU-land dan Nederland.
+ * Of de btw wordt verlegd: een bedrijf met een geldig btw-nummer van het land van aflevering, in een ander EU-land dan Nederland (EL is geen landcode van een bestemming: Griekenland is GR).
  * @param {{ group: string, method: string, country: string, vatNumber: string }} order Klantgroep, verzendmethode, land en btw-nummer.
  * @returns {boolean} true als de bestelling zonder btw wordt gefactureerd.
  */
 function vatShifted({ group, method, country, vatNumber }) {
-  if (group !== 'zakelijk' || method !== 'dpd' || country === 'NL') return false;
+  if (group !== 'zakelijk' || method !== 'dpd' || country === 'NL' || country === 'EL') return false;
   return validVatNumber(vatNumber) && vatNumberFits(vatNumber, country);
 }
 
