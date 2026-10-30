@@ -611,6 +611,9 @@ function createStore(db) {
       prepare('UPDATE history SET user_id = NULL WHERE user_id = ?').run(user.id);
       prepare('UPDATE audit SET user_id = NULL WHERE user_id = ?').run(user.id);
       prepare('UPDATE news SET author_id = NULL WHERE author_id = ?').run(user.id);
+      prepare('UPDATE shop_content SET updated_by = NULL WHERE updated_by = ?').run(user.id);
+      prepare('UPDATE shop_content SET published_by = NULL WHERE published_by = ?').run(user.id);
+      prepare('UPDATE shop_images SET created_by = NULL WHERE created_by = ?').run(user.id);
       prepare('DELETE FROM impersonations WHERE admin_id = ? OR user_id = ?').run(user.id, user.id);
       prepare('DELETE FROM support_grants WHERE user_id = ?').run(user.id);
       prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
@@ -837,6 +840,8 @@ function createStore(db) {
       prepare('DELETE FROM settings WHERE tenant_id = ?').run(id);
       prepare('DELETE FROM shop_products WHERE tenant_id = ?').run(id);
       prepare('DELETE FROM shop_sync WHERE tenant_id = ?').run(id);
+      prepare('DELETE FROM shop_content WHERE tenant_id = ?').run(id);
+      prepare('DELETE FROM shop_images WHERE tenant_id = ?').run(id);
       prepare('DELETE FROM audit WHERE tenant_id = ?').run(id);
       prepare('DELETE FROM tenants WHERE id = ?').run(id);
     });
@@ -882,6 +887,8 @@ function createStore(db) {
     prepare('DELETE FROM work_order_materials WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM work_order_offers WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM news WHERE tenant_id = ?').run(tenantId);
+    prepare('DELETE FROM shop_content WHERE tenant_id = ?').run(tenantId);
+    prepare('DELETE FROM shop_images WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM sprinkler_library WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM ai_usage WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM plan_recognitions WHERE tenant_id = ?').run(tenantId);

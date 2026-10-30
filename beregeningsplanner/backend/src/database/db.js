@@ -835,6 +835,40 @@ const MIGRATIONS = [
   `
   CREATE INDEX users_email ON users (tenant_id, email);
   `,
+  // 36: inhoud van de eigen webshop (shop-content.js). shop_content: per
+  // tenant een rij per onderdeel (key 'site' = blokken op de startpagina en in
+  // kop/voet, 'page:<slug>' = een vaste pagina) met JSON voor het concept
+  // (draft), de gepubliceerde versie (published) en de vorige gepubliceerde
+  // versie (previous). shop_images: geüploade afbeeldingen, versleuteld
+  // (vault.sealBytes) als tekst zodat ze in back-ups en PostgreSQL meegaan.
+  `
+  CREATE TABLE shop_content (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    key          TEXT NOT NULL,
+    draft        TEXT,
+    published    TEXT,
+    previous     TEXT,
+    updated_at   TEXT NOT NULL,
+    updated_by   TEXT REFERENCES users(id),
+    published_at TEXT,
+    published_by TEXT REFERENCES users(id)
+  );
+  CREATE UNIQUE INDEX shop_content_key ON shop_content (tenant_id, key);
+  CREATE TABLE shop_images (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    name       TEXT NOT NULL,
+    mime       TEXT NOT NULL,
+    width      INTEGER,
+    height     INTEGER,
+    size       INTEGER NOT NULL,
+    data       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id)
+  );
+  CREATE INDEX shop_images_tenant ON shop_images (tenant_id, created_at);
+  `,
 ];
 
 /**

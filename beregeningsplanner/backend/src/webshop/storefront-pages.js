@@ -5,23 +5,9 @@
 // proxy werkt.
 
 const { version: SHOP_VERSION } = require('../../package.json');
+const { DEFAULT_SITE } = require('./shop-content');
 
 const SHOP_NAME = 'Aquatechshop.nl';
-/** Contactgegevens zoals op aquatechshop.nl. */
-const PHONE = '06 47212019';
-const PHONE_LINK = 'tel:+31647212019';
-const EMAIL = 'info@aquatechshop.nl';
-/** Merken op de startpagina: bestand in assets/ en naam (alt-tekst). */
-const BRANDS = [
-  ['merk-ebara.png', 'Ebara'], ['merk-metzerplas.jpg', 'Metzerplas'], ['merk-grundfos.jpg', 'Grundfos'],
-  ['merk-rainbird.png', 'Rain Bird'], ['merk-dab.webp', 'DAB'], ['merk-pedrollo.webp', 'Pedrollo'],
-];
-/** Voordelen onder de producten op de startpagina: pictogram, kop en tekst. */
-const BENEFITS = [
-  ['usp-assortiment.png', 'Zeer compleet assortiment', 'Direct alles voor jouw project in huis'],
-  ['usp-bezorgd.png', 'Bezorgd op iedere locatie', 'Jouw producten op locatie bezorgd'],
-  ['usp-prijzen.png', 'Scherpe zakelijke prijzen', 'Vraag jouw zakelijk account aan'],
-];
 /** Maximaal aantal resultaten op de zoekpagina. */
 const MAX_SEARCH_RESULTS = 60;
 /** Aantal subcategorieën per hoofdcategorie op de startpagina. */
@@ -43,6 +29,58 @@ function escapeHtml(value) {
  */
 function formatPrice(amount) {
   return `€ ${Number(amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
+let activeContent = { site: DEFAULT_SITE, pages: [] };
+
+/**
+ * Bouwt pagina's op met de inhoud uit Beheer. Het opbouwen is synchroon, dus
+ * zolang `render` loopt hoort elke pagina bij deze inhoud; daarna geldt weer de vorige.
+ * @param {{ site: object, pages: object[] }} content De inhoud (zie shop-content.js, publicContent).
+ * @param {Function} render Functie die de pagina('s) opbouwt en iets teruggeeft.
+ * @returns {*} Wat `render` teruggeeft.
+ */
+function renderWith(content, render) {
+  const previous = activeContent;
+  activeContent = content;
+  try { return render(); } finally { activeContent = previous; }
+}
+
+/**
+ * Het adres van een afbeelding uit Beheer: een standaardbestand of een geüploade afbeelding.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {string} reference 'asset:<bestand>' of 'media:<id>'.
+ * @returns {string} Het (relatieve) adres, of een lege tekst als er geen afbeelding is.
+ */
+function imageSrc(root, reference) {
+  const [kind, name] = String(reference || '').split(':');
+  if (kind === 'asset' && name) return assetUrl(root, name);
+  return kind === 'media' && name ? `${root}media/${escapeHtml(name)}` : '';
+}
+
+/**
+ * Het adres van een knop uit Beheer: een volledig adres, een pad in de shop of de standaard.
+ * @param {string} link De ingevoerde link (leeg = standaard).
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {string} fallback De standaardbestemming (al met root).
+ * @returns {string} Het adres, ontsnapt voor in een attribuut.
+ */
+function linkHref(link, root, fallback) {
+  if (!link) return fallback;
+  return escapeHtml(/^https?:/i.test(link) ? link : `${root}${link}`);
+}
+
+/**
+ * Het telefoonnummer als tel:-link (06 → +316).
+ * @param {string} phone Het nummer zoals getoond.
+ * @returns {string} De link, of een lege tekst zonder cijfers.
+ */
+function phoneLink(phone) {
+  const digits = String(phone).replace(/[^\d+]/g, '');
+  if (!/\d/.test(digits)) return '';
+  if (digits.startsWith('00')) return `tel:+${digits.slice(2)}`;
+  return `tel:${digits.startsWith('0') ? `+31${digits.slice(1)}` : digits}`;
 }
 
 /** Pictogrammen (inline SVG, geen scripts of afbeeldingen nodig). */
@@ -93,11 +131,12 @@ function navigation(groups, root) {
   }
   const allGroups = groups.map((group) => `<li><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a></li>`).join('');
   const search = `<li class="nav-all"><span class="nav-all-button" tabindex="0">Product zoeken${ICONS.down}</span><ul class="nav-drop">${allGroups}</ul></li>`;
-  const about = `<li class="nav-about"><a href="${root}over-ons/">Over ons</a></li>`;
+  const extraPages = activeContent.pages.filter((page) => page.menu && page.slug !== 'over-ons');
+  const about = `<li class="nav-about"><a href="${root}over-ons/">Over ons</a></li>${extraPages.map((page) => `<li class="nav-about"><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}`;
   const desktop = groups.map((group) => `<li class="nav-group"><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a><ul class="nav-drop">${subItems(group)}</ul></li>`).join('');
   const mobile = groups.map((group) => `<li><details><summary>${escapeHtml(group.name)}</summary><ul><li><a href="${root}groep/${escapeHtml(group.slug)}/">Alles in ${escapeHtml(group.name)}</a></li>${subItems(group)}</ul></details></li>`).join('');
   return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${search}${about}${desktop}<!--planner:${root}--></ul></nav>
-<details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${mobile}<!--planner:${root}--></ul></details>`;
+<details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${mobile}${extraPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}<!--planner:${root}--></ul></details>`;
 }
 
 /**
@@ -108,6 +147,10 @@ function navigation(groups, root) {
  */
 function layout({ root, title, description, body, groups, query = '', wide = false }) {
   const home = root || './';
+  const { site, pages } = activeContent;
+  const phone = site.contact.phone;
+  const phoneHref = phoneLink(phone);
+  const footerPages = pages.filter((page) => page.footer && page.slug !== 'over-ons');
   const footerGroups = groups.map((group) => `<li><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a></li>`).join('');
   return `<!doctype html>
 <html lang="nl">
@@ -121,7 +164,7 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
 </head>
 <body>
-<div class="shop-notice">Welkom op onze webshop! Momenteel zijn wij nog volop producten aan het toevoegen. Mocht er wat ontbreken wat u zoekt, neem contact op!</div>
+${site.notice.enabled && site.notice.text ? `<div class="shop-notice">${escapeHtml(site.notice.text)}</div>` : ''}
 <header class="shop-head">
   <div class="shop-bar">
     <a class="shop-brand" href="${home}"><img src="${assetUrl(root, 'aquatechshop-logo.png')}" alt="Aquatechshop.nl" width="216" height="44"></a>
@@ -129,7 +172,7 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
       <input type="search" name="q" value="${escapeHtml(query)}" placeholder="Zoek op product of artikelnummer" aria-label="Zoeken" maxlength="80">
       <button type="submit" aria-label="Zoeken">${ICONS.search}</button>
     </form>
-    <a class="shop-phone" href="${PHONE_LINK}" aria-label="Klantenservice ${PHONE}">${ICONS.phone}<span><small>Klantenservice</small><strong>${PHONE}</strong></span></a>
+    ${phone ? `<a class="shop-phone" href="${phoneHref}" aria-label="Klantenservice ${escapeHtml(phone)}">${ICONS.phone}<span><small>Klantenservice</small><strong>${escapeHtml(phone)}</strong></span></a>` : ''}
     <div class="shop-actions">
       <a class="shop-action" href="${root}account/" title="Inloggen of mijn account">${ICONS.user}<span>Account</span></a>
       <span class="shop-action cart" aria-disabled="true" title="De winkelwagen volgt binnenkort">${ICONS.cart}<span>Winkelwagen</span><b>0</b></span>
@@ -142,10 +185,10 @@ ${body}
 </main>
 <footer class="shop-foot">
   <div class="foot-grid">
-    <div><strong>Aquatechshop.nl</strong><p>K.v.k.: 88438252<br>Oenenburgweg 218, 8072 GP Nunspeet<br><a href="mailto:${EMAIL}">${EMAIL}</a><br><a href="${PHONE_LINK}">${PHONE}</a></p></div>
+    <div><strong>Aquatechshop.nl</strong><p>${[site.contact.kvk && `K.v.k.: ${escapeHtml(site.contact.kvk)}`, site.contact.address && escapeHtml(site.contact.address), site.contact.email && `<a href="mailto:${escapeHtml(site.contact.email)}">${escapeHtml(site.contact.email)}</a>`, phone && `<a href="${phoneHref}">${escapeHtml(phone)}</a>`].filter(Boolean).join('<br>')}</p></div>
     <div><strong>Productgroepen</strong><ul>${footerGroups}</ul></div>
     <div><strong>Account</strong><ul><li><a href="${root}account/">Mijn account</a></li><li><a href="${root}account/">Inloggen of registreren</a></li></ul></div>
-    <div><strong>Over ons</strong><p>Beregening, leidingen en pompen voor tuin en bedrijf, van AquaTech Service in Nunspeet.</p><p><a href="${root}over-ons/">Lees ons verhaal</a></p></div>
+    <div><strong>Over ons</strong><p>${escapeHtml(site.footer.about)}</p><p><a href="${root}over-ons/">Lees ons verhaal</a></p>${footerPages.length ? `<ul>${footerPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}</ul>` : ''}</div>
   </div>
   <div class="foot-note"><span>Alle prijzen zijn inclusief btw.</span><img src="${assetUrl(root, 'betaalmethoden.png')}" alt="Betaalmethoden" width="286" height="26" loading="lazy"></div>
 </footer>
@@ -213,7 +256,11 @@ function productRow(product, root) {
 function homePage(catalog) {
   const root = '';
   const first = catalog.groups[0];
-  const intro = `<section class="home-hero"><img src="${assetUrl(root, 'hero-tuin.jpg')}" alt="" width="1440" height="419"><div class="home-hero-text"><h1>Alles voor uw tuinberegening</h1><p>Sproeiers, druppelslang, leidingen en pompen van AquaTech Service.</p>${first ? `<a class="button" href="groep/${escapeHtml(first.slug)}/">Bekijk ${escapeHtml(first.name.toLowerCase())}</a>` : ''}</div></section>`;
+  const { hero, benefits: benefitBlock, brands: brandBlock, business: businessBlock } = activeContent.site;
+  const heroButton = hero.button || (first ? `Bekijk ${first.name.toLowerCase()}` : '');
+  const heroHref = linkHref(hero.link, root, first ? `groep/${escapeHtml(first.slug)}/` : '');
+  const heroImage = imageSrc(root, hero.image);
+  const intro = `<section class="home-hero">${heroImage ? `<img src="${heroImage}" alt=""${hero.image === DEFAULT_SITE.hero.image ? ' width="1440" height="419"' : ''}>` : ''}<div class="home-hero-text"><h1>${escapeHtml(hero.title)}</h1>${hero.text ? `<p>${escapeHtml(hero.text)}</p>` : ''}${heroButton && heroHref ? `<a class="button" href="${heroHref}">${escapeHtml(heroButton)}</a>` : ''}</div></section>`;
   if (!catalog.products.length) return layout({ root, groups: catalog.groups, wide: true, title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}<div class="wrap"><p class="muted">De webshop wordt gevuld. Kom snel terug.</p></div>` });
   const tiles = catalog.groups.map((group) => {
     const showcase = groupShowcase(group, catalog.products);
@@ -226,9 +273,11 @@ ${catalog.featured.map((product) => productCard(product, root)).join('\n')}
 </div></section>` : '';
   const columns = catalog.groups.map((group) => ({ group, items: catalog.products.filter((product) => product.groupSlug === group.slug && product.image).slice(0, 3) })).filter((column) => column.items.length).slice(0, 3);
   const perGroup = columns.length ? `<section class="wrap"><div class="group-columns">${columns.map((column) => `<div><h2><a href="groep/${escapeHtml(column.group.slug)}/">${escapeHtml(column.group.name)}</a></h2>${column.items.map((product) => productRow(product, root)).join('')}</div>`).join('')}</div></section>` : '';
-  const benefits = `<section class="benefits"><div class="wrap benefits-inner">${BENEFITS.map(([icon, heading, text]) => `<div class="benefit"><img src="${assetUrl(root, icon)}" alt="" width="50" height="50" loading="lazy"><div><strong>${heading}</strong><span>${text}</span></div></div>`).join('')}</div></section>`;
-  const brands = `<section class="wrap"><h2 class="centered">Onze merken</h2><div class="brands">${BRANDS.map(([file, name]) => `<img src="${assetUrl(root, file)}" alt="${name}" height="70" loading="lazy">`).join('')}</div></section>`;
-  const business = `<section class="business"><img src="${assetUrl(root, 'zakelijk-achtergrond.jpg')}" alt="" loading="lazy"><div class="business-text"><h2>Vraag direct een zakelijk account aan</h2><p>Ervaar de scherpe prijzen en het complete assortiment van Aquatechshop.nl.</p><a class="button" href="${root}registreren/">Account aanmaken</a></div></section>`;
+  const benefits = benefitBlock.enabled && benefitBlock.items.length ? `<section class="benefits"><div class="wrap benefits-inner">${benefitBlock.items.map((item) => `<div class="benefit">${item.image ? `<img src="${imageSrc(root, item.image)}" alt="" width="50" height="50" loading="lazy">` : ''}<div><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.text)}</span></div></div>`).join('')}</div></section>` : '';
+  const brands = brandBlock.enabled && brandBlock.items.length ? `<section class="wrap">${brandBlock.title ? `<h2 class="centered">${escapeHtml(brandBlock.title)}</h2>` : ''}<div class="brands">${brandBlock.items.map((item) => `<img src="${imageSrc(root, item.image)}" alt="${escapeHtml(item.name)}" height="70" loading="lazy">`).join('')}</div></section>` : '';
+  const businessImage = imageSrc(root, businessBlock.image);
+  const businessHref = linkHref(businessBlock.link, root, `${root}registreren/`);
+  const business = businessBlock.enabled ? `<section class="business">${businessImage ? `<img src="${businessImage}" alt="" loading="lazy">` : ''}<div class="business-text"><h2>${escapeHtml(businessBlock.title)}</h2>${businessBlock.text ? `<p>${escapeHtml(businessBlock.text)}</p>` : ''}${businessBlock.button ? `<a class="button" href="${businessHref}">${escapeHtml(businessBlock.button)}</a>` : ''}</div></section>` : '';
   return layout({ root, wide: true, title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}\n${assortment}\n${popular}\n${perGroup}\n${benefits}\n${brands}\n${business}`, groups: catalog.groups });
 }
 
@@ -338,6 +387,22 @@ function aboutPage(groups) {
 }
 
 /**
+ * Een vaste pagina uit Beheer (zoals Over ons): titel en tekst.
+ * @param {object} page De pagina (slug, title, description, body).
+ * @param {object[]} groups Alle hoofdcategorieën (voor menu en voet).
+ * @param {string} root Relatief pad naar de shop-startpagina ('../' of '../../').
+ * @returns {string} De HTML-pagina.
+ */
+function contentPage(page, groups, root) {
+  const body = page.body.replace(/<img src="media:([0-9a-f-]{36})"/g, (_, id) => `<img loading="lazy" src="${root}media/${id}"`);
+  const html = `<div class="wrap"><nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a> › <span>${escapeHtml(page.title)}</span></nav>
+<article class="cms-page"><h1>${escapeHtml(page.title)}</h1>
+${body}
+</article></div>`;
+  return layout({ root, groups, wide: true, title: `${page.title} – ${SHOP_NAME}`, description: page.description || `${page.title} bij ${SHOP_NAME}.`, body: html });
+}
+
+/**
  * Pagina voor een onbekende categorie of product.
  * @param {string} root Relatief pad naar de shop-startpagina.
  * @param {object[]} groups Alle hoofdcategorieën.
@@ -347,4 +412,4 @@ function notFoundPage(root, groups) {
   return layout({ root, groups, title: `Pagina niet gevonden – ${SHOP_NAME}`, description: 'Deze pagina bestaat niet.', body: `<h1>Pagina niet gevonden</h1><p><a href="${root || './'}">Terug naar de shop</a></p>` });
 }
 
-module.exports = { layout, homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };
+module.exports = { layout, renderWith, contentPage, homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };
