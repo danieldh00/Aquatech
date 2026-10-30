@@ -25,6 +25,7 @@ const { createImpersonationStore, createImpersonation } = require('./beveiliging
 const { createStorefront } = require('./webshop/storefront');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
 const { createShopSync } = require('./webshop/shop-sync');
+const { createShopContentStore, registerShopContentRoutes } = require('./webshop/shop-content');
 const { createShopOrders } = require('./webshop/shop-orders');
 const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
 const { createInvoiceSender } = require('./verkoop/invoice-mail');
@@ -434,6 +435,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use(/^\/api\/portal\/requests\/[^/]+\/photos$/, express.json({ limit: '8mb' }));
   app.use(['/api/portal/requests', '/api/service-requests'], express.json({ limit: '64kb' }));
   app.use('/api/news', express.json({ limit: '64kb' }));
+  app.use('/api/admin/shop-content/images', express.json({ limit: '8mb' }));
+  app.use('/api/admin/shop-content', express.json({ limit: '512kb' }));
   // Sproeierbibliotheek uit Excel (sprinklers.js): max. 300 behuizingen en 1000 nozzles.
   app.use('/api/sprinkler-library', express.json({ limit: '2mb' }));
   app.use('/api/stock', express.json({ limit: '256kb' }));
@@ -1850,6 +1853,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }),
   });
 
+  const shopContentStore = createShopContentStore(database, { vault });
+  registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id) });
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
   app.get('/api/config', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -2120,7 +2125,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // zolang de instelling `storefront` van de hoofdtenant uit staat.
   // Inloggen en registreren in de shop gebruiken dezelfde accounts (rol klant).
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
-  app.use('/winkel', createStorefront({ db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts }));
+  app.use('/winkel', createStorefront({
+    db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore,
+    // Een beheerder van de hoofdorganisatie bekijkt het concept met ?voorbeeld=1.
+    previewAllowed: (req) => {
+      const user = identify(req);
+      return Boolean(user) && Roles.can(user, 'beheer') && user.tenant_id === tenant.id;
+    },
+  }));
 
   // Scripts, stylesheets, lettertypen en afbeeldingen (geen HTML, geen API).
   const STATIC_ASSET = /\.(js|css|png|jpe?g|svg|webp|gif|ico|woff2?|map|json|traineddata(\.gz)?|wasm)$/i;

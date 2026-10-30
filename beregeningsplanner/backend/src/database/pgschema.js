@@ -657,6 +657,35 @@ const PG_MIGRATIONS = [
   `
   CREATE INDEX users_email ON users (tenant_id, email);
   `,
+  // 36: inhoud van de eigen webshop (zie db.js).
+  `
+  CREATE TABLE shop_content (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    key          ${TEXT_TYPE} NOT NULL,
+    draft        ${TEXT_TYPE},
+    published    ${TEXT_TYPE},
+    previous     ${TEXT_TYPE},
+    updated_at   ${TEXT_TYPE} NOT NULL,
+    updated_by   ${TEXT_TYPE} ${references('users(id)')},
+    published_at ${TEXT_TYPE},
+    published_by ${TEXT_TYPE} ${references('users(id)')}
+  );
+  CREATE UNIQUE INDEX shop_content_key ON shop_content (tenant_id, key);
+  CREATE TABLE shop_images (
+    id         ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id  ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    name       ${TEXT_TYPE} NOT NULL,
+    mime       ${TEXT_TYPE} NOT NULL,
+    width      BIGINT,
+    height     BIGINT,
+    size       BIGINT NOT NULL,
+    data       ${TEXT_TYPE} NOT NULL,
+    created_at ${TEXT_TYPE} NOT NULL,
+    created_by ${TEXT_TYPE} ${references('users(id)')}
+  );
+  CREATE INDEX shop_images_tenant ON shop_images (tenant_id, created_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

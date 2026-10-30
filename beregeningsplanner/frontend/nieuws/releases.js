@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.4.2',
+      date: '2026-10-30',
+      title: 'Webshop zelf bewerken',
+      items: [
+        { text: 'Je kunt de teksten en afbeeldingen van de webshop nu zelf aanpassen bij Beheer, onder Webshop-inhoud: de mededeling bovenaan, de grote afbeelding, de voordelen, de merken, het zakelijke blok en de contactgegevens.', for: ['beheer'] },
+        { text: 'Je kunt eigen pagina\'s maken, zoals Klantenservice of Verzending & retour, met een eenvoudige editor en eigen afbeeldingen. Eerst een concept bekijken en dan pas publiceren kan ook.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.4.1',
       date: '2026-10-30',
       title: 'Webshop netter uitgelijnd en Over ons',

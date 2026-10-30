@@ -23,6 +23,7 @@
     { title: 'Integraties', sections: [
       { id: 'mail', label: 'E-mail', pane: 'settings', form: 's-mail', words: 'smtp exchange office 365 connector afzender wan ip offertes versturen' },
       { id: 'ai', label: 'AI-herkenning', pane: 'settings', form: 's-ai', words: 'anthropic claude api sleutel model limiet koers dag uur' },
+      { id: 'shopinhoud', label: 'Webshop-inhoud', pane: 'shopinhoud', words: 'winkel teksten pagina hero mededeling banner afbeeldingen merken contact over ons klantenservice bewerken publiceren concept' },
       { id: 'webshop', label: 'Webshop en WooCommerce', pane: 'webshop', words: 'woocommerce winkel sku prijzen voorraad synchroniseren koppeling kopje planner' },
     ] },
     { title: 'Toegang & beveiliging', sections: [

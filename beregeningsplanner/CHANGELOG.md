@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.4.2
+
+De inhoud van de eigen webshop (`winkel/`) is zelf te bewerken in Beheer.
+
+- **Beheer → Integraties → Webshop-inhoud** (`frontend/beheer/webshop-inhoud.js`,
+  recht `beheer`): blokken van de startpagina (mededelingenbalk, hero,
+  voordelen, merken, zakelijk blok), contactgegevens en tekst in de voet, vaste
+  pagina's met een eenvoudige tekst-editor (kop, subkop, vet, cursief, lijsten,
+  citaat, links, afbeeldingen) en een afbeeldingenbibliotheek.
+- **Concept en publiceren**: wijzigingen zijn eerst een concept; bezoekers zien
+  pas wat is gepubliceerd. Een beheerder bekijkt het concept met
+  `?voorbeeld=1` op de shop. Concept weggooien en de vorige gepubliceerde
+  versie terugzetten kan per onderdeel.
+- **Opslag** (`backend/src/webshop/shop-content.js`, migratie 36 in `MIGRATIONS`
+  en `PG_MIGRATIONS`): `shop_content` (concept, gepubliceerd, vorige versie, per
+  tenant) en `shop_images` (versleuteld met `vault.sealBytes`, type op inhoud
+  gecontroleerd, EXIF eruit, geen SVG). Zonder opgeslagen inhoud geldt de
+  standaard, die gelijk is aan de shop van 1.4.1.
+- **Saneren**: pagina-HTML gaat door een whitelist (alinea's, kopjes, lijsten,
+  vet, cursief, citaat, https/mailto/tel-links, eigen afbeeldingen); scripts,
+  stijlen en andere attributen verdwijnen. Alle blokvelden worden begrensd.
+- **Shop**: nieuwe routes `pagina/<naam>/` en `media/<id>`; de pagina `over-ons`
+  uit Beheer vervangt de standaardpagina Over ons. Pagina's met menu of voet
+  komen in kop en voet. De webshop-inhoud geldt alleen voor de hoofdtenant
+  (andere omgevingen: 404 op de API).
+- **Audit**: `webshop_inhoud_*`, `webshop_pagina_verwijderd`,
+  `webshop_afbeelding_*`.
+
 ## 1.4.1
 
 Uitlijning van de webshop en een eigen pagina Over ons.

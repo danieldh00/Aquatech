@@ -12,8 +12,12 @@ const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { remoteIp } = require('../beveiliging/auth');
 const { createStorefrontData } = require('./storefront-data');
-const { homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
+const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
+const { DEFAULT_SITE } = require('./shop-content');
 const { loginPage, registerPage, accountPage, plannerPage } = require('./storefront-account-pages');
+
+/** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
+const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
 
 /** Content-Security-Policy van de shop: geen scripts; afbeeldingen van de webshop komen van https-adressen. */
 const STOREFRONT_CSP = [
@@ -40,10 +44,10 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ db: object, tenantId: string, settingsFor: Function, accounts?: object }} options db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront`) en accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen).
+ * @param {{ db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function }} options db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard) en previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`).
  * @returns {Function} Express-router, te monteren met app.use('/winkel', router).
  */
-function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
+function createStorefront({ db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false }) {
   const data = createStorefrontData(db);
   const router = express.Router();
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: remoteIp });
@@ -66,17 +70,33 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
   };
 
   /**
-   * Stuurt een HTML-pagina met de kopjes van de shop.
+   * Bouwt een HTML-pagina op met de inhoud uit Beheer en stuurt hem met de kopjes van de shop.
+   * @param {object} req Het verzoek.
    * @param {object} res Het antwoord.
    * @param {number} status De statuscode.
-   * @param {string} html De pagina.
+   * @param {Function} render Functie zonder argumenten die de pagina (HTML) opbouwt.
    * @returns {void}
    */
-  const sendPage = (res, status, html) => {
+  const sendPage = (req, res, status, render) => {
+    const preview = isPreview(req);
     res.status(status);
-    if (!res.getHeader('Cache-Control')) res.setHeader('Cache-Control', 'no-cache');
+    if (preview) { res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Robots-Tag', 'noindex'); }
+    else if (!res.getHeader('Cache-Control')) res.setHeader('Cache-Control', 'no-cache');
+    const html = renderWith(contentOf(req), render);
     res.type('html').send(html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : '')));
   };
+  /**
+   * Of dit verzoek het concept van de inhoud moet tonen: `?voorbeeld=1` door een beheerder.
+   * @param {object} req Het verzoek.
+   * @returns {boolean} true bij een voorbeeld.
+   */
+  const isPreview = (req) => req.query.voorbeeld === '1' && Boolean(content) && previewAllowed(req);
+  /**
+   * De inhoud uit Beheer waarmee een pagina wordt getekend (gepubliceerd, of het concept bij een voorbeeld).
+   * @param {object} req Het verzoek.
+   * @returns {{ site: object, pages: object[] }} Blokken en pagina's.
+   */
+  const contentOf = (req) => (content ? content.publicContent(tenantId, { preview: isPreview(req) }) : DEFAULT_CONTENT);
   /**
    * Of het kopje Planner (aanmelden en doorgaan naar de planner) aan staat.
    * @returns {boolean} true als de instelling shopPlanner aan staat en de shop accounts heeft.
@@ -89,7 +109,8 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
     res.setHeader('Referrer-Policy', 'same-origin');
     const accountPost = req.method === 'POST' && accounts && ACCOUNT_POSTS.test(req.path);
     if (req.method !== 'GET' && req.method !== 'HEAD' && !accountPost) return res.status(405).set('Allow', 'GET, HEAD').end();
-    if (!settingsFor(tenantId).get('storefront')) return res.status(404).type('text').send('Niet gevonden.');
+    const previewFile = Boolean(content) && /^\/(assets|media)\//.test(req.path) && previewAllowed(req);
+    if (!settingsFor(tenantId).get('storefront') && !isPreview(req) && !previewFile) return res.status(404).type('text').send('Niet gevonden.');
     next();
   });
   router.use(limiter);
@@ -107,7 +128,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
   router.get('/', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
-    sendPage(res, 200, homePage(data.catalogOf(tenantId)));
+    sendPage(req, res, 200, () => homePage(data.catalogOf(tenantId)));
   });
 
   if (accounts) {
@@ -132,35 +153,36 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
     };
     /**
      * Stuurt een pagina met de productgroepen voor het menu.
+     * @param {object} req Het verzoek.
      * @param {object} res Het antwoord.
      * @param {number} status De statuscode.
      * @param {Function} render Functie (groepen) => HTML.
      * @returns {void}
      */
-    const sendWithGroups = (res, status, render) => sendPage(res, status, render(data.catalogOf(tenantId).groups));
+    const sendWithGroups = (req, res, status, render) => sendPage(req, res, status, () => render(data.catalogOf(tenantId).groups));
 
     router.get('/account', (req, res) => {
       if (withSlash(req, res)) return;
       const viewer = accounts.viewer(req);
       if (!viewer) return res.redirect(302, '../inloggen/');
       res.setHeader('Cache-Control', 'no-store');
-      sendWithGroups(res, 200, (groups) => accountPage(viewer, groups));
+      sendWithGroups(req, res, 200, (groups) => accountPage(viewer, groups));
     });
     router.get('/inloggen', (req, res) => {
       if (withSlash(req, res)) return;
       if (accounts.viewer(req)) return res.redirect(302, req.query.volgende === 'planner' ? '../../beregening/' : '../account/');
-      sendWithGroups(res, 200, (groups) => loginPage({ next: req.query.volgende === 'planner' ? 'planner' : '' }, groups));
+      sendWithGroups(req, res, 200, (groups) => loginPage({ next: req.query.volgende === 'planner' ? 'planner' : '' }, groups));
     });
     router.get('/registreren', (req, res) => {
       if (withSlash(req, res)) return;
       if (accounts.viewer(req)) return res.redirect(302, '../account/');
-      sendWithGroups(res, 200, (groups) => registerPage({}, groups));
+      sendWithGroups(req, res, 200, (groups) => registerPage({}, groups));
     });
     router.post('/inloggen', form, async (req, res, next) => {
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
       try {
         const out = await accounts.login(req, res, { login: req.body?.login, password: req.body?.password });
-        if (out.error) return sendWithGroups(res, out.status, (groups) => loginPage({ error: out.error, login: String(req.body?.login ?? '').slice(0, 200), next: req.body?.volgende === 'planner' ? 'planner' : '' }, groups));
+        if (out.error) return sendWithGroups(req, res, out.status, (groups) => loginPage({ error: out.error, login: String(req.body?.login ?? '').slice(0, 200), next: req.body?.volgende === 'planner' ? 'planner' : '' }, groups));
         res.redirect(303, out.user.must_change_password ? '../../wachtwoord' : req.body?.volgende === 'planner' && plannerOn() ? '../../beregening/' : '../account/');
       } catch (error) { next(error); }
     });
@@ -169,23 +191,23 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
       try {
         const out = await accounts.register(req, res, req.body || {});
         if (out.skipped) return res.redirect(303, '../');
-        if (out.error) return sendWithGroups(res, out.status, (groups) => registerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200) }, groups));
+        if (out.error) return sendWithGroups(req, res, out.status, (groups) => registerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200) }, groups));
         res.redirect(303, '../account/');
       } catch (error) { next(error); }
     });
     router.get('/planner', (req, res) => {
       if (withSlash(req, res)) return;
-      if (!plannerOn()) return sendWithGroups(res, 404, (groups) => notFoundPage('../', groups));
+      if (!plannerOn()) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../', groups));
       if (accounts.viewer(req)) return res.redirect(302, '../../beregening/');
-      sendWithGroups(res, 200, (groups) => plannerPage({}, groups));
+      sendWithGroups(req, res, 200, (groups) => plannerPage({}, groups));
     });
     router.post('/planner', form, async (req, res, next) => {
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
-      if (!plannerOn()) return sendWithGroups(res, 404, (groups) => notFoundPage('../', groups));
+      if (!plannerOn()) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../', groups));
       try {
         const out = await accounts.register(req, res, { ...(req.body || {}), password2: undefined });
         if (out.skipped) return res.redirect(303, '../');
-        if (out.error) return sendWithGroups(res, out.status, (groups) => plannerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200) }, groups));
+        if (out.error) return sendWithGroups(req, res, out.status, (groups) => plannerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200) }, groups));
         res.redirect(303, '../../beregening/');
       } catch (error) { next(error); }
     });
@@ -196,10 +218,30 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
     });
   }
 
+  // Over ons: de standaardpagina, of een eigen versie uit Beheer (pagina "over-ons").
   router.get('/over-ons', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
-    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
-    sendPage(res, 200, aboutPage(data.catalogOf(tenantId).groups));
+    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
+    const own = contentOf(req).pages.find((page) => page.slug === 'over-ons');
+    sendPage(req, res, 200, () => (own ? contentPage(own, data.catalogOf(tenantId).groups, '../') : aboutPage(data.catalogOf(tenantId).groups)));
+  });
+
+  // Vaste pagina's uit Beheer.
+  router.get('/pagina/:slug', (req, res) => {
+    const pathname = req.originalUrl.split('?')[0];
+    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
+    const page = contentOf(req).pages.find((candidate) => candidate.slug === req.params.slug);
+    const groups = data.catalogOf(tenantId).groups;
+    if (!page) return sendPage(req, res, 404, () => notFoundPage('../../', groups));
+    sendPage(req, res, 200, () => contentPage(page, groups, '../../'));
+  });
+
+  // Afbeeldingen die in Beheer zijn geüpload; het id is onraadbaar en de afbeelding verandert nooit.
+  router.get('/media/:id', (req, res) => {
+    const file = content && /^[0-9a-f-]{36}$/.test(req.params.id) ? content.imageFile(tenantId, req.params.id) : null;
+    if (!file) return res.status(404).end();
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.type(file.mime).send(file.body);
   });
 
   router.get('/groep/:slug', (req, res) => {
@@ -207,8 +249,8 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
     const catalog = data.catalogOf(tenantId);
     const group = catalog.groups.find((candidate) => candidate.slug === req.params.slug);
-    if (!group) return sendPage(res, 404, notFoundPage('../../', catalog.groups));
-    sendPage(res, 200, groupPage(group, catalog.groups));
+    if (!group) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
+    sendPage(req, res, 200, () => groupPage(group, catalog.groups));
   });
 
   router.get('/zoeken', (req, res) => {
@@ -220,7 +262,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
     const found = words.length
       ? catalog.products.filter((product) => words.every((word) => `${product.name} ${product.code} ${product.categoryName}`.toLowerCase().includes(word)))
       : [];
-    sendPage(res, 200, searchPage(query, found, catalog.groups));
+    sendPage(req, res, 200, () => searchPage(query, found, catalog.groups));
   });
 
   router.get('/categorie/:slug', (req, res) => {
@@ -228,8 +270,8 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
     const catalog = data.catalogOf(tenantId);
     const category = catalog.categories.find((candidate) => candidate.slug === req.params.slug);
-    if (!category) return sendPage(res, 404, notFoundPage('../../', catalog.groups));
-    sendPage(res, 200, categoryPage(category, catalog.products.filter((product) => product.categorySlug === category.slug), catalog.groups));
+    if (!category) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
+    sendPage(req, res, 200, () => categoryPage(category, catalog.products.filter((product) => product.categorySlug === category.slug), catalog.groups));
   });
 
   router.get('/product/:slug', (req, res) => {
@@ -237,14 +279,14 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null }) {
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
     const catalog = data.catalogOf(tenantId);
     const product = catalog.products.find((candidate) => candidate.slug === req.params.slug);
-    if (!product) return sendPage(res, 404, notFoundPage('../../', catalog.groups));
-    sendPage(res, 200, productPage(product, catalog.groups));
+    if (!product) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
+    sendPage(req, res, 200, () => productPage(product, catalog.groups));
   });
 
   router.use((req, res) => {
     const segments = req.path.split('/').filter(Boolean).length;
     const depth = req.path.endsWith('/') ? segments : Math.max(segments - 1, 0);
-    sendPage(res, 404, notFoundPage('../'.repeat(depth), data.catalogOf(tenantId).groups));
+    sendPage(req, res, 404, () => notFoundPage('../'.repeat(depth), data.catalogOf(tenantId).groups));
   });
   router.clearCache = data.clearCache;
   return router;
