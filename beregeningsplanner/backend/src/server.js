@@ -2194,7 +2194,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Oude adressen van Voorraadbeheer (module hernoemd naar Artikelen in 1.4.0):
   // `voorraad`, `voorraad/` en `voorraad/…` gaan relatief door naar `artikelen/…`.
   app.get(/^\/voorraad(\/.*)?$/, (req, res, next) => {
-    const rest = req.path.slice('/voorraad'.length);
+    const rest = req.path.slice('/voorraad'.length).replace(/\/index\.html$/, '/');
     if (/\.[a-z0-9]+$/i.test(rest)) return next();
     const qs = req.originalUrl.slice(req.path.length);
     const target = rest === '' ? 'artikelen/' : `${'../'.repeat((rest.match(/\//g) || []).length)}artikelen${rest}`;

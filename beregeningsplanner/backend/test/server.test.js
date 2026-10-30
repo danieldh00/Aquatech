@@ -217,6 +217,7 @@ test('oude adressen van Voorraadbeheer gaan relatief door naar Artikelen', async
       ['/voorraad/', '../artikelen/'],
       ['/voorraad/?id=5', '../artikelen/?id=5'],
       ['/voorraad/x', '../artikelen/x'],
+      ['/voorraad/index.html?id=5', '../artikelen/?id=5'],
     ];
     for (const [urlPath, loc] of cases) {
       const res = await fetch(base + urlPath, { redirect: 'manual' });

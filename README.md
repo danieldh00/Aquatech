@@ -3,7 +3,7 @@
 Aquatech is een modulair pakket (in de richting van een ERP voor
 beregeningsbedrijven). De startpagina is een dashboard met een tegel per
 module; de **beregeningsplanner** is de eerste module, planning en
-voorraadbeheer volgen.
+Artikelen (voorheen voorraadbeheer) volgen.
 
 ## Beregeningsplanner
 
