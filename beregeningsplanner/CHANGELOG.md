@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.3.8
+
+De webshop (`winkel/`) heeft de opzet van aquatechshop.nl als basis, en een
+verouderd stijlbestand in de browser kan de shop niet meer breken.
+
+- **Cache**: elke link naar CSS, logo en afbeeldingen van de shop draagt
+  `?v=<versie>` (`assetUrl` in `storefront-pages.js`). Met versie een jaar
+  `immutable`, zonder versie 5 minuten (was 24 uur zonder versie, waardoor een
+  oude CSS na een uitrol bleef hangen).
+- **Header**: mededelingenbalk, klantenservicenummer, groene knop *Product
+  zoeken* met uitklapmenu, *Over ons* en de hoofdgroepen. Alleen CSS, geen scripts.
+- **Startpagina**: foto met kop, assortimentsbalk (horizontaal scrollbaar, met
+  een productfoto per hoofdgroep), *Populaire producten*, drie kolommen met
+  producten per hoofdgroep, voordelen, merken en een oproep voor een zakelijk
+  account (knop naar registreren). Afbeeldingen staan in `webshop/assets/`.
+  Uitgelichte producten worden aangevuld met producten zonder voorraad als er te
+  weinig op voorraad zijn, zodat de startpagina nooit zonder plaatjes is.
+- **Voet**: kvk, adres, contact, account en betaalmethoden. Productpagina heeft
+  een uitgeschakelde knop *In winkelwagen*; echt bestellen volgt in een
+  volgende stap.
+
 ## 1.3.7
 
 Accounts in de webshop zijn de accounts van de planner: registreren of inloggen

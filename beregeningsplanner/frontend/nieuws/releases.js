@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.3.8',
+      date: '2026-10-30',
+      title: 'Nieuwe opzet webshop',
+      items: [
+        { text: 'De webshop heeft de opzet van aquatechshop.nl gekregen: een foto bovenaan, populaire producten met plaatjes, merken en een duidelijker menu met het klantenservicenummer.' },
+        { text: 'Een oude opmaak uit de browser kan de webshop niet meer verstoren na een nieuwe versie.' },
+      ],
+    },
+    {
       version: '1.3.7',
       date: '2026-10-30',
       title: 'Account in de webshop',
