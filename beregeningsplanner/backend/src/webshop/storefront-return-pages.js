@@ -10,6 +10,12 @@ const { REASONS, RETURN_DAYS } = require('./web-returns');
  * @returns {string} Bijvoorbeeld "30-10-2026".
  */
 const formatDate = (iso) => new Date(iso).toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Amsterdam' });
+/**
+ * Een tijdstip als dag-maand-jaar en uur:minuut in Nederlandse tijd.
+ * @param {string} iso Tijdstip als ISO-tekst.
+ * @returns {string} Bijvoorbeeld "13-11-2026 14:05".
+ */
+const formatDateTime = (iso) => new Date(iso).toLocaleString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam' });
 
 /**
  * Eén eerdere retour: nummer, status, regels, het besluit en zo nodig de knop om hem in te trekken.
@@ -39,7 +45,7 @@ function returnForm(lines, { values = {}, error = '', until }) {
 <div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Besteld</th><th class="num">Terug</th></tr></thead><tbody>${rows}</tbody></table></div>
 <label class="form-field"><span>Reden</span><select name="reason" required><option value="">Kies een reden</option>${reasons}</select></label>
 <label class="form-field"><span>Toelichting (optioneel)</span><textarea name="note" rows="3" maxlength="1000">${escapeHtml(values.note || '')}</textarea></label>
-<p class="note">Je kunt tot en met ${escapeHtml(formatDate(until))} een retour aanvragen. Na goedkeuring sturen we je het retouradres.</p>
+<p class="note">Je kunt tot ${escapeHtml(formatDateTime(until))} (Nederlandse tijd) een retour aanvragen. Na goedkeuring sturen we je het retouradres.</p>
 <button class="button" type="submit">Retour aanvragen</button>
 </form>`;
 }

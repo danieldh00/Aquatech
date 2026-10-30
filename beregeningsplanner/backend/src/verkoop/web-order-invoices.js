@@ -197,7 +197,8 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
   async function creditReturn(tenantId, returnId, user) {
     const record = returns ? returns.get(tenantId, returnId) : null;
     if (!record) return { error: 'Retour niet gevonden.', status: 404 };
-    if (record.credit) return { credit: record.credit, existing: true };
+    // Een creditnota die al definitief is, of niet meer te herstellen, blijft zoals hij is; een concept dat bleef staan wordt hieronder alsnog afgemaakt.
+    if (record.credit && !(record.credit.status === 'concept' && record.creditError)) return { credit: record.credit, existing: true };
     /**
      * Legt vast waarom er (nog) geen creditnota is en meldt dat terug.
      * @param {string} reason De reden.
@@ -210,17 +211,22 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     if (!found || found.status === 'concept') return skip('Er is nog geen definitieve factuur bij de bestelling: maak de creditnota zelf in Facturen zodra die er is.');
     try {
       const original = invoices.get(tenantId, found.id);
-      const draft = Core.creditOf(original);
-      const byCode = new Map(draft.lines.map((line) => [String(line.code || '').toUpperCase(), line]));
-      draft.lines = record.lines.map((line) => {
-        const match = byCode.get(String(line.code || '').toUpperCase());
-        return match ? { ...match, qty: -Math.abs(line.qty) } : null;
-      }).filter(Boolean);
-      if (!draft.lines.length) return skip('De teruggestuurde artikelen staan niet op de factuur: er is geen creditnota gemaakt.');
-      draft.intro = `Creditering van factuur ${original.number} voor retour ${record.number}`;
-      const created = invoices.create(tenantId, user, draft, settings, { kind: 'credit', creditOf: original.id, customerId: original.customerId, debtorId: original.debtorId });
+      let created = record.credit ? invoices.get(tenantId, record.credit.invoiceId) : null;
+      if (!created) {
+        const draft = Core.creditOf(original);
+        const byCode = new Map(draft.lines.map((line) => [String(line.code || '').toUpperCase(), line]));
+        draft.lines = record.lines.map((line) => {
+          const match = byCode.get(String(line.code || '').toUpperCase());
+          return match ? { ...match, qty: -Math.abs(line.qty) } : null;
+        }).filter(Boolean);
+        if (!draft.lines.length) return skip('De teruggestuurde artikelen staan niet op de factuur: er is geen creditnota gemaakt.');
+        draft.intro = `Creditering van factuur ${original.number} voor retour ${record.number}`;
+        created = invoices.create(tenantId, user, draft, settings, { kind: 'credit', creditOf: original.id, customerId: original.customerId, debtorId: original.debtorId });
+        // Direct vastleggen: mislukt het definitief maken, dan maakt een volgende poging dit concept af in plaats van een tweede creditnota te maken.
+        returns.updateData(tenantId, record.id, { credit: { invoiceId: created.id, number: created.number, status: created.status } });
+      }
       let outcome = { invoice: created, finalizedNow: false };
-      if (settings.webOrders.finalize) {
+      if (settings.webOrders.finalize && created.status === 'concept') {
         const finalized = invoices.finalize(tenantId, user, created.id, settings, { skipStock: true });
         if (finalized && finalized.error) throw new Error(finalized.error);
         outcome = { invoice: finalized.invoice || invoices.get(tenantId, created.id), finalizedNow: true };

@@ -5,6 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { openDb } = require('../src/database/db');
 const { createWebReturnStore, RETURN_DAYS } = require('../src/webshop/web-returns');
+const { createWebOrderInvoices } = require('../src/verkoop/web-order-invoices');
 const { postForm } = require('./helpers/http-client');
 const { setup, order, until, mailsWith } = require('./helpers/webshop-world');
 
@@ -79,6 +80,11 @@ test('retour van aanvraag tot creditnota: mails, voorraad terug en creditregel',
   assert.strictEqual(record.status, 'aangevraagd');
   assert.strictEqual((await world.vreemd.get(`/api/admin/web-returns/${record.id}`)).status, 404, 'andere organisatie');
   assert.strictEqual((await customer.client.get('/api/admin/web-returns')).status, 403, 'klant heeft geen beheerrecht');
+  for (const action of ['decision', 'complete', 'credit']) {
+    assert.strictEqual((await world.vreemd.post(`/api/admin/web-returns/${record.id}/${action}`, { approve: true })).status, 404, `andere organisatie: ${action}`);
+    assert.strictEqual((await customer.client.post(`/api/admin/web-returns/${record.id}/${action}`, { approve: true })).status, 403, `klant heeft geen beheerrecht: ${action}`);
+  }
+  assert.strictEqual((await world.admin.get(`/api/admin/web-returns/${record.id}`)).body.return.status, 'aangevraagd', 'status ongewijzigd');
 
   assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/complete`, {})).status, 409, 'eerst goedkeuren');
   assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/decision`, { approve: false })).status, 400, 'afwijzen vraagt een reden');
@@ -175,4 +181,50 @@ test('de termijn van 14 dagen na verzending', () => {
   assert.strictEqual(store.eligibility('t', order(RETURN_DAYS - 1)).open, true);
   assert.strictEqual(store.eligibility('t', order(RETURN_DAYS + 1)).open, false);
   assert.strictEqual(store.eligibility('t', { id: 'y', status: 'nieuw', lines: [], history: [] }).shipped, false);
+});
+
+test('mislukt definitief maken van de creditnota: een nieuwe poging maakt het concept af, geen tweede creditnota', async () => {
+  const stored = new Map([['i1', { id: 'i1', number: 'F2026-0001', status: 'definitief', kind: 'factuur', customerId: 'c', debtorId: 'd', data: { customer: { name: 'Els' }, lines: [{ code: 'BUS', description: 'Sproeier', qty: 2, unit: 'st', price: 10, vat: 21, group: 'producten' }] } }]]);
+  let created = 0;
+  let finalizeCalls = 0;
+  const invoices = {
+    /**
+     * De factuur van de bestelling.
+     * @returns {Map<string, string>} Sleutel naar factuur-id.
+     */
+    byShopOrders: () => new Map([['web:o1', 'i1']]),
+    /**
+     * Een factuur uit het geheugen.
+     * @param {string} tenantId Id van de omgeving.
+     * @param {string} id Id van de factuur.
+     * @returns {?object} De factuur, of null.
+     */
+    get: (tenantId, id) => stored.get(id) || null,
+    /**
+     * Maakt de creditfactuur als concept.
+     * @returns {object} Het concept.
+     */
+    create: () => { created += 1; stored.set('c1', { id: 'c1', number: '', status: 'concept' }); return stored.get('c1'); },
+    /**
+     * Definitief maken: de eerste keer mislukt het, daarna lukt het.
+     * @returns {object} De fout of de definitieve factuur.
+     */
+    finalize: () => {
+      finalizeCalls += 1;
+      if (finalizeCalls === 1) return { error: 'Boekhouding even niet bereikbaar.' };
+      Object.assign(stored.get('c1'), { number: 'F2026-0002', status: 'definitief' });
+      return { invoice: stored.get('c1') };
+    },
+  };
+  const record = { id: 'r1', orderId: 'o1', number: 'WEB-1-R1', lines: [{ code: 'BUS', qty: 1 }], credit: null, creditError: '' };
+  const returns = { get: () => ({ ...record }), updateData: (tenantId, id, patch) => Object.assign(record, patch) };
+  const credits = createWebOrderInvoices({ orders: {}, invoices, returns, settingsFor: () => ({ get: () => undefined }) });
+  const failed = await credits.creditReturn('t', 'r1', null);
+  assert.match(failed.error, /Boekhouding even niet bereikbaar/);
+  assert.strictEqual(record.credit.invoiceId, 'c1', 'het concept is vastgelegd');
+  const retried = await credits.creditReturn('t', 'r1', null);
+  assert.strictEqual(retried.credit.status, 'definitief');
+  assert.strictEqual(retried.credit.number, 'F2026-0002');
+  assert.strictEqual(created, 1, 'één creditnota');
+  assert.strictEqual((await credits.creditReturn('t', 'r1', null)).existing, true, 'daarna verandert er niets meer');
 });

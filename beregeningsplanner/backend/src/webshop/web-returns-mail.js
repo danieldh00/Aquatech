@@ -88,7 +88,7 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
     ? {
       subject: `Je retour ${record.number} is goedgekeurd`,
       paragraphs: [
-        `Je retour is goedgekeurd. Stuur de artikelen terug${profile.address ? ` naar:\n${profile.address}` : ''} en vermeld retournummer ${record.number} in het pakket.${record.decisionNote ? `\n\n${record.decisionNote}` : ''}`,
+        `Je retour is goedgekeurd. ${profile.address ? `Stuur de artikelen terug naar:\n${profile.address}\n\nVermeld retournummer ${record.number} in het pakket.` : `Het retouradres ontvang je van ons; antwoord op deze mail als je het nog niet hebt. Vermeld retournummer ${record.number} in het pakket.`}${record.decisionNote ? `\n\n${record.decisionNote}` : ''}`,
         detailsText(record), 'Zodra we de artikelen hebben ontvangen, ontvang je de creditnota.',
       ],
     }
