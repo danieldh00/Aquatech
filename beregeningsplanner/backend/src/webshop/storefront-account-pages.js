@@ -71,13 +71,16 @@ ${field({ name: 'password2', label: 'Wachtwoord herhalen', type: 'password', aut
  * "Mijn account": wie is ingelogd, met knoppen naar de planner en het portaal.
  * @param {{ displayName: string, username: string, email: string, isCustomer: boolean }} viewer De ingelogde gebruiker.
  * @param {object[]} groups Alle hoofdcategorieën.
+ * @param {{ ordering?: boolean }} [options] ordering: bestellen staat aan, dus een knop naar de bestelhistorie.
  * @returns {string} De HTML-pagina.
  */
-function accountPage(viewer, groups = []) {
+function accountPage(viewer, groups = [], { ordering = false } = {}) {
+  const orders = ordering ? `<a class="button" href="${ROOT}bestellingen/">Mijn bestellingen</a>` : '';
   const portal = viewer.isCustomer ? `<a class="button secondary" href="${APP_ROOT}portaal/">Mijn portaal</a>` : '';
   const body = `<section class="account-card"><h1>Mijn account</h1>
 <p>Ingelogd als <strong>${escapeHtml(viewer.displayName)}</strong> (${escapeHtml(viewer.username)}${viewer.email ? `, ${escapeHtml(viewer.email)}` : ''}).</p>
 <div class="account-actions">
+${orders}
 <a class="button" href="${APP_ROOT}beregening/">Naar de planner</a>
 ${portal}
 <a class="button secondary" href="${APP_ROOT}profiel/">Mijn profiel</a>

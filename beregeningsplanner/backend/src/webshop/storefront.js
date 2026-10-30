@@ -15,7 +15,7 @@ const { createStorefrontData } = require('./storefront-data');
 const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
 const { DEFAULT_SITE } = require('./shop-content');
 const { loginPage, registerPage, accountPage, plannerPage } = require('./storefront-account-pages');
-const { cartPage, checkoutPage, checkoutLoginPage, orderPage } = require('./storefront-order-pages');
+const { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage } = require('./storefront-order-pages');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
 const { readCart, writeCart, applyCartAction } = require('./storefront-cart');
@@ -47,14 +47,16 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
 const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner)\/?$/;
 /** Paden waar de winkelwagen en het afrekenformulier naartoe posten. */
 const ORDER_POSTS = /^\/(winkelwagen|afrekenen)\/?$/;
+/** Aantal bestellingen per pagina in de bestelhistorie van een klant. */
+const HISTORY_PAGE = 25;
 const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function, orders?: object, orderMail?: object, onOrder?: Function }} options db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js) en onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog).
+ * @param {{ db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, onOrder?: Function }} options db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) en onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/winkel', router).
  */
-function createStorefront({ db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false, orders = null, orderMail = null, onOrder = () => {} }) {
+function createStorefront({ db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, onOrder = () => {} }) {
   const data = createStorefrontData(db);
   const router = express.Router();
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: remoteIp });
@@ -179,7 +181,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
       const viewer = accounts.viewer(req);
       if (!viewer) return res.redirect(302, '../inloggen/');
       res.setHeader('Cache-Control', 'no-store');
-      sendWithGroups(req, res, 200, (groups) => accountPage(viewer, groups));
+      sendWithGroups(req, res, 200, (groups) => accountPage(viewer, groups, { ordering: orderingOn() }));
     });
     /**
      * Waar een bezoeker na inloggen of registreren naartoe gaat (het veld volgende): de planner, het afrekenen of het account.
@@ -365,7 +367,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
           // De bestelling staat al vast: een fout in audit of mail mag de klant niet naar een foutpagina sturen, en de ene stap niet de andere overslaan.
           try { onOrder(req, out.order); } catch (failure) { console.error(`Audit van bestelling ${out.order.number} mislukt: ${failure.message}`); }
           try { if (orderMail) await orderMail.sendPlaced(tenantId, out.order); } catch (failure) { console.error(`Mail van bestelling ${out.order.number} mislukt: ${failure.message}`); }
-          res.redirect(303, `../bestelling/${out.order.id}/`);
+          res.redirect(303, `../bestelling/${out.order.id}/?bedankt=1`);
         } catch (error) { next(error); }
       });
       router.get('/bestelling/:id', (req, res) => {
@@ -376,7 +378,30 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
         if (!viewer) return res.redirect(302, '../../inloggen/');
         const order = orders.getForUser(tenantId, viewer.id, req.params.id);
         if (!order) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../../', groups));
-        sendWithGroups(req, res, 200, (groups) => orderPage(order, groups));
+        const invoice = orderInvoices ? orderInvoices.invoiceFor(tenantId, order.id) : null;
+        sendWithGroups(req, res, 200, (groups) => orderPage(order, groups, { thanks: req.query.bedankt === '1', invoice: invoice && invoice.status !== 'concept' ? invoice : null }));
+      });
+      // De factuur van een eigen bestelling als PDF (alleen als hij definitief is).
+      router.get('/bestelling/:id/factuur.pdf', (req, res) => {
+        if (!orderingOn() || !orderInvoices) return orderingOff(req, res);
+        res.setHeader('Cache-Control', 'no-store');
+        const viewer = accounts.viewer(req);
+        if (!viewer) return res.redirect(302, '../../inloggen/');
+        const order = orders.getForUser(tenantId, viewer.id, req.params.id);
+        const pdf = order ? orderInvoices.pdfFor(tenantId, order.id) : null;
+        if (!pdf) return res.status(404).type('text').send('Geen factuur gevonden.');
+        res.setHeader('Content-Disposition', `attachment; filename="${pdf.name.replace(/[^A-Za-z0-9._-]/g, '_')}"`);
+        res.type('application/pdf').send(pdf.body);
+      });
+      // De bestelhistorie van de ingelogde klant.
+      router.get('/bestellingen', (req, res) => {
+        if (withSlash(req, res)) return;
+        if (!orderingOn()) return orderingOff(req, res);
+        res.setHeader('Cache-Control', 'no-store');
+        const viewer = accounts.viewer(req);
+        if (!viewer) return res.redirect(302, '../inloggen/');
+        const page = Math.max(1, Math.floor(Number(req.query.pagina)) || 1);
+        sendWithGroups(req, res, 200, (groups) => ordersPage(orders.listForUser(tenantId, viewer.id, { limit: HISTORY_PAGE, offset: (page - 1) * HISTORY_PAGE }), groups, { page, pageSize: HISTORY_PAGE }));
       });
     }
   }

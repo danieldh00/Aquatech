@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.5.0
+
+Verzendmail en bestelhistorie in de eigen webshop (stap 5 van de
+webshop-roadmap).
+
+- **Verzendmail** (`web-orders-mail.js`, `sendShipment`): bij Verzonden krijgt
+  de klant een mail dat de bestelling onderweg is, met de volgcode en de
+  DPD-link als die er is, of dat de bestelling klaarstaat om op te halen.
+  Komt de volgcode later (`POST /api/admin/web-orders/:id/tracking`), dan volgt
+  één mail met die code; dezelfde code nog eens geeft geen nieuwe mail. De
+  uitkomst staat in `data.shipMail` en in Beheer > Bestellingen. Nieuwe haak
+  `webOrders.onTracking` naast `onShipped`.
+- **Bestelhistorie** in het klantaccount: `/winkel/bestellingen/` (nieuwe
+  knop *Mijn bestellingen* bij Mijn account) met alleen de eigen
+  bestellingen (`listForUser`, zonder regels); het detail toont verloop,
+  volgcode en factuur. De bevestigingspagina met "Bedankt" verschijnt alleen
+  direct na het plaatsen (`?bedankt=1`).
+- **Factuur als PDF** voor de klant: `/winkel/bestelling/:id/factuur.pdf`, alleen
+  voor de eigen bestelling en alleen een definitieve factuur (geen concept);
+  anders 404, zonder sessie het inlogscherm.
+- Tests: `test/order-history.test.js`.
+
 ## 1.4.9
 
 Facturen en Visma voor bestellingen van de eigen webshop (stap 4 van de

@@ -2,6 +2,8 @@
 // een melding aan het bedrijf (e-mailadres uit het bedrijfsprofiel). Via de
 // mailserver van de organisatie (mailer.js); een mislukte verzending houdt de
 // bestelling niet tegen maar blijft zichtbaar bij de bestelling (data.mail).
+// Bij Verzonden volgt een mail met de volgcode van DPD (of: klaar om op te
+// halen); komt de volgcode later, dan volgt één mail met die code (data.shipMail).
 const { validEmail } = require('../platform/mailer');
 
 const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
@@ -9,7 +11,7 @@ const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' 
 /**
  * Maakt de verzender van bestelmails.
  * @param {{ orders: object, settingsFor: Function, mailerFor: Function, mailBody: Function }} deps De bestelopslag, de instellingen per omgeving, de mailserver en de opmaak van de mail.
- * @returns {{ sendPlaced: Function }} De functies.
+ * @returns {{ sendPlaced: Function, sendShipment: Function }} De functies.
  */
 function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
   /**
@@ -87,7 +89,55 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     orders.updateData(tenantId, order.id, { mail: { sent: !error, error, at: new Date().toISOString() } });
   }
 
-  return { sendPlaced };
+  /**
+   * Meldt de klant dat de bestelling onderweg is (met de volgcode van DPD als
+   * die er is) of klaarstaat om op te halen, en legt vast hoe dat is gegaan.
+   * Met `onlyNewTracking` (na het vastleggen van een volgcode) gaat er alleen
+   * een mail als de klant deze code nog niet kreeg.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} order De verzonden bestelling (met shipping en shipMail).
+   * @param {{ onlyNewTracking?: boolean }} [options] Zie boven.
+   * @returns {Promise<void>}
+   */
+  async function sendShipment(tenantId, order, { onlyNewTracking = false } = {}) {
+    const shipping = order.shipping || {};
+    const pickup = shipping.method === 'ophalen';
+    const tracking = !pickup && shipping.tracking ? shipping.tracking : null;
+    if (onlyNewTracking && (!tracking || (order.shipMail && order.shipMail.sent && order.shipMail.tracking === tracking.code))) return;
+    /**
+     * Legt de uitkomst van de verzendmail vast bij de bestelling.
+     * @param {{ sent: boolean, error: string }} patch Of de mail is verstuurd en anders de fout.
+     * @returns {void}
+     */
+    const record = (patch) => orders.updateData(tenantId, order.id, { shipMail: { tracking: tracking ? tracking.code : null, at: new Date().toISOString(), ...patch } });
+    let mailer;
+    let profile;
+    try {
+      const settings = settingsFor(tenantId);
+      mailer = mailerFor(settings);
+      profile = settings.get('quoteProfile') || {};
+    } catch (failure) {
+      record({ sent: false, error: String(failure && failure.message || 'Versturen mislukt.').slice(0, 300) });
+      return;
+    }
+    if (!mailer.configured()) { record({ sent: false, error: 'Geen mailserver ingesteld.' }); return; }
+    const intro = pickup
+      ? `Je bestelling ${order.number} staat klaar om op te halen.${profile.address ? `\n\nOphaaladres:\n${profile.address}` : ''}`
+      : tracking
+        ? `Je bestelling ${order.number} is onderweg. Volg je pakket met de code ${tracking.code}: ${tracking.url}`
+        : `Je bestelling ${order.number} is onderweg met DPD. Zodra we de volgcode hebben, sturen we hem je toe.`;
+    let error = '';
+    try {
+      const message = mailBody(profile, [`Beste ${order.customer.name},`, ...intro.split(/\n{2,}/), `Bestelling ${order.number}\n\n${linesText(order)}`]);
+      const subject = pickup ? `Je bestelling ${order.number} staat klaar` : tracking ? `Je bestelling ${order.number} is onderweg (volgcode ${tracking.code})` : `Je bestelling ${order.number} is onderweg`;
+      await mailer.send({ to: order.email, subject, text: message.text, html: message.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+    } catch (failure) {
+      error = String(failure && failure.message || 'Versturen mislukt.').slice(0, 300);
+    }
+    record({ sent: !error, error });
+  }
+
+  return { sendPlaced, sendShipment };
 }
 
 module.exports = { createOrderMailer };

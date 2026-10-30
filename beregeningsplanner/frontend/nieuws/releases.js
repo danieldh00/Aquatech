@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.5.0',
+      date: '2026-10-30',
+      title: 'Verzendmail en bestelhistorie',
+      items: [
+        { text: 'Zodra je een webshopbestelling op Verzonden zet, krijgt de klant een mail met de volgcode van DPD (of dat de bestelling klaarstaat om op te halen). Voeg je de volgcode later toe, dan volgt één mail met die code.', for: ['beheer'] },
+        { text: 'Klanten zien onder Mijn account al hun bestellingen, met verloop, volgcode en de factuur als PDF.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.4.9',
       date: '2026-10-30',
       title: 'Facturen voor webshopbestellingen',

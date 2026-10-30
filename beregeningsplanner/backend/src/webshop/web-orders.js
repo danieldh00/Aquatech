@@ -102,10 +102,11 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', group = '' } = 
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
  * @param {{ stock: object }} deps De voorraadopslag (reserveren en afboeken).
- * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, onShipped: Function }} De functies.
+ * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, onShipped: Function, onTracking: Function }} De functies.
  */
 function createWebOrderStore(db, { stock }) {
   const shippedHooks = [];
+  const trackingHooks = [];
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -193,7 +194,7 @@ function createWebOrderStore(db, { stock }) {
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, invoiceError: data.invoiceError || '' };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -333,6 +334,21 @@ function createWebOrderStore(db, { stock }) {
   }
 
   /**
+   * De bestellingen van één klant, nieuwste eerst (zonder regels; het detail haalt getForUser op).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} userId Id van de klant.
+   * @param {{ limit?: number, offset?: number }} [paging] Hoogstens zoveel bestellingen (standaard 25, ten hoogste 200) vanaf deze plek.
+   * @returns {{ items: object[], total: number }} De bestellingen (id, nummer, status, totaal, datum) van deze pagina en het totaal aantal.
+   */
+  function listForUser(tenantId, userId, { limit = 25, offset = 0 } = {}) {
+    const size = Math.min(200, Math.max(1, Math.floor(Number(limit)) || 25));
+    const start = Math.max(0, Math.floor(Number(offset)) || 0);
+    const total = Number(prepare('SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND user_id = ?').get(tenantId, String(userId)).n);
+    const items = prepare(`SELECT ${COLUMNS} FROM web_orders WHERE tenant_id = ? AND user_id = ? ORDER BY created_at DESC, number DESC LIMIT ? OFFSET ?`).all(tenantId, String(userId), size, start).map(shape);
+    return { items, total };
+  }
+
+  /**
    * Bestellingen voor Beheer, nieuwste eerst, met een telling per status.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ status?: string, query?: string, limit?: number, offset?: number, withLines?: boolean }} [options] Filter op status en zoekterm (nummer, naam of e-mail), paginering en of de regels meekomen (export).
@@ -383,6 +399,13 @@ function createWebOrderStore(db, { stock }) {
   const onShipped = (hook) => { shippedHooks.push(hook); };
 
   /**
+   * Registreert een haak die wordt aangeroepen als bij een verzonden bestelling een (nieuwe) volgcode is vastgelegd.
+   * @param {Function} hook Functie (tenantId, order); mag een belofte geven, fouten worden alleen gelogd.
+   * @returns {void}
+   */
+  const onTracking = (hook) => { trackingHooks.push(hook); };
+
+  /**
    * Legt de nieuwe status vast in één transactie (zie setStatus).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de bestelling.
@@ -418,6 +441,23 @@ function createWebOrderStore(db, { stock }) {
    * @returns {{ order?: object, error?: string, status?: number }} De bijgewerkte bestelling of een foutmelding.
    */
   function setTracking(tenantId, id, trackingCode) {
+    const out = changeTracking(tenantId, id, trackingCode);
+    if (out.order && out.changed && out.order.shipping && out.order.shipping.tracking) {
+      for (const hook of trackingHooks) {
+        try { Promise.resolve(hook(tenantId, out.order)).catch((error) => console.warn(`Na volgcode: ${error.message}`)); } catch (error) { console.warn(`Na volgcode: ${error.message}`); }
+      }
+    }
+    return out.error ? out : { order: out.order };
+  }
+
+  /**
+   * Legt de volgcode vast in één transactie (zie setTracking).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {string} trackingCode De volgcode van DPD (leeg wist hem).
+   * @returns {{ order?: object, changed?: boolean, error?: string, status?: number }} De bijgewerkte bestelling en of de volgcode veranderde, of een foutmelding.
+   */
+  function changeTracking(tenantId, id, trackingCode) {
     const wanted = String(trackingCode || '').trim();
     const tracking = wanted ? Shipping.trackingOf(wanted) : null;
     if (wanted && !tracking) return { error: 'Ongeldige volgcode (6 tot 40 letters, cijfers of streepjes).', status: 400 };
@@ -427,9 +467,10 @@ function createWebOrderStore(db, { stock }) {
       const data = JSON.parse(row.data);
       if (!data.shipping || data.shipping.method !== 'dpd') return { error: 'Alleen bij bezorging door DPD hoort een volgcode.', status: 409 };
       if (!['verzonden', 'afgerond'].includes(row.status)) return { error: 'Een volgcode kan pas als de bestelling is verzonden.', status: 409 };
+      const changed = (data.shipping.tracking ? data.shipping.tracking.code : '') !== (tracking ? tracking.code : '');
       data.shipping.tracking = tracking;
       prepare('UPDATE web_orders SET data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), currentTimestamp(), tenantId, row.id);
-      return { order: get(tenantId, row.id) };
+      return { order: get(tenantId, row.id), changed };
     });
   }
 
@@ -448,7 +489,7 @@ function createWebOrderStore(db, { stock }) {
     });
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, get, getForUser, list, setStatus, setTracking, updateData, onShipped };
+  return { priceCart, shippingQuote, orderTotals, place, get, getForUser, listForUser, list, setStatus, setTracking, updateData, onShipped, onTracking };
 }
 
 /**

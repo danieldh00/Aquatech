@@ -65,6 +65,7 @@
     const shippingRow = shipping ? `<tr><td colspan="3">${esc(shipping.label)}</td><td class="num">${shipping.price > 0 ? euro(shipping.price) : 'Gratis'}</td></tr>` : '';
     const canTrack = shipping && shipping.method === 'dpd' && ['verzonden', 'afgerond'].includes(order.status);
     const trackingForm = shipping && shipping.method === 'dpd' ? `<p>${shipping.tracking ? `Volgcode: <a href="${esc(shipping.tracking.url)}" target="_blank" rel="noopener">${esc(shipping.tracking.code)}</a> ` : 'Nog geen volgcode. '}${order.status === 'nieuw' ? '<input id="wo-tracking" placeholder="Volgcode DPD (optioneel)" maxlength="40"> <span class="muted small">wordt bij Verzonden vastgelegd</span>' : canTrack ? `<input id="wo-tracking" placeholder="Volgcode DPD" maxlength="40" value="${esc(shipping.tracking ? shipping.tracking.code : '')}"> <button class="btn" id="wo-tracking-save">Volgcode opslaan</button>` : ''}</p>` : '';
+    const shipMail = order.shipMail ? (order.shipMail.sent ? `Verzendmail verstuurd${order.shipMail.tracking ? ` met volgcode ${esc(order.shipMail.tracking)}` : ''} (${when(order.shipMail.at)})` : `Verzendmail niet verstuurd: ${esc(order.shipMail.error)}`) : '';
     const mail = order.mail ? (order.mail.sent ? `Bevestiging verstuurd (${when(order.mail.at)})` : `Bevestiging niet verstuurd: ${esc(order.mail.error)}`) : 'Bevestiging nog niet verstuurd';
     const needsInvoice = ['verzonden', 'afgerond'].includes(order.status) && !invoice;
     const invoiceLine = invoice ? `<p>Factuur: <a href="../facturen/?id=${encodeURIComponent(invoice.id)}">${esc(invoice.number || 'concept')}</a> (${esc(invoice.status)}${invoice.paidAt ? ', betaald' : ''})</p>`
@@ -78,7 +79,7 @@
         <tr><th colspan="3">${order.vat && order.vat.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num"><b>${euro(order.totals.total)}</b></td></tr></tbody></table></div>
       ${trackingForm}
       ${invoiceLine}
-      <p class="muted small">Betaling: op rekening · ${mail}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})`).join(' → ')}</p>
+      <p class="muted small">Betaling: op rekening · ${mail}${shipMail ? ` · ${shipMail}` : ''}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})`).join(' → ')}</p>
       <p>${buttons} <button class="btn" id="wo-close">Sluiten</button></p>`;
     box.hidden = false;
     /** Sluit het detail. */

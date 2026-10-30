@@ -10,6 +10,8 @@
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 
+const { invoiceFileName } = require('./invoice-pdf');
+
 const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 
 /**
@@ -64,7 +66,7 @@ function fromWebOrder(order, articles, settings) {
 /**
  * Maakt het factureren van webshopbestellingen.
  * @param {{ orders: object, invoices: object, debtors?: object, stock?: object, sender?: object, settingsFor: Function, log?: object }} ctx De opslagen en hulpfuncties van de server (settingsFor(tenantId) geeft de instellingen van een omgeving).
- * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, onShipped: Function }} De functies.
+ * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function }} De functies.
  */
 function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null, sender = null, settingsFor, log = console }) {
   /**
@@ -138,6 +140,21 @@ function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null
   }
 
   /**
+   * De factuur van een bestelling als PDF, voor de klant zelf (de aanroeper
+   * controleert dat de bestelling van de klant is). Concepten worden niet getoond.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} orderId Id van de bestelling.
+   * @returns {{ name: string, body: Buffer }|null} Bestandsnaam en PDF, of null als er (nog) geen definitieve factuur is.
+   */
+  function pdfFor(tenantId, orderId) {
+    if (!sender) return null;
+    const found = invoiceFor(tenantId, orderId);
+    if (!found || found.status === 'concept') return null;
+    const invoice = invoices.get(tenantId, found.id);
+    return invoice ? { name: invoiceFileName(invoice), body: sender.pdfOf(tenantId, invoice) } : null;
+  }
+
+  /**
    * Mailt de factuur als hij zojuist definitief is geworden en automatisch
    * mailen aan staat (instelling autoSend). Een mailfout wordt alleen gelogd.
    * @param {string} tenantId Id van de omgeving.
@@ -164,7 +181,7 @@ function createWebOrderInvoices({ orders, invoices, debtors = null, stock = null
     await mailIfFinalized(tenantId, out);
   }
 
-  return { invoiceFor, ensureInvoice, mailIfFinalized, onShipped };
+  return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped };
 }
 
 module.exports = { createWebOrderInvoices, fromWebOrder, invoiceKey };

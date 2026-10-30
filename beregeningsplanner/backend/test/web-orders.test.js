@@ -130,7 +130,7 @@ test('bestelling plaatsen reserveert de voorraad en stuurt een bevestiging', asy
   assert.match(bad.text, /geldige postcode/);
   const placed = await postCheckout(base, customer, CHECKOUT);
   assert.strictEqual(placed.status, 303);
-  assert.match(placed.location, /^\.\.\/bestelling\/[0-9a-f-]{36}\/$/);
+  assert.match(placed.location, /^\.\.\/bestelling\/[0-9a-f-]{36}\/\?bedankt=1$/);
   const page = await customer.get(`/winkel/${placed.location.slice(3)}`);
   assert.match(page.text, /WEB-\d{4}-0001/);
   assert.match(page.text, /Graag bellen|Afleveradres/);

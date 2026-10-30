@@ -6,6 +6,10 @@ const { layout, escapeHtml, formatPrice } = require('./storefront-pages');
 
 /** Relatief pad van deze pagina's naar de shop-startpagina. */
 const ROOT = '../';
+/** Relatief pad van het besteldetail (/winkel/bestelling/<id>/) naar de shop-startpagina. */
+const DETAIL_ROOT = '../../';
+/** Namen van de bestelstatussen voor het verloop (web-orders.js, STATUSES). */
+const STATUS_LABELS = { nieuw: 'Nieuw', verzonden: 'Verzonden', afgerond: 'Afgerond', geannuleerd: 'Geannuleerd' };
 
 /**
  * De btw-regels onder een bedrag: per tarief het bedrag excl. btw en de btw.
@@ -169,23 +173,60 @@ function deliveryBlock(order) {
 }
 
 /**
- * De bevestiging van een geplaatste bestelling.
- * @param {object} order De bestelling (met regels, adres en totalen).
+ * Een datum als dag-maand-jaar in het Nederlands.
+ * @param {string} iso Tijdstip als ISO-tekst.
+ * @returns {string} Bijvoorbeeld "30-10-2026".
+ */
+const formatDate = (iso) => {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Amsterdam' });
+};
+
+/**
+ * De bestelling met regels, verzending, volgcode, factuur en verloop. Na het
+ * plaatsen (`thanks`) met een bedankt, anders als onderdeel van de bestelhistorie.
+ * @param {object} order De bestelling (met regels, adres, totalen en verloop).
  * @param {object[]} groups Alle hoofdcategorieën.
+ * @param {{ thanks?: boolean, invoice?: ?{ number: string, status: string } }} [options] thanks: direct na het plaatsen; invoice: de definitieve factuur bij de bestelling (download als PDF).
  * @returns {string} De HTML-pagina.
  */
-function orderPage(order, groups = []) {
+function orderPage(order, groups = [], { thanks = false, invoice = null } = {}) {
   const business = order.customerGroup === 'zakelijk';
   const rows = order.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<br><small>Artikelnr.: ${escapeHtml(line.code)}</small></td><td class="num">${escapeHtml(formatPrice(business ? line.unitExcl : line.unitIncl))}</td><td class="num">${line.qty}</td><td class="num">${escapeHtml(formatPrice(business && line.lineExcl !== undefined ? line.lineExcl : line.lineTotal))}</td></tr>`).join('');
   const vatNote = order.vat && order.vat.shifted ? `<p class="note">Btw verlegd naar de afnemer${order.vat.number ? ` (btw-nummer ${escapeHtml(order.vat.number)})` : ''}.</p>` : business && order.vat && order.vat.number ? `<p class="note">Btw-nummer: ${escapeHtml(order.vat.number)}</p>` : '';
-  const body = `<section class="cart"><h1>Bedankt voor je bestelling</h1>
-<p>Je bestelling <strong>${escapeHtml(order.number)}</strong> is ontvangen. We sturen een bevestiging naar ${escapeHtml(order.email)}. Je bestelling gaat op rekening: je ontvangt de factuur van ons.</p>
+  const intro = thanks
+    ? `<h1>Bedankt voor je bestelling</h1>
+<p>Je bestelling <strong>${escapeHtml(order.number)}</strong> is ontvangen. We sturen een bevestiging naar ${escapeHtml(order.email)}. Je bestelling gaat op rekening: je ontvangt de factuur van ons.</p>`
+    : `<h1>Bestelling ${escapeHtml(order.number)}</h1>
+<p>Geplaatst op ${escapeHtml(formatDate(order.createdAt))}. Je bestelling gaat op rekening.</p>`;
+  const invoiceBlock = invoice ? `<p>Factuur <strong>${escapeHtml(invoice.number)}</strong>: <a href="factuur.pdf">Download als PDF</a></p>` : '';
+  const history = order.history.length ? `<p class="note">Verloop: ${order.history.map((step) => `${escapeHtml(STATUS_LABELS[step.status] || step.status)} (${escapeHtml(formatDate(step.at))})`).join(' → ')}</p>` : '';
+  const body = `<section class="cart">${intro}
 <div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Prijs${business ? ' excl. btw' : ''}</th><th class="num">Aantal</th><th class="num">Totaal${business ? ' excl. btw' : ''}</th></tr></thead>
 <tbody>${rows}</tbody><tfoot>${shippingRow(order.shipping, business)}${totalRows(order.totals, business, Boolean(order.vat && order.vat.shifted))}</tfoot></table></div>
 ${vatNote}${deliveryBlock(order)}
 <p>Status: <strong>${escapeHtml(order.statusLabel)}</strong></p>
-<p><a class="button" href="${ROOT}">Verder winkelen</a></p></section>`;
-  return layout({ root: ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups });
+${invoiceBlock}${history}
+<p><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a> <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a></p></section>`;
+  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups });
 }
 
-module.exports = { cartPage, checkoutPage, checkoutLoginPage, orderPage };
+/**
+ * De bestelhistorie van de ingelogde klant: een tabel met elke bestelling en een link naar het detail, met bladeren bij meer dan één pagina.
+ * @param {{ items: { id: string, number: string, statusLabel: string, total: number, createdAt: string }[], total: number }} list De bestellingen van deze pagina (nieuwste eerst) en het totaal aantal.
+ * @param {object[]} groups Alle hoofdcategorieën.
+ * @param {{ page?: number, pageSize?: number }} [paging] Het paginanummer (vanaf 1) en het aantal per pagina.
+ * @returns {string} De HTML-pagina.
+ */
+function ordersPage(list, groups = [], { page = 1, pageSize = 25 } = {}) {
+  const rows = list.items.map((order) => `<tr><td><a href="../bestelling/${escapeHtml(order.id)}/">${escapeHtml(order.number)}</a></td><td>${escapeHtml(formatDate(order.createdAt))}</td><td>${escapeHtml(order.statusLabel)}</td><td class="num">${escapeHtml(formatPrice(order.total))}</td></tr>`).join('');
+  const pages = Math.max(1, Math.ceil(list.total / pageSize));
+  const paging = pages > 1 ? `<p class="note">Pagina ${page} van ${pages}${page > 1 ? ` · <a href="?pagina=${page - 1}">Vorige</a>` : ''}${page < pages ? ` · <a href="?pagina=${page + 1}">Volgende</a>` : ''}</p>` : '';
+  const emptyNote = list.total > 0 ? '<p>Deze pagina bevat geen bestellingen. <a href="?pagina=1">Naar de eerste pagina</a></p>' : '<p>Je hebt nog geen bestellingen geplaatst.</p>';
+  const body = `<section class="cart"><h1>Mijn bestellingen</h1>
+${list.items.length ? `<div class="tablewrap"><table class="cart-table"><thead><tr><th>Bestelling</th><th>Datum</th><th>Status</th><th class="num">Totaal</th></tr></thead><tbody>${rows}</tbody></table></div>${paging}` : emptyNote}
+<p><a class="button" href="${ROOT}">Verder winkelen</a> <a class="button secondary" href="../account/">Mijn account</a></p></section>`;
+  return layout({ root: ROOT, title: 'Mijn bestellingen – Aquatechshop.nl', description: 'Je bestellingen bij Aquatechshop.nl.', body, groups });
+}
+
+module.exports = { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage };
