@@ -636,16 +636,10 @@
   }
 
   /**
-   * Laadt de instellingen en wat de gekozen sectie extra nodig heeft (e-mail of, voor hoofdbeheerders, de back-ups).
-   * Alles wordt per paginabezoek één keer geladen, zodat wisselen tussen secties geen ingevulde maar nog niet opgeslagen velden wist;
-   * opslaan tekent de formulieren zelf opnieuw.
-   * @param {string} [sectionId] De sectie die getoond wordt; leeg = alleen de instellingen zelf.
+   * Haalt de instellingen op en tekent de formulieren; state.settings wordt pas gevuld als dat lukt.
    * @returns {Promise<void>}
    */
-  async function loadSettings(sectionId) {
-    if (sectionId === 'backup' && state.backups) loadBackups();
-    if (sectionId === 'mail' && !state.mailLoaded) { state.mailLoaded = true; loadMail(); }
-    if (state.settings) return;
+  async function fetchSettings() {
     try {
       const result = await api('settings');
       state.aiFromLive = Boolean(result.aiFromLive);
@@ -654,6 +648,25 @@
     } catch (error) {
       toast(`Kan de instellingen niet laden: ${error.message}`, true);
     }
+  }
+
+  /**
+   * Laadt de instellingen en wat de gekozen sectie extra nodig heeft (e-mail of, voor hoofdbeheerders, de back-ups).
+   * Instellingen en e-mail worden per paginabezoek één keer succesvol geladen (een lopend verzoek wordt gedeeld), zodat wisselen tussen
+   * secties geen ingevulde maar nog niet opgeslagen velden wist; na een fout wordt het bij de volgende keer opnieuw geprobeerd.
+   * Opslaan tekent de formulieren zelf opnieuw.
+   * @param {string} [sectionId] De sectie die getoond wordt; leeg = alleen de instellingen zelf.
+   * @returns {Promise<void>}
+   */
+  async function loadSettings(sectionId) {
+    const pending = state.pending || (state.pending = {});
+    if (sectionId === 'backup' && state.backups) loadBackups();
+    if (sectionId === 'mail' && !state.mailLoaded && !pending.mail) {
+      pending.mail = loadMail().then((loaded) => { state.mailLoaded = loaded; }).finally(() => { pending.mail = null; });
+    }
+    if (state.settings) return;
+    if (!pending.settings) pending.settings = fetchSettings().finally(() => { pending.settings = null; });
+    await pending.settings;
   }
 
   // Februari altijd 28, net als op de server: de datum moet elk jaar bestaan.
@@ -874,7 +887,7 @@
   // ---------- E-mail (SMTP of Exchange-connector) ----------
   /**
    * Laadt de e-mailinstellingen in het formulier.
-   * @returns {Promise<void>}
+   * @returns {Promise<boolean>} true als het laden lukte.
    */
   async function loadMail() {
     const formElement = $('#s-mail');
@@ -890,8 +903,10 @@
       $('#m-state').textContent = ok ? 'De mailserver is ingesteld.' : 'Nog geen mailserver ingesteld.';
       $('#m-state').className = `state ${ok ? 'ok' : 'off'}`;
       mailMode();
+      return true;
     } catch (error) {
       $('#m-state').textContent = `Kan de e-mailinstellingen niet laden: ${error.message}`;
+      return false;
     }
   }
 
