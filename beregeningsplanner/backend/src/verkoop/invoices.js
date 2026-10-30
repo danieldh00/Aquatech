@@ -515,7 +515,7 @@ function registerInvoiceRoutes(app, ctx) {
     try {
       const out = await shopOrders.run(tenantOf(req), { user: req.user });
       if (out.skipped === 'disabled') return res.status(409).json({ error: 'disabled', message: 'Zet eerst het ophalen van webshopbestellingen aan (Instellingen).' });
-      if (out.skipped === 'not_configured') return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Webshop).' });
+      if (out.skipped === 'not_configured') return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' });
       if (out.imported) audit(req, 'webshopbestellingen_gefactureerd', { count: out.imported });
       res.json({ ...out, status: shopOrders.status(tenantOf(req)) });
     } catch (error) {

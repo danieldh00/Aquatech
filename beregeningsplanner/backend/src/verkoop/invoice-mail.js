@@ -100,7 +100,7 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
     if (invoice.status === 'concept') throw Object.assign(new Error('Maak de factuur eerst definitief.'), { code: 'not_final' });
     const settings = settingsFor(tenantId);
     const mailer = mailerFor(settings);
-    if (!mailer.configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld (Beheer → Instellingen → E-mail).'), { code: 'not_configured' });
+    if (!mailer.configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).'), { code: 'not_configured' });
     const defaults = draft(tenantId, invoice);
     const to = (options.to && options.to.length ? options.to : [defaults.to]).filter(validEmail);
     if (!to.length) throw Object.assign(new Error('Geen geldig e-mailadres van de klant.'), { code: 'invalid_to' });

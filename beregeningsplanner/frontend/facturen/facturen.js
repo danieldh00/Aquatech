@@ -330,8 +330,8 @@
     formElement.ordersFinalize.checked = settings.shopOrders.finalize;
     const noShop = !shop.url || !shop.rest;
     formElement.ordersEnabled.disabled = noShop && !settings.shopOrders.enabled;
-    $('#s-shopinfo').innerHTML = !shop.url ? 'Er is nog geen webshop gekoppeld (Beheer → Webshop).'
-      : !shop.rest ? 'Bestellingen ophalen kan alleen met de REST API van WooCommerce (Beheer → Webshop, met API-sleutels).'
+    $('#s-shopinfo').innerHTML = !shop.url ? 'Er is nog geen webshop gekoppeld (Beheer → Integraties → Webshop).'
+      : !shop.rest ? 'Bestellingen ophalen kan alleen met de REST API van WooCommerce (Beheer → Integraties → Webshop, met API-sleutels).'
         : shop.stockSynced ? 'De voorraad van webshopverkopen wordt al afgeboekt via de webshopkoppeling; de factuur boekt niets extra af.'
           : 'De voorraad gaat niet naar de webshop, dus een definitieve webshopfactuur boekt de artikelen af van de voorraad.';
     /** Toont hoe het volgende factuurnummer eruitziet. */
@@ -862,7 +862,7 @@
     $('#e-send').onclick = async () => {
       try {
         const mail = await api(`invoices/${encodeURIComponent(state.invoice.id)}/mail`);
-        if (!mail.configured) { toast('Er is geen mailserver ingesteld (Beheer → Instellingen → E-mail).', true); return; }
+        if (!mail.configured) { toast('Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).', true); return; }
         sendForm.to.value = mail.to;
         sendForm.subject.value = mail.subject;
         sendForm.message.value = mail.message;

@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.3.9
+
+Beheer en de zijbalk zijn overzichtelijker ingedeeld; niets verandert aan de
+werking of de opslag.
+
+- **Beheer**: de tabbladen en het lange tabblad *Instellingen* zijn vervangen
+  door een zijmenu met zes groepen (Overzicht, Organisatie & gebruikers,
+  Modules, Integraties, Toegang & beveiliging, Systeem). Elke sectie heeft een
+  eigen pagina en adres (`beheer/#mail`, `#ai`, `#access`, `#modules`,
+  `#outsourcing`, `#season`, `#security`, `#backup`; de overige behouden hun
+  naam). `#settings` opent *Modules aan/uit*. Zoekveld *Zoek instelling* filtert
+  op naam en trefwoorden. Op een smal scherm klapt het menu uit. Nieuw bestand
+  `beheer/indeling.js` met de indeling.
+- **Eigen webshop** (`storefront`, `shopPlanner`): staan nu bij *Webshop en
+  WooCommerce* in plaats van onder *Toegang*, in een eigen formulier `#s-shop`.
+- Verwijzingen in meldingen en docs (Beheer → Integraties → E-mail, → Webshop,
+  → Modules → Uitbesteden) en links in Offertes en Uitbesteden aangepast.
+- **Zijbalk**: modules staan in inklapbare groepen *Ontwerpen*, *Verkoop*
+  (incl. Klantdossiers) en *Uitvoering*; Nieuws staat bovenaan, Artikelen
+  (voorheen Voorraadbeheer, alleen de zichtbare naam; de rest volgt in 1.4.0)
+  los eronder. De groep met de huidige pagina staat open, de rest onthoudt de
+  gebruiker. Ingeklapte zijbalk toont alle iconen. `navGroup` in
+  `dashboard/modules.js` kiest de groep.
+
 ## 1.3.8
 
 De webshop (`winkel/`) heeft de opzet van aquatechshop.nl als basis, en een

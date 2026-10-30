@@ -27,19 +27,12 @@
     <div id="denied" class="notice" hidden></div>
 
     <div id="app" hidden>
-      <nav class="tabs" role="tablist">
-        <button class="tab active" data-tab="history" role="tab">Aanvragen</button>
-        <button class="tab" data-tab="plans" role="tab">Plannen</button>
-        <button class="tab" data-tab="users" role="tab">Gebruikers</button>
-        <button class="tab" data-tab="roles" role="tab">Rollen</button>
-        <button class="tab" data-tab="settings" role="tab">Instellingen</button>
-        <button class="tab" data-tab="webshop" role="tab">Webshop</button>
-        <button class="tab" data-tab="sproeiers" role="tab">Sproeiers</button>
-        <button class="tab" data-tab="aikosten" role="tab">AI-kosten</button>
-        <button class="tab" data-tab="audit" role="tab">Auditlog</button>
-      </nav>
+      <div class="bh">
+      <aside class="bh-nav" id="bh-nav" aria-label="Beheer"></aside>
+      <div class="bh-main">
+      <h2 class="bh-title" id="bh-title"></h2>
 
-      <section id="tab-history" class="tabpane">
+      <section id="tab-history" class="tabpane" hidden>
         <div class="filters">
           <input id="h-search" type="search" placeholder="Zoek op plan, klant, adres of gebruiker">
           <select id="h-user"><option value="">Alle gebruikers</option></select>
@@ -87,7 +80,7 @@
           <p id="u-roles" class="muted small"></p>
         </form>
         <p id="u-login" class="muted small"></p>
-        <label class="chk"><input type="checkbox" id="u-guests"> Gasten tonen (anonieme bezoekers zonder account)</label>
+        <label class="chk"><input type="checkbox" id="u-guests"> Gasten in de lijst tonen (anonieme bezoekers zonder account)</label>
         <div class="tablewrap"><table class="grid" id="u-table"></table></div>
       </section>
 
@@ -143,11 +136,9 @@
 
         <form id="s-access" class="card-form settings">
           <h3>Toegang</h3>
-          <p class="muted small">Iedereen logt in met een eigen account (tabblad Gebruikers). Bezoekers zonder account zien alleen de inlogpagina, tenzij je gasten toestaat.</p>
+          <p class="muted small">Iedereen logt in met een eigen account (Organisatie → Gebruikers). Bezoekers zonder account zien alleen de inlogpagina, tenzij je gasten toestaat.</p>
           <label class="chk"><input type="checkbox" name="guestAccess"> Gasten zonder inloggen toestaan (openbare planner; elke browser ziet alleen de eigen plannen). Werkt alleen zonder toegangscode.</label>
-          <label class="chk"><input type="checkbox" name="drawingRequests"> Klanten zonder account mogen een tekening maken en ter controle indienen (knop <i>Direct een tekening maken</i> op de inlogpagina). De tekening komt in het Plannenoverzicht onder <i>Ter controle</i>.</label>
-          <label class="chk"><input type="checkbox" name="storefront"> Eigen webshop tonen op <code>winkel/</code> (openbaar, alleen bekijken): voorraadartikelen met verkoopprijs en <i>Naar webshop</i> aan, zonder bestellen. Alleen voor de hoofdtenant.</label>
-          <label class="chk"><input type="checkbox" name="shopPlanner"> Kopje <i>Planner</i> in de webshop: een bezoeker maakt met naam, e-mail en wachtwoord een klantaccount en gaat meteen door naar de planner. Uit = kopje verborgen en de pagina geweigerd. Alleen voor de hoofdtenant.</label>
+          <label class="chk"><input type="checkbox" name="drawingRequests"> <span>Klanten zonder account mogen een tekening maken en ter controle indienen (knop <i>Direct een tekening maken</i> op de inlogpagina). De tekening komt in het Plannenoverzicht onder <i>Ter controle</i>.</span></label>
           <div class="field">
             <span class="label">Toegangscode (optioneel) <span class="src" data-origin="accessCode"></span></span>
             <span class="muted small">Een gedeelde code waarmee iemand zonder eigen account als beheerder inlogt. Niet nodig als iedereen een account heeft.</span>
@@ -264,6 +255,12 @@
       </section>
       <section id="tab-webshop" class="tabpane" hidden>
         <p class="muted small">Koppel de webshop van je organisatie: de stuklijst in de planner, de Excel-export en nieuwe offertes gebruiken dan de naam, prijs en link uit de webshop. Een testomgeving heeft een eigen koppeling.</p>
+        <form id="s-shop" class="card-form settings">
+          <h3>Eigen webshop (winkel/)</h3>
+          <label class="chk"><input type="checkbox" name="storefront"> <span>Eigen webshop tonen op <code>winkel/</code> (openbaar, alleen bekijken): voorraadartikelen met verkoopprijs en <i>Naar webshop</i> aan, zonder bestellen. Alleen voor de hoofdtenant.</span></label>
+          <label class="chk"><input type="checkbox" name="shopPlanner"> <span>Kopje <i>Planner</i> in de webshop: een bezoeker maakt met naam, e-mail en wachtwoord een klantaccount en gaat meteen door naar de planner. Uit = kopje verborgen en de pagina geweigerd. Alleen voor de hoofdtenant.</span></label>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="w-form" class="card-form settings">
           <h3>WooCommerce</h3>
           <label>Webadres van de webshop<input name="url" type="url" placeholder="https://www.voorbeeld.nl" spellcheck="false"></label>
@@ -365,6 +362,8 @@
         <div class="tablewrap"><table class="grid" id="a-table"></table></div>
         <div class="pager"><button id="a-prev" class="btn">← Nieuwer</button><span id="a-info" class="muted"></span><button id="a-next" class="btn">Ouder →</button></div>
       </section>
+      </div>
+      </div>
     </div>
   </main>
 
@@ -385,6 +384,7 @@
   <script src="../dashboard/modules.js"></script>
   <script src="../shared/sidebar.js"></script>
   <script src="../dashboard/account.js"></script>
+  <script src="indeling.js"></script>
   <script src="webshop.js"></script>
   <script src="sproeiers.js"></script>
   <script src="rollen.js"></script>

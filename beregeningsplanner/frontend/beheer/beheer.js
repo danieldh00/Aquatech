@@ -407,7 +407,7 @@
     const rolesLink = $('#u-roles [data-goto]');
     if (rolesLink) {
       /**
-       * Opent het tabblad Rollen.
+       * Opent de sectie Rollen.
        * @param {MouseEvent} event de klik
        */
       rolesLink.onclick = (event) => { event.preventDefault(); showTab('roles'); };
@@ -571,10 +571,10 @@
     accessForm.guestAccess.checked = view.guestAccess.value;
     accessForm.guestAccess.disabled = code.set;
     accessForm.drawingRequests.checked = view.drawingRequests.value;
-    accessForm.storefront.checked = Boolean(view.storefront?.value);
-    accessForm.storefront.closest('label').hidden = !state.storefrontAllowed;
-    accessForm.shopPlanner.checked = view.shopPlanner?.value !== false;
-    accessForm.shopPlanner.closest('label').hidden = !state.storefrontAllowed;
+    const shopForm = $('#s-shop');
+    shopForm.storefront.checked = Boolean(view.storefront?.value);
+    shopForm.shopPlanner.checked = view.shopPlanner?.value !== false;
+    shopForm.hidden = !state.storefrontAllowed;
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
@@ -636,12 +636,13 @@
   }
 
   /**
-   * Laadt de instellingen, de e-mail en (voor hoofdbeheerders) de back-ups.
+   * Laadt de instellingen en wat de gekozen sectie extra nodig heeft (e-mail of, voor hoofdbeheerders, de back-ups).
+   * @param {string} [sectionId] De sectie die getoond wordt; leeg = alleen de instellingen zelf.
    * @returns {Promise<void>}
    */
-  async function loadSettings() {
-    if (state.backups) loadBackups();
-    loadMail();
+  async function loadSettings(sectionId) {
+    if (sectionId === 'backup' && state.backups) loadBackups();
+    if (sectionId === 'mail') loadMail();
     try {
       const result = await api('settings');
       state.aiFromLive = Boolean(result.aiFromLive);
@@ -760,13 +761,14 @@
     accessForm.drawingRequests.onchange = () => {
       saveSettings(accessForm, { drawingRequests: accessForm.drawingRequests.checked }, accessForm.drawingRequests.checked ? 'Tekening indienen zonder account staat aan' : 'Tekening indienen zonder account staat uit');
     };
+    const shopForm = $('#s-shop');
     /** Zet de eigen webshop (winkel/) aan of uit. */
-    accessForm.storefront.onchange = () => {
-      saveSettings(accessForm, { storefront: accessForm.storefront.checked }, accessForm.storefront.checked ? 'Webshop staat aan' : 'Webshop staat uit');
+    shopForm.storefront.onchange = () => {
+      saveSettings(shopForm, { storefront: shopForm.storefront.checked }, shopForm.storefront.checked ? 'Webshop staat aan' : 'Webshop staat uit');
     };
     /** Zet het kopje Planner in de webshop aan of uit. */
-    accessForm.shopPlanner.onchange = () => {
-      saveSettings(accessForm, { shopPlanner: accessForm.shopPlanner.checked }, accessForm.shopPlanner.checked ? 'Kopje Planner in de webshop staat aan' : 'Kopje Planner in de webshop staat uit');
+    shopForm.shopPlanner.onchange = () => {
+      saveSettings(shopForm, { shopPlanner: shopForm.shopPlanner.checked }, shopForm.shopPlanner.checked ? 'Kopje Planner in de webshop staat aan' : 'Kopje Planner in de webshop staat uit');
     };
     /**
      * Slaat een nieuwe toegangscode op.
@@ -1039,21 +1041,23 @@
 
   // ---------- Algemeen ----------
   /**
-   * Toont een tabblad en laadt wat erop staat.
-   * @param {string} name naam van het tabblad
+   * Toont een sectie van Beheer en laadt wat erop staat.
+   * @param {string} name sleutel van de sectie (zie indeling.js; oude adressen als `settings` werken ook)
    */
   function showTab(name) {
-    document.querySelectorAll('.tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === name));
-    document.querySelectorAll('.tabpane').forEach((pane) => { pane.hidden = pane.id !== `tab-${name}`; });
-    if (name === 'plans') loadPlans();
-    if (name === 'users') loadUsers();
-    if (name === 'roles') window.BeheerRollen.load();
-    if (name === 'settings') loadSettings();
-    if (name === 'webshop') window.BeheerWebshop.load();
-    if (name === 'sproeiers') window.BeheerSproeiers.load();
-    if (name === 'aikosten') window.BeheerAiKosten.load();
-    if (name === 'audit') loadAudit();
-    try { window.history.replaceState(null, '', `#${name}`); } catch (error) { /* file:// */ }
+    const id = window.BeheerIndeling.resolve(name);
+    if (!id) return;
+    const section = window.BeheerIndeling.find(id);
+    window.BeheerIndeling.show(section);
+    if (section.pane === 'plans') loadPlans();
+    if (section.pane === 'users') loadUsers();
+    if (section.pane === 'roles') window.BeheerRollen.load();
+    if (section.pane === 'settings') loadSettings(section.id);
+    if (section.pane === 'webshop') { loadSettings(section.id); window.BeheerWebshop.load(); }
+    if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
+    if (section.pane === 'aikosten') window.BeheerAiKosten.load();
+    if (section.pane === 'audit') loadAudit();
+    try { window.history.replaceState(null, '', `#${id}`); } catch (error) { /* file:// */ }
   }
 
   /**
@@ -1080,9 +1084,14 @@
     $('#u-login').innerHTML = me.loginCode
       ? `Gebruikersnamen zijn uniek binnen deze organisatie. Gebruikers loggen in met organisatiecode <b>${esc(me.loginCode)}</b> (of via <a href="${esc(link)}">deze inloglink</a>, die de code al invult).`
       : 'Gebruikersnamen zijn uniek binnen deze organisatie. Gebruikers loggen in met een lege organisatiecode.';
-    document.querySelectorAll('.tab').forEach((tab) => {
-      /** Toont dit tabblad. */
-      tab.onclick = () => { showTab(tab.dataset.tab); };
+    window.BeheerIndeling.build({
+      /**
+       * Back-ups zijn alleen voor hoofdbeheerders zichtbaar.
+       * @param {object} section De sectie.
+       * @returns {boolean} true als de sectie in het menu hoort.
+       */
+      allowed: (section) => section.needs !== 'backups' || state.backups,
+      onSelect: showTab,
     });
     let searchTimer;
     /** Zoekt kort na het typen opnieuw in de historie. */
@@ -1116,9 +1125,11 @@
     $('#detail').onclick = (event) => { if (event.target.id === 'detail') $('#detail').hidden = true; };
     await loadUsers().catch(() => {});
     loadHistory();
-    // Direct naar een tabblad via beheer/#settings.
-    const hash = location.hash.slice(1);
-    if (['plans', 'users', 'roles', 'settings', 'webshop', 'sproeiers', 'aikosten', 'audit'].includes(hash)) showTab(hash);
+    // Direct naar een sectie via beheer/#mail; zonder adres beginnen we bij de aanvragen.
+    const start = window.BeheerIndeling.resolve(location.hash.slice(1)) || 'history';
+    showTab(start);
+    /** Een ander adres (terugknop, bladwijzer, link vanuit een andere pagina) opent de bijbehorende sectie. */
+    window.addEventListener('hashchange', () => { showTab(location.hash.slice(1)); });
   }
 
   init();

@@ -8,6 +8,8 @@
 // - Breed scherm: vast links, in te klappen tot een smalle iconenbalk
 //   (per browser onthouden). Pagina's met <body data-nav-compact> (de
 //   planner) beginnen ingeklapt.
+// - Modules staan in inklapbare groepen (Ontwerpen, Verkoop, Uitvoering); de
+//   groep met de huidige pagina staat open, de rest onthoudt de gebruiker.
 // - Smal scherm (< 900px): lade van links via de menuknop in de kopbalk.
 (function (root) {
   const tools = root.AquatechModuleTools;
@@ -24,6 +26,13 @@
   const base = script ? (script.getAttribute('src') || '').replace(/shared\/sidebar\.js(\?.*)?$/, '') : '';
   const CACHE = 'aquatech_nav';
   const COMPACT = 'aquatech_nav_compact';
+  const OPEN_GROUPS = 'aquatech_nav_groups';
+  /** De inklapbare groepen van de zijbalk, in volgorde (een module kiest er één met `navGroup` in dashboard/modules.js). */
+  const GROUPS = [
+    { key: 'ontwerpen', title: 'Ontwerpen' },
+    { key: 'verkoop', title: 'Verkoop' },
+    { key: 'uitvoering', title: 'Uitvoering' },
+  ];
   const store = {
     /**
      * Leest een waarde uit localStorage.
@@ -41,6 +50,14 @@
 
   const body = document.body;
   let nav = null;
+
+  /**
+   * Leest welke groepen de gebruiker zelf heeft opengeklapt (per browser onthouden).
+   * @returns {object} Groepsleutel → true als de groep open staat.
+   */
+  function readOpenGroups() {
+    try { return JSON.parse(store.get(OPEN_GROUPS) || '{}') || {}; } catch (error) { return {}; }
+  }
 
   /**
    * Geeft aan of de zijbalk ingeklapt moet zijn (per browser onthouden, anders data-nav-compact op de pagina).
@@ -69,13 +86,13 @@
 
   /**
    * Tekent de zijbalk (maakt hem de eerste keer aan). Alleen modules die er al
-   * zijn; geplande modules staan in Beheer > Instellingen en komen pas in de
+   * zijn; geplande modules staan in Beheer > Modules en komen pas in de
    * zijbalk als ze klaar zijn.
    * @param {object} data { rights, disabled, profile, news }.
    */
   function render(data) {
     // Alleen modules die er al zijn; geplande modules staan in Beheer >
-    // Instellingen en komen pas in de zijbalk als ze klaar zijn.
+    // Modules en komen pas in de zijbalk als ze klaar zijn.
     const items = [{ id: '', title: 'Overzicht', icon: 'home', status: 'actief', href: base || './' }]
       .concat(tools.visible(data.rights, data.disabled).filter((module) => module.status === 'actief' && module.href).map((module) => ({ ...module, href: module.href ? base + module.href : '' })));
     const profile = { id: 'profiel', href: `${base}profiel/` };
@@ -100,6 +117,27 @@
     const section = (title, list) => (list.length
       ? `<div class="at-nav-list">${title ? `<div class="at-nav-group">${esc(title)}</div>` : ''}${list.map(link).join('')}</div>`
       : '');
+    const openGroups = readOpenGroups();
+    /**
+     * Inklapbare groep links; met één zichtbare module is het gewoon een link. De groep met de huidige pagina staat altijd open.
+     * @param {{key: string, title: string}} group De groep.
+     * @param {object[]} list De modules in de groep.
+     * @returns {string} HTML van de groep (leeg zonder modules).
+     */
+    const collapsible = (group, list) => {
+      if (list.length < 2) return list.map(link).join('');
+      const open = list.some((module) => module.id === active) || openGroups[group.key] === true;
+      return `<div class="at-nav-sec${open ? ' open' : ''}" data-group="${esc(group.key)}">
+        <button type="button" class="at-nav-sec-head" aria-expanded="${open}"><span class="at-nav-label">${esc(group.title)}</span>
+          <svg class="ico at-nav-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="at-nav-list at-nav-sec-body">${list.map(link).join('')}</div>
+      </div>`;
+    };
+    const mainItems = items.filter((module) => module.status === 'actief' && module.group !== 'beheer');
+    const topItems = mainItems.filter((module) => module.id === '' || module.navGroup === 'top');
+    const looseItems = mainItems.filter((module) => !topItems.includes(module) && !GROUPS.some((group) => group.key === module.navGroup));
+    const mainHtml = `<div class="at-nav-list">${topItems.map(link).join('')}</div>
+      <div class="at-nav-list">${GROUPS.map((group) => collapsible(group, mainItems.filter((module) => module.navGroup === group.key))).join('')}${looseItems.map(link).join('')}</div>`;
     if (!nav) {
       nav = document.createElement('nav');
       nav.className = 'at-nav';
@@ -117,6 +155,20 @@
       addToggle();
       syncTopbarHeight();
       /**
+       * Klapt een groep open of dicht en onthoudt dat.
+       * @param {MouseEvent} event De klik.
+       */
+      nav.addEventListener('click', (event) => {
+        const head = event.target.closest('.at-nav-sec-head');
+        if (!head) return;
+        const group = head.closest('.at-nav-sec');
+        const open = group.classList.toggle('open');
+        head.setAttribute('aria-expanded', String(open));
+        const saved = readOpenGroups();
+        saved[group.dataset.group] = open;
+        store.set(OPEN_GROUPS, JSON.stringify(saved));
+      });
+      /**
        * Sluit de lade met Escape.
        * @param {KeyboardEvent} event De toets.
        */
@@ -130,7 +182,7 @@
         </a>
         <button type="button" class="at-nav-close" aria-label="Menu sluiten" title="Menu sluiten">✕</button>
       </div>
-      ${section('', items.filter((module) => module.status === 'actief' && module.group !== 'beheer'))}
+      ${mainHtml}
       ${section('Beheer', items.filter((module) => module.status === 'actief' && module.group === 'beheer'))}
       ${data.profile ? `<div class="at-nav-list at-nav-foot">${link({ id: 'profiel', title: 'Mijn profiel', icon: 'user', status: 'actief', href: `${base}profiel/` })}</div>` : ''}
       <button type="button" class="at-nav-collapse" title="Zijbalk in- of uitklappen" aria-label="Zijbalk in- of uitklappen">

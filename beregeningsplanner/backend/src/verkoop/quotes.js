@@ -829,7 +829,7 @@ function registerQuoteRoutes(app, ctx) {
     if (!list.length || list.length > 5 || !list.every(validEmail)) return res.status(400).json({ error: 'invalid_to', message: 'Vul een of meer geldige e-mailadressen in.' });
     const settings = settingsOf(req);
     const mailer = mailerFor(settings);
-    if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Instellingen → E-mail).' });
+    if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).' });
     const shared = quotes.share(req.user, req.params.id, url);
     if (shared.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (shared.error) return notFound(res);

@@ -130,3 +130,26 @@ dl.kv dd { margin: 0; }
 /* Seizoensherinneringen: één blok per herinnering. */
 .season-item { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 10px; display: grid; gap: 8px; }
 .season-item textarea { font: inherit; }
+
+/* Indeling: zijmenu met groepen en zoekveld, daarnaast de gekozen sectie */
+.bh { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; align-items: start; }
+.bh-nav { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.bh-search { width: 100%; box-sizing: border-box; }
+.bh-toggle { display: none; }
+.bh-group { margin-bottom: 12px; }
+.bh-group-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 10px 4px; }
+.bh-link { display: block; padding: 7px 10px; border-radius: 6px; color: var(--text); text-decoration: none; font-size: 14px; border-left: 3px solid transparent; }
+.bh-link:hover { background: var(--primary-soft); }
+.bh-link.active { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; border-left-color: var(--primary); }
+.bh-none { padding: 0 10px; }
+.bh-title { margin: 0 0 12px; font-size: 20px; text-transform: none; letter-spacing: 0; color: var(--text); }
+.bh-main { min-width: 0; }
+.card-form.sec-off { display: none; }
+.bh-link[hidden], .bh-group[hidden], .bh-none[hidden] { display: none; }
+@media (max-width: 800px) {
+  .bh { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .bh-nav { position: static; max-height: none; overflow: visible; }
+  .bh-toggle { display: flex; justify-content: space-between; align-items: center; width: 100%; font: inherit; font-family: var(--at-font); font-weight: 600; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--text); cursor: pointer; }
+  .bh-list { display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 4px; }
+  .bh-list.open { display: block; }
+}

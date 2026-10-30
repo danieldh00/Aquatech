@@ -931,7 +931,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     if (!want.size) return { error: 'Kies een of meer producten.', field: 'ids' };
     const chosen = products.filter((product) => want.has(String(product.id)) && !product.parentId);
     // Producten van vóór migratie 33 hebben nog geen bekend type; een variabel product zou anders een gewoon artikel worden.
-    if (chosen.some((product) => product.type === 'unknown')) return { error: 'Synchroniseer eerst de webshop opnieuw (Beheer → Webshop); van een of meer producten is het type nog onbekend.', field: 'ids' };
+    if (chosen.some((product) => product.type === 'unknown')) return { error: 'Synchroniseer eerst de webshop opnieuw (Beheer → Integraties → Webshop); van een of meer producten is het type nog onbekend.', field: 'ids' };
     const chosenIds = new Set(chosen.map((product) => String(product.id)));
     chosen.push(...products.filter((product) => product.parentId && chosenIds.has(String(product.parentId))));
     const skipped = [];
@@ -1569,8 +1569,8 @@ function registerStockRoutes(app, ctx) {
     if (!Array.isArray(req.body?.ids) && ctx.syncShop) {
       try {
         const out = await ctx.syncShop(tenantOf(req), req.user);
-        if (out.skipped) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Webshop).' });
-        if (out.mirror === false) return res.status(409).json({ error: 'mirror_off', message: 'De instelling "Webshop bepaalt de artikellijst" staat uit (Beheer → Webshop); er is niets overgenomen.' });
+        if (out.skipped) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' });
+        if (out.mirror === false) return res.status(409).json({ error: 'mirror_off', message: 'De instelling "Webshop bepaalt de artikellijst" staat uit (Beheer → Integraties → Webshop); er is niets overgenomen.' });
         audit(req, 'voorraad_webshop_overgenomen', { created: out.created, archived: out.archived });
         return res.json(out);
       } catch (error) {
@@ -1603,7 +1603,7 @@ function registerStockRoutes(app, ctx) {
   app.post('/api/stock/items/:id/publish', requireJson, requireStock, ctx.importLimiter || ((req, res, next) => next()), async (req, res) => {
     // Eerst het artikel in deze omgeving: een id van een andere organisatie is 404, ook zonder webshop.
     if (!stock.get(tenantOf(req), req.params.id)) return notFound(res);
-    if (!ctx.publishToShop) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Webshop).' });
+    if (!ctx.publishToShop) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' });
     try {
       const out = await ctx.publishToShop(tenantOf(req), req.params.id, req.user);
       if (out.error === 'not_found') return notFound(res);
