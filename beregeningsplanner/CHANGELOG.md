@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.4.5
+
+Voorraadstand in de eigen webshop.
+
+- **Stand**: de shop gebruikt de voorraad uit het systeem (`stock_items.on_hand`
+  min de reserveringen voor open werkorders, dezelfde beschikbare stand die naar
+  WooCommerce gaat); per variant en bij een hoofdartikel op voorraad als een
+  variant dat is. Er gaan nooit aantallen naar de bezoeker, alleen
+  *Op voorraad* of *Niet op voorraad*.
+- **Filter**: `?voorraad=1` op categorie en zoeken toont alleen wat op voorraad
+  is (keuze *Alles / Alleen op voorraad*); de omleiding van `categorie/<slug>`
+  naar `categorie/<slug>/` behoudt de querystring.
+- **Waarschijnlijke oorzaak 'alles niet op voorraad'** (live shop: 882 regels
+  niet, 0 wel op voorraad; de database zelf niet ingezien): mogelijk geen fout in de
+  shop, maar nog te controleren op `on_hand`, reserveringen en synchronisatiestatus. Artikelen die uit
+  WooCommerce zijn overgenomen krijgen alleen een beginstand als het product
+  daar voorraadbeheer heeft (`manage_stock` met aantal) en de koppeling
+  voorraad synchroniseert; anders blijft `on_hand` 0 totdat er geteld of
+  geboekt wordt bij Artikelen.
+
 ## 1.4.4
 
 Beheer: dezelfde layout op elk tabblad.

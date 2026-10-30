@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.4.5',
+      date: '2026-10-30',
+      title: 'Voorraad in de webshop',
+      items: [
+        { text: 'De webshop toont per artikel (en per variant) of het op voorraad is, op basis van de voorraad bij Artikelen min wat voor werkorders is gereserveerd. In een categorie of zoekresultaat kun je kiezen voor Alleen op voorraad.', for: ['beheer', 'voorraad'] },
+        { text: 'Staat alles in de webshop op "Niet op voorraad", dan is bij die artikelen nog geen voorraad ingevuld bij Artikelen. Zodra je de voorraad telt of boekt, verschijnt die in de webshop.', for: ['beheer', 'voorraad'] },
+      ],
+    },
+    {
       version: '1.4.4',
       date: '2026-10-30',
       title: 'Beheer overal gelijk uitgelijnd',

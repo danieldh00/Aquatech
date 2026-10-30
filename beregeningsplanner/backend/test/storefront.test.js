@@ -362,3 +362,24 @@ test('webshop: hoofdartikel met varianten als regel met keuzelijst en eigen scri
   assert.strictEqual(found.text.match(/data-variant-row/g).length, 1);
   assert.ok(!/<script/i.test((await anonymous.get('/winkel/')).text), 'startpagina laadt geen script');
 });
+
+test('webshop: voorraadstand uit het systeem en filter alleen op voorraad', async () => {
+  const { admin, anonymous } = await setup();
+  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
+  const home = await anonymous.get('/winkel/');
+  const categorySlug = home.text.match(/href="categorie\/(overig-[0-9a-f]{6})\//)[1];
+  const all = await anonymous.get(`/winkel/categorie/${categorySlug}/`);
+  assert.match(all.text, /Sproeier Pro/);
+  assert.match(all.text, /stock in/, 'SPR-1 heeft voorraad');
+  assert.match(all.text, /stock out/, 'SPR-2 heeft geen voorraad');
+  const only = await anonymous.get(`/winkel/categorie/${categorySlug}?voorraad=1`);
+  assert.ok(!only.text.includes('stock out'), 'alleen producten op voorraad (omleiding behoudt de keuze)');
+  assert.match(only.text, /stock in/);
+  assert.match(only.text, /aria-current="true">Alleen op voorraad/);
+  // Gereserveerd telt mee: voorraad uit het systeem min wat voor werkorders is gereserveerd.
+  const catalog = buildCatalog([
+    { id: 'A', code: 'A', name: 'Vrij', unit: 'st', on_hand: 5, reserved: 2, sale_price: 1, vat_rate: 21 },
+    { id: 'B', code: 'B', name: 'Gereserveerd', unit: 'st', on_hand: 5, reserved: 5, sale_price: 1, vat_rate: 21 },
+  ]);
+  assert.deepStrictEqual(catalog.products.map((product) => [product.code, product.inStock]), [['B', false], ['A', true]]);
+});
