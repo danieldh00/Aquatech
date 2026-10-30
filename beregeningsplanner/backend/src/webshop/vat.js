@@ -16,10 +16,10 @@ const VAT_PATTERNS = {
 /**
  * Maakt van een ingevoerd btw-nummer hoofdletters zonder spaties, punten en streepjes.
  * @param {*} raw De invoer.
- * @returns {string} Het genormaliseerde nummer (hoogstens 14 tekens), of een lege tekst.
+ * @returns {string} Het genormaliseerde nummer (afgekapt op 40 tekens, zodat een te lang nummer ongeldig blijft), of een lege tekst.
  */
 function normalizeVatNumber(raw) {
-  return String(raw == null ? '' : raw).toUpperCase().replace(/[\s.\-]/g, '').slice(0, 14);
+  return String(raw == null ? '' : raw).toUpperCase().replace(/[\s.\-]/g, '').slice(0, 40);
 }
 
 /**

@@ -21,6 +21,7 @@ const COMPANY = { name: 'Els Bakker', company: 'Bakker Tuinen BV', email: 'els@b
 test('btw-nummer: formaat, landvoorvoegsel en verleggen', () => {
   assert.strictEqual(Vat.normalizeVatNumber(' be 0123.456.789 '), 'BE0123456789');
   assert.ok(Vat.validVatNumber('BE0123456789') && Vat.validVatNumber('NL123456789B01') && Vat.validVatNumber('DE123456789') && Vat.validVatNumber('EL123456789'));
+  assert.ok(!Vat.validVatNumber(Vat.normalizeVatNumber('SE123456789012XYZ')), 'te lang wordt niet afgekapt tot geldig');
   assert.ok(!Vat.validVatNumber('BE12') && !Vat.validVatNumber('XX123456789') && !Vat.validVatNumber(''));
   assert.ok(Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'BE', vatNumber: 'BE0123456789' }));
   assert.ok(Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'GR', vatNumber: 'EL123456789' }), 'Griekenland gebruikt EL');

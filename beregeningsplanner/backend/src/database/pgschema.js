@@ -711,7 +711,7 @@ const PG_MIGRATIONS = [
   `,
   // 39: zakelijke klantgroep en zakelijke prijs (zie db.js).
   `
-  ALTER TABLE users ADD COLUMN customer_group TEXT NOT NULL DEFAULT '';
+  ALTER TABLE users ADD COLUMN customer_group ${TEXT_TYPE} NOT NULL DEFAULT '';
   ALTER TABLE stock_items ADD COLUMN business_price DOUBLE PRECISION;
   `,
 ];
