@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.4.3
+
+Artikelen met varianten staan in de webshop als één regel met een keuzelijst.
+
+- **Lijst** (`webshop/storefront-pages.js`, `variantRow`): in categorie en
+  zoekresultaat één regel per hoofdartikel met foto, naam, artikelnummer en
+  kenmerken, een keuzelijst (naam van het kenmerk, anders *Uitvoeringen*) met
+  "N varianten", en rechts prijs incl. btw, voorraad, aantal en een
+  winkelwagenknop (nog uitgeschakeld, bestellen volgt). Elders (startpagina,
+  uitgelicht) toont de kaart "Vanaf" de laagste prijs.
+- **Catalogus** (`storefront-data.js`): `buildCatalog` voegt varianten (`parent_id`)
+  samen onder hun hoofdartikel (`products` bevat de hoofdartikelen, `variantProducts`
+  de losse varianten); categorietellingen tellen één regel per hoofdartikel. Nog
+  steeds één query. Hoofdartikel zonder zichtbare variant komt niet in de shop.
+- **Keuze**: `product/<slug>/?v=<artikelnummer>` toont de gekozen variant (ook
+  zonder script, met de knop *Kies*); een variant blijft op zijn eigen adres
+  bereikbaar met een link naar alle uitvoeringen.
+- **Script**: alleen op pagina's met een variantenregel, `assets/varianten.js`
+  (eigen bestand, geen inline); de shop-CSP kreeg `script-src 'self'`.
+
 ## 1.4.2
 
 De inhoud van de eigen webshop (`winkel/`) is zelf te bewerken in Beheer.

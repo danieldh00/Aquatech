@@ -19,9 +19,9 @@ const { loginPage, registerPage, accountPage, plannerPage } = require('./storefr
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
 const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
 
-/** Content-Security-Policy van de shop: geen scripts; afbeeldingen van de webshop komen van https-adressen. */
+/** Content-Security-Policy van de shop: alleen het eigen script voor de keuzelijsten van varianten; afbeeldingen van de webshop komen van https-adressen. */
 const STOREFRONT_CSP = [
-  "default-src 'none'", "style-src 'self'", "img-src 'self' https:", "font-src 'self'",
+  "default-src 'none'", "script-src 'self'", "style-src 'self'", "img-src 'self' https:", "font-src 'self'",
   "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'",
 ].join('; ');
 
@@ -30,6 +30,7 @@ const SHARED_DIR = path.join(FRONTEND_DIR, 'shared');
 const ASSETS = {
   'brand.css': { file: path.join(SHARED_DIR, 'brand.css'), type: 'text/css; charset=utf-8' },
   'winkel.css': { file: path.join(__dirname, 'storefront.css'), type: 'text/css; charset=utf-8' },
+  'varianten.js': { file: path.join(__dirname, 'storefront-variants.js'), type: 'text/javascript; charset=utf-8' },
   'favicon.png': { file: path.join(SHARED_DIR, 'icons', 'favicon-48.png'), type: 'image/png' },
 };
 /** Afbeeldingen van de shop zelf (logo, hero, merken, pictogrammen) uit de map assets/ naast dit bestand. */
@@ -260,7 +261,12 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
     const query = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const found = words.length
-      ? catalog.products.filter((product) => words.every((word) => `${product.name} ${product.code} ${product.categoryName}`.toLowerCase().includes(word)))
+      ? catalog.products.filter((product) => {
+        const base = `${product.name} ${product.code} ${product.categoryName}`;
+        // Alle woorden moeten bij het hoofdartikel samen met één variant passen, niet verspreid over meerdere varianten.
+        const haystacks = (product.variants || []).length ? product.variants.map((variant) => `${base} ${variant.code} ${variant.label}`) : [base];
+        return haystacks.some((haystack) => words.every((word) => haystack.toLowerCase().includes(word)));
+      })
       : [];
     sendPage(req, res, 200, () => searchPage(query, found, catalog.groups));
   });
@@ -276,11 +282,16 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
 
   router.get('/product/:slug', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
-    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
+    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const catalog = data.catalogOf(tenantId);
-    const product = catalog.products.find((candidate) => candidate.slug === req.params.slug);
+    const variant = catalog.variantProducts.find((candidate) => candidate.slug === req.params.slug);
+    const parent = variant && catalog.products.find((candidate) => candidate.slug === variant.parentSlug);
+    // Een variant krijgt de keuzelijst van zijn hoofdartikel en staat zelf geselecteerd.
+    const product = catalog.products.find((candidate) => candidate.slug === req.params.slug)
+      || (parent ? { ...variant, variants: parent.variants, attributeName: parent.attributeName } : variant);
     if (!product) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
-    sendPage(req, res, 200, () => productPage(product, catalog.groups));
+    const chosenCode = typeof req.query.v === 'string' ? req.query.v.slice(0, 80) : (variant ? variant.code : '');
+    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : '')));
   });
 
   router.use((req, res) => {

@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.4.3',
+      date: '2026-10-30',
+      title: 'Artikelen met varianten in de webshop',
+      items: [
+        { text: 'In de webshop staat een artikel met varianten (bijvoorbeeld een koppeling in meerdere maten) nu als één regel met een keuzelijst. Kies je een maat, dan wisselen artikelnummer, prijs en voorraad meteen.', for: ['beheer', 'voorraad'] },
+      ],
+    },
+    {
       version: '1.4.2',
       date: '2026-10-30',
       title: 'Webshop zelf bewerken',
