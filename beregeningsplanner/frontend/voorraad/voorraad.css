@@ -29,3 +29,17 @@ table.grid tr[data-id]:hover td { background: var(--at-green-soft); }
   .i-list { columns: 1; }
 }
 .pill.ok { background: var(--at-green-soft); color: var(--at-green-dark); }
+
+/* Ruimte tussen velden en knoppen op het artikelscherm en in de formulieren. */
+.card-form .row { gap: 12px 14px; }
+.card-form .row + .row, .card-form label + .row, .card-form textarea + .row, .card-form p + .row, .card-form .chips + .row { margin-top: 16px; }
+.card-form .row + .err, .card-form .row + p { margin-top: 10px; }
+.card-form label + label, .card-form .row + label { margin-top: 12px; }
+.card-form .row .btn { padding: 9px 16px; }
+#units-form { border-left: 4px solid var(--at-teal); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; background: var(--panel); }
+.chips .chip small { color: var(--muted); }
+.chips .chip button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 999px; }
+.chips .chip button:hover { background: color-mix(in srgb, var(--at-danger) 12%, transparent); color: var(--at-danger); }
+.chips .chip button:disabled { opacity: 0.3; cursor: default; background: none; color: var(--muted); }

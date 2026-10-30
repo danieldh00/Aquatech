@@ -268,3 +268,53 @@ test('voorraad: bestelvoorstel vult aan tot Bestellen tot (leeg = 2× minimum), 
     server.close();
   }
 });
+
+test('voorraad: eenheden beheren, een gebruikte eenheid blijft staan, andere organisatie en rechten', async () => {
+  const { server, as } = await setup();
+  try {
+    const baas = await as('baas');
+    const kees = await as('kees');
+    const pien = await as('pien');
+    const standard = (await kees.get('/api/stock/units')).body.items;
+    assert.ok(['st', 'm', 'rol'].every((name) => standard.some((unit) => unit.name === name)));
+
+    // Aanmaken: dubbel (ook met andere hoofdletters) en leeg worden geweigerd.
+    const made = await kees.post('/api/stock/units', { name: 'Pallet' });
+    assert.strictEqual(made.status, 201);
+    assert.strictEqual((await kees.post('/api/stock/units', { name: 'pallet' })).status, 409);
+    assert.strictEqual((await kees.post('/api/stock/units', { name: '  ' })).status, 400);
+
+    // Een artikel met een nieuwe eenheid zet die vanzelf in de lijst; in gebruik = niet te verwijderen.
+    const item = (await kees.post('/api/stock/items', { code: 'ZAND', name: 'Zand', unit: 'Pallet' })).body;
+    const used = (await kees.get('/api/stock/units')).body.items.find((unit) => unit.name === 'Pallet');
+    assert.strictEqual(used.items, 1);
+    assert.strictEqual((await kees.del(`/api/stock/units/${made.body.id}`)).status, 409);
+    await kees.put(`/api/stock/items/${item.id}`, { unit: 'rol' });
+    assert.strictEqual((await kees.del(`/api/stock/units/${made.body.id}`)).status, 200);
+    assert.strictEqual((await kees.del(`/api/stock/units/${made.body.id}`)).status, 404);
+
+    // Een onbekende eenheid bij een nieuw artikel komt atomair in de lijst; ook via de catalogusimport.
+    assert.strictEqual((await kees.post('/api/stock/items', { code: 'BAK-1', name: 'Bak', unit: 'bak' })).status, 201);
+    await kees.post('/api/stock/import', { codes: ['PE-25'] });
+    const names = (await kees.get('/api/stock/units')).body.items.map((unit) => unit.name);
+    assert.ok(names.includes('bak') && names.includes('m'));
+    assert.strictEqual(names.filter((name) => name === 'bak').length, 1);
+
+    // Rechten en scheiding tussen organisaties.
+    assert.strictEqual((await pien.get('/api/stock/units')).status, 403);
+    assert.strictEqual((await pien.post('/api/stock/units', { name: 'x' })).status, 403);
+    await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
+    const piet = await as('piet', 'groen');
+    const other = (await piet.get('/api/stock/units')).body.items;
+    assert.ok(!other.some((unit) => unit.name === 'Pallet'));
+    assert.strictEqual((await piet.del(`/api/stock/units/${used.id}`)).status, 404);
+    // De laatste eenheid blijft staan (anders zou de standaardlijst terugkomen).
+    for (const unit of other.slice(0, -1)) assert.strictEqual((await piet.del(`/api/stock/units/${unit.id}`)).status, 200);
+    const last = (await piet.get('/api/stock/units')).body.items;
+    assert.strictEqual(last.length, 1);
+    assert.strictEqual((await piet.del(`/api/stock/units/${last[0].id}`)).status, 409);
+    assert.strictEqual((await piet.get('/api/stock/units')).body.items.length, 1);
+  } finally {
+    server.close();
+  }
+});

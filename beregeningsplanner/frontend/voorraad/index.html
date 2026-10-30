@@ -51,15 +51,28 @@
           <button class="btn" id="b-import">Uit catalogus</button>
           <button class="btn" id="b-shop" title="Neemt alle producten uit de webshop over; artikelen die niet in de webshop staan worden gearchiveerd">Alles uit webshop</button>
           <button class="btn" id="b-reorder" title="Excel met wat er onder de minimumvoorraad zit en hoeveel je moet bestellen">Bestelvoorstel</button>
+          <button class="btn" id="b-units" title="Eenheden (st, m, rol, …) aanmaken of verwijderen">Eenheden</button>
           <button class="btn" id="b-export">Excel-export</button>
         </div>
+
+        <form id="units-form" class="card-form" hidden novalidate>
+          <h3>Eenheden</h3>
+          <p class="muted small">Eenheden waaruit je bij een artikel kiest. Een eenheid die nog door een artikel wordt gebruikt kan niet worden verwijderd.</p>
+          <div id="u-list" class="chips"></div>
+          <div class="row">
+            <label>Nieuwe eenheid<input name="name" maxlength="12" placeholder="Bijv. rol" autocomplete="off"></label>
+            <button class="btn primary" type="submit">Toevoegen</button>
+            <button class="btn" type="button" data-cancel>Sluiten</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
 
         <form id="new-form" class="card-form" hidden novalidate>
           <h3>Nieuw voorraadartikel</h3>
           <div class="row">
             <label>Artikelcode<input name="code" maxlength="40" list="catalog-codes" required autocomplete="off" placeholder="Bijv. PE-25"></label>
             <label class="grow">Omschrijving<input name="name" maxlength="200" required></label>
-            <label>Eenheid<input name="unit" maxlength="12" value="st"></label>
+            <label>Eenheid<select name="unit" data-units></select></label>
           </div>
           <div class="row">
             <label>Locatie<input name="location" maxlength="60" placeholder="Bijv. magazijn A3, bus 1"></label>
@@ -151,7 +164,7 @@
           <div class="row">
             <label>Artikelcode<input name="code" maxlength="40" required></label>
             <label class="grow">Omschrijving<input name="name" maxlength="200" required></label>
-            <label>Eenheid<input name="unit" maxlength="12"></label>
+            <label>Eenheid<select name="unit" data-units></select></label>
           </div>
           <div class="row">
             <label>Locatie<input name="location" maxlength="60"></label>

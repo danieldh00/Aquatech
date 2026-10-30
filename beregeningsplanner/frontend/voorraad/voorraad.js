@@ -53,7 +53,7 @@
   const num = (value) => (String(value).trim() === '' ? null : Number(String(value).replace(',', '.')));
   const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 
-  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null };
+  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [] };
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -248,12 +248,95 @@
     if (state.moves) loadMoves();
   }
 
+  // ---------- Eenheden ----------
+  /**
+   * Vult de keuzelijsten Eenheid met de eenheden; een eenheid die een artikel al
+   * heeft maar niet (meer) in de lijst staat blijft keuzemogelijk, net als de
+   * eenheid die op dat moment in een zichtbare keuzelijst gekozen is (verborgen
+   * formulieren beginnen opnieuw, zodat een verwijderde eenheid niet terugkomt).
+   * @param {string} extra eenheid die altijd in de lijst moet staan (bijv. die van het geopende artikel)
+   */
+  function fillUnits(extra = '') {
+    const names = state.units.map((unit) => unit.name);
+    if (extra && !names.includes(extra)) names.push(extra);
+    document.querySelectorAll('select[data-units]').forEach((select) => {
+      const keep = select.offsetParent === null ? '' : select.value;
+      const options = keep && !names.includes(keep) ? [...names, keep] : names;
+      select.innerHTML = options.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+      select.value = options.includes(keep) ? keep : (options.includes('st') ? 'st' : options[0] || '');
+    });
+  }
+
+  /**
+   * Laadt de eenheden en vult de keuzelijsten en het beheerscherm.
+   * @returns {Promise<void>}
+   */
+  async function loadUnits() {
+    state.units = (await api('stock/units')).items;
+    fillUnits(state.item ? state.item.unit : '');
+    renderUnits();
+  }
+
+  /** Tekent de eenheden als labels met een verwijderknop (uitgeschakeld zolang een artikel de eenheid gebruikt). */
+  function renderUnits() {
+    $('#u-list').innerHTML = state.units.map((unit) => `<span class="chip">${esc(unit.name)}${unit.items ? ` <small>${unit.items}×</small>` : ''}
+      <button type="button" data-id="${esc(unit.id)}" aria-label="${esc(unit.name)} verwijderen" title="${unit.items ? 'In gebruik door artikelen' : 'Verwijderen'}"${unit.items ? ' disabled' : ''}>×</button></span>`).join('');
+  }
+
+  /** Koppelt het formulier om eenheden aan te maken en te verwijderen. */
+  function setupUnits() {
+    const formElement = $('#units-form');
+    /** Opent of sluit het scherm met eenheden. */
+    $('#b-units').onclick = () => {
+      formElement.hidden = !formElement.hidden;
+      if (!formElement.hidden) { $('#new-form').hidden = true; $('#import-form').hidden = true; formElement.name.focus(); }
+    };
+    /** Sluit het scherm. */
+    $('[data-cancel]', formElement).onclick = () => { formElement.hidden = true; };
+    /**
+     * Voegt de ingevulde eenheid toe.
+     * @param {SubmitEvent} event het verzenden
+     * @returns {Promise<void>}
+     */
+    formElement.onsubmit = async (event) => {
+      event.preventDefault();
+      const errorBox = $('.err', formElement);
+      errorBox.textContent = '';
+      try {
+        const unit = await api('stock/units', { method: 'POST', body: { name: formElement.name.value } });
+        formElement.name.value = '';
+        await loadUnits();
+        toast(`Eenheid ${unit.name} toegevoegd`);
+      } catch (error) {
+        errorBox.textContent = error.message;
+      }
+    };
+    /**
+     * Verwijdert een eenheid.
+     * @param {MouseEvent} event de klik op een verwijderknop
+     * @returns {Promise<void>}
+     */
+    $('#u-list').onclick = async (event) => {
+      const button = event.target.closest('button[data-id]');
+      if (!button) return;
+      try {
+        await api(`stock/units/${encodeURIComponent(button.dataset.id)}`, { method: 'DELETE' });
+        await loadUnits();
+      } catch (error) {
+        $('.err', formElement).textContent = error.message;
+      }
+    };
+  }
+
   // ---------- Nieuw artikel en uit de catalogus ----------
   /** Opent het formulier voor een nieuw artikel (met codes uit de catalogus om te kiezen). */
   function openNew() {
     const formElement = $('#new-form');
     $('#import-form').hidden = true;
+    $('#units-form').hidden = true;
     formElement.reset();
+    fillUnits();
+    if (state.units.some((unit) => unit.name === 'st')) formElement.unit.value = 'st';
     $('.err', formElement).textContent = '';
     const have = new Set(state.items.map((item) => item.code));
     $('#catalog-codes').innerHTML = Object.entries(Catalog.articles).filter(([code]) => !have.has(code)).map(([code, article]) => `<option value="${esc(code)}">${esc(article.name)}</option>`).join('');
@@ -267,7 +350,11 @@
     /** Vult naam en eenheid in als de code in de catalogus staat. */
     formElement.code.oninput = () => {
       const article = Catalog.articles[formElement.code.value.trim().toUpperCase()];
-      if (article && !formElement.name.value) { formElement.name.value = article.name; formElement.unit.value = article.unit || 'st'; }
+      if (article && !formElement.name.value) {
+        formElement.name.value = article.name;
+        fillUnits(article.unit || 'st');
+        formElement.unit.value = article.unit || 'st';
+      }
     };
     /** Sluit het formulier. */
     $('[data-cancel]', formElement).onclick = () => { formElement.hidden = true; };
@@ -288,7 +375,7 @@
         } });
         formElement.hidden = true;
         toast(`${item.code} toegevoegd`);
-        await load();
+        await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
       } catch (error) {
         errorBox.textContent = error.message;
         if (error.field && formElement[error.field]) formElement[error.field].focus();
@@ -315,7 +402,7 @@
       const result = await api('stock/import-shop', { method: 'POST', body: {} });
       bar.value = 1;
       $('#shop-text').textContent = `Klaar: ${result.created} nieuw, ${result.restored} teruggezet, ${result.archived} gearchiveerd (niet in de webshop)${result.skippedProducts ? `, ${result.skippedProducts} overgeslagen (geen geldige code)` : ''}.`;
-      await load();
+      await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
     } catch (error) {
       bar.value = 0;
       $('#shop-text').textContent = `Overnemen mislukt: ${error.message}`;
@@ -375,7 +462,7 @@
         const result = await api('stock/import', { method: 'POST', body: { codes } });
         formElement.hidden = true;
         toast(`${result.created} artikel${result.created === 1 ? '' : 'en'} op voorraad genomen`);
-        await load();
+        await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
       } catch (error) {
         errorBox.textContent = error.message;
       }
@@ -396,6 +483,7 @@
       [eur(item.value) || '–', 'waarde (inkoop)'],
     ].map(([value, label]) => `<div class="stat"><b>${esc(value)}</b><span>${esc(label)}</span></div>`).join('');
     const formElement = $('#edit-form');
+    fillUnits(item.unit);
     for (const key of ['code', 'name', 'unit', 'location', 'notes']) formElement[key].value = item[key] || '';
     formElement.minQty.value = item.minQty || '';
     formElement.reorderQty.value = item.reorderQty == null ? '' : item.reorderQty;
@@ -511,8 +599,9 @@
           minQty: num(editForm.minQty.value), reorderQty: num(editForm.reorderQty.value), costPrice: num(editForm.costPrice.value),
           salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
         } }) };
-        renderItem();
         toast('Opgeslagen');
+        await loadUnits().catch((error) => toast(error.message, true));
+        renderItem();
       } catch (error) {
         errorBox.textContent = error.message;
       }
@@ -529,7 +618,7 @@
         toast(result.archived ? `${item.code} gearchiveerd` : `${item.code} verwijderd`);
         history.pushState(null, '', './');
         showList();
-        await load();
+        await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
       } catch (error) {
         toast(error.message, true);
       }
@@ -801,8 +890,10 @@
         await load();
       } catch (error) { toast(error.message, true); }
     };
+    setupUnits();
     setupNew();
     setupImport();
+    loadUnits().catch((error) => toast(error.message, true));
     setupShop();
     setupItem();
     window.addEventListener('popstate', () => {

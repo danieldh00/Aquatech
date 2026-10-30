@@ -825,6 +825,8 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
     if (imported.error) throw new Error(`Testdata: voorraad mislukt (${imported.error})`);
     const own = stock.create(tenantId, admin, { code: 'EIGEN-ZAND', name: 'Straatzand (big bag, eigen inkoop)', unit: 'zak', location: 'Buitenterrein', minQty: 2, costPrice: 42.5, onHand: 5 }, { resync: false });
     if (own.error) throw new Error(`Testdata: voorraadartikel mislukt (${own.error})`);
+    // Eigen eenheid naast de standaardeenheden (de lijst is voor het eerst gevuld bij het artikel hierboven).
+    stock.addUnit(tenantId, 'big bag');
     const items = stock.list(tenantId);
     items.forEach((item, itemIndex) => {
       const want = need.get(item.code) || 0;
