@@ -197,15 +197,15 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
   async function creditReturn(tenantId, returnId, user) {
     const record = returns ? returns.get(tenantId, returnId) : null;
     if (!record) return { error: 'Retour niet gevonden.', status: 404 };
-    // Een creditnota die al definitief is, of niet meer te herstellen, blijft zoals hij is; een concept dat bleef staan wordt hieronder alsnog afgemaakt.
-    if (record.credit && !(record.credit.status === 'concept' && record.creditError)) return { credit: record.credit, existing: true };
+    const settings = settingsOf(tenantId);
+    // Een creditnota die al definitief is blijft zoals hij is; een concept dat bleef staan (ook zonder foutmelding, bijvoorbeeld na een herstart) wordt alsnog afgemaakt, tenzij definitief maken uit staat.
+    if (record.credit && !(record.credit.status === 'concept' && settings.webOrders.finalize)) return { credit: record.credit, existing: true };
     /**
      * Legt vast waarom er (nog) geen creditnota is en meldt dat terug.
      * @param {string} reason De reden.
      * @returns {{ skipped: string }} De melding.
      */
     const skip = (reason) => { returns.updateData(tenantId, record.id, { creditError: reason }); return { skipped: reason }; };
-    const settings = settingsOf(tenantId);
     if (!settings.webOrders.enabled) return skip('Facturen voor webshopbestellingen staan uit (Facturen → Instellingen): er is geen creditnota gemaakt.');
     const found = invoiceFor(tenantId, record.orderId);
     if (!found || found.status === 'concept') return skip('Er is nog geen definitieve factuur bij de bestelling: maak de creditnota zelf in Facturen zodra die er is.');
@@ -221,6 +221,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
         }).filter(Boolean);
         if (!draft.lines.length) return skip('De teruggestuurde artikelen staan niet op de factuur: er is geen creditnota gemaakt.');
         draft.intro = `Creditering van factuur ${original.number} voor retour ${record.number}`;
+        // Tussen het lezen van de retour en het vastleggen hieronder zit geen await en de database is synchroon: gelijktijdige aanvragen in dit proces kunnen er dus niet tussen komen, en een tweede aanvraag ziet de gekoppelde creditnota.
         created = invoices.create(tenantId, user, draft, settings, { kind: 'credit', creditOf: original.id, customerId: original.customerId, debtorId: original.debtorId });
         // Direct vastleggen: mislukt het definitief maken, dan maakt een volgende poging dit concept af in plaats van een tweede creditnota te maken.
         returns.updateData(tenantId, record.id, { credit: { invoiceId: created.id, number: created.number, status: created.status } });
