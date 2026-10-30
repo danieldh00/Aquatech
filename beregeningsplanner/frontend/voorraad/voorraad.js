@@ -251,7 +251,8 @@
   // ---------- Eenheden ----------
   /**
    * Vult de keuzelijsten Eenheid met de eenheden; een eenheid die een artikel al
-   * heeft maar niet (meer) in de lijst staat blijft keuzemogelijk.
+   * heeft maar niet (meer) in de lijst staat blijft keuzemogelijk, net als de
+   * eenheid die op dat moment in een keuzelijst gekozen is.
    * @param {string} extra eenheid die altijd in de lijst moet staan (bijv. die van het geopende artikel)
    */
   function fillUnits(extra = '') {
@@ -259,8 +260,9 @@
     if (extra && !names.includes(extra)) names.push(extra);
     document.querySelectorAll('select[data-units]').forEach((select) => {
       const keep = select.value;
-      select.innerHTML = names.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
-      select.value = names.includes(keep) ? keep : (names.includes('st') ? 'st' : names[0] || '');
+      const options = keep && !names.includes(keep) ? [...names, keep] : names;
+      select.innerHTML = options.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+      select.value = options.includes(keep) ? keep : (options.includes('st') ? 'st' : options[0] || '');
     });
   }
 
