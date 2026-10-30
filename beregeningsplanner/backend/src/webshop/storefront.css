@@ -124,3 +124,18 @@ a.shop-action:hover { background: var(--at-page); }
 .foot-grid li { padding: 3px 0; }
 .foot-note { max-width: 1168px; margin: 20px auto 0; padding-top: 14px; border-top: 1px solid var(--at-foot-line); font-size: 0.8rem; }
 @media (max-width: 1232px) { .foot-note { margin-left: 16px; margin-right: 16px; } }
+
+/* Account: inloggen, registreren en mijn account. */
+.account-card { max-width: 460px; margin: 24px auto; padding: 24px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 12px; }
+.account-form { display: grid; gap: 14px; }
+.form-field { display: grid; gap: 4px; font-weight: 600; font-size: 0.9rem; }
+.form-field input { padding: 10px 12px; border: 1px solid var(--at-line); border-radius: 8px; font: inherit; font-weight: 400; }
+.form-field small { color: var(--at-muted); font-weight: 400; }
+.form-error { padding: 10px 12px; border-radius: 8px; color: var(--at-stock-out); border: 1px solid var(--at-stock-out); }
+.account-aside { color: var(--at-muted); font-size: 0.9rem; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.button { border: 0; cursor: pointer; font: inherit; font-weight: 700; }
+.button.secondary { background: var(--at-white); color: var(--at-shop-navy); border: 1px solid var(--at-shop-navy); }
+.trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.nav-planner > a { display: block; padding: 12px 18px; color: var(--at-white); text-decoration: none; font-weight: 700; background: var(--at-shop-green-dark); }
+.nav-planner > a:hover { background: var(--at-shop-navy-dark); outline: 1px solid var(--at-white); outline-offset: -2px; }

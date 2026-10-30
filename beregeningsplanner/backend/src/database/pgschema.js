@@ -653,6 +653,10 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE impersonations ADD COLUMN mode ${TEXT_TYPE} NOT NULL DEFAULT 'support';
   `,
+  // 35: account zoeken op e-mailadres (zie db.js).
+  `
+  CREATE INDEX users_email ON users (tenant_id, email);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

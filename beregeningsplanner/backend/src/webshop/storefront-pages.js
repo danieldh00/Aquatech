@@ -63,8 +63,8 @@ function navigation(groups, root) {
   }
   const desktop = groups.map((group) => `<li class="nav-group"><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a><ul class="nav-drop">${subItems(group)}</ul></li>`).join('');
   const mobile = groups.map((group) => `<li><details><summary>${escapeHtml(group.name)}</summary><ul><li><a href="${root}groep/${escapeHtml(group.slug)}/">Alles in ${escapeHtml(group.name)}</a></li>${subItems(group)}</ul></details></li>`).join('');
-  return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${desktop}</ul></nav>
-<details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${mobile}</ul></details>`;
+  return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${desktop}<!--planner:${root}--></ul></nav>
+<details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${mobile}<!--planner:${root}--></ul></details>`;
 }
 
 /**
@@ -96,7 +96,7 @@ function layout({ root, title, description, body, groups, query = '' }) {
       <button type="submit" aria-label="Zoeken">${ICONS.search}</button>
     </form>
     <div class="shop-actions">
-      <a class="shop-action" href="${root}../" title="Inloggen of mijn account">${ICONS.user}<span>Account</span></a>
+      <a class="shop-action" href="${root}account/" title="Inloggen of mijn account">${ICONS.user}<span>Account</span></a>
       <span class="shop-action cart" aria-disabled="true" title="De winkelwagen volgt binnenkort">${ICONS.cart}<span>Winkelwagen</span><b>0</b></span>
     </div>
   </div>
@@ -109,7 +109,7 @@ ${body}
   <div class="foot-grid">
     <div><strong>Aquatechshop.nl</strong><p>Beregening, leidingen en pompen voor tuin en bedrijf, van AquaTech Service in Nunspeet.</p></div>
     <div><strong>Productgroepen</strong><ul>${footerGroups}</ul></div>
-    <div><strong>AquaTech Service</strong><ul><li><a href="https://aquatechservice.nl">Over AquaTech Service</a></li><li><a href="${root}../">Inloggen</a></li></ul></div>
+    <div><strong>AquaTech Service</strong><ul><li><a href="https://aquatechservice.nl">Over AquaTech Service</a></li><li><a href="${root}account/">Inloggen of registreren</a></li></ul></div>
   </div>
   <p class="foot-note">Alle prijzen zijn inclusief btw.</p>
 </footer>
@@ -258,4 +258,4 @@ function notFoundPage(root, groups) {
   return layout({ root, groups, title: `Pagina niet gevonden – ${SHOP_NAME}`, description: 'Deze pagina bestaat niet.', body: `<h1>Pagina niet gevonden</h1><p><a href="${root || './'}">Terug naar de shop</a></p>` });
 }
 
-module.exports = { homePage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };
+module.exports = { layout, homePage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };

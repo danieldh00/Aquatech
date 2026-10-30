@@ -573,6 +573,8 @@
     accessForm.drawingRequests.checked = view.drawingRequests.value;
     accessForm.storefront.checked = Boolean(view.storefront?.value);
     accessForm.storefront.closest('label').hidden = !state.storefrontAllowed;
+    accessForm.shopPlanner.checked = view.shopPlanner?.value !== false;
+    accessForm.shopPlanner.closest('label').hidden = !state.storefrontAllowed;
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
@@ -761,6 +763,10 @@
     /** Zet de eigen webshop (winkel/) aan of uit. */
     accessForm.storefront.onchange = () => {
       saveSettings(accessForm, { storefront: accessForm.storefront.checked }, accessForm.storefront.checked ? 'Webshop staat aan' : 'Webshop staat uit');
+    };
+    /** Zet het kopje Planner in de webshop aan of uit. */
+    accessForm.shopPlanner.onchange = () => {
+      saveSettings(accessForm, { shopPlanner: accessForm.shopPlanner.checked }, accessForm.shopPlanner.checked ? 'Kopje Planner in de webshop staat aan' : 'Kopje Planner in de webshop staat uit');
     };
     /**
      * Slaat een nieuwe toegangscode op.

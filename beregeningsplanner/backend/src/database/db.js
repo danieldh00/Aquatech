@@ -831,6 +831,10 @@ const MIGRATIONS = [
   `
   ALTER TABLE impersonations ADD COLUMN mode TEXT NOT NULL DEFAULT 'support';
   `,
+  // 35: inloggen en registreren in de webshop zoekt een account op e-mailadres.
+  `
+  CREATE INDEX users_email ON users (tenant_id, email);
+  `,
 ];
 
 /**
