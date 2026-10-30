@@ -279,6 +279,9 @@ test('webshop: eigen pagina Over ons, vaste kaarthoogte en telefoonlink met naam
   const { version } = require('../package.json');
   const home = await anonymous.get('/winkel/');
   assert.match(home.text, /href="over-ons\/"/, 'menu verwijst naar de eigen pagina');
+  const footer = home.text.match(/<footer class="shop-foot">[\s\S]*?<\/footer>/);
+  assert.ok(footer, 'footer aanwezig');
+  assert.match(footer[0], /<a href="over-ons\/">Lees ons verhaal<\/a>/, 'footer verwijst naar de eigen pagina');
   assert.ok(!home.text.includes('aquatechservice.nl'), 'geen verwijzing meer naar aquatechservice.nl');
   assert.match(home.text, /class="shop-phone" href="tel:\+31647212019" aria-label="Klantenservice 06 47212019"/);
   const about = await anonymous.get('/winkel/over-ons/');
