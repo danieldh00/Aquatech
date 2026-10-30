@@ -353,6 +353,11 @@ test('webshop: hoofdartikel met varianten als regel met keuzelijst en eigen scri
   assert.strictEqual(variantPage.status, 200);
   assert.match(variantPage.text, new RegExp(`<option value="${code32}" selected>32 mm</option>`), 'variant staat geselecteerd');
   assert.match(variantPage.text, /2 varianten/, 'variantpagina toont de keuzelijst van het hoofdartikel');
+  const redirected = await anonymous.get(`/winkel/product/${slug}?v=${encodeURIComponent(code32)}`);
+  assert.ok(redirected.text.includes(`Artikelnummer: ${code32}`), 'omleiding behoudt de gekozen variant');
+  assert.match(variantPage.text, /\?v=[^"]*32[^"]*">Alle uitvoeringen/, 'link naar het hoofdartikel wijst naar de getoonde variant');
+  const mixed = await anonymous.get('/winkel/zoeken/?q=koppeling+25+mm+32+mm');
+  assert.ok(!mixed.text.includes('data-variant-row'), 'woorden uit verschillende varianten tellen niet samen');
   const found = await anonymous.get('/winkel/zoeken/?q=koppeling');
   assert.strictEqual(found.text.match(/data-variant-row/g).length, 1);
   assert.ok(!/<script/i.test((await anonymous.get('/winkel/')).text), 'startpagina laadt geen script');

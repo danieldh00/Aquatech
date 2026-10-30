@@ -415,7 +415,7 @@ function productPage(product, groups, chosenCode = '') {
       <span class="variant-count">${variants.length} varianten</span>
       <button class="button secondary" type="submit">Kies</button>
     </form>` : '';
-  const parentLink = product.parentSlug ? `<p class="note"><a href="${root}product/${escapeHtml(product.parentSlug)}/?v=${encodeURIComponent(product.code)}">Alle uitvoeringen van ${escapeHtml(product.parentName)}</a></p>` : '';
+  const parentLink = product.parentSlug ? `<p class="note"><a href="${root}product/${escapeHtml(product.parentSlug)}/?v=${encodeURIComponent(shown.code)}">Alle uitvoeringen van ${escapeHtml(product.parentName)}</a></p>` : '';
   const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a>${group ? ` › <a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : ''} › <a href="${root}categorie/${escapeHtml(product.categorySlug)}/">${escapeHtml(product.categoryName)}</a> › <span>${escapeHtml(product.name)}</span></nav>
 <article class="product-detail">
   <div class="product-image large">${image}</div>

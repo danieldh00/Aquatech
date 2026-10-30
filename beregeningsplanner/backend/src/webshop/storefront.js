@@ -262,9 +262,10 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const found = words.length
       ? catalog.products.filter((product) => {
-        const variantText = (product.variants || []).map((variant) => `${variant.code} ${variant.label}`).join(' ');
-        const haystack = `${product.name} ${product.code} ${product.categoryName} ${variantText}`.toLowerCase();
-        return words.every((word) => haystack.includes(word));
+        const base = `${product.name} ${product.code} ${product.categoryName}`;
+        // Alle woorden moeten bij het hoofdartikel samen met één variant passen, niet verspreid over meerdere varianten.
+        const haystacks = (product.variants || []).length ? product.variants.map((variant) => `${base} ${variant.code} ${variant.label}`) : [base];
+        return haystacks.some((haystack) => words.every((word) => haystack.toLowerCase().includes(word)));
       })
       : [];
     sendPage(req, res, 200, () => searchPage(query, found, catalog.groups));
@@ -281,7 +282,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
 
   router.get('/product/:slug', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
-    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
+    if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const catalog = data.catalogOf(tenantId);
     const variant = catalog.variantProducts.find((candidate) => candidate.slug === req.params.slug);
     const parent = variant && catalog.products.find((candidate) => candidate.slug === variant.parentSlug);
