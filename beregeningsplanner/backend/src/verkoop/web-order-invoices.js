@@ -71,6 +71,9 @@ function fromWebOrder(order, articles, settings) {
  * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditReturn: Function }} De functies.
  */
 function createWebOrderInvoices({ orders, invoices, returns = null, debtors = null, stock = null, sender = null, settingsFor, log = console }) {
+  // Facturen waarvan de mail nu onderweg is (tenant:factuur), tegen dubbel mailen bij gelijktijdige verzoeken.
+  const mailClaims = new Set();
+
   /**
    * De factuurinstellingen van een omgeving.
    * @param {string} tenantId Id van de omgeving.
@@ -192,7 +195,11 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
    */
   async function mailIfFinalized(tenantId, outcome) {
     if (!outcome.finalizedNow || !sender) return;
-    try { await sender.autoSend(tenantId, outcome.invoice.id); } catch (error) { log.warn(`Factuur ${outcome.invoice.number} mailen mislukt: ${error.message}`); }
+    // Verzendclaim: een gelijktijdige tweede aanroep voor dezelfde factuur mailt niet nog eens; bij een fout komt de claim vrij zodat een latere poging kan.
+    const claim = `${tenantId}:${outcome.invoice.id}`;
+    if (mailClaims.has(claim)) return;
+    mailClaims.add(claim);
+    try { await sender.autoSend(tenantId, outcome.invoice.id); } catch (error) { log.warn(`Factuur ${outcome.invoice.number} mailen mislukt: ${error.message}`); } finally { mailClaims.delete(claim); }
   }
 
   /**
