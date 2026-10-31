@@ -178,7 +178,7 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
           if (order && order.pay && order.pay.id && !config.apiKey) { kept += 1; continue; }
           if (order && order.pay && order.pay.id) {
             const out = await sync(tenantId, id);
-            if (out.becamePaid || (out.order && out.order.pay.status === 'betaald')) { kept += 1; continue; }
+            if (out.becamePaid || (out.order && out.order.pay.status === 'betaald')) continue; // niet meer onbetaald: valt buiten de selectie, dus telt niet mee in kept
           }
           const cancelled = orders.setStatus(tenantId, id, 'geannuleerd', null);
           if (cancelled.error) { kept += 1; continue; }
