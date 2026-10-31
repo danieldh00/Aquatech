@@ -327,3 +327,19 @@ test('een ongeldige Mollie-sleutel zet online betalen niet aan', () => {
   assert.strictEqual(configOf(settingsWith('abcdefghijklmnop')).online, false);
   assert.strictEqual(configOf(settingsWith('test_abcdefghij1234567')).online, true);
 });
+
+test('met een ongeldige sleutel en op rekening op nooit worden er geen betaalwijzen aangeboden', () => {
+  const { createWebPayments } = require('../src/webshop/web-payments');
+  /**
+   * Nagebootste instellingen: online aan, ongeldige sleutel, op rekening nooit.
+   * @returns {{ get: Function }} De instellingen.
+   */
+  const settingsFor = () => ({ get: (name) => (name === 'mollieApiKey' ? 'ongeldig' : { online: true, publicUrl: 'https://winkel.example/winkel/', onAccount: 'nooit' }) });
+  assert.deepStrictEqual(createWebPayments({ orders: {}, mollie: {}, settingsFor }).optionsFor('t', null), []);
+  /**
+   * Nagebootste instellingen: online betalen niet aangezet.
+   * @returns {{ get: Function }} De instellingen.
+   */
+  const off = () => ({ get: (name) => (name === 'mollieApiKey' ? '' : { online: false, onAccount: 'nooit' }) });
+  assert.deepStrictEqual(createWebPayments({ orders: {}, mollie: {}, settingsFor: off }).optionsFor('t', null), ['rekening']);
+});

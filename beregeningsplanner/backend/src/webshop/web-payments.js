@@ -30,7 +30,7 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
 
   /**
    * De betaalwijzen die een klant bij het afrekenen mag kiezen.
-   * Online betalen als het aan staat; op rekening volgens de instelling (altijd als online uit staat, zodat bestellen blijft werken).
+   * Online betalen als het aan staat; op rekening volgens de instelling (altijd als online betalen niet is aangezet, zodat bestellen blijft werken).
    * @param {string} tenantId Id van de omgeving.
    * @param {{ customerGroup?: string }} viewer De klant (zakelijk of niet).
    * @returns {string[]} 'online' en/of 'rekening' (online staat voorop).
@@ -38,7 +38,8 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
   function optionsFor(tenantId, viewer) {
     const config = configOf(settingsFor(tenantId));
     const business = Boolean(viewer) && viewer.customerGroup === 'zakelijk';
-    const onAccount = !config.online || config.onAccount === 'iedereen' || (config.onAccount === 'zakelijk' && business);
+    // Staat online betalen aan maar klopt de sleutel of het webadres niet, dan blijft de beperking voor op rekening gelden (bij 'nooit' kan er dan niet besteld worden).
+    const onAccount = !config.wanted || config.onAccount === 'iedereen' || (config.onAccount === 'zakelijk' && business);
     return [...(config.online ? ['online'] : []), ...(onAccount ? ['rekening'] : [])];
   }
 

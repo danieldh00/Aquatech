@@ -73,12 +73,12 @@ const validApiKey = (value) => /^(test|live)_[A-Za-z0-9]{8,}$/.test(String(value
 /**
  * De betaalinstelling van een omgeving, met bepaald of online betalen kan.
  * @param {object} settings De instellingen van de omgeving (settingsFor).
- * @returns {{ online: boolean, apiKey: string, publicUrl: string, onAccount: string, holdHours: number, mode: string }} online is alleen waar als het aan staat, de sleutel de vorm test_/live_ heeft en het webadres klopt; mode is test of live (naar de sleutel).
+ * @returns {{ online: boolean, wanted: boolean, apiKey: string, publicUrl: string, onAccount: string, holdHours: number, mode: string }} online is alleen waar als het aan staat, de sleutel de vorm test_/live_ heeft en het webadres klopt; wanted is of de beheerder online betalen heeft aangezet (ook als de sleutel of het webadres niet klopt); mode is test of live (naar de sleutel).
  */
 function configOf(settings) {
   const config = sanitizePayment(settings.get('shopPayment'));
   const apiKey = String(settings.get('mollieApiKey') || '');
-  return { ...config, apiKey, online: config.online && validApiKey(apiKey) && Boolean(config.publicUrl), mode: apiKey.startsWith('live_') ? 'live' : 'test' };
+  return { ...config, apiKey, wanted: config.online, online: config.online && validApiKey(apiKey) && Boolean(config.publicUrl), mode: apiKey.startsWith('live_') ? 'live' : 'test' };
 }
 
 /**
