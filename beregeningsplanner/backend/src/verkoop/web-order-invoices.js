@@ -119,9 +119,12 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     if (!['verzonden', 'afgerond'].includes(order.status)) return { error: 'Een factuur kan pas als de bestelling is verzonden.', status: 409 };
     const existing = invoiceFor(tenantId, order.id);
     const settings = settingsOf(tenantId);
+    // Online betaald: het geld is binnen, dus de factuur wordt altijd definitief en betaald, ook als concepten verder handmatig blijven.
+    const paidOnline = order.payment === 'online' && Boolean(order.pay) && order.pay.status === 'betaald';
     if (existing) {
-      // Een concept dat bleef staan doordat definitief maken mislukte, alsnog afmaken.
-      if (existing.status !== 'concept' || !order.invoiceError || !settings.webOrders.finalize) return { invoice: existing, created: false };
+      // Een concept dat bleef staan doordat definitief maken mislukte, of dat online betaald bleek, alsnog afmaken.
+      const retryFinalization = settings.webOrders.finalize && Boolean(order.invoiceError);
+      if (existing.status !== 'concept' || !(retryFinalization || paidOnline)) return { invoice: existing, created: false };
       if (!settings.webOrders.enabled) return { error: 'Facturen voor webshopbestellingen staan uit (Facturen → Instellingen).', status: 409 };
       const finalized = invoices.finalize(tenantId, user, existing.id, settings, { skipStock: true });
       if (!finalized || finalized.error) {
@@ -139,7 +142,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
       const data = fromWebOrder(order, articles, settings);
       const debtor = debtors ? debtors.ensure(tenantId, data.customer, { customerId: order.userId, source: 'webshop', start: settings.debtorStart }) : null;
       const created = invoices.create(tenantId, user, data, settings, { shopOrderId: invoiceKey(order.id), customerId: order.userId, debtorId: debtor ? debtor.id : null });
-      if (settings.webOrders.finalize) {
+      if (settings.webOrders.finalize || paidOnline) {
         const finalized = invoices.finalize(tenantId, user, created.id, settings, { skipStock: true });
         if (finalized && finalized.error) throw new Error(finalized.error);
       }

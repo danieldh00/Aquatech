@@ -279,3 +279,16 @@ test('een bestelling die blijft staan houdt latere onbetaalde bestellingen niet 
   assert.strictEqual((await world.admin.get(`/api/admin/web-orders/${withPayment.id}`)).body.order.status, 'nieuw');
   assert.strictEqual((await world.admin.get(`/api/admin/web-orders/${withoutPayment}`)).body.order.status, 'geannuleerd');
 });
+
+test('een online betaalde bestelling krijgt ook een betaalde factuur als concepten handmatig blijven', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  await world.admin.put('/api/invoices/settings', { webOrders: { enabled: true, finalize: false } });
+  const { id, paymentId } = await placeOnline(world, customer);
+  world.mollie.set(paymentId, 'paid');
+  assert.strictEqual((await webhook(world, id, paymentId)).status, 200);
+  const shipped = await world.admin.post(`/api/admin/web-orders/${id}/status`, { status: 'verzonden' });
+  assert.strictEqual(shipped.status, 200, JSON.stringify(shipped.body));
+  const withInvoice = (await world.admin.get(`/api/admin/web-orders/${id}`)).body;
+  assert.strictEqual(withInvoice.invoice.status, 'betaald');
+});
