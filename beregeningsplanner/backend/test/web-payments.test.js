@@ -244,3 +244,25 @@ test('de lijst in Beheer toont de betaalstatus', async () => {
   const list = (await world.admin.get('/api/admin/web-orders')).body.items;
   assert.deepStrictEqual(list.map((item) => item.payStatus).sort((left, right) => String(left).localeCompare(String(right))), [null, 'open']);
 });
+
+test('een betaling met een afwijkend bedrag geldt niet als betaald, ook niet via de betaalpagina', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const { id, paymentId } = await placeOnline(world, customer);
+  world.mollie.set(paymentId, 'paid', { amount: { currency: 'EUR', value: '1.00' } });
+  const again = await createClient(world.base, { jar: customer.client.jar, followRedirects: false }).get(`/winkel/bestelling/${id}/betalen/`);
+  assert.notStrictEqual(again.status, 302);
+  const detail = (await world.admin.get(`/api/admin/web-orders/${id}`)).body.order;
+  assert.strictEqual(detail.pay.status, 'open');
+});
+
+test('zonder Mollie-sleutel blijft een onbetaalde online bestelling staan in plaats van te vervallen', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const { id } = await placeOnline(world, customer);
+  await world.admin.put('/api/admin/settings', { mollieApiKey: '' });
+  world.db.prepare('UPDATE web_orders SET created_at = ?').run(new Date(Date.now() - 25 * 3600 * 1000).toISOString());
+  assert.deepStrictEqual(await world.app.locals.webPaymentsExpire(), { expired: 0 });
+  const detail = (await world.admin.get(`/api/admin/web-orders/${id}`)).body.order;
+  assert.strictEqual(detail.status, 'nieuw');
+});

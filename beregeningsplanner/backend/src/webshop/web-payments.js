@@ -81,6 +81,16 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
   }
 
   /**
+   * Controleert of een betaling van Mollie bij de bestelling hoort (metadata en bedrag).
+   * @param {object} payment De betaling zoals Mollie hem geeft.
+   * @param {object} order De bestelling.
+   * @returns {boolean} true als bestelling en bedrag kloppen.
+   */
+  function belongsTo(payment, order) {
+    return payment.orderId === order.id && Math.abs(payment.amount - order.totals.total) <= 0.005;
+  }
+
+  /**
    * Vraagt een betaling bij Mollie op en verwerkt hem. De betaling moet bij de
    * bestelling horen (id, metadata en bedrag kloppen), anders gebeurt er niets.
    * @param {string} tenantId Id van de omgeving.
@@ -96,7 +106,7 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
     const config = configOf(settingsFor(tenantId));
     if (!config.apiKey) return { order, becamePaid: false, ignored: true };
     const payment = await mollie.getPayment(config.apiKey, id);
-    if (payment.orderId !== order.id || !(Math.abs(payment.amount - order.totals.total) <= 0.005)) {
+    if (!belongsTo(payment, order)) {
       log.warn(`Betaling ${id} hoort niet bij bestelling ${order.number}; genegeerd.`);
       return { order, becamePaid: false, ignored: true };
     }
@@ -119,7 +129,14 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
     try {
       if (order.pay.id && order.pay.status === 'open' && order.pay.checkoutUrl) {
         const current = await mollie.getPayment(config.apiKey, order.pay.id);
-        if (MOLLIE_STATES[current.status] === 'betaald') { await apply(tenantId, order.id, current); return { paid: true }; }
+        if (MOLLIE_STATES[current.status] === 'betaald') {
+          if (!belongsTo(current, order)) {
+            log.warn(`Betaling ${current.id} hoort niet bij bestelling ${order.number}; genegeerd.`);
+            return { error: 'De betaling hoort niet bij deze bestelling.', status: 409 };
+          }
+          await apply(tenantId, order.id, current);
+          return { paid: true };
+        }
         if (MOLLIE_STATES[current.status] === 'open') return { checkoutUrl: order.pay.checkoutUrl };
         await apply(tenantId, order.id, current);
       }
@@ -154,7 +171,8 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
     for (const id of orders.unpaidOnline(tenantId, cutoff)) {
       try {
         const order = orders.get(tenantId, id);
-        if (order && order.pay && order.pay.id && config.apiKey) {
+        if (order && order.pay && order.pay.id && !config.apiKey) continue;
+        if (order && order.pay && order.pay.id) {
           const out = await sync(tenantId, id);
           if (out.becamePaid || (out.order && out.order.pay.status === 'betaald')) continue;
         }
