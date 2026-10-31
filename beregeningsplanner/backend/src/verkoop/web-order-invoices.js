@@ -128,8 +128,8 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     if (existing) {
       // Een concept dat bleef staan doordat definitief maken mislukte, of dat online betaald bleek, alsnog afmaken.
       const retryFinalization = settings.webOrders.finalize && Boolean(order.invoiceError);
-      if (existing.status === 'definitief' && paidOnline) {
-        // Definitief gemaakt, maar het proces stopte voor het op betaald zetten: alsnog afmaken.
+      if (['definitief', 'betaald'].includes(existing.status) && paidOnline) {
+        // Definitief gemaakt, maar het proces stopte voor het op betaald zetten of voor het versturen van de mail: alsnog afmaken.
         settleIfPaidOnline(tenantId, order);
         return { invoice: invoiceFor(tenantId, order.id), created: false, finalizedNow: !existing.sentAt };
       }
