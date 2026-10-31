@@ -92,7 +92,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
   }
 
   /**
-   * Zet de definitieve factuur van een online betaalde bestelling op betaald (met de betaaldatum van Mollie).
+   * Zet de definitieve factuur van een online betaalde bestelling op betaald (met de betaaldatum van Mollie); bij een afwijkend bedrag komt er een melding bij de bestelling.
    * @param {string} tenantId Id van de omgeving.
    * @param {object} order De bestelling.
    * @returns {void}
@@ -101,10 +101,9 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     if (order.payment !== 'online' || !order.pay || order.pay.status !== 'betaald') return;
     const invoice = invoiceFor(tenantId, order.id);
     if (!invoice || invoice.status !== 'definitief') return;
-    // Een factuur die niet gelijk is aan wat Mollie ontving (afronding) gaat niet automatisch op betaald.
+    // Het geld is binnen: de factuur gaat altijd op betaald (anders krijgt de klant een betaalverzoek voor een betaalde bestelling). Een afwijkend bedrag (afronding) wordt bij de bestelling gemeld.
     if (Math.abs(invoice.total - order.totals.total) > 0.005) {
-      orders.updateData(tenantId, order.id, { invoiceError: `Factuurbedrag ${invoice.total} wijkt af van de online ontvangen betaling ${order.totals.total}: controleer en zet de factuur zelf op betaald.` });
-      return;
+      orders.updateData(tenantId, order.id, { invoiceError: `Let op: het factuurbedrag (${invoice.total}) wijkt af van de online ontvangen betaling (${order.totals.total}); controleer de boeking.` });
     }
     invoices.setPaid(tenantId, invoice.id, true, String(order.pay.paidAt || '').slice(0, 10));
   }
