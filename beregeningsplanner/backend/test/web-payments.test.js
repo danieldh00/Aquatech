@@ -375,13 +375,13 @@ test('een online betaalde bestelling krijgt de betaalde factuur al bij de betali
   assert.strictEqual((await world.admin.get(`/api/admin/web-orders/${id}`)).body.invoice.status, 'betaald');
 });
 
-test('de factuur van een bestelling heeft hetzelfde totaal als de bestelling, ook bij een afrondingsverschil', () => {
+test('de factuur van een bestelling heeft hetzelfde totaal als de bestelling, ook bij een afrondingsverschil, zonder aparte afrondingsregel', () => {
   const { fromWebOrder } = require('../src/verkoop/web-order-invoices');
   const Core = require('../../frontend/facturen/invoice-core');
   const lines = [{ code: 'A', name: 'Artikel', qty: 10, unitExcl: 1.01, vatRate: 21 }];
   const order = { number: 'W-1', customer: { name: 'Klant', email: 'k@example.nl' }, address: {}, lines, totals: { total: 12.2, byRate: [{ rate: 21, excl: 10.08, vat: 2.12, incl: 12.2 }] } };
   const data = fromWebOrder(order, {}, Core.sanitizeSettings({}));
   assert.strictEqual(Core.totals(data, Core.sanitizeSettings({})).total, 12.2);
-  assert.ok(data.lines.some((line) => line.description === 'Afrondingsverschil' && line.vat === 21));
+  assert.ok(!data.lines.some((line) => /afronding/i.test(line.description)), 'geen aparte afrondingsregel');
   assert.strictEqual(Core.totals(data, Core.sanitizeSettings({})).vatTotal, 2.12);
 });

@@ -66,16 +66,37 @@ function fromWebOrder(order, articles, settings) {
     },
     notes, lines,
   }, settings);
-  // De webshop rekent particuliere prijzen per btw-tarief vanuit bedragen incl. btw, de factuur vanuit prijzen excl. btw: dat kan een paar cent schelen. Per btw-tarief komt een afrondingsregel met datzelfde tarief, zodat het factuurbedrag en de btw-verdeling gelijk zijn aan wat de klant betaalde.
+  // De webshop rekent particuliere prijzen per btw-tarief vanuit bedragen incl. btw, de factuur vanuit prijzen excl. btw: dat kan een paar cent schelen. Daarom staat de grondslag per btw-tarief vast in de prijs van één regel (die regel wordt zo nodig gesplitst in "aantal min één" en één stuk met een cent afwijkende prijs), zodat het factuurbedrag en de btw gelijk zijn aan wat de klant betaalde zonder een aparte afrondingsregel. Lukt dat niet, dan meldt het afwijkende bedrag zich bij de bestelling.
+  if (shifted || !order.totals || !order.totals.byRate) return data;
   const invoiceBases = new Map(Core.totals(data, settings).vat.map((entry) => [entry.rate, entry.base]));
-  const corrections = shifted ? [] : (order.totals && order.totals.byRate ? order.totals.byRate : []).map((row) => ({
-    rate: Number(row.rate) || 0, difference: Core.round2(Number(row.excl) - (invoiceBases.get(Number(row.rate) || 0) || 0)),
-  })).filter((entry) => Math.abs(entry.difference) >= 0.01 && Math.abs(entry.difference) <= MAX_ROUNDING);
-  if (corrections.length > 0) {
-    const correctionLines = corrections.map((entry) => ({ code: '', description: 'Afrondingsverschil', qty: 1, unit: '', price: entry.difference, vat: entry.rate, group: 'overig' }));
-    return Core.sanitize({ ...data, lines: [...data.lines, ...correctionLines] }, settings);
+  let invoiceLines = data.lines;
+  for (const row of order.totals.byRate) {
+    const rate = Number(row.rate) || 0;
+    if (rate <= 0) continue;
+    // Dichtstbijzijnde grondslag (binnen de afrondingsgrens) waarover het btw-bedrag gelijk is aan dat van de bestelling.
+    let target = null;
+    for (let cents = -10; cents <= 10; cents += 1) {
+      const candidate = Core.round2(Number(row.excl) + cents / 100);
+      if (Core.round2((candidate * rate) / 100) !== Core.round2(Number(row.vat))) continue;
+      if (target === null || Math.abs(candidate - row.excl) < Math.abs(target - row.excl)) target = candidate;
+    }
+    if (target === null) target = Number(row.excl);
+    const difference = Core.round2(target - (invoiceBases.get(rate) || 0));
+    if (Math.abs(difference) < 0.01 || Math.abs(difference) > MAX_ROUNDING) continue;
+    let index = -1;
+    invoiceLines.forEach((line, position) => {
+      if (Number(line.vat) === rate && Number(line.qty) >= 1 && Number.isInteger(Number(line.qty)) && Number(line.price) > 0
+        && (index === -1 || Number(line.qty) * Number(line.price) > Number(invoiceLines[index].qty) * Number(invoiceLines[index].price))) index = position;
+    });
+    if (index === -1) continue;
+    const line = invoiceLines[index];
+    const adjusted = { ...line, qty: 1, price: Core.round2(Number(line.price) + difference) };
+    if (adjusted.price < 0) continue;
+    invoiceLines = Number(line.qty) === 1
+      ? invoiceLines.map((entry, position) => (position === index ? adjusted : entry))
+      : [...invoiceLines.slice(0, index), { ...line, qty: Number(line.qty) - 1 }, adjusted, ...invoiceLines.slice(index + 1)];
   }
-  return data;
+  return invoiceLines === data.lines ? data : Core.sanitize({ ...data, lines: invoiceLines }, settings);
 }
 
 /**
@@ -245,6 +266,12 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     if (!found || found.status === 'concept') return;
     const settings = settingsOf(tenantId);
     try {
+      // Is de factuur al (handmatig) definitief gecrediteerd, dan komt er geen tweede creditnota.
+      const original = invoices.get(tenantId, found.id);
+      if (original && original.creditedAt) {
+        orders.updateData(tenantId, order.id, { creditNote: { invoiceId: null, number: '', status: 'al gecrediteerd' }, invoiceError: null });
+        return;
+      }
       const made = invoices.credit(tenantId, user, found.id, settings);
       if (!made || made.error) throw new Error(made && made.error ? made.error : 'Factuur niet gevonden.');
       let credit = made.invoice;
