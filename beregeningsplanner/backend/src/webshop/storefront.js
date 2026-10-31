@@ -20,6 +20,7 @@ const { returnsBlock } = require('./storefront-return-pages');
 const { legalDefaults } = require('./legal-pages');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
+const { validPaymentId } = require('./mollie');
 const { readCart, writeCart, applyCartAction } = require('./storefront-cart');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
@@ -47,18 +48,18 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
 }
 /** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner). */
 const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner)\/?$/;
-/** Paden waar de winkelwagen, het afrekenformulier en het retourformulier (met intrekken) naartoe posten. */
-const ORDER_POSTS = /^\/(winkelwagen|afrekenen|bestelling\/[^/]+\/retour(\/[^/]+\/intrekken)?)\/?$/;
+/** Paden waar de winkelwagen, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
+const ORDER_POSTS = /^\/(winkelwagen|afrekenen|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/retour(\/[^/]+\/intrekken)?)\/?$/;
 /** Aantal bestellingen per pagina in de bestelhistorie van een klant. */
 const HISTORY_PAGE = 25;
 const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, onOrder?: Function, onReturn?: Function }} options db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
+ * @param {{ db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, onOrder?: Function, onReturn?: Function }} options db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/winkel', router).
  */
-function createStorefront({ db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, onOrder = () => {}, onReturn = () => {} }) {
+function createStorefront({ db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onReturn = () => {} }) {
   const data = createStorefrontData(db);
   const router = express.Router();
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: remoteIp });
@@ -301,6 +302,12 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
        */
       const shippingConfig = () => Shipping.sanitizeShipping(settingsFor(tenantId).get('shopShipping'));
       /**
+       * De betaalwijzen die deze klant bij het afrekenen mag kiezen.
+       * @param {{ customerGroup?: string }} viewer De ingelogde klant.
+       * @returns {string[]} 'online' en/of 'rekening'.
+       */
+      const paymentOptionsOf = (viewer) => (payments ? payments.optionsFor(tenantId, viewer) : ['rekening']);
+      /**
        * Bepaalt het land en de verzendmethode die bij het afrekenen getoond worden.
        * @param {object} cart De geprijsde winkelwagen.
        * @param {object} input Het gekozen land en de gekozen methode (query of formulier).
@@ -329,7 +336,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
         if (!cart.lines.length || !cart.ok) return res.redirect(302, '../winkelwagen/');
         const viewer = accounts.viewer(req);
         if (!viewer) return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups));
-        sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, ...checkoutChoice(cart, req.query || {}) }, groups));
+        sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), ...checkoutChoice(cart, req.query || {}) }, groups));
       });
       router.post('/afrekenen', form, async (req, res, next) => {
         if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
@@ -342,7 +349,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
           res.setHeader('Cache-Control', 'no-store');
           const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
           if (!cart.lines.length || !cart.ok) return res.redirect(303, '../winkelwagen/');
-          return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, values: body, ...checkoutChoice(cart, body) }, groups));
+          return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), values: body, ...checkoutChoice(cart, body) }, groups));
         }
         // Hoort het getoonde totaal niet bij de actuele invoer (btw-nummer, land, methode) of ontbreekt het? Dan eerst opnieuw tonen, zonder te bestellen.
         {
@@ -353,36 +360,95 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
             const current = choice.summary ? choice.summary.totals.total : null;
             if (current !== null && (!/^\d+(\.\d+)?$/.test(shown) || Math.abs(Number(shown) - current) > 0.005)) {
               res.setHeader('Cache-Control', 'no-store');
-              return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', values: body, ...choice }, groups));
+              return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', values: body, ...choice }, groups));
             }
           }
         }
         if (orderLimited(req, res)) return res.status(429).type('text').send('Te veel bestellingen vanaf dit adres. Probeer het later opnieuw.');
         try {
-          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup }, body, readCart(req), shippingConfig(), Number(body.expectedTotal));
+          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup }, body, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer));
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
             const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
-            return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, error: out.error, values: body, ...checkoutChoice(cart, body) }, groups));
+            return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: out.error, values: body, ...checkoutChoice(cart, body) }, groups));
           }
           writeCart(req, res, []);
           // De bestelling staat al vast: een fout in audit of mail mag de klant niet naar een foutpagina sturen, en de ene stap niet de andere overslaan.
           try { onOrder(req, out.order); } catch (failure) { console.error(`Audit van bestelling ${out.order.number} mislukt: ${failure.message}`); }
+          // Een online bestelling wordt pas bevestigd als hij betaald is (zie payments.onPaid); de klant gaat eerst naar de betaalpagina.
+          if (out.order.payment === 'online') return res.redirect(303, `../bestelling/${out.order.id}/?bedankt=1&betalen=1`);
           try { if (orderMail) await orderMail.sendPlaced(tenantId, out.order); } catch (failure) { console.error(`Mail van bestelling ${out.order.number} mislukt: ${failure.message}`); }
           res.redirect(303, `../bestelling/${out.order.id}/?bedankt=1`);
         } catch (error) { next(error); }
       });
-      router.get('/bestelling/:id', (req, res) => {
-        if (withSlash(req, res)) return;
-        if (!orderingOn()) return orderingOff(req, res);
-        res.setHeader('Cache-Control', 'no-store');
-        const viewer = accounts.viewer(req);
-        if (!viewer) return res.redirect(302, '../../inloggen/');
-        const order = orders.getForUser(tenantId, viewer.id, req.params.id);
-        if (!order) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../../', groups));
-        const invoice = orderInvoices ? orderInvoices.invoiceFor(tenantId, order.id) : null;
-        sendWithGroups(req, res, 200, (groups) => orderPage(order, groups, { thanks: req.query.bedankt === '1', invoice: invoice && invoice.status !== 'concept' ? invoice : null, returnsHtml: returnsHtmlOf(order) }));
+      router.get('/bestelling/:id', async (req, res, next) => {
+        try {
+          if (withSlash(req, res)) return;
+          if (!orderingOn()) return orderingOff(req, res);
+          res.setHeader('Cache-Control', 'no-store');
+          const viewer = accounts.viewer(req);
+          if (!viewer) return res.redirect(302, '../../inloggen/');
+          let order = orders.getForUser(tenantId, viewer.id, req.params.id);
+          if (!order) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../../', groups));
+          // Terug van de betaalpagina (of een open betaling): de uitkomst eerst bij Mollie opvragen, want de webhook kan nog onderweg zijn.
+          if (payments && order.payment === 'online' && order.pay && order.pay.status === 'open' && order.pay.id) {
+            try {
+              const synced = await payments.sync(tenantId, order.id);
+              if (synced.order) order = orders.getForUser(tenantId, viewer.id, order.id) || order;
+                          } catch (failure) { console.error(`Betaling van bestelling ${order.number} opvragen mislukt: ${failure.message}`); }
+          }
+          const invoice = orderInvoices ? orderInvoices.invoiceFor(tenantId, order.id) : null;
+          const payError = req.query.betaalfout === '1' ? 'De betaalpagina is nu niet bereikbaar. Probeer het zo opnieuw met de knop hieronder.' : '';
+          sendWithGroups(req, res, 200, (groups) => orderPage(order, groups, { thanks: req.query.bedankt === '1' || (req.query.betaald === '1' && order.pay && order.pay.status === 'betaald'), invoice: invoice && invoice.status !== 'concept' ? invoice : null, returnsHtml: returnsHtmlOf(order), payError, autoPay: req.query.betalen === '1' }));
+        } catch (error) { next(error); }
       });
+      if (payments) {
+        const payLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 40, keyFn: (req) => `betalen:${remoteIp(req)}` });
+        const webhookLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `mollie:${remoteIp(req)}` });
+        /**
+         * Past een limiet toe zonder JSON-antwoord.
+         * @param {Function} limit De limiet (createRateLimiter).
+         * @param {object} req Het verzoek.
+         * @param {object} res Het antwoord.
+         * @returns {boolean} true als het verzoek geweigerd moet worden.
+         */
+        const limitedBy = (limit, req, res) => {
+          let refused = false;
+          limit(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
+          return refused;
+        };
+        // Naar de betaalpagina van Mollie: de lopende betaling, of een nieuwe als de vorige mislukte.
+        router.get('/bestelling/:id/betalen', async (req, res, next) => {
+          try {
+            if (withSlash(req, res)) return;
+            if (!orderingOn()) return orderingOff(req, res);
+            res.setHeader('Cache-Control', 'no-store');
+            const viewer = accounts.viewer(req);
+            if (!viewer) return res.redirect(302, '../../../inloggen/');
+            const order = orders.getForUser(tenantId, viewer.id, req.params.id);
+            if (!order) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../../../', groups));
+            if (limitedBy(payLimiter, req, res)) return res.status(429).type('text').send('Te veel pogingen vanaf dit adres. Probeer het later opnieuw.');
+            const out = await payments.start(tenantId, order);
+            if (out.paid) return res.redirect(303, '../?betaald=1');
+            if (out.checkoutUrl && /^https:\/\//.test(out.checkoutUrl)) return res.redirect(302, out.checkoutUrl);
+            if (out.status === 502) return res.redirect(303, '../?betaalfout=1');
+            res.redirect(303, '../');
+          } catch (error) { next(error); }
+        });
+        // De melding van Mollie dat een betaling van stand is veranderd. Alleen het id komt mee; de uitkomst vragen we zelf bij Mollie op.
+        router.post('/mollie/webhook/:orderId', form, async (req, res) => {
+          if (limitedBy(webhookLimiter, req, res)) return res.status(429).end();
+          const paymentId = String(req.body && req.body.id || '');
+          if (!validPaymentId(paymentId)) return res.status(200).end();
+          try {
+            await payments.sync(tenantId, String(req.params.orderId), { paymentId });
+          } catch (failure) {
+            console.error(`Webhook van Mollie voor ${paymentId} mislukt: ${failure.message}`);
+            return res.status(502).end();
+          }
+          res.status(200).end();
+        });
+      }
       /**
        * Het blok Retourneren van een bestelling (leeg als retourneren uit staat).
        * @param {object} order De bestelling van de ingelogde klant.

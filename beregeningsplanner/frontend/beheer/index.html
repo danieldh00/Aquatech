@@ -258,7 +258,7 @@
         <form id="s-shop" class="card-form settings">
           <h3>Eigen webshop (winkel/)</h3>
           <label class="chk"><input type="checkbox" name="storefront"> <span>Eigen webshop tonen op <code>winkel/</code> (openbaar, alleen bekijken): voorraadartikelen met verkoopprijs en <i>Naar webshop</i> aan, zonder bestellen. Alleen voor de hoofdtenant.</span></label>
-          <label class="chk"><input type="checkbox" name="shopOrdering"> <span>Bestellen in de webshop: winkelwagen en afrekenen voor ingelogde klanten (op rekening). Uit = de knop <i>In winkelwagen</i> blijft uitgeschakeld. Bestellingen zie je onder <i>Bestellingen</i>. Alleen voor de hoofdtenant.</span></label>
+          <label class="chk"><input type="checkbox" name="shopOrdering"> <span>Bestellen in de webshop: winkelwagen en afrekenen voor ingelogde klanten (op rekening, of online betalen als dat hieronder aan staat). Uit = de knop <i>In winkelwagen</i> blijft uitgeschakeld. Bestellingen zie je onder <i>Bestellingen</i>. Alleen voor de hoofdtenant.</span></label>
           <label class="chk"><input type="checkbox" name="shopPlanner"> <span>Kopje <i>Planner</i> in de webshop: een bezoeker maakt met naam, e-mail en wachtwoord een klantaccount en gaat meteen door naar de planner. Uit = kopje verborgen en de pagina geweigerd. Alleen voor de hoofdtenant.</span></label>
           <div class="err" role="alert"></div>
         </form>
@@ -274,6 +274,28 @@
           <p class="muted small">Eén regel per land: landcode, naam, gratis vanaf (leeg of 0 = nooit) en de weegklassen als <i>t/m gram=prijs</i>, gescheiden door een puntkomma (bijvoorbeeld <code>2000=6,95; 5000=8,95</code>). Zwaarder dan de hoogste klasse = niet te bezorgen. Het gewicht per artikel vul je in bij <i>Artikelen</i>.</p>
           <div id="s-shipping-zones"></div>
           <p><button type="button" class="btn" id="s-shipping-add">Land toevoegen</button> <button class="btn primary" type="submit">Verzending opslaan</button></p>
+          <div class="err" role="alert"></div>
+        </form>
+        <form id="s-payment" class="card-form settings">
+          <h3>Betalen</h3>
+          <p class="muted small">Klanten betalen online via Mollie (iDEAL, kaart en wat je in je Mollie-account aanzet), of op rekening. Een onbetaalde online bestelling houdt de voorraad vast en kan pas verzonden worden als hij betaald is. Alleen voor de hoofdtenant.</p>
+          <label class="chk"><input type="checkbox" name="online"> <span>Online betalen aanbieden bij het afrekenen</span></label>
+          <div class="field">
+            <span class="label">Mollie API-sleutel</span>
+            <span class="state" id="s-payment-key-state"></span>
+            <input name="mollieApiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="test_… of live_…, leeg = ongewijzigd">
+            <span class="muted small">Te vinden in je Mollie-dashboard onder Ontwikkelaars → API-sleutels. Begin met een <code>test_</code>-sleutel: dan is er geen echt geld mee gemoeid. De sleutel wordt versleuteld opgeslagen en nooit teruggestuurd naar de browser.</span>
+          </div>
+          <label>Webadres van de webshop<input name="publicUrl" type="url" placeholder="https://aquatech.den-hollander.com/winkel/" spellcheck="false"></label>
+          <span class="muted small">Het openbare adres van de webshop, voor de terugkeer van de klant en de melding van Mollie (<code>mollie/webhook/…</code>). Moet vanaf internet bereikbaar zijn en met https beginnen.</span>
+          <label>Op rekening bestellen<select name="onAccount">
+            <option value="iedereen">Voor iedereen (naast online betalen)</option>
+            <option value="zakelijk">Alleen voor zakelijke klanten</option>
+            <option value="nooit">Niet aanbieden (alleen online betalen)</option>
+          </select></label>
+          <label>Onbetaalde bestelling vasthouden (uren)<input name="holdHours" type="number" min="1" max="168" step="1"></label>
+          <span class="muted small">Na deze tijd vervalt een onbetaalde online bestelling en komt de voorraad vrij. Bij een betaalde bestelling die je annuleert, boek je de betaling zelf terug in je Mollie-dashboard.</span>
+          <p><button class="btn primary" type="submit">Betalen opslaan</button></p>
           <div class="err" role="alert"></div>
         </form>
         <form id="w-form" class="card-form settings">
@@ -328,7 +350,7 @@
           <input id="wo-search" type="search" placeholder="Zoek op nummer, naam of e-mail" aria-label="Zoeken">
           <button id="wo-export" class="btn primary">Exporteer naar Excel</button>
         </div>
-        <p class="muted small">Bestellingen uit de eigen webshop (winkel/). Een nieuwe bestelling reserveert de voorraad; <i>Verzonden</i> boekt de artikelen af, <i>Annuleren</i> geeft de reservering vrij. Betalen gaat op rekening.</p>
+        <p class="muted small">Bestellingen uit de eigen webshop (winkel/). Een nieuwe bestelling reserveert de voorraad; <i>Verzonden</i> boekt de artikelen af, <i>Annuleren</i> geeft de reservering vrij. Betalen gaat op rekening of online via Mollie; een online bestelling kan pas verzonden worden als hij betaald is.</p>
         <p class="muted small" id="wo-counts"></p>
         <div class="tablewrap"><table class="grid" id="wo-table"></table></div>
         <div class="pager"><button id="wo-prev" class="btn small">Vorige</button> <span id="wo-info" class="muted small"></span> <button id="wo-next" class="btn small">Volgende</button></div>

@@ -91,13 +91,29 @@ ${countryField}
 ${options || '<p class="note">Er is op dit moment geen verzendmethode beschikbaar.</p>'}`;
 }
 
+/** Namen van de betaalmethoden van Mollie zoals de klant ze kent. */
+const PAYMENT_METHODS = { ideal: 'iDEAL', creditcard: 'creditcard', bancontact: 'Bancontact', paypal: 'PayPal', applepay: 'Apple Pay', banktransfer: 'overboeking', eps: 'EPS', giropay: 'giropay', kbc: 'KBC/CBC', belfius: 'Belfius' };
+
+/**
+ * Het onderdeel Betalen op de pagina Afrekenen: bij één betaalwijze een uitleg, bij meer een keuze.
+ * @param {string[]} options De betaalwijzen die de klant mag kiezen: 'online' en/of 'rekening'.
+ * @param {string} [chosen] De eerder gekozen betaalwijze.
+ * @returns {string} HTML van het onderdeel.
+ */
+function paymentChoice(options, chosen = '') {
+  const texts = { online: 'Online betalen met iDEAL of een andere betaalmethode: je betaalt direct op de beveiligde pagina van onze betaalprovider.', rekening: 'Op rekening: je ontvangt de factuur van ons.' };
+  if (options.length === 1) return `<h2>Betalen</h2><p class="note">${options[0] === 'online' ? 'Na het bestellen betaal je online met iDEAL of een andere betaalmethode, op de beveiligde pagina van onze betaalprovider.' : texts.rekening}</p>${options[0] === 'online' ? '<input type="hidden" name="paymentMethod" value="online">' : ''}`;
+  const selected = options.includes(chosen) ? chosen : options[0];
+  return `<h2>Betalen</h2>${options.map((option) => `<label class="shipping-option"><input type="radio" name="paymentMethod" value="${option}"${option === selected ? ' checked' : ''} required> <span>${escapeHtml(texts[option])}</span></label>`).join('')}`;
+}
+
 /**
  * De pagina Afrekenen: gegevens van de klant, de verzendmethode, het afleveradres en een overzicht van de bestelling.
- * @param {{ cart: object, quote: object, country: string, method: string, summary?: object|null, values?: object, error?: string, viewer: { displayName: string, email: string } }} state De geprijsde winkelwagen, de verzendopties, het gekozen land en de gekozen methode, de uitgerekende totalen (web-orders.js, orderTotals), eerder ingevulde waarden, een foutmelding en de ingelogde klant.
+ * @param {{ cart: object, quote: object, country: string, method: string, summary?: object|null, values?: object, error?: string, viewer: { displayName: string, email: string }, paymentOptions?: string[] }} state De geprijsde winkelwagen, de verzendopties, het gekozen land en de gekozen methode, de uitgerekende totalen (web-orders.js, orderTotals), eerder ingevulde waarden, een foutmelding, de ingelogde klant en de betaalwijzen die hij mag kiezen (online en/of rekening).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @returns {string} De HTML-pagina.
  */
-function checkoutPage({ cart, quote, country, method, summary = null, values = {}, error = '', viewer }, groups = []) {
+function checkoutPage({ cart, quote, country, method, summary = null, values = {}, error = '', viewer, paymentOptions = ['rekening'] }, groups = []) {
   const value = { name: viewer.displayName, email: viewer.email, ...values };
   const chosen = quote.options.find((option) => option.method === method && option.available);
   const business = Boolean(cart.pricesExcl);
@@ -125,9 +141,9 @@ ${checkoutField({ name: 'street', label: 'Straat en huisnummer', value: value.st
 ${checkoutField({ name: 'postcode', label: 'Postcode', value: value.postcode || '', autocomplete: 'postal-code', required: false })}
 ${checkoutField({ name: 'city', label: 'Woonplaats', value: value.city || '', autocomplete: 'address-level2', required: false })}
 <label class="form-field"><span>Opmerking (optioneel)</span><textarea name="note" rows="3" maxlength="500">${escapeHtml(value.note || '')}</textarea></label>
-<p class="note">Je bestelling gaat op rekening: je ontvangt de factuur van ons.</p>
+${paymentChoice(paymentOptions, value.paymentMethod)}
 <label class="terms-check"><input type="checkbox" name="terms" value="ja" required${value.terms === 'ja' ? ' checked' : ''}><span>Ik ga akkoord met de <a href="${ROOT}pagina/algemene-voorwaarden/" target="_blank" rel="noopener">algemene voorwaarden</a> en heb de <a href="${ROOT}pagina/privacyverklaring/" target="_blank" rel="noopener">privacyverklaring</a> gelezen. Als consument heb je <a href="${ROOT}pagina/herroepingsrecht/" target="_blank" rel="noopener">herroepingsrecht</a>.</span></label>
-<button class="button" type="submit" name="action" value="place">Bestelling plaatsen</button>
+<button class="button" type="submit" name="action" value="place">${paymentOptions.length === 1 && paymentOptions[0] === 'online' ? 'Bestellen en betalen' : 'Bestelling plaatsen'}</button>
 </form>
 <aside class="checkout-summary"><h2>Je bestelling</h2><ul>${items}${shippingRow}</ul>
 <p class="checkout-total"><span>${business && !(summary && summary.shifted) ? 'Totaal incl. btw' : business ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</span><strong>${escapeHtml(formatPrice(total))}</strong></p>${vatNote}
@@ -188,29 +204,52 @@ const formatDate = (iso) => {
  * plaatsen (`thanks`) met een bedankt, anders als onderdeel van de bestelhistorie.
  * @param {object} order De bestelling (met regels, adres, totalen en verloop).
  * @param {object[]} groups Alle hoofdcategorieën.
- * @param {{ thanks?: boolean, invoice?: ?{ number: string, status: string }, returnsHtml?: string }} [options] thanks: direct na het plaatsen; invoice: de definitieve factuur bij de bestelling (download als PDF); returnsHtml: het blok Retourneren (storefront-return-pages.js).
+ * @param {{ thanks?: boolean, invoice?: ?{ number: string, status: string }, returnsHtml?: string, payError?: string, autoPay?: boolean }} [options] thanks: direct na het plaatsen; invoice: de definitieve factuur bij de bestelling (download als PDF); returnsHtml: het blok Retourneren (storefront-return-pages.js); payError: een melding bij het starten van de betaling; autoPay: stuur de klant meteen door naar de betaalpagina.
  * @returns {string} De HTML-pagina.
  */
-function orderPage(order, groups = [], { thanks = false, invoice = null, returnsHtml = '' } = {}) {
+function orderPage(order, groups = [], { thanks = false, invoice = null, returnsHtml = '', payError = '', autoPay = false } = {}) {
   const business = order.customerGroup === 'zakelijk';
   const rows = order.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<br><small>Artikelnr.: ${escapeHtml(line.code)}</small></td><td class="num">${escapeHtml(formatPrice(business ? line.unitExcl : line.unitIncl))}</td><td class="num">${line.qty}</td><td class="num">${escapeHtml(formatPrice(business && line.lineExcl !== undefined ? line.lineExcl : line.lineTotal))}</td></tr>`).join('');
   const vatNote = order.vat && order.vat.shifted ? `<p class="note">Btw verlegd naar de afnemer${order.vat.number ? ` (btw-nummer ${escapeHtml(order.vat.number)})` : ''}.</p>` : business && order.vat && order.vat.number ? `<p class="note">Btw-nummer: ${escapeHtml(order.vat.number)}</p>` : '';
+  const online = order.payment === 'online' && order.pay;
+  const paid = Boolean(online && order.pay.status === 'betaald');
+  const waiting = Boolean(online && !paid && order.status === 'nieuw');
   const intro = thanks
     ? `<h1>Bedankt voor je bestelling</h1>
-<p>Je bestelling <strong>${escapeHtml(order.number)}</strong> is ontvangen. We sturen een bevestiging naar ${escapeHtml(order.email)}. Je bestelling gaat op rekening: je ontvangt de factuur van ons.</p>`
+<p>Je bestelling <strong>${escapeHtml(order.number)}</strong> is ontvangen.${paid ? ` We hebben je betaling ontvangen en sturen een bevestiging naar ${escapeHtml(order.email)}.` : waiting ? ' Rond je betaling af, dan bevestigen we je bestelling per mail.' : ` We sturen een bevestiging naar ${escapeHtml(order.email)}. Je bestelling gaat op rekening: je ontvangt de factuur van ons.`}</p>`
     : `<h1>Bestelling ${escapeHtml(order.number)}</h1>
-<p>Geplaatst op ${escapeHtml(formatDate(order.createdAt))}. Je bestelling gaat op rekening.</p>`;
+<p>Geplaatst op ${escapeHtml(formatDate(order.createdAt))}. ${online ? (paid ? 'Je hebt online betaald.' : 'Je bestelling wordt online betaald.') : 'Je bestelling gaat op rekening.'}</p>`;
+  const payBlock = online ? paymentBlock(order, { payError, waiting }) : '';
   const invoiceBlock = invoice ? `<p>Factuur <strong>${escapeHtml(invoice.number)}</strong>: <a href="factuur.pdf">Download als PDF</a></p>` : '';
   const history = order.history.length ? `<p class="note">Verloop: ${order.history.map((step) => `${escapeHtml(STATUS_LABELS[step.status] || step.status)} (${escapeHtml(formatDate(step.at))})`).join(' → ')}</p>` : '';
   const body = `<section class="cart">${intro}
 <div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Prijs${business ? ' excl. btw' : ''}</th><th class="num">Aantal</th><th class="num">Totaal${business ? ' excl. btw' : ''}</th></tr></thead>
 <tbody>${rows}</tbody><tfoot>${shippingRow(order.shipping, business)}${totalRows(order.totals, business, Boolean(order.vat && order.vat.shifted))}</tfoot></table></div>
 ${vatNote}${deliveryBlock(order)}
-<p>Status: <strong>${escapeHtml(order.statusLabel)}</strong></p>
+${payBlock}<p>Status: <strong>${escapeHtml(order.statusLabel)}</strong></p>
 ${invoiceBlock}${history}
 ${returnsHtml}
 <p><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a> <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a></p></section>`;
-  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups });
+  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups, refresh: autoPay && waiting && !payError ? 'betalen/' : '' });
+}
+
+/**
+ * Het blok Betaling op de pagina van een online bestelling: betaald, nog te betalen (met knop) of niet gelukt.
+ * @param {object} order De online bestelling (met pay).
+ * @param {{ payError?: string, waiting: boolean }} state Een melding bij het starten van de betaling en of de bestelling nog op betaling wacht.
+ * @returns {string} HTML van het blok.
+ */
+function paymentBlock(order, { payError, waiting }) {
+  const pay = order.pay;
+  const error = payError ? `<p class="form-error" role="alert">${escapeHtml(payError)}</p>` : '';
+  if (pay.status === 'betaald') {
+    const method = PAYMENT_METHODS[pay.method] || pay.method;
+    return `<p>Betaling: <strong>betaald</strong> op ${escapeHtml(formatDate(pay.paidAt))}${method ? ` (${escapeHtml(method)})` : ''}.</p>`;
+  }
+  if (!waiting) return `<p>Betaling: <strong>niet betaald</strong>. Deze bestelling is ${order.status === 'geannuleerd' ? 'geannuleerd' : 'niet meer te betalen'}.</p>`;
+  const note = pay.status === 'mislukt' ? 'De betaling is niet gelukt of afgebroken. Je kunt het opnieuw proberen; je bestelling staat nog even voor je klaar.' : 'We hebben je betaling nog niet ontvangen. Rond de betaling af om je bestelling te bevestigen.';
+  return `${error}<p>Betaling: <strong>${pay.status === 'mislukt' ? 'niet gelukt' : 'nog te betalen'}</strong>. ${note}</p>
+<p><a class="button" href="betalen/">${pay.status === 'mislukt' ? 'Opnieuw betalen' : 'Nu betalen'}</a></p>`;
 }
 
 /**

@@ -4,7 +4,11 @@
 // bij het plaatsen reserveert de bestelling de voorraad (stock.reserveOrder),
 // bij Verzonden boekt hij de artikelen af en bij Geannuleerd vervalt de
 // reservering. Tabel web_orders (migratie 37); beheer via /api/admin/web-orders
-// (Beheer > Bestellingen). Alles per omgeving (tenantId).
+// (Beheer > Bestellingen). Alles per omgeving (tenantId). Betalen: op rekening,
+// of online via Mollie (web-payments.js): de bestelling krijgt dan `data.pay`
+// (status open, betaald, mislukt of verlopen) en kan pas op Verzonden als hij
+// betaald is; een onbetaalde online bestelling houdt de voorraad vast tot hij
+// betaald, geannuleerd of verlopen is.
 const crypto = require('crypto');
 const { transaction, isPg } = require('../database/db');
 const { validEmail } = require('../platform/mailer');
@@ -102,10 +106,12 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', group = '' } = 
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
  * @param {{ stock: object }} deps De voorraadopslag (reserveren en afboeken).
- * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, onShipped: Function, onTracking: Function }} De functies.
+ * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
  */
 function createWebOrderStore(db, { stock }) {
   const shippedHooks = [];
+  // Haken die na het annuleren van een bestelling draaien.
+  const cancelledHooks = [];
   const trackingHooks = [];
   /**
    * Bereidt een SQL-opdracht voor.
@@ -186,6 +192,7 @@ function createWebOrderStore(db, { stock }) {
   const shape = (row) => ({
     id: row.id, number: row.number, userId: row.user_id || null, status: row.status, statusLabel: STATUSES[row.status] || row.status,
     customerName: row.customer_name, email: row.email, total: Number(row.total), createdAt: row.created_at, updatedAt: row.updated_at,
+    ...(row.pay_status !== undefined ? { payStatus: row.pay_status || null } : {}),
   });
   /**
    * Zet een rij met data om naar de volledige bestelling.
@@ -194,7 +201,7 @@ function createWebOrderStore(db, { stock }) {
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -266,9 +273,10 @@ function createWebOrderStore(db, { stock }) {
    * @param {{ code: string, qty: number }[]} wanted De winkelwagen.
    * @param {object} [shippingConfig] De verzendinstelling (shipping.js); standaard de startwaarden.
    * @param {?number} [expectedTotal] Het totaal dat de klant bevestigde; wijkt het berekende totaal af, dan volgt een fout (409) en wordt niet besteld.
+   * @param {string[]} [paymentOptions] De betaalwijzen die de klant mag kiezen: 'rekening' en/of 'online'. Is er maar één, dan hoeft de klant niets te kiezen.
    * @returns {{ order?: object, error?: string, field?: string, status?: number, cart?: object }} De bestelling, of een foutmelding (met de actuele winkelwagen bij een probleem met prijs of voorraad).
    */
-  function place(tenantId, user, rawFields, wanted, shippingConfig = Shipping.DEFAULT_CONFIG, expectedTotal = null) {
+  function place(tenantId, user, rawFields, wanted, shippingConfig = Shipping.DEFAULT_CONFIG, expectedTotal = null, paymentOptions = ['rekening']) {
     const input = rawFields && typeof rawFields === 'object' ? rawFields : {};
     const method = String(input.shippingMethod || '');
     const country = method === 'ophalen' ? 'NL' : String(input.country || 'NL').toUpperCase();
@@ -277,6 +285,10 @@ function createWebOrderStore(db, { stock }) {
     const checked = sanitizeCheckout(input, { method, country, group });
     if (checked.error) return { error: checked.error, field: checked.field, status: 400 };
     if (input.terms !== 'ja') return { error: 'Ga akkoord met de algemene voorwaarden om te bestellen.', field: 'terms', status: 400 };
+    const asked = String(input.paymentMethod || '');
+    const paymentMethod = paymentOptions.length === 1 && !asked ? paymentOptions[0] : asked;
+    if (!paymentOptions.includes(paymentMethod)) return { error: 'Kies hoe je wilt betalen.', field: 'paymentMethod', status: 400 };
+    const online = paymentMethod === 'online';
     return transaction(db, () => {
       lockItems(tenantId, wanted);
       const cart = priceCart(tenantId, wanted, { group });
@@ -300,7 +312,8 @@ function createWebOrderStore(db, { stock }) {
         address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' } : { street: fields.street, postcode: fields.postcode, city: fields.city, country },
         shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method === 'dpd', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
         customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted } : null,
-        note: fields.note, totals, payment: 'op rekening', consent: { terms: true, at: timestamp },
+        note: fields.note, totals, payment: online ? 'online' : 'op rekening', consent: { terms: true, at: timestamp },
+        ...(online ? { pay: { provider: 'mollie', status: 'open', id: null, ids: [], checkoutUrl: '', createdAt: timestamp, paidAt: null } } : {}),
         history: [{ at: timestamp, status: 'nieuw', by: fields.name }],
       };
       prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)
@@ -366,7 +379,8 @@ function createWebOrderStore(db, { stock }) {
     const start = Math.max(0, Math.floor(Number(offset)) || 0);
     const clause = where.join(' AND ');
     const total = Number(prepare(`SELECT COUNT(*) AS n FROM web_orders WHERE ${clause}`).get(...args).n);
-    const rows = prepare(`SELECT ${COLUMNS}${withLines ? ', data' : ''} FROM web_orders WHERE ${clause} ORDER BY created_at DESC, number DESC LIMIT ? OFFSET ?`).all(...args, size, start);
+    const payStatus = isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')";
+    const rows = prepare(`SELECT ${COLUMNS}${withLines ? ', data' : `, ${payStatus} AS pay_status`} FROM web_orders WHERE ${clause} ORDER BY created_at DESC, number DESC LIMIT ? OFFSET ?`).all(...args, size, start);
     const counts = Object.fromEntries(Object.keys(STATUSES).map((key) => [key, 0]));
     for (const row of prepare('SELECT status, COUNT(*) AS n FROM web_orders WHERE tenant_id = ? GROUP BY status').all(tenantId)) counts[row.status] = Number(row.n);
     return { total, items: rows.map((row) => (withLines ? shapeFull(row) : shape(row))), counts };
@@ -389,8 +403,20 @@ function createWebOrderStore(db, { stock }) {
         try { Promise.resolve(hook(tenantId, out.order, user)).catch((error) => console.warn(`Na verzenden: ${error.message}`)); } catch (error) { console.warn(`Na verzenden: ${error.message}`); }
       }
     }
+    if (out.order && status === 'geannuleerd') {
+      for (const hook of cancelledHooks) {
+        try { Promise.resolve(hook(tenantId, out.order, user)).catch((error) => console.warn(`Na annuleren: ${error.message}`)); } catch (error) { console.warn(`Na annuleren: ${error.message}`); }
+      }
+    }
     return out;
   }
+
+  /**
+   * Registreert een haak die na elke bestelling die wordt geannuleerd wordt aangeroepen (nadat de wijziging is vastgelegd).
+   * @param {Function} hook Functie (tenantId, order, user); mag een belofte geven, fouten worden alleen gelogd.
+   * @returns {void}
+   */
+  const onCancelled = (hook) => { cancelledHooks.push(hook); };
 
   /**
    * Registreert een haak die na elke bestelling die op Verzonden gaat wordt aangeroepen (nadat de wijziging is vastgelegd).
@@ -424,9 +450,12 @@ function createWebOrderStore(db, { stock }) {
       if (!row) return { error: 'Bestelling niet gevonden.', status: 404 };
       if (!TRANSITIONS[row.status].includes(status)) return { error: `Een bestelling met status ${STATUSES[row.status]} kan niet naar ${STATUSES[status]}.`, status: 409 };
       const data = JSON.parse(row.data);
+      if (status === 'verzonden' && data.payment === 'online' && !(data.pay && data.pay.status === 'betaald')) return { error: 'Deze bestelling is nog niet betaald: verzenden kan pas na de betaling.', status: 409 };
       const timestamp = currentTimestamp();
       if (status === 'verzonden') stock.issueOrder(tenantId, { id: row.id, number: row.number }, data.lines.map((line) => ({ itemId: line.itemId, qty: line.qty })), user);
       if (status === 'geannuleerd') stock.releaseOrder(tenantId, row.id);
+      // Een al online betaalde bestelling die wordt geannuleerd moet worden terugbetaald: zichtbaar in Beheer.
+      if (status === 'geannuleerd' && data.payment === 'online' && data.pay && data.pay.status === 'betaald') data.pay.refundNeeded = true;
       data.history.push({ at: timestamp, status, by: user ? user.display_name || user.displayName || '' : '' });
       if (status === 'verzonden' && tracking && data.shipping && data.shipping.method === 'dpd') data.shipping.tracking = tracking;
       prepare('UPDATE web_orders SET status = ?, data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(status, JSON.stringify(data), timestamp, tenantId, row.id);
@@ -490,7 +519,41 @@ function createWebOrderStore(db, { stock }) {
     });
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, get, getForUser, listForUser, list, setStatus, setTracking, updateData, onShipped, onTracking };
+  /**
+   * Past de betaalgegevens (`data.pay`) van een online bestelling aan in één transactie.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {Function} mutate Functie (pay, order) die de nieuwe betaalgegevens geeft, of null als er niets verandert; order is de bestelling zoals hij nu is.
+   * @returns {{ order?: object, changed?: boolean, error?: string, status?: number }} De bestelling en of er iets veranderde, of een foutmelding (geen online bestelling: 409).
+   */
+  function changePay(tenantId, id, mutate) {
+    return transaction(db, () => {
+      const row = readForUpdate(tenantId, id, `${COLUMNS}, data`);
+      if (!row) return { error: 'Bestelling niet gevonden.', status: 404 };
+      const data = JSON.parse(row.data);
+      if (data.payment !== 'online' || !data.pay) return { error: 'Dit is geen online bestelling.', status: 409 };
+      const next = mutate(data.pay, shapeFull(row));
+      if (!next) return { order: shapeFull(row), changed: false };
+      data.pay = next;
+      prepare('UPDATE web_orders SET data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), currentTimestamp(), tenantId, row.id);
+      return { order: get(tenantId, row.id), changed: true };
+    });
+  }
+
+  /**
+   * De nieuwe online bestellingen die nog niet betaald zijn en ouder zijn dan een bepaald moment.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} before Tijdstip (ISO): alleen bestellingen die daarvoor zijn geplaatst.
+   * @param {number} [limit] Hoogstens zoveel bestellingen (standaard 100).
+   * @param {number} [skip] Zoveel oudste bestellingen overslaan (voor wie ze laat staan).
+   * @returns {string[]} De id's van de bestellingen.
+   */
+  function unpaidOnline(tenantId, before, limit = 100, skip = 0) {
+    return prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND created_at < ? AND data LIKE '%\"payment\":\"online\"%' AND data NOT LIKE '%\"status\":\"betaald\"%' ORDER BY created_at, id LIMIT ? OFFSET ?")
+      .all(tenantId, String(before), Math.max(1, Math.floor(limit)), Math.max(0, Math.floor(skip))).map((row) => row.id);
+  }
+
+  return { priceCart, shippingQuote, orderTotals, place, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, onShipped, onCancelled, onTracking };
 }
 
 /**

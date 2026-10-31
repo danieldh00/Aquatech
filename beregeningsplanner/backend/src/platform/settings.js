@@ -4,6 +4,7 @@ const { sanitizeProfile } = require('../verkoop/quotes');
 const { sanitizeMail } = require('./mailer');
 const { sanitizeShop } = require('../webshop/woocommerce');
 const { sanitizeShipping } = require('../webshop/shipping');
+const { sanitizePayment } = require('../webshop/mollie');
 const { sanitizeOutsourcing } = require('../uitvoering/outsourcing');
 const { sanitizeInvoicing } = require('../verkoop/invoices');
 const { sanitizeSeasonReminders } = require('../uitvoering/season-reminders');
@@ -39,6 +40,9 @@ const FIELDS = {
   shopOrdering: { type: 'bool', default: false },
   // Verzending in de webshop: ophalen en DPD met tarieven per land en gewicht (webshop/shipping.js).
   shopShipping: { type: 'object', default: {}, sanitize: sanitizeShipping },
+  // Betalen in de webshop (webshop/mollie.js): online betalen via Mollie, op rekening en de bewaartijd van onbetaalde bestellingen; de API-sleutel staat apart en versleuteld.
+  shopPayment: { type: 'object', default: {}, sanitize: sanitizePayment },
+  mollieApiKey: { type: 'secret', default: '', min: 10, max: 200, hint: true },
   anthropicApiKey: { type: 'secret', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
   aiEnabled: { type: 'bool', default: true },
   aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },

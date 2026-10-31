@@ -55,7 +55,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
 
   /**
    * Stuurt de bevestiging naar de klant en de melding naar het bedrijf, en
-   * legt vast hoe dat is gegaan.
+   * legt vast hoe dat is gegaan. Bij een online bestelling gebeurt dat pas als hij betaald is.
    * @param {string} tenantId Id van de omgeving.
    * @param {object} order De geplaatste bestelling.
    * @returns {Promise<void>}
@@ -72,17 +72,18 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     }
     if (!mailer.configured()) { orders.updateData(tenantId, order.id, { mail: { sent: false, error: 'Geen mailserver ingesteld.', at: new Date().toISOString() } }); return; }
     const profile = settings.get('quoteProfile') || {};
+    const paid = Boolean(order.pay && order.pay.status === 'betaald');
     const details = `Bestelling ${order.number}\n\n${linesText(order)}\n\n${totalsText(order)}\n\n${shippingText(order)}${order.note ? `\n\nJe opmerking: ${order.note}` : ''}`;
     let error = '';
     try {
       const customerMail = mailBody(profile, [
-        `Beste ${order.customer.name},`, 'Bedankt voor je bestelling. We hebben hem ontvangen en reserveren de artikelen voor je.',
-        details, 'Je bestelling gaat op rekening: je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.',
+        `Beste ${order.customer.name},`, paid ? 'Bedankt voor je bestelling en je betaling. We hebben beide ontvangen en reserveren de artikelen voor je.' : 'Bedankt voor je bestelling. We hebben hem ontvangen en reserveren de artikelen voor je.',
+        details, paid ? `Je hebt ${EUR.format(order.totals.total)} online betaald. Je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.` : 'Je bestelling gaat op rekening: je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.',
         `Als consument kun je binnen ${WITHDRAWAL_DAYS} dagen na ontvangst herroepen: log in en kies bij je bestelling Retour aanvragen, of antwoord op deze mail. Onze algemene voorwaarden, privacyverklaring en het herroepingsrecht met modelformulier staan onderaan elke pagina van de webshop.`,
       ]);
       await mailer.send({ to: order.email, subject: `Bevestiging van je bestelling ${order.number}`, text: customerMail.text, html: customerMail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
       if (validEmail(profile.email)) {
-        const shopMail = mailBody(profile, [`Nieuwe webshopbestelling ${order.number} van ${order.customer.company || order.customer.name} (${order.email}).`, details]);
+        const shopMail = mailBody(profile, [`Nieuwe webshopbestelling ${order.number} van ${order.customer.company || order.customer.name} (${order.email})${paid ? ', online betaald' : ''}.`, details]);
         await mailer.send({ to: profile.email, subject: `Nieuwe webshopbestelling ${order.number}`, text: shopMail.text, html: shopMail.html });
       }
     } catch (failure) {

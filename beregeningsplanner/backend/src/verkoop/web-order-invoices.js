@@ -5,8 +5,9 @@
 // maken. Eén factuur per bestelling (shop_order_id = `web:<bestelling>`,
 // uniek per omgeving), dus opnieuw proberen is veilig. De voorraad is bij
 // Verzonden al afgeboekt (stock.issueOrder), de factuur boekt dus niets af.
-// Betaling is nu altijd "op rekening": de factuur blijft open tot een
-// beheerder hem in Facturen op betaald zet. Een afgeronde retour (web-returns.js)
+// Bij een bestelling op rekening blijft de factuur open tot een beheerder hem
+// in Facturen op betaald zet; een bestelling die online betaald is (Mollie,
+// web-payments.js) krijgt de factuur meteen op betaald, met de betaaldatum. Een afgeronde retour (web-returns.js)
 // krijgt een creditnota voor de teruggestuurde regels bij die factuur.
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -21,6 +22,9 @@ const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
  * @returns {string} De waarde voor shop_order_id.
  */
 const invoiceKey = (orderId) => `web:${orderId}`;
+
+/** Grootste afrondingsverschil (euro) tussen bestelling en factuur dat met een afrondingsregel wordt gecorrigeerd. */
+const MAX_ROUNDING = 0.1;
 
 /**
  * Zet een webshopbestelling om naar factuurgegevens. Bedragen komen uit de
@@ -52,7 +56,7 @@ function fromWebOrder(order, articles, settings) {
     shifted ? `BTW verlegd naar afnemer${order.vat.number ? ` (btw-nummer ${order.vat.number})` : ''}; levering naar een ander EU-land.` : '',
     order.note ? `Opmerking bij de bestelling: ${order.note}` : '',
   ].filter(Boolean).join('\n');
-  return Core.sanitize({
+  const data = Core.sanitize({
     date: Core.today(),
     reference: `Webshopbestelling ${order.number}`,
     customer: {
@@ -62,14 +66,48 @@ function fromWebOrder(order, articles, settings) {
     },
     notes, lines,
   }, settings);
+  // De webshop rekent particuliere prijzen per btw-tarief vanuit bedragen incl. btw, de factuur vanuit prijzen excl. btw: dat kan een paar cent schelen. Daarom staat de grondslag per btw-tarief vast in de prijs van één regel (die regel wordt zo nodig gesplitst in "aantal min één" en één stuk met een cent afwijkende prijs), zodat het factuurbedrag en de btw gelijk zijn aan wat de klant betaalde zonder een aparte afrondingsregel. Lukt dat niet, dan meldt het afwijkende bedrag zich bij de bestelling.
+  if (shifted || !order.totals || !order.totals.byRate) return data;
+  const invoiceBases = new Map(Core.totals(data, settings).vat.map((entry) => [entry.rate, entry.base]));
+  let invoiceLines = data.lines;
+  for (const row of order.totals.byRate) {
+    const rate = Number(row.rate) || 0;
+    if (rate <= 0) continue;
+    // Dichtstbijzijnde grondslag (binnen de afrondingsgrens) waarover het btw-bedrag gelijk is aan dat van de bestelling.
+    let target = null;
+    for (let cents = -10; cents <= 10; cents += 1) {
+      const candidate = Core.round2(Number(row.excl) + cents / 100);
+      if (Core.round2((candidate * rate) / 100) !== Core.round2(Number(row.vat))) continue;
+      if (target === null || Math.abs(candidate - row.excl) < Math.abs(target - row.excl)) target = candidate;
+    }
+    if (target === null) target = Number(row.excl);
+    const difference = Core.round2(target - (invoiceBases.get(rate) || 0));
+    if (Math.abs(difference) < 0.01 || Math.abs(difference) > MAX_ROUNDING) continue;
+    let index = -1;
+    invoiceLines.forEach((line, position) => {
+      if (Number(line.vat) === rate && Number(line.qty) >= 1 && Number.isInteger(Number(line.qty)) && Number(line.price) > 0
+        && (index === -1 || Number(line.qty) * Number(line.price) > Number(invoiceLines[index].qty) * Number(invoiceLines[index].price))) index = position;
+    });
+    if (index === -1) continue;
+    const line = invoiceLines[index];
+    const adjusted = { ...line, qty: 1, price: Core.round2(Number(line.price) + difference) };
+    if (adjusted.price < 0) continue;
+    invoiceLines = Number(line.qty) === 1
+      ? invoiceLines.map((entry, position) => (position === index ? adjusted : entry))
+      : [...invoiceLines.slice(0, index), { ...line, qty: Number(line.qty) - 1 }, adjusted, ...invoiceLines.slice(index + 1)];
+  }
+  return invoiceLines === data.lines ? data : Core.sanitize({ ...data, lines: invoiceLines }, settings);
 }
 
 /**
  * Maakt het factureren van webshopbestellingen.
  * @param {{ orders: object, invoices: object, returns?: object, debtors?: object, stock?: object, sender?: object, settingsFor: Function, log?: object }} ctx De opslagen en hulpfuncties van de server (settingsFor(tenantId) geeft de instellingen van een omgeving).
- * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditReturn: Function }} De functies.
+ * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditCancelled: Function, creditReturn: Function }} De functies.
  */
 function createWebOrderInvoices({ orders, invoices, returns = null, debtors = null, stock = null, sender = null, settingsFor, log = console }) {
+  // Facturen waarvan de mail nu onderweg is (tenant:factuur), tegen dubbel mailen bij gelijktijdige verzoeken.
+  const mailClaims = new Set();
+
   /**
    * De factuurinstellingen van een omgeving.
    * @param {string} tenantId Id van de omgeving.
@@ -87,7 +125,24 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     const invoiceId = invoices.byShopOrders(tenantId, [invoiceKey(orderId)]).get(invoiceKey(orderId));
     if (!invoiceId) return null;
     const invoice = invoices.get(tenantId, invoiceId);
-    return invoice ? { id: invoice.id, number: invoice.number, status: invoice.status, total: invoice.total, paidAt: invoice.paidAt } : null;
+    return invoice ? { id: invoice.id, number: invoice.number, status: invoice.status, total: invoice.total, paidAt: invoice.paidAt, sentAt: invoice.sentAt } : null;
+  }
+
+  /**
+   * Zet de definitieve factuur van een online betaalde bestelling op betaald (met de betaaldatum van Mollie); bij een afwijkend bedrag komt er een melding bij de bestelling.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} order De bestelling.
+   * @returns {void}
+   */
+  function settleIfPaidOnline(tenantId, order) {
+    if (order.payment !== 'online' || !order.pay || order.pay.status !== 'betaald') return;
+    const invoice = invoiceFor(tenantId, order.id);
+    if (!invoice || invoice.status !== 'definitief') return;
+    // Het geld is binnen: de factuur gaat altijd op betaald (anders krijgt de klant een betaalverzoek voor een betaalde bestelling). Een afwijkend bedrag (afronding) wordt bij de bestelling gemeld.
+    if (Math.abs(invoice.total - order.totals.total) > 0.005) {
+      orders.updateData(tenantId, order.id, { invoiceError: `Let op: het factuurbedrag (${invoice.total}) wijkt af van de online ontvangen betaling (${order.totals.total}); controleer de boeking.` });
+    }
+    invoices.setPaid(tenantId, invoice.id, true, String(order.pay.paidAt || '').slice(0, 10));
   }
 
   /**
@@ -102,12 +157,21 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
   function ensureInvoice(tenantId, orderId, user) {
     const order = orders.get(tenantId, orderId);
     if (!order) return { error: 'Bestelling niet gevonden.', status: 404 };
-    if (!['verzonden', 'afgerond'].includes(order.status)) return { error: 'Een factuur kan pas als de bestelling is verzonden.', status: 409 };
+    // Online betaald: het geld is binnen, dus de factuur wordt altijd definitief en betaald, ook als concepten verder handmatig blijven.
+    const paidOnline = order.payment === 'online' && Boolean(order.pay) && order.pay.status === 'betaald';
+    // Een factuur ontstaat bij verzenden; een online betaalde bestelling krijgt hem al bij de betaling (niet als hij is geannuleerd).
+    if (!['verzonden', 'afgerond'].includes(order.status) && !(paidOnline && order.status === 'nieuw')) return { error: 'Een factuur kan pas als de bestelling is verzonden.', status: 409 };
     const existing = invoiceFor(tenantId, order.id);
     const settings = settingsOf(tenantId);
     if (existing) {
-      // Een concept dat bleef staan doordat definitief maken mislukte, alsnog afmaken.
-      if (existing.status !== 'concept' || !order.invoiceError || !settings.webOrders.finalize) return { invoice: existing, created: false };
+      // Een concept dat bleef staan doordat definitief maken mislukte, of dat online betaald bleek, alsnog afmaken.
+      const retryFinalization = settings.webOrders.finalize && Boolean(order.invoiceError);
+      if (['definitief', 'betaald'].includes(existing.status) && paidOnline) {
+        // Definitief gemaakt, maar het proces stopte voor het op betaald zetten of voor het versturen van de mail: alsnog afmaken.
+        settleIfPaidOnline(tenantId, order);
+        return { invoice: invoiceFor(tenantId, order.id), created: false, finalizedNow: !existing.sentAt };
+      }
+      if (existing.status !== 'concept' || !(retryFinalization || paidOnline)) return { invoice: existing, created: false };
       if (!settings.webOrders.enabled) return { error: 'Facturen voor webshopbestellingen staan uit (Facturen → Instellingen).', status: 409 };
       const finalized = invoices.finalize(tenantId, user, existing.id, settings, { skipStock: true });
       if (!finalized || finalized.error) {
@@ -116,6 +180,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
         return { error: `Factuur definitief maken mislukt: ${reason}`, status: 500 };
       }
       orders.updateData(tenantId, order.id, { invoiceError: null });
+      settleIfPaidOnline(tenantId, order);
       return { invoice: invoiceFor(tenantId, order.id), created: false, finalizedNow: true };
     }
     if (!settings.webOrders.enabled) return { error: 'Facturen voor webshopbestellingen staan uit (Facturen → Instellingen).', status: 409 };
@@ -124,13 +189,14 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
       const data = fromWebOrder(order, articles, settings);
       const debtor = debtors ? debtors.ensure(tenantId, data.customer, { customerId: order.userId, source: 'webshop', start: settings.debtorStart }) : null;
       const created = invoices.create(tenantId, user, data, settings, { shopOrderId: invoiceKey(order.id), customerId: order.userId, debtorId: debtor ? debtor.id : null });
-      if (settings.webOrders.finalize) {
+      if (settings.webOrders.finalize || paidOnline) {
         const finalized = invoices.finalize(tenantId, user, created.id, settings, { skipStock: true });
         if (finalized && finalized.error) throw new Error(finalized.error);
       }
       orders.updateData(tenantId, order.id, { invoiceError: null });
+      settleIfPaidOnline(tenantId, order);
       const invoice = invoiceFor(tenantId, order.id);
-      return { invoice, created: true, finalizedNow: invoice.status === 'definitief' };
+      return { invoice, created: true, finalizedNow: ['definitief', 'betaald'].includes(invoice.status) };
     } catch (error) {
       // Tegelijk al gemaakt (unieke index op de bestelling): de bestaande factuur is goed.
       const raced = /unique|constraint/i.test(error.message) ? invoiceFor(tenantId, order.id) : null;
@@ -164,7 +230,11 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
    */
   async function mailIfFinalized(tenantId, outcome) {
     if (!outcome.finalizedNow || !sender) return;
-    try { await sender.autoSend(tenantId, outcome.invoice.id); } catch (error) { log.warn(`Factuur ${outcome.invoice.number} mailen mislukt: ${error.message}`); }
+    // Verzendclaim: een gelijktijdige tweede aanroep voor dezelfde factuur mailt niet nog eens; bij een fout komt de claim vrij zodat een latere poging kan.
+    const claim = `${tenantId}:${outcome.invoice.id}`;
+    if (mailClaims.has(claim)) return;
+    mailClaims.add(claim);
+    try { await sender.autoSend(tenantId, outcome.invoice.id); } catch (error) { log.warn(`Factuur ${outcome.invoice.number} mailen mislukt: ${error.message}`); } finally { mailClaims.delete(claim); }
   }
 
   /**
@@ -180,6 +250,45 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     const out = ensureInvoice(tenantId, order.id, user);
     if (out.error) { log.warn(`Factuur bij ${order.number}: ${out.error}`); return; }
     await mailIfFinalized(tenantId, out);
+  }
+
+  /**
+   * Haak voor web-orders.js: na het annuleren van een bestelling die al een definitieve of betaalde factuur heeft
+   * (bijvoorbeeld online betaald) de creditnota maken, zo ingesteld meteen definitief en per mail verstuurd.
+   * De terugbetaling van het geld zelf gaat apart via Mollie. Mislukt het, dan staat de reden bij de bestelling.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} order De geannuleerde bestelling.
+   * @param {object|null} user Wie de status wijzigde.
+   * @returns {Promise<void>} Klaar als de creditnota is gemaakt (of niet nodig was).
+   */
+  async function creditCancelled(tenantId, order, user) {
+    const found = invoiceFor(tenantId, order.id);
+    if (!found || found.status === 'concept') return;
+    const settings = settingsOf(tenantId);
+    try {
+      // Is de factuur al (handmatig) definitief gecrediteerd, dan komt er geen tweede creditnota.
+      const original = invoices.get(tenantId, found.id);
+      if (original && original.creditedAt) {
+        orders.updateData(tenantId, order.id, { creditNote: { invoiceId: null, number: '', status: 'al gecrediteerd' }, invoiceError: null });
+        return;
+      }
+      const made = invoices.credit(tenantId, user, found.id, settings);
+      if (!made || made.error) throw new Error(made && made.error ? made.error : 'Factuur niet gevonden.');
+      let credit = made.invoice;
+      orders.updateData(tenantId, order.id, { creditNote: { invoiceId: credit.id, number: credit.number, status: credit.status } });
+      let finalizedNow = false;
+      if (settings.webOrders.finalize && credit.status === 'concept') {
+        const finalized = invoices.finalize(tenantId, user, credit.id, settings, { skipStock: true });
+        if (finalized && finalized.error) throw new Error(finalized.error);
+        finalizedNow = true;
+        credit = invoices.get(tenantId, credit.id);
+      }
+      orders.updateData(tenantId, order.id, { creditNote: { invoiceId: credit.id, number: credit.number, status: credit.status }, invoiceError: null });
+      await mailIfFinalized(tenantId, { invoice: credit, finalizedNow });
+    } catch (error) {
+      orders.updateData(tenantId, order.id, { invoiceError: `Creditnota maken mislukt: ${String(error.message || error).slice(0, 250)}. Maak hem zelf in Facturen.` });
+      log.warn(`Creditnota bij ${order.number}: ${error.message}`);
+    }
   }
 
   /**
@@ -244,7 +353,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     }
   }
 
-  return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped, creditReturn };
+  return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped, creditCancelled, creditReturn };
 }
 
 module.exports = { createWebOrderInvoices, fromWebOrder, invoiceKey };

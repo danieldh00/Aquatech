@@ -29,6 +29,8 @@ const { createShopContentStore, registerShopContentRoutes } = require('./webshop
 const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
+const { createMollie } = require('./webshop/mollie');
+const { createWebPayments } = require('./webshop/web-payments');
 const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
 const { createReturnMailer } = require('./webshop/web-returns-mail');
 const { createShopOrders } = require('./webshop/shop-orders');
@@ -229,10 +231,10 @@ function staticHeaders(version) {
 
 /**
  * Bouwt de Express-app met alle routes en opslag.
- * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch en wanIp (tests vervangen hiermee de buitenwereld).
+ * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, wanIp = createWanIp() }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, wanIp = createWanIp() }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -1414,7 +1416,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // aiFromLive: testomgeving zonder eigen sleutel gebruikt die van live.
     const aiFrom = aiTenantOf(req.tenantId);
     const settings = settingsFor(req.tenantId).view();
-    if (req.tenantId !== tenant.id) { delete settings.storefront; delete settings.shopPlanner; delete settings.shopOrdering; delete settings.shopShipping; }
+    if (req.tenantId !== tenant.id) { delete settings.storefront; delete settings.shopPlanner; delete settings.shopOrdering; delete settings.shopShipping; delete settings.shopPayment; delete settings.mollieApiKey; }
     res.json({ settings, via: auth.session(req)?.via || null,
       // De eigen webshop (winkel/) toont alleen de hoofdtenant: de schakelaar hoort alleen daar.
       storefrontAllowed: req.tenantId === tenant.id,
@@ -1435,7 +1437,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return res.status(400).json({ error: 'invalid_setting', field: platformField,
         message: FIELDS[platformField].internal ? 'Deze instelling wijzig je in de module zelf.' : 'Deze instelling wijzig je in Hoofdbeheer.' });
     }
-    if (req.tenantId !== tenant.id && ['storefront', 'shopPlanner', 'shopOrdering', 'shopShipping'].some((key) => [...Object.keys(patch), ...resets].includes(key))) {
+    if (req.tenantId !== tenant.id && ['storefront', 'shopPlanner', 'shopOrdering', 'shopShipping', 'shopPayment', 'mollieApiKey'].some((key) => [...Object.keys(patch), ...resets].includes(key))) {
       return res.status(400).json({ error: 'invalid_setting', field: 'storefront', message: 'De eigen webshop geldt alleen voor de hoofdtenant.' });
     }
     const codeAfter = patch.accessCode !== undefined ? String(patch.accessCode).trim()
@@ -1457,7 +1459,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       audit(req, 'instellingen_gewijzigd', { fields: changed });
     }
     const responseSettings = settings.view();
-    if (req.tenantId !== tenant.id) { delete responseSettings.storefront; delete responseSettings.shopPlanner; delete responseSettings.shopOrdering; delete responseSettings.shopShipping; }
+    if (req.tenantId !== tenant.id) { delete responseSettings.storefront; delete responseSettings.shopPlanner; delete responseSettings.shopOrdering; delete responseSettings.shopShipping; delete responseSettings.shopPayment; delete responseSettings.mollieApiKey; }
     res.json({ settings: responseSettings, changed });
   });
 
@@ -1866,8 +1868,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const webReturns = createWebReturnStore(database, { orders: webOrders, stock: stockStore });
   const webReturnMail = createReturnMailer({ returns: webReturns, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
   const webOrderInvoices = createWebOrderInvoices({ orders: webOrders, invoices: invoiceStore, returns: webReturns, debtors: debtorStore, stock: stockStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id) });
+  const webPayments = createWebPayments({ orders: webOrders, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id) });
+  // Een online bestelling wordt pas bevestigd (mail aan klant en bedrijf) als hij betaald is.
+  webPayments.onPaid((tenantId, order) => store.audit({ tenantId, userId: order.userId || null, action: 'webshop_bestelling_betaald', detail: { number: order.number, total: order.total } }));
+  // De factuur van een online betaalde bestelling ontstaat al bij de betaling (definitief en betaald) en gaat zo ingesteld meteen naar de klant.
+  webPayments.onPaid(async (tenantId, order) => {
+    const outcome = webOrderInvoices.ensureInvoice(tenantId, order.id, null);
+    if (outcome.error) throw new Error(`Factuur bij ${order.number}: ${outcome.error}`);
+    await webOrderInvoices.mailIfFinalized(tenantId, outcome);
+  });
+  webPayments.onPaid((tenantId, order) => webOrderMail.sendPlaced(tenantId, order));
+  /**
+   * Laat onbetaalde online webshopbestellingen vervallen die langer wachten dan de bewaartijd (elk uur).
+   * @returns {Promise<{ expired: number }>} Het aantal vervallen bestellingen.
+   */
+  app.locals.webPaymentsExpire = () => webPayments.expireUnpaid(tenant.id);
   webOrders.onShipped((tenantId, order, user) => webOrderInvoices.onShipped(tenantId, order, user));
   webOrders.onShipped((tenantId, order) => webOrderMail.sendShipment(tenantId, order));
+  webOrders.onCancelled((tenantId, order, user) => webOrderInvoices.creditCancelled(tenantId, order, user));
   webOrders.onTracking((tenantId, order) => webOrderMail.sendShipment(tenantId, order, { onlyNewTracking: true }));
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices });
   webReturns.onRequested((tenantId, record) => webReturnMail.sendRequested(tenantId, record));
@@ -2146,7 +2164,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
   app.use('/winkel', createStorefront({
     db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore,
-    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns,
+    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
     // Een beheerder van de hoofdorganisatie bekijkt het concept met ?voorbeeld=1.
@@ -2365,6 +2383,9 @@ if (require.main === module) {
     } catch (err) {
       console.error('Onderhoud mislukt:', err);
     }
+    app.locals.webPaymentsExpire()
+      .then((out) => { if (out.expired) console.log(`Onbetaalde webshopbestellingen vervallen: ${out.expired}`); })
+      .catch((error) => console.error('Onbetaalde webshopbestellingen laten vervallen mislukt:', error.message));
     app.locals.seasonRemindersAll()
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));

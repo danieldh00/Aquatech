@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.5.3',
+      date: '2026-10-31',
+      title: 'Online betalen in de webshop',
+      items: [
+        { text: 'Klanten kunnen in de webshop nu online betalen met iDEAL of een andere betaalmethode (via Mollie), naast bestellen op rekening. De bestelling wordt bevestigd zodra de betaling binnen is.', for: ['beheer'] },
+        { text: 'Bij Beheer, Webshop, Betalen vul je je Mollie-sleutel in (begin met een testsleutel) en kies je of op rekening nog mag. Een onbetaalde online bestelling kun je pas verzenden als hij betaald is en vervalt na een instelbare tijd.', for: ['beheer'] },
+        { text: 'Bij Bestellingen zie je of een bestelling betaald is. Een online betaalde bestelling krijgt al bij de betaling een betaalde factuur.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.5.2',
       date: '2026-10-31',
       title: 'Voorwaarden en privacy in de webshop',
