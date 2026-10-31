@@ -23,6 +23,9 @@ const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
  */
 const invoiceKey = (orderId) => `web:${orderId}`;
 
+/** Grootste afrondingsverschil (euro) tussen bestelling en factuur dat met een afrondingsregel wordt gecorrigeerd. */
+const MAX_ROUNDING = 0.1;
+
 /**
  * Zet een webshopbestelling om naar factuurgegevens. Bedragen komen uit de
  * bestelling (excl. btw per stuk, het tarief van de bestelling; bij btw
@@ -53,7 +56,7 @@ function fromWebOrder(order, articles, settings) {
     shifted ? `BTW verlegd naar afnemer${order.vat.number ? ` (btw-nummer ${order.vat.number})` : ''}; levering naar een ander EU-land.` : '',
     order.note ? `Opmerking bij de bestelling: ${order.note}` : '',
   ].filter(Boolean).join('\n');
-  return Core.sanitize({
+  const data = Core.sanitize({
     date: Core.today(),
     reference: `Webshopbestelling ${order.number}`,
     customer: {
@@ -63,6 +66,12 @@ function fromWebOrder(order, articles, settings) {
     },
     notes, lines,
   }, settings);
+  // De webshop rekent particuliere prijzen per btw-tarief vanuit bedragen incl. btw, de factuur vanuit prijzen excl. btw: dat kan een paar cent schelen. Een afrondingsregel zorgt dat het factuurbedrag gelijk is aan wat de klant betaalde.
+  const difference = Core.round2(Number(order.totals && order.totals.total) - Core.totals(data, settings).total);
+  if (Math.abs(difference) >= 0.01 && Math.abs(difference) <= MAX_ROUNDING) {
+    return Core.sanitize({ ...data, lines: [...data.lines, { code: '', description: 'Afrondingsverschil', qty: 1, unit: '', price: difference, vat: 0, group: 'overig' }] }, settings);
+  }
+  return data;
 }
 
 /**
@@ -123,11 +132,12 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
   function ensureInvoice(tenantId, orderId, user) {
     const order = orders.get(tenantId, orderId);
     if (!order) return { error: 'Bestelling niet gevonden.', status: 404 };
-    if (!['verzonden', 'afgerond'].includes(order.status)) return { error: 'Een factuur kan pas als de bestelling is verzonden.', status: 409 };
-    const existing = invoiceFor(tenantId, order.id);
-    const settings = settingsOf(tenantId);
     // Online betaald: het geld is binnen, dus de factuur wordt altijd definitief en betaald, ook als concepten verder handmatig blijven.
     const paidOnline = order.payment === 'online' && Boolean(order.pay) && order.pay.status === 'betaald';
+    // Een factuur ontstaat bij verzenden; een online betaalde bestelling krijgt hem al bij de betaling (niet als hij is geannuleerd).
+    if (!['verzonden', 'afgerond'].includes(order.status) && !(paidOnline && order.status === 'nieuw')) return { error: 'Een factuur kan pas als de bestelling is verzonden.', status: 409 };
+    const existing = invoiceFor(tenantId, order.id);
+    const settings = settingsOf(tenantId);
     if (existing) {
       // Een concept dat bleef staan doordat definitief maken mislukte, of dat online betaald bleek, alsnog afmaken.
       const retryFinalization = settings.webOrders.finalize && Boolean(order.invoiceError);

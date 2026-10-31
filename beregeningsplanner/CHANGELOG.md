@@ -20,7 +20,9 @@ Online betalen in de eigen webshop via Mollie (stap 8 van de webshop-roadmap).
   Mollie zelf) en terugkeer `?betaald=1` die de stand opvraagt. De overgang
   naar betaald gebeurt één keer (`web-orders.changePay`, in een transactie).
 - **Bevestigingsmail** van een online bestelling gaat pas na de betaling;
-  de factuur van een online betaalde bestelling is meteen betaald.
+  de factuur van een online betaalde bestelling ontstaat al bij de betaling
+  (definitief en betaald, en zo ingesteld per mail naar de klant). Een
+  afrondingsregel zorgt dat het factuurbedrag gelijk is aan wat de klant betaalde.
 - **Verzenden pas na betaling** (409 bij een onbetaalde online bestelling);
   een onbetaalde online bestelling houdt de voorraad vast en vervalt na `holdHours`
   (`app.locals.webPaymentsExpire`, elk uur); betaald na annuleren geeft

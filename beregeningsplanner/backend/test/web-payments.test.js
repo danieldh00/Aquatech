@@ -343,3 +343,28 @@ test('met een ongeldige sleutel en op rekening op nooit worden er geen betaalwij
   const off = () => ({ get: (name) => (name === 'mollieApiKey' ? '' : { online: false, onAccount: 'nooit' }) });
   assert.deepStrictEqual(createWebPayments({ orders: {}, mollie: {}, settingsFor: off }).optionsFor('t', null), ['rekening']);
 });
+
+test('een online betaalde bestelling krijgt de betaalde factuur al bij de betaling, vóór het verzenden', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const { id, paymentId } = await placeOnline(world, customer);
+  world.mollie.set(paymentId, 'paid');
+  assert.strictEqual((await webhook(world, id, paymentId)).status, 200);
+  await until(async () => Boolean((await world.admin.get(`/api/admin/web-orders/${id}`)).body.invoice));
+  const detail = (await world.admin.get(`/api/admin/web-orders/${id}`)).body;
+  assert.strictEqual(detail.order.status, 'nieuw');
+  assert.strictEqual(detail.invoice.status, 'betaald');
+  const shipped = await world.admin.post(`/api/admin/web-orders/${id}/status`, { status: 'verzonden' });
+  assert.strictEqual(shipped.status, 200, JSON.stringify(shipped.body));
+  assert.strictEqual((await world.admin.get(`/api/admin/web-orders/${id}`)).body.invoice.status, 'betaald');
+});
+
+test('de factuur van een bestelling heeft hetzelfde totaal als de bestelling, ook bij een afrondingsverschil', () => {
+  const { fromWebOrder } = require('../src/verkoop/web-order-invoices');
+  const Core = require('../../frontend/facturen/invoice-core');
+  const lines = [{ code: 'A', name: 'Artikel', qty: 10, unitExcl: 1.01, vatRate: 21 }];
+  const order = { number: 'W-1', customer: { name: 'Klant', email: 'k@example.nl' }, address: {}, lines, totals: { total: 12.2 } };
+  const data = fromWebOrder(order, {}, Core.sanitizeSettings({}));
+  assert.strictEqual(Core.totals(data, Core.sanitizeSettings({})).total, 12.2);
+  assert.ok(data.lines.some((line) => line.description === 'Afrondingsverschil'));
+});

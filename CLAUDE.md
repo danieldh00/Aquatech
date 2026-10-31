@@ -392,7 +392,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   /winkel/mollie/webhook/<bestelling>/` krijgt alleen het id, terugkeer
   `?betaald=1` vraagt zelf op); overgang naar betaald één keer via
   `web-orders.changePay`. Verzenden pas na betaling, bevestigingsmail pas na
-  betaling, factuur van online betaalde bestelling meteen betaald, onbetaald
+  betaling, factuur van online betaalde bestelling al bij de betaling (definitief + betaald, `onPaid`-haak; afrondingsregel in `fromWebOrder` houdt het bedrag gelijk), onbetaald
   vervalt na `holdHours` (`app.locals.webPaymentsExpire`, elk uur). Redirect
   naar Mollie loopt via GET `bestelling/<id>/betalen/` (CSP `form-action
   'self'` blokkeert een redirect direct vanuit het formulier).

@@ -1871,6 +1871,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const webPayments = createWebPayments({ orders: webOrders, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id) });
   // Een online bestelling wordt pas bevestigd (mail aan klant en bedrijf) als hij betaald is.
   webPayments.onPaid((tenantId, order) => store.audit({ tenantId, userId: order.userId || null, action: 'webshop_bestelling_betaald', detail: { number: order.number, total: order.total } }));
+  // De factuur van een online betaalde bestelling ontstaat al bij de betaling (definitief en betaald) en gaat zo ingesteld meteen naar de klant.
+  webPayments.onPaid(async (tenantId, order) => {
+    const outcome = webOrderInvoices.ensureInvoice(tenantId, order.id, null);
+    if (outcome.error) throw new Error(`Factuur bij ${order.number}: ${outcome.error}`);
+    await webOrderInvoices.mailIfFinalized(tenantId, outcome);
+  });
   webPayments.onPaid((tenantId, order) => webOrderMail.sendPlaced(tenantId, order));
   /**
    * Laat onbetaalde online webshopbestellingen vervallen die langer wachten dan de bewaartijd (elk uur).
