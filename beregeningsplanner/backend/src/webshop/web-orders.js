@@ -440,6 +440,8 @@ function createWebOrderStore(db, { stock }) {
       const timestamp = currentTimestamp();
       if (status === 'verzonden') stock.issueOrder(tenantId, { id: row.id, number: row.number }, data.lines.map((line) => ({ itemId: line.itemId, qty: line.qty })), user);
       if (status === 'geannuleerd') stock.releaseOrder(tenantId, row.id);
+      // Een al online betaalde bestelling die wordt geannuleerd moet worden terugbetaald: zichtbaar in Beheer.
+      if (status === 'geannuleerd' && data.payment === 'online' && data.pay && data.pay.status === 'betaald') data.pay.refundNeeded = true;
       data.history.push({ at: timestamp, status, by: user ? user.display_name || user.displayName || '' : '' });
       if (status === 'verzonden' && tracking && data.shipping && data.shipping.method === 'dpd') data.shipping.tracking = tracking;
       prepare('UPDATE web_orders SET status = ?, data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(status, JSON.stringify(data), timestamp, tenantId, row.id);

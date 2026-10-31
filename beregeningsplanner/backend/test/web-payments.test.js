@@ -305,3 +305,25 @@ test('een definitieve factuur die niet op betaald kwam, wordt bij een nieuwe pog
   assert.strictEqual(retry.status, 200, JSON.stringify(retry.body));
   assert.strictEqual((await world.admin.get(`/api/admin/web-orders/${id}`)).body.invoice.status, 'betaald');
 });
+
+test('een betaalde online bestelling die wordt geannuleerd, krijgt de melding om terug te betalen', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const { id, paymentId } = await placeOnline(world, customer);
+  world.mollie.set(paymentId, 'paid');
+  assert.strictEqual((await webhook(world, id, paymentId)).status, 200);
+  assert.strictEqual((await world.admin.post(`/api/admin/web-orders/${id}/status`, { status: 'geannuleerd' })).status, 200);
+  assert.strictEqual((await world.admin.get(`/api/admin/web-orders/${id}`)).body.order.pay.refundNeeded, true);
+});
+
+test('een ongeldige Mollie-sleutel zet online betalen niet aan', () => {
+  /**
+   * Nagebootste instellingen met één Mollie-sleutel.
+   * @param {string} key De sleutel.
+   * @returns {{ get: Function }} De instellingen.
+   */
+  const settingsWith = (key) => ({ get: (name) => (name === 'mollieApiKey' ? key : { online: true, publicUrl: 'https://winkel.example/winkel/' }) });
+  const { configOf } = require('../src/webshop/mollie');
+  assert.strictEqual(configOf(settingsWith('abcdefghijklmnop')).online, false);
+  assert.strictEqual(configOf(settingsWith('test_abcdefghij1234567')).online, true);
+});

@@ -64,14 +64,21 @@ function sanitizePayment(raw) {
 }
 
 /**
+ * Of een tekst de vorm van een Mollie-API-sleutel heeft (test_ of live_ plus tekens).
+ * @param {*} value De sleutel.
+ * @returns {boolean} true bij een sleutel die Mollie kan accepteren.
+ */
+const validApiKey = (value) => /^(test|live)_[A-Za-z0-9]{8,}$/.test(String(value || ''));
+
+/**
  * De betaalinstelling van een omgeving, met bepaald of online betalen kan.
  * @param {object} settings De instellingen van de omgeving (settingsFor).
- * @returns {{ online: boolean, apiKey: string, publicUrl: string, onAccount: string, holdHours: number, mode: string }} online is alleen waar als het aan staat, de sleutel is ingevuld en het webadres klopt; mode is test of live (naar de sleutel).
+ * @returns {{ online: boolean, apiKey: string, publicUrl: string, onAccount: string, holdHours: number, mode: string }} online is alleen waar als het aan staat, de sleutel de vorm test_/live_ heeft en het webadres klopt; mode is test of live (naar de sleutel).
  */
 function configOf(settings) {
   const config = sanitizePayment(settings.get('shopPayment'));
   const apiKey = String(settings.get('mollieApiKey') || '');
-  return { ...config, apiKey, online: config.online && Boolean(apiKey) && Boolean(config.publicUrl), mode: apiKey.startsWith('live_') ? 'live' : 'test' };
+  return { ...config, apiKey, online: config.online && validApiKey(apiKey) && Boolean(config.publicUrl), mode: apiKey.startsWith('live_') ? 'live' : 'test' };
 }
 
 /**

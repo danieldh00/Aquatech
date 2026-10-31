@@ -64,7 +64,7 @@
     if (order.payment !== 'online' || !order.pay) return 'op rekening';
     const pay = order.pay;
     const method = PAY_METHODS[pay.method] || pay.method;
-    const refund = pay.refundNeeded ? ' · <b>betaald na annuleren: terugbetalen via Mollie</b>' : order.status === 'geannuleerd' && pay.status === 'betaald' ? ' · geannuleerd: betaling zelf terugboeken via Mollie' : '';
+    const refund = pay.refundNeeded ? ' · <b>betaald en geannuleerd: terugbetalen via Mollie</b>' : order.status === 'geannuleerd' && pay.status === 'betaald' ? ' · geannuleerd: betaling zelf terugboeken via Mollie' : '';
     return `online via Mollie, ${esc(PAY_LABELS[pay.status] || pay.status)}${pay.status === 'betaald' ? ` op ${when(pay.paidAt)}${method ? ` (${esc(method)})` : ''}` : ''}${pay.mode === 'test' ? ' · testbetaling' : ''}${refund}`;
   }
 
