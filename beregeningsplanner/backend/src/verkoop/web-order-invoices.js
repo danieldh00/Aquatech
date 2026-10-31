@@ -131,7 +131,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
       if (existing.status === 'definitief' && paidOnline) {
         // Definitief gemaakt, maar het proces stopte voor het op betaald zetten: alsnog afmaken.
         settleIfPaidOnline(tenantId, order);
-        return { invoice: invoiceFor(tenantId, order.id), created: false };
+        return { invoice: invoiceFor(tenantId, order.id), created: false, finalizedNow: !existing.paidAt };
       }
       if (existing.status !== 'concept' || !(retryFinalization || paidOnline)) return { invoice: existing, created: false };
       if (!settings.webOrders.enabled) return { error: 'Facturen voor webshopbestellingen staan uit (Facturen → Instellingen).', status: 409 };
