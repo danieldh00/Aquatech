@@ -168,20 +168,26 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
     const config = configOf(settingsFor(tenantId));
     const cutoff = new Date(Date.now() - config.holdHours * 3600 * 1000).toISOString();
     let expired = 0;
-    for (const id of orders.unpaidOnline(tenantId, cutoff)) {
-      try {
-        const order = orders.get(tenantId, id);
-        if (order && order.pay && order.pay.id && !config.apiKey) continue;
-        if (order && order.pay && order.pay.id) {
-          const out = await sync(tenantId, id);
-          if (out.becamePaid || (out.order && out.order.pay.status === 'betaald')) continue;
+    let kept = 0;
+    for (;;) {
+      const batch = orders.unpaidOnline(tenantId, cutoff, 100, kept);
+      if (!batch.length) break;
+      for (const id of batch) {
+        try {
+          const order = orders.get(tenantId, id);
+          if (order && order.pay && order.pay.id && !config.apiKey) { kept += 1; continue; }
+          if (order && order.pay && order.pay.id) {
+            const out = await sync(tenantId, id);
+            if (out.becamePaid || (out.order && out.order.pay.status === 'betaald')) { kept += 1; continue; }
+          }
+          const cancelled = orders.setStatus(tenantId, id, 'geannuleerd', null);
+          if (cancelled.error) { kept += 1; continue; }
+          orders.changePay(tenantId, id, (pay) => (pay.status === 'betaald' ? null : { ...pay, status: 'verlopen' }));
+          expired += 1;
+        } catch (error) {
+          kept += 1;
+          log.warn(`Onbetaalde bestelling ${id} laten vervallen mislukt: ${error.message}`);
         }
-        const cancelled = orders.setStatus(tenantId, id, 'geannuleerd', null);
-        if (cancelled.error) continue;
-        orders.changePay(tenantId, id, (pay) => (pay.status === 'betaald' ? null : { ...pay, status: 'verlopen' }));
-        expired += 1;
-      } catch (error) {
-        log.warn(`Onbetaalde bestelling ${id} laten vervallen mislukt: ${error.message}`);
       }
     }
     return { expired };

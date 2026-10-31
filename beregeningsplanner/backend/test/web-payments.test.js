@@ -266,3 +266,16 @@ test('zonder Mollie-sleutel blijft een onbetaalde online bestelling staan in pla
   const detail = (await world.admin.get(`/api/admin/web-orders/${id}`)).body.order;
   assert.strictEqual(detail.status, 'nieuw');
 });
+
+test('een bestelling die blijft staan houdt latere onbetaalde bestellingen niet tegen', async () => {
+  const world = await setup({ mollie: true });
+  const [first, second] = world.shoppers;
+  const withPayment = await placeOnline(world, first);
+  const withoutPayment = await order(world, second, { paymentMethod: 'online' });
+  await world.admin.put('/api/admin/settings', { mollieApiKey: '' });
+  world.db.prepare('UPDATE web_orders SET created_at = ?').run(new Date(Date.now() - 25 * 3600 * 1000).toISOString());
+  world.db.prepare('UPDATE web_orders SET created_at = ? WHERE id = ?').run(new Date(Date.now() - 48 * 3600 * 1000).toISOString(), withPayment.id);
+  assert.deepStrictEqual(await world.app.locals.webPaymentsExpire(), { expired: 1 });
+  assert.strictEqual((await world.admin.get(`/api/admin/web-orders/${withPayment.id}`)).body.order.status, 'nieuw');
+  assert.strictEqual((await world.admin.get(`/api/admin/web-orders/${withoutPayment}`)).body.order.status, 'geannuleerd');
+});
