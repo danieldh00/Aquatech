@@ -88,7 +88,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     const invoiceId = invoices.byShopOrders(tenantId, [invoiceKey(orderId)]).get(invoiceKey(orderId));
     if (!invoiceId) return null;
     const invoice = invoices.get(tenantId, invoiceId);
-    return invoice ? { id: invoice.id, number: invoice.number, status: invoice.status, total: invoice.total, paidAt: invoice.paidAt } : null;
+    return invoice ? { id: invoice.id, number: invoice.number, status: invoice.status, total: invoice.total, paidAt: invoice.paidAt, sentAt: invoice.sentAt } : null;
   }
 
   /**
@@ -131,7 +131,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
       if (existing.status === 'definitief' && paidOnline) {
         // Definitief gemaakt, maar het proces stopte voor het op betaald zetten: alsnog afmaken.
         settleIfPaidOnline(tenantId, order);
-        return { invoice: invoiceFor(tenantId, order.id), created: false, finalizedNow: !existing.paidAt };
+        return { invoice: invoiceFor(tenantId, order.id), created: false, finalizedNow: !existing.sentAt };
       }
       if (existing.status !== 'concept' || !(retryFinalization || paidOnline)) return { invoice: existing, created: false };
       if (!settings.webOrders.enabled) return { error: 'Facturen voor webshopbestellingen staan uit (Facturen → Instellingen).', status: 409 };
