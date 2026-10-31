@@ -101,6 +101,11 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     if (order.payment !== 'online' || !order.pay || order.pay.status !== 'betaald') return;
     const invoice = invoiceFor(tenantId, order.id);
     if (!invoice || invoice.status !== 'definitief') return;
+    // Een factuur die niet gelijk is aan wat Mollie ontving (afronding) gaat niet automatisch op betaald.
+    if (Math.abs(invoice.total - order.totals.total) > 0.005) {
+      orders.updateData(tenantId, order.id, { invoiceError: `Factuurbedrag ${invoice.total} wijkt af van de online ontvangen betaling ${order.totals.total}: controleer en zet de factuur zelf op betaald.` });
+      return;
+    }
     invoices.setPaid(tenantId, invoice.id, true, String(order.pay.paidAt || '').slice(0, 10));
   }
 
@@ -124,6 +129,11 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     if (existing) {
       // Een concept dat bleef staan doordat definitief maken mislukte, of dat online betaald bleek, alsnog afmaken.
       const retryFinalization = settings.webOrders.finalize && Boolean(order.invoiceError);
+      if (existing.status === 'definitief' && paidOnline) {
+        // Definitief gemaakt, maar het proces stopte voor het op betaald zetten: alsnog afmaken.
+        settleIfPaidOnline(tenantId, order);
+        return { invoice: invoiceFor(tenantId, order.id), created: false };
+      }
       if (existing.status !== 'concept' || !(retryFinalization || paidOnline)) return { invoice: existing, created: false };
       if (!settings.webOrders.enabled) return { error: 'Facturen voor webshopbestellingen staan uit (Facturen → Instellingen).', status: 409 };
       const finalized = invoices.finalize(tenantId, user, existing.id, settings, { skipStock: true });

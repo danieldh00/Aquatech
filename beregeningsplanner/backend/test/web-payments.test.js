@@ -292,3 +292,16 @@ test('een online betaalde bestelling krijgt ook een betaalde factuur als concept
   const withInvoice = (await world.admin.get(`/api/admin/web-orders/${id}`)).body;
   assert.strictEqual(withInvoice.invoice.status, 'betaald');
 });
+
+test('een definitieve factuur die niet op betaald kwam, wordt bij een nieuwe poging alsnog betaald gezet', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const { id, paymentId } = await placeOnline(world, customer);
+  world.mollie.set(paymentId, 'paid');
+  assert.strictEqual((await webhook(world, id, paymentId)).status, 200);
+  assert.strictEqual((await world.admin.post(`/api/admin/web-orders/${id}/status`, { status: 'verzonden' })).status, 200);
+  world.db.prepare("UPDATE invoices SET status = 'definitief', paid_at = NULL WHERE shop_order_id IS NOT NULL").run();
+  const retry = await world.admin.post(`/api/admin/web-orders/${id}/invoice`, {});
+  assert.strictEqual(retry.status, 200, JSON.stringify(retry.body));
+  assert.strictEqual((await world.admin.get(`/api/admin/web-orders/${id}`)).body.invoice.status, 'betaald');
+});
