@@ -1885,6 +1885,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.locals.webPaymentsExpire = () => webPayments.expireUnpaid(tenant.id);
   webOrders.onShipped((tenantId, order, user) => webOrderInvoices.onShipped(tenantId, order, user));
   webOrders.onShipped((tenantId, order) => webOrderMail.sendShipment(tenantId, order));
+  webOrders.onCancelled((tenantId, order, user) => webOrderInvoices.creditCancelled(tenantId, order, user));
   webOrders.onTracking((tenantId, order) => webOrderMail.sendShipment(tenantId, order, { onlyNewTracking: true }));
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices });
   webReturns.onRequested((tenantId, record) => webReturnMail.sendRequested(tenantId, record));

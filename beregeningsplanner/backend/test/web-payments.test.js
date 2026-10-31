@@ -236,6 +236,22 @@ test('betaald na annuleren: de betaling wordt vastgelegd met een waarschuwing om
   assert.strictEqual(detail.pay.refundNeeded, true);
 });
 
+test('annuleren van een online betaalde bestelling met factuur maakt een creditnota', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const { id, paymentId } = await placeOnline(world, customer);
+  world.mollie.set(paymentId, 'paid');
+  await webhook(world, id, paymentId);
+  await until(async () => Boolean((await world.admin.get(`/api/admin/web-orders/${id}`)).body.invoice));
+  assert.strictEqual((await world.admin.post(`/api/admin/web-orders/${id}/status`, { status: 'geannuleerd' })).status, 200);
+  await until(async () => Boolean((await world.admin.get(`/api/admin/web-orders/${id}`)).body.order.creditNote));
+  const detail = (await world.admin.get(`/api/admin/web-orders/${id}`)).body;
+  assert.strictEqual(detail.order.pay.refundNeeded, true);
+  assert.ok(detail.order.creditNote.invoiceId);
+  const credit = (await world.admin.get(`/api/invoices/${detail.order.creditNote.invoiceId}`)).body;
+  assert.strictEqual((credit.invoice || credit).kind, 'credit');
+});
+
 test('de lijst in Beheer toont de betaalstatus', async () => {
   const world = await setup({ mollie: true });
   const [customer, other] = world.shoppers;
@@ -363,8 +379,9 @@ test('de factuur van een bestelling heeft hetzelfde totaal als de bestelling, oo
   const { fromWebOrder } = require('../src/verkoop/web-order-invoices');
   const Core = require('../../frontend/facturen/invoice-core');
   const lines = [{ code: 'A', name: 'Artikel', qty: 10, unitExcl: 1.01, vatRate: 21 }];
-  const order = { number: 'W-1', customer: { name: 'Klant', email: 'k@example.nl' }, address: {}, lines, totals: { total: 12.2 } };
+  const order = { number: 'W-1', customer: { name: 'Klant', email: 'k@example.nl' }, address: {}, lines, totals: { total: 12.2, byRate: [{ rate: 21, excl: 10.08, vat: 2.12, incl: 12.2 }] } };
   const data = fromWebOrder(order, {}, Core.sanitizeSettings({}));
   assert.strictEqual(Core.totals(data, Core.sanitizeSettings({})).total, 12.2);
-  assert.ok(data.lines.some((line) => line.description === 'Afrondingsverschil'));
+  assert.ok(data.lines.some((line) => line.description === 'Afrondingsverschil' && line.vat === 21));
+  assert.strictEqual(Core.totals(data, Core.sanitizeSettings({})).vatTotal, 2.12);
 });

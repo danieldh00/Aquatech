@@ -66,10 +66,14 @@ function fromWebOrder(order, articles, settings) {
     },
     notes, lines,
   }, settings);
-  // De webshop rekent particuliere prijzen per btw-tarief vanuit bedragen incl. btw, de factuur vanuit prijzen excl. btw: dat kan een paar cent schelen. Een afrondingsregel zorgt dat het factuurbedrag gelijk is aan wat de klant betaalde.
-  const difference = Core.round2(Number(order.totals && order.totals.total) - Core.totals(data, settings).total);
-  if (Math.abs(difference) >= 0.01 && Math.abs(difference) <= MAX_ROUNDING) {
-    return Core.sanitize({ ...data, lines: [...data.lines, { code: '', description: 'Afrondingsverschil', qty: 1, unit: '', price: difference, vat: 0, group: 'overig' }] }, settings);
+  // De webshop rekent particuliere prijzen per btw-tarief vanuit bedragen incl. btw, de factuur vanuit prijzen excl. btw: dat kan een paar cent schelen. Per btw-tarief komt een afrondingsregel met datzelfde tarief, zodat het factuurbedrag en de btw-verdeling gelijk zijn aan wat de klant betaalde.
+  const invoiceBases = new Map(Core.totals(data, settings).vat.map((entry) => [entry.rate, entry.base]));
+  const corrections = shifted ? [] : (order.totals && order.totals.byRate ? order.totals.byRate : []).map((row) => ({
+    rate: Number(row.rate) || 0, difference: Core.round2(Number(row.excl) - (invoiceBases.get(Number(row.rate) || 0) || 0)),
+  })).filter((entry) => Math.abs(entry.difference) >= 0.01 && Math.abs(entry.difference) <= MAX_ROUNDING);
+  if (corrections.length > 0) {
+    const correctionLines = corrections.map((entry) => ({ code: '', description: 'Afrondingsverschil', qty: 1, unit: '', price: entry.difference, vat: entry.rate, group: 'overig' }));
+    return Core.sanitize({ ...data, lines: [...data.lines, ...correctionLines] }, settings);
   }
   return data;
 }
@@ -77,7 +81,7 @@ function fromWebOrder(order, articles, settings) {
 /**
  * Maakt het factureren van webshopbestellingen.
  * @param {{ orders: object, invoices: object, returns?: object, debtors?: object, stock?: object, sender?: object, settingsFor: Function, log?: object }} ctx De opslagen en hulpfuncties van de server (settingsFor(tenantId) geeft de instellingen van een omgeving).
- * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditReturn: Function }} De functies.
+ * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditCancelled: Function, creditReturn: Function }} De functies.
  */
 function createWebOrderInvoices({ orders, invoices, returns = null, debtors = null, stock = null, sender = null, settingsFor, log = console }) {
   // Facturen waarvan de mail nu onderweg is (tenant:factuur), tegen dubbel mailen bij gelijktijdige verzoeken.
@@ -228,6 +232,39 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
   }
 
   /**
+   * Haak voor web-orders.js: na het annuleren van een bestelling die al een definitieve of betaalde factuur heeft
+   * (bijvoorbeeld online betaald) de creditnota maken, zo ingesteld meteen definitief en per mail verstuurd.
+   * De terugbetaling van het geld zelf gaat apart via Mollie. Mislukt het, dan staat de reden bij de bestelling.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} order De geannuleerde bestelling.
+   * @param {object|null} user Wie de status wijzigde.
+   * @returns {Promise<void>} Klaar als de creditnota is gemaakt (of niet nodig was).
+   */
+  async function creditCancelled(tenantId, order, user) {
+    const found = invoiceFor(tenantId, order.id);
+    if (!found || found.status === 'concept') return;
+    const settings = settingsOf(tenantId);
+    try {
+      const made = invoices.credit(tenantId, user, found.id, settings);
+      if (!made || made.error) throw new Error(made && made.error ? made.error : 'Factuur niet gevonden.');
+      let credit = made.invoice;
+      orders.updateData(tenantId, order.id, { creditNote: { invoiceId: credit.id, number: credit.number, status: credit.status } });
+      let finalizedNow = false;
+      if (settings.webOrders.finalize && credit.status === 'concept') {
+        const finalized = invoices.finalize(tenantId, user, credit.id, settings, { skipStock: true });
+        if (finalized && finalized.error) throw new Error(finalized.error);
+        finalizedNow = true;
+        credit = invoices.get(tenantId, credit.id);
+      }
+      orders.updateData(tenantId, order.id, { creditNote: { invoiceId: credit.id, number: credit.number, status: credit.status }, invoiceError: null });
+      await mailIfFinalized(tenantId, { invoice: credit, finalizedNow });
+    } catch (error) {
+      orders.updateData(tenantId, order.id, { invoiceError: `Creditnota maken mislukt: ${String(error.message || error).slice(0, 250)}. Maak hem zelf in Facturen.` });
+      log.warn(`Creditnota bij ${order.number}: ${error.message}`);
+    }
+  }
+
+  /**
    * Maakt de creditnota voor een afgeronde retour: een creditfactuur bij de factuur
    * van de bestelling met alleen de teruggestuurde regels, zo ingesteld meteen
    * definitief en per mail verstuurd. De voorraad is al door de retour zelf
@@ -289,7 +326,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     }
   }
 
-  return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped, creditReturn };
+  return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped, creditCancelled, creditReturn };
 }
 
 module.exports = { createWebOrderInvoices, fromWebOrder, invoiceKey };

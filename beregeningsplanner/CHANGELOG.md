@@ -22,7 +22,9 @@ Online betalen in de eigen webshop via Mollie (stap 8 van de webshop-roadmap).
 - **Bevestigingsmail** van een online bestelling gaat pas na de betaling;
   de factuur van een online betaalde bestelling ontstaat al bij de betaling
   (definitief en betaald, en zo ingesteld per mail naar de klant). Een
-  afrondingsregel zorgt dat het factuurbedrag gelijk is aan wat de klant betaalde.
+  afrondingsregel per btw-tarief zorgt dat het factuurbedrag en de btw-verdeling
+  gelijk zijn aan wat de klant betaalde. Annuleren van een bestelling met een
+  definitieve factuur maakt meteen een creditnota (`onCancelled`).
 - **Verzenden pas na betaling** (409 bij een onbetaalde online bestelling);
   een onbetaalde online bestelling houdt de voorraad vast en vervalt na `holdHours`
   (`app.locals.webPaymentsExpire`, elk uur); betaald na annuleren geeft

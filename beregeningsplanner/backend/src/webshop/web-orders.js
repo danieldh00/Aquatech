@@ -106,10 +106,12 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', group = '' } = 
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
  * @param {{ stock: object }} deps De voorraadopslag (reserveren en afboeken).
- * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, onShipped: Function, onTracking: Function }} De functies.
+ * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
  */
 function createWebOrderStore(db, { stock }) {
   const shippedHooks = [];
+  // Haken die na het annuleren van een bestelling draaien.
+  const cancelledHooks = [];
   const trackingHooks = [];
   /**
    * Bereidt een SQL-opdracht voor.
@@ -199,7 +201,7 @@ function createWebOrderStore(db, { stock }) {
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -401,8 +403,20 @@ function createWebOrderStore(db, { stock }) {
         try { Promise.resolve(hook(tenantId, out.order, user)).catch((error) => console.warn(`Na verzenden: ${error.message}`)); } catch (error) { console.warn(`Na verzenden: ${error.message}`); }
       }
     }
+    if (out.order && status === 'geannuleerd') {
+      for (const hook of cancelledHooks) {
+        try { Promise.resolve(hook(tenantId, out.order, user)).catch((error) => console.warn(`Na annuleren: ${error.message}`)); } catch (error) { console.warn(`Na annuleren: ${error.message}`); }
+      }
+    }
     return out;
   }
+
+  /**
+   * Registreert een haak die na elke bestelling die wordt geannuleerd wordt aangeroepen (nadat de wijziging is vastgelegd).
+   * @param {Function} hook Functie (tenantId, order, user); mag een belofte geven, fouten worden alleen gelogd.
+   * @returns {void}
+   */
+  const onCancelled = (hook) => { cancelledHooks.push(hook); };
 
   /**
    * Registreert een haak die na elke bestelling die op Verzonden gaat wordt aangeroepen (nadat de wijziging is vastgelegd).
@@ -539,7 +553,7 @@ function createWebOrderStore(db, { stock }) {
       .all(tenantId, String(before), Math.max(1, Math.floor(limit)), Math.max(0, Math.floor(skip))).map((row) => row.id);
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, onShipped, onTracking };
+  return { priceCart, shippingQuote, orderTotals, place, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, onShipped, onCancelled, onTracking };
 }
 
 /**
