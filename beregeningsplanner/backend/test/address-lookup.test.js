@@ -210,3 +210,26 @@ test('opzoeken: huisnummer met alleen toevoegingen vraagt om een toevoeging; gel
   found = false;
   assert.strictEqual((await flats.lookup({ postcode: '8082AB', houseNumber: '1' })).found, false);
 });
+
+test('frontendcomponent: land wijzigt tijdens het opzoeken, of het adres is intussen vervangen', async () => {
+  const lookup = loadComponent();
+  /**
+   * Eenvoudig invoerveld met gebeurtenissen.
+   * @param {string} value Beginwaarde.
+   * @returns {object} Het nagebootste veld.
+   */
+  const makeInput = (value) => ({ value, addEventListener: () => {} });
+  const statusElement = { textContent: '', dataset: {} };
+  const found = [];
+  let active = true;
+  let current = true;
+  const component = lookup.attach({
+    postcodeInput: makeInput('8071 AB'), numberInput: makeInput('1'), statusElement, endpoint: 'adres/', isActive: () => active, isCurrent: () => current, onFound: (address) => found.push(address),
+    fetchImpl: async () => { active = false; return { ok: true, status: 200, json: async () => ({ found: true, street: 'Tuinstraat', houseNumber: '1', suffix: '', postcode: '8071 AB', city: 'Nunspeet' }) }; },
+  });
+  await component.check();
+  assert.strictEqual(found.length, 0, 'een antwoord na een landwijziging vult niets in');
+  active = true;
+  await component.check();
+  assert.strictEqual(found.length, 0, 'fetchImpl zet het land weer uit');
+});

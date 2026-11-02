@@ -57,10 +57,10 @@
   /**
    * Koppelt drie invoervelden aan het opzoeken van een adres. Zodra postcode en huisnummer geldig zijn
    * (na een korte pauze in het typen) wordt het adres opgevraagd; een oudere vraag wordt afgebroken.
-   * @param {{ postcodeInput: HTMLInputElement, numberInput: HTMLInputElement, suffixInput?: HTMLInputElement, statusElement: HTMLElement, endpoint?: string, isActive?: Function, onFound: Function, fetchImpl?: Function }} options De velden, het element voor de melding, het adres van de API, isActive() = of er nu opgezocht mag worden (bijvoorbeeld alleen voor Nederland), onFound(adres) = wat er met een treffer gebeurt en fetchImpl (alleen voor tests).
+   * @param {{ postcodeInput: HTMLInputElement, numberInput: HTMLInputElement, suffixInput?: HTMLInputElement, statusElement: HTMLElement, endpoint?: string, isActive?: Function, isCurrent?: Function, onFound: Function, fetchImpl?: Function }} options De velden, het element voor de melding, het adres van de API, isActive() = of er nu opgezocht mag worden (bijvoorbeeld alleen voor Nederland), isCurrent() = of het ingevulde adres nog van de laatste treffer is (anders wordt dezelfde invoer opnieuw opgezocht), onFound(adres) = wat er met een treffer gebeurt en fetchImpl (alleen voor tests).
    * @returns {{ check: Function, reset: Function }} check() zoekt meteen op (zonder pauze); reset() vergeet de laatste treffer.
    */
-  function attach({ postcodeInput, numberInput, suffixInput = null, statusElement, endpoint = DEFAULT_ENDPOINT, isActive = () => true, onFound, fetchImpl = (...args) => fetch(...args) }) {
+  function attach({ postcodeInput, numberInput, suffixInput = null, statusElement, endpoint = DEFAULT_ENDPOINT, isActive = () => true, isCurrent = () => true, onFound, fetchImpl = (...args) => fetch(...args) }) {
     let timer = null;
     let controller = null;
     let sequence = 0;
@@ -107,7 +107,7 @@
         return;
       }
       const key = `${postcode}|${houseNumber}|${suffixInput ? suffixInput.value.trim().toUpperCase() : ''}`;
-      if (key === lastKey) { say(lastMessage.text, lastMessage.kind); return; }
+      if (key === lastKey && isCurrent()) { say(lastMessage.text, lastMessage.kind); return; }
       if (key === inFlightKey) return;
       inFlightKey = key;
       if (controller) controller.abort();
@@ -122,6 +122,7 @@
         if (!response.ok) throw new Error(`status ${response.status}`);
         const address = await response.json();
         if (mine !== sequence) return;
+        if (!isActive()) { say(''); return; }
         if (!address.found) { settle('Geen adres gevonden bij deze postcode en dit huisnummer. Controleer de invoer of vul het adres zelf in.', 'error'); return; }
         lastKey = key;
         onFound(address);
@@ -221,12 +222,16 @@
      */
     const isEditable = () => !field.matches(':disabled') && !field.readOnly;
     let filling = false;
+    // Wat deze component zelf in het veld zette: iets anders (door de gebruiker of de pagina) betekent dat dezelfde invoer opnieuw mag invullen.
+    let lastWritten = null;
     const lookup = attach({
       postcodeInput, numberInput, suffixInput, statusElement, endpoint, fetchImpl,
       isActive: isEditable,
+      isCurrent: () => field.value === lastWritten,
       onFound: (address) => {
         filling = true;
-        field.value = fullAddress(address, separator);
+        lastWritten = fullAddress(address, separator);
+        field.value = lastWritten;
         field.dispatchEvent(new Event('input', { bubbles: true }));
         field.dispatchEvent(new Event('change', { bubbles: true }));
         filling = false;
