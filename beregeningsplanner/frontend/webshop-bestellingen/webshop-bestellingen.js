@@ -38,6 +38,7 @@
     for (const button of document.querySelectorAll('.tab')) {
       button.classList.toggle('active', button.dataset.tab === tab);
       button.setAttribute('aria-selected', String(button.dataset.tab === tab));
+      button.tabIndex = button.dataset.tab === tab ? 0 : -1;
     }
     for (const pane of document.querySelectorAll('.tabpane')) pane.hidden = pane.id !== `tab-${tab}`;
     history.replaceState(null, '', `#${tab}`);
@@ -62,6 +63,17 @@
     window.BeheerBestellingen.init({ toast });
     window.BeheerRetouren.init({ toast });
     for (const button of document.querySelectorAll('.tab')) button.addEventListener('click', () => showTab(button.dataset.tab));
+    // Pijltoetsen wisselen tussen de tabbladen (ARIA-patroon voor tabs); alleen het actieve tabblad staat in de tabvolgorde.
+    $('.tabs').addEventListener('keydown', (event) => {
+      const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+      if (!step && event.key !== 'Home' && event.key !== 'End') return;
+      const current = TABS.findIndex((name) => $(`#t-${name}`) === document.activeElement);
+      if (current < 0) return;
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : (current + step + TABS.length) % TABS.length;
+      event.preventDefault();
+      showTab(TABS[next]);
+      $(`#t-${TABS[next]}`).focus();
+    });
     showTab(location.hash.slice(1));
   }
 
