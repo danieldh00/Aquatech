@@ -18,17 +18,19 @@ const formatDate = (iso) => new Date(iso).toLocaleDateString('nl-NL', { day: '2-
 const formatDateTime = (iso) => new Date(iso).toLocaleString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam' });
 
 /**
- * Eén eerdere retour: nummer, status, regels, het besluit en zo nodig de knop om hem in te trekken.
+ * Eén eerdere retour als kaart: nummer en statuslabel, datum, regels, het besluit en zo nodig de knop om hem in te trekken.
  * @param {object} record De retour (web-returns.js).
- * @returns {string} HTML van het blokje.
+ * @returns {string} HTML van de kaart.
  */
 function returnItem(record) {
-  const lines = record.lines.map((line) => `${line.qty} × ${escapeHtml(line.name)}`).join(', ');
-  const decision = record.decisionNote ? `<br><small>${escapeHtml(record.decisionNote)}</small>` : '';
-  const credit = record.credit ? `<br><small>Creditnota ${escapeHtml(record.credit.number)}</small>` : '';
+  const lines = record.lines.map((line) => `<li>${line.qty} × ${escapeHtml(line.name)}</li>`).join('');
+  const decision = record.decisionNote ? `<p class="return-note">${escapeHtml(record.decisionNote)}</p>` : '';
+  const credit = record.credit ? `<p class="return-note">Creditnota ${escapeHtml(record.credit.number)}</p>` : '';
+  const rejected = record.status === 'afgewezen' ? '<p class="return-note">Een afgewezen retour kan niet opnieuw worden ingediend.</p>' : '';
   const withdraw = record.status === 'aangevraagd'
     ? `<form class="inline" method="post" action="retour/${escapeHtml(record.id)}/intrekken"><button class="button secondary" type="submit">Retour intrekken</button></form>` : '';
-  return `<li><strong>${escapeHtml(record.number)}</strong> · ${escapeHtml(record.statusLabel)} (${escapeHtml(formatDate(record.createdAt))})<br>${lines}${decision}${credit} ${withdraw}</li>`;
+  return `<li class="return-card"><div class="return-head"><strong>${escapeHtml(record.number)}</strong><span class="status-badge status-${escapeHtml(record.status)}">${escapeHtml(record.statusLabel)}</span><span class="return-date">${escapeHtml(formatDate(record.createdAt))}</span></div>
+<ul class="return-lines">${lines}</ul>${decision}${rejected}${credit}${withdraw}</li>`;
 }
 
 /**
@@ -38,11 +40,11 @@ function returnItem(record) {
  * @returns {string} HTML van het formulier.
  */
 function returnForm(lines, { values = {}, error = '', until }) {
-  const rows = lines.map((line) => `<tr><td>${escapeHtml(line.name)}<br><small>Artikelnr.: ${escapeHtml(line.code)}</small></td><td class="num">${line.qty}</td><td class="num"><input name="qty:${escapeHtml(line.code)}" type="number" min="0" max="${line.qty}" value="${escapeHtml(values[`qty:${line.code}`] || '0')}" aria-label="Aantal terug van ${escapeHtml(line.name)}"></td></tr>`).join('');
+  const rows = lines.map((line) => `<tr><td>${escapeHtml(line.name)}<br><small>Artikelnr.: ${escapeHtml(line.code)}</small></td><td class="num">${line.qty}</td><td class="num"><input name="qty:${escapeHtml(line.code)}" type="number" min="0" max="${line.qty}" value="${escapeHtml(values[`qty:${line.code}`] || '')}" placeholder="0" inputmode="numeric" aria-label="Aantal terug van ${escapeHtml(line.name)}"></td></tr>`).join('');
   const reasons = Object.entries(REASONS).map(([key, label]) => `<option value="${key}"${values.reason === key ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('');
   return `${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
-<form method="post" action="retour">
-<div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Besteld</th><th class="num">Terug</th></tr></thead><tbody>${rows}</tbody></table></div>
+<form class="return-form" method="post" action="retour">
+<div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Nog terug te sturen</th><th class="num">Terug</th></tr></thead><tbody>${rows}</tbody></table></div>
 <label class="form-field"><span>Reden</span><select name="reason" required><option value="">Kies een reden</option>${reasons}</select></label>
 <label class="form-field"><span>Toelichting (optioneel)</span><textarea name="note" rows="3" maxlength="1000">${escapeHtml(values.note || '')}</textarea></label>
 <p class="note">Je kunt tot ${escapeHtml(formatDateTime(until))} (Nederlandse tijd) een retour aanvragen. Na goedkeuring sturen we je het retouradres.</p>
@@ -61,7 +63,7 @@ function returnsBlock({ items, eligibility, values = {}, error = '' }) {
   let request = '';
   if (eligibility.lines.length) request = returnForm(eligibility.lines, { values, error, until: eligibility.until });
   else if (!eligibility.open) request = `<p class="note">De termijn van ${RETURN_DAYS} dagen om een retour aan te vragen is verstreken.</p>`;
-  else if (!items.length) request = '<p class="note">Er is niets meer om terug te sturen.</p>';
+  else request = '<p class="note">Er is niets meer om terug te sturen.</p>';
   const failure = error && !eligibility.lines.length ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : '';
   return `<h2>Retourneren</h2>${failure}${earlier}${request}`;
 }

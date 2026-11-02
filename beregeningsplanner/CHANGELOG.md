@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.5.4
+
+Verbeteringen aan de eigen webshop en de plaats van de bestellingen.
+
+- **Webshopbestellingen onder Verkoop**: nieuwe module `webshop-bestellingen`
+  (recht `beheer`, zijbalkgroep Verkoop) met de tabbladen Bestellingen en
+  Retouren; ze zijn uit Beheer gehaald. De scripts `beheer/bestellingen.js` en
+  `beheer/retouren.js` worden hergebruikt.
+- **Afrekenen**: `afrekenen.js` werkt bij een andere verzendmethode het
+  overzicht, het totaal en het verwachte totaal (`expectedTotal`) direct bij
+  uit gegevens die de server per beschikbare methode meegeeft (`summaries`).
+  Een ander land of btw-nummer rekent de pagina opnieuw door; zonder script
+  blijft de knop *Totaal bijwerken*. Verzendkosten krijgen "incl. btw" of
+  "excl. btw" (zakelijk) in de omschrijving; de berekening (21% over de
+  verzendkosten, bij verlegging 0%) is ongewijzigd.
+- **Productkaarten**: label "N varianten" bij een hoofdartikel met varianten;
+  prijs en voorraadregel staan in `.product-foot` onderaan de kaart. Op de
+  productpagina staat het aantal varianten bij de naam van de keuzelijst.
+- **Retouren, klant**: formulier met opgemaakte keuzelijst en aantalveld
+  (leeg met placeholder 0), eerdere retouren als kaarten met statuslabel.
+  Een **afgewezen** retour telt voortaan mee in `COUNTING` (web-returns.js):
+  die artikelen kunnen niet opnieuw worden ingediend (409, ook via de API);
+  alleen een ingetrokken retour geeft ze weer vrij.
+- **Retouren, Beheer**: artikelnaam en artikelnummer onder elkaar, tekstvak en
+  knoppen in de stijl van Beheer.
+- **Mededelingenbalk**: nieuw veld `notice.color` (sleutel uit
+  `NOTICE_COLORS`: paars, donkerblauw, groen, turquoise, oranje, rood, grijs;
+  de CSP van de shop staat geen inline stijl toe, dus een vaste lijst met
+  klassen `kleur-<sleutel>` en leesbare achtergronden). Een onbekende
+  waarde valt terug op paars.
+
 ## 1.5.3
 
 Online betalen in de eigen webshop via Mollie (stap 8 van de webshop-roadmap).

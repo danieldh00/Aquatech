@@ -53,6 +53,14 @@ test('sanitizeHtml houdt opmaak, haalt scripts en gevaarlijke links weg', () => 
   assert.strictEqual(sanitizeHtml('<a href="tel:+31647212019">bel</a> <a href="mailto:info@voorbeeld.nl">mail</a>'), '<a href="tel:+31647212019" rel="noopener noreferrer">bel</a> <a href="mailto:info@voorbeeld.nl" rel="noopener noreferrer">mail</a>');
 });
 
+test('mededelingenbalk: kleur uit de vaste lijst, anders paars', () => {
+  assert.strictEqual(normalizeSite({}).notice.color, 'purple');
+  assert.strictEqual(normalizeSite({ notice: { color: 'navy' } }).notice.color, 'navy');
+  for (const invalid of ['#ff0000', 'red;background:url(x)', '__proto__', 'toString', 5, null]) {
+    assert.strictEqual(normalizeSite({ notice: { color: invalid } }).notice.color, 'purple', String(invalid));
+  }
+});
+
 test('normalizeSite vult aan met de standaard en weigert ongeldige waarden', () => {
   assert.deepStrictEqual(normalizeSite({}), DEFAULT_SITE);
   const site = normalizeSite({

@@ -28,9 +28,12 @@ const MAX_PAGES = 30;
 /** Sleutel van het onderdeel met de blokken van de startpagina, kop en voet. */
 const SITE_KEY = 'site';
 
+/** De kleuren voor de mededelingenbalk (sleutel → naam in Beheer); de shop kent bij elke sleutel een vaste, goed leesbare achtergrond (storefront.css). */
+const NOTICE_COLORS = { purple: 'Paars', navy: 'Donkerblauw', green: 'Groen', teal: 'Turquoise', orange: 'Oranje', red: 'Rood', grey: 'Grijs' };
+
 /** Standaardinhoud: precies wat de shop toonde voordat deze te bewerken was. */
 const DEFAULT_SITE = {
-  notice: { enabled: true, text: 'Welkom op onze webshop! Momenteel zijn wij nog volop producten aan het toevoegen. Mocht er wat ontbreken wat u zoekt, neem contact op!' },
+  notice: { enabled: true, color: 'purple', text: 'Welkom op onze webshop! Momenteel zijn wij nog volop producten aan het toevoegen. Mocht er wat ontbreken wat u zoekt, neem contact op!' },
   hero: { image: 'asset:hero-tuin.jpg', title: 'Alles voor uw tuinberegening', text: 'Sproeiers, druppelslang, leidingen en pompen van AquaTech Service.', button: '', link: '' },
   benefits: {
     enabled: true,
@@ -143,7 +146,7 @@ function normalizeSite(input, base = DEFAULT_SITE) {
   const footer = section('footer');
   const email = cleanText(contact.email, 120, base.contact.email);
   return {
-    notice: { enabled: flag(notice.enabled, base.notice.enabled), text: cleanText(notice.text, 300, base.notice.text) },
+    notice: { enabled: flag(notice.enabled, base.notice.enabled), color: Object.hasOwn(NOTICE_COLORS, notice.color) ? notice.color : base.notice.color, text: cleanText(notice.text, 300, base.notice.text) },
     hero: {
       image: imageRef(hero.image, base.hero.image), title: cleanText(hero.title, 120, base.hero.title), text: cleanText(hero.text, 300, base.hero.text),
       button: cleanText(hero.button, 40, base.hero.button), link: 'link' in hero ? linkRef(hero.link) : base.hero.link,
@@ -584,6 +587,7 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
       available: true, storefront: Boolean(settingsOf(req).get('storefront')),
       site: { ...stored.site, isDefault: !stored.site.published },
       pages: stored.pages, images: content.listImages(req.tenantId),
+      noticeColors: NOTICE_COLORS,
       defaults: { site: DEFAULT_SITE, aboutBody: DEFAULT_ABOUT_BODY, legal: legalDefaults(((stored.site.draft || stored.site.published) || {}).contact || DEFAULT_SITE.contact) }, assets: [...ASSET_NAMES].sort(),
     };
   }
@@ -662,4 +666,4 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
   });
 }
 
-module.exports = { createShopContentStore, registerShopContentRoutes, normalizeSite, normalizePage, sanitizeHtml, DEFAULT_SITE, DEFAULT_ABOUT_BODY, SITE_KEY };
+module.exports = { NOTICE_COLORS, createShopContentStore, registerShopContentRoutes, normalizeSite, normalizePage, sanitizeHtml, DEFAULT_SITE, DEFAULT_ABOUT_BODY, SITE_KEY };

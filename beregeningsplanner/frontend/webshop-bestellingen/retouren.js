@@ -1,4 +1,4 @@
-// Beheer > Retouren: retouren uit de eigen webshop met hun status, het detail
+// Webshopbestellingen (Verkoop) > Retouren: retouren uit de eigen webshop met hun status, het detail
 // (regels, reden, verloop), goedkeuren of afwijzen, afronden (artikelen terug op
 // voorraad) en de creditnota (API /api/admin/web-returns, zie
 // backend/src/webshop/web-returns.js).
@@ -76,11 +76,11 @@
     const mail = (record.mail ? (record.mail.sent ? `Laatste mail (${esc(record.mail.kind)}) verstuurd ${when(record.mail.at)}` : `Laatste mail (${esc(record.mail.kind)}) niet verstuurd: ${esc(record.mail.error)}`) : 'Nog geen mail verstuurd') + resend;
     let actions = '';
     if (record.status === 'aangevraagd') {
-      actions = `<label class="form-field"><span>Toelichting voor de klant (verplicht bij afwijzen)</span><textarea id="wr-note" rows="2" maxlength="1000"></textarea></label>
-        <p><button class="btn primary" id="wr-approve">Goedkeuren</button> <button class="btn danger" id="wr-reject">Afwijzen</button></p>`;
+      actions = `<label>Toelichting voor de klant (verplicht bij afwijzen)<textarea id="wr-note" rows="3" maxlength="1000"></textarea></label>
+        <div class="row actions"><button class="btn primary" id="wr-approve">Goedkeuren</button><button class="btn danger" id="wr-reject">Afwijzen</button></div>`;
     } else if (record.status === 'goedgekeurd') {
       actions = `<p><label><input type="checkbox" id="wr-restock" checked> Artikelen terug op voorraad (niet aanvinken bij beschadigde artikelen)</label></p>
-        <p><button class="btn primary" id="wr-complete">Retour ontvangen en afronden</button></p>`;
+        <div class="row actions"><button class="btn primary" id="wr-complete">Retour ontvangen en afronden</button></div>`;
     }
     box.innerHTML = `<h3>${esc(record.number)} <span class="pill ${esc(record.status)}">${esc(record.statusLabel)}</span></h3>
       <p>Bestelling ${esc(record.orderNumber)} · ${esc(record.customerName)} · <a href="mailto:${esc(record.email)}">${esc(record.email)}</a></p>
@@ -90,7 +90,7 @@
       ${credit}
       <p class="muted small">${mail}<br>Verloop: ${record.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})`).join(' → ')}</p>
       ${actions}
-      <p><button class="btn" id="wr-close">Sluiten</button></p>`;
+      <div class="row actions"><button class="btn" id="wr-close">Sluiten</button></div>`;
     box.hidden = false;
     /** Sluit het detail. */
     $('#wr-close').onclick = () => { box.hidden = true; };

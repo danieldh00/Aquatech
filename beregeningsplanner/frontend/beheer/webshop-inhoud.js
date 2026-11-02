@@ -101,6 +101,18 @@
   }
 
   /**
+   * Keuzelijst voor een blokveld.
+   * @param {string} label Naam van het veld.
+   * @param {string} path Pad in het blok, bijv. "notice.color".
+   * @param {string} value De gekozen sleutel.
+   * @param {Object<string, string>} options De keuzes (sleutel → naam).
+   * @returns {string} HTML van het veld.
+   */
+  function selectField(label, path, value, options) {
+    return `<label>${esc(label)}<select data-f="${esc(path)}">${Object.entries(options || {}).map(([key, name]) => `<option value="${esc(key)}"${key === value ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>`;
+  }
+
+  /**
    * Vinkje voor een blokveld.
    * @param {string} label Tekst naast het vinkje.
    * @param {string} path Het veldpad (data-f).
@@ -190,6 +202,7 @@
       <fieldset class="sc-block"><legend>Mededelingenbalk</legend>
         ${checkField('Toon de balk bovenaan de shop', 'notice.enabled', site.notice.enabled)}
         ${textField('Tekst', 'notice.text', site.notice.text, { long: true, max: 300 })}
+        ${selectField('Achtergrondkleur', 'notice.color', site.notice.color || 'purple', state.view.noticeColors)}
       </fieldset>
       <fieldset class="sc-block"><legend>Hero (grote afbeelding bovenaan)</legend>
         <label>Afbeelding${imagePicker('hero.image', site.hero.image)}</label>

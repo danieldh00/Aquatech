@@ -123,17 +123,26 @@ test('afwijzen met reden en intrekken door de klant', async () => {
   assert.match(mail.text, /Gebruikte artikelen/);
   assert.match((await customer.client.get(`/winkel/bestelling/${id}/`)).text, /Gebruikte artikelen nemen we niet terug/);
 
-  assert.strictEqual((await requestReturn(world, id, { 'qty:BUS': '2', reason: 'verkeerd' })).status, 303, 'na afwijzen kan het opnieuw');
+  const again = await requestReturn(world, id, { 'qty:BUS': '2', reason: 'verkeerd' });
+  assert.strictEqual(again.status, 409, 'een afgewezen retour kan niet opnieuw worden ingediend');
+  assert.match(again.text, /al in een retour afgewezen/);
+  const page = (await customer.client.get(`/winkel/bestelling/${id}/`)).text;
+  assert.doesNotMatch(page, /name="qty:BUS"/, 'geen formulier meer voor wat is afgewezen');
+  assert.match(page, /status-afgewezen/);
+  assert.match(page, /kan niet opnieuw worden ingediend/);
+
+  const secondOrder = await shippedOrder(world);
+  assert.strictEqual((await requestReturn(world, secondOrder, { 'qty:BUS': '2', reason: 'verkeerd' })).status, 303);
   const second = await latestReturn(world.admin);
   const other = world.shoppers[1];
-  const withdrawUrl = `/winkel/bestelling/${id}/retour/${second.id}/intrekken`;
+  const withdrawUrl = `/winkel/bestelling/${secondOrder}/retour/${second.id}/intrekken`;
   assert.strictEqual((await postForm(world.base, other.client, withdrawUrl, {})).status, 404, 'alleen de eigen retour');
   const withdrawn = await postForm(world.base, customer.client, withdrawUrl, {});
   assert.strictEqual(withdrawn.status, 303);
   assert.strictEqual(withdrawn.location, '../../');
   assert.strictEqual((await world.admin.get(`/api/admin/web-returns/${second.id}`)).body.return.status, 'ingetrokken');
   assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${second.id}/decision`, { approve: true })).status, 409, 'een ingetrokken retour is klaar');
-  assert.strictEqual((await requestReturn(world, id, { 'qty:BUS': '2', reason: 'verkeerd' })).status, 303, 'ingetrokken telt niet mee');
+  assert.strictEqual((await requestReturn(world, secondOrder, { 'qty:BUS': '2', reason: 'verkeerd' })).status, 303, 'ingetrokken telt niet mee');
 });
 
 test('geen retour voor verzending, en zonder terugboeken blijft de voorraad staan', async () => {

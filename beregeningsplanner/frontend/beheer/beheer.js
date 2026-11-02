@@ -1214,8 +1214,6 @@
     if (section.pane === 'roles') window.BeheerRollen.load();
     if (section.pane === 'settings') loadSettings(section.id);
     if (section.pane === 'webshop') { loadSettings(section.id); window.BeheerWebshop.load(); }
-    if (section.pane === 'bestellingen') window.BeheerBestellingen.load();
-    if (section.pane === 'retouren') window.BeheerRetouren.load();
     if (section.pane === 'shopinhoud') window.BeheerWebshopInhoud.load();
     if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
@@ -1229,6 +1227,8 @@
    * @returns {Promise<void>}
    */
   async function init() {
+    // Oude adressen: de bestellingen en retouren staan onder Verkoop > Webshopbestellingen.
+    if (/^#(bestellingen|retouren)$/.test(location.hash)) { location.replace(`../webshop-bestellingen/${location.hash}`); return; }
     const me = await window.AquatechAccount.load('../');
     state.meId = me.user ? me.user.id : null;
     if (!me.user || !(me.rights || []).includes('beheer')) {
@@ -1281,8 +1281,6 @@
     initSettings();
     initMail();
     window.BeheerWebshop.init({ toast });
-    window.BeheerBestellingen.init({ toast });
-    window.BeheerRetouren.init({ toast });
     window.BeheerWebshopInhoud.init({ toast });
     window.BeheerSproeiers.init({ toast });
     window.BeheerRollen.init({ toast, onChange: setRoles });

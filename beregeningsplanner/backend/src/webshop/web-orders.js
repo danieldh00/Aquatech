@@ -4,7 +4,7 @@
 // bij het plaatsen reserveert de bestelling de voorraad (stock.reserveOrder),
 // bij Verzonden boekt hij de artikelen af en bij Geannuleerd vervalt de
 // reservering. Tabel web_orders (migratie 37); beheer via /api/admin/web-orders
-// (Beheer > Bestellingen). Alles per omgeving (tenantId). Betalen: op rekening,
+// (Verkoop > Webshopbestellingen). Alles per omgeving (tenantId). Betalen: op rekening,
 // of online via Mollie (web-payments.js): de bestelling krijgt dan `data.pay`
 // (status open, betaald, mislukt of verlopen) en kan pas op Verzonden als hij
 // betaald is; een onbetaalde online bestelling houdt de voorraad vast tot hij
