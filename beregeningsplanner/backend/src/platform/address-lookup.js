@@ -191,7 +191,7 @@ function addressCandidates(text) {
       candidates.push({ postcode, houseNumber: normalizeHouseNumber(compact.slice(0, length)), suffix: normalizeSuffix(compact.slice(length, length + 6)) });
     }
   }
-  return candidates.filter((candidate) => candidate.houseNumber).slice(0, 6);
+  return candidates.filter((candidate) => candidate.houseNumber).slice(0, 10);
 }
 
 /**

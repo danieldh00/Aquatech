@@ -382,5 +382,10 @@ test('adrestekst ontleden: twee losse getallen en zeer lange cijferreeksen', () 
   assert.ok(readings.includes('12|2'), 'huisnummer 12 met toevoeging 2');
   assert.ok(readings.includes('2|'), 'ook alleen huisnummer 2');
   const long = addressCandidates(`Tuinstraat ${'1'.repeat(5000)}, 8071 AB Nunspeet`);
-  assert.ok(long.length <= 6 && long.every((candidate) => candidate.houseNumber.length <= 5 && candidate.suffix.length <= 6));
+  assert.ok(long.length <= 10 && long.every((candidate) => candidate.houseNumber.length <= 5 && candidate.suffix.length <= 6));
+});
+
+test('adrestekst ontleden: beide lezingen blijven behouden', () => {
+  const readings = addressCandidates('Tuinstraat 12 123, 8071 AB Nunspeet').map((candidate) => `${candidate.houseNumber}|${candidate.suffix}`);
+  assert.ok(readings.includes('12|123'));
 });
