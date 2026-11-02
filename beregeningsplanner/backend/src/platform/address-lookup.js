@@ -175,19 +175,23 @@ function addressCandidates(text) {
   if (!postcode) return [];
   const street = flat.slice(0, match.index).replace(/[\s,]+$/, '');
   // Het huisnummer staat in de laatste component van de straatregel (cijfers in de straatnaam, zoals "Plein 1940-1945", tellen niet mee);
-  // een losse toevoeging ("12 A") hoort bij het component ervoor.
+  // een losse toevoeging ("12 A" of "12 2") hoort bij het component ervoor, dus beide lezingen worden geprobeerd.
   const parts = street.split(' ');
-  let compact = parts[parts.length - 1] || '';
-  if (!/^\d/.test(compact) && parts.length > 1 && /^\d/.test(parts[parts.length - 2])) compact = `${parts[parts.length - 2]}${compact}`;
-  compact = compact.replace(/-+/g, '');
-  const digitsMatch = /^\d+/.exec(compact);
-  if (!digitsMatch) return [];
-  const digits = digitsMatch[0];
+  const last = parts[parts.length - 1] || '';
+  const previous = parts.length > 1 ? parts[parts.length - 2] : '';
+  const readings = /^\d/.test(last) ? [last] : [];
+  if (/^\d/.test(previous) && last) readings.push(`${previous}${last}`);
   const candidates = [];
-  for (let length = digits.length; length >= 1; length -= 1) {
-    candidates.push({ postcode, houseNumber: normalizeHouseNumber(compact.slice(0, length)), suffix: normalizeSuffix(compact.slice(length)) });
+  for (const reading of readings) {
+    const compact = reading.replace(/-+/g, '');
+    const digitsMatch = /^\d+/.exec(compact);
+    if (!digitsMatch) continue;
+    const digits = digitsMatch[0].slice(0, 5);
+    for (let length = digits.length; length >= 1; length -= 1) {
+      candidates.push({ postcode, houseNumber: normalizeHouseNumber(compact.slice(0, length)), suffix: normalizeSuffix(compact.slice(length, length + 6)) });
+    }
   }
-  return candidates.filter((candidate) => candidate.houseNumber).slice(0, 4);
+  return candidates.filter((candidate) => candidate.houseNumber).slice(0, 6);
 }
 
 /**

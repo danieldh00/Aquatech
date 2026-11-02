@@ -376,3 +376,11 @@ test('afrekenen: een ongeldige postcode of lege straat geeft een foutmelding in 
   assert.strictEqual(bad.status, 400);
   assert.match(bad.text, /geldige postcode/);
 });
+
+test('adrestekst ontleden: twee losse getallen en zeer lange cijferreeksen', () => {
+  const readings = addressCandidates('Tuinstraat 12 2, 8071 AB Nunspeet').map((candidate) => `${candidate.houseNumber}|${candidate.suffix}`);
+  assert.ok(readings.includes('12|2'), 'huisnummer 12 met toevoeging 2');
+  assert.ok(readings.includes('2|'), 'ook alleen huisnummer 2');
+  const long = addressCandidates(`Tuinstraat ${'1'.repeat(5000)}, 8071 AB Nunspeet`);
+  assert.ok(long.length <= 6 && long.every((candidate) => candidate.houseNumber.length <= 5 && candidate.suffix.length <= 6));
+});
