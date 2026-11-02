@@ -236,6 +236,8 @@ function createAddressGuard(service) {
   async function verify(text, { previous = () => '' } = {}) {
     if (!String(text || '').trim()) return { ok: true };
     let failure = { status: 400, error: 'invalid_address', message: 'Het adres klopt niet met de postcode en het huisnummer. Vul postcode en huisnummer in; het adres wordt dan automatisch ingevuld.' };
+    // Alleen leestekens of streepjes ("," of "-") is geen adres en ook geen ongewijzigd adres.
+    if (!comparable(text)) return { ok: false, ...failure };
     try {
       if ((await match(text)).found) return { ok: true };
     } catch (error) {

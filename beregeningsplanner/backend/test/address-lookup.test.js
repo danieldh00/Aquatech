@@ -389,3 +389,10 @@ test('adrestekst ontleden: beide lezingen blijven behouden', () => {
   const readings = addressCandidates('Tuinstraat 12 123, 8071 AB Nunspeet').map((candidate) => `${candidate.houseNumber}|${candidate.suffix}`);
   assert.ok(readings.includes('12|123'));
 });
+
+test('adrescontrole: alleen leestekens is geen adres', async () => {
+  const guard = createAddressGuard(createAddressLookup({ fetchImpl: createPdokFake().fetchImpl }));
+  assert.strictEqual((await guard.verify(',')).ok, false);
+  assert.strictEqual((await guard.verify(' - ,', { previous: () => '' })).ok, false);
+  assert.strictEqual((await guard.verify('   ')).ok, true, 'alleen spaties telt als geen adres');
+});
