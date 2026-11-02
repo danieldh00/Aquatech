@@ -44,7 +44,7 @@ function returnForm(lines, { values = {}, error = '', until }) {
   const reasons = Object.entries(REASONS).map(([key, label]) => `<option value="${key}"${values.reason === key ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('');
   return `${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 <form class="return-form" method="post" action="retour">
-<div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Besteld</th><th class="num">Terug</th></tr></thead><tbody>${rows}</tbody></table></div>
+<div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Nog terug te sturen</th><th class="num">Terug</th></tr></thead><tbody>${rows}</tbody></table></div>
 <label class="form-field"><span>Reden</span><select name="reason" required><option value="">Kies een reden</option>${reasons}</select></label>
 <label class="form-field"><span>Toelichting (optioneel)</span><textarea name="note" rows="3" maxlength="1000">${escapeHtml(values.note || '')}</textarea></label>
 <p class="note">Je kunt tot ${escapeHtml(formatDateTime(until))} (Nederlandse tijd) een retour aanvragen. Na goedkeuring sturen we je het retouradres.</p>

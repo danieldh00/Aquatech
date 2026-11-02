@@ -126,7 +126,9 @@ function shippingChoice(quote, country, method, summaries = {}, business = false
 `
     : `<input type="hidden" name="country" value="${escapeHtml(country)}">`;
   const options = quote.options.map((option) => {
-    const price = !option.available ? '' : option.free && option.method === 'dpd' ? 'Gratis' : option.price > 0 ? formatPrice(option.price) : 'Gratis';
+    const businessPrice = option.available && business && summaries[option.method] ? summaries[option.method].shipping.priceExcl : undefined;
+    const displayPrice = businessPrice !== undefined ? businessPrice : option.price;
+    const price = !option.available ? '' : option.free && option.method === 'dpd' ? 'Gratis' : displayPrice > 0 ? formatPrice(displayPrice) : 'Gratis';
     const extra = option.available ? option.note : option.reason;
     return `<label class="shipping-option${option.available ? '' : ' disabled'}"><input type="radio" name="shippingMethod" value="${escapeHtml(option.method)}"${option.method === method ? ' checked' : ''}${option.available ? '' : ' disabled'}${summaryData(option, summaries[option.method], business)} required>
 <span><strong>${escapeHtml(option.label)}</strong>${price ? ` – ${escapeHtml(price)}` : ''}${extra ? `<br><small>${escapeHtml(extra)}</small>` : ''}</span></label>`;
