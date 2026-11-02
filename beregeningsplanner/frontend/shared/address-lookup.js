@@ -57,10 +57,10 @@
   /**
    * Koppelt drie invoervelden aan het opzoeken van een adres. Zodra postcode en huisnummer geldig zijn
    * (na een korte pauze in het typen) wordt het adres opgevraagd; een oudere vraag wordt afgebroken.
-   * @param {{ postcodeInput: HTMLInputElement, numberInput: HTMLInputElement, suffixInput?: HTMLInputElement, statusElement: HTMLElement, endpoint?: string, isActive?: Function, isCurrent?: Function, getDestination?: Function, onFound: Function, fetchImpl?: Function }} options De velden, het element voor de melding, het adres van de API, isActive() = of er nu opgezocht mag worden (bijvoorbeeld alleen voor Nederland), isCurrent() = of het ingevulde adres nog van de laatste treffer is (anders wordt dezelfde invoer opnieuw opgezocht), getDestination() = de huidige inhoud van de velden die een treffer invult (verandert die tijdens het opzoeken, bijvoorbeeld door een handmatige aanpassing, dan wordt het antwoord genegeerd), onFound(adres) = wat er met een treffer gebeurt en fetchImpl (alleen voor tests).
+   * @param {{ postcodeInput: HTMLInputElement, numberInput: HTMLInputElement, suffixInput?: HTMLInputElement, statusElement: HTMLElement, endpoint?: string, isActive?: Function, isCurrent?: Function, getDestination?: Function, onFound: Function, onClear?: Function, fetchImpl?: Function }} options De velden, het element voor de melding, het adres van de API, isActive() = of er nu opgezocht mag worden (bijvoorbeeld alleen voor Nederland), isCurrent() = of het ingevulde adres nog van de laatste treffer is (anders wordt dezelfde invoer opnieuw opgezocht), getDestination() = de huidige inhoud van de velden die een treffer invult (verandert die tijdens het opzoeken, bijvoorbeeld door een handmatige aanpassing, dan wordt het antwoord genegeerd), onFound(adres) = wat er met een treffer gebeurt, onClear() = wist een eerder automatisch ingevuld adres als de nieuwe invoer geen treffer geeft (zodat er geen verouderd adres blijft staan) en fetchImpl (alleen voor tests).
    * @returns {{ check: Function, reset: Function }} check() zoekt meteen op (zonder pauze); reset() vergeet de laatste treffer.
    */
-  function attach({ postcodeInput, numberInput, suffixInput = null, statusElement, endpoint = DEFAULT_ENDPOINT, isActive = () => true, isCurrent = () => true, getDestination = () => '', onFound, fetchImpl = (...args) => fetch(...args) }) {
+  function attach({ postcodeInput, numberInput, suffixInput = null, statusElement, endpoint = DEFAULT_ENDPOINT, isActive = () => true, isCurrent = () => true, getDestination = () => '', onFound, onClear = () => {}, fetchImpl = (...args) => fetch(...args) }) {
     let timer = null;
     let controller = null;
     let sequence = 0;
@@ -126,6 +126,8 @@
         if (mine !== sequence) return;
         if (!isActive() || getDestination() !== destinationAtStart) { say(''); return; }
         if (!address.found) {
+          lastKey = '';
+          onClear();
           const typedSuffix = suffixInput ? suffixInput.value.trim() : '';
           if (address.suffixRequired) { settle('Bij dit huisnummer hoort een toevoeging (bijvoorbeeld A); vul die in.', 'error'); return; }
           settle(address.suffixUnknown ? `De toevoeging "${typedSuffix}" komt niet voor bij dit huisnummer. Controleer de toevoeging of vul het adres zelf in.` : 'Geen adres gevonden bij deze postcode en dit huisnummer. Controleer de invoer of vul het adres zelf in.', 'error');
@@ -237,6 +239,15 @@
         filling = true;
         lastWritten = fullAddress(address, separator);
         field.value = lastWritten;
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+        filling = false;
+      },
+      onClear: () => {
+        if (lastWritten === null || field.value !== lastWritten) return;
+        filling = true;
+        field.value = '';
+        lastWritten = null;
         field.dispatchEvent(new Event('input', { bubbles: true }));
         field.dispatchEvent(new Event('change', { bubbles: true }));
         filling = false;

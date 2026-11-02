@@ -261,3 +261,32 @@ test('frontendcomponent: antwoord wordt genegeerd als het adresveld tijdens het 
   await component.check();
   assert.strictEqual(statusElement.textContent, '', 'ook een foutmelding verschijnt niet meer');
 });
+
+test('frontendcomponent: een eerder ingevuld adres wordt gewist als de nieuwe invoer om een toevoeging vraagt', async () => {
+  const lookup = loadComponent();
+  /**
+   * Eenvoudig invoerveld.
+   * @param {string} value Beginwaarde.
+   * @returns {object} Het nagebootste veld.
+   */
+  const makeInput = (value) => ({ value, addEventListener: () => {} });
+  const statusElement = { textContent: '', dataset: {} };
+  const numberInput = makeInput('1');
+  let address = '';
+  let cleared = 0;
+  const component = lookup.attach({
+    postcodeInput: makeInput('8071 AB'), numberInput, statusElement, endpoint: 'adres/', getDestination: () => address,
+    onFound: (found) => { address = found.street; },
+    onClear: () => { cleared += 1; address = ''; },
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => (numberInput.value === '1' ? { found: true, street: 'Tuinstraat', houseNumber: '1', suffix: '', postcode: '8071 AB', city: 'Nunspeet' } : { found: false, suffixRequired: true }) }),
+  });
+  await component.check();
+  assert.strictEqual(address, 'Tuinstraat');
+  numberInput.value = '5';
+  await component.check();
+  assert.strictEqual(cleared, 1, 'het verouderde adres is gewist');
+  assert.match(statusElement.textContent, /toevoeging/);
+  numberInput.value = '1';
+  await component.check();
+  assert.strictEqual(address, 'Tuinstraat', 'terug naar de eerdere combinatie zoekt opnieuw op en toont niet de oude melding');
+});

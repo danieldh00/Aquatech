@@ -70,6 +70,10 @@ function setUpAddressLookup(form) {
   if (!row || !postcodeInput || !window.AddressLookup) return;
   row.hidden = false;
   const countryField = form.querySelector('[name="country"]');
+  const streetInput = form.querySelector('input[name="street"]');
+  const cityInput = form.querySelector('input[name="city"]');
+  // Wat de opzoeking zelf invulde: alleen dat wordt weer gewist (een handmatig getypt adres blijft staan).
+  let lastWritten = null;
   window.AddressLookup.attach({
     postcodeInput,
     numberInput: row.querySelector('[data-address-number]'),
@@ -77,11 +81,18 @@ function setUpAddressLookup(form) {
     statusElement: row.querySelector('[data-address-status]'),
     endpoint: form.dataset.addressEndpoint,
     isActive: () => !countryField || countryField.value === 'NL',
-    getDestination: () => `${form.querySelector('input[name="street"]').value}|${form.querySelector('input[name="city"]').value}`,
+    getDestination: () => `${streetInput.value}|${cityInput.value}`,
     onFound: (address) => {
-      form.querySelector('input[name="street"]').value = window.AddressLookup.streetLine(address);
+      streetInput.value = window.AddressLookup.streetLine(address);
       postcodeInput.value = address.postcode;
-      form.querySelector('input[name="city"]').value = address.city;
+      cityInput.value = address.city;
+      lastWritten = `${streetInput.value}|${cityInput.value}`;
+    },
+    onClear: () => {
+      if (lastWritten === null || `${streetInput.value}|${cityInput.value}` !== lastWritten) return;
+      streetInput.value = '';
+      cityInput.value = '';
+      lastWritten = null;
     },
   });
 }
