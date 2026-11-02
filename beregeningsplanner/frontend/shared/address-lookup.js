@@ -109,7 +109,11 @@
       if (!postcode || !houseNumber) {
         const typed = postcodeInput.value.replace(/\s+/g, '');
         if (typed.length >= 6 && !postcode) say('Controleer de postcode: die bestaat uit vier cijfers en twee letters, bijvoorbeeld 1234 AB.', 'error');
-        else say('');
+        else if (problem) {
+          // Onvolledige invoer na een eerder adres: de blokkade blijft tot er een nieuwe treffer is, alleen de melding wordt neutraal.
+          statusElement.textContent = 'Vul postcode en huisnummer in; het adres wordt dan automatisch ingevuld.';
+          statusElement.dataset.kind = '';
+        } else say('');
         return;
       }
       const key = `${postcode}|${houseNumber}|${suffixInput ? suffixInput.value.trim().toUpperCase() : ''}`;

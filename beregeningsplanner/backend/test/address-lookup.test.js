@@ -414,3 +414,15 @@ test('frontendcomponent: typen wist het adres niet en bij een inactieve opzoekin
   listeners[0]();
   assert.strictEqual(cleared, 0);
 });
+
+test('frontendcomponent: onvolledige invoer na een adres houdt het formulier geblokkeerd', async () => {
+  const lookup = loadComponent();
+  const listeners = [];
+  const postcodeInput = { value: '80', addEventListener: (name, handler) => { if (name === 'input') listeners.push(handler); } };
+  const statusElement = { textContent: '', dataset: {} };
+  const component = lookup.attach({ postcodeInput, numberInput: { value: '1', addEventListener: () => {} }, statusElement, endpoint: 'adres/', onFound: () => {} });
+  listeners[0]();
+  await component.check();
+  assert.strictEqual(component.hasProblem(), true, 'zonder nieuwe treffer blijft verzenden geblokkeerd');
+  assert.match(statusElement.textContent, /postcode en huisnummer/);
+});
