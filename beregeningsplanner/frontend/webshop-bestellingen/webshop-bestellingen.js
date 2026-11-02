@@ -13,8 +13,6 @@
   const $ = (selector) => document.querySelector(selector);
   /** Waar het tabblad staat in de adresbalk (#retouren). */
   const TABS = ['bestellingen', 'retouren'];
-  /** Welk tabblad al geladen is, zodat een tabblad pas bij het openen ophaalt. */
-  const loaded = new Set();
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -31,17 +29,18 @@
   }
 
   /**
-   * Toont één tabblad, haalt de gegevens de eerste keer op en onthoudt de keuze in het adres.
+   * Toont één tabblad, haalt de gegevens opnieuw op en onthoudt de keuze in het adres.
    * @param {string} name Naam van het tabblad (bestellingen of retouren).
    * @returns {void}
    */
   function showTab(name) {
     const tab = TABS.includes(name) ? name : TABS[0];
-    for (const button of document.querySelectorAll('.tab')) button.classList.toggle('active', button.dataset.tab === tab);
+    for (const button of document.querySelectorAll('.tab')) {
+      button.classList.toggle('active', button.dataset.tab === tab);
+      button.setAttribute('aria-selected', String(button.dataset.tab === tab));
+    }
     for (const pane of document.querySelectorAll('.tabpane')) pane.hidden = pane.id !== `tab-${tab}`;
     history.replaceState(null, '', `#${tab}`);
-    if (loaded.has(tab)) return;
-    loaded.add(tab);
     (tab === 'retouren' ? window.BeheerRetouren : window.BeheerBestellingen).load();
   }
 

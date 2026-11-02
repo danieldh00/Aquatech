@@ -31,11 +31,11 @@
         <h1>Webshopbestellingen</h1>
         <p class="muted">Bestellingen en retouren uit de eigen webshop (winkel/).</p>
       </section>
-      <nav class="tabs" role="tablist">
-        <button class="tab active" data-tab="bestellingen" role="tab">Bestellingen</button>
-        <button class="tab" data-tab="retouren" role="tab">Retouren</button>
+      <nav class="tabs" role="tablist" aria-label="Bestellingen en retouren">
+        <button class="tab active" data-tab="bestellingen" role="tab" id="t-bestellingen" aria-selected="true" aria-controls="tab-bestellingen">Bestellingen</button>
+        <button class="tab" data-tab="retouren" role="tab" id="t-retouren" aria-selected="false" aria-controls="tab-retouren">Retouren</button>
       </nav>
-      <section id="tab-bestellingen" class="tabpane">
+      <section id="tab-bestellingen" class="tabpane" role="tabpanel" aria-labelledby="t-bestellingen">
         <div class="filters">
           <select id="wo-status" aria-label="Status"></select>
           <input id="wo-search" type="search" placeholder="Zoek op nummer, naam of e-mail" aria-label="Zoeken">
@@ -47,7 +47,7 @@
         <div class="pager"><button id="wo-prev" class="btn small">Vorige</button> <span id="wo-info" class="muted small"></span> <button id="wo-next" class="btn small">Volgende</button></div>
         <div id="wo-detail" class="card-form settings" hidden></div>
       </section>
-      <section id="tab-retouren" class="tabpane" hidden>
+      <section id="tab-retouren" class="tabpane" role="tabpanel" aria-labelledby="t-retouren" hidden>
         <div class="filters">
           <select id="wr-status" aria-label="Status"></select>
           <button id="wr-export" class="btn primary">Exporteer naar Excel</button>
