@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.5.5',
+      date: '2026-11-02',
+      title: 'Adres invullen met postcode en huisnummer',
+      items: [
+        { text: 'Vul een postcode en huisnummer in en straat en woonplaats staan er meteen. Dat voorkomt typefouten. Je vindt het bij het afrekenen in de webshop en bij elk adresveld van klanten: offertes, werkorders, facturen en debiteuren en het meldingsformulier in het klantportaal.' },
+        { text: 'Bij het afrekenen werkt het totaal zich nu vanzelf bij als je een ander land of een btw-nummer kiest. De knop Totaal bijwerken is niet meer nodig.' },
+        { text: 'Het adres blijft altijd handmatig aan te passen. Is de adresdienst even niet bereikbaar of vindt hij niets, dan staat er een melding en kun je het adres zelf invullen.', for: ['beheer', 'werkorders'] },
+      ],
+    },
+    {
       version: '1.5.4',
       date: '2026-11-02',
       title: 'Webshop: afrekenen, retouren en mededelingenbalk',

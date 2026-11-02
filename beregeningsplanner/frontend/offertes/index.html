@@ -80,7 +80,7 @@
         <h3>Klant</h3>
         <label>Naam / bedrijf<input data-f="customer.name" maxlength="200"></label>
         <label>T.a.v.<input data-f="customer.contact" maxlength="200"></label>
-        <label>Adres<textarea data-f="customer.address" rows="3" maxlength="400"></textarea></label>
+        <label>Adres<textarea data-address-lookup data-f="customer.address" rows="3" maxlength="400"></textarea></label>
         <div class="row2">
           <label>E-mail<input data-f="customer.email" type="email" maxlength="200"></label>
           <label>Telefoon<input data-f="customer.phone" maxlength="40"></label>
@@ -150,7 +150,7 @@
       <p class="muted small">Staan op elke offerte. Wijzigingen gelden voor nieuwe offertes; bestaande offertes houden hun eigen teksten en prijzen.</p>
       <form id="pf" class="card-form plain">
         <label>Bedrijfsnaam<input name="companyName" maxlength="120"></label>
-        <label>Adres<textarea name="address" rows="3" maxlength="400"></textarea></label>
+        <label>Adres<textarea data-address-lookup name="address" rows="3" maxlength="400"></textarea></label>
         <div class="row2">
           <label>E-mail<input name="email" maxlength="160"></label>
           <label>Telefoon<input name="phone" maxlength="40"></label>
@@ -224,6 +224,7 @@
   <script src="../shared/env.js"></script>
   <script src="../dashboard/modules.js"></script>
   <script src="../shared/sidebar.js"></script>
+  <script src="../shared/address-lookup.js"></script>
   <script src="../beregening/js/geometry.js"></script>
   <script src="../beregening/js/sprinklerlib.js"></script>
   <script src="../beregening/js/catalog.js"></script>

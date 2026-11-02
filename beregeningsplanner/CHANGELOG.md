@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.5.5
+
+Adres invullen via postcode en huisnummer (PDOK Locatieserver, BAG, gratis en zonder sleutel).
+
+- **Afrekenen zonder knop**: een ander land of een btw-nummer werkt het totaal en de
+  verzendopties op de achtergrond bij (`refreshTotals` in `storefront-checkout.js`, verzoek
+  `action=update` met alleen land, methode en btw-nummer); de knop *Totaal bijwerken* is
+  met script verborgen en blijft zonder script werken. Bestellen tijdens een berekening
+  wacht tot het totaal klopt.
+
+- **Server**: `platform/address-lookup.js` (`createAddressLookup`, `registerAddressRoute`)
+  vraagt PDOK (vast adres, geen invoer van een tenant) en onthoudt uitkomsten 24 uur
+  (max. 2000); time-out 4 s, storing → 502 `unavailable`, ongeldige invoer → 400.
+  Route `GET /api/address-lookup` (login, 60 per minuut per gebruiker/IP) en in de
+  shop `GET /winkel/adres/` (30 per minuut per IP). De browser praat dus alleen met
+  de eigen server: de CSP van de app blijft ongewijzigd; die van de shop kreeg
+  `connect-src 'self'`. Tests vervangen PDOK via `createApp({ addressFetch })`.
+- **Frontend**: één gedeelde component `shared/address-lookup.js`
+  (`AddressLookup.attach` voor losse velden, `enhance`/`enhanceAll` voor elk element
+  met `data-address-lookup`): debounce 400 ms, postcodecontrole, melding in een
+  `role="status"` / `aria-live="polite"`, veld blijft bewerkbaar. Toegevoegd aan
+  offertes (klant en bedrijfsprofiel), werkorders, facturen (klant en debiteur) en
+  het meldformulier van het portaal.
+- **Webshop**: afrekenen heeft postcode boven straat, met (alleen met script)
+  huisnummer en toevoeging; alleen voor land NL. `layout()` accepteert meerdere scripts.
+
 ## 1.5.4
 
 Verbeteringen aan de eigen webshop en de plaats van de bestellingen.

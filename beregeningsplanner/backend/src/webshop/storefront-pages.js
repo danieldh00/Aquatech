@@ -148,7 +148,7 @@ function navigation(groups, root) {
 /**
  * Het kader om elke pagina: kop met logo, zoeken, winkelwagen en account,
  * menu van productgroepen, inhoud en voet.
- * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean, variantScript?: boolean, script?: string, refresh?: string }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina) en variantScript = of de pagina het script voor de keuzelijsten van varianten laadt en script = de naam van een ander script uit de assets dat de pagina laadt (leeg = geen) en refresh = een adres waar de pagina de bezoeker meteen heen stuurt (leeg = niet).
+ * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean, variantScript?: boolean, script?: string|string[], refresh?: string }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina) en variantScript = of de pagina het script voor de keuzelijsten van varianten laadt en script = de naam (of namen) van andere scripts uit de assets die de pagina laadt (leeg = geen) en refresh = een adres waar de pagina de bezoeker meteen heen stuurt (leeg = niet).
  * @returns {string} De volledige HTML-pagina.
  */
 function layout({ root, title, description, body, groups, query = '', wide = false, variantScript = false, script = '', refresh = '' }) {
@@ -169,7 +169,7 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
 ${refresh ? `<meta http-equiv="refresh" content="0;url=${escapeHtml(refresh)}">\n` : ''}<link rel="icon" type="image/png" href="${assetUrl(root, 'favicon.png')}">
 <link rel="stylesheet" href="${assetUrl(root, 'brand.css')}">
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
-${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${script ? `<script src="${assetUrl(root, script)}" defer></script>\n` : ''}</head>
+${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
 <body>
 ${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${escapeHtml(site.notice.color || 'purple')}">${escapeHtml(site.notice.text)}</div>` : ''}
 <header class="shop-head">

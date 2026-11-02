@@ -81,7 +81,7 @@
         <h3>Klant en adres</h3>
         <label>Naam / bedrijf<input data-f="customer.name" maxlength="200"></label>
         <label>Contactpersoon<input data-f="customer.contact" maxlength="200"></label>
-        <label>Adres van de klus<textarea data-f="customer.address" rows="3" maxlength="400"></textarea></label>
+        <label>Adres van de klus<textarea data-address-lookup data-f="customer.address" rows="3" maxlength="400"></textarea></label>
         <div class="row2">
           <label>Telefoon<input data-f="customer.phone" maxlength="40"></label>
           <label>E-mail<input data-f="customer.email" type="email" maxlength="200"></label>
@@ -242,6 +242,7 @@
   <script src="../shared/offline.js"></script>
   <script src="../dashboard/modules.js"></script>
   <script src="../shared/sidebar.js"></script>
+  <script src="../shared/address-lookup.js"></script>
   <script src="../beregening/js/geometry.js"></script>
   <script src="../beregening/js/sprinklerlib.js"></script>
   <script src="../beregening/js/catalog.js"></script>
