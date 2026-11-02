@@ -69,26 +69,72 @@ function checkoutField({ name, label, value, autocomplete, required = true, type
 }
 
 /**
+ * De gegevens die het script (afrekenen.js) nodig heeft om het overzicht bij een andere verzendmethode direct bij te werken.
+ * @param {{ label: string, price: number }} option De verzendoptie.
+ * @param {?object} summary De uitgerekende totalen bij deze optie, of niets als de optie niet beschikbaar is.
+ * @param {boolean} business true voor een zakelijke klant (bedragen excl. btw).
+ * @returns {string} Attributen voor het keuzerondje, of leeg.
+ */
+function summaryData(option, summary, business) {
+  if (!summary) return '';
+  const shown = business ? summary.shipping.priceExcl : summary.shipping.price;
+  const charged = option.price > 0;
+  const attributes = {
+    'data-ship-label': shippingCaption(option.label, charged, business),
+    'data-ship-price': charged ? formatPrice(shown) : 'Gratis',
+    'data-total': String(summary.totals.total),
+    'data-total-text': formatPrice(summary.totals.total),
+    'data-total-caption': totalCaption(business, summary.shifted),
+    'data-note': vatNoteText(business, summary.shifted),
+  };
+  return Object.entries(attributes).map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join('');
+}
+
+/**
+ * Het label bij het totaal op de pagina Afrekenen.
+ * @param {boolean} business true voor een zakelijke klant.
+ * @param {boolean} shifted true als de btw is verlegd.
+ * @returns {string} Het label.
+ */
+function totalCaption(business, shifted) {
+  return business && shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw';
+}
+
+/**
+ * De opmerking over de btw onder het totaal op de pagina Afrekenen.
+ * @param {boolean} business true voor een zakelijke klant.
+ * @param {boolean} shifted true als de btw is verlegd.
+ * @returns {string} De tekst, of leeg voor een particulier.
+ */
+function vatNoteText(business, shifted) {
+  if (shifted) return 'Btw verlegd: je bestelling wordt zonder btw gefactureerd (intracommunautaire levering).';
+  return business ? 'Prijzen excl. btw; de btw komt er bij het afrekenen bovenop. Heb je een btw-nummer van het land van aflevering (buiten Nederland), vul het in en de btw wordt verlegd.' : '';
+}
+
+/**
  * De keuze van de verzendmethode: een land (bij meer dan één) en per methode een keuzerondje met de kosten.
  * @param {{ countries: object[], options: object[] }} quote De verzendopties (web-orders.js, shippingQuote).
  * @param {string} country Het gekozen land (landcode).
  * @param {string} method De gekozen methode ('ophalen' of 'dpd').
+ * @param {Object<string, object>} [summaries] De uitgerekende totalen per beschikbare methode (web-orders.js, orderTotals), zodat het script het overzicht direct kan bijwerken.
+ * @param {boolean} [business] true voor een zakelijke klant (bedragen excl. btw).
  * @returns {string} HTML van het onderdeel Verzending.
  */
-function shippingChoice(quote, country, method) {
+function shippingChoice(quote, country, method, summaries = {}, business = false) {
   const countryField = quote.countries.length > 1
     ? `<label class="form-field"><span>Land</span><select name="country">${quote.countries.map((entry) => `<option value="${escapeHtml(entry.code)}"${entry.code === country ? ' selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label>
-<button class="button secondary" type="submit" name="action" value="update" formnovalidate>Verzendkosten bijwerken</button>`
+`
     : `<input type="hidden" name="country" value="${escapeHtml(country)}">`;
   const options = quote.options.map((option) => {
     const price = !option.available ? '' : option.free && option.method === 'dpd' ? 'Gratis' : option.price > 0 ? formatPrice(option.price) : 'Gratis';
     const extra = option.available ? option.note : option.reason;
-    return `<label class="shipping-option${option.available ? '' : ' disabled'}"><input type="radio" name="shippingMethod" value="${escapeHtml(option.method)}"${option.method === method ? ' checked' : ''}${option.available ? '' : ' disabled'} required>
+    return `<label class="shipping-option${option.available ? '' : ' disabled'}"><input type="radio" name="shippingMethod" value="${escapeHtml(option.method)}"${option.method === method ? ' checked' : ''}${option.available ? '' : ' disabled'}${summaryData(option, summaries[option.method], business)} required>
 <span><strong>${escapeHtml(option.label)}</strong>${price ? ` – ${escapeHtml(price)}` : ''}${extra ? `<br><small>${escapeHtml(extra)}</small>` : ''}</span></label>`;
   }).join('');
   return `<h2>Verzending</h2>
 ${countryField}
-${options || '<p class="note">Er is op dit moment geen verzendmethode beschikbaar.</p>'}`;
+${options || '<p class="note">Er is op dit moment geen verzendmethode beschikbaar.</p>'}
+<button class="button secondary update-totals" type="submit" name="action" value="update" formnovalidate>Totaal bijwerken</button>`;
 }
 
 /** Namen van de betaalmethoden van Mollie zoals de klant ze kent. */
@@ -113,28 +159,29 @@ function paymentChoice(options, chosen = '') {
  * @param {object[]} groups Alle hoofdcategorieën.
  * @returns {string} De HTML-pagina.
  */
-function checkoutPage({ cart, quote, country, method, summary = null, values = {}, error = '', viewer, paymentOptions = ['rekening'] }, groups = []) {
+function checkoutPage({ cart, quote, country, method, summary = null, summaries = {}, values = {}, error = '', viewer, paymentOptions = ['rekening'] }, groups = []) {
   const value = { name: viewer.displayName, email: viewer.email, ...values };
   const chosen = quote.options.find((option) => option.method === method && option.available);
   const business = Boolean(cart.pricesExcl);
   const items = (summary ? summary.lines : cart.lines).map((line) => `<li><span>${line.qty} × ${escapeHtml(line.name)}</span><span>${escapeHtml(formatPrice(business ? line.lineExcl : line.lineTotal))}</span></li>`).join('');
   const shippingShown = summary ? (business ? summary.shipping.priceExcl : summary.shipping.price) : 0;
-  const shippingRow = chosen ? `<li><span>${escapeHtml(chosen.label)}</span><span>${chosen.price > 0 ? escapeHtml(formatPrice(shippingShown)) : 'Gratis'}</span></li>` : '';
+  const shippingRow = `<li data-ship-row${chosen ? '' : ' hidden'}><span data-ship-label>${chosen ? escapeHtml(shippingCaption(chosen.label, chosen.price > 0, business)) : ''}</span><span data-ship-price>${chosen ? (chosen.price > 0 ? escapeHtml(formatPrice(shippingShown)) : 'Gratis') : ''}</span></li>`;
   const total = summary ? summary.totals.total : cart.totals.total;
-  const vatNote = summary && summary.shifted ? '<p class="note">Btw verlegd: je bestelling wordt zonder btw gefactureerd (intracommunautaire levering).</p>' : business ? '<p class="note">Prijzen excl. btw; de btw komt er bij het afrekenen bovenop. Heb je een btw-nummer van het land van aflevering (buiten Nederland), vul het in en de btw wordt verlegd.</p>' : '';
+  const noteText = vatNoteText(business, Boolean(summary && summary.shifted));
+  const vatNote = `<p class="note" data-vat-note${noteText ? '' : ' hidden'}>${escapeHtml(noteText)}</p>`;
   const body = `<section class="cart checkout"><h1>Afrekenen</h1>
 ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 <div class="checkout-grid">
 <form method="post" action="./" class="account-form">
 <button type="submit" hidden>Bestelling plaatsen</button>
-<input type="hidden" name="expectedTotal" value="${escapeHtml(String(total))}">
+<input type="hidden" name="expectedTotal" value="${escapeHtml(String(total))}" data-expected-total>
 <h2>Je gegevens</h2>
 ${checkoutField({ name: 'name', label: 'Naam', value: value.name || '', autocomplete: 'name' })}
 ${checkoutField({ name: 'company', label: business ? 'Bedrijfsnaam' : 'Bedrijfsnaam (optioneel)', value: value.company || '', autocomplete: 'organization', required: business })}
 ${business ? checkoutField({ name: 'vatNumber', label: 'Btw-nummer (optioneel, bijvoorbeeld BE0123456789)', value: value.vatNumber || '', autocomplete: 'off', required: false }) : ''}
 ${checkoutField({ name: 'email', label: 'E-mailadres', value: value.email || '', autocomplete: 'email', type: 'email' })}
 ${checkoutField({ name: 'phone', label: 'Telefoon (optioneel)', value: value.phone || '', autocomplete: 'tel', required: false, type: 'tel' })}
-${shippingChoice(quote, country, method)}
+${shippingChoice(quote, country, method, summaries, business)}
 <h2>Afleveradres</h2>
 <p class="note">Bij ophalen is een adres niet nodig.</p>
 ${checkoutField({ name: 'street', label: 'Straat en huisnummer', value: value.street || '', autocomplete: 'street-address', required: false })}
@@ -146,10 +193,10 @@ ${paymentChoice(paymentOptions, value.paymentMethod)}
 <button class="button" type="submit" name="action" value="place">${paymentOptions.length === 1 && paymentOptions[0] === 'online' ? 'Bestellen en betalen' : 'Bestelling plaatsen'}</button>
 </form>
 <aside class="checkout-summary"><h2>Je bestelling</h2><ul>${items}${shippingRow}</ul>
-<p class="checkout-total"><span>${business && !(summary && summary.shifted) ? 'Totaal incl. btw' : business ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</span><strong>${escapeHtml(formatPrice(total))}</strong></p>${vatNote}
+<p class="checkout-total"><span data-total-caption>${totalCaption(business, Boolean(summary && summary.shifted))}</span><strong data-total-text>${escapeHtml(formatPrice(total))}</strong></p>${vatNote}
 <p><a href="${ROOT}winkelwagen/">Winkelwagen aanpassen</a></p></aside>
 </div></section>`;
-  return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Reken je bestelling af bij Aquatechshop.nl.', body, groups });
+  return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Reken je bestelling af bij Aquatechshop.nl.', body, groups, script: 'afrekenen.js' });
 }
 
 /**
@@ -166,6 +213,17 @@ function checkoutLoginPage(groups = []) {
 }
 
 /**
+ * De omschrijving van de verzendkosten met erbij of de btw erin zit.
+ * @param {string} label De naam van de verzendmethode (bijvoorbeeld "Bezorgen met DPD").
+ * @param {boolean} charged true als er verzendkosten zijn (bij gratis staat er geen btw-vermelding).
+ * @param {boolean} excl true voor een zakelijke klant: de verzendkosten staan excl. btw.
+ * @returns {string} De omschrijving, bijvoorbeeld "Bezorgen met DPD (incl. btw)".
+ */
+function shippingCaption(label, charged, excl) {
+  return charged ? `${label} (${excl ? 'excl.' : 'incl.'} btw)` : label;
+}
+
+/**
  * De regel met de verzendkosten onder de artikelen van een bestelling.
  * @param {{ label: string, price: number, priceExcl?: number, vatRate?: number, free: boolean }|null} shipping De verzending van de bestelling (oudere bestellingen hebben geen).
  * @param {boolean} [excl] true voor een zakelijke bestelling: toon de verzendkosten excl. btw.
@@ -174,7 +232,7 @@ function checkoutLoginPage(groups = []) {
 function shippingRow(shipping, excl = false) {
   if (!shipping) return '';
   const shown = excl && shipping.priceExcl !== undefined ? shipping.priceExcl : shipping.price;
-  return `<tr class="sub"><td colspan="3">${escapeHtml(shipping.label)}</td><td class="num">${shipping.price > 0 ? escapeHtml(formatPrice(shown)) : 'Gratis'}</td></tr>`;
+  return `<tr class="sub"><td colspan="3">${escapeHtml(shippingCaption(shipping.label, shipping.price > 0, excl))}</td><td class="num">${shipping.price > 0 ? escapeHtml(formatPrice(shown)) : 'Gratis'}</td></tr>`;
 }
 
 /**

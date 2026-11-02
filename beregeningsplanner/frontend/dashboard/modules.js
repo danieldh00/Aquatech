@@ -132,6 +132,16 @@
       right: 'facturen',
     },
     {
+      id: 'webshop-bestellingen',
+      navGroup: 'verkoop',
+      title: 'Webshopbestellingen',
+      description: 'Bestellingen en retouren uit de eigen webshop: status wijzigen, verzenden met volgcode, retouren goedkeuren of afwijzen en exporteren naar Excel.',
+      href: 'webshop-bestellingen/',
+      icon: 'box',
+      status: 'actief',
+      right: 'beheer',
+    },
+    {
       id: 'uitbesteden',
       navGroup: 'uitvoering',
       title: 'Uitbesteden',

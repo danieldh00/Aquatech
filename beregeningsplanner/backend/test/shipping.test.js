@@ -124,6 +124,14 @@ test('afrekenen: ophalen, DPD met tarief, gratis vanaf, te zwaar en ander land',
   assert.match(page.text, /€ 6,95/);
   assert.match(page.text, /Gratis bezorging vanaf €\s100,00/);
   assert.match(page.text, /name="country"/);
+  // Per verzendmethode de totalen voor het script, zodat een andere keuze het overzicht direct bijwerkt.
+  assert.match(page.text, /data-ship-label="[^"]*\(incl\. btw\)"/, 'verzendkosten met btw-vermelding');
+  assert.match(page.text, /data-total="\d+(\.\d+)?"/);
+  assert.match(page.text, /afrekenen\.js/);
+  assert.match(page.text, /data-expected-total/);
+  const script = await customer.get('/winkel/assets/afrekenen.js');
+  assert.strictEqual(script.status, 200);
+  assert.match(script.text, /showChosenShipping/);
   const be = await postForm(base, customer, '/winkel/afrekenen/', { ...FIELDS, action: 'update', country: 'BE' });
   assert.strictEqual(be.status, 200);
   assert.match(be.text, /€ 14,50/);

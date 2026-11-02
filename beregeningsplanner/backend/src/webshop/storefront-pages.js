@@ -148,10 +148,10 @@ function navigation(groups, root) {
 /**
  * Het kader om elke pagina: kop met logo, zoeken, winkelwagen en account,
  * menu van productgroepen, inhoud en voet.
- * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean, variantScript?: boolean, refresh?: string }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina) en variantScript = of de pagina het script voor de keuzelijsten van varianten laadt en refresh = een adres waar de pagina de bezoeker meteen heen stuurt (leeg = niet).
+ * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean, variantScript?: boolean, script?: string, refresh?: string }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina) en variantScript = of de pagina het script voor de keuzelijsten van varianten laadt en script = de naam van een ander script uit de assets dat de pagina laadt (leeg = geen) en refresh = een adres waar de pagina de bezoeker meteen heen stuurt (leeg = niet).
  * @returns {string} De volledige HTML-pagina.
  */
-function layout({ root, title, description, body, groups, query = '', wide = false, variantScript = false, refresh = '' }) {
+function layout({ root, title, description, body, groups, query = '', wide = false, variantScript = false, script = '', refresh = '' }) {
   const home = root || './';
   const { site, pages } = activeContent;
   const phone = site.contact.phone;
@@ -169,9 +169,9 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
 ${refresh ? `<meta http-equiv="refresh" content="0;url=${escapeHtml(refresh)}">\n` : ''}<link rel="icon" type="image/png" href="${assetUrl(root, 'favicon.png')}">
 <link rel="stylesheet" href="${assetUrl(root, 'brand.css')}">
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
-${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}</head>
+${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${script ? `<script src="${assetUrl(root, script)}" defer></script>\n` : ''}</head>
 <body>
-${site.notice.enabled && site.notice.text ? `<div class="shop-notice">${escapeHtml(site.notice.text)}</div>` : ''}
+${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${escapeHtml(site.notice.color || 'purple')}">${escapeHtml(site.notice.text)}</div>` : ''}
 <header class="shop-head">
   <div class="shop-bar">
     <a class="shop-brand" href="${home}"><img src="${assetUrl(root, 'aquatechshop-logo.png')}" alt="Aquatechshop.nl" width="216" height="44"></a>
@@ -287,6 +287,15 @@ function listItem(product, root) {
 }
 
 /**
+ * Het label "3 varianten" voor een hoofdartikel met varianten, zodat de bezoeker in een lijst ziet dat er keuze is.
+ * @param {object} product Een product uit de catalogus.
+ * @returns {string} HTML van het label, of leeg als het product geen varianten heeft.
+ */
+function variantBadge(product) {
+  return product.variants && product.variants.length > 1 ? `<span class="variant-badge">${product.variants.length} varianten</span>` : '';
+}
+
+/**
  * Een kaart in een productoverzicht: afbeelding, naam, prijs en voorraadstand.
  * @param {object} product Een product uit de catalogus.
  * @param {string} root Relatief pad naar de shop-startpagina.
@@ -297,8 +306,11 @@ function productCard(product, root) {
   return `<a class="product-card" href="${root}product/${escapeHtml(product.slug)}/">
   <span class="product-image">${image}</span>
   <span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span>
-  <span class="product-price">${priceText(product)}</span>
-  <span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span>
+  <span class="product-foot">
+    <span class="product-price">${priceText(product)}</span>
+    ${variantBadge(product)}
+    <span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span>
+  </span>
 </a>`;
 }
 
@@ -332,7 +344,7 @@ function groupShowcase(group, products) {
  * @returns {string} HTML van de regel.
  */
 function productRow(product, root) {
-  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${escapeHtml(product.image)}" alt="" loading="lazy"></span><span class="product-row-text"><span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span><span class="product-price">${priceText(product)}</span><span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span></span></a>`;
+  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${escapeHtml(product.image)}" alt="" loading="lazy"></span><span class="product-row-text"><span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span><span class="product-price">${priceText(product)}</span>${variantBadge(product)}<span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span></span></a>`;
 }
 
 /**
@@ -460,8 +472,7 @@ function productPage(product, groups, chosenCode = '') {
   const image = imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}">` : '<span class="no-image" aria-hidden="true"></span>';
   const group = groups.find((candidate) => candidate.slug === product.groupSlug);
   const picker = chosen ? `<form class="variant-pick" method="get" action="">
-      <label>${escapeHtml(product.attributeName)}<select name="v">${variants.map((variant) => `<option value="${escapeHtml(variant.code)}"${variant === chosen ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('')}</select></label>
-      <span class="variant-count">${variants.length} varianten</span>
+      <label>${escapeHtml(product.attributeName)} <span class="variant-count">(${variants.length} varianten)</span><select name="v">${variants.map((variant) => `<option value="${escapeHtml(variant.code)}"${variant === chosen ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('')}</select></label>
       <button class="button secondary" type="submit">Kies</button>
     </form>` : '';
   const parentLink = product.parentSlug ? `<p class="note"><a href="${root}product/${escapeHtml(product.parentSlug)}/?v=${encodeURIComponent(shown.code)}">Alle uitvoeringen van ${escapeHtml(product.parentName)}</a></p>` : '';

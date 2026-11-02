@@ -13,6 +13,19 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.5.4',
+      date: '2026-11-02',
+      title: 'Webshop: afrekenen, retouren en mededelingenbalk',
+      items: [
+        { text: 'Webshopbestellingen en -retouren staan nu onder Verkoop, naast Offertes en Facturen.', for: ['beheer'] },
+        { text: 'Bij afrekenen werkt het overzicht en het totaal direct bij als de klant kiest tussen bezorgen en ophalen: één klik op Bestelling plaatsen is genoeg. Verzendkosten staan er nu met "incl. btw" of "excl. btw" bij.', for: ['beheer'] },
+        { text: 'In de webshop zie je bij een product met varianten nu "3 varianten", de voorraadregel staat op elke kaart onderaan en op de productpagina staat het aantal varianten netjes bij de keuzelijst.', for: ['beheer'] },
+        { text: 'Het retourformulier en de eerdere retouren van een klant hebben dezelfde opmaak als de rest van de webshop. Een afgewezen retour kan niet opnieuw worden ingediend; na intrekken kan dat wel.', for: ['beheer'] },
+        { text: 'Het retourdetail in Beheer is netter opgemaakt: artikelnaam en artikelnummer onder elkaar, tekstvak en knoppen in de stijl van Beheer.', for: ['beheer'] },
+        { text: 'De mededelingenbalk bovenaan de webshop kun je nu ook een andere achtergrondkleur geven, naast het aanpassen van de tekst en het aan- of uitzetten (Beheer, Webshop-inhoud).', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.5.3',
       date: '2026-10-31',
       title: 'Online betalen in de webshop',

@@ -9,6 +9,15 @@
   --at-shop-green-dark: #137f46;
   --at-shop-green-soft: #e6f5ed;
   --at-shop-notice: #7a1fe0;
+  --at-notice-navy: #1b3768;
+  --at-notice-green: #137f46;
+  --at-notice-teal: #0f7f8c;
+  --at-notice-orange: #b45309;
+  --at-notice-red: #b3261e;
+  --at-notice-grey: #374151;
+  --at-badge-open: #8a5a00;
+  --at-badge-open-bg: #fdf1d6;
+  --at-badge-bad-bg: #fbe4e2;
   --at-white: #fff;
   --at-ink: #1c2433;
   --at-muted: #5b6577;
@@ -30,6 +39,12 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 
 /* Mededelingenbalk boven aan elke pagina. */
 .shop-notice { background: var(--at-shop-notice); color: var(--at-white); text-align: center; font-size: 0.9rem; padding: 8px 16px; }
+.shop-notice.kleur-navy { background: var(--at-notice-navy); }
+.shop-notice.kleur-green { background: var(--at-notice-green); }
+.shop-notice.kleur-teal { background: var(--at-notice-teal); }
+.shop-notice.kleur-orange { background: var(--at-notice-orange); }
+.shop-notice.kleur-red { background: var(--at-notice-red); }
+.shop-notice.kleur-grey { background: var(--at-notice-grey); }
 
 /* Kopbalk: logo, zoeken, account en winkelwagen, daaronder de productgroepen. */
 .shop-head { background: var(--at-white); position: relative; z-index: 10; }
@@ -155,6 +170,8 @@ a.shop-action:hover { background: var(--at-page); }
 .product-name { font-weight: 600; color: var(--at-shop-navy); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; min-height: 4.5em; }
 .product-card:hover .product-name, .product-card:focus-within .product-name, .product-card:active .product-name, .product-row:hover .product-name, .product-row:focus-within .product-name, .product-row:active .product-name { -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
 .product-price { font-weight: 700; }
+.product-foot { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
+.variant-badge { align-self: flex-start; padding: 2px 8px; font-size: 0.8rem; font-weight: 600; color: var(--at-shop-navy); background: var(--at-line); border-radius: 999px; }
 .stock { font-size: 0.85rem; font-weight: 600; margin: 0; }
 .stock.in { color: var(--at-shop-green-dark); }
 .stock.out { color: var(--at-stock-out); }
@@ -250,7 +267,7 @@ a.shop-action:hover { background: var(--at-page); }
 .variant-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .variant-pick label { display: flex; flex-direction: column; gap: 2px; flex: 1 1 140px; font-size: 0.75rem; color: var(--at-muted); }
 .variant-pick select { font: inherit; font-size: 1rem; color: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; background: var(--at-white); }
-.variant-count { font-size: 0.9rem; color: var(--at-muted); }
+.variant-count { font-size: 0.8rem; color: var(--at-muted); }
 .js-on .variant-go { display: none; }
 .variant-buy { display: flex; flex-direction: column; gap: 4px; }
 .variant-price { margin: 0; font-size: 1.1rem; }
@@ -258,7 +275,9 @@ a.shop-action:hover { background: var(--at-page); }
 .variant-order { display: flex; gap: 8px; align-items: stretch; }
 .variant-order input { width: 64px; font: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; }
 .variant-order .button { flex: 1; padding: 8px 12px; }
-.product-info .variant-pick { margin: 8px 0 12px; }
+.product-info .variant-pick { margin: 8px 0 12px; flex-direction: column; align-items: stretch; }
+.product-info .variant-pick label { flex: none; }
+.product-info .variant-pick .button { align-self: flex-start; }
 @media (max-width: 860px) { .variant-row { grid-template-columns: 80px minmax(0, 1fr); } .variant-row .product-image { width: 80px; height: 80px; } .variant-pick, .variant-buy { grid-column: 1 / -1; } }
 
 /* Keuze tussen alle producten en alleen wat op voorraad is. */
@@ -284,3 +303,24 @@ form.inline { display: inline-block; margin-right: 8px; }
 .checkout-summary li, .checkout-total { display: flex; justify-content: space-between; gap: 12px; }
 .form-field textarea { padding: 10px 12px; border: 1px solid var(--at-line); border-radius: 8px; font: inherit; font-weight: 400; }
 @media (max-width: 720px) { .checkout-grid { grid-template-columns: 1fr; } .cart-actions { flex-direction: column; align-items: stretch; } }
+
+
+/* Formulier Retourneren: invoervelden in de stijl van de rest van de shop. */
+.form-field select { padding: 10px 12px; border: 1px solid var(--at-line); border-radius: 8px; font: inherit; font-weight: 400; background: var(--at-white); }
+.cart-table input[type="number"] { width: 5.5em; padding: 8px 10px; border: 1px solid var(--at-line); border-radius: 8px; font: inherit; text-align: right; background: var(--at-white); }
+.return-form .form-field { margin-top: 12px; }
+.return-form .button { margin-top: 12px; }
+
+/* Eerdere retouren als kaarten met een statuslabel. */
+.return-list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
+.return-card { padding: 12px 14px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 8px; }
+.return-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.return-date { margin-left: auto; color: var(--at-muted); font-size: 0.85rem; }
+.return-lines { list-style: none; margin: 6px 0 0; padding: 0; }
+.return-note { margin: 6px 0 0; color: var(--at-muted); font-size: 0.85rem; }
+.return-card .button { margin-top: 10px; }
+.status-badge { padding: 2px 10px; font-size: 0.8rem; font-weight: 700; border-radius: 999px; background: var(--at-line); color: var(--at-ink); }
+.status-aangevraagd { background: var(--at-badge-open-bg); color: var(--at-badge-open); }
+.status-goedgekeurd, .status-afgerond { background: var(--at-shop-green-soft); color: var(--at-shop-green-dark); }
+.status-afgewezen { background: var(--at-badge-bad-bg); color: var(--at-stock-out); }
+.status-ingetrokken { background: var(--at-line); color: var(--at-muted); }

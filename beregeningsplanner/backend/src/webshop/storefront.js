@@ -26,7 +26,7 @@ const { readCart, writeCart, applyCartAction } = require('./storefront-cart');
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
 const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
 
-/** Content-Security-Policy van de shop: alleen het eigen script voor de keuzelijsten van varianten; afbeeldingen van de webshop komen van https-adressen. */
+/** Content-Security-Policy van de shop: alleen de eigen scripts voor de keuzelijsten van varianten en het afrekenen; afbeeldingen van de webshop komen van https-adressen. */
 const STOREFRONT_CSP = [
   "default-src 'none'", "script-src 'self'", "style-src 'self'", "img-src 'self' https:", "font-src 'self'",
   "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'",
@@ -38,6 +38,7 @@ const ASSETS = {
   'brand.css': { file: path.join(SHARED_DIR, 'brand.css'), type: 'text/css; charset=utf-8' },
   'winkel.css': { file: path.join(__dirname, 'storefront.css'), type: 'text/css; charset=utf-8' },
   'varianten.js': { file: path.join(__dirname, 'storefront-variants.js'), type: 'text/javascript; charset=utf-8' },
+  'afrekenen.js': { file: path.join(__dirname, 'storefront-checkout.js'), type: 'text/javascript; charset=utf-8' },
   'favicon.png': { file: path.join(SHARED_DIR, 'icons', 'favicon-48.png'), type: 'image/png' },
 };
 /** Afbeeldingen van de shop zelf (logo, hero, merken, pictogrammen) uit de map assets/ naast dit bestand. */
@@ -311,7 +312,7 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
        * Bepaalt het land en de verzendmethode die bij het afrekenen getoond worden.
        * @param {object} cart De geprijsde winkelwagen.
        * @param {object} input Het gekozen land en de gekozen methode (query of formulier).
-       * @returns {{ quote: object, country: string, method: string }} De opties, het land (een bezorgbaar land) en de methode (de gekozen, anders de eerste beschikbare).
+       * @returns {{ quote: object, country: string, method: string, summary: ?object, summaries: object }} De opties, het land (een bezorgbaar land), de methode (de gekozen, anders de eerste beschikbare), de totalen bij die methode en de totalen per beschikbare methode.
        */
       const checkoutChoice = (cart, input) => {
         const config = shippingConfig();
@@ -324,8 +325,10 @@ function createStorefront({ db, tenantId, settingsFor, accounts = null, content 
         const method = available.some((option) => option.method === asking) ? asking : available.length ? available[0].method : '';
         const chosen = available.find((option) => option.method === method);
         const group = cart.pricesExcl ? 'zakelijk' : '';
-        const summary = chosen ? orders.orderTotals(cart, chosen, { group, country, vatNumber: Vat.normalizeVatNumber(input.vatNumber) }) : null;
-        return { quote, country, method, summary };
+        const vatNumber = Vat.normalizeVatNumber(input.vatNumber);
+        const summaries = {};
+        for (const option of available) summaries[option.method] = orders.orderTotals(cart, option, { group, country, vatNumber });
+        return { quote, country, method, summary: chosen ? summaries[method] : null, summaries };
       };
 
       router.get('/afrekenen', (req, res) => {

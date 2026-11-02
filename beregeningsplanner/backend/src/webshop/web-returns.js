@@ -16,8 +16,8 @@ const TRANSITIONS = { aangevraagd: ['goedgekeurd', 'afgewezen', 'ingetrokken'], 
 const REASONS = { niet_nodig: 'Niet meer nodig', verkeerd: 'Verkeerd besteld', defect: 'Defect of beschadigd', anders: 'Anders' };
 /** Het aantal dagen na verzending waarbinnen een retour kan worden aangevraagd (herroepingstermijn). */
 const RETURN_DAYS = 14;
-/** Retouren die nog of al meetellen voor wat er van een bestelling terug kan. */
-const COUNTING = ['aangevraagd', 'goedgekeurd', 'afgerond'];
+/** Retouren die meetellen voor wat er van een bestelling terug kan: lopende, afgewezen (definitief) en afgeronde; een ingetrokken retour telt niet. */
+const COUNTING = ['aangevraagd', 'goedgekeurd', 'afgewezen', 'afgerond'];
 /** Hoogstens zoveel retouren per pagina in Beheer. */
 const PAGE_LIMIT = 200;
 const COLUMNS = 'id, order_id, user_id, number, status, created_at, updated_at';
@@ -78,7 +78,9 @@ function createWebReturnStore(db, { orders, stock }) {
 
   /**
    * Wat er van een bestelling nog terug kan: per regel het verzonden aantal
-   * min wat in andere (lopende of afgeronde) retouren zit.
+   * min wat in andere (lopende, afgewezen of afgeronde) retouren zit. Een
+   * afgewezen retour is definitief: alleen een ingetrokken retour geeft de
+   * artikelen weer vrij.
    * @param {string} tenantId Id van de omgeving.
    * @param {object} order De bestelling (met regels).
    * @returns {{ itemId: string, code: string, name: string, unit: string, qty: number, unitExcl: number, vatRate: number }[]} De regels met een resterend aantal groter dan nul.
@@ -93,6 +95,20 @@ function createWebReturnStore(db, { orders, stock }) {
     return order.lines
       .map((line) => ({ itemId: line.itemId, code: line.code, name: line.name, unit: line.unit, qty: line.qty - (used.get(line.code) || 0), unitExcl: line.unitExcl, vatRate: line.vatRate }))
       .filter((line) => line.qty > 0);
+  }
+
+  /**
+   * De artikelcodes van een bestelling die in een afgewezen retour zaten.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} orderId Id van de bestelling.
+   * @returns {Set<string>} De artikelcodes.
+   */
+  function rejectedCodes(tenantId, orderId) {
+    const codes = new Set();
+    for (const row of prepare('SELECT data FROM web_returns WHERE tenant_id = ? AND order_id = ? AND status = ?').all(tenantId, orderId, 'afgewezen')) {
+      for (const line of JSON.parse(row.data).lines) codes.add(line.code);
+    }
+    return codes;
   }
 
   /**
@@ -169,7 +185,7 @@ function createWebReturnStore(db, { orders, stock }) {
       const lines = [];
       for (const [code, qty] of wanted) {
         const line = available.get(code);
-        if (!line) return { error: `Artikel ${code} kan niet (meer) terug.`, status: 409 };
+        if (!line) return { error: rejectedCodes(tenantId, order.id).has(code) ? `Artikel ${code} is al in een retour afgewezen en kan niet opnieuw worden ingediend.` : `Artikel ${code} kan niet (meer) terug.`, status: 409 };
         if (qty > line.qty) return { error: `Van ${line.name} kunnen nog ${line.qty} terug.`, status: 409 };
         lines.push({ ...line, qty });
       }

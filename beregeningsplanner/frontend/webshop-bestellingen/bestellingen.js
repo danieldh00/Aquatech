@@ -1,4 +1,4 @@
-// Beheer > Bestellingen: bestellingen uit de eigen webshop met hun status, het
+// Webshopbestellingen (Verkoop) > Bestellingen: bestellingen uit de eigen webshop met hun status, het
 // detail (regels, adres, mailstatus), statuswijzigingen en een Excel-export
 // (API /api/admin/web-orders, zie backend/src/webshop/web-orders.js).
 (function () {
