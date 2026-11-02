@@ -8,6 +8,7 @@ const { transaction, jsonField } = require('../database/db');
 const { createVault } = require('../beveiliging/vault');
 const { createMailer, validEmail } = require('../platform/mailer');
 const { preferencesOf } = require('../platform/store');
+const { requireVerifiedAddress } = require('../platform/address-lookup');
 
 /**
  * Kopie (bcc) van een verstuurde mail naar de afzender, als die dat in Mijn
@@ -710,7 +711,7 @@ function registerQuoteRoutes(app, ctx) {
     res.json(quote);
   });
 
-  app.post('/api/quotes', requireJson, requireQuotes, (req, res) => {
+  app.post('/api/quotes', requireJson, requireQuotes, requireVerifiedAddress(ctx.addressGuard, (req) => req.body?.data?.customer?.address), (req, res) => {
     const { data, status } = req.body || {};
     if (!validData(data) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
     const customerChoice = customerIdOf(req, req.body.customerId);
@@ -723,7 +724,7 @@ function registerQuoteRoutes(app, ctx) {
     res.status(201).json(quotes.create(req.user, data, { status, prefix, customerId: customerChoice.value }));
   });
 
-  app.put('/api/quotes/:id', requireJson, requireQuotes, (req, res) => {
+  app.put('/api/quotes/:id', requireJson, requireQuotes, requireVerifiedAddress(ctx.addressGuard, (req) => req.body?.data?.customer?.address, (req) => () => quotes.get(req.user, req.params.id)?.data?.customer?.address), (req, res) => {
     const { data, status } = req.body || {};
     if ((data !== undefined && !validData(data)) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
     const customerChoice = customerIdOf(req, req.body.customerId);

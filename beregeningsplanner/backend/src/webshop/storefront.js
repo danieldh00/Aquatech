@@ -10,7 +10,7 @@ const path = require('path');
 const express = require('express');
 const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
-const { registerAddressRoute } = require('../platform/address-lookup');
+const { registerAddressRoute, normalizePostcode } = require('../platform/address-lookup');
 const { remoteIp } = require('../beveiliging/auth');
 const { createStorefrontData } = require('./storefront-data');
 const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
@@ -59,10 +59,10 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ addressLookup?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, onOrder?: Function, onReturn?: Function }} options addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
+ * @param {{ addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, onOrder?: Function, onReturn?: Function }} options addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/winkel', router).
  */
-function createStorefront({ addressLookup = null, db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onReturn = () => {} }) {
+function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onReturn = () => {} }) {
   const data = createStorefrontData(db);
   const router = express.Router();
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: remoteIp });
@@ -373,7 +373,18 @@ function createStorefront({ addressLookup = null, db, tenantId, settingsFor, acc
         }
         if (orderLimited(req, res)) return res.status(429).type('text').send('Te veel bestellingen vanaf dit adres. Probeer het later opnieuw.');
         try {
-          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup }, body, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer));
+          // Een Nederlands bezorgadres komt altijd uit postcode + huisnummer (PDOK): straat en woonplaats uit de browser worden niet vertrouwd.
+          let placed = body;
+          if (addressGuard && String(body.shippingMethod || '') === 'dpd' && String(body.country || 'NL').toUpperCase() === 'NL' && normalizePostcode(body.postcode) && String(body.street || '').trim().length >= 3) {
+            const resolved = await addressGuard.resolveParts({ street: String(body.street || '').trim(), postcode: String(body.postcode || '').trim() });
+            if (!resolved.ok) {
+              res.setHeader('Cache-Control', 'no-store');
+              const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
+              return sendWithGroups(req, res, resolved.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: resolved.message, values: body, ...checkoutChoice(cart, body) }, groups));
+            }
+            placed = { ...body, street: resolved.street, postcode: resolved.postcode, city: resolved.city };
+          }
+          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer));
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
             const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });

@@ -4,6 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { sitePhotoPng } = require('../src/platform/test-data');
@@ -27,7 +28,7 @@ async function setup() {
   await store.createAccount(main, { username: 'piet', displayName: 'Piet', role: 'klant', password: PW });
   const other = store.createTenant({ name: 'Blauw BV', slug: 'blauw' }).tenant;
   await store.createAccount(other.id, { username: 'bram', displayName: 'Bram', role: 'installateur', password: PW });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const as = createLogin(base, { password: PW, extraBody: { mustChangePassword: false } });
   return { db, store, server, base, as };
 }
@@ -44,7 +45,7 @@ test('meldingen: klant meldt met foto, medewerker antwoordt en maakt een werkord
     const klaasId = (await klaas.get('/api/me')).body.user.id;
 
     // Installatie van Klaas: werkorder uit een geaccordeerde offerte aan zijn account.
-    const data = { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1\nNunspeet' },
+    const data = { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1\n8071 AB Nunspeet' },
       lines: [{ section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 20, vat: 21 }] };
     const quote = (await kees.post('/api/quotes', { data, customerId: klaasId })).body;
     await kees.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
@@ -60,7 +61,7 @@ test('meldingen: klant meldt met foto, medewerker antwoordt en maakt een werkord
 
     const created = await klaas.post('/api/portal/requests', {
       kind: 'storing', urgent: true, subject: 'Zone 1 gaat niet aan', description: 'Sinds gisteren gaat zone 1 niet meer aan.',
-      address: 'Dorpsstraat 1, Nunspeet', phone: '0341 000 000', preferred: 'Ochtend', installationId: inst.id,
+      address: 'Tuinstraat 1, 8071 AB Nunspeet', phone: '0341 000 000', preferred: 'Ochtend', installationId: inst.id,
     });
     assert.strictEqual(created.status, 201, JSON.stringify(created.body));
     const request = created.body;

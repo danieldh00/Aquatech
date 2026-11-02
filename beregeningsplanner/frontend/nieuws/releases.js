@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.5.6',
+      date: '2026-11-02',
+      title: 'Adres alleen via postcode en huisnummer',
+      items: [
+        { text: 'Het adres is niet meer met de hand te typen: vul alleen postcode, huisnummer en eventueel een toevoeging in, dan staan straat en woonplaats er automatisch. Zo klopt elk adres, ook bij offertes, werkorders, facturen, meldingen en het afrekenen in de webshop. Bestaande adressen blijven zichtbaar. Vindt het systeem geen adres, dan staat er een melding en kun je pas verder als de postcode en het huisnummer kloppen.' },
+      ],
+    },
+    {
       version: '1.5.5',
       date: '2026-11-02',
       title: 'Adres invullen met postcode en huisnummer',

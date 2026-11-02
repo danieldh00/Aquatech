@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const QuoteCore = require('../../frontend/offertes/quote-core.js');
@@ -28,7 +29,7 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
  * @returns {object} De plangegevens.
  */
 const garden = () => ({
-  meta: { name: 'Tuin Jansen', customer: 'Fam. Jansen', address: 'Dorpsstraat 1, Nunspeet' },
+  meta: { name: 'Tuin Jansen', customer: 'Fam. Jansen', address: 'Tuinstraat 1, 8071 AB Nunspeet' },
   settings: { level: 'expert', pressure: 3.5, flow: 2 },
   areas: [
     { id: 'a1', type: 'lawn', pts: [{ x: 0, y: 0 }, { x: 12, y: 0 }, { x: 12, y: 8 }, { x: 0, y: 8 }] },
@@ -56,7 +57,7 @@ const garden = () => ({
  */
 const quoteFromGarden = () => {
   const built = plain(QuoteCore.fromPlan(garden(), lib, { hourlyRate: 55, callOutFee: 35 }));
-  return { id: 'q1', number: 'OF-2026-0007', data: QuoteCore.sanitize({ title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1\nNunspeet' }, planId: 'p1', lines: built.lines }) };
+  return { id: 'q1', number: 'OF-2026-0007', data: QuoteCore.sanitize({ title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1\n8071 AB Nunspeet' }, planId: 'p1', lines: built.lines }) };
 };
 
 test('werkorder uit offerte: materialen zonder prijzen, arbeid als werkstappen in uitvoeringsvolgorde', () => {
@@ -179,7 +180,7 @@ async function setup(appOpts = {}) {
   await store.createAccount(tid, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!' });
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: 'Tuin-Plan-2026!' });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: 'Tuin-Plan-2026!' });
-  const { server, base } = await listen(createApp({ secret: SECRET, db, ...appOpts }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, ...appOpts }));
   const as = createLogin(base, { password: 'Tuin-Plan-2026!' });
   return { server, base, as };
 }
@@ -207,7 +208,7 @@ test('API: werkorder alleen uit een geaccordeerde offerte, alleen voor beheerder
     assert.strictEqual(firstOrder.body.status, 'open');
     assert.strictEqual(firstOrder.body.quoteId, savedQuote.id);
     assert.strictEqual(firstOrder.body.customer, 'Fam. Jansen');
-    assert.strictEqual(firstOrder.body.address, 'Dorpsstraat 1, Nunspeet');
+    assert.strictEqual(firstOrder.body.address, 'Tuinstraat 1, 8071 AB Nunspeet');
     assert.strictEqual(firstOrder.body.data.quoteNumber, savedQuote.number);
     assert.strictEqual(firstOrder.body.data.materials.length, quote.data.lines.filter((line) => line.section === 'materiaal').length);
 
@@ -402,7 +403,7 @@ test('API: startscherm (my-day): klussen van de dag per uitvoerder, meerdaagse k
     assert.strictEqual(second.totalDays, 2);
     assert.strictEqual(second.phone, '06 12345678');
     assert.strictEqual(second.contact, 'Jan Jansen');
-    assert.strictEqual(second.address, 'Dorpsstraat 1, Nunspeet');
+    assert.strictEqual(second.address, 'Tuinstraat 1, 8071 AB Nunspeet');
     assert.strictEqual(second.photos, 0);
     assert.strictEqual(day.next.id, orderD.id, 'eerstvolgende klus na deze dag');
 

@@ -6,6 +6,7 @@
 // Later (deel 3) ook de koppeling met Visma eAccounting.
 // Alles per omgeving (req.tenantId); recht 'facturen'.
 const crypto = require('crypto');
+const { requireVerifiedAddress } = require('../platform/address-lookup');
 
 const COLS = 'id, number, name, contact, address, email, phone, vat_number, customer_id, shop_customer_id, source, created_at, updated_at';
 const LIST_LIMIT = 2000;
@@ -206,7 +207,7 @@ function createDebtorStore(db) {
  * @param {object} context Afhankelijkheden: debtors (opslag), requireRight, requireJson en audit.
  * @returns {void}
  */
-function registerDebtorRoutes(app, { debtors, requireRight, requireJson, audit }) {
+function registerDebtorRoutes(app, { debtors, requireRight, requireJson, audit, addressGuard }) {
   const requireInvoices = requireRight('facturen');
   /**
    * Omgeving van het verzoek.
@@ -229,7 +230,7 @@ function registerDebtorRoutes(app, { debtors, requireRight, requireJson, audit }
     if (!debtor) return notFound(res);
     res.json(debtor);
   });
-  app.put('/api/debtors/:id', requireJson, requireInvoices, (req, res) => {
+  app.put('/api/debtors/:id', requireJson, requireInvoices, requireVerifiedAddress(addressGuard, (req) => req.body?.address, (req) => () => debtors.get(tenantOf(req), req.params.id)?.address), (req, res) => {
     const out = debtors.update(tenantOf(req), req.params.id, req.body);
     if (!out) return notFound(res);
     if (out.error) return res.status(out.status).json({ error: 'invalid', field: out.field, message: out.error });

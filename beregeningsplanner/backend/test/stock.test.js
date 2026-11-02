@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createStockStore, sanitizeItem, needsOf } = require('../src/artikelen/stock');
@@ -24,7 +25,7 @@ async function setup() {
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
   await store.createAccount(main, { username: 'pien', displayName: 'Pien', role: 'planner', password: PW });
   await store.createAccount(main, { username: 'klant', displayName: 'Klant', role: 'klant', password: PW });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const as = createLogin(base, { password: PW });
   return { db, server, as, main };
 }
@@ -36,7 +37,7 @@ async function setup() {
  * @returns {Promise<object>} De werkorder.
  */
 async function workOrder(client, lines) {
-  const quote = (await client.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1, Nunspeet' },
+  const quote = (await client.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1, 8071 AB Nunspeet' },
     lines: [...lines.map(([code, qty]) => ({ section: 'materiaal', code, description: code, qty, unit: 'st', price: 1 })),
       { section: 'arbeid', description: 'Sleuven graven', qty: 4, unit: 'uur', price: 55 }] } })).body;
   assert.strictEqual((await client.put(`/api/quotes/${quote.id}`, { status: 'akkoord' })).status, 200);

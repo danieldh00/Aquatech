@@ -9,6 +9,7 @@ const { openDb } = require('../../src/database/db');
 const { createStore } = require('../../src/platform/store');
 const { createLogin, createClient, listen, postForm, postCheckout } = require('./http-client');
 const { createMollieFake } = require('./mollie-fake');
+const { createPdokFake } = require('./pdok-fake');
 
 const SECRET = 'f'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -34,10 +35,10 @@ async function until(check) {
 
 /**
  * Hoofdtenant met beheerder, een artikel, een tweede organisatie en twee klanten; mails worden onderschept.
- * @param {{ mollie?: boolean, addressFetch?: Function }} [options] mollie: zet online betalen aan met een nagebootste Mollie (testsleutel en webadres https://winkel.example/winkel/); addressFetch: nagebootste PDOK voor het opzoeken van adressen.
+ * @param {{ mollie?: boolean, addressFetch?: Function }} [options] mollie: zet online betalen aan met een nagebootste Mollie (testsleutel en webadres https://winkel.example/winkel/); addressFetch: nagebootste PDOK voor het opzoeken van adressen (standaard de vaste testadressen uit pdok-fake.js).
  * @returns {Promise<object>} base, admin, vreemd, sent (verstuurde mails), mailFailing (zet .on aan om mails te laten mislukken), shoppers (twee klanten), app, db en bij mollie de nagebootste Mollie.
  */
-async function setup({ mollie = false, addressFetch = null } = {}) {
+async function setup({ mollie = false, addressFetch = createPdokFake().fetchImpl } = {}) {
   const db = openDb();
   const store = createStore(db);
   const main = store.ensureTenant().id;
@@ -52,7 +53,7 @@ async function setup({ mollie = false, addressFetch = null } = {}) {
    */
   const mailerFor = () => ({ configured: () => true, send: async (message) => { if (mailFailing.on) throw new Error('Mailserver onbereikbaar'); sent.push(message); } });
   const mollieFake = mollie ? createMollieFake() : null;
-  const app = createApp({ secret: SECRET, db, mailerFor, ...(mollieFake ? { mollieFetch: mollieFake.fetchImpl } : {}), ...(addressFetch ? { addressFetch } : {}) });
+  const app = createApp({ secret: SECRET, db, mailerFor, ...(mollieFake ? { mollieFetch: mollieFake.fetchImpl } : {}), addressFetch });
   const { server, base } = await listen(app);
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');

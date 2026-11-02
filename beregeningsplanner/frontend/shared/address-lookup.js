@@ -5,8 +5,10 @@
 // - AddressLookup.enhance(veld): zet boven een adresveld (textarea of input) een
 //   rijtje Postcode / Huisnr. / Toev. en vult het veld bij een treffer.
 // - Elk element met data-address-lookup wordt automatisch uitgebreid.
-// Het veld blijft altijd handmatig te bewerken; bij een storing of geen treffer
-// staat er een melding en verandert er niets aan wat al is ingevuld.
+// Het adresveld zelf is alleen-lezen: invullen kan alleen via postcode, huisnummer en toevoeging
+// (straat en plaats komen van PDOK; de server controleert dat nog eens). Bij geen treffer of een storing
+// staat er een melding, wordt het veld leeggemaakt en kan het formulier niet worden verstuurd.
+// Een bestaand adres blijft gewoon zichtbaar tot er een nieuwe postcode en huisnummer worden ingevuld.
 (function (root) {
   /** Wachttijd na de laatste toetsaanslag voordat er wordt opgezocht (ms). */
   const DEBOUNCE_MS = 400;
@@ -58,7 +60,7 @@
    * Koppelt drie invoervelden aan het opzoeken van een adres. Zodra postcode en huisnummer geldig zijn
    * (na een korte pauze in het typen) wordt het adres opgevraagd; een oudere vraag wordt afgebroken.
    * @param {{ postcodeInput: HTMLInputElement, numberInput: HTMLInputElement, suffixInput?: HTMLInputElement, statusElement: HTMLElement, endpoint?: string, isActive?: Function, isCurrent?: Function, getDestination?: Function, onFound: Function, onClear?: Function, fetchImpl?: Function }} options De velden, het element voor de melding, het adres van de API, isActive() = of er nu opgezocht mag worden (bijvoorbeeld alleen voor Nederland), isCurrent() = of het ingevulde adres nog van de laatste treffer is (anders wordt dezelfde invoer opnieuw opgezocht), getDestination() = de huidige inhoud van de velden die een treffer invult (verandert die tijdens het opzoeken, bijvoorbeeld door een handmatige aanpassing, dan wordt het antwoord genegeerd), onFound(adres) = wat er met een treffer gebeurt, onClear() = wist een eerder automatisch ingevuld adres als de nieuwe invoer geen treffer geeft (zodat er geen verouderd adres blijft staan) en fetchImpl (alleen voor tests).
-   * @returns {{ check: Function, reset: Function }} check() zoekt meteen op (zonder pauze); reset() vergeet de laatste treffer.
+   * @returns {{ check: Function, reset: Function, hasProblem: Function }} check() zoekt meteen op (zonder pauze); reset() vergeet de laatste treffer; hasProblem() = of de laatste invoer geen adres opleverde.
    */
   function attach({ postcodeInput, numberInput, suffixInput = null, statusElement, endpoint = DEFAULT_ENDPOINT, isActive = () => true, isCurrent = () => true, getDestination = () => '', onFound, onClear = () => {}, fetchImpl = (...args) => fetch(...args) }) {
     let timer = null;
@@ -69,6 +71,8 @@
     let lastMessage = { text: '', kind: '' };
     // Combinatie waarvoor nu een vraag onderweg is, zodat bijvoorbeeld de blur direct na de pauze niet nog een vraag stuurt.
     let inFlightKey = '';
+    // Of de laatste invoer geen adres opleverde (geen treffer, storing): dan mag het formulier niet worden verstuurd.
+    let problem = false;
 
     /**
      * Toont een melding bij de velden.
@@ -79,6 +83,8 @@
     function say(text, kind = '') {
       statusElement.textContent = text;
       statusElement.dataset.kind = kind;
+      if (kind === 'error') problem = true;
+      else if (text !== 'Adres opzoeken…') problem = false;
     }
 
     /**
@@ -130,7 +136,7 @@
           onClear();
           const typedSuffix = suffixInput ? suffixInput.value.trim() : '';
           if (address.suffixRequired) { settle('Bij dit huisnummer hoort een toevoeging (bijvoorbeeld A); vul die in.', 'error'); return; }
-          settle(address.suffixUnknown ? `De toevoeging "${typedSuffix}" komt niet voor bij dit huisnummer. Controleer de toevoeging of vul het adres zelf in.` : 'Geen adres gevonden bij deze postcode en dit huisnummer. Controleer de invoer of vul het adres zelf in.', 'error');
+          settle(address.suffixUnknown ? `De toevoeging "${typedSuffix}" komt niet voor bij dit huisnummer. Controleer de toevoeging.` : 'Geen adres gevonden bij deze postcode en dit huisnummer. Controleer de invoer.', 'error');
           return;
         }
         lastKey = key;
@@ -140,7 +146,8 @@
         if (error && error.name === 'AbortError') return;
         if (mine !== sequence) return;
         if (!isActive() || getDestination() !== destinationAtStart) { say(''); return; }
-        settle('Het adres kon nu niet worden opgezocht. Vul het adres zelf in.', 'error');
+        onClear();
+        settle('Het adres kon nu niet worden opgezocht. Probeer het later opnieuw.', 'error');
       } finally {
         if (mine === sequence) inFlightKey = '';
       }
@@ -171,7 +178,15 @@
       lastKey = '';
     }
 
-    return { check: lookup, reset };
+    /**
+     * Of de ingevulde postcode en het huisnummer geen adres hebben opgeleverd (of nog worden opgezocht).
+     * @returns {boolean} true als het formulier niet verstuurd mag worden.
+     */
+    function hasProblem() {
+      return problem || inFlightKey !== '';
+    }
+
+    return { check: lookup, reset, hasProblem };
   }
 
   /**
@@ -189,13 +204,14 @@
 .addr-lookup .addr-status { grid-column: 1 / -1; margin: 0; font-size: 0.85rem; min-height: 1.2em; opacity: 0.85; }
 .addr-lookup .addr-status[data-kind="ok"] { color: var(--at-green-dark); opacity: 1; }
 .addr-lookup .addr-status[data-kind="error"] { color: var(--at-danger); opacity: 1; }
-.addr-lookup[hidden] { display: none; }`;
+.addr-lookup[hidden] { display: none; }
+[data-address-lookup][readonly] { border-style: dashed; cursor: default; }`;
     document.head.appendChild(style);
   }
 
   /**
    * Zet boven een adresveld een rijtje Postcode / Huisnr. / Toev. en vult het veld bij een treffer.
-   * @param {HTMLTextAreaElement|HTMLInputElement} field Het adresveld (bij een textarea komen straat en postcode/plaats op twee regels).
+   * @param {HTMLTextAreaElement|HTMLInputElement} field Het adresveld (wordt alleen-lezen; bij een textarea komen straat en postcode/plaats op twee regels).
    * @param {{ endpoint?: string, fetchImpl?: Function }} [options] endpoint = adres van de API, fetchImpl alleen voor tests.
    * @returns {HTMLElement|null} Het toegevoegde rijtje, of niets als het veld al is uitgebreid of niet bestaat.
    */
@@ -214,19 +230,21 @@
       <label>Postcode<input type="text" maxlength="7" autocomplete="off" placeholder="1234 AB" spellcheck="false"></label>
       <label>Huisnr.<input type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="12"></label>
       <label>Toev.<input type="text" maxlength="6" autocomplete="off" placeholder="A"></label>
-      <p class="addr-status" role="status" aria-live="polite"></p>`;
+      <p class="addr-status" role="status" aria-live="polite">Vul postcode en huisnummer in; het adres wordt dan automatisch ingevuld.</p>`;
     const [postcodeInput, numberInput, suffixInput] = group.querySelectorAll('input');
     const statusElement = group.querySelector('.addr-status');
     counter += 1;
     statusElement.id = `address-status-${counter}`;
     for (const input of [postcodeInput, numberInput, suffixInput]) input.setAttribute('aria-describedby', statusElement.id);
     anchor.parentNode.insertBefore(group, anchor);
+    field.readOnly = true;
+    field.setAttribute('aria-describedby', statusElement.id);
     const separator = field.tagName === 'TEXTAREA' ? '\n' : ', ';
     /**
      * Of het adresveld nu te bewerken is (ook niet via een uitgeschakelde fieldset eromheen).
      * @returns {boolean} true als er ingevuld mag worden.
      */
-    const isEditable = () => !field.matches(':disabled') && !field.readOnly;
+    const isEditable = () => !field.matches(':disabled');
     let filling = false;
     // Wat deze component zelf in het veld zette: iets anders (door de gebruiker of de pagina) betekent dat dezelfde invoer opnieuw mag invullen.
     let lastWritten = null;
@@ -244,7 +262,7 @@
         filling = false;
       },
       onClear: () => {
-        if (lastWritten === null || field.value !== lastWritten) return;
+        if (!field.value) return;
         filling = true;
         field.value = '';
         lastWritten = null;
@@ -253,8 +271,18 @@
         filling = false;
       },
     });
-    // Past iemand het adresveld zelf aan (of wordt het door de pagina gevuld), dan mag dezelfde postcode en hetzelfde huisnummer opnieuw invullen.
+    // Wordt het adresveld door de pagina gevuld, dan mag dezelfde postcode en hetzelfde huisnummer opnieuw invullen.
     field.addEventListener('input', () => { if (!filling) lookup.reset(); });
+    // Staat er een melding (geen treffer, storing, nog onderweg), dan gaat het formulier niet weg.
+    const form = field.closest('form');
+    if (form) {
+      form.addEventListener('submit', (event) => {
+        if (!isEditable() || !lookup.hasProblem()) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        postcodeInput.focus();
+      }, true);
+    }
     /**
      * Verbergt het rijtje zolang het adresveld niet te bewerken is (bijvoorbeeld een vergrendelde factuur).
      * @returns {void}
@@ -262,7 +290,7 @@
     const syncEditable = () => { group.hidden = !isEditable(); };
     syncEditable();
     const observer = new MutationObserver(syncEditable);
-    observer.observe(field, { attributes: true, attributeFilter: ['disabled', 'readonly'] });
+    observer.observe(field, { attributes: true, attributeFilter: ['disabled'] });
     const fieldset = field.closest('fieldset');
     if (fieldset) observer.observe(fieldset, { attributes: true, attributeFilter: ['disabled'] });
     return group;

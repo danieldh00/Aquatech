@@ -28,6 +28,7 @@ const { validEmail } = require('../platform/mailer');
 const { preferencesOf } = require('../platform/store');
 const { invoiceFileName } = require('./invoice-pdf');
 const { SourceError } = require('../webshop/woocommerce');
+const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { withoutInternal } = require('./quotes');
 
 const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
@@ -531,7 +532,7 @@ function registerInvoiceRoutes(app, ctx) {
   });
 
   // Nieuw: { workOrderId } (uit de werkorder; force = ook als er al een is) of { data }.
-  app.post('/api/invoices', requireJson, requireInvoices, (req, res) => {
+  app.post('/api/invoices', requireJson, requireInvoices, requireVerifiedAddress(ctx.addressGuard, (req) => (req.body?.workOrderId ? '' : req.body?.data?.customer?.address)), (req, res) => {
     const body = req.body || {};
     const tenantId = tenantOf(req);
     const settings = invoicingOf(req);
@@ -557,7 +558,7 @@ function registerInvoiceRoutes(app, ctx) {
     res.status(201).json(invoice);
   });
 
-  app.put('/api/invoices/:id', requireJson, requireInvoices, (req, res) => {
+  app.put('/api/invoices/:id', requireJson, requireInvoices, requireVerifiedAddress(ctx.addressGuard, (req) => req.body?.data?.customer?.address, (req) => () => invoices.get(tenantOf(req), req.params.id)?.data?.customer?.address), (req, res) => {
     if (!validData(req.body && req.body.data)) return res.status(400).json({ error: 'invalid_invoice', message: 'Ongeldige factuur.' });
     const out = invoices.update(tenantOf(req), req.params.id, req.body.data, invoicingOf(req));
     if (!out) return notFound(res);

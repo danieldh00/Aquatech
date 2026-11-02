@@ -16,7 +16,7 @@ const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody } = require('./verkoop/quotes');
 const { createMailer } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
-const { createAddressLookup, registerAddressRoute } = require('./platform/address-lookup');
+const { createAddressLookup, createAddressGuard, registerAddressRoute } = require('./platform/address-lookup');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./uitvoering/workorders');
 const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('./uitvoering/photos');
 const { createWorkLogStore, registerWorkLogRoutes } = require('./uitvoering/worklog');
@@ -1529,6 +1529,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // in de hele app en in de webshop (zie hieronder). Per ingelogde gebruiker
   // of IP begrensd; de uitkomsten worden onthouden.
   const addressLookup = createAddressLookup(addressFetch ? { fetchImpl: addressFetch } : {});
+  // Adressen die formulieren opsturen moeten precies kloppen met wat PDOK bij postcode + huisnummer geeft.
+  const addressGuard = createAddressGuard(addressLookup);
   registerAddressRoute(app, '/api/address-lookup', addressLookup, requireUser, createRateLimiter({ windowMs: 60 * 1000, max: 60, keyFn: (req) => req.user?.id || remoteIp(req) }));
 
   // Automatisch herkennen van een plan. De URL is (zonder toegangscode)
@@ -1757,7 +1759,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // Een offerte uit een plan alleen als dat plan is goedgekeurd.
     planReviewOf: (tenantId, planId) => store.planReviewStatus(tenantId, planId),
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
-    settingsForTenant: (id) => settingsFor(id), remoteIp, mailerFor, tenantActive, publicLimiter,
+    settingsForTenant: (id) => settingsFor(id), remoteIp, mailerFor, tenantActive, publicLimiter, addressGuard,
     themeOf: (id) => Theme.vars(themeFor(id)),
     // Klantaccounts horen bij de live-tenant (ook als er in test gewerkt
     // wordt); in een testomgeving komen de testklanten daarvan erbij.
@@ -1770,7 +1772,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Werkorders (module Werkorders, zie workorders.js) ----------
   registerWorkOrderRoutes(app, {
-    workorders: workOrderStore, requireRight, requireAdmin, requireJson, audit,
+    workorders: workOrderStore, requireRight, requireAdmin, requireJson, audit, addressGuard,
     settingsOf: (req) => settingsFor(req.tenantId || tenant.id), settingsForTenant: (id) => settingsFor(id),
     remoteIp, mailerFor, tenantActive, publicLimiter,
     themeOf: (id) => Theme.vars(themeFor(id)),
@@ -1795,7 +1797,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Facturen en export naar de boekhouding (zie invoices.js) ----------
   registerInvoiceRoutes(app, {
-    invoices: invoiceStore, requireRight, requireJson, audit,
+    invoices: invoiceStore, requireRight, requireJson, audit, addressGuard,
     settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     loggedOf: (tid, woId) => workLogStore.list(tid, woId),
     articlesOf: (tid) => stockStore.saleInfo(tid),
@@ -1805,7 +1807,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     shopOf: (req) => settingsFor(req.tenantId || tenant.id).get('shopSource'),
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => req.tenantId || tenant.id }),
   });
-  registerDebtorRoutes(app, { debtors: debtorStore, requireRight, requireJson, audit });
+  registerDebtorRoutes(app, { debtors: debtorStore, requireRight, requireJson, audit, addressGuard });
   // Nacalculatie per werkorder: begroot tegenover werkelijk, kosten en marge.
   registerCostingRoutes(app, {
     requireRight, invoices: invoiceStore,
@@ -1854,7 +1856,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Meldingen: storing of onderhoud via het portaal (zie service-requests.js) ----------
   registerServiceRequestRoutes(app, {
-    requests: serviceRequestStore, portal: portalStore, workorders: workOrderStore, requireRight, requireJson, audit,
+    requests: serviceRequestStore, portal: portalStore, workorders: workOrderStore, requireRight, requireJson, audit, addressGuard,
     remoteIp, createRateLimiter, mailerFor, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     staffTenantsOf: (req) => { const tid = req.tenantId || tenant.id; return [homeOf(tid), tid]; },
   });
@@ -2170,7 +2172,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Inloggen en registreren in de shop gebruiken dezelfde accounts (rol klant).
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
   app.use('/winkel', createStorefront({
-    addressLookup, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore,
+    addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),

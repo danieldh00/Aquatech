@@ -4,6 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createClient, listen } = require('./helpers/http-client');
@@ -73,7 +74,7 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
   const db = openDb();
   const store = createStore(db);
   await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PASSWORD });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const client = createClient(base);
   try {
     assert.strictEqual((await client.post('/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
@@ -140,7 +141,7 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     // Werkregistratie: vaste aantallen queries, ongeacht het aantal regels
     // (sessie + werkorder + uren + materiaal; urenstaat: sessie + uren + materiaal).
     const lines = [{ id: 'a', section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 10 }];
-    const qid = (await client.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1, Nunspeet' }, lines } })).body.id;
+    const qid = (await client.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1, 8071 AB Nunspeet' }, lines } })).body.id;
     await client.put(`/api/quotes/${qid}`, { status: 'akkoord' });
     const wo = (await client.post('/api/workorders', { quoteId: qid })).body;
     const day = new Date().toISOString().slice(0, 10);

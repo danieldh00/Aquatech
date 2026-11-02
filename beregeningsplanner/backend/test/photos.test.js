@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createVault } = require('../src/beveiliging/vault');
@@ -81,7 +82,7 @@ async function setup() {
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: pw });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: pw });
   await store.createAccount(tid, { username: 'piet', displayName: 'Piet', role: 'klant', password: pw });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const as = createLogin(base, { password: pw });
   return { db, server, base, as };
 }
@@ -93,7 +94,7 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
   try {
     const kees = await as('kees'), baas = await as('baas'), klaas = await as('klaas'), piet = await as('piet');
     const klaasId = (await klaas.get('/api/me')).body.user.id;
-    const quote = (await kees.post('/api/quotes', { data: { title: 'Aanleg beregening', customer: { name: 'Fam. Klaassen', address: 'Dorpsstraat 1\nNunspeet' }, lines } })).body;
+    const quote = (await kees.post('/api/quotes', { data: { title: 'Aanleg beregening', customer: { name: 'Fam. Klaassen', address: 'Tuinstraat 1\n8071 AB Nunspeet' }, lines } })).body;
     await kees.put(`/api/quotes/${quote.id}`, { status: 'akkoord', customerId: klaasId });
     const wo = (await kees.post('/api/workorders', { quoteId: quote.id })).body;
     // Tweede klant zonder account (dossier op naam).
@@ -176,7 +177,7 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
     assert.match(nameDossier.key, /^n-[0-9a-f]{16}$/);
     const detail = (await kees.get(`/api/dossiers/${encodeURIComponent(accountDossier.key)}`)).body;
     assert.strictEqual(detail.customer.name, 'Fam. Klaassen');
-    assert.deepStrictEqual(detail.addresses, ['Dorpsstraat 1, Nunspeet']);
+    assert.deepStrictEqual(detail.addresses, ['Tuinstraat 1, 8071 AB Nunspeet']);
     assert.strictEqual(detail.installations[0].report.signedBy, 'K. Klaassen');
     assert.strictEqual(detail.installations[0].photos.length, 2);
     assert.deepStrictEqual(detail.installations[0].materials.map((material) => material.description), ['Sproeier']);

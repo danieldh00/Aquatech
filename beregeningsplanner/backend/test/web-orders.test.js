@@ -4,6 +4,7 @@ const test = require('node:test');
 const { after } = test;
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { totalsOf, sanitizeCheckout } = require('../src/webshop/web-orders');
@@ -34,7 +35,7 @@ async function setup() {
    * @returns {{ configured: Function, send: Function }} De mailfuncties.
    */
   const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
-  const { server, base } = await listen(createApp({ secret: SECRET, db, mailerFor }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true, shopOrdering: true })).status, 200);
@@ -98,7 +99,7 @@ test('bestellen staat standaard uit: geen winkelwagen en knop uitgeschakeld', as
   const store = createStore(db);
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   await admin.put('/api/admin/settings', { storefront: true });

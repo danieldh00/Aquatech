@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.5.6
+
+Het adres is niet meer met de hand te wijzigen: alleen postcode, huisnummer en toevoeging zijn invulbaar.
+
+- **Frontend**: `shared/address-lookup.js` zet het adresveld (`data-address-lookup`) op
+  alleen-lezen. Een treffer vult het in; geen treffer, een ongeldige toevoeging of een
+  storing maakt het veld leeg, toont een duidelijke melding (zonder "vul het zelf in") en
+  blokkeert het versturen van het formulier (`hasProblem`, `submit` in de capture-fase).
+  Een bestaand adres blijft gewoon zichtbaar. Afrekenen: straat en woonplaats zijn
+  alleen-lezen voor land NL (bewerkbaar voor andere landen) en bestellen kan pas met een
+  gevonden adres.
+- **Server**: `createAddressGuard` + `requireVerifiedAddress` (`platform/address-lookup.js`):
+  een gewijzigd adres moet precies kloppen met wat PDOK bij postcode + huisnummer
+  (+ toevoeging) geeft, anders 400 `invalid_address` (bij een PDOK-storing 503
+  `address_unavailable`). Een ongewijzigd ouder adres blijft opgeslagen kunnen worden.
+  Toegepast op offerte (POST/PUT), werkorder (POST/PUT), factuur (POST/PUT), debiteur
+  (PUT) en melding in het portaal (POST). Afrekenen: bij land NL en DPD worden straat,
+  postcode en woonplaats uit PDOK gehaald (`resolveParts`); invoer uit de browser wordt
+  vervangen of geweigerd.
+- Tests: `test/helpers/pdok-fake.js` (gedeelde nagebootste PDOK); testadressen in de
+  bestaande tests hebben nu een postcode.
+
 ## 1.5.5
 
 Adres invullen via postcode en huisnummer (PDOK Locatieserver, BAG, gratis en zonder sleutel).

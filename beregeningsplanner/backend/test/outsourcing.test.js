@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { placeOf, previewOf, sanitizeOutsourcing } = require('../src/uitvoering/outsourcing');
@@ -21,7 +22,7 @@ async function setup() {
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const as = createLogin(base, { password: PW });
   const baas = await as('baas');
   const orgs = {};
@@ -40,7 +41,7 @@ async function setup() {
  * @returns {Promise<object>} De bijgewerkte werkorder.
  */
 async function acceptedWorkOrder(client, extra = {}) {
-  const quote = (await client.post('/api/quotes', { data: { title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1\n8071 AB Nunspeet', email: 'jansen@voorbeeld.nl', phone: '0612345678' },
+  const quote = (await client.post('/api/quotes', { data: { title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1\n8071 AB Nunspeet', email: 'jansen@voorbeeld.nl', phone: '0612345678' },
     lines: [{ section: 'materiaal', code: 'PE25', description: 'PE-buis 25 mm', qty: 50, unit: 'm', price: 1.2 }, { section: 'arbeid', description: 'Sleuven graven', qty: 6, unit: 'uur', price: 55 }] } })).body;
   await client.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
   const wo = (await client.post('/api/workorders', { quoteId: quote.id })).body;

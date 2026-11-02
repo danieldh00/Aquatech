@@ -5,6 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 
@@ -24,7 +25,7 @@ async function setup() {
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
   await store.createAccount(main, { username: 'klant', displayName: 'Klant', role: 'klant', password: PW });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const as = createLogin(base, { password: PW });
   return { db, server, as };
 }
@@ -66,7 +67,7 @@ test('facturen: uit een werkorder, definitief met nummer, betaald, credit en exp
     const baas = await as('baas');
     const kees = await as('kees');
     // Offerte met een optie die niet gekozen is, akkoord, werkorder.
-    const quote = (await kees.post('/api/quotes', { data: { title: 'Aanleg', discountPct: 0, customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1, Nunspeet', email: 'jansen@voorbeeld.test' },
+    const quote = (await kees.post('/api/quotes', { data: { title: 'Aanleg', discountPct: 0, customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1, 8071 AB Nunspeet', email: 'jansen@voorbeeld.test' },
       lines: [{ section: 'materiaal', code: 'PE-25', description: 'PE-buis', qty: 50, unit: 'm', price: 2, vat: 21 },
         { section: 'arbeid', description: 'Sleuven graven', qty: 4, unit: 'uur', price: 55, vat: 21 },
         { section: 'materiaal', code: 'X-OPT', description: 'Regensensor', qty: 1, unit: 'st', price: 80, vat: 21, optional: true, selected: false }] } })).body;
