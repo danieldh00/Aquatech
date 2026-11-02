@@ -396,6 +396,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   vervalt na `holdHours` (`app.locals.webPaymentsExpire`, elk uur). Redirect
   naar Mollie loopt via GET `bestelling/<id>/betalen/` (CSP `form-action
   'self'` blokkeert een redirect direct vanuit het formulier).
+- **Adres via postcode** (1.5.5, PDOK Locatieserver): `backend/src/platform/address-lookup.js`
+  (server haalt op, 24 u cache, tests via `createApp({ addressFetch })`), routes
+  `GET /api/address-lookup` (login) en `GET /winkel/adres/`; de browser belt nooit
+  rechtstreeks naar PDOK. Gedeelde frontendcomponent `shared/address-lookup.js`:
+  zet `data-address-lookup` op een adresveld en laad het script; de shop gebruikt
+  `AddressLookup.attach` in `storefront-checkout.js`. Nieuwe adresvelden altijd zo.
 - **Debiteuren, webshopbestellingen, PDF en mail** (0.63.0, migratie 27):
   `debtors.js` (tabel `debtors`, `ensure` bij definitief, `match_key`),
   `shop-orders.js` (WooCommerce-bestellingen met status uit

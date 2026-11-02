@@ -101,7 +101,7 @@
         <label>Onderwerp<input name="subject" maxlength="200" required placeholder="Bijv. sproeiers bij de border gaan niet aan"></label>
         <label>Omschrijving<textarea name="description" rows="4" maxlength="4000" required placeholder="Wat ziet u, sinds wanneer, en welke zone of welk deel van de tuin?"></textarea></label>
         <div class="row">
-          <label class="grow">Adres<input name="address" maxlength="400" autocomplete="street-address"></label>
+          <label class="grow">Adres<input data-address-lookup name="address" maxlength="400" autocomplete="street-address"></label>
           <label>Telefoon<input name="phone" maxlength="40" type="tel" autocomplete="tel"></label>
         </div>
         <label>Wanneer komt het u uit? (optioneel)<input name="preferred" maxlength="300" placeholder="Bijv. liefst 's ochtends, niet op woensdag"></label>
@@ -128,6 +128,7 @@
   <script src="../shared/env.js"></script>
   <script src="../dashboard/modules.js"></script>
   <script src="../shared/sidebar.js"></script>
+  <script src="../shared/address-lookup.js"></script>
   <script src="../dashboard/account.js"></script>
   <script src="../werkorders/photos.js"></script>
   <script src="locaties.js"></script>

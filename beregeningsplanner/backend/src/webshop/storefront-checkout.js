@@ -57,3 +57,32 @@ if (checkoutForm) {
     field.addEventListener('change', () => recalculate(checkoutForm));
   }
 }
+
+/**
+ * Koppelt postcode en huisnummer aan het opzoeken van straat en woonplaats (adres.js). Alleen voor Nederland; het
+ * adres blijft handmatig aan te passen en bij een storing of geen treffer verandert er niets.
+ * @param {HTMLFormElement} form Het afrekenformulier.
+ * @returns {void}
+ */
+function setUpAddressLookup(form) {
+  const row = form.querySelector('[data-address-row]');
+  const postcodeInput = form.querySelector('input[name="postcode"]');
+  if (!row || !postcodeInput || !window.AddressLookup) return;
+  row.hidden = false;
+  const countryField = form.querySelector('[name="country"]');
+  window.AddressLookup.attach({
+    postcodeInput,
+    numberInput: row.querySelector('[data-address-number]'),
+    suffixInput: row.querySelector('[data-address-suffix]'),
+    statusElement: row.querySelector('[data-address-status]'),
+    endpoint: form.dataset.addressEndpoint,
+    isActive: () => !countryField || countryField.value === 'NL',
+    onFound: (address) => {
+      form.querySelector('input[name="street"]').value = window.AddressLookup.streetLine(address);
+      postcodeInput.value = address.postcode;
+      form.querySelector('input[name="city"]').value = address.city;
+    },
+  });
+}
+
+if (checkoutForm) setUpAddressLookup(checkoutForm);

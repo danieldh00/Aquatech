@@ -73,7 +73,7 @@
             <label class="grow">Naam<input name="name" maxlength="200" required></label>
             <label class="grow">T.a.v.<input name="contact" maxlength="200"></label>
           </div>
-          <label>Adres<textarea name="address" rows="3" maxlength="400"></textarea></label>
+          <label>Adres<textarea data-address-lookup name="address" rows="3" maxlength="400"></textarea></label>
           <div class="row">
             <label class="grow">E-mail<input name="email" type="email" maxlength="200"></label>
             <label>Telefoon<input name="phone" maxlength="40"></label>
@@ -216,7 +216,7 @@
           <h3>Klant</h3>
           <label>Naam<input name="name" maxlength="200" autocomplete="off"></label>
           <label>T.a.v.<input name="contact" maxlength="200"></label>
-          <label>Adres<textarea name="address" rows="3" maxlength="400"></textarea></label>
+          <label>Adres<textarea data-address-lookup name="address" rows="3" maxlength="400"></textarea></label>
           <div class="row">
             <label class="grow">E-mail<input name="email" type="email" maxlength="200"></label>
             <label>Btw-nummer klant<input name="vatNumber" maxlength="30" placeholder="Zakelijk"></label>
@@ -249,6 +249,7 @@
   <script src="../shared/env.js"></script>
   <script src="../dashboard/modules.js"></script>
   <script src="../shared/sidebar.js"></script>
+  <script src="../shared/address-lookup.js"></script>
   <script src="../dashboard/account.js"></script>
   <script src="invoice-core.js"></script>
   <script src="facturen.js"></script>

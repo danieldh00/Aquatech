@@ -69,6 +69,19 @@ function checkoutField({ name, label, value, autocomplete, required = true, type
 }
 
 /**
+ * Het extra invoerrijtje voor het afrekenformulier: huisnummer en toevoeging, waarmee het script (adres.js, afrekenen.js)
+ * straat en woonplaats bij de postcode opzoekt. Verborgen zonder script; de velden hebben geen naam en worden niet verstuurd.
+ * @returns {string} HTML van het rijtje met de plaats voor de melding.
+ */
+function addressLookupRow() {
+  return `<div class="address-lookup" data-address-row hidden>
+<label class="form-field"><span>Huisnummer</span><input type="text" inputmode="numeric" maxlength="5" autocomplete="off" data-address-number></label>
+<label class="form-field"><span>Toevoeging (optioneel)</span><input type="text" maxlength="6" autocomplete="off" data-address-suffix></label>
+<p class="address-status" role="status" aria-live="polite" data-address-status></p>
+</div>`;
+}
+
+/**
  * De gegevens die het script (afrekenen.js) nodig heeft om het overzicht bij een andere verzendmethode direct bij te werken.
  * @param {{ label: string, price: number }} option De verzendoptie.
  * @param {?object} summary De uitgerekende totalen bij deze optie, of niets als de optie niet beschikbaar is.
@@ -174,7 +187,7 @@ function checkoutPage({ cart, quote, country, method, summary = null, summaries 
   const body = `<section class="cart checkout"><h1>Afrekenen</h1>
 ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 <div class="checkout-grid">
-<form method="post" action="./" class="account-form">
+<form method="post" action="./" class="account-form" data-address-endpoint="${ROOT}adres/">
 <button type="submit" hidden>Bestelling plaatsen</button>
 <input type="hidden" name="expectedTotal" value="${escapeHtml(String(total))}" data-expected-total>
 <h2>Je gegevens</h2>
@@ -186,8 +199,9 @@ ${checkoutField({ name: 'phone', label: 'Telefoon (optioneel)', value: value.pho
 ${shippingChoice(quote, country, method, summaries, business)}
 <h2>Afleveradres</h2>
 <p class="note">Bij ophalen is een adres niet nodig.</p>
-${checkoutField({ name: 'street', label: 'Straat en huisnummer', value: value.street || '', autocomplete: 'street-address', required: false })}
 ${checkoutField({ name: 'postcode', label: 'Postcode', value: value.postcode || '', autocomplete: 'postal-code', required: false })}
+${addressLookupRow()}
+${checkoutField({ name: 'street', label: 'Straat en huisnummer', value: value.street || '', autocomplete: 'street-address', required: false })}
 ${checkoutField({ name: 'city', label: 'Woonplaats', value: value.city || '', autocomplete: 'address-level2', required: false })}
 <label class="form-field"><span>Opmerking (optioneel)</span><textarea name="note" rows="3" maxlength="500">${escapeHtml(value.note || '')}</textarea></label>
 ${paymentChoice(paymentOptions, value.paymentMethod)}
@@ -198,7 +212,7 @@ ${paymentChoice(paymentOptions, value.paymentMethod)}
 <p class="checkout-total"><span data-total-caption>${totalCaption(business, Boolean(summary && summary.shifted))}</span><strong data-total-text>${escapeHtml(formatPrice(total))}</strong></p>${vatNote}
 <p><a href="${ROOT}winkelwagen/">Winkelwagen aanpassen</a></p></aside>
 </div></section>`;
-  return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Reken je bestelling af bij Aquatechshop.nl.', body, groups, script: 'afrekenen.js' });
+  return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Reken je bestelling af bij Aquatechshop.nl.', body, groups, script: ['adres.js', 'afrekenen.js'] });
 }
 
 /**

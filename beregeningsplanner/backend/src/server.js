@@ -16,6 +16,7 @@ const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody } = require('./verkoop/quotes');
 const { createMailer } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
+const { createAddressLookup, registerAddressRoute } = require('./platform/address-lookup');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./uitvoering/workorders');
 const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('./uitvoering/photos');
 const { createWorkLogStore, registerWorkLogRoutes } = require('./uitvoering/worklog');
@@ -231,10 +232,10 @@ function staticHeaders(version) {
 
 /**
  * Bouwt de Express-app met alle routes en opslag.
- * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch en wanIp (tests vervangen hiermee de buitenwereld).
+ * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, wanIp = createWanIp() }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, wanIp = createWanIp() }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -1524,6 +1525,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
   });
 
+  // Adres bij postcode + huisnummer (PDOK Locatieserver), voor de adresvelden
+  // in de hele app en in de webshop (zie hieronder). Per ingelogde gebruiker
+  // of IP begrensd; de uitkomsten worden onthouden.
+  const addressLookup = createAddressLookup(addressFetch ? { fetchImpl: addressFetch } : {});
+  registerAddressRoute(app, '/api/address-lookup', addressLookup, requireUser, createRateLimiter({ windowMs: 60 * 1000, max: 60, keyFn: (req) => req.user?.id || remoteIp(req) }));
+
   // Automatisch herkennen van een plan. De URL is (zonder toegangscode)
   // openbaar, dus elke aanroep kost tegoed: per IP begrensd plus een
   // dagelijks maximum voor de hele app (beide in Beheer > Instellingen).
@@ -2163,7 +2170,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Inloggen en registreren in de shop gebruiken dezelfde accounts (rol klant).
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
   app.use('/winkel', createStorefront({
-    db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore,
+    addressLookup, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
