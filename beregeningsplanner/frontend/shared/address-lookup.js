@@ -162,10 +162,10 @@
       sequence += 1;
       if (controller) controller.abort();
       inFlightKey = '';
-      // Een gewijzigde invoer maakt het eerder gevonden adres meteen ongeldig, ook tijdens de pauze en bij onvolledige invoer.
+      // Een gewijzigde invoer maakt het eerder gevonden adres meteen ongeldig (verzenden kan pas na een nieuwe treffer), ook tijdens de pauze.
+      // Het opgeslagen adres blijft staan tot er een uitkomst is: tijdens het typen wordt niets gewist of automatisch bewaard.
       lastKey = '';
-      problem = true;
-      onClear();
+      if (isActive()) problem = true;
       timer = setTimeout(lookup, DEBOUNCE_MS);
     }
 

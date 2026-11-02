@@ -94,7 +94,7 @@ test('webshop: route /winkel/adres/, CSP en afrekenformulier', async () => {
  * @returns {object} De component (AddressLookup).
  */
 function loadComponent() {
-  const sandbox = { window: {}, document: { readyState: 'complete', querySelectorAll: () => [] }, console, AbortController, URLSearchParams };
+  const sandbox = { window: {}, document: { readyState: 'complete', querySelectorAll: () => [] }, console, setTimeout: () => 0, clearTimeout: () => {}, AbortController, URLSearchParams };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(ADDRESS_LOOKUP_FILE, 'utf8'), sandbox);
   return sandbox.window.AddressLookup;
@@ -395,4 +395,22 @@ test('adrescontrole: alleen leestekens is geen adres', async () => {
   assert.strictEqual((await guard.verify(',')).ok, false);
   assert.strictEqual((await guard.verify(' - ,', { previous: () => '' })).ok, false);
   assert.strictEqual((await guard.verify('   ')).ok, true, 'alleen spaties telt als geen adres');
+});
+
+test('frontendcomponent: typen wist het adres niet en bij een inactieve opzoeking blijft alles ongemoeid', () => {
+  const lookup = loadComponent();
+  const listeners = [];
+  const postcodeInput = { value: '8071 AB', addEventListener: (name, handler) => { if (name === 'input') listeners.push(handler); } };
+  const numberInput = { value: '1', addEventListener: () => {} };
+  const statusElement = { textContent: '', dataset: {} };
+  let active = true;
+  let cleared = 0;
+  const component = lookup.attach({ postcodeInput, numberInput, statusElement, endpoint: 'adres/', isActive: () => active, onFound: () => {}, onClear: () => { cleared += 1; } });
+  listeners[0]();
+  assert.strictEqual(cleared, 0, 'typen wist het opgeslagen adres niet');
+  assert.strictEqual(component.hasProblem(), true, 'maar verzenden kan pas na een treffer');
+  active = false;
+  component.reset();
+  listeners[0]();
+  assert.strictEqual(cleared, 0);
 });
