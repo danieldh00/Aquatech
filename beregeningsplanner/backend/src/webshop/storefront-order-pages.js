@@ -148,7 +148,7 @@ function shippingChoice(quote, country, method, summaries = {}, business = false
   }).join('');
   return `<h2>Verzending</h2>
 ${countryField}
-${options || '<p class="note">Er is op dit moment geen verzendmethode beschikbaar.</p>'}
+<div data-shipping-options>${options || '<p class="note">Er is op dit moment geen verzendmethode beschikbaar.</p>'}</div>
 <button class="button secondary update-totals" type="submit" name="action" value="update" formnovalidate>Totaal bijwerken</button>`;
 }
 

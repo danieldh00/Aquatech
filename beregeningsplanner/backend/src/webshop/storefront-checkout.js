@@ -1,7 +1,7 @@
-// Afrekenen in de eigen webshop: bij een andere verzendmethode meteen het
-// overzicht en het totaal bijwerken, zodat één klik op Bestelling plaatsen
-// genoeg is. Bij een ander land wordt de pagina opnieuw berekend; een btw-nummer
-// werkt via de knop Totaal bijwerken. Zonder dit script werkt die knop ook.
+// Afrekenen in de eigen webshop: bij een andere verzendmethode, een ander land of
+// een btw-nummer meteen het overzicht en het totaal bijwerken (op de achtergrond),
+// zodat één klik op Bestelling plaatsen genoeg is. Zonder dit script werkt de
+// knop Totaal bijwerken (een gewone formulierverzending) nog steeds.
 
 /**
  * Zet de tekst van een onderdeel van het overzicht, als dat onderdeel er is.
@@ -36,26 +36,64 @@ function showChosenShipping(radio) {
 }
 
 /**
- * Stuurt het formulier als "bijwerken" op, zodat de server land of btw-nummer opnieuw doorrekent.
+ * Vraagt de server op de achtergrond het overzicht en de verzendopties opnieuw uit te rekenen voor het gekozen land,
+ * de gekozen methode en het btw-nummer, en vervangt die onderdelen op de pagina. Eerder ingevulde velden blijven staan.
+ * @param {HTMLFormElement} form Het afrekenformulier.
+ * @returns {Promise<void>} Klaar als de pagina is bijgewerkt (ook als dat niet lukte: dan blijft de pagina zoals hij was).
+ */
+async function refreshTotals(form) {
+  const sequence = ++refreshSequence;
+  const body = new URLSearchParams({ action: 'update' });
+  for (const name of ['country', 'shippingMethod', 'vatNumber']) {
+    const field = name === 'shippingMethod' ? form.querySelector('input[name="shippingMethod"]:checked') : form.querySelector(`[name="${name}"]`);
+    if (field) body.set(name, field.value);
+  }
+  try {
+    const response = await fetch(form.action, { method: 'POST', body, credentials: 'same-origin', headers: { Accept: 'text/html' } });
+    if (!response.ok || sequence !== refreshSequence) return;
+    const updated = new DOMParser().parseFromString(await response.text(), 'text/html');
+    if (sequence !== refreshSequence) return;
+    const newOptions = updated.querySelector('[data-shipping-options]');
+    const newSummary = updated.querySelector('.checkout-summary');
+    const newTotal = updated.querySelector('[data-expected-total]');
+    if (!newOptions || !newSummary || !newTotal) return;
+    form.querySelector('[data-shipping-options]').innerHTML = newOptions.innerHTML;
+    document.querySelector('.checkout-summary').innerHTML = newSummary.innerHTML;
+    form.querySelector('[data-expected-total]').value = newTotal.value;
+  } catch (error) {
+    // Geen verbinding: de pagina blijft staan en bij het bestellen controleert de server het totaal alsnog.
+  }
+}
+
+/**
+ * Start een achtergrondberekening en onthoudt hem, zodat Bestelling plaatsen kan wachten tot het totaal klopt.
  * @param {HTMLFormElement} form Het afrekenformulier.
  * @returns {void}
  */
-function recalculate(form) {
-  form.requestSubmit(form.querySelector('.update-totals'));
+function scheduleRefresh(form) {
+  pendingRefresh = refreshTotals(form).then(() => { pendingRefresh = null; });
 }
+
+let refreshSequence = 0;
+let pendingRefresh = null;
 
 document.documentElement.classList.add('js-on');
 const checkoutForm = document.querySelector('form[action="./"]');
 if (checkoutForm) {
-  for (const radio of checkoutForm.querySelectorAll('input[name="shippingMethod"]')) {
-    radio.addEventListener('change', () => showChosenShipping(radio));
-  }
-  // Een ander land rekent de pagina meteen opnieuw door. Bij een btw-nummer blijft de knop Totaal bijwerken staan, zodat een klik op Bestelling plaatsen niet wordt onderschept.
-  const updateButton = checkoutForm.querySelector('.update-totals');
-  if (!checkoutForm.querySelector('input[name="vatNumber"]')) updateButton.hidden = true;
-  for (const field of checkoutForm.querySelectorAll('select[name="country"]')) {
-    field.addEventListener('change', () => recalculate(checkoutForm));
-  }
+  // Geen knop meer nodig: alles werkt op de achtergrond.
+  checkoutForm.querySelector('.update-totals').hidden = true;
+  checkoutForm.addEventListener('change', (event) => {
+    const field = event.target;
+    if (field.name === 'shippingMethod') showChosenShipping(field);
+    if (field.name === 'country' || field.name === 'vatNumber') scheduleRefresh(checkoutForm);
+  });
+  // Wordt er besteld terwijl de berekening nog loopt, dan eerst afwachten zodat het getoonde totaal klopt.
+  checkoutForm.addEventListener('submit', (event) => {
+    if (!pendingRefresh || event.submitter?.value === 'update') return;
+    event.preventDefault();
+    const submitter = event.submitter;
+    pendingRefresh.then(() => checkoutForm.requestSubmit(submitter));
+  });
 }
 
 /**

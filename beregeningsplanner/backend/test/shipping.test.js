@@ -132,6 +132,13 @@ test('afrekenen: ophalen, DPD met tarief, gratis vanaf, te zwaar en ander land',
   const script = await customer.get('/winkel/assets/afrekenen.js');
   assert.strictEqual(script.status, 200);
   assert.match(script.text, /showChosenShipping/);
+  assert.match(page.text, /data-shipping-options/, 'de verzendopties staan in een eigen onderdeel dat op de achtergrond wordt ververst');
+  assert.match(script.text, /refreshTotals/, 'land en btw-nummer werken het totaal op de achtergrond bij');
+  // De achtergrondberekening stuurt alleen land, methode en btw-nummer en gebruikt alleen de onderdelen uit het antwoord.
+  const background = await postForm(base, customer, '/winkel/afrekenen/', { action: 'update', country: 'BE', shippingMethod: 'dpd' });
+  assert.strictEqual(background.status, 200);
+  assert.match(background.text, /data-shipping-options/);
+  assert.match(background.text, /value="\d+(\.\d+)?" data-expected-total/);
   const be = await postForm(base, customer, '/winkel/afrekenen/', { ...FIELDS, action: 'update', country: 'BE' });
   assert.strictEqual(be.status, 200);
   assert.match(be.text, /€ 14,50/);

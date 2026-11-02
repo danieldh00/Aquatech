@@ -4,6 +4,12 @@
 
 Adres invullen via postcode en huisnummer (PDOK Locatieserver, BAG, gratis en zonder sleutel).
 
+- **Afrekenen zonder knop**: een ander land of een btw-nummer werkt het totaal en de
+  verzendopties op de achtergrond bij (`refreshTotals` in `storefront-checkout.js`, verzoek
+  `action=update` met alleen land, methode en btw-nummer); de knop *Totaal bijwerken* is
+  met script verborgen en blijft zonder script werken. Bestellen tijdens een berekening
+  wacht tot het totaal klopt.
+
 - **Server**: `platform/address-lookup.js` (`createAddressLookup`, `registerAddressRoute`)
   vraagt PDOK (vast adres, geen invoer van een tenant) en onthoudt uitkomsten 24 uur
   (max. 2000); time-out 4 s, storing → 502 `unavailable`, ongeldige invoer → 400.
