@@ -66,6 +66,7 @@
     // Pijltoetsen wisselen tussen de tabbladen (ARIA-patroon voor tabs); alleen het actieve tabblad staat in de tabvolgorde.
     $('.tabs').addEventListener('keydown', (event) => {
       const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (!step && event.key !== 'Home' && event.key !== 'End') return;
       const current = TABS.findIndex((name) => $(`#t-${name}`) === document.activeElement);
       if (current < 0) return;
