@@ -59,12 +59,11 @@ test('invoer schoonmaken: postcode, huisnummer en toevoeging', () => {
 test('opzoeken: straat en plaats, toevoeging, geen treffer en onthouden', async () => {
   const pdok = createPdokFake();
   const service = createAddressLookup({ fetchImpl: pdok.fetchImpl });
-  assert.deepStrictEqual(await service.lookup({ postcode: '8071ab', houseNumber: '1' }), { found: true, street: 'Tuinstraat', houseNumber: '1', suffix: '', suffixMatched: true, suffixRequired: false, postcode: '8071 AB', city: 'Nunspeet' });
+  assert.deepStrictEqual(await service.lookup({ postcode: '8071ab', houseNumber: '1' }), { found: true, street: 'Tuinstraat', houseNumber: '1', suffix: '', suffixRequired: false, postcode: '8071 AB', city: 'Nunspeet' });
   assert.strictEqual((await service.lookup({ postcode: '8071AB', houseNumber: '12', suffix: 'a' })).suffix, 'A');
   assert.strictEqual((await service.lookup({ postcode: '8071AB', houseNumber: '12', suffix: '2' })).suffix, '2');
   assert.strictEqual((await service.lookup({ postcode: '8071AB', houseNumber: '12' })).suffixRequired, false, 'er is ook een adres zonder toevoeging');
-  const unknownSuffix = await service.lookup({ postcode: '8071AB', houseNumber: '12', suffix: 'Q' });
-  assert.deepStrictEqual([unknownSuffix.found, unknownSuffix.suffix, unknownSuffix.suffixMatched], [true, '', false]);
+  assert.deepStrictEqual(await service.lookup({ postcode: '8071AB', houseNumber: '12', suffix: 'Q' }), { found: false, suffixUnknown: true });
   assert.deepStrictEqual(await service.lookup({ postcode: '8071AB', houseNumber: '99' }), { found: false });
   assert.strictEqual(pdok.calls.length, 3, 'dezelfde postcode en hetzelfde huisnummer worden onthouden');
   await assert.rejects(service.lookup({ postcode: 'abc', houseNumber: '1' }), { code: 'invalid' });
@@ -174,7 +173,7 @@ test('frontendcomponent: vult bij een treffer, meldt een storing en wacht op gel
     fetchImpl: async (url) => {
       requests.push(url);
       if (down) throw new Error('weg');
-      return { ok: true, status: 200, json: async () => ({ found: true, street: 'Tuinstraat', houseNumber: '1', suffix: '', suffixMatched: true, suffixRequired: false, postcode: '8071 AB', city: 'Nunspeet' }) };
+      return { ok: true, status: 200, json: async () => ({ found: true, street: 'Tuinstraat', houseNumber: '1', suffix: '', suffixRequired: false, postcode: '8071 AB', city: 'Nunspeet' }) };
     },
   });
   postcodeInput.value = '8071 AB';
@@ -232,4 +231,28 @@ test('frontendcomponent: land wijzigt tijdens het opzoeken, of het adres is intu
   active = true;
   await component.check();
   assert.strictEqual(found.length, 0, 'fetchImpl zet het land weer uit');
+});
+
+test('frontendcomponent: antwoord wordt genegeerd als het adresveld tijdens het opzoeken is aangepast, ook bij een fout', async () => {
+  const lookup = loadComponent();
+  const makeInput = (value) => ({ value, addEventListener: () => {} });
+  const statusElement = { textContent: '', dataset: {} };
+  const found = [];
+  let destination = 'a';
+  let failure = false;
+  const component = lookup.attach({
+    postcodeInput: makeInput('8071 AB'), numberInput: makeInput('1'), statusElement, endpoint: 'adres/', getDestination: () => destination, onFound: (address) => found.push(address),
+    fetchImpl: async () => {
+      destination = 'handmatig aangepast';
+      if (failure) throw new Error('weg');
+      return { ok: true, status: 200, json: async () => ({ found: true, street: 'Tuinstraat', houseNumber: '1', suffix: '', postcode: '8071 AB', city: 'Nunspeet' }) };
+    },
+  });
+  await component.check();
+  assert.strictEqual(found.length, 0, 'een handmatige aanpassing blijft staan');
+  assert.strictEqual(statusElement.textContent, '');
+  destination = 'a';
+  failure = true;
+  await component.check();
+  assert.strictEqual(statusElement.textContent, '', 'ook een foutmelding verschijnt niet meer');
 });

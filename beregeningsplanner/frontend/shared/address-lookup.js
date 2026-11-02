@@ -57,10 +57,10 @@
   /**
    * Koppelt drie invoervelden aan het opzoeken van een adres. Zodra postcode en huisnummer geldig zijn
    * (na een korte pauze in het typen) wordt het adres opgevraagd; een oudere vraag wordt afgebroken.
-   * @param {{ postcodeInput: HTMLInputElement, numberInput: HTMLInputElement, suffixInput?: HTMLInputElement, statusElement: HTMLElement, endpoint?: string, isActive?: Function, isCurrent?: Function, onFound: Function, fetchImpl?: Function }} options De velden, het element voor de melding, het adres van de API, isActive() = of er nu opgezocht mag worden (bijvoorbeeld alleen voor Nederland), isCurrent() = of het ingevulde adres nog van de laatste treffer is (anders wordt dezelfde invoer opnieuw opgezocht), onFound(adres) = wat er met een treffer gebeurt en fetchImpl (alleen voor tests).
+   * @param {{ postcodeInput: HTMLInputElement, numberInput: HTMLInputElement, suffixInput?: HTMLInputElement, statusElement: HTMLElement, endpoint?: string, isActive?: Function, isCurrent?: Function, getDestination?: Function, onFound: Function, fetchImpl?: Function }} options De velden, het element voor de melding, het adres van de API, isActive() = of er nu opgezocht mag worden (bijvoorbeeld alleen voor Nederland), isCurrent() = of het ingevulde adres nog van de laatste treffer is (anders wordt dezelfde invoer opnieuw opgezocht), getDestination() = de huidige inhoud van de velden die een treffer invult (verandert die tijdens het opzoeken, bijvoorbeeld door een handmatige aanpassing, dan wordt het antwoord genegeerd), onFound(adres) = wat er met een treffer gebeurt en fetchImpl (alleen voor tests).
    * @returns {{ check: Function, reset: Function }} check() zoekt meteen op (zonder pauze); reset() vergeet de laatste treffer.
    */
-  function attach({ postcodeInput, numberInput, suffixInput = null, statusElement, endpoint = DEFAULT_ENDPOINT, isActive = () => true, isCurrent = () => true, onFound, fetchImpl = (...args) => fetch(...args) }) {
+  function attach({ postcodeInput, numberInput, suffixInput = null, statusElement, endpoint = DEFAULT_ENDPOINT, isActive = () => true, isCurrent = () => true, getDestination = () => '', onFound, fetchImpl = (...args) => fetch(...args) }) {
     let timer = null;
     let controller = null;
     let sequence = 0;
@@ -113,27 +113,31 @@
       if (controller) controller.abort();
       controller = new AbortController();
       const mine = ++sequence;
+      const destinationAtStart = getDestination();
       say('Adres opzoeken…');
       const query = new URLSearchParams({ postcode, huisnummer: houseNumber, toevoeging: suffixInput ? suffixInput.value : '' });
       try {
         const response = await fetchImpl(`${endpoint}${endpoint.includes('?') ? '&' : '?'}${query}`, { signal: controller.signal, headers: { Accept: 'application/json' }, credentials: 'same-origin' });
         if (mine !== sequence) return;
+        if (!isActive() || getDestination() !== destinationAtStart) { say(''); return; }
         if (response.status === 400) { settle('Controleer de postcode en het huisnummer.', 'error'); return; }
         if (!response.ok) throw new Error(`status ${response.status}`);
         const address = await response.json();
         if (mine !== sequence) return;
-        if (!isActive()) { say(''); return; }
-        if (!address.found) { settle('Geen adres gevonden bij deze postcode en dit huisnummer. Controleer de invoer of vul het adres zelf in.', 'error'); return; }
+        if (!isActive() || getDestination() !== destinationAtStart) { say(''); return; }
+        if (!address.found) {
+          const typedSuffix = suffixInput ? suffixInput.value.trim() : '';
+          settle(address.suffixUnknown ? `De toevoeging "${typedSuffix}" komt niet voor bij dit huisnummer. Controleer de toevoeging of vul het adres zelf in.` : 'Geen adres gevonden bij deze postcode en dit huisnummer. Controleer de invoer of vul het adres zelf in.', 'error');
+          return;
+        }
         lastKey = key;
         onFound(address);
-        const typedSuffix = suffixInput ? suffixInput.value.trim() : '';
-        let note = '';
-        if (address.suffixRequired) note = ' Bij dit huisnummer hoort een toevoeging (bijvoorbeeld A); vul die in.';
-        else if (typedSuffix && address.suffixMatched === false) note = ` De toevoeging "${typedSuffix}" komt niet voor bij dit huisnummer; controleer die.`;
+        const note = address.suffixRequired ? ' Bij dit huisnummer hoort een toevoeging (bijvoorbeeld A); vul die in.' : '';
         settle(`Adres ingevuld: ${fullAddress(address, ', ')}.${note}`, note ? 'error' : 'ok');
       } catch (error) {
         if (error && error.name === 'AbortError') return;
         if (mine !== sequence) return;
+        if (!isActive() || getDestination() !== destinationAtStart) { say(''); return; }
         settle('Het adres kon nu niet worden opgezocht. Vul het adres zelf in.', 'error');
       } finally {
         if (mine === sequence) inFlightKey = '';
@@ -228,6 +232,7 @@
       postcodeInput, numberInput, suffixInput, statusElement, endpoint, fetchImpl,
       isActive: isEditable,
       isCurrent: () => field.value === lastWritten,
+      getDestination: () => field.value,
       onFound: (address) => {
         filling = true;
         lastWritten = fullAddress(address, separator);

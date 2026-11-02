@@ -56,16 +56,16 @@ function suffixOf(doc) {
  * Zoekt in de uitkomst van PDOK het adres dat het best past.
  * @param {object[]} docs De adressen die PDOK teruggaf voor deze postcode en dit huisnummer.
  * @param {string} suffix De gevraagde toevoeging (mag leeg zijn).
- * @returns {{ doc: object, suffixMatched: boolean, suffixRequired: boolean }|null} Het gekozen adres (suffixMatched = de gevraagde toevoeging bestaat; suffixRequired = dit huisnummer heeft alleen adressen mét toevoeging), of niets als er geen is.
+ * @returns {{ doc: object, suffixRequired: boolean }|null} Het gekozen adres (suffixRequired = dit huisnummer heeft alleen adressen mét toevoeging), of niets als er geen past (ook als de gevraagde toevoeging niet bestaat).
  */
 function pickAddress(docs, suffix) {
   if (!docs.length) return null;
   if (suffix) {
     const exact = docs.find((doc) => suffixOf(doc) === suffix);
-    return exact ? { doc: exact, suffixMatched: true, suffixRequired: false } : { doc: docs[0], suffixMatched: false, suffixRequired: false };
+    return exact ? { doc: exact, suffixRequired: false } : null;
   }
   const plain = docs.find((doc) => !suffixOf(doc));
-  return { doc: plain || docs[0], suffixMatched: true, suffixRequired: !plain };
+  return { doc: plain || docs[0], suffixRequired: !plain };
 }
 
 /**
@@ -98,7 +98,7 @@ function createAddressLookup({ fetchImpl = (...args) => fetch(...args) } = {}) {
   /**
    * Zoekt het adres bij een postcode en huisnummer.
    * @param {{ postcode: *, houseNumber: *, suffix?: * }} input De ingevoerde waarden.
-   * @returns {Promise<{ found: boolean, street?: string, houseNumber?: string, suffix?: string, suffixMatched?: boolean, suffixRequired?: boolean, postcode?: string, city?: string }>} Het adres, of found:false als de combinatie niet bestaat.
+   * @returns {Promise<{ found: boolean, street?: string, houseNumber?: string, suffix?: string, suffixRequired?: boolean, suffixUnknown?: boolean, postcode?: string, city?: string }>} Het adres, of found:false als de combinatie niet bestaat.
    * @throws {Error} Met code 'invalid' bij een ongeldige invoer en 'unavailable' als PDOK niet bereikbaar is.
    */
   async function lookup({ postcode, houseNumber, suffix = '' }) {
@@ -125,10 +125,11 @@ function createAddressLookup({ fetchImpl = (...args) => fetch(...args) } = {}) {
       cache.set(key, entry);
     }
     const picked = pickAddress(entry.docs, cleanSuffix);
-    if (!picked || !picked.doc.straatnaam || !picked.doc.woonplaatsnaam) return { found: false };
+    if (!picked) return entry.docs.length && cleanSuffix ? { found: false, suffixUnknown: true } : { found: false };
+    if (!picked.doc.straatnaam || !picked.doc.woonplaatsnaam) return { found: false };
     return {
-      found: true, street: picked.doc.straatnaam, houseNumber: cleanNumber, suffix: picked.suffixMatched ? cleanSuffix : '',
-      suffixMatched: picked.suffixMatched, suffixRequired: picked.suffixRequired, postcode: `${cleanPostcode.slice(0, 4)} ${cleanPostcode.slice(4)}`, city: picked.doc.woonplaatsnaam,
+      found: true, street: picked.doc.straatnaam, houseNumber: cleanNumber, suffix: cleanSuffix,
+      suffixRequired: picked.suffixRequired, postcode: `${cleanPostcode.slice(0, 4)} ${cleanPostcode.slice(4)}`, city: picked.doc.woonplaatsnaam,
     };
   }
 

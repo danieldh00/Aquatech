@@ -77,6 +77,7 @@ function setUpAddressLookup(form) {
     statusElement: row.querySelector('[data-address-status]'),
     endpoint: form.dataset.addressEndpoint,
     isActive: () => !countryField || countryField.value === 'NL',
+    getDestination: () => `${form.querySelector('input[name="street"]').value}|${form.querySelector('input[name="city"]').value}`,
     onFound: (address) => {
       form.querySelector('input[name="street"]').value = window.AddressLookup.streetLine(address);
       postcodeInput.value = address.postcode;
