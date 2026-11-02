@@ -354,3 +354,25 @@ test('frontendcomponent: het adresveld is alleen-lezen en een mislukte opzoeking
   const source = fs.readFileSync(ADDRESS_LOOKUP_FILE, 'utf8');
   assert.match(source, /field\.readOnly = true/);
 });
+
+test('adrestekst ontleden: cijfers in de straatnaam tellen niet mee en een losse toevoeging hoort bij het huisnummer', () => {
+  assert.strictEqual(addressCandidates('Plein 1940-1945 12, 8071 AB Nunspeet')[0].houseNumber, '12');
+  const split = addressCandidates('Tuinstraat 12 A, 8071 AB Nunspeet')[0];
+  assert.deepStrictEqual([split.houseNumber, split.suffix], ['12', 'A']);
+});
+
+test('adrescontrole: een adres dat geen tekst is wordt geweigerd', async () => {
+  const world = await setup();
+  const rejected = await world.admin.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: ['Dorpsstraat 1, Amsterdam'] }, lines: [] } });
+  assert.strictEqual(rejected.status, 400);
+});
+
+test('afrekenen: een ongeldige postcode of lege straat geeft een foutmelding in plaats van ongecontroleerd opslaan', async () => {
+  const world = await setup();
+  const customer = world.shoppers[0].client;
+  await postForm(world.base, customer, '/winkel/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
+  const fields = { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'dpd', country: 'NL', terms: 'ja', street: 'Verzonnenlaan 1', city: 'Nergens' };
+  const bad = await postCheckout(world.base, customer, { ...fields, postcode: '0000AB' });
+  assert.strictEqual(bad.status, 400);
+  assert.match(bad.text, /geldige postcode/);
+});

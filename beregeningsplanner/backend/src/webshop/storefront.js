@@ -10,7 +10,7 @@ const path = require('path');
 const express = require('express');
 const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
-const { registerAddressRoute, normalizePostcode } = require('../platform/address-lookup');
+const { registerAddressRoute } = require('../platform/address-lookup');
 const { remoteIp } = require('../beveiliging/auth');
 const { createStorefrontData } = require('./storefront-data');
 const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
@@ -375,7 +375,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         try {
           // Een Nederlands bezorgadres komt altijd uit postcode + huisnummer (PDOK): straat en woonplaats uit de browser worden niet vertrouwd.
           let placed = body;
-          if (addressGuard && String(body.shippingMethod || '') === 'dpd' && String(body.country || 'NL').toUpperCase() === 'NL' && normalizePostcode(body.postcode) && String(body.street || '').trim().length >= 3) {
+          if (addressGuard && String(body.shippingMethod || '') === 'dpd' && String(body.country || 'NL').toUpperCase() === 'NL') {
             const resolved = await addressGuard.resolveParts({ street: String(body.street || '').trim(), postcode: String(body.postcode || '').trim() });
             if (!resolved.ok) {
               res.setHeader('Cache-Control', 'no-store');

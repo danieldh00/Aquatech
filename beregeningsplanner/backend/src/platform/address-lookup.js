@@ -174,10 +174,15 @@ function addressCandidates(text) {
   const postcode = normalizePostcode(`${match[1]}${match[2]}`);
   if (!postcode) return [];
   const street = flat.slice(0, match.index).replace(/[\s,]+$/, '');
-  const tail = /(\d[0-9A-Za-z -]{0,9})$/.exec(street);
-  if (!tail) return [];
-  const compact = tail[1].replace(/[\s-]+/g, '');
-  const digits = /^\d+/.exec(compact)[0];
+  // Het huisnummer staat in de laatste component van de straatregel (cijfers in de straatnaam, zoals "Plein 1940-1945", tellen niet mee);
+  // een losse toevoeging ("12 A") hoort bij het component ervoor.
+  const parts = street.split(' ');
+  let compact = parts[parts.length - 1] || '';
+  if (!/^\d/.test(compact) && parts.length > 1 && /^\d/.test(parts[parts.length - 2])) compact = `${parts[parts.length - 2]}${compact}`;
+  compact = compact.replace(/-+/g, '');
+  const digitsMatch = /^\d+/.exec(compact);
+  if (!digitsMatch) return [];
+  const digits = digitsMatch[0];
   const candidates = [];
   for (let length = digits.length; length >= 1; length -= 1) {
     candidates.push({ postcode, houseNumber: normalizeHouseNumber(compact.slice(0, length)), suffix: normalizeSuffix(compact.slice(length)) });
@@ -245,6 +250,8 @@ function createAddressGuard(service) {
    * @returns {Promise<{ ok: true, street: string, postcode: string, city: string }|{ ok: false, status: number, error: string, message: string }>} Het adres zoals PDOK het geeft, of de fout.
    */
   async function resolveParts({ street, postcode }) {
+    if (!normalizePostcode(postcode)) return { ok: false, status: 400, error: 'invalid_address', message: 'Vul een geldige postcode in, bijvoorbeeld 8071 AB.' };
+    if (street.length < 3) return { ok: false, status: 400, error: 'invalid_address', message: 'Vul je straat en huisnummer in.' };
     const text = `${street}, ${postcode}`;
     for (const candidate of addressCandidates(text)) {
       let found;
@@ -275,7 +282,9 @@ function requireVerifiedAddress(guard, addressOf, previousOf = () => () => '') {
   return async (req, res, next) => {
     try {
       const text = addressOf(req);
-      if (typeof text !== 'string' || !text.trim()) return next();
+      if (text === undefined || text === null) return next();
+      if (typeof text !== 'string') return res.status(400).json({ error: 'invalid_address', field: 'address', message: 'Het adres moet tekst zijn.' });
+      if (!text.trim()) return next();
       const out = await guard.verify(text, { previous: previousOf(req) });
       if (!out.ok) return res.status(out.status).json({ error: out.error, field: 'address', message: out.message });
       next();
