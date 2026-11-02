@@ -235,6 +235,11 @@ test('frontendcomponent: land wijzigt tijdens het opzoeken, of het adres is intu
 
 test('frontendcomponent: antwoord wordt genegeerd als het adresveld tijdens het opzoeken is aangepast, ook bij een fout', async () => {
   const lookup = loadComponent();
+  /**
+   * Eenvoudig invoerveld.
+   * @param {string} value Beginwaarde.
+   * @returns {object} Het nagebootste veld.
+   */
   const makeInput = (value) => ({ value, addEventListener: () => {} });
   const statusElement = { textContent: '', dataset: {} };
   const found = [];
