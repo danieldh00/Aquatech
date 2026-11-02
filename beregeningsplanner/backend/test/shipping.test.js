@@ -134,6 +134,7 @@ test('afrekenen: ophalen, DPD met tarief, gratis vanaf, te zwaar en ander land',
   assert.match(script.text, /showChosenShipping/);
   assert.match(page.text, /data-shipping-options/, 'de verzendopties staan in een eigen onderdeel dat op de achtergrond wordt ververst');
   assert.match(script.text, /refreshTotals/, 'land en btw-nummer werken het totaal op de achtergrond bij');
+  assert.match(script.text, /getAttribute\('action'\)/, 'form.action zou de knop met naam action teruggeven in plaats van het adres');
   // De achtergrondberekening stuurt alleen land, methode en btw-nummer en gebruikt alleen de onderdelen uit het antwoord.
   const background = await postForm(base, customer, '/winkel/afrekenen/', { action: 'update', country: 'BE', shippingMethod: 'dpd' });
   assert.strictEqual(background.status, 200);

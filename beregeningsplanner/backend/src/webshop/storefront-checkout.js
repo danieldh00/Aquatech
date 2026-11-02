@@ -49,7 +49,7 @@ async function refreshTotals(form) {
     if (field) body.set(name, field.value);
   }
   try {
-    const response = await fetch(form.action, { method: 'POST', body, credentials: 'same-origin', headers: { Accept: 'text/html' } });
+    const response = await fetch(form.getAttribute('action'), { method: 'POST', body, credentials: 'same-origin', headers: { Accept: 'text/html' } });
     if (!response.ok || sequence !== refreshSequence) return;
     const updated = new DOMParser().parseFromString(await response.text(), 'text/html');
     if (sequence !== refreshSequence) return;
