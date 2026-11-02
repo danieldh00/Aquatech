@@ -127,6 +127,7 @@ function createAddressLookup({ fetchImpl = (...args) => fetch(...args) } = {}) {
     const picked = pickAddress(entry.docs, cleanSuffix);
     if (!picked) return entry.docs.length && cleanSuffix ? { found: false, suffixUnknown: true } : { found: false };
     if (!picked.doc.straatnaam || !picked.doc.woonplaatsnaam) return { found: false };
+    if (picked.suffixRequired) return { found: false, suffixRequired: true };
     return {
       found: true, street: picked.doc.straatnaam, houseNumber: cleanNumber, suffix: cleanSuffix,
       suffixRequired: picked.suffixRequired, postcode: `${cleanPostcode.slice(0, 4)} ${cleanPostcode.slice(4)}`, city: picked.doc.woonplaatsnaam,

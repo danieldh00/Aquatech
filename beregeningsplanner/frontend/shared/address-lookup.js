@@ -127,13 +127,13 @@
         if (!isActive() || getDestination() !== destinationAtStart) { say(''); return; }
         if (!address.found) {
           const typedSuffix = suffixInput ? suffixInput.value.trim() : '';
+          if (address.suffixRequired) { settle('Bij dit huisnummer hoort een toevoeging (bijvoorbeeld A); vul die in.', 'error'); return; }
           settle(address.suffixUnknown ? `De toevoeging "${typedSuffix}" komt niet voor bij dit huisnummer. Controleer de toevoeging of vul het adres zelf in.` : 'Geen adres gevonden bij deze postcode en dit huisnummer. Controleer de invoer of vul het adres zelf in.', 'error');
           return;
         }
         lastKey = key;
         onFound(address);
-        const note = address.suffixRequired ? ' Bij dit huisnummer hoort een toevoeging (bijvoorbeeld A); vul die in.' : '';
-        settle(`Adres ingevuld: ${fullAddress(address, ', ')}.${note}`, note ? 'error' : 'ok');
+        settle(`Adres ingevuld: ${fullAddress(address, ', ')}.`, 'ok');
       } catch (error) {
         if (error && error.name === 'AbortError') return;
         if (mine !== sequence) return;

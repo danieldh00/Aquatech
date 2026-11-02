@@ -204,8 +204,8 @@ test('opzoeken: huisnummer met alleen toevoegingen vraagt om een toevoeging; gel
   } });
   const [first, second] = await Promise.all([flats.lookup({ postcode: '8081AB', houseNumber: '5' }), flats.lookup({ postcode: '8081AB', houseNumber: '5' })]);
   assert.strictEqual(calls, 1, 'gelijktijdige vragen delen één aanroep');
-  assert.deepStrictEqual([first.found, first.suffixRequired, second.suffix], [true, true, '']);
-  assert.strictEqual((await flats.lookup({ postcode: '8081AB', houseNumber: '5', suffix: 'B' })).suffixRequired, false);
+  assert.deepStrictEqual([first.found, first.suffixRequired, second.found, second.street], [false, true, false, undefined], 'zonder toevoeging wordt niets ingevuld');
+  assert.strictEqual((await flats.lookup({ postcode: '8081AB', houseNumber: '5', suffix: 'B' })).found, true);
   found = false;
   assert.strictEqual((await flats.lookup({ postcode: '8082AB', houseNumber: '1' })).found, false);
 });
