@@ -57,9 +57,18 @@ async function refreshTotals(form) {
     const newSummary = updated.querySelector('.checkout-summary');
     const newTotal = updated.querySelector('[data-expected-total]');
     if (!newOptions || !newSummary || !newTotal) return;
+    // Koos de klant intussen een andere verzendmethode, dan blijft die keuze staan (ook al kwam het antwoord voor de eerdere keuze).
+    const chosenNow = form.querySelector('input[name="shippingMethod"]:checked');
     form.querySelector('[data-shipping-options]').innerHTML = newOptions.innerHTML;
     document.querySelector('.checkout-summary').innerHTML = newSummary.innerHTML;
     form.querySelector('[data-expected-total]').value = newTotal.value;
+    if (chosenNow) {
+      const sameChoice = [...form.querySelectorAll('input[name="shippingMethod"]')].find((radio) => radio.value === chosenNow.value && !radio.disabled);
+      if (sameChoice && !sameChoice.checked) {
+        sameChoice.checked = true;
+        showChosenShipping(sameChoice);
+      }
+    }
   } catch (error) {
     // Geen verbinding: de pagina blijft staan en bij het bestellen controleert de server het totaal alsnog.
   }
@@ -71,7 +80,8 @@ async function refreshTotals(form) {
  * @returns {void}
  */
 function scheduleRefresh(form) {
-  pendingRefresh = refreshTotals(form).then(() => { pendingRefresh = null; });
+  const refresh = refreshTotals(form).then(() => { if (pendingRefresh === refresh) pendingRefresh = null; });
+  pendingRefresh = refresh;
 }
 
 let refreshSequence = 0;
