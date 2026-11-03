@@ -4,6 +4,7 @@ const test = require('node:test');
 const { after } = test;
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const Shipping = require('../src/webshop/shipping');
@@ -73,7 +74,7 @@ async function setup() {
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   const other = store.createTenant({ slug: 'ander', name: 'Ander BV' }).tenant;
   await store.createAccount(other.id, { username: 'vreemd', displayName: 'Vreemd', role: 'beheerder', password: PW, mustChangePassword: false });
-  const { server, base } = await listen(createApp({ secret: SECRET, db, mailerFor: () => ({ configured: () => false, send: async () => {} }) }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor: () => ({ configured: () => false, send: async () => {} }) }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   const saved = await admin.put('/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {

@@ -152,9 +152,152 @@ function registerAddressRoute(router, routePath, service, ...guards) {
       res.json(await service.lookup({ postcode: req.query.postcode, houseNumber: req.query.huisnummer, suffix: req.query.toevoeging }));
     } catch (error) {
       if (error.code === 'invalid') return res.status(400).json({ error: 'invalid', message: 'Vul een geldige postcode (1234 AB) en een huisnummer in.' });
-      res.status(502).json({ error: 'unavailable', message: 'Het adres kon nu niet worden opgezocht. Vul het adres zelf in.' });
+      res.status(502).json({ error: 'unavailable', message: 'Het adres kon nu niet worden opgezocht. Probeer het later opnieuw.' });
     }
   });
 }
 
-module.exports = { createAddressLookup, registerAddressRoute, normalizePostcode, normalizeHouseNumber, normalizeSuffix };
+/** Postcode in een vrije adrestekst (vier cijfers en twee letters, met of zonder spatie). */
+const POSTCODE_IN_TEXT = /(?<![0-9A-Za-z])([1-9]\d{3})\s?([A-Za-z]{2})(?![0-9A-Za-z])/;
+
+/**
+ * Haalt uit een adrestekst de mogelijke combinaties van postcode, huisnummer en toevoeging.
+ * Het deel vóór de postcode eindigt op huisnummer en toevoeging ("Tuinstraat 12A"); omdat een toevoeging met cijfers
+ * ("12" + "2" = "122") dubbelzinnig is, komen alle verdelingen terug.
+ * @param {*} text De adrestekst, bijvoorbeeld "Tuinstraat 12A\n8071 AB Nunspeet".
+ * @returns {{ postcode: string, houseNumber: string, suffix: string }[]} De mogelijke combinaties (leeg als er geen postcode of huisnummer in staat).
+ */
+function addressCandidates(text) {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim();
+  const match = POSTCODE_IN_TEXT.exec(flat);
+  if (!match) return [];
+  const postcode = normalizePostcode(`${match[1]}${match[2]}`);
+  if (!postcode) return [];
+  const street = flat.slice(0, match.index).replace(/[\s,]+$/, '');
+  // Het huisnummer staat in de laatste component van de straatregel (cijfers in de straatnaam, zoals "Plein 1940-1945", tellen niet mee);
+  // een losse toevoeging ("12 A" of "12 2") hoort bij het component ervoor, dus beide lezingen worden geprobeerd.
+  const parts = street.split(' ');
+  const last = parts[parts.length - 1] || '';
+  const previous = parts.length > 1 ? parts[parts.length - 2] : '';
+  const readings = /^\d/.test(last) ? [last] : [];
+  if (/^\d/.test(previous) && last) readings.push(`${previous}${last}`);
+  const candidates = [];
+  for (const reading of readings) {
+    const compact = reading.replace(/-+/g, '');
+    const digitsMatch = /^\d+/.exec(compact);
+    if (!digitsMatch) continue;
+    const digits = digitsMatch[0].slice(0, 5);
+    for (let length = digits.length; length >= 1; length -= 1) {
+      candidates.push({ postcode, houseNumber: normalizeHouseNumber(compact.slice(0, length)), suffix: normalizeSuffix(compact.slice(length, length + 6)) });
+    }
+  }
+  return candidates.filter((candidate) => candidate.houseNumber).slice(0, 10);
+}
+
+/**
+ * Maakt een adrestekst vergelijkbaar: kleine letters, zonder spaties, komma's en streepjes.
+ * @param {*} text De adrestekst.
+ * @returns {string} De vergelijkbare vorm.
+ */
+function comparable(text) {
+  return String(text || '').toLowerCase().replace(/[\s,-]+/g, '');
+}
+
+/**
+ * Maakt de adrescontrole voor de server: een adres dat een klant of medewerker opstuurt moet precies het adres zijn
+ * dat PDOK bij de postcode en het huisnummer geeft. De server vertrouwt dus nooit een straat of plaats uit de browser.
+ * @param {{ lookup: Function }} service De opzoekdienst (createAddressLookup).
+ * @returns {{ verify: Function, resolveParts: Function }} De controle.
+ */
+function createAddressGuard(service) {
+  /**
+   * Zoekt de verdeling van een adrestekst die bij PDOK exact klopt.
+   * @param {*} text De adrestekst.
+   * @returns {Promise<{ found: boolean, address?: object }>} Het gevonden adres, of found:false als geen enkele verdeling klopt.
+   * @throws {Error} Met code 'unavailable' als PDOK niet bereikbaar is.
+   */
+  async function match(text) {
+    const wanted = comparable(text);
+    for (const candidate of addressCandidates(text)) {
+      const found = await service.lookup(candidate);
+      if (!found.found) continue;
+      const line = `${found.street}${found.houseNumber}${found.suffix}${found.postcode}${found.city}`;
+      if (comparable(line) === wanted) return { found: true, address: found };
+    }
+    return { found: false };
+  }
+
+  /**
+   * Controleert een adrestekst die in een formulier is ingevuld.
+   * @param {*} text Het opgestuurde adres (leeg mag: dan is er geen adres).
+   * @param {{ previous?: Function }} [options] previous() geeft het adres (of de adressen) zoals ze nu zijn opgeslagen; een ongewijzigd (ouder) adres blijft altijd geldig.
+   * @returns {Promise<{ ok: true }|{ ok: false, status: number, error: string, message: string }>} De uitkomst.
+   */
+  async function verify(text, { previous = () => '' } = {}) {
+    if (!String(text || '').trim()) return { ok: true };
+    let failure = { status: 400, error: 'invalid_address', message: 'Het adres klopt niet met de postcode en het huisnummer. Vul postcode en huisnummer in; het adres wordt dan automatisch ingevuld.' };
+    // Alleen leestekens of streepjes ("," of "-") is geen adres en ook geen ongewijzigd adres.
+    if (!comparable(text)) return { ok: false, ...failure };
+    try {
+      if ((await match(text)).found) return { ok: true };
+    } catch (error) {
+      if (error.code !== 'unavailable') throw error;
+      failure = { status: 503, error: 'address_unavailable', message: 'Het adres kon nu niet worden gecontroleerd. Probeer het later opnieuw.' };
+    }
+    // Een bestaand record met een ouder adres (zonder postcode of niet meer in de BAG) blijft ongewijzigd opgeslagen kunnen worden.
+    const stored = [].concat(await previous());
+    if (stored.some((address) => comparable(address) === comparable(text))) return { ok: true };
+    return { ok: false, ...failure };
+  }
+
+  /**
+   * Zoekt voor het afrekenen straat en plaats bij een Nederlandse postcode.
+   * @param {{ street: *, postcode: *, city?: * }} parts De ingevulde straat (met huisnummer), postcode en plaats.
+   * @returns {Promise<{ ok: true, street: string, postcode: string, city: string }|{ ok: false, status: number, error: string, message: string }>} Het adres zoals PDOK het geeft, of de fout.
+   */
+  async function resolveParts({ street, postcode }) {
+    if (!normalizePostcode(postcode)) return { ok: false, status: 400, error: 'invalid_address', message: 'Vul een geldige postcode in, bijvoorbeeld 8071 AB.' };
+    if (street.length < 3) return { ok: false, status: 400, error: 'invalid_address', message: 'Vul je straat en huisnummer in.' };
+    const text = `${street}, ${postcode}`;
+    for (const candidate of addressCandidates(text)) {
+      let found;
+      try {
+        found = await service.lookup(candidate);
+      } catch (error) {
+        if (error.code !== 'unavailable') throw error;
+        return { ok: false, status: 503, error: 'address_unavailable', message: 'Het adres kon nu niet worden gecontroleerd. Probeer het later opnieuw.' };
+      }
+      if (found.found && comparable(`${found.street}${found.houseNumber}${found.suffix}`) === comparable(street)) {
+        return { ok: true, street: `${found.street} ${found.houseNumber}${found.suffix}`, postcode: found.postcode, city: found.city };
+      }
+    }
+    return { ok: false, status: 400, error: 'invalid_address', message: 'Het adres klopt niet met de postcode en het huisnummer. Vul postcode en huisnummer in; straat en woonplaats worden dan automatisch ingevuld.' };
+  }
+
+  return { verify, resolveParts };
+}
+
+/**
+ * Maakt een Express-middleware die het adres in een verzoek controleert voordat de route het opslaat.
+ * @param {{ verify: Function }} guard De adrescontrole (createAddressGuard).
+ * @param {Function} addressOf (req) => het opgestuurde adres, of niets als dit verzoek geen adres meestuurt.
+ * @param {Function} [previousOf] (req) => functie die het opgeslagen adres geeft (alleen aangeroepen als het adres niet klopt).
+ * @returns {Function} De middleware.
+ */
+function requireVerifiedAddress(guard, addressOf, previousOf = () => () => '') {
+  return async (req, res, next) => {
+    try {
+      const text = addressOf(req);
+      if (text === undefined || text === null) return next();
+      if (typeof text !== 'string') return res.status(400).json({ error: 'invalid_address', field: 'address', message: 'Het adres moet tekst zijn.' });
+      if (!text.trim()) return next();
+      const out = await guard.verify(text, { previous: previousOf(req) });
+      if (!out.ok) return res.status(out.status).json({ error: out.error, field: 'address', message: out.message });
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+module.exports = { createAddressGuard, requireVerifiedAddress, addressCandidates, createAddressLookup, registerAddressRoute, normalizePostcode, normalizeHouseNumber, normalizeSuffix };

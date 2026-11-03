@@ -15,6 +15,7 @@ const { createVault } = require('../beveiliging/vault');
 const { createMailer, validEmail } = require('../platform/mailer');
 const { preferencesOf } = require('../platform/store');
 const { ifBaseOf } = require('../beveiliging/idempotency');
+const { requireVerifiedAddress } = require('../platform/address-lookup');
 
 /**
  * Kopie (bcc) van een verstuurde mail naar de afzender, als die dat in Mijn
@@ -713,7 +714,7 @@ function registerWorkOrderRoutes(app, ctx) {
   });
 
   // Alleen vanuit een offerte met status akkoord.
-  app.post('/api/workorders', requireJson, requireWo, (req, res) => {
+  app.post('/api/workorders', requireJson, requireWo, requireVerifiedAddress(ctx.addressGuard, (req) => req.body?.data?.customer?.address, (req) => () => workorders.quoteOf(tenantOf(req), req.body?.quoteId)?.data?.customer?.address), (req, res) => {
     const { quoteId, data } = req.body || {};
     if (!quoteId || (data !== undefined && !validData(data))) return res.status(400).json({ error: 'invalid_workorder', message: 'Kies een offerte.' });
     const quote = workorders.quoteOf(tenantOf(req), quoteId);
@@ -727,7 +728,7 @@ function registerWorkOrderRoutes(app, ctx) {
     res.status(201).json(workOrder);
   });
 
-  app.put('/api/workorders/:id', requireJson, requireWo, (req, res) => {
+  app.put('/api/workorders/:id', requireJson, requireWo, requireVerifiedAddress(ctx.addressGuard, (req) => req.body?.data?.customer?.address, (req) => () => workorders.get(tenantOf(req), req.params.id)?.data?.customer?.address), (req, res) => {
     const { data, status } = req.body || {};
     if ((data !== undefined && !validData(data)) || !validStatus(status)) return res.status(400).json({ error: 'invalid_workorder', message: 'Ongeldige werkorder.' });
     const assignee = assigneeOf(req, req.body.assigneeId);

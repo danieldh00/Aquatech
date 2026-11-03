@@ -6,44 +6,12 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { createAddressLookup, normalizePostcode, normalizeHouseNumber, normalizeSuffix } = require('../src/platform/address-lookup');
+const { createAddressLookup, createAddressGuard, addressCandidates, normalizePostcode, normalizeHouseNumber, normalizeSuffix } = require('../src/platform/address-lookup');
 const { setup } = require('./helpers/webshop-world');
-const { createClient, postForm } = require('./helpers/http-client');
+const { createPdokFake } = require('./helpers/pdok-fake');
+const { createClient, postForm, postCheckout } = require('./helpers/http-client');
 
 const ADDRESS_LOOKUP_FILE = path.join(__dirname, '..', '..', 'frontend', 'shared', 'address-lookup.js');
-
-/**
- * Nagebootste PDOK Locatieserver met een paar adressen.
- * @returns {{ fetchImpl: Function, calls: string[], down: { on: boolean } }} fetchImpl voor createAddressLookup, de opgevraagde adressen en down.on om PDOK onbereikbaar te maken.
- */
-function createPdokFake() {
-  const calls = [];
-  const down = { on: false };
-  const documents = {
-    '8071AB|1': [{ straatnaam: 'Tuinstraat', huisnummer: 1, postcode: '8071AB', woonplaatsnaam: 'Nunspeet' }],
-    '8071AB|12': [
-      { straatnaam: 'Tuinstraat', huisnummer: 12, huisletter: 'A', postcode: '8071AB', woonplaatsnaam: 'Nunspeet' },
-      { straatnaam: 'Tuinstraat', huisnummer: 12, postcode: '8071AB', woonplaatsnaam: 'Nunspeet' },
-      { straatnaam: 'Tuinstraat', huisnummer: 12, huisnummertoevoeging: '2', postcode: '8071AB', woonplaatsnaam: 'Nunspeet' },
-    ],
-  };
-  /**
-   * Doet alsof dit PDOK is.
-   * @param {string} url Het opgevraagde adres.
-   * @returns {Promise<{ ok: boolean, status: number, json: Function }>} Het antwoord.
-   */
-  const fetchImpl = async (url) => {
-    calls.push(url);
-    if (down.on) throw new Error('netwerk weg');
-    const parsed = new URL(url);
-    assert.strictEqual(parsed.origin + parsed.pathname, 'https://api.pdok.nl/bzk/locatieserver/search/v3_1/free');
-    const filters = parsed.searchParams.getAll('fq');
-    const postcode = filters.find((filter) => filter.startsWith('postcode:')).slice(9);
-    const houseNumber = filters.find((filter) => filter.startsWith('huisnummer:')).slice(11);
-    return { ok: true, status: 200, json: async () => ({ response: { docs: documents[`${postcode}|${houseNumber}`] || [] } }) };
-  };
-  return { fetchImpl, calls, down };
-}
 
 test('invoer schoonmaken: postcode, huisnummer en toevoeging', () => {
   assert.strictEqual(normalizePostcode(' 8071 ab '), '8071AB');
@@ -93,7 +61,7 @@ test('API in de app: alleen ingelogd, ongeldige invoer 400, storing 502', async 
   pdok.down.on = true;
   const down = await world.admin.get('/api/address-lookup?postcode=8071AB&huisnummer=5');
   assert.strictEqual(down.status, 502);
-  assert.match(down.body.message, /zelf in/);
+  assert.match(down.body.message, /later opnieuw/);
   await world.admin.put('/api/admin/settings', { guestAccess: false });
   assert.strictEqual((await anonymous.get('/api/address-lookup?postcode=8071AB&huisnummer=1')).status, 401);
 });
@@ -126,7 +94,7 @@ test('webshop: route /winkel/adres/, CSP en afrekenformulier', async () => {
  * @returns {object} De component (AddressLookup).
  */
 function loadComponent() {
-  const sandbox = { window: {}, document: { readyState: 'complete', querySelectorAll: () => [] }, console, AbortController, URLSearchParams };
+  const sandbox = { window: {}, document: { readyState: 'complete', querySelectorAll: () => [] }, console, setTimeout: () => 0, clearTimeout: () => {}, AbortController, URLSearchParams };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(ADDRESS_LOOKUP_FILE, 'utf8'), sandbox);
   return sandbox.window.AddressLookup;
@@ -191,7 +159,7 @@ test('frontendcomponent: vult bij een treffer, meldt een storing en wacht op gel
   numberInput.value = '2';
   await component.check();
   assert.strictEqual(statusElement.dataset.kind, 'error');
-  assert.match(statusElement.textContent, /zelf in/);
+  assert.match(statusElement.textContent, /later opnieuw/);
   assert.strictEqual(found.length, 1, 'bij een storing verandert er niets aan het formulier');
 });
 
@@ -289,4 +257,172 @@ test('frontendcomponent: een eerder ingevuld adres wordt gewist als de nieuwe in
   numberInput.value = '1';
   await component.check();
   assert.strictEqual(address, 'Tuinstraat', 'terug naar de eerdere combinatie zoekt opnieuw op en toont niet de oude melding');
+});
+
+test('adrestekst ontleden: alle verdelingen van huisnummer en toevoeging', () => {
+  assert.deepStrictEqual(addressCandidates('Tuinstraat 12A\n8071 AB Nunspeet').map((candidate) => `${candidate.postcode}|${candidate.houseNumber}|${candidate.suffix}`), ['8071AB|12|A', '8071AB|1|2A']);
+  assert.deepStrictEqual(addressCandidates('Tuinstraat 122, 8071ab Nunspeet').map((candidate) => `${candidate.houseNumber}|${candidate.suffix}`), ['122|', '12|2', '1|22']);
+  assert.deepStrictEqual(addressCandidates('Tuinstraat, 8071 AB Nunspeet'), [], 'zonder huisnummer');
+  assert.deepStrictEqual(addressCandidates('Dorpsstraat 1, Nunspeet'), [], 'zonder postcode');
+});
+
+test('adrescontrole: alleen het adres dat PDOK bij postcode en huisnummer geeft', async () => {
+  const pdok = createPdokFake();
+  const guard = createAddressGuard(createAddressLookup({ fetchImpl: pdok.fetchImpl }));
+  assert.deepStrictEqual(await guard.verify(''), { ok: true }, 'geen adres is geen fout');
+  assert.deepStrictEqual(await guard.verify('Tuinstraat 1\n8071 AB Nunspeet'), { ok: true });
+  assert.deepStrictEqual(await guard.verify('tuinstraat 1, 8071ab nunspeet'), { ok: true }, 'hoofdletters en scheiding doen er niet toe');
+  assert.deepStrictEqual(await guard.verify('Tuinstraat 12A\n8071 AB Nunspeet'), { ok: true });
+  assert.deepStrictEqual(await guard.verify('Tuinstraat 122\n8071 AB Nunspeet'), { ok: true }, 'huisnummer 12 met toevoeging 2');
+  for (const tampered of ['Dorpsstraat 1\n8071 AB Nunspeet', 'Tuinstraat 1\n8071 AB Amsterdam', 'Tuinstraat 1\nNunspeet', 'Tuinstraat 99\n8071 AB Nunspeet']) {
+    const out = await guard.verify(tampered);
+    assert.strictEqual(out.ok, false, tampered);
+    assert.strictEqual(out.status, 400);
+  }
+  const legacy = 'Dorpsstraat 1, Nunspeet';
+  assert.strictEqual((await guard.verify(legacy)).ok, false, 'een nieuw adres zonder postcode mag niet');
+  assert.deepStrictEqual(await guard.verify(legacy, { previous: () => legacy }), { ok: true }, 'een ongewijzigd ouder adres blijft geldig');
+  assert.deepStrictEqual(await guard.verify(legacy, { previous: () => ['ander adres', legacy] }), { ok: true });
+  pdok.down.on = true;
+  const fresh = createAddressGuard(createAddressLookup({ fetchImpl: pdok.fetchImpl }));
+  const unavailable = await fresh.verify('Tuinstraat 1\n8071 AB Nunspeet');
+  assert.strictEqual(unavailable.status, 503, 'bij een storing wordt niets zonder controle opgeslagen');
+  assert.deepStrictEqual(await fresh.verify(legacy, { previous: () => legacy }), { ok: true }, 'ook bij een storing blijft een ongewijzigd adres opslaan');
+});
+
+test('offerte en melding: het adres moet kloppen met postcode en huisnummer (server vertrouwt de browser niet)', async () => {
+  const world = await setup();
+  const { admin } = world;
+  const lines = [{ section: 'materiaal', code: 'SPR', description: 'Sproeier', qty: 1, unit: 'st', price: 20, vat: 21 }];
+  /**
+   * Een offerte met dit klantadres.
+   * @param {string} address Het adres.
+   * @returns {object} De body voor POST /api/quotes.
+   */
+  const quoteWith = (address) => ({ data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address }, lines } });
+  const wrongCity = await admin.post('/api/quotes', quoteWith('Tuinstraat 1\n8071 AB Amsterdam'));
+  assert.strictEqual(wrongCity.status, 400);
+  assert.strictEqual(wrongCity.body.error, 'invalid_address');
+  assert.strictEqual((await admin.post('/api/quotes', quoteWith('Dorpsstraat 1, Nunspeet'))).status, 400, 'geen postcode');
+  const good = await admin.post('/api/quotes', quoteWith('Tuinstraat 1\n8071 AB Nunspeet'));
+  assert.strictEqual(good.status, 201);
+  assert.strictEqual((await admin.post('/api/quotes', quoteWith(''))).status, 201, 'zonder adres kan het nog');
+  const tampered = await admin.put(`/api/quotes/${good.body.id}`, quoteWith('Tuinstraat 1\n8071 AB Elburg'));
+  assert.strictEqual(tampered.status, 400);
+  assert.strictEqual((await admin.put(`/api/quotes/${good.body.id}`, quoteWith('Tuinstraat 1\n8071 AB Nunspeet'))).status, 200);
+});
+
+test('afrekenen: straat en woonplaats komen uit PDOK, niet uit de browser', async () => {
+  const world = await setup();
+  const { base } = world;
+  const customer = world.shoppers[0].client;
+  await postForm(base, customer, '/winkel/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
+  const fields = { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'dpd', country: 'NL', terms: 'ja', postcode: '8071ab', street: 'tuinstraat 1', city: 'Amsterdam' };
+  const wrongStreet = await postCheckout(base, customer, { ...fields, street: 'Dorpsstraat 1' });
+  assert.strictEqual(wrongStreet.status, 400);
+  assert.match(wrongStreet.text, /klopt niet met de postcode/);
+  const placed = await postCheckout(base, customer, fields);
+  assert.strictEqual(placed.status, 303, 'de verkeerde woonplaats uit de browser wordt vervangen');
+  const list = await world.admin.get('/api/admin/web-orders');
+  const detail = await world.admin.get(`/api/admin/web-orders/${list.body.items[0].id}`);
+  assert.deepStrictEqual([detail.body.order.address.street, detail.body.order.address.postcode, detail.body.order.address.city], ['Tuinstraat 1', '8071 AB', 'Nunspeet']);
+});
+
+test('frontendcomponent: het adresveld is alleen-lezen en een mislukte opzoeking wist het en blokkeert het formulier', async () => {
+  const sandbox = { window: {}, document: { readyState: 'complete', querySelectorAll: () => [], getElementById: () => ({}) }, console, AbortController, URLSearchParams };
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(ADDRESS_LOOKUP_FILE, 'utf8'), sandbox);
+  const lookup = sandbox.window.AddressLookup;
+  /**
+   * Eenvoudig invoerveld.
+   * @param {string} value Beginwaarde.
+   * @returns {object} Het nagebootste veld.
+   */
+  const makeInput = (value) => ({ value, addEventListener: () => {} });
+  const statusElement = { textContent: '', dataset: {} };
+  let cleared = 0;
+  let status = 200;
+  const component = lookup.attach({
+    postcodeInput: makeInput('8071 AB'), numberInput: makeInput('1'), statusElement, endpoint: 'adres/', onFound: () => {}, onClear: () => { cleared += 1; },
+    fetchImpl: async () => ({ ok: status === 200, status, json: async () => ({ found: false }) }),
+  });
+  assert.strictEqual(component.hasProblem(), false);
+  await component.check();
+  assert.strictEqual(cleared, 1, 'geen treffer wist het adres');
+  assert.strictEqual(component.hasProblem(), true, 'zonder adres geen verzending');
+  assert.doesNotMatch(statusElement.textContent, /zelf in/);
+  const source = fs.readFileSync(ADDRESS_LOOKUP_FILE, 'utf8');
+  assert.match(source, /field\.readOnly = true/);
+});
+
+test('adrestekst ontleden: cijfers in de straatnaam tellen niet mee en een losse toevoeging hoort bij het huisnummer', () => {
+  assert.strictEqual(addressCandidates('Plein 1940-1945 12, 8071 AB Nunspeet')[0].houseNumber, '12');
+  const split = addressCandidates('Tuinstraat 12 A, 8071 AB Nunspeet')[0];
+  assert.deepStrictEqual([split.houseNumber, split.suffix], ['12', 'A']);
+});
+
+test('adrescontrole: een adres dat geen tekst is wordt geweigerd', async () => {
+  const world = await setup();
+  const rejected = await world.admin.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: ['Dorpsstraat 1, Amsterdam'] }, lines: [] } });
+  assert.strictEqual(rejected.status, 400);
+});
+
+test('afrekenen: een ongeldige postcode of lege straat geeft een foutmelding in plaats van ongecontroleerd opslaan', async () => {
+  const world = await setup();
+  const customer = world.shoppers[0].client;
+  await postForm(world.base, customer, '/winkel/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
+  const fields = { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'dpd', country: 'NL', terms: 'ja', street: 'Verzonnenlaan 1', city: 'Nergens' };
+  const bad = await postCheckout(world.base, customer, { ...fields, postcode: '0000AB' });
+  assert.strictEqual(bad.status, 400);
+  assert.match(bad.text, /geldige postcode/);
+});
+
+test('adrestekst ontleden: twee losse getallen en zeer lange cijferreeksen', () => {
+  const readings = addressCandidates('Tuinstraat 12 2, 8071 AB Nunspeet').map((candidate) => `${candidate.houseNumber}|${candidate.suffix}`);
+  assert.ok(readings.includes('12|2'), 'huisnummer 12 met toevoeging 2');
+  assert.ok(readings.includes('2|'), 'ook alleen huisnummer 2');
+  const long = addressCandidates(`Tuinstraat ${'1'.repeat(5000)}, 8071 AB Nunspeet`);
+  assert.ok(long.length <= 10 && long.every((candidate) => candidate.houseNumber.length <= 5 && candidate.suffix.length <= 6));
+});
+
+test('adrestekst ontleden: beide lezingen blijven behouden', () => {
+  const readings = addressCandidates('Tuinstraat 12 123, 8071 AB Nunspeet').map((candidate) => `${candidate.houseNumber}|${candidate.suffix}`);
+  assert.ok(readings.includes('12|123'));
+});
+
+test('adrescontrole: alleen leestekens is geen adres', async () => {
+  const guard = createAddressGuard(createAddressLookup({ fetchImpl: createPdokFake().fetchImpl }));
+  assert.strictEqual((await guard.verify(',')).ok, false);
+  assert.strictEqual((await guard.verify(' - ,', { previous: () => '' })).ok, false);
+  assert.strictEqual((await guard.verify('   ')).ok, true, 'alleen spaties telt als geen adres');
+});
+
+test('frontendcomponent: typen wist het adres niet en bij een inactieve opzoeking blijft alles ongemoeid', () => {
+  const lookup = loadComponent();
+  const listeners = [];
+  const postcodeInput = { value: '8071 AB', addEventListener: (name, handler) => { if (name === 'input') listeners.push(handler); } };
+  const numberInput = { value: '1', addEventListener: () => {} };
+  const statusElement = { textContent: '', dataset: {} };
+  let active = true;
+  let cleared = 0;
+  const component = lookup.attach({ postcodeInput, numberInput, statusElement, endpoint: 'adres/', isActive: () => active, onFound: () => {}, onClear: () => { cleared += 1; } });
+  listeners[0]();
+  assert.strictEqual(cleared, 0, 'typen wist het opgeslagen adres niet');
+  assert.strictEqual(component.hasProblem(), true, 'maar verzenden kan pas na een treffer');
+  active = false;
+  component.reset();
+  listeners[0]();
+  assert.strictEqual(cleared, 0);
+});
+
+test('frontendcomponent: onvolledige invoer na een adres houdt het formulier geblokkeerd', async () => {
+  const lookup = loadComponent();
+  const listeners = [];
+  const postcodeInput = { value: '80', addEventListener: (name, handler) => { if (name === 'input') listeners.push(handler); } };
+  const statusElement = { textContent: '', dataset: {} };
+  const component = lookup.attach({ postcodeInput, numberInput: { value: '1', addEventListener: () => {} }, statusElement, endpoint: 'adres/', onFound: () => {} });
+  listeners[0]();
+  await component.check();
+  assert.strictEqual(component.hasProblem(), true, 'zonder nieuwe treffer blijft verzenden geblokkeerd');
+  assert.match(statusElement.textContent, /postcode en huisnummer/);
 });

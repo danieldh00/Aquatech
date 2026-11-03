@@ -107,8 +107,9 @@ if (checkoutForm) {
 }
 
 /**
- * Koppelt postcode en huisnummer aan het opzoeken van straat en woonplaats (adres.js). Alleen voor Nederland; het
- * adres blijft handmatig aan te passen en bij een storing of geen treffer verandert er niets.
+ * Koppelt postcode en huisnummer aan het opzoeken van straat en woonplaats (adres.js). Voor Nederland zijn straat en
+ * woonplaats alleen-lezen (ze komen uit PDOK en de server controleert ze nog eens) en wordt er niet besteld zolang er
+ * geen adres is gevonden; voor andere landen vult de klant ze zelf in.
  * @param {HTMLFormElement} form Het afrekenformulier.
  * @returns {void}
  */
@@ -120,29 +121,51 @@ function setUpAddressLookup(form) {
   const countryField = form.querySelector('[name="country"]');
   const streetInput = form.querySelector('input[name="street"]');
   const cityInput = form.querySelector('input[name="city"]');
-  // Wat de opzoeking zelf invulde: alleen dat wordt weer gewist (een handmatig getypt adres blijft staan).
-  let lastWritten = null;
-  window.AddressLookup.attach({
+  const statusElement = row.querySelector('[data-address-status]');
+  /**
+   * Of straat en woonplaats nu uit de opzoeking komen (Nederland) en dus niet met de hand te wijzigen zijn.
+   * @returns {boolean} true bij Nederland.
+   */
+  const isDutch = () => !countryField || countryField.value === 'NL';
+  /**
+   * Zet straat en woonplaats alleen-lezen voor Nederland en bewerkbaar voor andere landen.
+   * @returns {void}
+   */
+  const syncReadOnly = () => {
+    streetInput.readOnly = isDutch();
+    cityInput.readOnly = isDutch();
+  };
+  syncReadOnly();
+  if (countryField) countryField.addEventListener('change', syncReadOnly);
+  const lookup = window.AddressLookup.attach({
     postcodeInput,
     numberInput: row.querySelector('[data-address-number]'),
     suffixInput: row.querySelector('[data-address-suffix]'),
-    statusElement: row.querySelector('[data-address-status]'),
+    statusElement,
     endpoint: form.dataset.addressEndpoint,
-    isActive: () => !countryField || countryField.value === 'NL',
+    isActive: isDutch,
     getDestination: () => `${streetInput.value}|${cityInput.value}`,
     onFound: (address) => {
       streetInput.value = window.AddressLookup.streetLine(address);
       postcodeInput.value = address.postcode;
       cityInput.value = address.city;
-      lastWritten = `${streetInput.value}|${cityInput.value}`;
     },
     onClear: () => {
-      if (lastWritten === null || `${streetInput.value}|${cityInput.value}` !== lastWritten) return;
       streetInput.value = '';
       cityInput.value = '';
-      lastWritten = null;
     },
   });
+  // Bestellen kan pas als er een adres is gevonden (Nederland); de server controleert het adres daarna nog eens.
+  form.addEventListener('submit', (event) => {
+    if (event.submitter?.value === 'update' || !isDutch()) return;
+    const pickup = form.querySelector('input[name="shippingMethod"]:checked')?.value === 'ophalen';
+    if (pickup || (streetInput.value && cityInput.value && !lookup.hasProblem())) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    statusElement.textContent = streetInput.value && cityInput.value ? statusElement.textContent : 'Vul je postcode en huisnummer in; het adres wordt dan automatisch ingevuld.';
+    statusElement.dataset.kind = 'error';
+    postcodeInput.focus();
+  }, true);
 }
 
 if (checkoutForm) setUpAddressLookup(checkoutForm);

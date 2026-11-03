@@ -401,7 +401,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `GET /api/address-lookup` (login) en `GET /winkel/adres/`; de browser belt nooit
   rechtstreeks naar PDOK. Gedeelde frontendcomponent `shared/address-lookup.js`:
   zet `data-address-lookup` op een adresveld en laad het script; de shop gebruikt
-  `AddressLookup.attach` in `storefront-checkout.js`. Nieuwe adresvelden altijd zo.
+  `AddressLookup.attach` in `storefront-checkout.js`. Nieuwe adresvelden altijd zo. Sinds 1.5.6 is het adresveld zelf alleen-lezen (alleen postcode/huisnummer/toevoeging invulbaar) en controleert de server elk gewijzigd adres met `createAddressGuard`/`requireVerifiedAddress` (moet exact PDOK zijn; ongewijzigd ouder adres blijft geldig); een nieuwe route die een adres opslaat krijgt die middleware. Tests gebruiken `test/helpers/pdok-fake.js` (`addressFetch`).
 - **Afrekenen zonder knop** (1.5.5): land/btw-nummer/verzendmethode werken het totaal op de achtergrond bij (`storefront-checkout.js`, `refreshTotals`, onderdeel `data-shipping-options` + `.checkout-summary` worden vervangen); de knop *Totaal bijwerken* is alleen de terugval zonder script. Nieuwe invoer die het totaal beïnvloedt: stuur hem mee in `refreshTotals`.
 - **Debiteuren, webshopbestellingen, PDF en mail** (0.63.0, migratie 27):
   `debtors.js` (tabel `debtors`, `ensure` bij definitief, `match_key`),

@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const express = require('express');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { registerPortalRoutes, customerWorkOrder } = require('../src/uitvoering/portal');
@@ -52,7 +53,7 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas Jansen', role: 'klant', password: PW });
   await store.createAccount(tid, { username: 'piet', displayName: 'Piet', role: 'klant', password: PW });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const as = createLogin(base, { password: PW, extraBody: { mustChangePassword: false } });
   try {
     assert.strictEqual((await createClient(base).get('/api/portal')).status, 401);
@@ -64,7 +65,7 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
     await klaas.post('/api/plans', { data: { meta: { name: 'Mijn tuin', address: 'Dorpsstraat 1' }, areas: [] } });
     await piet.post('/api/plans', { data: { meta: { name: 'Tuin Piet' }, areas: [] } });
 
-    const data = { title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Dorpsstraat 1\nNunspeet' },
+    const data = { title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1\n8071 AB Nunspeet' },
       lines: [{ section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 20, vat: 21 }, { section: 'arbeid', description: 'Sleuven graven', qty: 3, unit: 'uur', price: 55, vat: 21 }] };
     const concept = (await kees.post('/api/quotes', { data, customerId: klaasId })).body;
     let portal = (await klaas.get('/api/portal')).body;

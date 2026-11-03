@@ -12,6 +12,7 @@
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { createMailer, validEmail } = require('../platform/mailer');
+const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { inspectImage, fromBase64, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE, MAX_THUMB_SIDE } = require('./photos');
 const { mailBody } = require('../verkoop/quotes');
 
@@ -524,7 +525,7 @@ function registerServiceRequestRoutes(app, ctx) {
     res.json(item);
   });
 
-  app.post('/api/portal/requests', requireJson, requirePortal, createLimiter, (req, res) => {
+  app.post('/api/portal/requests', requireJson, requirePortal, createLimiter, requireVerifiedAddress(ctx.addressGuard, (req) => req.body?.address, (req) => () => ctx.workorders.list(tenantOf(req), { customerId: req.user.id }).map((workOrder) => workOrder.address)), (req, res) => {
     const tenantId = tenantOf(req);
     const out = requests.create(req.user, tenantId, req.body, { installationOk: (id) => Boolean(portal.ownRow(tenantId, req.user.id, id)) });
     if (out.error) return fail(res, out);

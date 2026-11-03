@@ -4,6 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { locationKey } = require('../src/uitvoering/photos');
@@ -26,14 +27,14 @@ async function setup() {
   const other = store.createTenant({ name: 'Blauw BV', slug: 'blauw' }).tenant;
   await store.createAccount(other.id, { username: 'bram', displayName: 'Bram', role: 'installateur', password: PW });
   await store.createAccount(other.id, { username: 'bea', displayName: 'Bea', role: 'klant', password: PW });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const as = createLogin(base, { password: PW, extraBody: { mustChangePassword: false } });
   return { db, server, as };
 }
 
 test('locatiesleutel: zelfde adres met andere schrijfwijze, leeg adres geen sleutel', () => {
   assert.strictEqual(locationKey('Dorpsstraat 1\n8071 AB  Nunspeet'), locationKey('dorpsstraat 1, 8071ab nunspeet'));
-  assert.notStrictEqual(locationKey('Dorpsstraat 1, Nunspeet'), locationKey('Dorpsstraat 3, Nunspeet'));
+  assert.notStrictEqual(locationKey('Tuinstraat 1, 8071 AB Nunspeet'), locationKey('Dorpsstraat 3, Nunspeet'));
   assert.match(locationKey('Dorpsstraat 1'), /^l-[0-9a-f]{16}$/);
   assert.strictEqual(locationKey('  '), null);
   assert.strictEqual(locationKey('Dorpsstraat 1-A, Nunspeet'), locationKey('dorpsstraat 1a nunspeet'));
@@ -60,23 +61,23 @@ test('installatiedossier per locatie: medewerker ziet alles, klant alleen zijn d
       await kees.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
       return (await kees.post('/api/workorders', { quoteId: quote.id })).body;
     };
-    const first = await install('Aanleg tuin', 'Dorpsstraat 1\n8071 AB Nunspeet');
-    const second = await install('Uitbreiding border', 'Dorpsstraat 1, 8071AB Nunspeet');
-    await install('Vakantiehuis', 'Strandweg 9, Renesse');
+    const first = await install('Aanleg tuin', 'Tuinstraat 1\n8071 AB Nunspeet');
+    const second = await install('Uitbreiding border', 'Tuinstraat 1, 8071AB Nunspeet');
+    await install('Vakantiehuis', 'Tuinstraat 3, 8071 AB Nunspeet');
     await kees.put(`/api/workorders/${first.id}`, { status: 'gereed', data: { ...first.data, report: { completedOn: '2026-10-01', notes: 'Netjes opgeleverd', signedBy: 'Jansen' } } });
     const materialUse = await kees.post(`/api/workorders/${first.id}/materials`, { usedOn: '2026-10-01', code: 'SPR', description: 'Sproeier', unit: 'st', qty: 5 });
     assert.strictEqual(materialUse.status, 201);
     // Melding van Klaas op hetzelfde adres; Piet meldt op een eigen adres.
-    assert.strictEqual((await klaas.post('/api/portal/requests', { subject: 'Lek', description: 'Er lekt water bij de kraan.', address: 'dorpsstraat 1 8071 ab nunspeet' })).status, 201);
+    assert.strictEqual((await klaas.post('/api/portal/requests', { subject: 'Lek', description: 'Er lekt water bij de kraan.', address: 'Tuinstraat 1, 8071 AB Nunspeet' })).status, 201);
     // Melding zonder adres maar aan een installatie gekoppeld: hoort bij het adres van die installatie.
     assert.strictEqual((await klaas.post('/api/portal/requests', { subject: 'Zone 2', description: 'Zone 2 gaat niet meer aan.', installationId: first.id })).status, 201);
-    assert.strictEqual((await piet.post('/api/portal/requests', { subject: 'Onderhoud', description: 'Graag winterklaar maken.', address: 'Kerkplein 2, Ermelo' })).status, 201);
+    assert.strictEqual((await piet.post('/api/portal/requests', { subject: 'Onderhoud', description: 'Graag winterklaar maken.', address: 'Tuinstraat 2, 8071 AB Nunspeet' })).status, 201);
 
     // Overzicht: drie locaties, het dubbele adres één keer.
     assert.strictEqual((await klaas.get('/api/locations')).status, 403);
     const items = (await kees.get('/api/locations')).body.items;
     assert.strictEqual(items.length, 3);
-    const home = items.find((item) => item.key === locationKey('Dorpsstraat 1, 8071 AB Nunspeet'));
+    const home = items.find((item) => item.key === locationKey('Tuinstraat 1, 8071 AB Nunspeet'));
     assert.deepStrictEqual([home.installations, home.completed, home.requests, home.openRequests], [2, 1, 2, 2]);
     assert.strictEqual(home.lastCompletedOn, '2026-10-01');
 
@@ -99,7 +100,7 @@ test('installatiedossier per locatie: medewerker ziet alles, klant alleen zijn d
     assert.ok(portal.body.materials.every((material) => !('used' in material)));
     assert.ok(!('customers' in portal.body));
     assert.ok(portal.body.installations.every((installation) => !('crew' in installation)));
-    const pietHome = items.find((item) => item.key === locationKey('Kerkplein 2, Ermelo'));
+    const pietHome = items.find((item) => item.key === locationKey('Tuinstraat 2, 8071 AB Nunspeet'));
     assert.strictEqual((await klaas.get(`/api/portal/locations/${pietHome.key}`)).status, 404);
     assert.strictEqual((await piet.get(`/api/portal/locations/${pietHome.key}`)).status, 200);
     assert.strictEqual((await kees.get(`/api/portal/locations/${home.key}`)).status, 403, 'medewerker heeft geen portaal');

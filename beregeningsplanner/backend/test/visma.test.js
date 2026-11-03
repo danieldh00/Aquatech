@@ -4,6 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
+const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { splitAddress, invoiceBody, sanitizeVismaApp, sanitizeVisma } = require('../src/verkoop/visma');
@@ -94,7 +95,7 @@ async function setup() {
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
   await store.createAccount(main, { username: 'anna', displayName: 'Anna', role: 'beheerder', password: PW });
   const visma = fakeVisma();
-  const app = createApp({ secret: SECRET, db, vismaFetch: visma.fetchImpl });
+  const app = createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, vismaFetch: visma.fetchImpl });
   const { server, base } = await listen(app);
   const as = createLogin(base, { password: PW, clientOptions: { followRedirects: false } });
   return { db, app, server, as, visma, main };
@@ -139,7 +140,7 @@ test('visma: adres splitsen, instellingen saneren, factuur opbouwen', () => {
   assert.strictEqual(conf.autoSync, false);
 
   const inv = { number: 'F2026-0001', kind: 'factuur', data: { date: '2026-10-21', dueDate: '2026-11-04', discountPct: 10, reference: 'Tuin',
-    customer: { name: 'Jan', address: 'Dorpsweg 1\n8071 AB Nunspeet' }, lines: [{ description: 'Sproeier', code: 'SPR', qty: 2, price: 10, vat: 21, group: 'producten' }] } };
+    customer: { name: 'Jan', address: 'Tuinstraat 1\n8071 AB Nunspeet' }, lines: [{ description: 'Sproeier', code: 'SPR', qty: 2, price: 10, vat: 21, group: 'producten' }] } };
   const out = invoiceBody(inv, 'c1', conf, null);
   assert.strictEqual(out.body.Rows[0].IsTextRow, true);
   assert.match(out.body.Rows[0].Text, /Factuur F2026-0001 – Tuin/);
@@ -197,7 +198,7 @@ test('visma: app instellen (hoofdbeheerder), verbinden, doorsturen, token vernie
     await baas.put('/api/visma/settings', { articles: { 'producten:21': ART.producten }, termsOfPaymentId: TERMS });
 
     // Factuur met arbeid zonder gekozen artikel: fout bij de factuur, niets naar Visma.
-    const one = await finalInvoice(baas, { name: 'Jan de Vries', address: 'Dorpsweg 1\n8071 AB Nunspeet', email: 'jan@voorbeeld.test' },
+    const one = await finalInvoice(baas, { name: 'Jan de Vries', address: 'Tuinstraat 1\n8071 AB Nunspeet', email: 'jan@voorbeeld.test' },
       [{ description: 'Sproeier', qty: 2, price: 10 }, { description: 'Aanleg', qty: 1, price: 50, group: 'arbeid' }]);
     const miss = await baas.post(`/api/visma/invoices/${one.id}`, {});
     assert.strictEqual(miss.status, 409);
