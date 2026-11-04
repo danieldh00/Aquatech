@@ -1652,6 +1652,7 @@ function registerStockRoutes(app, ctx) {
   app.put('/api/stock/items/:id/variants', requireJson, requireStock, (req, res) => {
     const out = stock.setVariants(tenantOf(req), req.params.id, req.body?.attributes);
     if (out.error) return fail(res, out);
+    if (out.removed > 0 && ctx.pruneImages) ctx.pruneImages(tenantOf(req));
     audit(req, 'voorraad_varianten', { itemId: out.item.id, code: out.item.code, created: out.created, restored: out.restored });
     res.json({ ...out.item, created: out.created, restored: out.restored });
   });
