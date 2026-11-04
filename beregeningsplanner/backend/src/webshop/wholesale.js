@@ -147,7 +147,17 @@ function wholesalePrice(baseExcl, qty, tiers, customerDiscount) {
 }
 
 /** Eerste regel van een geplakte lijst die een kopregel is ("Artikelcode;Aantal") en dus wordt overgeslagen. */
-const HEADER_LINE = /^(artikel ?(nr|nummer|code)?|code|sku|item)\b/i;
+const HEADER_WORDS = new Set(['artikel', 'artikelnr', 'artikelnummer', 'artikelcode', 'nr', 'nummer', 'no', 'code', 'sku', 'item', 'aantal', 'qty', 'quantity', 'stuks', 'hoeveelheid']);
+
+/**
+ * Of een regel een kopregel is: alleen woorden als artikelcode en aantal, geen echte code.
+ * @param {string} line De regel.
+ * @returns {boolean} true bij een kopregel.
+ */
+function isHeaderLine(line) {
+  const words = line.toLowerCase().split(/[\s;,:=\t]+/).filter(Boolean);
+  return words.length > 0 && HEADER_WORDS.has(words[0]) && words.every((word) => HEADER_WORDS.has(word));
+}
 /** Een regel met een artikelcode, een scheidingsteken en een aantal ("CODE 50", "CODE;50", "CODE\t50", "CODE x 50"). */
 const ENTRY_LINE = /^(.*?)[\s;,:=×]+x?\s*(\d{1,6})\s*$/i;
 
@@ -171,7 +181,7 @@ function parseOrderList(text) {
   for (let index = 0; index < lines.length; index += 1) {
     const raw = lines[index].trim();
     if (!raw) continue;
-    if (index === 0 && HEADER_LINE.test(raw) && !/\d/.test(raw)) continue;
+    if (index === 0 && isHeaderLine(raw)) continue;
     if (read >= MAX_PASTE_LINES) { truncated = true; stoppedAt = index; break; }
     read += 1;
     if (raw.length > MAX_LINE_LENGTH) { problems.push({ line: index + 1, text: `${raw.slice(0, 40)}…`, message: `De regel is te lang (hoogstens ${MAX_LINE_LENGTH} tekens).` }); continue; }

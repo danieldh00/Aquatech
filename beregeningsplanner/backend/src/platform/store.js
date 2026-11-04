@@ -606,9 +606,9 @@ function createStore(db) {
     if (input.mustChangePassword !== undefined) prepare('UPDATE users SET must_change_password = ? WHERE id = ?').run(input.mustChangePassword ? 1 : 0, user.id);
     // Een keuze van de beheerder (goedkeuren of afwijzen) sluit een open aanvraag voor een zakelijk account.
     if (input.customerGroup !== undefined) prepare("UPDATE users SET customer_group = ?, business_request = '' WHERE id = ?").run(input.customerGroup, user.id);
-    if (input.wholesale !== undefined) prepare('UPDATE users SET wholesale = ? WHERE id = ?').run(input.wholesale ? 1 : 0, user.id);
-    if (input.wholesaleDiscount !== undefined) prepare('UPDATE users SET wholesale_discount = ? WHERE id = ?').run(input.wholesaleDiscount, user.id);
-    if (input.customerGroup === '') prepare('UPDATE users SET wholesale = 0, wholesale_discount = 0 WHERE id = ?').run(user.id);
+    if (input.wholesale !== undefined) prepare('UPDATE users SET wholesale = ? WHERE tenant_id = ? AND id = ?').run(input.wholesale ? 1 : 0, tenantId, user.id);
+    if (input.wholesaleDiscount !== undefined) prepare('UPDATE users SET wholesale_discount = ? WHERE tenant_id = ? AND id = ?').run(input.wholesaleDiscount, tenantId, user.id);
+    if (input.customerGroup === '') prepare('UPDATE users SET wholesale = 0, wholesale_discount = 0 WHERE tenant_id = ? AND id = ?').run(tenantId, user.id);
     if (input.business !== undefined) saveBusinessProfile(tenantId, user.id, input.business);
     const newHash = input.password !== undefined ? await hashPassword(input.password) : null;
     if (newHash) prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
@@ -649,8 +649,8 @@ function createStore(db) {
         }
       }
       prepare('UPDATE quotes SET customer_id = NULL WHERE customer_id = ?').run(user.id);
-      prepare('UPDATE web_orders SET user_id = NULL WHERE tenant_id = ? AND user_id = ?').run(user.tenant_id, user.id);
-      prepare('UPDATE web_returns SET user_id = NULL WHERE tenant_id = ? AND user_id = ?').run(user.tenant_id, user.id);
+      prepare('UPDATE web_orders SET user_id = NULL WHERE tenant_id = ? AND user_id = ?').run(tenantId, user.id);
+      prepare('UPDATE web_returns SET user_id = NULL WHERE tenant_id = ? AND user_id = ?').run(tenantId, user.id);
       prepare('UPDATE service_requests SET customer_id = NULL WHERE customer_id = ?').run(user.id);
       prepare('UPDATE service_requests SET handled_by = NULL WHERE handled_by = ?').run(user.id);
       prepare('UPDATE work_orders SET assignee_id = NULL WHERE assignee_id = ?').run(user.id);
