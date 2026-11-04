@@ -108,6 +108,17 @@ function safeImageUrl(url) {
 }
 
 /**
+ * De afbeelding van een artikel: de eigen afbeelding (als 'own:<id>'; de pagina
+ * maakt er het adres van `artikelfoto/<id>` van) of anders het https-adres van
+ * het gekoppelde webshopproduct.
+ * @param {{ image_id?: string|null, image?: string|null }} row De artikelrij (image_id = eigen afbeelding, image = adres bij het webshopproduct).
+ * @returns {string} 'own:<id>', een https-adres of ''.
+ */
+function imageOf(row) {
+  return row.image_id && /^[0-9a-f-]{36}$/.test(String(row.image_id)) ? `own:${row.image_id}` : safeImageUrl(row.image);
+}
+
+/**
  * Geeft elke categorie een slug die alleen van haar eigen naam afhangt: de
  * slug van de naam plus een korte vingerafdruk van de naam. Zo blijft de url
  * gelijk als er categorieën bijkomen, ook bij namen waarvan de slug samenvalt
@@ -203,7 +214,7 @@ function buildCatalog(rows) {
       slug: uniqueSlug(row.name, row.code), code: String(row.code), name: decodeHtmlEntities(row.name), unit: String(row.unit || 'st'),
       categoryKey: categoryName.toLowerCase(), categoryName, groupSlug: groupOf(categoryName).slug, priceExcl, vatRate,
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
-      inStock: Math.round((Number(row.on_hand) - Number(row.reserved || 0)) * 1000) / 1000 > 0, image: safeImageUrl(row.image),
+      inStock: Math.round((Number(row.on_hand) - Number(row.reserved || 0)) * 1000) / 1000 > 0, image: imageOf(row),
     };
   };
   const standalone = [];
@@ -229,12 +240,12 @@ function buildCatalog(rows) {
       slug: uniqueSlug(parent.name, parent.code), code: String(parent.code), name: decodeHtmlEntities(parent.name), unit: String(parent.unit || variants[0].unit),
       categoryKey: categoryName.toLowerCase(), categoryName, groupSlug: groupOf(categoryName).slug,
       priceExcl: cheapest.priceExcl, vatRate: cheapest.vatRate, priceIncl: cheapest.priceIncl,
-      inStock: variants.some((variant) => variant.inStock), image: safeImageUrl(parent.image) || (variants.find((variant) => variant.image) || {}).image || '',
+      inStock: variants.some((variant) => variant.inStock), image: imageOf(parent) || (variants.find((variant) => variant.image) || {}).image || '',
       attributeName: attributeNames.length === 1 ? attributeNames[0] : 'Uitvoeringen',
       variants: variants.map((variant) => ({
         slug: variant.slug, code: variant.code, label: Object.values(variant.values).join(' / ') || variant.code,
         meta: Object.entries(variant.values).map(([name, value]) => `${name}: ${value}`).join(' | '),
-        priceIncl: variant.priceIncl, vatRate: variant.vatRate, inStock: variant.inStock, image: variant.image,
+        priceIncl: variant.priceIncl, vatRate: variant.vatRate, inStock: variant.inStock, image: variant.image || imageOf(parent),
       })),
     };
     for (const variant of variants) {
@@ -282,7 +293,7 @@ function createStorefrontData(db) {
     catalogOf(tenantId) {
       const cached = cache.get(tenantId);
       if (cached && cached.until > Date.now()) return cached.catalog;
-      const rows = db.prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.vat_rate, p.categories, p.image
+      const rows = db.prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.vat_rate, i.image_id, p.categories, p.image
         FROM stock_items i
         LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
         LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
@@ -299,4 +310,4 @@ function createStorefrontData(db) {
   };
 }
 
-module.exports = { createStorefrontData, buildCatalog, slugify, categoryNameOf, groupOf, safeImageUrl, CACHE_MS };
+module.exports = { createStorefrontData, buildCatalog, slugify, categoryNameOf, groupOf, safeImageUrl, imageOf, CACHE_MS };

@@ -900,6 +900,7 @@ function createStore(db) {
     prepare('DELETE FROM debtors WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM stock_reservations WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM stock_movements WHERE tenant_id = ?').run(tenantId);
+    prepare('DELETE FROM item_images WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM stock_items WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM work_orders WHERE tenant_id = ?').run(tenantId);
     prepare('DELETE FROM impersonations WHERE tenant_id = ?').run(tenantId);

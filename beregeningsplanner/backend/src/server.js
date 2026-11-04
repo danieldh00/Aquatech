@@ -45,6 +45,7 @@ const { createServiceRequestStore, registerServiceRequestRoutes } = require('./u
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./uitvoering/outsourcing');
 const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uitvoering/season-reminders');
 const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
+const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
 const { registerDrawingRoutes } = require('./beregening/drawings');
@@ -235,7 +236,7 @@ function staticHeaders(version) {
  * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, wanIp = createWanIp() }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, wanIp = createWanIp() }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -449,6 +450,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/admin/shop-content', express.json({ limit: '512kb' }));
   // Sproeierbibliotheek uit Excel (sprinklers.js): max. 300 behuizingen en 1000 nozzles.
   app.use('/api/sprinkler-library', express.json({ limit: '2mb' }));
+  // Afbeelding bij een artikel (base64, verkleind in de browser): vóór de 256 kB hieronder.
+  app.use(/^\/api\/stock\/items\/[^/]+\/image$/, express.json({ limit: '8mb' }));
   app.use('/api/stock', express.json({ limit: '256kb' }));
   app.use('/api/invoices', express.json({ limit: '1mb' }));
   app.use('/api/debtors', express.json({ limit: '16kb' }));
@@ -1696,6 +1699,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const newsStore = createNewsStore(database);
   const sprinklerStore = createSprinklerStore(database);
   const stockStore = createStockStore(database);
+  const itemImageStore = createItemImageStore(database, { vault, fetchImpl: imageFetch });
   // Prijs en voorraad in twee richtingen met de webshop (shop-sync.js); na een
   // wijziging gaan de gewijzigde artikelen enkele seconden later mee.
   const shopSync = createShopSync({ db: database, shop: shopStore, stock: stockStore, settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch });
@@ -1794,6 +1798,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     syncShop: (tid, user) => shopSync.run(tid, { full: true, user }),
     publishToShop: (tid, itemId) => shopSync.publish(tid, itemId),
     importLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }) });
+  // Afbeeldingen bij artikelen: uploaden, verwijderen en overnemen uit de oude webshop (zie item-images.js).
+  registerItemImageRoutes(app, { images: itemImageStore, requireRight, requireJson, audit,
+    importLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => req.tenantId || tenant.id }) });
 
   // ---------- Facturen en export naar de boekhouding (zie invoices.js) ----------
   registerInvoiceRoutes(app, {
@@ -2077,7 +2084,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, settings: settingsFor(tenantRow.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, settings: settingsFor(tenantRow.id) },
       testSet, { users: out.byKey, quoteIds: out.quoteIds, tenantId: tenantRow.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );
@@ -2172,7 +2179,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Inloggen en registreren in de shop gebruiken dezelfde accounts (rol klant).
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
   app.use('/winkel', createStorefront({
-    addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore,
+    addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),

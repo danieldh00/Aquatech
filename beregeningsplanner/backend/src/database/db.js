@@ -919,6 +919,29 @@ const MIGRATIONS = [
   CREATE INDEX web_returns_order ON web_returns (tenant_id, order_id);
   CREATE INDEX web_returns_status ON web_returns (tenant_id, status, created_at);
   `,
+  // 41: afbeeldingen bij artikelen (item-images.js). item_images bewaart de
+  // afbeelding versleuteld (vault.sealBytes) als tekst, zodat ze in back-ups en
+  // PostgreSQL meegaan; content_hash (SHA-256) laat artikelen met dezelfde foto
+  // (bijv. de varianten van een product) één afbeelding delen; source_url is het
+  // adres waarvan ze zijn overgenomen (bijv. de oude webshop). stock_items.image_id
+  // wijst naar de afbeelding van een artikel.
+  `
+  CREATE TABLE item_images (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    name         TEXT NOT NULL,
+    mime         TEXT NOT NULL,
+    width        INTEGER,
+    height       INTEGER,
+    size         INTEGER NOT NULL,
+    content_hash TEXT NOT NULL,
+    source_url   TEXT,
+    data         TEXT NOT NULL,
+    created_at   TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX item_images_hash ON item_images (tenant_id, content_hash);
+  ALTER TABLE stock_items ADD COLUMN image_id TEXT;
+  `,
 ];
 
 /**

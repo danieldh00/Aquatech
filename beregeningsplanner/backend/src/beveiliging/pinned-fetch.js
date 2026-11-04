@@ -120,4 +120,34 @@ async function readLimited(response, maxBytes) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-module.exports = { pinnedFetch, readLimited, ResponseTooLargeError };
+/**
+ * Leest de inhoud van een antwoord als bytes, met een grens op het aantal
+ * bytes (na uitpakken). Bij te veel wordt het lezen meteen afgebroken.
+ * @param {Response|object} response Het antwoord (een Response, of iets met arrayBuffer()).
+ * @param {number} maxBytes De grens in bytes.
+ * @returns {Promise<Buffer>} De bytes.
+ * @throws {ResponseTooLargeError} Als het antwoord groter is dan maxBytes.
+ */
+async function readBytesLimited(response, maxBytes) {
+  const reader = response.body && typeof response.body.getReader === 'function' ? response.body.getReader() : null;
+  if (!reader) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > maxBytes) throw new ResponseTooLargeError(maxBytes);
+    return bytes;
+  }
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new ResponseTooLargeError(maxBytes);
+    }
+    chunks.push(Buffer.from(value.buffer, value.byteOffset, value.byteLength));
+  }
+  return Buffer.concat(chunks);
+}
+
+module.exports = { pinnedFetch, readLimited, readBytesLimited, ResponseTooLargeError };

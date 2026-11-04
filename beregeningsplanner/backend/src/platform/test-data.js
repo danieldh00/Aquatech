@@ -584,14 +584,14 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, imageWidth = 480, imageHeig
  * precies zo is als wanneer iemand het in de app doet): klantlinks, reacties
  * van klanten, werkorders, uren, foto's, meldingen, voorraad, facturen en de
  * webshop. Draait na store.seedEnvironment.
- * @param {object} stores { db, quotes, workorders, shop, settings (van de testomgeving), photos, worklog, outsourcing, news, aiUsage, recognitions, stock, requests, invoices, sprinklers }.
+ * @param {object} stores { db, quotes, workorders, shop, settings (van de testomgeving), photos, worklog, outsourcing, news, aiUsage, recognitions, stock, itemImages, requests, invoices, sprinklers }.
  * @param {object} testSet Uitkomst van buildTestData.
  * @param {{ users: object, quoteIds: string[], tenantId: string }} seeded Uit seedEnvironment.
  * @param {{ shareBase?: string|null }} [options] Adres van openbaar/offerte.html (uit de browser); zonder komen er geen klantlinks.
  * @returns {object} Aantallen per soort aangemaakte gegevens.
  */
 function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, requests, invoices, sprinklers, seasonReminders } = stores;
+  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, itemImages, requests, invoices, sprinklers, seasonReminders } = stores;
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -848,6 +848,7 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
     // lengte een eigen code, prijs en voorraad.
     const hose = stock.create(tenantId, admin, { code: 'TUINSLANG', name: 'Tuinslang 1/2"', unit: 'st', costPrice: 14, salePrice: 24.95, minQty: 0 }, { resync: false });
     if (hose.error) throw new Error(`Testdata: hoofdartikel mislukt (${hose.error})`);
+    if (itemImages) itemImages.setForItem(tenantId, hose.item.id, { name: 'tuinslang.png', data: sitePhotoPng('voor', 7).toString('base64') });
     const hoseVariants = stock.setVariants(tenantId, hose.item.id, [{ name: 'Lengte', values: ['15 m', '25 m', '50 m'] }]);
     if (hoseVariants.error) throw new Error(`Testdata: varianten mislukt (${hoseVariants.error})`);
     hoseVariants.item.variants.forEach((variant, variantIndex) => {

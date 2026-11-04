@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.5.7
+
+Afbeeldingen bij artikelen: uploaden, overnemen uit de oude webshop en tonen in de eigen shop.
+
+- **Opslag** (migratie 41, `db.js` + `pgschema.js`): tabel `item_images` (versleuteld via
+  `vault.sealBytes`, AAD `<tenant>:artikel-afbeelding:<id>`, `content_hash` SHA-256 zodat artikelen
+  met dezelfde foto één afbeelding delen, `source_url`) en kolom `stock_items.image_id`.
+  Verweesde afbeeldingen worden opgeruimd (`prune`).
+- **Server** (`artikelen/item-images.js`): `PUT|DELETE /api/stock/items/:id/image` (recht
+  `voorraad`, eigen `express.json` van 8 MB, type op inhoud gecontroleerd, EXIF weg),
+  `GET /api/stock/images/:id` (voorbeeld in het beheer) en het overnemen uit de webshop:
+  `GET /api/stock/images-import` (aantal nog te doen) en `POST /api/stock/images-import
+  { after }` (porties van 25 artikelen, elk adres één keer opgehaald; alleen https en
+  openbare adressen via `netguard.publicAddress` + `pinnedFetch`, geen omleidingen, 4 MB,
+  time-out 10 s). Eenmalig en herhaalbaar: alleen artikelen zonder eigen afbeelding komen
+  aan bod, mislukte adressen worden gemeld en bij de volgende keer opnieuw geprobeerd.
+  `pinned-fetch.js`: `readBytesLimited`.
+- **Shop**: `winkel/artikelfoto/<id>` (openbaar, onraadbaar id, immutable cache);
+  `storefront-data.js` (`imageOf`) geeft de eigen afbeelding voorrang boven het adres van het
+  webshopproduct, een variant zonder afbeelding gebruikt die van het hoofdartikel.
+- **Frontend** (`artikelen/item-images.js`): verkleinen in de browser (max. 1200 px), uploadveld in
+  het formulier Nieuw voorraadartikel, blok Afbeelding op het artikel en de knop *Afbeeldingen uit
+  webshop* met voortgangsbalk. Layout: de knoppen onder aan de formulieren (`.row.actions`) staan
+  los van de velden (de `<datalist>` tussen de rijen brak de afstandsregel).
+- Testdata: het testartikel *Tuinslang* heeft een afbeelding. Tests: `test/item-images.test.js`.
+
 ## 1.5.6
 
 Het adres is niet meer met de hand te wijzigen: alleen postcode, huisnummer en toevoeging zijn invulbaar.
