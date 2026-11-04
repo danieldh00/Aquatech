@@ -3,15 +3,14 @@
 // btw en voorraad komen bij elke pagina en bij het afrekenen opnieuw uit de
 // database (web-orders.js, priceCart).
 const { parseCookies } = require('../beveiliging/auth');
+const { MAX_LINES, MAX_QTY } = require('./web-orders');
 
 /** Naam van de cookie. */
 const CART_COOKIE = 'aquatech_winkelwagen';
 /** Hoe lang (s) de winkelwagen bewaard blijft. */
 const CART_MAX_AGE = 30 * 24 * 60 * 60;
-/** Hoogstens zoveel regels in de wagen. */
-const MAX_LINES = 40;
-/** Hoogstens zoveel stuks per artikel. */
-const MAX_QTY = 99;
+/** Grootste cookie (tekens, na base64) dat de winkelwagen mag worden; de browser staat 4096 bytes per cookie toe. */
+const MAX_COOKIE_CHARS = 3600;
 
 /**
  * Leest de winkelwagen uit de cookie. Ongeldige of te grote inhoud geeft een lege wagen.
@@ -20,7 +19,7 @@ const MAX_QTY = 99;
  */
 function readCart(req) {
   const raw = parseCookies(req.headers.cookie)[CART_COOKIE];
-  if (!raw || raw.length > 3000) return [];
+  if (!raw || raw.length > MAX_COOKIE_CHARS) return [];
   try {
     const list = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
     if (!Array.isArray(list)) return [];
@@ -35,6 +34,46 @@ function readCart(req) {
 }
 
 /**
+ * Zet de regels om naar de tekst in de cookie.
+ * @param {{ code: string, qty: number }[]} lines De regels.
+ * @returns {string} De tekst (leeg bij een lege wagen).
+ */
+function encodeCart(lines) {
+  return lines.length ? Buffer.from(JSON.stringify(lines.map((line) => [line.code, line.qty])), 'utf8').toString('base64url') : '';
+}
+
+/**
+ * Houdt van de regels zoveel over als in de cookie passen (vanaf het begin).
+ * @param {{ code: string, qty: number }[]} lines De regels.
+ * @returns {{ lines: { code: string, qty: number }[], dropped: string[] }} De regels die passen en de codes die niet pasten.
+ */
+function fitCart(lines) {
+  const kept = lines.slice(0, MAX_LINES);
+  while (kept.length && encodeCart(kept).length > MAX_COOKIE_CHARS) kept.pop();
+  return { lines: kept, dropped: lines.filter((line) => !kept.includes(line)).map((line) => line.code) };
+}
+
+/**
+ * Voegt een lijst regels bij de winkelwagen: bestaande regels krijgen het aantal erbij, nieuwe komen achteraan.
+ * Wat niet meer in de wagen past (te veel regels of een te grote cookie) wordt niet toegevoegd.
+ * @param {{ code: string, qty: number }[]} current De huidige regels.
+ * @param {{ code: string, qty: number }[]} additions De regels om bij te voegen (al genormaliseerde codes).
+ * @returns {{ lines: { code: string, qty: number }[], skipped: string[] }} De nieuwe wagen en de codes die niet pasten.
+ */
+function addCartLines(current, additions) {
+  const next = current.map((line) => ({ ...line }));
+  const skipped = [];
+  for (const addition of additions) {
+    const existing = next.find((line) => line.code === addition.code);
+    if (existing) { existing.qty = Math.min(MAX_QTY, existing.qty + addition.qty); continue; }
+    const candidate = [...next, { code: addition.code, qty: Math.min(MAX_QTY, addition.qty) }];
+    if (candidate.length > MAX_LINES || encodeCart(candidate).length > MAX_COOKIE_CHARS) { skipped.push(addition.code); continue; }
+    next.push(candidate[candidate.length - 1]);
+  }
+  return { lines: next, skipped };
+}
+
+/**
  * Bewaart de winkelwagen in de cookie (een lege wagen wist de cookie).
  * @param {object} req Het verzoek (voor https-detectie).
  * @param {object} res Het antwoord.
@@ -42,7 +81,7 @@ function readCart(req) {
  * @returns {void}
  */
 function writeCart(req, res, lines) {
-  const value = lines.length ? Buffer.from(JSON.stringify(lines.map((line) => [line.code, line.qty])), 'utf8').toString('base64url') : '';
+  const value = encodeCart(fitCart(lines).lines);
   const attrs = [`${CART_COOKIE}=${value}`, 'Path=/', `Max-Age=${value ? CART_MAX_AGE : 0}`, 'HttpOnly', 'SameSite=Lax'];
   if (req.headers['x-forwarded-proto'] === 'https') attrs.push('Secure');
   const previous = res.getHeader('Set-Cookie');
@@ -73,4 +112,4 @@ function applyCartAction(lines, fields) {
   return next;
 }
 
-module.exports = { readCart, writeCart, applyCartAction, CART_COOKIE, MAX_QTY };
+module.exports = { readCart, writeCart, applyCartAction, addCartLines, CART_COOKIE, MAX_QTY };

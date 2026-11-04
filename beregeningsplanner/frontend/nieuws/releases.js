@@ -13,6 +13,17 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.6.1',
+      date: '2026-11-04',
+      title: 'Groothandelsvenster voor bestellen in bulk',
+      items: [
+        { text: 'Bestel je in bulk? Als groothandelsklant heb je in de webshop een eigen venster Groothandel. Daar staan alle artikelen en varianten in één lijst met een aantalvak per regel: zoek of filter op categorie, vul de aantallen in en klik één keer op Alles in winkelwagen. Je ziet je groothandelsprijzen excl. btw, met de staffelprijzen eronder.' },
+        { text: 'Bestellen op artikelcode: plak een lijst met per regel een artikelcode en een aantal (bijvoorbeeld uit Excel) en alles staat in één keer in je winkelwagen. Met Opnieuw bestellen zet je een eerdere bestelling met één klik terug in de wagen.' },
+        { text: 'Sommige artikelen hebben een verpakkingseenheid of minimale afname (bijvoorbeeld alleen per 25). Een aantal dat daar niet bij past, ronden we voor je naar boven af en we melden dat erbij. In de winkelwagen kun je nu ook meer dan 99 stuks van een artikel kiezen.' },
+        { text: 'In Beheer > Gebruikers kun je bij een zakelijke klant Groothandel aanvinken en eventueel een vaste korting instellen; bij een staffelkorting geldt steeds de hoogste van de twee. Bij een artikel (Artikelen) stel je de verpakkingseenheid, de minimale afname en de staffelkorting in, bijvoorbeeld 50:10, 100:15 voor 10% vanaf 50 stuks en 15% vanaf 100 stuks.', for: ['beheer', 'voorraad'] },
+      ],
+    },
+    {
       version: '1.6.0',
       date: '2026-11-04',
       title: 'Zakelijke klanten zien prijzen excl. btw',

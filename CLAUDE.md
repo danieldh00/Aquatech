@@ -412,6 +412,13 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   zet `data-address-lookup` op een adresveld en laad het script; de shop gebruikt
   `AddressLookup.attach` in `storefront-checkout.js`. Nieuwe adresvelden altijd zo. Sinds 1.5.6 is het adresveld zelf alleen-lezen (alleen postcode/huisnummer/toevoeging invulbaar) en controleert de server elk gewijzigd adres met `createAddressGuard`/`requireVerifiedAddress` (moet exact PDOK zijn; ongewijzigd ouder adres blijft geldig); een nieuwe route die een adres opslaat krijgt die middleware. Tests gebruiken `test/helpers/pdok-fake.js` (`addressFetch`).
 - **Afrekenen zonder knop** (1.5.5): land/btw-nummer/verzendmethode werken het totaal op de achtergrond bij (`storefront-checkout.js`, `refreshTotals`, onderdeel `data-shipping-options` + `.checkout-summary` worden vervangen); de knop *Totaal bijwerken* is alleen de terugval zonder script. Nieuwe invoer die het totaal beïnvloedt: stuur hem mee in `refreshTotals`.
+- **Groothandelsvenster** (1.6.1, `webshop/wholesale.js` + `storefront-wholesale-pages.js`, migratie 44): `/winkel/groothandel/`
+  voor klanten met `users.wholesale` (alleen bij klantgroep `zakelijk`, vaste korting `wholesale_discount` 0-50%; Beheer >
+  Gebruikers). Snelbestellijst, plakken van code + aantal (`parseOrderList`) en opnieuw bestellen posten alle naar hetzelfde adres
+  (veld `action`, dus relatieve links blijven kloppen). Per artikel `order_pack_size`, `order_min_qty` (veelvoud van de eenheid) en
+  `price_tiers`; **let op**: `min_qty` is de minimumvoorraad, niet de minimale afname. Stukprijs = zakelijke prijs min de hoogste van
+  staffel- en klantkorting (niet opgeteld). Voorwaarden gelden alleen voor groothandelsklanten (`priceCart(..., { wholesale })`;
+  `packProblem` blokkeert afrekenen). Winkelwagencookie: 60 regels, 9999 stuks, 3600 tekens (`addCartLines`).
 - **Debiteuren, webshopbestellingen, PDF en mail** (0.63.0, migratie 27):
   `debtors.js` (tabel `debtors`, `ensure` bij definitief, `match_key`),
   `shop-orders.js` (WooCommerce-bestellingen met status uit

@@ -416,7 +416,7 @@
 
   /**
    * De cel Klantgroep van een klant: keuze particulier/zakelijk, een open aanvraag met knoppen om goed te keuren of af te wijzen, en de bedrijfsgegevens.
-   * @param {object} user de klant (customerGroup, businessRequest, companyName, kvkNumber, vatNumber)
+   * @param {object} user de klant (customerGroup, businessRequest, companyName, kvkNumber, vatNumber, wholesale, wholesaleDiscount)
    * @returns {string} HTML van de cel
    */
   function businessCell(user) {
@@ -425,7 +425,10 @@
     const request = user.businessRequest === 'aangevraagd'
       ? `<div><span class="pill">Aanvraag zakelijk</span> <button class="btn small" data-biz-approve="${id}">Goedkeuren</button> <button class="btn small" data-biz-reject="${id}">Afwijzen</button></div>` : '';
     const details = [user.companyName, user.kvkNumber && `KvK ${user.kvkNumber}`, user.vatNumber && `btw ${user.vatNumber}`].filter(Boolean).map(esc).join(' · ');
-    return `${select}${request}${details ? `<div><small>${details}</small></div>` : ''}<button class="btn small" data-biz-edit="${id}">Bedrijfsgegevens</button>`;
+    // Een groothandelsklant (alleen zakelijk) krijgt in de webshop het groothandelsvenster, staffelkorting en eventueel een vaste korting.
+    const wholesale = user.customerGroup === 'zakelijk'
+      ? `<div><label title="Toegang tot het groothandelsvenster in de webshop: snelbestellijst, staffelprijzen en bestellen op artikelcode"><input type="checkbox" data-wholesale="${id}"${user.wholesale ? ' checked' : ''}> Groothandel</label>${user.wholesale ? ` <label title="Vaste korting op alle artikelen; bij een staffelkorting geldt de hoogste van de twee">korting <input type="number" class="narrow" min="0" max="50" step="0.5" value="${esc(String(user.wholesaleDiscount || 0))}" data-wholesale-discount="${id}" aria-label="Vaste groothandelskorting in procenten"> %</label>` : ''}</div>` : '';
+    return `${select}${request}${wholesale}${details ? `<div><small>${details}</small></div>` : ''}<button class="btn small" data-biz-edit="${id}">Bedrijfsgegevens</button>`;
   }
 
   /** Tekent de gebruikerstabel met de knoppen per gebruiker. */
@@ -492,6 +495,20 @@
        * @returns {Promise<void>}
        */
       select.onchange = () => patch(select.dataset.group, { customerGroup: select.value }, select.value === 'zakelijk' ? 'Zakelijke klant: zakelijke prijzen excl. btw' : 'Particuliere klant');
+    });
+    table.querySelectorAll('[data-wholesale]').forEach((box) => {
+      /**
+       * Maakt de zakelijke klant groothandelsklant of haalt dat weer weg.
+       * @returns {Promise<void>}
+       */
+      box.onchange = () => patch(box.dataset.wholesale, { wholesale: box.checked }, box.checked ? 'Groothandelsklant: de klant ziet het groothandelsvenster' : 'Geen groothandelsklant meer');
+    });
+    table.querySelectorAll('[data-wholesale-discount]').forEach((input) => {
+      /**
+       * Slaat de vaste groothandelskorting (%) op.
+       * @returns {Promise<void>}
+       */
+      input.onchange = () => patch(input.dataset.wholesaleDiscount, { wholesaleDiscount: Number(input.value) || 0 }, 'Vaste korting opgeslagen');
     });
     table.querySelectorAll('[data-biz-approve]').forEach((button) => {
       /**

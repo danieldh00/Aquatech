@@ -54,6 +54,22 @@
    * @returns {number|null} het getal, of null bij lege invoer
    */
   const num = (value) => (String(value).trim() === '' ? null : Number(String(value).replace(',', '.')));
+  /**
+   * Leest de staffelkorting uit het invoerveld: "50:10, 100:15" wordt vanaf 50 stuks 10% en vanaf 100 stuks 15%.
+   * @param {string} text de ingevoerde tekst
+   * @returns {{ minQty: number, discountPct: number }[]} de staffels (leeg bij een leeg veld)
+   */
+  const parseTiers = (text) => String(text).split(/[,;\n]/).map((part) => part.trim()).filter(Boolean).map((part) => {
+    const match = /^(\d+)\s*[:=\s]\s*(\d+(?:[.,]\d+)?)\s*%?$/.exec(part);
+    if (!match) throw new Error('Staffelkorting: gebruik de vorm aantal:korting, bijvoorbeeld 50:10, 100:15.');
+    return { minQty: Number(match[1]), discountPct: Number(match[2].replace(',', '.')) };
+  });
+  /**
+   * Maakt van de staffels de tekst voor het invoerveld.
+   * @param {{ minQty: number, discountPct: number }[]} tiers de staffels van het artikel
+   * @returns {string} bijvoorbeeld "50:10, 100:15"
+   */
+  const tiersText = (tiers) => (tiers || []).map((tier) => `${tier.minQty}:${tier.discountPct}`).join(', ');
   const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 
   const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null };
@@ -455,6 +471,7 @@
           code: formElement.code.value, name: formElement.name.value, unit: formElement.unit.value, location: formElement.location.value,
           onHand: num(formElement.onHand.value), minQty: num(formElement.minQty.value), reorderQty: num(formElement.reorderQty.value), costPrice: num(formElement.costPrice.value),
           salePrice: num(formElement.salePrice.value), vatRate: Number(formElement.vatRate.value), weightGrams: num(formElement.weightGrams.value), businessPrice: num(formElement.businessPrice.value), revenueGroup: formElement.revenueGroup.value, shopSync: formElement.shopSync.checked,
+          packSize: num(formElement.packSize.value), orderMinQty: num(formElement.orderMinQty.value), priceTiers: parseTiers(formElement.priceTiers.value),
         } });
         formElement.hidden = true;
         toast(`${item.code} toegevoegd`);
@@ -578,6 +595,9 @@
     formElement.businessPrice.value = item.businessPrice == null ? '' : item.businessPrice;
     formElement.revenueGroup.value = item.revenueGroup;
     formElement.shopSync.checked = item.shopSync;
+    formElement.packSize.value = item.packSize > 1 ? item.packSize : '';
+    formElement.orderMinQty.value = item.orderMinQty > 1 ? item.orderMinQty : '';
+    formElement.priceTiers.value = tiersText(item.priceTiers);
     $('#d-shop').innerHTML = item.shop.error ? `Webshop: <span class="err">${esc(item.shop.error)}</span>`
       : !item.shop.productId ? (item.shopSync ? 'Nog niet gekoppeld aan een webshopproduct (koppelen gaat op SKU = artikelcode).' : '')
         : item.shop.pending ? 'Webshop: wijziging wordt binnen enkele seconden verstuurd.'
@@ -889,6 +909,7 @@
           code: editForm.code.value, name: editForm.name.value, unit: editForm.unit.value, location: editForm.location.value, notes: editForm.notes.value,
           minQty: num(editForm.minQty.value), reorderQty: num(editForm.reorderQty.value), costPrice: num(editForm.costPrice.value),
           salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), weightGrams: num(editForm.weightGrams.value), businessPrice: num(editForm.businessPrice.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
+          packSize: num(editForm.packSize.value), orderMinQty: num(editForm.orderMinQty.value), priceTiers: parseTiers(editForm.priceTiers.value),
         } }) };
         toast('Opgeslagen');
         await loadUnits().catch((error) => toast(error.message, true));

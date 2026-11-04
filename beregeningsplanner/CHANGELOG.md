@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.6.1
+
+Groothandelsvenster in de webshop: snelbestellijst, bestellen op artikelcode, staffelkorting en verpakkingseenheden.
+
+- **Server** (migratie 44 in `database/db.js` en `database/pgschema.js`): `users.wholesale` en
+  `users.wholesale_discount` (vaste korting in %, 0-50) en per artikel `stock_items.order_pack_size`,
+  `order_min_qty` en `price_tiers` (JSON `[{ minQty, discountPct }]`, hoogstens 5). Een groothandelsklant is
+  altijd een zakelijke klant: `PATCH /api/admin/users/:id` met `wholesale` weigert (400) een particuliere klant,
+  en particulier maken wist de vlag en de korting. Artikelen: `packSize`, `orderMinQty` (wordt een veelvoud van
+  de eenheid) en `priceTiers` in `POST/PUT /api/stock/items`. Rekenregels in `webshop/wholesale.js`
+  (zuivere functies): de stukprijs is de zakelijke prijs min de **hoogste** van staffelkorting (voor dat aantal) en
+  vaste klantkorting (niet opgeteld); `priceCart` krijgt `wholesale: { discountPct }` mee, meldt per regel
+  `packProblem` en laat `place` een aantal dat niet past weigeren (409). De voorwaarden gelden alleen voor
+  groothandelsklanten. Winkelwagenlimiet: 60 regels en 9999 stuks per regel (was 40 en 99; de cookie wordt op
+  3600 tekens begrensd, `addCartLines`/`fitCart`).
+- **Webshop** (`webshop/storefront-wholesale-pages.js`, `storefront-wholesale.js`): `/winkel/groothandel/`
+  (alleen voor een ingelogde groothandelsklant, anders 404 of naar inloggen; kopje Groothandel in het menu) met
+  de **snelbestellijst** (alle artikelen en varianten, zoeken/filteren in de browser, één knop *Alles in
+  winkelwagen*), **bestellen op artikelcode** (plakken uit Excel: tab, `;`, `x` of spatie als scheiding, kopregel
+  overgeslagen, dubbele codes opgeteld, onbekende codes gemeld) en **opnieuw bestellen** (laatste 5 bestellingen).
+  Alle acties posten naar hetzelfde adres (veld `action`), aantallen worden naar boven afgerond en gemeld. De
+  winkelwagen toont de toegepaste korting en de voorwaarde per regel.
+- **Frontend**: `beheer/beheer.js` (Groothandel-vakje + vaste korting bij een zakelijke klant) en
+  `artikelen/` (velden Verpakkingseenheid, Minimale afname en Staffelkorting, invoer `50:10, 100:15`).
+- Testdata: testklant `klant5` is groothandelsklant (5% vaste korting), elk vijfde artikel heeft verpakkingseenheid 10
+  en staffels.
+- Tests: `wholesale.test.js` (rekenregels, plakken, rechten, andere organisatie, afronden, korting, afrekenen
+  blokkeren, opnieuw bestellen).
+
 ## 1.6.0
 
 Zakelijke klanten in de webshop: aanvragen, goedkeuren en prijzen excl. btw in de hele shop.

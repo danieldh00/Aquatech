@@ -341,3 +341,17 @@ form.inline { display: inline-block; margin-right: 8px; }
 .address-lookup .address-status { grid-column: 1 / -1; margin: 0 0 8px; font-size: 0.9rem; min-height: 1.2em; color: var(--at-muted); }
 .address-lookup .address-status[data-kind="ok"] { color: var(--at-green-dark); }
 .address-lookup .address-status[data-kind="error"] { color: var(--at-danger); }
+
+/* Groothandel (/winkel/groothandel/) */
+.wholesale { max-width: 1100px; margin: 24px auto; }
+.wholesale-block { margin-top: 24px; }
+.wholesale-block h2 { margin-top: 0; }
+.wholesale-paste textarea { width: 100%; box-sizing: border-box; font: inherit; font-family: ui-monospace, monospace; padding: 10px; border: 1px solid var(--at-line); border-radius: 8px; }
+.wholesale-notice { margin: 16px 0; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--at-shop-green); background: var(--at-shop-green-soft); }
+.wholesale-notice.warn { border-color: var(--at-stock-out); background: var(--at-white); }
+.wholesale-notice p, .wholesale-notice ul { margin: 4px 0; }
+.wholesale-toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.wholesale-toolbar .form-field { flex: 1; min-width: 200px; }
+.wholesale-table input[type="number"] { width: 90px; font: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; }
+.wholesale-table .tier { display: block; color: var(--at-shop-green-dark); }
+.wholesale-bar { position: sticky; bottom: 0; display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-top: 12px; padding: 12px 14px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 8px; box-shadow: 0 -4px 12px var(--at-shadow); }

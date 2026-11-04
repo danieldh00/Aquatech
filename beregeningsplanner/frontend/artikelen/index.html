@@ -93,6 +93,11 @@
             <label>Omzetgroep<select name="revenueGroup"><option value="producten">Producten</option><option value="arbeid">Arbeid</option><option value="overig">Overig</option></select></label>
             <label class="chk"><input type="checkbox" name="shopSync" checked> Naar de webshop</label>
           </div>
+          <div class="row">
+            <label title="Groothandel: een klant bestelt alleen per dit aantal (leeg = 1)">Verpakkingseenheid<input name="packSize" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="1"></label>
+            <label title="Groothandel: het kleinste aantal dat een klant kan bestellen (leeg = 1)">Minimale afname<input name="orderMinQty" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="1"></label>
+            <label title="Groothandel: korting per aantal, in de vorm aantal:korting%, bijvoorbeeld 50:10, 100:15 (vanaf 50 stuks 10%, vanaf 100 stuks 15%)">Staffelkorting<input name="priceTiers" maxlength="120" placeholder="bijv. 50:10, 100:15"></label>
+          </div>
           <div class="row image-row">
             <span class="image-preview" id="n-image-preview"><span class="muted small">Geen afbeelding</span></span>
             <label>Afbeelding<input type="file" name="image" accept="image/jpeg,image/png,image/webp"></label>
@@ -245,6 +250,11 @@
             <label>Gewicht (gram)<input name="weightGrams" type="number" min="0" max="1000000" step="1" placeholder="standaard"></label>
             <label>Omzetgroep<select name="revenueGroup"><option value="producten">Producten</option><option value="arbeid">Arbeid</option><option value="overig">Overig</option></select></label>
             <label class="chk"><input type="checkbox" name="shopSync"> Naar de webshop</label>
+          </div>
+          <div class="row">
+            <label title="Groothandel: een klant bestelt alleen per dit aantal (leeg = 1)">Verpakkingseenheid<input name="packSize" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="1"></label>
+            <label title="Groothandel: het kleinste aantal dat een klant kan bestellen (leeg = 1)">Minimale afname<input name="orderMinQty" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="1"></label>
+            <label title="Groothandel: korting per aantal, in de vorm aantal:korting%, bijvoorbeeld 50:10, 100:15 (vanaf 50 stuks 10%, vanaf 100 stuks 15%)">Staffelkorting<input name="priceTiers" maxlength="120" placeholder="bijv. 50:10, 100:15"></label>
           </div>
           <p class="muted small" id="d-parent-note" hidden>Dit is een hoofdartikel: de voorraad zit bij de varianten. Eenheid, btw en omzetgroep gelden voor alle varianten; prijzen zijn de standaard voor nieuwe varianten.</p>
           <p class="muted small" id="d-shop"></p>

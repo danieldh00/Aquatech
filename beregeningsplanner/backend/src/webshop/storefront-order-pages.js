@@ -40,10 +40,10 @@ function cartPage(cart, groups = []) {
     return layout({ root: ROOT, title: 'Winkelwagen – Aquatechshop.nl', description: 'Je winkelwagen bij Aquatechshop.nl.', groups,
       body: `<section class="cart"><h1>Winkelwagen</h1><p>Je winkelwagen is leeg.</p><p><a class="button" href="${ROOT}">Verder winkelen</a></p></section>` });
   }
-  const rows = cart.lines.map((line) => `<tr${line.enough ? '' : ' class="problem"'}>
-    <td><strong>${escapeHtml(line.name)}</strong><br><small>Artikelnr.: ${escapeHtml(line.code)}</small>${line.enough ? '' : `<br><small class="stock out">${line.available > 0 ? `Nog maar ${escapeHtml(String(line.available))} beschikbaar` : 'Niet meer op voorraad'}</small>`}</td>
-    <td class="num">${escapeHtml(formatPrice(cart.pricesExcl ? line.unitExcl : line.unitIncl))}</td>
-    <td><form class="cart-qty" method="post" action="./"><input type="hidden" name="action" value="set"><input type="hidden" name="code" value="${escapeHtml(line.code)}"><input type="number" name="qty" value="${line.qty}" min="0" max="99" aria-label="Aantal ${escapeHtml(line.name)}"><button class="button secondary" type="submit">Wijzig</button></form></td>
+  const rows = cart.lines.map((line) => `<tr${line.enough && !line.packProblem ? '' : ' class="problem"'}>
+    <td><strong>${escapeHtml(line.name)}</strong><br><small>Artikelnr.: ${escapeHtml(line.code)}</small>${line.enough ? '' : `<br><small class="stock out">${line.available > 0 ? `Nog maar ${escapeHtml(String(line.available))} beschikbaar` : 'Niet meer op voorraad'}</small>`}${line.packProblem ? `<br><small class="stock out">${escapeHtml(line.packProblem)}</small>` : ''}</td>
+    <td class="num">${escapeHtml(formatPrice(cart.pricesExcl ? line.unitExcl : line.unitIncl))}${line.discountPct > 0 ? `<br><small class="muted">${escapeHtml(String(line.discountPct))}% ${line.discountSource === 'staffel' ? 'staffelkorting' : 'groothandelskorting'}</small>` : ''}</td>
+    <td><form class="cart-qty" method="post" action="./"><input type="hidden" name="action" value="set"><input type="hidden" name="code" value="${escapeHtml(line.code)}"><input type="number" name="qty" value="${line.qty}" min="0" max="9999" aria-label="Aantal ${escapeHtml(line.name)}"><button class="button secondary" type="submit">Wijzig</button></form></td>
     <td class="num">${escapeHtml(formatPrice(cart.pricesExcl ? line.lineExcl : line.lineTotal))}</td>
     <td><form method="post" action="./"><input type="hidden" name="action" value="remove"><input type="hidden" name="code" value="${escapeHtml(line.code)}"><button class="button secondary" type="submit" aria-label="Verwijder ${escapeHtml(line.name)}">Verwijder</button></form></td>
   </tr>`).join('');

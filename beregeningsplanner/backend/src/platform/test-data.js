@@ -193,9 +193,9 @@ const ACCOUNTS = [
   { key: 'klant6', suffix: 'klant6', displayName: 'Tuincentrum De Linde (test)', role: 'klant' },
 ];
 
-/** Bedrijfsgegevens van de zakelijke testklanten; `request` = de aanvraag staat nog open. */
+/** Bedrijfsgegevens van de zakelijke testklanten; `request` = de aanvraag staat nog open; `wholesale` = groothandelsklant met een vaste korting in procenten. */
 const BUSINESS_CUSTOMERS = {
-  klant5: { customerGroup: 'zakelijk', companyName: 'Hoveniersbedrijf Hoekstra', kvkNumber: '12345678', vatNumber: 'NL123456789B01', request: '' },
+  klant5: { customerGroup: 'zakelijk', companyName: 'Hoveniersbedrijf Hoekstra', kvkNumber: '12345678', vatNumber: 'NL123456789B01', request: '', wholesale: true, wholesaleDiscount: 5 },
   klant6: { customerGroup: '', companyName: 'Tuincentrum De Linde', kvkNumber: '87654321', vatNumber: '', request: 'aangevraagd' },
 };
 
@@ -613,8 +613,8 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
   for (const [key, business] of Object.entries(BUSINESS_CUSTOMERS)) {
     const userId = seeded.users[key] && seeded.users[key].id;
     if (!userId) continue;
-    prepare('UPDATE users SET customer_group = ?, company_name = ?, kvk_number = ?, vat_number = ?, business_request = ? WHERE id = ? AND tenant_id = ?')
-      .run(business.customerGroup, business.companyName, business.kvkNumber, business.vatNumber, business.request, userId, seeded.tenantId);
+    prepare('UPDATE users SET customer_group = ?, company_name = ?, kvk_number = ?, vat_number = ?, business_request = ?, wholesale = ?, wholesale_discount = ? WHERE id = ? AND tenant_id = ?')
+      .run(business.customerGroup, business.companyName, business.kvkNumber, business.vatNumber, business.request, business.wholesale ? 1 : 0, business.wholesaleDiscount || 0, userId, seeded.tenantId);
     counts.businessCustomers++;
   }
   // Werkorder per plan (voor meldingen over die installatie).
@@ -855,6 +855,8 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
       // Genoeg voor alles, behalve het tekortartikel (half zoveel).
       const qty = item.code === short ? Math.max(1, Math.floor(want / 2)) : Math.ceil(want * 1.5) + 2;
       stock.move(tenantId, admin, item.id, { kind: 'ontvangst', qty, note: `Pakbon ${1000 + itemIndex}` });
+      // Groothandelsvoorwaarden (webshop, /winkel/groothandel/): elk vijfde artikel per 10 stuks met staffelkorting.
+      if (itemIndex % 5 === 0) stock.update(tenantId, item.id, { packSize: 10, orderMinQty: 10, priceTiers: [{ minQty: 50, discountPct: 10 }, { minQty: 100, discountPct: 15 }] });
     });
     const first = items.find((item) => item.code !== 'EIGEN-ZAND' && item.code !== short);
     if (first) {

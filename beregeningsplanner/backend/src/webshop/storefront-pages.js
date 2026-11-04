@@ -34,18 +34,18 @@ function formatPrice(amount) {
 
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
-/** Of bestellen aan staat en hoeveel regels er in de winkelwagen van de bezoeker zitten (voor de pagina's die nu worden opgebouwd). */
-let activeShop = { ordering: false, cartCount: 0, business: false };
+/** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
+let activeShop = { ordering: false, cartCount: 0, business: false, wholesale: false };
 
 /**
  * Bouwt pagina's op met de inhoud uit Beheer. Het opbouwen is synchroon, dus
  * zolang `render` loopt hoort elke pagina bij deze inhoud; daarna geldt weer de vorige.
  * @param {{ site: object, pages: object[] }} content De inhoud (zie shop-content.js, publicContent).
  * @param {Function} render Functie die de pagina('s) opbouwt en iets teruggeeft.
- * @param {{ ordering: boolean, cartCount: number }} [shop] Of bestellen aan staat en het aantal regels in de winkelwagen.
+ * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean }} [shop] Of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
  * @returns {*} Wat `render` teruggeeft.
  */
-function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false }) {
+function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, wholesale: false }) {
   const previous = activeContent;
   const previousShop = activeShop;
   activeContent = content;
@@ -150,11 +150,12 @@ function navigation(groups, root) {
   const allGroups = groups.map((group) => `<li><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a></li>`).join('');
   const search = `<li class="nav-all"><span class="nav-all-button" tabindex="0">Product zoeken${ICONS.down}</span><ul class="nav-drop">${allGroups}</ul></li>`;
   const extraPages = activeContent.pages.filter((page) => page.menu && page.slug !== 'over-ons');
-  const about = `<li class="nav-about"><a href="${root}over-ons/">Over ons</a></li>${extraPages.map((page) => `<li class="nav-about"><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}`;
+  const wholesale = activeShop.wholesale ? `<li class="nav-about"><a href="${root}groothandel/">Groothandel</a></li>` : '';
+  const about = `<li class="nav-about"><a href="${root}over-ons/">Over ons</a></li>${wholesale}${extraPages.map((page) => `<li class="nav-about"><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}`;
   const desktop = groups.map((group) => `<li class="nav-group"><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a><ul class="nav-drop">${subItems(group)}</ul></li>`).join('');
   const mobile = groups.map((group) => `<li><details><summary>${escapeHtml(group.name)}</summary><ul><li><a href="${root}groep/${escapeHtml(group.slug)}/">Alles in ${escapeHtml(group.name)}</a></li>${subItems(group)}</ul></details></li>`).join('');
   return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${search}${about}${desktop}<!--planner:${root}--></ul></nav>
-<details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${mobile}${extraPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}<!--planner:${root}--></ul></details>`;
+<details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${mobile}${activeShop.wholesale ? `<li><a href="${root}groothandel/">Groothandel</a></li>` : ''}${extraPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}<!--planner:${root}--></ul></details>`;
 }
 
 /**
