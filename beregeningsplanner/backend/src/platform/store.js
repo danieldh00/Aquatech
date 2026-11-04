@@ -579,6 +579,7 @@ function createStore(db) {
       input.wholesaleDiscount = Math.round(discount * 100) / 100;
     }
     // Groothandel hoort bij een zakelijke klant: wie particulier wordt, is ook geen groothandelsklant meer.
+    if (input.wholesale !== undefined && typeof input.wholesale !== 'boolean') return { error: 'De groothandelsstatus moet true of false zijn.' };
     if (input.wholesale) {
       const group = input.customerGroup !== undefined ? input.customerGroup : (prepare('SELECT customer_group FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, user.id) || {}).customer_group;
       if (group !== 'zakelijk') return { error: 'Alleen een zakelijke klant kan groothandelsklant zijn. Maak de klant eerst zakelijk.' };

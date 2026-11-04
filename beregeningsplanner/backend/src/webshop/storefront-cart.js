@@ -110,8 +110,9 @@ function applyCartAction(lines, fields) {
   if (!code) return next;
   if (fields.action === 'add') {
     const amount = qty >= 1 ? qty : 1;
-    if (existing) existing.qty = Math.min(MAX_QTY, existing.qty + amount);
-    else if (next.length < MAX_LINES) next.push({ code, qty: Math.min(MAX_QTY, amount) });
+    if (amount > MAX_QTY - (existing ? existing.qty : 0)) return lines.map((line) => ({ ...line }));
+    if (existing) existing.qty += amount;
+    else if (next.length < MAX_LINES) next.push({ code, qty: amount });
     return encodeCart(next).length > MAX_COOKIE_CHARS ? lines.map((line) => ({ ...line })) : next;
   }
   if (fields.action === 'remove' || (fields.action === 'set' && !(qty >= 1))) return next.filter((line) => line.code !== code);
@@ -132,7 +133,10 @@ function cartActionRejected(before, after, fields) {
   const previous = before.find((line) => line.code === code);
   const current = after.find((line) => line.code === code);
   if (!code) return false;
-  if (fields.action === 'add') return !current || Boolean(previous && current.qty === previous.qty && previous.qty < MAX_QTY);
+  if (fields.action === 'add') {
+    const amount = qty >= 1 ? qty : 1;
+    return !current || amount > MAX_QTY - (previous ? previous.qty : 0) || Boolean(previous && current.qty === previous.qty);
+  }
   if (fields.action === 'set' && qty >= 1) return !current || current.qty !== Math.min(MAX_QTY, qty);
   return false;
 }

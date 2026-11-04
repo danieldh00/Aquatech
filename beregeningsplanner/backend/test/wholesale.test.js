@@ -75,6 +75,10 @@ test('winkelwagen: een gewone toevoeging die niet meer past wordt als geweigerd 
   const after = applyCartAction(full, { action: 'add', code: 'NIEUW', qty: '1' });
   assert.strictEqual(after.length, 60);
   assert.ok(cartActionRejected(full, after, { action: 'add', code: 'NIEUW', qty: '1' }));
+  const nearMax = [{ code: 'A', qty: 9990 }];
+  const tooMuch = applyCartAction(nearMax, { action: 'add', code: 'A', qty: '10' });
+  assert.strictEqual(tooMuch[0].qty, 9990);
+  assert.ok(cartActionRejected(nearMax, tooMuch, { action: 'add', code: 'A', qty: '10' }));
   const raised = applyCartAction(full, { action: 'set', code: 'ART-1', qty: '5' });
   assert.ok(!cartActionRejected(full, raised, { action: 'set', code: 'ART-1', qty: '5' }));
 });
