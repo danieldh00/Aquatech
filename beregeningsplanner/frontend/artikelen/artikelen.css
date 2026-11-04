@@ -67,3 +67,11 @@ table.grid .toggle:hover { color: var(--at-teal); }
 #d-image { border-left: 4px solid var(--at-teal); }
 #images-dialog { border-left: 4px solid var(--at-teal); max-width: 520px; }
 #images-bar { margin: 8px 0 12px; }
+
+/* Mediabibliotheek: raster met alle afbeeldingen. */
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-top: 4px; }
+.media-card { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.media-card a { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: #fff; }
+.media-card img { width: 100%; height: 100%; object-fit: contain; }
+.media-card figcaption { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; font-size: 13px; }
+.media-card figcaption b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

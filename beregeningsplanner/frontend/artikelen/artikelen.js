@@ -56,7 +56,7 @@
   const num = (value) => (String(value).trim() === '' ? null : Number(String(value).replace(',', '.')));
   const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 
-  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null };
+  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null };
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -286,8 +286,9 @@
   function showTab(name) {
     state.tab = name;
     document.querySelectorAll('.tab').forEach((button) => button.classList.toggle('active', button.dataset.tab === name));
-    for (const tabName of ['stock', 'reserved', 'moves']) $(`#tab-${tabName}`).hidden = tabName !== name;
+    for (const tabName of ['stock', 'reserved', 'moves', 'media']) $(`#tab-${tabName}`).hidden = tabName !== name;
     if (name === 'moves' && !state.moves) loadMoves();
+    if (name === 'media') loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
   }
 
@@ -603,6 +604,58 @@
         <td class="num${movement.qty < 0 ? ' neg' : ''}">${movement.qty > 0 ? '+' : ''}${esc(nl(movement.qty))}</td><td class="num">${esc(nl(movement.balance))}</td>
         <td>${movement.workOrderId ? woLink({ id: movement.workOrderId, number: movement.workOrderNumber }) : ''}</td><td>${esc(movement.userName)}</td><td class="wrap">${esc(movement.note)}</td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="empty">Nog geen mutaties.</td></tr></tbody>';
+  }
+
+  // ---------- Mediabibliotheek ----------
+  /**
+   * Haalt de mediabibliotheek op en tekent hem.
+   * @returns {Promise<void>}
+   */
+  async function loadMedia() {
+    state.media = await api('stock/images');
+    renderMedia();
+  }
+
+  /** Tekent de mediabibliotheek: een raster met alle afbeeldingen (gefilterd op de zoekterm) of de lijst met artikelen zonder afbeelding. */
+  function renderMedia() {
+    if (!state.media) return;
+    const term = $('#m-search').value.trim().toLowerCase();
+    const onlyMissing = $('#m-missing').checked;
+    /**
+     * Of een tekst de zoekterm bevat.
+     * @param {string} text de tekst
+     * @returns {boolean} true bij een treffer
+     */
+    const matches = (text) => String(text).toLowerCase().includes(term);
+    const images = state.media.images.filter((image) => !term || matches(image.name) || image.items.some((item) => matches(item.code) || matches(item.name)));
+    const missing = state.media.missing.filter((item) => !term || matches(item.code) || matches(item.name));
+    $('#m-grid').hidden = onlyMissing;
+    $('#m-missing-table').hidden = !onlyMissing;
+    $('#m-count').textContent = onlyMissing ? `${missing.length} artikel${missing.length === 1 ? '' : 'en'} zonder afbeelding` : `${images.length} afbeelding${images.length === 1 ? '' : 'en'} · ${state.media.missing.length} artikel${state.media.missing.length === 1 ? '' : 'en'} zonder`;
+    $('#m-grid').innerHTML = images.length ? images.map((image) => {
+      const first = image.items[0];
+      const label = image.items.length ? `${esc(first.code)}${image.items.length > 1 ? ` +${image.items.length - 1}` : ''}` : 'Niet in gebruik';
+      return `<figure class="media-card"><a href="${first ? `./?id=${encodeURIComponent(first.id)}` : '#'}" ${first ? `data-open="${esc(first.id)}"` : ''}><img src="${esc(window.ItemImages.src(image.id))}" alt="" loading="lazy"></a>
+        <figcaption><b title="${esc(image.items.map((item) => `${item.code} ${item.name}`).join('\n'))}">${label}</b><span class="muted small">${esc(image.width)}×${esc(image.height)} · ${esc(Math.round(image.size / 1024))} kB</span>${image.sourceUrl ? `<span class="muted small" title="${esc(image.sourceUrl)}">van oude webshop</span>` : ''}</figcaption></figure>`;
+    }).join('') : '<p class="muted">Nog geen afbeeldingen. Upload ze bij een artikel of neem ze over uit de webshop.</p>';
+    $('#m-missing-table').innerHTML = missing.length ? `<thead><tr><th>Code</th><th>Omschrijving</th></tr></thead><tbody>${missing.map((item) => `<tr data-id="${esc(item.id)}"><td class="code">${esc(item.code)}</td><td class="wrap">${esc(item.name)}</td></tr>`).join('')}</tbody>`
+      : '<tbody><tr><td class="empty">Alle artikelen hebben een afbeelding.</td></tr></tbody>';
+  }
+
+  /** Koppelt de zoekbalk, het filter en het openen van een artikel in de mediabibliotheek. */
+  function setupMedia() {
+    $('#m-search').oninput = renderMedia;
+    $('#m-missing').onchange = renderMedia;
+    /**
+     * Opent het artikel bij een klik op een afbeelding of een regel zonder afbeelding.
+     * @param {MouseEvent} event de klik
+     */
+    $('#tab-media').onclick = (event) => {
+      const target = event.target.closest('[data-open], tr[data-id]');
+      if (!target || event.metaKey || event.ctrlKey) return;
+      event.preventDefault();
+      openItem(target.dataset.open || target.dataset.id, true);
+    };
   }
 
   /** Tekent het blok Afbeelding van het geopende artikel. */
@@ -1210,6 +1263,7 @@
     setupImport();
     loadUnits().catch((error) => toast(error.message, true));
     setupShop();
+    setupMedia();
     setupImagesImport();
     setupImage();
     setupItem();
@@ -1224,7 +1278,7 @@
       $('#v-list').hidden = false;
       try { await load(); } catch (error) { toast(error.message, true); }
       const hash = location.hash.slice(1);
-      if (['stock', 'reserved', 'moves'].includes(hash)) showTab(hash);
+      if (['stock', 'reserved', 'moves', 'media'].includes(hash)) showTab(hash);
       // Vanuit een werkorder: "Op voorraad nemen" met de ontbrekende codes.
       const codes = (params.get('codes') || '').split(',').map((code) => code.trim()).filter((code) => Catalog.articles[code.toUpperCase()]);
       if (codes.length) openImport(codes);

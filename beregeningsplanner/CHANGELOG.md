@@ -24,6 +24,9 @@ Afbeeldingen bij artikelen: uploaden, overnemen uit de oude webshop en tonen in 
   het formulier Nieuw voorraadartikel, blok Afbeelding op het artikel en de knop *Afbeeldingen uit
   webshop* met voortgangsbalk. Layout: de knoppen onder aan de formulieren (`.row.actions`) staan
   los van de velden (de `<datalist>` tussen de rijen brak de afstandsregel).
+- **Mediabibliotheek**: tabblad *Afbeeldingen* bij Artikelen (`GET /api/stock/images`, twee queries,
+  geen inhoud): raster met alle afbeeldingen + de artikelen die ze gebruiken, zoeken, en de lijst
+  met artikelen zonder afbeelding; klik opent het artikel.
 - Testdata: het testartikel *Tuinslang* heeft een afbeelding. Tests: `test/item-images.test.js`.
 
 ## 1.5.6

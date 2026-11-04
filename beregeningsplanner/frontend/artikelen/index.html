@@ -39,6 +39,7 @@
         <button class="tab active" data-tab="stock" role="tab">Voorraad</button>
         <button class="tab" data-tab="reserved" role="tab">Gereserveerd <span id="t-reserved" class="count"></span></button>
         <button class="tab" data-tab="moves" role="tab">Mutaties</button>
+        <button class="tab" data-tab="media" role="tab">Afbeeldingen</button>
       </nav>
 
       <section id="tab-stock" class="tabpane">
@@ -140,6 +141,17 @@
       <section id="tab-reserved" class="tabpane" hidden>
         <p class="muted small">Materialen die open werkorders (Nieuw, Gepland, In uitvoering) nog nodig hebben. Klopt een reservering niet meer, bijvoorbeeld na een nieuw voorraadartikel, <button class="linkbtn" id="b-resync">bereken ze opnieuw</button>.</p>
         <div class="tablewrap"><table class="grid" id="r-table"></table></div>
+      </section>
+
+      <section id="tab-media" class="tabpane" hidden>
+        <div class="filters">
+          <input id="m-search" type="search" placeholder="Zoek op artikelcode, omschrijving of bestandsnaam">
+          <label class="chk"><input type="checkbox" id="m-missing"> Alleen artikelen zonder afbeelding</label>
+          <span class="spacer"></span>
+          <span id="m-count" class="muted small"></span>
+        </div>
+        <div id="m-grid" class="media-grid"></div>
+        <div class="tablewrap"><table class="grid" id="m-missing-table" hidden></table></div>
       </section>
 
       <section id="tab-moves" class="tabpane" hidden>

@@ -57,7 +57,7 @@ function importableUrl(text) {
  * Maakt de opslag voor artikelafbeeldingen.
  * @param {object} db De database.
  * @param {{ vault: object, fetchImpl?: Function|null, resolveHost?: Function }} options vault = de kluis (sealBytes/openBytes), fetchImpl = eigen fetch (tests), resolveHost = zoekt een hostnaam op (alleen openbare adressen).
- * @returns {{ setForItem: Function, clearForItem: Function, file: Function, importFromShop: Function, prune: Function, pendingImport: Function }} De functies.
+ * @returns {{ setForItem: Function, clearForItem: Function, file: Function, importFromShop: Function, prune: Function, pendingImport: Function, library: Function }} De functies.
  */
 function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publicAddress }) {
   /**
@@ -240,7 +240,28 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
     return result;
   }
 
-  return { setForItem, clearForItem, file, importFromShop, prune, pendingImport };
+  /**
+   * De mediabibliotheek: alle afbeeldingen van de omgeving (zonder inhoud) met de artikelen
+   * die ze gebruiken, plus de actieve artikelen zonder afbeelding. Twee queries, geen query per afbeelding.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ images: object[], missing: object[] }} images = [{ id, name, mime, width, height, size, sourceUrl, createdAt, items: [{ id, code, name }] }], missing = [{ id, code, name }].
+   */
+  function library(tenantId) {
+    const images = prepare('SELECT id, name, mime, width, height, size, source_url, created_at FROM item_images WHERE tenant_id = ? ORDER BY created_at DESC, id').all(tenantId);
+    const itemRows = prepare('SELECT id, code, name, image_id, archived FROM stock_items WHERE tenant_id = ? ORDER BY code').all(tenantId);
+    const usedBy = new Map();
+    const missing = [];
+    for (const item of itemRows) {
+      if (item.image_id) usedBy.set(item.image_id, [...(usedBy.get(item.image_id) || []), { id: item.id, code: item.code, name: item.name }]);
+      else if (!Number(item.archived)) missing.push({ id: item.id, code: item.code, name: item.name });
+    }
+    return {
+      images: images.map((row) => ({ id: row.id, name: row.name, mime: row.mime, width: row.width, height: row.height, size: Number(row.size), sourceUrl: row.source_url || '', createdAt: row.created_at, items: usedBy.get(row.id) || [] })),
+      missing,
+    };
+  }
+
+  return { setForItem, clearForItem, file, importFromShop, prune, pendingImport, library };
 }
 
 /**
@@ -278,6 +299,12 @@ function registerItemImageRoutes(app, { images, requireRight, requireJson, audit
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     res.setHeader('Cache-Control', 'private, max-age=3600');
     res.type(file.mime).send(file.body);
+  });
+
+  // Mediabibliotheek: alle afbeeldingen met de artikelen die ze gebruiken, en de artikelen zonder afbeelding.
+  app.get('/api/stock/images', requireStock, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(images.library(tenantOf(req)));
   });
 
   app.get('/api/stock/images-import', requireStock, (req, res) => {

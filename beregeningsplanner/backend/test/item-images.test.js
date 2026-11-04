@@ -99,6 +99,25 @@ test('artikelafbeelding: uploaden, delen, vervangen en verwijderen', async () =>
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 0);
 });
 
+test('mediabibliotheek: alle afbeeldingen met hun artikelen en de artikelen zonder afbeelding', async () => {
+  const { admin, klant, vreemd } = await setup();
+  const first = await article(admin, 'LIB-1');
+  const second = await article(admin, 'LIB-2');
+  const third = await article(admin, 'LIB-3');
+  const shared = (await admin.put(`/api/stock/items/${first.id}/image`, { name: 'a.png', data: pngBase64(20) })).body.imageId;
+  await admin.put(`/api/stock/items/${second.id}/image`, { name: 'b.png', data: pngBase64(20) });
+  const library = (await admin.get('/api/stock/images')).body;
+  assert.strictEqual(library.images.length, 1);
+  assert.strictEqual(library.images[0].id, shared);
+  assert.deepStrictEqual(library.images[0].items.map((item) => item.code), ['LIB-1', 'LIB-2']);
+  assert.ok(library.images[0].width > 0 && library.images[0].size > 0);
+  assert.ok(!JSON.stringify(library).includes('"data"'), 'geen inhoud in de lijst');
+  assert.deepStrictEqual(library.missing.map((item) => item.code), ['LIB-3']);
+  assert.strictEqual(library.missing[0].id, third.id);
+  assert.strictEqual((await klant.get('/api/stock/images')).status, 403);
+  assert.deepStrictEqual((await vreemd.get('/api/stock/images')).body, { images: [], missing: [] });
+});
+
 test('artikelafbeelding: ongeldige bestanden, rechten en andere organisatie', async () => {
   const { admin, klant, vreemd, anonymous } = await setup();
   const item = await article(admin, 'IMG-3');
