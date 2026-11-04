@@ -45,7 +45,7 @@ function sanitizeTiers(raw) {
   for (const entry of list) {
     const minQty = Number(entry && entry.minQty);
     const discountPct = Number(entry && entry.discountPct);
-    if (!Number.isInteger(minQty) || minQty < 2 || minQty > MAX_ORDER_QTY) return { error: 'Een staffel begint bij een heel aantal van minimaal 2.' };
+    if (!Number.isInteger(minQty) || minQty < 2 || minQty > MAX_ORDER_QTY) return { error: `Een staffel begint bij een heel aantal van 2 tot en met ${MAX_ORDER_QTY}.` };
     if (!Number.isFinite(discountPct) || discountPct <= 0 || discountPct > MAX_TIER_DISCOUNT) return { error: `De korting van een staffel is een percentage boven 0 tot en met ${MAX_TIER_DISCOUNT}.` };
     if (tiers.some((tier) => tier.minQty === minQty)) return { error: `Het aantal ${minQty} komt twee keer voor in de staffels.` };
     tiers.push({ minQty, discountPct: Math.round(discountPct * 100) / 100 });
