@@ -61,6 +61,9 @@ test('geplakte lijst: tab, puntkomma, x, dubbele codes, kopregel en fouten', () 
   assert.strictEqual(parsed.problems.length, 2, 'de regel zonder code en de regel met aantal 0');
   assert.deepStrictEqual(parsed.problems.map((problem) => problem.line), [8, 9]);
   assert.strictEqual(Wholesale.parseOrderList('').entries.length, 0);
+  const huge = Wholesale.parseOrderList(`A${' '.repeat(5000)}b\nOK 2`);
+  assert.deepStrictEqual(huge.entries, [{ code: 'OK', qty: 2 }], 'een te lange regel wordt overgeslagen');
+  assert.match(huge.problems[0].message, /te lang/);
   const long = Wholesale.parseOrderList(Array.from({ length: Wholesale.MAX_PASTE_LINES + 5 }, (_, index) => `C${index}\t1`).join('\n'));
   assert.strictEqual(long.entries.length, Wholesale.MAX_PASTE_LINES);
   assert.ok(long.truncated);
@@ -73,6 +76,9 @@ test('winkelwagen: bulk bijvoegen, en wat niet past wordt gemeld', () => {
   const many = addCartLines([], Array.from({ length: 80 }, (_, index) => ({ code: `ARTIKEL-${index}`, qty: 1 })));
   assert.strictEqual(many.lines.length, 60);
   assert.strictEqual(many.skipped.length, 20);
+  const crowded = addCartLines(Array.from({ length: 50 }, (_, index) => ({ code: `LANGE-ARTIKELCODE-VOOR-COOKIE-${index}-${'X'.repeat(20)}`, qty: 1 })), []);
+  const raised = addCartLines(crowded.lines, [{ code: crowded.lines[0].code, qty: 9000 }]);
+  assert.ok(raised.lines[0].qty === 9001 || raised.skipped.length === 1, 'een hoger aantal houdt de cookie binnen de grens');
 });
 
 /**

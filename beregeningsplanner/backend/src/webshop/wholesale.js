@@ -10,6 +10,8 @@ const MAX_TIERS = 5;
 const MAX_TIER_DISCOUNT = 90;
 /** Hoogste verpakkingseenheid of minimale afname. */
 const MAX_TERM = 100000;
+/** Langste regel (tekens) van een geplakte lijst die we nog inlezen; langere regels slaan we over (beschermt de reguliere expressie tegen enorme regels). */
+const MAX_LINE_LENGTH = 200;
 /** Hoeveel regels van een geplakte lijst we hoogstens inlezen. */
 const MAX_PASTE_LINES = 300;
 
@@ -166,6 +168,7 @@ function parseOrderList(text) {
     if (index === 0 && HEADER_LINE.test(raw) && !/\d/.test(raw)) continue;
     if (read >= MAX_PASTE_LINES) { truncated = true; break; }
     read += 1;
+    if (raw.length > MAX_LINE_LENGTH) { problems.push({ line: index + 1, text: `${raw.slice(0, 40)}…`, message: `De regel is te lang (hoogstens ${MAX_LINE_LENGTH} tekens).` }); continue; }
     const match = ENTRY_LINE.exec(raw);
     const code = (match ? match[1] : raw).replace(/^["']|["']$/g, '').trim().toUpperCase();
     const qty = match ? Number(match[2]) : 1;
