@@ -885,7 +885,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * Controleert of een samenvoeging kan worden teruggedraaid en laat zien wat er gebeurt.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het hoofdartikel.
-   * @returns {object} { code, name, variants: [{ code, name, value, archived }], logged, mergedAt, restoresLinks, blocked }; blocked is een tekst als terugdraaien nu niet kan; of { error, status }.
+   * @returns {object} { code, name, variants: [{ code, name, value, archived, outcome }] (outcome: los, weg of gearchiveerd), logged, mergedAt, restoresLinks, blocked }; blocked is een tekst als terugdraaien nu niet kan; of { error, status }.
    */
   function unmergePreview(tenantId, id) {
     const parent = findItem(tenantId, id);
@@ -894,10 +894,18 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const children = prepare('SELECT id, code, name, variant_values, archived FROM stock_items WHERE tenant_id = ? AND parent_id = ? ORDER BY code').all(tenantId, parent.id);
     const log = mergeLogOf(tenantId, parent.id);
     const inLog = new Map((log ? log.snapshot : []).map((entry) => [entry.id, entry]));
+    // Een na het samenvoegen bijgemaakte variant gaat weg, of wordt bij boekingen gearchiveerd: één query voor alle varianten.
+    const extra = log ? children.filter((child) => !inLog.has(child.id)) : [];
+    const moved = new Set(extra.length
+      ? prepare(`SELECT DISTINCT item_id FROM stock_movements WHERE tenant_id = ? AND item_id IN (${placeholders(extra.length)})`).all(tenantId, ...extra.map((child) => child.id)).map((row) => row.item_id)
+      : []);
     return {
       code: parent.code,
       name: parent.name,
-      variants: children.map((child) => ({ code: child.code, name: child.name, value: Object.values(parseJson(child.variant_values, {})).join(' '), archived: Boolean(child.archived) })),
+      variants: children.map((child) => ({
+        code: child.code, name: child.name, value: Object.values(parseJson(child.variant_values, {})).join(' '), archived: Boolean(child.archived),
+        outcome: !log || inLog.has(child.id) ? 'los' : moved.has(child.id) ? 'gearchiveerd' : 'weg',
+      })),
       logged: Boolean(log),
       mergedAt: log ? log.createdAt : null,
       restoresLinks: children.filter((child) => inLog.get(child.id) && inLog.get(child.id).shopProductId).length,
@@ -928,7 +936,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       if (!parent || !Number(parent.has_variants)) return { error: 'not_found', status: 404 };
       const log = mergeLogOf(tenantId, parent.id);
       const inLog = new Map((log ? log.snapshot : []).map((entry) => [entry.id, entry]));
-      const children = prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, parent.id);
+      const children = prepare('SELECT id, code, archived, archived_by_parent FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, parent.id);
+      const reopened = [];
       const wantedLinks = [...new Set([...inLog.values()].map((entry) => entry.shopProductId).filter(Boolean))];
       const taken = new Set(wantedLinks.length
         ? prepare(`SELECT shop_product_id FROM stock_items WHERE tenant_id = ? AND shop_product_id IN (${placeholders(wantedLinks.length)})`).all(tenantId, ...wantedLinks).map((row) => row.shop_product_id)
@@ -946,6 +955,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
           removed++;
           continue;
         }
+        if (child.archived && child.archived_by_parent) reopened.push(child.code);
         const entry = inLog.get(child.id);
         prepare(`UPDATE stock_items SET parent_id = NULL, variant_values = '', archived = CASE WHEN archived_by_parent = 1 THEN 0 ELSE archived END,
             archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND id = ?`).run(timestamp, tenantId, child.id);
@@ -958,6 +968,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         restored++;
       }
       removeRow(tenantId, parent);
+      // Varianten die door het gearchiveerde hoofdartikel waren gearchiveerd (reserveringen weg) zijn weer actief: werkorders opnieuw laten reserveren.
+      if (reopened.length) resyncOpen(tenantId, reopened, { nested: true });
       if (log) prepare('UPDATE stock_merges SET undone_at = ? WHERE tenant_id = ? AND id = ?').run(timestamp, tenantId, log.id);
       return { code: parent.code, restored, removed, linksRestored, reconstructed: !log };
     });

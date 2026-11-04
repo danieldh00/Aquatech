@@ -267,6 +267,7 @@ test('samenvoeging terugdraaien zonder logboek (samengevoegd voor 1.5.9) en met 
   const again = stock.mergeIntoVariants(tenantId, input, { user });
   const added = stock.setVariants(tenantId, again.parentId, [{ name: 'Maat', values: ['16 mm', '20 mm', '25 mm'] }]);
   assert.strictEqual(added.created, 1);
+  assert.deepStrictEqual(stock.unmergePreview(tenantId, again.parentId).variants.map((variant) => variant.outcome), ['los', 'los', 'weg']);
   const out = stock.unmergeVariants(tenantId, again.parentId);
   assert.strictEqual(out.restored, 2);
   assert.strictEqual(out.removed, 1);

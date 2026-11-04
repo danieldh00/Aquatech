@@ -925,11 +925,13 @@
       try {
         const preview = await api(`stock/items/${encodeURIComponent(item.id)}/unmerge`);
         if (preview.blocked) { toast(preview.blocked, true); return; }
-        const codes = preview.variants.map((variant) => `• ${variant.code} ${variant.name}`).join('\n');
+        const outcomeText = { weg: ' (na het samenvoegen bijgemaakt: wordt verwijderd)', gearchiveerd: ' (na het samenvoegen bijgemaakt, heeft boekingen: wordt gearchiveerd)' };
+        const codes = preview.variants.map((variant) => `• ${variant.code} ${variant.name}${outcomeText[variant.outcome] || ''}`).join('\n');
+        const looseCount = preview.variants.filter((variant) => variant.outcome === 'los').length;
         const origin = preview.logged
           ? `Samengevoegd op ${new Date(preview.mergedAt).toLocaleDateString('nl-NL')}. ${preview.restoresLinks ? `${preview.restoresLinks} webshopkoppeling${preview.restoresLinks === 1 ? '' : 'en'} komt terug.` : ''}`
           : 'Van deze samenvoeging is geen momentopname (gemaakt vóór deze functie): de varianten worden losgemaakt, eerdere webshopkoppelingen komen niet terug.';
-        if (!confirm(`${item.code} ongedaan maken?\n\nDeze ${preview.variants.length} artikelen worden weer losse artikelen en ${item.code} verdwijnt:\n${codes}\n\nCode, omschrijving, prijzen, voorraad (ook boekingen sinds het samenvoegen) en afbeelding blijven zoals ze nu zijn. ${origin}`)) return;
+        if (!confirm(`${item.code} ongedaan maken?\n\n${looseCount} ${looseCount === 1 ? 'artikel wordt' : 'artikelen worden'} weer los en ${item.code} verdwijnt:\n${codes}\n\nCode, omschrijving, prijzen, voorraad (ook boekingen sinds het samenvoegen) en afbeelding blijven zoals ze nu zijn. ${origin}`)) return;
         const result = await api(`stock/items/${encodeURIComponent(item.id)}/unmerge`, { method: 'POST', body: {} });
         toast(`${result.restored} artikelen weer los${result.linksRestored ? `, ${result.linksRestored} webshopkoppeling${result.linksRestored === 1 ? '' : 'en'} hersteld` : ''}`);
         history.pushState(null, '', './');
