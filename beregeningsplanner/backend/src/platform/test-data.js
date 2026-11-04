@@ -855,6 +855,17 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
       stock.update(tenantId, variant.id, { costPrice: [9.5, 14, 26][variantIndex], salePrice: [17.95, 24.95, 44.95][variantIndex], minQty: 2, reorderQty: 6 });
       stock.move(tenantId, admin, variant.id, { kind: 'ontvangst', qty: [6, 4, 1][variantIndex], note: 'Pakbon slangen' });
     });
+    // Samengevoegde artikelen: drie losse verloopstukken zijn samengevoegd tot één hoofdartikel (met logboek, dus terug te draaien).
+    const reducerIds = [['VERLOOP-16', '16 mm', 1.4], ['VERLOOP-20', '20 mm', 1.8], ['VERLOOP-25', '25 mm', 2.3]].map(([code, size, price]) => {
+      const reducer = stock.create(tenantId, admin, { code, name: `Verloopstuk ${size}`, unit: 'st', costPrice: price, salePrice: Math.round(price * 2.2 * 100) / 100, minQty: 0, onHand: 10 }, { resync: false });
+      if (reducer.error) throw new Error(`Testdata: verloopstuk mislukt (${reducer.error})`);
+      return reducer.item.id;
+    });
+    const mergedReducers = stock.mergeIntoVariants(tenantId, {
+      ids: reducerIds, code: 'VERLOOPSTUK', name: 'Verloopstuk', attributeName: 'Maat',
+      values: Object.fromEntries(reducerIds.map((reducerId, reducerIndex) => [reducerId, ['16 mm', '20 mm', '25 mm'][reducerIndex]])),
+    }, { user: admin });
+    if (mergedReducers.error) throw new Error(`Testdata: samenvoegen mislukt (${mergedReducers.error})`);
     // Werkorders: gereed = alles afgeboekt, bezig = de helft, open = reserveren.
     for (const seededWorkOrder of seededWos) {
       const lines = [...new Map(seededWorkOrder.materials.filter((material) => material.code && material.qty > 0 && material.code.toUpperCase() !== skip)

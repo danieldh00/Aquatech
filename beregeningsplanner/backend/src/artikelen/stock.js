@@ -318,7 +318,7 @@ function needsOf(materials) {
  * Maakt de opslag voor voorraadartikelen, mutaties en reserveringen.
  * @param {object} db De database.
  * @param {{ articles?: Function, onDirty?: Function }} [options] Catalogus van de planner; aanroep na een wijziging voor de webshop.
- * @returns {object} list, get, create, update, remove, move, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, importCatalog, importShop, mirrorShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal, reserveOrder, releaseOrder, issueOrder en onDirty.
+ * @returns {object} list, get, create, update, remove, move, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants, importCatalog, importShop, mirrorShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal, reserveOrder, releaseOrder, issueOrder en onDirty.
  */
 function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) {
   /**
@@ -795,13 +795,14 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * eerste afbeelding over. Is een artikel apart aan een webshopproduct gekoppeld,
    * dan vervalt die koppeling: het hoofdartikel kan daarna met "In webshop zetten"
    * als één variabel product worden aangemaakt (het oude webshopproduct blijft in
-   * de webshop staan tot je het daar weghaalt).
+   * de webshop staan tot je het daar weghaalt). Per samenvoeging komt een
+   * momentopname in het logboek (stock_merges), zodat unmergeVariants het kan terugdraaien.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ ids?: string[], code?: string, name?: string, attributeName?: string, values?: Object<string, string> }} raw De invoer: de artikelen, code en omschrijving van het hoofdartikel, naam van het kenmerk en de waarde per artikel-id.
-   * @param {{ refuseLinked?: boolean, shopMatchOf?: Function }} [options] refuseLinked: weiger artikelen die aan een webshopproduct gekoppeld zijn (nodig als de webshop de artikellijst bepaalt: de volgende synchronisatie zou de varianten archiveren); shopMatchOf: functie artikelrij → webshopproduct of null, om ook artikelen te weigeren die via code of sku met een los webshopproduct samenvallen.
+   * @param {{ refuseLinked?: boolean, shopMatchOf?: Function, user?: object }} [options] user: wie samenvoegt (voor het logboek); refuseLinked: weiger artikelen die aan een webshopproduct gekoppeld zijn (nodig als de webshop de artikellijst bepaalt: de volgende synchronisatie zou de varianten archiveren); shopMatchOf: functie artikelrij → webshopproduct of null, om ook artikelen te weigeren die via code of sku met een los webshopproduct samenvallen.
    * @returns {object} { item, merged, unlinked } met het nieuwe hoofdartikel, het aantal samengevoegde artikelen en het aantal verbroken webshopkoppelingen; of { error, field?, status }.
    */
-  function mergeIntoVariants(tenantId, raw, { refuseLinked = false, shopMatchOf = null } = {}) {
+  function mergeIntoVariants(tenantId, raw, { refuseLinked = false, shopMatchOf = null, user = null } = {}) {
     const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
     const ids = Array.isArray(input.ids) ? [...new Set(input.ids.map((id) => String(id)))] : [];
     if (ids.length < 2) return { error: 'Kies minstens twee artikelen om samen te voegen.', field: 'ids', status: 400 };
@@ -823,7 +824,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       valueOf.set(id, value);
     }
     return transaction(db, () => {
-      const rows = prepare(`SELECT id, code, unit, location, cost_price, sale_price, business_price, vat_rate, revenue_group, shop_sync, shop_product_id, image_id, archived, parent_id, has_variants
+      const rows = prepare(`SELECT id, code, unit, location, cost_price, sale_price, business_price, vat_rate, revenue_group, shop_sync, shop_product_id, shop_price_seen, shop_stock_seen, shop_dirty, shop_error, image_id, archived, parent_id, has_variants
           FROM stock_items WHERE tenant_id = ? AND id IN (${placeholders(ids.length)})`).all(tenantId, ...ids);
       if (rows.length !== ids.length) return { error: 'not_found', status: 404 };
       for (const row of rows) {
@@ -858,7 +859,107 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
             shop_product_id = NULL, shop_price_seen = NULL, shop_stock_seen = NULL, shop_dirty = 0, shop_error = ''
           WHERE tenant_id = ? AND id = ?`).run(parentId, JSON.stringify({ [checked.value[0].name]: valueOf.get(row.id) }), timestamp, tenantId, row.id);
       }
+      // Momentopname voor het terugdraaien: wat het samenvoegen aan de artikelen verandert (de webshopkoppeling).
+      const snapshot = rows.map((row) => ({
+        id: row.id, code: row.code, shopProductId: row.shop_product_id || null, shopPriceSeen: row.shop_price_seen ?? null,
+        shopStockSeen: row.shop_stock_seen ?? null, shopDirty: Number(row.shop_dirty) || 0, shopError: row.shop_error || '',
+      }));
+      prepare('INSERT INTO stock_merges (id, tenant_id, parent_id, parent_code, parent_name, snapshot, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(crypto.randomUUID(), tenantId, parentId, code, name, JSON.stringify(snapshot), (user && user.id) || null, timestamp);
       return { parentId, merged: rows.length, unlinked };
+    });
+  }
+
+  /**
+   * De logboekregel van de samenvoeging waaruit een hoofdartikel is ontstaan (de laatste die nog niet is teruggedraaid).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} parentId Id van het hoofdartikel.
+   * @returns {{ id: string, createdAt: string, snapshot: object[] }|null} De regel, of null als het hoofdartikel niet via samenvoegen is gemaakt (of voor versie 1.5.9).
+   */
+  function mergeLogOf(tenantId, parentId) {
+    const row = prepare('SELECT id, snapshot, created_at FROM stock_merges WHERE tenant_id = ? AND parent_id = ? AND undone_at IS NULL ORDER BY created_at DESC LIMIT 1').get(tenantId, parentId);
+    return row ? { id: row.id, createdAt: row.created_at, snapshot: parseJson(row.snapshot, []) } : null;
+  }
+
+  /**
+   * Controleert of een samenvoeging kan worden teruggedraaid en laat zien wat er gebeurt.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van het hoofdartikel.
+   * @returns {object} { code, name, variants: [{ code, name, value, archived }], logged, mergedAt, restoresLinks, blocked }; blocked is een tekst als terugdraaien nu niet kan; of { error, status }.
+   */
+  function unmergePreview(tenantId, id) {
+    const parent = findItem(tenantId, id);
+    if (!parent) return { error: 'not_found', status: 404 };
+    if (!Number(parent.has_variants)) return { error: 'Dit is geen hoofdartikel.', status: 409 };
+    const children = prepare('SELECT id, code, name, variant_values, archived FROM stock_items WHERE tenant_id = ? AND parent_id = ? ORDER BY code').all(tenantId, parent.id);
+    const log = mergeLogOf(tenantId, parent.id);
+    const inLog = new Map((log ? log.snapshot : []).map((entry) => [entry.id, entry]));
+    return {
+      code: parent.code,
+      name: parent.name,
+      variants: children.map((child) => ({ code: child.code, name: child.name, value: Object.values(parseJson(child.variant_values, {})).join(' '), archived: Boolean(child.archived) })),
+      logged: Boolean(log),
+      mergedAt: log ? log.createdAt : null,
+      restoresLinks: children.filter((child) => inLog.get(child.id) && inLog.get(child.id).shopProductId).length,
+      blocked: parent.shop_product_id ? `${parent.code} is aan een webshopproduct gekoppeld (bijv. via In webshop zetten). Haal dat product eerst uit de webshop of ontkoppel het; daarna kun je de samenvoeging terugdraaien.` : null,
+    };
+  }
+
+  /**
+   * Draait een samenvoeging terug: de varianten worden weer losse artikelen en het
+   * hoofdartikel verdwijnt. Id, code, omschrijving, prijzen, voorraad, afbeelding,
+   * boekingen en reserveringen van de artikelen zijn nooit veranderd en blijven dus
+   * zoals ze nu zijn (ook mutaties na het samenvoegen). Uit de momentopname komt
+   * de webshopkoppeling terug (tenzij het webshopproduct inmiddels aan een ander
+   * artikel hangt). Bij een hoofdartikel zonder logboekregel (samengevoegd voor
+   * 1.5.9) worden alleen de varianten losgemaakt; webshopkoppelingen kunnen dan niet
+   * terugkomen. Een variant die na het samenvoegen is bijgemaakt gaat weg (met
+   * boekingen: gearchiveerd en losgemaakt).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van het hoofdartikel.
+   * @returns {object} { code, restored, removed, linksRestored, reconstructed }; of { error, status }.
+   */
+  function unmergeVariants(tenantId, id) {
+    const preview = unmergePreview(tenantId, id);
+    if (preview.error) return preview;
+    if (preview.blocked) return { error: preview.blocked, status: 409 };
+    return transaction(db, () => {
+      const parent = findItem(tenantId, id);
+      if (!parent || !Number(parent.has_variants)) return { error: 'not_found', status: 404 };
+      const log = mergeLogOf(tenantId, parent.id);
+      const inLog = new Map((log ? log.snapshot : []).map((entry) => [entry.id, entry]));
+      const children = prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, parent.id);
+      const wantedLinks = [...new Set([...inLog.values()].map((entry) => entry.shopProductId).filter(Boolean))];
+      const taken = new Set(wantedLinks.length
+        ? prepare(`SELECT shop_product_id FROM stock_items WHERE tenant_id = ? AND shop_product_id IN (${placeholders(wantedLinks.length)})`).all(tenantId, ...wantedLinks).map((row) => row.shop_product_id)
+        : []);
+      const timestamp = currentTimestamp();
+      let restored = 0;
+      let removed = 0;
+      let linksRestored = 0;
+      for (const child of children) {
+        if (log && !inLog.has(child.id)) {
+          // Na het samenvoegen bijgemaakte variant: weg, of bij boekingen gearchiveerd en losgemaakt.
+          if (removeRow(tenantId, child)) {
+            prepare("UPDATE stock_items SET parent_id = NULL, variant_values = '', archived_by_parent = 0 WHERE tenant_id = ? AND id = ?").run(tenantId, child.id);
+          }
+          removed++;
+          continue;
+        }
+        const entry = inLog.get(child.id);
+        prepare(`UPDATE stock_items SET parent_id = NULL, variant_values = '', archived = CASE WHEN archived_by_parent = 1 THEN 0 ELSE archived END,
+            archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND id = ?`).run(timestamp, tenantId, child.id);
+        if (entry && entry.shopProductId && !taken.has(entry.shopProductId)) {
+          prepare('UPDATE stock_items SET shop_product_id = ?, shop_price_seen = ?, shop_stock_seen = ?, shop_dirty = ?, shop_error = ? WHERE tenant_id = ? AND id = ?')
+            .run(entry.shopProductId, entry.shopPriceSeen, entry.shopStockSeen, entry.shopDirty, entry.shopError, tenantId, child.id);
+          taken.add(entry.shopProductId);
+          linksRestored++;
+        }
+        restored++;
+      }
+      removeRow(tenantId, parent);
+      if (log) prepare('UPDATE stock_merges SET undone_at = ? WHERE tenant_id = ? AND id = ?').run(timestamp, tenantId, log.id);
+      return { code: parent.code, restored, removed, linksRestored, reconstructed: !log };
     });
   }
 
@@ -1584,7 +1685,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   return {
-    units, addUnit, removeUnit, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants,
+    units, addUnit, removeUnit, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants,
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
     reorderProposal, reserveOrder, releaseOrder, issueOrder, onDirty: setDirtyHook,
@@ -1752,12 +1853,30 @@ function registerStockRoutes(app, ctx) {
 
   // Losse artikelen samenvoegen tot de varianten van een nieuw hoofdartikel.
   app.post('/api/stock/merge', requireJson, requireStock, (req, res) => {
-    const out = stock.mergeIntoVariants(tenantOf(req), req.body, { refuseLinked: Boolean(ctx.shopMirrorOn && ctx.shopMirrorOn(tenantOf(req))), shopMatchOf: ctx.shopMatchOf ? ctx.shopMatchOf(tenantOf(req)) : null });
+    const out = stock.mergeIntoVariants(tenantOf(req), req.body, { refuseLinked: Boolean(ctx.shopMirrorOn && ctx.shopMirrorOn(tenantOf(req))), shopMatchOf: ctx.shopMatchOf ? ctx.shopMatchOf(tenantOf(req)) : null, user: req.user });
     if (out.error) return fail(res, out);
     const item = stock.get(tenantOf(req), out.parentId);
     // De samenvoeging staat al in de database: een fout in het auditlogboek mag die niet als mislukt melden.
     try { audit(req, 'voorraad_samengevoegd', { itemId: out.parentId, code: item.code, merged: out.merged, unlinked: out.unlinked }); } catch (error) { console.error('Audit voorraad_samengevoegd mislukt:', error.message); }
     res.status(201).json({ item, merged: out.merged, unlinked: out.unlinked });
+  });
+
+  // Wat terugdraaien van een samenvoeging doet (voor de bevestiging).
+  app.get('/api/stock/items/:id/unmerge', requireStock, (req, res) => {
+    noStore(res);
+    const out = stock.unmergePreview(tenantOf(req), req.params.id);
+    if (out.error) return fail(res, out);
+    res.json(out);
+  });
+
+  // Een samenvoeging terugdraaien: de varianten worden weer losse artikelen, het hoofdartikel verdwijnt.
+  app.post('/api/stock/items/:id/unmerge', requireJson, requireStock, (req, res) => {
+    const out = stock.unmergeVariants(tenantOf(req), req.params.id);
+    if (out.error) return fail(res, out);
+    if (ctx.pruneImages) ctx.pruneImages(tenantOf(req));
+    // De wijziging staat al in de database: een fout in het auditlogboek mag die niet als mislukt melden.
+    try { audit(req, 'voorraad_samenvoeging_teruggedraaid', { itemId: req.params.id, code: out.code, restored: out.restored, removed: out.removed, reconstructed: out.reconstructed }); } catch (error) { console.error('Audit voorraad_samenvoeging_teruggedraaid mislukt:', error.message); }
+    res.json(out);
   });
 
   // Kenmerken van een hoofdartikel; ontbrekende varianten worden aangemaakt.

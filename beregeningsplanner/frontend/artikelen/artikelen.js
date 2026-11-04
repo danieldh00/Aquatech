@@ -765,6 +765,7 @@
     $('#v-hint').textContent = item.hasVariants
       ? 'Voeg waarden toe om nieuwe varianten te maken. Een variant weghalen doe je op de variant zelf.'
       : 'Heeft dit artikel maten, kleuren of lengtes? Geef de kenmerken op; elke combinatie wordt een variant met een eigen code, prijs en voorraad. Kan alleen zolang dit artikel zelf geen voorraad of boekingen heeft.';
+    $('#v-unmerge-row').hidden = !item.hasVariants;
     $('#v-attrs').innerHTML = (item.attributes.length ? item.attributes : [{ name: '', values: [] }]).map(attributeRow).join('');
     $('#d-var-table').innerHTML = variants.length ? `<thead><tr><th>Variant</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Inkoopprijs</th><th class="num">Verkoopprijs</th><th>Webshop</th></tr></thead>
       <tbody>${variants.map((variant) => `<tr data-id="${esc(variant.id)}" class="${variant.low ? 'low' : ''}${variant.archived ? ' arch' : ''}">
@@ -911,6 +912,33 @@
         await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
       } catch (error) {
         toast(error.message, true);
+      }
+    };
+    /**
+     * Draait het samenvoegen terug na bevestiging: de varianten worden weer losse artikelen.
+     * @returns {Promise<void>}
+     */
+    $('#v-unmerge').onclick = async () => {
+      const item = state.item;
+      const button = $('#v-unmerge');
+      button.disabled = true;
+      try {
+        const preview = await api(`stock/items/${encodeURIComponent(item.id)}/unmerge`);
+        if (preview.blocked) { toast(preview.blocked, true); return; }
+        const codes = preview.variants.map((variant) => `• ${variant.code} ${variant.name}`).join('\n');
+        const origin = preview.logged
+          ? `Samengevoegd op ${new Date(preview.mergedAt).toLocaleDateString('nl-NL')}. ${preview.restoresLinks ? `${preview.restoresLinks} webshopkoppeling${preview.restoresLinks === 1 ? '' : 'en'} komt terug.` : ''}`
+          : 'Van deze samenvoeging is geen momentopname (gemaakt vóór deze functie): de varianten worden losgemaakt, eerdere webshopkoppelingen komen niet terug.';
+        if (!confirm(`${item.code} ongedaan maken?\n\nDeze ${preview.variants.length} artikelen worden weer losse artikelen en ${item.code} verdwijnt:\n${codes}\n\nCode, omschrijving, prijzen, voorraad (ook boekingen sinds het samenvoegen) en afbeelding blijven zoals ze nu zijn. ${origin}`)) return;
+        const result = await api(`stock/items/${encodeURIComponent(item.id)}/unmerge`, { method: 'POST', body: {} });
+        toast(`${result.restored} artikelen weer los${result.linksRestored ? `, ${result.linksRestored} webshopkoppeling${result.linksRestored === 1 ? '' : 'en'} hersteld` : ''}`);
+        history.pushState(null, '', './');
+        showList();
+        await load();
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        button.disabled = false;
       }
     };
     /**

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.5.9
+
+Samenvoegen van artikelen terugdraaien.
+
+- **Server** (`artikelen/stock.js`, migratie 42 in `database/db.js` en `database/pgschema.js`): tabel
+  `stock_merges` met per samenvoeging een momentopname (de webshopkoppeling van elk artikel; verder
+  verandert samenvoegen niets aan een artikel). `GET /api/stock/items/:id/unmerge` toont wat er gebeurt,
+  `POST /api/stock/items/:id/unmerge` (recht `voorraad`) maakt van de varianten weer losse artikelen
+  (id, code, omschrijving, prijzen, voorraad incl. latere boekingen en afbeelding blijven), zet de
+  webshopkoppeling terug (niet als het product inmiddels aan een ander artikel hangt) en haalt het
+  hoofdartikel weg. Een na het samenvoegen bijgemaakte variant gaat weg (met boekingen: gearchiveerd).
+  Is het hoofdartikel aan een webshopproduct gekoppeld, dan weigert de server (409). Samengevoegd onder
+  1.5.8 (zonder logboek): de varianten worden losgemaakt, webshopkoppelingen komen niet terug.
+- **Frontend** (`artikelen/`): knop *Samenvoeging ongedaan maken* onder Varianten van een hoofdartikel,
+  met een bevestiging die de artikelen noemt.
+- Testdata: een samengevoegd hoofdartikel (Verloopstuk) met logboek.
+- Tests: terugdraaien via de API (rechten, andere organisatie, geblokkeerd, voorraad na samenvoegen),
+  zonder logboek en met een later bijgemaakte variant.
+
 ## 1.5.8
 
 Losse artikelen samenvoegen tot één variabel artikel.

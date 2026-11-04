@@ -180,3 +180,95 @@ test('samenvoegen: bepaalt de webshop de artikellijst, dan worden aan een websho
   assert.match(looseMatch.error, /A-25/);
   assert.strictEqual(stock.mergeIntoVariants(tenantId, input).merged, 2, 'zonder spiegelen mag het wel');
 });
+
+test('samenvoeging terugdraaien via de API: artikelen weer los met hun voorraad, webshopkoppeling terug, rechten en andere organisatie', async () => {
+  const db = openDb();
+  const store = createStore(db);
+  const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
+  await store.createAccount(main, { username: 'pien', displayName: 'Pien', role: 'planner', password: PW });
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  try {
+    const as = createLogin(base, { password: PW });
+    const baas = await as('baas');
+    const pien = await as('pien');
+    const made = [];
+    for (const [code, size, onHand] of [['KR-16', '16 mm', 10], ['KR-20', '20 mm', 4]]) {
+      made.push((await baas.post('/api/stock/items', { code, name: `Kraan ${size}`, unit: 'st', costPrice: 2, salePrice: 5, onHand })).body);
+    }
+    db.prepare('UPDATE stock_items SET shop_product_id = ?, shop_price_seen = 5, shop_dirty = 1 WHERE id = ?').run('88', made[0].id);
+    const body = { ids: made.map((item) => item.id), code: 'KR', name: 'Kraan', attributeName: 'Maat', values: { [made[0].id]: '16 mm', [made[1].id]: '20 mm' } };
+    const merged = (await baas.post('/api/stock/merge', body)).body;
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_merges').get().n, 1, 'het samenvoegen komt in het logboek');
+    // Na het samenvoegen verandert de voorraad nog: die mutatie moet het terugdraaien overleven.
+    assert.strictEqual((await baas.post(`/api/stock/items/${made[1].id}/movements`, { kind: 'ontvangst', qty: 6, note: 'Pakbon' })).status, 201);
+
+    const preview = await baas.get(`/api/stock/items/${merged.item.id}/unmerge`);
+    assert.strictEqual(preview.status, 200);
+    assert.strictEqual(preview.body.logged, true);
+    assert.strictEqual(preview.body.restoresLinks, 1);
+    assert.deepStrictEqual(preview.body.variants.map((variant) => variant.code), ['KR-16', 'KR-20']);
+    assert.strictEqual((await baas.get(`/api/stock/items/${made[0].id}/unmerge`)).status, 409, 'een los artikel is geen hoofdartikel');
+    assert.strictEqual((await pien.get(`/api/stock/items/${merged.item.id}/unmerge`)).status, 403);
+    assert.strictEqual((await pien.post(`/api/stock/items/${merged.item.id}/unmerge`, {})).status, 403);
+
+    // Een andere organisatie kan het hoofdartikel niet terugdraaien (404).
+    assert.strictEqual((await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } })).status, 201);
+    const piet = await as('piet', 'groen');
+    assert.strictEqual((await piet.post(`/api/stock/items/${merged.item.id}/unmerge`, {})).status, 404);
+
+    // Is het hoofdartikel inmiddels aan een webshopproduct gekoppeld, dan blijft het staan.
+    db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('99', merged.item.id);
+    assert.strictEqual((await baas.post(`/api/stock/items/${merged.item.id}/unmerge`, {})).status, 409);
+    db.prepare('UPDATE stock_items SET shop_product_id = NULL WHERE id = ?').run(merged.item.id);
+
+    const undone = await baas.post(`/api/stock/items/${merged.item.id}/unmerge`, {});
+    assert.strictEqual(undone.status, 200, JSON.stringify(undone.body));
+    assert.strictEqual(undone.body.restored, 2);
+    assert.strictEqual(undone.body.linksRestored, 1);
+    assert.strictEqual((await baas.get(`/api/stock/items/${merged.item.id}`)).status, 404, 'het hoofdartikel is weg');
+    const first = (await baas.get(`/api/stock/items/${made[0].id}`)).body;
+    assert.strictEqual(first.parentId, null);
+    assert.strictEqual(first.name, 'Kraan 16 mm');
+    assert.strictEqual(first.shop.productId, '88', 'de webshopkoppeling is terug');
+    const second = (await baas.get(`/api/stock/items/${made[1].id}`)).body;
+    assert.strictEqual(second.parentId, null);
+    assert.strictEqual(second.onHand, 10, 'de ontvangst na het samenvoegen blijft');
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_movements WHERE item_id = ?').get(made[1].id).n, 2);
+    const listed = (await baas.get('/api/stock')).body.items;
+    assert.strictEqual(listed.filter((item) => item.hasVariants || item.parentId).length, 0);
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_merges WHERE undone_at IS NOT NULL').get().n, 1);
+    assert.strictEqual((await baas.post(`/api/stock/items/${merged.item.id}/unmerge`, {})).status, 404, 'nog een keer kan niet');
+    // Opnieuw samenvoegen met dezelfde code kan weer.
+    assert.strictEqual((await baas.post('/api/stock/merge', body)).status, 201);
+  } finally { server.close(); }
+});
+
+test('samenvoeging terugdraaien zonder logboek (samengevoegd voor 1.5.9) en met een later bijgemaakte variant', () => {
+  const db = openDb();
+  const tenantId = createStore(db).ensureTenant().id;
+  const { createStockStore } = require('../src/artikelen/stock');
+  const stock = createStockStore(db);
+  const user = { id: null, display_name: 'Test' };
+  const first = stock.create(tenantId, user, { code: 'B-16', name: 'Buis 16 mm', unit: 'm' }).item;
+  const second = stock.create(tenantId, user, { code: 'B-20', name: 'Buis 20 mm', unit: 'm' }).item;
+  const input = { ids: [first.id, second.id], code: 'B', name: 'Buis', attributeName: 'Maat', values: { [first.id]: '16 mm', [second.id]: '20 mm' } };
+
+  // Zonder logboekregel worden alleen de varianten losgemaakt.
+  const legacy = stock.mergeIntoVariants(tenantId, input, { user });
+  db.prepare('DELETE FROM stock_merges').run();
+  assert.strictEqual(stock.unmergePreview(tenantId, legacy.parentId).logged, false);
+  const reconstructed = stock.unmergeVariants(tenantId, legacy.parentId);
+  assert.strictEqual(reconstructed.restored, 2);
+  assert.strictEqual(reconstructed.reconstructed, true);
+  assert.strictEqual(stock.get(tenantId, first.id).parentId, null);
+
+  // Met logboek: een variant die erna is bijgemaakt gaat weg.
+  const again = stock.mergeIntoVariants(tenantId, input, { user });
+  const added = stock.setVariants(tenantId, again.parentId, [{ name: 'Maat', values: ['16 mm', '20 mm', '25 mm'] }]);
+  assert.strictEqual(added.created, 1);
+  const out = stock.unmergeVariants(tenantId, again.parentId);
+  assert.strictEqual(out.restored, 2);
+  assert.strictEqual(out.removed, 1);
+  assert.deepStrictEqual(stock.list(tenantId).map((item) => item.code).sort(), ['B-16', 'B-20']);
+});

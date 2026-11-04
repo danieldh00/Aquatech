@@ -943,6 +943,23 @@ const MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN image_id TEXT;
   CREATE INDEX stock_items_image ON stock_items (tenant_id, image_id);
   `,
+  // 42: logboek van samengevoegde artikelen (stock.js, mergeIntoVariants). Per
+  // samenvoeging een momentopname van de artikelen zoals ze waren (snapshot:
+  // JSON), zodat het samenvoegen ongedaan gemaakt kan worden (undone_at).
+  `
+  CREATE TABLE stock_merges (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    parent_id   TEXT NOT NULL,
+    parent_code TEXT NOT NULL,
+    parent_name TEXT NOT NULL,
+    snapshot    TEXT NOT NULL,
+    created_by  TEXT,
+    created_at  TEXT NOT NULL,
+    undone_at   TEXT
+  );
+  CREATE INDEX stock_merges_parent ON stock_merges (tenant_id, parent_id);
+  `,
 ];
 
 /**
