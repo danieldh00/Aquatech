@@ -14,15 +14,16 @@ const { transaction, isPg } = require('../database/db');
 const { validEmail } = require('../platform/mailer');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
+const Wholesale = require('./wholesale');
 
 /** Statussen van een bestelling met hun weergavenaam. */
 const STATUSES = { nieuw: 'Nieuw', verzonden: 'Verzonden', afgerond: 'Afgerond', geannuleerd: 'Geannuleerd' };
 /** Welke status op welke mag volgen. */
 const TRANSITIONS = { nieuw: ['verzonden', 'geannuleerd'], verzonden: ['afgerond'], afgerond: [], geannuleerd: [] };
-/** Hoogstens zoveel regels in een winkelwagen. */
-const MAX_LINES = 40;
-/** Hoogstens zoveel stuks van één artikel per bestelling. */
-const MAX_QTY = 99;
+/** Hoogstens zoveel regels in een winkelwagen (de wagen staat in een cookie van hooguit 4 kB). */
+const MAX_LINES = 60;
+/** Hoogstens zoveel stuks van één artikel per bestelling (groothandelsklanten bestellen in bulk; de beschikbare voorraad begrenst het echte aantal). */
+const MAX_QTY = 9999;
 /** Hoogstens zoveel bestellingen per pagina in Beheer. */
 const PAGE_LIMIT = 200;
 /** Hoogstens zoveel bestellingen met regels per aanvraag (de export haalt meerdere pagina's op). */
@@ -126,11 +127,12 @@ function createWebOrderStore(db, { stock }) {
    * webshop staan (Naar webshop aan, met verkoopprijs) tellen mee.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ code: string, qty: number }[]} wanted De gewenste artikelen en aantallen.
-   * @param {{ group?: string }} [customer] De klantgroep: 'zakelijk' rekent met de zakelijke prijs (excl. btw, anders de verkoopprijs) en toont prijzen excl. btw.
-   * @returns {{ lines: object[], missing: string[], totals: object, ok: boolean, pricesExcl: boolean }} De regels (itemId, code, name, unit, qty, available, unitExcl, vatRate, unitIncl, lineTotal, enough, weightGrams en bij zakelijk lineExcl), de codes die niet (meer) te koop zijn, de totalen, of er besteld kan worden en of de prijzen excl. btw getoond worden.
+   * @param {{ group?: string, wholesale?: ?{ discountPct: number } }} [customer] De klantgroep: 'zakelijk' rekent met de zakelijke prijs (excl. btw, anders de verkoopprijs) en toont prijzen excl. btw. Met `wholesale` (alleen bij zakelijk) gelden ook de groothandelsvoorwaarden: staffelkorting, de vaste korting `discountPct` van de klant, verpakkingseenheid en minimale afname.
+   * @returns {{ lines: object[], missing: string[], totals: object, ok: boolean, pricesExcl: boolean }} De regels (itemId, code, name, unit, qty, available, unitExcl, vatRate, unitIncl, lineTotal, enough, weightGrams en bij zakelijk lineExcl; bij groothandel ook listExcl, discountPct, discountSource en packProblem), de codes die niet (meer) te koop zijn, de totalen, of er besteld kan worden en of de prijzen excl. btw getoond worden.
    */
-  function priceCart(tenantId, wanted, { group = '' } = {}) {
+  function priceCart(tenantId, wanted, { group = '', wholesale = null } = {}) {
     const business = group === 'zakelijk';
+    const wholesaleTerms = business && wholesale ? wholesale : null;
     const unique = new Map();
     for (const line of wanted) {
       const code = String(line.code || '').trim().toUpperCase();
@@ -138,7 +140,7 @@ function createWebOrderStore(db, { stock }) {
       if (code && qty >= 1) unique.set(code, Math.min(MAX_QTY, (unique.get(code) || 0) + qty));
     }
     const codes = [...unique.keys()].slice(0, MAX_LINES);
-    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, p.name AS parent_name, COALESCE(r.qty, 0) AS reserved
+    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, p.name AS parent_name, COALESCE(r.qty, 0) AS reserved
       FROM stock_items i
       LEFT JOIN stock_items p ON p.tenant_id = i.tenant_id AND p.id = i.parent_id
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
@@ -155,7 +157,10 @@ function createWebOrderStore(db, { stock }) {
       const label = Object.values(values).join(' / ');
       const qty = unique.get(code);
       const vatRate = Number(row.vat_rate ?? 21);
-      const unitExcl = business && row.business_price != null ? Number(row.business_price) : Number(row.sale_price);
+      const listExcl = business && row.business_price != null ? Number(row.business_price) : Number(row.sale_price);
+      const terms = { packSize: Number(row.order_pack_size) || 1, orderMinQty: Number(row.order_min_qty) || 1 };
+      const priced = wholesaleTerms ? Wholesale.wholesalePrice(listExcl, qty, Wholesale.tiersOf(row.price_tiers), wholesaleTerms.discountPct) : null;
+      const unitExcl = priced ? priced.unitExcl : listExcl;
       const unitIncl = round2(unitExcl * (1 + vatRate / 100));
       const lineExcl = round2(unitExcl * qty);
       const available = Math.round((Number(row.on_hand) - Number(row.reserved)) * 1000) / 1000;
@@ -163,9 +168,10 @@ function createWebOrderStore(db, { stock }) {
         itemId: row.id, code: row.code, name: row.parent_name && label ? `${row.parent_name} (${label})` : row.name, unit: row.unit || 'st', qty, available,
         unitExcl, vatRate, unitIncl, lineTotal: business ? round2(lineExcl * (1 + vatRate / 100)) : round2(unitIncl * qty), enough: available >= qty,
         weightGrams: row.weight_grams == null ? null : Number(row.weight_grams), ...(business ? { lineExcl } : {}),
+        ...(wholesaleTerms ? { listExcl, discountPct: priced.discountPct, discountSource: priced.source, packSize: terms.packSize, minimum: Wholesale.minimumOf(terms), packProblem: Wholesale.quantityProblem(qty, terms) } : {}),
       });
     }
-    return { lines, missing, totals: totalsOf(lines), ok: lines.length > 0 && !missing.length && lines.every((line) => line.enough), pricesExcl: business };
+    return { lines, missing, totals: totalsOf(lines), ok: lines.length > 0 && !missing.length && lines.every((line) => line.enough && !line.packProblem), pricesExcl: business };
   }
 
   /**
@@ -268,7 +274,7 @@ function createWebOrderStore(db, { stock }) {
    * opnieuw, legt de bestelling vast en reserveert de voorraad, alles in één
    * transactie.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ id: string, group?: string }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg).
+   * @param {{ id: string, group?: string, wholesale?: ?{ discountPct: number } }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg) en bij een groothandelsklant zijn vaste korting.
    * @param {object} rawFields De gegevens van het afrekenformulier (zie sanitizeCheckout, plus shippingMethod en country).
    * @param {{ code: string, qty: number }[]} wanted De winkelwagen.
    * @param {object} [shippingConfig] De verzendinstelling (shipping.js); standaard de startwaarden.
@@ -291,8 +297,9 @@ function createWebOrderStore(db, { stock }) {
     const online = paymentMethod === 'online';
     return transaction(db, () => {
       lockItems(tenantId, wanted);
-      const cart = priceCart(tenantId, wanted, { group });
+      const cart = priceCart(tenantId, wanted, { group, wholesale: group === 'zakelijk' ? user.wholesale || null : null });
       if (!cart.lines.length) return { error: 'Je winkelwagen is leeg.', status: 409, cart };
+      if (cart.lines.some((line) => line.packProblem)) return { error: 'Een artikel in je winkelwagen voldoet niet aan de verpakkingseenheid of minimale afname. Controleer je winkelwagen.', status: 409, cart };
       if (!cart.ok) return { error: 'Een artikel in je winkelwagen is niet meer in de gevraagde hoeveelheid beschikbaar. Controleer je winkelwagen.', status: 409, cart };
       const quote = shippingQuote(cart, shippingConfig, country);
       const option = quote.options.find((candidate) => candidate.method === method);

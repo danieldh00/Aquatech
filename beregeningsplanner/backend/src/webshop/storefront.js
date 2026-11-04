@@ -18,12 +18,14 @@ const { DEFAULT_SITE } = require('./shop-content');
 const { wantsBusiness } = require('./business-profile');
 const { loginPage, registerPage, accountPage, plannerPage } = require('./storefront-account-pages');
 const { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage } = require('./storefront-order-pages');
+const { wholesalePage, orderableProducts } = require('./storefront-wholesale-pages');
+const Wholesale = require('./wholesale');
 const { returnsBlock } = require('./storefront-return-pages');
 const { legalDefaults } = require('./legal-pages');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
 const { validPaymentId } = require('./mollie');
-const { readCart, writeCart, applyCartAction } = require('./storefront-cart');
+const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, MAX_QTY } = require('./storefront-cart');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
 const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
@@ -42,6 +44,7 @@ const ASSETS = {
   'varianten.js': { file: path.join(__dirname, 'storefront-variants.js'), type: 'text/javascript; charset=utf-8' },
   'adres.js': { file: path.join(SHARED_DIR, 'address-lookup.js'), type: 'text/javascript; charset=utf-8' },
   'afrekenen.js': { file: path.join(__dirname, 'storefront-checkout.js'), type: 'text/javascript; charset=utf-8' },
+  'groothandel.js': { file: path.join(__dirname, 'storefront-wholesale.js'), type: 'text/javascript; charset=utf-8' },
   'favicon.png': { file: path.join(SHARED_DIR, 'icons', 'favicon-48.png'), type: 'image/png' },
 };
 /** Afbeeldingen van de shop zelf (logo, hero, merken, pictogrammen) uit de map assets/ naast dit bestand. */
@@ -52,8 +55,8 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
 }
 /** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner). */
 const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakelijk)\/?$/;
-/** Paden waar de winkelwagen, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
-const ORDER_POSTS = /^\/(winkelwagen|afrekenen|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/retour(\/[^/]+\/intrekken)?)\/?$/;
+/** Paden waar de winkelwagen, het groothandelsvenster, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
+const ORDER_POSTS = /^\/(winkelwagen|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/retour(\/[^/]+\/intrekken)?)\/?$/;
 /** Aantal bestellingen per pagina in de bestelhistorie van een klant. */
 const HISTORY_PAGE = 25;
 const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
@@ -103,7 +106,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const viewer = accounts ? accounts.viewer(req) : null;
     const business = Boolean(viewer) && viewer.customerGroup === 'zakelijk';
     if (business) res.setHeader('Cache-Control', 'private, no-store');
-    const html = renderWith(contentOf(req), render, { ordering, cartCount: ordering ? readCart(req).reduce((total, line) => total + line.qty, 0) : 0, business });
+    const html = renderWith(contentOf(req), render, { ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, wholesale: ordering && business && viewer.wholesale });
     res.type('html').send(html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : '')));
   };
   /**
@@ -309,18 +312,146 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         return viewer && viewer.customerGroup === 'zakelijk' ? 'zakelijk' : '';
       };
 
+      /**
+       * De groothandelsvoorwaarden van de ingelogde bezoeker (de vaste korting van een groothandelsklant), of niets.
+       * @param {?{ wholesale?: boolean, wholesaleDiscount?: number }} viewer De ingelogde klant.
+       * @returns {?{ discountPct: number }} De voorwaarden voor de prijsberekening, of null.
+       */
+      const wholesaleOf = (viewer) => (viewer && viewer.wholesale ? { discountPct: viewer.wholesaleDiscount } : null);
+      /**
+       * De klantgroep en groothandelsvoorwaarden waarmee de winkelwagen van deze bezoeker geprijsd wordt.
+       * @param {object} req Het verzoek.
+       * @returns {{ group: string, wholesale: ?{ discountPct: number } }} De opties voor priceCart.
+       */
+      const priceOptionsOf = (req) => ({ group: groupOf(req), wholesale: wholesaleOf(accounts.viewer(req)) });
+
       router.get('/winkelwagen', (req, res) => {
         if (withSlash(req, res)) return;
         if (!orderingOn()) return orderingOff(req, res);
         res.setHeader('Cache-Control', 'no-store');
-        const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
-        sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups));
+        const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
+        sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups, req.query.vol === '1' ? 'Je winkelwagen is vol: deze wijziging paste er niet meer bij. Plaats eerst deze bestelling en bestel de rest daarna.' : ''));
+      });
+      /**
+       * Controleert dat de bezoeker een groothandelsklant is bij een bestelling; anders is de pagina er niet (of moet hij eerst inloggen).
+       * @param {object} req Het verzoek.
+       * @param {object} res Het antwoord.
+       * @returns {?object} De ingelogde groothandelsklant, of null nadat er een antwoord is gestuurd.
+       */
+      const wholesaleViewer = (req, res) => {
+        if (!orderingOn()) { orderingOff(req, res); return null; }
+        const viewer = accounts.viewer(req);
+        if (!viewer) { res.redirect(req.method === 'POST' ? 303 : 302, '../inloggen/'); return null; }
+        if (!viewer.wholesale) { sendWithGroups(req, res, 404, (groups) => notFoundPage('../', groups)); return null; }
+        return viewer;
+      };
+      /**
+       * Zet gevraagde artikelen om in winkelwagenregels: onbekende codes vallen af (met een melding) en aantallen worden naar boven afgerond op de verpakkingseenheid en minimale afname.
+       * @param {object} catalog De catalogus.
+       * @param {{ code: string, qty: number }[]} wanted De gevraagde codes en aantallen.
+       * @returns {{ entries: { code: string, qty: number }[], adjusted: object[], problems: object[] }} De regels voor de wagen, de aangepaste aantallen en de codes die niet bestaan.
+       */
+      const resolveWanted = (catalog, wanted) => {
+        const byCode = new Map(orderableProducts(catalog).map((product) => [product.code.toUpperCase(), product]));
+        const entries = [];
+        const adjusted = [];
+        const problems = [];
+        for (const want of wanted) {
+          const product = byCode.get(want.code);
+          if (!product) { problems.push({ text: want.code, message: 'Onbekende artikelcode, of niet meer te koop.' }); continue; }
+          const terms = { packSize: product.packSize, orderMinQty: product.minimum };
+          const qty = Wholesale.roundUpQty(want.qty, terms);
+          if (qty > MAX_QTY) { problems.push({ text: want.code, message: `Het afgeronde aantal (${qty}) is hoger dan het maximum van ${MAX_QTY} stuks per regel.` }); continue; }
+          if (qty !== want.qty) adjusted.push({ code: product.code, from: want.qty, to: qty, reason: Wholesale.quantityProblem(want.qty, terms) });
+          entries.push({ code: product.code.toUpperCase(), qty });
+        }
+        return { entries, adjusted, problems };
+      };
+      /**
+       * De gevraagde artikelen uit een formulier van het groothandelsvenster: de ingevulde lijst, een geplakte lijst of een eerdere bestelling.
+       * @param {object} body De velden van het formulier (action, q:<code>, lijst of orderId).
+       * @param {object} viewer De ingelogde klant.
+       * @returns {{ wanted: { code: string, qty: number }[], problems: object[], pasted: string }|null} De gevraagde regels, de regels die niet te lezen waren en de geplakte tekst; null bij een onbekende actie.
+       */
+      const wantedFrom = (body, viewer) => {
+        if (body.action === 'bestellen') {
+          const wanted = [];
+          for (const [key, value] of Object.entries(body)) {
+            const qty = Math.floor(Number(value));
+            if (key.startsWith('q:') && qty >= 1) wanted.push({ code: key.slice(2).trim().toUpperCase(), qty });
+          }
+          return { wanted, problems: wanted.length ? [] : [{ text: 'Snelbestellijst', message: 'Vul bij minstens één artikel een aantal in.' }], pasted: '' };
+        }
+        if (body.action === 'plakken') {
+          const text = String(body.lijst ?? '').slice(0, 20000);
+          const parsed = Wholesale.parseOrderList(text);
+          const problems = parsed.problems.map((problem) => ({ text: `Regel ${problem.line} (${problem.text})`, message: problem.message }));
+          if (parsed.truncated) problems.push({ text: 'Lijst', message: `Alleen de eerste ${Wholesale.MAX_PASTE_LINES} regels zijn gelezen; plak de rest apart.` });
+          if (!parsed.entries.length && !problems.length) problems.push({ text: 'Lijst', message: 'Er staan geen artikelcodes in de lijst.' });
+          return { wanted: parsed.entries, problems, pasted: text, problemLines: parsed.problems.map((problem) => problem.line), rows: parsed.rows, stoppedAt: parsed.stoppedAt };
+        }
+        if (body.action === 'opnieuw') {
+          const order = orders.getForUser(tenantId, viewer.id, String(body.orderId ?? ''));
+          if (!order) return { wanted: [], problems: [{ text: 'Bestelling', message: 'Deze bestelling is niet gevonden.' }], pasted: '' };
+          return { wanted: order.lines.map((line) => ({ code: String(line.code).toUpperCase(), qty: line.qty })), problems: [], pasted: '' };
+        }
+        return null;
+      };
+      /**
+       * De regels van een geplakte lijst die niet verwerkt zijn (onleesbaar, onbekende code of niet meer in de wagen gepast), zodat een gecorrigeerde lijst geen regels dubbel toevoegt.
+       * @param {{ pasted: string, problemLines?: number[], rows?: object[], stoppedAt?: number }} request De uitkomst van wantedFrom.
+       * @param {Set<string>} failedCodes De artikelcodes die niet in de wagen kwamen.
+       * @returns {string} De overgebleven regels, onder elkaar.
+       */
+      const unprocessedLines = (request, failedCodes) => {
+        if (!request.problemLines) return request.pasted;
+        const unreadable = new Set(request.problemLines);
+        const failedRows = new Set(request.rows.filter((row) => failedCodes.has(row.code)).map((row) => row.line));
+        return request.pasted.replace(/\r/g, '').split('\n').filter((line, index) => line.trim() && (unreadable.has(index + 1) || failedRows.has(index + 1) || index >= request.stoppedAt)).join('\n');
+      };
+      /**
+       * Toont het groothandelsvenster.
+       * @param {object} req Het verzoek.
+       * @param {object} res Het antwoord.
+       * @param {object} viewer De groothandelsklant.
+       * @param {{ notice?: ?object, pasted?: string }} [state] De melding na een actie en de geplakte tekst.
+       * @returns {void}
+       */
+      const showWholesale = (req, res, viewer, { notice = null, pasted = '' } = {}) => {
+        res.setHeader('Cache-Control', 'no-store');
+        const recent = orders.listForUser(tenantId, viewer.id, { limit: 5 }).items.filter((order) => order.status !== 'geannuleerd');
+        sendWithGroups(req, res, 200, (groups) => wholesalePage({ catalog: data.catalogOf(tenantId), viewer, recent, notice, pasted }, groups));
+      };
+      router.get('/groothandel', (req, res) => {
+        if (withSlash(req, res)) return;
+        const viewer = wholesaleViewer(req, res);
+        if (viewer) showWholesale(req, res, viewer);
+      });
+      // Eén adres voor alle acties van het venster (veld action), zodat de pagina na een actie op dezelfde plek blijft.
+      router.post('/groothandel', express.urlencoded({ extended: false, limit: '256kb', parameterLimit: 3000 }), (req, res) => {
+        if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+        const viewer = wholesaleViewer(req, res);
+        if (!viewer) return;
+        const request = wantedFrom(req.body || {}, viewer);
+        if (!request) return res.redirect(303, './');
+        const resolved = resolveWanted(data.catalogOf(tenantId), request.wanted);
+        const merged = addCartLines(readCart(req), resolved.entries);
+        if (resolved.entries.length) writeCart(req, res, merged.lines);
+        const problems = [...request.problems, ...resolved.problems];
+        const notice = { added: resolved.entries.length - merged.skipped.length, adjusted: resolved.adjusted, problems, skipped: merged.skipped };
+        // Alles gelukt zonder iets te melden: meteen naar de winkelwagen.
+        if (notice.added > 0 && !problems.length && !notice.adjusted.length && !notice.skipped.length) return res.redirect(303, '../winkelwagen/');
+        if (resolved.entries.length) req.pendingCart = merged.lines;
+        const failedCodes = new Set([...resolved.problems.map((problem) => problem.text), ...merged.skipped]);
+        showWholesale(req, res, viewer, { notice, pasted: problems.length || notice.skipped.length ? unprocessedLines(request, failedCodes) : '' });
       });
       router.post('/winkelwagen', form, (req, res) => {
         if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
         if (!orderingOn()) return orderingOff(req, res);
-        writeCart(req, res, applyCartAction(readCart(req), req.body || {}));
-        res.redirect(303, './');
+        const before = readCart(req);
+        const after = applyCartAction(before, req.body || {});
+        writeCart(req, res, after);
+        res.redirect(303, cartActionRejected(before, after, req.body || {}) ? './?vol=1' : './');
       });
       /**
        * De verzendinstelling van deze winkel (de instelling `shopShipping`, gesaneerd).
@@ -367,7 +498,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (withSlash(req, res)) return;
         if (!orderingOn()) return orderingOff(req, res);
         res.setHeader('Cache-Control', 'no-store');
-        const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
+        const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
         if (!cart.lines.length || !cart.ok) return res.redirect(302, '../winkelwagen/');
         const viewer = withBusinessProfile(accounts.viewer(req));
         if (!viewer) return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups));
@@ -382,13 +513,13 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         // Land wijzigen: alleen de pagina opnieuw tonen met de kosten voor dat land, zonder te bestellen.
         if (body.action === 'update') {
           res.setHeader('Cache-Control', 'no-store');
-          const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
+          const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
           if (!cart.lines.length || !cart.ok) return res.redirect(303, '../winkelwagen/');
           return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), values: body, ...checkoutChoice(cart, body) }, groups));
         }
         // Hoort het getoonde totaal niet bij de actuele invoer (btw-nummer, land, methode) of ontbreekt het? Dan eerst opnieuw tonen, zonder te bestellen.
         {
-          const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
+          const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
           if (cart.lines.length && cart.ok) {
             const choice = checkoutChoice(cart, body);
             const shown = String(body.expectedTotal === undefined ? '' : body.expectedTotal).trim();
@@ -407,15 +538,15 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             const resolved = await addressGuard.resolveParts({ street: String(body.street || '').trim(), postcode: String(body.postcode || '').trim() });
             if (!resolved.ok) {
               res.setHeader('Cache-Control', 'no-store');
-              const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
+              const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
               return sendWithGroups(req, res, resolved.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: resolved.message, values: body, ...checkoutChoice(cart, body) }, groups));
             }
             placed = { ...body, street: resolved.street, postcode: resolved.postcode, city: resolved.city };
           }
-          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer));
+          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer) }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer));
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
-            const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
+            const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
             return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: out.error, values: body, ...checkoutChoice(cart, body) }, groups));
           }
           writeCart(req, res, []);

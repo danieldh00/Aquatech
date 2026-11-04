@@ -5,6 +5,7 @@
 
 const crypto = require('crypto');
 const { decodeHtmlEntities } = require('./html-entities');
+const Wholesale = require('./wholesale');
 
 /** Hoe lang (ms) een opgebouwde catalogus per omgeving wordt hergebruikt. */
 const CACHE_MS = 30 * 1000;
@@ -170,7 +171,7 @@ function attributeNamesOf(attributesJson) {
  * en categorieën, categorie-indeling en prijs inclusief btw. Varianten van een
  * hoofdartikel (parent_id) komen als één regel in `products`, met hun keuzes
  * in `variants`; elke variant blijft los bereikbaar via `variantProducts`.
- * @param {object[]} rows Rijen met id, code, name, unit, on_hand, sale_price, business_price, vat_rate, categories en image; bij varianten parent_id en variant_values, bij hoofdartikelen has_variants=1 en attributes.
+ * @param {object[]} rows Rijen met id, code, name, unit, on_hand, sale_price, business_price, vat_rate, categories en image (en optioneel order_pack_size, order_min_qty en price_tiers: de groothandelsvoorwaarden); bij varianten parent_id en variant_values, bij hoofdartikelen has_variants=1 en attributes.
  * @returns {{ products: object[], variantProducts: object[], categories: object[], groups: object[], featured: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image; bij een hoofdartikel met varianten ook `variants` [{ slug, code, label, meta, priceIncl, inStock, image }] en `attributeName`, met de laagste prijs en op voorraad als een variant dat is) en categories (slug, name, count, groupSlug), beide op naam gesorteerd; variantProducts = de varianten als gewoon product (met parentSlug en parentName); groups = hoofdcategorieën met hun categorieën (slug, name, categories, count); featured = uitgelichte producten.
  */
 function buildCatalog(rows) {
@@ -218,6 +219,8 @@ function buildCatalog(rows) {
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
       priceBusiness, priceBusinessIncl: Math.round(priceBusiness * (1 + vatRate / 100) * 100) / 100,
       inStock: Math.round((Number(row.on_hand) - Number(row.reserved || 0)) * 1000) / 1000 > 0, image: imageOf(row),
+      // Groothandelsvoorwaarden (alleen gebruikt op de groothandelspagina's): verpakkingseenheid, minimale afname en staffels.
+      packSize: Number(row.order_pack_size) || 1, minimum: Wholesale.minimumOf({ packSize: row.order_pack_size, orderMinQty: row.order_min_qty }), tiers: Wholesale.tiersOf(row.price_tiers),
     };
   };
   const standalone = [];
@@ -298,7 +301,7 @@ function createStorefrontData(db) {
     catalogOf(tenantId) {
       const cached = cache.get(tenantId);
       if (cached && cached.until > Date.now()) return cached.catalog;
-      const rows = db.prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, p.categories, p.image
+      const rows = db.prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, p.categories, p.image
         FROM stock_items i
         LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
         LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id

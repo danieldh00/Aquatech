@@ -772,6 +772,14 @@ const PG_MIGRATIONS = [
   ALTER TABLE users ADD COLUMN vat_number ${TEXT_TYPE} NOT NULL DEFAULT '';
   ALTER TABLE users ADD COLUMN business_request ${TEXT_TYPE} NOT NULL DEFAULT '';
   `,
+  // 44: groothandel in de webshop (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN wholesale BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE users ADD COLUMN wholesale_discount DOUBLE PRECISION NOT NULL DEFAULT 0;
+  ALTER TABLE stock_items ADD COLUMN order_pack_size BIGINT NOT NULL DEFAULT 1;
+  ALTER TABLE stock_items ADD COLUMN order_min_qty BIGINT NOT NULL DEFAULT 1;
+  ALTER TABLE stock_items ADD COLUMN price_tiers ${TEXT_TYPE} NOT NULL DEFAULT '[]';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

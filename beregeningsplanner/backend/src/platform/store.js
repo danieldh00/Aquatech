@@ -23,7 +23,7 @@ const withRequestCache = (callback) => requestCache.run(new Map(), callback);
 // verzoek: sessie + gebruiker + tenant).
 const USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'password_hash', 'disabled', 'created_at',
   'last_seen_at', 'platform_admin', 'must_change_password', 'email', 'phone', 'preferences', 'customer_group',
-  'company_name', 'kvk_number', 'vat_number', 'business_request'];
+  'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount'];
 const TENANT_COLUMNS = ['id', 'slug', 'name', 'created_at', 'environment', 'parent_id', 'disabled', 'updated_at'];
 // Nergens SELECT *: een nieuwe (grote) kolom komt zo nooit ongemerkt mee.
 const USER_COLS = USER_COLUMNS.join(', ');
@@ -32,6 +32,8 @@ const TENANT_COLS = TENANT_COLUMNS.join(', ');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 const { createRoleStore } = require('./roles');
 const ROLES = Object.keys(Roles.ROLES);
+/** Hoogste vaste groothandelskorting (%) die een beheerder bij een klant kan instellen. */
+const MAX_WHOLESALE_DISCOUNT = 50;
 // Opeenvolgende wijzigingen van één gebruiker aan één plan binnen dit venster
 // vormen één regel in de historie (anders levert automatisch opslaan honderden
 // regels per plan op).
@@ -300,7 +302,7 @@ function createStore(db) {
   // ---------- Gebruikers ----------
   // Wat publicUser nodig heeft (zonder wachtwoord-hash en voorkeuren).
   const PUBLIC_USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'disabled', 'platform_admin',
-    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group', 'company_name', 'kvk_number', 'vat_number', 'business_request'].map((column) => `u.${column}`).join(', ');
+    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group', 'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount'].map((column) => `u.${column}`).join(', ');
 
   /**
    * Een gebruiker zoals de API hem toont (zonder wachtwoord-hash en voorkeuren).
@@ -313,7 +315,8 @@ function createStore(db) {
       roleLabel: user.platform_admin ? 'Hoofdbeheerder' : roles.label(user.tenant_id, user.role),
       disabled: Boolean(user.disabled), platformAdmin: Boolean(user.platform_admin), mustChangePassword: Boolean(user.must_change_password), createdAt: user.created_at, lastSeenAt: user.last_seen_at,
       email: user.email || '', phone: user.phone || '', customerGroup: user.customer_group || '',
-      companyName: user.company_name || '', kvkNumber: user.kvk_number || '', vatNumber: user.vat_number || '', businessRequest: user.business_request || '' };
+      companyName: user.company_name || '', kvkNumber: user.kvk_number || '', vatNumber: user.vat_number || '', businessRequest: user.business_request || '',
+      wholesale: Boolean(Number(user.wholesale)), wholesaleDiscount: Number(user.wholesale_discount) || 0 };
   }
 
   /**
@@ -529,12 +532,13 @@ function createStore(db) {
    * De bedrijfsgegevens en de klantgroep van een account (één query).
    * @param {string} tenantId De tenant.
    * @param {string} id Id van de gebruiker.
-   * @returns {{ customerGroup: string, companyName: string, kvkNumber: string, vatNumber: string, businessRequest: string }|null} De gegevens, of null als het account niet bestaat.
+   * @returns {{ customerGroup: string, companyName: string, kvkNumber: string, vatNumber: string, businessRequest: string, wholesale: boolean, wholesaleDiscount: number }|null} De gegevens, of null als het account niet bestaat.
    */
   function businessProfile(tenantId, id) {
-    const row = prepare('SELECT customer_group, company_name, kvk_number, vat_number, business_request FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+    const row = prepare('SELECT customer_group, company_name, kvk_number, vat_number, business_request, wholesale, wholesale_discount FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
     if (!row) return null;
-    return { customerGroup: row.customer_group || '', companyName: row.company_name || '', kvkNumber: row.kvk_number || '', vatNumber: row.vat_number || '', businessRequest: row.business_request || '' };
+    return { customerGroup: row.customer_group || '', companyName: row.company_name || '', kvkNumber: row.kvk_number || '', vatNumber: row.vat_number || '', businessRequest: row.business_request || '',
+      wholesale: Boolean(Number(row.wholesale)), wholesaleDiscount: Number(row.wholesale_discount) || 0 };
   }
 
   /**
@@ -557,7 +561,7 @@ function createStore(db) {
    * dat; een nieuw wachtwoord of uitschakelen logt overal uit.
    * @param {string} tenantId De tenant.
    * @param {string} id Id van de gebruiker.
-   * @param {object} rawInput displayName, role, disabled, platformAdmin, mustChangePassword, password, customerGroup ('' of 'zakelijk') en/of business (gesaneerde bedrijfsgegevens).
+   * @param {object} rawInput displayName, role, disabled, platformAdmin, mustChangePassword, password, customerGroup ('' of 'zakelijk'), wholesale (groothandelsklant, alleen bij een zakelijke klant), wholesaleDiscount (vaste korting 0-50%) en/of business (gesaneerde bedrijfsgegevens).
    * @returns {Promise<{ user: object }|{ error: string, status?: number }>} De gebruiker of een foutmelding.
    */
   async function updateAccount(tenantId, id, rawInput) {
@@ -569,6 +573,17 @@ function createStore(db) {
     if (problem) return { error: problem };
     if (input.username !== undefined) return { error: 'De gebruikersnaam is niet te wijzigen.' };
     if (input.customerGroup !== undefined && !['', 'zakelijk'].includes(input.customerGroup)) return { error: 'Onbekende klantgroep.' };
+    if (input.wholesaleDiscount !== undefined) {
+      const discount = Number(input.wholesaleDiscount);
+      if (input.wholesaleDiscount === '' || !Number.isFinite(discount) || discount < 0 || discount > MAX_WHOLESALE_DISCOUNT) return { error: `De groothandelskorting is een percentage van 0 tot en met ${MAX_WHOLESALE_DISCOUNT}.` };
+      input.wholesaleDiscount = Math.round(discount * 100) / 100;
+    }
+    // Groothandel hoort bij een zakelijke klant: wie particulier wordt, is ook geen groothandelsklant meer.
+    if (input.wholesale !== undefined && typeof input.wholesale !== 'boolean') return { error: 'De groothandelsstatus moet true of false zijn.' };
+    if (input.wholesale) {
+      const group = input.customerGroup !== undefined ? input.customerGroup : (prepare('SELECT customer_group FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, user.id) || {}).customer_group;
+      if (group !== 'zakelijk') return { error: 'Alleen een zakelijke klant kan groothandelsklant zijn. Maak de klant eerst zakelijk.' };
+    }
     // De laatste actieve beheerder blijft beheerder: anders verschijnt het
     // instelscherm voor een eerste beheerder weer voor iedereen.
     const losesAdmin = user.role === 'beheerder' && !user.disabled && ((input.role !== undefined && input.role !== 'beheerder') || input.disabled);
@@ -592,6 +607,9 @@ function createStore(db) {
     if (input.mustChangePassword !== undefined) prepare('UPDATE users SET must_change_password = ? WHERE id = ?').run(input.mustChangePassword ? 1 : 0, user.id);
     // Een keuze van de beheerder (goedkeuren of afwijzen) sluit een open aanvraag voor een zakelijk account.
     if (input.customerGroup !== undefined) prepare("UPDATE users SET customer_group = ?, business_request = '' WHERE id = ?").run(input.customerGroup, user.id);
+    if (input.wholesale !== undefined) prepare('UPDATE users SET wholesale = ? WHERE tenant_id = ? AND id = ?').run(input.wholesale ? 1 : 0, tenantId, user.id);
+    if (input.wholesaleDiscount !== undefined) prepare('UPDATE users SET wholesale_discount = ? WHERE tenant_id = ? AND id = ?').run(input.wholesaleDiscount, tenantId, user.id);
+    if (input.customerGroup === '') prepare('UPDATE users SET wholesale = 0, wholesale_discount = 0 WHERE tenant_id = ? AND id = ?').run(tenantId, user.id);
     if (input.business !== undefined) saveBusinessProfile(tenantId, user.id, input.business);
     const newHash = input.password !== undefined ? await hashPassword(input.password) : null;
     if (newHash) prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
@@ -632,8 +650,8 @@ function createStore(db) {
         }
       }
       prepare('UPDATE quotes SET customer_id = NULL WHERE customer_id = ?').run(user.id);
-      prepare('UPDATE web_orders SET user_id = NULL WHERE tenant_id = ? AND user_id = ?').run(user.tenant_id, user.id);
-      prepare('UPDATE web_returns SET user_id = NULL WHERE tenant_id = ? AND user_id = ?').run(user.tenant_id, user.id);
+      prepare('UPDATE web_orders SET user_id = NULL WHERE tenant_id = ? AND user_id = ?').run(tenantId, user.id);
+      prepare('UPDATE web_returns SET user_id = NULL WHERE tenant_id = ? AND user_id = ?').run(tenantId, user.id);
       prepare('UPDATE service_requests SET customer_id = NULL WHERE customer_id = ?').run(user.id);
       prepare('UPDATE service_requests SET handled_by = NULL WHERE handled_by = ?').run(user.id);
       prepare('UPDATE work_orders SET assignee_id = NULL WHERE assignee_id = ?').run(user.id);

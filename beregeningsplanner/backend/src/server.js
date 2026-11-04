@@ -1263,7 +1263,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.patch('/api/admin/users/:id', requireJson, wrap(async (req, res) => {
     const input = {};
-    for (const field of ['displayName', 'role', 'disabled', 'password', 'username', 'customerGroup']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
+    for (const field of ['displayName', 'role', 'disabled', 'password', 'username', 'customerGroup', 'wholesale', 'wholesaleDiscount']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
     withMustChange(input, req.body);
     const home = usersTenantOf(req);
     // Een deel van de velden (bijvoorbeeld alleen het btw-nummer) vult het bestaande profiel aan; een onbekend account geeft hieronder 404.
@@ -1306,7 +1306,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       ...(input.role !== undefined ? { role: input.role } : {}), ...(input.disabled !== undefined ? { disabled: Boolean(input.disabled) } : {}),
       ...(input.platformAdmin !== undefined ? { hoofdbeheerder: Boolean(input.platformAdmin) } : {}),
       ...(input.mustChangePassword !== undefined ? { wachtwoordWijzigen: input.mustChangePassword } : {}),
-      ...(input.customerGroup !== undefined ? { klantgroep: input.customerGroup || 'particulier' } : {}) }, undefined, tenantId);
+      ...(input.customerGroup !== undefined ? { klantgroep: input.customerGroup || 'particulier' } : {}),
+      ...(input.wholesale !== undefined ? { groothandel: Boolean(input.wholesale) } : {}), ...(input.wholesaleDiscount !== undefined ? { groothandelskorting: input.wholesaleDiscount } : {}) }, undefined, tenantId);
   }
 
   // Gebruiker op alle toestellen uitloggen.

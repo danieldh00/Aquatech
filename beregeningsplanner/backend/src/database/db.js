@@ -969,6 +969,15 @@ const MIGRATIONS = [
   ALTER TABLE users ADD COLUMN vat_number TEXT NOT NULL DEFAULT '';
   ALTER TABLE users ADD COLUMN business_request TEXT NOT NULL DEFAULT '';
   `,
+  // 44: groothandel in de webshop: een zakelijke klant kan groothandelsklant zijn (met een
+  // vaste korting in procenten) en per artikel gelden verpakkingseenheid, minimale afname en staffelkorting.
+  `
+  ALTER TABLE users ADD COLUMN wholesale INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE users ADD COLUMN wholesale_discount REAL NOT NULL DEFAULT 0;
+  ALTER TABLE stock_items ADD COLUMN order_pack_size INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE stock_items ADD COLUMN order_min_qty INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE stock_items ADD COLUMN price_tiers TEXT NOT NULL DEFAULT '[]';
+  `,
 ];
 
 /**
