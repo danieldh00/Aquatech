@@ -159,3 +159,20 @@ test('samenvoegen: een los webshopproduct met dezelfde sku wordt niet weer aan e
   assert.strictEqual(match({ code: 'PEB-16', parent_id: 'p1' }), null, 'een variant koppelt niet aan een los product');
   assert.strictEqual(match({ code: 'PEB-20', parent_id: 'p1' }).id, '2', 'een variant koppelt wel aan een variatie');
 });
+
+test('samenvoegen: bepaalt de webshop de artikellijst, dan worden aan een webshopproduct gekoppelde artikelen geweigerd', () => {
+  const db = openDb();
+  const tenantId = createStore(db).ensureTenant().id;
+  const { createStockStore } = require('../src/artikelen/stock');
+  const stock = createStockStore(db);
+  const user = { id: null, display_name: 'Test' };
+  const first = stock.create(tenantId, user, { code: 'A-16', name: 'Buis 16 mm', unit: 'm' }).item;
+  const second = stock.create(tenantId, user, { code: 'A-20', name: 'Buis 20 mm', unit: 'm' }).item;
+  db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('55', first.id);
+  const input = { ids: [first.id, second.id], code: 'A', name: 'Buis', attributeName: 'Maat', values: { [first.id]: '16 mm', [second.id]: '20 mm' } };
+  const refused = stock.mergeIntoVariants(tenantId, input, { refuseLinked: true });
+  assert.strictEqual(refused.status, 409);
+  assert.match(refused.error, /A-16/);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE parent_id IS NOT NULL').get().n, 0);
+  assert.strictEqual(stock.mergeIntoVariants(tenantId, input).merged, 2, 'zonder spiegelen mag het wel');
+});

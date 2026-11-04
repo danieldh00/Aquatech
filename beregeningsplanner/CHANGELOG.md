@@ -22,6 +22,7 @@ Losse artikelen samenvoegen tot één variabel artikel.
 - **Frontend** (`artikelen/merge.js`): knop *Samenvoegen tot variabel artikel* bij Artikelen. Stap 1:
   voorstellen (één klik) of zelf artikelen aanvinken; stap 2: controle met code, omschrijving, kenmerk,
   waarde per artikel en een overzicht van wat er verandert; daarna opent het nieuwe hoofdartikel.
+- Staat "Webshop bepaalt de artikellijst" aan (standaard bij een gekoppelde webshop), dan weigert het samenvoegen (409) artikelen die aan een webshopproduct hangen: de volgende synchronisatie zou de varianten archiveren en hun reserveringen wissen.
 - Webshopsync (`shop-sync.js`, `matcher`): een variant koppelt alleen nog aan een variatie, niet meer opnieuw aan een los product met dezelfde sku.
 - Tests: `test/merge-articles.test.js`.
 
