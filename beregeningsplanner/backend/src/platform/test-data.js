@@ -613,8 +613,8 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
   for (const [key, business] of Object.entries(BUSINESS_CUSTOMERS)) {
     const userId = seeded.users[key] && seeded.users[key].id;
     if (!userId) continue;
-    prepare('UPDATE users SET customer_group = ?, company_name = ?, kvk_number = ?, vat_number = ?, business_request = ? WHERE id = ?')
-      .run(business.customerGroup, business.companyName, business.kvkNumber, business.vatNumber, business.request, userId);
+    prepare('UPDATE users SET customer_group = ?, company_name = ?, kvk_number = ?, vat_number = ?, business_request = ? WHERE id = ? AND tenant_id = ?')
+      .run(business.customerGroup, business.companyName, business.kvkNumber, business.vatNumber, business.request, userId, seeded.tenantId);
     counts.businessCustomers++;
   }
   // Werkorder per plan (voor meldingen over die installatie).

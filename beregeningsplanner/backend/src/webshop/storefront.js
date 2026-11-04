@@ -202,7 +202,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
       const viewer = accounts.viewer(req);
       if (!viewer) return res.redirect(303, '../../inloggen/');
-      if (!viewer.isCustomer) return res.redirect(303, '../');
+      if (!viewer.isCustomer) return res.status(403).type('text').send('Alleen klanten kunnen een zakelijk account aanvragen.');
       const out = accounts.requestBusiness(req, viewer, req.body || {});
       if (out.error) {
         const values = { companyName: String(req.body?.companyName ?? '').slice(0, 120), kvkNumber: String(req.body?.kvkNumber ?? '').slice(0, 20), vatNumber: String(req.body?.vatNumber ?? '').slice(0, 40) };
@@ -371,7 +371,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (!cart.lines.length || !cart.ok) return res.redirect(302, '../winkelwagen/');
         const viewer = withBusinessProfile(accounts.viewer(req));
         if (!viewer) return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups));
-        sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), ...checkoutChoice(cart, req.query || {}) }, groups));
+        sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), ...checkoutChoice(cart, { vatNumber: viewer.profile ? viewer.profile.vatNumber : '', ...(req.query || {}) }) }, groups));
       });
       router.post('/afrekenen', form, async (req, res, next) => {
         if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');

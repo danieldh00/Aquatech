@@ -1265,12 +1265,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const input = {};
     for (const field of ['displayName', 'role', 'disabled', 'password', 'username', 'customerGroup']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
     withMustChange(input, req.body);
-    if (['companyName', 'kvkNumber', 'vatNumber'].some((field) => req.body?.[field] !== undefined)) {
-      const checked = sanitizeBusinessProfile(req.body);
+    const home = usersTenantOf(req);
+    // Een deel van de velden (bijvoorbeeld alleen het btw-nummer) vult het bestaande profiel aan; een onbekend account geeft hieronder 404.
+    const existing = store.businessProfile(home, req.params.id);
+    if (existing && ['companyName', 'kvkNumber', 'vatNumber'].some((field) => req.body?.[field] !== undefined)) {
+      const checked = sanitizeBusinessProfile({ companyName: existing.companyName, kvkNumber: existing.kvkNumber, vatNumber: existing.vatNumber, ...req.body });
       if (checked.error) return res.status(400).json({ error: 'invalid_user', message: checked.error, field: checked.field });
       input.business = checked.profile;
     }
-    const home = usersTenantOf(req);
     if (guardPlatformAdmin(req, res, req.params.id)) return;
     const out = await store.updateAccount(home, req.params.id, input);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_user', message: out.error });

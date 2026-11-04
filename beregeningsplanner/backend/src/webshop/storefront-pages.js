@@ -225,7 +225,8 @@ ${body}
  * @returns {string} De opgemaakte en ontsnapte prijs.
  */
 function priceText(product) {
-  return `${product.variants && product.variants.length > 1 ? 'Vanaf ' : ''}${escapeHtml(formatPrice(shownPrice(product)))}${activeShop.business ? ' <small class="price-vat">excl. btw</small>' : ''}`;
+  const business = activeShop.business ? ` <small class="price-vat">excl. btw</small> <small class="price-incl">(incl. btw ${escapeHtml(formatPrice(product.priceBusinessIncl))})</small>` : '';
+  return `${product.variants && product.variants.length > 1 ? 'Vanaf ' : ''}${escapeHtml(formatPrice(shownPrice(product)))}${business}`;
 }
 
 /**
@@ -287,7 +288,7 @@ function orderForm(root, code, inStock, className) {
 function variantRow(product, root) {
   const selected = product.variants.find((variant) => variant.inStock) || product.variants[0];
   const image = product.image ? `<img src="${productImageSrc(root, product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
-  const options = product.variants.map((variant) => `<option value="${escapeHtml(variant.code)}" data-code="${escapeHtml(variant.code)}" data-meta="${escapeHtml(variant.meta)}" data-price="${escapeHtml(formatPrice(shownPrice(variant)))}" data-price-incl="${escapeHtml(formatPrice(variant.priceBusinessIncl))}" data-stock="${variant.inStock ? 'in' : 'out'}" data-href="${productHref(root, product, variant)}"${variant === selected ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('');
+  const options = product.variants.map((variant) => `<option value="${escapeHtml(variant.code)}" data-code="${escapeHtml(variant.code)}" data-meta="${escapeHtml(variant.meta)}" data-price="${escapeHtml(formatPrice(shownPrice(variant)))}" ${activeShop.business ? ` data-price-incl="${escapeHtml(formatPrice(variant.priceBusinessIncl))}"` : ''} data-stock="${variant.inStock ? 'in' : 'out'}" data-href="${productHref(root, product, variant)}"${variant === selected ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('');
   return `<div class="variant-row" data-variant-row>
   <a class="product-image" href="${productHref(root, product, selected)}" data-variant-link tabindex="-1" aria-hidden="true">${image}</a>
   <div class="variant-main">

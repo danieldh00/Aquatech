@@ -5,6 +5,8 @@
 
 const Vat = require('./vat');
 
+/** Maximale lengte van de bedrijfsnaam; gelijk aan de limiet van het afrekenformulier, zodat de naam bij het bestellen niet wordt afgekapt. */
+const MAX_COMPANY_NAME = 80;
 /** Een KvK-nummer heeft acht cijfers. */
 const KVK_PATTERN = /^\d{8}$/;
 
@@ -18,7 +20,7 @@ const KVK_PATTERN = /^\d{8}$/;
 function sanitizeBusinessProfile(input = {}) {
   const companyName = String(input.companyName ?? '').replace(/\s+/g, ' ').trim();
   if (!companyName) return { error: 'Vul de bedrijfsnaam in.', field: 'companyName' };
-  if (companyName.length > 120) return { error: 'De bedrijfsnaam mag maximaal 120 tekens hebben.', field: 'companyName' };
+  if (companyName.length > MAX_COMPANY_NAME) return { error: `De bedrijfsnaam mag maximaal ${MAX_COMPANY_NAME} tekens hebben.`, field: 'companyName' };
   const kvkNumber = String(input.kvkNumber ?? '').replace(/[\s.\-]/g, '');
   if (!KVK_PATTERN.test(kvkNumber)) return { error: 'Vul een geldig KvK-nummer in (8 cijfers).', field: 'kvkNumber' };
   const vatNumber = Vat.normalizeVatNumber(input.vatNumber);

@@ -141,7 +141,7 @@ test('beheerder keurt goed: zakelijke klant ziet overal excl. btw met de regel i
   assert.match(product.text, /alle prijzen zijn exclusief btw/);
   assert.match(product.headers.get('cache-control') || '', /private/);
   const search = await applicant.client.get('/winkel/zoeken/?q=zakelijk');
-  assert.match(search.text, /€\s8,00 <small class="price-vat">excl\. btw/);
+  assert.match(search.text, /€\s8,00 <small class="price-vat">excl\. btw<\/small> <small class="price-incl">\(incl\. btw €\s9,68\)/);
   const account = await applicant.client.get('/winkel/account/');
   assert.match(account.text, /Zakelijk account/);
   assert.match(account.text, /KvK 12345678/);
@@ -184,6 +184,8 @@ test('aanvragen vanaf Mijn account: validatie, alleen ingelogd, niet voor een za
   const anonymous = await postForm(base, createClient(base), '/winkel/account/zakelijk/', COMPANY);
   assert.strictEqual(anonymous.status, 303);
   assert.match(anonymous.location, /inloggen/);
+  const staff = await postForm(base, (await (async () => { const client = createClient(base); await postForm(base, client, '/winkel/inloggen/', { login: 'baas', password: PW }); return client; })()), '/winkel/account/zakelijk/', COMPANY);
+  assert.strictEqual(staff.status, 403, 'een medewerker is geen klant');
   const crossSite = await postForm(base, person.client, '/winkel/account/zakelijk/', COMPANY, { 'sec-fetch-site': 'cross-site' });
   assert.strictEqual(crossSite.status, 403);
   await admin.patch(`/api/admin/users/${person.id}`, { customerGroup: 'zakelijk' });
@@ -201,6 +203,11 @@ test('beheer: bedrijfsgegevens wijzigen, validatie, andere organisatie 404, klan
   const invalid = await admin.patch(`/api/admin/users/${person.id}`, { ...COMPANY, kvkNumber: '1' });
   assert.strictEqual(invalid.status, 400);
   assert.strictEqual(invalid.body.field, 'kvkNumber');
+  const partial = await admin.patch(`/api/admin/users/${person.id}`, { vatNumber: 'NL999999999B01' });
+  assert.strictEqual(partial.status, 200, 'alleen het btw-nummer wijzigen vult het bestaande profiel aan');
+  const merged = (await admin.get('/api/admin/users')).body.items.find((candidate) => candidate.id === person.id);
+  assert.strictEqual(merged.vatNumber, 'NL999999999B01');
+  assert.strictEqual(merged.companyName, COMPANY.companyName);
   assert.strictEqual((await vreemd.patch(`/api/admin/users/${person.id}`, COMPANY)).status, 404);
   assert.strictEqual((await person.client.patch(`/api/admin/users/${person.id}`, COMPANY)).status, 403);
 });

@@ -22,7 +22,8 @@ const withRequestCache = (callback) => requestCache.run(new Map(), callback);
 // Kolommen van users en tenants voor de sessiecontrole (één query per
 // verzoek: sessie + gebruiker + tenant).
 const USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'password_hash', 'disabled', 'created_at',
-  'last_seen_at', 'platform_admin', 'must_change_password', 'email', 'phone', 'preferences', 'customer_group'];
+  'last_seen_at', 'platform_admin', 'must_change_password', 'email', 'phone', 'preferences', 'customer_group',
+  'company_name', 'kvk_number', 'vat_number', 'business_request'];
 const TENANT_COLUMNS = ['id', 'slug', 'name', 'created_at', 'environment', 'parent_id', 'disabled', 'updated_at'];
 // Nergens SELECT *: een nieuwe (grote) kolom komt zo nooit ongemerkt mee.
 const USER_COLS = USER_COLUMNS.join(', ');
