@@ -76,9 +76,24 @@ test('winkelwagen: bulk bijvoegen, en wat niet past wordt gemeld', () => {
   const many = addCartLines([], Array.from({ length: 80 }, (_, index) => ({ code: `ARTIKEL-${index}`, qty: 1 })));
   assert.strictEqual(many.lines.length, 60);
   assert.strictEqual(many.skipped.length, 20);
-  const crowded = addCartLines(Array.from({ length: 50 }, (_, index) => ({ code: `LANGE-ARTIKELCODE-VOOR-COOKIE-${index}-${'X'.repeat(20)}`, qty: 1 })), []);
-  const raised = addCartLines(crowded.lines, [{ code: crowded.lines[0].code, qty: 9000 }]);
-  assert.ok(raised.lines[0].qty === 9001 || raised.skipped.length === 1, 'een hoger aantal houdt de cookie binnen de grens');
+  // Vul de wagen tot er niets meer bij past; verhoog daarna één aantal tot de cookiegrens dat niet meer toelaat.
+  let cart = [];
+  for (let index = 0; index < 60; index += 1) {
+    const filled = addCartLines(cart, [{ code: `LANGE-ARTIKELCODE-VOOR-COOKIE-${index}-${'X'.repeat(20)}`, qty: 1 }]);
+    if (filled.skipped.length) break;
+    cart = filled.lines;
+  }
+  // Elke regel krijgt er 9000 bij: het eerste aantal dat de cookie te groot maakt wordt geweigerd en blijft zoals het was.
+  let blocked = null;
+  let blockedCode = '';
+  for (const line of cart) {
+    const raised = addCartLines(cart, [{ code: line.code, qty: 9000 }]);
+    if (raised.skipped.length) { blocked = raised; blockedCode = line.code; break; }
+    cart = raised.lines;
+  }
+  assert.ok(blocked, 'een hoger aantal stuit uiteindelijk op de cookiegrens');
+  assert.deepStrictEqual(blocked.skipped, [blockedCode]);
+  assert.strictEqual(blocked.lines.find((line) => line.code === blockedCode).qty, 1, 'het aantal blijft ongewijzigd');
 });
 
 /**
