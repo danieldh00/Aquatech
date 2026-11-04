@@ -99,6 +99,8 @@ test('plaklijst: per gelezen regel de code en waar het lezen stopte', () => {
 test('plaklijst: een kopregel wordt overgeslagen, een code die met sku begint niet', () => {
   assert.deepStrictEqual(Wholesale.parseOrderList('Artikelcode;Aantal\nAB-1;5').entries, [{ code: 'AB-1', qty: 5 }]);
   assert.deepStrictEqual(Wholesale.parseOrderList('SKU-POMP').entries, [{ code: 'SKU-POMP', qty: 1 }]);
+  assert.deepStrictEqual(Wholesale.parseOrderList('CODE').entries, [{ code: 'CODE', qty: 1 }]);
+  assert.ok(Wholesale.sanitizeTiers([{ minQty: 10000, discountPct: 5 }]).error);
   assert.deepStrictEqual(Wholesale.parseOrderList('GOED 1\nSKU-POMP').entries.map((entry) => entry.code), ['GOED', 'SKU-POMP']);
 });
 

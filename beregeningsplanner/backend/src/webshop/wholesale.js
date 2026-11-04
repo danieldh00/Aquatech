@@ -45,7 +45,7 @@ function sanitizeTiers(raw) {
   for (const entry of list) {
     const minQty = Number(entry && entry.minQty);
     const discountPct = Number(entry && entry.discountPct);
-    if (!Number.isInteger(minQty) || minQty < 2 || minQty > MAX_TERM) return { error: 'Een staffel begint bij een heel aantal van minimaal 2.' };
+    if (!Number.isInteger(minQty) || minQty < 2 || minQty > MAX_ORDER_QTY) return { error: 'Een staffel begint bij een heel aantal van minimaal 2.' };
     if (!Number.isFinite(discountPct) || discountPct <= 0 || discountPct > MAX_TIER_DISCOUNT) return { error: `De korting van een staffel is een percentage boven 0 tot en met ${MAX_TIER_DISCOUNT}.` };
     if (tiers.some((tier) => tier.minQty === minQty)) return { error: `Het aantal ${minQty} komt twee keer voor in de staffels.` };
     tiers.push({ minQty, discountPct: Math.round(discountPct * 100) / 100 });
@@ -156,7 +156,7 @@ const HEADER_WORDS = new Set(['artikel', 'artikelnr', 'artikelnummer', 'artikelc
  */
 function isHeaderLine(line) {
   const words = line.toLowerCase().split(/[\s;,:=\t]+/).filter(Boolean);
-  return words.length > 0 && HEADER_WORDS.has(words[0]) && words.every((word) => HEADER_WORDS.has(word));
+  return words.length > 1 && HEADER_WORDS.has(words[0]) && words.every((word) => HEADER_WORDS.has(word));
 }
 /** Een regel met een artikelcode, een scheidingsteken en een aantal ("CODE 50", "CODE;50", "CODE\t50", "CODE x 50"). */
 const ENTRY_LINE = /^(.*?)[\s;,:=×]+x?\s*(\d{1,6})\s*$/i;
