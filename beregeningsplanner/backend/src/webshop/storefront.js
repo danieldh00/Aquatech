@@ -134,7 +134,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     if (!settingsFor(tenantId).get('storefront') && !isPreview(req) && !previewFile) return res.status(404).type('text').send('Niet gevonden.');
     next();
   });
-  router.use(limiter);
+  // Een categorie toont alle producten met hun foto: de afbeeldingen krijgen een ruimere eigen limiet.
+  const imageLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 1200, keyFn: (req) => `foto:${remoteIp(req)}` });
+  router.use((req, res, next) => (req.path.startsWith('/artikelfoto/') ? imageLimiter : limiter)(req, res, next));
 
   if (addressLookup) registerAddressRoute(router, '/adres/', addressLookup, createRateLimiter({ windowMs: 60 * 1000, max: 30, keyFn: (req) => `adres:${remoteIp(req)}` }));
 

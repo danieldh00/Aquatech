@@ -941,6 +941,7 @@ const MIGRATIONS = [
   );
   CREATE UNIQUE INDEX item_images_hash ON item_images (tenant_id, content_hash);
   ALTER TABLE stock_items ADD COLUMN image_id TEXT;
+  CREATE INDEX stock_items_image ON stock_items (tenant_id, image_id);
   `,
 ];
 

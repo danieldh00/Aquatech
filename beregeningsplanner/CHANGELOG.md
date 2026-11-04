@@ -7,7 +7,7 @@ Afbeeldingen bij artikelen: uploaden, overnemen uit de oude webshop en tonen in 
 - **Opslag** (migratie 41, `db.js` + `pgschema.js`): tabel `item_images` (versleuteld via
   `vault.sealBytes`, AAD `<tenant>:artikel-afbeelding:<id>`, `content_hash` SHA-256 zodat artikelen
   met dezelfde foto één afbeelding delen, `source_url`) en kolom `stock_items.image_id`.
-  Verweesde afbeeldingen worden opgeruimd (`prune`).
+  Verweesde afbeeldingen worden opgeruimd (`prune`); index `stock_items (tenant_id, image_id)`.
 - **Server** (`artikelen/item-images.js`): `PUT|DELETE /api/stock/items/:id/image` (recht
   `voorraad`, eigen `express.json` van 8 MB, type op inhoud gecontroleerd, EXIF weg),
   `GET /api/stock/images/:id` (voorbeeld in het beheer) en het overnemen uit de webshop:
@@ -17,7 +17,7 @@ Afbeeldingen bij artikelen: uploaden, overnemen uit de oude webshop en tonen in 
   time-out 10 s). Eenmalig en herhaalbaar: alleen artikelen zonder eigen afbeelding komen
   aan bod, mislukte adressen worden gemeld en bij de volgende keer opnieuw geprobeerd.
   `pinned-fetch.js`: `readBytesLimited`.
-- **Shop**: `winkel/artikelfoto/<id>` (openbaar, onraadbaar id, immutable cache);
+- **Shop**: `winkel/artikelfoto/<id>` (openbaar, onraadbaar id, immutable cache, eigen limiet van 1200 per minuut per bezoeker);
   `storefront-data.js` (`imageOf`) geeft de eigen afbeelding voorrang boven het adres van het
   webshopproduct, een variant zonder afbeelding gebruikt die van het hoofdartikel.
 - **Frontend** (`artikelen/item-images.js`): verkleinen in de browser (max. 1200 px), uploadveld in
