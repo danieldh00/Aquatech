@@ -99,6 +99,18 @@ test('artikelafbeelding: uploaden, delen, vervangen en verwijderen', async () =>
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 0);
 });
 
+test('artikelafbeelding: een echt verwijderd artikel ruimt zijn afbeelding op', async () => {
+  const { admin, db, main } = await setup();
+  // Zonder voorraadmutaties wordt het artikel echt verwijderd (anders gearchiveerd).
+  const created = await admin.post('/api/stock/items', { code: 'IMG-DEL', name: 'Artikel IMG-DEL', onHand: 0, salePrice: 10 });
+  assert.strictEqual(created.status, 201, JSON.stringify(created.body));
+  const item = created.body;
+  assert.strictEqual((await admin.put(`/api/stock/items/${item.id}/image`, { name: 'weg.png', data: pngBase64(7) })).status, 200);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 1);
+  assert.strictEqual((await admin.del(`/api/stock/items/${item.id}`)).status, 200);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 0);
+});
+
 test('mediabibliotheek: alle afbeeldingen met hun artikelen en de artikelen zonder afbeelding', async () => {
   const { admin, klant, vreemd } = await setup();
   const first = await article(admin, 'LIB-1');

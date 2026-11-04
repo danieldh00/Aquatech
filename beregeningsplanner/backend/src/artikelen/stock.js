@@ -1675,6 +1675,7 @@ function registerStockRoutes(app, ctx) {
   app.delete('/api/stock/items/:id', requireStock, (req, res) => {
     const out = stock.remove(tenantOf(req), req.params.id);
     if (!out) return notFound(res);
+    if (out.deleted && ctx.pruneImages) ctx.pruneImages(tenantOf(req));
     audit(req, out.deleted ? 'voorraad_artikel_verwijderd' : 'voorraad_artikel_gearchiveerd', { itemId: req.params.id, code: out.code });
     res.json(out);
   });

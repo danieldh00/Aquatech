@@ -252,7 +252,10 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
     const usedBy = new Map();
     const missing = [];
     for (const item of itemRows) {
-      if (item.image_id) usedBy.set(item.image_id, [...(usedBy.get(item.image_id) || []), { id: item.id, code: item.code, name: item.name }]);
+      if (item.image_id) {
+        if (!usedBy.has(item.image_id)) usedBy.set(item.image_id, []);
+        usedBy.get(item.image_id).push({ id: item.id, code: item.code, name: item.name });
+      }
       else if (!Number(item.archived)) missing.push({ id: item.id, code: item.code, name: item.name });
     }
     return {
