@@ -85,6 +85,13 @@ test('winkelwagen: een gecombineerd aantal boven het maximum wordt niet stil afg
   assert.strictEqual(lines[0].qty, 9990);
 });
 
+test('plaklijst: per gelezen regel de code en waar het lezen stopte', () => {
+  const parsed = Wholesale.parseOrderList(Array.from({ length: Wholesale.MAX_PASTE_LINES + 5 }, (_, index) => `ART-${index} 1`).join('\n'));
+  assert.strictEqual(parsed.rows.length, Wholesale.MAX_PASTE_LINES);
+  assert.strictEqual(parsed.stoppedAt, Wholesale.MAX_PASTE_LINES);
+  assert.deepStrictEqual(parsed.rows[1], { line: 2, code: 'ART-1' });
+});
+
 test('winkelwagen: bulk bijvoegen, en wat niet past wordt gemeld', () => {
   const { lines, skipped } = addCartLines([{ code: 'A', qty: 5 }], [{ code: 'A', qty: 100 }, { code: 'B', qty: 12000 }]);
   assert.deepStrictEqual(lines, [{ code: 'A', qty: 105 }, { code: 'B', qty: 9999 }]);

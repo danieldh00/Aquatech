@@ -378,7 +378,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           const wanted = [];
           for (const [key, value] of Object.entries(body)) {
             const qty = Math.floor(Number(value));
-            if (key.startsWith('q:') && qty >= 1) wanted.push({ code: key.slice(2).trim().toUpperCase(), qty: Math.min(qty, 9999) });
+            if (key.startsWith('q:') && qty >= 1) wanted.push({ code: key.slice(2).trim().toUpperCase(), qty });
           }
           return { wanted, problems: wanted.length ? [] : [{ text: 'Snelbestellijst', message: 'Vul bij minstens één artikel een aantal in.' }], pasted: '' };
         }
@@ -388,7 +388,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           const problems = parsed.problems.map((problem) => ({ text: `Regel ${problem.line} (${problem.text})`, message: problem.message }));
           if (parsed.truncated) problems.push({ text: 'Lijst', message: `Alleen de eerste ${Wholesale.MAX_PASTE_LINES} regels zijn gelezen; plak de rest apart.` });
           if (!parsed.entries.length && !problems.length) problems.push({ text: 'Lijst', message: 'Er staan geen artikelcodes in de lijst.' });
-          return { wanted: parsed.entries, problems, pasted: text, problemLines: parsed.problems.map((problem) => problem.line) };
+          return { wanted: parsed.entries, problems, pasted: text, problemLines: parsed.problems.map((problem) => problem.line), rows: parsed.rows, stoppedAt: parsed.stoppedAt };
         }
         if (body.action === 'opnieuw') {
           const order = orders.getForUser(tenantId, viewer.id, String(body.orderId ?? ''));
@@ -399,19 +399,15 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       };
       /**
        * De regels van een geplakte lijst die niet verwerkt zijn (onleesbaar, onbekende code of niet meer in de wagen gepast), zodat een gecorrigeerde lijst geen regels dubbel toevoegt.
-       * @param {{ pasted: string, problemLines?: number[] }} request De uitkomst van wantedFrom.
+       * @param {{ pasted: string, problemLines?: number[], rows?: object[], stoppedAt?: number }} request De uitkomst van wantedFrom.
        * @param {Set<string>} failedCodes De artikelcodes die niet in de wagen kwamen.
        * @returns {string} De overgebleven regels, onder elkaar.
        */
       const unprocessedLines = (request, failedCodes) => {
         if (!request.problemLines) return request.pasted;
         const unreadable = new Set(request.problemLines);
-        return request.pasted.replace(/\r/g, '').split('\n').filter((line, index) => {
-          if (!line.trim()) return false;
-          if (unreadable.has(index + 1)) return true;
-          const parsed = Wholesale.parseOrderList(line).entries[0];
-          return Boolean(parsed && failedCodes.has(parsed.code));
-        }).join('\n');
+        const failedRows = new Set(request.rows.filter((row) => failedCodes.has(row.code)).map((row) => row.line));
+        return request.pasted.replace(/\r/g, '').split('\n').filter((line, index) => line.trim() && (unreadable.has(index + 1) || failedRows.has(index + 1) || index >= request.stoppedAt)).join('\n');
       };
       /**
        * Toont het groothandelsvenster.

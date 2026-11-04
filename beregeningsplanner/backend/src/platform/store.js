@@ -606,9 +606,9 @@ function createStore(db) {
     if (input.mustChangePassword !== undefined) prepare('UPDATE users SET must_change_password = ? WHERE id = ?').run(input.mustChangePassword ? 1 : 0, user.id);
     // Een keuze van de beheerder (goedkeuren of afwijzen) sluit een open aanvraag voor een zakelijk account.
     if (input.customerGroup !== undefined) prepare("UPDATE users SET customer_group = ?, business_request = '' WHERE id = ?").run(input.customerGroup, user.id);
-    if (input.customerGroup === '') prepare('UPDATE users SET wholesale = 0, wholesale_discount = 0 WHERE id = ?').run(user.id);
     if (input.wholesale !== undefined) prepare('UPDATE users SET wholesale = ? WHERE id = ?').run(input.wholesale ? 1 : 0, user.id);
     if (input.wholesaleDiscount !== undefined) prepare('UPDATE users SET wholesale_discount = ? WHERE id = ?').run(input.wholesaleDiscount, user.id);
+    if (input.customerGroup === '') prepare('UPDATE users SET wholesale = 0, wholesale_discount = 0 WHERE id = ?').run(user.id);
     if (input.business !== undefined) saveBusinessProfile(tenantId, user.id, input.business);
     const newHash = input.password !== undefined ? await hashPassword(input.password) : null;
     if (newHash) prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);

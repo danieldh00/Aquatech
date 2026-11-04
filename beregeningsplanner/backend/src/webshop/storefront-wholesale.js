@@ -64,6 +64,10 @@ for (const form of document.querySelectorAll('[data-wholesale-form]')) {
   form.addEventListener('submit', () => {
     for (const input of form.querySelectorAll('[data-wholesale-qty]')) if (!(Math.floor(Number(input.value)) >= 1)) input.disabled = true;
   });
+  // Terug naar de pagina (bfcache): de aantalvelden die bij het verzenden uitgeschakeld waren, weer bruikbaar maken.
+  window.addEventListener('pageshow', () => {
+    for (const input of form.querySelectorAll('[data-wholesale-qty]')) input.disabled = false;
+  });
   form.querySelector('[data-wholesale-search]').addEventListener('keydown', (event) => { if (event.key === 'Enter') event.preventDefault(); });
   updateSummary(form);
 }

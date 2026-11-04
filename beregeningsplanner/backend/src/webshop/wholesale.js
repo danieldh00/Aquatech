@@ -157,20 +157,22 @@ const ENTRY_LINE = /^(.*?)[\s;,:=×]+x?\s*(\d{1,6})\s*$/i;
  * met alleen een code telt als aantal 1; een kopregel en lege regels worden overgeslagen.
  * Dezelfde code twee keer wordt opgeteld.
  * @param {*} text De geplakte tekst.
- * @returns {{ entries: { code: string, qty: number }[], problems: { line: number, text: string, message: string }[], truncated: boolean }} De regels, de regels die niet te lezen waren (met regelnummer) en of de lijst te lang was.
+ * @returns {{ entries: { code: string, qty: number }[], problems: { line: number, text: string, message: string }[], truncated: boolean, rows: { line: number, code: string }[], stoppedAt: number }} De regels, de regels die niet te lezen waren (met regelnummer), of de lijst te lang was, per gelezen regel de code (met regelnummer) en de index van de eerste regel die niet meer gelezen is.
  */
 function parseOrderList(text) {
   const lines = String(text ?? '').replace(/\r/g, '').split('\n');
   const entries = [];
   const problems = [];
   const byCode = new Map();
+  const rows = [];
   let read = 0;
   let truncated = false;
+  let stoppedAt = lines.length;
   for (let index = 0; index < lines.length; index += 1) {
     const raw = lines[index].trim();
     if (!raw) continue;
     if (index === 0 && HEADER_LINE.test(raw) && !/\d/.test(raw)) continue;
-    if (read >= MAX_PASTE_LINES) { truncated = true; break; }
+    if (read >= MAX_PASTE_LINES) { truncated = true; stoppedAt = index; break; }
     read += 1;
     if (raw.length > MAX_LINE_LENGTH) { problems.push({ line: index + 1, text: `${raw.slice(0, 40)}…`, message: `De regel is te lang (hoogstens ${MAX_LINE_LENGTH} tekens).` }); continue; }
     const match = ENTRY_LINE.exec(raw);
@@ -178,11 +180,12 @@ function parseOrderList(text) {
     const qty = match ? Number(match[2]) : 1;
     if (!code || code.length > 60) { problems.push({ line: index + 1, text: raw.slice(0, 80), message: 'Geen artikelcode gevonden.' }); continue; }
     if (!(qty >= 1)) { problems.push({ line: index + 1, text: raw.slice(0, 80), message: 'Het aantal moet minimaal 1 zijn.' }); continue; }
+    rows.push({ line: index + 1, code });
     const existing = byCode.get(code);
     if (existing) existing.qty += qty;
     else { const entry = { code, qty }; byCode.set(code, entry); entries.push(entry); }
   }
-  return { entries, problems, truncated };
+  return { entries, problems, truncated, rows, stoppedAt };
 }
 
 module.exports = { sanitizeTiers, tiersOf, sanitizeTerms, minimumOf, roundUpQty, quantityProblem, tierDiscount, wholesalePrice, parseOrderList, MAX_TIERS, MAX_PASTE_LINES };
