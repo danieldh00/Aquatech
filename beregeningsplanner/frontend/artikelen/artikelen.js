@@ -1261,6 +1261,15 @@
     setupUnits();
     setupNew();
     setupImport();
+    window.ArtikelenMerge.setup({
+      api, toast, esc, eur, nl, getItems: () => state.items,
+      /**
+       * Na het samenvoegen: de lijst verversen en het nieuwe hoofdartikel openen.
+       * @param {object} parent het nieuwe hoofdartikel
+       * @returns {Promise<void>}
+       */
+      onMerged: async (parent) => { state.open.add(parent.id); await load(); await openItem(parent.id, true); },
+    });
     loadUnits().catch((error) => toast(error.message, true));
     setupShop();
     setupMedia();

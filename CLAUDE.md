@@ -353,6 +353,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (recht `werkorders`). Bestelvoorstel (0.70.0, migratie 30): `reorder_qty`
   (*Bestellen tot*, leeg = 2× minimum), `GET /api/stock/reorder`
   (`stock.reorderProposal`), Excel in de browser.
+- **Artikelen samenvoegen tot variabel artikel** (1.5.8, `backend/src/artikelen/variant-suggestions.js` + `stock.mergeSuggestions|mergeIntoVariants`, `frontend/artikelen/merge.js`): geen migratie. `GET /api/stock/merge-suggestions` (groepen op naam minus maat/kleur, zelfde eenheid/btw/omzetgroep) en `POST /api/stock/merge { ids, code, name, attributeName, values }` zetten losse artikelen onder een nieuw hoofdartikel; id, code, voorraad, prijzen, boekingen en reserveringen blijven (verwijzingen elders gaan op code). Een apart webshopproduct-koppeling vervalt (daarna *In webshop zetten*). Terugdraaien kan niet automatisch.
 - **Artikelafbeeldingen** (1.5.7, `backend/src/artikelen/item-images.js`, migratie 41): tabel
   `item_images` (versleuteld via `vault.sealBytes`, `content_hash` = gedeelde foto's,
   `source_url`) + `stock_items.image_id`; één afbeelding per artikel, upload via
