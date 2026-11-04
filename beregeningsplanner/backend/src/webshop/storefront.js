@@ -25,7 +25,7 @@ const { legalDefaults } = require('./legal-pages');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
 const { validPaymentId } = require('./mollie');
-const { readCart, writeCart, applyCartAction, addCartLines } = require('./storefront-cart');
+const { readCart, writeCart, applyCartAction, addCartLines, MAX_QTY } = require('./storefront-cart');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
 const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
@@ -361,6 +361,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           if (!product) { problems.push({ text: want.code, message: 'Onbekende artikelcode, of niet meer te koop.' }); continue; }
           const terms = { packSize: product.packSize, orderMinQty: product.minimum };
           const qty = Wholesale.roundUpQty(want.qty, terms);
+          if (qty > MAX_QTY) { problems.push({ text: want.code, message: `Het afgeronde aantal (${qty}) is hoger dan het maximum van ${MAX_QTY} stuks per regel.` }); continue; }
           if (qty !== want.qty) adjusted.push({ code: product.code, from: want.qty, to: qty, reason: Wholesale.quantityProblem(want.qty, terms) });
           entries.push({ code: product.code.toUpperCase(), qty });
         }

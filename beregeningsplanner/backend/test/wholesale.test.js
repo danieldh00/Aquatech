@@ -36,6 +36,7 @@ test('voorwaarden: minimale afname wordt een veelvoud van de verpakkingseenheid'
   assert.deepStrictEqual(Wholesale.sanitizeTerms({ packSize: 25, orderMinQty: 30 }), { packSize: 25, orderMinQty: 50 });
   assert.strictEqual(Wholesale.sanitizeTerms({ packSize: 0 }).field, 'packSize');
   assert.strictEqual(Wholesale.sanitizeTerms({ orderMinQty: 1.5 }).field, 'orderMinQty');
+  assert.strictEqual(Wholesale.sanitizeTerms({ packSize: 10000, orderMinQty: 1 }).field, 'orderMinQty');
   const terms = { packSize: 25, orderMinQty: 50 };
   assert.strictEqual(Wholesale.minimumOf(terms), 50);
   assert.strictEqual(Wholesale.roundUpQty(30, terms), 50);

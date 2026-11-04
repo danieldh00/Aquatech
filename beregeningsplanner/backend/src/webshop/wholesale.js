@@ -8,6 +8,8 @@
 const MAX_TIERS = 5;
 /** Hoogste korting (%) in een staffel. */
 const MAX_TIER_DISCOUNT = 90;
+/** Hoogste aantal per winkelwagenregel (gelijk aan MAX_QTY in web-orders.js). */
+const MAX_ORDER_QTY = 9999;
 /** Hoogste verpakkingseenheid of minimale afname. */
 const MAX_TERM = 100000;
 /** Langste regel (tekens) van een geplakte lijst die we nog inlezen; langere regels slaan we over (beschermt de reguliere expressie tegen enorme regels). */
@@ -74,7 +76,9 @@ function sanitizeTerms(input) {
   if (!Number.isInteger(packSize) || packSize < 1 || packSize > MAX_TERM) return { error: 'De verpakkingseenheid is een heel aantal vanaf 1.', field: 'packSize' };
   const orderMinQty = input.orderMinQty === undefined || input.orderMinQty === '' || input.orderMinQty === null ? 1 : Number(input.orderMinQty);
   if (!Number.isInteger(orderMinQty) || orderMinQty < 1 || orderMinQty > MAX_TERM) return { error: 'De minimale afname is een heel aantal vanaf 1.', field: 'orderMinQty' };
-  return { packSize, orderMinQty: Math.ceil(orderMinQty / packSize) * packSize };
+  const roundedMinQty = Math.ceil(orderMinQty / packSize) * packSize;
+  if (roundedMinQty > MAX_ORDER_QTY) return { error: `De minimale afname, afgerond op de verpakkingseenheid, is hoogstens ${MAX_ORDER_QTY}.`, field: 'orderMinQty' };
+  return { packSize, orderMinQty: roundedMinQty };
 }
 
 /**

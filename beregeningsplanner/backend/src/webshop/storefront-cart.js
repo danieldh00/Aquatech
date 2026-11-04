@@ -111,11 +111,11 @@ function applyCartAction(lines, fields) {
     const amount = qty >= 1 ? qty : 1;
     if (existing) existing.qty = Math.min(MAX_QTY, existing.qty + amount);
     else if (next.length < MAX_LINES) next.push({ code, qty: Math.min(MAX_QTY, amount) });
-    return next;
+    return encodeCart(next).length > MAX_COOKIE_CHARS ? lines.map((line) => ({ ...line })) : next;
   }
   if (fields.action === 'remove' || (fields.action === 'set' && !(qty >= 1))) return next.filter((line) => line.code !== code);
   if (fields.action === 'set' && existing) existing.qty = Math.min(MAX_QTY, qty);
-  return next;
+  return encodeCart(next).length > MAX_COOKIE_CHARS ? lines.map((line) => ({ ...line })) : next;
 }
 
 module.exports = { readCart, writeCart, applyCartAction, addCartLines, CART_COOKIE, MAX_QTY };
