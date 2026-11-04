@@ -8,7 +8,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const Wholesale = require('../src/webshop/wholesale');
-const { addCartLines } = require('../src/webshop/storefront-cart');
+const { addCartLines, applyCartAction, cartActionRejected } = require('../src/webshop/storefront-cart');
 const { createLogin, createClient, listen, postForm, postCheckout } = require('./helpers/http-client');
 
 const SECRET = 'e'.repeat(64);
@@ -68,6 +68,15 @@ test('geplakte lijst: tab, puntkomma, x, dubbele codes, kopregel en fouten', () 
   const long = Wholesale.parseOrderList(Array.from({ length: Wholesale.MAX_PASTE_LINES + 5 }, (_, index) => `C${index}\t1`).join('\n'));
   assert.strictEqual(long.entries.length, Wholesale.MAX_PASTE_LINES);
   assert.ok(long.truncated);
+});
+
+test('winkelwagen: een gewone toevoeging die niet meer past wordt als geweigerd herkend', () => {
+  const full = Array.from({ length: 60 }, (_, index) => ({ code: `ART-${index}`, qty: 1 }));
+  const after = applyCartAction(full, { action: 'add', code: 'NIEUW', qty: '1' });
+  assert.strictEqual(after.length, 60);
+  assert.ok(cartActionRejected(full, after, { action: 'add', code: 'NIEUW', qty: '1' }));
+  const raised = applyCartAction(full, { action: 'set', code: 'ART-1', qty: '5' });
+  assert.ok(!cartActionRejected(full, raised, { action: 'set', code: 'ART-1', qty: '5' }));
 });
 
 test('winkelwagen: bulk bijvoegen, en wat niet past wordt gemeld', () => {

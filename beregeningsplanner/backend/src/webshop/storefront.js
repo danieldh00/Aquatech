@@ -25,7 +25,7 @@ const { legalDefaults } = require('./legal-pages');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
 const { validPaymentId } = require('./mollie');
-const { readCart, writeCart, applyCartAction, addCartLines, MAX_QTY } = require('./storefront-cart');
+const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, MAX_QTY } = require('./storefront-cart');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
 const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
@@ -330,7 +330,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (!orderingOn()) return orderingOff(req, res);
         res.setHeader('Cache-Control', 'no-store');
         const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
-        sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups));
+        sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups, req.query.vol === '1' ? 'Je winkelwagen is vol: deze wijziging paste er niet meer bij. Plaats eerst deze bestelling en bestel de rest daarna.' : ''));
       });
       /**
        * Controleert dat de bezoeker een groothandelsklant is bij een bestelling; anders is de pagina er niet (of moet hij eerst inloggen).
@@ -435,8 +435,10 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       router.post('/winkelwagen', form, (req, res) => {
         if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
         if (!orderingOn()) return orderingOff(req, res);
-        writeCart(req, res, applyCartAction(readCart(req), req.body || {}));
-        res.redirect(303, './');
+        const before = readCart(req);
+        const after = applyCartAction(before, req.body || {});
+        writeCart(req, res, after);
+        res.redirect(303, cartActionRejected(before, after, req.body || {}) ? './?vol=1' : './');
       });
       /**
        * De verzendinstelling van deze winkel (de instelling `shopShipping`, gesaneerd).

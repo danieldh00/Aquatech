@@ -603,6 +603,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         salePrice: existing.sale_price, businessPrice: existing.business_price ?? null, vatRate: Number(existing.vat_rate), revenueGroup: existing.revenue_group, shopSync: Boolean(Number(existing.shop_sync)), weightGrams: existing.weight_grams ?? null,
         packSize: Number(existing.order_pack_size) || 1, orderMinQty: Number(existing.order_min_qty) || 1, priceTiers: Wholesale.tiersOf(existing.price_tiers), ...fields,
       };
+      const mergedTerms = Wholesale.sanitizeTerms(merged);
+      if (mergedTerms.error) return { error: mergedTerms.error, field: mergedTerms.field, status: 400 };
       const archived = raw && raw.archived !== undefined ? (raw.archived ? 1 : 0) : existing.archived;
       const isParent = Boolean(Number(existing.has_variants));
       if (!archived && existing.archived && existing.parent_id) {
@@ -618,7 +620,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
            shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
          WHERE tenant_id = ? AND id = ?`)
         .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.businessPrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0, merged.weightGrams,
-          merged.packSize, Wholesale.sanitizeTerms(merged).orderMinQty, JSON.stringify(merged.priceTiers),
+          merged.packSize, mergedTerms.orderMinQty, JSON.stringify(merged.priceTiers),
           toShop && merged.shopSync ? 1 : 0, tenantId, existing.id);
       if (archived && !existing.archived) prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
       let variantsToShop = false;

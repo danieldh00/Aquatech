@@ -118,4 +118,22 @@ function applyCartAction(lines, fields) {
   return encodeCart(next).length > MAX_COOKIE_CHARS ? lines.map((line) => ({ ...line })) : next;
 }
 
-module.exports = { readCart, writeCart, applyCartAction, addCartLines, CART_COOKIE, MAX_QTY };
+/**
+ * Of een gewone winkelwagenactie (toevoegen of aantal wijzigen) geweigerd is omdat de wagen vol is (te veel regels of een te grote cookie).
+ * @param {{ code: string, qty: number }[]} before De regels voor de actie.
+ * @param {{ code: string, qty: number }[]} after De regels die applyCartAction teruggaf.
+ * @param {object} fields De velden van het formulier (action, code, qty).
+ * @returns {boolean} true als de wijziging niet is doorgevoerd.
+ */
+function cartActionRejected(before, after, fields) {
+  const code = String(fields.code || '').trim().toUpperCase().slice(0, 60);
+  const qty = Math.floor(Number(fields.qty));
+  const previous = before.find((line) => line.code === code);
+  const current = after.find((line) => line.code === code);
+  if (!code) return false;
+  if (fields.action === 'add') return !current || Boolean(previous && current.qty === previous.qty && previous.qty < MAX_QTY);
+  if (fields.action === 'set' && qty >= 1) return !current || current.qty !== Math.min(MAX_QTY, qty);
+  return false;
+}
+
+module.exports = { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, CART_COOKIE, MAX_QTY };
