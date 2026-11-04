@@ -188,7 +188,16 @@ const ACCOUNTS = [
   { key: 'klant3', suffix: 'klant3', displayName: 'Dhr. en mevr. Visser (test)', role: 'klant' },
   // Klant met een ingeplande werkorder: zo toont het klantportaal een afspraak.
   { key: 'klant4', suffix: 'klant4', displayName: 'Fam. van den Berg (test)', role: 'klant' },
+  // Zakelijke klanten voor de webshop: een goedgekeurde (prijzen excl. btw) en een die nog wacht op goedkeuring.
+  { key: 'klant5', suffix: 'klant5', displayName: 'Hoveniersbedrijf Hoekstra (test)', role: 'klant' },
+  { key: 'klant6', suffix: 'klant6', displayName: 'Tuincentrum De Linde (test)', role: 'klant' },
 ];
+
+/** Bedrijfsgegevens van de zakelijke testklanten; `request` = de aanvraag staat nog open. */
+const BUSINESS_CUSTOMERS = {
+  klant5: { customerGroup: 'zakelijk', companyName: 'Hoveniersbedrijf Hoekstra', kvkNumber: '12345678', vatNumber: 'NL123456789B01', request: '' },
+  klant6: { customerGroup: '', companyName: 'Tuincentrum De Linde', kvkNumber: '87654321', vatNumber: '', request: 'aangevraagd' },
+};
 
 const CUSTOMERS = {
   klant1: { name: 'Fam. de Vries', contact: 'Petra de Vries', address: 'Molenweg 12\n8071 AB Nunspeet', email: 'devries@voorbeeld.test', phone: '0341 000 101' },
@@ -598,8 +607,16 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
    * @returns {object} De voorbereide opdracht.
    */
   const prepare = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0, businessCustomers: 0 };
   const seededWos = [];
+  // Zakelijke webshopklanten: bedrijfsgegevens, en één aanvraag die nog goedgekeurd moet worden.
+  for (const [key, business] of Object.entries(BUSINESS_CUSTOMERS)) {
+    const userId = seeded.users[key] && seeded.users[key].id;
+    if (!userId) continue;
+    prepare('UPDATE users SET customer_group = ?, company_name = ?, kvk_number = ?, vat_number = ?, business_request = ? WHERE id = ?')
+      .run(business.customerGroup, business.companyName, business.kvkNumber, business.vatNumber, business.request, userId);
+    counts.businessCustomers++;
+  }
   // Werkorder per plan (voor meldingen over die installatie).
   const woByPlan = {};
   const apptBase = shareBase ? shareBase.replace(/offerte\.html$/, 'afspraak.html') : null;

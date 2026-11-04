@@ -765,6 +765,13 @@ const PG_MIGRATIONS = [
   );
   CREATE INDEX stock_merges_parent ON stock_merges (tenant_id, parent_id);
   `,
+  // 43: bedrijfsgegevens van zakelijke klanten (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN company_name ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE users ADD COLUMN kvk_number ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE users ADD COLUMN vat_number ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE users ADD COLUMN business_request ${TEXT_TYPE} NOT NULL DEFAULT '';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

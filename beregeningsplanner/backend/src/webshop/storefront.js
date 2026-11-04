@@ -15,6 +15,7 @@ const { remoteIp } = require('../beveiliging/auth');
 const { createStorefrontData } = require('./storefront-data');
 const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
 const { DEFAULT_SITE } = require('./shop-content');
+const { wantsBusiness } = require('./business-profile');
 const { loginPage, registerPage, accountPage, plannerPage } = require('./storefront-account-pages');
 const { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage } = require('./storefront-order-pages');
 const { returnsBlock } = require('./storefront-return-pages');
@@ -50,7 +51,7 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
   if (type) ASSETS[name] = { file: path.join(__dirname, 'assets', name), type };
 }
 /** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner). */
-const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner)\/?$/;
+const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakelijk)\/?$/;
 /** Paden waar de winkelwagen, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
 const ORDER_POSTS = /^\/(winkelwagen|afrekenen|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/retour(\/[^/]+\/intrekken)?)\/?$/;
 /** Aantal bestellingen per pagina in de bestelhistorie van een klant. */
@@ -98,7 +99,11 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     res.status(status);
     if (preview) { res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Robots-Tag', 'noindex'); }
     else if (!res.getHeader('Cache-Control')) res.setHeader('Cache-Control', ordering ? 'private, no-cache' : 'no-cache');
-    const html = renderWith(contentOf(req), render, { ordering, cartCount: ordering ? readCart(req).reduce((total, line) => total + line.qty, 0) : 0 });
+    // Een zakelijke klant ziet overal prijzen excl. btw; die pagina's zijn persoonlijk en worden niet gedeeld.
+    const viewer = accounts ? accounts.viewer(req) : null;
+    const business = Boolean(viewer) && viewer.customerGroup === 'zakelijk';
+    if (business) res.setHeader('Cache-Control', 'private, no-store');
+    const html = renderWith(contentOf(req), render, { ordering, cartCount: ordering ? readCart(req).reduce((total, line) => total + line.qty, 0) : 0, business });
     res.type('html').send(html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : '')));
   };
   /**
@@ -191,7 +196,20 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       const viewer = accounts.viewer(req);
       if (!viewer) return res.redirect(302, '../inloggen/');
       res.setHeader('Cache-Control', 'no-store');
-      sendWithGroups(req, res, 200, (groups) => accountPage(viewer, groups, { ordering: orderingOn() }));
+      sendWithGroups(req, res, 200, (groups) => accountPage(viewer, groups, { ordering: orderingOn(), profile: accounts.businessProfile(viewer), requested: req.query.aangevraagd === '1' }));
+    });
+    router.post('/account/zakelijk', form, (req, res) => {
+      if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+      const viewer = accounts.viewer(req);
+      if (!viewer) return res.redirect(303, '../../inloggen/');
+      if (!viewer.isCustomer) return res.redirect(303, '../');
+      const out = accounts.requestBusiness(req, viewer, req.body || {});
+      if (out.error) {
+        const values = { companyName: String(req.body?.companyName ?? '').slice(0, 120), kvkNumber: String(req.body?.kvkNumber ?? '').slice(0, 20), vatNumber: String(req.body?.vatNumber ?? '').slice(0, 40) };
+        res.setHeader('Cache-Control', 'no-store');
+        return sendWithGroups(req, res, out.status, (groups) => accountPage(viewer, groups, { ordering: orderingOn(), profile: accounts.businessProfile(viewer), error: out.error, values }));
+      }
+      res.redirect(303, '../?aangevraagd=1');
     });
     /**
      * Waar een bezoeker na inloggen of registreren naartoe gaat (het veld volgende): de planner, het afrekenen of het account.
@@ -233,7 +251,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const out = await accounts.register(req, res, req.body || {});
         if (out.skipped) return res.redirect(303, '../');
         const next = nextOf(req.body?.volgende) === 'afrekenen' ? 'afrekenen' : '';
-        if (out.error) return sendWithGroups(req, res, out.status, (groups) => registerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200), next }, groups));
+        if (out.error) return sendWithGroups(req, res, out.status, (groups) => registerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200), next,
+          business: wantsBusiness(req.body?.business), companyName: String(req.body?.companyName ?? '').slice(0, 120), kvkNumber: String(req.body?.kvkNumber ?? '').slice(0, 20), vatNumber: String(req.body?.vatNumber ?? '').slice(0, 40) }, groups));
         res.redirect(303, destination(next, '../account/'));
       } catch (error) { next(error); }
     });
@@ -337,20 +356,27 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         return { quote, country, method, summary: chosen ? summaries[method] : null, summaries };
       };
 
+      /**
+       * Vult een zakelijke klant aan met de bedrijfsgegevens uit het account (voor het vooraf invullen van het afrekenformulier).
+       * @param {object|null} viewer De ingelogde klant, of null.
+       * @returns {object|null} De klant, bij een zakelijke klant met `profile` (companyName, vatNumber).
+       */
+      const withBusinessProfile = (viewer) => (viewer && viewer.customerGroup === 'zakelijk' ? { ...viewer, profile: accounts.businessProfile(viewer) } : viewer);
+
       router.get('/afrekenen', (req, res) => {
         if (withSlash(req, res)) return;
         if (!orderingOn()) return orderingOff(req, res);
         res.setHeader('Cache-Control', 'no-store');
         const cart = orders.priceCart(tenantId, readCart(req), { group: groupOf(req) });
         if (!cart.lines.length || !cart.ok) return res.redirect(302, '../winkelwagen/');
-        const viewer = accounts.viewer(req);
+        const viewer = withBusinessProfile(accounts.viewer(req));
         if (!viewer) return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups));
         sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), ...checkoutChoice(cart, req.query || {}) }, groups));
       });
       router.post('/afrekenen', form, async (req, res, next) => {
         if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
         if (!orderingOn()) return orderingOff(req, res);
-        const viewer = accounts.viewer(req);
+        const viewer = withBusinessProfile(accounts.viewer(req));
         if (!viewer) return res.redirect(303, './');
         const body = req.body || {};
         // Land wijzigen: alleen de pagina opnieuw tonen met de kosten voor dat land, zonder te bestellen.

@@ -197,6 +197,16 @@ a.shop-action:hover { background: var(--at-page); }
 .foot-legal + .foot-note { margin-top: 10px; border-top: 0; padding-top: 0; }
 .terms-check { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0; font-size: 0.9rem; }
 .terms-check input { margin-top: 3px; }
+.price-vat, .price-incl { font-size: 0.8rem; font-weight: 400; color: var(--at-muted); }
+.business-fields { display: grid; gap: 12px; padding: 12px 14px; border: 1px solid var(--at-line); border-radius: 8px; }
+.business-fields legend { padding: 0 6px; font-weight: 600; }
+.business-fields .note { margin: 0; font-size: 0.85rem; }
+.business-fields .check { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.business-status { margin: 12px 0; padding: 10px 12px; background: var(--at-shop-green-soft); border-radius: 8px; }
+.business-status p { margin: 0; }
+.business-request { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--at-line); border-radius: 8px; }
+.business-request summary { cursor: pointer; font-weight: 600; }
+.business-request form { margin-top: 12px; }
 .foot-note img { display: block; max-width: 100%; height: auto; }
 .button:disabled { background: var(--at-muted); cursor: not-allowed; }
 .shop-foot a[href^="tel:"], .shop-foot a[href^="mailto:"] { text-decoration: none; }

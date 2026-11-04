@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.6.0
+
+Zakelijke klanten in de webshop: aanvragen, goedkeuren en prijzen excl. btw in de hele shop.
+
+- **Server** (migratie 43 in `database/db.js` en `database/pgschema.js`): kolommen `users.company_name`,
+  `kvk_number`, `vat_number` en `business_request` (`aangevraagd` = open aanvraag). `webshop/business-profile.js`
+  controleert en normaliseert bedrijfsnaam (verplicht), KvK-nummer (8 cijfers) en btw-nummer (optioneel,
+  formaat via `vat.js`; geen VIES of KvK-API). `store.businessProfile`/`saveBusinessProfile`; `createShopCustomer`
+  neemt `business` aan. Goedkeuren/afwijzen = `PATCH /api/admin/users/:id` met `customerGroup` (sluit de
+  aanvraag); bedrijfsgegevens met `companyName`/`kvkNumber`/`vatNumber` (400 met `field` bij een fout). De
+  klantgroep `zakelijk` is de vlag waar een latere groothandelsfunctie op voortbouwt.
+- **Webshop** (`webshop/`): registreren met het vakje *Zakelijke klant* + bedrijfsgegevens (aanvraag, tot
+  goedkeuring particulier); `POST /winkel/account/zakelijk/` vraagt een zakelijk account aan vanaf *Mijn account*
+  (alleen ingelogd, met de `Sec-Fetch-Site`-controle van de andere accountformulieren). Voor een zakelijke klant tonen alle
+  pagina's (lijsten, zoeken, product, varianten, voettekst) de zakelijke prijs excl. btw met de regel
+  *incl. btw €…* (`priceBusiness`/`priceBusinessIncl` in de catalogus uit `business_price`, anders de
+  verkoopprijs); die pagina's krijgen `Cache-Control: private, no-store`. Afrekenen vult bedrijfsnaam en
+  btw-nummer vooraf in. Winkelwagen, afrekenen en factuur rekenden al excl. btw (1.4.8) en blijven gelijk.
+- **Frontend** (`beheer/beheer.js`): cel *Klantgroep* met keuze particulier/zakelijk, de knop
+  *Bedrijfsgegevens* en bij een open aanvraag *Goedkeuren*/*Afwijzen*.
+- Testdata: een zakelijke testklant en een klant met een openstaande aanvraag.
+- Tests: `business-customers.test.js` (aanvragen, goedkeuren/afwijzen, prijzen per bezoeker, rechten, andere
+  organisatie, vooraf invullen bij afrekenen).
+
 ## 1.5.9
 
 Samenvoegen van artikelen terugdraaien.

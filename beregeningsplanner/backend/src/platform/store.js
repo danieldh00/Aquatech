@@ -299,7 +299,7 @@ function createStore(db) {
   // ---------- Gebruikers ----------
   // Wat publicUser nodig heeft (zonder wachtwoord-hash en voorkeuren).
   const PUBLIC_USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'disabled', 'platform_admin',
-    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group'].map((column) => `u.${column}`).join(', ');
+    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group', 'company_name', 'kvk_number', 'vat_number', 'business_request'].map((column) => `u.${column}`).join(', ');
 
   /**
    * Een gebruiker zoals de API hem toont (zonder wachtwoord-hash en voorkeuren).
@@ -311,7 +311,8 @@ function createStore(db) {
     return { id: user.id, tenantId: user.tenant_id, username: user.username, displayName: user.display_name, role: user.role, kind: user.kind,
       roleLabel: user.platform_admin ? 'Hoofdbeheerder' : roles.label(user.tenant_id, user.role),
       disabled: Boolean(user.disabled), platformAdmin: Boolean(user.platform_admin), mustChangePassword: Boolean(user.must_change_password), createdAt: user.created_at, lastSeenAt: user.last_seen_at,
-      email: user.email || '', phone: user.phone || '', customerGroup: user.customer_group || '' };
+      email: user.email || '', phone: user.phone || '', customerGroup: user.customer_group || '',
+      companyName: user.company_name || '', kvkNumber: user.kvk_number || '', vatNumber: user.vat_number || '', businessRequest: user.business_request || '' };
   }
 
   /**
@@ -492,10 +493,10 @@ function createStore(db) {
    * rol klant, e-mailadres ingevuld, gebruikersnaam afgeleid van het e-mailadres.
    * Hetzelfde account werkt in de planner en het klantportaal.
    * @param {string} tenantId De tenant van de webshop.
-   * @param {{ displayName: string, email: string, password: string }} input Naam, e-mailadres en gekozen wachtwoord.
+   * @param {{ displayName: string, email: string, password: string, business?: { companyName: string, kvkNumber: string, vatNumber: string } }} input Naam, e-mailadres en gekozen wachtwoord; met `business` (al gesaneerd) vraagt de klant een zakelijk account aan, dat een beheerder nog goedkeurt.
    * @returns {Promise<{ user: object }|{ error: string, field: string }>} Het account of een foutmelding met het veld.
    */
-  async function createShopCustomer(tenantId, { displayName, email, password }) {
+  async function createShopCustomer(tenantId, { displayName, email, password, business = null }) {
     const name = String(displayName ?? '').replace(/\s+/g, ' ').trim();
     if (!name) return { error: 'Vul je naam in.', field: 'displayName' };
     if (name.length > 80) return { error: 'Je naam mag maximaal 80 tekens hebben.', field: 'displayName' };
@@ -509,6 +510,7 @@ function createStore(db) {
       const out = await createAccount(tenantId, { username, displayName: name, role: 'klant', password });
       if (out.user) {
         prepare('UPDATE users SET email = ? WHERE id = ?').run(address, out.user.id);
+        if (business) saveBusinessProfile(tenantId, out.user.id, business, { request: true });
         // Twee gelijktijdige registraties kunnen allebei de controle hierboven passeren: het oudste account houdt het adres.
         const owners = prepare("SELECT id FROM users WHERE tenant_id = ? AND email = ? AND kind = 'account' AND disabled = 0 ORDER BY created_at, id").all(tenantId, address);
         if (owners[0].id !== out.user.id) {
@@ -523,11 +525,38 @@ function createStore(db) {
   }
 
   /**
+   * De bedrijfsgegevens en de klantgroep van een account (één query).
+   * @param {string} tenantId De tenant.
+   * @param {string} id Id van de gebruiker.
+   * @returns {{ customerGroup: string, companyName: string, kvkNumber: string, vatNumber: string, businessRequest: string }|null} De gegevens, of null als het account niet bestaat.
+   */
+  function businessProfile(tenantId, id) {
+    const row = prepare('SELECT customer_group, company_name, kvk_number, vat_number, business_request FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+    if (!row) return null;
+    return { customerGroup: row.customer_group || '', companyName: row.company_name || '', kvkNumber: row.kvk_number || '', vatNumber: row.vat_number || '', businessRequest: row.business_request || '' };
+  }
+
+  /**
+   * Bewaart de bedrijfsgegevens van een account (al gesaneerd door de aanroeper).
+   * Met `request` wordt een zakelijk account aangevraagd, tenzij het account al zakelijk is.
+   * @param {string} tenantId De tenant.
+   * @param {string} id Id van de gebruiker.
+   * @param {{ companyName: string, kvkNumber: string, vatNumber: string }} profile De bedrijfsgegevens.
+   * @param {{ request?: boolean }} [options] request: zet de aanvraag open ('aangevraagd').
+   * @returns {void}
+   */
+  function saveBusinessProfile(tenantId, id, profile, { request = false } = {}) {
+    prepare('UPDATE users SET company_name = ?, kvk_number = ?, vat_number = ? WHERE tenant_id = ? AND id = ?')
+      .run(profile.companyName, profile.kvkNumber, profile.vatNumber, tenantId, String(id));
+    if (request) prepare("UPDATE users SET business_request = 'aangevraagd' WHERE tenant_id = ? AND id = ? AND customer_group <> 'zakelijk'").run(tenantId, String(id));
+  }
+
+  /**
    * Wijzigt een account. De laatste actieve beheerder en hoofdbeheerder blijven
    * dat; een nieuw wachtwoord of uitschakelen logt overal uit.
    * @param {string} tenantId De tenant.
    * @param {string} id Id van de gebruiker.
-   * @param {object} rawInput displayName, role, disabled, platformAdmin, mustChangePassword en/of password.
+   * @param {object} rawInput displayName, role, disabled, platformAdmin, mustChangePassword, password, customerGroup ('' of 'zakelijk') en/of business (gesaneerde bedrijfsgegevens).
    * @returns {Promise<{ user: object }|{ error: string, status?: number }>} De gebruiker of een foutmelding.
    */
   async function updateAccount(tenantId, id, rawInput) {
@@ -560,7 +589,9 @@ function createStore(db) {
       if (input.platformAdmin) prepare("UPDATE users SET role = 'beheerder' WHERE id = ?").run(user.id);
     }
     if (input.mustChangePassword !== undefined) prepare('UPDATE users SET must_change_password = ? WHERE id = ?').run(input.mustChangePassword ? 1 : 0, user.id);
-    if (input.customerGroup !== undefined) prepare('UPDATE users SET customer_group = ? WHERE id = ?').run(input.customerGroup, user.id);
+    // Een keuze van de beheerder (goedkeuren of afwijzen) sluit een open aanvraag voor een zakelijk account.
+    if (input.customerGroup !== undefined) prepare("UPDATE users SET customer_group = ?, business_request = '' WHERE id = ?").run(input.customerGroup, user.id);
+    if (input.business !== undefined) saveBusinessProfile(tenantId, user.id, input.business);
     const newHash = input.password !== undefined ? await hashPassword(input.password) : null;
     if (newHash) prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
     // Nieuw wachtwoord of uitgeschakeld: op alle toestellen uitgelogd.
@@ -1702,7 +1733,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, systemUser, createGuest, createAccount, createShopCustomer, loginNameFor, accountIdsByEmail, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, systemUser, createGuest, createAccount, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
     createSession, findSessionWithUser, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
     planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing,

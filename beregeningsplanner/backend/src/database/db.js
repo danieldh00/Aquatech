@@ -960,6 +960,15 @@ const MIGRATIONS = [
   );
   CREATE INDEX stock_merges_parent ON stock_merges (tenant_id, parent_id);
   `,
+  // 43: bedrijfsgegevens van zakelijke klanten (webshop): bedrijfsnaam, KvK- en
+  // btw-nummer, en business_request ('aangevraagd' = de klant vroeg een zakelijk
+  // account aan en wacht op goedkeuring; leeg = geen aanvraag open).
+  `
+  ALTER TABLE users ADD COLUMN company_name TEXT NOT NULL DEFAULT '';
+  ALTER TABLE users ADD COLUMN kvk_number TEXT NOT NULL DEFAULT '';
+  ALTER TABLE users ADD COLUMN vat_number TEXT NOT NULL DEFAULT '';
+  ALTER TABLE users ADD COLUMN business_request TEXT NOT NULL DEFAULT '';
+  `,
 ];
 
 /**

@@ -35,7 +35,7 @@ function formatPrice(amount) {
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat en hoeveel regels er in de winkelwagen van de bezoeker zitten (voor de pagina's die nu worden opgebouwd). */
-let activeShop = { ordering: false, cartCount: 0 };
+let activeShop = { ordering: false, cartCount: 0, business: false };
 
 /**
  * Bouwt pagina's op met de inhoud uit Beheer. Het opbouwen is synchroon, dus
@@ -45,7 +45,7 @@ let activeShop = { ordering: false, cartCount: 0 };
  * @param {{ ordering: boolean, cartCount: number }} [shop] Of bestellen aan staat en het aantal regels in de winkelwagen.
  * @returns {*} Wat `render` teruggeeft.
  */
-function renderWith(content, render, shop = { ordering: false, cartCount: 0 }) {
+function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false }) {
   const previous = activeContent;
   const previousShop = activeShop;
   activeContent = content;
@@ -212,7 +212,7 @@ ${body}
     <div><strong>Over ons</strong><p>${escapeHtml(site.footer.about)}</p><p><a href="${root}over-ons/">Lees ons verhaal</a></p>${footerPages.length ? `<ul>${footerPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}</ul>` : ''}</div>
   </div>
   <nav class="foot-legal" aria-label="Voorwaarden">${legalLinks}</nav>
-  <div class="foot-note"><span>Alle prijzen zijn inclusief btw.</span><img src="${assetUrl(root, 'betaalmethoden.png')}" alt="Betaalmethoden" width="286" height="26" loading="lazy"></div>
+  <div class="foot-note"><span>${activeShop.business ? 'Je ziet zakelijke prijzen: alle prijzen zijn exclusief btw.' : 'Alle prijzen zijn inclusief btw.'}</span><img src="${assetUrl(root, 'betaalmethoden.png')}" alt="Betaalmethoden" width="286" height="26" loading="lazy"></div>
 </footer>
 </body>
 </html>
@@ -225,7 +225,26 @@ ${body}
  * @returns {string} De opgemaakte en ontsnapte prijs.
  */
 function priceText(product) {
-  return `${product.variants && product.variants.length > 1 ? 'Vanaf ' : ''}${escapeHtml(formatPrice(product.priceIncl))}`;
+  return `${product.variants && product.variants.length > 1 ? 'Vanaf ' : ''}${escapeHtml(formatPrice(shownPrice(product)))}${activeShop.business ? ' <small class="price-vat">excl. btw</small>' : ''}`;
+}
+
+/**
+ * De prijs die de bezoeker te zien krijgt: voor een zakelijke klant de zakelijke prijs excl. btw, anders de prijs incl. btw.
+ * @param {{ priceIncl: number, priceBusiness: number }} item Een product of variant uit de catalogus.
+ * @returns {number} De te tonen prijs.
+ */
+function shownPrice(item) {
+  return activeShop.business ? item.priceBusiness : item.priceIncl;
+}
+
+/**
+ * Het label achter de prijs en, voor een zakelijke klant, de kleine regel met de prijs incl. btw.
+ * @param {{ priceBusinessIncl: number }} item Een product of variant uit de catalogus.
+ * @returns {string} HTML: "incl. btw" of "excl. btw" met bij een zakelijke klant de regel "incl. btw € …".
+ */
+function vatLabel(item) {
+  if (!activeShop.business) return 'incl. btw';
+  return `excl. btw<br><small class="price-incl" data-variant-incl>incl. btw ${escapeHtml(formatPrice(item.priceBusinessIncl))}</small>`;
 }
 
 /**
@@ -268,7 +287,7 @@ function orderForm(root, code, inStock, className) {
 function variantRow(product, root) {
   const selected = product.variants.find((variant) => variant.inStock) || product.variants[0];
   const image = product.image ? `<img src="${productImageSrc(root, product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
-  const options = product.variants.map((variant) => `<option value="${escapeHtml(variant.code)}" data-code="${escapeHtml(variant.code)}" data-meta="${escapeHtml(variant.meta)}" data-price="${escapeHtml(formatPrice(variant.priceIncl))}" data-stock="${variant.inStock ? 'in' : 'out'}" data-href="${productHref(root, product, variant)}"${variant === selected ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('');
+  const options = product.variants.map((variant) => `<option value="${escapeHtml(variant.code)}" data-code="${escapeHtml(variant.code)}" data-meta="${escapeHtml(variant.meta)}" data-price="${escapeHtml(formatPrice(shownPrice(variant)))}" data-price-incl="${escapeHtml(formatPrice(variant.priceBusinessIncl))}" data-stock="${variant.inStock ? 'in' : 'out'}" data-href="${productHref(root, product, variant)}"${variant === selected ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('');
   return `<div class="variant-row" data-variant-row>
   <a class="product-image" href="${productHref(root, product, selected)}" data-variant-link tabindex="-1" aria-hidden="true">${image}</a>
   <div class="variant-main">
@@ -281,7 +300,7 @@ function variantRow(product, root) {
     <button class="button secondary variant-go" type="submit">Kies</button>
   </form>
   <div class="variant-buy">
-    <p class="variant-price"><strong data-variant-price>${escapeHtml(formatPrice(selected.priceIncl))}</strong> <small>incl. btw</small></p>
+    <p class="variant-price"><strong data-variant-price>${escapeHtml(formatPrice(shownPrice(selected)))}</strong> <small>${vatLabel(selected)}</small></p>
     <p class="stock ${selected.inStock ? 'in' : 'out'}" data-variant-stock>${selected.inStock ? 'Op voorraad' : 'Niet op voorraad'}</p>
     ${orderForm(root, selected.code, selected.inStock, 'variant-order')}
   </div>
@@ -495,13 +514,13 @@ function productPage(product, groups, chosenCode = '') {
     <h1>${escapeHtml(product.name)}</h1>
     ${picker}
     <p class="sku">Artikelnummer: ${escapeHtml(shown.code)}${chosen && chosen.meta ? ` | ${escapeHtml(chosen.meta)}` : ''}</p>
-    <p class="price">${escapeHtml(formatPrice(shown.priceIncl))} <small>incl. ${shown.vatRate}% btw · per ${escapeHtml(product.unit)}</small></p>
+    <p class="price">${escapeHtml(formatPrice(shownPrice(shown)))} <small>${activeShop.business ? `excl. ${shown.vatRate}% btw · per ${escapeHtml(product.unit)}<br><span class="price-incl">incl. btw ${escapeHtml(formatPrice(shown.priceBusinessIncl))}</span>` : `incl. ${shown.vatRate}% btw · per ${escapeHtml(product.unit)}`}</small></p>
     <p class="stock ${shown.inStock ? 'in' : 'out'}">${shown.inStock ? 'Op voorraad' : 'Niet op voorraad'}</p>
     ${activeShop.ordering ? orderForm(root, shown.code, shown.inStock, 'product-order') : '<button class="button" type="button" disabled>In winkelwagen</button>\n    <p class="note">Online bestellen volgt binnenkort.</p>'}
     ${parentLink}
   </div>
 </article>`;
-  return layout({ root, title: `${product.name} – ${SHOP_NAME}`, description: `${product.name} (${formatPrice(shown.priceIncl)} incl. btw) bij AquaTech Service.`, body, groups });
+  return layout({ root, title: `${product.name} – ${SHOP_NAME}`, description: `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`, body, groups });
 }
 
 /**
