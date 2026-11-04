@@ -11,11 +11,23 @@ const APP_ROOT = '../../';
 
 /**
  * Een invoerveld met label.
- * @param {{ name: string, label: string, type?: string, value?: string, autocomplete: string, hint?: string }} field Het veld.
+ * @param {{ name: string, label: string, type?: string, value?: string, autocomplete: string, hint?: string, required?: boolean }} field Het veld.
  * @returns {string} HTML van het veld.
  */
-function field({ name, label, type = 'text', value = '', autocomplete, hint = '' }) {
-  return `<label class="form-field"><span>${escapeHtml(label)}</span><input name="${name}" type="${type}" value="${escapeHtml(value)}" autocomplete="${autocomplete}" required>${hint ? `<small>${escapeHtml(hint)}</small>` : ''}</label>`;
+function field({ name, label, type = 'text', value = '', autocomplete, hint = '', required = true }) {
+  return `<label class="form-field"><span>${escapeHtml(label)}</span><input name="${name}" type="${type}" value="${escapeHtml(value)}" autocomplete="${autocomplete}"${required ? ' required' : ''}>${hint ? `<small>${escapeHtml(hint)}</small>` : ''}</label>`;
+}
+
+/**
+ * De velden voor een zakelijk account (bedrijfsnaam, KvK-nummer, btw-nummer).
+ * @param {{ companyName?: string, kvkNumber?: string, vatNumber?: string }} [values] Eerder ingevulde waarden.
+ * @param {boolean} [required] Of bedrijfsnaam en KvK-nummer verplicht zijn in de browser (niet bij het keuzevakje bij registreren).
+ * @returns {string} HTML van de velden.
+ */
+function businessFields({ companyName = '', kvkNumber = '', vatNumber = '' } = {}, required = true) {
+  return `${field({ name: 'companyName', label: 'Bedrijfsnaam', value: companyName, autocomplete: 'organization', required })}
+${field({ name: 'kvkNumber', label: 'KvK-nummer', value: kvkNumber, autocomplete: 'off', hint: '8 cijfers.', required })}
+${field({ name: 'vatNumber', label: 'Btw-nummer (optioneel)', value: vatNumber, autocomplete: 'off', hint: 'Bijvoorbeeld NL123456789B01.', required: false })}`;
 }
 
 /**
@@ -48,11 +60,11 @@ ${field({ name: 'password', label: 'Wachtwoord', type: 'password', autocomplete:
 
 /**
  * Registratiepagina.
- * @param {{ error?: string, displayName?: string, email?: string, next?: string }} state Foutmelding, eerder ingevulde waarden en waar naartoe na het registreren ('afrekenen' of leeg).
+ * @param {{ error?: string, displayName?: string, email?: string, next?: string, business?: boolean, companyName?: string, kvkNumber?: string, vatNumber?: string }} state Foutmelding, eerder ingevulde waarden (ook het vakje en de bedrijfsgegevens) en waar naartoe na het registreren ('afrekenen' of leeg).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @returns {string} De HTML-pagina.
  */
-function registerPage({ error = '', displayName = '', email = '', next = '' } = {}, groups = []) {
+function registerPage({ error = '', displayName = '', email = '', next = '', business = false, companyName = '', kvkNumber = '', vatNumber = '' } = {}, groups = []) {
   const form = `${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 <form method="post" action="./" class="account-form">
 ${next ? `<input type="hidden" name="volgende" value="${escapeHtml(next)}">` : ''}
@@ -60,6 +72,11 @@ ${field({ name: 'displayName', label: 'Naam', value: displayName, autocomplete: 
 ${field({ name: 'email', label: 'E-mailadres', type: 'email', value: email, autocomplete: 'email' })}
 ${field({ name: 'password', label: 'Wachtwoord', type: 'password', autocomplete: 'new-password', hint: 'Minimaal 12 tekens.' })}
 ${field({ name: 'password2', label: 'Wachtwoord herhalen', type: 'password', autocomplete: 'new-password' })}
+<fieldset class="business-fields"><legend>Zakelijke klant</legend>
+<label class="check"><input type="checkbox" name="business" value="1"${business ? ' checked' : ''}> Ik bestel zakelijk (prijzen excl. btw)</label>
+<p class="note">Vink dit aan en vul de bedrijfsgegevens in. Na controle door AquaTech Service zie je overal prijzen excl. btw. Tot die tijd bestel je als particulier.</p>
+${businessFields({ companyName, kvkNumber, vatNumber }, false)}
+</fieldset>
 <input class="trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
 <button class="button" type="submit">Account maken</button>
 </form>`;
@@ -68,17 +85,42 @@ ${field({ name: 'password2', label: 'Wachtwoord herhalen', type: 'password', aut
 }
 
 /**
+ * Het blok over zakelijk bestellen op "Mijn account": de status voor een zakelijke klant of een open aanvraag, of het formulier om een zakelijk account aan te vragen.
+ * @param {{ isCustomer: boolean }} viewer De ingelogde gebruiker.
+ * @param {{ customerGroup?: string, companyName?: string, kvkNumber?: string, vatNumber?: string, businessRequest?: string }} profile Klantgroep en bedrijfsgegevens.
+ * @param {{ error: string, values: object, requested: boolean }} state Fout, ingevulde waarden en of de aanvraag net is verstuurd.
+ * @returns {string} HTML van het blok (leeg voor een gebruiker die geen klant is).
+ */
+function businessSection(viewer, profile, { error, values, requested }) {
+  if (!viewer.isCustomer) return '';
+  if (profile.customerGroup === 'zakelijk') {
+    const details = [profile.companyName, profile.kvkNumber && `KvK ${profile.kvkNumber}`, profile.vatNumber && `btw ${profile.vatNumber}`].filter(Boolean).map(escapeHtml).join(' · ');
+    return `<div class="business-status"><p><strong>Zakelijk account</strong>${details ? `: ${details}` : ''}. Je ziet prijzen excl. btw.</p></div>`;
+  }
+  if (profile.businessRequest === 'aangevraagd') {
+    return `<div class="business-status"><p>${requested ? 'Bedankt! ' : ''}Je aanvraag voor een zakelijk account wordt beoordeeld. Je hoort van ons zodra het is goedgekeurd; tot die tijd zie je de prijzen incl. btw.</p></div>`;
+  }
+  return `<details class="business-request"${error ? ' open' : ''}><summary>Zakelijk bestellen? Vraag een zakelijk account aan</summary>
+${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
+<form method="post" action="${ROOT}account/zakelijk/" class="account-form">
+${businessFields(values)}
+<button class="button" type="submit">Aanvragen</button>
+</form></details>`;
+}
+
+/**
  * "Mijn account": wie is ingelogd, met knoppen naar de planner en het portaal.
  * @param {{ displayName: string, username: string, email: string, isCustomer: boolean }} viewer De ingelogde gebruiker.
  * @param {object[]} groups Alle hoofdcategorieën.
- * @param {{ ordering?: boolean }} [options] ordering: bestellen staat aan, dus een knop naar de bestelhistorie.
+ * @param {{ ordering?: boolean, profile?: object, error?: string, values?: object, requested?: boolean }} [options] ordering: bestellen staat aan, dus een knop naar de bestelhistorie; profile: klantgroep en bedrijfsgegevens uit het account; error/values: fout en ingevulde waarden van het aanvraagformulier; requested: de aanvraag is net verstuurd.
  * @returns {string} De HTML-pagina.
  */
-function accountPage(viewer, groups = [], { ordering = false } = {}) {
+function accountPage(viewer, groups = [], { ordering = false, profile = {}, error = '', values = {}, requested = false } = {}) {
   const orders = ordering ? `<a class="button" href="${ROOT}bestellingen/">Mijn bestellingen</a>` : '';
   const portal = viewer.isCustomer ? `<a class="button secondary" href="${APP_ROOT}portaal/">Mijn portaal</a>` : '';
   const body = `<section class="account-card"><h1>Mijn account</h1>
 <p>Ingelogd als <strong>${escapeHtml(viewer.displayName)}</strong> (${escapeHtml(viewer.username)}${viewer.email ? `, ${escapeHtml(viewer.email)}` : ''}).</p>
+${businessSection(viewer, profile, { error, values, requested })}
 <div class="account-actions">
 ${orders}
 <a class="button" href="${APP_ROOT}beregening/">Naar de planner</a>

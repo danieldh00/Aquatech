@@ -13,6 +13,8 @@ function showChosenVariant(row) {
   row.querySelector('[data-variant-code]').textContent = option.dataset.code;
   row.querySelector('[data-variant-meta]').textContent = option.dataset.meta ? ` | ${option.dataset.meta}` : '';
   row.querySelector('[data-variant-price]').textContent = option.dataset.price;
+  const inclusive = row.querySelector('[data-variant-incl]');
+  if (inclusive) inclusive.textContent = `incl. btw ${option.dataset.priceIncl}`;
   const stock = row.querySelector('[data-variant-stock]');
   stock.className = `stock ${option.dataset.stock}`;
   stock.textContent = option.dataset.stock === 'in' ? 'Op voorraad' : 'Niet op voorraad';

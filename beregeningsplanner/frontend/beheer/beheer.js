@@ -414,6 +414,20 @@
     }
   }
 
+  /**
+   * De cel Klantgroep van een klant: keuze particulier/zakelijk, een open aanvraag met knoppen om goed te keuren of af te wijzen, en de bedrijfsgegevens.
+   * @param {object} user de klant (customerGroup, businessRequest, companyName, kvkNumber, vatNumber)
+   * @returns {string} HTML van de cel
+   */
+  function businessCell(user) {
+    const id = esc(user.id);
+    const select = `<select data-group="${id}" aria-label="Klantgroep"><option value="">Particulier</option><option value="zakelijk"${user.customerGroup === 'zakelijk' ? ' selected' : ''}>Zakelijk</option></select>`;
+    const request = user.businessRequest === 'aangevraagd'
+      ? `<div><span class="pill">Aanvraag zakelijk</span> <button class="btn small" data-biz-approve="${id}">Goedkeuren</button> <button class="btn small" data-biz-reject="${id}">Afwijzen</button></div>` : '';
+    const details = [user.companyName, user.kvkNumber && `KvK ${user.kvkNumber}`, user.vatNumber && `btw ${user.vatNumber}`].filter(Boolean).map(esc).join(' · ');
+    return `${select}${request}${details ? `<div><small>${details}</small></div>` : ''}<button class="btn small" data-biz-edit="${id}">Bedrijfsgegevens</button>`;
+  }
+
   /** Tekent de gebruikerstabel met de knoppen per gebruiker. */
   function renderUsers() {
     const showGuests = $('#u-guests').checked;
@@ -430,7 +444,7 @@
         <td class="num">${user.historyCount}</td>
         <td>${esc(when(user.lastSeenAt))}</td>
         <td class="num">${user.sessionCount || 0}</td>
-        <td>${editable && roleOf(user.role) && roleOf(user.role).kind === 'klant' ? `<select data-group="${esc(user.id)}" aria-label="Klantgroep"><option value="">Particulier</option><option value="zakelijk"${user.customerGroup === 'zakelijk' ? ' selected' : ''}>Zakelijk</option></select>` : ''}</td>
+        <td>${editable && roleOf(user.role) && roleOf(user.role).kind === 'klant' ? businessCell(user) : ''}</td>
         <td>${editable ? `<input type="checkbox" data-mustchange="${esc(user.id)}"${user.mustChangePassword ? ' checked' : ''} aria-label="Wachtwoord wijzigen bij volgende aanmelding">` : ''}</td>
         <td>${user.sessionCount ? `<button class="btn small" data-logout="${esc(user.id)}">Uitloggen</button> ` : ''}${editable ? `<button class="btn small" data-pw="${esc(user.id)}">Wachtwoord</button> <button class="btn small" data-toggle="${esc(user.id)}">${user.disabled ? 'Inschakelen' : 'Uitschakelen'}</button>` : ''}
           ${user.historyCount ? `<button class="btn small" data-hist="${esc(user.id)}">Aanvragen</button>` : ''}
@@ -478,6 +492,33 @@
        * @returns {Promise<void>}
        */
       select.onchange = () => patch(select.dataset.group, { customerGroup: select.value }, select.value === 'zakelijk' ? 'Zakelijke klant: zakelijke prijzen excl. btw' : 'Particuliere klant');
+    });
+    table.querySelectorAll('[data-biz-approve]').forEach((button) => {
+      /**
+       * Keurt de aanvraag voor een zakelijk account goed.
+       * @returns {Promise<void>}
+       */
+      button.onclick = () => patch(button.dataset.bizApprove, { customerGroup: 'zakelijk' }, 'Zakelijk account goedgekeurd: prijzen excl. btw');
+    });
+    table.querySelectorAll('[data-biz-reject]').forEach((button) => {
+      /**
+       * Wijst de aanvraag voor een zakelijk account af (de klant blijft particulier).
+       * @returns {Promise<void>}
+       */
+      button.onclick = () => patch(button.dataset.bizReject, { customerGroup: '' }, 'Aanvraag afgewezen: de klant blijft particulier');
+    });
+    table.querySelectorAll('[data-biz-edit]').forEach((button) => {
+      const user = state.users.find((candidate) => candidate.id === button.dataset.bizEdit);
+      /** Vraagt bedrijfsnaam, KvK- en btw-nummer en slaat ze op. */
+      button.onclick = () => {
+        const companyName = prompt('Bedrijfsnaam', user.companyName);
+        if (companyName === null) return;
+        const kvkNumber = prompt('KvK-nummer (8 cijfers)', user.kvkNumber);
+        if (kvkNumber === null) return;
+        const vatNumber = prompt('Btw-nummer (optioneel, bijvoorbeeld NL123456789B01)', user.vatNumber);
+        if (vatNumber === null) return;
+        patch(user.id, { companyName, kvkNumber, vatNumber }, 'Bedrijfsgegevens opgeslagen');
+      };
     });
     table.querySelectorAll('[data-mustchange]').forEach((checkbox) => {
       /**

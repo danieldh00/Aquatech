@@ -22,6 +22,7 @@ const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('.
 const { createWorkLogStore, registerWorkLogRoutes } = require('./uitvoering/worklog');
 const { registerCostingRoutes } = require('./uitvoering/costing');
 const { createShopAccounts } = require('./webshop/shop-accounts');
+const { sanitizeBusinessProfile } = require('./webshop/business-profile');
 const { createImpersonationStore, createImpersonation } = require('./beveiliging/impersonation');
 const { createStorefront } = require('./webshop/storefront');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
@@ -1265,6 +1266,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     for (const field of ['displayName', 'role', 'disabled', 'password', 'username', 'customerGroup']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
     withMustChange(input, req.body);
     const home = usersTenantOf(req);
+    // Een deel van de velden (bijvoorbeeld alleen het btw-nummer) vult het bestaande profiel aan; een onbekend account geeft hieronder 404.
+    const existing = store.businessProfile(home, req.params.id);
+    if (existing && ['companyName', 'kvkNumber', 'vatNumber'].some((field) => req.body?.[field] !== undefined)) {
+      const checked = sanitizeBusinessProfile({ companyName: existing.companyName, kvkNumber: existing.kvkNumber, vatNumber: existing.vatNumber, ...req.body });
+      if (checked.error) return res.status(400).json({ error: 'invalid_user', message: checked.error, field: checked.field });
+      input.business = checked.profile;
+    }
     if (guardPlatformAdmin(req, res, req.params.id)) return;
     const out = await store.updateAccount(home, req.params.id, input);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_user', message: out.error });
@@ -1297,7 +1305,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     audit(req, 'gebruiker_gewijzigd', { userId: user.id, username: user.username, fields: Object.keys(input),
       ...(input.role !== undefined ? { role: input.role } : {}), ...(input.disabled !== undefined ? { disabled: Boolean(input.disabled) } : {}),
       ...(input.platformAdmin !== undefined ? { hoofdbeheerder: Boolean(input.platformAdmin) } : {}),
-      ...(input.mustChangePassword !== undefined ? { wachtwoordWijzigen: input.mustChangePassword } : {}) }, undefined, tenantId);
+      ...(input.mustChangePassword !== undefined ? { wachtwoordWijzigen: input.mustChangePassword } : {}),
+      ...(input.customerGroup !== undefined ? { klantgroep: input.customerGroup || 'particulier' } : {}) }, undefined, tenantId);
   }
 
   // Gebruiker op alle toestellen uitloggen.

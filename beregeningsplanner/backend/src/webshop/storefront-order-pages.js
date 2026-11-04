@@ -175,7 +175,8 @@ function paymentChoice(options, chosen = '') {
  * @returns {string} De HTML-pagina.
  */
 function checkoutPage({ cart, quote, country, method, summary = null, summaries = {}, values = {}, error = '', viewer, paymentOptions = ['rekening'] }, groups = []) {
-  const value = { name: viewer.displayName, email: viewer.email, ...values };
+  const profile = viewer.profile || {};
+  const value = { name: viewer.displayName, email: viewer.email, company: profile.companyName || '', vatNumber: profile.vatNumber || '', ...values };
   const chosen = quote.options.find((option) => option.method === method && option.available);
   const business = Boolean(cart.pricesExcl);
   const items = (summary ? summary.lines : cart.lines).map((line) => `<li><span>${line.qty} × ${escapeHtml(line.name)}</span><span>${escapeHtml(formatPrice(business ? line.lineExcl : line.lineTotal))}</span></li>`).join('');
