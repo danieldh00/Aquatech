@@ -17,7 +17,7 @@
       date: '2026-11-04',
       title: 'Zakelijke klanten zien prijzen excl. btw',
       items: [
-        { text: 'Bestel je zakelijk bij de webshop? Vink bij het registreren Zakelijke klant aan en vul je bedrijfsnaam en KvK-nummer in (het btw-nummer mag ook). Heb je al een account, dan vraag je het aan op Mijn account. Zodra AquaTech Service je aanvraag goedkeurt, zie je in de hele shop de prijzen exclusief btw, met eronder in het klein wat het incl. btw is. Winkelwagen, afrekenen en factuur rekenen de btw gewoon bij.' },
+        { text: 'Bestel je zakelijk bij de webshop? Vink bij het registreren Zakelijke klant aan en vul je bedrijfsnaam en KvK-nummer in (het btw-nummer mag ook). Heb je al een account, dan vraag je het aan op Mijn account. Zodra AquaTech Service je aanvraag goedkeurt, zie je in de hele shop de prijzen exclusief btw, met eronder in het klein wat het incl. btw is. Winkelwagen, afrekenen en factuur rekenen de btw gewoon bij, behalve bij een levering met DPD naar een ander EU-land met een geldig btw-nummer: dan wordt de btw verlegd (0% over artikelen en verzending).' },
         { text: 'Bij Afrekenen staan je bedrijfsnaam en btw-nummer al ingevuld.' },
         { text: 'In Beheer > Gebruikers staat bij een klant nu een keuze Particulier of Zakelijk, de knop Bedrijfsgegevens (bedrijfsnaam, KvK- en btw-nummer) en bij een openstaande aanvraag de knoppen Goedkeuren en Afwijzen.', for: ['beheer'] },
       ],
