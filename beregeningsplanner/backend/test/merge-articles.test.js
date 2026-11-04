@@ -168,11 +168,15 @@ test('samenvoegen: bepaalt de webshop de artikellijst, dan worden aan een websho
   const user = { id: null, display_name: 'Test' };
   const first = stock.create(tenantId, user, { code: 'A-16', name: 'Buis 16 mm', unit: 'm' }).item;
   const second = stock.create(tenantId, user, { code: 'A-20', name: 'Buis 20 mm', unit: 'm' }).item;
+  const third = stock.create(tenantId, user, { code: 'A-25', name: 'Buis 25 mm', unit: 'm' }).item;
   db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('55', first.id);
   const input = { ids: [first.id, second.id], code: 'A', name: 'Buis', attributeName: 'Maat', values: { [first.id]: '16 mm', [second.id]: '20 mm' } };
   const refused = stock.mergeIntoVariants(tenantId, input, { refuseLinked: true });
   assert.strictEqual(refused.status, 409);
   assert.match(refused.error, /A-16/);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE parent_id IS NOT NULL').get().n, 0);
+  const looseMatch = stock.mergeIntoVariants(tenantId, { ...input, ids: [second.id, third.id], values: { [second.id]: '20 mm', [third.id]: '25 mm' } }, { refuseLinked: true, shopMatchOf: (row) => (row.code === 'A-25' ? { id: 9 } : null) });
+  assert.strictEqual(looseMatch.status, 409, 'een artikel dat met een los webshopproduct samenvalt wordt geweigerd');
+  assert.match(looseMatch.error, /A-25/);
   assert.strictEqual(stock.mergeIntoVariants(tenantId, input).merged, 2, 'zonder spiegelen mag het wel');
 });

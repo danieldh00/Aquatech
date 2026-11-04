@@ -798,10 +798,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * de webshop staan tot je het daar weghaalt).
    * @param {string} tenantId Id van de omgeving.
    * @param {{ ids?: string[], code?: string, name?: string, attributeName?: string, values?: Object<string, string> }} raw De invoer: de artikelen, code en omschrijving van het hoofdartikel, naam van het kenmerk en de waarde per artikel-id.
-   * @param {{ refuseLinked?: boolean }} [options] refuseLinked: weiger artikelen die aan een webshopproduct gekoppeld zijn (nodig als de webshop de artikellijst bepaalt: de volgende synchronisatie zou de varianten archiveren).
+   * @param {{ refuseLinked?: boolean, shopMatchOf?: Function }} [options] refuseLinked: weiger artikelen die aan een webshopproduct gekoppeld zijn (nodig als de webshop de artikellijst bepaalt: de volgende synchronisatie zou de varianten archiveren); shopMatchOf: functie artikelrij → webshopproduct of null, om ook artikelen te weigeren die via code of sku met een los webshopproduct samenvallen.
    * @returns {object} { item, merged, unlinked } met het nieuwe hoofdartikel, het aantal samengevoegde artikelen en het aantal verbroken webshopkoppelingen; of { error, field?, status }.
    */
-  function mergeIntoVariants(tenantId, raw, { refuseLinked = false } = {}) {
+  function mergeIntoVariants(tenantId, raw, { refuseLinked = false, shopMatchOf = null } = {}) {
     const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
     const ids = Array.isArray(input.ids) ? [...new Set(input.ids.map((id) => String(id)))] : [];
     if (ids.length < 2) return { error: 'Kies minstens twee artikelen om samen te voegen.', field: 'ids', status: 400 };
@@ -832,8 +832,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         if (Number(row.has_variants)) return { error: `${row.code} is zelf al een hoofdartikel.`, field: 'ids', status: 409 };
       }
       if (refuseLinked) {
-        const linked = rows.find((row) => row.shop_product_id);
-        if (linked) return { error: `${linked.code} hangt aan een webshopproduct en de webshop bepaalt de artikellijst (Beheer → Integraties → Webshop). Zet die instelling eerst uit, dan is Aquatech de bron en kun je samenvoegen.`, field: 'ids', status: 409 };
+        const linked = rows.find((row) => row.shop_product_id || (shopMatchOf && shopMatchOf(row)));
+        if (linked) return { error: `${linked.code} hangt aan (of komt overeen met) een webshopproduct en de webshop bepaalt de artikellijst (Beheer → Integraties → Webshop). Zet die instelling eerst uit, dan is Aquatech de bron en kun je samenvoegen.`, field: 'ids', status: 409 };
       }
       const first = [...rows].sort((left, right) => (left.code < right.code ? -1 : left.code > right.code ? 1 : 0))[0];
       if (rows.some((row) => row.unit !== first.unit || Number(row.vat_rate) !== Number(first.vat_rate) || row.revenue_group !== first.revenue_group)) {
@@ -1596,7 +1596,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
  * de voorraad van een werkorder bekijken en afboeken onder 'werkorders'.
  * Gegevens per omgeving via req.tenantId.
  * @param {object} app De Express-app.
- * @param {object} ctx { stock, requireRight, requireAnyRight?, requireJson, audit, shopProductsOf?, syncShop?, publishToShop? }.
+ * @param {object} ctx { stock, requireRight, requireAnyRight?, requireJson, audit, shopProductsOf?, shopMatchOf?, shopMirrorOn?, syncShop?, publishToShop? }.
  * @returns {void}
  */
 function registerStockRoutes(app, ctx) {
@@ -1752,7 +1752,7 @@ function registerStockRoutes(app, ctx) {
 
   // Losse artikelen samenvoegen tot de varianten van een nieuw hoofdartikel.
   app.post('/api/stock/merge', requireJson, requireStock, (req, res) => {
-    const out = stock.mergeIntoVariants(tenantOf(req), req.body, { refuseLinked: Boolean(ctx.shopMirrorOn && ctx.shopMirrorOn(tenantOf(req))) });
+    const out = stock.mergeIntoVariants(tenantOf(req), req.body, { refuseLinked: Boolean(ctx.shopMirrorOn && ctx.shopMirrorOn(tenantOf(req))), shopMatchOf: ctx.shopMatchOf ? ctx.shopMatchOf(tenantOf(req)) : null });
     if (out.error) return fail(res, out);
     const item = stock.get(tenantOf(req), out.parentId);
     // De samenvoeging staat al in de database: een fout in het auditlogboek mag die niet als mislukt melden.

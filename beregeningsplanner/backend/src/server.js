@@ -1797,6 +1797,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerStockRoutes(app, { stock: stockStore, pruneImages: (tid) => itemImageStore.prune(tid), requireRight, requireAnyRight, requireJson, audit, shopProductsOf: (tid) => shopStore.products(tid),
     syncShop: (tid, user) => shopSync.run(tid, { full: true, user }),
     publishToShop: (tid, itemId) => shopSync.publish(tid, itemId),
+    shopMatchOf: (tid) => shopSync.matcher(shopStore.products(tid), (settingsFor(tid).get('shopSource') || {}).mapping),
     shopMirrorOn: (tid) => { const source = settingsFor(tid).get('shopSource'); return Boolean(source && source.url && source.mirror !== false); },
     importLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }) });
   // Afbeeldingen bij artikelen: uploaden, verwijderen en overnemen uit de oude webshop (zie item-images.js).
