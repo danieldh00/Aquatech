@@ -885,7 +885,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * Controleert of een samenvoeging kan worden teruggedraaid en laat zien wat er gebeurt.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het hoofdartikel.
-   * @returns {object} { code, name, variants: [{ code, name, value, archived, outcome }] (outcome: los, weg of gearchiveerd), logged, mergedAt, restoresLinks, blocked }; blocked is een tekst als terugdraaien nu niet kan; of { error, status }.
+   * @returns {object} { code, name, variants: [{ code, name, value, archived, outcome }] (outcome: los, weg of gearchiveerd), logged, mergedAt, restoresLinks, blocked }; blocked is een tekst als terugdraaien nu niet kan (hoofdartikel in de webshop, of een later bijgemaakte variant is gereserveerd); of { error, status }.
    */
   function unmergePreview(tenantId, id) {
     const parent = findItem(tenantId, id);
@@ -899,6 +899,15 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const moved = new Set(extra.length
       ? prepare(`SELECT DISTINCT item_id FROM stock_movements WHERE tenant_id = ? AND item_id IN (${placeholders(extra.length)})`).all(tenantId, ...extra.map((child) => child.id)).map((row) => row.item_id)
       : []);
+    // Een reservering op een na het samenvoegen bijgemaakte variant zou bij het weghalen verdwijnen: dan blokkeren.
+    const reserved = extra.length
+      ? prepare(`SELECT 1 AS found FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${placeholders(extra.length)}) LIMIT 1`).get(tenantId, ...extra.map((child) => child.id))
+      : null;
+    // Webshopkoppelingen uit de momentopname die nog vrij zijn; alleen die komen echt terug.
+    const wantedLinks = [...new Set([...inLog.values()].map((entry) => entry.shopProductId).filter(Boolean))];
+    const takenLinks = new Set(wantedLinks.length
+      ? prepare(`SELECT shop_product_id FROM stock_items WHERE tenant_id = ? AND shop_product_id IN (${placeholders(wantedLinks.length)})`).all(tenantId, ...wantedLinks).map((row) => row.shop_product_id)
+      : []);
     return {
       code: parent.code,
       name: parent.name,
@@ -908,8 +917,13 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       })),
       logged: Boolean(log),
       mergedAt: log ? log.createdAt : null,
-      restoresLinks: children.filter((child) => inLog.get(child.id) && inLog.get(child.id).shopProductId).length,
-      blocked: parent.shop_product_id ? `${parent.code} is aan een webshopproduct gekoppeld (bijv. via In webshop zetten). Haal dat product eerst uit de webshop of ontkoppel het; daarna kun je de samenvoeging terugdraaien.` : null,
+      restoresLinks: children.filter((child) => {
+        const shopProductId = inLog.get(child.id) && inLog.get(child.id).shopProductId;
+        return shopProductId && !takenLinks.has(shopProductId);
+      }).length,
+      blocked: parent.shop_product_id
+        ? `${parent.code} is aan een webshopproduct gekoppeld (bijv. via In webshop zetten). Haal dat product eerst uit de webshop of ontkoppel het; daarna kun je de samenvoeging terugdraaien.`
+        : reserved ? 'Een na het samenvoegen bijgemaakte variant is gereserveerd voor een werkorder of bestelling. Handel die reservering eerst af of haal de variant van de werkorder; daarna kun je de samenvoeging terugdraaien.' : null,
     };
   }
 
@@ -931,7 +945,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const preview = unmergePreview(tenantId, id);
     if (preview.error) return preview;
     if (preview.blocked) return { error: preview.blocked, status: 409 };
-    return transaction(db, () => {
+    const out = transaction(db, () => {
       const parent = findItem(tenantId, id);
       if (!parent || !Number(parent.has_variants)) return { error: 'not_found', status: 404 };
       const log = mergeLogOf(tenantId, parent.id);
@@ -961,7 +975,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
             archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND id = ?`).run(timestamp, tenantId, child.id);
         if (entry && entry.shopProductId && !taken.has(entry.shopProductId)) {
           prepare('UPDATE stock_items SET shop_product_id = ?, shop_price_seen = ?, shop_stock_seen = ?, shop_dirty = ?, shop_error = ? WHERE tenant_id = ? AND id = ?')
-            .run(entry.shopProductId, entry.shopPriceSeen, entry.shopStockSeen, entry.shopDirty, entry.shopError, tenantId, child.id);
+            .run(entry.shopProductId, entry.shopPriceSeen, entry.shopStockSeen, 1, '', tenantId, child.id);
           taken.add(entry.shopProductId);
           linksRestored++;
         }
@@ -973,6 +987,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       if (log) prepare('UPDATE stock_merges SET undone_at = ? WHERE tenant_id = ? AND id = ?').run(timestamp, tenantId, log.id);
       return { code: parent.code, restored, removed, linksRestored, reconstructed: !log };
     });
+    // Herstelde webshopkoppelingen krijgen bij de volgende ronde de actuele prijs en voorraad.
+    if (out.linksRestored) dirty(tenantId);
+    return out;
   }
 
   /**
@@ -1885,8 +1902,8 @@ function registerStockRoutes(app, ctx) {
   app.post('/api/stock/items/:id/unmerge', requireJson, requireStock, (req, res) => {
     const out = stock.unmergeVariants(tenantOf(req), req.params.id);
     if (out.error) return fail(res, out);
-    if (ctx.pruneImages) ctx.pruneImages(tenantOf(req));
-    // De wijziging staat al in de database: een fout in het auditlogboek mag die niet als mislukt melden.
+    // Het terugdraaien staat al in de database: opruimen en auditlogboek zijn bijzaak en mogen het niet als mislukt melden.
+    try { if (ctx.pruneImages) ctx.pruneImages(tenantOf(req)); } catch (error) { console.error('Afbeeldingen opruimen na terugdraaien mislukt:', error.message); }
     try { audit(req, 'voorraad_samenvoeging_teruggedraaid', { itemId: req.params.id, code: out.code, restored: out.restored, removed: out.removed, reconstructed: out.reconstructed }); } catch (error) { console.error('Audit voorraad_samenvoeging_teruggedraaid mislukt:', error.message); }
     res.json(out);
   });

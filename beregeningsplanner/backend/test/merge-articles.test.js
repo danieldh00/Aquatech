@@ -265,11 +265,23 @@ test('samenvoeging terugdraaien zonder logboek (samengevoegd voor 1.5.9) en met 
 
   // Met logboek: een variant die erna is bijgemaakt gaat weg.
   const again = stock.mergeIntoVariants(tenantId, input, { user });
-  const added = stock.setVariants(tenantId, again.parentId, [{ name: 'Maat', values: ['16 mm', '20 mm', '25 mm'] }]);
-  assert.strictEqual(added.created, 1);
-  assert.deepStrictEqual(stock.unmergePreview(tenantId, again.parentId).variants.map((variant) => variant.outcome), ['los', 'los', 'weg']);
+  const added = stock.setVariants(tenantId, again.parentId, [{ name: 'Maat', values: ['16 mm', '20 mm', '25 mm', '30 mm'] }]);
+  assert.strictEqual(added.created, 2);
+  const withMoves = added.item.variants.find((variant) => variant.values.Maat === '30 mm');
+  stock.move(tenantId, user, withMoves.id, { kind: 'ontvangst', qty: 3, note: 'Pakbon' });
+  assert.deepStrictEqual(stock.unmergePreview(tenantId, again.parentId).variants.map((variant) => variant.outcome), ['los', 'los', 'weg', 'gearchiveerd']);
+  // Een reservering op een later bijgemaakte variant blokkeert het terugdraaien.
+  const plain = added.item.variants.find((variant) => variant.values.Maat === '25 mm');
+  db.prepare('INSERT INTO stock_reservations (tenant_id, work_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, 1, ?)').run(tenantId, 'wo-1', plain.id, '2026-11-04T10:00:00Z');
+  assert.ok(stock.unmergePreview(tenantId, again.parentId).blocked);
+  assert.strictEqual(stock.unmergeVariants(tenantId, again.parentId).status, 409);
+  db.prepare('DELETE FROM stock_reservations').run();
   const out = stock.unmergeVariants(tenantId, again.parentId);
   assert.strictEqual(out.restored, 2);
-  assert.strictEqual(out.removed, 1);
+  assert.strictEqual(out.removed, 2);
   assert.deepStrictEqual(stock.list(tenantId).map((item) => item.code).sort(), ['B-16', 'B-20']);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE id = ?').get(plain.id).n, 0, 'zonder boekingen echt verwijderd');
+  const archived = db.prepare('SELECT archived, parent_id FROM stock_items WHERE id = ?').get(withMoves.id);
+  assert.deepStrictEqual([Number(archived.archived), archived.parent_id], [1, null], 'met boekingen gearchiveerd en losgemaakt');
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_movements WHERE item_id = ?').get(withMoves.id).n, 1, 'boekingen blijven');
 });
