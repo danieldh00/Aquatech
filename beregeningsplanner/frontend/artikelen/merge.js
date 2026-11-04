@@ -132,14 +132,15 @@
         <td class="num">${esc(context.eur(item.salePrice))}</td>
         <td>${item.shop.productId ? '<span class="pill">Koppeling vervalt</span>' : ''}</td></tr>`).join('');
     const linked = items.filter((item) => item.shop.productId).length;
-    const first = items[0];
+    // Zelfde keuze als de server: het artikel met de laagste code levert eenheid, btw, omzetgroep en prijs.
+    const first = [...items].sort((left, right) => (left.code < right.code ? -1 : left.code > right.code ? 1 : 0))[0];
     const mixed = items.some((item) => item.unit !== first.unit || item.vatRate !== first.vatRate || item.revenueGroup !== first.revenueGroup);
     $('#mg-notes').innerHTML = `<li>${items.length} artikelen worden varianten van één nieuw hoofdartikel. Code, voorraad, prijzen, minimum, afbeelding, boekingen en reserveringen van elk artikel blijven zoals ze zijn; werkorders, offertes, facturen en bestellingen verwijzen nog naar dezelfde artikelcodes.</li>
       <li>Het hoofdartikel heeft zelf geen voorraad: het telt de varianten op. Het neemt eenheid, btw, omzetgroep en prijs van ${esc(first.code)} over.</li>
       ${linked ? `<li>${linked} artikel${linked === 1 ? ' is' : 'en zijn'} apart aan een webshopproduct gekoppeld. Die koppeling vervalt; zet daarna het hoofdartikel in de webshop (knop <i>In webshop zetten</i>) als één variabel product. Het oude webshopproduct blijft in de webshop staan tot je het daar weghaalt.</li>` : ''}
       ${mixed ? '<li class="bad">Deze artikelen hebben niet dezelfde eenheid, btw en omzetgroep. Pas die eerst aan, anders kunnen ze niet samen.</li>' : ''}`;
     $('#mg-submit').disabled = mixed;
-    $('.err', $('#merge-form')).textContent = '';
+    $('#merge-form > .err').textContent = '';
     $('#mg-step1').hidden = true;
     $('#mg-step2').hidden = false;
   }
@@ -148,7 +149,7 @@
   function showPick() {
     $('#mg-step1').hidden = false;
     $('#mg-step2').hidden = true;
-    $('.err', $('#merge-form')).textContent = '';
+    $('#merge-form > .err').textContent = '';
   }
 
   /**
@@ -156,7 +157,7 @@
    * @returns {Promise<void>}
    */
   async function submit() {
-    const errorBox = $('.err', $('#merge-form'));
+    const errorBox = $('#merge-form > .err');
     const values = {};
     document.querySelectorAll('#mg-rows tr').forEach((row) => { values[row.dataset.id] = row.querySelector('.mg-value').value.trim(); });
     $('#mg-submit').disabled = true;

@@ -1750,7 +1750,8 @@ function registerStockRoutes(app, ctx) {
     const out = stock.mergeIntoVariants(tenantOf(req), req.body);
     if (out.error) return fail(res, out);
     const item = stock.get(tenantOf(req), out.parentId);
-    audit(req, 'voorraad_samengevoegd', { itemId: out.parentId, code: item.code, merged: out.merged, unlinked: out.unlinked });
+    // De samenvoeging staat al in de database: een fout in het auditlogboek mag die niet als mislukt melden.
+    try { audit(req, 'voorraad_samengevoegd', { itemId: out.parentId, code: item.code, merged: out.merged, unlinked: out.unlinked }); } catch (error) { console.error('Audit voorraad_samengevoegd mislukt:', error.message); }
     res.status(201).json({ item, merged: out.merged, unlinked: out.unlinked });
   });
 

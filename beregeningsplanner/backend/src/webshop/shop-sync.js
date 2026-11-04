@@ -120,7 +120,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    * @returns {object[]} De artikelrijen.
    */
   const itemsOf = (tenantId, onlyDirty) => prepare(`SELECT i.id, i.code, i.on_hand, i.sale_price, i.vat_rate, i.shop_product_id, i.shop_dirty,
-      i.shop_price_seen, i.shop_stock_seen, i.has_variants, parent.shop_product_id AS shop_parent_id, COALESCE(r.qty, 0) AS reserved,
+      i.shop_price_seen, i.shop_stock_seen, i.has_variants, i.parent_id, parent.shop_product_id AS shop_parent_id, COALESCE(r.qty, 0) AS reserved,
       EXISTS (SELECT 1 FROM stock_movements m WHERE m.tenant_id = i.tenant_id AND m.item_id = i.id) AS moved
     FROM stock_items i
     LEFT JOIN stock_items parent ON parent.tenant_id = i.tenant_id AND parent.id = i.parent_id
@@ -147,7 +147,9 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       const linked = item.shop_product_id && byId.get(String(item.shop_product_id));
       if (linked) return linked;
       const mappedSku = byMapping.get(item.code);
-      return (mappedSku && bySku.get(mappedSku)) || byCode.get(item.code) || bySku.get(item.code) || null;
+      const found = (mappedSku && bySku.get(mappedSku)) || byCode.get(item.code) || bySku.get(item.code) || null;
+      // Een variant hoort bij een variatie: een los product (ook met dezelfde sku) komt er niet voor in aanmerking.
+      return found && item.parent_id && !found.parentId ? null : found;
     };
   }
 
@@ -535,7 +537,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     return out;
   }
 
-  return { sync, run, schedule, runAll, publish, exclOf, rawOf };
+  return { sync, run, schedule, runAll, publish, exclOf, rawOf, matcher };
 }
 
 module.exports = { createShopSync, exclOf, rawOf };

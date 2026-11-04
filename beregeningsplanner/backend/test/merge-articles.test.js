@@ -147,3 +147,15 @@ test('samenvoegen via de API: voorraad, prijs, afbeelding en reserveringen blijv
     assert.strictEqual(otherTenant.status, 404);
   } finally { server.close(); }
 });
+
+test('samenvoegen: een los webshopproduct met dezelfde sku wordt niet weer aan een variant gekoppeld', () => {
+  const db = openDb();
+  const { createShopStore } = require('../src/webshop/shop');
+  const { createShopSync } = require('../src/webshop/shop-sync');
+  const { createStockStore } = require('../src/artikelen/stock');
+  const sync = createShopSync({ db, shop: createShopStore(db), stock: createStockStore(db), settingsFor: () => ({ get: () => undefined }), fetchImpl: async () => ({}), log: { warn() {} } });
+  const match = sync.matcher([{ id: '1', sku: 'PEB-16' }, { id: '2', sku: 'PEB-20', parentId: '9' }]);
+  assert.strictEqual(match({ code: 'PEB-16', parent_id: null }).id, '1', 'een los artikel blijft koppelen');
+  assert.strictEqual(match({ code: 'PEB-16', parent_id: 'p1' }), null, 'een variant koppelt niet aan een los product');
+  assert.strictEqual(match({ code: 'PEB-20', parent_id: 'p1' }).id, '2', 'een variant koppelt wel aan een variatie');
+});
