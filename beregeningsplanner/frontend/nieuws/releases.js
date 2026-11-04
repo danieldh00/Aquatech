@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.5.9',
+      date: '2026-11-04',
+      title: 'Samenvoegen van artikelen terugdraaien',
+      items: [
+        { text: 'Heb je artikelen samengevoegd tot een variabel artikel en wil je dat terug? Open het hoofdartikel en kies onder Varianten Samenvoeging ongedaan maken. Na een bevestiging worden de varianten weer losse artikelen met hun eigen code, prijzen, voorraad (ook wat er sinds het samenvoegen is binnengekomen of verbruikt) en afbeelding, en verdwijnt het hoofdartikel.', for: ['voorraad'] },
+        { text: 'Heeft een artikel vóór het samenvoegen een eigen webshopkoppeling gehad, dan komt die terug. Bij samenvoegingen die al zijn gedaan voordat deze functie er was, worden de varianten wel losgemaakt, maar komen de oude webshopkoppelingen niet terug. Is het hoofdartikel inmiddels in de webshop gezet, dan haal je dat product daar eerst weg.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.5.8',
       date: '2026-11-04',
       title: 'Artikelen samenvoegen tot een variabel artikel',

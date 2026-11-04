@@ -750,6 +750,21 @@ const PG_MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN image_id ${TEXT_TYPE};
   CREATE INDEX stock_items_image ON stock_items (tenant_id, image_id);
   `,
+  // 42: logboek van samengevoegde artikelen (zie db.js).
+  `
+  CREATE TABLE stock_merges (
+    id          ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id   ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    parent_id   ${TEXT_TYPE} NOT NULL,
+    parent_code ${TEXT_TYPE} NOT NULL,
+    parent_name ${TEXT_TYPE} NOT NULL,
+    snapshot    ${TEXT_TYPE} NOT NULL,
+    created_by  ${TEXT_TYPE},
+    created_at  ${TEXT_TYPE} NOT NULL,
+    undone_at   ${TEXT_TYPE}
+  );
+  CREATE INDEX stock_merges_parent ON stock_merges (tenant_id, parent_id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
