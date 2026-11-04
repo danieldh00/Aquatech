@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.5.8',
+      date: '2026-11-04',
+      title: 'Artikelen samenvoegen tot een variabel artikel',
+      items: [
+        { text: 'Onder Artikelen staat een nieuwe knop Samenvoegen tot variabel artikel. Losse artikelen die eigenlijk maten of kleuren van één product zijn (bijvoorbeeld PE-buis 16, 20 en 25 mm) maak je zo tot één variabel artikel met varianten. Het systeem stelt zelf groepen voor; je kunt ook zelf artikelen aanvinken.', for: ['voorraad'] },
+        { text: 'Voor het samenvoegen controleer je eerst code, omschrijving en de maat per artikel. Voorraad, prijzen, afbeelding en alle verwijzingen in werkorders, offertes en facturen blijven gewoon bestaan. Is een artikel apart aan een webshopproduct gekoppeld, dan zet je daarna het hoofdartikel in de webshop als één variabel product.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.5.7',
       date: '2026-11-04',
       title: 'Afbeeldingen bij artikelen',

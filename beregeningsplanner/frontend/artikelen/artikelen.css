@@ -4,7 +4,7 @@
 .tab .count:not(:empty) { display: inline-block; min-width: 18px; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--at-green); color: #fff; font-size: 12px; line-height: 18px; text-align: center; }
 .card-form label.grow { flex: 1 1 260px; }
 .card-form label.grow input { width: 100%; }
-#new-form, #import-form, #shop-dialog { border-left: 4px solid var(--at-teal); }
+#new-form, #import-form, #merge-form, #shop-dialog { border-left: 4px solid var(--at-teal); }
 td .sub { display: block; font-size: 12px; color: var(--muted); white-space: normal; }
 td .code, .code { font-family: ui-monospace, monospace; font-size: 12px; }
 table.grid tr.low td.avail { color: var(--danger, #c62828); font-weight: 600; }
@@ -75,3 +75,13 @@ table.grid .toggle:hover { color: var(--at-teal); }
 .media-card img { width: 100%; height: 100%; object-fit: contain; }
 .media-card figcaption { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; font-size: 13px; }
 .media-card figcaption b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Artikelen samenvoegen tot een variabel artikel. */
+.merge-groups { display: grid; gap: 8px; margin-bottom: 14px; }
+.merge-group { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.merge-group .sub { display: block; font-size: 12px; color: var(--muted); }
+#merge-form h4 { margin: 18px 0 8px; font-size: 14px; }
+#merge-form .tablewrap { margin-top: 14px; }
+#mg-rows input.mg-value { width: 100%; min-width: 110px; }
+.merge-notes { margin: 0; padding-left: 18px; font-size: 13px; display: grid; gap: 6px; }
+.merge-notes .bad { color: var(--danger, #c62828); font-weight: 600; }

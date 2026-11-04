@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.5.8
+
+Losse artikelen samenvoegen tot één variabel artikel.
+
+- **Server** (`artikelen/stock.js`, `artikelen/variant-suggestions.js`): `GET /api/stock/merge-suggestions`
+  (recht `voorraad`, één query met alleen de nodige kolommen) groepeert losse artikelen waarvan de
+  omschrijving alleen in een maat of kleur verschilt en die dezelfde eenheid, btw en omzetgroep hebben
+  (dubbele maten vallen af). `POST /api/stock/merge { ids, code, name, attributeName, values }` maakt in
+  één transactie een nieuw hoofdartikel en zet de gekozen artikelen eronder (`parent_id`,
+  `variant_values`). Geen migratie: een variant is al een gewoon voorraadartikel.
+- **Niets gaat verloren**: id, code, voorraad, prijzen, minimum, afbeelding, boekingen en reserveringen
+  van elk artikel blijven; werkorders, offertes, facturen en bestellingen verwijzen nog naar dezelfde
+  code. Het hoofdartikel neemt eenheid, btw, omzetgroep en prijs van het eerste artikel (op code) en
+  de eerste afbeelding over. Artikelen met verschillende eenheid, btw of omzetgroep, gearchiveerde
+  artikelen en artikelen die al hoofdartikel of variant zijn worden geweigerd (409); een id van een
+  andere organisatie is 404. Audit: `voorraad_samengevoegd`.
+- **Webshop**: een apart aan een webshopproduct gekoppeld artikel verliest die koppeling (een variant
+  hoort bij een variatie); daarna zet *In webshop zetten* het hoofdartikel als één variabel product
+  in de webshop. Het oude webshopproduct blijft staan tot je het daar weghaalt.
+- **Frontend** (`artikelen/merge.js`): knop *Samenvoegen tot variabel artikel* bij Artikelen. Stap 1:
+  voorstellen (één klik) of zelf artikelen aanvinken; stap 2: controle met code, omschrijving, kenmerk,
+  waarde per artikel en een overzicht van wat er verandert; daarna opent het nieuwe hoofdartikel.
+- Tests: `test/merge-articles.test.js`.
+
 ## 1.5.7
 
 Afbeeldingen bij artikelen: uploaden, overnemen uit de oude webshop en tonen in de eigen shop.

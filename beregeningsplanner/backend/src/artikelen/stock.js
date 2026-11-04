@@ -34,9 +34,14 @@
 //   een hoofdartikel op een werkorder, dan moet er eerst een maat gekozen
 //   worden (forWorkOrder: chooseVariant). Eenheid, btw en omzetgroep volgen het
 //   hoofdartikel.
+// - Samenvoegen (1.5.8): losse artikelen worden de varianten van een nieuw hoofdartikel
+//   (mergeIntoVariants). Hun id, code, voorraad, prijzen, afbeelding, boekingen en
+//   reserveringen blijven zoals ze zijn, dus werkorders, offertes en facturen
+//   verwijzen nog steeds naar dezelfde code. mergeSuggestions stelt groepen voor.
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { loadArticles } = require('../webshop/shop');
+const { suggestGroups, MAX_GROUP_SIZE } = require('./variant-suggestions');
 
 const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 // Mutaties die een beheerder op het artikel zelf doet (de rest hoort bij een werkorder).
@@ -313,7 +318,7 @@ function needsOf(materials) {
  * Maakt de opslag voor voorraadartikelen, mutaties en reserveringen.
  * @param {object} db De database.
  * @param {{ articles?: Function, onDirty?: Function }} [options] Catalogus van de planner; aanroep na een wijziging voor de webshop.
- * @returns {object} list, get, create, update, remove, move, setVariants, articleChoices, importCatalog, importShop, mirrorShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal, reserveOrder, releaseOrder, issueOrder en onDirty.
+ * @returns {object} list, get, create, update, remove, move, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, importCatalog, importShop, mirrorShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal, reserveOrder, releaseOrder, issueOrder en onDirty.
  */
 function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) {
   /**
@@ -764,6 +769,92 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     if (out.error) return out;
     if (out.linked && out.created.length) dirty(tenantId);
     return { item: get(tenantId, id), created: out.created.length - out.restored, restored: out.restored, removed: out.removed };
+  }
+
+  /**
+   * Stelt groepen losse artikelen voor die samen één variabel artikel kunnen worden
+   * (zelfde omschrijving op de maat of kleur na, zelfde eenheid, btw en omzetgroep).
+   * Eén query met alleen de nodige kolommen.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {object[]} De voorstellen: attributeName, name, code en items (id, code, name, value).
+   */
+  function mergeSuggestions(tenantId) {
+    const rows = prepare('SELECT id, code, name, unit, vat_rate, revenue_group, archived, parent_id, has_variants FROM stock_items WHERE tenant_id = ?').all(tenantId);
+    const loose = rows.filter((row) => !row.archived && !row.parent_id && !Number(row.has_variants))
+      .map((row) => ({ id: row.id, code: row.code, name: row.name, unit: row.unit, vatRate: Number(row.vat_rate ?? 21), revenueGroup: row.revenue_group || 'producten' }));
+    return suggestGroups(loose, new Set(rows.map((row) => row.code)));
+  }
+
+  /**
+   * Voegt losse artikelen samen tot de varianten van een nieuw hoofdartikel. De
+   * artikelen zelf blijven bestaan (zelfde id en code, dus werkorders, offertes,
+   * facturen en bestellingen verwijzen nog naar hetzelfde artikel) en houden hun
+   * voorraad, prijzen, afbeelding, boekingen en reserveringen; ze krijgen alleen
+   * een hoofdartikel en een waarde voor het kenmerk. Het hoofdartikel neemt eenheid,
+   * btw, omzetgroep en prijzen van het eerste artikel (op code) over en neemt de
+   * eerste afbeelding over. Is een artikel apart aan een webshopproduct gekoppeld,
+   * dan vervalt die koppeling: het hoofdartikel kan daarna met "In webshop zetten"
+   * als één variabel product worden aangemaakt (het oude webshopproduct blijft in
+   * de webshop staan tot je het daar weghaalt).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ ids?: string[], code?: string, name?: string, attributeName?: string, values?: Object<string, string> }} raw De invoer: de artikelen, code en omschrijving van het hoofdartikel, naam van het kenmerk en de waarde per artikel-id.
+   * @returns {object} { item, merged, unlinked } met het nieuwe hoofdartikel, het aantal samengevoegde artikelen en het aantal verbroken webshopkoppelingen; of { error, field?, status }.
+   */
+  function mergeIntoVariants(tenantId, raw) {
+    const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const ids = Array.isArray(input.ids) ? [...new Set(input.ids.map((id) => String(id)))] : [];
+    if (ids.length < 2) return { error: 'Kies minstens twee artikelen om samen te voegen.', field: 'ids', status: 400 };
+    if (ids.length > MAX_GROUP_SIZE) return { error: `Hooguit ${MAX_GROUP_SIZE} artikelen per keer.`, field: 'ids', status: 400 };
+    const code = normalizeCode(input.code);
+    if (code.length > 40 || !/^[A-Z0-9][A-Z0-9._\-/+ ]*$/.test(code)) return { error: 'Geef het hoofdartikel een code (letters, cijfers en - . / +).', field: 'code', status: 400 };
+    const name = cleanText(input.name, 200);
+    if (!name) return { error: 'Geef het hoofdartikel een omschrijving.', field: 'name', status: 400 };
+    const attributeName = cleanText(input.attributeName, 40);
+    if (!attributeName) return { error: 'Geef het kenmerk een naam (bijv. Maat of Kleur).', field: 'attributeName', status: 400 };
+    const rawValues = input.values && typeof input.values === 'object' && !Array.isArray(input.values) ? input.values : {};
+    const valueOf = new Map();
+    const seen = new Set();
+    for (const id of ids) {
+      const value = cleanText(rawValues[id], 40);
+      if (!value) return { error: 'Geef elk artikel een waarde voor het kenmerk (bijv. 16 mm).', field: 'values', status: 400 };
+      if (seen.has(value.toLowerCase())) return { error: `De waarde ${value} komt twee keer voor; elke variant heeft een eigen waarde.`, field: 'values', status: 409 };
+      seen.add(value.toLowerCase());
+      valueOf.set(id, value);
+    }
+    return transaction(db, () => {
+      const rows = prepare(`SELECT id, code, unit, location, cost_price, sale_price, business_price, vat_rate, revenue_group, shop_sync, shop_product_id, image_id, archived, parent_id, has_variants
+          FROM stock_items WHERE tenant_id = ? AND id IN (${placeholders(ids.length)})`).all(tenantId, ...ids);
+      if (rows.length !== ids.length) return { error: 'not_found', status: 404 };
+      for (const row of rows) {
+        if (row.archived) return { error: `${row.code} is gearchiveerd.`, field: 'ids', status: 409 };
+        if (row.parent_id) return { error: `${row.code} is al een variant van een hoofdartikel.`, field: 'ids', status: 409 };
+        if (Number(row.has_variants)) return { error: `${row.code} is zelf al een hoofdartikel.`, field: 'ids', status: 409 };
+      }
+      const first = [...rows].sort((left, right) => (left.code < right.code ? -1 : left.code > right.code ? 1 : 0))[0];
+      if (rows.some((row) => row.unit !== first.unit || Number(row.vat_rate) !== Number(first.vat_rate) || row.revenue_group !== first.revenue_group)) {
+        return { error: 'De artikelen hebben niet dezelfde eenheid, btw en omzetgroep. Een variant volgt die van het hoofdartikel; pas ze eerst aan.', field: 'ids', status: 409 };
+      }
+      if (findCode(tenantId, code)) return { error: 'Er is al een artikel met deze code.', field: 'code', status: 409 };
+      const timestamp = currentTimestamp();
+      const parentId = crypto.randomUUID();
+      const attributes = [{ name: attributeName, values: ids.map((id) => valueOf.get(id)) }];
+      const checked = sanitizeAttributes(attributes);
+      if (checked.error) return checked;
+      prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
+          sale_price, business_price, vat_rate, revenue_group, shop_sync, has_variants, attributes, image_id)
+        VALUES (?, ?, ?, ?, ?, '', 0, 0, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`)
+        .run(parentId, tenantId, code, name, first.unit, first.cost_price, timestamp, timestamp, first.sale_price, first.business_price ?? null, first.vat_rate, first.revenue_group,
+          rows.some((row) => Number(row.shop_sync)) ? 1 : 0, JSON.stringify(checked.value), (rows.find((row) => row.image_id) || {}).image_id || null);
+      let unlinked = 0;
+      for (const row of rows) {
+        // Een apart webshopproduct past niet bij een variatie: de koppeling vervalt, het hoofdartikel wordt later als geheel aan de webshop gekoppeld.
+        if (row.shop_product_id) unlinked++;
+        prepare(`UPDATE stock_items SET parent_id = ?, variant_values = ?, archived_by_parent = 0, updated_at = ?,
+            shop_product_id = NULL, shop_price_seen = NULL, shop_stock_seen = NULL, shop_dirty = 0, shop_error = ''
+          WHERE tenant_id = ? AND id = ?`).run(parentId, JSON.stringify({ [checked.value[0].name]: valueOf.get(row.id) }), timestamp, tenantId, row.id);
+      }
+      return { parentId, merged: rows.length, unlinked };
+    });
   }
 
   /**
@@ -1488,7 +1579,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   return {
-    units, addUnit, removeUnit, setVariants, articleChoices,
+    units, addUnit, removeUnit, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants,
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
     reorderProposal, reserveOrder, releaseOrder, issueOrder, onDirty: setDirtyHook,
@@ -1646,6 +1737,21 @@ function registerStockRoutes(app, ctx) {
     const out = stock.update(tenantOf(req), req.params.id, req.body);
     if (out.error) return fail(res, out);
     res.json(out.item);
+  });
+
+  // Voorstellen: losse artikelen die samen één variabel artikel kunnen worden.
+  app.get('/api/stock/merge-suggestions', requireStock, (req, res) => {
+    noStore(res);
+    res.json({ groups: stock.mergeSuggestions(tenantOf(req)) });
+  });
+
+  // Losse artikelen samenvoegen tot de varianten van een nieuw hoofdartikel.
+  app.post('/api/stock/merge', requireJson, requireStock, (req, res) => {
+    const out = stock.mergeIntoVariants(tenantOf(req), req.body);
+    if (out.error) return fail(res, out);
+    const item = stock.get(tenantOf(req), out.parentId);
+    audit(req, 'voorraad_samengevoegd', { itemId: out.parentId, code: item.code, merged: out.merged, unlinked: out.unlinked });
+    res.status(201).json({ item, merged: out.merged, unlinked: out.unlinked });
   });
 
   // Kenmerken van een hoofdartikel; ontbrekende varianten worden aangemaakt.
