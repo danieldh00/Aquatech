@@ -11,6 +11,9 @@ const { registerPortalRoutes, customerWorkOrder } = require('../src/uitvoering/p
 const Roles = require('../../frontend/shared/roles.js');
 const { createClient, createLogin, listen } = require('./helpers/http-client');
 
+// Een afspraak in het verleden wordt geweigerd: plan altijd 30 dagen vooruit.
+const PLANNED_DATE = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+
 const SECRET = 'p'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
@@ -25,7 +28,7 @@ test('rollen: alleen de klant (en de hoofdbeheerder) heeft het portaal', () => {
 test('klantweergave van een werkorder: geen uren, instructies of notities', () => {
   const wo = {
     id: 'w1', number: 'WO-2026-0001', status: 'bezig', title: 'Aanleg', address: 'Dorpsstraat 1', quoteId: 'q1', quoteNumber: 'OF-1', planId: 'p1',
-    plannedDate: '2026-11-03', startTime: '08:00', assignee: { id: 'u1', displayName: 'Kees' }, updatedAt: 'x',
+    plannedDate: PLANNED_DATE, startTime: '08:00', assignee: { id: 'u1', displayName: 'Kees' }, updatedAt: 'x',
     progress: { steps: 2, done: 1, pct: 50, hours: 6, actualHours: 3, materials: 1, picked: 1 },
     data: {
       instructions: 'Sleutel onder de mat', siteNotes: 'Hond bijt', crew: 'Ploeg A', design: { zones: 2 },
@@ -75,7 +78,7 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
 
     await kees.put(`/api/quotes/${concept.id}`, { status: 'akkoord' });
     const wo = (await kees.post('/api/workorders', { quoteId: concept.id })).body;
-    await kees.put(`/api/workorders/${wo.id}`, { status: 'gepland', data: { ...wo.data, plannedDate: '2026-11-03', startTime: '08:00', instructions: 'Sleutel onder de mat' } });
+    await kees.put(`/api/workorders/${wo.id}`, { status: 'gepland', data: { ...wo.data, plannedDate: PLANNED_DATE, startTime: '08:00', instructions: 'Sleutel onder de mat' } });
     // Een werkorder van een offerte zonder klantaccount telt niet mee.
     const other = (await kees.post('/api/quotes', { data })).body;
     await kees.put(`/api/quotes/${other.id}`, { status: 'akkoord' });
@@ -85,7 +88,7 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
     assert.deepStrictEqual(portal.quotes.map((x) => x.number), [concept.number]);
     assert.deepStrictEqual(portal.workorders.map((x) => x.number), [wo.number]);
     assert.strictEqual(portal.workorders[0].status, 'gepland');
-    assert.strictEqual(portal.workorders[0].plannedDate, '2026-11-03');
+    assert.strictEqual(portal.workorders[0].plannedDate, PLANNED_DATE);
     assert.strictEqual(portal.workorders[0].startTime, '08:00');
     assert.ok(!JSON.stringify(portal).includes('Sleutel'), 'geen interne instructies');
     assert.strictEqual(portal.workorders[0].appointment.state, 'wacht', 'ingepland zonder reactie: wacht op de klant');
