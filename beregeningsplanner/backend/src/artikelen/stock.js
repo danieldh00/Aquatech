@@ -891,7 +891,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const parent = findItem(tenantId, id);
     if (!parent) return { error: 'not_found', status: 404 };
     if (!Number(parent.has_variants)) return { error: 'Dit is geen hoofdartikel.', status: 409 };
-    const children = prepare('SELECT id, code, name, variant_values, archived FROM stock_items WHERE tenant_id = ? AND parent_id = ? ORDER BY code').all(tenantId, parent.id);
+    const children = prepare('SELECT id, code, name, variant_values, archived, shop_product_id FROM stock_items WHERE tenant_id = ? AND parent_id = ? ORDER BY code').all(tenantId, parent.id);
     const log = mergeLogOf(tenantId, parent.id);
     const inLog = new Map((log ? log.snapshot : []).map((entry) => [entry.id, entry]));
     // Een na het samenvoegen bijgemaakte variant gaat weg, of wordt bij boekingen gearchiveerd: één query voor alle varianten.
@@ -919,7 +919,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       mergedAt: log ? log.createdAt : null,
       restoresLinks: children.filter((child) => {
         const shopProductId = inLog.get(child.id) && inLog.get(child.id).shopProductId;
-        return shopProductId && !takenLinks.has(shopProductId);
+        return shopProductId && !child.shop_product_id && !takenLinks.has(shopProductId);
       }).length,
       blocked: parent.shop_product_id
         ? `${parent.code} is aan een webshopproduct gekoppeld (bijv. via In webshop zetten). Haal dat product eerst uit de webshop of ontkoppel het; daarna kun je de samenvoeging terugdraaien.`
@@ -932,7 +932,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * hoofdartikel verdwijnt. Id, code, omschrijving, prijzen, voorraad, afbeelding,
    * boekingen en reserveringen van de artikelen zijn nooit veranderd en blijven dus
    * zoals ze nu zijn (ook mutaties na het samenvoegen). Uit de momentopname komt
-   * de webshopkoppeling terug (tenzij het webshopproduct inmiddels aan een ander
+   * de webshopkoppeling terug (tenzij het artikel inmiddels een nieuwe koppeling heeft of het webshopproduct aan een ander
    * artikel hangt). Bij een hoofdartikel zonder logboekregel (samengevoegd voor
    * 1.5.9) worden alleen de varianten losgemaakt; webshopkoppelingen kunnen dan niet
    * terugkomen. Een variant die na het samenvoegen is bijgemaakt gaat weg (met
@@ -950,7 +950,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       if (!parent || !Number(parent.has_variants)) return { error: 'not_found', status: 404 };
       const log = mergeLogOf(tenantId, parent.id);
       const inLog = new Map((log ? log.snapshot : []).map((entry) => [entry.id, entry]));
-      const children = prepare('SELECT id, code, archived, archived_by_parent FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, parent.id);
+      const children = prepare('SELECT id, code, archived, archived_by_parent, shop_product_id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, parent.id);
       const reopened = [];
       const wantedLinks = [...new Set([...inLog.values()].map((entry) => entry.shopProductId).filter(Boolean))];
       const taken = new Set(wantedLinks.length
@@ -973,7 +973,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         const entry = inLog.get(child.id);
         prepare(`UPDATE stock_items SET parent_id = NULL, variant_values = '', archived = CASE WHEN archived_by_parent = 1 THEN 0 ELSE archived END,
             archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND id = ?`).run(timestamp, tenantId, child.id);
-        if (entry && entry.shopProductId && !taken.has(entry.shopProductId)) {
+        if (entry && entry.shopProductId && !child.shop_product_id && !taken.has(entry.shopProductId)) {
           prepare('UPDATE stock_items SET shop_product_id = ?, shop_price_seen = ?, shop_stock_seen = ?, shop_dirty = ?, shop_error = ? WHERE tenant_id = ? AND id = ?')
             .run(entry.shopProductId, entry.shopPriceSeen, entry.shopStockSeen, 1, '', tenantId, child.id);
           taken.add(entry.shopProductId);

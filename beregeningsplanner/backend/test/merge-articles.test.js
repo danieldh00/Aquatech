@@ -217,6 +217,11 @@ test('samenvoeging terugdraaien via de API: artikelen weer los met hun voorraad,
     const piet = await as('piet', 'groen');
     assert.strictEqual((await piet.post(`/api/stock/items/${merged.item.id}/unmerge`, {})).status, 404);
 
+    // Een variant die na het samenvoegen een nieuwe koppeling kreeg, houdt die; de preview telt hem niet mee.
+    db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('555', made[0].id);
+    assert.strictEqual((await baas.get(`/api/stock/items/${merged.item.id}/unmerge`)).body.restoresLinks, 0);
+    db.prepare('UPDATE stock_items SET shop_product_id = NULL WHERE id = ?').run(made[0].id);
+
     // Is het hoofdartikel inmiddels aan een webshopproduct gekoppeld, dan blijft het staan.
     db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('99', merged.item.id);
     assert.strictEqual((await baas.post(`/api/stock/items/${merged.item.id}/unmerge`, {})).status, 409);
