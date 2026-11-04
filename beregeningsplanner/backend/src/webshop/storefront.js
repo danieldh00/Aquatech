@@ -388,7 +388,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           const problems = parsed.problems.map((problem) => ({ text: `Regel ${problem.line} (${problem.text})`, message: problem.message }));
           if (parsed.truncated) problems.push({ text: 'Lijst', message: `Alleen de eerste ${Wholesale.MAX_PASTE_LINES} regels zijn gelezen; plak de rest apart.` });
           if (!parsed.entries.length && !problems.length) problems.push({ text: 'Lijst', message: 'Er staan geen artikelcodes in de lijst.' });
-          return { wanted: parsed.entries, problems, pasted: text };
+          return { wanted: parsed.entries, problems, pasted: text, problemLines: parsed.problems.map((problem) => problem.line) };
         }
         if (body.action === 'opnieuw') {
           const order = orders.getForUser(tenantId, viewer.id, String(body.orderId ?? ''));
@@ -396,6 +396,22 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           return { wanted: order.lines.map((line) => ({ code: String(line.code).toUpperCase(), qty: line.qty })), problems: [], pasted: '' };
         }
         return null;
+      };
+      /**
+       * De regels van een geplakte lijst die niet verwerkt zijn (onleesbaar, onbekende code of niet meer in de wagen gepast), zodat een gecorrigeerde lijst geen regels dubbel toevoegt.
+       * @param {{ pasted: string, problemLines?: number[] }} request De uitkomst van wantedFrom.
+       * @param {Set<string>} failedCodes De artikelcodes die niet in de wagen kwamen.
+       * @returns {string} De overgebleven regels, onder elkaar.
+       */
+      const unprocessedLines = (request, failedCodes) => {
+        if (!request.problemLines) return request.pasted;
+        const unreadable = new Set(request.problemLines);
+        return request.pasted.replace(/\r/g, '').split('\n').filter((line, index) => {
+          if (!line.trim()) return false;
+          if (unreadable.has(index + 1)) return true;
+          const parsed = Wholesale.parseOrderList(line).entries[0];
+          return Boolean(parsed && failedCodes.has(parsed.code));
+        }).join('\n');
       };
       /**
        * Toont het groothandelsvenster.
@@ -430,7 +446,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         // Alles gelukt zonder iets te melden: meteen naar de winkelwagen.
         if (notice.added > 0 && !problems.length && !notice.adjusted.length && !notice.skipped.length) return res.redirect(303, '../winkelwagen/');
         if (resolved.entries.length) req.pendingCart = merged.lines;
-        showWholesale(req, res, viewer, { notice, pasted: problems.length ? request.pasted : '' });
+        const failedCodes = new Set([...resolved.problems.map((problem) => problem.text), ...merged.skipped]);
+        showWholesale(req, res, viewer, { notice, pasted: problems.length || notice.skipped.length ? unprocessedLines(request, failedCodes) : '' });
       });
       router.post('/winkelwagen', form, (req, res) => {
         if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');

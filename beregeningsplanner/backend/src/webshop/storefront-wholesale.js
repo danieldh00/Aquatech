@@ -60,6 +60,10 @@ for (const form of document.querySelectorAll('[data-wholesale-form]')) {
     input.addEventListener('input', () => updateSummary(form));
   }
   // Een ingetypte opdracht met Enter verstuurt niet per ongeluk de hele lijst vanuit het zoekveld.
+  // Lege aantalvelden niet meesturen: bij een grote catalogus blijft het formulier zo binnen de parameterlimiet van de server.
+  form.addEventListener('submit', () => {
+    for (const input of form.querySelectorAll('[data-wholesale-qty]')) if (!(Math.floor(Number(input.value)) >= 1)) input.disabled = true;
+  });
   form.querySelector('[data-wholesale-search]').addEventListener('keydown', (event) => { if (event.key === 'Enter') event.preventDefault(); });
   updateSummary(form);
 }

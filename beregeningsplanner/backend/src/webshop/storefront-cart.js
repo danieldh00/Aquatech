@@ -66,10 +66,11 @@ function addCartLines(current, additions) {
   for (const addition of additions) {
     const existing = next.find((line) => line.code === addition.code);
     if (existing) {
+      if (existing.qty + addition.qty > MAX_QTY) { skipped.push(addition.code); continue; }
       // Een hoger aantal kan het cijfer langer maken: alleen toepassen als de cookie nog past.
-      const raised = next.map((line) => (line === existing ? { ...line, qty: Math.min(MAX_QTY, line.qty + addition.qty) } : line));
+      const raised = next.map((line) => (line === existing ? { ...line, qty: line.qty + addition.qty } : line));
       if (encodeCart(raised).length > MAX_COOKIE_CHARS) skipped.push(addition.code);
-      else existing.qty = Math.min(MAX_QTY, existing.qty + addition.qty);
+      else existing.qty += addition.qty;
       continue;
     }
     const candidate = [...next, { code: addition.code, qty: Math.min(MAX_QTY, addition.qty) }];

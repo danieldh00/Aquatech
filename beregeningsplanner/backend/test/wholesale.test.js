@@ -79,6 +79,12 @@ test('winkelwagen: een gewone toevoeging die niet meer past wordt als geweigerd 
   assert.ok(!cartActionRejected(full, raised, { action: 'set', code: 'ART-1', qty: '5' }));
 });
 
+test('winkelwagen: een gecombineerd aantal boven het maximum wordt niet stil afgekapt', () => {
+  const { lines, skipped } = addCartLines([{ code: 'A', qty: 9990 }], [{ code: 'A', qty: 10 }]);
+  assert.deepStrictEqual(skipped, ['A']);
+  assert.strictEqual(lines[0].qty, 9990);
+});
+
 test('winkelwagen: bulk bijvoegen, en wat niet past wordt gemeld', () => {
   const { lines, skipped } = addCartLines([{ code: 'A', qty: 5 }], [{ code: 'A', qty: 100 }, { code: 'B', qty: 12000 }]);
   assert.deepStrictEqual(lines, [{ code: 'A', qty: 105 }, { code: 'B', qty: 9999 }]);
