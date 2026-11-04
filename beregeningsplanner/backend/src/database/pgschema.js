@@ -731,6 +731,25 @@ const PG_MIGRATIONS = [
   CREATE INDEX web_returns_order ON web_returns (tenant_id, order_id);
   CREATE INDEX web_returns_status ON web_returns (tenant_id, status, created_at);
   `,
+  // 41: afbeeldingen bij artikelen (zie db.js).
+  `
+  CREATE TABLE item_images (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    name         ${TEXT_TYPE} NOT NULL,
+    mime         ${TEXT_TYPE} NOT NULL,
+    width        BIGINT,
+    height       BIGINT,
+    size         BIGINT NOT NULL,
+    content_hash ${TEXT_TYPE} NOT NULL,
+    source_url   ${TEXT_TYPE},
+    data         ${TEXT_TYPE} NOT NULL,
+    created_at   ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX item_images_hash ON item_images (tenant_id, content_hash);
+  ALTER TABLE stock_items ADD COLUMN image_id ${TEXT_TYPE};
+  CREATE INDEX stock_items_image ON stock_items (tenant_id, image_id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

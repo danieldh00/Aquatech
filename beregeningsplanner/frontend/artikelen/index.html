@@ -39,6 +39,7 @@
         <button class="tab active" data-tab="stock" role="tab">Voorraad</button>
         <button class="tab" data-tab="reserved" role="tab">Gereserveerd <span id="t-reserved" class="count"></span></button>
         <button class="tab" data-tab="moves" role="tab">Mutaties</button>
+        <button class="tab" data-tab="media" role="tab">Afbeeldingen</button>
       </nav>
 
       <section id="tab-stock" class="tabpane">
@@ -50,6 +51,7 @@
           <button class="btn primary" id="b-new">+ Artikel</button>
           <button class="btn" id="b-import">Uit catalogus</button>
           <button class="btn" id="b-shop" title="Neemt alle producten uit de webshop over; artikelen die niet in de webshop staan worden gearchiveerd">Alles uit webshop</button>
+          <button class="btn" id="b-images" title="Neemt de afbeeldingen van de webshopproducten over in dit systeem, zodat ze hier staan en niet meer van de oude webshop komen">Afbeeldingen uit webshop</button>
           <button class="btn" id="b-reorder" title="Excel met wat er onder de minimumvoorraad zit en hoeveel je moet bestellen">Bestelvoorstel</button>
           <button class="btn" id="b-units" title="Eenheden (st, m, rol, …) aanmaken of verwijderen">Eenheden</button>
           <button class="btn" id="b-export">Excel-export</button>
@@ -69,6 +71,7 @@
 
         <form id="new-form" class="card-form" hidden novalidate>
           <h3>Nieuw voorraadartikel</h3>
+          <datalist id="catalog-codes"></datalist>
           <div class="row">
             <label>Artikelcode<input name="code" maxlength="40" list="catalog-codes" required autocomplete="off" placeholder="Bijv. PE-25"></label>
             <label class="grow">Omschrijving<input name="name" maxlength="200" required></label>
@@ -89,8 +92,13 @@
             <label>Omzetgroep<select name="revenueGroup"><option value="producten">Producten</option><option value="arbeid">Arbeid</option><option value="overig">Overig</option></select></label>
             <label class="chk"><input type="checkbox" name="shopSync" checked> Naar de webshop</label>
           </div>
-          <datalist id="catalog-codes"></datalist>
-          <div class="row">
+          <div class="row image-row">
+            <span class="image-preview" id="n-image-preview"><span class="muted small">Geen afbeelding</span></span>
+            <label>Afbeelding<input type="file" name="image" accept="image/jpeg,image/png,image/webp"></label>
+            <button class="btn small" type="button" id="n-image-clear" hidden>Afbeelding weghalen</button>
+            <span class="muted small image-hint">JPEG, PNG of WebP; grote afbeeldingen worden verkleind.</span>
+          </div>
+          <div class="row actions">
             <button class="btn primary" type="submit">Toevoegen</button>
             <button class="btn" type="button" data-cancel>Annuleren</button>
           </div>
@@ -105,7 +113,7 @@
             <button class="btn small" type="button" id="i-all">Alles kiezen</button>
           </div>
           <div id="i-list" class="i-list"></div>
-          <div class="row">
+          <div class="row actions">
             <button class="btn primary" type="submit">Op voorraad nemen</button>
             <button class="btn" type="button" data-cancel>Annuleren</button>
           </div>
@@ -119,12 +127,31 @@
           <div class="row"><button class="btn" id="shop-close" type="button" hidden>Sluiten</button></div>
         </dialog>
 
+        <dialog id="images-dialog" class="card-form">
+          <h3>Afbeeldingen uit de webshop overnemen</h3>
+          <p id="images-text" class="small"></p>
+          <progress id="images-bar" max="1" style="width:100%"></progress>
+          <div id="images-failed" class="small muted" hidden></div>
+          <div class="row actions"><button class="btn primary" id="images-start" type="button">Overnemen</button><button class="btn" id="images-close" type="button">Sluiten</button></div>
+        </dialog>
+
         <div class="tablewrap"><table class="grid" id="s-table"></table></div>
       </section>
 
       <section id="tab-reserved" class="tabpane" hidden>
         <p class="muted small">Materialen die open werkorders (Nieuw, Gepland, In uitvoering) nog nodig hebben. Klopt een reservering niet meer, bijvoorbeeld na een nieuw voorraadartikel, <button class="linkbtn" id="b-resync">bereken ze opnieuw</button>.</p>
         <div class="tablewrap"><table class="grid" id="r-table"></table></div>
+      </section>
+
+      <section id="tab-media" class="tabpane" hidden>
+        <div class="filters">
+          <input id="m-search" type="search" placeholder="Zoek op artikelcode, omschrijving of bestandsnaam">
+          <label class="chk"><input type="checkbox" id="m-missing"> Alleen artikelen zonder afbeelding</label>
+          <span class="spacer"></span>
+          <span id="m-count" class="muted small"></span>
+        </div>
+        <div id="m-grid" class="media-grid"></div>
+        <div class="tablewrap"><table class="grid" id="m-missing-table" hidden></table></div>
       </section>
 
       <section id="tab-moves" class="tabpane" hidden>
@@ -195,6 +222,16 @@
           <div class="err" role="alert"></div>
         </form>
       </div>
+      <section class="card-form" id="d-image">
+        <h3>Afbeelding</h3>
+        <div class="row image-row">
+          <span class="image-preview large" id="d-image-view"></span>
+          <label>Nieuwe afbeelding<input type="file" id="d-image-file" accept="image/jpeg,image/png,image/webp"></label>
+          <button class="btn danger small" type="button" id="d-image-remove" hidden>Afbeelding verwijderen</button>
+        </div>
+        <p class="muted small" id="d-image-note">Wordt getoond in de webshop. JPEG, PNG of WebP; grote afbeeldingen worden verkleind.</p>
+        <div class="err" role="alert"></div>
+      </section>
       <section class="card-form" id="d-variants" hidden>
         <h3>Varianten</h3>
         <p class="muted small" id="v-hint"></p>
@@ -228,6 +265,7 @@
   <script src="../beregening/js/sprinklerlib.js"></script>
   <script src="../beregening/js/catalog.js"></script>
   <script src="../werkorders/workorder-core.js"></script>
+  <script src="item-images.js"></script>
   <script src="artikelen.js"></script>
 </body>
 </html>

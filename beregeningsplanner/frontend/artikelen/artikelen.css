@@ -36,6 +36,8 @@ table.grid tr[data-id]:hover td { background: var(--at-green-soft); }
 .card-form .row + .err, .card-form .row + p { margin-top: 10px; }
 .card-form label + label, .card-form .row + label { margin-top: 12px; }
 .card-form .row .btn { padding: 9px 16px; }
+/* Knoppen onder aan een formulier: duidelijk los van de velden erboven, zoals elders in Beheer. */
+.card-form .row.actions { margin-top: 22px; align-items: center; gap: 10px; }
 #units-form { border-left: 4px solid var(--at-teal); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chips .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; background: var(--panel); }
@@ -55,3 +57,21 @@ table.grid .toggle:hover { color: var(--at-teal); }
 #d-variants .tablewrap { margin-top: 14px; }
 #d-variant-of { margin: -6px 0 12px; }
 #d-var-table .variant-link { font-weight: 600; color: inherit; }
+
+/* Afbeelding bij een artikel: voorbeeld naast de bestandskeuze. */
+.image-row { align-items: center; }
+.image-preview { display: inline-flex; align-items: center; justify-content: center; width: 84px; height: 84px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+.image-preview.large { width: 140px; height: 140px; }
+.image-preview img { width: 100%; height: 100%; object-fit: contain; }
+.image-row .image-hint { flex: 1 1 220px; }
+#d-image { border-left: 4px solid var(--at-teal); }
+#images-dialog { border-left: 4px solid var(--at-teal); max-width: 520px; }
+#images-bar { margin: 8px 0 12px; }
+
+/* Mediabibliotheek: raster met alle afbeeldingen. */
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-top: 4px; }
+.media-card { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.media-card a { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: #fff; }
+.media-card img { width: 100%; height: 100%; object-fit: contain; }
+.media-card figcaption { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; font-size: 13px; }
+.media-card figcaption b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

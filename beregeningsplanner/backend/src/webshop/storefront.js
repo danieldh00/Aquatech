@@ -59,10 +59,10 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, onOrder?: Function, onReturn?: Function }} options addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
+ * @param {{ addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, onOrder?: Function, onReturn?: Function }} options addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/winkel', router).
  */
-function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onReturn = () => {} }) {
+function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onReturn = () => {} }) {
   const data = createStorefrontData(db);
   const router = express.Router();
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: remoteIp });
@@ -134,7 +134,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     if (!settingsFor(tenantId).get('storefront') && !isPreview(req) && !previewFile) return res.status(404).type('text').send('Niet gevonden.');
     next();
   });
-  router.use(limiter);
+  // Een categorie toont alle producten met hun foto: de afbeeldingen krijgen een ruimere eigen limiet.
+  const imageLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 1200, keyFn: (req) => `foto:${remoteIp(req)}` });
+  router.use((req, res, next) => (req.path.startsWith('/artikelfoto/') ? imageLimiter : limiter)(req, res, next));
 
   if (addressLookup) registerAddressRoute(router, '/adres/', addressLookup, createRateLimiter({ windowMs: 60 * 1000, max: 30, keyFn: (req) => `adres:${remoteIp(req)}` }));
 
@@ -572,6 +574,14 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   // Afbeeldingen die in Beheer zijn geüpload; het id is onraadbaar en de afbeelding verandert nooit.
   router.get('/media/:id', (req, res) => {
     const file = content && /^[0-9a-f-]{36}$/.test(req.params.id) ? content.imageFile(tenantId, req.params.id) : null;
+    if (!file) return res.status(404).end();
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.type(file.mime).send(file.body);
+  });
+
+  // Afbeeldingen die bij een artikel zijn geüpload of overgenomen; het id is onraadbaar en de afbeelding verandert nooit.
+  router.get('/artikelfoto/:id', (req, res) => {
+    const file = itemImages ? itemImages.file(tenantId, req.params.id) : null;
     if (!file) return res.status(404).end();
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     res.type(file.mime).send(file.body);

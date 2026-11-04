@@ -56,7 +56,7 @@
   const num = (value) => (String(value).trim() === '' ? null : Number(String(value).replace(',', '.')));
   const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 
-  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set() };
+  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null };
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -286,8 +286,9 @@
   function showTab(name) {
     state.tab = name;
     document.querySelectorAll('.tab').forEach((button) => button.classList.toggle('active', button.dataset.tab === name));
-    for (const tabName of ['stock', 'reserved', 'moves']) $(`#tab-${tabName}`).hidden = tabName !== name;
+    for (const tabName of ['stock', 'reserved', 'moves', 'media']) $(`#tab-${tabName}`).hidden = tabName !== name;
     if (name === 'moves' && !state.moves) loadMoves();
+    if (name === 'media') loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
   }
 
@@ -395,15 +396,40 @@
     fillUnits();
     if (state.units.some((unit) => unit.name === 'st')) formElement.unit.value = 'st';
     $('.err', formElement).textContent = '';
+    showNewImage(null);
     const have = new Set(state.items.map((item) => item.code));
     $('#catalog-codes').innerHTML = Object.entries(Catalog.articles).filter(([code]) => !have.has(code)).map(([code, article]) => `<option value="${esc(code)}">${esc(article.name)}</option>`).join('');
     formElement.hidden = false;
     formElement.code.focus();
   }
 
+  /**
+   * Toont de gekozen afbeelding in het formulier voor een nieuw artikel (of leeg).
+   * @param {{ name: string, data: string }|null} picked de klaargemaakte afbeelding, of null
+   */
+  function showNewImage(picked) {
+    state.newImage = picked;
+    $('#n-image-preview').innerHTML = picked ? `<img src="data:image/*;base64,${picked.data}" alt="">` : '<span class="muted small">Geen afbeelding</span>';
+    $('#n-image-clear').hidden = !picked;
+    if (!picked) $('#new-form').image.value = '';
+  }
+
   /** Koppelt het formulier voor een nieuw artikel. */
   function setupNew() {
     const formElement = $('#new-form');
+    /** Verkleint de gekozen afbeelding en toont hem. */
+    formElement.image.onchange = async () => {
+      const errorBox = $('.err', formElement);
+      errorBox.textContent = '';
+      const file = formElement.image.files && formElement.image.files[0];
+      if (!file) { showNewImage(null); return; }
+      try { showNewImage(await window.ItemImages.prepare(file)); } catch (error) { showNewImage(null); errorBox.textContent = error.message; }
+    };
+    /**
+     * Haalt de gekozen afbeelding weer weg.
+     * @returns {void}
+     */
+    $('#n-image-clear').onclick = () => showNewImage(null);
     /** Vult naam en eenheid in als de code in de catalogus staat. */
     formElement.code.oninput = () => {
       const article = Catalog.articles[formElement.code.value.trim().toUpperCase()];
@@ -432,6 +458,7 @@
         } });
         formElement.hidden = true;
         toast(`${item.code} toegevoegd`);
+        if (state.newImage) await window.ItemImages.upload(item.id, state.newImage).catch((error) => toast(`${item.code} is toegevoegd, maar de afbeelding niet: ${error.message}`, true));
         await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
       } catch (error) {
         errorBox.textContent = error.message;
@@ -555,6 +582,7 @@
       : !item.shop.productId ? (item.shopSync ? 'Nog niet gekoppeld aan een webshopproduct (koppelen gaat op SKU = artikelcode).' : '')
         : item.shop.pending ? 'Webshop: wijziging wordt binnen enkele seconden verstuurd.'
           : `Webshop: gekoppeld (product ${esc(item.shop.productId)})${item.shop.syncedAt ? `, bijgewerkt ${esc(when(item.shop.syncedAt))}` : ''}.`;
+    renderImage();
     $('#d-remove').hidden = item.archived;
     $('#d-restore').hidden = !item.archived;
     $('#move-form').hidden = item.archived || item.hasVariants;
@@ -576,6 +604,144 @@
         <td class="num${movement.qty < 0 ? ' neg' : ''}">${movement.qty > 0 ? '+' : ''}${esc(nl(movement.qty))}</td><td class="num">${esc(nl(movement.balance))}</td>
         <td>${movement.workOrderId ? woLink({ id: movement.workOrderId, number: movement.workOrderNumber }) : ''}</td><td>${esc(movement.userName)}</td><td class="wrap">${esc(movement.note)}</td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="empty">Nog geen mutaties.</td></tr></tbody>';
+  }
+
+  // ---------- Mediabibliotheek ----------
+  /**
+   * Haalt de mediabibliotheek op en tekent hem.
+   * @returns {Promise<void>}
+   */
+  async function loadMedia() {
+    state.media = await api('stock/images');
+    renderMedia();
+  }
+
+  /** Tekent de mediabibliotheek: een raster met alle afbeeldingen (gefilterd op de zoekterm) of de lijst met artikelen zonder afbeelding. */
+  function renderMedia() {
+    if (!state.media) return;
+    const term = $('#m-search').value.trim().toLowerCase();
+    const onlyMissing = $('#m-missing').checked;
+    /**
+     * Of een tekst de zoekterm bevat.
+     * @param {string} text de tekst
+     * @returns {boolean} true bij een treffer
+     */
+    const matches = (text) => String(text).toLowerCase().includes(term);
+    const images = state.media.images.filter((image) => !term || matches(image.name) || image.items.some((item) => matches(item.code) || matches(item.name)));
+    const missing = state.media.missing.filter((item) => !term || matches(item.code) || matches(item.name));
+    $('#m-grid').hidden = onlyMissing;
+    $('#m-missing-table').hidden = !onlyMissing;
+    $('#m-count').textContent = onlyMissing ? `${missing.length} artikel${missing.length === 1 ? '' : 'en'} zonder afbeelding` : `${images.length} afbeelding${images.length === 1 ? '' : 'en'} · ${state.media.missing.length} artikel${state.media.missing.length === 1 ? '' : 'en'} zonder`;
+    $('#m-grid').innerHTML = images.length ? images.map((image) => {
+      const first = image.items[0];
+      const label = image.items.length ? `${esc(first.code)}${image.items.length > 1 ? ` +${image.items.length - 1}` : ''}` : 'Niet in gebruik';
+      return `<figure class="media-card"><a href="${first ? `./?id=${encodeURIComponent(first.id)}` : '#'}" ${first ? `data-open="${esc(first.id)}"` : ''}><img src="${esc(window.ItemImages.src(image.id))}" alt="" loading="lazy"></a>
+        <figcaption><b title="${esc(image.items.map((item) => `${item.code} ${item.name}`).join('\n'))}">${label}</b><span class="muted small">${esc(image.width)}×${esc(image.height)} · ${esc(Math.round(image.size / 1024))} kB</span>${image.sourceUrl ? `<span class="muted small" title="${esc(image.sourceUrl)}">van oude webshop</span>` : ''}</figcaption></figure>`;
+    }).join('') : '<p class="muted">Nog geen afbeeldingen. Upload ze bij een artikel of neem ze over uit de webshop.</p>';
+    $('#m-missing-table').innerHTML = missing.length ? `<thead><tr><th>Code</th><th>Omschrijving</th></tr></thead><tbody>${missing.map((item) => `<tr data-id="${esc(item.id)}"><td class="code"><a href="./?id=${encodeURIComponent(item.id)}">${esc(item.code)}</a></td><td class="wrap">${esc(item.name)}</td></tr>`).join('')}</tbody>`
+      : '<tbody><tr><td class="empty">Alle artikelen hebben een afbeelding.</td></tr></tbody>';
+  }
+
+  /** Koppelt de zoekbalk, het filter en het openen van een artikel in de mediabibliotheek. */
+  function setupMedia() {
+    $('#m-search').oninput = renderMedia;
+    $('#m-missing').onchange = renderMedia;
+    /**
+     * Opent het artikel bij een klik op een afbeelding of een regel zonder afbeelding.
+     * @param {MouseEvent} event de klik
+     */
+    $('#tab-media').onclick = (event) => {
+      const target = event.target.closest('[data-open], tr[data-id]');
+      if (!target || event.metaKey || event.ctrlKey) return;
+      event.preventDefault();
+      openItem(target.dataset.open || target.dataset.id, true);
+    };
+  }
+
+  /** Tekent het blok Afbeelding van het geopende artikel. */
+  function renderImage() {
+    const item = state.item;
+    $('#d-image-view').innerHTML = item.imageId ? `<img src="${esc(window.ItemImages.src(item.imageId))}" alt="">` : '<span class="muted small">Geen afbeelding</span>';
+    $('#d-image-remove').hidden = !item.imageId;
+    $('#d-image-file').value = '';
+    $('.err', $('#d-image')).textContent = '';
+  }
+
+  /** Koppelt het uploaden en verwijderen van de afbeelding van een artikel. */
+  function setupImage() {
+    const errorBox = $('.err', $('#d-image'));
+    /** Verkleint en uploadt de gekozen afbeelding. */
+    $('#d-image-file').onchange = async () => {
+      const file = $('#d-image-file').files && $('#d-image-file').files[0];
+      if (!file) return;
+      errorBox.textContent = '';
+      try {
+        state.item.imageId = await window.ItemImages.upload(state.item.id, await window.ItemImages.prepare(file));
+        toast('Afbeelding opgeslagen');
+      } catch (error) { errorBox.textContent = error.message; }
+      renderImage();
+    };
+    /** Haalt de afbeelding weg. */
+    $('#d-image-remove').onclick = async () => {
+      errorBox.textContent = '';
+      try {
+        await window.ItemImages.remove(state.item.id);
+        state.item.imageId = null;
+        toast('Afbeelding verwijderd');
+      } catch (error) { errorBox.textContent = error.message; }
+      renderImage();
+    };
+  }
+
+  // ---------- Afbeeldingen uit de webshop ----------
+  /** Opent het venster om de afbeeldingen van de webshop over te nemen en toont hoeveel er nog te doen is. */
+  async function openImagesImport() {
+    const dialog = $('#images-dialog');
+    $('#images-failed').hidden = true;
+    $('#images-bar').value = 0;
+    $('#images-start').hidden = true;
+    $('#images-text').textContent = 'Controleren…';
+    dialog.showModal();
+    try {
+      const pendingCount = await window.ItemImages.pending();
+      $('#images-text').textContent = pendingCount
+        ? `${pendingCount} artikel${pendingCount === 1 ? '' : 'en'} gebruik${pendingCount === 1 ? 't' : 'en'} nog de afbeelding van de oude webshop. Overnemen bewaart ze in dit systeem; opnieuw uitvoeren neemt alleen over wat nog ontbreekt.`
+        : 'Alle afbeeldingen van gekoppelde webshopproducten staan al in dit systeem.';
+      $('#images-start').hidden = !pendingCount;
+      $('#images-start').dataset.total = String(pendingCount);
+    } catch (error) {
+      $('#images-text').textContent = `Controleren mislukt: ${error.message}`;
+    }
+  }
+
+  /** Koppelt de knoppen van het venster Afbeeldingen uit de webshop. */
+  function setupImagesImport() {
+    /** Sluit het venster. */
+    $('#images-close').onclick = () => { $('#images-dialog').close(); };
+    /** Neemt de afbeeldingen over met een voortgangsbalk. */
+    $('#images-start').onclick = async () => {
+      const total = Number($('#images-start').dataset.total) || 1;
+      $('#images-start').hidden = true;
+      $('#images-close').disabled = true;
+      try {
+        const totals = await window.ItemImages.importAll((progress) => {
+          $('#images-bar').value = Math.min(1, (total - progress.pending) / total);
+          $('#images-text').textContent = `${progress.imported + progress.reused} overgenomen…`;
+        });
+        $('#images-bar').value = 1;
+        $('#images-text').textContent = `Klaar: ${totals.imported + totals.reused} artikel${totals.imported + totals.reused === 1 ? '' : 'en'} overgenomen${totals.failed.length ? `, ${totals.failed.length} niet gelukt` : ''}.`;
+        if (totals.failed.length) {
+          $('#images-failed').hidden = false;
+          $('#images-failed').innerHTML = `Niet gelukt (opnieuw uitvoeren probeert ze nog eens):<br>${totals.failed.slice(0, 20).map((failure) => `${esc(failure.code)}: ${esc(failure.reason)}`).join('<br>')}${totals.failed.length > 20 ? `<br>… en ${totals.failed.length - 20} meer` : ''}`;
+        }
+        await load();
+      } catch (error) {
+        $('#images-text').textContent = `Overnemen mislukt: ${error.message}`;
+        $('#images-start').hidden = false;
+      } finally {
+        $('#images-close').disabled = false;
+      }
+    };
   }
 
   /**
@@ -1061,6 +1227,8 @@
      * @returns {Promise<void>}
      */
     $('#b-shop').onclick = () => importShop();
+    /** Opent het venster om de afbeeldingen van de webshop over te nemen. */
+    $('#b-images').onclick = () => { openImagesImport(); };
     /**
      * Exporteert de voorraad.
      * @returns {Promise<void>}
@@ -1095,6 +1263,9 @@
     setupImport();
     loadUnits().catch((error) => toast(error.message, true));
     setupShop();
+    setupMedia();
+    setupImagesImport();
+    setupImage();
     setupItem();
     window.addEventListener('popstate', () => {
       const itemId = new URLSearchParams(location.search).get('id');
@@ -1107,7 +1278,7 @@
       $('#v-list').hidden = false;
       try { await load(); } catch (error) { toast(error.message, true); }
       const hash = location.hash.slice(1);
-      if (['stock', 'reserved', 'moves'].includes(hash)) showTab(hash);
+      if (['stock', 'reserved', 'moves', 'media'].includes(hash)) showTab(hash);
       // Vanuit een werkorder: "Op voorraad nemen" met de ontbrekende codes.
       const codes = (params.get('codes') || '').split(',').map((code) => code.trim()).filter((code) => Catalog.articles[code.toUpperCase()]);
       if (codes.length) openImport(codes);

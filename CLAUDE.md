@@ -353,6 +353,14 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (recht `werkorders`). Bestelvoorstel (0.70.0, migratie 30): `reorder_qty`
   (*Bestellen tot*, leeg = 2× minimum), `GET /api/stock/reorder`
   (`stock.reorderProposal`), Excel in de browser.
+- **Artikelafbeeldingen** (1.5.7, `backend/src/artikelen/item-images.js`, migratie 41): tabel
+  `item_images` (versleuteld via `vault.sealBytes`, `content_hash` = gedeelde foto's,
+  `source_url`) + `stock_items.image_id`; één afbeelding per artikel, upload via
+  `PUT /api/stock/items/:id/image` (browser verkleint tot 1200 px), shop toont hem via
+  `winkel/artikelfoto/<id>` (catalogus-waarde `own:<id>`, `imageOf` in storefront-data.js, geldt vóór
+  het adres van het webshopproduct). Overnemen uit de oude webshop: knop *Afbeeldingen uit webshop*,
+  `POST /api/stock/images-import { after }` in porties van 25, herhaalbaar. Tests: `imageFetch` in
+  `createApp`. Een nieuw artikelveld in een formulier met knoppenrij: gebruik `.row.actions`.
 - **Verkoop, webshop en facturen** (0.61.0, Brincr vervangen deel 1; migratie 26):
   `stock_items` heeft `sale_price`/`vat_rate`/`revenue_group` (Aquatech = bron).
   `backend/src/webshop/shop-sync.js`: tweerichting met WooCommerce REST v3

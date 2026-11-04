@@ -13,6 +13,17 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.5.7',
+      date: '2026-11-04',
+      title: 'Afbeeldingen bij artikelen',
+      items: [
+        { text: 'Je kunt nu een afbeelding uploaden bij een artikel, zowel bij een nieuw artikel als bij een bestaand artikel. Grote foto\'s worden automatisch verkleind. De afbeelding staat in de webshop bij het product.', for: ['voorraad'] },
+        { text: 'Onder Artikelen staat een knop Afbeeldingen uit webshop: die neemt de afbeeldingen die nu nog van de oude webshop komen over in dit systeem. Het kan zo vaak als je wilt; alleen wat nog ontbreekt wordt opgehaald.', for: ['voorraad'] },
+        { text: 'Nieuw tabblad Afbeeldingen bij Artikelen: de mediabibliotheek met alle productafbeeldingen, bij welke artikelen ze horen en welke artikelen nog geen afbeelding hebben. Klik op een afbeelding om het artikel te openen.', for: ['voorraad'] },
+        { text: 'In het formulier Nieuw voorraadartikel staan de knoppen Toevoegen en Annuleren nu ruimer onder de velden.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.5.6',
       date: '2026-11-02',
       title: 'Adres alleen via postcode en huisnummer',

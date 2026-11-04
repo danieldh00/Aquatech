@@ -66,6 +66,18 @@ function imageSrc(root, reference) {
 }
 
 /**
+ * Het adres van een productafbeelding: een eigen afbeelding ('own:<id>') komt van
+ * de shop zelf, anders is het het https-adres van het webshopproduct.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {string} image De waarde uit de catalogus ('own:<id>' of een https-adres).
+ * @returns {string} Het adres, ontsnapt voor in een attribuut.
+ */
+function productImageSrc(root, image) {
+  const text = String(image || '');
+  return text.startsWith('own:') ? `${root}artikelfoto/${escapeHtml(text.slice(4))}` : escapeHtml(text);
+}
+
+/**
  * Het adres van een knop uit Beheer: een volledig adres, een pad in de shop of de standaard.
  * @param {string} link De ingevoerde link (leeg = standaard).
  * @param {string} root Relatief pad naar de shop-startpagina.
@@ -255,7 +267,7 @@ function orderForm(root, code, inStock, className) {
  */
 function variantRow(product, root) {
   const selected = product.variants.find((variant) => variant.inStock) || product.variants[0];
-  const image = product.image ? `<img src="${escapeHtml(product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
+  const image = product.image ? `<img src="${productImageSrc(root, product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
   const options = product.variants.map((variant) => `<option value="${escapeHtml(variant.code)}" data-code="${escapeHtml(variant.code)}" data-meta="${escapeHtml(variant.meta)}" data-price="${escapeHtml(formatPrice(variant.priceIncl))}" data-stock="${variant.inStock ? 'in' : 'out'}" data-href="${productHref(root, product, variant)}"${variant === selected ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('');
   return `<div class="variant-row" data-variant-row>
   <a class="product-image" href="${productHref(root, product, selected)}" data-variant-link tabindex="-1" aria-hidden="true">${image}</a>
@@ -302,7 +314,7 @@ function variantBadge(product) {
  * @returns {string} HTML van de kaart.
  */
 function productCard(product, root) {
-  const image = product.image ? `<img src="${escapeHtml(product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
+  const image = product.image ? `<img src="${productImageSrc(root, product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
   return `<a class="product-card" href="${root}product/${escapeHtml(product.slug)}/">
   <span class="product-image">${image}</span>
   <span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span>
@@ -344,7 +356,7 @@ function groupShowcase(group, products) {
  * @returns {string} HTML van de regel.
  */
 function productRow(product, root) {
-  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${escapeHtml(product.image)}" alt="" loading="lazy"></span><span class="product-row-text"><span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span><span class="product-price">${priceText(product)}</span>${variantBadge(product)}<span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span></span></a>`;
+  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${productImageSrc(root, product.image)}" alt="" loading="lazy"></span><span class="product-row-text"><span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span><span class="product-price">${priceText(product)}</span>${variantBadge(product)}<span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span></span></a>`;
 }
 
 /**
@@ -365,7 +377,7 @@ function homePage(catalog) {
   if (!catalog.products.length) return layout({ root, groups: catalog.groups, wide: true, title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}<div class="wrap"><p class="muted">De webshop wordt gevuld. Kom snel terug.</p></div>` });
   const tiles = catalog.groups.map((group) => {
     const showcase = groupShowcase(group, catalog.products);
-    return `<a class="assortment-tile" href="groep/${escapeHtml(group.slug)}/"><span class="product-image">${showcase ? `<img src="${escapeHtml(showcase.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><span>${escapeHtml(group.name)}</span></a>`;
+    return `<a class="assortment-tile" href="groep/${escapeHtml(group.slug)}/"><span class="product-image">${showcase ? `<img src="${productImageSrc(root, showcase.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><span>${escapeHtml(group.name)}</span></a>`;
   }).join('');
   const assortment = `<section class="assortment"><div class="wrap assortment-inner"><div class="assortment-title"><h2>Assortiment</h2><p>Alles voor jouw project</p></div><div class="assortment-strip">${tiles}</div></div></section>`;
   const popular = catalog.featured.length ? `<section class="wrap"><h2 class="centered">Populaire producten</h2>
@@ -469,7 +481,7 @@ function productPage(product, groups, chosenCode = '') {
   const chosen = variants.length ? (variants.find((variant) => variant.code === chosenCode) || variants.find((variant) => variant.inStock) || variants[0]) : null;
   const shown = chosen || product;
   const imageUrl = (chosen && chosen.image) || product.image;
-  const image = imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}">` : '<span class="no-image" aria-hidden="true"></span>';
+  const image = imageUrl ? `<img src="${productImageSrc(root, imageUrl)}" alt="${escapeHtml(product.name)}">` : '<span class="no-image" aria-hidden="true"></span>';
   const group = groups.find((candidate) => candidate.slug === product.groupSlug);
   const picker = chosen ? `<form class="variant-pick" method="get" action="">
       <label>${escapeHtml(product.attributeName)} <span class="variant-count">(${variants.length} varianten)</span><select name="v">${variants.map((variant) => `<option value="${escapeHtml(variant.code)}"${variant === chosen ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('')}</select></label>

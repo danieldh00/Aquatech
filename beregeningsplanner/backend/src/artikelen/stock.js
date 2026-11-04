@@ -331,7 +331,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   const dirty = (tenantId) => { if (dirtyHook) dirtyHook(tenantId); };
   const SALE_COLS = 'sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error';
-  const VARIANT_COLS = 'parent_id, has_variants, attributes, variant_values';
+  const VARIANT_COLS = 'parent_id, has_variants, attributes, variant_values, image_id';
   const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}, ${VARIANT_COLS}`;
   const MOVE_COLS = 'm.id, m.item_id, m.kind, m.qty, m.balance, m.work_order_id, m.work_order_number, m.source, m.note, m.user_name, m.created_at';
 
@@ -356,7 +356,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       weightGrams: itemRow.weight_grams == null ? null : Number(itemRow.weight_grams),
       shopSync: itemRow.shop_sync === undefined ? true : Boolean(Number(itemRow.shop_sync)),
       shop: { productId: itemRow.shop_product_id || null, pending: Boolean(Number(itemRow.shop_dirty)), syncedAt: itemRow.shop_synced_at || null, error: itemRow.shop_error || '' },
-      parentId: itemRow.parent_id || null, hasVariants: Boolean(Number(itemRow.has_variants)),
+      parentId: itemRow.parent_id || null, imageId: itemRow.image_id || null, hasVariants: Boolean(Number(itemRow.has_variants)),
       attributes: Number(itemRow.has_variants) ? parseJson(itemRow.attributes, []) : [],
       values: itemRow.parent_id ? parseJson(itemRow.variant_values, {}) : null,
       createdAt: itemRow.created_at, updatedAt: itemRow.updated_at,
@@ -428,7 +428,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     if (parentId) { where += ' AND i.parent_id = ?'; args.push(String(parentId)); }
     return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
         i.sale_price, i.business_price, i.vat_rate, i.revenue_group, i.weight_grams, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
-        i.parent_id, i.has_variants, i.attributes, i.variant_values,
+        i.parent_id, i.has_variants, i.attributes, i.variant_values, i.image_id,
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders, COALESCE(f.orders, 0) AS family_orders
       FROM stock_items i
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
@@ -1652,6 +1652,7 @@ function registerStockRoutes(app, ctx) {
   app.put('/api/stock/items/:id/variants', requireJson, requireStock, (req, res) => {
     const out = stock.setVariants(tenantOf(req), req.params.id, req.body?.attributes);
     if (out.error) return fail(res, out);
+    if (out.removed > 0 && ctx.pruneImages) ctx.pruneImages(tenantOf(req));
     audit(req, 'voorraad_varianten', { itemId: out.item.id, code: out.item.code, created: out.created, restored: out.restored });
     res.json({ ...out.item, created: out.created, restored: out.restored });
   });
@@ -1675,6 +1676,8 @@ function registerStockRoutes(app, ctx) {
   app.delete('/api/stock/items/:id', requireStock, (req, res) => {
     const out = stock.remove(tenantOf(req), req.params.id);
     if (!out) return notFound(res);
+    // Ook bij archiveren: een hoofdartikel kan varianten (met eigen afbeelding) echt verwijderd hebben.
+    if (ctx.pruneImages) ctx.pruneImages(tenantOf(req));
     audit(req, out.deleted ? 'voorraad_artikel_verwijderd' : 'voorraad_artikel_gearchiveerd', { itemId: req.params.id, code: out.code });
     res.json(out);
   });
