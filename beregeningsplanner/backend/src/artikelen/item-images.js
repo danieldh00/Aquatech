@@ -217,6 +217,11 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
         const url = queue.shift();
         const items = byUrl.get(url);
         let imageId = known.get(url) || null;
+        // Een bekende afbeelding kan intussen opgeruimd zijn (artikel verwijderd tijdens het overnemen): dan opnieuw ophalen.
+        if (imageId && !prepare('SELECT 1 AS present FROM item_images WHERE tenant_id = ? AND id = ?').get(tenantId, imageId)) {
+          known.delete(url);
+          imageId = null;
+        }
         if (imageId) {
           result.reused += items.length;
         } else {
