@@ -11,7 +11,7 @@ const express = require('express');
 const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { registerAddressRoute } = require('../platform/address-lookup');
-const { remoteIp } = require('../beveiliging/auth');
+const { clientKey } = require('../beveiliging/auth');
 const { createStorefrontData } = require('./storefront-data');
 const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
 const { DEFAULT_SITE } = require('./shop-content');
@@ -69,7 +69,7 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onReturn = () => {} }) {
   const data = createStorefrontData(db);
   const router = express.Router();
-  const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: remoteIp });
+  const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: clientKey });
 
   /**
    * Stuurt een bestand (CSS, afbeelding, lettertype). Met `?v=<versie>` in het
@@ -143,10 +143,10 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     next();
   });
   // Een categorie toont alle producten met hun foto: de afbeeldingen krijgen een ruimere eigen limiet.
-  const imageLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 1200, keyFn: (req) => `foto:${remoteIp(req)}` });
+  const imageLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 1200, keyFn: (req) => `foto:${clientKey(req)}` });
   router.use((req, res, next) => (req.path.startsWith('/artikelfoto/') ? imageLimiter : limiter)(req, res, next));
 
-  if (addressLookup) registerAddressRoute(router, '/adres/', addressLookup, createRateLimiter({ windowMs: 60 * 1000, max: 30, keyFn: (req) => `adres:${remoteIp(req)}` }));
+  if (addressLookup) registerAddressRoute(router, '/adres/', addressLookup, createRateLimiter({ windowMs: 60 * 1000, max: 30, keyFn: (req) => `adres:${clientKey(req)}` }));
 
   router.get('/assets/:name', (req, res) => {
     const asset = Object.prototype.hasOwnProperty.call(ASSETS, req.params.name) ? ASSETS[req.params.name] : null;
@@ -282,7 +282,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     });
 
     if (orders) {
-      const orderLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `order:${remoteIp(req)}` });
+      const orderLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `order:${clientKey(req)}` });
       /**
        * Past de bestellimiet toe zonder JSON-antwoord.
        * @param {object} req Het verzoek.
@@ -580,8 +580,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         } catch (error) { next(error); }
       });
       if (payments) {
-        const payLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 40, keyFn: (req) => `betalen:${remoteIp(req)}` });
-        const webhookLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `mollie:${remoteIp(req)}` });
+        const payLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 40, keyFn: (req) => `betalen:${clientKey(req)}` });
+        const webhookLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `mollie:${clientKey(req)}` });
         /**
          * Past een limiet toe zonder JSON-antwoord.
          * @param {Function} limit De limiet (createRateLimiter).
@@ -634,7 +634,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
        */
       const returnsHtmlOf = (order, formState = {}) => (returns ? returnsBlock({ items: returns.listForOrder(tenantId, order.id), eligibility: returns.eligibility(tenantId, order), ...formState }) : '');
       if (returns) {
-        const returnLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => `retour:${remoteIp(req)}` });
+        const returnLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => `retour:${clientKey(req)}` });
         /**
          * Past de retourlimiet toe zonder JSON-antwoord.
          * @param {object} req Het verzoek.

@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 
-const { createAuth, remoteIp, parseCookies } = require('./beveiliging/auth');
+const { createAuth, remoteIp, clientKey, parseCookies } = require('./beveiliging/auth');
 const { createRateLimiter } = require('./beveiliging/rate-limit');
 const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
@@ -526,7 +526,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Inloggen: streng begrensd per IP (achter de tunnel is dat het
   // cloudflared-adres, dus effectief een globale grens -- prima voor een
   // handvol gebruikers, en precies wat raden van de code onmogelijk maakt).
-  const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10, keyFn: remoteIp });
+  const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10, keyFn: clientKey });
   // Daarnaast per gebruikersnaam: na 10 mislukte pogingen in 15 minuten is dat
   // account 15 minuten geblokkeerd (ook als de pogingen van veel IP's komen).
   const failures = new Map();
@@ -807,7 +807,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }
 
 
-  const guestLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: remoteIp });
+  const guestLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: clientKey });
   /**
    * De gebruiker, of (met gasten aan) een nieuwe gast; begrensd per IP.
    * @param {object} req Het verzoek.
@@ -1069,7 +1069,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
 
   // ---------- Plannen: alleen de eigen plannen ----------
-  const planLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 900, keyFn: (req) => req.user?.id || remoteIp(req) });
+  const planLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 900, keyFn: (req) => req.user?.id || clientKey(req) });
   /**
    * Is dit een plan (object met areas)?
    * @param {*} data De invoer.
@@ -1545,13 +1545,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const addressLookup = createAddressLookup(addressFetch ? { fetchImpl: addressFetch } : {});
   // Adressen die formulieren opsturen moeten precies kloppen met wat PDOK bij postcode + huisnummer geeft.
   const addressGuard = createAddressGuard(addressLookup);
-  registerAddressRoute(app, '/api/address-lookup', addressLookup, requireUser, createRateLimiter({ windowMs: 60 * 1000, max: 60, keyFn: (req) => req.user?.id || remoteIp(req) }));
+  registerAddressRoute(app, '/api/address-lookup', addressLookup, requireUser, createRateLimiter({ windowMs: 60 * 1000, max: 60, keyFn: (req) => req.user?.id || clientKey(req) }));
 
   // Automatisch herkennen van een plan. De URL is (zonder toegangscode)
   // openbaar, dus elke aanroep kost tegoed: per IP begrensd plus een
   // dagelijks maximum voor de hele app (beide in Beheer > Instellingen).
   // Limieten en dagteller per tenant (omgeving).
-  const analyzeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: (req) => settingsFor(req.tenantId || tenant.id).get('aiHourlyPerIp'), keyFn: (req) => `${req.tenantId || tenant.id}|${remoteIp(req)}` });
+  const analyzeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: (req) => settingsFor(req.tenantId || tenant.id).get('aiHourlyPerIp'), keyFn: (req) => `${req.tenantId || tenant.id}|${clientKey(req)}` });
   const dailyCounts = new Map();
   /**
    * De datum van vandaag (UTC).
@@ -1672,7 +1672,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Leren van herkende plannen (zie recognitions.js en localrecog.js). De
   // planner haalt de geleerde kleuren op voor de lokale herkenning, en stuurt
   // na een AI-herkenning of een goedkeuring alleen kleurtellingen (geen beeld).
-  const learnLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `${req.tenantId || tenant.id}|${remoteIp(req)}` });
+  const learnLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `${req.tenantId || tenant.id}|${clientKey(req)}` });
   app.get('/api/plan/learned', requireAppAccess, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json(recognitions.learned(req.tenantId || tenant.id));
@@ -1760,7 +1760,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const live = tenantRow && tenantRow.parent_id ? store.getTenant(tenantRow.parent_id) : tenantRow;
     return Boolean(tenantRow && !tenantRow.disabled && live && !live.disabled);
   };
-  const publicLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: remoteIp });
+  const publicLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: clientKey });
 
   // ---------- Tekening indienen zonder inloggen, plan ter controle, goedkeuren.
   registerDrawingRoutes(app, {
@@ -2008,9 +2008,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.status(201).json({ tenant: store.tenantRow(out.tenant), copied: out.copied });
   });
 
+  /**
+   * Vergeet de afbeeldingen van omgevingen in het geheugen nadat hun gegevens zijn gewist.
+   * @param {string[]} ids Id's van de omgevingen.
+   * @returns {void}
+   */
+  const forgetImages = (ids) => { for (const id of ids) { itemImageStore.forget(id); shopContentStore.forgetImages(id); } };
+
   app.post('/api/platform/tenants/:id/reset', requireJson, (req, res) => {
     const out = store.resetEnvironment(req.params.id);
     if (out.error) return platformError(res, out);
+    forgetImages([out.tenant.id]);
     console.log(`Testomgeving ${out.tenant.name} leeggemaakt door ${req.user.display_name}`);
     audit(req, 'testomgeving_leeggemaakt', { tenantId: out.tenant.id }, undefined, tenant.id);
     res.json({ ok: true });
@@ -2028,6 +2036,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const out = store.deleteTenant(tenantRow.id, tenant.id);
       if (out.error) return platformError(res, out);
       for (const id of out.ids) { settingsCache.delete(id); dailyCounts.delete(id); }
+      forgetImages(out.ids);
       console.log(`Tenant ${tenantRow.name} (${tenantRow.slug}) verwijderd door ${req.user.display_name}, met ${out.ids.length - 1} testomgeving(en)`);
       audit(req, 'tenant_verwijderd', { tenantId: tenantRow.id, slug: tenantRow.slug, name: tenantRow.name, environments: out.ids.length - 1, rows: out.counts }, undefined, tenant.id);
       return res.json({ ok: true, environments: out.ids.length - 1 });
@@ -2036,6 +2045,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (out.error) return platformError(res, out);
     settingsCache.delete(req.params.id);
     dailyCounts.delete(req.params.id);
+    forgetImages([req.params.id]);
     console.log(`Testomgeving verwijderd door ${req.user.display_name}`);
     audit(req, 'testomgeving_verwijderd', { tenantId: req.params.id }, undefined, tenant.id);
     res.json({ ok: true });
@@ -2095,6 +2105,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     while (testSet.accounts.some((account) => passwordProblem(password, account.username))) password = testdata.newPassword();
     const out = store.seedEnvironment(tenantRow.id, testSet, { passwordHash: await hashPassword(password), numberPrefix: profile.numberPrefix || 'OF-' });
     if (out.error) return platformError(res, out);
+    forgetImages([tenantRow.id]);
     // Klantlinks, reacties, werkorders en webshop via de echte opslaglogica.
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).

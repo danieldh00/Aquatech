@@ -13,6 +13,7 @@
 const { createMailer, validEmail } = require('../platform/mailer');
 const { mailBody } = require('../verkoop/quotes');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
+const { clientKey } = require('../beveiliging/auth');
 
 const LIMITS = { name: 80, email: 120, phone: 30, address: 300, question: 2000 };
 // Grootste plan (met foto of PDF van de tekening als achtergrond) in tekens JSON.
@@ -64,7 +65,7 @@ function registerDrawingRoutes(app, ctx) {
   const tenantActive = ctx.tenantActive || (() => true);
   const mailerFor = ctx.mailerFor || ((settings) => createMailer(settings));
   const planLimiter = ctx.planLimiter || ((req, res, next) => next());
-  const ipLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: PER_IP_HOUR, keyFn: remoteIp });
+  const ipLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: PER_IP_HOUR, keyFn: clientKey });
   const tenantLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: PER_TENANT_DAY, keyFn: (req) => req.drawingTenant });
   /**
    * Stuurt het antwoord 404 "plan niet gevonden".

@@ -7,6 +7,7 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createVault } = require('../src/beveiliging/vault');
 const { inspectImage, cleanJpeg } = require('../src/uitvoering/photos');
+const zlib = require('zlib');
 const { sitePhotoPng } = require('../src/platform/test-data');
 const { createClient, createLogin, listen } = require('./helpers/http-client');
 
@@ -54,6 +55,78 @@ test('afbeelding herkennen: formaat en afmetingen uit de inhoud, EXIF/GPS uit JP
   assert.strictEqual(inspectImage(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')), null, 'geen SVG (scripts)');
   assert.strictEqual(inspectImage(Buffer.from('GIF89a................')), null);
   assert.strictEqual(inspectImage(j.subarray(0, 40)), null, 'afgekapte JPEG');
+});
+
+/**
+ * Eén PNG-blok: lengte, type, inhoud en CRC (de CRC wordt hier niet gecontroleerd).
+ * @param {string} type Type van het blok (4 tekens).
+ * @param {Buffer} body Inhoud.
+ * @returns {Buffer} Het blok.
+ */
+function pngChunk(type, body) {
+  const length = Buffer.alloc(4); length.writeUInt32BE(body.length);
+  return Buffer.concat([length, Buffer.from(type, 'latin1'), body, Buffer.alloc(4)]);
+}
+
+/**
+ * Eén WebP-blok (RIFF): type, lengte, inhoud en opvulbyte bij een oneven lengte.
+ * @param {string} type Type van het blok (4 tekens).
+ * @param {Buffer} body Inhoud.
+ * @returns {Buffer} Het blok.
+ */
+function webpChunk(type, body) {
+  const length = Buffer.alloc(4); length.writeUInt32LE(body.length);
+  return Buffer.concat([Buffer.from(type, 'latin1'), length, body, body.length % 2 ? Buffer.alloc(1) : Buffer.alloc(0)]);
+}
+
+test('afbeelding herkennen: tekst, tijd en EXIF gaan ook uit PNG en WebP', () => {
+  const header = Buffer.alloc(13); header.writeUInt32BE(2, 0); header.writeUInt32BE(3, 4); header[8] = 8; header[9] = 2;
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const imageData = pngChunk('IDAT', zlib.deflateSync(Buffer.alloc(3 * 7)));
+  const png = Buffer.concat([signature, pngChunk('IHDR', header), pngChunk('tEXt', Buffer.from('Author\0Jan Jansen', 'latin1')),
+    pngChunk('eXIf', Buffer.from('GPSLatitude 52.37', 'latin1')), pngChunk('tIME', Buffer.alloc(7)), imageData, pngChunk('IEND', Buffer.alloc(0))]);
+  const cleanPng = inspectImage(png);
+  assert.deepStrictEqual([cleanPng.mime, cleanPng.width, cleanPng.height], ['image/png', 2, 3]);
+  assert.ok(!cleanPng.body.includes('GPSLatitude') && !cleanPng.body.includes('Jan Jansen'), 'tekst en EXIF zijn weg');
+  assert.ok(cleanPng.body.includes(imageData), 'beelddata blijft');
+  assert.deepStrictEqual(cleanPng.body, Buffer.concat([signature, pngChunk('IHDR', header), imageData, pngChunk('IEND', Buffer.alloc(0))]));
+  const plain = sitePhotoPng('voor', 1, 120, 80);
+  assert.deepStrictEqual(inspectImage(plain).body, plain, 'zonder metadata: hetzelfde bestand');
+  const trailer = Buffer.from('GPSLatitude 52.37', 'latin1');
+  assert.deepStrictEqual(inspectImage(Buffer.concat([plain, trailer])).body, plain, 'bytes na IEND gaan eruit (zonder metadata)');
+  assert.deepStrictEqual(inspectImage(Buffer.concat([png, trailer])).body, cleanPng.body, 'bytes na IEND gaan eruit (met metadata)');
+  assert.strictEqual(inspectImage(png.subarray(0, png.length - 20)), null, 'afgekapte PNG wordt geweigerd');
+  assert.strictEqual(inspectImage(png.subarray(0, png.length - 12)), null, 'PNG zonder IEND wordt geweigerd');
+
+  const vp8x = Buffer.alloc(10); vp8x[0] = 0x08 | 0x04 | 0x10; vp8x.writeUIntLE(99, 4, 3); vp8x.writeUIntLE(49, 7, 3);
+  const bitstream = webpChunk('VP8L', Buffer.from([0x2f, 1, 2, 3, 4]));
+  const chunks = Buffer.concat([webpChunk('VP8X', vp8x), bitstream, webpChunk('EXIF', Buffer.from('GPSLatitude 52.37', 'latin1')), webpChunk('XMP ', Buffer.from('<x:xmpmeta/>', 'latin1'))]);
+  const size = Buffer.alloc(4); size.writeUInt32LE(chunks.length + 4);
+  const webp = Buffer.concat([Buffer.from('RIFF', 'latin1'), size, Buffer.from('WEBP', 'latin1'), chunks]);
+  const cleanWebp = inspectImage(webp);
+  assert.deepStrictEqual([cleanWebp.mime, cleanWebp.width, cleanWebp.height], ['image/webp', 100, 50]);
+  assert.ok(!cleanWebp.body.includes('GPSLatitude') && !cleanWebp.body.includes('xmpmeta'), 'EXIF en XMP zijn weg');
+  assert.strictEqual(cleanWebp.body[20], 0x10, 'vlaggen voor EXIF en XMP uit, alfa blijft');
+  assert.strictEqual(cleanWebp.body.readUInt32LE(4), cleanWebp.body.length - 8, 'RIFF-lengte klopt');
+  assert.ok(cleanWebp.body.includes(bitstream), 'beelddata blijft');
+  assert.deepStrictEqual(inspectImage(cleanWebp.body).body, cleanWebp.body, 'nogmaals schoonmaken verandert niets');
+  assert.strictEqual(inspectImage(webp.subarray(0, webp.length - 4)), null, 'RIFF-lengte groter dan het bestand: geweigerd');
+  const overlong = Buffer.from(webp);
+  overlong.writeUInt32LE(9999, 12 + 18 + 4);
+  assert.strictEqual(inspectImage(overlong), null, 'blok buiten het bestand: geweigerd');
+  /**
+   * Een WebP met deze blokken achter elkaar en een kloppende RIFF-lengte.
+   * @param {Buffer} body De blokken.
+   * @returns {Buffer} Het bestand.
+   */
+  const riff = (body) => { const length = Buffer.alloc(4); length.writeUInt32LE(body.length + 4); return Buffer.concat([Buffer.from('RIFF', 'latin1'), length, Buffer.from('WEBP', 'latin1'), body]); };
+  const plainWebp = riff(Buffer.concat([webpChunk('VP8X', vp8x), bitstream]));
+  assert.deepStrictEqual(inspectImage(plainWebp).body, plainWebp, 'zonder metadata: hetzelfde bestand');
+  assert.deepStrictEqual(inspectImage(Buffer.concat([plainWebp, trailer])).body, plainWebp, 'bytes na de RIFF-grens gaan eruit (zonder metadata)');
+  assert.deepStrictEqual(inspectImage(Buffer.concat([webp, trailer])).body, cleanWebp.body, 'bytes na de RIFF-grens gaan eruit (met metadata)');
+  assert.strictEqual(inspectImage(riff(Buffer.concat([webpChunk('VP8X', vp8x), bitstream, Buffer.from('EXI', 'latin1')]))), null, 'halve blokkop aan het eind: geweigerd');
+  const unpadded = Buffer.concat([webpChunk('VP8X', vp8x), bitstream]);
+  assert.strictEqual(inspectImage(riff(unpadded.subarray(0, unpadded.length - 1))), null, 'ontbrekende opvulbyte bij oneven lengte: geweigerd');
 });
 
 test('vault: bestanden versleuteld met de context als AAD', () => {

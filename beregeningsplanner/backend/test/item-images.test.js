@@ -164,6 +164,10 @@ test('artikelafbeelding: de openbare shop toont de eigen afbeelding', async () =
   assert.strictEqual(picture.status, 200);
   assert.match(picture.type, /image\/png/);
   assert.match(picture.headers.get('cache-control'), /immutable/);
+  // Daarna uit het geheugen; verwijderen in Aquatech haalt hem daar ook weg.
+  assert.strictEqual((await anonymous.get(`/winkel/artikelfoto/${imageId}`)).status, 200);
+  assert.strictEqual((await admin.del(`/api/stock/items/${item.id}/image`)).status, 200);
+  assert.strictEqual((await anonymous.get(`/winkel/artikelfoto/${imageId}`)).status, 404, 'verwijderde afbeelding komt niet meer uit het geheugen');
   assert.strictEqual((await anonymous.get('/winkel/artikelfoto/00000000-0000-0000-0000-000000000000')).status, 404);
   assert.strictEqual((await anonymous.get('/winkel/artikelfoto/geen-id')).status, 404);
 });

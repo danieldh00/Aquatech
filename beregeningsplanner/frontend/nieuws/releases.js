@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.6.5',
+      date: '2026-11-05',
+      title: 'Veiliger en sneller',
+      items: [
+        { text: 'Foto\'s en afbeeldingen die je uploadt worden nu altijd ontdaan van verborgen gegevens zoals de locatie, ook bij PNG- en WebP-bestanden.' },
+        { for: ['voorraad'], text: 'Productfoto\'s in de webshop laden sneller, vooral als veel bezoekers dezelfde categorie bekijken.' },
+      ],
+    },
+    {
       version: '1.6.4',
       date: '2026-11-05',
       title: 'Duidelijker bij het overnemen van afbeeldingen',

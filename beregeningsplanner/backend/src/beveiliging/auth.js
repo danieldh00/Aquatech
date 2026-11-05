@@ -81,6 +81,47 @@ function remoteIp(req) {
 }
 
 /**
+ * Schrijft een IPv6-adres uit als acht groepen van 16 bits (een IPv4-staart telt als twee groepen).
+ * @param {string} ip Een geldig IPv6-adres.
+ * @returns {number[]} De acht groepen als getal.
+ */
+function ipv6Groups(ip) {
+  const [head, tail = ''] = ip.toLowerCase().split('::');
+  /**
+   * Zet de groepen van één helft om naar getallen.
+   * @param {string} half De groepen gescheiden door dubbele punten.
+   * @returns {number[]} De groepen als getal.
+   */
+  const groupsOf = (half) => (half ? half.split(':') : []).flatMap((group) => {
+    if (!group.includes('.')) return [parseInt(group, 16)];
+    const [first, second, third, fourth] = group.split('.').map(Number);
+    return [first * 256 + second, third * 256 + fourth];
+  });
+  const headGroups = groupsOf(head);
+  const tailGroups = groupsOf(tail);
+  return ip.includes('::') ? [...headGroups, ...Array(8 - headGroups.length - tailGroups.length).fill(0), ...tailGroups] : headGroups;
+}
+
+/**
+ * De sleutel voor een limiet per bezoeker: het IPv4-adres, of bij IPv6 het
+ * /64-netwerk. Eén aansluiting krijgt bij IPv6 een heel /64-blok; per los adres
+ * tellen zou een bezoeker elke poging een nieuw adres laten kiezen en zo elke
+ * limiet (inloggen, registreren, openbare links) omzeilen. Een IPv4-adres in
+ * IPv6-vorm (::ffff:a.b.c.d, in welke schrijfwijze ook) telt als dat IPv4-adres.
+ * @param {object} req Het Express-verzoek.
+ * @returns {string} Het IPv4-adres of het IPv6-netwerk als 'xxxx:xxxx:xxxx:xxxx::/64'.
+ */
+function clientKey(req) {
+  const ip = remoteIp(req);
+  if (net.isIP(ip) !== 6) return ip;
+  const groups = ipv6Groups(ip);
+  if (groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff) {
+    return [groups[6] >> 8, groups[6] & 255, groups[7] >> 8, groups[7] & 255].join('.');
+  }
+  return `${groups.slice(0, 4).map((group) => group.toString(16)).join(':')}::/64`;
+}
+
+/**
  * Leest de Cookie-kop uit tot een object naam → waarde (URL-gedecodeerd waar dat kan).
  * @param {string} header De Cookie-kop.
  * @returns {Object<string, string>} De cookies.
@@ -440,4 +481,4 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
   return { readSigned, setSigned, setPlain, clearNamed, requireAccess, isAuthenticated, isAuthenticatedForAsset, session, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
 }
 
-module.exports = { createAuth, remoteIp, parseCookies, COOKIE_NAME, GUEST_COOKIE };
+module.exports = { createAuth, remoteIp, clientKey, parseCookies, COOKIE_NAME, GUEST_COOKIE };

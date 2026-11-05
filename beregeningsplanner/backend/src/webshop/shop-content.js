@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { inspectImage, fromBase64 } = require('../uitvoering/photos');
+const { createImageCache } = require('../platform/image-cache');
 const { legalDefaults } = require('./legal-pages');
 
 /** Bestanden in assets/ die als standaardafbeelding gekozen mogen worden. */
@@ -305,11 +306,13 @@ const currentTimestamp = () => new Date().toISOString();
  * Maakt de opslag voor de inhoud van de webshop.
  * @param {object} db De database.
  * @param {{ vault: object }} stores De kluis (sealBytes/openBytes).
- * @returns {object} Functies voor concept en publiceren (`state`, `saveDraft`, `publish`, `discard`, `revert`, `removePage`), de openbare inhoud (`publicContent`) en afbeeldingen (`addImage`, `listImages`, `imageFile`, `removeImage`).
+ * @returns {object} Functies voor concept en publiceren (`state`, `saveDraft`, `publish`, `discard`, `revert`, `removePage`), de openbare inhoud (`publicContent`) en afbeeldingen (`addImage`, `listImages`, `imageFile`, `removeImage`, `forgetImages`).
  */
 function createShopContentStore(db, { vault }) {
   /** Gepubliceerde inhoud per tenant (korte cache). */
   const cache = new Map();
+  /** Ontsleutelde afbeeldingen in het geheugen: elke bezoeker van de shop vraagt dezelfde op. */
+  const memory = createImageCache({ maxBytes: 24 * 1024 * 1024 });
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -519,9 +522,14 @@ function createShopContentStore(db, { vault }) {
    * @returns {{ mime: string, body: Buffer }|null} De afbeelding, of null als hij niet bestaat of niet te lezen is.
    */
   function imageFile(tenantId, id) {
+    const remembered = memory.get(tenantId, String(id));
+    if (remembered) return remembered;
     const row = prepare('SELECT mime, data FROM shop_images WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
     if (!row) return null;
-    try { return { mime: row.mime, body: vault.openBytes(row.data, aadOf(tenantId, String(id))) }; } catch { return null; }
+    let found;
+    try { found = { mime: row.mime, body: vault.openBytes(row.data, aadOf(tenantId, String(id))) }; } catch { return null; }
+    memory.set(tenantId, String(id), found);
+    return found;
   }
 
   /**
@@ -544,10 +552,18 @@ function createShopContentStore(db, { vault }) {
     if (!prepare('SELECT id FROM shop_images WHERE tenant_id = ? AND id = ?').get(tenantId, String(id))) return { error: 'not_found', message: 'Afbeelding niet gevonden.' };
     if (imageInUse(tenantId, String(id))) return { error: 'in_use', message: 'Deze afbeelding wordt nog gebruikt in een blok of pagina.' };
     prepare('DELETE FROM shop_images WHERE tenant_id = ? AND id = ?').run(tenantId, String(id));
+    memory.remove(tenantId, String(id));
     return {};
   }
 
-  return { state, saveDraft, publish, discard, revert, removePage, publicContent, listImages, addImage, imageFile, removeImage };
+  /**
+   * Vergeet de afbeeldingen van een omgeving in het geheugen (na leegmaken of verwijderen van de omgeving).
+   * @param {string} tenantId Id van de tenant.
+   * @returns {void}
+   */
+  const forgetImages = (tenantId) => memory.clearTenant(tenantId);
+
+  return { state, saveDraft, publish, discard, revert, removePage, publicContent, listImages, addImage, imageFile, removeImage, forgetImages };
 }
 
 // ---------- Routes (Beheer) ----------

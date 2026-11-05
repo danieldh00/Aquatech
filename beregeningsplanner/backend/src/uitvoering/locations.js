@@ -8,6 +8,7 @@
 // 'portaal') alleen zijn eigen werkorders en meldingen, zonder prijzen, uren,
 // interne notities en interne foto's.
 const { jsonDigest } = require('../database/db');
+const { clientKey } = require('../beveiliging/auth');
 const { installationOf, completedOf, locationKey } = require('./photos');
 const { KINDS: REQUEST_KINDS, STATUSES: REQUEST_STATUSES } = require('./service-requests');
 const WorkOrderCore = require('../../../frontend/werkorders/workorder-core.js');
@@ -253,12 +254,12 @@ function createLocationStore(db, { photos }) {
  * 'werkorders') via /api/locations, de klant (recht 'portaal') via
  * /api/portal/locations/:key.
  * @param {object} app De Express-app.
- * @param {object} ctx locations, requireRight, createRateLimiter en remoteIp.
+ * @param {object} ctx locations, requireRight, createRateLimiter (limiet per bezoeker via clientKey).
  */
 function registerLocationRoutes(app, ctx) {
-  const { locations, requireRight, createRateLimiter, remoteIp } = ctx;
+  const { locations, requireRight, createRateLimiter } = ctx;
   // Elk verzoek leest alle adressen van de omgeving: begrensd per bezoeker.
-  const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: remoteIp });
+  const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: clientKey });
   /**
    * De actieve omgeving van het verzoek.
    * @param {object} req Het Express-verzoek.
