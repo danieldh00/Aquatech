@@ -88,7 +88,7 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
    * @param {string} tenantId Id van de omgeving.
    * @param {Buffer} raw De bytes van het bestand.
    * @param {{ name?: string, sourceUrl?: string|null }} [origin] Bestandsnaam en het adres waarvan hij komt.
-   * @returns {{ imageId?: string, error?: string, message?: string, status?: number }} Het id van de afbeelding, of een fout.
+   * @returns {{ imageId?: string, created?: boolean, error?: string, message?: string, status?: number }} Het id van de afbeelding (created = nieuw bewaard, anders hergebruikt), of een fout.
    */
   function storeImage(tenantId, raw, { name = '', sourceUrl = null } = {}) {
     if (!raw || !raw.length) return { error: 'invalid_image', message: 'Dit is geen geldige afbeelding.', status: 400 };
@@ -102,7 +102,7 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
     prepare('INSERT INTO item_images (id, tenant_id, name, mime, width, height, size, content_hash, source_url, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(id, tenantId, cleanName(name), image.mime, image.width, image.height, image.body.length, contentHash, sourceUrl ? String(sourceUrl).slice(0, 1000) : null,
         vault.sealBytes(image.body, aadOf(tenantId, id)), currentTimestamp());
-    return { imageId: id };
+    return { imageId: id, created: true };
   }
 
   /**
@@ -199,14 +199,14 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
    * koppelt de afbeelding aan alle artikelen met dat adres.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ after?: string }} [options] Het laatste artikel-id van de vorige portie ('' = begin).
-   * @returns {Promise<{ processed: number, imported: number, reused: number, failed: { code: string, url: string, reason: string }[], next: string|null, pending: number }>} Het resultaat; `next` is het cursor-id voor de volgende portie of null als alles gehad is.
+   * @returns {Promise<{ processed: number, imported: number, reused: number, stored: number, failed: { code: string, url: string, reason: string }[], next: string|null, pending: number }>} Het resultaat; `stored` = hoeveel nieuwe afbeeldingen er echt zijn bewaard (imported en reused tellen artikelen); `next` is het cursor-id voor de volgende portie of null als alles gehad is.
    */
   async function importFromShop(tenantId, { after = '' } = {}) {
     const rows = prepare(`SELECT i.id, i.code, p.image ${CANDIDATES_SQL} AND i.id > ? ORDER BY i.id LIMIT ${IMPORT_PAGE_SIZE}`).all(tenantId, String(after || ''));
     const known = new Map(prepare('SELECT id, source_url FROM item_images WHERE tenant_id = ? AND source_url IS NOT NULL').all(tenantId).map((row) => [row.source_url, row.id]));
     const byUrl = new Map();
     for (const row of rows) byUrl.set(row.image, [...(byUrl.get(row.image) || []), row]);
-    const result = { processed: rows.length, imported: 0, reused: 0, failed: [], next: rows.length === IMPORT_PAGE_SIZE ? rows[rows.length - 1].id : null, pending: 0 };
+    const result = { processed: rows.length, imported: 0, reused: 0, stored: 0, failed: [], next: rows.length === IMPORT_PAGE_SIZE ? rows[rows.length - 1].id : null, pending: 0 };
     const queue = [...byUrl.keys()];
     /**
      * Neemt adressen uit de wachtrij en koppelt de afbeelding aan de artikelen.
@@ -229,6 +229,7 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
             const stored = storeImage(tenantId, await download(url), { name: url, sourceUrl: url });
             if (stored.error) throw new Error(stored.message);
             imageId = stored.imageId;
+            if (stored.created) result.stored += 1;
             known.set(url, imageId);
             result.imported += items.length;
           } catch (error) {

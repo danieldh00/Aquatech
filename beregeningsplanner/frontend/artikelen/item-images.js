@@ -96,16 +96,17 @@
   /**
    * Neemt de afbeeldingen uit de webshop over, portie voor portie, tot alles gehad is.
    * Opnieuw uitvoeren neemt alleen over wat nog ontbreekt.
-   * @param {(progress: { imported: number, reused: number, failed: object[], pending: number }) => void} onProgress wordt na elke portie aangeroepen met de totalen
-   * @returns {Promise<{ imported: number, reused: number, failed: object[], pending: number }>} de totalen
+   * @param {(progress: { imported: number, reused: number, stored: number, failed: object[], pending: number }) => void} onProgress wordt na elke portie aangeroepen met de totalen
+   * @returns {Promise<{ imported: number, reused: number, stored: number, failed: object[], pending: number }>} de totalen
    */
   async function importAll(onProgress) {
-    const totals = { imported: 0, reused: 0, failed: [], pending: 0 };
+    const totals = { imported: 0, reused: 0, stored: 0, failed: [], pending: 0 };
     let after = '';
     for (;;) {
       const part = await api('stock/images-import', { method: 'POST', body: { after } });
       totals.imported += part.imported;
       totals.reused += part.reused;
+      totals.stored += part.stored;
       totals.failed.push(...part.failed);
       totals.pending = part.pending;
       if (onProgress) onProgress({ ...totals });

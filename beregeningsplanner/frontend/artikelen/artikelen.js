@@ -790,10 +790,11 @@
       try {
         const totals = await window.ItemImages.importAll((progress) => {
           $('#images-bar').value = Math.min(1, (total - progress.pending) / total);
-          $('#images-text').textContent = `${progress.imported + progress.reused} overgenomen…`;
+          $('#images-text').textContent = `${progress.imported + progress.reused} artikelen gekoppeld, ${progress.stored} afbeeldingen bewaard…`;
         });
         $('#images-bar').value = 1;
-        $('#images-text').textContent = `Klaar: ${totals.imported + totals.reused} artikel${totals.imported + totals.reused === 1 ? '' : 'en'} overgenomen${totals.failed.length ? `, ${totals.failed.length} niet gelukt` : ''}.`;
+        const linked = totals.imported + totals.reused;
+        $('#images-text').textContent = `Klaar: ${linked} artikel${linked === 1 ? '' : 'en'} gekoppeld; ${totals.stored} nieuwe afbeelding${totals.stored === 1 ? '' : 'en'} bewaard, bestaande foto\'s zijn hergebruikt${totals.failed.length ? `. ${totals.failed.length} niet gelukt` : ''}.`;
         if (totals.failed.length) {
           $('#images-failed').hidden = false;
           $('#images-failed').innerHTML = `Niet gelukt (opnieuw uitvoeren probeert ze nog eens):<br>${totals.failed.slice(0, 20).map((failure) => `${esc(failure.code)}: ${esc(failure.reason)}`).join('<br>')}${totals.failed.length > 20 ? `<br>… en ${totals.failed.length - 20} meer` : ''}`;

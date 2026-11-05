@@ -187,6 +187,7 @@ test('afbeeldingen uit de webshop overnemen: eenmalig, per portie en herhaalbaar
   assert.strictEqual(run.status, 200, JSON.stringify(run.body));
   assert.strictEqual(run.body.processed, 4);
   assert.strictEqual(run.body.imported, 3);
+  assert.strictEqual(run.body.stored, 2, 'twee artikelen delen een afbeelding: er worden twee bewaard, geen drie');
   assert.strictEqual(run.body.next, null);
   assert.strictEqual(run.body.failed.length, 1);
   assert.strictEqual(run.body.failed[0].code, 'OLD-4');
@@ -230,4 +231,30 @@ test('afbeeldingen overnemen: geen http-adressen en geen ongeldige bestanden', a
   const notImage = await admin.post('/api/stock/images-import', { after: '' });
   assert.strictEqual(notImage.body.failed.length, 1);
   assert.strictEqual((await admin.get(`/api/stock/items/${item.id}`)).body.imageId, null);
+});
+
+test('afbeeldingen overnemen: veel artikelen en verschillende adressen met dezelfde foto geven één afbeelding', async () => {
+  const { admin, db, main, responses } = await setup();
+  const sameBytes = Buffer.from(pngBase64(20), 'base64');
+  const urls = ['https://oud.example/foto.png', 'https://oud.example/foto-1.png', 'https://oud.example/foto-2.png'];
+  for (const url of urls) responses.set(url, sameBytes);
+  // 30 artikelen (meer dan één portie van 25) verdeeld over drie adressen met identieke inhoud.
+  for (let index = 0; index < 30; index += 1) {
+    const item = await article(admin, `SAME-${String(index).padStart(2, '0')}`);
+    db.prepare('INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories) VALUES (?, ?, ?, ?, 10, ?, ?, ?, 1, ?, ?)')
+      .run(main, `s${index}`, item.code, item.name, 'EUR', '', urls[index % 3], item.code, '[]');
+    db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE tenant_id = ? AND id = ?').run(`s${index}`, main, item.id);
+  }
+  let after = '';
+  let stored = 0;
+  do {
+    const part = await admin.post('/api/stock/images-import', { after });
+    assert.strictEqual(part.status, 200, JSON.stringify(part.body));
+    stored += part.body.stored;
+    after = part.body.next;
+  } while (after);
+  assert.strictEqual(stored, 1, 'identieke inhoud wordt één keer bewaard');
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 1);
+  assert.strictEqual(db.prepare('SELECT COUNT(DISTINCT image_id) AS n FROM stock_items WHERE tenant_id = ? AND image_id IS NOT NULL').get(main).n, 1);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE tenant_id = ? AND image_id IS NOT NULL').get(main).n, 30);
 });
