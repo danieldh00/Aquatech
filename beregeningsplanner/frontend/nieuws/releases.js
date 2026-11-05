@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.6.3',
+      date: '2026-11-05',
+      title: 'Kleine correctie in de inkoopprijs bij retouren',
+      items: [],
+    },
+    {
       version: '1.6.2',
       date: '2026-11-05',
       title: 'Inkoopprijzen en een margerapportage voor de webshop',
