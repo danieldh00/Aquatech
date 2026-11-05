@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.3
+
+Vervolg op 1.6.2 (inkoopprijzen en FIFO).
+
+- **Server** (`artikelen/stock-costs.js`, `issuedCost`): een retour met een herleidbare bron
+  (eigen bron zoals `bestelling:<nr>`/`verbruik:<id>`, of een werkorder) waarvan de afboeking geen
+  kostregels heeft, krijgt een onbekende inkoopprijs in plaats van de actuele prijs (nooit raden).
+  Alleen een retour met een algemene bron zonder werkorder valt terug op de actuele inkoopprijs.
+- **Review**: `.coderabbit.yaml` vermeldt dat de software in ontwikkeling is; gegevens van vóór een
+  migratie hoeven geen speciale afhandeling.
+
 ## 1.6.2
 
 Inkoopprijzen met historie, voorraadlagen (FIFO) en een margerapportage in de webshopmodule.

@@ -161,22 +161,24 @@ function createStockCosts(db) {
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
    * @param {{ source?: string, workOrderId?: ?string }} basis Een eigen bron van de oorspronkelijke afboeking (bijv. 'verbruik:<id>', 'bestelling:W2026-0001'), of bij een algemene bron de werkorder.
-   * @returns {number|null|undefined} De prijs per eenheid, null als die onbekend was, undefined als er geen afboeking is gevonden.
+   * @returns {number|null|undefined} De prijs per eenheid; null als de afboeking geen bekende prijs (of geen kostregels) heeft; undefined zonder herleidbare bron of werkorder.
    */
   function issuedCost(tenantId, itemId, { source = '', workOrderId = null }) {
-    if (!source && !workOrderId) return undefined;
+    // Een eigen bron (bijv. 'verbruik:<id>' of 'bestelling:<nr>') is het specifiekst; bij een
+    // algemene bron zoals 'handmatig' of 'gereed' telt de werkorder. Zonder een van beide is
+    // er niets om op terug te vallen.
+    const specificSource = Boolean(source) && !GENERAL_SOURCES.has(String(source));
+    if (!specificSource && !workOrderId) return undefined;
     const conditions = [];
     const args = [tenantId, itemId];
-    // Een eigen bron (bijv. 'verbruik:<id>' of 'bestelling:<nr>') is het specifiekst; bij een
-    // algemene bron zoals 'handmatig' of 'gereed' telt de werkorder.
-    const specificSource = source && !GENERAL_SOURCES.has(String(source));
     if (specificSource || !workOrderId) { conditions.push('m.source = ?'); args.push(String(source)); } else { conditions.push('m.work_order_id = ?'); args.push(String(workOrderId)); }
     const row = prepare(`SELECT SUM(-e.qty) AS qty, SUM(CASE WHEN e.unit_cost IS NULL THEN 0 ELSE -e.qty END) AS known_qty,
         SUM(CASE WHEN e.unit_cost IS NULL THEN 0 ELSE -e.qty * e.unit_cost END) AS cost
       FROM stock_cost_entries e JOIN stock_movements m ON m.tenant_id = e.tenant_id AND m.id = e.movement_id
       WHERE e.tenant_id = ? AND e.item_id = ? AND e.qty < 0 AND (${conditions.join(' OR ')})`).get(...args);
-    if (!row || !(Number(row.qty) > 0)) return undefined;
-    if (!(Number(row.known_qty) > 0)) return null;
+    // De oorspronkelijke afboeking is bekend maar heeft geen kostregels (bijv. van vóór de
+    // voorraadlagen): dan is de prijs onbekend, niet de huidige inkoopprijs.
+    if (!row || !(Number(row.qty) > 0) || !(Number(row.known_qty) > 0)) return null;
     return round4(Number(row.cost) / Number(row.known_qty));
   }
 
