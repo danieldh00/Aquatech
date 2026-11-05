@@ -73,7 +73,7 @@ const WEBP_METADATA_FLAGS = 0x08 | 0x04;
 
 /**
  * Haalt metadata (tekst, tijd, EXIF) uit een PNG; de beeldblokken blijven ongewijzigd.
- * Een onvolledig bestand (blok buiten het bestand of geen IEND) wordt geweigerd.
+ * Een onvolledig bestand (blok buiten het bestand of geen IEND) wordt geweigerd; bytes na IEND gaan eruit.
  * @param {Buffer} buffer Het PNG-bestand (handtekening en IHDR al gecontroleerd).
  * @returns {Buffer|null} Het bestand zonder metadata, of null bij een onvolledig bestand.
  */
@@ -89,14 +89,14 @@ function stripPngMetadata(buffer) {
     if (PNG_METADATA_CHUNKS.has(type)) removed = true;
     else parts.push(buffer.subarray(position, end));
     position = end;
-    if (type === 'IEND') return removed ? Buffer.concat(parts) : buffer;
+    if (type === 'IEND') return removed ? Buffer.concat(parts) : buffer.subarray(0, position);
   }
   return null;
 }
 
 /**
  * Haalt EXIF en XMP uit een WebP en zet de bijbehorende vlaggen in VP8X uit; de beelddata blijft ongewijzigd.
- * Een onvolledig bestand (RIFF-lengte groter dan het bestand, een blok of opvulbyte die erbuiten valt, of een halve blokkop aan het eind) wordt geweigerd.
+ * Een onvolledig bestand (RIFF-lengte groter dan het bestand, een blok of opvulbyte die erbuiten valt, of een halve blokkop aan het eind) wordt geweigerd; bytes na de RIFF-grens gaan eruit.
  * @param {Buffer} buffer Het WebP-bestand (RIFF/WEBP al gecontroleerd).
  * @returns {Buffer|null} Het bestand zonder metadata, of null bij een onvolledig bestand.
  */
@@ -116,7 +116,7 @@ function stripWebpMetadata(buffer) {
     position = end;
   }
   if (position !== riffEnd) return null;
-  if (!removed) return buffer;
+  if (!removed) return buffer.subarray(0, riffEnd);
   const body = Buffer.concat(parts);
   if (body.toString('latin1', 0, 4) === 'VP8X' && body.length > 8) body[8] &= ~WEBP_METADATA_FLAGS;
   const header = Buffer.alloc(12);

@@ -91,7 +91,10 @@ test('afbeelding herkennen: tekst, tijd en EXIF gaan ook uit PNG en WebP', () =>
   assert.ok(cleanPng.body.includes(imageData), 'beelddata blijft');
   assert.deepStrictEqual(cleanPng.body, Buffer.concat([signature, pngChunk('IHDR', header), imageData, pngChunk('IEND', Buffer.alloc(0))]));
   const plain = sitePhotoPng('voor', 1, 120, 80);
-  assert.strictEqual(inspectImage(plain).body, plain, 'zonder metadata: hetzelfde bestand');
+  assert.deepStrictEqual(inspectImage(plain).body, plain, 'zonder metadata: hetzelfde bestand');
+  const trailer = Buffer.from('GPSLatitude 52.37', 'latin1');
+  assert.deepStrictEqual(inspectImage(Buffer.concat([plain, trailer])).body, plain, 'bytes na IEND gaan eruit (zonder metadata)');
+  assert.deepStrictEqual(inspectImage(Buffer.concat([png, trailer])).body, cleanPng.body, 'bytes na IEND gaan eruit (met metadata)');
   assert.strictEqual(inspectImage(png.subarray(0, png.length - 20)), null, 'afgekapte PNG wordt geweigerd');
   assert.strictEqual(inspectImage(png.subarray(0, png.length - 12)), null, 'PNG zonder IEND wordt geweigerd');
 
@@ -118,7 +121,9 @@ test('afbeelding herkennen: tekst, tijd en EXIF gaan ook uit PNG en WebP', () =>
    */
   const riff = (body) => { const length = Buffer.alloc(4); length.writeUInt32LE(body.length + 4); return Buffer.concat([Buffer.from('RIFF', 'latin1'), length, Buffer.from('WEBP', 'latin1'), body]); };
   const plainWebp = riff(Buffer.concat([webpChunk('VP8X', vp8x), bitstream]));
-  assert.strictEqual(inspectImage(plainWebp).body, plainWebp, 'zonder metadata: hetzelfde bestand');
+  assert.deepStrictEqual(inspectImage(plainWebp).body, plainWebp, 'zonder metadata: hetzelfde bestand');
+  assert.deepStrictEqual(inspectImage(Buffer.concat([plainWebp, trailer])).body, plainWebp, 'bytes na de RIFF-grens gaan eruit (zonder metadata)');
+  assert.deepStrictEqual(inspectImage(Buffer.concat([webp, trailer])).body, cleanWebp.body, 'bytes na de RIFF-grens gaan eruit (met metadata)');
   assert.strictEqual(inspectImage(riff(Buffer.concat([webpChunk('VP8X', vp8x), bitstream, Buffer.from('EXI', 'latin1')]))), null, 'halve blokkop aan het eind: geweigerd');
   const unpadded = Buffer.concat([webpChunk('VP8X', vp8x), bitstream]);
   assert.strictEqual(inspectImage(riff(unpadded.subarray(0, unpadded.length - 1))), null, 'ontbrekende opvulbyte bij oneven lengte: geweigerd');
