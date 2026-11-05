@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createStockStore } = require('../src/artikelen/stock');
-const { periodOf, bucketOf, bucketsBetween } = require('../src/webshop/web-sales');
+const { createWebSalesStore, periodOf, bucketOf, bucketsBetween } = require('../src/webshop/web-sales');
 const { setup, order } = require('./helpers/webshop-world');
 const { postForm } = require('./helpers/http-client');
 
@@ -157,4 +157,81 @@ test('rapportage webshop: kostprijs uit de laag, retour tegen dezelfde prijs, re
   assert.strictEqual((await world.vreemd.get('/api/admin/webshop-report')).body.totals.lines, 0, 'andere organisatie ziet niets');
   assert.strictEqual((await world.shoppers[0].client.get('/api/admin/webshop-report')).status, 403, 'klant heeft geen beheerrecht');
   assert.strictEqual((await world.admin.get('/api/admin/webshop-report?from=2026-13-01')).status, 400);
+});
+
+
+test('inkoopprijs: vier decimalen blijven bij aanmaken en bewerken', () => {
+  const { stock, tenantId } = freshStock();
+  const item = stock.create(tenantId, null, { code: 'PRECIES', name: 'Precies', costPrice: 1.2345 }).item;
+  assert.strictEqual(item.costPrice, 1.2345);
+  assert.strictEqual(stock.update(tenantId, item.id, { name: 'Andere naam' }).item.costPrice, 1.2345);
+  assert.strictEqual(stock.update(tenantId, item.id, { costPrice: 2.3456 }).item.costPrice, 2.3456);
+});
+
+test('FIFO: een lege onbekende laag kan achteraf worden geprijsd', () => {
+  const { db, stock, tenantId } = freshStock();
+  const item = stock.create(tenantId, null, { code: 'LEEG', name: 'Leeg', onHand: 2 }).item;
+  const issue = stock.move(tenantId, null, item.id, { kind: 'correctie', qty: -2, note: 'Alles gebruikt' });
+  assert.deepStrictEqual(issue.item.layers.map((layer) => [layer.remaining, layer.unitCost]), [[0, null]]);
+  const filled = stock.setLayerCost(tenantId, item.id, issue.item.layers[0].id, 1.2345);
+  assert.deepStrictEqual(entriesOf(db, issue.movementId), [{ qty: -2, unitCost: 1.2345 }]);
+  assert.deepStrictEqual(filled.item.layers, []);
+});
+
+test('FIFO: retour kiest de werkorder boven een gedeelde bron', () => {
+  const { db, stock, tenantId } = freshStock();
+  const { createStockCosts } = require('../src/artikelen/stock-costs');
+  const costs = createStockCosts(db);
+  const item = stock.create(tenantId, null, { code: 'RETOUR', name: 'Retour' }).item;
+  for (const [id, workOrderId, price] of [['issue-a', 'a', 2], ['issue-b', 'b', 8]]) {
+    db.prepare(`INSERT INTO stock_movements (id, tenant_id, item_id, kind, qty, balance, work_order_id, source, created_at)
+      VALUES (?, ?, ?, 'afboeking', -1, -1, ?, 'gereed', '2026-01-01')`).run(id, tenantId, item.id, workOrderId);
+    costs.record(tenantId, { id: item.id, cost_price: price }, { movementId: id, delta: -1, onHandBefore: 0, kind: 'afboeking', at: '2026-01-01' });
+  }
+  for (const [id, basis, expected] of [['return-a', { workOrderId: 'a', source: 'gereed' }, 2], ['return-source', { source: 'gereed' }, 5]]) {
+    db.prepare(`INSERT INTO stock_movements (id, tenant_id, item_id, kind, qty, balance, created_at)
+      VALUES (?, ?, ?, 'retour', 1, 1, '2026-01-02')`).run(id, tenantId, item.id);
+    costs.record(tenantId, { id: item.id, cost_price: 99 }, { movementId: id, delta: 1, onHandBefore: 0, kind: 'retour', at: '2026-01-02', costBasis: basis });
+    assert.deepStrictEqual(entriesOf(db, id), [{ qty: 1, unitCost: expected }]);
+  }
+});
+
+test('rapportage: overlappende selecties voegen order- en retourregels eenmaal toe', () => {
+  const { db, tenantId } = freshStock();
+  const lines = [{ code: 'ZELFDE', qty: 1, unitExcl: 10 }, { code: 'ZELFDE', qty: 2, unitExcl: 10 }];
+  const data = JSON.stringify({ lines });
+  db.prepare(`INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at)
+    VALUES ('race', ?, 'W-RACE', 'verzonden', '', '', 30, ?, '2026-01-01', '2026-01-01')`).run(tenantId, data);
+  for (const id of ['return-one', 'return-two']) {
+    db.prepare(`INSERT INTO web_returns (id, tenant_id, order_id, number, status, data, created_at, updated_at)
+      VALUES (?, ?, 'race', ?, 'afgerond', ?, '2026-01-02', '2026-01-02')`).run(id, tenantId, id, data);
+  }
+  // Beide processen kunnen dezelfde ontbrekende regels selecteren. De echte
+  // database verwerkt de inserts en controleert de unieke primaire sleutel.
+  const selections = new Map();
+  const staleDb = {
+    /**
+     * Bereidt SQL voor en bewaart de oorspronkelijke selectie.
+     * @param {string} sql De opdracht.
+     * @returns {object} De opdracht met zo nodig een bewaarde selectie.
+     */
+    prepare: (sql) => {
+      const statement = db.prepare(sql);
+      if (!sql.includes('NOT EXISTS')) return statement;
+      return {
+        /**
+         * Geeft dezelfde selectie aan beide synchronisaties.
+         * @param {...*} args De queryparameters.
+         * @returns {object[]} De oorspronkelijke rijen.
+         */
+        all: (...args) => {
+          if (!selections.has(sql)) selections.set(sql, statement.all(...args));
+          return selections.get(sql);
+        },
+      };
+    },
+  };
+  assert.strictEqual(createWebSalesStore(staleDb).sync(tenantId), 6);
+  assert.strictEqual(createWebSalesStore(staleDb).sync(tenantId), 0);
+  assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS total FROM web_sale_lines WHERE tenant_id = ?').get(tenantId).total), 6);
 });

@@ -1,4 +1,16 @@
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:dc28f99f9600b7fef5278ae567a0cd048cfa3085811eff8be6740fe6909c8e42 -->
+
 # Changelog
+
+## 1.6.3
+
+- Retouren gebruiken de kostprijs van de juiste werkorder; lege lagen met onbekende prijs blijven invulbaar.
+- Artikelen bewaren inkoopprijzen op vier decimalen.
+- Gelijktijdige synchronisaties voegen webshopverkoopregels eenmaal toe via deterministische IDs en de bestaande unieke primaire sleutel.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 ## 1.6.2
 

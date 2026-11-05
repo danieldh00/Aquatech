@@ -168,18 +168,22 @@ function createWebSalesStore(db, { stock = null } = {}) {
 
   /**
    * Schrijft verkoopregels weg (binnen de transactie van de aanroeper).
+   * De deterministische id gebruikt de bestaande primaire sleutel als unieke
+   * constraint: gelijktijdige synchronisaties slaan dezelfde regel eenmaal op.
    * @param {string} tenantId Id van de omgeving.
-   * @param {object[]} rows Regels met kind, soldAt, orderId, reference, itemId, code, name, qty, revenue en movementId.
-   * @returns {void}
+   * @param {object[]} rows Regels met id, kind, soldAt, orderId, reference, itemId, code, name, qty, revenue en movementId.
+   * @returns {number} Aantal toegevoegde regels.
    */
   function insertLines(tenantId, rows) {
     const insert = prepare(`INSERT INTO web_sale_lines (id, tenant_id, kind, sold_at, order_id, reference, item_id, code, name, qty, revenue, movement_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`);
     const at = currentTimestamp();
+    let added = 0;
     for (const row of rows) {
-      insert.run(crypto.randomUUID(), tenantId, row.kind, row.soldAt, row.orderId, row.reference, row.itemId || null, String(row.code || '').slice(0, 60),
-        String(row.name || '').slice(0, 200), round3(row.qty), round2(row.revenue), row.movementId || null, at);
+      added += insert.run(row.id, tenantId, row.kind, row.soldAt, row.orderId, row.reference, row.itemId || null, String(row.code || '').slice(0, 60),
+        String(row.name || '').slice(0, 200), round3(row.qty), round2(row.revenue), row.movementId || null, at).changes;
     }
+    return added;
   }
 
   /**
@@ -189,10 +193,11 @@ function createWebSalesStore(db, { stock = null } = {}) {
    * @param {object[]} lines De regels van de bestelling (itemId, code, name, qty, unitExcl, lineExcl).
    * @param {Map<string, string>} movementIds Per artikel-id de afboeking.
    * @param {string} soldAt Moment van verzenden.
-   * @returns {void}
+   * @returns {number} Aantal toegevoegde regels.
    */
   function recordShipment(tenantId, order, lines, movementIds, soldAt) {
-    insertLines(tenantId, lines.map((line) => ({
+    return insertLines(tenantId, lines.map((line, index) => ({
+      id: crypto.createHash('sha256').update(JSON.stringify([tenantId, 'verkoop', order.id, index])).digest('hex'),
       kind: 'verkoop', soldAt, orderId: order.id, reference: order.number, itemId: line.itemId, code: line.code, name: line.name,
       qty: line.qty, revenue: revenueOf(line), movementId: movementIds.get(line.itemId) || null,
     })));
@@ -205,10 +210,11 @@ function createWebSalesStore(db, { stock = null } = {}) {
    * @param {object[]} lines De teruggestuurde regels (itemId, code, name, qty, unitExcl).
    * @param {Map<string, string>} movementIds Per artikel-id de terugboeking op voorraad (leeg = niet terug op voorraad).
    * @param {string} soldAt Moment van afronden.
-   * @returns {void}
+   * @returns {number} Aantal toegevoegde regels.
    */
   function recordReturn(tenantId, record, lines, movementIds, soldAt) {
-    insertLines(tenantId, lines.map((line) => ({
+    return insertLines(tenantId, lines.map((line, index) => ({
+      id: crypto.createHash('sha256').update(JSON.stringify([tenantId, 'retour', record.orderId, record.number, index])).digest('hex'),
       kind: 'retour', soldAt, orderId: record.orderId, reference: record.number, itemId: line.itemId, code: line.code, name: line.name,
       qty: -line.qty, revenue: -round2(Number(line.unitExcl) * line.qty), movementId: movementIds.get(line.itemId) || null,
     })));
@@ -249,15 +255,13 @@ function createWebSalesStore(db, { stock = null } = {}) {
       const data = JSON.parse(order.data);
       const shipped = (data.history || []).find((entry) => entry.status === 'verzonden');
       const lines = data.lines || [];
-      recordShipment(tenantId, order, lines, movementsFor(`bestelling:${order.number}`, lines), shipped ? shipped.at : currentTimestamp());
-      added += lines.length;
+      added += recordShipment(tenantId, order, lines, movementsFor(`bestelling:${order.number}`, lines), shipped ? shipped.at : currentTimestamp());
     }
     for (const record of returns) {
       const data = JSON.parse(record.data);
       const lines = data.lines || [];
       const completed = (data.history || []).find((entry) => entry.status === 'afgerond');
-      recordReturn(tenantId, { number: record.number, orderId: record.order_id }, lines, data.restock ? movementsFor(`retour:${record.number}`, lines) : new Map(), completed ? completed.at : record.updated_at);
-      added += lines.length;
+      added += recordReturn(tenantId, { number: record.number, orderId: record.order_id }, lines, data.restock ? movementsFor(`retour:${record.number}`, lines) : new Map(), completed ? completed.at : record.updated_at);
     }
     return added;
   }

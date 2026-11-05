@@ -164,8 +164,8 @@ function createStockCosts(db) {
     if (!source && !workOrderId) return undefined;
     const conditions = [];
     const args = [tenantId, itemId];
-    if (source) { conditions.push('m.source = ?'); args.push(String(source)); }
     if (workOrderId) { conditions.push('m.work_order_id = ?'); args.push(String(workOrderId)); }
+    else if (source) { conditions.push('m.source = ?'); args.push(String(source)); }
     const row = prepare(`SELECT SUM(-e.qty) AS qty, SUM(CASE WHEN e.unit_cost IS NULL THEN 0 ELSE -e.qty END) AS known_qty,
         SUM(CASE WHEN e.unit_cost IS NULL THEN 0 ELSE -e.qty * e.unit_cost END) AS cost
       FROM stock_cost_entries e JOIN stock_movements m ON m.tenant_id = e.tenant_id AND m.id = e.movement_id
@@ -283,8 +283,9 @@ function createStockCosts(db) {
   });
 
   /**
-   * De prijshistorie (nieuwste eerst) en de voorraadlagen waar nog iets in zit
-   * (oudste eerst, zoals ze gebruikt worden) van een artikel, in één query.
+   * De prijshistorie (nieuwste eerst) en de voorraadlagen met resterende voorraad
+   * of een onbekende inkoopprijs (ook lege lagen, zodat de prijs nog ingevuld kan
+   * worden), oudste eerst, van een artikel in één query.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
    * @returns {{ prices: object[], layers: object[] }} prices: id, price, validFrom, note, userName, createdAt; layers: zie shapeLayer.
@@ -295,7 +296,7 @@ function createStockCosts(db) {
         ORDER BY valid_from DESC, created_at DESC LIMIT ${HISTORY_LIMIT}) AS price_rows
       UNION ALL
       SELECT 'laag' AS part, id, received_at AS moment, source AS label, qty, remaining, unit_cost AS amount, '' AS user_name, created_at FROM (
-        SELECT id, received_at, source, qty, remaining, unit_cost, created_at FROM stock_layers WHERE tenant_id = ? AND item_id = ? AND remaining > 0
+        SELECT id, received_at, source, qty, remaining, unit_cost, created_at FROM stock_layers WHERE tenant_id = ? AND item_id = ? AND (remaining > 0 OR unit_cost IS NULL)
         ORDER BY received_at, created_at, id LIMIT ${HISTORY_LIMIT}) AS layer_rows`).all(tenantId, itemId, tenantId, itemId);
     const prices = rows.filter((row) => row.part === 'prijs')
       .sort((left, right) => String(right.moment).localeCompare(String(left.moment)) || String(right.created_at).localeCompare(String(left.created_at)))
