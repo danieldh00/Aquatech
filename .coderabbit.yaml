@@ -19,6 +19,12 @@ reviews:
     base_branches:
       - master
   path_instructions:
+    - path: "**"
+      instructions: |
+        De software is nog in ontwikkeling en draait niet bij klanten. Gegevens van vóór
+        een migratie (bijv. bestellingen of voorraadmutaties van vóór een nieuwe tabel)
+        hoeven geen speciale afhandeling of terugwerkende correctie. Meld zulke gevallen
+        niet als bevinding.
     - path: "**/*.js"
       instructions: |
         Codestijl van dit project (zie CLAUDE.md, bewaakt door test/codestyle.test.js):

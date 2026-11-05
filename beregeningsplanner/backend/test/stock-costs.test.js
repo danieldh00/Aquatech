@@ -207,7 +207,10 @@ test('FIFO: retour kiest de werkorder boven een gedeelde bron', () => {
       VALUES (?, ?, ?, 'afboeking', -1, -1, ?, 'gereed', '2026-01-01')`).run(id, tenantId, item.id, workOrderId);
     costs.record(tenantId, { id: item.id, cost_price: price }, { movementId: id, delta: -1, onHandBefore: 0, kind: 'afboeking', at: '2026-01-01' });
   }
-  for (const [id, basis, expected] of [['return-a', { workOrderId: 'a', source: 'gereed' }, 2], ['return-source', { source: 'gereed' }, 5]]) {
+  // Werkorder bekend: de prijs van die werkorder. Alleen een algemene bron: niets herleidbaars,
+  // dus de actuele inkoopprijs. Een eigen bron zonder kostregels (van vóór de lagen): onbekend.
+  const cases = [['return-a', { workOrderId: 'a', source: 'gereed' }, 2], ['return-source', { source: 'gereed' }, 99], ['return-old', { source: 'bestelling:W-OUD' }, null]];
+  for (const [id, basis, expected] of cases) {
     db.prepare(`INSERT INTO stock_movements (id, tenant_id, item_id, kind, qty, balance, created_at)
       VALUES (?, ?, ?, 'retour', 1, 1, '2026-01-02')`).run(id, tenantId, item.id);
     costs.record(tenantId, { id: item.id, cost_price: 99 }, { movementId: id, delta: 1, onHandBefore: 0, kind: 'retour', at: '2026-01-02', costBasis: basis });
