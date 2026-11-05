@@ -16,7 +16,6 @@
 //   rapportage. Van bestellingen die al verzonden waren vóór migratie 45 is de
 //   inkoopwaarde onbekend (er waren toen nog geen voorraadlagen).
 // - Omzet = artikelen excl. btw; verzendkosten tellen niet mee.
-const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { categoryNameOf } = require('./storefront-data');
 
@@ -167,17 +166,20 @@ function createWebSalesStore(db, { stock = null } = {}) {
   const prepare = (sql) => db.prepare(sql);
 
   /**
-   * Schrijft verkoopregels weg (binnen de transactie van de aanroeper).
+   * Schrijft verkoopregels weg (binnen de transactie van de aanroeper). Elke regel
+   * heeft een vaste id (soort, bestelling, retournummer en regelnummer), zodat twee
+   * gelijktijdige aanvullingen dezelfde regel nooit dubbel opslaan (ON CONFLICT).
    * @param {string} tenantId Id van de omgeving.
    * @param {object[]} rows Regels met kind, soldAt, orderId, reference, itemId, code, name, qty, revenue en movementId.
    * @returns {void}
    */
   function insertLines(tenantId, rows) {
     const insert = prepare(`INSERT INTO web_sale_lines (id, tenant_id, kind, sold_at, order_id, reference, item_id, code, name, qty, revenue, movement_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`);
     const at = currentTimestamp();
-    for (const row of rows) {
-      insert.run(crypto.randomUUID(), tenantId, row.kind, row.soldAt, row.orderId, row.reference, row.itemId || null, String(row.code || '').slice(0, 60),
+    for (const [index, row] of rows.entries()) {
+      const lineId = `${row.kind}:${row.orderId}:${row.kind === 'retour' ? `${row.reference}:` : ''}${index + 1}`;
+      insert.run(lineId, tenantId, row.kind, row.soldAt, row.orderId, row.reference, row.itemId || null, String(row.code || '').slice(0, 60),
         String(row.name || '').slice(0, 200), round3(row.qty), round2(row.revenue), row.movementId || null, at);
     }
   }
