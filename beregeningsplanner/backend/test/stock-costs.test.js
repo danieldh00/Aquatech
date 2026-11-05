@@ -89,6 +89,23 @@ test('FIFO: een onbekende inkoopprijs blijft onbekend tot hij is ingevuld', () =
   assert.strictEqual(stock.setLayerCost(tenantId, item.id, fixed.id, 1).status, 409, 'de prijs van een ontvangst ligt vast');
 });
 
+test('FIFO: een opgebruikte laag zonder prijs blijft zichtbaar en invulbaar', () => {
+  const { db, stock, tenantId } = freshStock();
+  const item = stock.create(tenantId, null, { code: 'GRIND', name: 'Grind', onHand: 2 }).item;
+  const issue = stock.move(tenantId, null, item.id, { kind: 'correctie', qty: -2, note: 'Opgebruikt' });
+  assert.deepStrictEqual(issue.item.layers.map((layer) => [layer.remaining, layer.unitCost, layer.editable]), [[0, null, true]]);
+  stock.setLayerCost(tenantId, item.id, issue.item.layers[0].id, 2.5);
+  assert.deepStrictEqual(entriesOf(db, issue.movementId), [{ qty: -2, unitCost: 2.5 }]);
+  assert.deepStrictEqual(stock.get(tenantId, item.id).layers, [], 'een lege laag met prijs valt uit het overzicht');
+});
+
+test('inkoopprijs: vier decimalen blijven bewaard', () => {
+  const { stock, tenantId } = freshStock();
+  const item = stock.create(tenantId, null, { code: 'NIP', name: 'Nippel', costPrice: 0.1234 }).item;
+  assert.strictEqual(item.costPrice, 0.1234);
+  assert.deepStrictEqual(item.costPrices.map((price) => price.price), [0.1234]);
+});
+
 test('FIFO: een oude stand zonder lagen wordt een beginstand', () => {
   const { db, stock, tenantId } = freshStock();
   const item = stock.create(tenantId, null, { code: 'OUD', name: 'Oud artikel', costPrice: 3 }).item;
@@ -151,6 +168,8 @@ test('rapportage webshop: kostprijs uit de laag, retour tegen dezelfde prijs, re
   assert.strictEqual(after.totals.cost, 4);
   assert.strictEqual(after.totals.margin, 6);
   assert.deepStrictEqual(after.lines.map((line) => [line.kind, line.qty, line.revenue, line.cost]), [['verkoop', 2, 20, 8], ['retour', -1, -10, -4]]);
+  const again = (await world.admin.get('/api/admin/webshop-report?lines=1')).body;
+  assert.strictEqual(again.lines.length, 2, 'een tweede rapportage voegt geen regels toe');
   const layers = (await world.admin.get(`/api/stock/items/${bus.id}`)).body.layers;
   assert.deepStrictEqual(layers.map((layer) => [layer.remaining, layer.unitCost]), [[48, 4], [1, 4]], 'de retour komt terug als partij van 4');
 

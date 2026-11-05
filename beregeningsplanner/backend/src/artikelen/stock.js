@@ -269,6 +269,7 @@ function sanitizeItem(raw, { partial = false } = {}) {
   if (!partial || input.costPrice !== undefined) {
     const costPrice = input.costPrice === '' || input.costPrice == null ? null : Number(input.costPrice);
     if (costPrice !== null && (!Number.isFinite(costPrice) || costPrice < 0 || costPrice > MAX_QTY)) return { error: 'Ongeldige inkoopprijs.', field: 'costPrice' };
+    // Vier decimalen, net als de prijshistorie en de voorraadlagen (stock-costs.js).
     out.costPrice = costPrice === null ? null : Math.round(costPrice * 10000) / 10000;
   }
   if (!partial || input.salePrice !== undefined) {
