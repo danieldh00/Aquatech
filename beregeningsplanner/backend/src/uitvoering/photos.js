@@ -3,7 +3,7 @@
 // Foto's: de ploeg maakt bij een werkorder foto's (voor, tijdens, oplevering)
 // om vast te leggen hoe een installatie is opgeleverd. De browser verkleint
 // en hercodeert ze (zonder EXIF/GPS); de server controleert het formaat,
-// haalt bij JPEG alsnog metadata weg en bewaart afbeelding en miniatuur
+// haalt bij JPEG, PNG en WebP alsnog metadata weg en bewaart afbeelding en miniatuur
 // versleuteld in de database (vault.sealBytes, AAD = tenant + foto-id). Zo
 // gaan ze mee in de versleutelde back-ups en in een overstap naar PostgreSQL,
 // en wist het verwijderen van een tenant ze ook.
@@ -64,17 +64,76 @@ function cleanJpeg(buffer) {
 }
 
 const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+/** PNG-blokken met tekst, tijd of EXIF (daar kan GPS, een naam of software in staan); die gaan eruit. */
+const PNG_METADATA_CHUNKS = new Set(['tEXt', 'zTXt', 'iTXt', 'eXIf', 'tIME']);
+/** WebP-blokken met EXIF of XMP; die gaan eruit (en de vlaggen in VP8X ook). */
+const WEBP_METADATA_CHUNKS = new Set(['EXIF', 'XMP ']);
+/** Vlaggen in het VP8X-blok die zeggen dat er EXIF (0x08) of XMP (0x04) in het bestand zit. */
+const WEBP_METADATA_FLAGS = 0x08 | 0x04;
+
+/**
+ * Haalt metadata (tekst, tijd, EXIF) uit een PNG; de beeldblokken blijven ongewijzigd.
+ * Klopt de opbouw niet, dan blijft het bestand zoals het was.
+ * @param {Buffer} buffer Het PNG-bestand (handtekening en IHDR al gecontroleerd).
+ * @returns {Buffer} Het bestand zonder metadata.
+ */
+function stripPngMetadata(buffer) {
+  const parts = [buffer.subarray(0, 8)];
+  let position = 8;
+  let removed = false;
+  while (position + 12 <= buffer.length) {
+    const chunkLength = buffer.readUInt32BE(position);
+    const end = position + 12 + chunkLength;
+    if (end > buffer.length) return buffer;
+    const type = buffer.toString('latin1', position + 4, position + 8);
+    if (PNG_METADATA_CHUNKS.has(type)) removed = true;
+    else parts.push(buffer.subarray(position, end));
+    position = end;
+    if (type === 'IEND') return removed ? Buffer.concat(parts) : buffer;
+  }
+  return buffer;
+}
+
+/**
+ * Haalt EXIF en XMP uit een WebP en zet de bijbehorende vlaggen in VP8X uit; de beelddata blijft ongewijzigd.
+ * Klopt de opbouw niet, dan blijft het bestand zoals het was.
+ * @param {Buffer} buffer Het WebP-bestand (RIFF/WEBP al gecontroleerd).
+ * @returns {Buffer} Het bestand zonder metadata.
+ */
+function stripWebpMetadata(buffer) {
+  const riffEnd = Math.min(buffer.length, 8 + buffer.readUInt32LE(4));
+  const parts = [];
+  let position = 12;
+  let removed = false;
+  while (position + 8 <= riffEnd) {
+    const type = buffer.toString('latin1', position, position + 4);
+    const chunkLength = buffer.readUInt32LE(position + 4);
+    const end = position + 8 + chunkLength + (chunkLength % 2);
+    if (position + 8 + chunkLength > riffEnd) return buffer;
+    if (WEBP_METADATA_CHUNKS.has(type)) removed = true;
+    else parts.push(buffer.subarray(position, Math.min(end, riffEnd)));
+    position = end;
+  }
+  if (!removed) return buffer;
+  const body = Buffer.concat(parts);
+  if (body.toString('latin1', 0, 4) === 'VP8X' && body.length > 8) body[8] &= ~WEBP_METADATA_FLAGS;
+  const header = Buffer.alloc(12);
+  header.write('RIFF', 0, 'latin1');
+  header.writeUInt32LE(body.length + 4, 4);
+  header.write('WEBP', 8, 'latin1');
+  return Buffer.concat([header, body]);
+}
 
 /**
  * Herkent het formaat aan de inhoud (niet aan wat de browser zegt).
  * @param {Buffer} buffer Het bestand.
- * @returns {{ mime: string, width: number, height: number, body: Buffer }|null} JPEG (opgeschoond), PNG of WebP met afmetingen, of null.
+ * @returns {{ mime: string, width: number, height: number, body: Buffer }|null} JPEG, PNG of WebP (alle drie zonder metadata zoals EXIF/GPS) met afmetingen, of null.
  */
 function inspectImage(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 16) return null;
   if (buffer[0] === 0xff && buffer[1] === 0xd8) return cleanJpeg(buffer);
   if (buffer.subarray(0, 8).equals(PNG_SIG) && buffer.toString('latin1', 12, 16) === 'IHDR') {
-    return { mime: 'image/png', width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20), body: buffer };
+    return { mime: 'image/png', width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20), body: stripPngMetadata(buffer) };
   }
   if (buffer.toString('latin1', 0, 4) === 'RIFF' && buffer.toString('latin1', 8, 12) === 'WEBP' && buffer.length >= 30) {
     const chunk = buffer.toString('latin1', 12, 16);
@@ -83,7 +142,7 @@ function inspectImage(buffer) {
     if (chunk === 'VP8 ') { width = buffer.readUInt16LE(26) & 0x3fff; height = buffer.readUInt16LE(28) & 0x3fff; }
     else if (chunk === 'VP8L') { const header = buffer.readUInt32LE(21); width = (header & 0x3fff) + 1; height = ((header >> 14) & 0x3fff) + 1; }
     else if (chunk === 'VP8X') { width = buffer.readUIntLE(24, 3) + 1; height = buffer.readUIntLE(27, 3) + 1; }
-    return width && height ? { mime: 'image/webp', width, height, body: buffer } : null;
+    return width && height ? { mime: 'image/webp', width, height, body: stripWebpMetadata(buffer) } : null;
   }
   return null;
 }
@@ -603,4 +662,4 @@ function registerPhotoRoutes(app, ctx) {
   });
 }
 
-module.exports = { createPhotoStore, createDossierStore, registerPhotoRoutes, installationOf, completedOf, locationKey, inspectImage, cleanJpeg, fromBase64, KINDS, MAX_PER_WORK_ORDER, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE, MAX_THUMB_SIDE };
+module.exports = { createPhotoStore, createDossierStore, registerPhotoRoutes, installationOf, completedOf, locationKey, inspectImage, cleanJpeg, stripPngMetadata, stripWebpMetadata, fromBase64, KINDS, MAX_PER_WORK_ORDER, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE, MAX_THUMB_SIDE };

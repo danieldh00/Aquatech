@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.6.5
+
+Beveiligingsronde en snelheid (deel 1), zonder andere functionaliteit.
+
+- **Beveiliging, metadata** (`uitvoering/photos.js`, `inspectImage`): naast JPEG gaan nu ook bij PNG
+  (`tEXt`, `zTXt`, `iTXt`, `eXIf`, `tIME`) en WebP (`EXIF`, `XMP `, plus de vlaggen in `VP8X`) de
+  metadata eruit. Geldt voor werkorderfoto's, meldingen, artikelafbeeldingen (ook overgenomen uit de
+  oude webshop en daarna openbaar in de shop) en afbeeldingen van de shop. Beelddata blijft byte voor
+  byte gelijk; een bestand met een onduidelijke opbouw blijft zoals het was.
+- **Beveiliging, limieten** (`beveiliging/auth.js`, `clientKey`): limieten per bezoeker tellen bij IPv6
+  per /64-netwerk in plaats van per adres. Een IPv6-aansluiting heeft een heel /64-blok, dus per adres
+  tellen liet elke limiet (inloggen, registreren, bestellen, openbare links, AI) omzeilen door steeds
+  een ander adres te gebruiken. IPv4 blijft per adres. `remoteIp` (auditlog) is ongewijzigd.
+- **Snelheid** (`platform/image-cache.js`): artikelfoto's (`/winkel/artikelfoto/`, `/api/stock/images/`)
+  en shopafbeeldingen (`/winkel/media/`) komen na de eerste keer uit het geheugen (LRU, 48 resp. 24 MB,
+  10 minuten). Scheelt per foto een databaserondgang met de volledige afbeelding (bij Supabase over het
+  netwerk, en de synchrone databaselaag houdt de server zolang vast) plus het ontsleutelen. Verwijderen
+  of opruimen haalt de afbeelding ook uit het geheugen.
+- **Tests**: PNG/WebP met tekst, EXIF en XMP; `clientKey` en de inloglimiet met wisselende IPv6-adressen
+  in één /64; cache (grenzen, verlopen, per omgeving) en een verwijderde artikelfoto komt niet meer uit
+  het geheugen.
+
 ## 1.6.4
 
 Afbeeldingen overnemen uit de webshop: duidelijker over hergebruik.

@@ -17,6 +17,7 @@
 const crypto = require('crypto');
 const { inspectImage, fromBase64, MAX_IMAGE_BYTES, MAX_SIDE } = require('../uitvoering/photos');
 const { publicAddress } = require('../beveiliging/netguard');
+const { createImageCache } = require('../platform/image-cache');
 const { pinnedFetch, readBytesLimited } = require('../beveiliging/pinned-fetch');
 
 const DOWNLOAD_TIMEOUT_MS = 10000;
@@ -73,6 +74,8 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
    * @returns {string} De context.
    */
   const aadOf = (tenantId, id) => `${tenantId}:artikel-afbeelding:${id}`;
+  /** Ontsleutelde afbeeldingen in het geheugen: de shop toont dezelfde foto's steeds opnieuw. */
+  const memory = createImageCache();
 
   /**
    * Verwijdert afbeeldingen waar geen artikel meer naar verwijst.
@@ -80,7 +83,9 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
    * @returns {void}
    */
   function prune(tenantId) {
-    prepare('DELETE FROM item_images WHERE tenant_id = ? AND NOT EXISTS (SELECT 1 FROM stock_items i WHERE i.tenant_id = ? AND i.image_id = item_images.id)').run(tenantId, tenantId);
+    const removed = prepare('DELETE FROM item_images WHERE tenant_id = ? AND NOT EXISTS (SELECT 1 FROM stock_items i WHERE i.tenant_id = ? AND i.image_id = item_images.id)').run(tenantId, tenantId);
+    // Welke afbeeldingen weg zijn weten we niet: dan de hele omgeving uit het geheugen.
+    if (!removed || Number(removed.changes) !== 0) memory.clearTenant(tenantId);
   }
 
   /**
@@ -144,9 +149,14 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
    */
   function file(tenantId, imageId) {
     if (!IMAGE_ID_PATTERN.test(String(imageId))) return null;
+    const remembered = memory.get(tenantId, String(imageId));
+    if (remembered) return remembered;
     const row = prepare('SELECT mime, data FROM item_images WHERE tenant_id = ? AND id = ?').get(tenantId, String(imageId));
     if (!row) return null;
-    try { return { mime: row.mime, body: vault.openBytes(row.data, aadOf(tenantId, String(imageId))) }; } catch (error) { return null; }
+    let found;
+    try { found = { mime: row.mime, body: vault.openBytes(row.data, aadOf(tenantId, String(imageId))) }; } catch (error) { return null; }
+    memory.set(tenantId, String(imageId), found);
+    return found;
   }
 
   /**

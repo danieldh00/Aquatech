@@ -81,6 +81,24 @@ function remoteIp(req) {
 }
 
 /**
+ * De sleutel voor een limiet per bezoeker: het IPv4-adres, of bij IPv6 het
+ * /64-netwerk. Eén aansluiting krijgt bij IPv6 een heel /64-blok; per los adres
+ * tellen zou een bezoeker elke poging een nieuw adres laten kiezen en zo elke
+ * limiet (inloggen, registreren, openbare links) omzeilen.
+ * @param {object} req Het Express-verzoek.
+ * @returns {string} Het IPv4-adres of het IPv6-netwerk als 'xxxx:xxxx:xxxx:xxxx::/64'.
+ */
+function clientKey(req) {
+  const ip = remoteIp(req);
+  if (net.isIP(ip) !== 6) return ip;
+  const [head, tail = ''] = ip.toLowerCase().split('::');
+  const headParts = head ? head.split(':') : [];
+  const tailParts = tail ? tail.split(':') : [];
+  const groups = ip.includes('::') ? [...headParts, ...Array(Math.max(0, 8 - headParts.length - tailParts.length)).fill('0'), ...tailParts] : headParts;
+  return `${groups.slice(0, 4).map((group) => group.replace(/^0+(?=.)/, '')).join(':')}::/64`;
+}
+
+/**
  * Leest de Cookie-kop uit tot een object naam → waarde (URL-gedecodeerd waar dat kan).
  * @param {string} header De Cookie-kop.
  * @returns {Object<string, string>} De cookies.
@@ -440,4 +458,4 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
   return { readSigned, setSigned, setPlain, clearNamed, requireAccess, isAuthenticated, isAuthenticatedForAsset, session, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
 }
 
-module.exports = { createAuth, remoteIp, parseCookies, COOKIE_NAME, GUEST_COOKIE };
+module.exports = { createAuth, remoteIp, clientKey, parseCookies, COOKIE_NAME, GUEST_COOKIE };

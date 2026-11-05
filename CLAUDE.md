@@ -579,14 +579,18 @@ de PR-beschrijving kort hoe eraan voldaan is.
 - Rechten op de server met `requireRight(recht)` (rechten in
   `shared/roles.js`, `Roles.can`); de frontend verbergt alleen. Klant ziet
   alleen eigen gegevens (`customer_id`), nooit uren/notities/interne velden.
-- Limieten per bezoeker via `remoteIp(req)` (CF-Connecting-IP achter de
-  tunnel) en `createRateLimiter`; elk openbaar of duur endpoint krijgt er één.
+- Limieten per bezoeker via `clientKey(req)` (auth.js: IPv4-adres of
+  IPv6-/64, op basis van `remoteIp`/CF-Connecting-IP achter de tunnel; 1.6.5)
+  en `createRateLimiter`; elk openbaar of duur endpoint krijgt er één.
+  `remoteIp` alleen voor het auditlog/opslaan van het adres.
 - Uitgaande verbindingen naar door een tenant ingevulde hosts altijd via
   `netguard.publicAddress` (geen SSRF naar het eigen netwerk).
 - Schrijvende `/api`-verzoeken: de `Sec-Fetch-Site`-controle niet omzeilen;
   nieuwe body-routes krijgen een eigen `express.json({ limit })`.
 - Uploads: type op inhoud controleren (niet op naam/MIME), grootte begrenzen,
-  EXIF strippen, opslaan via `vault.sealBytes`. Openbare links: token alleen
+  metadata strippen (`inspectImage` doet JPEG, PNG en WebP), opslaan via
+  `vault.sealBytes`. Vaak opgevraagde afbeeldingen via
+  `platform/image-cache.js` (wissen bij verwijderen). Openbare links: token alleen
   als SHA-256 opslaan, via een kop (niet in de URL-query) versturen.
 - Geheimen als `type: 'secret'` in settings.js, nooit in logs, `audit`-detail
   of frontend. Invoer server-side saneren (`sanitize`), parameters altijd

@@ -328,6 +328,22 @@ test('bezoekers-IP achter de tunnel: doorgegeven adres alleen van een proxy in h
   assert.strictEqual(remoteIp(req('8.8.8.8', { 'cf-connecting-ip': '1.2.3.4' })), '8.8.8.8', 'openbaar socketadres: koppen genegeerd');
 });
 
+test('limietsleutel: IPv4 per adres, IPv6 per /64-netwerk', () => {
+  const { clientKey } = require('../src/beveiliging/auth');
+  /**
+   * Een nagebootst verzoek via de tunnel met het doorgegeven bezoekersadres.
+   * @param {string} ip Doorgegeven IP (CF-Connecting-IP).
+   * @returns {object} Het verzoek.
+   */
+  const req = (ip) => ({ socket: { remoteAddress: '172.18.0.3' }, headers: { 'cf-connecting-ip': ip } });
+  assert.strictEqual(clientKey(req('203.0.114.7')), '203.0.114.7');
+  assert.strictEqual(clientKey(req('2001:db8:aa:1:1234:5678:9abc:def0')), '2001:db8:aa:1::/64');
+  assert.strictEqual(clientKey(req('2001:0DB8:00aa:0001::7')), '2001:db8:aa:1::/64', 'zelfde netwerk, andere schrijfwijze');
+  assert.strictEqual(clientKey(req('2001:db8::1')), '2001:db8:0:0::/64');
+  assert.strictEqual(clientKey(req('::1')), '0:0:0:0::/64');
+  assert.notStrictEqual(clientKey(req('2001:db8:aa:2::1')), clientKey(req('2001:db8:aa:1::1')), 'ander /64: eigen limiet');
+});
+
 test('inlogblokkade per IP geldt per bezoeker, niet voor iedereen achter de tunnel', async () => {
   const { server, base } = await start();
   try {
@@ -341,6 +357,9 @@ test('inlogblokkade per IP geldt per bezoeker, niet voor iedereen achter de tunn
     for (let i = 0; i < 10; i++) await login('198.51.99.1');
     assert.strictEqual(await login('198.51.99.1'), 429);
     assert.strictEqual(await login('198.51.99.2'), 401, 'andere bezoeker kan nog inloggen');
+    for (let i = 0; i < 10; i++) await login(`2001:db8:77:1::${i + 1}`);
+    assert.strictEqual(await login('2001:db8:77:1::ffff'), 429, 'een nieuw adres in hetzelfde /64 omzeilt de limiet niet');
+    assert.strictEqual(await login('2001:db8:77:2::1'), 401, 'ander /64: eigen limiet');
   } finally {
     server.close();
   }

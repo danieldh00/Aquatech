@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { createMailer, validEmail } = require('../platform/mailer');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
+const { clientKey } = require('../beveiliging/auth');
 const { inspectImage, fromBase64, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE, MAX_THUMB_SIDE } = require('./photos');
 const { mailBody } = require('../verkoop/quotes');
 
@@ -402,11 +403,10 @@ function forCustomer(item) {
  * /api/portal/requests…; medewerkers (recht 'werkorders'): /api/service-requests…;
  * gegevens van de actieve omgeving.
  * @param {object} app De Express-app.
- * @param {object} ctx requests, portal, workorders, requireRight, requireJson, audit, remoteIp, createRateLimiter, mailerFor, settingsOf en staffTenantsOf.
+ * @param {object} ctx requests, portal, workorders, requireRight, requireJson, audit, createRateLimiter, mailerFor, settingsOf en staffTenantsOf.
  */
 function registerServiceRequestRoutes(app, ctx) {
   const { requests, portal, workorders, requireRight, requireJson, audit } = ctx;
-  const remoteIp = ctx.remoteIp || ((req) => req.socket?.remoteAddress || '');
   const mailerFor = ctx.mailerFor || ((settings) => createMailer(settings));
   const requirePortal = requireRight('portaal');
   const requireWo = requireRight('werkorders');
@@ -443,7 +443,7 @@ function registerServiceRequestRoutes(app, ctx) {
    * @returns {Function} De middleware.
    */
   const limiter = (max) => (ctx.createRateLimiter
-    ? ctx.createRateLimiter({ windowMs: 60 * 60 * 1000, max, keyFn: (req) => `${tenantOf(req)}|${req.user?.id || remoteIp(req)}` })
+    ? ctx.createRateLimiter({ windowMs: 60 * 60 * 1000, max, keyFn: (req) => `${tenantOf(req)}|${req.user?.id || clientKey(req)}` })
     : passthrough);
   const createLimiter = limiter(10);
   const photoLimiter = limiter(60);

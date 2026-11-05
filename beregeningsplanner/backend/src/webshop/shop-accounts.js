@@ -3,7 +3,7 @@
 // en inloggen in de shop gebruikt dezelfde sessie als de rest van de app.
 
 const { createRateLimiter } = require('../beveiliging/rate-limit');
-const { remoteIp } = require('../beveiliging/auth');
+const { clientKey } = require('../beveiliging/auth');
 const { sanitizeBusinessProfile, wantsBusiness } = require('./business-profile');
 
 /** Mislukte inlogpogingen per gebruiker waarna de gebruiker tijdelijk is geblokkeerd. */
@@ -15,8 +15,8 @@ const LOGIN_MAX_FAILURES = 10;
  * @returns {{ viewer: Function, login: Function, register: Function, logout: Function, businessProfile: Function, requestBusiness: Function }} De functies.
  */
 function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures }) {
-  const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyFn: (req) => `login:${remoteIp(req)}` });
-  const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `register:${remoteIp(req)}` });
+  const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyFn: (req) => `login:${clientKey(req)}` });
+  const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `register:${clientKey(req)}` });
 
   /**
    * Past een limiet toe zonder JSON-antwoord: zegt of het verzoek te veel is.
