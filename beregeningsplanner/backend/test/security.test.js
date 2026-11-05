@@ -342,6 +342,8 @@ test('limietsleutel: IPv4 per adres, IPv6 per /64-netwerk', () => {
   assert.strictEqual(clientKey(req('2001:db8::1')), '2001:db8:0:0::/64');
   assert.strictEqual(clientKey(req('::1')), '0:0:0:0::/64');
   assert.notStrictEqual(clientKey(req('2001:db8:aa:2::1')), clientKey(req('2001:db8:aa:1::1')), 'ander /64: eigen limiet');
+  assert.strictEqual(clientKey(req('0:0:0:0:0:ffff:203.0.113.1')), '203.0.113.1', 'IPv4 in IPv6-vorm: per IPv4-adres');
+  assert.strictEqual(clientKey(req('::FFFF:cb00:7102')), '203.0.113.2', 'ook in hexadecimale vorm');
 });
 
 test('inlogblokkade per IP geldt per bezoeker, niet voor iedereen achter de tunnel', async () => {

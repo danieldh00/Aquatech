@@ -58,7 +58,7 @@ function importableUrl(text) {
  * Maakt de opslag voor artikelafbeeldingen.
  * @param {object} db De database.
  * @param {{ vault: object, fetchImpl?: Function|null, resolveHost?: Function }} options vault = de kluis (sealBytes/openBytes), fetchImpl = eigen fetch (tests), resolveHost = zoekt een hostnaam op (alleen openbare adressen).
- * @returns {{ setForItem: Function, clearForItem: Function, file: Function, importFromShop: Function, prune: Function, pendingImport: Function, library: Function }} De functies.
+ * @returns {{ setForItem: Function, clearForItem: Function, file: Function, importFromShop: Function, prune: Function, pendingImport: Function, library: Function, forget: Function }} De functies.
  */
 function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publicAddress }) {
   /**
@@ -280,7 +280,14 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
     };
   }
 
-  return { setForItem, clearForItem, file, importFromShop, prune, pendingImport, library };
+  /**
+   * Vergeet de afbeeldingen van een omgeving in het geheugen (na leegmaken of verwijderen van de omgeving).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {void}
+   */
+  const forget = (tenantId) => memory.clearTenant(tenantId);
+
+  return { setForItem, clearForItem, file, importFromShop, prune, pendingImport, library, forget };
 }
 
 /**

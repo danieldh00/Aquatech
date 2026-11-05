@@ -306,7 +306,7 @@ const currentTimestamp = () => new Date().toISOString();
  * Maakt de opslag voor de inhoud van de webshop.
  * @param {object} db De database.
  * @param {{ vault: object }} stores De kluis (sealBytes/openBytes).
- * @returns {object} Functies voor concept en publiceren (`state`, `saveDraft`, `publish`, `discard`, `revert`, `removePage`), de openbare inhoud (`publicContent`) en afbeeldingen (`addImage`, `listImages`, `imageFile`, `removeImage`).
+ * @returns {object} Functies voor concept en publiceren (`state`, `saveDraft`, `publish`, `discard`, `revert`, `removePage`), de openbare inhoud (`publicContent`) en afbeeldingen (`addImage`, `listImages`, `imageFile`, `removeImage`, `forgetImages`).
  */
 function createShopContentStore(db, { vault }) {
   /** Gepubliceerde inhoud per tenant (korte cache). */
@@ -556,7 +556,14 @@ function createShopContentStore(db, { vault }) {
     return {};
   }
 
-  return { state, saveDraft, publish, discard, revert, removePage, publicContent, listImages, addImage, imageFile, removeImage };
+  /**
+   * Vergeet de afbeeldingen van een omgeving in het geheugen (na leegmaken of verwijderen van de omgeving).
+   * @param {string} tenantId Id van de tenant.
+   * @returns {void}
+   */
+  const forgetImages = (tenantId) => memory.clearTenant(tenantId);
+
+  return { state, saveDraft, publish, discard, revert, removePage, publicContent, listImages, addImage, imageFile, removeImage, forgetImages };
 }
 
 // ---------- Routes (Beheer) ----------

@@ -92,8 +92,8 @@ test('afbeelding herkennen: tekst, tijd en EXIF gaan ook uit PNG en WebP', () =>
   assert.deepStrictEqual(cleanPng.body, Buffer.concat([signature, pngChunk('IHDR', header), imageData, pngChunk('IEND', Buffer.alloc(0))]));
   const plain = sitePhotoPng('voor', 1, 120, 80);
   assert.strictEqual(inspectImage(plain).body, plain, 'zonder metadata: hetzelfde bestand');
-  const truncated = png.subarray(0, png.length - 20);
-  assert.strictEqual(inspectImage(truncated).body, truncated, 'onduidelijke opbouw: ongewijzigd (zoals eerder)');
+  assert.strictEqual(inspectImage(png.subarray(0, png.length - 20)), null, 'afgekapte PNG wordt geweigerd');
+  assert.strictEqual(inspectImage(png.subarray(0, png.length - 12)), null, 'PNG zonder IEND wordt geweigerd');
 
   const vp8x = Buffer.alloc(10); vp8x[0] = 0x08 | 0x04 | 0x10; vp8x.writeUIntLE(99, 4, 3); vp8x.writeUIntLE(49, 7, 3);
   const bitstream = webpChunk('VP8L', Buffer.from([0x2f, 1, 2, 3, 4]));
@@ -107,6 +107,10 @@ test('afbeelding herkennen: tekst, tijd en EXIF gaan ook uit PNG en WebP', () =>
   assert.strictEqual(cleanWebp.body.readUInt32LE(4), cleanWebp.body.length - 8, 'RIFF-lengte klopt');
   assert.ok(cleanWebp.body.includes(bitstream), 'beelddata blijft');
   assert.deepStrictEqual(inspectImage(cleanWebp.body).body, cleanWebp.body, 'nogmaals schoonmaken verandert niets');
+  assert.strictEqual(inspectImage(webp.subarray(0, webp.length - 4)), null, 'RIFF-lengte groter dan het bestand: geweigerd');
+  const overlong = Buffer.from(webp);
+  overlong.writeUInt32LE(9999, 12 + 18 + 4);
+  assert.strictEqual(inspectImage(overlong), null, 'blok buiten het bestand: geweigerd');
 });
 
 test('vault: bestanden versleuteld met de context als AAD', () => {

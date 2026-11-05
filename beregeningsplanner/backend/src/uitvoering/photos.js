@@ -73,9 +73,9 @@ const WEBP_METADATA_FLAGS = 0x08 | 0x04;
 
 /**
  * Haalt metadata (tekst, tijd, EXIF) uit een PNG; de beeldblokken blijven ongewijzigd.
- * Klopt de opbouw niet, dan blijft het bestand zoals het was.
+ * Een onvolledig bestand (blok buiten het bestand of geen IEND) wordt geweigerd.
  * @param {Buffer} buffer Het PNG-bestand (handtekening en IHDR al gecontroleerd).
- * @returns {Buffer} Het bestand zonder metadata.
+ * @returns {Buffer|null} Het bestand zonder metadata, of null bij een onvolledig bestand.
  */
 function stripPngMetadata(buffer) {
   const parts = [buffer.subarray(0, 8)];
@@ -84,24 +84,25 @@ function stripPngMetadata(buffer) {
   while (position + 12 <= buffer.length) {
     const chunkLength = buffer.readUInt32BE(position);
     const end = position + 12 + chunkLength;
-    if (end > buffer.length) return buffer;
+    if (end > buffer.length) return null;
     const type = buffer.toString('latin1', position + 4, position + 8);
     if (PNG_METADATA_CHUNKS.has(type)) removed = true;
     else parts.push(buffer.subarray(position, end));
     position = end;
     if (type === 'IEND') return removed ? Buffer.concat(parts) : buffer;
   }
-  return buffer;
+  return null;
 }
 
 /**
  * Haalt EXIF en XMP uit een WebP en zet de bijbehorende vlaggen in VP8X uit; de beelddata blijft ongewijzigd.
- * Klopt de opbouw niet, dan blijft het bestand zoals het was.
+ * Een onvolledig bestand (RIFF-lengte groter dan het bestand of een blok dat erbuiten valt) wordt geweigerd.
  * @param {Buffer} buffer Het WebP-bestand (RIFF/WEBP al gecontroleerd).
- * @returns {Buffer} Het bestand zonder metadata.
+ * @returns {Buffer|null} Het bestand zonder metadata, of null bij een onvolledig bestand.
  */
 function stripWebpMetadata(buffer) {
-  const riffEnd = Math.min(buffer.length, 8 + buffer.readUInt32LE(4));
+  const riffEnd = 8 + buffer.readUInt32LE(4);
+  if (riffEnd > buffer.length) return null;
   const parts = [];
   let position = 12;
   let removed = false;
@@ -109,7 +110,7 @@ function stripWebpMetadata(buffer) {
     const type = buffer.toString('latin1', position, position + 4);
     const chunkLength = buffer.readUInt32LE(position + 4);
     const end = position + 8 + chunkLength + (chunkLength % 2);
-    if (position + 8 + chunkLength > riffEnd) return buffer;
+    if (position + 8 + chunkLength > riffEnd) return null;
     if (WEBP_METADATA_CHUNKS.has(type)) removed = true;
     else parts.push(buffer.subarray(position, Math.min(end, riffEnd)));
     position = end;
@@ -133,7 +134,8 @@ function inspectImage(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 16) return null;
   if (buffer[0] === 0xff && buffer[1] === 0xd8) return cleanJpeg(buffer);
   if (buffer.subarray(0, 8).equals(PNG_SIG) && buffer.toString('latin1', 12, 16) === 'IHDR') {
-    return { mime: 'image/png', width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20), body: stripPngMetadata(buffer) };
+    const body = stripPngMetadata(buffer);
+    return body ? { mime: 'image/png', width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20), body } : null;
   }
   if (buffer.toString('latin1', 0, 4) === 'RIFF' && buffer.toString('latin1', 8, 12) === 'WEBP' && buffer.length >= 30) {
     const chunk = buffer.toString('latin1', 12, 16);
@@ -142,7 +144,8 @@ function inspectImage(buffer) {
     if (chunk === 'VP8 ') { width = buffer.readUInt16LE(26) & 0x3fff; height = buffer.readUInt16LE(28) & 0x3fff; }
     else if (chunk === 'VP8L') { const header = buffer.readUInt32LE(21); width = (header & 0x3fff) + 1; height = ((header >> 14) & 0x3fff) + 1; }
     else if (chunk === 'VP8X') { width = buffer.readUIntLE(24, 3) + 1; height = buffer.readUIntLE(27, 3) + 1; }
-    return width && height ? { mime: 'image/webp', width, height, body: stripWebpMetadata(buffer) } : null;
+    const body = width && height ? stripWebpMetadata(buffer) : null;
+    return body ? { mime: 'image/webp', width, height, body } : null;
   }
   return null;
 }

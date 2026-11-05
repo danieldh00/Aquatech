@@ -2008,9 +2008,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.status(201).json({ tenant: store.tenantRow(out.tenant), copied: out.copied });
   });
 
+  /**
+   * Vergeet de afbeeldingen van omgevingen in het geheugen nadat hun gegevens zijn gewist.
+   * @param {string[]} ids Id's van de omgevingen.
+   * @returns {void}
+   */
+  const forgetImages = (ids) => { for (const id of ids) { itemImageStore.forget(id); shopContentStore.forgetImages(id); } };
+
   app.post('/api/platform/tenants/:id/reset', requireJson, (req, res) => {
     const out = store.resetEnvironment(req.params.id);
     if (out.error) return platformError(res, out);
+    forgetImages([out.tenant.id]);
     console.log(`Testomgeving ${out.tenant.name} leeggemaakt door ${req.user.display_name}`);
     audit(req, 'testomgeving_leeggemaakt', { tenantId: out.tenant.id }, undefined, tenant.id);
     res.json({ ok: true });
@@ -2028,6 +2036,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const out = store.deleteTenant(tenantRow.id, tenant.id);
       if (out.error) return platformError(res, out);
       for (const id of out.ids) { settingsCache.delete(id); dailyCounts.delete(id); }
+      forgetImages(out.ids);
       console.log(`Tenant ${tenantRow.name} (${tenantRow.slug}) verwijderd door ${req.user.display_name}, met ${out.ids.length - 1} testomgeving(en)`);
       audit(req, 'tenant_verwijderd', { tenantId: tenantRow.id, slug: tenantRow.slug, name: tenantRow.name, environments: out.ids.length - 1, rows: out.counts }, undefined, tenant.id);
       return res.json({ ok: true, environments: out.ids.length - 1 });
@@ -2036,6 +2045,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (out.error) return platformError(res, out);
     settingsCache.delete(req.params.id);
     dailyCounts.delete(req.params.id);
+    forgetImages([req.params.id]);
     console.log(`Testomgeving verwijderd door ${req.user.display_name}`);
     audit(req, 'testomgeving_verwijderd', { tenantId: req.params.id }, undefined, tenant.id);
     res.json({ ok: true });
@@ -2095,6 +2105,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     while (testSet.accounts.some((account) => passwordProblem(password, account.username))) password = testdata.newPassword();
     const out = store.seedEnvironment(tenantRow.id, testSet, { passwordHash: await hashPassword(password), numberPrefix: profile.numberPrefix || 'OF-' });
     if (out.error) return platformError(res, out);
+    forgetImages([tenantRow.id]);
     // Klantlinks, reacties, werkorders en webshop via de echte opslaglogica.
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
