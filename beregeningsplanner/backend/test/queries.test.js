@@ -129,7 +129,8 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
 
     // Voorraad: overzicht in één query (stand + reserveringen samen), een
-    // artikel in drie, ongeacht het aantal artikelen en mutaties.
+    // artikel in vier (artikel, reserveringen, mutaties, prijshistorie + voorraadlagen samen),
+    // ongeacht het aantal artikelen en mutaties.
     assert.strictEqual((await client.post('/api/stock/import', { codes: ['PE-25', 'PE-32', 'FIT-T-25', 'VAL-24V', 'BOX-STD'] })).status, 200);
     probe.reset();
     const stock = (await client.get('/api/stock')).body.items;
@@ -137,7 +138,7 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     assert.strictEqual(probe.stats.queries, 2, probe.stats.sql.join('\n'));
     probe.reset();
     assert.strictEqual((await client.get(`/api/stock/items/${stock[0].id}`)).status, 200);
-    assert.strictEqual(probe.stats.queries, 4, probe.stats.sql.join('\n'));
+    assert.strictEqual(probe.stats.queries, 5, probe.stats.sql.join('\n'));
     // Werkregistratie: vaste aantallen queries, ongeacht het aantal regels
     // (sessie + werkorder + uren + materiaal; urenstaat: sessie + uren + materiaal).
     const lines = [{ id: 'a', section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 10 }];

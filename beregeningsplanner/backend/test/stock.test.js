@@ -47,8 +47,8 @@ async function workOrder(client, lines) {
 }
 
 test('voorraad: artikel opschonen en benodigd per code', () => {
-  assert.deepStrictEqual(sanitizeItem({ code: ' pe-25 ', name: ' PE-buis ', minQty: '5', costPrice: '0.849' }).value,
-    { code: 'PE-25', name: 'PE-buis', unit: 'st', location: '', notes: '', minQty: 5, reorderQty: null, costPrice: 0.85, salePrice: null, vatRate: 21, weightGrams: null, businessPrice: null, revenueGroup: 'producten', shopSync: true, packSize: 1, orderMinQty: 1, priceTiers: [] });
+  assert.deepStrictEqual(sanitizeItem({ code: ' pe-25 ', name: ' PE-buis ', minQty: '5', costPrice: '0.84937' }).value,
+    { code: 'PE-25', name: 'PE-buis', unit: 'st', location: '', notes: '', minQty: 5, reorderQty: null, costPrice: 0.8494, salePrice: null, vatRate: 21, weightGrams: null, businessPrice: null, revenueGroup: 'producten', shopSync: true, packSize: 1, orderMinQty: 1, priceTiers: [] });
   assert.strictEqual(sanitizeItem({ code: '', name: 'x' }).field, 'code');
   assert.strictEqual(sanitizeItem({ code: 'A B;C', name: 'x' }).field, 'code');
   assert.strictEqual(sanitizeItem({ code: 'A', name: '' }).field, 'name');
@@ -145,6 +145,26 @@ test('voorraad: reserveren vanuit de werkorder, afboeken bij Gereed, mutaties', 
     assert.ok(!(await kees.get('/api/stock')).body.items.some((i) => i.code === 'PE-25'));
     assert.ok((await kees.get('/api/stock?archived=1')).body.items.some((i) => i.code === 'PE-25' && i.archived));
     assert.strictEqual((await kees.post('/api/stock/items', { code: 'VAL-24V', name: 'Dubbel' })).status, 409);
+  } finally {
+    server.close();
+  }
+});
+
+test('voorraad: retour van een verbruiksregel krijgt de prijs van díe regel', async () => {
+  const { db, server, as, main } = await setup();
+  try {
+    const kees = await as('kees');
+    const wo = await workOrder(kees, [['KLEP', 15]]);
+    const item = (await kees.post('/api/stock/items', { code: 'KLEP', name: 'Magneetklep', costPrice: 2, onHand: 10 })).body;
+    const stock = createStockStore(db);
+    const user = { id: 'u1', display_name: 'Kees' };
+    stock.move(main, null, item.id, { kind: 'ontvangst', qty: 10, unitCost: 5 });
+    stock.syncUsage(main, { usageId: 'v1', workOrderId: wo.id, code: 'KLEP', qty: 10, user });
+    stock.syncUsage(main, { usageId: 'v2', workOrderId: wo.id, code: 'KLEP', qty: 5, user });
+    stock.syncUsage(main, { usageId: 'v1', workOrderId: wo.id, code: 'KLEP', qty: 8, user });
+    const returned = stock.get(main, item.id).layers.find((layer) => layer.source === 'retour');
+    assert.ok(returned, JSON.stringify(stock.get(main, item.id).layers));
+    assert.deepStrictEqual([returned.remaining, returned.unitCost], [2, 2], 'v1 kwam uit de partij van 2, niet het gemiddelde van de werkorder');
   } finally {
     server.close();
   }

@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.6.2',
+      date: '2026-11-05',
+      title: 'Inkoopprijzen en een margerapportage voor de webshop',
+      items: [
+        { text: 'Bij elk artikel staat nu het blok Inkoopprijs en voorraadlagen. Een nieuwe inkoopprijs voeg je toe met een datum; de oude prijs blijft bewaard, zodat je ziet hoe de prijs zich ontwikkelt. Bij een ontvangst kun je de inkoopprijs van die levering meteen invullen.', for: ['voorraad'] },
+        { text: 'De voorraad werkt volgens FIFO: elke levering is een eigen partij met zijn eigen inkoopprijs en bij verkoop of verbruik gaat de oudste partij eerst. Stijgt de inkoopprijs, dan houden eerdere verkopen de prijs waarvoor ze echt zijn ingekocht. Is de inkoopprijs van een partij onbekend, dan staat dat er zo bij en kun je hem achteraf invullen.', for: ['voorraad'] },
+        { text: 'Nieuw tabblad Rapportage bij Webshopbestellingen: omzet, inkoopwaarde, brutowinst en marge over een periode naar keuze, met een grafiek over de tijd, de artikelen en categorieën met de meeste winst, de voorraadwaarde en een export naar Excel.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.6.1',
       date: '2026-11-04',
       title: 'Groothandelsvenster voor bestellen in bulk',

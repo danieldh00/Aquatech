@@ -978,6 +978,80 @@ const MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN order_min_qty INTEGER NOT NULL DEFAULT 1;
   ALTER TABLE stock_items ADD COLUMN price_tiers TEXT NOT NULL DEFAULT '[]';
   `,
+  // 45: inkoopprijzen met historie, voorraadlagen (FIFO) en de verkoopregels van de
+  // webshop voor de margerapportage (artikelen/stock-costs.js, webshop/web-sales.js).
+  // - stock_cost_prices: elke nieuwe inkoopprijs is een eigen regel (geldig vanaf);
+  //   een oude prijs wordt nooit overschreven. stock_items.cost_price = de actuele.
+  // - stock_layers: elke ontvangst is een laag met de inkoopprijs van dat moment
+  //   (unit_cost leeg = onbekend) en wat er nog van over is (remaining).
+  // - stock_cost_entries: per mutatie welke laag tegen welke prijs is gebruikt
+  //   (qty met hetzelfde teken als de mutatie); zo blijft de kostprijs van een
+  //   verkoop de prijs van de laag waaruit hij kwam.
+  // - web_sale_lines: per verzonden of geretourneerde webshopregel de omzet excl. btw
+  //   en de mutatie (movement_id) waarvan de kostprijs komt.
+  // De bestaande voorraad wordt één beginlaag tegen de huidige inkoopprijs (leeg = onbekend).
+  `
+  CREATE TABLE stock_cost_prices (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    item_id    TEXT NOT NULL REFERENCES stock_items(id),
+    price      REAL NOT NULL,
+    valid_from TEXT NOT NULL,
+    note       TEXT NOT NULL DEFAULT '',
+    user_id    TEXT,
+    user_name  TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX stock_cost_prices_item ON stock_cost_prices (tenant_id, item_id, valid_from);
+  CREATE TABLE stock_layers (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    item_id     TEXT NOT NULL REFERENCES stock_items(id),
+    movement_id TEXT,
+    received_at TEXT NOT NULL,
+    qty         REAL NOT NULL,
+    remaining   REAL NOT NULL,
+    unit_cost   REAL,
+    source      TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL
+  );
+  CREATE INDEX stock_layers_item ON stock_layers (tenant_id, item_id, received_at);
+  CREATE TABLE stock_cost_entries (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    movement_id TEXT NOT NULL,
+    item_id     TEXT NOT NULL REFERENCES stock_items(id),
+    layer_id    TEXT,
+    qty         REAL NOT NULL,
+    unit_cost   REAL,
+    created_at  TEXT NOT NULL
+  );
+  CREATE INDEX stock_cost_entries_movement ON stock_cost_entries (tenant_id, movement_id);
+  CREATE INDEX stock_cost_entries_layer ON stock_cost_entries (tenant_id, layer_id);
+  CREATE TABLE web_sale_lines (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    kind        TEXT NOT NULL CHECK (kind IN ('verkoop', 'retour')),
+    sold_at     TEXT NOT NULL,
+    order_id    TEXT,
+    reference   TEXT NOT NULL,
+    item_id     TEXT,
+    code        TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    qty         REAL NOT NULL,
+    revenue     REAL NOT NULL,
+    movement_id TEXT,
+    created_at  TEXT NOT NULL
+  );
+  CREATE INDEX web_sale_lines_sold ON web_sale_lines (tenant_id, sold_at);
+  CREATE INDEX web_sale_lines_order ON web_sale_lines (tenant_id, order_id);
+  INSERT INTO stock_layers (id, tenant_id, item_id, movement_id, received_at, qty, remaining, unit_cost, source, created_at)
+    SELECT 'begin-' || id, tenant_id, id, NULL, created_at, on_hand, on_hand, cost_price, 'beginstand', updated_at
+    FROM stock_items WHERE has_variants = 0 AND on_hand > 0;
+  INSERT INTO stock_cost_prices (id, tenant_id, item_id, price, valid_from, note, user_id, user_name, created_at)
+    SELECT 'begin-' || id, tenant_id, id, cost_price, substr(created_at, 1, 10), 'Inkoopprijs bij de start van de prijshistorie', NULL, '', updated_at
+    FROM stock_items WHERE cost_price IS NOT NULL;
+  `,
 ];
 
 /**

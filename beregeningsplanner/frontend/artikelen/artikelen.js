@@ -41,6 +41,19 @@
    * @param {string} iso tijdstip in ISO-formaat
    * @returns {string} leesbare datum en tijd, of leeg
    */
+  /**
+   * Prijs per eenheid in euro's (tot vier decimalen).
+   * @param {?number} value De prijs.
+   * @returns {string} Bijv. "€ 0,1234" (leeg zonder prijs).
+   */
+  const unitEur = (value) => (value == null ? '' : (Number(value) || 0).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 4 }));
+  /** Waar een voorraadlaag vandaan komt, in gewone woorden. */
+  const LAYER_SOURCES = { ontvangst: 'Ontvangst', retour: 'Retour', correctie: 'Correctie', telling: 'Telling', beginstand: 'Beginstand' };
+  /**
+   * Datum en tijd in het Nederlands.
+   * @param {string} iso Tijdstip als ISO-tekst.
+   * @returns {string} Bijv. "22 okt 2026 10:15".
+   */
   const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : '');
   /**
    * Formatteert een datum kort.
@@ -614,6 +627,7 @@
     variantOf.hidden = !item.parent;
     variantOf.innerHTML = item.parent ? `Variant van <a href="./?id=${encodeURIComponent(item.parent.id)}" data-open="${esc(item.parent.id)}">${esc(item.parent.code)} ${esc(item.parent.name)}</a>${valuesText(item) ? ` · ${esc(valuesText(item))}` : ''}` : '';
     renderVariants();
+    renderCosts();
     $('#d-res').innerHTML = item.reservations.length ? `<thead><tr><th>Werkorder</th><th>Status</th><th>Gepland</th><th class="num">Gereserveerd</th></tr></thead>
       <tbody>${item.reservations.map((reservation) => `<tr><td class="wrap">${woLink(reservation.workOrder)}<span class="sub">${esc(reservation.workOrder.title)}</span></td>
         <td><span class="pill wo-${esc(reservation.workOrder.status)}">${esc((WorkOrderCore && WorkOrderCore.STATUSES[reservation.workOrder.status]) || reservation.workOrder.status)}</span></td>
@@ -624,6 +638,36 @@
         <td class="num${movement.qty < 0 ? ' neg' : ''}">${movement.qty > 0 ? '+' : ''}${esc(nl(movement.qty))}</td><td class="num">${esc(nl(movement.balance))}</td>
         <td>${movement.workOrderId ? woLink({ id: movement.workOrderId, number: movement.workOrderNumber }) : ''}</td><td>${esc(movement.userName)}</td><td class="wrap">${esc(movement.note)}</td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="empty">Nog geen mutaties.</td></tr></tbody>';
+  }
+
+  /**
+   * Tekent de prijshistorie en de voorraadlagen (FIFO) van het artikel; een laag
+   * met een onbekende prijs (of de beginstand) krijgt een veld om de prijs in te vullen.
+   * @returns {void}
+   */
+  function renderCosts() {
+    const item = state.item;
+    const section = $('#d-costs');
+    section.hidden = item.hasVariants;
+    if (item.hasVariants) return;
+    $('#cost-form').hidden = item.archived;
+    const prices = item.costPrices || [];
+    $('#d-prices').innerHTML = prices.length ? `<thead><tr><th>Geldig vanaf</th><th class="num">Prijs</th><th class="num">Verschil</th><th>Door</th><th>Opmerking</th></tr></thead>
+      <tbody>${prices.map((price, index) => {
+    const older = prices[index + 1];
+    const change = older && older.price ? ((price.price - older.price) / older.price) * 100 : null;
+    return `<tr><td>${esc(day(price.validFrom))}</td><td class="num">${esc(unitEur(price.price))}</td>
+          <td class="num${change > 0 ? ' neg' : ''}">${change == null ? '' : `${change > 0 ? '+' : ''}${esc(nl(change, 1))}%`}</td><td>${esc(price.userName)}</td><td class="wrap">${esc(price.note)}</td></tr>`;
+  }).join('')}</tbody>`
+      : '<tbody><tr><td class="empty">Nog geen inkoopprijs.</td></tr></tbody>';
+    const layers = item.layers || [];
+    $('#d-layers').innerHTML = layers.length ? `<thead><tr><th>Ontvangen</th><th>Soort</th><th class="num">Over</th><th class="num">Inkoopprijs</th><th class="num">Waarde</th></tr></thead>
+      <tbody>${layers.map((layer) => `<tr><td>${esc(day(String(layer.receivedAt).slice(0, 10)))}</td><td>${esc(LAYER_SOURCES[layer.source] || layer.source)}</td>
+        <td class="num">${esc(nl(layer.remaining))} <span class="muted">van ${esc(nl(layer.qty))}</span></td>
+        <td class="num">${layer.unitCost == null ? '<span class="pill k-correctie">onbekend</span>' : esc(unitEur(layer.unitCost))}${layer.editable && !item.archived
+    ? `<form class="layer-cost" data-layer="${esc(layer.id)}" novalidate><input name="unitCost" type="number" min="0" step="0.0001" inputmode="decimal" aria-label="Inkoopprijs van deze laag" placeholder="${layer.unitCost == null ? 'prijs' : 'wijzig'}"><button class="btn small" type="submit">${layer.unitCost == null ? 'Invullen' : 'Wijzigen'}</button></form>` : ''}</td>
+        <td class="num">${layer.value == null ? '–' : esc(eur(layer.value))}</td></tr>`).join('')}</tbody>`
+      : '<tbody><tr><td class="empty">Niets op voorraad.</td></tr></tbody>';
   }
 
   // ---------- Mediabibliotheek ----------
@@ -872,7 +916,10 @@
     }
     const moveForm = $('#move-form');
     /** Een correctie mag negatief zijn, de andere soorten niet. */
-    moveForm.kind.onchange = () => { moveForm.qty.min = moveForm.kind.value === 'correctie' ? '' : '0'; };
+    moveForm.kind.onchange = () => {
+      moveForm.qty.min = moveForm.kind.value === 'correctie' ? '' : '0';
+      $('[data-receipt-only]', moveForm).hidden = moveForm.kind.value !== 'ontvangst';
+    };
     /**
      * Boekt een mutatie op het artikel.
      * @param {SubmitEvent} event het verzenden
@@ -885,11 +932,55 @@
       const qty = num(moveForm.qty.value);
       if (qty === null || !Number.isFinite(qty)) { errorBox.textContent = 'Vul een aantal in.'; return; }
       try {
-        state.item = await api(`stock/items/${encodeURIComponent(state.item.id)}/movements`, { method: 'POST', body: { kind: moveForm.kind.value, qty, note: moveForm.note.value } });
+        const unitCost = moveForm.kind.value === 'ontvangst' ? num(moveForm.unitCost.value) : null;
+        state.item = await api(`stock/items/${encodeURIComponent(state.item.id)}/movements`, { method: 'POST', body: { kind: moveForm.kind.value, qty, note: moveForm.note.value, ...(unitCost === null ? {} : { unitCost }) } });
         moveForm.qty.value = '';
         moveForm.note.value = '';
+        moveForm.unitCost.value = '';
         renderItem();
         toast('Geboekt');
+      } catch (error) {
+        errorBox.textContent = error.message;
+      }
+    };
+    const costForm = $('#cost-form');
+    /**
+     * Voegt een nieuwe inkoopprijs toe (de oude blijft in de historie).
+     * @param {SubmitEvent} event het verzenden
+     * @returns {Promise<void>}
+     */
+    costForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const errorBox = $('#cost-err');
+      errorBox.textContent = '';
+      const price = num(costForm.price.value);
+      if (price === null || !Number.isFinite(price)) { errorBox.textContent = 'Vul een inkoopprijs in.'; return; }
+      try {
+        state.item = await api(`stock/items/${encodeURIComponent(state.item.id)}/cost-prices`, { method: 'POST', body: { price, validFrom: costForm.validFrom.value, note: costForm.note.value } });
+        costForm.reset();
+        renderItem();
+        toast('Inkoopprijs toegevoegd');
+      } catch (error) {
+        errorBox.textContent = error.message;
+      }
+    };
+    /**
+     * Vult de inkoopprijs in van een voorraadlaag (formulier in de tabel met lagen).
+     * @param {SubmitEvent} event het verzenden
+     * @returns {Promise<void>}
+     */
+    $('#d-layers').onsubmit = async (event) => {
+      const layerForm = event.target.closest('form.layer-cost');
+      if (!layerForm) return;
+      event.preventDefault();
+      const errorBox = $('#cost-err');
+      errorBox.textContent = '';
+      const unitCost = num(layerForm.unitCost.value);
+      if (unitCost === null || !Number.isFinite(unitCost)) { errorBox.textContent = 'Vul de inkoopprijs van deze laag in.'; return; }
+      try {
+        state.item = await api(`stock/items/${encodeURIComponent(state.item.id)}/layers/${encodeURIComponent(layerForm.dataset.layer)}`, { method: 'PUT', body: { unitCost } });
+        renderItem();
+        toast('Inkoopprijs van de laag ingevuld');
       } catch (error) {
         errorBox.textContent = error.message;
       }

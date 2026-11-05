@@ -1,0 +1,51 @@
+/* Webshopbestellingen > Rapportage: kerncijfers, grafieken en tabel (rapportage.js). Kleuren via de --at-*-variabelen van het thema. */
+#tab-rapportage .filters { align-items: flex-end; }
+#tab-rapportage .filters label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+#tab-rapportage .filters .btn { margin-left: auto; }
+.report-tiles .stat small { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.report-tiles .stat:nth-child(3) b { color: var(--at-green-dark); }
+#rp-notes .notice { padding: 10px 14px; margin: 0 0 12px; border-left: 4px solid var(--at-teal); }
+.report-card { margin-bottom: 14px; }
+.report-card h3 { margin: 0 0 10px; }
+.report-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.report-cols .report-card { margin-bottom: 0; }
+.report-cols + .report-card { margin-top: 14px; }
+.empty-chart { padding: 24px 0; text-align: center; }
+
+/* Verloop: gestapelde staven (inkoop + brutowinst = omzet). */
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; margin-bottom: 6px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.sw-cost, .bar-cost { background: var(--at-teal); fill: var(--at-teal); }
+.sw-profit, .bar-profit { background: var(--at-green); fill: var(--at-green); }
+.bar-loss { fill: var(--at-danger); }
+.chart-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.chart { display: block; max-width: none; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .baseline { stroke: var(--muted); stroke-width: 1; }
+.chart .axis { fill: var(--muted); font-size: 11px; font-family: var(--at-font, inherit); }
+.chart .hit { fill: transparent; }
+.chart .period:hover .hit, .chart .period:focus .hit { fill: var(--at-green-soft); }
+.chart .period:focus { outline: none; }
+
+/* Liggende staven: artikelen en categorieën op brutowinst. */
+.hbars { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.hbars li { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(60px, 1fr) 128px; gap: 10px; align-items: center; font-size: 13px; border-radius: 4px; }
+.hbars li:hover, .hbars li:focus { background: var(--at-green-soft); outline: none; }
+.hbar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-track { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; }
+.hbar { display: block; height: 100%; background: var(--at-green); border-radius: 5px; }
+.hbar.loss { background: var(--at-danger); }
+.hbar-value { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hbar-value small { color: var(--muted); }
+#tab-rapportage .warn { color: var(--at-danger); }
+#rp-table .sub { display: block; font-size: 12px; color: var(--muted); }
+#rp-table td.neg { color: var(--at-danger); }
+
+.chart-tip { position: fixed; z-index: 50; pointer-events: none; white-space: pre-line; background: var(--at-navy); color: #fff; font-size: 12px; line-height: 1.45; padding: 8px 10px; border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); max-width: 260px; }
+
+@media (max-width: 640px) {
+  #tab-rapportage .filters label { flex: 1 1 45%; }
+  #tab-rapportage .filters .btn { margin-left: 0; width: 100%; }
+  .hbars li { grid-template-columns: minmax(0, 1fr) auto; }
+  .hbars li .hbar-track { grid-column: 1 / -1; grid-row: 2; }
+}

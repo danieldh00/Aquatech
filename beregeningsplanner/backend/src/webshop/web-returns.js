@@ -331,7 +331,8 @@ function createWebReturnStore(db, { orders, stock }) {
       if (!restock) return;
       const known = new Set(prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND id IN (${data.lines.map(() => '?').join(', ')})`).all(tenantId, ...data.lines.map((line) => line.itemId)).map((item) => item.id));
       for (const line of data.lines) {
-        if (known.has(line.itemId)) stock.book(tenantId, line.itemId, line.qty, { kind: 'retour', source: `retour:${row.number}`, note: `Retour ${row.number}`, user });
+        // De retour komt terug tegen de kostprijs waartegen hij met de bestelling is afgeboekt (FIFO).
+        if (known.has(line.itemId)) stock.book(tenantId, line.itemId, line.qty, { kind: 'retour', source: `retour:${row.number}`, note: `Retour ${row.number}`, user, costBasis: { source: `bestelling:${data.orderNumber}` } });
       }
     });
     return out;
