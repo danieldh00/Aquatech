@@ -9,7 +9,7 @@ Afbeeldingen overnemen uit de webshop: duidelijker over hergebruik.
   webshop (producten en variaties) gaf geen verschillende bestanden met dezelfde foto.
 - **Server** (`artikelen/item-images.js`, `importFromShop`): het resultaat bevat nu `stored`, het aantal
   echt nieuw bewaarde afbeeldingen (`imported`/`reused` tellen artikelen).
-- **Frontend** (`artikelen/artikelen.js`): de melding noemt artikelen én afbeeldingen, zodat
+- **Frontend** (`artikelen/artikelen.js`): de melding noemt gekoppelde artikelen en nieuw bewaarde afbeeldingen, zodat
   "882 overgenomen" niet meer als 882 kopieën leest.
 - **Tests**: 30 artikelen over meerdere porties met drie adressen met identieke inhoud geven één afbeelding.
 
