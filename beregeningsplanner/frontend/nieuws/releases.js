@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.6.4',
+      date: '2026-11-05',
+      title: 'Duidelijker bij het overnemen van afbeeldingen',
+      items: [
+        { for: ['voorraad'], text: 'Bij het overnemen van afbeeldingen uit de webshop zie je nu hoeveel afbeeldingen er echt zijn bewaard. Dezelfde foto staat maar één keer opgeslagen, ook als veel artikelen hem gebruiken.' },
+      ],
+    },
+    {
       version: '1.6.3',
       date: '2026-11-05',
       title: 'Kleine correctie in de inkoopprijs bij retouren',
