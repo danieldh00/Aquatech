@@ -115,18 +115,21 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
 
   /**
    * Voorraadartikelen die met de webshop meedoen, met gereserveerd aantal en of er al boekingen zijn.
+   * Bij alleen gewijzigde artikelen (na elke voorraadmutatie) wordt het gereserveerde aantal per
+   * artikel via de index opgezocht, in plaats van alle reserveringen van de omgeving op te tellen.
    * @param {string} tenantId Id van de omgeving.
    * @param {boolean} onlyDirty Alleen gewijzigde, al gekoppelde artikelen.
    * @returns {object[]} De artikelrijen.
    */
   const itemsOf = (tenantId, onlyDirty) => prepare(`SELECT i.id, i.code, i.on_hand, i.sale_price, i.vat_rate, i.shop_product_id, i.shop_dirty,
-      i.shop_price_seen, i.shop_stock_seen, i.has_variants, i.parent_id, parent.shop_product_id AS shop_parent_id, COALESCE(r.qty, 0) AS reserved,
+      i.shop_price_seen, i.shop_stock_seen, i.has_variants, i.parent_id, parent.shop_product_id AS shop_parent_id,
+      ${onlyDirty ? 'COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0)' : 'COALESCE(r.qty, 0)'} AS reserved,
       EXISTS (SELECT 1 FROM stock_movements m WHERE m.tenant_id = i.tenant_id AND m.item_id = i.id) AS moved
     FROM stock_items i
     LEFT JOIN stock_items parent ON parent.tenant_id = i.tenant_id AND parent.id = i.parent_id
-    LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
+    ${onlyDirty ? '' : 'LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id'}
     WHERE i.tenant_id = ? AND i.archived = 0 AND i.shop_sync = 1${onlyDirty ? ' AND i.shop_dirty = 1 AND i.shop_product_id IS NOT NULL' : ''}`)
-    .all(tenantId, tenantId);
+    .all(...(onlyDirty ? [tenantId] : [tenantId, tenantId]));
 
   /**
    * Maakt een functie die bij een voorraadartikel het webshopproduct zoekt
@@ -436,9 +439,9 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     if (!shopConfig.url) return { error: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).', code: 'not_configured', status: 409 };
     if (shopConfig.mode !== 'rest' || !shopConfig.push) return { error: 'Zet in Beheer → Integraties → Webshop de REST API aan met "Aquatech is de bron" (prijzen en voorraad terugschrijven).', code: 'no_push', status: 409 };
     const item = prepare(`SELECT i.id, i.code, i.name, i.sale_price, i.vat_rate, i.on_hand, i.archived, i.shop_sync, i.shop_product_id, i.parent_id, i.has_variants, i.attributes,
-        COALESCE(r.qty, 0) AS reserved
-      FROM stock_items i LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
-      WHERE i.tenant_id = ? AND i.id = ?`).get(tenantId, tenantId, String(itemId));
+        COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
+      FROM stock_items i
+      WHERE i.tenant_id = ? AND i.id = ?`).get(tenantId, String(itemId));
     if (!item) return { error: 'not_found', status: 404 };
     if (item.parent_id) return { error: 'Een variant gaat mee met zijn hoofdartikel: zet het hoofdartikel in de webshop.', status: 409 };
     if (item.archived) return { error: 'Dit artikel is gearchiveerd.', status: 409 };

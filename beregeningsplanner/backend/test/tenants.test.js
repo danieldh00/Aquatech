@@ -452,6 +452,7 @@ test('migratie: de globale index op gebruikersnaam vervalt, uniek per tenant bli
   const idx = (PG ? db.prepare("SELECT indexname AS name FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'users'")
     : db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'users'")).all().map((row) => row.name);
   assert.ok(!idx.includes('users_username'));
+  assert.ok(idx.includes('users_login_name'), 'gewone (niet-unieke) index om op naam te zoeken');
   const store = createStore(db);
   const t1 = store.ensureTenant().id;
   const t2 = store.createTenant({ name: 'Groen', slug: 'groen' }).tenant.id;

@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.6
+
+Snelheid (deel 2): databasequery's, zonder andere functionaliteit.
+
+- **Gemeten**: queries per verzoek voor 55 routes en de achtergrondtaken op een met testdata gevulde
+  omgeving (geen N+1, hoogstens 9 queries per verzoek, de shop 0 dankzij de bestaande caches), en alle
+  993 verschillende SQL-opdrachten uit de testsuite langs het queryplan van SQLite. Wat overbleef aan
+  tabelscans zit in zeldzame paden (gebruiker of omgeving verwijderen) of alleen in tests.
+- **Winkelwagen en afrekenen** (`webshop/web-orders.js`, `priceCart`): het gereserveerde aantal wordt per
+  artikel in de wagen via de index opgezocht, in plaats van eerst alle reserveringen van de omgeving op te
+  tellen. Elke weergave van de winkelwagen en elke herberekening van het totaal doet dit.
+- **Hoofdartikel openen** (`artikelen/stock.js`, `listRows` met `parentId`): de reserveringen en het
+  aantal werkorders tellen alleen voor de varianten van dat artikel.
+- **Webshopkoppeling** (`webshop/shop-sync.js`): bij het terugschrijven van alleen gewijzigde artikelen
+  (na elke voorraadmutatie) en bij *In webshop zetten* geldt hetzelfde: gereserveerd per artikel via de index.
+- **Inloggen** (migratie 46, `users_login_name`): gewone index op `users.username`. Een inlogpoging
+  zonder treffer in de organisatie zoekt een testaccount op naam over alle omgevingen
+  (`store.loginTenantOfTestAccount`); zonder index las PostgreSQL daarvoor elke gebruiker.
+- **Tests**: de migratietest controleert dat de nieuwe index er is en dat gebruikersnamen uniek per
+  organisatie blijven. Bestaande tests voor gereserveerd/beschikbaar, varianten en de winkelwagen
+  dekken de herschreven query's; dezelfde uitkomst is ook gecontroleerd met een meting op 900 artikelen
+  en 4.000 reserveringen per omgeving (SQLite en PostgreSQL).
+
 ## 1.6.5
 
 Beveiligingsronde en snelheid (deel 1), zonder andere functionaliteit.
