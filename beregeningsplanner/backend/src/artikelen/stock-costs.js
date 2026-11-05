@@ -66,6 +66,9 @@ const cleanText = (value, maxLength) => String(value ?? '').replace(/[\u0000-\u0
 const MAX_PRICE = 1e6;
 /** Kleine afwijking die we als nul zien (aantallen). */
 const EPSILON = 0.0005;
+
+/** Bronnen van een mutatie die niets over de oorspronkelijke afboeking zeggen; dan telt de werkorder. */
+const GENERAL_SOURCES = new Set(['handmatig', 'gereed', '']);
 /** Hoeveel prijsregels en lagen het artikel toont. */
 const HISTORY_LIMIT = 100;
 /** Waar een laag vandaan komt, in gewone woorden. */
@@ -157,15 +160,17 @@ function createStockCosts(db) {
    * dezelfde prijs terug te nemen.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
-   * @param {{ source?: string, workOrderId?: ?string }} basis De werkorder van de oorspronkelijke afboeking, of anders de bron (bijv. 'bestelling:W2026-0001').
+   * @param {{ source?: string, workOrderId?: ?string }} basis Een eigen bron van de oorspronkelijke afboeking (bijv. 'verbruik:<id>', 'bestelling:W2026-0001'), of bij een algemene bron de werkorder.
    * @returns {number|null|undefined} De prijs per eenheid, null als die onbekend was, undefined als er geen afboeking is gevonden.
    */
   function issuedCost(tenantId, itemId, { source = '', workOrderId = null }) {
     if (!source && !workOrderId) return undefined;
     const conditions = [];
     const args = [tenantId, itemId];
-    // Een werkorder is specifieker dan een algemene bron zoals 'handmatig' of 'gereed'.
-    if (workOrderId) { conditions.push('m.work_order_id = ?'); args.push(String(workOrderId)); } else { conditions.push('m.source = ?'); args.push(String(source)); }
+    // Een eigen bron (bijv. 'verbruik:<id>' of 'bestelling:<nr>') is het specifiekst; bij een
+    // algemene bron zoals 'handmatig' of 'gereed' telt de werkorder.
+    const specificSource = source && !GENERAL_SOURCES.has(String(source));
+    if (specificSource || !workOrderId) { conditions.push('m.source = ?'); args.push(String(source)); } else { conditions.push('m.work_order_id = ?'); args.push(String(workOrderId)); }
     const row = prepare(`SELECT SUM(-e.qty) AS qty, SUM(CASE WHEN e.unit_cost IS NULL THEN 0 ELSE -e.qty END) AS known_qty,
         SUM(CASE WHEN e.unit_cost IS NULL THEN 0 ELSE -e.qty * e.unit_cost END) AS cost
       FROM stock_cost_entries e JOIN stock_movements m ON m.tenant_id = e.tenant_id AND m.id = e.movement_id
