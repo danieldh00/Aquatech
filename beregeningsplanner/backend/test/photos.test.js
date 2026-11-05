@@ -111,6 +111,17 @@ test('afbeelding herkennen: tekst, tijd en EXIF gaan ook uit PNG en WebP', () =>
   const overlong = Buffer.from(webp);
   overlong.writeUInt32LE(9999, 12 + 18 + 4);
   assert.strictEqual(inspectImage(overlong), null, 'blok buiten het bestand: geweigerd');
+  /**
+   * Een WebP met deze blokken achter elkaar en een kloppende RIFF-lengte.
+   * @param {Buffer} body De blokken.
+   * @returns {Buffer} Het bestand.
+   */
+  const riff = (body) => { const length = Buffer.alloc(4); length.writeUInt32LE(body.length + 4); return Buffer.concat([Buffer.from('RIFF', 'latin1'), length, Buffer.from('WEBP', 'latin1'), body]); };
+  const plainWebp = riff(Buffer.concat([webpChunk('VP8X', vp8x), bitstream]));
+  assert.strictEqual(inspectImage(plainWebp).body, plainWebp, 'zonder metadata: hetzelfde bestand');
+  assert.strictEqual(inspectImage(riff(Buffer.concat([webpChunk('VP8X', vp8x), bitstream, Buffer.from('EXI', 'latin1')]))), null, 'halve blokkop aan het eind: geweigerd');
+  const unpadded = Buffer.concat([webpChunk('VP8X', vp8x), bitstream]);
+  assert.strictEqual(inspectImage(riff(unpadded.subarray(0, unpadded.length - 1))), null, 'ontbrekende opvulbyte bij oneven lengte: geweigerd');
 });
 
 test('vault: bestanden versleuteld met de context als AAD', () => {
