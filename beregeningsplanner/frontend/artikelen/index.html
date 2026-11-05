@@ -225,6 +225,7 @@
               <option value="correctie">Correctie (+ of −)</option>
             </select></label>
             <label>Aantal<input name="qty" type="number" step="any" inputmode="decimal" required></label>
+            <label data-receipt-only title="Komt op deze partij in de voorraad (FIFO). Is hij anders dan de huidige inkoopprijs, dan wordt hij de nieuwe inkoopprijs; de oude blijft in de historie.">Inkoopprijs per eenheid (€)<input name="unitCost" type="number" min="0" step="0.0001" inputmode="decimal"></label>
             <label class="grow">Opmerking<input name="note" maxlength="300" placeholder="Bijv. pakbon, leverancier of reden"></label>
           </div>
           <div class="row"><button class="btn primary" type="submit">Boeken</button></div>
@@ -268,6 +269,27 @@
           <div class="err" role="alert"></div>
         </form>
       </div>
+      <section class="card-form" id="d-costs">
+        <h3>Inkoopprijs en voorraadlagen (FIFO)</h3>
+        <p class="muted small">Een nieuwe inkoopprijs overschrijft de oude niet: elke prijs blijft met zijn datum bewaard. Elke ontvangst is een eigen partij (laag) met de inkoopprijs van dat moment; bij verkoop of verbruik gaat de oudste partij eerst. Zo blijft in de rapportages de inkoopprijs staan waarvoor de artikelen echt zijn ingekocht.</p>
+        <form id="cost-form" class="row" novalidate>
+          <label>Nieuwe inkoopprijs (€)<input name="price" type="number" min="0" step="0.0001" inputmode="decimal" required></label>
+          <label>Geldig vanaf<input name="validFrom" type="date"></label>
+          <label class="grow">Opmerking<input name="note" maxlength="200" placeholder="Bijv. prijsverhoging leverancier"></label>
+          <button class="btn primary" type="submit">Prijs toevoegen</button>
+        </form>
+        <div class="err" role="alert" id="cost-err"></div>
+        <div class="cols">
+          <div>
+            <h4>Prijshistorie</h4>
+            <div class="tablewrap"><table class="grid" id="d-prices"></table></div>
+          </div>
+          <div>
+            <h4>Voorraadlagen</h4>
+            <div class="tablewrap"><table class="grid" id="d-layers"></table></div>
+          </div>
+        </div>
+      </section>
       <section class="card-form" id="d-image">
         <h3>Afbeelding</h3>
         <div class="row image-row">

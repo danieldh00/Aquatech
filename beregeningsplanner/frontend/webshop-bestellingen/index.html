@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="../shared/sidebar.css">
   <link rel="stylesheet" href="../dashboard/dashboard.css">
   <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="rapportage.css">
   <script src="../shared/common.js"></script>
 </head>
 <body>
@@ -29,11 +30,12 @@
     <div id="app" hidden>
       <section class="intro">
         <h1>Webshopbestellingen</h1>
-        <p class="muted">Bestellingen en retouren uit de eigen webshop (winkel/).</p>
+        <p class="muted">Bestellingen, retouren en de rapportage van de eigen webshop (winkel/).</p>
       </section>
-      <nav class="tabs" role="tablist" aria-label="Bestellingen en retouren">
+      <nav class="tabs" role="tablist" aria-label="Bestellingen, retouren en rapportage">
         <button class="tab active" data-tab="bestellingen" role="tab" id="t-bestellingen" aria-selected="true" aria-controls="tab-bestellingen">Bestellingen</button>
         <button class="tab" data-tab="retouren" role="tab" id="t-retouren" tabindex="-1" aria-selected="false" aria-controls="tab-retouren">Retouren</button>
+        <button class="tab" data-tab="rapportage" role="tab" id="t-rapportage" tabindex="-1" aria-selected="false" aria-controls="tab-rapportage">Rapportage</button>
       </nav>
       <section id="tab-bestellingen" class="tabpane" role="tabpanel" aria-labelledby="t-bestellingen">
         <div class="filters">
@@ -57,6 +59,53 @@
         <div class="pager"><button id="wr-prev" class="btn small">Vorige</button> <span id="wr-info" class="muted small"></span> <button id="wr-next" class="btn small">Volgende</button></div>
         <div id="wr-detail" class="card-form settings" hidden></div>
       </section>
+      <section id="tab-rapportage" class="tabpane" role="tabpanel" aria-labelledby="t-rapportage" hidden>
+        <div class="filters">
+          <label>Periode<select id="rp-preset">
+            <option value="maand">Deze maand</option>
+            <option value="vorige-maand">Vorige maand</option>
+            <option value="30">Laatste 30 dagen</option>
+            <option value="kwartaal">Dit kwartaal</option>
+            <option value="jaar" selected>Dit jaar</option>
+            <option value="vorig-jaar">Vorig jaar</option>
+            <option value="12">Laatste 12 maanden</option>
+            <option value="eigen">Eigen periode</option>
+          </select></label>
+          <label>Van<input id="rp-from" type="date"></label>
+          <label>Tot en met<input id="rp-to" type="date"></label>
+          <label>Grafiek<select id="rp-interval">
+            <option value="">Automatisch</option>
+            <option value="day">Per dag</option>
+            <option value="week">Per week</option>
+            <option value="month">Per maand</option>
+          </select></label>
+          <button id="rp-export" class="btn primary">Exporteer naar Excel</button>
+        </div>
+        <div id="rp-body">
+          <p class="muted small"><span id="rp-period"></span>. Omzet van de artikelen excl. btw, zonder verzendkosten. De inkoopwaarde komt uit de voorraad (FIFO): een verkoop houdt de inkoopprijs van de partij waaruit hij kwam, ook als de inkoopprijs later is gestegen.</p>
+          <div id="rp-tiles" class="stats report-tiles"></div>
+          <div id="rp-notes"></div>
+          <section class="card-form report-card">
+            <h3 id="rp-trend-title">Omzet, inkoop en brutowinst</h3>
+            <div id="rp-trend"></div>
+          </section>
+          <div class="report-cols">
+            <section class="card-form report-card">
+              <h3>Artikelen met de meeste brutowinst</h3>
+              <div id="rp-items"></div>
+            </section>
+            <section class="card-form report-card">
+              <h3>Brutowinst per categorie</h3>
+              <div id="rp-categories"></div>
+            </section>
+          </div>
+          <section class="card-form report-card">
+            <h3>Alle artikelen</h3>
+            <div class="tablewrap"><table class="grid" id="rp-table"></table></div>
+          </section>
+          <div id="rp-tip" class="chart-tip" role="tooltip" hidden></div>
+        </div>
+      </section>
     </div>
   </main>
 
@@ -69,6 +118,7 @@
   <script src="../dashboard/account.js"></script>
   <script src="bestellingen.js"></script>
   <script src="retouren.js"></script>
+  <script src="rapportage.js"></script>
   <script src="webshop-bestellingen.js"></script>
 </body>
 </html>

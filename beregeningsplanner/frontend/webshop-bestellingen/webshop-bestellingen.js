@@ -1,6 +1,6 @@
-// Webshopbestellingen (Verkoop): de bestellingen en retouren uit de eigen
-// webshop op één pagina met twee tabbladen. De tabellen en het detail komen uit
-// bestellingen.js en retouren.js; dit bestand regelt de
+// Webshopbestellingen (Verkoop): de bestellingen, retouren en de rapportage van de eigen
+// webshop op één pagina met drie tabbladen. De tabellen en het detail komen uit
+// bestellingen.js, retouren.js en rapportage.js; dit bestand regelt de
 // rechtencontrole, de tabbladen en de melding onderin.
 (function () {
   'use strict';
@@ -11,8 +11,10 @@
    * @returns {Element|null} Het element.
    */
   const $ = (selector) => document.querySelector(selector);
-  /** Waar het tabblad staat in de adresbalk (#retouren). */
-  const TABS = ['bestellingen', 'retouren'];
+  /** Waar het tabblad staat in de adresbalk (#retouren, #rapportage). */
+  const TABS = ['bestellingen', 'retouren', 'rapportage'];
+  /** De code achter elk tabblad. */
+  const PANES = { bestellingen: () => window.BeheerBestellingen, retouren: () => window.BeheerRetouren, rapportage: () => window.BeheerRapportage };
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -30,7 +32,7 @@
 
   /**
    * Toont één tabblad, haalt de gegevens opnieuw op en onthoudt de keuze in het adres.
-   * @param {string} name Naam van het tabblad (bestellingen of retouren).
+   * @param {string} name Naam van het tabblad (bestellingen, retouren of rapportage).
    * @returns {void}
    */
   function showTab(name) {
@@ -42,7 +44,7 @@
     }
     for (const pane of document.querySelectorAll('.tabpane')) pane.hidden = pane.id !== `tab-${tab}`;
     history.replaceState(null, '', `#${tab}`);
-    (tab === 'retouren' ? window.BeheerRetouren : window.BeheerBestellingen).load();
+    PANES[tab]().load();
   }
 
   /**
@@ -62,6 +64,7 @@
     $('#app').hidden = false;
     window.BeheerBestellingen.init({ toast });
     window.BeheerRetouren.init({ toast });
+    window.BeheerRapportage.init({ toast });
     for (const button of document.querySelectorAll('.tab')) button.addEventListener('click', () => showTab(button.dataset.tab));
     // Pijltoetsen wisselen tussen de tabbladen (ARIA-patroon voor tabs); alleen het actieve tabblad staat in de tabvolgorde.
     $('.tabs').addEventListener('keydown', (event) => {

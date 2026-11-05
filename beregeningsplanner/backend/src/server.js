@@ -34,6 +34,7 @@ const { createOrderMailer } = require('./webshop/web-orders-mail');
 const { createMollie } = require('./webshop/mollie');
 const { createWebPayments } = require('./webshop/web-payments');
 const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
+const { createWebSalesStore, registerWebSalesRoutes } = require('./webshop/web-sales');
 const { createReturnMailer } = require('./webshop/web-returns-mail');
 const { createShopOrders } = require('./webshop/shop-orders');
 const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
@@ -1919,6 +1920,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   webReturns.onRequested((tenantId, record) => webReturnMail.sendRequested(tenantId, record));
   webReturns.onDecided((tenantId, record) => webReturnMail.sendDecision(tenantId, record));
   registerWebReturnRoutes(app, { returns: webReturns, requireJson, audit, credits: webOrderInvoices, mail: webReturnMail });
+  // Margerapportage van de webshop: omzet, inkoop (FIFO-voorraadlagen) en marge (web-sales.js).
+  registerWebSalesRoutes(app, { sales: createWebSalesStore(database, { stock: stockStore }) });
   registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id) });
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
   app.get('/api/config', (req, res) => {

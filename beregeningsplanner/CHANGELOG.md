@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.6.2
+
+Inkoopprijzen met historie, voorraadlagen (FIFO) en een margerapportage in de webshopmodule.
+
+- **Server** (migratie 45 in `database/db.js` en `database/pgschema.js`): tabellen `stock_cost_prices`
+  (prijshistorie: elke nieuwe inkoopprijs is een eigen regel met *geldig vanaf*; `stock_items.cost_price` = de
+  actuele), `stock_layers` (elke ontvangst is een laag met zijn inkoopprijs en wat er nog over is),
+  `stock_cost_entries` (per mutatie welke laag tegen welke prijs is gebruikt) en `web_sale_lines` (verkoopregels
+  van de webshop). De bestaande voorraad wordt één beginlaag tegen de huidige inkoopprijs (leeg = onbekend).
+  `artikelen/stock-costs.js`: elke mutatie (`stock.book`) gaat langs de lagen; afboeken gebruikt de oudste laag
+  eerst (FIFO), een retour komt terug tegen de prijs van de oorspronkelijke afboeking (bron of werkorder), een
+  tekort (negatieve stand) tegen de actuele prijs, en lagen die niet met de stand kloppen worden rechtgezet
+  (beginstand). Een onbekende prijs wordt nooit geraden. Nieuwe routes `POST /api/stock/items/:id/cost-prices`
+  (`{ price, validFrom, note }`, niet in de toekomst) en `PUT /api/stock/items/:id/layers/:layerId`
+  (`{ unitCost }`, alleen een laag met onbekende prijs of de beginstand; wat al uit die laag is afgeboekt gaat
+  mee). Een ontvangst kan `unitCost` meekrijgen; een andere prijs dan de actuele wordt de nieuwe inkoopprijs. Een
+  andere inkoopprijs in het artikelformulier komt ook in de historie.
+- **Rapportage** (`webshop/web-sales.js`, `GET /api/admin/webshop-report?from&to&interval&lines=1`, alleen
+  beheerders): omzet artikelen excl. btw (zonder verzendkosten), inkoopwaarde uit de lagen, brutowinst en marge,
+  per dag/week/maand, per artikel en per webshopcategorie, plus de voorraadwaarde nu (FIFO). Verzonden
+  bestellingen en afgeronde retouren worden bij elke rapportage aangevuld (ook die van vóór deze versie, met
+  onbekende inkoop); een retour zonder terugboeking (beschadigd) laat de inkoop staan. Omzet zonder bekende inkoop
+  telt apart als *inkoop onbekend* en niet mee in de marge.
+- **Frontend**: tabblad *Rapportage* in Webshopbestellingen (`webshop-bestellingen/rapportage.js|.css`):
+  kerncijfers, gestapelde staafgrafiek inkoop + brutowinst, top 10 artikelen en categorieën op brutowinst,
+  tabel met alle artikelen en Excel-export (overzicht, per periode, per artikel, per categorie, verkoopregels).
+  Artikelen: blok *Inkoopprijs en voorraadlagen (FIFO)* (prijs toevoegen met datum, prijshistorie, lagen met
+  *onbekend* en een veld om de prijs in te vullen) en een inkoopprijs bij een ontvangst.
+- Testdata: de voorraad krijgt vanzelf prijshistorie, lagen en kostregels; `web_sale_lines` staat in
+  `NO_TESTDATA` (een testomgeving heeft geen webshop). Tests: `stock-costs.test.js`.
+
 ## 1.6.1
 
 Groothandelsvenster in de webshop: snelbestellijst, bestellen op artikelcode, staffelkorting en verpakkingseenheden.

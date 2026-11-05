@@ -85,3 +85,10 @@ table.grid .toggle:hover { color: var(--at-teal); }
 #mg-rows input.mg-value { width: 100%; min-width: 110px; }
 .merge-notes { margin: 0; padding-left: 18px; font-size: 13px; display: grid; gap: 6px; }
 .merge-notes .bad { color: var(--danger, #c62828); font-weight: 600; }
+/* Inkoopprijs en voorraadlagen (FIFO) op het artikel. */
+#d-costs h4 { margin: 10px 0 6px; font-size: 14px; }
+#d-costs .cols { margin-top: 6px; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
+@media (max-width: 560px) { #d-costs .cols { grid-template-columns: 1fr; } }
+.layer-cost { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; }
+.layer-cost input { width: 90px; }
+#move-form [hidden], #d-costs[hidden], #d-costs [hidden] { display: none !important; }

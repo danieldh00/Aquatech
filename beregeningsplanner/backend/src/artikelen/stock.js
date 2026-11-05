@@ -38,11 +38,16 @@
 //   (mergeIntoVariants). Hun id, code, voorraad, prijzen, afbeelding, boekingen en
 //   reserveringen blijven zoals ze zijn, dus werkorders, offertes en facturen
 //   verwijzen nog steeds naar dezelfde code. mergeSuggestions stelt groepen voor.
+// - Inkoopprijzen en FIFO (migratie 45, stock-costs.js): elke mutatie gaat via book
+//   langs de voorraadlagen. Een ontvangst wordt een laag met zijn inkoopprijs, een
+//   afboeking gebruikt de oudste laag eerst; een nieuwe inkoopprijs komt in de
+//   historie en overschrijft de oude niet.
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { loadArticles } = require('../webshop/shop');
 const { suggestGroups, MAX_GROUP_SIZE } = require('./variant-suggestions');
 const Wholesale = require('../webshop/wholesale');
+const { createStockCosts, parsePrice } = require('./stock-costs');
 
 const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 // Mutaties die een beheerder op het artikel zelf doet (de rest hoort bij een werkorder).
@@ -340,6 +345,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {object} De voorbereide opdracht.
    */
   const prepare = (sql) => db.prepare(sql);
+  // Inkoopprijzen en voorraadlagen (FIFO), zie stock-costs.js.
+  const costs = createStockCosts(db);
   // Webshop: na een wijziging van prijs of stand (shop-sync.js meldt zich aan via onDirty()).
   let dirtyHook = onDirty;
   /**
@@ -517,7 +524,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       .all(tenantId, itemRow.id).map(shapeMove);
     const parentRow = itemRow.parent_id ? prepare('SELECT id, code, name, attributes, archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemRow.parent_id) : null;
     const parent = parentRow ? { id: parentRow.id, code: parentRow.code, name: parentRow.name, attributes: parseJson(parentRow.attributes, []), archived: Boolean(parentRow.archived) } : null;
-    return { ...item, parent, reservations, movements };
+    const history = costs.historyOf(tenantId, itemRow.id);
+    return { ...item, parent, reservations, movements, costPrices: history.prices, layers: history.layers };
   }
 
   /**
@@ -526,10 +534,16 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
    * @param {number} delta Wijziging van de stand (negatief = eraf).
-   * @param {{ kind: string, workOrder?: object, source?: string, note?: string, user?: object, at?: string }} details Soort, werkorder, bron, opmerking, gebruiker en tijdstip.
+   * De voorraadlagen (FIFO) gaan mee: erbij wordt een laag met de inkoopprijs
+   * (unitCost, anders bij een retour de prijs van de oorspronkelijke afboeking,
+   * anders de actuele inkoopprijs), eraf gebruikt de oudste laag eerst.
+   * @param {{ kind: string, workOrder?: object, source?: string, note?: string, user?: object, at?: string, unitCost?: number|null, costBasis?: { source?: string, workOrderId?: string } }} details
+   *   Soort, werkorder, bron, opmerking, gebruiker, tijdstip, de inkoopprijs per eenheid (ontvangst) en bij een retour waar de afboeking vandaan kwam
+   *   (standaard dezelfde bron of werkorder).
    * @returns {string} Id van de mutatie.
    */
-  function book(tenantId, itemId, delta, { kind, workOrder = null, source = '', note = '', user = null, at = currentTimestamp() }) {
+  function book(tenantId, itemId, delta, { kind, workOrder = null, source = '', note = '', user = null, at = currentTimestamp(), unitCost, costBasis }) {
+    const before = prepare('SELECT id, on_hand, cost_price, created_at FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemId);
     // Een verkoop in de webshop zelf (source 'webshop') hoeft niet terug.
     const toShop = source === 'webshop' ? 0 : 1;
     prepare(`UPDATE stock_items SET on_hand = on_hand + ?, updated_at = ?,
@@ -542,6 +556,12 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(id, tenantId, itemId, kind, round3(delta), round3(balance), workOrder ? workOrder.id : null, workOrder ? workOrder.number : '',
         source, cleanText(note, 300), user ? user.id : null, user ? cleanText(user.display_name || user.displayName, 120) : '', at);
+    if (before) {
+      costs.record(tenantId, before, {
+        movementId: id, delta, onHandBefore: Number(before.on_hand), kind, at, unitCost,
+        costBasis: costBasis || { source, workOrderId: workOrder ? workOrder.id : null },
+      });
+    }
     return id;
   }
 
@@ -566,6 +586,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
            sale_price, business_price, vat_rate, revenue_group, shop_sync, weight_grams, order_pack_size, order_min_qty, price_tiers)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.businessPrice ?? null, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null, fields.packSize ?? 1, fields.orderMinQty ?? 1, JSON.stringify(fields.priceTiers || []));
+      costs.noteFormPrice(tenantId, id, null, fields.costPrice, user);
       const start = Number(raw && raw.onHand);
       if (Number.isFinite(start) && start > 0 && start <= MAX_QTY) book(tenantId, id, start, { kind: 'ontvangst', note: 'Beginvoorraad', user });
       return { id };
@@ -581,9 +602,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het artikel.
    * @param {object} raw De gewijzigde velden (en eventueel archived).
+   * @param {object|null} [user] Wie het wijzigt (voor de prijshistorie).
    * @returns {object} { item, toShop }, of { error, field, status }.
    */
-  function update(tenantId, id, raw) {
+  function update(tenantId, id, raw, user = null) {
     const checked = sanitizeItem(raw, { partial: true });
     if (checked.error) return checked;
     const fields = checked.value;
@@ -622,6 +644,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.businessPrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0, merged.weightGrams,
           merged.packSize, mergedTerms.orderMinQty, JSON.stringify(merged.priceTiers),
           toShop && merged.shopSync ? 1 : 0, tenantId, existing.id);
+      // Een andere inkoopprijs komt als nieuwe regel in de historie (de oude blijft staan).
+      costs.noteFormPrice(tenantId, existing.id, existing.cost_price, merged.costPrice, user);
       if (archived && !existing.archived) prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
       let variantsToShop = false;
       if (isParent) variantsToShop = followParent(tenantId, existing, merged, archived);
@@ -673,6 +697,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       prepare('UPDATE stock_items SET archived = 1, archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, row.id);
       return true;
     }
+    costs.removeItem(tenantId, row.id);
     prepare('DELETE FROM stock_items WHERE tenant_id = ? AND id = ?').run(tenantId, row.id);
     return false;
   }
@@ -1043,7 +1068,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {string} tenantId Id van de omgeving.
    * @param {object} user Wie boekt.
    * @param {string} id Id van het artikel.
-   * @param {{ kind: string, qty: number, note?: string }} raw De mutatie.
+   * Bij een ontvangst kan de inkoopprijs per eenheid mee (unitCost): die komt op de
+   * voorraadlaag en wordt, als hij anders is, de nieuwe inkoopprijs (de oude blijft in de historie).
+   * @param {{ kind: string, qty: number, note?: string, unitCost?: number|string }} raw De mutatie.
    * @returns {object} { movementId, delta, item }, of { error, field, status }.
    */
   function move(tenantId, user, id, raw) {
@@ -1057,13 +1084,19 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     if (kind === 'telling' && qty < 0) return { error: 'Vul het getelde aantal in.', field: 'qty' };
     const note = cleanText(input.note, 300);
     if (kind === 'correctie' && note.length < 3) return { error: 'Geef bij een correctie de reden op.', field: 'note' };
+    const hasCost = kind === 'ontvangst' && input.unitCost !== undefined && input.unitCost !== null && input.unitCost !== '';
+    const checkedCost = hasCost ? parsePrice(input.unitCost) : { value: undefined };
+    if (checkedCost.error) return { error: checkedCost.error, field: 'unitCost' };
     return transaction(db, () => {
       const existing = findItem(tenantId, id);
       if (!existing) return { error: 'not_found', status: 404 };
       if (existing.archived) return { error: 'Dit artikel is gearchiveerd.', status: 409 };
       if (Number(existing.has_variants)) return { error: 'Een hoofdartikel heeft zelf geen voorraad: boek op een variant.', status: 409 };
       const delta = kind === 'telling' ? round3(qty - existing.on_hand) : round3(qty);
-      const movementId = book(tenantId, existing.id, delta, { kind, note: kind === 'telling' ? note || `Geteld: ${round3(qty)}` : note, user });
+      const movementId = book(tenantId, existing.id, delta, { kind, note: kind === 'telling' ? note || `Geteld: ${round3(qty)}` : note, user, unitCost: checkedCost.value });
+      if (hasCost && (existing.cost_price == null || Math.abs(Number(existing.cost_price) - checkedCost.value) > 0.00005)) {
+        costs.addPrice(tenantId, existing, { price: checkedCost.value, note: `Bij ontvangst${note ? `: ${note}` : ''}`, user });
+      }
       return { movementId, delta, item: get(tenantId, existing.id) };
     });
   }
@@ -1418,6 +1451,44 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Legt een nieuwe inkoopprijs vast met een datum (geldig vanaf); de oude blijft in de historie.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} user Wie het doet.
+   * @param {string} id Id van het artikel.
+   * @param {{ price: *, validFrom?: string, note?: string }} raw De prijs, de datum (standaard vandaag) en een toelichting.
+   * @returns {object} { item }, of { error, field, status }.
+   */
+  function addCostPrice(tenantId, user, id, raw) {
+    const input = raw && typeof raw === 'object' ? raw : {};
+    return transaction(db, () => {
+      const existing = findItem(tenantId, id);
+      if (!existing) return { error: 'not_found', status: 404 };
+      if (Number(existing.has_variants)) return { error: 'Een hoofdartikel heeft zelf geen voorraad: geef de inkoopprijs per variant op.', status: 409 };
+      const out = costs.addPrice(tenantId, existing, { price: input.price, validFrom: input.validFrom, note: input.note, user });
+      if (out.error) return { ...out, status: 400 };
+      return { item: get(tenantId, existing.id) };
+    });
+  }
+
+  /**
+   * Vult de inkoopprijs in van een voorraadlaag met een onbekende prijs (of van de beginstand).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van het artikel.
+   * @param {string} layerId Id van de laag.
+   * @param {*} unitCost De prijs per eenheid.
+   * @returns {object} { item }, of { error, field, status }.
+   */
+  function setLayerCost(tenantId, id, layerId, unitCost) {
+    return transaction(db, () => {
+      const existing = findItem(tenantId, id);
+      if (!existing) return { error: 'not_found', status: 404 };
+      const out = costs.setLayerCost(tenantId, existing.id, layerId, unitCost);
+      if (out.error) return out;
+      return { item: get(tenantId, existing.id) };
+    });
+  }
+
+  /**
    * Alle open werkorders opnieuw reserveren (bijv. na een nieuw voorraadartikel).
    * @param {string} tenantId Id van de omgeving.
    * @param {string[]|null} [codes] Alleen werkorders met een van deze codes.
@@ -1737,6 +1808,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
     reorderProposal, reserveOrder, releaseOrder, issueOrder, onDirty: setDirtyHook,
+    addCostPrice, setLayerCost, stockValue: costs.stockValue,
   };
 }
 
@@ -1888,8 +1960,25 @@ function registerStockRoutes(app, ctx) {
   });
 
   app.put('/api/stock/items/:id', requireJson, requireStock, (req, res) => {
-    const out = stock.update(tenantOf(req), req.params.id, req.body);
+    const out = stock.update(tenantOf(req), req.params.id, req.body, req.user);
     if (out.error) return fail(res, out);
+    res.json(out.item);
+  });
+
+  // Inkoopprijs: een nieuwe prijs met datum (de oude blijft in de historie).
+  app.post('/api/stock/items/:id/cost-prices', requireJson, requireStock, (req, res) => {
+    const out = stock.addCostPrice(tenantOf(req), req.user, req.params.id, req.body);
+    if (out.error) return fail(res, out);
+    audit(req, 'voorraad_inkoopprijs', { itemId: out.item.id, code: out.item.code, price: out.item.costPrice });
+    res.status(201).json(out.item);
+  });
+
+  // Voorraadlaag met een onbekende inkoopprijs (of de beginstand): prijs invullen.
+  app.put('/api/stock/items/:id/layers/:layerId', requireJson, requireStock, (req, res) => {
+    const out = stock.setLayerCost(tenantOf(req), req.params.id, req.params.layerId, req.body?.unitCost);
+    if (out.error === 'not_found') return notFound(res, 'Voorraadlaag');
+    if (out.error) return fail(res, out);
+    audit(req, 'voorraad_laag_inkoopprijs', { itemId: out.item.id, code: out.item.code, layerId: String(req.params.layerId).slice(0, 80) });
     res.json(out.item);
   });
 

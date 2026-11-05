@@ -780,6 +780,69 @@ const PG_MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN order_min_qty BIGINT NOT NULL DEFAULT 1;
   ALTER TABLE stock_items ADD COLUMN price_tiers ${TEXT_TYPE} NOT NULL DEFAULT '[]';
   `,
+  // 45: inkoopprijzen, voorraadlagen (FIFO) en webshopverkopen (zie db.js).
+  `
+  CREATE TABLE stock_cost_prices (
+    id         ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id  ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    item_id    ${TEXT_TYPE} NOT NULL ${references('stock_items(id)')},
+    price      DOUBLE PRECISION NOT NULL,
+    valid_from ${TEXT_TYPE} NOT NULL,
+    note       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    user_id    ${TEXT_TYPE},
+    user_name  ${TEXT_TYPE} NOT NULL DEFAULT '',
+    created_at ${TEXT_TYPE} NOT NULL
+  );
+  CREATE INDEX stock_cost_prices_item ON stock_cost_prices (tenant_id, item_id, valid_from);
+  CREATE TABLE stock_layers (
+    id          ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id   ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    item_id     ${TEXT_TYPE} NOT NULL ${references('stock_items(id)')},
+    movement_id ${TEXT_TYPE},
+    received_at ${TEXT_TYPE} NOT NULL,
+    qty         DOUBLE PRECISION NOT NULL,
+    remaining   DOUBLE PRECISION NOT NULL,
+    unit_cost   DOUBLE PRECISION,
+    source      ${TEXT_TYPE} NOT NULL DEFAULT '',
+    created_at  ${TEXT_TYPE} NOT NULL
+  );
+  CREATE INDEX stock_layers_item ON stock_layers (tenant_id, item_id, received_at);
+  CREATE TABLE stock_cost_entries (
+    id          ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id   ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    movement_id ${TEXT_TYPE} NOT NULL,
+    item_id     ${TEXT_TYPE} NOT NULL ${references('stock_items(id)')},
+    layer_id    ${TEXT_TYPE},
+    qty         DOUBLE PRECISION NOT NULL,
+    unit_cost   DOUBLE PRECISION,
+    created_at  ${TEXT_TYPE} NOT NULL
+  );
+  CREATE INDEX stock_cost_entries_movement ON stock_cost_entries (tenant_id, movement_id);
+  CREATE INDEX stock_cost_entries_layer ON stock_cost_entries (tenant_id, layer_id);
+  CREATE TABLE web_sale_lines (
+    id          ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id   ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    kind        ${TEXT_TYPE} NOT NULL CHECK (kind IN ('verkoop', 'retour')),
+    sold_at     ${TEXT_TYPE} NOT NULL,
+    order_id    ${TEXT_TYPE},
+    reference   ${TEXT_TYPE} NOT NULL,
+    item_id     ${TEXT_TYPE},
+    code        ${TEXT_TYPE} NOT NULL,
+    name        ${TEXT_TYPE} NOT NULL,
+    qty         DOUBLE PRECISION NOT NULL,
+    revenue     DOUBLE PRECISION NOT NULL,
+    movement_id ${TEXT_TYPE},
+    created_at  ${TEXT_TYPE} NOT NULL
+  );
+  CREATE INDEX web_sale_lines_sold ON web_sale_lines (tenant_id, sold_at);
+  CREATE INDEX web_sale_lines_order ON web_sale_lines (tenant_id, order_id);
+  INSERT INTO stock_layers (id, tenant_id, item_id, movement_id, received_at, qty, remaining, unit_cost, source, created_at)
+    SELECT 'begin-' || id, tenant_id, id, NULL, created_at, on_hand, on_hand, cost_price, 'beginstand', updated_at
+    FROM stock_items WHERE has_variants = 0 AND on_hand > 0;
+  INSERT INTO stock_cost_prices (id, tenant_id, item_id, price, valid_from, note, user_id, user_name, created_at)
+    SELECT 'begin-' || id, tenant_id, id, cost_price, substr(created_at, 1, 10), 'Inkoopprijs bij de start van de prijshistorie', NULL, '', updated_at
+    FROM stock_items WHERE cost_price IS NOT NULL;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

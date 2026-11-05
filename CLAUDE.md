@@ -419,6 +419,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `price_tiers`; **let op**: `min_qty` is de minimumvoorraad, niet de minimale afname. Stukprijs = zakelijke prijs min de hoogste van
   staffel- en klantkorting (niet opgeteld). Voorwaarden gelden alleen voor groothandelsklanten (`priceCart(..., { wholesale })`;
   `packProblem` blokkeert afrekenen). Winkelwagencookie: 60 regels, 9999 stuks, 3600 tekens (`addCartLines`).
+- **Inkoopprijzen, FIFO en margerapportage** (1.6.2, migratie 45): `artikelen/stock-costs.js`
+  (prijshistorie `stock_cost_prices`, lagen `stock_layers`, kostregels `stock_cost_entries`); elke mutatie via
+  `stock.book` gaat langs de lagen (oudste eerst, retour tegen de prijs van de afboeking via `costBasis`,
+  onbekende prijs blijft leeg, nooit raden). Nieuwe code die voorraad wijzigt moet via `book`, nooit
+  `on_hand` rechtstreeks. Rapportage `webshop/web-sales.js` (`web_sale_lines`, aangevuld bij elke rapportage
+  via `sync`, `GET /api/admin/webshop-report`), tabblad Rapportage in `webshop-bestellingen/`.
 - **Debiteuren, webshopbestellingen, PDF en mail** (0.63.0, migratie 27):
   `debtors.js` (tabel `debtors`, `ensure` bij definitief, `match_key`),
   `shop-orders.js` (WooCommerce-bestellingen met status uit
