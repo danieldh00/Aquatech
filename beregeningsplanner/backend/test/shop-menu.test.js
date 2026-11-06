@@ -92,6 +92,7 @@ test('menuboom: concept is alleen een voorbeeld, publiceren zet hem live, hernoe
   const preview = await admin.get('/winkel/?voorbeeld=1');
   assert.ok(preview.text.includes('Eindkappen'), 'voorbeeld toont het concept');
   assert.match(preview.text, /href="categorie\/eindkap-tyleen\/\?voorbeeld=1"/, 'links in het voorbeeld blijven in het voorbeeld');
+  assert.match(preview.text, /<form class="shop-search"[^>]*><input type="hidden" name="voorbeeld" value="1">/, 'zoeken houdt het voorbeeld vast');
   assert.doesNotMatch((await admin.get('/winkel/')).text, /voorbeeld=1/);
   assert.doesNotMatch(preview.text, /nav-flip/, 'submenu\'s klappen standaard naar rechts');
   assert.match(preview.text, /src="assets\/menu\.js/);

@@ -111,7 +111,11 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const html = renderWith(contentOf(req), render, { ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
     const withPlanner = html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : ''));
     // In een voorbeeld blijven de menu- en categorielinks in het concept, ook voor categorieën die er alleen in staan.
-    res.type('html').send(preview ? withPlanner.replace(/href="((?:\.\.?\/)*(?:categorie|groep)\/[^"?#]*)"/g, 'href="$1?voorbeeld=1"') : withPlanner);
+    // Ook het zoekformulier houdt de voorbeeldstatus vast (verborgen veld), anders valt een zoekopdracht terug op de gepubliceerde boom.
+    const inPreview = withPlanner
+      .replace(/href="((?:\.\.?\/)*(?:categorie|groep)\/[^"?#]*)"/g, 'href="$1?voorbeeld=1"')
+      .replace(/(<form class="shop-search"[^>]*>)/, '$1<input type="hidden" name="voorbeeld" value="1">');
+    res.type('html').send(preview ? inPreview : withPlanner);
   };
   /**
    * Of dit verzoek het concept van de inhoud moet tonen: `?voorbeeld=1` door een beheerder.
