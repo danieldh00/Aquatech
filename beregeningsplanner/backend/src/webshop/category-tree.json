@@ -82,7 +82,7 @@
       "name": "Pop-up sproeiers",
       "slug": "pop-up-sproeiers",
       "intro": "Hier vind je diverse pop-up sproeiers voor jouw project.\n\nEen pop-up sproeier is een sproeier die zich normaal net onder het maaiveld bevindt. Als er waterdruk op de leiding komt te staan, schuift deze sproeier automatisch uit naar boven. Als de waterdruk eraf is verdwijnt hij weer onder de grond.\n\nGebruik altijd een buitendraad knie of puntstuk tyleenkoppeling in de juiste maat voor het aansluiten van de sproeier.\n\nWe adviseren eigenlijk alle sproeiers minimaal op een tyleenleiding 25 mm aan te sluiten.",
-      "image": "cat-pop-up-sproeiers.webp"
+      "image": "cat-beregening_nieuw.webp"
      },
      {
       "name": "Sproeikoppen & nevelaars",
@@ -143,7 +143,7 @@
       "name": "Geka messing snelkoppelingen",
       "slug": "geka-messing-snelkoppelingen",
       "intro": "Hier vind je alle geka snelkoppelingen, vervaardigd uit messing!\n\nGeka koppelingen voor een vlotte en makkelijke verbinding!\n\nGeka koppelingen ook wel Klauw/snelkoppelingen genoemd, zijn geschikt voor het transport van water. De koppelingen  worden vooral gebruikt in de land- en tuinbouw. Leverbaar met slangtules, binnen- en buitendraad en meer.\n\nDe Geka schroefkoppelingen zijn eenvoudig te koppelen en los te koppelen aan de slang, de bevestiging is volledig lektdicht.\n\nIn diverse maten en uitvoeringen beschikbaar, bekijk het uitgebreide assortiment koppelingen om de juiste koppeling te vinden!",
-      "image": "cat-geka-messing-snelkoppelingen.webp"
+      "image": "cat-draadfittingen.webp"
      },
      {
       "name": "Messing draadfittingen & koppelingen",
@@ -179,7 +179,7 @@
     "name": "Tyleen & koppelingen",
     "slug": "tyleen-en-koppelingen",
     "intro": "Tyleen, PE leidingen en toebehoren!\n\nWij bieden een breed assortiment van kwalitatieve producten voor PE buis. . De perfecte waterleiding voor jouw project! Daarnaast een uitgebreid aanbod tyleen koppelingen.",
-    "image": "cat-tyleen-en-koppelingen.webp",
+    "image": "cat-pe-tyleenleidingen.webp",
     "children": [
      {
       "name": "PE – tyleenleidingen",
@@ -258,7 +258,7 @@
       "name": "Unidelta tyleen koppelingen",
       "slug": "unidelta-tyleen-koppelingen",
       "intro": "Hoogwaardige tyleen koppelingen van  Unidelta! Scrol naar onder en ontdek het assortiment! De robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden van zowel HDPE als LDPE leidingen.De Unidelta koppelingen hebben het Kiwa keurmerk. Daarom zijn  te gebruiken voor drinkwater systemen. De werkdruk van deze koppeling is tot 16 BAR/ Verkrijgbaar met een diameter van 16 tot 110 mm.\n\nZelfs al staan er sommige producten niet op onze webshop, neem contact op, dan regelen we het!",
-      "image": "cat-unidelta-tyleen-koppelingen.webp",
+      "image": "cat-unidelta-pe-t-stuk.webp",
       "children": [
        {
         "name": "Unidelta eindkap tyleen koppeling",
@@ -312,7 +312,7 @@
         "name": "Unidelta schroefbus binnendraad tyleen koppeling",
         "slug": "unidelta-pe-schroefbus-binnendraad-koppeling",
         "intro": "Hoogwaardige Unidelta binnendraad koppeling voor tyleen slang.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-pe-schroefbus-binnendraad-koppeling.webp"
+        "image": "cat-unidelta-pe-puntstuk-buitendraad-koppeling.webp"
        },
        {
         "name": "Unidelta t-stuk binnendraad tyleen koppeling",
@@ -377,7 +377,7 @@
      {
       "name": "Aansluitkasten",
       "slug": "aansluitkasten-bronpomp",
-      "image": "cat-aansluitkasten-bronpomp.webp",
+      "image": "cat-aansluitkasten-230v-bronpomp.webp",
       "children": [
        {
         "name": "Aansluitkast 230V bronpomp",
@@ -391,7 +391,7 @@
       "name": "Complete bronpompen",
       "slug": "complete-bronpompen",
       "intro": "Uitgebreid assortiment complete bronpompen",
-      "image": "cat-complete-bronpompen.webp",
+      "image": "cat-3-bronpompen-compleet.webp",
       "children": [
        {
         "name": "3″ Bronpompen compleet",
@@ -403,7 +403,7 @@
           "name": "Ebara 3″ complete bronpompen",
           "slug": "ebara-3-complete-bronpompen",
           "intro": "Ons aanbod van het gerenommeerde merk Ebara.",
-          "image": "cat-ebara-3-complete-bronpompen.webp"
+          "image": "cat-3-ebara-bronpomp-motoren.webp"
          },
          {
           "name": "Grundfos 3″ complete bronpompen",
@@ -434,7 +434,7 @@
           "name": "Ebara 4″ complete bronpompen",
           "slug": "ebara-4-complete-bronpompen",
           "intro": "Ons aanbod van het gerennomeerde merk Ebara",
-          "image": "cat-ebara-4-complete-bronpompen.webp"
+          "image": "cat-3-ebara-bronpomp-motoren.webp"
          },
          {
           "name": "Pedrollo 4″ complete bronpompen",
@@ -450,7 +450,7 @@
       "name": "Hydraulische pompdelen",
       "slug": "hydraulische-pompdelen",
       "intro": "Alle pompdelen met universele NEMA koppeling vind je hier!",
-      "image": "cat-hydraulische-pompdelen.webp",
+      "image": "cat-4-pompdelen.webp",
       "children": [
        {
         "name": "4″ Pompdelen",
@@ -462,7 +462,7 @@
           "name": "Pedrollo 4″ pompdelen",
           "slug": "pedrollo-4-losse-pompdelen",
           "intro": "Koop de losse pedrollo 4SR pompdelen exclusief bij aquatechshop. Ideaal te combineren met een bronpompmotor van Franklin Electric!\n\n## Wat is een hydraulisch pompdeel?\n\nEen hydraulisch pomphuis dient gekoppeld te worden aan een motor. Het pomphuis bevat waaiers. Deze verplaatsen door de aandrijving van de motor het water naar de persuitgang.\n\nTwijfel je over de juiste keuze bronpomp in jouw situatie? Neem contact op, we helpen je graag op weg!",
-          "image": "cat-pedrollo-4-losse-pompdelen.webp"
+          "image": "cat-4-pompdelen.webp"
          }
         ]
        }
@@ -504,7 +504,7 @@
           "name": "4″ Franklin Electric bronpomp motoren",
           "slug": "bronpomp-motoren-4",
           "intro": "Losse bronpomp motoren van het top merk Franklin Electric.\n\nDe motoren met het oranje label zijn olie gekoeld. Topkwaliteit. Het voordeel van deze motoren is dat ze extra lang zijn t.o.v. andere bronpompmotoren. Dit geeft ruimte voor meer koeling en betere isolatie. Daarnaast zijn deze motoren volledig herwikkelbaar.\n\nDe motoren zonder oranje label zijn de watergel gekoelde motoren. Deze zijn echter niet herwikkelbaar. \n\nBeide type motoren zijn geschikt voor frequentiebesturing(VFD)\n\nLangere kabels voor op jouw Franklin motor vind je hier.",
-          "image": "cat-bronpomp-motoren-4.webp"
+          "image": "cat-4-bronpomp-motoren.webp"
          },
          {
           "name": "4″ Pedrollo bronpomp motoren",
@@ -524,7 +524,7 @@
           "name": "6″ Franklin Electric bronpomp motoren",
           "slug": "6-franklin-electric-bronpomp-motoren",
           "intro": "Hier tref je ons aanbod van 6″ bronpomp motoren van het gerenommeerde Franklin electric!",
-          "image": "cat-6-franklin-electric-bronpomp-motoren.webp"
+          "image": "cat-6-bronpomp-motoren.webp"
          }
         ]
        }
@@ -534,7 +534,7 @@
       "name": "Stroomkabels bronpomp motoren",
       "slug": "stroomkabel-bronpomp-motor",
       "intro": "Waterdichte stroomkabels voor het monteren op je bronpomp.\n\nVoor onder meer DAB, Franklin en Pedrollo kunnen wij kabels op maat leveren. Langere lengtes of advies nodig? We helpen je graag. Neem contact op!",
-      "image": "cat-stroomkabel-bronpomp-motor.webp",
+      "image": "cat-franklin-electric-kabels.webp",
       "children": [
        {
         "name": "Ebara-Sumoto kabels",
@@ -573,7 +573,7 @@
       "name": "RVS expansievaten",
       "slug": "rvs-expansievaten",
       "intro": "Topkwaliteit RVS expansievaten van onder meer het Italiaanse topmerk Varem” Wij zijn hier officieel importeur van.",
-      "image": "cat-rvs-expansievaten.webp"
+      "image": "cat-expansievaten-en-toebehoren.webp"
      },
      {
       "name": "Verzinkte expansievaten (Zincvarem)",
