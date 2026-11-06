@@ -297,7 +297,7 @@
     const index = path[path.length - 1];
     if (action === 'fold') node._open = !node._open;
     else if (action === 'detail') node._detail = !node._detail;
-    else if (action === 'add') { node.children.push({ name: 'Nieuwe categorie', slug: '', intro: '', image: '', hidden: false, match: [entry.name], group: undefined, children: [], _open: false, _detail: true, _new: true }); node._open = true; }
+    else if (action === 'add') { node.children.push({ name: 'Nieuwe categorie', slug: '', intro: '', image: '', hidden: false, match: [], group: undefined, children: [], _open: false, _detail: true, _new: true }); node._open = true; }
     else if (action === 'up' && index > 0) [siblings[index - 1], siblings[index]] = [siblings[index], siblings[index - 1]];
     else if (action === 'down' && index < siblings.length - 1) [siblings[index + 1], siblings[index]] = [siblings[index], siblings[index + 1]];
     else if (action === 'in' && index > 0) { siblings.splice(index, 1); siblings[index - 1].children.push(node); siblings[index - 1]._open = true; }
@@ -324,7 +324,7 @@
     const entry = loose[position];
     if (!entry) return;
     const heading = state.roots.find((root) => root.group === entry.groupSlug) || state.roots[0];
-    heading.children.push({ name: entry.name, slug: '', intro: '', image: '', hidden: false, match: [], group: undefined, children: [], _open: false, _detail: false, _new: true });
+    heading.children.push({ name: entry.name, slug: '', intro: '', image: '', hidden: false, match: [entry.name], group: undefined, children: [], _open: false, _detail: false, _new: true });
     heading._open = true;
     render();
   }

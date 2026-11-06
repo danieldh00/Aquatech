@@ -56,6 +56,30 @@ function renamed(slug, name) {
   return tree;
 }
 
+test('menu-editor: een nieuwe categorie en een toegevoegde losse categorie krijgen de juiste indeling', () => {
+  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../frontend/beheer/webshop-menu.js'), 'utf8');
+  const addLine = source.split('\n').find((line) => line.includes("action === 'add'"));
+  assert.ok(addLine && !addLine.includes('entry'), "de knop + gebruikt geen variabele 'entry' (die bestaat in change() niet)");
+  assert.ok(addLine.includes('match: []'), 'een nieuwe categorie begint zonder indeling');
+  const placeLine = source.split('\n').find((line) => line.includes('heading.children.push'));
+  assert.ok(placeLine.includes('match: [entry.name]'), 'een toegevoegde losse categorie houdt zijn webshopnaam als indeling');
+});
+
+test('catalogus: de volgorde uit de menuboom blijft staan (niet alfabetisch)', () => {
+  const { buildCatalog } = require('../src/webshop/storefront-data');
+  const tree = normalizeTree([{ group: 'beregening', name: 'Beregening', children: [{ name: 'Zeta', match: ['Zeta'] }, { name: 'Alfa', match: ['Alfa'] }] }], []);
+  /**
+   * Maakt een artikelrij voor de catalogus.
+   * @param {string} id Het id.
+   * @param {string} category De webshopcategorie.
+   * @returns {object} De rij.
+   */
+  const row = (id, category) => ({ id, code: `C${id}`, name: `Artikel ${id}`, unit: 'stuk', on_hand: 5, stock_managed: 1, sale_price: 10, vat_rate: 21, categories: JSON.stringify([category]) });
+  const catalog = buildCatalog([row('1', 'Alfa'), row('2', 'Zeta')], new Map(), tree);
+  const group = catalog.groups.find((entry) => entry.slug === 'beregening');
+  assert.deepStrictEqual(group.categories.map((category) => category.name), ['Zeta', 'Alfa']);
+});
+
 test('normalizeTree: grens van 600 telt de koppen niet mee en weigert in plaats van in te korten', () => {
   /**
    * Maakt een lijst met genummerde categorieën.

@@ -118,6 +118,7 @@
  },
  {
   "name": "Leidingen & toebehoren",
+  "match": ["Leidingen & Slangen", "Leidingen & toebehoren"],
   "slug": "leidingen-slangen",
   "intro": "Ontdek ons ruime leidingen en slangen assortiment. Je vindt hier alles wat je nodig hebt voor het afvoeren en aanvoeren van vloeistoffen terug in ons assortiment.",
   "image": "asset:cat-leidingen-slangen.webp",

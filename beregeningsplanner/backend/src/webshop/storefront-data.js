@@ -208,18 +208,11 @@ function arrangeCategories(products, variantProducts, tree) {
     entries.push(entry);
     topOf.set(category.groupSlug, [...(topOf.get(category.groupSlug) || []), entry]);
   }
-  /**
-   * Sorteert categorieën op naam, ook in alle subcategorieën.
-   * @param {object[]} list De categorieën.
-   * @returns {object[]} Dezelfde lijst, gesorteerd.
-   */
-  const sortByName = (list) => {
-    list.sort((left, right) => left.name.localeCompare(right.name, 'nl'));
-    for (const category of list) sortByName(category.children);
-    return list;
-  };
   const groups = [...GROUPS, OTHER_GROUP].map((group) => {
-    const members = sortByName(topOf.get(group.slug) || []);
+    // De volgorde uit de boom (Beheer) blijft staan; losse categorieën uit de webshop komen er alfabetisch achter.
+    const inTree = (topOf.get(group.slug) || []).filter((category) => !category.loose);
+    const loose = (topOf.get(group.slug) || []).filter((category) => category.loose).sort((left, right) => left.name.localeCompare(right.name, 'nl'));
+    const members = [...inTree, ...loose];
     const root = rootOf.get(group.slug);
     return { slug: group.slug, name: root && root.name || group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0), intro: root && root.intro || '', image: root && root.image || '' };
   }).filter((group) => group.categories.length);
