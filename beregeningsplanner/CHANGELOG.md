@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.9
+
+Categoriepagina's en menu van de eigen webshop in de opzet van aquatechshop.nl.
+
+- **Categorieboom** (`webshop/category-tree.js` + `category-tree.json`): de indeling van aquatechshop.nl
+  (4 hoofdcategorieën, tot vijf niveaus diep) met intro en afbeelding per categorie; de afbeeldingen staan
+  lokaal in `webshop/assets/cat-*.webp`. De webshop levert alleen platte categorienamen: een product komt
+  in de diepste categorie waarvan de naam bij zijn categorieën past (`placeIn`); wat niet in de boom staat
+  blijft een losse categorie, een product met alleen een hoofdcategorie komt in *Overig*. *Beregening oud*
+  is een verborgen categorie (alleen via het adres bereikbaar).
+- **Catalogus** (`buildCatalog(rows, soldByCode, tree)`): categorieën hebben nu `children`, `parentSlug`,
+  `depth`, `intro`, `image`, `hidden` en een telling inclusief subcategorieën (`count`; `ownCount` = alleen
+  rechtstreeks); lege takken vallen weg. Hoofdcategorieën krijgen `intro` en `image`.
+- **Menu**: de koppen van de hoofdcategorieën zijn geen link meer, ze klappen open (CSS, ook met focus).
+  Elk niveau krijgt een flyout (`nav-fly`; de rechterhelft van de balk klapt naar links); op een smal scherm
+  klappen de niveaus in elkaar open (`details`). De tussenpagina met alle suboptions is uit het menu.
+- **Categoriepagina** (`browsePage` in `storefront-pages.js`): kruimelbalk, zijbalk *Categorie* (uitgeklapt
+  langs het pad) en *Prijs* (min/max), intro, blokken van de subcategorieën met afbeelding en aantal en,
+  bij producten die rechtstreeks in de categorie zitten, resultaatregel, filter *Alleen op voorraad*,
+  sorteren (naam, prijs) en paginering (24 per pagina). Dezelfde opzet voor de pagina van een hoofdcategorie
+  (`groep/<slug>/`, bereikbaar vanaf de startpagina en het kruimelpad).
+- Tests: `test/shop-categories.test.js`.
+
 ## 1.6.8
 
 Startpagina van de eigen webshop (`/winkel/`) gelijk aan die van aquatechshop.nl.

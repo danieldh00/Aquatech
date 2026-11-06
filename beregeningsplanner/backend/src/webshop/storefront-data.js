@@ -6,6 +6,7 @@
 const crypto = require('crypto');
 const { decodeHtmlEntities } = require('./html-entities');
 const Wholesale = require('./wholesale');
+const { DEFAULT_TREE, placeIn } = require('./category-tree');
 
 /** Hoe lang (ms) een opgebouwde catalogus per omgeving wordt hergebruikt. */
 const CACHE_MS = 30 * 1000;
@@ -51,6 +52,17 @@ function categoryNameOf(categoriesJson) {
   try { names = JSON.parse(categoriesJson || '[]'); } catch { names = []; }
   const first = Array.isArray(names) ? names.map((name) => decodeHtmlEntities(name).trim()).find(Boolean) : '';
   return first || FALLBACK_CATEGORY;
+}
+
+/**
+ * Leest alle categorienamen uit het JSON-veld `categories` van een webshopproduct.
+ * @param {*} categoriesJson De opgeslagen tekst, bijv. '["Sproeiers","Pop-up sproeiers"]'.
+ * @returns {string[]} De namen (ontdaan van html-tekens), leeg bij ongeldige invoer.
+ */
+function categoryNamesOf(categoriesJson) {
+  let names = [];
+  try { names = JSON.parse(categoriesJson || '[]'); } catch { names = []; }
+  return Array.isArray(names) ? names.map((name) => decodeHtmlEntities(name).trim()).filter(Boolean) : [];
 }
 
 /**
@@ -143,6 +155,78 @@ function assignCategorySlugs(categories) {
 }
 
 /**
+ * Deelt de producten in categorieën in en bouwt de boom: categorieën uit de boom (met telling
+ * inclusief subcategorieën, leeg = weggelaten) en losse categorieën voor wat niet in de boom
+ * staat. Zet `categorySlug` op elk product en haalt de tijdelijke velden `categoryKey` en
+ * `treeSlug` weg.
+ * @param {object[]} products De producten (met categoryKey, categoryName, groupSlug en eventueel treeSlug).
+ * @param {object[]} variantProducts De varianten als product (zelfde velden als hun hoofdartikel).
+ * @param {object[]} tree De categorieboom.
+ * @returns {{ categoryList: object[], groups: object[] }} Alle categorieën plat (op naam) en de hoofdcategorieën met hun bovenste categorieën.
+ */
+function arrangeCategories(products, variantProducts, tree) {
+  const flat = new Map();
+  const ownCounts = new Map();
+  for (const product of products) {
+    if (product.treeSlug) { ownCounts.set(product.treeSlug, (ownCounts.get(product.treeSlug) || 0) + 1); continue; }
+    const category = flat.get(product.categoryKey) || { key: product.categoryKey, name: product.categoryName, count: 0, groupSlug: product.groupSlug };
+    category.count += 1;
+    flat.set(product.categoryKey, category);
+  }
+  assignCategorySlugs(flat);
+  for (const product of [...products, ...variantProducts]) {
+    product.categorySlug = product.treeSlug || flat.get(product.categoryKey).slug;
+    delete product.categoryKey;
+    delete product.treeSlug;
+  }
+  const entries = [];
+  /**
+   * Bouwt de categorie van een knoop en (eerst) haar subcategorieën.
+   * @param {object} node De knoop uit de boom.
+   * @param {number} depth Diepte (1 = bovenste categorie in een hoofdcategorie).
+   * @param {string} groupSlug De hoofdcategorie.
+   * @param {string} parentSlug De bovenliggende categorie (leeg = de hoofdcategorie zelf).
+   * @returns {?object} De categorie, of null als er geen producten in zitten.
+   */
+  const build = (node, depth, groupSlug, parentSlug) => {
+    const children = (node.children || []).map((child) => build(child, depth + 1, groupSlug, node.slug)).filter(Boolean);
+    const ownCount = ownCounts.get(node.slug) || 0;
+    const count = ownCount + children.reduce((total, child) => total + child.count, 0);
+    if (!count) return null;
+    const entry = { slug: node.slug, name: node.name, count, ownCount, groupSlug, parentSlug, depth, intro: node.intro || '', image: node.image || '', hidden: Boolean(node.hidden), children };
+    entries.push(entry);
+    return entry;
+  };
+  const topOf = new Map();
+  const rootOf = new Map();
+  for (const root of tree) {
+    rootOf.set(root.group, root);
+    topOf.set(root.group, (root.children || []).map((child) => build(child, 1, root.group, '')).filter(Boolean));
+  }
+  for (const category of flat.values()) {
+    const entry = { slug: category.slug, name: category.name, count: category.count, ownCount: category.count, groupSlug: category.groupSlug, parentSlug: '', depth: 1, intro: '', image: '', hidden: false, children: [] };
+    entries.push(entry);
+    topOf.set(category.groupSlug, [...(topOf.get(category.groupSlug) || []), entry]);
+  }
+  /**
+   * Sorteert categorieën op naam, ook in alle subcategorieën.
+   * @param {object[]} list De categorieën.
+   * @returns {object[]} Dezelfde lijst, gesorteerd.
+   */
+  const sortByName = (list) => {
+    list.sort((left, right) => left.name.localeCompare(right.name, 'nl'));
+    for (const category of list) sortByName(category.children);
+    return list;
+  };
+  const groups = [...GROUPS, OTHER_GROUP].map((group) => {
+    const members = sortByName(topOf.get(group.slug) || []);
+    const root = rootOf.get(group.slug);
+    return { slug: group.slug, name: group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0), intro: root && root.intro || '', image: root && root.image || '' };
+  }).filter((group) => group.categories.length);
+  return { categoryList: entries.sort((left, right) => left.name.localeCompare(right.name, 'nl')), groups };
+}
+
+/**
  * Leest de waarden van een variant (bijv. { Maat: '25 mm' }) uit het JSON-veld.
  * @param {*} valuesJson De opgeslagen tekst.
  * @returns {Object<string, string>} Kenmerknaam → waarde, leeg bij ongeldige invoer.
@@ -173,9 +257,10 @@ function attributeNamesOf(attributesJson) {
  * in `variants`; elke variant blijft los bereikbaar via `variantProducts`.
  * @param {object[]} rows Rijen met id, code, name, unit, on_hand, sale_price, business_price, vat_rate, categories en image (en optioneel order_pack_size, order_min_qty en price_tiers: de groothandelsvoorwaarden); bij varianten parent_id en variant_values, bij hoofdartikelen has_variants=1 en attributes.
  * @param {Map<string, number>} [soldByCode] Het verkochte aantal per artikelcode (webshopverkopen), voor de meest verkochte producten.
- * @returns {{ products: object[], variantProducts: object[], categories: object[], groups: object[], featured: object[], bestsellers: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image; bij een hoofdartikel met varianten ook `variants` [{ slug, code, label, meta, priceIncl, inStock, image }] en `attributeName`, met de laagste prijs en op voorraad als een variant dat is) en categories (slug, name, count, groupSlug), beide op naam gesorteerd; variantProducts = de varianten als gewoon product (met parentSlug en parentName); groups = hoofdcategorieën met hun categorieën (slug, name, categories, count); featured = uitgelichte producten; bestsellers = de meest verkochte producten met foto (leeg zonder verkopen).
+ * @param {object[]} [tree] De categorieboom (standaard die van Aquatechshop.nl); producten waarvan een categorienaam in de boom staat komen in de diepste passende categorie.
+ * @returns {{ products: object[], variantProducts: object[], categories: object[], groups: object[], featured: object[], bestsellers: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image; bij een hoofdartikel met varianten ook `variants` [{ slug, code, label, meta, priceIncl, inStock, image }] en `attributeName`, met de laagste prijs en op voorraad als een variant dat is) en categories (alle categorieën plat: slug, name, count = producten inclusief subcategorieën, ownCount, groupSlug, parentSlug, depth, intro, image, hidden en children = de subcategorieën als objecten) op naam gesorteerd; variantProducts = de varianten als gewoon product (met parentSlug en parentName); groups = hoofdcategorieën met hun bovenste categorieën (slug, name, categories, count, intro, image); featured = uitgelichte producten; bestsellers = de meest verkochte producten met foto (leeg zonder verkopen).
  */
-function buildCatalog(rows, soldByCode = new Map()) {
+function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE) {
   /**
    * Sorteert op naam, bij gelijke namen op artikelcode.
    * @param {object} left Het eerste product of de eerste rij.
@@ -215,19 +300,35 @@ function buildCatalog(rows, soldByCode = new Map()) {
     : Math.round((Number(row.on_hand) - Number(row.reserved || 0)) * 1000) / 1000 > 0);
 
   /**
+   * Bepaalt de plek van een product in de indeling: de diepste categorie uit de boom waarvan de
+   * naam bij de categorieën van het webshopproduct past; anders de eerste categorienaam als losse
+   * categorie in de hoofdcategorie die bij haar naam past. Staat alleen een hoofdcategorie genoemd,
+   * dan komt het product in "Overig" van die hoofdcategorie.
+   * @param {*} categoriesJson Het JSON-veld met categorienamen.
+   * @returns {{ categoryKey: string, categoryName: string, groupSlug: string, treeSlug?: string }} De plek (categoryKey is voor het tellen en wordt later vervangen door categorySlug).
+   */
+  const placementOf = (categoriesJson) => {
+    const names = categoryNamesOf(categoriesJson);
+    const place = placeIn(tree, names);
+    if (place && !place.root) return { categoryKey: `boom:${place.node.slug}`, categoryName: place.node.name, groupSlug: place.group, treeSlug: place.node.slug };
+    if (place) return { categoryKey: `overig:${place.group}`, categoryName: FALLBACK_CATEGORY, groupSlug: place.group };
+    const categoryName = names[0] || FALLBACK_CATEGORY;
+    return { categoryKey: categoryName.toLowerCase(), categoryName, groupSlug: groupOf(categoryName).slug };
+  };
+
+  /**
    * Zet een rij van de database om in een product (zonder categorie-indeling).
    * @param {object} row De rij.
    * @returns {object} Het product.
    */
   const toProduct = (row) => {
-    const categoryName = categoryNameOf(row.categories);
     const priceExcl = Number(row.sale_price);
     const vatRate = Number(row.vat_rate ?? 21);
     // De prijs voor een zakelijke klant (excl. btw): de zakelijke prijs van het artikel, anders de gewone verkoopprijs.
     const priceBusiness = Math.round((row.business_price != null ? Number(row.business_price) : priceExcl) * 100) / 100;
     return {
       slug: uniqueSlug(row.name, row.code), code: String(row.code), name: decodeHtmlEntities(row.name), unit: String(row.unit || 'st'),
-      categoryKey: categoryName.toLowerCase(), categoryName, groupSlug: groupOf(categoryName).slug, priceExcl, vatRate,
+      ...placementOf(row.categories), priceExcl, vatRate,
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
       priceBusiness, priceBusinessIncl: Math.round(priceBusiness * (1 + vatRate / 100) * 100) / 100,
       inStock: stockOf(row), image: imageOf(row),
@@ -254,10 +355,10 @@ function buildCatalog(rows, soldByCode = new Map()) {
     const attributeNames = attributeNamesOf(parent.attributes);
     const cheapest = variants.reduce((lowest, variant) => (variant.priceIncl < lowest.priceIncl ? variant : lowest), variants[0]);
     const cheapestBusiness = variants.reduce((lowest, variant) => (variant.priceBusiness < lowest.priceBusiness ? variant : lowest), variants[0]);
-    const categoryName = parent.categories ? categoryNameOf(parent.categories) : variants[0].categoryName;
+    const placement = parent.categories ? placementOf(parent.categories) : { categoryKey: variants[0].categoryKey, categoryName: variants[0].categoryName, groupSlug: variants[0].groupSlug, treeSlug: variants[0].treeSlug };
     const group = {
       slug: uniqueSlug(parent.name, parent.code), code: String(parent.code), name: decodeHtmlEntities(parent.name), unit: String(parent.unit || variants[0].unit),
-      categoryKey: categoryName.toLowerCase(), categoryName, groupSlug: groupOf(categoryName).slug,
+      ...placement,
       priceExcl: cheapest.priceExcl, vatRate: cheapest.vatRate, priceIncl: cheapest.priceIncl,
       priceBusiness: cheapestBusiness.priceBusiness, priceBusinessIncl: cheapestBusiness.priceBusinessIncl,
       inStock: variants.some((variant) => variant.inStock), image: imageOf(parent) || (variants.find((variant) => variant.image) || {}).image || '',
@@ -270,27 +371,12 @@ function buildCatalog(rows, soldByCode = new Map()) {
     };
     for (const variant of variants) {
       variant.parentSlug = group.slug;
-      variant.categoryKey = group.categoryKey; variant.categoryName = group.categoryName; variant.groupSlug = group.groupSlug;
+      variant.categoryKey = group.categoryKey; variant.categoryName = group.categoryName; variant.groupSlug = group.groupSlug; variant.treeSlug = group.treeSlug;
     }
     listing.push(group);
   }
   const products = listing.sort(compareByName);
-  const categories = new Map();
-  for (const product of products) {
-    const category = categories.get(product.categoryKey) || { key: product.categoryKey, name: product.categoryName, count: 0, groupSlug: product.groupSlug };
-    category.count += 1;
-    categories.set(product.categoryKey, category);
-  }
-  assignCategorySlugs(categories);
-  for (const product of [...products, ...variantProducts]) {
-    product.categorySlug = categories.get(product.categoryKey).slug;
-    delete product.categoryKey;
-  }
-  const categoryList = [...categories.values()].sort((left, right) => left.name.localeCompare(right.name, 'nl'));
-  const groups = [...GROUPS, OTHER_GROUP].map((group) => {
-    const members = categoryList.filter((category) => category.groupSlug === group.slug);
-    return { slug: group.slug, name: group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0) };
-  }).filter((group) => group.categories.length);
+  const { categoryList, groups } = arrangeCategories(products, variantProducts, tree);
   /**
    * Het verkochte aantal van een product (bij een hoofdartikel de varianten samen).
    * @param {object} product Een product van de catalogus.

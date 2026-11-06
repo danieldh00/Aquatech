@@ -132,28 +132,50 @@ function productCount(count) {
 }
 
 /**
- * Menu van de hoofdcategorieën. Op een breed scherm een balk met uitklappers
- * (alleen CSS), op een smal scherm een menuknop (details/summary).
- * @param {object[]} groups De hoofdcategorieën (slug, name, categories).
+ * Menu van de hoofdcategorieën. Op een breed scherm een balk met uitklappers en
+ * per niveau een flyout (alleen CSS), op een smal scherm een menuknop met
+ * ingeklapte niveaus (details/summary). De koppen van de hoofdcategorieën zijn
+ * geen link: ze klappen alleen open.
+ * @param {object[]} groups De hoofdcategorieën (slug, name, categories met children).
  * @param {string} root Relatief pad naar de shop-startpagina.
  * @returns {string} HTML van beide menu's.
  */
 function navigation(groups, root) {
   /**
-   * Lijstitems met de subcategorieën van een hoofdcategorie.
-   * @param {object} group De hoofdcategorie.
+   * De zichtbare (niet verborgen) categorieën uit een lijst.
+   * @param {object[]} categories De categorieën.
+   * @returns {object[]} De categorieën die in menu's getoond worden.
+   */
+  const visible = (categories) => categories.filter((category) => !category.hidden);
+  /**
+   * Lijstitems voor de balk: een link, bij subcategorieën met een flyout ernaast.
+   * @param {object[]} categories De categorieën van één niveau.
    * @returns {string} HTML van de lijstitems.
    */
-  function subItems(group) {
-    return group.categories.map((category) => `<li><a href="${root}categorie/${escapeHtml(category.slug)}/">${escapeHtml(category.name)}</a></li>`).join('');
-  }
-  const allGroups = groups.map((group) => `<li><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a></li>`).join('');
+  const flyItems = (categories) => visible(categories).map((category) => {
+    const link = `<a href="${root}categorie/${escapeHtml(category.slug)}/">${escapeHtml(category.name)}</a>`;
+    const children = visible(category.children);
+    return children.length ? `<li class="has-sub">${link}<ul class="nav-drop nav-fly">${flyItems(children)}</ul></li>` : `<li>${link}</li>`;
+  }).join('');
+  /**
+   * Lijstitems voor het smalle menu: subcategorieën klappen open met "Alles in …" bovenaan.
+   * @param {object[]} categories De categorieën van één niveau.
+   * @returns {string} HTML van de lijstitems.
+   */
+  const foldItems = (categories) => visible(categories).map((category) => {
+    const link = `<a href="${root}categorie/${escapeHtml(category.slug)}/">${escapeHtml(category.name)}</a>`;
+    const children = visible(category.children);
+    return children.length
+      ? `<li><details><summary>${escapeHtml(category.name)}</summary><ul><li><a href="${root}categorie/${escapeHtml(category.slug)}/">Alles in ${escapeHtml(category.name)}</a></li>${foldItems(children)}</ul></details></li>`
+      : `<li>${link}</li>`;
+  }).join('');
+  const allGroups = groups.map((group) => `<li class="has-sub"><span class="nav-heading" tabindex="0">${escapeHtml(group.name)}</span><ul class="nav-drop nav-fly">${flyItems(group.categories)}</ul></li>`).join('');
   const search = `<li class="nav-all"><span class="nav-all-button" tabindex="0">Product zoeken${ICONS.down}</span><ul class="nav-drop">${allGroups}</ul></li>`;
   const extraPages = activeContent.pages.filter((page) => page.menu && page.slug !== 'over-ons');
   const wholesale = activeShop.wholesale ? `<li class="nav-about"><a href="${root}groothandel/">Groothandel</a></li>` : '';
   const about = `<li class="nav-about"><a href="${root}over-ons/">Over ons</a></li>${wholesale}${extraPages.map((page) => `<li class="nav-about"><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}`;
-  const desktop = groups.map((group) => `<li class="nav-group"><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a><ul class="nav-drop">${subItems(group)}</ul></li>`).join('');
-  const mobile = groups.map((group) => `<li><details><summary>${escapeHtml(group.name)}</summary><ul><li><a href="${root}groep/${escapeHtml(group.slug)}/">Alles in ${escapeHtml(group.name)}</a></li>${subItems(group)}</ul></details></li>`).join('');
+  const desktop = groups.map((group, index) => `<li class="nav-group${index >= Math.ceil(groups.length / 2) ? ' nav-flip' : ''}"><span class="nav-heading" tabindex="0">${escapeHtml(group.name)}</span><ul class="nav-drop">${flyItems(group.categories)}</ul></li>`).join('');
+  const mobile = groups.map((group) => `<li><details><summary>${escapeHtml(group.name)}</summary><ul>${foldItems(group.categories)}</ul></details></li>`).join('');
   return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${search}${about}${desktop}<!--planner:${root}--></ul></nav>
 <details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${mobile}${activeShop.wholesale ? `<li><a href="${root}groothandel/">Groothandel</a></li>` : ''}${extraPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}<!--planner:${root}--></ul></details>`;
 }
@@ -347,18 +369,6 @@ function productCard(product, root) {
 }
 
 /**
- * Tegels van categorieën (naam en aantal producten).
- * @param {object[]} categories De categorieën (slug, name, count).
- * @param {string} root Relatief pad naar de shop-startpagina.
- * @returns {string} HTML van het raster.
- */
-function categoryTiles(categories, root) {
-  return `<div class="category-grid">
-${categories.map((category) => `<a class="category-tile" href="${root}categorie/${escapeHtml(category.slug)}/"><strong>${escapeHtml(category.name)}</strong><span>${productCount(category.count)}</span></a>`).join('\n')}
-</div>`;
-}
-
-/**
  * Eerste product met foto per hoofdcategorie, voor de tegels in de assortimentsbalk.
  * @param {object} group De hoofdcategorie (slug).
  * @param {object[]} products Alle producten.
@@ -461,20 +471,6 @@ function homePage(catalog) {
 }
 
 /**
- * Pagina van een hoofdcategorie: haar subcategorieën.
- * @param {object} group De hoofdcategorie (slug, name, categories, count).
- * @param {object[]} groups Alle hoofdcategorieën (voor menu en voet).
- * @returns {string} De HTML-pagina.
- */
-function groupPage(group, groups) {
-  const root = '../../';
-  const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a> › <span>${escapeHtml(group.name)}</span></nav>
-<h1>${escapeHtml(group.name)}</h1>
-${categoryTiles(group.categories, root)}`;
-  return layout({ root, title: `${group.name} – ${SHOP_NAME}`, description: `${group.name} van AquaTech Service: ${productCount(group.count)}.`, body, groups });
-}
-
-/**
  * Keuze tussen alle producten en alleen wat op voorraad is (uit de voorraad van het systeem).
  * @param {boolean} onlyInStock Of nu alleen wat op voorraad is getoond wordt.
  * @param {string} allQuery Querystring voor alle producten (zonder vraagteken, kan leeg zijn).
@@ -490,26 +486,144 @@ function stockFilter(onlyInStock, allQuery, stockQuery, preview = false) {
   return `<p class="stock-filter">Toon: <a href="./${allQuery ? `?${allQuery}` : ''}"${onlyInStock ? '' : ' aria-current="true"'}>Alles</a> · <a href="./?${stockQuery}"${onlyInStock ? ' aria-current="true"' : ''}>Alleen op voorraad</a></p>`;
 }
 
+/** Aantal producten per pagina op een categoriepagina. */
+const PAGE_SIZE = 24;
+/** Sorteringen op een categoriepagina: sleutel in de adresbalk en tekst. */
+const SORTS = [
+  { key: '', label: 'Op naam' },
+  { key: 'prijs-laag', label: 'Prijs: laag - hoog' },
+  { key: 'prijs-hoog', label: 'Prijs: hoog - laag' },
+];
+
 /**
- * Categoriepagina: alle producten van één categorie.
- * @param {object} category De categorie (slug, name, count, groupSlug).
- * @param {object[]} products De producten in die categorie (bij onlyInStock al gefilterd).
- * @param {object[]} groups Alle hoofdcategorieën.
- * @param {boolean} [onlyInStock] Of alleen producten op voorraad getoond worden.
- * @param {boolean} [preview] Of het conceptvoorbeeld in de filterlinks behouden blijft.
+ * De intro van een categorie als HTML: alinea's, met "## kop" als tussenkop.
+ * @param {string} intro De tekst; alinea's gescheiden door een lege regel.
+ * @returns {string} HTML, leeg zonder tekst.
+ */
+function introHtml(intro) {
+  return String(intro || '').split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean)
+    .map((part) => (part.startsWith('## ') ? `<h2>${escapeHtml(part.slice(3))}</h2>` : `<p>${escapeHtml(part)}</p>`)).join('\n');
+}
+
+/**
+ * Zoekt een categorie met haar voorouders in de categorieën van een hoofdcategorie.
+ * @param {object[]} categories De categorieën van één niveau (met children).
+ * @param {string} slug De gezochte categorie.
+ * @returns {?object[]} De keten van de bovenste categorie tot de gezochte, of null.
+ */
+function chainTo(categories, slug) {
+  for (const category of categories) {
+    if (category.slug === slug) return [category];
+    const below = chainTo(category.children, slug);
+    if (below) return [category, ...below];
+  }
+  return null;
+}
+
+/**
+ * Het blok "Categorie" in de zijbalk: de categorieën van de hoofdcategorie, met de subcategorieën
+ * uitgeklapt langs het pad naar de huidige pagina.
+ * @param {object[]} categories De categorieën van één niveau.
+ * @param {Set<string>} open Slugs van categorieën waarvan de subcategorieën getoond worden (het pad naar de huidige).
+ * @param {string} current Slug van de huidige categorie (leeg op de pagina van een hoofdcategorie).
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @returns {string} HTML van de lijst.
+ */
+function sideTree(categories, open, current, root) {
+  const items = categories.filter((category) => !category.hidden).map((category) => {
+    const children = category.children.filter((child) => !child.hidden);
+    const here = category.slug === current;
+    return `<li><a href="${root}categorie/${escapeHtml(category.slug)}/"${here ? ' aria-current="page"' : ''}>${escapeHtml(category.name)}</a>${children.length && open.has(category.slug) ? sideTree(children, open, current, root) : ''}</li>`;
+  }).join('');
+  return `<ul>${items}</ul>`;
+}
+
+/**
+ * Pagina van een hoofdcategorie of categorie in de opzet van aquatechshop.nl: kruimelpad,
+ * zijbalk met categorieën en prijsfilter, intro, blokken van de subcategorieën en (als er
+ * producten direct in de categorie zitten) de producten met sortering en paginering.
+ * @param {{ group: object, category?: ?object, products?: object[], groups: object[], options?: { onlyInStock?: boolean, min?: ?number, max?: ?number, sort?: string, page?: number, preview?: boolean } }} input group = de hoofdcategorie, category = de categorie (leeg op de pagina van de hoofdcategorie zelf), products = de producten die direct in de categorie zitten, groups = alle hoofdcategorieën en options = de gekozen filters en sortering.
  * @returns {string} De HTML-pagina.
  */
-function categoryPage(category, products, groups, onlyInStock = false, preview = false) {
+function browsePage({ group, category = null, products = [], groups, options = {} }) {
   const root = '../../';
-  const group = groups.find((candidate) => candidate.slug === category.groupSlug);
-  const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a>${group ? ` › <a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : ''} › <span>${escapeHtml(category.name)}</span></nav>
-<h1>${escapeHtml(category.name)}</h1>
-${stockFilter(onlyInStock, '', 'voorraad=1', preview)}
-${products.length ? '' : '<p class="muted">Geen producten op voorraad in deze categorie.</p>'}
+  const { onlyInStock = false, min = null, max = null, sort = '', preview = false } = options;
+  const subject = category || group;
+  const children = (category ? category.children : group.categories).filter((child) => !child.hidden);
+  const chain = category ? chainTo(group.categories, category.slug) || [category] : [];
+  const open = new Set(chain.map((item) => item.slug));
+  /**
+   * Adres met de gekozen filters, met enkele wijzigingen.
+   * @param {Object<string, ?(string|number)>} changes Waarden die anders zijn dan nu (leeg of null = weglaten).
+   * @returns {string} Een relatief adres, "./" zonder filters.
+   */
+  const link = (changes) => {
+    const values = { voorraad: onlyInStock ? '1' : '', min: min ?? '', max: max ?? '', sorteer: sort, pagina: '', voorbeeld: preview ? '1' : '', ...changes };
+    const query = Object.entries(values).filter(([, value]) => value !== '' && value != null).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&amp;');
+    return `./${query ? `?${query}` : ''}`;
+  };
+  const filtered = products.filter((product) => (!onlyInStock || product.inStock)
+    && (min == null || shownPrice(product) >= min) && (max == null || shownPrice(product) <= max));
+  const ordered = sort === 'prijs-laag' ? [...filtered].sort((left, right) => shownPrice(left) - shownPrice(right))
+    : sort === 'prijs-hoog' ? [...filtered].sort((left, right) => shownPrice(right) - shownPrice(left)) : filtered;
+  const pageCount = Math.max(1, Math.ceil(ordered.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, Number(options.page) || 1), pageCount);
+  const shown = ordered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const crumbs = [`<a href="${root}">Shop</a>`, category ? `<a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : `<span>${escapeHtml(group.name)}</span>`,
+    ...chain.map((item, position) => (position === chain.length - 1 ? `<span>${escapeHtml(item.name)}</span>` : `<a href="${root}categorie/${escapeHtml(item.slug)}/">${escapeHtml(item.name)}</a>`))].join(' › ');
+  const priceForm = `<form class="price-filter" action="./" method="get">
+  <label>Van <input type="number" name="min" min="0" step="0.01" inputmode="decimal" value="${min == null ? '' : escapeHtml(min)}" placeholder="Min. prijs"></label>
+  <label>Tot <input type="number" name="max" min="0" step="0.01" inputmode="decimal" value="${max == null ? '' : escapeHtml(max)}" placeholder="Max. prijs"></label>
+  ${onlyInStock ? '<input type="hidden" name="voorraad" value="1">' : ''}${sort ? `<input type="hidden" name="sorteer" value="${escapeHtml(sort)}">` : ''}${preview ? '<input type="hidden" name="voorbeeld" value="1">' : ''}
+  <button class="button" type="submit">Filter</button>${min != null || max != null ? ` <a href="${link({ min: '', max: '' })}">Wis prijs</a>` : ''}
+</form>`;
+  const side = `<aside class="browse-side"><h2>Categorie</h2>${sideTree(group.categories, open, category ? category.slug : '', root)}${products.length ? `<h2>Prijs</h2>${priceForm}` : ''}</aside>`;
+  const blocks = children.length ? `<div class="cat-blocks">${children.map((child) => `<a class="cat-block" href="${root}categorie/${escapeHtml(child.slug)}/"><span class="cat-block-image">${child.image ? `<img src="${assetUrl(root, child.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><strong>${escapeHtml(child.name)}</strong><span>${productCount(child.count)}</span></a>`).join('')}</div>` : '';
+  const sorting = SORTS.map((item) => `<a href="${link({ sorteer: item.key })}"${item.key === sort ? ' aria-current="true"' : ''}>${escapeHtml(item.label)}</a>`).join(' · ');
+  const pages = pageCount > 1 ? `<nav class="pager" aria-label="Pagina's">${Array.from({ length: pageCount }, (_, index) => `<a href="${link({ pagina: index === 0 ? '' : index + 1 })}"${index + 1 === page ? ' aria-current="page"' : ''}>${index + 1}</a>`).join('')}${page < pageCount ? `<a href="${link({ pagina: page + 1 })}">Volgende</a>` : ''}</nav>` : '';
+  const list = products.length ? `<div class="browse-toolbar"><p>${ordered.length ? `Resultaat ${(page - 1) * PAGE_SIZE + 1}–${(page - 1) * PAGE_SIZE + shown.length} van de ${ordered.length} ${ordered.length === 1 ? 'resultaat' : 'resultaten'}` : 'Geen resultaten'}</p>
+<p class="stock-filter">Toon: <a href="${link({ voorraad: '' })}"${onlyInStock ? '' : ' aria-current="true"'}>Alles</a> · <a href="${link({ voorraad: '1' })}"${onlyInStock ? ' aria-current="true"' : ''}>Alleen op voorraad</a></p>
+<p class="stock-filter">Sorteren: ${sorting}</p></div>
+${ordered.length ? '' : '<p class="muted">Geen producten gevonden met deze filters.</p>'}
 <div class="product-grid">
-${products.map((product) => listItem(product, root)).join('\n')}
+${shown.map((product) => listItem(product, root)).join('\n')}
+</div>
+${pages}` : '';
+  const body = `<div class="crumbs-band"><nav class="crumbs wrap" aria-label="Kruimelpad">${crumbs}</nav></div>
+<div class="wrap browse">
+${side}
+<section class="browse-main">
+<h1>${escapeHtml(subject.name)}</h1>
+<div class="browse-intro">${introHtml(subject.intro)}</div>
+${blocks}
+${list}
+</section>
 </div>`;
-  return layout({ root, variantScript: products.some((product) => product.variants), title: `${category.name} – ${SHOP_NAME}`, description: `${category.name} van AquaTech Service: ${productCount(category.count)}.`, body, groups });
+  return layout({ root, wide: true, variantScript: shown.some((product) => product.variants), title: `${subject.name} – ${SHOP_NAME}`, description: `${subject.name} van AquaTech Service: ${productCount(subject.count)}.`, body, groups });
+}
+
+/**
+ * Pagina van een hoofdcategorie: haar categorieën als blokken.
+ * @param {object} group De hoofdcategorie (slug, name, categories, count, intro).
+ * @param {object[]} groups Alle hoofdcategorieën (voor menu en voet).
+ * @returns {string} De HTML-pagina.
+ */
+function groupPage(group, groups) {
+  return browsePage({ group, groups });
+}
+
+/**
+ * Categoriepagina: subcategorieën als blokken en de producten die direct in de categorie zitten.
+ * @param {object} category De categorie (slug, name, count, groupSlug, children, intro).
+ * @param {object[]} products De producten die direct in de categorie zitten.
+ * @param {object[]} groups Alle hoofdcategorieën.
+ * @param {object} [options] De filters, zie browsePage.
+ * @returns {string} De HTML-pagina.
+ */
+function categoryPage(category, products, groups, options = {}) {
+  const group = groups.find((candidate) => candidate.slug === category.groupSlug) || { slug: category.groupSlug, name: category.name, categories: [category], count: category.count };
+  return browsePage({ group, category, products, groups, options });
 }
 
 /**

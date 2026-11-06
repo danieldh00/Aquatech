@@ -806,9 +806,21 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const catalog = data.catalogOf(tenantId);
     const category = catalog.categories.find((candidate) => candidate.slug === req.params.slug);
     if (!category) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
-    const onlyInStock = req.query.voorraad === '1';
-    const inCategory = catalog.products.filter((product) => product.categorySlug === category.slug && (!onlyInStock || product.inStock));
-    sendPage(req, res, 200, () => categoryPage(category, inCategory, catalog.groups, onlyInStock, isPreview(req)));
+    /**
+     * Leest een prijsgrens uit de adresbalk (komma of punt als decimaalteken).
+     * @param {*} value De ruwe waarde.
+     * @returns {?number} Het bedrag, of null als er geen geldig bedrag staat.
+     */
+    const priceLimit = (value) => {
+      const amount = typeof value === 'string' && value.trim() ? Number(value.replace(',', '.')) : NaN;
+      return Number.isFinite(amount) && amount >= 0 ? amount : null;
+    };
+    const options = {
+      onlyInStock: req.query.voorraad === '1', min: priceLimit(req.query.min), max: priceLimit(req.query.max),
+      sort: ['prijs-laag', 'prijs-hoog'].includes(req.query.sorteer) ? req.query.sorteer : '', page: Number.parseInt(req.query.pagina, 10) || 1, preview: isPreview(req),
+    };
+    const inCategory = catalog.products.filter((product) => product.categorySlug === category.slug);
+    sendPage(req, res, 200, () => categoryPage(category, inCategory, catalog.groups, options));
   });
 
   router.get('/product/:slug', (req, res) => {

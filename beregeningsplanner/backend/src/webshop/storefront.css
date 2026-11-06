@@ -22,6 +22,7 @@
   --at-ink: #1c2433;
   --at-muted: #5b6577;
   --at-line: #dde3ec;
+  --at-band: #eef1f6;
   --at-page: #f5f7fa;
   --at-stock-out: #b3261e;
   --at-shadow: rgba(20, 42, 82, 0.18);
@@ -72,17 +73,23 @@ a.shop-action:hover { background: var(--at-page); }
 .nav-group, .nav-all { position: relative; }
 .nav-all-button { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-width: 220px; padding: 12px 18px; background: var(--at-shop-green); color: var(--at-white); font-weight: 700; text-transform: uppercase; cursor: default; }
 .nav-all:hover .nav-all-button, .nav-all:focus-within .nav-all-button { background: var(--at-shop-green-dark); }
-.nav-all:hover .nav-drop, .nav-all:focus-within .nav-drop { display: block; }
 .nav-about > a { display: block; padding: 12px 18px; color: var(--at-white); text-decoration: none; font-weight: 600; }
 .nav-about > a:hover { background: var(--at-shop-navy-dark); }
-.nav-group > a { display: block; padding: 12px 18px; color: var(--at-white); text-decoration: none; font-weight: 600; }
-.nav-group:hover > a, .nav-group:focus-within > a { background: var(--at-shop-navy-dark); }
-.nav-drop { display: none; position: absolute; left: 0; top: 100%; z-index: 20; min-width: 280px; max-height: 70vh; overflow-y: auto; margin: 0; padding: 8px 0; list-style: none; background: var(--at-white); border: 1px solid var(--at-line); border-top: 3px solid var(--at-shop-teal); border-radius: 0 0 8px 8px; box-shadow: 0 10px 24px var(--at-shadow); }
-.nav-group:hover .nav-drop, .nav-group:focus-within .nav-drop { display: block; }
-.nav-drop a { display: block; padding: 7px 18px; text-decoration: none; font-size: 0.92rem; }
-.nav-drop a:hover { background: var(--at-shop-green-soft); }
+.nav-group > .nav-heading { display: block; padding: 12px 18px; color: var(--at-white); font-weight: 600; cursor: default; }
+.nav-group:hover > .nav-heading, .nav-group:focus-within > .nav-heading { background: var(--at-shop-navy-dark); }
+/* Uitklappers: de balk en elk niveau (flyout) alleen via CSS; een kop is geen link maar klapt open bij aanwijzen of focus. */
+.nav-drop { display: none; position: absolute; left: 0; top: 100%; z-index: 20; min-width: 280px; margin: 0; padding: 8px 0; list-style: none; background: var(--at-white); border: 1px solid var(--at-line); border-top: 3px solid var(--at-shop-teal); border-radius: 0 0 8px 8px; box-shadow: 0 10px 24px var(--at-shadow); }
+.nav-all:hover > .nav-drop, .nav-all:focus-within > .nav-drop, .nav-group:hover > .nav-drop, .nav-group:focus-within > .nav-drop, .has-sub:hover > .nav-fly, .has-sub:focus-within > .nav-fly { display: block; }
+.nav-drop li { position: relative; }
+.nav-drop a, .nav-drop .nav-heading { display: block; padding: 8px 18px; text-decoration: none; font-size: 0.92rem; }
+.nav-drop .nav-heading { color: var(--at-shop-navy); cursor: default; }
+.nav-drop li:hover > a, .nav-drop li:focus-within > a, .nav-drop li:hover > .nav-heading, .nav-drop li:focus-within > .nav-heading { background: var(--at-shop-green-soft); }
+.has-sub > a::after, .has-sub > .nav-heading::after { content: "›"; float: right; margin-left: 14px; color: var(--at-muted); }
+.nav-fly { left: 100%; top: -11px; min-width: 260px; border-radius: 8px; }
+.nav-flip > .nav-drop { left: auto; right: 0; }
+.nav-flip .nav-fly { left: auto; right: 100%; }
 
-/* Smal scherm: één menuknop met uitklappende groepen. */
+/* Smal scherm: één menuknop met uitklappende groepen en subcategorieën. */
 .shop-menu { display: none; background: var(--at-shop-navy); color: var(--at-white); }
 .shop-menu > summary { display: flex; align-items: center; gap: 10px; padding: 12px 16px; font-weight: 600; cursor: pointer; list-style: none; }
 .shop-menu > summary::-webkit-details-marker { display: none; }
@@ -90,6 +97,10 @@ a.shop-action:hover { background: var(--at-page); }
 .shop-menu > ul { background: var(--at-white); border-bottom: 1px solid var(--at-line); max-height: 70vh; overflow-y: auto; }
 .shop-menu li details > summary { padding: 12px 16px; font-weight: 600; color: var(--at-shop-navy); cursor: pointer; border-top: 1px solid var(--at-line); }
 .shop-menu li li a { display: block; padding: 9px 16px 9px 32px; text-decoration: none; font-size: 0.92rem; }
+.shop-menu li li details > summary { padding: 9px 16px 9px 32px; border-top: 0; font-weight: 400; font-size: 0.92rem; }
+.shop-menu li li li a, .shop-menu li li li details > summary { padding-left: 48px; }
+.shop-menu li li li li a, .shop-menu li li li li details > summary { padding-left: 64px; }
+.shop-menu li li li li li a, .shop-menu li li li li li details > summary { padding-left: 80px; }
 @media (max-width: 800px) {
   .shop-nav { display: none; }
   .shop-menu { display: block; }
@@ -390,3 +401,37 @@ form.inline { display: inline-block; margin-right: 8px; }
   .business.with-form { min-height: 0; padding-top: 24px; gap: 0; }
   .business.with-form .business-text { padding-bottom: 8px; }
 }
+
+/* Categoriepagina (zoals aquatechshop.nl): kruimelbalk, zijbalk, intro, subcategorieblokken en productlijst. */
+.crumbs-band { background: var(--at-band); border-bottom: 1px solid var(--at-line); }
+.crumbs-band .crumbs { margin: 0 auto; }
+.browse { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 32px; align-items: start; padding-top: 24px; padding-bottom: 40px; }
+.browse-side h2 { margin: 0 0 10px; color: var(--at-shop-green); font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.02em; }
+.browse-side h2 ~ h2 { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--at-line); }
+.browse-side ul { list-style: none; margin: 0; padding: 0; }
+.browse-side ul ul { padding-left: 14px; }
+.browse-side li a { display: block; padding: 5px 0; color: var(--at-ink); text-decoration: none; font-size: 0.92rem; }
+.browse-side li a:hover { color: var(--at-shop-green-dark); }
+.browse-side li a[aria-current] { color: var(--at-shop-green-dark); font-weight: 700; }
+.price-filter { display: grid; gap: 8px; font-size: 0.9rem; }
+.price-filter label { display: grid; gap: 2px; color: var(--at-muted); }
+.price-filter input { font: inherit; padding: 8px 10px; border: 1px solid var(--at-line); border-radius: 6px; background: var(--at-white); color: var(--at-ink); }
+.price-filter .button { justify-self: start; padding: 8px 18px; border: 0; font: inherit; font-weight: 700; cursor: pointer; }
+.browse-main h1 { margin-top: 0; font-size: 2rem; }
+.browse-intro { max-width: 62em; }
+.browse-intro p { margin: 0 0 0.8em; }
+.browse-intro h2 { margin: 1.2em 0 0.4em; font-size: 1.1rem; }
+.cat-blocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; padding: 16px; margin: 16px 0 28px; background: var(--at-shop-green-soft); border: 2px solid var(--at-shop-green); border-radius: 8px; }
+.cat-block { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px; background: var(--at-white); border-radius: 8px; text-align: center; text-decoration: none; }
+.cat-block:hover { box-shadow: 0 4px 14px var(--at-shadow); }
+.cat-block strong { color: var(--at-shop-green-dark); font-size: 0.95rem; }
+.cat-block > span:last-child { color: var(--at-muted); font-size: 0.8rem; }
+.cat-block-image { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 4 / 3; }
+.cat-block-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.browse-toolbar { display: flex; flex-wrap: wrap; gap: 2px 28px; align-items: baseline; margin: 0 0 14px; }
+.browse-toolbar p { margin: 0; }
+.stock-filter a[aria-current="true"] { color: var(--at-ink); font-weight: 700; text-decoration: none; }
+.pager { display: flex; flex-wrap: wrap; gap: 6px; margin: 24px 0 0; }
+.pager a { padding: 6px 12px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 6px; text-decoration: none; }
+.pager a[aria-current] { background: var(--at-shop-navy); border-color: var(--at-shop-navy); color: var(--at-white); }
+@media (max-width: 860px) { .browse { grid-template-columns: minmax(0, 1fr); gap: 16px; } .browse-side { order: 2; } }
