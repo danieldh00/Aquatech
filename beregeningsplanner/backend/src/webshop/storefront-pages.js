@@ -436,7 +436,12 @@ function homePage(catalog) {
     const inner = `<img src="${imageSrc(root, item.image)}" alt="" loading="lazy"><span class="home-banner-text">${item.title ? `<strong>${escapeHtml(item.title)}</strong>` : ''}${item.button ? `<span class="button">${escapeHtml(item.button)}</span>` : ''}</span>`;
     return href ? `<a class="home-banner" href="${href}">${inner}</a>` : `<div class="home-banner">${inner}</div>`;
   }).join('')}</section>` : '';
+  // Een variantcode verwijst naar het hoofdartikel waar de variant onder valt.
   const byCode = new Map(catalog.products.map((product) => [product.code, product]));
+  const bySlug = new Map(catalog.products.map((product) => [product.slug, product]));
+  for (const variant of catalog.variantProducts || []) {
+    if (!byCode.has(variant.code) && bySlug.has(variant.parentSlug)) byCode.set(variant.code, bySlug.get(variant.parentSlug));
+  }
   const columns = columnBlock.enabled ? columnBlock.items.map((column) => {
     const group = catalog.groups.find((candidate) => candidate.slug === column.group);
     const items = column.codes.length
