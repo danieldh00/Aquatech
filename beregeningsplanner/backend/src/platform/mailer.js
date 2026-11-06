@@ -2,8 +2,8 @@
 // mailServer + het versleutelde mailPassword, per tenant). Zonder ingestelde
 // server stuurt de app niets; de offertemodule biedt dan een link om zelf te
 // versturen. nodemailer is puur JavaScript (geen native module).
-const nodemailer = require('nodemailer');
 const { domainToASCII } = require('node:url');
+const nodemailer = require('nodemailer');
 const { publicAddress, privateAllowed } = require('../beveiliging/netguard');
 
 const MAIL_TEXT = { host: 200, user: 200, from: 200, replyTo: 200 };
@@ -31,20 +31,29 @@ function sanitizeMail(raw) {
   return out;
 }
 
-const EMAIL = /^[^\s@<>()",;:]+@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+/** Lokaal deel: geen spaties, @ of tekens die een adreslijst of kop kunnen breken. */
+const EMAIL_LOCAL = /^[^\s@<>()",;:]+$/;
+/** Domeinlabel in ASCII (na omzetting van internationale namen): begint en eindigt met letter of cijfer. */
+const EMAIL_LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 /**
- * Of een waarde een bruikbaar e-mailadres is.
+ * Of een waarde een bruikbaar e-mailadres is. Het domein wordt eerst naar zijn
+ * ASCII-vorm (punycode) omgezet, zodat ook internationale domeinnamen kloppen.
  * @param {*} value De waarde.
  * @returns {boolean} true bij een geldig e-mailadres (hoogstens 200 tekens).
  */
 const validEmail = (value) => {
   if (typeof value !== 'string' || value.length > 200) return false;
-  const parts = value.trim().split('@');
+  const address = value.trim();
+  const at = address.lastIndexOf('@');
+  if (at < 1 || !EMAIL_LOCAL.test(address.slice(0, at))) return false;
+  const rawDomain = address.slice(at + 1);
   // Geen URL-onderdelen die domainToASCII als pad of escape zou verwerken.
-  if (parts.length !== 2 || /[\s%/\\?#]/.test(parts[1])) return false;
+  if (/[\s%/\\?#]/.test(rawDomain)) return false;
   // Randstreepjes mogen ook vóór punycode-conversie niet voorkomen.
-  if (parts[1].split(/[.\u3002\uff0e\uff61]/u).some((label) => label.startsWith('-') || label.endsWith('-'))) return false;
-  return EMAIL.test(`${parts[0]}@${domainToASCII(parts[1])}`);
+  if (rawDomain.split(/[.\u3002\uff0e\uff61]/u).some((label) => label.startsWith('-') || label.endsWith('-'))) return false;
+  const domain = domainToASCII(rawDomain);
+  const labels = domain.split('.');
+  return labels.length >= 2 && labels.every((label) => EMAIL_LABEL.test(label));
 };
 
 /**
