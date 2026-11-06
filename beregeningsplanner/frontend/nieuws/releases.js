@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.6.8',
+      date: '2026-11-06',
+      title: 'Nieuwe startpagina voor de webshop',
+      items: [
+        { text: 'De startpagina van de webshop lijkt nu op die van aquatechshop.nl: met meest verkochte producten, twee bannerblokken, kolommen met producten en een formulier voor een zakelijk account.' },
+        { for: ['beheer'], text: 'Bij Webshop-inhoud pas je de banners, de kolommen met producten, het citaat en het zakelijke formulier zelf aan. Aanvragen voor een zakelijk account komen per mail binnen.' },
+      ],
+    },
+    {
       version: '1.6.7',
       date: '2026-11-06',
       title: 'Voorraad in de webshop klopt weer',

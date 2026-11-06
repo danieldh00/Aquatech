@@ -12,7 +12,7 @@ const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' 
 /**
  * Maakt de verzender van bestelmails.
  * @param {{ orders: object, settingsFor: Function, mailerFor: Function, mailBody: Function }} deps De bestelopslag, de instellingen per omgeving, de mailserver en de opmaak van de mail.
- * @returns {{ sendPlaced: Function, sendShipment: Function }} De functies.
+ * @returns {{ sendPlaced: Function, sendShipment: Function, sendBusinessRequest: Function, businessRequestReady: Function }} De functies.
  */
 function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
   /**
@@ -93,6 +93,50 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
   }
 
   /**
+   * Of aanvragen voor een zakelijk account per mail kunnen binnenkomen: er is een
+   * mailserver ingesteld en het bedrijfsprofiel heeft een e-mailadres.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {boolean} true als het formulier getoond kan worden.
+   */
+  function businessRequestReady(tenantId) {
+    try {
+      const settings = settingsFor(tenantId);
+      return mailerFor(settings).configured() && validEmail((settings.get('quoteProfile') || {}).email);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Mailt een aanvraag voor een zakelijk account (formulier op de startpagina van
+   * de shop) naar het e-mailadres van het bedrijf; de gegevens worden niet bewaard.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ company?: string, email?: string, phone?: string, message?: string }} request De ingevulde velden.
+   * @returns {Promise<boolean>} true als de mail is verstuurd; false bij ongeldige gegevens, geen mailserver of een fout.
+   */
+  async function sendBusinessRequest(tenantId, request) {
+    /**
+     * Maakt van een invoerveld een korte tekst zonder stuurtekens.
+     * @param {*} value De invoer.
+     * @param {number} max Maximale lengte.
+     * @returns {string} De tekst.
+     */
+    const clean = (value, max) => String(value || '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, max);
+    const company = clean(request.company, 120);
+    const email = clean(request.email, 120);
+    const phone = clean(request.phone, 30);
+    const message = clean(request.message, 1000);
+    if (!company || !phone || !validEmail(email)) return false;
+    const settings = settingsFor(tenantId);
+    const mailer = mailerFor(settings);
+    const profile = settings.get('quoteProfile') || {};
+    if (!mailer.configured() || !validEmail(profile.email)) return false;
+    const mail = mailBody(profile, ['Nieuwe aanvraag voor een zakelijk account via de webshop.', `Bedrijfsnaam: ${company}\nE-mail: ${email}\nTelefoon: ${phone}${message ? `\n\nBericht:\n${message}` : ''}`]);
+    await mailer.send({ to: profile.email, subject: `Aanvraag zakelijk account: ${company}`, text: mail.text, html: mail.html, replyTo: email });
+    return true;
+  }
+
+  /**
    * Meldt de klant dat de bestelling onderweg is (met de volgcode van DPD als
    * die er is) of klaarstaat om op te halen, en legt vast hoe dat is gegaan.
    * Met `onlyNewTracking` (na het vastleggen van een volgcode) gaat er alleen
@@ -140,7 +184,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     record({ sent: !error, error });
   }
 
-  return { sendPlaced, sendShipment };
+  return { sendPlaced, sendShipment, sendBusinessRequest, businessRequestReady };
 }
 
 module.exports = { createOrderMailer };

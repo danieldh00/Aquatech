@@ -355,3 +355,38 @@ form.inline { display: inline-block; margin-right: 8px; }
 .wholesale-table input[type="number"] { width: 90px; font: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; }
 .wholesale-table .tier { display: block; color: var(--at-shop-green-dark); }
 .wholesale-bar { position: sticky; bottom: 0; display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-top: 12px; padding: 12px 14px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 8px; box-shadow: 0 -4px 12px var(--at-shadow); }
+
+/* Startpagina: tabbladen, banners, kolommen, citaat en het formulier voor een zakelijk account. */
+.home-tabs { padding-top: 24px; }
+.home-tabs input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+.tab-labels { display: flex; justify-content: center; gap: 36px; margin: 12px 0 20px; }
+.tab-labels label { cursor: pointer; font-size: 1.6rem; font-weight: 700; color: var(--at-muted, #6b7a90); padding-bottom: 4px; border-bottom: 3px solid transparent; }
+.tab-panel { display: none; }
+#tab-best:checked ~ .panel-best, #tab-popular:checked ~ .panel-popular { display: block; }
+#tab-best:checked ~ .tab-labels label[for="tab-best"], #tab-popular:checked ~ .tab-labels label[for="tab-popular"] { color: var(--at-shop-green-dark); border-bottom-color: var(--at-shop-green-dark); }
+#tab-best:focus-visible ~ .tab-labels label[for="tab-best"], #tab-popular:focus-visible ~ .tab-labels label[for="tab-popular"] { outline: 2px solid var(--at-shop-navy); outline-offset: 4px; }
+.home-banners { display: grid; grid-template-columns: repeat(2, 1fr); gap: 30px; margin: 40px 0 0; }
+.home-banner { position: relative; display: block; min-height: 340px; overflow: hidden; background: var(--at-shop-navy); color: var(--at-white); text-decoration: none; }
+.home-banner img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s; }
+.home-banner:hover img { transform: scale(1.04); }
+.home-banner-text { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 18px; min-height: 340px; padding: 24px max(24px, 4%); background: linear-gradient(90deg, var(--at-shadow-strong), transparent 85%); }
+.home-banner-text strong { font-size: clamp(1.6rem, 2.6vw, 2.4rem); line-height: 1.2; max-width: 14em; text-shadow: 0 2px 6px var(--at-shadow-strong); }
+.home-banner-text .button { display: inline-block; }
+.home-quote { margin: 8px 0 24px; color: var(--at-shop-navy); font-size: 0.95rem; }
+.business.with-form { flex-wrap: wrap; gap: 24px 48px; padding: 0 max(16px, calc((100% - 1168px) / 2)); justify-content: space-between; }
+.business.with-form .business-text { text-align: left; max-width: 560px; }
+.business-form { position: relative; display: grid; gap: 10px; width: min(560px, 100%); padding: 28px 0; color: var(--at-white); }
+.business-form label { display: grid; gap: 4px; font-weight: 600; font-size: 0.9rem; }
+.business-form input, .business-form textarea { padding: 10px 14px; border: 1px solid var(--at-line); border-radius: 22px; font: inherit; color: var(--at-ink, #1b2a41); background: var(--at-white); }
+.business-form textarea { border-radius: 10px; }
+.business-form .trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.business-form .button { justify-self: stretch; }
+.business-form .error, .business-sent { margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--at-white); color: var(--at-shop-navy); font-weight: 600; }
+@media (max-width: 760px) {
+  .home-banners { grid-template-columns: 1fr; gap: 16px; }
+  .home-banner, .home-banner-text { min-height: 260px; }
+  .tab-labels { gap: 14px; }
+  .tab-labels label { font-size: 1.05rem; }
+  .business.with-form { min-height: 0; padding-top: 24px; gap: 0; }
+  .business.with-form .business-text { padding-bottom: 8px; }
+}

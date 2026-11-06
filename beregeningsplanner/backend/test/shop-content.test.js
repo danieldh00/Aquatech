@@ -90,7 +90,7 @@ test('blokken: concept, voorbeeld, publiceren en vorige versie terugzetten', asy
   assert.strictEqual(start.body.available, true);
   assert.strictEqual(start.body.site.isDefault, true);
   assert.ok(start.body.assets.includes('hero-tuin.jpg'));
-  assert.match((await anonymous.get('/winkel/')).text, /Alles voor uw tuinberegening/);
+  assert.match((await anonymous.get('/winkel/')).text, /Welkom op onze webshop/);
 
   const draft = await admin.put('/api/admin/shop-content/site', { hero: { title: 'Tuinseizoen is begonnen' }, notice: { enabled: false } });
   assert.strictEqual(draft.status, 200);
@@ -99,8 +99,8 @@ test('blokken: concept, voorbeeld, publiceren en vorige versie terugzetten', asy
   assert.strictEqual(draft.body.site.draft.hero.text, DEFAULT_SITE.hero.text, 'rest blijft standaard');
 
   // Bezoekers zien het concept niet, een beheerder met ?voorbeeld=1 wel.
-  assert.match((await anonymous.get('/winkel/')).text, /Alles voor uw tuinberegening/);
-  assert.match((await anonymous.get('/winkel/?voorbeeld=1')).text, /Alles voor uw tuinberegening/);
+  assert.match((await anonymous.get('/winkel/')).text, /Welkom op onze webshop/);
+  assert.match((await anonymous.get('/winkel/?voorbeeld=1')).text, /Welkom op onze webshop/);
   const preview = await admin.get('/winkel/?voorbeeld=1');
   assert.match(preview.text, /Tuinseizoen is begonnen/);
   assert.doesNotMatch(preview.text, /shop-notice/);

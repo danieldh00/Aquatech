@@ -57,6 +57,8 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
 const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakelijk)\/?$/;
 /** Paden waar de winkelwagen, het groothandelsvenster, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
 const ORDER_POSTS = /^\/(winkelwagen|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/retour(\/[^/]+\/intrekken)?)\/?$/;
+/** Pad van het aanvraagformulier voor een zakelijk account op de startpagina. */
+const REQUEST_POST = /^\/zakelijk-aanvraag\/?$/;
 /** Aantal bestellingen per pagina in de bestelhistorie van een klant. */
 const HISTORY_PAGE = 25;
 const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
@@ -106,7 +108,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const viewer = accounts ? accounts.viewer(req) : null;
     const business = Boolean(viewer) && viewer.customerGroup === 'zakelijk';
     if (business) res.setHeader('Cache-Control', 'private, no-store');
-    const html = renderWith(contentOf(req), render, { ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, wholesale: ordering && business && viewer.wholesale });
+    const html = renderWith(contentOf(req), render, { ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
     res.type('html').send(html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : '')));
   };
   /**
@@ -136,7 +138,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', STOREFRONT_CSP);
     res.setHeader('Referrer-Policy', 'same-origin');
-    const accountPost = req.method === 'POST' && accounts && (ACCOUNT_POSTS.test(req.path) || (orders && ORDER_POSTS.test(req.path)));
+    const accountPost = req.method === 'POST' && ((accounts && (ACCOUNT_POSTS.test(req.path) || (orders && ORDER_POSTS.test(req.path)))) || (orderMail && orderMail.sendBusinessRequest && REQUEST_POST.test(req.path)));
     if (req.method !== 'GET' && req.method !== 'HEAD' && !accountPost) return res.status(405).set('Allow', 'GET, HEAD').end();
     const previewFile = Boolean(content) && /^\/(assets|media)\//.test(req.path) && previewAllowed(req);
     if (!settingsFor(tenantId).get('storefront') && !isPreview(req) && !previewFile) return res.status(404).type('text').send('Niet gevonden.');
@@ -163,6 +165,20 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     sendPage(req, res, 200, () => homePage(data.catalogOf(tenantId)));
   });
+
+  if (orderMail && orderMail.sendBusinessRequest) {
+    const requestLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `zakelijk-aanvraag:${clientKey(req)}` });
+    // Aanvraag voor een zakelijk account vanaf de startpagina: een mail aan het bedrijf (geen opslag van de gegevens in de database).
+    router.post('/zakelijk-aanvraag', express.urlencoded({ extended: false, limit: '4kb' }), requestLimiter, async (req, res) => {
+      if (['cross-site', 'same-site'].includes(req.headers['sec-fetch-site'])) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+      const body = req.body || {};
+      // Het verborgen veld is ingevuld: een robot. Doen alsof het gelukt is.
+      if (body.website) return res.redirect(303, '../?aanvraag=ja#zakelijk');
+      let sent = false;
+      try { sent = await orderMail.sendBusinessRequest(tenantId, { company: body.company, email: body.email, phone: body.phone, message: body.message }); } catch (failure) { console.error(`Aanvraag zakelijk account niet verstuurd: ${failure.message}`); }
+      return res.redirect(303, `../?aanvraag=${sent ? 'ja' : 'fout'}#zakelijk`);
+    });
+  }
 
   if (accounts) {
     const form = express.urlencoded({ extended: false, limit: '4kb' });

@@ -196,6 +196,8 @@
     const part = state.view.site;
     const site = part.draft || part.published || state.view.defaults.site;
     const benefits = site.benefits.items.map((item) => listRow(`${imagePicker('image', item.image, { optional: true, inList: true })}${textField('Kop', 'title', item.title, { inList: true, max: 80 })}${textField('Tekst', 'text', item.text, { inList: true })}`)).join('');
+    const banners = site.banners.items.map((item) => listRow(`${imagePicker('image', item.image, { inList: true })}${textField('Kop', 'title', item.title, { inList: true, max: 120 })}${textField('Knoptekst', 'button', item.button, { inList: true, max: 40 })}${textField('Link van de knop', 'link', item.link, { inList: true, max: 300 })}`)).join('');
+    const columns = site.columns.items.map((item) => listRow(`${textField('Kop', 'title', item.title, { inList: true, max: 60 })}<label>Productgroep<select data-k="group"><option value="">Geen (alleen de lijst hieronder)</option>${Object.entries(state.view.groups || {}).map(([key, name]) => `<option value="${esc(key)}"${key === item.group ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label>${textField('Eigen artikelcodes', 'codes', (item.codes || []).join(', '), { inList: true, max: 300, hint: 'Maximaal 6, gescheiden door komma\'s. Leeg = de eerste producten van de productgroep.' })}`)).join('');
     const brands = site.brands.items.map((item) => listRow(`${imagePicker('image', item.image, { inList: true })}${textField('Naam (alt-tekst)', 'name', item.name, { inList: true, max: 60 })}`)).join('');
     return `<form id="sc-site" class="card-form settings" autocomplete="off">
       ${statusLine(part)}
@@ -210,6 +212,16 @@
         ${textField('Tekst', 'hero.text', site.hero.text, { long: true, max: 300 })}
         <div class="row">${textField('Knoptekst', 'hero.button', site.hero.button, { max: 40, hint: 'Leeg = "Bekijk <eerste productgroep>".' })}${textField('Link van de knop', 'hero.link', site.hero.link, { max: 300, hint: 'Leeg = eerste productgroep. Een volledig adres (https://…) of een pad in de shop, bijv. pagina/verzending/.' })}</div>
       </fieldset>
+      <fieldset class="sc-block"><legend>Banners (twee afbeeldingen onder de producten)</legend>
+        ${checkField('Toon dit blok', 'banners.enabled', site.banners.enabled)}
+        <div data-list="banners.items">${banners}</div>
+        <button type="button" class="btn small" data-add="banners"${site.banners.items.length >= 4 ? ' disabled' : ''}>Banner toevoegen</button>
+      </fieldset>
+      <fieldset class="sc-block"><legend>Kolommen met producten (Beregening, Speciale producten, Uitverkoop)</legend>
+        ${checkField('Toon dit blok', 'columns.enabled', site.columns.enabled)}
+        <div data-list="columns.items">${columns}</div>
+        <button type="button" class="btn small" data-add="columns"${site.columns.items.length >= 3 ? ' disabled' : ''}>Kolom toevoegen</button>
+      </fieldset>
       <fieldset class="sc-block"><legend>Voordelen (onder de producten)</legend>
         ${checkField('Toon dit blok', 'benefits.enabled', site.benefits.enabled)}
         <div data-list="benefits.items">${benefits}</div>
@@ -221,8 +233,13 @@
         <div data-list="brands.items">${brands}</div>
         <button type="button" class="btn small" data-add="brands"${site.brands.items.length >= 16 ? ' disabled' : ''}>Merk toevoegen</button>
       </fieldset>
+      <fieldset class="sc-block"><legend>Citaat (boven het zakelijke blok)</legend>
+        ${checkField('Toon het citaat', 'quote.enabled', site.quote.enabled)}
+        ${textField('Tekst', 'quote.text', site.quote.text, { max: 200 })}
+      </fieldset>
       <fieldset class="sc-block"><legend>Zakelijk account (blok onderaan)</legend>
         ${checkField('Toon dit blok', 'business.enabled', site.business.enabled)}
+        ${checkField('Toon het aanvraagformulier (bedrijfsnaam, e-mail, telefoon, bericht; komt per mail binnen)', 'business.form', site.business.form)}
         <label>Achtergrondafbeelding${imagePicker('business.image', site.business.image, { optional: true })}</label>
         ${textField('Kop', 'business.title', site.business.title, { max: 120 })}
         ${textField('Tekst', 'business.text', site.business.text, { long: true, max: 300 })}
@@ -583,7 +600,15 @@
       } else if (data.add) {
         const site = collectSite();
         const list = site[data.add].items;
-        list.push(data.add === 'benefits' ? { image: '', title: '', text: '' } : { image: state.view.assets.find((name) => name.startsWith('merk-')) ? `asset:${state.view.assets.find((name) => name.startsWith('merk-'))}` : '', name: '' });
+        const brandImage = state.view.assets.find((name) => name.startsWith('merk-'));
+        const bannerImage = state.view.assets.find((name) => name.startsWith('banner-'));
+        const NEW_ITEMS = {
+          benefits: { image: '', title: '', text: '' },
+          banners: { image: bannerImage ? `asset:${bannerImage}` : '', title: '', button: '', link: '' },
+          columns: { title: '', group: '', codes: '' },
+          brands: { image: brandImage ? `asset:${brandImage}` : '', name: '' },
+        };
+        list.push(NEW_ITEMS[data.add]);
         state.view.site = { ...state.view.site, draft: site };
         render();
       } else if (data.remove) {

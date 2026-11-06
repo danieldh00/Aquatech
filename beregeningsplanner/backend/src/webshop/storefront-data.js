@@ -172,9 +172,10 @@ function attributeNamesOf(attributesJson) {
  * hoofdartikel (parent_id) komen als één regel in `products`, met hun keuzes
  * in `variants`; elke variant blijft los bereikbaar via `variantProducts`.
  * @param {object[]} rows Rijen met id, code, name, unit, on_hand, sale_price, business_price, vat_rate, categories en image (en optioneel order_pack_size, order_min_qty en price_tiers: de groothandelsvoorwaarden); bij varianten parent_id en variant_values, bij hoofdartikelen has_variants=1 en attributes.
- * @returns {{ products: object[], variantProducts: object[], categories: object[], groups: object[], featured: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image; bij een hoofdartikel met varianten ook `variants` [{ slug, code, label, meta, priceIncl, inStock, image }] en `attributeName`, met de laagste prijs en op voorraad als een variant dat is) en categories (slug, name, count, groupSlug), beide op naam gesorteerd; variantProducts = de varianten als gewoon product (met parentSlug en parentName); groups = hoofdcategorieën met hun categorieën (slug, name, categories, count); featured = uitgelichte producten.
+ * @param {Map<string, number>} [soldByCode] Het verkochte aantal per artikelcode (webshopverkopen), voor de meest verkochte producten.
+ * @returns {{ products: object[], variantProducts: object[], categories: object[], groups: object[], featured: object[], bestsellers: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image; bij een hoofdartikel met varianten ook `variants` [{ slug, code, label, meta, priceIncl, inStock, image }] en `attributeName`, met de laagste prijs en op voorraad als een variant dat is) en categories (slug, name, count, groupSlug), beide op naam gesorteerd; variantProducts = de varianten als gewoon product (met parentSlug en parentName); groups = hoofdcategorieën met hun categorieën (slug, name, categories, count); featured = uitgelichte producten; bestsellers = de meest verkochte producten met foto (leeg zonder verkopen).
  */
-function buildCatalog(rows) {
+function buildCatalog(rows, soldByCode = new Map()) {
   /**
    * Sorteert op naam, bij gelijke namen op artikelcode.
    * @param {object} left Het eerste product of de eerste rij.
@@ -290,7 +291,15 @@ function buildCatalog(rows) {
     const members = categoryList.filter((category) => category.groupSlug === group.slug);
     return { slug: group.slug, name: group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0) };
   }).filter((group) => group.categories.length);
-  return { products, variantProducts, categories: categoryList, groups, featured: pickFeatured(products) };
+  /**
+   * Het verkochte aantal van een product (bij een hoofdartikel de varianten samen).
+   * @param {object} product Een product van de catalogus.
+   * @returns {number} Het aantal.
+   */
+  const soldOf = (product) => (product.variants ? product.variants.reduce((total, variant) => total + (soldByCode.get(variant.code) || 0), 0) : soldByCode.get(product.code) || 0);
+  const bestsellers = products.filter((product) => product.image && soldOf(product) > 0)
+    .sort((left, right) => soldOf(right) - soldOf(left) || compareByName(left, right)).slice(0, FEATURED_COUNT);
+  return { products, variantProducts, categories: categoryList, groups, featured: pickFeatured(products), bestsellers };
 }
 
 /**
@@ -317,7 +326,12 @@ function createStorefrontData(db) {
         LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
         LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
         WHERE i.tenant_id = ? AND i.archived = 0 AND ((i.shop_sync = 1 AND i.has_variants = 0 AND i.sale_price IS NOT NULL) OR i.has_variants = 1)`).all(tenantId, tenantId);
-      const catalog = buildCatalog(rows);
+      // Meest verkocht: afboekingen van webshopverkopen (eigen bestellingen en de oude webshop) van de laatste 180 dagen.
+      const since = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString();
+      const sold = db.prepare(`SELECT i.code, SUM(-m.qty) AS qty FROM stock_movements m JOIN stock_items i ON i.tenant_id = m.tenant_id AND i.id = m.item_id
+        WHERE m.tenant_id = ? AND m.created_at >= ? AND m.kind = 'afboeking' AND m.qty < 0 AND (m.source = 'webshop' OR m.source LIKE 'bestelling:%')
+        GROUP BY i.code`).all(tenantId, since);
+      const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])));
       cache.set(tenantId, { catalog, until: Date.now() + CACHE_MS });
       return catalog;
     },
@@ -329,4 +343,8 @@ function createStorefrontData(db) {
   };
 }
 
-module.exports = { createStorefrontData, buildCatalog, slugify, categoryNameOf, groupOf, safeImageUrl, imageOf, CACHE_MS };
+const GROUP_SLUGS = [...GROUPS.map((group) => group.slug), OTHER_GROUP.slug];
+/** Naam per hoofdcategorie (slug → naam), voor de keuzelijst in Beheer. */
+const GROUP_NAMES = Object.fromEntries([...GROUPS, OTHER_GROUP].map((group) => [group.slug, group.name]));
+
+module.exports = { GROUP_SLUGS, GROUP_NAMES, createStorefrontData, buildCatalog, slugify, categoryNameOf, groupOf, safeImageUrl, imageOf, CACHE_MS };
