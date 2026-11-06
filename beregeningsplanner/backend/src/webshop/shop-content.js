@@ -261,6 +261,8 @@ function normalizeTree(input, base = DEFAULT_TREE, options = {}) {
   const cleanNode = (item, depth) => {
     if (!item || typeof item !== 'object' || depth > MAX_TREE_DEPTH) return null;
     const name = cleanText(item.name, 80);
+    // Bij opslaan (strict) geeft een categorie zonder naam een fout, zodat zij en haar subcategorieën niet stilzwijgend verdwijnen.
+    if (!name && options.strict && depth > 0) throw Object.assign(new Error('Elke categorie heeft een naam nodig.'), { code: 'invalid_name' });
     if (!name) return null;
     if (depth > 0) count += 1;
     const node = { name, slug: '' };
@@ -755,7 +757,7 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
     try {
       roots = normalizeTree(req.body && req.body.roots, current.published ? normalizeTree(current.published.roots) : DEFAULT_TREE, { strict: true });
     } catch (error) {
-      if (error.code !== 'tree_too_large') throw error;
+      if (error.code !== 'tree_too_large' && error.code !== 'invalid_name') throw error;
       return res.status(400).json({ error: error.code, message: error.message });
     }
     content.saveDraft(req.tenantId, MENU_KEY, { roots }, req.user?.id || null);

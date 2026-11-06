@@ -359,7 +359,7 @@
     else if (name === 'match') node.match = field.value.split('|').map((entry) => entry.trim()).filter(Boolean);
     else if (name === 'name') {
       // Een bestaande categorie houdt haar indeling als de naam verandert: de oude naam wordt de webshopcategorie.
-      if (!node._new && path.length > 1 && !node.match.length && node.name) node.match = [node.name];
+      if (!node._new && !node.match.length && node.name) node.match = [node.name];
       node.name = field.value;
     } else if (name === 'image') {
       node.image = field.value;
@@ -390,6 +390,15 @@
   }
 
   /**
+   * Zegt of er niet-opgeslagen wijzigingen in de menuboom staan.
+   * @returns {boolean} True als de bewerkte boom afwijkt van het concept op de server.
+   */
+  function hasChanges() {
+    if (!state.roots.length || !state.view) return false;
+    return JSON.stringify(forServer(state.roots)) !== JSON.stringify(forServer(currentTree()));
+  }
+
+  /**
    * Vergeet de bewerkbare boom (bij het opnieuw laden van de hele stand).
    * @returns {void}
    */
@@ -397,5 +406,5 @@
     state.roots = [];
   }
 
-  window.BeheerWebshopMenu = { mount, reset };
+  window.BeheerWebshopMenu = { mount, reset, hasChanges };
 })();

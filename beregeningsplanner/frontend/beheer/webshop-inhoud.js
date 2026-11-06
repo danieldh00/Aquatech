@@ -363,7 +363,8 @@
       window.BeheerWebshopMenu.reset();
       render();
     } catch (error) {
-      $('#sc-root').innerHTML = `<div class="notice">Kan de webshop-inhoud niet laden: ${esc(error.message)}</div>`;
+      $('#sc-root').innerHTML = `<div class="notice">Kan de webshop-inhoud niet laden: ${esc(error.message)} <button type="button" class="btn" id="sc-retry">Opnieuw proberen</button></div>`;
+      $('#sc-retry').onclick = load;
     }
   }
 

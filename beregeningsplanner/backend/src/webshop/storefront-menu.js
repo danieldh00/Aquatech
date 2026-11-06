@@ -8,9 +8,17 @@
  */
 function fitDropdown(list) {
   list.classList.remove('fly-left', 'drop-left');
+  const isFly = list.classList.contains('nav-fly');
+  const side = isFly ? 'fly-left' : 'drop-left';
+  // Een submenu volgt de richting van het menu waar het in hangt (anders overlapt het dat menu), tenzij daar geen ruimte voor is.
+  const parent = list.parentElement && list.parentElement.closest('.nav-drop');
+  const parentLeft = isFly && parent && (parent.classList.contains('fly-left') || parent.classList.contains('drop-left'));
+  if (parentLeft) list.classList.add(side);
   const box = list.getBoundingClientRect();
-  if (box.width === 0 || box.right <= document.documentElement.clientWidth) return;
-  list.classList.add(list.classList.contains('nav-fly') ? 'fly-left' : 'drop-left');
+  if (box.width === 0) return;
+  if (parentLeft) {
+    if (box.left < 0) list.classList.remove(side);
+  } else if (box.right > document.documentElement.clientWidth) list.classList.add(side);
 }
 
 /**

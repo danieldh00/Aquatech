@@ -1268,6 +1268,9 @@
     const wanted = window.BeheerIndeling.find(window.BeheerIndeling.resolve(name));
     if (!wanted) return;
     const section = wanted.needs === 'backups' && !state.backups ? window.BeheerIndeling.find('history') : wanted;
+    // Weggaan bij Webshop-inhoud met niet-opgeslagen menuwijzigingen: eerst vragen, bij annuleren blijft de sectie staan.
+    if (activePane === 'shopinhoud' && section.pane !== 'shopinhoud' && window.BeheerWebshopMenu && window.BeheerWebshopMenu.hasChanges()
+      && !confirm('Er zijn niet-opgeslagen wijzigingen in het menu. Toch weggaan? Die gaan dan verloren.')) return;
     window.BeheerIndeling.show(section);
     if (section.pane === 'plans') loadPlans();
     if (section.pane === 'users') loadUsers();

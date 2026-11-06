@@ -167,6 +167,9 @@ test('menuboom: concept weggooien en rechten', async () => {
   const tooMany = await admin.put('/api/admin/shop-content/menu', { roots: [{ group: 'beregening', name: 'A', children: Array.from({ length: 601 }, (_, index) => ({ name: `Cat ${index}` })) }] });
   assert.strictEqual(tooMany.status, 400, 'te grote boom wordt geweigerd');
   assert.strictEqual(tooMany.body.error, 'tree_too_large');
+  const nameless = await admin.put('/api/admin/shop-content/menu', { roots: [{ group: 'beregening', name: 'A', children: [{ name: '  ', children: [{ name: 'Kind' }] }] }] });
+  assert.strictEqual(nameless.status, 400, 'categorie zonder naam wordt geweigerd in plaats van stil verwijderd');
+  assert.strictEqual(nameless.body.error, 'invalid_name');
   for (const [client, expected] of [[customer, 403], [anonymous, 401]]) {
     assert.strictEqual((await client.put('/api/admin/shop-content/menu', { roots: [] })).status, expected);
     for (const action of ['publish', 'discard', 'revert']) {
@@ -182,4 +185,13 @@ test('menuboom: een lege koptekst laat de gepubliceerde kop staan', () => {
   const base = normalizeTree([{ group: 'beregening', name: 'Eigen kop', children: [] }], []);
   const result = normalizeTree([{ group: 'beregening', name: '   ', children: [] }], base);
   assert.equal(result.find((root) => root.group === 'beregening').name, 'Eigen kop');
+});
+
+/**
+ * Bronnencontrole: een hernoemde kop (ook een hoofdcategorie) onthoudt zijn oude naam in `match`, en de editor meldt niet-opgeslagen wijzigingen.
+ */
+test('menu-editor: hernoemen van een kop houdt de indeling en wijzigingen worden herkend', () => {
+  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../frontend/beheer/webshop-menu.js'), 'utf8');
+  assert.ok(!/path\.length > 1 && !node\.match\.length/.test(source), 'ook een kop krijgt zijn oude naam als match');
+  assert.ok(source.includes('hasChanges'), 'editor meldt niet-opgeslagen wijzigingen');
 });
