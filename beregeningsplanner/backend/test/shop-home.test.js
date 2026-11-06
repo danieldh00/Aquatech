@@ -68,6 +68,17 @@ test('catalogus: meest verkocht uit de verkochte aantallen per code', () => {
   assert.deepStrictEqual(catalog.bestsellers.map((product) => product.code), ['C', 'A']);
 });
 
+test('catalogus: variantverkopen tellen samen voor het hoofdartikel', () => {
+  const rows = [
+    { id: 'P', code: 'KOP', name: 'Koppeling', has_variants: 1, image: 'https://x.nl/k.jpg' },
+    { id: 'V1', parent_id: 'P', code: 'KOP-1', name: 'Koppeling 1', on_hand: 1, sale_price: 1 },
+    { id: 'V2', parent_id: 'P', code: 'KOP-2', name: 'Koppeling 2', on_hand: 1, sale_price: 1 },
+    { id: 'S', code: 'LOS', name: 'Los artikel', on_hand: 1, sale_price: 1, image: 'https://x.nl/l.jpg' },
+  ];
+  const catalog = buildCatalog(rows, new Map([['KOP-1', 3], ['KOP-2', 3], ['LOS', 5]]));
+  assert.deepStrictEqual(catalog.bestsellers.map((product) => product.code), ['KOP', 'LOS']);
+});
+
 test('startpagina: hero zonder tekst, banners, kolommen, citaat en tabbladen na een verkoop', async () => {
   const { db, base, main } = await setup();
   const home = await (await fetch(`${base}/winkel/`)).text();
