@@ -140,12 +140,12 @@ function createWebOrderStore(db, { stock }) {
       if (code && qty >= 1) unique.set(code, Math.min(MAX_QTY, (unique.get(code) || 0) + qty));
     }
     const codes = [...unique.keys()].slice(0, MAX_LINES);
-    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, p.name AS parent_name, COALESCE(r.qty, 0) AS reserved
+    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, p.name AS parent_name,
+        COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
       FROM stock_items i
       LEFT JOIN stock_items p ON p.tenant_id = i.tenant_id AND p.id = i.parent_id
-      LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
       WHERE i.tenant_id = ? AND i.archived = 0 AND i.has_variants = 0 AND i.shop_sync = 1 AND i.sale_price IS NOT NULL
-        AND i.code IN (${codes.map(() => '?').join(', ')})`).all(tenantId, tenantId, ...codes) : [];
+        AND i.code IN (${codes.map(() => '?').join(', ')})`).all(tenantId, ...codes) : [];
     const byCode = new Map(rows.map((row) => [row.code, row]));
     const lines = [];
     const missing = [];

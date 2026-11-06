@@ -1052,6 +1052,13 @@ const MIGRATIONS = [
     SELECT 'begin-' || id, tenant_id, id, cost_price, substr(created_at, 1, 10), 'Inkoopprijs bij de start van de prijshistorie', NULL, '', updated_at
     FROM stock_items WHERE cost_price IS NOT NULL;
   `,
+  // 46: index op de gebruikersnaam alleen. Bij inloggen zonder treffer in de organisatie
+  // zoekt store.loginTenantOfTestAccount een testaccount op naam over alle omgevingen;
+  // de unieke sleutel (tenant_id, username) helpt daar niet, zonder index las dat elke gebruiker.
+  // Niet uniek: dezelfde naam mag in verschillende organisaties voorkomen.
+  `
+  CREATE INDEX users_login_name ON users (username);
+  `,
 ];
 
 /**

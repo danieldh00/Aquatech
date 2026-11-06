@@ -558,6 +558,9 @@ de PR-beschrijving kort hoe eraan voldaan is.
 - Geen `SELECT *`/`t.*`: alleen de kolommen die nodig zijn; grote kolommen
   (`data`, beelden, blobs) niet in overzichten, gebruik `jsonDigest`.
 - Geen query per regel (N+1): één query met `IN (...)`/JOIN of een map vooraf.
+- Een paar rijen ophalen (winkelwagen, één artikel)? Dan geen `LEFT JOIN (SELECT … GROUP BY)` over
+  de hele omgeving, maar per rij via de index (bijv. `(SELECT SUM(r.qty) FROM stock_reservations r
+  WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id)`); de groepering past bij hele lijsten (1.6.6).
 - Een nieuwe `WHERE`/`ORDER BY` op een groeiende tabel krijgt een index met
   `tenant_id` vooraan (migratie in `MIGRATIONS` én `PG_MIGRATIONS`).
 - Gebruiker/tenant per verzoek niet opnieuw opvragen (`req.user`,

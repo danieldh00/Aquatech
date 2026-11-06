@@ -445,23 +445,27 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * Artikelrijen met het gereserveerde aantal (som over open werkorders), in één query.
    * Bij een hoofdartikel en zijn varianten staat in familyOrders het aantal verschillende
    * werkorders over alle actieve varianten (een werkorder met twee maten telt één keer).
+   * Met parentId tellen de reserveringen alleen voor die varianten (niet eerst alles van de omgeving).
    * @param {string} tenantId Id van de omgeving.
    * @param {{ archived?: boolean, parentId?: string|null }} [filters] Ook gearchiveerde; alleen de varianten van dit hoofdartikel.
    * @returns {object[]} De artikelen (shapeItem met familyOrders), op code.
    */
   function listRows(tenantId, { archived = false, parentId = null } = {}) {
-    const args = [tenantId, tenantId, tenantId, tenantId];
+    const family = parentId ? String(parentId) : null;
+    const reservedFilter = family ? ' AND item_id IN (SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?)' : '';
+    const familyFilter = family ? ' AND sibling.parent_id = ?' : '';
+    const args = [tenantId, ...(family ? [tenantId, family] : []), tenantId, tenantId, ...(family ? [family] : []), tenantId];
     let where = archived ? '' : ' AND i.archived = 0';
-    if (parentId) { where += ' AND i.parent_id = ?'; args.push(String(parentId)); }
+    if (family) { where += ' AND i.parent_id = ?'; args.push(family); }
     return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
         i.sale_price, i.business_price, i.vat_rate, i.revenue_group, i.weight_grams, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
         i.order_pack_size, i.order_min_qty, i.price_tiers, i.parent_id, i.has_variants, i.attributes, i.variant_values, i.image_id,
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders, COALESCE(f.orders, 0) AS family_orders
       FROM stock_items i
-      LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
+      LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ?${reservedFilter} GROUP BY item_id) r ON r.item_id = i.id
       LEFT JOIN (SELECT sibling.parent_id, COUNT(DISTINCT family.work_order_id) AS orders FROM stock_reservations family
           JOIN stock_items sibling ON sibling.id = family.item_id AND sibling.tenant_id = ?
-          WHERE family.tenant_id = ? AND sibling.archived = 0 AND sibling.parent_id IS NOT NULL GROUP BY sibling.parent_id) f
+          WHERE family.tenant_id = ? AND sibling.archived = 0 AND sibling.parent_id IS NOT NULL${familyFilter} GROUP BY sibling.parent_id) f
         ON f.parent_id = COALESCE(i.parent_id, i.id)
       WHERE i.tenant_id = ?${where} ORDER BY i.code`)
       .all(...args).map((itemRow) => ({ ...shapeItem(itemRow, itemRow.reserved, itemRow.orders), familyOrders: Number(itemRow.family_orders) || 0 }));

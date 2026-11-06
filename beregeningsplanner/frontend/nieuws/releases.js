@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.6.6',
+      date: '2026-11-05',
+      title: 'Sneller winkelen en artikelen openen',
+      items: [
+        { text: 'De winkelwagen en het afrekenen in de webshop rekenen de beschikbare voorraad sneller uit.' },
+        { for: ['voorraad'], text: 'Een artikel met maten of kleuren opent sneller.' },
+      ],
+    },
+    {
       version: '1.6.5',
       date: '2026-11-05',
       title: 'Veiliger en sneller',
