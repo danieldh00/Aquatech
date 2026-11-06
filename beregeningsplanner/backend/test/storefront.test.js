@@ -218,14 +218,14 @@ test('categorieën worden in hoofdcategorieën gegroepeerd', () => {
 test('webshop: hoofdcategorie, zoeken, kop en voet', async () => {
   const { db, anonymous, admin, main } = await setup();
   await admin.put('/api/admin/settings', { storefront: true });
-  db.prepare('INSERT INTO shop_products (tenant_id, id, name, image, categories) VALUES (?, ?, ?, ?, ?)').run(main, '77', 'x', 'https://shop.test/buis.jpg', '["Leidingen &amp; Slangen"]');
+  db.prepare('INSERT INTO shop_products (tenant_id, id, name, image, categories) VALUES (?, ?, ?, ?, ?)').run(main, '77', 'x', 'https://shop.test/buis.jpg', '["Tyleen &amp; koppelingen"]');
   db.prepare("UPDATE stock_items SET shop_product_id = '77' WHERE tenant_id = ? AND code = 'BUIS-25'").run(main);
 
   const home = await anonymous.get('/winkel/');
   assert.match(home.text, /assets\/aquatechshop-logo\.png/);
   assert.match(home.text, /rel="icon"/);
   assert.match(home.text, /action="zoeken\/"/);
-  assert.match(home.text, /Leidingen &amp; Slangen/);
+  assert.match(home.text, /Tyleen &amp; koppelingen/);
   assert.ok(!home.text.includes('&amp;amp;'), 'geen dubbel gecodeerde tekens');
   assert.match(home.text, /Populaire producten/);
   assert.match(home.text, /https:\/\/shop\.test\/buis\.jpg/);
@@ -233,7 +233,7 @@ test('webshop: hoofdcategorie, zoeken, kop en voet', async () => {
   const group = await anonymous.get('/winkel/groep/leidingen-toebehoren/');
   assert.strictEqual(group.status, 200);
   assert.match(group.text, /Leidingen &amp; toebehoren/);
-  assert.match(group.text, /Leidingen &amp; Slangen/);
+  assert.match(group.text, /Tyleen &amp; koppelingen/);
   assert.strictEqual((await anonymous.get('/winkel/groep/bestaat-niet/')).status, 404);
 
   const found = await anonymous.get('/winkel/zoeken/?q=buis%2025');

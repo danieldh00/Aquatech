@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.6.9',
+      date: '2026-11-06',
+      title: 'Overzichtelijker menu en categoriepagina\'s in de webshop',
+      items: [
+        { text: 'Het menu van de webshop heeft nu submenu\'s per niveau: je klapt een hoofdcategorie open en kiest direct de juiste subcategorie, zonder tussenpagina.' },
+        { text: 'Categoriepagina\'s lijken nu op die van aquatechshop.nl: met zijbalk, prijsfilter, uitleg, blokken met subcategorieën, sorteren en meerdere pagina\'s.' },
+      ],
+    },
+    {
       version: '1.6.8',
       date: '2026-11-06',
       title: 'Nieuwe startpagina voor de webshop',
