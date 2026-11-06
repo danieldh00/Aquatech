@@ -241,6 +241,11 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
           }
         }
 
+        // De webshop houdt een aantal bij: dan is de voorraad vanaf nu ook in Aquatech bijgehouden (stand uit stap 1).
+        if (pushStock && product.stockQty != null) {
+          prepare('UPDATE stock_items SET stock_managed = 1 WHERE tenant_id = ? AND id = ? AND stock_managed = 0').run(tenantId, item.id);
+        }
+
         // 2. Prijs.
         const raw = product.rawRegular != null ? product.rawRegular : null;
         if (raw == null && !shopConfig.push && product.price != null && (salePrice == null || Math.abs(product.price - salePrice) >= 0.005)) {

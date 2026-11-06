@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.6.7
+
+Voorraad: artikelen uit een webshop zonder voorraadbeheer stonden overal als "niet op voorraad".
+
+- **Oorzaak**: aquatechshop.nl bewaart bij veel producten geen aantal (alleen de status "op voorraad").
+  `fromRestV3` geeft dan `stockQty: null`, het artikel kwam met stand 0 in Aquatech en de shop, de
+  winkelwagen en de groothandel rekenden `stand - gereserveerd > 0`.
+- **Oplossing** (migratie 47, `stock_items.stock_managed`): een artikel zonder voorraadbeheer
+  (`stock_managed = 0`) volgt de status van het gekoppelde webshopproduct (`shop_products.in_stock`) in
+  `storefront-data.js` (`stockOf`) en `web-orders.js` (`priceCart`). Een import zonder aantal zet het zo; de
+  migratie zet bestaande gekoppelde artikelen zonder stand, boekingen en gezien webshopaantal ook zo.
+  Een ontvangst of telling (`stock.book`, delta > 0 of soort `telling`) of een aantal in de webshop
+  (`shop-sync.js`) zet `stock_managed` aan; een verkoop (afboeking) niet. Aquatech blijft de bron voor
+  de voorraad zodra die wordt bijgehouden.
+- Test: `shopsync.test.js` (webshop zonder voorraadbeheer).
+
 ## 1.6.6
 
 Snelheid (deel 2): databasequery's, zonder andere functionaliteit.

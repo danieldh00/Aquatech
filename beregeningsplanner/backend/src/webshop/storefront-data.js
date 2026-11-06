@@ -203,6 +203,17 @@ function buildCatalog(rows) {
     return slug;
   };
   /**
+   * Of een artikel op voorraad is: met voorraadbeheer stand min gereserveerd boven nul; zonder
+   * voorraadbeheer (stock_managed = 0, bijvoorbeeld uit de webshop overgenomen zonder aantal) de
+   * status uit het gekoppelde webshopproduct (zonder koppeling: op voorraad).
+   * @param {object} row Artikelrij met on_hand, reserved, stock_managed en shop_in_stock.
+   * @returns {boolean} true als te bestellen.
+   */
+  const stockOf = (row) => (Number(row.stock_managed) === 0
+    ? row.shop_in_stock == null || Boolean(Number(row.shop_in_stock))
+    : Math.round((Number(row.on_hand) - Number(row.reserved || 0)) * 1000) / 1000 > 0);
+
+  /**
    * Zet een rij van de database om in een product (zonder categorie-indeling).
    * @param {object} row De rij.
    * @returns {object} Het product.
@@ -218,7 +229,7 @@ function buildCatalog(rows) {
       categoryKey: categoryName.toLowerCase(), categoryName, groupSlug: groupOf(categoryName).slug, priceExcl, vatRate,
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
       priceBusiness, priceBusinessIncl: Math.round(priceBusiness * (1 + vatRate / 100) * 100) / 100,
-      inStock: Math.round((Number(row.on_hand) - Number(row.reserved || 0)) * 1000) / 1000 > 0, image: imageOf(row),
+      inStock: stockOf(row), image: imageOf(row),
       // Groothandelsvoorwaarden (alleen gebruikt op de groothandelspagina's): verpakkingseenheid, minimale afname en staffels.
       packSize: Number(row.order_pack_size) || 1, minimum: Wholesale.minimumOf({ packSize: row.order_pack_size, orderMinQty: row.order_min_qty }), tiers: Wholesale.tiersOf(row.price_tiers),
     };
@@ -301,7 +312,7 @@ function createStorefrontData(db) {
     catalogOf(tenantId) {
       const cached = cache.get(tenantId);
       if (cached && cached.until > Date.now()) return cached.catalog;
-      const rows = db.prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, p.categories, p.image
+      const rows = db.prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, p.in_stock AS shop_in_stock, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, p.categories, p.image
         FROM stock_items i
         LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
         LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id

@@ -140,7 +140,8 @@ function createWebOrderStore(db, { stock }) {
       if (code && qty >= 1) unique.set(code, Math.min(MAX_QTY, (unique.get(code) || 0) + qty));
     }
     const codes = [...unique.keys()].slice(0, MAX_LINES);
-    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, p.name AS parent_name,
+    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, p.name AS parent_name,
+        (SELECT sp.in_stock FROM shop_products sp WHERE sp.tenant_id = i.tenant_id AND sp.id = i.shop_product_id) AS shop_in_stock,
         COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
       FROM stock_items i
       LEFT JOIN stock_items p ON p.tenant_id = i.tenant_id AND p.id = i.parent_id
@@ -163,7 +164,10 @@ function createWebOrderStore(db, { stock }) {
       const unitExcl = priced ? priced.unitExcl : listExcl;
       const unitIncl = round2(unitExcl * (1 + vatRate / 100));
       const lineExcl = round2(unitExcl * qty);
-      const available = Math.round((Number(row.on_hand) - Number(row.reserved)) * 1000) / 1000;
+      // Zonder voorraadbeheer (stock_managed = 0) telt alleen of het artikel in de oude webshop op voorraad staat: wel = genoeg, niet = 0.
+      const available = Number(row.stock_managed) === 0
+        ? (row.shop_in_stock != null && !Number(row.shop_in_stock) ? 0 : qty)
+        : Math.round((Number(row.on_hand) - Number(row.reserved)) * 1000) / 1000;
       lines.push({
         itemId: row.id, code: row.code, name: row.parent_name && label ? `${row.parent_name} (${label})` : row.name, unit: row.unit || 'st', qty, available,
         unitExcl, vatRate, unitIncl, lineTotal: business ? round2(lineExcl * (1 + vatRate / 100)) : round2(unitIncl * qty), enough: available >= qty,

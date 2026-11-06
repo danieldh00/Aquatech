@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.6.7',
+      date: '2026-11-06',
+      title: 'Voorraad in de webshop klopt weer',
+      items: [
+        { text: 'Producten die in de oude webshop op voorraad staan maar waar geen aantal van wordt bijgehouden, staan nu ook in de nieuwe webshop op voorraad.' },
+        { for: ['voorraad'], text: 'Zodra je voor zo\'n artikel voorraad ontvangt of telt, houdt Aquatech de voorraad bij en telt het aantal.' },
+      ],
+    },
+    {
       version: '1.6.6',
       date: '2026-11-05',
       title: 'Sneller winkelen en artikelen openen',

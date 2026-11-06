@@ -190,3 +190,35 @@ test('webshop: nieuwe artikelen krijgen normale prijs en btw van de koppeling; p
   assert.strictEqual(products.get('31').manage_stock, false, 'voorraadbeheer in de webshop blijft uit');
   assert.ok(!fake.calls.some((call) => call.method === 'POST'), 'niets teruggeschreven');
 });
+
+test('webshop zonder voorraadbeheer: overgenomen artikelen volgen de webshopstatus tot Aquatech de voorraad bijhoudt', async () => {
+  const { createStorefrontData } = require('../src/webshop/storefront-data');
+  const products = new Map();
+  const { db, tid, stock } = setup(products, { url: 'http://shop.test', mode: 'rest', push: true, pricesIncludeTax: true, vatRate: 21 });
+  const user = { id: null, display_name: 'Test' };
+  const shop = createShopStore(db);
+  const base = { currency: 'EUR', url: '', image: '', categories: [], code: '', parentId: null, attributes: [], type: 'simple', price: 10, stockQty: null };
+  shop.replaceProducts(tid, [{ ...base, id: '31', sku: 'GEEN-AANTAL', name: 'Geen aantal', inStock: true }, { ...base, id: '32', sku: 'UIT', name: 'Uit', inStock: false }], new Date().toISOString());
+  const imported = stock.importShop(tid, shop.products(tid), ['31', '32']);
+  assert.strictEqual(imported.created, 2);
+  const inShop = stock.findCode(tid, 'GEEN-AANTAL');
+  assert.strictEqual(stock.get(tid, inShop.id).stockManaged, false);
+
+  const data = createStorefrontData(db);
+  /**
+   * Leest de producten van de shop opnieuw (zonder cache).
+   * @returns {object[]} De producten.
+   */
+  const catalog = () => { data.clearCache(); return data.catalogOf(tid).products; };
+  assert.strictEqual(catalog().find((entry) => entry.code === 'GEEN-AANTAL').inStock, true, 'op voorraad volgens de webshop');
+  assert.strictEqual(catalog().find((entry) => entry.code === 'UIT').inStock, false, 'uitverkocht volgens de webshop');
+
+  // Een verkoop (afboeking) zet het beheer niet aan; een ontvangst wel, daarna telt de stand.
+  stock.book(tid, inShop.id, -1, { kind: 'afboeking', source: 'webshop', user });
+  assert.strictEqual(stock.get(tid, inShop.id).stockManaged, false);
+  stock.book(tid, inShop.id, 5, { kind: 'ontvangst', source: 'handmatig', user });
+  assert.strictEqual(stock.get(tid, inShop.id).stockManaged, true);
+  assert.strictEqual(catalog().find((entry) => entry.code === 'GEEN-AANTAL').inStock, true);
+  stock.book(tid, inShop.id, -4, { kind: 'afboeking', source: 'handmatig', user });
+  assert.strictEqual(catalog().find((entry) => entry.code === 'GEEN-AANTAL').inStock, false, 'met voorraadbeheer telt de stand');
+});

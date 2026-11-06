@@ -356,7 +356,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {void}
    */
   const dirty = (tenantId) => { if (dirtyHook) dirtyHook(tenantId); };
-  const SALE_COLS = 'sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error, order_pack_size, order_min_qty, price_tiers';
+  const SALE_COLS = 'stock_managed, sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error, order_pack_size, order_min_qty, price_tiers';
   const VARIANT_COLS = 'parent_id, has_variants, attributes, variant_values, image_id';
   const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}, ${VARIANT_COLS}`;
   const MOVE_COLS = 'm.id, m.item_id, m.kind, m.qty, m.balance, m.work_order_id, m.work_order_number, m.source, m.note, m.user_name, m.created_at';
@@ -381,6 +381,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       salePrice: itemRow.sale_price == null ? null : Number(itemRow.sale_price), businessPrice: itemRow.business_price == null ? null : Number(itemRow.business_price), vatRate: Number(itemRow.vat_rate ?? 21), revenueGroup: itemRow.revenue_group || 'producten',
       weightGrams: itemRow.weight_grams == null ? null : Number(itemRow.weight_grams),
       packSize: Number(itemRow.order_pack_size) || 1, orderMinQty: Number(itemRow.order_min_qty) || 1, priceTiers: Wholesale.tiersOf(itemRow.price_tiers),
+      stockManaged: itemRow.stock_managed === undefined ? true : Boolean(Number(itemRow.stock_managed)),
       shopSync: itemRow.shop_sync === undefined ? true : Boolean(Number(itemRow.shop_sync)),
       shop: { productId: itemRow.shop_product_id || null, pending: Boolean(Number(itemRow.shop_dirty)), syncedAt: itemRow.shop_synced_at || null, error: itemRow.shop_error || '' },
       parentId: itemRow.parent_id || null, imageId: itemRow.image_id || null, hasVariants: Boolean(Number(itemRow.has_variants)),
@@ -551,9 +552,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const before = prepare('SELECT id, on_hand, cost_price, created_at FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemId);
     // Een verkoop in de webshop zelf (source 'webshop') hoeft niet terug.
     const toShop = source === 'webshop' ? 0 : 1;
-    prepare(`UPDATE stock_items SET on_hand = on_hand + ?, updated_at = ?,
+    // Een ontvangst of telling betekent dat Aquatech de voorraad voortaan bijhoudt; een verkoop alleen niet.
+    const manage = delta > 0 || kind === 'telling' ? 1 : 0;
+    prepare(`UPDATE stock_items SET on_hand = on_hand + ?, updated_at = ?, stock_managed = CASE WHEN ? = 1 THEN 1 ELSE stock_managed END,
       shop_dirty = CASE WHEN shop_product_id IS NOT NULL AND shop_sync = 1 AND ? = 1 THEN 1 ELSE shop_dirty END
-      WHERE tenant_id = ? AND id = ?`).run(round3(delta), at, toShop, tenantId, itemId);
+      WHERE tenant_id = ? AND id = ?`).run(round3(delta), at, manage, toShop, tenantId, itemId);
     if (toShop) dirty(tenantId);
     const balance = prepare('SELECT on_hand FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemId).on_hand;
     const id = crypto.randomUUID();
@@ -1147,18 +1150,20 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   function insertShopProducts(tenantId, fresh, parentItems, { vatRate, priceOf }) {
     const timestamp = currentTimestamp();
     const put = prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
-        sale_price, vat_rate, revenue_group, shop_sync, shop_product_id, parent_id, has_variants, attributes, variant_values)
-      VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, ?, 'producten', 1, ?, ?, ?, ?, ?)`);
+        sale_price, vat_rate, revenue_group, shop_sync, shop_product_id, parent_id, has_variants, attributes, variant_values, stock_managed)
+      VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, ?, 'producten', 1, ?, ?, ?, ?, ?, ?)`);
     const codes = [];
     let skipped = 0;
     const ordered = [...fresh.filter((entry) => !entry.product.parentId), ...fresh.filter((entry) => entry.product.parentId)];
     for (const { product, code } of ordered) {
       const price = priceOf(product);
       const salePrice = price == null ? null : Math.round(price * 100) / 100;
+      // Geen aantal in de webshop (geen voorraadbeheer daar): Aquatech houdt de voorraad nog niet bij, de status volgt de webshop.
+      const managed = product.stockQty == null ? 0 : 1;
       if (product.type === 'variable') {
         const attributes = shopAttributesOf(product);
         const id = crypto.randomUUID();
-        put.run(id, tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, null, vatRate, String(product.id), null, 1, JSON.stringify(attributes), '');
+        put.run(id, tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, null, vatRate, String(product.id), null, 1, JSON.stringify(attributes), '', 1);
         parentItems.set(String(product.id), { id, name: cleanText(product.name, 200) || code, has_variants: 1, attributes: JSON.stringify(attributes) });
       } else if (product.parentId) {
         const parent = parentItems.get(String(product.parentId));
@@ -1166,9 +1171,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         const values = {};
         for (const attribute of product.attributes || []) if (attribute.name && attribute.option) values[cleanText(attribute.name, 40)] = cleanText(attribute.option, 40);
         put.run(crypto.randomUUID(), tenantId, code, Object.keys(values).length ? variantName(parent.name, values) : cleanText(product.name, 200) || code, timestamp, timestamp,
-          salePrice, vatRate, String(product.id), parent.id, 0, '', JSON.stringify(values));
+          salePrice, vatRate, String(product.id), parent.id, 0, '', JSON.stringify(values), managed);
       } else {
-        put.run(crypto.randomUUID(), tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, salePrice, vatRate, String(product.id), null, 0, '', '');
+        put.run(crypto.randomUUID(), tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, salePrice, vatRate, String(product.id), null, 0, '', '', managed);
       }
       codes.push(code);
     }
