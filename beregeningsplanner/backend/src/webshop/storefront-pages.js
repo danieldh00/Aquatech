@@ -171,7 +171,6 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
   const phoneHref = phoneLink(phone);
   const footerPages = pages.filter((page) => page.footer && page.slug !== 'over-ons' && !LEGAL_SLUGS.includes(page.slug));
   const legalLinks = LEGAL_SLUGS.map((slug) => { const own = pages.find((page) => page.slug === slug); return `<a href="${root}pagina/${slug}/">${escapeHtml(own ? own.title : LEGAL_TITLES[slug])}</a>`; }).join('');
-  const footerGroups = groups.map((group) => `<li><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a></li>`).join('');
   return `<!doctype html>
 <html lang="nl">
 <head>
@@ -208,7 +207,7 @@ ${body}
 <footer class="shop-foot">
   <div class="foot-grid">
     <div><strong>Aquatechshop.nl</strong><p>${[site.contact.kvk && `K.v.k.: ${escapeHtml(site.contact.kvk)}`, site.contact.address && escapeHtml(site.contact.address), site.contact.email && `<a href="mailto:${escapeHtml(site.contact.email)}">${escapeHtml(site.contact.email)}</a>`, phone && `<a href="${phoneHref}">${escapeHtml(phone)}</a>`].filter(Boolean).join('<br>')}</p></div>
-    <div><strong>Productgroepen</strong><ul>${footerGroups}</ul></div>
+    <div><strong>Klantenservice</strong><ul>${site.contact.email ? `<li><a href="mailto:${escapeHtml(site.contact.email)}">Contact</a></li>` : ''}<li><a href="${root}pagina/herroepingsrecht/">Retourbeleid</a></li><li><a href="${root}pagina/algemene-voorwaarden/">Algemene voorwaarden</a></li></ul></div>
     <div><strong>Account</strong><ul><li><a href="${root}account/">Mijn account</a></li><li><a href="${root}account/">Inloggen of registreren</a></li></ul></div>
     <div><strong>Over ons</strong><p>${escapeHtml(site.footer.about)}</p><p><a href="${root}over-ons/">Lees ons verhaal</a></p>${footerPages.length ? `<ul>${footerPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}</ul>` : ''}</div>
   </div>
@@ -381,6 +380,27 @@ function productRow(product, root) {
 }
 
 /**
+ * Het aanvraagformulier voor een zakelijk account op de startpagina (bedrijfsnaam,
+ * e-mail, telefoon en een bericht). Het veld "website" blijft leeg voor bezoekers
+ * (valstrik voor robots).
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {string} sent Uitkomst van een verstuurde aanvraag: 'ja', 'fout' of leeg.
+ * @returns {string} HTML van het formulier of de bevestiging.
+ */
+function businessForm(root, sent) {
+  if (sent === 'ja') return '<div class="business-form" id="zakelijk"><p class="business-sent">Bedankt voor je aanvraag. We nemen zo snel mogelijk contact met je op.</p></div>';
+  return `<form class="business-form" id="zakelijk" method="post" action="${root}zakelijk-aanvraag/">
+${sent === 'fout' ? '<p class="error" role="alert">Versturen is niet gelukt. Controleer je gegevens en probeer het opnieuw, of bel ons.</p>' : ''}
+<label>Bedrijfsnaam*<input name="company" required maxlength="120" autocomplete="organization"></label>
+<label>E-mail*<input type="email" name="email" required maxlength="120" autocomplete="email"></label>
+<label>Telefoonnummer*<input type="tel" name="phone" required maxlength="30" autocomplete="tel"></label>
+<label>Bericht (optioneel)<textarea name="message" rows="4" maxlength="1000"></textarea></label>
+<label class="trap" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+<button class="button" type="submit">Verstuur</button>
+</form>`;
+}
+
+/**
  * Startpagina in de opzet van aquatechshop.nl: foto met kop, assortimentsbalk,
  * populaire producten, producten per hoofdcategorie, voordelen, merken en een
  * oproep voor een zakelijk account.
@@ -390,29 +410,54 @@ function productRow(product, root) {
 function homePage(catalog) {
   const root = '';
   const first = catalog.groups[0];
-  const { hero, benefits: benefitBlock, brands: brandBlock, business: businessBlock } = activeContent.site;
-  const heroButton = hero.button || (first ? `Bekijk ${first.name.toLowerCase()}` : '');
+  const { hero, banners: bannerBlock, columns: columnBlock, quote: quoteBlock, benefits: benefitBlock, brands: brandBlock, business: businessBlock } = activeContent.site;
+  const heroButton = hero.button || (hero.title && first ? `Bekijk ${first.name.toLowerCase()}` : '');
   const heroHref = linkHref(hero.link, root, first ? `groep/${escapeHtml(first.slug)}/` : '');
   const heroImage = imageSrc(root, hero.image);
-  const intro = `<section class="home-hero">${heroImage ? `<img src="${heroImage}" alt=""${hero.image === DEFAULT_SITE.hero.image ? ' width="1440" height="419"' : ''}>` : ''}<div class="home-hero-text"><h1>${escapeHtml(hero.title)}</h1>${hero.text ? `<p>${escapeHtml(hero.text)}</p>` : ''}${heroButton && heroHref ? `<a class="button" href="${heroHref}">${escapeHtml(heroButton)}</a>` : ''}</div></section>`;
+  const intro = `<section class="home-hero">${heroImage ? `<img src="${heroImage}" alt=""${hero.image === DEFAULT_SITE.hero.image ? ' width="1440" height="419"' : ''}>` : ''}${hero.title || hero.text || heroButton ? `<div class="home-hero-text">${hero.title ? `<h1>${escapeHtml(hero.title)}</h1>` : ''}${hero.text ? `<p>${escapeHtml(hero.text)}</p>` : ''}${heroButton && heroHref ? `<a class="button" href="${heroHref}">${escapeHtml(heroButton)}</a>` : ''}</div>` : ''}</section>`;
   if (!catalog.products.length) return layout({ root, groups: catalog.groups, wide: true, title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}<div class="wrap"><p class="muted">De webshop wordt gevuld. Kom snel terug.</p></div>` });
   const tiles = catalog.groups.map((group) => {
     const showcase = groupShowcase(group, catalog.products);
     return `<a class="assortment-tile" href="groep/${escapeHtml(group.slug)}/"><span class="product-image">${showcase ? `<img src="${productImageSrc(root, showcase.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><span>${escapeHtml(group.name)}</span></a>`;
   }).join('');
   const assortment = `<section class="assortment"><div class="wrap assortment-inner"><div class="assortment-title"><h2>Assortiment</h2><p>Alles voor jouw project</p></div><div class="assortment-strip">${tiles}</div></div></section>`;
-  const popular = catalog.featured.length ? `<section class="wrap"><h2 class="centered">Populaire producten</h2>
-<div class="product-grid">
-${catalog.featured.map((product) => productCard(product, root)).join('\n')}
-</div></section>` : '';
-  const columns = catalog.groups.map((group) => ({ group, items: catalog.products.filter((product) => product.groupSlug === group.slug && product.image).slice(0, 3) })).filter((column) => column.items.length).slice(0, 3);
-  const perGroup = columns.length ? `<section class="wrap"><div class="group-columns">${columns.map((column) => `<div><h2><a href="groep/${escapeHtml(column.group.slug)}/">${escapeHtml(column.group.name)}</a></h2>${column.items.map((product) => productRow(product, root)).join('')}</div>`).join('')}</div></section>` : '';
+  /**
+   * Een raster met productkaarten.
+   * @param {object[]} list De producten.
+   * @returns {string} HTML van het raster.
+   */
+  const grid = (list) => `<div class="product-grid">\n${list.map((product) => productCard(product, root)).join('\n')}\n</div>`;
+  // Meest verkocht (webshopverkopen) en Populaire producten als tabbladen zonder script (keuzerondjes); zonder verkopen alleen Populaire producten.
+  const popular = catalog.bestsellers.length && catalog.featured.length
+    ? `<section class="wrap home-tabs"><input type="radio" name="home-tab" id="tab-best" checked><input type="radio" name="home-tab" id="tab-popular"><div class="tab-labels"><label for="tab-best">Meest verkocht</label><label for="tab-popular">Populaire producten</label></div><div class="tab-panel panel-best">${grid(catalog.bestsellers)}</div><div class="tab-panel panel-popular">${grid(catalog.featured)}</div></section>`
+    : catalog.featured.length ? `<section class="wrap"><h2 class="centered">Populaire producten</h2>\n${grid(catalog.featured)}</section>` : '';
+  const banners = bannerBlock.enabled && bannerBlock.items.length ? `<section class="home-banners">${bannerBlock.items.map((item) => {
+    const href = linkHref(item.link, root, '');
+    const inner = `<img src="${imageSrc(root, item.image)}" alt="" loading="lazy"><span class="home-banner-text">${item.title ? `<strong>${escapeHtml(item.title)}</strong>` : ''}${item.button ? `<span class="button">${escapeHtml(item.button)}</span>` : ''}</span>`;
+    return href ? `<a class="home-banner" href="${href}">${inner}</a>` : `<div class="home-banner">${inner}</div>`;
+  }).join('')}</section>` : '';
+  // Een variantcode verwijst naar het hoofdartikel waar de variant onder valt.
+  const byCode = new Map(catalog.products.map((product) => [product.code, product]));
+  const bySlug = new Map(catalog.products.map((product) => [product.slug, product]));
+  for (const variant of catalog.variantProducts || []) {
+    if (!byCode.has(variant.code) && bySlug.has(variant.parentSlug)) byCode.set(variant.code, bySlug.get(variant.parentSlug));
+  }
+  const columns = columnBlock.enabled ? columnBlock.items.map((column) => {
+    const group = catalog.groups.find((candidate) => candidate.slug === column.group);
+    const items = column.codes.length
+      ? column.codes.map((code) => byCode.get(code)).filter((product) => product && product.image)
+      : group ? catalog.products.filter((product) => product.groupSlug === group.slug && product.image).slice(0, 3) : [];
+    return { column, group, items };
+  }) : [];
+  const perGroup = columns.length ? `<section class="wrap"><div class="group-columns">${columns.map(({ column, group, items }) => `<div><h2>${group ? `<a href="groep/${escapeHtml(group.slug)}/">${escapeHtml(column.title)}</a>` : escapeHtml(column.title)}</h2>${items.length ? items.map((product) => productRow(product, root)).join('') : '<p class="muted">Binnenkort meer producten.</p>'}</div>`).join('')}</div></section>` : '';
   const benefits = benefitBlock.enabled && benefitBlock.items.length ? `<section class="benefits"><div class="wrap benefits-inner">${benefitBlock.items.map((item) => `<div class="benefit">${item.image ? `<img src="${imageSrc(root, item.image)}" alt="" width="50" height="50" loading="lazy">` : ''}<div><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.text)}</span></div></div>`).join('')}</div></section>` : '';
   const brands = brandBlock.enabled && brandBlock.items.length ? `<section class="wrap">${brandBlock.title ? `<h2 class="centered">${escapeHtml(brandBlock.title)}</h2>` : ''}<div class="brands">${brandBlock.items.map((item) => `<img src="${imageSrc(root, item.image)}" alt="${escapeHtml(item.name)}" height="70" loading="lazy">`).join('')}</div></section>` : '';
+  const quote = quoteBlock.enabled && quoteBlock.text ? `<section class="wrap"><p class="home-quote">“${escapeHtml(quoteBlock.text)}”</p></section>` : '';
   const businessImage = imageSrc(root, businessBlock.image);
   const businessHref = linkHref(businessBlock.link, root, `${root}registreren/`);
-  const business = businessBlock.enabled ? `<section class="business">${businessImage ? `<img src="${businessImage}" alt="" loading="lazy">` : ''}<div class="business-text"><h2>${escapeHtml(businessBlock.title)}</h2>${businessBlock.text ? `<p>${escapeHtml(businessBlock.text)}</p>` : ''}${businessBlock.button ? `<a class="button" href="${businessHref}">${escapeHtml(businessBlock.button)}</a>` : ''}</div></section>` : '';
-  return layout({ root, wide: true, title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}\n${assortment}\n${popular}\n${perGroup}\n${benefits}\n${brands}\n${business}`, groups: catalog.groups });
+  const withForm = Boolean(businessBlock.form && activeShop.businessForm);
+  const business = businessBlock.enabled ? `<section class="business${withForm ? ' with-form' : ''}">${businessImage ? `<img src="${businessImage}" alt="" loading="lazy">` : ''}<div class="business-text"><h2>${escapeHtml(businessBlock.title)}</h2>${businessBlock.text ? `<p>${escapeHtml(businessBlock.text)}</p>` : ''}${businessBlock.button && !withForm ? `<a class="button" href="${businessHref}">${escapeHtml(businessBlock.button)}</a>` : ''}</div>${withForm ? businessForm(root, activeShop.businessSent) : ''}</section>` : '';
+  return layout({ root, wide: true, title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}\n${assortment}\n${popular}\n${banners}\n${perGroup}\n${benefits}\n${brands}\n${quote}\n${business}`, groups: catalog.groups });
 }
 
 /**

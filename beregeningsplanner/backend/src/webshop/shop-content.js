@@ -15,6 +15,7 @@ const path = require('path');
 const { inspectImage, fromBase64 } = require('../uitvoering/photos');
 const { createImageCache } = require('../platform/image-cache');
 const { legalDefaults } = require('./legal-pages');
+const { GROUP_SLUGS, GROUP_NAMES } = require('./storefront-data');
 
 /** Bestanden in assets/ die als standaardafbeelding gekozen mogen worden. */
 const ASSET_NAMES = new Set(fs.readdirSync(path.join(__dirname, 'assets')).filter((name) => /\.(png|jpe?g|webp)$/i.test(name)));
@@ -35,7 +36,25 @@ const NOTICE_COLORS = { purple: 'Paars', navy: 'Donkerblauw', green: 'Groen', te
 /** Standaardinhoud: precies wat de shop toonde voordat deze te bewerken was. */
 const DEFAULT_SITE = {
   notice: { enabled: true, color: 'purple', text: 'Welkom op onze webshop! Momenteel zijn wij nog volop producten aan het toevoegen. Mocht er wat ontbreken wat u zoekt, neem contact op!' },
-  hero: { image: 'asset:hero-tuin.jpg', title: 'Alles voor uw tuinberegening', text: 'Sproeiers, druppelslang, leidingen en pompen van AquaTech Service.', button: '', link: '' },
+  // Zoals aquatechshop.nl: een grote afbeelding zonder tekst (kop, tekst en knop zijn optioneel).
+  hero: { image: 'asset:hero-tuin.jpg', title: '', text: '', button: '', link: '' },
+  // Twee afbeeldingen naast elkaar met een kop en een knop.
+  banners: {
+    enabled: true,
+    items: [
+      { image: 'asset:banner-druppelslang.jpg', title: 'Efficiënt bewateren met een druppelslang', button: 'Druppelslangen bekijken', link: 'groep/beregening/' },
+      { image: 'asset:banner-pomp.jpg', title: 'De beste beregeningspomp voor jouw sproei installatie', button: 'Beregeningspompen bekijken', link: 'groep/pomp-techniek/' },
+    ],
+  },
+  // Kolommen met een kop en drie producten: uit een productgroep of een eigen lijst artikelcodes.
+  columns: {
+    enabled: true,
+    items: [
+      { title: 'Beregening', group: 'beregening', codes: [] },
+      { title: 'Speciale producten', group: '', codes: [] },
+      { title: 'Uitverkoop', group: '', codes: [] },
+    ],
+  },
   benefits: {
     enabled: true,
     items: [
@@ -53,7 +72,8 @@ const DEFAULT_SITE = {
       { image: 'asset:merk-dab.webp', name: 'DAB' }, { image: 'asset:merk-pedrollo.webp', name: 'Pedrollo' },
     ],
   },
-  business: { enabled: true, image: 'asset:zakelijk-achtergrond.jpg', title: 'Vraag direct een zakelijk account aan', text: 'Ervaar de scherpe prijzen en het complete assortiment van Aquatechshop.nl.', button: 'Account aanmaken', link: '' },
+  quote: { enabled: true, text: 'Duurzaamheid door kwaliteit!' },
+  business: { enabled: true, image: 'asset:zakelijk-achtergrond.jpg', title: 'Vraag direct een zakelijk account aan!', text: 'En ontvang interessante prijzen!', button: 'Account aanmaken', link: '', form: true },
   contact: { phone: '06 47212019', email: 'info@aquatechshop.nl', kvk: '88438252', address: 'Oenenburgweg 218, 8072 GP Nunspeet' },
   footer: { about: 'Beregening, leidingen en pompen voor tuin en bedrijf, van AquaTech Service in Nunspeet.' },
 };
@@ -118,6 +138,16 @@ function cleanList(input, fallback, max, cleanItem) {
 }
 
 /**
+ * Artikelcodes uit een lijst of een tekst met komma's: hoofdletters, geldige tekens, uniek, maximaal 6.
+ * @param {*} value Een lijst of een tekst met komma's of regeleinden.
+ * @returns {string[]} De codes.
+ */
+function cleanCodes(value) {
+  const list = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,;\n]+/) : [];
+  return [...new Set(list.map((code) => cleanText(String(code), 40).toUpperCase()).filter((code) => /^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code)))].slice(0, 6);
+}
+
+/**
  * Maakt van de ingevoerde blokken een geldige set (ontbrekende velden = de standaard).
  * @param {*} input De ingevoerde blokken.
  * @param {object} [base] Waar ontbrekende velden vandaan komen.
@@ -142,6 +172,9 @@ function normalizeSite(input, base = DEFAULT_SITE) {
   const hero = section('hero');
   const benefits = section('benefits');
   const brands = section('brands');
+  const banners = section('banners');
+  const columns = section('columns');
+  const quote = section('quote');
   const business = section('business');
   const contact = section('contact');
   const footer = section('footer');
@@ -152,6 +185,21 @@ function normalizeSite(input, base = DEFAULT_SITE) {
       image: imageRef(hero.image, base.hero.image), title: cleanText(hero.title, 120, base.hero.title), text: cleanText(hero.text, 300, base.hero.text),
       button: cleanText(hero.button, 40, base.hero.button), link: 'link' in hero ? linkRef(hero.link) : base.hero.link,
     },
+    banners: {
+      enabled: flag(banners.enabled, base.banners.enabled),
+      items: cleanList(banners.items, base.banners.items, 4, (item) => {
+        const image = imageRef(item.image, '');
+        return image ? { image, title: cleanText(item.title, 120), button: cleanText(item.button, 40), link: linkRef(item.link) } : null;
+      }),
+    },
+    columns: {
+      enabled: flag(columns.enabled, base.columns.enabled),
+      items: cleanList(columns.items, base.columns.items, 3, (item) => {
+        const title = cleanText(item.title, 60);
+        return title ? { title, group: GROUP_SLUGS.includes(item.group) ? item.group : '', codes: cleanCodes(item.codes) } : null;
+      }),
+    },
+    quote: { enabled: flag(quote.enabled, base.quote.enabled), text: cleanText(quote.text, 200, base.quote.text) },
     benefits: {
       enabled: flag(benefits.enabled, base.benefits.enabled),
       items: cleanList(benefits.items, base.benefits.items, 6, (item) => {
@@ -170,6 +218,7 @@ function normalizeSite(input, base = DEFAULT_SITE) {
       enabled: flag(business.enabled, base.business.enabled), image: business.image === '' ? '' : imageRef(business.image, base.business.image),
       title: cleanText(business.title, 120, base.business.title), text: cleanText(business.text, 300, base.business.text),
       button: cleanText(business.button, 40, base.business.button), link: 'link' in business ? linkRef(business.link) : base.business.link,
+      form: flag(business.form, base.business.form),
     },
     contact: {
       phone: cleanText(contact.phone, 30, base.contact.phone).replace(/[^0-9 +()-]/g, ''),
@@ -604,6 +653,7 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
       site: { ...stored.site, isDefault: !stored.site.published },
       pages: stored.pages, images: content.listImages(req.tenantId),
       noticeColors: NOTICE_COLORS,
+      groups: GROUP_NAMES,
       defaults: { site: DEFAULT_SITE, aboutBody: DEFAULT_ABOUT_BODY, legal: legalDefaults(((stored.site.draft || stored.site.published) || {}).contact || DEFAULT_SITE.contact) }, assets: [...ASSET_NAMES].sort(),
     };
   }

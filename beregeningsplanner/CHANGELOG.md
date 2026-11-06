@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.6.8
+
+Startpagina van de eigen webshop (`/winkel/`) gelijk aan die van aquatechshop.nl.
+
+- **Hero** zonder tekst (alleen de afbeelding), zoals het origineel; kop, tekst en knop blijven optioneel
+  (de automatische knop komt alleen nog bij een kop).
+- **Tabbladen** *Meest verkocht* en *Populaire producten* (alleen CSS, keuzerondjes, geen script).
+  *Meest verkocht* = afboekingen van webshopverkopen (bron `webshop` en `bestelling:*`) van de laatste
+  180 dagen per artikelcode (`storefront-data.js`, `buildCatalog(rows, soldByCode)`, `catalog.bestsellers`);
+  zonder verkopen blijft alleen *Populaire producten*.
+- **Twee bannerblokken** (druppelslang en beregeningspomp) en **drie kolommen** (Beregening, Speciale
+  producten, Uitverkoop) met drie producten uit een productgroep of uit eigen artikelcodes; een lege
+  kolom toont "Binnenkort meer producten". Het **citaat** "Duurzaamheid door kwaliteit!".
+- **Aanvraagformulier voor een zakelijk account** in het zakelijke blok (bedrijfsnaam, e-mail, telefoon,
+  bericht): `POST /winkel/zakelijk-aanvraag/` mailt het bedrijfsprofiel-adres (`sendBusinessRequest` in
+  `web-orders-mail.js`), niets wordt in de database bewaard; limiet 5 per uur per bezoeker
+  (`clientKey`), verborgen valstrikveld, `Sec-Fetch-Site`-controle. Het formulier verschijnt alleen als
+  er een mailserver en een e-mailadres in het bedrijfsprofiel zijn (`businessRequestReady`), anders blijft
+  de knop *Account aanmaken*.
+- **Voet**: kolom *Klantenservice* (contact, retourbeleid, voorwaarden) in plaats van de lijst met productgroepen.
+- **Eigen opslag**: de afbeeldingen van de banners staan in `webshop/assets/` (zonder EXIF/GPS, 1400 px);
+  hero, pictogrammen, merklogo's en achtergrond stonden er al. De startpagina verwijst nergens naar
+  aquatechshop.nl; productfoto's volgen de eigen afbeeldingen (*Afbeeldingen uit webshop* in Artikelen).
+- **Beheer → Webshop-inhoud**: nieuwe blokken *Banners*, *Kolommen met producten*, *Citaat* en het
+  vinkje voor het formulier (`banners`, `columns`, `quote`, `business.form` in `shop-content.js`).
+- Tests: `shop-home.test.js`; `shop-content.test.js` aangepast aan de hero zonder tekst.
+
 ## 1.6.7
 
 Voorraad: artikelen uit een webshop zonder voorraadbeheer stonden overal als "niet op voorraad".
