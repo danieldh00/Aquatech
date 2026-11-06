@@ -2,6 +2,7 @@
 // mailServer + het versleutelde mailPassword, per tenant). Zonder ingestelde
 // server stuurt de app niets; de offertemodule biedt dan een link om zelf te
 // versturen. nodemailer is puur JavaScript (geen native module).
+const { domainToASCII } = require('node:url');
 const nodemailer = require('nodemailer');
 const { publicAddress, privateAllowed } = require('../beveiliging/netguard');
 
@@ -30,13 +31,25 @@ function sanitizeMail(raw) {
   return out;
 }
 
-const EMAIL = /^[^\s@<>()",;:]+@[\p{L}\p{N}]([\p{L}\p{N}\p{M}-]*[\p{L}\p{N}\p{M}])?(\.[\p{L}\p{N}]([\p{L}\p{N}\p{M}-]*[\p{L}\p{N}\p{M}])?)+$/u;
+/** Lokaal deel: geen spaties, @ of tekens die een adreslijst of kop kunnen breken. */
+const EMAIL_LOCAL = /^[^\s@<>()",;:]+$/;
+/** Domeinlabel in ASCII (na omzetting van internationale namen): begint en eindigt met letter of cijfer. */
+const EMAIL_LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 /**
- * Of een waarde een bruikbaar e-mailadres is.
+ * Of een waarde een bruikbaar e-mailadres is. Het domein wordt eerst naar zijn
+ * ASCII-vorm (punycode) omgezet, zodat ook internationale domeinnamen kloppen.
  * @param {*} value De waarde.
  * @returns {boolean} true bij een geldig e-mailadres (hoogstens 200 tekens).
  */
-const validEmail = (value) => typeof value === 'string' && value.length <= 200 && EMAIL.test(value.trim());
+const validEmail = (value) => {
+  if (typeof value !== 'string' || value.length > 200) return false;
+  const address = value.trim();
+  const at = address.lastIndexOf('@');
+  if (at < 1 || !EMAIL_LOCAL.test(address.slice(0, at))) return false;
+  const domain = domainToASCII(address.slice(at + 1));
+  const labels = domain.split('.');
+  return labels.length >= 2 && labels.every((label) => EMAIL_LABEL.test(label));
+};
 
 /**
  * Maakt de mailer van een tenant. De mailserver moet een openbaar adres hebben
