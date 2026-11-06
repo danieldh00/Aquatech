@@ -3,8 +3,18 @@
 // categorie. De webshop levert alleen platte categorienamen; een product wordt
 // op naam aan de diepste passende categorie van de boom gehangen.
 
-/** De standaardboom (Aquatechshop.nl): een lijst hoofdcategorieën met `group`, `children`, `intro` en `image`. */
+/** De standaardboom (Aquatechshop.nl): een lijst hoofdcategorieën met `group`, `children`, `intro`, `image` ('asset:…'), `hidden` en `match`. */
 const DEFAULT_TREE = require('./category-tree.json');
+
+/**
+ * De webshopcategorieën waarop een knoop producten indeelt: `match` (als ingevuld), anders haar eigen naam.
+ * Zo blijft de indeling gelijk als de naam in het menu wordt aangepast.
+ * @param {object} node De knoop.
+ * @returns {string[]} De namen.
+ */
+function matchNamesOf(node) {
+  return Array.isArray(node.match) && node.match.length ? node.match : [node.name];
+}
 
 /**
  * Maakt van een categorienaam een vergelijkbare sleutel: kleine letters en cijfers,
@@ -37,9 +47,11 @@ function indexOf(tree) {
    * @returns {void}
    */
   const visit = (node, group, depth) => {
-    const key = normalizeName(node.name);
-    const known = index.get(key);
-    if (!known || known.depth < depth) index.set(key, { node, group, depth, root: depth === 0 });
+    for (const name of matchNamesOf(node)) {
+      const key = normalizeName(name);
+      const known = index.get(key);
+      if (!known || known.depth < depth) index.set(key, { node, group, depth, root: depth === 0 });
+    }
     for (const child of node.children || []) visit(child, group, depth + 1);
   };
   for (const root of tree) visit(root, root.group, 0);
@@ -63,4 +75,4 @@ function placeIn(tree, names) {
   return best;
 }
 
-module.exports = { DEFAULT_TREE, normalizeName, placeIn };
+module.exports = { DEFAULT_TREE, normalizeName, placeIn, matchNamesOf };

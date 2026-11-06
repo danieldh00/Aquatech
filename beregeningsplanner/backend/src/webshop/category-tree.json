@@ -2,61 +2,61 @@
  {
   "name": "Beregening",
   "slug": "beregening_nieuw",
-  "image": "cat-beregening_nieuw.webp",
+  "image": "asset:cat-beregening_nieuw.webp",
   "children": [
    {
     "name": "Beregeningscomputers & regensensors",
     "slug": "beregeningscomputers-en-regensensors",
     "intro": "Beregeningscomputers voor automatisch beregenen. Ook met Wifi verbinding voor je smartphone! Ontdek het",
-    "image": "cat-beregeningscomputers-en-regensensors.webp"
+    "image": "asset:cat-beregeningscomputers-en-regensensors.webp"
    },
    {
     "name": "Complete verdelers & kleppenputten",
     "slug": "complete-verdelers-kleppenputten",
     "intro": "Hier vind je onze complete sets. Ideaal voor een snel en goed resultaat!",
-    "image": "cat-complete-verdelers-kleppenputten.webp"
+    "image": "asset:cat-complete-verdelers-kleppenputten.webp"
    },
    {
     "name": "Druppelaars & toebehoren",
     "slug": "druppelaars-en-toebehoren",
     "intro": "Alle producten voor micro irrigatie in kwekerij en tuin",
-    "image": "cat-druppelaars-en-toebehoren.webp"
+    "image": "asset:cat-druppelaars-en-toebehoren.webp"
    },
    {
     "name": "Druppelslangen & toebehoren",
     "slug": "druppelslang-toebehoren",
     "intro": "Alles wat je nodig hebt voor beregenen met druppelslangen!",
-    "image": "cat-druppelslang-toebehoren.webp",
+    "image": "asset:cat-druppelslang-toebehoren.webp",
     "children": [
      {
       "name": "Driptape koppelingen",
       "slug": "driptape-koppelingen",
       "intro": "Fittingen voor het verbinden van driptape leidingen en/of dunwandige tyleenslangen",
-      "image": "cat-driptape-koppelingen.webp"
+      "image": "asset:cat-driptape-koppelingen.webp"
      },
      {
       "name": "Druppelslang grondpennen/ankers",
       "slug": "druppelslang-grondpennen-ankers",
       "intro": "Hier vind je alle grondankers voor het vastleggen van jouw druppelslang of tyleenslang",
-      "image": "cat-druppelslang-grondpennen-ankers.webp"
+      "image": "asset:cat-druppelslang-grondpennen-ankers.webp"
      },
      {
       "name": "Druppelslang insteek koppelingen",
       "slug": "druppelslang-insteek-koppelingen",
       "intro": "Hier vind je alle koppelingen met slangtule. Deze koppelingen gebruik je om verbindingen te maken tussen drupppelslangen en 16mm tyleen slangen of tyleenkoppelingen. De koppelingen worden in de slang gedrukt.",
-      "image": "cat-druppelslang-insteek-koppelingen.webp"
+      "image": "asset:cat-druppelslang-insteek-koppelingen.webp"
      },
      {
       "name": "Druppelslangen",
       "slug": "druppelslangen",
       "intro": "Hier vind je alle druppelslangen voor jouw project!",
-      "image": "cat-druppelslangen.webp"
+      "image": "asset:cat-druppelslangen.webp"
      },
      {
       "name": "Trekvaste druppelslang koppelingen",
       "slug": "druppelslang-koppelingen-palaplast-lock",
       "intro": "Alle toebehoren voor jouw druppelslangsysteem vind je hier!",
-      "image": "cat-druppelslang-koppelingen-palaplast-lock.webp"
+      "image": "asset:cat-druppelslang-koppelingen-palaplast-lock.webp"
      }
     ]
    },
@@ -64,31 +64,31 @@
     "name": "Kraan/batterij computers",
     "slug": "kraan-batterij-computers",
     "intro": "Hier vind je kraancomputers op batterijen. Aansluiten, programma instellen en  beregenen maar!",
-    "image": "cat-kraan-batterij-computers.webp"
+    "image": "asset:cat-kraan-batterij-computers.webp"
    },
    {
     "name": "Magneetkleppen & putten",
     "slug": "magneetkleppen-putten",
     "intro": "Magneetkleppen zijn elektrische kleppen. Je gebruikt ze voor het automatiseren van je beregeningsinstallatie. Deze elektrische kleppen worden door de beregeningscomputer open en dicht gezet. Ze zijn er in 24 en 9 volt. Zowel VAC als DC. De meeste magneetkleppen kunnen functioneren met besturing vanaf een 230v beregeningscomputer. Door de standaard mee geleverde transformator wordt 230v omgevormd naar 24 volt.\n\nEen magneetklepput wordt ook wel kleppenput of kleppenbox genoemd. In de magneetklepputten kun je de magneetkleppen veilig onderbrengen in je tuin. Je plaatst deze bij voorkeur net onder/op maaiveld niveau.\n\nWacht niet en maak beregening automatisch en veilig door deze producten! Twijfel je over bepaalde dingen? Neem contact op, we helpen je graag op weg!",
-    "image": "cat-magneetkleppen-putten.webp"
+    "image": "asset:cat-magneetkleppen-putten.webp"
    },
    {
     "name": "Sproeiers & toebehoren",
     "slug": "sproeiers-en-toebehoren",
     "intro": "Hier vind je diverse soorten sproeiers en toebehoren voor het beregenen van jouw project",
-    "image": "cat-sproeiers-en-toebehoren.webp",
+    "image": "asset:cat-sproeiers-en-toebehoren.webp",
     "children": [
      {
       "name": "Pop-up sproeiers",
       "slug": "pop-up-sproeiers",
       "intro": "Hier vind je diverse pop-up sproeiers voor jouw project.\n\nEen pop-up sproeier is een sproeier die zich normaal net onder het maaiveld bevindt. Als er waterdruk op de leiding komt te staan, schuift deze sproeier automatisch uit naar boven. Als de waterdruk eraf is verdwijnt hij weer onder de grond.\n\nGebruik altijd een buitendraad knie of puntstuk tyleenkoppeling in de juiste maat voor het aansluiten van de sproeier.\n\nWe adviseren eigenlijk alle sproeiers minimaal op een tyleenleiding 25 mm aan te sluiten.",
-      "image": "cat-beregening_nieuw.webp"
+      "image": "asset:cat-beregening_nieuw.webp"
      },
      {
       "name": "Sproeikoppen & nevelaars",
       "slug": "sproeikoppen-en-nevalaars",
       "intro": "Hier vind je diverse sproeikoppen voor op de Rainbird 1800 en de Hunter PSR serie pop-up sproeiers",
-      "image": "cat-sproeikoppen-en-nevalaars.webp"
+      "image": "asset:cat-sproeikoppen-en-nevalaars.webp"
      }
     ]
    },
@@ -100,7 +100,7 @@
     "name": "Waterverdelers / manifolds",
     "slug": "waterverdeler-manifold",
     "intro": "Een waterverdeler, wordt ook wel manifold, verdeler of wandorgel genoemd. Deze zijn bedoeld voor het verdelen van het water van de toevoer. Dit zorgt ervoor dat er meerdere zones/groepen kunnen worden gerealiseerd uit.\n\nJe kunt hierop de watertoevoer aansluiten. Daarna kun je kogelkranen aanbrengen voor handmatige besturing. Wil je het automatiseren? Dat is makkelijk en goed mogelijk! Kijk hiervoor bij onze magneetkleppen en beregeningscomputers.\n\nIn ons assortiment tref je kant en klare verdelers. Maar je kunt natuurlijk ook zelf een waterverdeler maken van bijvoorbeeld PVC. Kijk hiervoor bij de categorie Druk PVC.",
-    "image": "cat-waterverdeler-manifold.webp"
+    "image": "asset:cat-waterverdeler-manifold.webp"
    },
    {
     "name": "Beregening oud",
@@ -113,144 +113,145 @@
  {
   "name": "Elektra",
   "slug": "elektra",
-  "image": "cat-elektra.webp",
+  "image": "asset:cat-elektra.webp",
   "group": "elektra"
  },
  {
-  "name": "Leidingen & Slangen",
+  "name": "Leidingen & toebehoren",
+  "match": ["Leidingen & Slangen", "Leidingen & toebehoren"],
   "slug": "leidingen-slangen",
   "intro": "Ontdek ons ruime leidingen en slangen assortiment. Je vindt hier alles wat je nodig hebt voor het afvoeren en aanvoeren van vloeistoffen terug in ons assortiment.",
-  "image": "cat-leidingen-slangen.webp",
+  "image": "asset:cat-leidingen-slangen.webp",
   "children": [
    {
     "name": "Draadfittingen",
     "slug": "draadfittingen",
     "intro": "Hier vind je diverse soorten draadfittingen voor jouw project",
-    "image": "cat-draadfittingen.webp",
+    "image": "asset:cat-draadfittingen.webp",
     "children": [
      {
       "name": "(kogel) kranen & toebehoren",
       "slug": "kogel-kranen-en-toebehoren",
-      "image": "cat-kogel-kranen-en-toebehoren.webp"
+      "image": "asset:cat-kogel-kranen-en-toebehoren.webp"
      },
      {
       "name": "Gegalvaniseerde draadfittingen",
       "slug": "gegalvaniseerde-draadfittingen",
       "intro": "Hier vind je alle gegalvaniseerde draadfittingen voor jouw project",
-      "image": "cat-gegalvaniseerde-draadfittingen.webp"
+      "image": "asset:cat-gegalvaniseerde-draadfittingen.webp"
      },
      {
       "name": "Geka messing snelkoppelingen",
       "slug": "geka-messing-snelkoppelingen",
       "intro": "Hier vind je alle geka snelkoppelingen, vervaardigd uit messing!\n\nGeka koppelingen voor een vlotte en makkelijke verbinding!\n\nGeka koppelingen ook wel Klauw/snelkoppelingen genoemd, zijn geschikt voor het transport van water. De koppelingen  worden vooral gebruikt in de land- en tuinbouw. Leverbaar met slangtules, binnen- en buitendraad en meer.\n\nDe Geka schroefkoppelingen zijn eenvoudig te koppelen en los te koppelen aan de slang, de bevestiging is volledig lektdicht.\n\nIn diverse maten en uitvoeringen beschikbaar, bekijk het uitgebreide assortiment koppelingen om de juiste koppeling te vinden!",
-      "image": "cat-draadfittingen.webp"
+      "image": "asset:cat-draadfittingen.webp"
      },
      {
       "name": "Messing draadfittingen & koppelingen",
       "slug": "messing-draadfittingen-koppelingen",
-      "image": "cat-messing-draadfittingen-koppelingen.webp"
+      "image": "asset:cat-messing-draadfittingen-koppelingen.webp"
      },
      {
       "name": "PP draadfittingen",
       "slug": "pp-draadfittingen",
       "intro": "Hier vind je PP draadfittingen voor jouw project",
-      "image": "cat-pp-draadfittingen.webp"
+      "image": "asset:cat-pp-draadfittingen.webp"
      },
      {
       "name": "RVS draadfittingen",
       "slug": "rvs-draadfittingen",
       "intro": "Hier vind je diverse hoogwaardige RVS draadfittingen voor jouw project!",
-      "image": "cat-rvs-draadfittingen.webp"
+      "image": "asset:cat-rvs-draadfittingen.webp"
      }
     ]
    },
    {
     "name": "PVC drukbuizen & fittingen",
     "slug": "druk-pvc-en-fittingen",
-    "image": "cat-druk-pvc-en-fittingen.webp"
+    "image": "asset:cat-druk-pvc-en-fittingen.webp"
    },
    {
     "name": "Toebehoren leidingen en slangen",
     "slug": "toebehoren-leidingen-en-slangen-https-aquatechshop-nl-produc",
     "intro": "Hulpmiddelen en toebehoren voor leidingen en slangen vind je hier!",
-    "image": "cat-toebehoren-leidingen-en-slangen-https-aquatechshop-nl-produc.webp"
+    "image": "asset:cat-toebehoren-leidingen-en-slangen-https-aquatechshop-nl-produc.webp"
    },
    {
     "name": "Tyleen & koppelingen",
     "slug": "tyleen-en-koppelingen",
     "intro": "Tyleen, PE leidingen en toebehoren!\n\nWij bieden een breed assortiment van kwalitatieve producten voor PE buis. . De perfecte waterleiding voor jouw project! Daarnaast een uitgebreid aanbod tyleen koppelingen.",
-    "image": "cat-pe-tyleenleidingen.webp",
+    "image": "asset:cat-pe-tyleenleidingen.webp",
     "children": [
      {
       "name": "PE – tyleenleidingen",
       "slug": "pe-tyleenleidingen",
       "intro": "Kwalitatieve tyleenslangen voor iedere klus!",
-      "image": "cat-pe-tyleenleidingen.webp"
+      "image": "asset:cat-pe-tyleenleidingen.webp"
      },
      {
       "name": "Tyleen koppelingen",
       "slug": "tyleenkoppelingen",
-      "image": "cat-tyleenkoppelingen.webp",
+      "image": "asset:cat-tyleenkoppelingen.webp",
       "children": [
        {
         "name": "Binnendraad tyleenkoppeling",
         "slug": "binnendraad-tyleenkoppeling",
-        "image": "cat-binnendraad-tyleenkoppeling.webp"
+        "image": "asset:cat-binnendraad-tyleenkoppeling.webp"
        },
        {
         "name": "Buitendraad tyleenkoppeling",
         "slug": "buitendraad-tyleen",
-        "image": "cat-buitendraad-tyleen.webp"
+        "image": "asset:cat-buitendraad-tyleen.webp"
        },
        {
         "name": "Eindkap tyleenkoppeling",
         "slug": "eindkap-tyleen",
-        "image": "cat-eindkap-tyleen.webp"
+        "image": "asset:cat-eindkap-tyleen.webp"
        },
        {
         "name": "Knie 90 ° tyleenkoppeling",
         "slug": "pe-knie-90-tyleen",
-        "image": "cat-pe-knie-90-tyleen.webp"
+        "image": "asset:cat-pe-knie-90-tyleen.webp"
        },
        {
         "name": "Knie binnendraad tyleenkoppeling",
         "slug": "knie-binnendraad-tyleenkoppeling",
-        "image": "cat-knie-binnendraad-tyleenkoppeling.webp"
+        "image": "asset:cat-knie-binnendraad-tyleenkoppeling.webp"
        },
        {
         "name": "Knie buitendraad tyleenkoppeling",
         "slug": "knie-buitendraad-tyleenkoppeling",
-        "image": "cat-knie-buitendraad-tyleenkoppeling.webp"
+        "image": "asset:cat-knie-buitendraad-tyleenkoppeling.webp"
        },
        {
         "name": "Kogelkraan tyleenkoppeling",
         "slug": "kogelkraan-tyleenkoppeling",
-        "image": "cat-kogelkraan-tyleenkoppeling.webp"
+        "image": "asset:cat-kogelkraan-tyleenkoppeling.webp"
        },
        {
         "name": "Recht, sok tyleenkoppeling",
         "slug": "sok-recht-tyleenkoppeling",
-        "image": "cat-sok-recht-tyleenkoppeling.webp"
+        "image": "asset:cat-sok-recht-tyleenkoppeling.webp"
        },
        {
         "name": "T-stuk binnendraad tyleenkoppeling",
         "slug": "t-stuk-binnendraad-tyleenkoppeling",
-        "image": "cat-t-stuk-binnendraad-tyleenkoppeling.webp"
+        "image": "asset:cat-t-stuk-binnendraad-tyleenkoppeling.webp"
        },
        {
         "name": "T-stuk tyleenkoppeling",
         "slug": "pe-t-stuk-tyleen",
-        "image": "cat-pe-t-stuk-tyleen.webp"
+        "image": "asset:cat-pe-t-stuk-tyleen.webp"
        },
        {
         "name": "Verloop t-stuk tyleenkoppeling",
         "slug": "verloop-t-stuk-tyleen",
-        "image": "cat-verloop-t-stuk-tyleen.webp"
+        "image": "asset:cat-verloop-t-stuk-tyleen.webp"
        },
        {
         "name": "Verloop tyleenkoppeling",
         "slug": "verloop-tyleenkoppeling",
-        "image": "cat-verloop-tyleenkoppeling.webp"
+        "image": "asset:cat-verloop-tyleenkoppeling.webp"
        }
       ]
      },
@@ -258,91 +259,91 @@
       "name": "Unidelta tyleen koppelingen",
       "slug": "unidelta-tyleen-koppelingen",
       "intro": "Hoogwaardige tyleen koppelingen van  Unidelta! Scrol naar onder en ontdek het assortiment! De robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden van zowel HDPE als LDPE leidingen.De Unidelta koppelingen hebben het Kiwa keurmerk. Daarom zijn  te gebruiken voor drinkwater systemen. De werkdruk van deze koppeling is tot 16 BAR/ Verkrijgbaar met een diameter van 16 tot 110 mm.\n\nZelfs al staan er sommige producten niet op onze webshop, neem contact op, dan regelen we het!",
-      "image": "cat-unidelta-pe-t-stuk.webp",
+      "image": "asset:cat-unidelta-pe-t-stuk.webp",
       "children": [
        {
         "name": "Unidelta eindkap tyleen koppeling",
         "slug": "unidelta-pe-eindkap",
         "intro": "Hoogwaardige Unidelta eindkappen voor tyleen slang. Betrouwbaar en robuust.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-pe-eindkap.webp"
+        "image": "asset:cat-unidelta-pe-eindkap.webp"
        },
        {
         "name": "Unidelta knie 90 graden tyleen koppeling",
         "slug": "unidelta-pe-knie-90-graden-tyleen-koppeling",
         "intro": "Hoogwaardige Unidelta knieën 90 graden voor tyleen slang. Betrouwbaar en robuust.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-pe-knie-90-graden-tyleen-koppeling.webp"
+        "image": "asset:cat-unidelta-pe-knie-90-graden-tyleen-koppeling.webp"
        },
        {
         "name": "Unidelta knie binnendraad tyleen koppeling",
         "slug": "unidelta-pe-knie-binnendraad-koppeling",
         "intro": "Hoogwaardige Unidelta knie x binnendraad koppelingen voor tyleen slang.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-pe-knie-binnendraad-koppeling.webp"
+        "image": "asset:cat-unidelta-pe-knie-binnendraad-koppeling.webp"
        },
        {
         "name": "Unidelta knie buitendraad tyleen koppeling",
         "slug": "unidelta-pe-knie-buitendraad-koppeling",
         "intro": "Hoogwaardige Unidelta knie x buitendraad koppelingen voor tyleen slang.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-pe-knie-buitendraad-koppeling.webp"
+        "image": "asset:cat-unidelta-pe-knie-buitendraad-koppeling.webp"
        },
        {
         "name": "Unidelta muurplaten tbv tapkraan",
         "slug": "unidelta-muurplaten",
         "intro": "Hier vind je onze muurplaten van Unidelta voor het aanbrengen van jouw tapkraan",
-        "image": "cat-unidelta-muurplaten.webp"
+        "image": "asset:cat-unidelta-muurplaten.webp"
        },
        {
         "name": "Unidelta PE knie 2 x knel + binnendraad",
         "slug": "unidelta-knie-2-keer-knel-plus-binnendrad",
         "intro": "Ideale koppeling voor het maken van bijzondere aansluitingen",
-        "image": "cat-unidelta-knie-2-keer-knel-plus-binnendrad.webp"
+        "image": "asset:cat-unidelta-knie-2-keer-knel-plus-binnendrad.webp"
        },
        {
         "name": "Unidelta puntstuk buitendraad tyleen koppeling",
         "slug": "unidelta-pe-puntstuk-buitendraad-koppeling",
         "intro": "Hoogwaardige Unidelta buitendraad koppelingen voor tyleen slang.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-pe-puntstuk-buitendraad-koppeling.webp"
+        "image": "asset:cat-unidelta-pe-puntstuk-buitendraad-koppeling.webp"
        },
        {
         "name": "Unidelta rechte tyleen koppeling",
         "slug": "unidelta-pe-rechte-koppeling",
         "intro": "Hoogwaardige rechte Unidelta koppelingen voor tyleen slang.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-pe-rechte-koppeling.webp"
+        "image": "asset:cat-unidelta-pe-rechte-koppeling.webp"
        },
        {
         "name": "Unidelta schroefbus binnendraad tyleen koppeling",
         "slug": "unidelta-pe-schroefbus-binnendraad-koppeling",
         "intro": "Hoogwaardige Unidelta binnendraad koppeling voor tyleen slang.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-pe-puntstuk-buitendraad-koppeling.webp"
+        "image": "asset:cat-unidelta-pe-puntstuk-buitendraad-koppeling.webp"
        },
        {
         "name": "Unidelta t-stuk binnendraad tyleen koppeling",
         "slug": "unidelta-t-stuk-binnendraad",
         "intro": "Hoogwaardige Unidelta t-stuk binnendraad koppeling voor tyleen slang.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-t-stuk-binnendraad.webp"
+        "image": "asset:cat-unidelta-t-stuk-binnendraad.webp"
        },
        {
         "name": "Unidelta t-stuk buitendraad tyleen koppeling",
         "slug": "unidelta-pe-t-stuk-buitendraad",
         "intro": "Hoogwaardig Unidelta t-stuk buitendraad koppeling voor tyleen slang.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-pe-t-stuk-buitendraad.webp"
+        "image": "asset:cat-unidelta-pe-t-stuk-buitendraad.webp"
        },
        {
         "name": "Unidelta T-stuk tyleen koppeling",
         "slug": "unidelta-pe-t-stuk",
         "intro": "Hoogwaardige Unidelta t-stuk koppelingen voor tyleen slang.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.\n\n‘",
-        "image": "cat-unidelta-pe-t-stuk.webp"
+        "image": "asset:cat-unidelta-pe-t-stuk.webp"
        },
        {
         "name": "Unidelta verloop t-stuk tyleen koppeling",
         "slug": "unidelta-pe-verloop-t-stuk-tyleen-koppeling",
         "intro": "Hoogwaardige Unidelta t-stukken 90 voor tyleen slang. Betrouwbaar en robuust.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-pe-verloop-t-stuk-tyleen-koppeling.webp"
+        "image": "asset:cat-unidelta-pe-verloop-t-stuk-tyleen-koppeling.webp"
        },
        {
         "name": "Unidelta verloop tyleen koppeling",
         "slug": "unidelta-pe-verloop-tyleen-koppeling",
         "intro": "Hoogwaardige Unidelta verloop koppelingen voor tyleen slang.\n\nDeze robuuste Unidelta koppelingen zijn verkrijgbaar in diverse varianten. Perfect voor het verbinden met zowel HDPE en LDPE leidingen.",
-        "image": "cat-unidelta-pe-verloop-tyleen-koppeling.webp"
+        "image": "asset:cat-unidelta-pe-verloop-tyleen-koppeling.webp"
        }
       ]
      }
@@ -354,36 +355,36 @@
  {
   "name": "Pomp en techniek",
   "slug": "pomp-en-techniek",
-  "image": "cat-pomp-en-techniek.webp",
+  "image": "asset:cat-pomp-en-techniek.webp",
   "children": [
    {
     "name": "Bovengrondse pompen",
     "slug": "bovengrondse-pompen",
     "intro": "Een uitgebreid aanbod beregeningspompen. Natuurlijk ook te gebruiken voor andere doelen in de tuin! Een kwalitatieve waterpomp koop je bij Aquatechshop. Onder meer Pedrollo, DAB en Ebara bieden wij aan.\n\nTwijfel je? Neem contact op, we helpen je graag op weg!",
-    "image": "cat-bovengrondse-pompen.webp"
+    "image": "asset:cat-bovengrondse-pompen.webp"
    },
    {
     "name": "Bronkoppen",
     "slug": "bronkoppen",
     "intro": "Ontdek ons unieke aanbod van robuuste en kwalitatieve bronkoppen. Standaard voorzien van hoogwaardig GEBO fitwerk( Duits fabrikaat). Leverbaar in onder meer 110,125, 140, 160 mm en zelfs tot wel 280 millimeter!\n\nOok onze KIWA bronkop is zeer interessant voor wie een eigen drinkwaterbron realiseert. Deze is namelijk voorzien van KIWA fitwerk inclusief messing tyleenkoppeling met steunbus. Dit garandeert een veilige doorstroom van drinkwater, zonder verontreinigingen.\n\nWij zijn exclusief distributeur in Nederland van deze producten. Zoek daarom niet verder!\n\nHebt u vragen, wij helpen u graag op weg!",
-    "image": "cat-bronkoppen.webp"
+    "image": "asset:cat-bronkoppen.webp"
    },
    {
     "name": "Bronpompen",
     "slug": "bronpompen",
     "intro": "Wij bieden een uitgebreide keuze aan diverse beproefde merken bronpompen. Voor zowel losse bronpomp motoren als hydraulische pompdelen ben je aan het juiste adres. Ook complete bronpomp sets hebben wij in het assortiment.\n\n## Wat is een bronpomp?\n\nEen bronpomp is een pomp die in een bron wordt aangebracht. Denk bijvoorbeeld aan een geboorde bron, oppervlaktewater of een regenwater opvang. Een bronpomp bestaat globaal uit een elektromotor en een pompdeel. Dit zogenaamde hydraulische pompdeel bevat ‘waaiers’ die het water bij rotatie verplaatsen naar de persuitgang. Dit pompdeel wordt aangedreven door de elektromotor. Samen vormen ze een krachtige combinatie.",
-    "image": "cat-bronpompen.webp",
+    "image": "asset:cat-bronpompen.webp",
     "children": [
      {
       "name": "Aansluitkasten",
       "slug": "aansluitkasten-bronpomp",
-      "image": "cat-aansluitkasten-230v-bronpomp.webp",
+      "image": "asset:cat-aansluitkasten-230v-bronpomp.webp",
       "children": [
        {
         "name": "Aansluitkast 230V bronpomp",
         "slug": "aansluitkasten-230v-bronpomp",
         "intro": "De aansluitkast voor jouw 230V bronpomp motor vind je hieronder!",
-        "image": "cat-aansluitkasten-230v-bronpomp.webp"
+        "image": "asset:cat-aansluitkasten-230v-bronpomp.webp"
        }
       ]
      },
@@ -391,19 +392,19 @@
       "name": "Complete bronpompen",
       "slug": "complete-bronpompen",
       "intro": "Uitgebreid assortiment complete bronpompen",
-      "image": "cat-3-bronpompen-compleet.webp",
+      "image": "asset:cat-3-bronpompen-compleet.webp",
       "children": [
        {
         "name": "3″ Bronpompen compleet",
         "slug": "3-bronpompen-compleet",
         "intro": "Ontdek onze complete bronpompen van diverse merken. Zoals Pedrollo, DAB, Franklin, Ebara en niet te vergeten: Grundfos!\n\nJe vindt hier bronpompen 3″, vanaf circa 74mm. Allen uitgevoerd in RVS. Perfect voor uw drinkwaterinstallatie of tuinberegening!\n\nHulp nodig bij het aansluiten van je bronpomp? Of twijfel je over de juiste keuze? Neem contact op, wij helpen je graag!",
-        "image": "cat-3-bronpompen-compleet.webp",
+        "image": "asset:cat-3-bronpompen-compleet.webp",
         "children": [
          {
           "name": "Ebara 3″ complete bronpompen",
           "slug": "ebara-3-complete-bronpompen",
           "intro": "Ons aanbod van het gerenommeerde merk Ebara.",
-          "image": "cat-3-ebara-bronpomp-motoren.webp"
+          "image": "asset:cat-3-ebara-bronpomp-motoren.webp"
          },
          {
           "name": "Grundfos 3″ complete bronpompen",
@@ -414,7 +415,7 @@
           "name": "Pedrollo 3″ complete bronpompen",
           "slug": "pedrollo-3sr-bronpompen-bronpompen-pompen",
           "intro": "Het complete assortiment van de Pedrollo 3SR serie. Dit zijn bronpompen met een diameter van 3 inch( 76 mm) Ook wel 3 duims genoemd. Deze passen in bronnen vanaf 90 millimeter!",
-          "image": "cat-pedrollo-3sr-bronpompen-bronpompen-pompen.webp"
+          "image": "asset:cat-pedrollo-3sr-bronpompen-bronpompen-pompen.webp"
          }
         ]
        },
@@ -422,25 +423,25 @@
         "name": "4″ Bronpompen compleet",
         "slug": "complete-4-bronpompen",
         "intro": "Ontdek onze complete bronpompen van diverse merken. Zoals Pedrollo, DAB, Franklin, Ebara en niet te vergeten: Grundfos!\n\nJe vindt hier bronpompen 4″, vanaf 96mm. Allen uitgevoerd in RVS. Perfect voor uw drinkwaterinstallatie of tuinberegening!\n\nHulp nodig bij het aansluiten van je bronpomp? Of twijfel je over de juiste keuze? Neem contact op, wij helpen je graag!",
-        "image": "cat-complete-4-bronpompen.webp",
+        "image": "asset:cat-complete-4-bronpompen.webp",
         "children": [
          {
           "name": "DAB 4″ complete bronpompen",
           "slug": "complete-4-bronpomp-sets",
           "intro": "Zoek je een bronpomp voor in uw grondwaterput of een andere bron? Ontdek ons uitgebreide assortiment aan complete DAB bronpompen.",
-          "image": "cat-complete-4-bronpomp-sets.webp"
+          "image": "asset:cat-complete-4-bronpomp-sets.webp"
          },
          {
           "name": "Ebara 4″ complete bronpompen",
           "slug": "ebara-4-complete-bronpompen",
           "intro": "Ons aanbod van het gerennomeerde merk Ebara",
-          "image": "cat-3-ebara-bronpomp-motoren.webp"
+          "image": "asset:cat-3-ebara-bronpomp-motoren.webp"
          },
          {
           "name": "Pedrollo 4″ complete bronpompen",
           "slug": "pedrollo-complete-bronpomp",
           "intro": "Het complete assortiment van de Pedrollo 4″ bronpompen koop je exclusief bij Aquatechshop.\n\nPedrollo is een Italiaans bedrijf met expertise op het gebied van de waterpomp. Het is al decennia lang dé beregeningspomp in Nederland!\n\nMet onze expertise helpen we je op weg met jouw project!",
-          "image": "cat-pedrollo-complete-bronpomp.webp"
+          "image": "asset:cat-pedrollo-complete-bronpomp.webp"
          }
         ]
        }
@@ -450,19 +451,19 @@
       "name": "Hydraulische pompdelen",
       "slug": "hydraulische-pompdelen",
       "intro": "Alle pompdelen met universele NEMA koppeling vind je hier!",
-      "image": "cat-4-pompdelen.webp",
+      "image": "asset:cat-4-pompdelen.webp",
       "children": [
        {
         "name": "4″ Pompdelen",
         "slug": "4-pompdelen",
         "intro": "Hier tref je ons uitgebreide assortiment van 4″ pompdelen met NEMA koppeling",
-        "image": "cat-4-pompdelen.webp",
+        "image": "asset:cat-4-pompdelen.webp",
         "children": [
          {
           "name": "Pedrollo 4″ pompdelen",
           "slug": "pedrollo-4-losse-pompdelen",
           "intro": "Koop de losse pedrollo 4SR pompdelen exclusief bij aquatechshop. Ideaal te combineren met een bronpompmotor van Franklin Electric!\n\n## Wat is een hydraulisch pompdeel?\n\nEen hydraulisch pomphuis dient gekoppeld te worden aan een motor. Het pomphuis bevat waaiers. Deze verplaatsen door de aandrijving van de motor het water naar de persuitgang.\n\nTwijfel je over de juiste keuze bronpomp in jouw situatie? Neem contact op, we helpen je graag op weg!",
-          "image": "cat-4-pompdelen.webp"
+          "image": "asset:cat-4-pompdelen.webp"
          }
         ]
        }
@@ -472,19 +473,19 @@
       "name": "Losse bronpomp motoren",
       "slug": "losse-bronpomp-motoren",
       "intro": "Hier tref je ons uitgebreide aanbod van losse bronpompmotoren in diverse merken, maten en vermogens.",
-      "image": "cat-losse-bronpomp-motoren.webp",
+      "image": "asset:cat-losse-bronpomp-motoren.webp",
       "children": [
        {
         "name": "3″ Bronpomp motoren",
         "slug": "3-bronpomp-motoren",
         "intro": "Hier tref je ons aanbod 3″ bronpomp motoren!",
-        "image": "cat-3-bronpomp-motoren.webp",
+        "image": "asset:cat-3-bronpomp-motoren.webp",
         "children": [
          {
           "name": "3″ Ebara bronpomp motoren",
           "slug": "3-ebara-bronpomp-motoren",
           "intro": "Hier tref je ons uitgebreide aanbod van 3″ Ebara bronpomp motoren",
-          "image": "cat-3-ebara-bronpomp-motoren.webp"
+          "image": "asset:cat-3-ebara-bronpomp-motoren.webp"
          }
         ]
        },
@@ -492,25 +493,25 @@
         "name": "4″ Bronpomp motoren",
         "slug": "4-bronpomp-motoren",
         "intro": "Hier tref je ons uitgebreide aanbod van 4″ bronpomp motoren!",
-        "image": "cat-4-bronpomp-motoren.webp",
+        "image": "asset:cat-4-bronpomp-motoren.webp",
         "children": [
          {
           "name": "4″ DAB bronpomp motoren",
           "slug": "4-dab-bronpomp-motoren",
           "intro": "Hier tref je ons aanbod 4″ DAB-Tesla bronpompmotoren!",
-          "image": "cat-4-dab-bronpomp-motoren.webp"
+          "image": "asset:cat-4-dab-bronpomp-motoren.webp"
          },
          {
           "name": "4″ Franklin Electric bronpomp motoren",
           "slug": "bronpomp-motoren-4",
           "intro": "Losse bronpomp motoren van het top merk Franklin Electric.\n\nDe motoren met het oranje label zijn olie gekoeld. Topkwaliteit. Het voordeel van deze motoren is dat ze extra lang zijn t.o.v. andere bronpompmotoren. Dit geeft ruimte voor meer koeling en betere isolatie. Daarnaast zijn deze motoren volledig herwikkelbaar.\n\nDe motoren zonder oranje label zijn de watergel gekoelde motoren. Deze zijn echter niet herwikkelbaar. \n\nBeide type motoren zijn geschikt voor frequentiebesturing(VFD)\n\nLangere kabels voor op jouw Franklin motor vind je hier.",
-          "image": "cat-4-bronpomp-motoren.webp"
+          "image": "asset:cat-4-bronpomp-motoren.webp"
          },
          {
           "name": "4″ Pedrollo bronpomp motoren",
           "slug": "pedrollo-bronpompmotoren",
           "intro": "Ontdek de Italiaanse Pedrollo 4″ bronpomp motor. Dit merk staat alom bekend om zijn betrouwbaarheid en duurzaamheid. Leverbaar in zowel 230V en 400V uitvoering. Zowel de PD als PS onderwatermotor is leverbaar.\n\n4″ Losse bronpomp motor van het top merk Pedrollo. Voor onder meer het Pedrollo 4SR hydraulisch  pompdeel. Ook te koppelen met diverse andere merken pomplichamen. Dit door de zogenaamd universele NEMA koppeling.\n\nElke motor is voorzien van een zogenaamde NEMA aansluiting voor op een hydraulisch pompdeel. Dat betekent dat zeer veel merken hydraulische pomplichamen geschikt zijn voor aansluiting hierop.\n\nKies voor de betrouwbare  bronpompmotoren van Pedrollo!\n\nAls u twijfelt over de juiste keuze motor, neem gerust contact met ons op. Wij helpen u graag op weg!",
-          "image": "cat-pedrollo-bronpompmotoren.webp"
+          "image": "asset:cat-pedrollo-bronpompmotoren.webp"
          }
         ]
        },
@@ -518,13 +519,13 @@
         "name": "6″ Bronpomp motoren",
         "slug": "6-bronpomp-motoren",
         "intro": "Hier tref je ons aanbod van 6″ losse bronpomp motoren.\n\nZit er niet tussen wat je zoekt? Neem contact op, ook voor grotere motoren of bijzondere producten!",
-        "image": "cat-6-bronpomp-motoren.webp",
+        "image": "asset:cat-6-bronpomp-motoren.webp",
         "children": [
          {
           "name": "6″ Franklin Electric bronpomp motoren",
           "slug": "6-franklin-electric-bronpomp-motoren",
           "intro": "Hier tref je ons aanbod van 6″ bronpomp motoren van het gerenommeerde Franklin electric!",
-          "image": "cat-6-bronpomp-motoren.webp"
+          "image": "asset:cat-6-bronpomp-motoren.webp"
          }
         ]
        }
@@ -534,24 +535,24 @@
       "name": "Stroomkabels bronpomp motoren",
       "slug": "stroomkabel-bronpomp-motor",
       "intro": "Waterdichte stroomkabels voor het monteren op je bronpomp.\n\nVoor onder meer DAB, Franklin en Pedrollo kunnen wij kabels op maat leveren. Langere lengtes of advies nodig? We helpen je graag. Neem contact op!",
-      "image": "cat-franklin-electric-kabels.webp",
+      "image": "asset:cat-franklin-electric-kabels.webp",
       "children": [
        {
         "name": "Ebara-Sumoto kabels",
         "slug": "ebara-sumoto-motorkabels",
         "intro": "Hier vind je alle langere kabels voor jouw Ebara-Sumoto bronpompmotor. De motoren van Ebara worden gemaakt door het Italiaanse bedrijf Sumoto.",
-        "image": "cat-ebara-sumoto-motorkabels.webp"
+        "image": "asset:cat-ebara-sumoto-motorkabels.webp"
        },
        {
         "name": "Franklin Electric bronpompmotor kabels",
         "slug": "franklin-electric-kabels",
         "intro": "De kabel op maat voor jouw Franklin Electric bronpompmotor.\n\nPS, van de olie gekoelde motoren wordt de kabel verlengd middels een speciale mof voor waterdichte verbinding( motor met de oranje sticker). Dit omdat hiervoor geen vaste kabels zijn, zoals de watergel motor die wel beschikbaar heeft.",
-        "image": "cat-franklin-electric-kabels.webp"
+        "image": "asset:cat-franklin-electric-kabels.webp"
        },
        {
         "name": "Pedrollo kabels",
         "slug": "pedrollo-kabels",
-        "image": "cat-pedrollo-kabels.webp"
+        "image": "asset:cat-pedrollo-kabels.webp"
        }
       ]
      }
@@ -561,25 +562,25 @@
     "name": "Dompelpompen",
     "slug": "dompelpompen",
     "intro": "Koop je dompelpomp exclusief bij Aquatechshop! Voor betrouwbare producten en persoonlijke aandacht.\n\nTwijfel je over de juiste keuze in jouw situatie? Neem contact op, we helpen je graag op weg!",
-    "image": "cat-dompelpompen.webp"
+    "image": "asset:cat-dompelpompen.webp"
    },
    {
     "name": "Expansievaten & toebehoren",
     "slug": "expansievaten-en-toebehoren",
     "intro": "Hoog kwalitatieve expansievaten voor ieder soort installatie!",
-    "image": "cat-expansievaten-en-toebehoren.webp",
+    "image": "asset:cat-expansievaten-en-toebehoren.webp",
     "children": [
      {
       "name": "RVS expansievaten",
       "slug": "rvs-expansievaten",
       "intro": "Topkwaliteit RVS expansievaten van onder meer het Italiaanse topmerk Varem” Wij zijn hier officieel importeur van.",
-      "image": "cat-expansievaten-en-toebehoren.webp"
+      "image": "asset:cat-expansievaten-en-toebehoren.webp"
      },
      {
       "name": "Verzinkte expansievaten (Zincvarem)",
       "slug": "verzinkte-expansievaten-zincvarem",
       "intro": "Topkwaliteit verzinkte expansievaten van het Italiaanse merk Varem! Voor wie kwaliteit en betaalbaarheid belangrijk vinden.",
-      "image": "cat-verzinkte-expansievaten-zincvarem.webp"
+      "image": "asset:cat-verzinkte-expansievaten-zincvarem.webp"
      }
     ]
    },
@@ -587,19 +588,19 @@
     "name": "Motorpompen",
     "slug": "motorpompen",
     "intro": "Alle waterpompen met een motorische aandrijving vind je hier! Van vuilwaterpompen tot aan de normale schoonwater pomp. Heb je vragen of zoek je iets? Neem gerust contact op!",
-    "image": "cat-motorpompen.webp"
+    "image": "asset:cat-motorpompen.webp"
    },
    {
     "name": "Overige toebehoren bron & pomp",
     "slug": "overige-toebehoren-bron-pomp",
     "intro": "Van manometers tot aan ophangkabels voor bronpompen, je vind het allemaal op deze pagina!",
-    "image": "cat-overige-toebehoren-bron-pomp.webp"
+    "image": "asset:cat-overige-toebehoren-bron-pomp.webp"
    },
    {
     "name": "Pomp besturing",
     "slug": "pompbesturing",
     "intro": "Alles voor het besturen van pompen. Van eenvoudige drukschakelaars tot aan frequentiebesturing van bijvoorbeeld DAB. De beste pompbesturing vind je bij Aquatechshop! Twijfel je? We helpen je graag op weg!",
-    "image": "cat-pompbesturing.webp"
+    "image": "asset:cat-pompbesturing.webp"
    }
   ],
   "group": "pomp-techniek"

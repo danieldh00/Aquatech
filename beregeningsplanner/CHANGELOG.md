@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.7.0
+
+De menuboom van de webshop is aanpasbaar in Beheer.
+
+- **Tabblad Menu** in Beheer > Webshop-inhoud (`beheer/webshop-menu.js`): categorieën hernoemen, verplaatsen
+  (omhoog, omlaag, een niveau in of uit), toevoegen, verbergen en verwijderen, met per categorie uitleg,
+  afbeelding en de webshopcategorieën waarop producten worden ingedeeld (`match`). De vier koppen blijven
+  vast (alleen hernoemen). Concept, voorbeeld (`?voorbeeld=1`), publiceren, weggooien en vorige versie
+  terugzetten zoals bij de andere onderdelen; opslag als content-sleutel `menu` in `shop_content`
+  (geen migratie), `normalizeTree` saneert de boom (max. 600 categorieën, 6 niveaus, unieke adressen).
+- Hernoemen breekt de indeling niet: een bestaande categorie houdt haar webshopnaam als `match`.
+- Webshopcategorieën die nog in geen enkele categorie staan, staan onder *Nog niet ingedeeld* met een knop
+  om ze toe te voegen.
+- Submenu's in de shop klappen naar rechts open en alleen naar links als er rechts geen ruimte meer is
+  (`webshop/storefront-menu.js`, klassen `fly-left`/`drop-left`; vervangt `nav-flip`).
+- Een voorbeeld (`?voorbeeld=1`) houdt de menu- en categorielinks in het concept.
+- `createStorefrontData` krijgt de boom per organisatie (`treeOf`); categorieafbeeldingen in de standaardboom
+  zijn nu `asset:`-verwijzingen.
+
 ## 1.6.9
 
 Categoriepagina's en menu van de eigen webshop in de opzet van aquatechshop.nl.

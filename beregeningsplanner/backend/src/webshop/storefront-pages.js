@@ -174,7 +174,7 @@ function navigation(groups, root) {
   const extraPages = activeContent.pages.filter((page) => page.menu && page.slug !== 'over-ons');
   const wholesale = activeShop.wholesale ? `<li class="nav-about"><a href="${root}groothandel/">Groothandel</a></li>` : '';
   const about = `<li class="nav-about"><a href="${root}over-ons/">Over ons</a></li>${wholesale}${extraPages.map((page) => `<li class="nav-about"><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}`;
-  const desktop = groups.map((group, index) => `<li class="nav-group${index >= Math.ceil(groups.length / 2) ? ' nav-flip' : ''}"><span class="nav-heading" tabindex="0">${escapeHtml(group.name)}</span><ul class="nav-drop">${flyItems(group.categories)}</ul></li>`).join('');
+  const desktop = groups.map((group) => `<li class="nav-group"><span class="nav-heading" tabindex="0">${escapeHtml(group.name)}</span><ul class="nav-drop">${flyItems(group.categories)}</ul></li>`).join('');
   const mobile = groups.map((group) => `<li><details><summary>${escapeHtml(group.name)}</summary><ul>${foldItems(group.categories)}</ul></details></li>`).join('');
   return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${search}${about}${desktop}<!--planner:${root}--></ul></nav>
 <details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${mobile}${activeShop.wholesale ? `<li><a href="${root}groothandel/">Groothandel</a></li>` : ''}${extraPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}<!--planner:${root}--></ul></details>`;
@@ -191,6 +191,7 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
   const { site, pages } = activeContent;
   const phone = site.contact.phone;
   const phoneHref = phoneLink(phone);
+  const nav = navigation(groups, root);
   const footerPages = pages.filter((page) => page.footer && page.slug !== 'over-ons' && !LEGAL_SLUGS.includes(page.slug));
   const legalLinks = LEGAL_SLUGS.map((slug) => { const own = pages.find((page) => page.slug === slug); return `<a href="${root}pagina/${slug}/">${escapeHtml(own ? own.title : LEGAL_TITLES[slug])}</a>`; }).join('');
   return `<!doctype html>
@@ -203,7 +204,7 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
 ${refresh ? `<meta http-equiv="refresh" content="0;url=${escapeHtml(refresh)}">\n` : ''}<link rel="icon" type="image/png" href="${assetUrl(root, 'favicon.png')}">
 <link rel="stylesheet" href="${assetUrl(root, 'brand.css')}">
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
-${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
+${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
 <body>
 ${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${escapeHtml(site.notice.color || 'purple')}">${escapeHtml(site.notice.text)}</div>` : ''}
 <header class="shop-head">
@@ -221,7 +222,7 @@ ${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${esc
     : `<span class="shop-action cart" aria-disabled="true" title="De winkelwagen volgt binnenkort">${ICONS.cart}<span>Winkelwagen</span><b>0</b></span>`}
     </div>
   </div>
-  ${navigation(groups, root)}
+  ${nav}
 </header>
 <main class="shop-main${wide ? ' wide' : ''}">
 ${body}
@@ -579,7 +580,7 @@ function browsePage({ group, category = null, products = [], groups, options = {
   <button class="button" type="submit">Filter</button>${min != null || max != null ? ` <a href="${link({ min: '', max: '' })}">Wis prijs</a>` : ''}
 </form>`;
   const side = `<aside class="browse-side"><h2>Categorie</h2>${sideTree(group.categories, open, category ? category.slug : '', root)}${products.length ? `<h2>Prijs</h2>${priceForm}` : ''}</aside>`;
-  const blocks = children.length ? `<div class="cat-blocks">${children.map((child) => `<a class="cat-block" href="${root}categorie/${escapeHtml(child.slug)}/"><span class="cat-block-image">${child.image ? `<img src="${assetUrl(root, child.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><strong>${escapeHtml(child.name)}</strong><span>${productCount(child.count)}</span></a>`).join('')}</div>` : '';
+  const blocks = children.length ? `<div class="cat-blocks">${children.map((child) => `<a class="cat-block" href="${root}categorie/${escapeHtml(child.slug)}/"><span class="cat-block-image">${child.image ? `<img src="${imageSrc(root, child.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><strong>${escapeHtml(child.name)}</strong><span>${productCount(child.count)}</span></a>`).join('')}</div>` : '';
   const sorting = SORTS.map((item) => `<a href="${link({ sorteer: item.key })}"${item.key === sort ? ' aria-current="true"' : ''}>${escapeHtml(item.label)}</a>`).join(' · ');
   const pages = pageCount > 1 ? `<nav class="pager" aria-label="Pagina's">${Array.from({ length: pageCount }, (_, index) => `<a href="${link({ pagina: index === 0 ? '' : index + 1 })}"${index + 1 === page ? ' aria-current="page"' : ''}>${index + 1}</a>`).join('')}${page < pageCount ? `<a href="${link({ pagina: page + 1 })}">Volgende</a>` : ''}</nav>` : '';
   const list = products.length ? `<div class="browse-toolbar"><p>${ordered.length ? `Resultaat ${(page - 1) * PAGE_SIZE + 1}–${(page - 1) * PAGE_SIZE + shown.length} van de ${ordered.length} ${ordered.length === 1 ? 'resultaat' : 'resultaten'}` : 'Geen resultaten'}</p>

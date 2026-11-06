@@ -344,11 +344,12 @@
     const root = $('#sc-root');
     const { view } = state;
     if (!view.available) { root.innerHTML = `<div class="notice">${esc(view.message)}</div>`; return; }
-    const tabs = [['site', 'Startpagina en gegevens'], ['pages', "Pagina's"], ['images', 'Afbeeldingen']];
+    const tabs = [['site', 'Startpagina en gegevens'], ['menu', 'Menu'], ['pages', "Pagina's"], ['images', 'Afbeeldingen']];
     root.innerHTML = `${view.storefront ? '' : '<div class="notice small">De eigen webshop staat uit: bezoekers zien hem pas na het aanzetten bij <a href="#webshop">Webshop en WooCommerce</a>. Het voorbeeld werkt wel.</div>'}
       <p class="muted small">Pas hier de teksten en afbeeldingen van <code>winkel/</code> aan. Wijzigingen blijven een concept totdat je op <b>Publiceren</b> klikt; met <b>Voorbeeld bekijken</b> zie je het concept zoals bezoekers het straks zien.</p>
       <div class="sc-tabs" role="tablist">${tabs.map(([id, label]) => `<button type="button" role="tab" class="btn${state.tab === id ? ' primary' : ''}" aria-selected="${state.tab === id}" data-tab="${id}">${label}</button>`).join('')}</div>
-      ${state.tab === 'site' ? siteTab() : state.tab === 'images' ? imagesTab() : (state.editing ? pageEditor() : pagesTab())}`;
+      ${state.tab === 'site' ? siteTab() : state.tab === 'images' ? imagesTab() : state.tab === 'menu' ? '<div id="sc-menu"></div>' : (state.editing ? pageEditor() : pagesTab())}`;
+    if (state.tab === 'menu') window.BeheerWebshopMenu.mount($('#sc-menu'), { view: state.view, api, adopt: menuAdopt, toast });
     if (state.editing) document.execCommand('defaultParagraphSeparator', false, 'p');
   }
 
@@ -359,9 +360,11 @@
   async function load() {
     try {
       state.view = await api('');
+      window.BeheerWebshopMenu.reset();
       render();
     } catch (error) {
-      $('#sc-root').innerHTML = `<div class="notice">Kan de webshop-inhoud niet laden: ${esc(error.message)}</div>`;
+      $('#sc-root').innerHTML = `<div class="notice">Kan de webshop-inhoud niet laden: ${esc(error.message)} <button type="button" class="btn" id="sc-retry">Opnieuw proberen</button></div>`;
+      $('#sc-retry').onclick = load;
     }
   }
 
@@ -378,6 +381,18 @@
       else state.editing = state.tab === 'pages' && state.editing.isNew ? state.editing : null;
     }
   }
+
+  /**
+   * Neemt een nieuwe stand over voor de menu-editor; `menuAdopt.current()` geeft de stand terug.
+   * @param {object} view De nieuwe stand.
+   * @returns {void}
+   */
+  function menuAdopt(view) { adopt(view); }
+  /**
+   * De huidige stand van het scherm.
+   * @returns {object} De stand.
+   */
+  menuAdopt.current = () => state.view;
 
   /**
    * De velden van de pagina die wordt bewerkt, zoals ze nu in het formulier staan.

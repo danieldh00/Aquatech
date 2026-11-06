@@ -61,7 +61,7 @@ test('boom: slugs uniek, afbeeldingen aanwezig, elke hoofdcategorie met bekende 
     assert.ok(node.name && /^[a-z0-9_-]+$/.test(node.slug), node.slug);
     assert.ok(!slugs.has(node.slug), `dubbele slug ${node.slug}`);
     slugs.add(node.slug);
-    if (node.image) assert.ok(fs.existsSync(path.join(__dirname, '../src/webshop/assets', node.image)), node.image);
+    if (node.image) assert.ok(fs.existsSync(path.join(__dirname, '../src/webshop/assets', node.image.replace(/^asset:/, ''))), node.image);
     (node.children || []).forEach(check);
   };
   for (const root of DEFAULT_TREE) { groups.add(root.group); check(root); }

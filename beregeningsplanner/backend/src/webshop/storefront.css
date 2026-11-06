@@ -86,8 +86,8 @@ a.shop-action:hover { background: var(--at-page); }
 .nav-drop li:hover > a, .nav-drop li:focus-within > a, .nav-drop li:hover > .nav-heading, .nav-drop li:focus-within > .nav-heading { background: var(--at-shop-green-soft); }
 .has-sub > a::after, .has-sub > .nav-heading::after { content: "›"; float: right; margin-left: 14px; color: var(--at-muted); }
 .nav-fly { left: 100%; top: -11px; min-width: 260px; border-radius: 8px; }
-.nav-flip > .nav-drop { left: auto; right: 0; }
-.nav-flip .nav-fly { left: auto; right: 100%; }
+.nav-drop.drop-left { left: auto; right: 0; }
+.nav-fly.fly-left { left: auto; right: 100%; }
 
 /* Smal scherm: één menuknop met uitklappende groepen en subcategorieën. */
 .shop-menu { display: none; background: var(--at-shop-navy); color: var(--at-white); }
