@@ -1059,6 +1059,16 @@ const MIGRATIONS = [
   `
   CREATE INDEX users_login_name ON users (username);
   `,
+  // 47: stock_managed. Artikelen die uit een webshop komen zonder voorraadbeheer (geen aantal, alleen
+  // "op voorraad") hebben in Aquatech geen stand; ze stonden op 0 en dus overal als niet op voorraad.
+  // Met stock_managed = 0 volgt de status de webshop (shop_products.in_stock) tot er een ontvangst of telling is.
+  // Bestaande gekoppelde artikelen zonder stand, boekingen en gezien webshopaantal worden zo gezet.
+  `
+  ALTER TABLE stock_items ADD COLUMN stock_managed INTEGER NOT NULL DEFAULT 1;
+  UPDATE stock_items SET stock_managed = 0
+    WHERE shop_product_id IS NOT NULL AND has_variants = 0 AND on_hand = 0 AND shop_stock_seen IS NULL
+      AND NOT EXISTS (SELECT 1 FROM stock_movements m WHERE m.tenant_id = stock_items.tenant_id AND m.item_id = stock_items.id);
+  `,
 ];
 
 /**
