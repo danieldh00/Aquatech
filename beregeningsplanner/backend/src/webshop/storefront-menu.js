@@ -28,5 +28,14 @@ function onMenuEnter(event) {
   for (const nested of list.querySelectorAll('.nav-fly')) nested.classList.toggle('fly-left', list.classList.contains('fly-left') || list.classList.contains('drop-left'));
 }
 
+/**
+ * Past bij een schermwijziging de uitklappers die open blijven (door focus) opnieuw aan.
+ * @returns {void}
+ */
+function onResize() {
+  for (const list of document.querySelectorAll('.nav-group:focus-within > .nav-drop, .nav-all:focus-within > .nav-drop, .has-sub:focus-within > .nav-drop')) fitDropdown(list);
+}
+
+window.addEventListener('resize', onResize);
 document.addEventListener('mouseover', onMenuEnter);
 document.addEventListener('focusin', onMenuEnter);

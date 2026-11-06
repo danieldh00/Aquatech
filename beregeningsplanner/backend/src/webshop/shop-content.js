@@ -279,8 +279,9 @@ function normalizeTree(input, base = DEFAULT_TREE, options = {}) {
   };
   const roots = [];
   for (const group of GROUP_SLUGS.filter((slug) => slug !== 'overig')) {
-    const source = given.find((root) => root && root.group === group) || base.find((root) => root.group === group);
-    const root = source && cleanNode(source, 0);
+    const givenRoot = given.find((root) => root && root.group === group);
+    // Een aangeleverde kop met een lege of ongeldige naam telt niet: dan blijft de kop uit de basis (bijv. de gepubliceerde) staan.
+    const root = (givenRoot && cleanNode(givenRoot, 0)) || cleanNode(base.find((entry) => entry.group === group), 0);
     if (root) roots.push({ ...root, group });
   }
   if (options.strict && count > MAX_TREE_NODES) throw Object.assign(new Error(`De menuboom heeft maximaal ${MAX_TREE_NODES} categorieën.`), { code: 'tree_too_large' });

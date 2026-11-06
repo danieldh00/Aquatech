@@ -1257,6 +1257,8 @@
   }
 
   // ---------- Algemeen ----------
+  /** Sleutel van de sectie die nu open staat (om opnieuw klikken op dezelfde sectie te herkennen). */
+  let activePane = '';
   /**
    * Toont een sectie van Beheer en laadt wat erop staat. Een sectie waar de gebruiker geen toegang toe heeft (Back-ups zonder hoofdbeheer) valt terug op Aanvragen.
    * @param {string} name sleutel van de sectie (zie indeling.js; oude adressen als `settings` werken ook)
@@ -1272,10 +1274,12 @@
     if (section.pane === 'roles') window.BeheerRollen.load();
     if (section.pane === 'settings') loadSettings(section.id);
     if (section.pane === 'webshop') { loadSettings(section.id); window.BeheerWebshop.load(); }
-    if (section.pane === 'shopinhoud') window.BeheerWebshopInhoud.load();
+    // Opnieuw klikken op de al geopende sectie laadt niets opnieuw, zodat niet-opgeslagen menuwijzigingen blijven staan.
+    if (section.pane === 'shopinhoud' && activePane !== 'shopinhoud') window.BeheerWebshopInhoud.load();
     if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
     if (section.pane === 'audit') loadAudit();
+    activePane = section.pane;
     if (location.hash === `#${section.id}`) return;
     try { window.history[push ? 'pushState' : 'replaceState'](null, '', `#${section.id}`); } catch (error) { /* file:// */ }
   }

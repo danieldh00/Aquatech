@@ -261,6 +261,7 @@
         const tab = window.open('about:blank', '_blank');
         try { await saveDraft(); } catch (error) { if (tab) tab.close(); throw error; }
         if (tab) tab.location.href = '../winkel/?voorbeeld=1';
+        else state.toast('Het voorbeeldtabblad kon niet worden geopend. Sta pop-ups toe voor deze pagina.', true);
         render();
         return;
       }

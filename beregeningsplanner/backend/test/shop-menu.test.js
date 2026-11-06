@@ -174,3 +174,12 @@ test('menuboom: concept weggooien en rechten', async () => {
     }
   }
 });
+
+/**
+ * Regressietest: een aangeleverde kop met lege naam laat de kop uit de basis (de gepubliceerde) staan.
+ */
+test('menuboom: een lege koptekst laat de gepubliceerde kop staan', () => {
+  const base = normalizeTree([{ group: 'beregening', name: 'Eigen kop', children: [] }], []);
+  const result = normalizeTree([{ group: 'beregening', name: '   ', children: [] }], base);
+  assert.equal(result.find((root) => root.group === 'beregening').name, 'Eigen kop');
+});
