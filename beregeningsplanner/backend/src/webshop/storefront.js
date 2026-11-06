@@ -169,8 +169,18 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   if (orderMail && orderMail.sendBusinessRequest) {
     const requestLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `zakelijk-aanvraag:${clientKey(req)}` });
     // Aanvraag voor een zakelijk account vanaf de startpagina: een mail aan het bedrijf (geen opslag van de gegevens in de database).
-    router.post('/zakelijk-aanvraag', express.urlencoded({ extended: false, limit: '4kb' }), requestLimiter, async (req, res) => {
+    /**
+     * Weigert een verzoek dat vanaf een andere site komt, nog vóór de verwerking en de limiet.
+     * @param {object} req Express-verzoek.
+     * @param {object} res Express-antwoord.
+     * @param {Function} next Volgende stap.
+     * @returns {void}
+     */
+    const refuseOtherSite = (req, res, next) => {
       if (['cross-site', 'same-site'].includes(req.headers['sec-fetch-site'])) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+      return next();
+    };
+    router.post('/zakelijk-aanvraag', refuseOtherSite, express.urlencoded({ extended: false, limit: '4kb' }), requestLimiter, async (req, res) => {
       const body = req.body || {};
       // Het verborgen veld is ingevuld: een robot. Doen alsof het gelukt is.
       if (body.website) return res.redirect(303, '../?aanvraag=ja#zakelijk');

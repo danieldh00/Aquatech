@@ -8,7 +8,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { normalizeSite, DEFAULT_SITE } = require('../src/webshop/shop-content');
-const { buildCatalog } = require('../src/webshop/storefront-data');
+const { buildCatalog, createStorefrontData } = require('../src/webshop/storefront-data');
 const { createLogin, listen, postForm } = require('./helpers/http-client');
 
 const SECRET = 'f'.repeat(64);
@@ -86,8 +86,6 @@ test('startpagina: hero zonder tekst, banners, kolommen, citaat en tabbladen na 
 
   const item = db.prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND code = ?').get(main, 'BUIS-25');
   db.prepare("INSERT INTO stock_movements (id, tenant_id, item_id, kind, qty, balance, source, note, created_at) VALUES ('m1', ?, ?, 'afboeking', -3, 97, 'bestelling:WEB-1', '', ?)").run(main, item.id, new Date().toISOString());
-  await new Promise((resolve) => { setTimeout(resolve, 0); });
-  const { createStorefrontData } = require('../src/webshop/storefront-data');
   const catalog = createStorefrontData(db).catalogOf(main);
   assert.deepStrictEqual(catalog.bestsellers.map((product) => product.code), ['BUIS-25']);
 });

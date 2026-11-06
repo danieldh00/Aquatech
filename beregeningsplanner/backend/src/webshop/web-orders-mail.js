@@ -122,9 +122,17 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
      * @returns {string} De tekst.
      */
     const clean = (value, max) => String(value || '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, max);
-    const company = clean(request.company, 120);
-    const email = clean(request.email, 120);
-    const phone = clean(request.phone, 30);
+    // Velden die in de onderwerpregel of kop terechtkomen krijgen geen regeleinden.
+    /**
+     * Maakt van een invoerveld één regel tekst.
+     * @param {*} value De invoer.
+     * @param {number} max Maximale lengte.
+     * @returns {string} De tekst op één regel.
+     */
+    const oneLine = (value, max) => clean(value, max).replace(/\s+/g, ' ');
+    const company = oneLine(request.company, 120);
+    const email = oneLine(request.email, 120);
+    const phone = oneLine(request.phone, 30);
     const message = clean(request.message, 1000);
     if (!company || !phone || !validEmail(email)) return false;
     const settings = settingsFor(tenantId);

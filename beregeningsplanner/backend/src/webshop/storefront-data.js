@@ -316,7 +316,7 @@ function createStorefrontData(db) {
      * verkoopprijs die naar de webshop mogen (shop_sync), met categorie en
      * afbeelding van het gekoppelde webshopproduct. Eén query.
      * @param {string} tenantId De omgeving.
-     * @returns {{ products: object[], categories: object[], groups: object[], featured: object[] }} Zie buildCatalog.
+     * @returns {{ products: object[], categories: object[], groups: object[], featured: object[], bestsellers: object[] }} Zie buildCatalog.
      */
     catalogOf(tenantId) {
       const cached = cache.get(tenantId);
