@@ -41,6 +41,7 @@ const SHARED_DIR = path.join(FRONTEND_DIR, 'shared');
 const ASSETS = {
   'brand.css': { file: path.join(SHARED_DIR, 'brand.css'), type: 'text/css; charset=utf-8' },
   'winkel.css': { file: path.join(__dirname, 'storefront.css'), type: 'text/css; charset=utf-8' },
+  'menu.js': { file: path.join(__dirname, 'storefront-menu.js'), type: 'text/javascript; charset=utf-8' },
   'varianten.js': { file: path.join(__dirname, 'storefront-variants.js'), type: 'text/javascript; charset=utf-8' },
   'adres.js': { file: path.join(SHARED_DIR, 'address-lookup.js'), type: 'text/javascript; charset=utf-8' },
   'afrekenen.js': { file: path.join(__dirname, 'storefront-checkout.js'), type: 'text/javascript; charset=utf-8' },
@@ -108,7 +109,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const business = Boolean(viewer) && viewer.customerGroup === 'zakelijk';
     if (business) res.setHeader('Cache-Control', 'private, no-store');
     const html = renderWith(contentOf(req), render, { preview, ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
-    res.type('html').send(html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : '')));
+    const withPlanner = html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : ''));
+    // In een voorbeeld blijven de menu- en categorielinks in het concept, ook voor categorieën die er alleen in staan.
+    res.type('html').send(preview ? withPlanner.replace(/href="((?:\.\.?\/)*(?:categorie|groep)\/[^"?#]*)"/g, 'href="$1?voorbeeld=1"') : withPlanner);
   };
   /**
    * Of dit verzoek het concept van de inhoud moet tonen: `?voorbeeld=1` door een beheerder.

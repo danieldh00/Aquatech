@@ -105,6 +105,11 @@ test('menuboom: concept is alleen een voorbeeld, publiceren zet hem live, hernoe
     assert.strictEqual(href, 'categorie/eindkap-tyleen/?voorbeeld=1');
     assert.ok((await admin.get(`/winkel/${href}`)).text.includes('Eindkappen'));
   }
+  assert.match(preview.text, /href="categorie\/eindkap-tyleen\/\?voorbeeld=1"/, 'links in het voorbeeld blijven in het voorbeeld');
+  assert.doesNotMatch((await admin.get('/winkel/')).text, /voorbeeld=1/);
+  assert.doesNotMatch(preview.text, /nav-flip/, 'submenu\'s klappen standaard naar rechts');
+  assert.match(preview.text, /src="assets\/menu\.js/);
+  assert.strictEqual((await admin.get('/winkel/assets/menu.js')).status, 200);
   assert.ok(!(await anonymous.get('/winkel/?voorbeeld=1')).text.includes('Eindkappen'), 'bezoeker ziet nooit het voorbeeld');
 
   assert.strictEqual((await admin.post('/api/admin/shop-content/menu/publish', {})).status, 200);
@@ -127,8 +132,7 @@ test('menuboom: concept weggooien en rechten', async () => {
   const discarded = await admin.post('/api/admin/shop-content/menu/discard', {});
   assert.strictEqual(discarded.status, 200);
   assert.strictEqual(discarded.body.menu.hasDraft, false);
-  for (const client of [customer, anonymous]) {
-    const expected = client === customer ? 403 : 401;
+  for (const [client, expected] of [[customer, 403], [anonymous, 401]]) {
     assert.strictEqual((await client.put('/api/admin/shop-content/menu', { roots: [] })).status, expected);
     for (const action of ['publish', 'discard', 'revert']) {
       assert.strictEqual((await client.post(`/api/admin/shop-content/menu/${action}`, {})).status, expected);

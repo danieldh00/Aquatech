@@ -25,6 +25,7 @@
       date: '2026-11-06',
       title: 'Menu van de webshop zelf aanpassen',
       items: [
+        { text: 'Submenu\'s in de webshop klappen nu naar rechts open; alleen als er rechts geen ruimte meer is gaan ze naar links.' },
         { text: 'In Beheer > Webshop-inhoud staat een tabblad Menu: je hernoemt, verplaatst, voegt toe of verbergt categorieën en subcategorieën, met uitleg en afbeelding per categorie. Pas na Publiceren staat het live; met Voorbeeld bekijken zie je het eerst.', for: ['beheer'] },
       ],
     },

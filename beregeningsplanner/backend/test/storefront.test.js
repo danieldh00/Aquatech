@@ -110,7 +110,7 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
   assert.match(home.text, /product\/pe-buis-25-mm-buis-25\//);
   assert.ok(!home.text.includes('Alleen intern') && !home.text.includes('Niet naar de shop'));
   assert.match(home.headers.get('content-security-policy'), /default-src 'none'/);
-  assert.ok(!/<script/i.test(home.text));
+  assert.ok(!/<script(?![^>]*assets\/menu\.js)/i.test(home.text), 'alleen het menuscript');
 
   const categorySlug = home.text.match(/href="categorie\/(leidingen-[0-9a-f]{6})\//)[1];
   const category = await anonymous.get(`/winkel/categorie/${categorySlug}/`);
@@ -360,7 +360,7 @@ test('webshop: hoofdartikel met varianten als regel met keuzelijst en eigen scri
   assert.ok(!mixed.text.includes('data-variant-row'), 'woorden uit verschillende varianten tellen niet samen');
   const found = await anonymous.get('/winkel/zoeken/?q=koppeling');
   assert.strictEqual(found.text.match(/data-variant-row/g).length, 1);
-  assert.ok(!/<script/i.test((await anonymous.get('/winkel/')).text), 'startpagina laadt geen script');
+  assert.ok(!/<script(?![^>]*assets\/menu\.js)/i.test((await anonymous.get('/winkel/')).text), 'startpagina laadt alleen het menuscript');
 });
 
 test('webshop: voorraadstand uit het systeem en filter alleen op voorraad', async () => {
