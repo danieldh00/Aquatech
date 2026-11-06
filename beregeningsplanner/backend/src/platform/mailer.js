@@ -30,7 +30,7 @@ function sanitizeMail(raw) {
   return out;
 }
 
-const EMAIL = /^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[^\s@<>()",;:]+$/;
+const EMAIL = /^[^\s@<>()",;:]+@[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)+$/u;
 /**
  * Of een waarde een bruikbaar e-mailadres is.
  * @param {*} value De waarde.
