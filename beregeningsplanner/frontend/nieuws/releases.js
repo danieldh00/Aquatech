@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.0',
+      date: '2026-11-06',
+      title: 'Menu van de webshop zelf aanpassen',
+      items: [
+        { text: 'In Beheer > Webshop-inhoud staat een tabblad Menu: je hernoemt, verplaatst, voegt toe of verbergt categorieën en subcategorieën, met uitleg en afbeelding per categorie. Pas na Publiceren staat het live; met Voorbeeld bekijken zie je het eerst.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.6.9',
       date: '2026-11-06',
       title: 'Overzichtelijker menu en categoriepagina\'s in de webshop',

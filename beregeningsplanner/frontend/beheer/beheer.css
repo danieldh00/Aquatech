@@ -203,3 +203,14 @@ dl.kv dd { margin: 0; }
 #wr-detail textarea { font: inherit; font-family: var(--at-font); padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); width: 100%; box-sizing: border-box; resize: vertical; }
 .card-form .row.actions { margin-top: 12px; align-items: center; }
 .narrow { width: 5em; }
+
+/* Webshop-inhoud > Menu: de boom met categorieën (webshop-menu.js). */
+.mn-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0 4px calc(var(--depth, 0) * 22px); border-top: 1px solid var(--line); }
+.mn-row.mn-root { background: var(--panel); font-weight: 600; }
+.mn-name { flex: 1 1 200px; min-width: 140px; }
+.mn-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.mn-detail-wrap { padding-left: calc(var(--depth, 0) * 22px + 28px); }
+.mn-detail { display: grid; gap: 8px; padding: 8px 10px; margin: 4px 0 8px; border-left: 3px solid var(--at-teal); background: var(--panel); }
+.mn-loose { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 4px 0; border-top: 1px dashed var(--line); }
+.mn-detail label { display: grid; gap: 4px; }
+.mn-detail textarea, .mn-detail input[data-mf="match"] { width: 100%; box-sizing: border-box; }

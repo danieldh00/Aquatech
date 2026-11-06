@@ -15,7 +15,8 @@ const path = require('path');
 const { inspectImage, fromBase64 } = require('../uitvoering/photos');
 const { createImageCache } = require('../platform/image-cache');
 const { legalDefaults } = require('./legal-pages');
-const { GROUP_SLUGS, GROUP_NAMES } = require('./storefront-data');
+const { GROUP_SLUGS, GROUP_NAMES, slugify } = require('./storefront-data');
+const { DEFAULT_TREE } = require('./category-tree');
 
 /** Bestanden in assets/ die als standaardafbeelding gekozen mogen worden. */
 const ASSET_NAMES = new Set(fs.readdirSync(path.join(__dirname, 'assets')).filter((name) => /\.(png|jpe?g|webp)$/i.test(name)));
@@ -29,6 +30,11 @@ const MAX_HTML = 100000;
 const MAX_PAGES = 30;
 /** Sleutel van het onderdeel met de blokken van de startpagina, kop en voet. */
 const SITE_KEY = 'site';
+/** Sleutel van het onderdeel met de menuboom (categorieën). */
+const MENU_KEY = 'menu';
+/** Grenzen van de menuboom: aantal categorieën en aantal niveaus onder een hoofdcategorie. */
+const MAX_TREE_NODES = 600;
+const MAX_TREE_DEPTH = 6;
 
 /** De kleuren voor de mededelingenbalk (sleutel → naam in Beheer); de shop kent bij elke sleutel een vaste, goed leesbare achtergrond (storefront.css). */
 const NOTICE_COLORS = { purple: 'Paars', navy: 'Donkerblauw', green: 'Groen', teal: 'Turquoise', orange: 'Oranje', red: 'Rood', grey: 'Grijs' };
@@ -230,6 +236,60 @@ function normalizeSite(input, base = DEFAULT_SITE) {
   };
 }
 
+/**
+ * Maakt van de ingevoerde menuboom een geldige boom: één hoofdcategorie per productgroep (ontbrekende
+ * groepen komen uit de basis), met per categorie naam, vaste slug (het adres), uitleg, afbeelding,
+ * verborgen-vlag en de webshopcategorieën waarop producten worden ingedeeld.
+ * @param {*} input De ingevoerde lijst hoofdcategorieën (met `group` en `children`).
+ * @param {object[]} [base] Waar ontbrekende hoofdcategorieën vandaan komen (standaard de boom van Aquatechshop.nl).
+ * @returns {object[]} De opgeschoonde boom, hoofdcategorieën in vaste volgorde.
+ */
+function normalizeTree(input, base = DEFAULT_TREE) {
+  const given = Array.isArray(input) ? input : [];
+  const used = new Set();
+  const needSlug = [];
+  let count = 0;
+  /**
+   * Maakt van een invoerknoop een geldige knoop met kinderen (of null als hij vervalt).
+   * @param {*} item De ingevoerde knoop.
+   * @param {number} depth Diepte (0 = hoofdcategorie).
+   * @returns {?object} De knoop.
+   */
+  const cleanNode = (item, depth) => {
+    if (!item || typeof item !== 'object' || depth > MAX_TREE_DEPTH || count >= MAX_TREE_NODES) return null;
+    const name = cleanText(item.name, 80);
+    if (!name) return null;
+    count += 1;
+    const node = { name, slug: '' };
+    const wanted = typeof item.slug === 'string' ? item.slug.trim() : '';
+    if (/^[a-z0-9_-]{1,60}$/.test(wanted) && !used.has(wanted)) { node.slug = wanted; used.add(wanted); } else needSlug.push(node);
+    const intro = cleanText(item.intro, 2000);
+    if (intro) node.intro = intro;
+    const image = imageRef(item.image, '');
+    if (image) node.image = image;
+    if (item.hidden === true) node.hidden = true;
+    const match = Array.isArray(item.match) ? [...new Set(item.match.map((entry) => cleanText(String(entry), 80)).filter(Boolean))].slice(0, 8) : [];
+    if (match.length) node.match = match;
+    const children = Array.isArray(item.children) ? item.children.map((child) => cleanNode(child, depth + 1)).filter(Boolean) : [];
+    if (children.length) node.children = children;
+    return node;
+  };
+  const roots = [];
+  for (const group of GROUP_SLUGS.filter((slug) => slug !== 'overig')) {
+    const source = given.find((root) => root && root.group === group) || base.find((root) => root.group === group);
+    const root = source && cleanNode(source, 0);
+    if (root) roots.push({ ...root, group });
+  }
+  for (const node of needSlug) {
+    const stem = slugify(node.name) || 'categorie';
+    let slug = stem;
+    for (let counter = 2; used.has(slug); counter += 1) slug = `${stem}-${counter}`.slice(0, 60);
+    node.slug = slug;
+    used.add(slug);
+  }
+  return roots;
+}
+
 /** Elementen die in pagina's mogen blijven; de rest vervalt (de tekst erin blijft). */
 const ALLOWED_TAGS = new Set(['p', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em', 'br', 'blockquote', 'a', 'img']);
 /** Andere elementen die we omzetten naar een toegestaan element. */
@@ -404,14 +464,16 @@ function createShopContentStore(db, { vault }) {
   /**
    * Alle bewerkbare inhoud van een tenant voor Beheer: blokken en pagina's met concept en gepubliceerde versie.
    * @param {string} tenantId Id van de tenant.
-   * @returns {{ site: object, pages: object[] }} De blokken (draft/published/…) en de pagina's (met slug).
+   * @returns {{ site: object, menu: object, pages: object[] }} De blokken en de menuboom (draft/published/…) en de pagina's (met slug).
    */
   function state(tenantId) {
     const rows = rowsOf(tenantId);
     const siteRow = rows.find((row) => row.key === SITE_KEY);
     const site = siteRow ? describe(siteRow) : { draft: null, published: null, hasDraft: false, canRevert: false, updatedAt: null, publishedAt: null };
+    const menuRow = rows.find((row) => row.key === MENU_KEY);
+    const menu = menuRow ? describe(menuRow) : { draft: null, published: null, hasDraft: false, canRevert: false, updatedAt: null, publishedAt: null };
     const pages = rows.filter((row) => row.key.startsWith('page:')).map((row) => ({ slug: row.key.slice(5), ...describe(row) }));
-    return { site, pages };
+    return { site, menu, pages };
   }
 
   /**
@@ -499,21 +561,23 @@ function createShopContentStore(db, { vault }) {
    * De inhoud voor de shop: blokken en pagina's, gepubliceerd of (voorbeeld) het concept.
    * @param {string} tenantId Id van de tenant.
    * @param {{ preview?: boolean }} [options] preview: concept gaat voor de gepubliceerde versie (niet onthouden).
-   * @returns {{ site: object, pages: object[] }} site = alle blokken (standaard waar niets is opgeslagen) en pages = pagina's op volgorde.
+   * @returns {{ site: object, pages: object[], tree: object[] }} site = alle blokken (standaard waar niets is opgeslagen), pages = pagina's op volgorde en tree = de menuboom (standaard waar niets is opgeslagen).
    */
   function publicContent(tenantId, { preview = false } = {}) {
     const hit = !preview && cache.get(tenantId);
     if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
     const pages = [];
     let site = DEFAULT_SITE;
+    let tree = DEFAULT_TREE;
     for (const row of rowsOf(tenantId)) {
       const data = parseJson(preview ? row.draft || row.published : row.published);
       if (!data) continue;
       if (row.key === SITE_KEY) site = normalizeSite(data);
+      else if (row.key === MENU_KEY) tree = normalizeTree(data.roots);
       else if (row.key.startsWith('page:')) pages.push({ ...data, slug: row.key.slice(5) });
     }
     pages.sort((left, right) => (left.order - right.order) || left.title.localeCompare(right.title, 'nl'));
-    const value = { site, pages };
+    const value = { site, pages, tree };
     if (!preview) cache.set(tenantId, { at: Date.now(), value });
     return value;
   }
@@ -621,10 +685,10 @@ function createShopContentStore(db, { vault }) {
  * Registreert de beheer-API van de webshop-inhoud (alleen beheerders; de
  * server zet requireAdmin al voor /api/admin) en geeft de pagina's.
  * @param {object} app De Express-app.
- * @param {{ content: object, requireJson: Function, audit: Function, mainTenantId: string, settingsOf: Function }} options content = de opslag, requireJson = eist JSON, audit = auditregel schrijven, mainTenantId = de tenant met de eigen webshop en settingsOf(req) = instellingen van de omgeving van het verzoek.
+ * @param {{ content: object, requireJson: Function, audit: Function, mainTenantId: string, settingsOf: Function, unplacedOf?: Function }} options content = de opslag, requireJson = eist JSON, audit = auditregel schrijven, mainTenantId = de tenant met de eigen webshop, settingsOf(req) = instellingen van de omgeving van het verzoek en unplacedOf(tenantId) = de webshopcategorieën die niet in de menuboom staan ({ name, count, groupSlug }).
  * @returns {void}
  */
-function registerShopContentRoutes(app, { content, requireJson, audit, mainTenantId, settingsOf }) {
+function registerShopContentRoutes(app, { content, requireJson, audit, mainTenantId, settingsOf, unplacedOf = () => [] }) {
   const BASE = '/api/admin/shop-content';
   /**
    * De webshop hoort bij de hoofdtenant: in een andere omgeving is er niets te bewerken.
@@ -644,17 +708,18 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
   /**
    * Antwoord met de volledige stand van de inhoud voor Beheer.
    * @param {object} req Het verzoek.
-   * @returns {object} available, storefront (aan?), site, pages, images, defaults en assets.
+   * @returns {object} available, storefront (aan?), site, menu, pages, images, unplaced, defaults en assets.
    */
   function view(req) {
     const stored = content.state(req.tenantId);
     return {
       available: true, storefront: Boolean(settingsOf(req).get('storefront')),
       site: { ...stored.site, isDefault: !stored.site.published },
+      menu: { ...stored.menu, isDefault: !stored.menu.published }, unplaced: unplacedOf(req.tenantId),
       pages: stored.pages, images: content.listImages(req.tenantId),
       noticeColors: NOTICE_COLORS,
       groups: GROUP_NAMES,
-      defaults: { site: DEFAULT_SITE, aboutBody: DEFAULT_ABOUT_BODY, legal: legalDefaults(((stored.site.draft || stored.site.published) || {}).contact || DEFAULT_SITE.contact) }, assets: [...ASSET_NAMES].sort(),
+      defaults: { site: DEFAULT_SITE, menu: { roots: DEFAULT_TREE }, aboutBody: DEFAULT_ABOUT_BODY, legal: legalDefaults(((stored.site.draft || stored.site.published) || {}).contact || DEFAULT_SITE.contact) }, assets: [...ASSET_NAMES].sort(),
     };
   }
   /**
@@ -676,6 +741,13 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
     const data = normalizeSite(req.body, normalizeSite(current.published || {}));
     content.saveDraft(req.tenantId, SITE_KEY, data, req.user?.id || null);
     audit(req, 'webshop_inhoud_concept', { onderdeel: 'blokken' });
+    res.json(view(req));
+  });
+  app.put(`${BASE}/menu`, onlyMain, requireJson, (req, res) => {
+    const current = content.state(req.tenantId).menu;
+    const roots = normalizeTree(req.body && req.body.roots, current.published ? normalizeTree(current.published.roots) : DEFAULT_TREE);
+    content.saveDraft(req.tenantId, MENU_KEY, { roots }, req.user?.id || null);
+    audit(req, 'webshop_inhoud_concept', { onderdeel: 'menuboom' });
     res.json(view(req));
   });
   app.put(`${BASE}/pages/:slug`, onlyMain, requireJson, (req, res) => {
@@ -703,6 +775,7 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
       });
     };
     app.post(`${BASE}/site/${action}`, onlyMain, requireJson, handle(() => SITE_KEY, () => ({ onderdeel: 'blokken' })));
+    app.post(`${BASE}/menu/${action}`, onlyMain, requireJson, handle(() => MENU_KEY, () => ({ onderdeel: 'menuboom' })));
     app.post(`${BASE}/pages/:slug/${action}`, onlyMain, requireJson, handle((req) => `page:${slugOf(req)}`, (req) => ({ onderdeel: 'pagina', pagina: slugOf(req) })));
   }
   app.delete(`${BASE}/pages/:slug`, onlyMain, (req, res) => {
@@ -732,4 +805,4 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
   });
 }
 
-module.exports = { NOTICE_COLORS, createShopContentStore, registerShopContentRoutes, normalizeSite, normalizePage, sanitizeHtml, DEFAULT_SITE, DEFAULT_ABOUT_BODY, SITE_KEY };
+module.exports = { NOTICE_COLORS, createShopContentStore, registerShopContentRoutes, normalizeSite, normalizeTree, normalizePage, sanitizeHtml, DEFAULT_SITE, DEFAULT_ABOUT_BODY, SITE_KEY, MENU_KEY };

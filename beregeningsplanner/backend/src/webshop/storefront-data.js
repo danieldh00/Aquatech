@@ -193,7 +193,7 @@ function arrangeCategories(products, variantProducts, tree) {
     const ownCount = ownCounts.get(node.slug) || 0;
     const count = ownCount + children.reduce((total, child) => total + child.count, 0);
     if (!count) return null;
-    const entry = { slug: node.slug, name: node.name, count, ownCount, groupSlug, parentSlug, depth, intro: node.intro || '', image: node.image || '', hidden: Boolean(node.hidden), children };
+    const entry = { slug: node.slug, name: node.name, count, ownCount, groupSlug, parentSlug, depth, intro: node.intro || '', image: node.image || '', hidden: Boolean(node.hidden), loose: false, children };
     entries.push(entry);
     return entry;
   };
@@ -204,7 +204,7 @@ function arrangeCategories(products, variantProducts, tree) {
     topOf.set(root.group, (root.children || []).map((child) => build(child, 1, root.group, '')).filter(Boolean));
   }
   for (const category of flat.values()) {
-    const entry = { slug: category.slug, name: category.name, count: category.count, ownCount: category.count, groupSlug: category.groupSlug, parentSlug: '', depth: 1, intro: '', image: '', hidden: false, children: [] };
+    const entry = { slug: category.slug, name: category.name, count: category.count, ownCount: category.count, groupSlug: category.groupSlug, parentSlug: '', depth: 1, intro: '', image: '', hidden: false, loose: true, children: [] };
     entries.push(entry);
     topOf.set(category.groupSlug, [...(topOf.get(category.groupSlug) || []), entry]);
   }
@@ -221,7 +221,7 @@ function arrangeCategories(products, variantProducts, tree) {
   const groups = [...GROUPS, OTHER_GROUP].map((group) => {
     const members = sortByName(topOf.get(group.slug) || []);
     const root = rootOf.get(group.slug);
-    return { slug: group.slug, name: group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0), intro: root && root.intro || '', image: root && root.image || '' };
+    return { slug: group.slug, name: root && root.name || group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0), intro: root && root.intro || '', image: root && root.image || '' };
   }).filter((group) => group.categories.length);
   return { categoryList: entries.sort((left, right) => left.name.localeCompare(right.name, 'nl')), groups };
 }
@@ -392,9 +392,10 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE) {
  * Maakt de gegevenslaag van de webshop, met een korte cache per omgeving
  * (de pagina's zijn openbaar: niet bij elk bezoek een databasequery).
  * @param {object} db De database.
- * @returns {{ catalogOf: Function, clearCache: Function }} catalogOf(tenantId) en clearCache().
+ * @param {{ treeOf?: Function }} [options] treeOf(tenantId, preview) = de categorieboom van een omgeving (uit Beheer; zonder de standaardboom).
+ * @returns {{ catalogOf: Function, clearCache: Function }} catalogOf(tenantId, { preview }) en clearCache().
  */
-function createStorefrontData(db) {
+function createStorefrontData(db, { treeOf = () => DEFAULT_TREE } = {}) {
   const cache = new Map();
   return {
     /**
@@ -402,11 +403,14 @@ function createStorefrontData(db) {
      * verkoopprijs die naar de webshop mogen (shop_sync), met categorie en
      * afbeelding van het gekoppelde webshopproduct. Eén query.
      * @param {string} tenantId De omgeving.
+     * @param {{ preview?: boolean }} [options] preview = met het concept van de categorieboom (niet onthouden).
      * @returns {{ products: object[], categories: object[], groups: object[], featured: object[], bestsellers: object[] }} Zie buildCatalog.
      */
-    catalogOf(tenantId) {
-      const cached = cache.get(tenantId);
-      if (cached && cached.until > Date.now()) return cached.catalog;
+    catalogOf(tenantId, { preview = false } = {}) {
+      const tree = treeOf(tenantId, preview);
+      const cached = !preview && cache.get(tenantId);
+      // Een andere boom (na publiceren) geeft een nieuwe catalogus, ook binnen de cachetijd.
+      if (cached && cached.until > Date.now() && cached.tree === tree) return cached.catalog;
       const rows = db.prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, p.in_stock AS shop_in_stock, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, p.categories, p.image
         FROM stock_items i
         LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
@@ -417,8 +421,8 @@ function createStorefrontData(db) {
       const sold = db.prepare(`SELECT i.code, SUM(-m.qty) AS qty FROM stock_movements m JOIN stock_items i ON i.tenant_id = m.tenant_id AND i.id = m.item_id
         WHERE m.tenant_id = ? AND m.created_at >= ? AND m.kind = 'afboeking' AND m.qty < 0 AND (m.source = 'webshop' OR m.source LIKE 'bestelling:%')
         GROUP BY i.code`).all(tenantId, since);
-      const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])));
-      cache.set(tenantId, { catalog, until: Date.now() + CACHE_MS });
+      const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])), tree);
+      if (!preview) cache.set(tenantId, { catalog, tree, until: Date.now() + CACHE_MS });
       return catalog;
     },
     /**

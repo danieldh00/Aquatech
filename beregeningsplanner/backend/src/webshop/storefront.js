@@ -65,11 +65,10 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, onOrder?: Function, onReturn?: Function }} options addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
+ * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/winkel', router).
  */
-function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onReturn = () => {} }) {
-  const data = createStorefrontData(db);
+function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onReturn = () => {} }) {
   const router = express.Router();
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: clientKey });
 
@@ -118,6 +117,12 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
    */
   const isPreview = (req) => req.query.voorbeeld === '1' && Boolean(content) && previewAllowed(req);
   /**
+   * De catalogus voor dit verzoek: met het concept van de menuboom bij een voorbeeld (`?voorbeeld=1`), anders de gepubliceerde.
+   * @param {object} req Het verzoek.
+   * @returns {object} De catalogus (zie buildCatalog).
+   */
+  const catalogOf = (req) => data.catalogOf(tenantId, { preview: isPreview(req) });
+  /**
    * De inhoud uit Beheer waarmee een pagina wordt getekend (gepubliceerd, of het concept bij een voorbeeld).
    * @param {object} req Het verzoek.
    * @returns {{ site: object, pages: object[] }} Blokken en pagina's.
@@ -163,7 +168,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   router.get('/', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
-    sendPage(req, res, 200, () => homePage(data.catalogOf(tenantId)));
+    sendPage(req, res, 200, () => homePage(catalogOf(req)));
   });
 
   if (orderMail && orderMail.sendBusinessRequest) {
@@ -218,7 +223,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
      * @param {Function} render Functie (groepen) => HTML.
      * @returns {void}
      */
-    const sendWithGroups = (req, res, status, render) => sendPage(req, res, status, () => render(data.catalogOf(tenantId).groups));
+    const sendWithGroups = (req, res, status, render) => sendPage(req, res, status, () => render(catalogOf(req).groups));
 
     router.get('/account', (req, res) => {
       if (withSlash(req, res)) return;
@@ -446,7 +451,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       const showWholesale = (req, res, viewer, { notice = null, pasted = '' } = {}) => {
         res.setHeader('Cache-Control', 'no-store');
         const recent = orders.listForUser(tenantId, viewer.id, { limit: 5 }).items.filter((order) => order.status !== 'geannuleerd');
-        sendWithGroups(req, res, 200, (groups) => wholesalePage({ catalog: data.catalogOf(tenantId), viewer, recent, notice, pasted }, groups));
+        sendWithGroups(req, res, 200, (groups) => wholesalePage({ catalog: catalogOf(req), viewer, recent, notice, pasted }, groups));
       };
       router.get('/groothandel', (req, res) => {
         if (withSlash(req, res)) return;
@@ -460,7 +465,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (!viewer) return;
         const request = wantedFrom(req.body || {}, viewer);
         if (!request) return res.redirect(303, './');
-        const resolved = resolveWanted(data.catalogOf(tenantId), request.wanted);
+        const resolved = resolveWanted(catalogOf(req), request.wanted);
         const merged = addCartLines(readCart(req), resolved.entries);
         if (resolved.entries.length) writeCart(req, res, merged.lines);
         const problems = [...request.problems, ...resolved.problems];
@@ -740,7 +745,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const own = contentOf(req).pages.find((page) => page.slug === 'over-ons');
-    sendPage(req, res, 200, () => (own ? contentPage(own, data.catalogOf(tenantId).groups, '../') : aboutPage(data.catalogOf(tenantId).groups)));
+    sendPage(req, res, 200, () => (own ? contentPage(own, catalogOf(req).groups, '../') : aboutPage(catalogOf(req).groups)));
   });
 
   // Vaste pagina's uit Beheer.
@@ -749,7 +754,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const site = contentOf(req).site;
     const page = contentOf(req).pages.find((candidate) => candidate.slug === req.params.slug) || legalDefaults(site.contact)[req.params.slug];
-    const groups = data.catalogOf(tenantId).groups;
+    const groups = catalogOf(req).groups;
     if (!page) return sendPage(req, res, 404, () => notFoundPage('../../', groups));
     sendPage(req, res, 200, () => contentPage(page, groups, '../../'));
   });
@@ -773,7 +778,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   router.get('/groep/:slug', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
-    const catalog = data.catalogOf(tenantId);
+    const catalog = catalogOf(req);
     const group = catalog.groups.find((candidate) => candidate.slug === req.params.slug);
     if (!group) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
     sendPage(req, res, 200, () => groupPage(group, catalog.groups));
@@ -782,7 +787,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   router.get('/zoeken', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
-    const catalog = data.catalogOf(tenantId);
+    const catalog = catalogOf(req);
     const query = typeof req.query.q === 'string' ? Array.from(req.query.q.trim()).slice(0, 80).join('') : '';
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const onlyInStock = req.query.voorraad === '1';
@@ -803,7 +808,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   router.get('/categorie/:slug', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
-    const catalog = data.catalogOf(tenantId);
+    const catalog = catalogOf(req);
     const category = catalog.categories.find((candidate) => candidate.slug === req.params.slug);
     if (!category) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
     /**
@@ -826,7 +831,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   router.get('/product/:slug', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
-    const catalog = data.catalogOf(tenantId);
+    const catalog = catalogOf(req);
     const variant = catalog.variantProducts.find((candidate) => candidate.slug === req.params.slug);
     const parent = variant && catalog.products.find((candidate) => candidate.slug === variant.parentSlug);
     // Een variant krijgt de keuzelijst van zijn hoofdartikel en staat zelf geselecteerd.
@@ -840,7 +845,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   router.use((req, res) => {
     const segments = req.path.split('/').filter(Boolean).length;
     const depth = req.path.endsWith('/') ? segments : Math.max(segments - 1, 0);
-    sendPage(req, res, 404, () => notFoundPage('../'.repeat(depth), data.catalogOf(tenantId).groups));
+    sendPage(req, res, 404, () => notFoundPage('../'.repeat(depth), catalogOf(req).groups));
   });
   router.clearCache = data.clearCache;
   return router;

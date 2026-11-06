@@ -28,6 +28,7 @@ const { createStorefront } = require('./webshop/storefront');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
 const { createShopSync } = require('./webshop/shop-sync');
 const { createShopContentStore, registerShopContentRoutes } = require('./webshop/shop-content');
+const { createStorefrontData } = require('./webshop/storefront-data');
 const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
@@ -1892,6 +1893,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   const shopContentStore = createShopContentStore(database, { vault });
+  // De catalogus van de shop (ook voor Beheer: welke categorieën staan nog niet in de menuboom) met de boom uit Beheer.
+  const storefrontData = createStorefrontData(database, { treeOf: (tenantId, preview) => shopContentStore.publicContent(tenantId, { preview }).tree });
   const webOrders = createWebOrderStore(database, { stock: stockStore });
   const webOrderMail = createOrderMailer({ orders: webOrders, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
   const webReturns = createWebReturnStore(database, { orders: webOrders, stock: stockStore });
@@ -1922,7 +1925,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerWebReturnRoutes(app, { returns: webReturns, requireJson, audit, credits: webOrderInvoices, mail: webReturnMail });
   // Margerapportage van de webshop: omzet, inkoop (FIFO-voorraadlagen) en marge (web-sales.js).
   registerWebSalesRoutes(app, { sales: createWebSalesStore(database, { stock: stockStore }) });
-  registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id) });
+  registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
+    unplacedOf: (tenantId) => storefrontData.catalogOf(tenantId, { preview: true }).categories.filter((category) => category.loose).map((category) => ({ name: category.name, count: category.count, groupSlug: category.groupSlug })) });
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
   app.get('/api/config', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -2205,7 +2209,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Inloggen en registreren in de shop gebruiken dezelfde accounts (rol klant).
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
   app.use('/winkel', createStorefront({
-    addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, itemImages: itemImageStore,
+    addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
