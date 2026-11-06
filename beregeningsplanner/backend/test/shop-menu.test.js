@@ -56,6 +56,27 @@ function renamed(slug, name) {
   return tree;
 }
 
+test('normalizeTree: grens van 600 telt de koppen niet mee en weigert in plaats van in te korten', () => {
+  /**
+   * Maakt een lijst met genummerde categorieën.
+   * @param {number} count Aantal categorieën.
+   * @returns {object[]} De categorieën.
+   */
+  const many = (count) => Array.from({ length: count }, (_, index) => ({ name: `Cat ${index}` }));
+  const full = normalizeTree([{ group: 'beregening', name: 'A', children: many(599) }, { group: 'elektra', name: 'B', children: many(1) }], [], { strict: true });
+  assert.strictEqual(full.find((root) => root.group === 'beregening').children.length, 599);
+  assert.ok(full.find((root) => root.group === 'elektra').children.length === 1, 'latere groepen vallen niet weg');
+  assert.throws(() => normalizeTree([{ group: 'beregening', name: 'A', children: many(601) }], [], { strict: true }), (error) => error.code === 'tree_too_large');
+});
+
+test('normalizeTree: lange namen krijgen toch unieke adressen binnen 60 tekens', () => {
+  const longName = 'x'.repeat(100);
+  const tree = normalizeTree([{ group: 'beregening', name: 'A', children: [{ name: longName }, { name: longName }, { name: longName }] }]);
+  const slugs = tree.find((root) => root.group === 'beregening').children.map((node) => node.slug);
+  assert.strictEqual(new Set(slugs).size, 3);
+  assert.ok(slugs.every((slug) => slug.length <= 60));
+});
+
 test('normalizeTree: vaste koppen, unieke adressen, grenzen en geen rommel', () => {
   const tree = normalizeTree([
     { group: 'beregening', name: '  Sproeiers  ', children: [{ name: 'Nieuw', children: [{ name: 'Nieuw' }] }, { name: 'Met adres', slug: 'Bad Slug!' }, { name: '' }] },
@@ -119,6 +140,9 @@ test('menuboom: concept weggooien en rechten', async () => {
   const discarded = await admin.post('/api/admin/shop-content/menu/discard', {});
   assert.strictEqual(discarded.status, 200);
   assert.strictEqual(discarded.body.menu.hasDraft, false);
+  const tooMany = await admin.put('/api/admin/shop-content/menu', { roots: [{ group: 'beregening', name: 'A', children: Array.from({ length: 601 }, (_, index) => ({ name: `Cat ${index}` })) }] });
+  assert.strictEqual(tooMany.status, 400, 'te grote boom wordt geweigerd');
+  assert.strictEqual(tooMany.body.error, 'tree_too_large');
   for (const [client, expected] of [[customer, 403], [anonymous, 401]]) {
     assert.strictEqual((await client.put('/api/admin/shop-content/menu', { roots: [] })).status, expected);
     for (const action of ['publish', 'discard', 'revert']) {

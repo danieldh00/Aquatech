@@ -241,10 +241,13 @@ function normalizeSite(input, base = DEFAULT_SITE) {
  * groepen komen uit de basis), met per categorie naam, vaste slug (het adres), uitleg, afbeelding,
  * verborgen-vlag en de webshopcategorieën waarop producten worden ingedeeld.
  * @param {*} input De ingevoerde lijst hoofdcategorieën (met `group` en `children`).
+ * De vier koppen tellen niet mee voor de grens van MAX_TREE_NODES categorieën; bij `strict` wordt een te grote boom geweigerd
+ * (fout met `code: 'tree_too_large'`) in plaats van stil ingekort, zodat een opgeslagen concept nooit categorieën verliest.
  * @param {object[]} [base] Waar ontbrekende hoofdcategorieën vandaan komen (standaard de boom van Aquatechshop.nl).
+ * @param {{ strict?: boolean }} [options] strict = weiger een boom met meer dan MAX_TREE_NODES categorieën.
  * @returns {object[]} De opgeschoonde boom, hoofdcategorieën in vaste volgorde.
  */
-function normalizeTree(input, base = DEFAULT_TREE) {
+function normalizeTree(input, base = DEFAULT_TREE, options = {}) {
   const given = Array.isArray(input) ? input : [];
   const used = new Set();
   const needSlug = [];
@@ -256,10 +259,10 @@ function normalizeTree(input, base = DEFAULT_TREE) {
    * @returns {?object} De knoop.
    */
   const cleanNode = (item, depth) => {
-    if (!item || typeof item !== 'object' || depth > MAX_TREE_DEPTH || count >= MAX_TREE_NODES) return null;
+    if (!item || typeof item !== 'object' || depth > MAX_TREE_DEPTH) return null;
     const name = cleanText(item.name, 80);
     if (!name) return null;
-    count += 1;
+    if (depth > 0) count += 1;
     const node = { name, slug: '' };
     const wanted = typeof item.slug === 'string' ? item.slug.trim() : '';
     if (/^[a-z0-9_-]{1,60}$/.test(wanted) && !used.has(wanted)) { node.slug = wanted; used.add(wanted); } else needSlug.push(node);
@@ -280,10 +283,12 @@ function normalizeTree(input, base = DEFAULT_TREE) {
     const root = source && cleanNode(source, 0);
     if (root) roots.push({ ...root, group });
   }
+  if (options.strict && count > MAX_TREE_NODES) throw Object.assign(new Error(`De menuboom heeft maximaal ${MAX_TREE_NODES} categorieën.`), { code: 'tree_too_large' });
   for (const node of needSlug) {
     const stem = slugify(node.name) || 'categorie';
-    let slug = stem;
-    for (let counter = 2; used.has(slug); counter += 1) slug = `${stem}-${counter}`.slice(0, 60);
+    let slug = stem.slice(0, 60);
+    // Het achtervoegsel past binnen de 60 tekens: de stam wordt ingekort, niet het resultaat afgekapt (anders blijft de slug gelijk).
+    for (let counter = 2; used.has(slug); counter += 1) slug = `${stem.slice(0, 60 - String(counter).length - 1)}-${counter}`;
     node.slug = slug;
     used.add(slug);
   }
@@ -745,7 +750,13 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
   });
   app.put(`${BASE}/menu`, onlyMain, requireJson, (req, res) => {
     const current = content.state(req.tenantId).menu;
-    const roots = normalizeTree(req.body && req.body.roots, current.published ? normalizeTree(current.published.roots) : DEFAULT_TREE);
+    let roots;
+    try {
+      roots = normalizeTree(req.body && req.body.roots, current.published ? normalizeTree(current.published.roots) : DEFAULT_TREE, { strict: true });
+    } catch (error) {
+      if (error.code !== 'tree_too_large') throw error;
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
     content.saveDraft(req.tenantId, MENU_KEY, { roots }, req.user?.id || null);
     audit(req, 'webshop_inhoud_concept', { onderdeel: 'menuboom' });
     res.json(view(req));
