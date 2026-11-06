@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { createMailer, sanitizeMail } = require('../src/platform/mailer');
+const { createMailer, sanitizeMail, validEmail } = require('../src/platform/mailer');
 const { createWanIp } = require('../src/platform/wan-ip');
 const { createClient, createLogin, listen } = require('./helpers/http-client');
 
@@ -34,6 +34,15 @@ test('WAN-IP: omgeving gaat voor, opzoeken met terugval, onthouden en alleen ope
   assert.strictEqual(calls.length, 8);
   assert.strictEqual((await createWanIp({ fetch: fakeFetch, env: { WAN_IP: '8.8.4.4' } }).get()).source, 'omgeving');
   await assert.rejects(createWanIp({ fetch: async () => '192.168.2.251', env: {} }).get(), { code: 'unavailable' });
+});
+
+test('e-mailadres: IDN-domeinen met behoud van lokale-deelcontrole en labelgrenzen', () => {
+  for (const email of ['info@col·legi.cat', 'info@xn--collegi-xma.cat', 'info@bücher.de', ' info+test@bedrijf.nl ']) {
+    assert.strictEqual(validEmail(email), true, email);
+  }
+  for (const email of ['info@-bedrijf.nl', 'info@bedrijf-.nl', 'info@-bücher.de', 'info@bücher-.de', 'info@bedrijf..nl', 'info@bedrijf', 'info@xn--.cat', 'info@bedrijf.nl/pad', 'info@bedrijf.nl?x', 'info@bedrijf.nl#x', 'info@bedrijf%2enl', 'info@bedrijf.nl\\pad', 'info@bed\tijf.nl', 'in fo@col·legi.cat', 'info@@col·legi.cat', '"info"@col·legi.cat', 'info;test@col·legi.cat', 'x'.repeat(201) + '@bedrijf.nl', null]) {
+    assert.strictEqual(validEmail(email), false, String(email));
+  }
 });
 
 test('mailer: Exchange-connector zonder inlog, met verplichte TLS', async () => {

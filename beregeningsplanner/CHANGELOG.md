@@ -1,4 +1,14 @@
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:3737a0407e035f79682a8b94a7ecddd03a5dd28b2076434c2190d6b06c749b05 -->
+
 # Changelog
+
+## 1.6.9
+
+- E-mailvalidatie zet IDN-domeinen om naar ASCII vóór de labelcontrole. Een geldig adres zoals `info@col·legi.cat` in het bedrijfsprofiel laat het zakelijke aanvraagformulier nu verschijnen. De controle op het lokale deel en randstreepjes blijft behouden.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 ## 1.6.8
 

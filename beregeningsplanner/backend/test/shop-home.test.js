@@ -108,6 +108,8 @@ test('zakelijk formulier: alleen met mailserver en e-mailadres, anders de knop',
   const without = await (await fetch(`${base}/winkel/`)).text();
   assert.doesNotMatch(without, /class="business-form"/);
   assert.match(without, /Account aanmaken/);
+  assert.strictEqual((await admin.put('/api/quote-profile', { profile: { email: 'info@col·legi.cat' } })).status, 200);
+  assert.match(await (await fetch(`${base}/winkel/`)).text(), /class="business-form"/, 'geldig IDN-adres in quoteProfile blokkeert het formulier niet');
 });
 
 test('zakelijk formulier: mail naar het bedrijf, valstrik en limiet', async () => {

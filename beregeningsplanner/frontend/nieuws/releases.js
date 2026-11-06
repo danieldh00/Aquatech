@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.6.9',
+      date: '2026-11-06',
+      title: 'E-mailadressen met internationale domeinen',
+      items: [
+        { for: ['beheer'], text: 'Het zakelijke aanvraagformulier verschijnt nu ook bij een geldig e-mailadres met een internationaal domein in het bedrijfsprofiel.' },
+      ],
+    },
+    {
       version: '1.6.8',
       date: '2026-11-06',
       title: 'Nieuwe startpagina voor de webshop',

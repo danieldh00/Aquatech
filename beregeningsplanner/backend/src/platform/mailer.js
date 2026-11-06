@@ -3,6 +3,7 @@
 // server stuurt de app niets; de offertemodule biedt dan een link om zelf te
 // versturen. nodemailer is puur JavaScript (geen native module).
 const nodemailer = require('nodemailer');
+const { domainToASCII } = require('node:url');
 const { publicAddress, privateAllowed } = require('../beveiliging/netguard');
 
 const MAIL_TEXT = { host: 200, user: 200, from: 200, replyTo: 200 };
@@ -30,13 +31,21 @@ function sanitizeMail(raw) {
   return out;
 }
 
-const EMAIL = /^[^\s@<>()",;:]+@[\p{L}\p{N}]([\p{L}\p{N}\p{M}-]*[\p{L}\p{N}\p{M}])?(\.[\p{L}\p{N}]([\p{L}\p{N}\p{M}-]*[\p{L}\p{N}\p{M}])?)+$/u;
+const EMAIL = /^[^\s@<>()",;:]+@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
 /**
  * Of een waarde een bruikbaar e-mailadres is.
  * @param {*} value De waarde.
  * @returns {boolean} true bij een geldig e-mailadres (hoogstens 200 tekens).
  */
-const validEmail = (value) => typeof value === 'string' && value.length <= 200 && EMAIL.test(value.trim());
+const validEmail = (value) => {
+  if (typeof value !== 'string' || value.length > 200) return false;
+  const parts = value.trim().split('@');
+  // Geen URL-onderdelen die domainToASCII als pad of escape zou verwerken.
+  if (parts.length !== 2 || /[\s%/\\?#]/.test(parts[1])) return false;
+  // Randstreepjes mogen ook vóór punycode-conversie niet voorkomen.
+  if (parts[1].split(/[.\u3002\uff0e\uff61]/u).some((label) => label.startsWith('-') || label.endsWith('-'))) return false;
+  return EMAIL.test(`${parts[0]}@${domainToASCII(parts[1])}`);
+};
 
 /**
  * Maakt de mailer van een tenant. De mailserver moet een openbaar adres hebben
