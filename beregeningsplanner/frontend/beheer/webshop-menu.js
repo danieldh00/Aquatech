@@ -245,6 +245,30 @@
   async function saveDraft() {
     state.adopt(await state.api('menu', { method: 'PUT', body: { roots: forServer(state.roots) } }));
     state.view = state.adopt.current();
+    const previous = new Map();
+    /**
+     * Onthoudt de schermvlaggen van herkenbare knopen, ook na verplaatsing.
+     * @param {object[]} nodes De oude bewerkbare knopen.
+     * @returns {void}
+     */
+    const remember = (nodes) => nodes.forEach((node) => {
+      const key = node.group || node.slug;
+      if (key) previous.set(key, node);
+      remember(node.children);
+    });
+    remember(state.roots);
+    state.roots = currentTree();
+    /**
+     * Herstelt de vouw- en detailstatus voor knopen die hun adres behouden.
+     * @param {object[]} nodes De genormaliseerde knopen.
+     * @returns {void}
+     */
+    const restore = (nodes) => nodes.forEach((node) => {
+      const old = previous.get(node.group || node.slug);
+      if (old) { node._open = old._open; node._detail = old._detail; }
+      restore(node.children);
+    });
+    restore(state.roots);
   }
 
   /**

@@ -107,7 +107,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const viewer = accounts ? accounts.viewer(req) : null;
     const business = Boolean(viewer) && viewer.customerGroup === 'zakelijk';
     if (business) res.setHeader('Cache-Control', 'private, no-store');
-    const html = renderWith(contentOf(req), render, { ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
+    const html = renderWith(contentOf(req), render, { preview, ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
     res.type('html').send(html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : '')));
   };
   /**

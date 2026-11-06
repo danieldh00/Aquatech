@@ -1,6 +1,9 @@
 // Menuboom van de webshop aanpassen (1.7.0): saneren van de boom, concept/publiceren,
 // voorbeeld, hernoemen zonder de indeling te breken, niet-ingedeelde categorieën en rechten.
 const test = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 const { after } = test;
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
@@ -86,11 +89,22 @@ test('menuboom: concept is alleen een voorbeeld, publiceren zet hem live, hernoe
   assert.deepStrictEqual(first.body.unplaced.map((entry) => entry.name), ['Iets nieuws']);
 
   const roots = renamed('eindkap-tyleen', 'Eindkappen');
+  roots[0].children.push({ name: 'Alleen concept', slug: 'alleen-concept', match: ['Iets nieuws'] });
   const saved = await admin.put('/api/admin/shop-content/menu', { roots });
   assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
   assert.ok(!(await anonymous.get('/winkel/')).text.includes('Eindkappen'), 'concept is niet live');
   const preview = await admin.get('/winkel/?voorbeeld=1');
   assert.ok(preview.text.includes('Eindkappen'), 'voorbeeld toont het concept');
+  assert.strictEqual((await anonymous.get('/winkel/categorie/alleen-concept/')).status, 404);
+  assert.match(preview.text, /href="categorie\/alleen-concept\/\?voorbeeld=1"/);
+  assert.strictEqual((await admin.get('/winkel/categorie/alleen-concept/?voorbeeld=1')).status, 200);
+  assert.match(preview.text, /href="groep\/beregening\/\?voorbeeld=1"/);
+  const links = [...preview.text.matchAll(/href="(categorie\/eindkap-tyleen\/[^"]*)"/g)];
+  assert.ok(links.length >= 3, 'desktopmenu, zoekmenu en mobiel menu');
+  for (const [, href] of links) {
+    assert.strictEqual(href, 'categorie/eindkap-tyleen/?voorbeeld=1');
+    assert.ok((await admin.get(`/winkel/${href}`)).text.includes('Eindkappen'));
+  }
   assert.ok(!(await anonymous.get('/winkel/?voorbeeld=1')).text.includes('Eindkappen'), 'bezoeker ziet nooit het voorbeeld');
 
   assert.strictEqual((await admin.post('/api/admin/shop-content/menu/publish', {})).status, 200);
@@ -114,7 +128,59 @@ test('menuboom: concept weggooien en rechten', async () => {
   assert.strictEqual(discarded.status, 200);
   assert.strictEqual(discarded.body.menu.hasDraft, false);
   for (const client of [customer, anonymous]) {
-    assert.ok([401, 403].includes((await client.put('/api/admin/shop-content/menu', { roots: [] })).status));
-    assert.ok([401, 403].includes((await client.post('/api/admin/shop-content/menu/publish', {})).status));
+    const expected = client === customer ? 403 : 401;
+    assert.strictEqual((await client.put('/api/admin/shop-content/menu', { roots: [] })).status, expected);
+    for (const action of ['publish', 'discard', 'revert']) {
+      assert.strictEqual((await client.post(`/api/admin/shop-content/menu/${action}`, {})).status, expected);
+    }
   }
+});
+
+
+test('menu-editor neemt na elke opslag de genormaliseerde boom over en behoudt schermvlaggen', async () => {
+  const window = {};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../frontend/beheer/webshop-menu.js'), 'utf8'), { window });
+  const roots = [{ group: 'beregening', name: 'Beregening', children: [{ name: '  Kapjes  ', slug: 'kapjes', children: [{ name: 'Nieuw', slug: '' }, { name: '', slug: '' }] }] }];
+  let view = { menu: { draft: { roots } }, defaults: { menu: { roots } }, assets: [], images: [] };
+  const sent = [];
+  const errorBox = { textContent: '' };
+  const host = { innerHTML: '', querySelector: () => errorBox };
+  /**
+   * Neemt het antwoord over zoals het beheerscherm dat doet.
+   * @param {object} response De nieuwe serverstand.
+   * @returns {void}
+   */
+  const adopt = (response) => { view = response; };
+  /**
+   * Geeft de overgenomen serverstand terug aan de editor.
+   * @returns {object} De huidige stand.
+   */
+  adopt.current = () => view;
+  window.BeheerWebshopMenu.mount(host, {
+    view, adopt, toast: () => {},
+    api: async (_, options) => {
+      sent.push(JSON.parse(JSON.stringify(options.body.roots)));
+      return { ...view, menu: { draft: { roots: normalizeTree(options.body.roots) } } };
+    },
+  });
+  /**
+   * Bedient een knop via de publieke klikafhandeling van de editor.
+   * @param {string} action De knopactie.
+   * @param {string} nodePath Het indexpad van de categorie.
+   * @returns {Promise<void>} Afgeronde klik.
+   */
+  const click = (action, nodePath = '0.0') => host.onclick({ target: { closest: () => ({ dataset: { m: action }, closest: () => ({ dataset: { path: nodePath } }) }) } });
+  await click('fold');
+  await click('detail');
+  await click('save');
+  assert.strictEqual(errorBox.textContent, '');
+  assert.match(host.innerHTML, /value="Kapjes"/);
+  assert.doesNotMatch(host.innerHTML, /value="  Kapjes  "/);
+  assert.match(host.innerHTML, /class="btn small primary" data-m="detail" aria-expanded="true"/);
+  assert.match(host.innerHTML, /value="Nieuw"/, 'opengevouwen kinderen blijven zichtbaar');
+  await click('save');
+  assert.strictEqual(errorBox.textContent, '');
+  assert.strictEqual(sent[1][0].children[0].name, 'Kapjes');
+  assert.strictEqual(sent[1][0].children[0].children.length, 1, 'lege knoop is verwijderd');
+  assert.ok(sent[1][0].children[0].children[0].slug, 'gegenereerd adres wordt opnieuw verstuurd');
 });

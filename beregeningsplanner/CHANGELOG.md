@@ -1,5 +1,17 @@
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:b98473b6bd4a556e901cb3b7b96d20af067e71bc743eb29fdcb0575fa58e023c -->
+
 # Changelog
 
+## 1.7.1
+
+- Categorielinks en menulinks houden het conceptvoorbeeld van de webshop vast.
+- De menu-editor neemt na opslaan de opgeschoonde serverboom over en behoudt de vouw- en detailstatus van herkenbare categorieën.
+- Rechten en tenantisolatie van alle schrijfroutes voor het menu worden exact getest.
+
+
+<!-- /coderabbit-ai-generated:v1 -->
 ## 1.7.0
 
 De menuboom van de webshop is aanpasbaar in Beheer.

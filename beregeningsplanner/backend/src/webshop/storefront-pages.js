@@ -42,7 +42,7 @@ let activeShop = { ordering: false, cartCount: 0, business: false, wholesale: fa
  * zolang `render` loopt hoort elke pagina bij deze inhoud; daarna geldt weer de vorige.
  * @param {{ site: object, pages: object[] }} content De inhoud (zie shop-content.js, publicContent).
  * @param {Function} render Functie die de pagina('s) opbouwt en iets teruggeeft.
- * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean }} [shop] Of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
+ * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean, preview?: boolean }} [shop] Of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
  * @returns {*} Wat `render` teruggeeft.
  */
 function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, wholesale: false }) {
@@ -78,6 +78,17 @@ function productImageSrc(root, image) {
 }
 
 /**
+ * Houdt het conceptvoorbeeld vast in relatieve links naar de catalogus.
+ * @param {string} href Het adres, ontsnapt voor HTML.
+ * @returns {string} Het adres met de voorbeeldstatus voor categorieën en groepen.
+ */
+function previewHref(href) {
+  if (!activeShop.preview || !/^(?:\.\.\/)*(?:groep|categorie)\//.test(href) || /[?&](?:amp;)?voorbeeld=/.test(href)) return href;
+  const [pathname, fragment] = href.split('#');
+  return `${pathname}${pathname.includes('?') ? '&amp;' : '?'}voorbeeld=1${fragment === undefined ? '' : `#${fragment}`}`;
+}
+
+/**
  * Het adres van een knop uit Beheer: een volledig adres, een pad in de shop of de standaard.
  * @param {string} link De ingevoerde link (leeg = standaard).
  * @param {string} root Relatief pad naar de shop-startpagina.
@@ -85,8 +96,8 @@ function productImageSrc(root, image) {
  * @returns {string} Het adres, ontsnapt voor in een attribuut.
  */
 function linkHref(link, root, fallback) {
-  if (!link) return fallback;
-  return escapeHtml(/^https?:/i.test(link) ? link : `${root}${link}`);
+  if (!link) return previewHref(fallback);
+  return previewHref(escapeHtml(/^https?:/i.test(link) ? link : `${root}${link}`));
 }
 
 /**
@@ -153,7 +164,7 @@ function navigation(groups, root) {
    * @returns {string} HTML van de lijstitems.
    */
   const flyItems = (categories) => visible(categories).map((category) => {
-    const link = `<a href="${root}categorie/${escapeHtml(category.slug)}/">${escapeHtml(category.name)}</a>`;
+    const link = `<a href="${previewHref(`${root}categorie/${escapeHtml(category.slug)}/`)}">${escapeHtml(category.name)}</a>`;
     const children = visible(category.children);
     return children.length ? `<li class="has-sub">${link}<ul class="nav-drop nav-fly">${flyItems(children)}</ul></li>` : `<li>${link}</li>`;
   }).join('');
@@ -163,10 +174,10 @@ function navigation(groups, root) {
    * @returns {string} HTML van de lijstitems.
    */
   const foldItems = (categories) => visible(categories).map((category) => {
-    const link = `<a href="${root}categorie/${escapeHtml(category.slug)}/">${escapeHtml(category.name)}</a>`;
+    const link = `<a href="${previewHref(`${root}categorie/${escapeHtml(category.slug)}/`)}">${escapeHtml(category.name)}</a>`;
     const children = visible(category.children);
     return children.length
-      ? `<li><details><summary>${escapeHtml(category.name)}</summary><ul><li><a href="${root}categorie/${escapeHtml(category.slug)}/">Alles in ${escapeHtml(category.name)}</a></li>${foldItems(children)}</ul></details></li>`
+      ? `<li><details><summary>${escapeHtml(category.name)}</summary><ul><li><a href="${previewHref(`${root}categorie/${escapeHtml(category.slug)}/`)}">Alles in ${escapeHtml(category.name)}</a></li>${foldItems(children)}</ul></details></li>`
       : `<li>${link}</li>`;
   }).join('');
   const allGroups = groups.map((group) => `<li class="has-sub"><span class="nav-heading" tabindex="0">${escapeHtml(group.name)}</span><ul class="nav-drop nav-fly">${flyItems(group.categories)}</ul></li>`).join('');
@@ -428,7 +439,7 @@ function homePage(catalog) {
   if (!catalog.products.length) return layout({ root, groups: catalog.groups, wide: true, title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}<div class="wrap"><p class="muted">De webshop wordt gevuld. Kom snel terug.</p></div>` });
   const tiles = catalog.groups.map((group) => {
     const showcase = groupShowcase(group, catalog.products);
-    return `<a class="assortment-tile" href="groep/${escapeHtml(group.slug)}/"><span class="product-image">${showcase ? `<img src="${productImageSrc(root, showcase.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><span>${escapeHtml(group.name)}</span></a>`;
+    return `<a class="assortment-tile" href="${previewHref(`groep/${escapeHtml(group.slug)}/`)}"><span class="product-image">${showcase ? `<img src="${productImageSrc(root, showcase.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><span>${escapeHtml(group.name)}</span></a>`;
   }).join('');
   const assortment = `<section class="assortment"><div class="wrap assortment-inner"><div class="assortment-title"><h2>Assortiment</h2><p>Alles voor jouw project</p></div><div class="assortment-strip">${tiles}</div></div></section>`;
   /**
@@ -459,7 +470,7 @@ function homePage(catalog) {
       : group ? catalog.products.filter((product) => product.groupSlug === group.slug && product.image).slice(0, 3) : [];
     return { column, group, items };
   }) : [];
-  const perGroup = columns.length ? `<section class="wrap"><div class="group-columns">${columns.map(({ column, group, items }) => `<div><h2>${group ? `<a href="groep/${escapeHtml(group.slug)}/">${escapeHtml(column.title)}</a>` : escapeHtml(column.title)}</h2>${items.length ? items.map((product) => productRow(product, root)).join('') : '<p class="muted">Binnenkort meer producten.</p>'}</div>`).join('')}</div></section>` : '';
+  const perGroup = columns.length ? `<section class="wrap"><div class="group-columns">${columns.map(({ column, group, items }) => `<div><h2>${group ? `<a href="${previewHref(`groep/${escapeHtml(group.slug)}/`)}">${escapeHtml(column.title)}</a>` : escapeHtml(column.title)}</h2>${items.length ? items.map((product) => productRow(product, root)).join('') : '<p class="muted">Binnenkort meer producten.</p>'}</div>`).join('')}</div></section>` : '';
   const benefits = benefitBlock.enabled && benefitBlock.items.length ? `<section class="benefits"><div class="wrap benefits-inner">${benefitBlock.items.map((item) => `<div class="benefit">${item.image ? `<img src="${imageSrc(root, item.image)}" alt="" width="50" height="50" loading="lazy">` : ''}<div><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.text)}</span></div></div>`).join('')}</div></section>` : '';
   const brands = brandBlock.enabled && brandBlock.items.length ? `<section class="wrap">${brandBlock.title ? `<h2 class="centered">${escapeHtml(brandBlock.title)}</h2>` : ''}<div class="brands">${brandBlock.items.map((item) => `<img src="${imageSrc(root, item.image)}" alt="${escapeHtml(item.name)}" height="70" loading="lazy">`).join('')}</div></section>` : '';
   const quote = quoteBlock.enabled && quoteBlock.text ? `<section class="wrap"><p class="home-quote">“${escapeHtml(quoteBlock.text)}”</p></section>` : '';
@@ -533,7 +544,7 @@ function sideTree(categories, open, current, root) {
   const items = categories.filter((category) => !category.hidden).map((category) => {
     const children = category.children.filter((child) => !child.hidden);
     const here = category.slug === current;
-    return `<li><a href="${root}categorie/${escapeHtml(category.slug)}/"${here ? ' aria-current="page"' : ''}>${escapeHtml(category.name)}</a>${children.length && open.has(category.slug) ? sideTree(children, open, current, root) : ''}</li>`;
+    return `<li><a href="${previewHref(`${root}categorie/${escapeHtml(category.slug)}/`)}"${here ? ' aria-current="page"' : ''}>${escapeHtml(category.name)}</a>${children.length && open.has(category.slug) ? sideTree(children, open, current, root) : ''}</li>`;
   }).join('');
   return `<ul>${items}</ul>`;
 }
@@ -570,8 +581,8 @@ function browsePage({ group, category = null, products = [], groups, options = {
   const page = Math.min(Math.max(1, Number(options.page) || 1), pageCount);
   const shown = ordered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const crumbs = [`<a href="${root}">Shop</a>`, category ? `<a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : `<span>${escapeHtml(group.name)}</span>`,
-    ...chain.map((item, position) => (position === chain.length - 1 ? `<span>${escapeHtml(item.name)}</span>` : `<a href="${root}categorie/${escapeHtml(item.slug)}/">${escapeHtml(item.name)}</a>`))].join(' › ');
+  const crumbs = [`<a href="${root}">Shop</a>`, category ? `<a href="${previewHref(`${root}groep/${escapeHtml(group.slug)}/`)}">${escapeHtml(group.name)}</a>` : `<span>${escapeHtml(group.name)}</span>`,
+    ...chain.map((item, position) => (position === chain.length - 1 ? `<span>${escapeHtml(item.name)}</span>` : `<a href="${previewHref(`${root}categorie/${escapeHtml(item.slug)}/`)}">${escapeHtml(item.name)}</a>`))].join(' › ');
   const priceForm = `<form class="price-filter" action="./" method="get">
   <label>Van <input type="number" name="min" min="0" step="0.01" inputmode="decimal" value="${min == null ? '' : escapeHtml(min)}" placeholder="Min. prijs"></label>
   <label>Tot <input type="number" name="max" min="0" step="0.01" inputmode="decimal" value="${max == null ? '' : escapeHtml(max)}" placeholder="Max. prijs"></label>
@@ -579,7 +590,7 @@ function browsePage({ group, category = null, products = [], groups, options = {
   <button class="button" type="submit">Filter</button>${min != null || max != null ? ` <a href="${link({ min: '', max: '' })}">Wis prijs</a>` : ''}
 </form>`;
   const side = `<aside class="browse-side"><h2>Categorie</h2>${sideTree(group.categories, open, category ? category.slug : '', root)}${products.length ? `<h2>Prijs</h2>${priceForm}` : ''}</aside>`;
-  const blocks = children.length ? `<div class="cat-blocks">${children.map((child) => `<a class="cat-block" href="${root}categorie/${escapeHtml(child.slug)}/"><span class="cat-block-image">${child.image ? `<img src="${imageSrc(root, child.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><strong>${escapeHtml(child.name)}</strong><span>${productCount(child.count)}</span></a>`).join('')}</div>` : '';
+  const blocks = children.length ? `<div class="cat-blocks">${children.map((child) => `<a class="cat-block" href="${previewHref(`${root}categorie/${escapeHtml(child.slug)}/`)}"><span class="cat-block-image">${child.image ? `<img src="${imageSrc(root, child.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><strong>${escapeHtml(child.name)}</strong><span>${productCount(child.count)}</span></a>`).join('')}</div>` : '';
   const sorting = SORTS.map((item) => `<a href="${link({ sorteer: item.key })}"${item.key === sort ? ' aria-current="true"' : ''}>${escapeHtml(item.label)}</a>`).join(' · ');
   const pages = pageCount > 1 ? `<nav class="pager" aria-label="Pagina's">${Array.from({ length: pageCount }, (_, index) => `<a href="${link({ pagina: index === 0 ? '' : index + 1 })}"${index + 1 === page ? ' aria-current="page"' : ''}>${index + 1}</a>`).join('')}${page < pageCount ? `<a href="${link({ pagina: page + 1 })}">Volgende</a>` : ''}</nav>` : '';
   const list = products.length ? `<div class="browse-toolbar"><p>${ordered.length ? `Resultaat ${(page - 1) * PAGE_SIZE + 1}–${(page - 1) * PAGE_SIZE + shown.length} van de ${ordered.length} ${ordered.length === 1 ? 'resultaat' : 'resultaten'}` : 'Geen resultaten'}</p>
@@ -668,7 +679,7 @@ function productPage(product, groups, chosenCode = '') {
       <button class="button secondary" type="submit">Kies</button>
     </form>` : '';
   const parentLink = product.parentSlug ? `<p class="note"><a href="${root}product/${escapeHtml(product.parentSlug)}/?v=${encodeURIComponent(shown.code)}">Alle uitvoeringen van ${escapeHtml(product.parentName)}</a></p>` : '';
-  const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a>${group ? ` › <a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : ''} › <a href="${root}categorie/${escapeHtml(product.categorySlug)}/">${escapeHtml(product.categoryName)}</a> › <span>${escapeHtml(product.name)}</span></nav>
+  const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a>${group ? ` › <a href="${previewHref(`${root}groep/${escapeHtml(group.slug)}/`)}">${escapeHtml(group.name)}</a>` : ''} › <a href="${previewHref(`${root}categorie/${escapeHtml(product.categorySlug)}/`)}">${escapeHtml(product.categoryName)}</a> › <span>${escapeHtml(product.name)}</span></nav>
 <article class="product-detail">
   <div class="product-image large">${image}</div>
   <div class="product-info">

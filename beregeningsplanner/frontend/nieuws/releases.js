@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.1',
+      date: '2026-11-06',
+      title: 'Voorbeeld van het webshopmenu verbeterd',
+      items: [
+        { text: 'Categorielinks houden het conceptvoorbeeld vast. Na opslaan toont de menu-editor de door de server opgeschoonde indeling.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.7.0',
       date: '2026-11-06',
       title: 'Menu van de webshop zelf aanpassen',
