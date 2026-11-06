@@ -13,6 +13,9 @@ De menuboom van de webshop is aanpasbaar in Beheer.
 - Hernoemen breekt de indeling niet: een bestaande categorie houdt haar webshopnaam als `match`.
 - Webshopcategorieën die nog in geen enkele categorie staan, staan onder *Nog niet ingedeeld* met een knop
   om ze toe te voegen.
+- Submenu's in de shop klappen naar rechts open en alleen naar links als er rechts geen ruimte meer is
+  (`webshop/storefront-menu.js`, klassen `fly-left`/`drop-left`; vervangt `nav-flip`).
+- Een voorbeeld (`?voorbeeld=1`) houdt de menu- en categorielinks in het concept.
 - `createStorefrontData` krijgt de boom per organisatie (`treeOf`); categorieafbeeldingen in de standaardboom
   zijn nu `asset:`-verwijzingen.
 

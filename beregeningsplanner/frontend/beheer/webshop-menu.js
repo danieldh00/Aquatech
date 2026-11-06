@@ -245,6 +245,7 @@
   async function saveDraft() {
     state.adopt(await state.api('menu', { method: 'PUT', body: { roots: forServer(state.roots) } }));
     state.view = state.adopt.current();
+    state.roots = currentTree();
   }
 
   /**

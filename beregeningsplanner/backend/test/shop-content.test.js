@@ -254,6 +254,10 @@ test('rechten en tenantgrenzen van de webshop-inhoud', async () => {
   assert.strictEqual(view.status, 200);
   assert.strictEqual(view.body.available, false);
   assert.strictEqual((await other.put('/api/admin/shop-content/site', { hero: { title: 'Hack' } })).status, 404);
+  assert.strictEqual((await other.put('/api/admin/shop-content/menu', { roots: [] })).status, 404);
+  for (const action of ['publish', 'discard', 'revert']) {
+    assert.strictEqual((await other.post(`/api/admin/shop-content/menu/${action}`, {})).status, 404);
+  }
   assert.strictEqual((await other.put('/api/admin/shop-content/pages/hack', { title: 'Hack' })).status, 404);
   assert.strictEqual((await other.post('/api/admin/shop-content/site/publish', {})).status, 404);
   assert.strictEqual((await other.post('/api/admin/shop-content/images', { data: PIXEL_PNG.toString('base64') })).status, 404);
