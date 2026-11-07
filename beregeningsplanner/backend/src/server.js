@@ -542,12 +542,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Buiten /app: de webshop, de oude adressen (doorverwijzing) en de gezondheidscontrole.
   app.use((req, res, next) => {
     if (req.inApp || req.path === '/api/health') return next();
+    // Uit de oude webshop-URL gebleven webhooks van Mollie: nog een tijdje intern doorgeven.
+    if (/^\/winkel\/mollie\/webhook\//.test(req.path)) req.url = req.url.slice('/winkel'.length);
     if (legacyAppRedirect(req, res)) return undefined;
     if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found' });
     if (req.path === '/sw.js') return sendCleanupWorker(res);
     if (req.path === '/robots.txt') return res.type('text').send('User-agent: *\nDisallow: /app/\nDisallow: /api/\nDisallow: /winkelwagen/\nDisallow: /afrekenen/\nDisallow: /account/\nDisallow: /inloggen/\nDisallow: /registreren/\nDisallow: /bestelling/\nDisallow: /bestellingen/\nDisallow: /groothandel/\n');
-    // Uit de oude webshop-URL gebleven webhooks van Mollie: nog een tijdje intern doorgeven.
-    if (/^\/winkel\/mollie\/webhook\//.test(req.path)) req.url = req.url.slice('/winkel'.length);
     // Webshop uit: de hoofdpagina is dan de app (voorbeeld voor beheerders blijft kunnen).
     if (req.path === '/' && !settingsFor(tenant.id).get('storefront') && !Object.prototype.hasOwnProperty.call(req.query, 'voorbeeld')) return res.redirect(302, 'app/');
     return storefrontRouter(req, res, next);

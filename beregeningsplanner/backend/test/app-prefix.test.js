@@ -52,6 +52,7 @@ test('/app zonder slash gaat naar /app/, daaronder werkt de app als vanouds', as
     const bare = await client.get('/app');
     assert.strictEqual(bare.status, 302);
     assert.strictEqual(bare.location, 'app/');
+    assert.strictEqual((await client.get('/app?x=1')).location, 'app/?x=1');
     const page = await client.get('/app/');
     assert.strictEqual(page.status, 401, 'zonder inlog de inlogpagina');
     assert.strictEqual((await client.get('/app/api/health')).body.ok, true);
@@ -74,5 +75,14 @@ test('webshop uit: / stuurt naar de app; /sw.js ruimt de oude worker op; robots.
     assert.match(worker.headers.get('cache-control'), /no-cache/);
     const robots = await client.get('/robots.txt');
     assert.match(robots.text, /Disallow: \/app\//);
+  } finally { server.close(); }
+});
+
+test('de oude Mollie-webhook onder /winkel wordt niet doorgestuurd maar verwerkt', async () => {
+  const { server, client } = await start();
+  try {
+    const res = await client.post('/winkel/mollie/webhook/onbekend/', undefined);
+    assert.notStrictEqual(res.status, 301, 'een POST mag niet worden omgeleid');
+    assert.ok(!res.location, 'geen Location-kop');
   } finally { server.close(); }
 });
