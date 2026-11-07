@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.1',
+      date: '2026-11-07',
+      title: 'De webshop is de startpagina',
+      items: [
+        { text: 'De webshop staat nu op de hoofdpagina (aquatech.den-hollander.com). De app, met planner, offertes, werkorders en Beheer, staat onder /app/. Oude adressen worden doorgestuurd.' },
+        { text: 'Staat de webshop uit (Beheer > Instellingen > Toegang), dan stuurt de hoofdpagina door naar /app/. Gebruik voor links in offertes en seizoensherinneringen het adres met /app/.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.7.0',
       date: '2026-11-06',
       title: 'Menu van de webshop zelf aanpassen',

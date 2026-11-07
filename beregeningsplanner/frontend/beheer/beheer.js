@@ -948,7 +948,7 @@
       saveSettings(accessForm, { drawingRequests: accessForm.drawingRequests.checked }, accessForm.drawingRequests.checked ? 'Tekening indienen zonder account staat aan' : 'Tekening indienen zonder account staat uit');
     };
     const shopForm = $('#s-shop');
-    /** Zet de eigen webshop (winkel/) aan of uit. */
+    /** Zet de eigen webshop (startpagina /) aan of uit. */
     shopForm.storefront.onchange = () => {
       saveSettings(shopForm, { storefront: shopForm.storefront.checked }, shopForm.storefront.checked ? 'Webshop staat aan' : 'Webshop staat uit');
     };

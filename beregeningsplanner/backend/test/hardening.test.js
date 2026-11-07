@@ -49,15 +49,15 @@ test('offline wachtrij: alleen bekende werkorder-wijzigingen, eigenaar meegestuu
   const { server, as } = await setup();
   try {
     const baas = await as('baas');
-    const me = (await baas.get('/api/me')).body;
+    const me = (await baas.get('/app/api/me')).body;
     const owner = `${me.user.id}@${me.tenant.id}`;
-    const other = await baas.put('/api/account/profile', { phone: '0612345678' }, { 'X-Aquatech-Owner': 'iemand-anders@elders' });
+    const other = await baas.put('/app/api/account/profile', { phone: '0612345678' }, { 'X-Aquatech-Owner': 'iemand-anders@elders' });
     assert.strictEqual(other.status, 409);
     assert.strictEqual(other.body.error, 'owner_mismatch');
-    assert.strictEqual((await baas.get('/api/account/profile')).body.user.phone || '', '', 'niet uitgevoerd');
-    assert.strictEqual((await baas.put('/api/account/profile', { phone: '0612345678' }, { 'X-Aquatech-Owner': owner })).status, 200);
+    assert.strictEqual((await baas.get('/app/api/account/profile')).body.user.phone || '', '', 'niet uitgevoerd');
+    assert.strictEqual((await baas.put('/app/api/account/profile', { phone: '0612345678' }, { 'X-Aquatech-Owner': owner })).status, 200);
     // Zonder de kop (gewoon verzoek vanaf de pagina) verandert er niets.
-    assert.strictEqual((await baas.put('/api/account/profile', { phone: '0612345679' })).status, 200);
+    assert.strictEqual((await baas.put('/app/api/account/profile', { phone: '0612345679' })).status, 200);
   } finally {
     server.close();
   }
@@ -68,14 +68,14 @@ test('plannen: alleen met het recht plannen; zonder recht geen lijst, geen opsla
   try {
     const pim = await as('pim'), klaas = await as('klaas');
     const plan = { data: { areas: [], meta: { name: 'Tuin' } } };
-    assert.strictEqual((await pim.post('/api/plans', plan)).status, 403, 'planner heeft geen recht plannen');
-    assert.deepStrictEqual((await pim.get('/api/plans')).body.items, []);
-    const own = await klaas.post('/api/plans', plan);
+    assert.strictEqual((await pim.post('/app/api/plans', plan)).status, 403, 'planner heeft geen recht plannen');
+    assert.deepStrictEqual((await pim.get('/app/api/plans')).body.items, []);
+    const own = await klaas.post('/app/api/plans', plan);
     assert.strictEqual(own.status, 201, 'klant mag wel');
-    assert.strictEqual((await pim.get(`/api/plans/${own.body.id}`)).status, 403);
-    assert.strictEqual((await pim.put(`/api/plans/${own.body.id}`, plan)).status, 403);
-    assert.strictEqual((await pim.del(`/api/plans/${own.body.id}`)).status, 403);
-    assert.strictEqual((await pim.post(`/api/plans/${own.body.id}/review-request`, {})).status, 403);
+    assert.strictEqual((await pim.get(`/app/api/plans/${own.body.id}`)).status, 403);
+    assert.strictEqual((await pim.put(`/app/api/plans/${own.body.id}`, plan)).status, 403);
+    assert.strictEqual((await pim.del(`/app/api/plans/${own.body.id}`)).status, 403);
+    assert.strictEqual((await pim.post(`/app/api/plans/${own.body.id}/review-request`, {})).status, 403);
   } finally {
     server.close();
   }
@@ -88,14 +88,14 @@ test('uitgeschakelde organisatie: ook accounts in haar testomgeving en de AI-rou
     const env = store.createEnvironment(live.id, { name: 'Test' }).tenant;
     await store.createAccount(env.id, { username: 'tess', displayName: 'Tess', role: 'installateur', password: PW });
     const tess = await as('tess', env.slug);
-    assert.ok((await tess.get('/api/me')).body.user, 'werkt zolang de organisatie aan staat');
+    assert.ok((await tess.get('/app/api/me')).body.user, 'werkt zolang de organisatie aan staat');
     const hoofd = await as('hoofd');
-    assert.strictEqual((await hoofd.patch(`/api/platform/tenants/${live.id}`, { disabled: true })).status, 200);
-    assert.strictEqual((await tess.get('/api/me')).body.user, null, 'bestaande sessie werkt niet meer');
-    assert.strictEqual((await tess.post('/api/plans', { data: { areas: [] } })).status, 401);
-    assert.strictEqual((await tess.get('/api/plan/status')).status, 401, 'AI niet via de hoofdtenant');
+    assert.strictEqual((await hoofd.patch(`/app/api/platform/tenants/${live.id}`, { disabled: true })).status, 200);
+    assert.strictEqual((await tess.get('/app/api/me')).body.user, null, 'bestaande sessie werkt niet meer');
+    assert.strictEqual((await tess.post('/app/api/plans', { data: { areas: [] } })).status, 401);
+    assert.strictEqual((await tess.get('/app/api/plan/status')).status, 401, 'AI niet via de hoofdtenant');
     // Zonder sessie en zonder gasten: ook dicht.
-    assert.strictEqual((await createClient(base).get('/api/plan/status')).status, 401);
+    assert.strictEqual((await createClient(base).get('/app/api/plan/status')).status, 401);
   } finally {
     server.close();
   }
@@ -111,7 +111,7 @@ test('inloggen: verzonnen organisatiecodes geven geen extra pogingen op een hoof
      * @param {object} body De inloggegevens.
      * @returns {Promise<object>} Het antwoord.
      */
-    const attempt = (body) => createClient(base).request('POST', '/api/auth/login', body, { 'X-Forwarded-For': `203.0.113.${ip++}` });
+    const attempt = (body) => createClient(base).request('POST', '/app/api/auth/login', body, { 'X-Forwarded-For': `203.0.113.${ip++}` });
     for (let i = 0; i < 10; i++) assert.strictEqual((await attempt({ username: 'hoofd', password: 'fout-fout-fout-1', tenant: `code-${i}` })).status, 401);
     assert.strictEqual((await attempt({ username: 'hoofd', password: PW, tenant: 'nog-een-code' })).status, 401, 'via een andere code niet meer');
     assert.strictEqual((await attempt({ username: 'hoofd', password: PW })).status, 429, 'de gebruikersnaam in de hoofdtenant is geblokkeerd');
@@ -131,7 +131,7 @@ test('inloggen: verzonnen organisatiecodes geven geen extra pogingen op een hoof
      * @param {string} code De code.
      * @returns {Promise<object>} Het antwoord.
      */
-    const tryCode = (code) => createClient(codeBase).request('POST', '/api/auth/login', { code }, { 'X-Forwarded-For': `198.51.100.${ip++}` });
+    const tryCode = (code) => createClient(codeBase).request('POST', '/app/api/auth/login', { code }, { 'X-Forwarded-For': `198.51.100.${ip++}` });
     for (let i = 0; i < 30; i++) assert.strictEqual((await tryCode(`fout-${i}`)).status, 401);
     assert.strictEqual((await tryCode('juiste-code-123')).status, 429, 'na 30 fouten in totaal even dicht');
   } finally {
@@ -170,8 +170,8 @@ test('sessieduur volgt de instelling van de eigen organisatie', async () => {
     const baas = await as('baas');
     const twoDaysAgo = new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString();
     db.prepare('UPDATE sessions SET last_seen_at = ?').run(twoDaysAgo);
-    assert.strictEqual((await gerda.get('/api/me')).body.user, null, 'na 1 dag zonder gebruik uitgelogd');
-    assert.ok((await baas.get('/api/me')).body.user, 'hoofdtenant: standaard 14 dagen');
+    assert.strictEqual((await gerda.get('/app/api/me')).body.user, null, 'na 1 dag zonder gebruik uitgelogd');
+    assert.ok((await baas.get('/app/api/me')).body.user, 'hoofdtenant: standaard 14 dagen');
   } finally {
     server.close();
   }
@@ -186,10 +186,10 @@ test('profiel: zonder wijziging geen auditregel', async () => {
      * @returns {number} Het aantal.
      */
     const count = () => Number(db.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'profiel_gewijzigd'").get().n);
-    await baas.put('/api/account/profile', { phone: '0612345678' });
+    await baas.put('/app/api/account/profile', { phone: '0612345678' });
     assert.strictEqual(count(), 1);
-    await baas.put('/api/account/profile', { phone: '0612345678' });
-    await baas.put('/api/account/profile', {});
+    await baas.put('/app/api/account/profile', { phone: '0612345678' });
+    await baas.put('/app/api/account/profile', {});
     assert.strictEqual(count(), 1);
   } finally {
     server.close();

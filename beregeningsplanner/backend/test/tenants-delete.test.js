@@ -58,22 +58,22 @@ test('hoofdbeheerder verwijdert een tenant met testomgevingen en al zijn gegeven
   try {
     const baas = createClient(base);
     await baas.login('baas', PW);
-    assert.strictEqual((await baas.post('/api/plans', { data: plan('Plan van Aquatech') })).status, 201);
-    const tenant = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
+    assert.strictEqual((await baas.post('/app/api/plans', { data: plan('Plan van Aquatech') })).status, 201);
+    const tenant = (await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
     const piet = createClient(base);
     assert.strictEqual((await piet.login('piet', 'Gras-Pomp-2027!', 'groen')).status, 200);
-    assert.strictEqual((await piet.post('/api/plans', { data: plan('Tuin van Groen') })).status, 201);
-    const env = (await baas.post(`/api/platform/tenants/${tenant.id}/environments`, { name: 'Test', copyPlans: true })).body.tenant;
-    assert.strictEqual((await baas.post(`/api/platform/tenants/${env.id}/testdata`)).status, 201);
+    assert.strictEqual((await piet.post('/app/api/plans', { data: plan('Tuin van Groen') })).status, 201);
+    const env = (await baas.post(`/app/api/platform/tenants/${tenant.id}/environments`, { name: 'Test', copyPlans: true })).body.tenant;
+    assert.strictEqual((await baas.post(`/app/api/platform/tenants/${env.id}/testdata`)).status, 201);
 
     // Alleen hoofdbeheerders; de beheerder van de tenant zelf niet.
-    assert.strictEqual((await piet.del(`/api/platform/tenants/${tenant.id}`, { confirm: 'groen' })).status, 403);
+    assert.strictEqual((await piet.del(`/app/api/platform/tenants/${tenant.id}`, { confirm: 'groen' })).status, 403);
     // Zonder (of met een verkeerde) tenantcode gebeurt er niets.
-    assert.strictEqual((await baas.del(`/api/platform/tenants/${tenant.id}`)).body.error, 'confirm_required');
-    assert.strictEqual((await baas.del(`/api/platform/tenants/${tenant.id}`, { confirm: 'groen-bv' })).status, 400);
+    assert.strictEqual((await baas.del(`/app/api/platform/tenants/${tenant.id}`)).body.error, 'confirm_required');
+    assert.strictEqual((await baas.del(`/app/api/platform/tenants/${tenant.id}`, { confirm: 'groen-bv' })).status, 400);
     assert.ok(createStore(db).getTenant(tenant.id));
 
-    const out = await baas.del(`/api/platform/tenants/${tenant.id}`, { confirm: 'Groen ' });
+    const out = await baas.del(`/app/api/platform/tenants/${tenant.id}`, { confirm: 'Groen ' });
     assert.strictEqual(out.status, 200, JSON.stringify(out.body));
     assert.strictEqual(out.body.environments, 1);
 
@@ -89,13 +89,13 @@ test('hoofdbeheerder verwijdert een tenant met testomgevingen en al zijn gegeven
     }
 
     // Gebruikers en sessies zijn weg; de hoofdtenant is ongemoeid.
-    assert.deepStrictEqual((await piet.get('/api/plans')).body.items, []);
-    assert.strictEqual((await piet.get('/api/admin/users')).status, 401);
+    assert.deepStrictEqual((await piet.get('/app/api/plans')).body.items, []);
+    assert.strictEqual((await piet.get('/app/api/admin/users')).status, 401);
     assert.strictEqual((await piet.login('piet', 'Gras-Pomp-2027!', 'groen')).status, 401);
-    assert.strictEqual((await baas.get('/api/plans')).body.items.length, 1);
-    const tenants = (await baas.get('/api/platform/tenants')).body.items;
+    assert.strictEqual((await baas.get('/app/api/plans')).body.items.length, 1);
+    const tenants = (await baas.get('/app/api/platform/tenants')).body.items;
     assert.deepStrictEqual(tenants.map((x) => x.slug), ['default']);
-    assert.ok((await baas.get('/api/admin/audit')).body.items.some((entry) => entry.action === 'tenant_verwijderd'));
+    assert.ok((await baas.get('/app/api/admin/audit')).body.items.some((entry) => entry.action === 'tenant_verwijderd'));
   } finally {
     server.close();
   }
@@ -107,10 +107,10 @@ test('de hoofdtenant kan niet worden verwijderd', async () => {
   try {
     const baas = createClient(base);
     await baas.login('baas', PW);
-    const main = (await baas.get('/api/platform/tenants')).body.items[0];
-    const out = await baas.del(`/api/platform/tenants/${main.id}`, { confirm: 'default' });
+    const main = (await baas.get('/app/api/platform/tenants')).body.items[0];
+    const out = await baas.del(`/app/api/platform/tenants/${main.id}`, { confirm: 'default' });
     assert.strictEqual(out.status, 409);
-    assert.strictEqual((await baas.get('/api/me')).status, 200);
+    assert.strictEqual((await baas.get('/app/api/me')).status, 200);
   } finally {
     server.close();
   }
@@ -122,23 +122,23 @@ test('geaccordeerde offerte alleen verwijderen met het offertenummer', async () 
   try {
     const baas = createClient(base);
     await baas.login('baas', PW);
-    const tenant = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen' })).body.tenant;
-    const env = (await baas.post(`/api/platform/tenants/${tenant.id}/environments`, { name: 'Test' })).body.tenant;
-    assert.strictEqual((await baas.post(`/api/platform/tenants/${env.id}/testdata`)).status, 201);
-    assert.strictEqual((await baas.post('/api/environment', { tenantId: env.id })).status, 200);
-    const items = (await baas.get('/api/quotes?all=1')).body.items;
+    const tenant = (await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen' })).body.tenant;
+    const env = (await baas.post(`/app/api/platform/tenants/${tenant.id}/environments`, { name: 'Test' })).body.tenant;
+    assert.strictEqual((await baas.post(`/app/api/platform/tenants/${env.id}/testdata`)).status, 201);
+    assert.strictEqual((await baas.post('/app/api/environment', { tenantId: env.id })).status, 200);
+    const items = (await baas.get('/app/api/quotes?all=1')).body.items;
     const accepted = items.find((quote) => quote.status === 'akkoord');
     const other = items.find((quote) => quote.status === 'concept');
     assert.ok(accepted && other);
 
-    const no = await baas.del(`/api/quotes/${accepted.id}`);
+    const no = await baas.del(`/app/api/quotes/${accepted.id}`);
     assert.strictEqual(no.status, 409);
     assert.strictEqual(no.body.number, accepted.number);
-    assert.strictEqual((await baas.del(`/api/admin/quotes/${accepted.id}`, { confirm: 'fout' })).status, 409);
-    assert.strictEqual((await baas.del(`/api/quotes/${accepted.id}`, { confirm: accepted.number })).status, 200);
-    assert.strictEqual((await baas.del(`/api/admin/quotes/${accepted.id}`, { confirm: accepted.number })).status, 200);
+    assert.strictEqual((await baas.del(`/app/api/admin/quotes/${accepted.id}`, { confirm: 'fout' })).status, 409);
+    assert.strictEqual((await baas.del(`/app/api/quotes/${accepted.id}`, { confirm: accepted.number })).status, 200);
+    assert.strictEqual((await baas.del(`/app/api/admin/quotes/${accepted.id}`, { confirm: accepted.number })).status, 200);
     // Een gewone offerte vraagt geen extra bevestiging.
-    assert.strictEqual((await baas.del(`/api/quotes/${other.id}`)).status, 200);
+    assert.strictEqual((await baas.del(`/app/api/quotes/${other.id}`)).status, 200);
   } finally {
     server.close();
   }
@@ -151,11 +151,11 @@ test('hoofdbeheerder verwijdert een back-up; ongeldige namen niet', async () => 
   try {
     const baas = createClient(base);
     await baas.login('baas', PW);
-    const made = await baas.post('/api/admin/backups');
+    const made = await baas.post('/app/api/admin/backups');
     assert.strictEqual(made.status, 201);
-    assert.strictEqual((await baas.del('/api/admin/backups/..%2Fmaster-key')).status, 404);
-    assert.strictEqual((await baas.del(`/api/admin/backups/${made.body.name}`)).status, 200);
-    assert.strictEqual((await baas.get('/api/admin/backups')).body.items.length, 0);
+    assert.strictEqual((await baas.del('/app/api/admin/backups/..%2Fmaster-key')).status, 404);
+    assert.strictEqual((await baas.del(`/app/api/admin/backups/${made.body.name}`)).status, 200);
+    assert.strictEqual((await baas.get('/app/api/admin/backups')).body.items.length, 0);
     assert.ok(!fs.existsSync(path.join(dir, made.body.name)));
   } finally {
     server.close();

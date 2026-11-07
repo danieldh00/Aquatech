@@ -49,7 +49,7 @@ async function start(opts = {}) {
  */
 async function admin(base, code = 'geheim') {
   const client = createClient(base);
-  const response = await client.post('/api/auth/login', { code });
+  const response = await client.post('/app/api/auth/login', { code });
   assert.strictEqual(response.status, 200);
   return client;
 }
@@ -134,16 +134,16 @@ test('instellingen-API alleen voor beheerders', async () => {
   const { server, base } = await start();
   try {
     const anon = createClient(base);
-    assert.strictEqual((await anon.get('/api/admin/settings')).status, 401);
-    assert.strictEqual((await anon.put('/api/admin/settings', { aiEnabled: false })).status, 401);
+    assert.strictEqual((await anon.get('/app/api/admin/settings')).status, 401);
+    assert.strictEqual((await anon.put('/app/api/admin/settings', { aiEnabled: false })).status, 401);
     const adminClient = await admin(base);
     // Een gewoon gebruikersaccount mag het niet.
-    const created = await adminClient.post('/api/admin/users', { username: 'jan', displayName: 'Jan', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false });
+    const created = await adminClient.post('/app/api/admin/users', { username: 'jan', displayName: 'Jan', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false });
     assert.strictEqual(created.status, 201);
     const jan = createClient(base);
-    assert.strictEqual((await jan.post('/api/auth/login', { username: 'jan', password: 'Tuin-Plan-2026!' })).status, 200);
-    assert.strictEqual((await jan.get('/api/admin/settings')).status, 403);
-    const response = await adminClient.get('/api/admin/settings');
+    assert.strictEqual((await jan.post('/app/api/auth/login', { username: 'jan', password: 'Tuin-Plan-2026!' })).status, 200);
+    assert.strictEqual((await jan.get('/app/api/admin/settings')).status, 403);
+    const response = await adminClient.get('/app/api/admin/settings');
     assert.strictEqual(response.status, 200);
     assert.strictEqual(response.body.settings.accessCode.set, true);
     assert.strictEqual(response.body.via, 'code');
@@ -157,23 +157,23 @@ test('API-sleutel instellen werkt meteen en gaat nooit terug naar de browser', a
   const { server, base } = await start({ createAnalyzer: fakeAnalyzerFactory(calls) });
   try {
     const adminClient = await admin(base);
-    assert.strictEqual((await adminClient.get('/api/plan/status')).body.available, false);
-    const response = await adminClient.put('/api/admin/settings', { anthropicApiKey: `  ${KEY}  ` });
+    assert.strictEqual((await adminClient.get('/app/api/plan/status')).body.available, false);
+    const response = await adminClient.put('/app/api/admin/settings', { anthropicApiKey: `  ${KEY}  ` });
     assert.strictEqual(response.status, 200);
     assert.ok(!response.text.includes(KEY));
     assert.strictEqual(response.body.settings.anthropicApiKey.hint, '…WXYZ');
     assert.deepStrictEqual(response.body.changed, ['anthropicApiKey']);
-    assert.ok(!(await adminClient.get('/api/admin/settings')).text.includes(KEY));
-    assert.strictEqual((await adminClient.get('/api/plan/status')).body.available, true);
-    assert.strictEqual((await adminClient.get('/api/config')).body.ai, true);
-    const checked = await adminClient.post('/api/admin/settings/test-ai');
+    assert.ok(!(await adminClient.get('/app/api/admin/settings')).text.includes(KEY));
+    assert.strictEqual((await adminClient.get('/app/api/plan/status')).body.available, true);
+    assert.strictEqual((await adminClient.get('/app/api/config')).body.ai, true);
+    const checked = await adminClient.post('/app/api/admin/settings/test-ai');
     assert.strictEqual(checked.status, 200);
     assert.deepStrictEqual(calls, [KEY]);
     // AI uitzetten: status zegt niet beschikbaar en analyseren wordt geweigerd.
-    await adminClient.put('/api/admin/settings', { aiEnabled: false });
-    assert.strictEqual((await adminClient.get('/api/plan/status')).body.available, false);
+    await adminClient.put('/app/api/admin/settings', { aiEnabled: false });
+    assert.strictEqual((await adminClient.get('/app/api/plan/status')).body.available, false);
     const img = { image: 'data:image/png;base64,iVBORw0KGgo=', width: 10, height: 10 };
-    const an = await adminClient.post('/api/plan/analyze', img);
+    const an = await adminClient.post('/app/api/plan/analyze', img);
     assert.strictEqual(an.status, 409);
     assert.strictEqual(an.body.error, 'disabled');
   } finally {
@@ -185,17 +185,17 @@ test('daglimiet uit de instellingen geldt meteen', async () => {
   const { server, base } = await start({ anthropicApiKey: KEY });
   try {
     const adminClient = await admin(base);
-    assert.strictEqual((await adminClient.put('/api/admin/settings', { aiDailyLimit: 1 })).status, 200);
+    assert.strictEqual((await adminClient.put('/app/api/admin/settings', { aiDailyLimit: 1 })).status, 200);
     const img = { image: 'data:image/png;base64,iVBORw0KGgo=', width: 10, height: 10 };
-    assert.strictEqual((await adminClient.post('/api/plan/analyze', img)).status, 200);
-    const second = await adminClient.post('/api/plan/analyze', { ...img, fresh: true });
+    assert.strictEqual((await adminClient.post('/app/api/plan/analyze', img)).status, 200);
+    const second = await adminClient.post('/app/api/plan/analyze', { ...img, fresh: true });
     assert.strictEqual(second.status, 429);
     assert.strictEqual(second.body.error, 'daily_limit');
     // dezelfde tekening nog eens: bewaarde herkenning, telt niet mee voor de daglimiet
-    const again = await adminClient.post('/api/plan/analyze', img);
+    const again = await adminClient.post('/app/api/plan/analyze', img);
     assert.strictEqual(again.status, 200);
     assert.strictEqual(again.body.recognition.cached, true);
-    const bad = await adminClient.put('/api/admin/settings', { aiDailyLimit: 100000 });
+    const bad = await adminClient.put('/app/api/admin/settings', { aiDailyLimit: 100000 });
     assert.strictEqual(bad.status, 400);
     assert.strictEqual(bad.body.field, 'aiDailyLimit');
   } finally {
@@ -208,12 +208,12 @@ test('nieuwe toegangscode: andere toestellen uit, de beheerder blijft ingelogd',
   try {
     const adminClient = await admin(base);
     const other = await admin(base);
-    const response = await adminClient.put('/api/admin/settings', { accessCode: 'nieuwecode' });
+    const response = await adminClient.put('/app/api/admin/settings', { accessCode: 'nieuwecode' });
     assert.strictEqual(response.status, 200);
-    assert.strictEqual((await adminClient.get('/api/admin/settings')).status, 200);
-    assert.strictEqual((await other.get('/api/admin/settings')).status, 401);
-    assert.strictEqual((await createClient(base).post('/api/auth/login', { code: 'geheim' })).status, 401);
-    assert.strictEqual((await createClient(base).post('/api/auth/login', { code: 'nieuwecode' })).status, 200);
+    assert.strictEqual((await adminClient.get('/app/api/admin/settings')).status, 200);
+    assert.strictEqual((await other.get('/app/api/admin/settings')).status, 401);
+    assert.strictEqual((await createClient(base).post('/app/api/auth/login', { code: 'geheim' })).status, 401);
+    assert.strictEqual((await createClient(base).post('/app/api/auth/login', { code: 'nieuwecode' })).status, 200);
   } finally {
     server.close();
   }
@@ -223,18 +223,18 @@ test('wie met de toegangscode beheert, kan die niet leegmaken', async () => {
   const { server, base } = await start();
   try {
     const adminClient = await admin(base);
-    const response = await adminClient.put('/api/admin/settings', { accessCode: '' });
+    const response = await adminClient.put('/app/api/admin/settings', { accessCode: '' });
     assert.strictEqual(response.status, 400);
     assert.strictEqual(response.body.field, 'accessCode');
-    const reset = await adminClient.put('/api/admin/settings', { reset: ['accessCode'] });
+    const reset = await adminClient.put('/app/api/admin/settings', { reset: ['accessCode'] });
     // Startwaarde is 'geheim' (uit de opstartparameters), dus terugzetten mag.
     assert.strictEqual(reset.status, 200);
     // Met een beheerdersaccount mag het wel.
-    await adminClient.post('/api/admin/users', { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!', mustChangePassword: false });
+    await adminClient.post('/app/api/admin/users', { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!', mustChangePassword: false });
     const baas = createClient(base);
-    await baas.post('/api/auth/login', { username: 'baas', password: 'Tuin-Plan-2026!' });
-    assert.strictEqual((await baas.put('/api/admin/settings', { accessCode: '' })).status, 200);
-    assert.strictEqual((await createClient(base).get('/api/auth/status')).body.configured, false);
+    await baas.post('/app/api/auth/login', { username: 'baas', password: 'Tuin-Plan-2026!' });
+    assert.strictEqual((await baas.put('/app/api/admin/settings', { accessCode: '' })).status, 200);
+    assert.strictEqual((await createClient(base).get('/app/api/auth/status')).body.configured, false);
   } finally {
     server.close();
   }
@@ -244,11 +244,11 @@ test('modules aan/uit via /api/config', async () => {
   const { server, base } = await start();
   try {
     const adminClient = await admin(base);
-    assert.deepStrictEqual((await adminClient.get('/api/config')).body.modules, {});
-    await adminClient.put('/api/admin/settings', { modules: { planning: false } });
-    await adminClient.put('/api/admin/settings', { modules: { voorraad: false } });
-    assert.deepStrictEqual((await adminClient.get('/api/config')).body.modules, { planning: false, voorraad: false });
-    const bad = await adminClient.put('/api/admin/settings', { modules: ['x'] });
+    assert.deepStrictEqual((await adminClient.get('/app/api/config')).body.modules, {});
+    await adminClient.put('/app/api/admin/settings', { modules: { planning: false } });
+    await adminClient.put('/app/api/admin/settings', { modules: { voorraad: false } });
+    assert.deepStrictEqual((await adminClient.get('/app/api/config')).body.modules, { planning: false, voorraad: false });
+    const bad = await adminClient.put('/app/api/admin/settings', { modules: ['x'] });
     assert.strictEqual(bad.status, 400);
   } finally {
     server.close();

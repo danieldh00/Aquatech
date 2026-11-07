@@ -114,13 +114,13 @@ test('API: beheerder stelt in en haalt op, catalogus per tenant, rechten', async
   try {
     const baas = await as('baas');
     const kees = await as('kees');
-    assert.strictEqual((await createClient(base).get('/api/catalog')).status, 401);
-    assert.strictEqual((await kees.get('/api/admin/shop')).status, 403);
-    assert.strictEqual((await kees.post('/api/admin/shop/sync')).status, 403);
-    assert.deepStrictEqual((await kees.get('/api/catalog')).body.articles, {});
-    assert.deepStrictEqual((await kees.get('/api/catalog')).body.assortment, [], 'zonder artikelen: standaardcatalogus');
+    assert.strictEqual((await createClient(base).get('/app/api/catalog')).status, 401);
+    assert.strictEqual((await kees.get('/app/api/admin/shop')).status, 403);
+    assert.strictEqual((await kees.post('/app/api/admin/shop/sync')).status, 403);
+    assert.deepStrictEqual((await kees.get('/app/api/catalog')).body.articles, {});
+    assert.deepStrictEqual((await kees.get('/app/api/catalog')).body.assortment, [], 'zonder artikelen: standaardcatalogus');
 
-    let response = await baas.put('/api/admin/shop', { url: shop.url, mode: 'rest', consumerKey: 'ck_1234567890', consumerSecret: 'cs_geheim_1234', mapping: { 'VAL-24V': 'VAL24' } });
+    let response = await baas.put('/app/api/admin/shop', { url: shop.url, mode: 'rest', consumerKey: 'ck_1234567890', consumerSecret: 'cs_geheim_1234', mapping: { 'VAL-24V': 'VAL24' } });
     assert.strictEqual(response.status, 200, JSON.stringify(response.body));
     assert.strictEqual(response.body.consumerSecret.set, true);
     assert.ok(!JSON.stringify(response.body).includes('cs_geheim'));
@@ -128,16 +128,16 @@ test('API: beheerder stelt in en haalt op, catalogus per tenant, rechten', async
     assert.ok(!raw.includes('cs_geheim'), 'sleutel versleuteld in de database');
 
     // Terug naar de Store API: de sleutels worden gewist.
-    response = await baas.put('/api/admin/shop', { url: shop.url, mode: 'store', mapping: { 'VAL-24V': 'VAL24' } });
+    response = await baas.put('/app/api/admin/shop', { url: shop.url, mode: 'store', mapping: { 'VAL-24V': 'VAL24' } });
     assert.strictEqual(response.body.consumerKey.set, false);
-    response = await baas.post('/api/admin/shop/sync');
+    response = await baas.post('/app/api/admin/shop/sync');
     assert.strictEqual(response.status, 200, JSON.stringify(response.body));
     assert.strictEqual(response.body.status.productCount, 150);
     assert.strictEqual(response.body.matchedCount, 2);
     assert.ok(response.body.unmatched.includes('FILTER'));
 
     // Installateur (planner, offertes) ziet de webshopprijzen.
-    const cat = (await kees.get('/api/catalog')).body;
+    const cat = (await kees.get('/app/api/catalog')).body;
     assert.strictEqual(cat.articles['PE-25'].price, 1);
     assert.strictEqual(cat.articles['VAL-24V'].price, 30);
     assert.strictEqual(cat.articles['VAL-24V'].via, 'mapping');
@@ -145,33 +145,33 @@ test('API: beheerder stelt in en haalt op, catalogus per tenant, rechten', async
     assert.deepStrictEqual(cat.assortment, ['PE-25', 'VAL-24V']);
 
     // Voorraadartikelen tellen mee; een code die de planner niet kent niet.
-    assert.strictEqual((await baas.post('/api/stock/items', { code: 'FILTER', name: 'Filter 1"', unit: 'st' })).status, 201);
-    assert.strictEqual((await baas.post('/api/stock/items', { code: 'EIGEN-1', name: 'Eigen artikel', unit: 'st' })).status, 201);
-    const cat2 = (await kees.get('/api/catalog')).body;
+    assert.strictEqual((await baas.post('/app/api/stock/items', { code: 'FILTER', name: 'Filter 1"', unit: 'st' })).status, 201);
+    assert.strictEqual((await baas.post('/app/api/stock/items', { code: 'EIGEN-1', name: 'Eigen artikel', unit: 'st' })).status, 201);
+    const cat2 = (await kees.get('/app/api/catalog')).body;
     assert.deepStrictEqual(cat2.assortment, ['FILTER', 'PE-25', 'VAL-24V']);
     assert.ok(cat2.unknownCodes >= 1, 'overige webshopproducten tellen als onbekende codes');
 
     // Andere organisatie: eigen (lege) catalogus.
     const groen = await as('groenbaas', 'groen');
-    assert.deepStrictEqual((await groen.get('/api/catalog')).body.articles, {});
-    assert.deepStrictEqual((await groen.get('/api/catalog')).body.assortment, [], 'assortiment per organisatie');
-    assert.strictEqual((await groen.get('/api/admin/shop')).body.source.url, '');
+    assert.deepStrictEqual((await groen.get('/app/api/catalog')).body.articles, {});
+    assert.deepStrictEqual((await groen.get('/app/api/catalog')).body.assortment, [], 'assortiment per organisatie');
+    assert.strictEqual((await groen.get('/app/api/admin/shop')).body.source.url, '');
 
     // Ongeldig adres en een onbereikbare shop: duidelijke melding, status bewaard.
     process.env.SHOP_ALLOW_INSECURE = '0';
-    assert.strictEqual((await baas.put('/api/admin/shop', { url: 'http://192.168.1.2' })).status, 400);
+    assert.strictEqual((await baas.put('/app/api/admin/shop', { url: 'http://192.168.1.2' })).status, 400);
     process.env.SHOP_ALLOW_INSECURE = '1';
     shop.server.close();
-    response = await baas.post('/api/admin/shop/sync');
+    response = await baas.post('/app/api/admin/shop/sync');
     assert.strictEqual(response.status, 502);
-    const st = (await baas.get('/api/admin/shop')).body.status;
+    const st = (await baas.get('/app/api/admin/shop')).body.status;
     assert.ok(st.lastError && st.syncedAt, 'vorige producten blijven staan');
-    assert.strictEqual((await kees.get('/api/catalog')).body.articles['PE-25'].price, 1);
+    assert.strictEqual((await kees.get('/app/api/catalog')).body.articles['PE-25'].price, 1);
 
     // Koppeling verwijderen wist de producten.
     // De overgenomen voorraadartikelen blijven (via 'voorraad'), maar niets komt meer rechtstreeks uit de webshop.
-    response = await baas.put('/api/admin/shop', { url: '', clearKeys: true });
-    const after = Object.values((await kees.get('/api/catalog')).body.articles);
+    response = await baas.put('/app/api/admin/shop', { url: '', clearKeys: true });
+    const after = Object.values((await kees.get('/app/api/catalog')).body.articles);
     assert.ok(after.every((article) => article.via === 'voorraad'));
   } finally {
     server.close();

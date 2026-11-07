@@ -25,7 +25,7 @@ async function setup() {
   const { server, base } = await listen(createApp({ secret: SECRET, db }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
   return { base, db, store, main, admin };
 }
 
@@ -49,37 +49,37 @@ async function postForm(base, client, urlPath, fields, headers = {}) {
 test('registreren in de shop maakt een klantaccount en logt in', async () => {
   const { base, store, main, admin } = await setup();
   const visitor = createClient(base);
-  const page = await visitor.get('/winkel/registreren/');
+  const page = await visitor.get('/registreren/');
   assert.strictEqual(page.status, 200);
   assert.ok(!/<script/i.test(page.text));
-  const done = await postForm(base, visitor, '/winkel/registreren/', { displayName: 'Piet Tuin', email: 'Piet@Voorbeeld.nl', password: PW, password2: PW, website: '' });
+  const done = await postForm(base, visitor, '/registreren/', { displayName: 'Piet Tuin', email: 'Piet@Voorbeeld.nl', password: PW, password2: PW, website: '' });
   assert.strictEqual(done.status, 303);
-  const me = await visitor.get('/api/me');
+  const me = await visitor.get('/app/api/me');
   assert.strictEqual(me.body.user.role, 'klant');
   assert.strictEqual(me.body.user.tenantId, main);
   assert.strictEqual(store.accountIdsByEmail(main, 'piet@voorbeeld.nl').length, 1);
-  const account = await visitor.get('/winkel/account/');
+  const account = await visitor.get('/account/');
   assert.match(account.text, /Piet Tuin/);
-  assert.match(account.text, /href="\.\.\/\.\.\/beregening\/"/, 'knop naar de planner');
-  assert.match(account.text, /href="\.\.\/\.\.\/portaal\/"/);
-  const users = (await admin.get('/api/admin/users')).body;
+  assert.match(account.text, /href="\.\.\/app\/beregening\/"/, 'knop naar de planner');
+  assert.match(account.text, /href="\.\.\/app\/portaal\/"/);
+  const users = (await admin.get('/app/api/admin/users')).body;
   assert.ok(JSON.stringify(users).includes('piet'));
 });
 
 test('registreren: dubbel e-mailadres, zwak of ongelijk wachtwoord, valstrik en andere site', async () => {
   const { base, store, main } = await setup();
   const fields = { displayName: 'Anna', email: 'anna@voorbeeld.nl', password: PW, password2: PW, website: '' };
-  assert.strictEqual((await postForm(base, createClient(base), '/winkel/registreren/', fields)).status, 303);
-  const twice = await postForm(base, createClient(base), '/winkel/registreren/', fields);
+  assert.strictEqual((await postForm(base, createClient(base), '/registreren/', fields)).status, 303);
+  const twice = await postForm(base, createClient(base), '/registreren/', fields);
   assert.strictEqual(twice.status, 400);
   assert.match(twice.text, /al een account met dit e-mailadres/);
-  assert.strictEqual((await postForm(base, createClient(base), '/winkel/registreren/', { ...fields, email: 'b@voorbeeld.nl', password: 'kort', password2: 'kort' })).status, 400);
-  const different = await postForm(base, createClient(base), '/winkel/registreren/', { ...fields, email: 'c@voorbeeld.nl', password2: 'anders' });
+  assert.strictEqual((await postForm(base, createClient(base), '/registreren/', { ...fields, email: 'b@voorbeeld.nl', password: 'kort', password2: 'kort' })).status, 400);
+  const different = await postForm(base, createClient(base), '/registreren/', { ...fields, email: 'c@voorbeeld.nl', password2: 'anders' });
   assert.match(different.text, /niet gelijk/);
-  const trap = await postForm(base, createClient(base), '/winkel/registreren/', { ...fields, email: 'bot@voorbeeld.nl', website: 'http://spam' });
+  const trap = await postForm(base, createClient(base), '/registreren/', { ...fields, email: 'bot@voorbeeld.nl', website: 'http://spam' });
   assert.strictEqual(trap.status, 303);
   assert.strictEqual(store.accountIdsByEmail(main, 'bot@voorbeeld.nl').length, 0);
-  const foreign = await postForm(base, createClient(base), '/winkel/registreren/', { ...fields, email: 'd@voorbeeld.nl' }, { 'sec-fetch-site': 'cross-site' });
+  const foreign = await postForm(base, createClient(base), '/registreren/', { ...fields, email: 'd@voorbeeld.nl' }, { 'sec-fetch-site': 'cross-site' });
   assert.strictEqual(foreign.status, 403);
   assert.strictEqual(store.accountIdsByEmail(main, 'd@voorbeeld.nl').length, 0);
 });
@@ -88,22 +88,22 @@ test('inloggen in de shop: e-mailadres of gebruikersnaam, bestaand planneraccoun
   const { base, store, main } = await setup();
   await store.createAccount(main, { username: 'jan.klant', displayName: 'Jan', role: 'klant', password: PW });
   const viaName = createClient(base);
-  assert.strictEqual((await postForm(base, viaName, '/winkel/inloggen/', { login: 'jan.klant', password: PW })).location, '../account/');
-  assert.strictEqual((await viaName.get('/api/me')).body.user.username, 'jan.klant');
+  assert.strictEqual((await postForm(base, viaName, '/inloggen/', { login: 'jan.klant', password: PW })).location, '../account/');
+  assert.strictEqual((await viaName.get('/app/api/me')).body.user.username, 'jan.klant');
   const noFollow = createClient(base, { jar: viaName.jar, followRedirects: false });
-  const loginPage = await noFollow.get('/winkel/inloggen/');
+  const loginPage = await noFollow.get('/inloggen/');
   assert.strictEqual(loginPage.status, 302);
   assert.strictEqual(loginPage.location, '../account/');
-  assert.strictEqual((await viaName.get('/winkel/account/')).headers.get('cache-control'), 'no-store');
-  await postForm(base, viaName, '/winkel/uitloggen/', {});
-  assert.strictEqual((await viaName.get('/winkel/account/')).status, 200, 'redirect gevolgd naar inlogpagina');
-  assert.strictEqual((await viaName.get('/api/me')).body.user, null);
+  assert.strictEqual((await viaName.get('/account/')).headers.get('cache-control'), 'no-store');
+  await postForm(base, viaName, '/uitloggen/', {});
+  assert.strictEqual((await viaName.get('/account/')).status, 200, 'redirect gevolgd naar inlogpagina');
+  assert.strictEqual((await viaName.get('/app/api/me')).body.user, null);
 
   const registered = createClient(base);
-  await postForm(base, registered, '/winkel/registreren/', { displayName: 'Els', email: 'els@voorbeeld.nl', password: PW, password2: PW, website: '' });
+  await postForm(base, registered, '/registreren/', { displayName: 'Els', email: 'els@voorbeeld.nl', password: PW, password2: PW, website: '' });
   const viaEmail = createClient(base);
-  assert.strictEqual((await postForm(base, viaEmail, '/winkel/inloggen/', { login: 'ELS@voorbeeld.nl', password: PW })).status, 303);
-  assert.strictEqual((await viaEmail.get('/api/me')).body.user.role, 'klant');
+  assert.strictEqual((await postForm(base, viaEmail, '/inloggen/', { login: 'ELS@voorbeeld.nl', password: PW })).status, 303);
+  assert.strictEqual((await viaEmail.get('/app/api/me')).body.user.role, 'klant');
 });
 
 test('e-mailadres van een ander account is niet te kiezen in het profiel; volgende blijft na een fout', async () => {
@@ -111,13 +111,13 @@ test('e-mailadres van een ander account is niet te kiezen in het profiel; volgen
   await store.createAccount(main, { username: 'eerste', displayName: 'Eerste', role: 'klant', password: PW });
   const first = await store.accountIdsByEmail(main, 'x@y.nl');
   assert.strictEqual(first.length, 0);
-  await postForm(base, createClient(base), '/winkel/registreren/', { displayName: 'Een', email: 'een@voorbeeld.nl', password: PW, password2: PW, website: '' });
+  await postForm(base, createClient(base), '/registreren/', { displayName: 'Een', email: 'een@voorbeeld.nl', password: PW, password2: PW, website: '' });
   const other = createClient(base);
-  await postForm(base, other, '/winkel/registreren/', { displayName: 'Twee', email: 'twee@voorbeeld.nl', password: PW, password2: PW, website: '' });
-  const clash = await other.put('/api/account/profile', { email: 'een@voorbeeld.nl' });
+  await postForm(base, other, '/registreren/', { displayName: 'Twee', email: 'twee@voorbeeld.nl', password: PW, password2: PW, website: '' });
+  const clash = await other.put('/app/api/account/profile', { email: 'een@voorbeeld.nl' });
   assert.strictEqual(clash.status, 400);
   assert.strictEqual(clash.body.field, 'email');
-  const failed = await postForm(base, createClient(base), '/winkel/inloggen/', { login: 'nobody', password: 'x', volgende: 'planner' });
+  const failed = await postForm(base, createClient(base), '/inloggen/', { login: 'nobody', password: 'x', volgende: 'planner' });
   assert.match(failed.text, /name="volgende" value="planner"/);
 });
 
@@ -132,10 +132,10 @@ test('gelijktijdige registraties met hetzelfde e-mailadres: één account', asyn
 test('profiel: ongewijzigd (gedeeld) e-mailadres blokkeert een andere wijziging niet', async () => {
   const { base, db, main } = await setup();
   const client = createClient(base);
-  await postForm(base, client, '/winkel/registreren/', { displayName: 'Deel', email: 'deel@voorbeeld.nl', password: PW, password2: PW, website: '' });
+  await postForm(base, client, '/registreren/', { displayName: 'Deel', email: 'deel@voorbeeld.nl', password: PW, password2: PW, website: '' });
   // Bestaande gegevens (bijv. uit de oude webshop) kunnen hetzelfde adres delen.
   db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, password_hash, disabled, platform_admin, must_change_password, created_at, email) VALUES ('dubbel-1', ?, 'dubbel1', 'Dubbel', 'klant', 'account', 'x', 0, 0, 0, '2026-01-01', 'deel@voorbeeld.nl')").run(main);
-  const saved = await client.put('/api/account/profile', { email: 'Deel@Voorbeeld.nl ', phone: '0612345678' });
+  const saved = await client.put('/app/api/account/profile', { email: 'Deel@Voorbeeld.nl ', phone: '0612345678' });
   assert.strictEqual(saved.status, 200);
   assert.strictEqual(saved.body.user.phone, '0612345678');
 });
@@ -144,41 +144,41 @@ test('inloggen in de shop: fout wachtwoord en blokkering', async () => {
   const { base, store, main } = await setup();
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'klant', password: PW });
   const visitor = createClient(base);
-  const wrong = await postForm(base, visitor, '/winkel/inloggen/', { login: 'kees', password: 'fout-wachtwoord-123' });
+  const wrong = await postForm(base, visitor, '/inloggen/', { login: 'kees', password: 'fout-wachtwoord-123' });
   assert.strictEqual(wrong.status, 401);
   assert.match(wrong.text, /Onjuist/);
-  assert.strictEqual((await visitor.get('/api/me')).body.user, null);
-  for (let attempt = 0; attempt < 10; attempt += 1) await postForm(base, createClient(base), '/winkel/inloggen/', { login: 'kees', password: 'fout-wachtwoord-123' });
-  assert.strictEqual((await postForm(base, createClient(base), '/winkel/inloggen/', { login: 'kees', password: PW })).status, 429);
+  assert.strictEqual((await visitor.get('/app/api/me')).body.user, null);
+  for (let attempt = 0; attempt < 10; attempt += 1) await postForm(base, createClient(base), '/inloggen/', { login: 'kees', password: 'fout-wachtwoord-123' });
+  assert.strictEqual((await postForm(base, createClient(base), '/inloggen/', { login: 'kees', password: PW })).status, 429);
 });
 
 test('shop-accounts: uit als de webshop uit staat en alleen GET op de overige paden', async () => {
   const { base, admin } = await setup();
-  await admin.put('/api/admin/settings', { storefront: false });
-  assert.strictEqual((await postForm(base, createClient(base), '/winkel/registreren/', { displayName: 'X', email: 'x@y.nl', password: PW, password2: PW })).status, 404);
-  await admin.put('/api/admin/settings', { storefront: true });
-  assert.strictEqual((await postForm(base, createClient(base), '/winkel/zoeken/', {})).status, 405);
+  await admin.put('/app/api/admin/settings', { storefront: false });
+  assert.strictEqual((await postForm(base, createClient(base), '/registreren/', { displayName: 'X', email: 'x@y.nl', password: PW, password2: PW })).status, 404);
+  await admin.put('/app/api/admin/settings', { storefront: true });
+  assert.strictEqual((await postForm(base, createClient(base), '/zoeken/', {})).status, 405);
 });
 
 test('kopje Planner: aanmelden met drie velden, doorsturen naar de planner, uit te zetten in Beheer', async () => {
   const { base, store, main, admin } = await setup();
   const visitor = createClient(base);
-  const home = await visitor.get('/winkel/');
+  const home = await visitor.get('/');
   assert.match(home.text, /href="planner\/">Planner</, 'kopje in de navigatie');
-  const page = await visitor.get('/winkel/planner/');
+  const page = await visitor.get('/planner/');
   assert.strictEqual(page.status, 200);
   assert.ok(!/password2/.test(page.text), 'geen herhaalveld');
-  const done = await postForm(base, visitor, '/winkel/planner/', { displayName: 'Lotte', email: 'lotte@voorbeeld.nl', password: PW, website: '' });
-  assert.strictEqual(done.location, '../../beregening/');
-  assert.strictEqual((await visitor.get('/api/me')).body.user.role, 'klant');
+  const done = await postForm(base, visitor, '/planner/', { displayName: 'Lotte', email: 'lotte@voorbeeld.nl', password: PW, website: '' });
+  assert.strictEqual(done.location, '../app/beregening/');
+  assert.strictEqual((await visitor.get('/app/api/me')).body.user.role, 'klant');
   assert.strictEqual(store.accountIdsByEmail(main, 'lotte@voorbeeld.nl').length, 1);
-  assert.strictEqual((await visitor.request('GET', '/winkel/planner/')).status, 200, 'ingelogd: doorverwezen naar de planner');
+  assert.strictEqual((await visitor.request('GET', '/planner/')).status, 200, 'ingelogd: doorverwezen naar de planner');
   const login = createClient(base);
-  assert.strictEqual((await postForm(base, login, '/winkel/inloggen/', { login: 'lotte@voorbeeld.nl', password: PW, volgende: 'planner' })).location, '../../beregening/');
+  assert.strictEqual((await postForm(base, login, '/inloggen/', { login: 'lotte@voorbeeld.nl', password: PW, volgende: 'planner' })).location, '../app/beregening/');
 
-  assert.strictEqual((await admin.put('/api/admin/settings', { shopPlanner: false })).status, 200);
-  assert.ok(!/planner\/"/.test((await createClient(base).get('/winkel/')).text), 'kopje verborgen');
-  assert.strictEqual((await createClient(base).get('/winkel/planner/')).status, 404);
-  assert.strictEqual((await postForm(base, createClient(base), '/winkel/planner/', { displayName: 'Z', email: 'z@voorbeeld.nl', password: PW })).status, 404);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { shopPlanner: false })).status, 200);
+  assert.ok(!/planner\/"/.test((await createClient(base).get('/')).text), 'kopje verborgen');
+  assert.strictEqual((await createClient(base).get('/planner/')).status, 404);
+  assert.strictEqual((await postForm(base, createClient(base), '/planner/', { displayName: 'Z', email: 'z@voorbeeld.nl', password: PW })).status, 404);
   assert.strictEqual(store.accountIdsByEmail(main, 'z@voorbeeld.nl').length, 0);
 });

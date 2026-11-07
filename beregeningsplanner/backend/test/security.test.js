@@ -111,28 +111,28 @@ test('sessies staan op de server: uitloggen en intrekken werkt meteen; token all
   const { server, base, db } = await start();
   try {
     const baas = createClient(base, { emptyJsonBody: false });
-    assert.strictEqual((await baas.post('/api/auth/login', { username: 'baas', password: PW })).status, 200);
+    assert.strictEqual((await baas.post('/app/api/auth/login', { username: 'baas', password: PW })).status, 200);
     const token = baas.jar.get('aquatech_session');
     assert.ok(token && token.length >= 40);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE id_hash = ?').get(token).n, 0, 'geen leesbaar token in de database');
-    assert.strictEqual((await baas.get('/api/admin/users')).status, 200);
+    assert.strictEqual((await baas.get('/app/api/admin/users')).status, 200);
 
     // Uitloggen: een gekopieerde cookie werkt daarna ook niet meer.
     const stolen = createClient(base, { emptyJsonBody: false });
     stolen.jar.set('aquatech_session', token);
-    await baas.post('/api/auth/logout');
-    assert.strictEqual((await stolen.get('/api/admin/users')).status, 401);
+    await baas.post('/app/api/auth/logout');
+    assert.strictEqual((await stolen.get('/app/api/admin/users')).status, 401);
 
     // Beheerder logt iemand op alle toestellen uit.
     const admin = createClient(base, { emptyJsonBody: false });
-    await admin.post('/api/auth/login', { username: 'baas', password: PW });
-    const jan = (await admin.post('/api/admin/users', { username: 'jan', role: 'gebruiker', password: 'Gras-Pomp-2027!', mustChangePassword: false })).body;
+    await admin.post('/app/api/auth/login', { username: 'baas', password: PW });
+    const jan = (await admin.post('/app/api/admin/users', { username: 'jan', role: 'gebruiker', password: 'Gras-Pomp-2027!', mustChangePassword: false })).body;
     const j = createClient(base, { emptyJsonBody: false });
-    await j.post('/api/auth/login', { username: 'jan', password: 'Gras-Pomp-2027!' });
-    assert.ok((await j.get('/api/me')).body.user);
-    assert.strictEqual((await admin.get('/api/admin/users')).body.items.find((user) => user.id === jan.id).sessionCount, 1);
-    assert.strictEqual((await admin.post(`/api/admin/users/${jan.id}/logout`)).body.revoked, 1);
-    assert.strictEqual((await j.get('/api/me')).body.user, null);
+    await j.post('/app/api/auth/login', { username: 'jan', password: 'Gras-Pomp-2027!' });
+    assert.ok((await j.get('/app/api/me')).body.user);
+    assert.strictEqual((await admin.get('/app/api/admin/users')).body.items.find((user) => user.id === jan.id).sessionCount, 1);
+    assert.strictEqual((await admin.post(`/app/api/admin/users/${jan.id}/logout`)).body.revoked, 1);
+    assert.strictEqual((await j.get('/app/api/me')).body.user, null);
   } finally {
     server.close();
   }
@@ -142,10 +142,10 @@ test('sessie verloopt na de ingestelde dagen zonder gebruik', async () => {
   const { server, base, db } = await start();
   try {
     const baas = createClient(base, { emptyJsonBody: false });
-    await baas.post('/api/auth/login', { username: 'baas', password: PW });
+    await baas.post('/app/api/auth/login', { username: 'baas', password: PW });
     const old = new Date(Date.now() - 15 * 86400000).toISOString();
     db.prepare('UPDATE sessions SET last_seen_at = ?').run(old);
-    assert.strictEqual((await baas.get('/api/me')).body.user, null);
+    assert.strictEqual((await baas.get('/app/api/me')).body.user, null);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM sessions').get().n, 0, 'verlopen sessie opgeruimd');
   } finally {
     server.close();
@@ -158,22 +158,22 @@ test('blokkade per gebruikersnaam na herhaald mislukt inloggen, met auditlog', a
     // Elke poging van een ander "IP" is hier niet na te bootsen; de limiet per
     // IP (10) en per gebruiker (10) vallen samen, dus de 11e is 429.
     const baas = createClient(base, { emptyJsonBody: false });
-    for (let i = 0; i < 10; i++) assert.strictEqual((await baas.post('/api/auth/login', { username: 'baas', password: 'fout' })).status, 401);
-    assert.strictEqual((await baas.post('/api/auth/login', { username: 'baas', password: PW })).status, 429);
+    for (let i = 0; i < 10; i++) assert.strictEqual((await baas.post('/app/api/auth/login', { username: 'baas', password: 'fout' })).status, 401);
+    assert.strictEqual((await baas.post('/app/api/auth/login', { username: 'baas', password: PW })).status, 429);
   } finally {
     server.close();
   }
   const s2 = await start();
   try {
     const admin = createClient(s2.base, { emptyJsonBody: false });
-    await admin.post('/api/auth/login', { username: 'baas', password: 'fout-fout-fout' });
-    await admin.post('/api/auth/login', { username: 'baas', password: PW });
-    await admin.put('/api/admin/settings', { sessionIdleDays: 7 });
-    const { items } = (await admin.get('/api/admin/audit')).body;
+    await admin.post('/app/api/auth/login', { username: 'baas', password: 'fout-fout-fout' });
+    await admin.post('/app/api/auth/login', { username: 'baas', password: PW });
+    await admin.put('/app/api/admin/settings', { sessionIdleDays: 7 });
+    const { items } = (await admin.get('/app/api/admin/audit')).body;
     const actions = items.map((x) => x.action);
     assert.deepStrictEqual(actions.slice(0, 3), ['instellingen_gewijzigd', 'ingelogd', 'inloggen_mislukt']);
     assert.ok(!JSON.stringify(items).includes(PW), 'geen wachtwoorden in het auditlog');
-    assert.strictEqual((await createClient(s2.base, { emptyJsonBody: false }).get('/api/admin/audit')).status, 401);
+    assert.strictEqual((await createClient(s2.base, { emptyJsonBody: false }).get('/app/api/admin/audit')).status, 401);
   } finally {
     s2.server.close();
   }
@@ -201,8 +201,8 @@ test('installatiecode is nodig voor het eerste beheerdersaccount', async () => {
     const code = app.locals.setupCode;
     assert.match(code, /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
     const client = createClient(base, { emptyJsonBody: false });
-    assert.strictEqual((await client.post('/api/setup', { username: 'daniel', password: PW })).status, 401);
-    assert.strictEqual((await client.post('/api/setup', { username: 'daniel', password: PW, code: code.toLowerCase() })).status, 201);
+    assert.strictEqual((await client.post('/app/api/setup', { username: 'daniel', password: PW })).status, 401);
+    assert.strictEqual((await client.post('/app/api/setup', { username: 'daniel', password: PW, code: code.toLowerCase() })).status, 201);
   } finally {
     server.close();
   }
@@ -211,7 +211,7 @@ test('installatiecode is nodig voor het eerste beheerdersaccount', async () => {
 test('beveiligingsheaders op pagina’s en API', async () => {
   const { server, base } = await start();
   try {
-    for (const urlPath of ['/', '/api/health']) {
+    for (const urlPath of ['/', '/app/api/health']) {
       const res = await fetch(base + urlPath);
       const csp = res.headers.get('content-security-policy');
       assert.match(csp, /default-src 'self'/);
@@ -220,8 +220,8 @@ test('beveiligingsheaders op pagina’s en API', async () => {
       assert.strictEqual(res.headers.get('x-frame-options'), 'DENY');
       assert.strictEqual(res.headers.get('x-content-type-options'), 'nosniff');
     }
-    assert.strictEqual((await fetch(`${base}/api/health`)).headers.get('cache-control'), 'no-store');
-    const https = await fetch(`${base}/api/health`, { headers: { 'X-Forwarded-Proto': 'https' } });
+    assert.strictEqual((await fetch(`${base}/app/api/health`)).headers.get('cache-control'), 'no-store');
+    const https = await fetch(`${base}/app/api/health`, { headers: { 'X-Forwarded-Proto': 'https' } });
     assert.match(https.headers.get('strict-transport-security'), /max-age=/);
   } finally {
     server.close();
@@ -268,25 +268,25 @@ test('back-up-API alleen voor hoofdbeheerders; download alleen geldige namen', a
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-bkapi-'));
   const { server, base, store } = await start({ backupDir: dir });
   try {
-    assert.strictEqual((await createClient(base, { emptyJsonBody: false }).post('/api/admin/backups')).status, 401);
+    assert.strictEqual((await createClient(base, { emptyJsonBody: false }).post('/app/api/admin/backups')).status, 401);
     // Een gewone beheerder (geen hoofdbeheerder): de back-up bevat alle tenants.
     await store.createAccount(store.ensureTenant().id, { username: 'tweede', role: 'beheerder', password: PW });
     const tweede = createClient(base, { emptyJsonBody: false });
-    await tweede.post('/api/auth/login', { username: 'tweede', password: PW });
-    assert.strictEqual((await tweede.post('/api/admin/backups')).status, 403);
-    assert.strictEqual((await tweede.get('/api/admin/backups')).status, 403);
+    await tweede.post('/app/api/auth/login', { username: 'tweede', password: PW });
+    assert.strictEqual((await tweede.post('/app/api/admin/backups')).status, 403);
+    assert.strictEqual((await tweede.get('/app/api/admin/backups')).status, 403);
     const baas = createClient(base, { emptyJsonBody: false });
-    await baas.post('/api/auth/login', { username: 'baas', password: PW });
-    const made = await baas.post('/api/admin/backups');
+    await baas.post('/app/api/auth/login', { username: 'baas', password: PW });
+    const made = await baas.post('/app/api/admin/backups');
     assert.strictEqual(made.status, 201);
-    const list = (await baas.get('/api/admin/backups')).body;
+    const list = (await baas.get('/app/api/admin/backups')).body;
     assert.strictEqual(list.enabled, true);
     assert.strictEqual(list.items[0].name, made.body.name);
-    const dl = await fetch(`${base}/api/admin/backups/${made.body.name}`, { headers: { cookie: `aquatech_session=${baas.jar.get('aquatech_session')}` } });
+    const dl = await fetch(`${base}/app/api/admin/backups/${made.body.name}`, { headers: { cookie: `aquatech_session=${baas.jar.get('aquatech_session')}` } });
     assert.strictEqual(dl.status, 200);
     assert.strictEqual(Buffer.from(await dl.arrayBuffer()).subarray(0, 4).toString(), 'AQBK');
-    assert.strictEqual((await baas.get('/api/admin/backups/..%2Fmaster-key')).status, 404);
-    assert.ok((await baas.get('/api/admin/audit')).body.items.some((x) => x.action === 'backup_gedownload'));
+    assert.strictEqual((await baas.get('/app/api/admin/backups/..%2Fmaster-key')).status, 404);
+    assert.ok((await baas.get('/app/api/admin/audit')).body.items.some((x) => x.action === 'backup_gedownload'));
   } finally {
     server.close();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -301,8 +301,8 @@ test('plan definitief wissen haalt ook klantgegevens uit de historie', async () 
     const plan = store.savePlan(user, null, { areas: [], meta: { name: 'Tuin Jansen', customer: 'Familie Jansen', address: 'Dorpsstraat 1' } }, '10.1.1.1');
     store.deletePlan(user, plan.id, '10.1.1.1');
     const baas = createClient(base, { emptyJsonBody: false });
-    await baas.post('/api/auth/login', { username: 'baas', password: PW });
-    const response = await (async () => { const res = await fetch(`${base}/api/admin/plans/${plan.id}`, { method: 'DELETE', headers: { cookie: `aquatech_session=${baas.jar.get('aquatech_session')}` } }); return { status: res.status, body: await res.json() }; })();
+    await baas.post('/app/api/auth/login', { username: 'baas', password: PW });
+    const response = await (async () => { const res = await fetch(`${base}/app/api/admin/plans/${plan.id}`, { method: 'DELETE', headers: { cookie: `aquatech_session=${baas.jar.get('aquatech_session')}` } }); return { status: res.status, body: await res.json() }; })();
     assert.strictEqual(response.status, 200);
     assert.deepStrictEqual(response.body, { ok: true, plan: true, history: 2 });
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM plans').get().n, 0);
@@ -354,7 +354,7 @@ test('inlogblokkade per IP geldt per bezoeker, niet voor iedereen achter de tunn
      * @param {string} ip Doorgegeven IP (CF-Connecting-IP).
      * @returns {Promise<number>} De HTTP-status.
      */
-    const login = (ip) => fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+    const login = (ip) => fetch(`${base}/app/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
       body: JSON.stringify({ username: `x${ip}`, password: 'fout-fout-fout' }) }).then((response) => response.status);
     for (let i = 0; i < 10; i++) await login('198.51.99.1');
     assert.strictEqual(await login('198.51.99.1'), 429);
@@ -375,12 +375,12 @@ test('wijzigingen via de API vanaf een andere (sub)site worden geweigerd', async
      * @param {string|null} site Waarde van Sec-Fetch-Site (null = zonder kop).
      * @returns {Promise<number>} De HTTP-status.
      */
-    const post = (site) => fetch(`${base}/api/auth/logout`, { method: 'POST', headers: site ? { 'Sec-Fetch-Site': site } : {} }).then((response) => response.status);
+    const post = (site) => fetch(`${base}/app/api/auth/logout`, { method: 'POST', headers: site ? { 'Sec-Fetch-Site': site } : {} }).then((response) => response.status);
     assert.strictEqual(await post('same-site'), 403);
     assert.strictEqual(await post('cross-site'), 403);
     assert.strictEqual(await post('same-origin'), 200);
     assert.strictEqual(await post(null), 200);
-    const get = await fetch(`${base}/api/health`, { headers: { 'Sec-Fetch-Site': 'cross-site' } });
+    const get = await fetch(`${base}/app/api/health`, { headers: { 'Sec-Fetch-Site': 'cross-site' } });
     assert.strictEqual(get.status, 200, 'lezen blijft mogelijk');
   } finally {
     server.close();

@@ -39,7 +39,7 @@ async function dbWithAdmin() {
  * @returns {Promise<{ res: Response, cookie: string }>} Het antwoord en de sessie-cookie.
  */
 async function login(base, code = 'geheim') {
-  const res = await fetch(`${base}/api/auth/login`, {
+  const res = await fetch(`${base}/app/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
@@ -50,7 +50,7 @@ async function login(base, code = 'geheim') {
 test('health is openbaar en geeft versie', async () => {
   const { server, base } = await start();
   try {
-    const res = await fetch(`${base}/api/health`);
+    const res = await fetch(`${base}/app/api/health`);
     assert.strictEqual(res.status, 200);
     const body = await res.json();
     assert.strictEqual(body.ok, true);
@@ -65,7 +65,7 @@ test('zonder inlog: inlogpagina in plaats van de planner, ook voor bestanden', a
   try {
     // De planner zelf (code, geen data) is openbaar voor een tekening zonder
     // account, maar alleen met ?tekenen; zonder dat de inlogpagina.
-    for (const urlPath of ['/', '/beregening/', '/beheer/', '/beheer/beheer.js', '/offertes/offertes.js', '/een/pad']) {
+    for (const urlPath of ['/app/', '/app/beregening/', '/app/beheer/', '/app/beheer/beheer.js', '/app/offertes/offertes.js', '/app/een/pad']) {
       const res = await fetch(base + urlPath);
       assert.strictEqual(res.status, 401, urlPath);
       const html = await res.text();
@@ -80,7 +80,7 @@ test('zonder inlog: inlogpagina in plaats van de planner, ook voor bestanden', a
 test('X-Ingress-Path (oude HA-header) geeft geen toegang', async () => {
   const { server, base } = await start();
   try {
-    const res = await fetch(`${base}/`, { headers: { 'X-Ingress-Path': '/api/hassio_ingress/abc' } });
+    const res = await fetch(`${base}/`, { headers: { 'X-Ingress-Path': '/app/api/hassio_ingress/abc' } });
     assert.strictEqual(res.status, 401);
   } finally {
     server.close();
@@ -95,28 +95,28 @@ test('verkeerde code faalt, juiste code geeft toegang tot de planner', async () 
     const ok = await login(base);
     assert.strictEqual(ok.res.status, 200);
     assert.match(ok.cookie, /^aquatech_session=/);
-    for (const urlPath of ['/', '/een/willekeurig/pad']) {
+    for (const urlPath of ['/app/', '/app/een/willekeurig/pad']) {
       const res = await fetch(base + urlPath, { headers: { cookie: ok.cookie } });
       assert.strictEqual(res.status, 200);
       assert.match(await res.text(), /id="modules"/);
     }
-    for (const urlPath of ['/beregening/', '/beregening/diep/pad']) {
+    for (const urlPath of ['/app/beregening/', '/app/beregening/diep/pad']) {
       const res = await fetch(base + urlPath, { headers: { cookie: ok.cookie } });
       assert.strictEqual(res.status, 200);
       assert.match(await res.text(), /Beregeningsplanner/);
     }
-    const css = await fetch(`${base}/beregening/css/app.css`, { headers: { cookie: ok.cookie } });
+    const css = await fetch(`${base}/app/beregening/css/app.css`, { headers: { cookie: ok.cookie } });
     assert.strictEqual(css.status, 200);
     // Na een update geen oude CSS/JS uit een cache: versie achter elke verwijzing
     const versionQuery = `?v=${PKG.version}`;
-    for (const urlPath of ['/beregening/', '/beregening/index.html', '/beregening/diep/pad', '/']) {
+    for (const urlPath of ['/app/beregening/', '/app/beregening/index.html', '/app/beregening/diep/pad', '/']) {
       const res = await fetch(base + urlPath, { headers: { cookie: ok.cookie } });
       assert.strictEqual(res.headers.get('cache-control'), 'no-cache');
       const html = await res.text();
       assert.ok(html.includes(`shared/brand.css${versionQuery}"`), urlPath);
       assert.doesNotMatch(html, /(?:href|src)="[^"]+\.(?:css|js)"/, urlPath);
     }
-    const versioned = await fetch(`${base}/beregening/css/app.css${versionQuery}`, { headers: { cookie: ok.cookie } });
+    const versioned = await fetch(`${base}/app/beregening/css/app.css${versionQuery}`, { headers: { cookie: ok.cookie } });
     assert.strictEqual(versioned.status, 200);
   } finally {
     server.close();
@@ -142,8 +142,8 @@ test('gasten aan en geen code: de planner is openbaar en inloggen is niet nodig'
     const res = await fetch(`${base}/`);
     assert.strictEqual(res.status, 200);
     assert.match(await res.text(), /id="modules"/);
-    assert.match(await (await fetch(`${base}/beregening/`)).text(), /Beregeningsplanner/);
-    assert.strictEqual((await fetch(`${base}/beregening/js/app.js`)).status, 200);
+    assert.match(await (await fetch(`${base}/app/beregening/`)).text(), /Beregeningsplanner/);
+    assert.strictEqual((await fetch(`${base}/app/beregening/js/app.js`)).status, 200);
     const { res: noCode } = await login(base, '');
     assert.strictEqual(noCode.status, 400);
   } finally {
@@ -194,13 +194,13 @@ test('planner heeft een relatieve link terug naar het dashboard', () => {
 test('module zonder slash: relatieve doorverwijzing, querystring blijft', async () => {
   const { server, base } = await start({ accessCode: '', env: { GUEST_ACCESS: 'true' }, db: await dbWithAdmin() });
   try {
-    for (const [urlPath, loc] of [['/beregening', 'beregening/'], ['/beregening?x=1', 'beregening/?x=1']]) {
+    for (const [urlPath, loc] of [['/app/beregening', 'beregening/'], ['/app/beregening?x=1', 'beregening/?x=1']]) {
       const res = await fetch(base + urlPath, { redirect: 'manual' });
       assert.strictEqual(res.status, 302, urlPath);
       assert.strictEqual(res.headers.get('location'), loc, urlPath);
     }
     // Geen module: gewoon het dashboard, geen doorverwijzing.
-    const res = await fetch(`${base}/dashboard`, { redirect: 'manual' });
+    const res = await fetch(`${base}/app/dashboard`, { redirect: 'manual' });
     assert.strictEqual(res.status, 200);
     assert.match(await res.text(), /id="modules"/);
   } finally {
@@ -212,19 +212,19 @@ test('oude adressen van Voorraadbeheer gaan relatief door naar Artikelen', async
   const { server, base } = await start({ accessCode: '', env: { GUEST_ACCESS: 'true' }, db: await dbWithAdmin() });
   try {
     const cases = [
-      ['/voorraad', 'artikelen/'],
-      ['/voorraad?id=5', 'artikelen/?id=5'],
-      ['/voorraad/', '../artikelen/'],
-      ['/voorraad/?id=5', '../artikelen/?id=5'],
-      ['/voorraad/x', '../artikelen/x'],
-      ['/voorraad/index.html?id=5', '../artikelen/?id=5'],
+      ['/app/voorraad', 'artikelen/'],
+      ['/app/voorraad?id=5', 'artikelen/?id=5'],
+      ['/app/voorraad/', '../artikelen/'],
+      ['/app/voorraad/?id=5', '../artikelen/?id=5'],
+      ['/app/voorraad/x', '../artikelen/x'],
+      ['/app/voorraad/index.html?id=5', '../artikelen/?id=5'],
     ];
     for (const [urlPath, loc] of cases) {
       const res = await fetch(base + urlPath, { redirect: 'manual' });
       assert.strictEqual(res.status, 302, urlPath);
       assert.strictEqual(res.headers.get('location'), loc, urlPath);
     }
-    assert.strictEqual((await fetch(`${base}/artikelen/`, { redirect: 'manual' })).status, 200);
+    assert.strictEqual((await fetch(`${base}/app/artikelen/`, { redirect: 'manual' })).status, 200);
   } finally {
     server.close();
   }
@@ -233,17 +233,17 @@ test('oude adressen van Voorraadbeheer gaan relatief door naar Artikelen', async
 test('eerste start: instelscherm op elk pad, daarna inloggen met het nieuwe account', async () => {
   const { server, base } = await start({ accessCode: '', setupCode: 'ABCD-EFGH-JKLM' });
   try {
-    for (const urlPath of ['/', '/beregening/', '/login']) {
+    for (const urlPath of ['/app/', '/app/beregening/', '/app/login']) {
       const res = await fetch(base + urlPath);
       assert.match(await res.text(), /Beheerder aanmaken/, urlPath);
     }
-    assert.deepStrictEqual(await (await fetch(`${base}/api/setup`)).json(), { required: true, codeRequired: true, codeKind: 'installatiecode' });
+    assert.deepStrictEqual(await (await fetch(`${base}/app/api/setup`)).json(), { required: true, codeRequired: true, codeKind: 'installatiecode' });
     /**
      * Stuurt het formulier voor de eerste beheerder.
      * @param {object} body De velden.
      * @returns {Promise<Response>} Het fetch-antwoord.
      */
-    const post = (body) => fetch(`${base}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const post = (body) => fetch(`${base}/app/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     // Zonder (juiste) installatiecode uit het serverlog lukt het niet.
     assert.strictEqual((await post({ username: 'daniel', displayName: 'Daniël', password: 'Tuin-Plan-2026!' })).status, 401);
     assert.strictEqual((await post({ username: 'daniel', displayName: 'Daniël', password: 'Tuin-Plan-2026!', code: 'ABCD-EFGH-JKLX' })).status, 401);
@@ -252,7 +252,7 @@ test('eerste start: instelscherm op elk pad, daarna inloggen met het nieuwe acco
     const ok = await post({ username: 'daniel', displayName: 'Daniël', password: 'Tuin-Plan-2026!', code: 'abcd efgh jklm' });
     assert.strictEqual(ok.status, 201);
     const cookie = ok.headers.get('set-cookie').split(';')[0];
-    const me = await (await fetch(`${base}/api/me`, { headers: { cookie } })).json();
+    const me = await (await fetch(`${base}/app/api/me`, { headers: { cookie } })).json();
     assert.strictEqual(me.user.role, 'beheerder');
     assert.strictEqual(me.user.kind, 'account');
     assert.strictEqual((await fetch(`${base}/`, { headers: { cookie } })).status, 200);
@@ -261,7 +261,7 @@ test('eerste start: instelscherm op elk pad, daarna inloggen met het nieuwe acco
     const anon = await fetch(`${base}/`);
     assert.strictEqual(anon.status, 401);
     assert.match(await anon.text(), /Gebruikersnaam/);
-    assert.doesNotMatch(await (await fetch(`${base}/login`)).text(), /Beheerder aanmaken/);
+    assert.doesNotMatch(await (await fetch(`${base}/app/login`)).text(), /Beheerder aanmaken/);
   } finally {
     server.close();
   }
@@ -270,13 +270,13 @@ test('eerste start: instelscherm op elk pad, daarna inloggen met het nieuwe acco
 test('eerste start met toegangscode: de code is nodig om de beheerder aan te maken', async () => {
   const { server, base } = await start();
   try {
-    assert.strictEqual((await (await fetch(`${base}/api/setup`)).json()).codeRequired, true);
+    assert.strictEqual((await (await fetch(`${base}/app/api/setup`)).json()).codeRequired, true);
     /**
      * Stuurt het formulier voor de eerste beheerder.
      * @param {object} body De velden.
      * @returns {Promise<Response>} Het fetch-antwoord.
      */
-    const post = (body) => fetch(`${base}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const post = (body) => fetch(`${base}/app/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     assert.strictEqual((await post({ username: 'daniel', password: 'Tuin-Plan-2026!', code: 'fout' })).status, 401);
     assert.strictEqual((await post({ username: 'daniel', password: 'Tuin-Plan-2026!', code: 'geheim' })).status, 201);
   } finally {
@@ -290,10 +290,10 @@ test('de laatste actieve beheerder kan niet worden uitgeschakeld of gedegradeerd
   try {
     const { cookie } = await login(base);
     const headers = { cookie, 'Content-Type': 'application/json' };
-    const users = (await (await fetch(`${base}/api/admin/users`, { headers })).json()).items;
+    const users = (await (await fetch(`${base}/app/api/admin/users`, { headers })).json()).items;
     const baas = users.find((user) => user.username === 'baas');
     for (const body of [{ disabled: true }, { role: 'gebruiker' }]) {
-      const res = await fetch(`${base}/api/admin/users/${baas.id}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
+      const res = await fetch(`${base}/app/api/admin/users/${baas.id}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
       assert.strictEqual(res.status, 409);
     }
   } finally {
@@ -354,12 +354,12 @@ test('snelheid: scripts met versie blijven in de browsercache, Excel pas bij exp
      */
     const get = (urlPath) => fetch(`${base}${urlPath}`, { headers: { cookie } });
     const version = encodeURIComponent(PKG.version);
-    assert.match((await get(`/shared/common.js?v=${version}`)).headers.get('cache-control'), /private, max-age=31536000, immutable/);
+    assert.match((await get(`/app/shared/common.js?v=${version}`)).headers.get('cache-control'), /private, max-age=31536000, immutable/);
     // Zonder (of met een oude) versie: elke keer controleren.
-    assert.strictEqual((await get('/shared/common.js')).headers.get('cache-control'), 'no-cache');
-    assert.strictEqual((await get('/shared/common.js?v=0.0.1')).headers.get('cache-control'), 'no-cache');
+    assert.strictEqual((await get('/app/shared/common.js')).headers.get('cache-control'), 'no-cache');
+    assert.strictEqual((await get('/app/shared/common.js?v=0.0.1')).headers.get('cache-control'), 'no-cache');
     // Het kleurthema kan wijzigen zonder nieuwe versie.
-    assert.strictEqual((await get(`/shared/theme.css?v=${version}`)).headers.get('cache-control'), 'no-cache');
+    assert.strictEqual((await get(`/app/shared/theme.css?v=${version}`)).headers.get('cache-control'), 'no-cache');
   } finally {
     server.close();
   }

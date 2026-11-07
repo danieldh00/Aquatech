@@ -49,7 +49,7 @@
   <script>
     const $ = (id) => document.getElementById(id);
     // Paden zijn relatief tot de root van de app (de pagina kan op elk pad staan).
-    const base = location.pathname.replace(/[^/]*$/, '').split('/').filter(Boolean).map(() => '..').join('/');
+    const base = location.pathname.replace(/[^/]*$/, '').split('/').filter(Boolean).slice(1).map(() => '..').join('/');
     const api = (p) => (base ? base + '/' : '') + 'api/' + p;
     fetch(api('setup'), { cache: 'no-store' }).then((r) => r.json()).then((s) => {
       if (!s.required) { location.reload(); return; }

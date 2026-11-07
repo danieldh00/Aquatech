@@ -118,64 +118,64 @@ test('varianten via de API: kenmerken, keuzelijst, werkorder kiest eerst een maa
     const kees = await as('kees');
     const pien = await as('pien');
     const klant = await as('klant');
-    const parent = (await kees.post('/api/stock/items', { code: 'SLANG', name: 'Tuinslang', salePrice: 20, costPrice: 12 })).body;
-    const made = await kees.put(`/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Lengte', values: ['15 m', '25 m'] }] });
+    const parent = (await kees.post('/app/api/stock/items', { code: 'SLANG', name: 'Tuinslang', salePrice: 20, costPrice: 12 })).body;
+    const made = await kees.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Lengte', values: ['15 m', '25 m'] }] });
     assert.strictEqual(made.status, 200, JSON.stringify(made.body));
     assert.strictEqual(made.body.created, 2);
-    assert.strictEqual((await kees.put(`/api/stock/items/${parent.id}/variants`, { attributes: [{ name: '', values: ['x'] }] })).status, 400);
-    assert.strictEqual((await kees.post(`/api/stock/items/${parent.id}/movements`, { kind: 'ontvangst', qty: 1 })).status, 409);
+    assert.strictEqual((await kees.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: '', values: ['x'] }] })).status, 400);
+    assert.strictEqual((await kees.post(`/app/api/stock/items/${parent.id}/movements`, { kind: 'ontvangst', qty: 1 })).status, 409);
 
     // Keuzelijst: hoofdartikel met varianten, zonder inkoopprijs; ook voor de planner (werkorders).
-    const picker = (await pien.get('/api/stock/articles')).body.items;
+    const picker = (await pien.get('/app/api/stock/articles')).body.items;
     const hose = picker.find((article) => article.code === 'SLANG');
     assert.deepStrictEqual(hose.variants.map((variant) => [variant.code, variant.values.Lengte]), [['SLANG-15M', '15 m'], ['SLANG-25M', '25 m']]);
     assert.ok(!JSON.stringify(picker).includes('costPrice'));
-    assert.strictEqual((await klant.get('/api/stock/articles')).status, 403);
-    assert.strictEqual((await pien.put(`/api/stock/items/${parent.id}/variants`, { attributes: [] })).status, 403);
-    assert.strictEqual((await pien.post(`/api/stock/items/${parent.id}/publish`, {})).status, 403);
-    const unlinked = await kees.post(`/api/stock/items/${parent.id}/publish`, {});
+    assert.strictEqual((await klant.get('/app/api/stock/articles')).status, 403);
+    assert.strictEqual((await pien.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [] })).status, 403);
+    assert.strictEqual((await pien.post(`/app/api/stock/items/${parent.id}/publish`, {})).status, 403);
+    const unlinked = await kees.post(`/app/api/stock/items/${parent.id}/publish`, {});
     assert.strictEqual(unlinked.status, 409);
     assert.strictEqual(unlinked.body.error, 'not_configured');
 
     // Werkorder met de code van het hoofdartikel: eerst een maat kiezen; met de variant wordt er gereserveerd.
-    const quote = (await kees.post('/api/quotes', { data: { title: 'Slang', customer: { name: 'Fam. Jansen' },
+    const quote = (await kees.post('/app/api/quotes', { data: { title: 'Slang', customer: { name: 'Fam. Jansen' },
       lines: [{ section: 'materiaal', code: 'SLANG', description: 'Tuinslang', qty: 2, unit: 'st', price: 20 }] } })).body;
-    await kees.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
-    const workOrder = (await kees.post('/api/workorders', { quoteId: quote.id })).body;
-    let stockOfOrder = (await kees.get(`/api/stock/workorders/${workOrder.id}`)).body;
+    await kees.put(`/app/api/quotes/${quote.id}`, { status: 'akkoord' });
+    const workOrder = (await kees.post('/app/api/workorders', { quoteId: quote.id })).body;
+    let stockOfOrder = (await kees.get(`/app/api/stock/workorders/${workOrder.id}`)).body;
     assert.deepStrictEqual(stockOfOrder.chooseVariant.map((line) => [line.code, line.qty]), [['SLANG', 2]]);
     assert.deepStrictEqual(stockOfOrder.notInStock, []);
     assert.strictEqual(stockOfOrder.lines.length, 0);
-    const full = (await kees.get(`/api/workorders/${workOrder.id}`)).body;
+    const full = (await kees.get(`/app/api/workorders/${workOrder.id}`)).body;
     full.data.materials[0].code = 'SLANG-25M';
-    assert.strictEqual((await kees.put(`/api/workorders/${workOrder.id}`, { data: full.data })).status, 200);
-    stockOfOrder = (await kees.get(`/api/stock/workorders/${workOrder.id}`)).body;
+    assert.strictEqual((await kees.put(`/app/api/workorders/${workOrder.id}`, { data: full.data })).status, 200);
+    stockOfOrder = (await kees.get(`/app/api/stock/workorders/${workOrder.id}`)).body;
     assert.deepStrictEqual(stockOfOrder.chooseVariant, []);
     assert.deepStrictEqual(stockOfOrder.lines.map((line) => [line.code, line.reserved]), [['SLANG-25M', 2]]);
 
     // Twee maten op dezelfde werkorder: het hoofdartikel telt één werkorder.
     full.data.materials.push({ ...full.data.materials[0], code: 'SLANG-15M', qty: 1 });
-    assert.strictEqual((await kees.put(`/api/workorders/${workOrder.id}`, { data: full.data })).status, 200);
-    assert.strictEqual((await kees.get(`/api/stock/items/${parent.id}`)).body.orders, 1);
-    assert.strictEqual((await kees.get('/api/stock')).body.items.find((item) => item.id === parent.id).orders, 1);
+    assert.strictEqual((await kees.put(`/app/api/workorders/${workOrder.id}`, { data: full.data })).status, 200);
+    assert.strictEqual((await kees.get(`/app/api/stock/items/${parent.id}`)).body.orders, 1);
+    assert.strictEqual((await kees.get('/app/api/stock')).body.items.find((item) => item.id === parent.id).orders, 1);
     full.data.materials.pop();
-    assert.strictEqual((await kees.put(`/api/workorders/${workOrder.id}`, { data: full.data })).status, 200);
+    assert.strictEqual((await kees.put(`/app/api/workorders/${workOrder.id}`, { data: full.data })).status, 200);
 
     // Losse factuur met de code van het hoofdartikel: niets afgeboekt op het hoofdartikel.
-    const invoice = (await baas.post('/api/invoices', { data: { customer: { name: 'Balieklant' }, lines: [{ code: 'SLANG', description: 'Tuinslang', qty: 1, price: 20 }] } })).body;
-    assert.strictEqual((await baas.post(`/api/invoices/${invoice.id}/finalize`, {})).status, 200);
-    const parentAfter = (await kees.get(`/api/stock/items/${parent.id}`)).body;
+    const invoice = (await baas.post('/app/api/invoices', { data: { customer: { name: 'Balieklant' }, lines: [{ code: 'SLANG', description: 'Tuinslang', qty: 1, price: 20 }] } })).body;
+    assert.strictEqual((await baas.post(`/app/api/invoices/${invoice.id}/finalize`, {})).status, 200);
+    const parentAfter = (await kees.get(`/app/api/stock/items/${parent.id}`)).body;
     assert.strictEqual(parentAfter.onHand, 0);
     assert.deepStrictEqual(parentAfter.movements, []);
     assert.strictEqual(stockDb.prepare('SELECT on_hand FROM stock_items WHERE id = ?').get(parent.id).on_hand, 0);
 
     // Andere organisatie: 404 op het hoofdartikel, eigen lege keuzelijst.
-    const created = await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
+    const created = await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
     assert.strictEqual(created.status, 201, JSON.stringify(created.body));
     const piet = await as('piet', 'groen');
-    assert.strictEqual((await piet.put(`/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Lengte', values: ['50 m'] }] })).status, 404);
-    assert.strictEqual((await piet.post(`/api/stock/items/${parent.id}/publish`, {})).status, 404);
-    assert.deepStrictEqual((await piet.get('/api/stock/articles')).body.items, []);
+    assert.strictEqual((await piet.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Lengte', values: ['50 m'] }] })).status, 404);
+    assert.strictEqual((await piet.post(`/app/api/stock/items/${parent.id}/publish`, {})).status, 404);
+    assert.deepStrictEqual((await piet.get('/app/api/stock/articles')).body.items, []);
   } finally {
     server.close();
   }

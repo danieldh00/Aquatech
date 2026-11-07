@@ -32,7 +32,7 @@ async function start() {
  */
 async function login(base, username, password = PW) {
   const client = createClient(base, { emptyJsonBody: false });
-  const response = await client.post('/api/auth/login', { username, password });
+  const response = await client.post('/app/api/auth/login', { username, password });
   assert.strictEqual(response.status, 200, JSON.stringify(response.body));
   return client;
 }
@@ -47,44 +47,44 @@ test('Mijn profiel: gegevens en voorkeuren wijzigen', async () => {
   const { server, base } = await start();
   try {
     const klaas = await login(base, 'klaas');
-    const profile = await klaas.get('/api/account/profile');
+    const profile = await klaas.get('/app/api/account/profile');
     assert.strictEqual(profile.status, 200);
     assert.deepStrictEqual(profile.body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '', seasonReminders: true });
     assert.strictEqual(profile.body.user.email, '');
-    assert.deepStrictEqual((await klaas.get('/api/me')).body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '', seasonReminders: true });
+    assert.deepStrictEqual((await klaas.get('/app/api/me')).body.preferences, { startPage: '', mailCopy: false, newsSeenAt: '', seenRelease: '', seasonReminders: true });
 
     // Ongeldige invoer: niets opgeslagen, met het veld erbij.
-    const bad = await klaas.put('/api/account/profile', { email: 'geen-adres' });
+    const bad = await klaas.put('/app/api/account/profile', { email: 'geen-adres' });
     assert.strictEqual(bad.status, 400);
     assert.strictEqual(bad.body.field, 'email');
-    assert.strictEqual((await klaas.put('/api/account/profile', { phone: 'bel me' })).body.field, 'phone');
-    assert.strictEqual((await klaas.put('/api/account/profile', { displayName: '   ' })).body.field, 'displayName');
-    assert.strictEqual((await klaas.put('/api/account/profile', { displayName: 'x'.repeat(81) })).status, 400);
+    assert.strictEqual((await klaas.put('/app/api/account/profile', { phone: 'bel me' })).body.field, 'phone');
+    assert.strictEqual((await klaas.put('/app/api/account/profile', { displayName: '   ' })).body.field, 'displayName');
+    assert.strictEqual((await klaas.put('/app/api/account/profile', { displayName: 'x'.repeat(81) })).status, 400);
 
-    const ok = await klaas.put('/api/account/profile', { displayName: '  Klaas   Vaak ', email: 'Klaas@Voorbeeld.TEST', phone: '+31 (0)6 12-34 56 78', preferences: { startPage: 'portaal', onbekend: true } });
+    const ok = await klaas.put('/app/api/account/profile', { displayName: '  Klaas   Vaak ', email: 'Klaas@Voorbeeld.TEST', phone: '+31 (0)6 12-34 56 78', preferences: { startPage: 'portaal', onbekend: true } });
     assert.strictEqual(ok.status, 200, JSON.stringify(ok.body));
     assert.strictEqual(ok.body.user.displayName, 'Klaas Vaak');
     assert.strictEqual(ok.body.user.email, 'klaas@voorbeeld.test');
     assert.strictEqual(ok.body.user.phone, '+31 (0)6 12-34 56 78');
     assert.deepStrictEqual(ok.body.preferences, { startPage: 'portaal', mailCopy: false, newsSeenAt: '', seenRelease: '', seasonReminders: true });
     // Alleen meegegeven velden veranderen; voorkeuren worden samengevoegd.
-    const more = await klaas.put('/api/account/profile', { preferences: { mailCopy: true } });
+    const more = await klaas.put('/app/api/account/profile', { preferences: { mailCopy: true } });
     assert.deepStrictEqual(more.body.preferences, { startPage: 'portaal', mailCopy: true, newsSeenAt: '', seenRelease: '', seasonReminders: true });
     assert.strictEqual(more.body.user.email, 'klaas@voorbeeld.test');
-    const me = (await klaas.get('/api/me')).body;
+    const me = (await klaas.get('/app/api/me')).body;
     assert.strictEqual(me.user.displayName, 'Klaas Vaak');
     assert.strictEqual(me.preferences.startPage, 'portaal');
     // Leegmaken mag.
-    assert.strictEqual((await klaas.put('/api/account/profile', { email: '', phone: '' })).body.user.email, '');
+    assert.strictEqual((await klaas.put('/app/api/account/profile', { email: '', phone: '' })).body.user.email, '');
 
     // Logboek: welke velden, nooit de waarden.
     const baas = await login(base, 'baas');
-    const items = (await baas.get('/api/admin/audit')).body.items.filter((entry) => entry.action === 'profiel_gewijzigd');
+    const items = (await baas.get('/app/api/admin/audit')).body.items.filter((entry) => entry.action === 'profiel_gewijzigd');
     assert.ok(items.length >= 3);
     assert.ok(!JSON.stringify(items).includes('voorbeeld.test') && !JSON.stringify(items).includes('12-34'), 'geen persoonsgegevens in het logboek');
     // De beheerder ziet de contactgegevens in het gebruikersoverzicht.
-    await klaas.put('/api/account/profile', { email: 'klaas@voorbeeld.test' });
-    const users = (await baas.get('/api/admin/users')).body;
+    await klaas.put('/app/api/account/profile', { email: 'klaas@voorbeeld.test' });
+    const users = (await baas.get('/app/api/admin/users')).body;
     const list = users.items || users;
     assert.strictEqual(list.find((user) => user.username === 'klaas').email, 'klaas@voorbeeld.test');
   } finally {
@@ -95,16 +95,16 @@ test('Mijn profiel: gegevens en voorkeuren wijzigen', async () => {
 test('Mijn profiel: niet zonder eigen account, pagina bereikbaar', async () => {
   const { server, base } = await start();
   try {
-    assert.strictEqual((await createClient(base, { emptyJsonBody: false }).get('/api/account/profile')).status, 400);
+    assert.strictEqual((await createClient(base, { emptyJsonBody: false }).get('/app/api/account/profile')).status, 400);
     // Met de toegangscode is er geen eigen profiel.
     const code = createClient(base, { emptyJsonBody: false });
-    assert.strictEqual((await code.post('/api/auth/login', { code: 'Toegang-Code-2026!' })).status, 200);
-    assert.strictEqual((await code.get('/api/account/profile')).status, 400);
-    assert.strictEqual((await code.put('/api/account/profile', { displayName: 'X' })).status, 400);
-    assert.strictEqual((await code.get('/api/me')).body.preferences, null);
+    assert.strictEqual((await code.post('/app/api/auth/login', { code: 'Toegang-Code-2026!' })).status, 200);
+    assert.strictEqual((await code.get('/app/api/account/profile')).status, 400);
+    assert.strictEqual((await code.put('/app/api/account/profile', { displayName: 'X' })).status, 400);
+    assert.strictEqual((await code.get('/app/api/me')).body.preferences, null);
 
     const klaas = await login(base, 'klaas');
-    const page = await klaas.get('/profiel/');
+    const page = await klaas.get('/app/profiel/');
     assert.strictEqual(page.status, 200);
     assert.match(page.text, /Mijn profiel/);
     assert.match(page.text, /profiel\.js/);
@@ -124,12 +124,12 @@ test('startpagina: het dashboard krijgt hem mee, alleen als de module er voor de
      */
     const meta = (html) => (/<meta name="aquatech-start" content="([^"]*)">/.exec(html) || [])[1] || null;
     assert.strictEqual(meta((await klaas.get('/')).text), null);
-    await klaas.put('/api/account/profile', { preferences: { startPage: 'portaal' } });
+    await klaas.put('/app/api/account/profile', { preferences: { startPage: 'portaal' } });
     assert.strictEqual(meta((await klaas.get('/')).text), 'portaal/');
     // Alleen op het dashboard, niet op andere pagina's.
-    assert.strictEqual(meta((await klaas.get('/plannen/')).text), null);
+    assert.strictEqual(meta((await klaas.get('/app/plannen/')).text), null);
     // Een module waar de klant geen recht op heeft: geen doorverwijzing.
-    await klaas.put('/api/account/profile', { preferences: { startPage: 'planning' } });
+    await klaas.put('/app/api/account/profile', { preferences: { startPage: 'planning' } });
     assert.strictEqual(meta((await klaas.get('/')).text), null);
   } finally {
     server.close();

@@ -1,4 +1,4 @@
-// Groothandelsvenster in de eigen webshop (/winkel/groothandel/): groothandelsklanten
+// Groothandelsvenster in de eigen webshop (/groothandel/): groothandelsklanten
 // met een vaste korting, staffelkorting, verpakkingseenheid en minimale afname per
 // artikel, de snelbestellijst, bestellen op artikelcode en opnieuw bestellen.
 const test = require('node:test');
@@ -145,10 +145,10 @@ async function setup() {
   const { server, base } = await listen(createApp({ secret: SECRET, db }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  await admin.put('/api/admin/settings', { storefront: true, shopOrdering: true });
-  await admin.post('/api/stock/items', { code: 'SPR', name: 'Sproeier groothandel', onHand: 5000, salePrice: 10, businessPrice: 8,
+  await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true });
+  await admin.post('/app/api/stock/items', { code: 'SPR', name: 'Sproeier groothandel', onHand: 5000, salePrice: 10, businessPrice: 8,
     packSize: 25, orderMinQty: 50, priceTiers: [{ minQty: 100, discountPct: 15 }] });
-  await admin.post('/api/stock/items', { code: 'SLANG', name: 'Slangklem', onHand: 5000, salePrice: 5 });
+  await admin.post('/app/api/stock/items', { code: 'SLANG', name: 'Slangklem', onHand: 5000, salePrice: 5 });
   let counter = 0;
   /**
    * Registreert een klant in de shop, optioneel als zakelijke of groothandelsklant (door de beheerder goedgekeurd).
@@ -158,10 +158,10 @@ async function setup() {
   const shopper = async ({ business = false, wholesale = false, discount } = {}) => {
     counter += 1;
     const client = createClient(base);
-    await postForm(base, client, '/winkel/registreren/', { displayName: `Klant ${counter}`, email: `g${counter}@voorbeeld.nl`, password: PW, password2: PW, website: '' });
-    const user = (await admin.get('/api/admin/users')).body.items.find((candidate) => candidate.email === `g${counter}@voorbeeld.nl`);
-    if (business) await admin.patch(`/api/admin/users/${user.id}`, { customerGroup: 'zakelijk', ...COMPANY });
-    if (wholesale) assert.strictEqual((await admin.patch(`/api/admin/users/${user.id}`, { wholesale: true, ...(discount !== undefined ? { wholesaleDiscount: discount } : {}) })).status, 200);
+    await postForm(base, client, '/registreren/', { displayName: `Klant ${counter}`, email: `g${counter}@voorbeeld.nl`, password: PW, password2: PW, website: '' });
+    const user = (await admin.get('/app/api/admin/users')).body.items.find((candidate) => candidate.email === `g${counter}@voorbeeld.nl`);
+    if (business) await admin.patch(`/app/api/admin/users/${user.id}`, { customerGroup: 'zakelijk', ...COMPANY });
+    if (wholesale) assert.strictEqual((await admin.patch(`/app/api/admin/users/${user.id}`, { wholesale: true, ...(discount !== undefined ? { wholesaleDiscount: discount } : {}) })).status, 200);
     return { client, id: user.id };
   };
   return { base, admin, vreemd: await createLogin(base, { password: PW })('vreemd', 'ander'), shopper };
@@ -173,73 +173,73 @@ async function setup() {
  * @returns {Promise<string>} De HTML van de winkelwagen.
  */
 async function cartHtml(client) {
-  return (await client.get('/winkel/winkelwagen/')).text;
+  return (await client.get('/winkelwagen/')).text;
 }
 
 test('beheer: groothandel alleen bij een zakelijke klant, korting 0-50%, particulier maken wist het', async () => {
   const { admin, vreemd, shopper } = await setup();
   const person = await shopper();
-  const refused = await admin.patch(`/api/admin/users/${person.id}`, { wholesale: true });
+  const refused = await admin.patch(`/app/api/admin/users/${person.id}`, { wholesale: true });
   assert.strictEqual(refused.status, 400);
   assert.match(refused.body.message, /zakelijke klant/);
-  assert.strictEqual((await admin.patch(`/api/admin/users/${person.id}`, { customerGroup: 'zakelijk', wholesale: true, wholesaleDiscount: 7.5 })).status, 200);
-  const user = (await admin.get('/api/admin/users')).body.items.find((candidate) => candidate.id === person.id);
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${person.id}`, { customerGroup: 'zakelijk', wholesale: true, wholesaleDiscount: 7.5 })).status, 200);
+  const user = (await admin.get('/app/api/admin/users')).body.items.find((candidate) => candidate.id === person.id);
   assert.strictEqual(user.wholesale, true);
   assert.strictEqual(user.wholesaleDiscount, 7.5);
-  for (const bad of [-1, 51, 'abc', '']) assert.strictEqual((await admin.patch(`/api/admin/users/${person.id}`, { wholesaleDiscount: bad })).status, 400, String(bad));
-  assert.strictEqual((await vreemd.patch(`/api/admin/users/${person.id}`, { wholesale: false })).status, 404, 'andere organisatie');
-  assert.strictEqual((await person.client.patch(`/api/admin/users/${person.id}`, { wholesale: false })).status, 403, 'klant zelf');
-  await admin.patch(`/api/admin/users/${person.id}`, { customerGroup: '' });
-  const reset = (await admin.get('/api/admin/users')).body.items.find((candidate) => candidate.id === person.id);
+  for (const bad of [-1, 51, 'abc', '']) assert.strictEqual((await admin.patch(`/app/api/admin/users/${person.id}`, { wholesaleDiscount: bad })).status, 400, String(bad));
+  assert.strictEqual((await vreemd.patch(`/app/api/admin/users/${person.id}`, { wholesale: false })).status, 404, 'andere organisatie');
+  assert.strictEqual((await person.client.patch(`/app/api/admin/users/${person.id}`, { wholesale: false })).status, 403, 'klant zelf');
+  await admin.patch(`/app/api/admin/users/${person.id}`, { customerGroup: '' });
+  const reset = (await admin.get('/app/api/admin/users')).body.items.find((candidate) => candidate.id === person.id);
   assert.strictEqual(reset.wholesale, false);
   assert.strictEqual(reset.wholesaleDiscount, 0);
 });
 
 test('artikel: voorwaarden en staffels opslaan, controleren en terugkrijgen', async () => {
   const { admin, vreemd } = await setup();
-  const items = (await admin.get('/api/stock')).body.items;
+  const items = (await admin.get('/app/api/stock')).body.items;
   const sprayer = items.find((item) => item.code === 'SPR');
   assert.strictEqual(sprayer.packSize, 25);
   assert.strictEqual(sprayer.orderMinQty, 50);
   assert.deepStrictEqual(sprayer.priceTiers, [{ minQty: 100, discountPct: 15 }]);
-  const clamp = await admin.put(`/api/stock/items/${sprayer.id}`, { packSize: 40, orderMinQty: 50 });
+  const clamp = await admin.put(`/app/api/stock/items/${sprayer.id}`, { packSize: 40, orderMinQty: 50 });
   assert.strictEqual(clamp.status, 200);
   assert.strictEqual(clamp.body.orderMinQty, 80, 'de minimale afname wordt een veelvoud van de eenheid');
   assert.deepStrictEqual(clamp.body.priceTiers, [{ minQty: 100, discountPct: 15 }], 'staffels blijven bij een deelwijziging staan');
-  assert.strictEqual((await admin.put(`/api/stock/items/${sprayer.id}`, { priceTiers: [{ minQty: 1, discountPct: 5 }] })).status, 400);
-  assert.strictEqual((await admin.put(`/api/stock/items/${sprayer.id}`, { packSize: 0 })).status, 400);
-  assert.strictEqual((await vreemd.put(`/api/stock/items/${sprayer.id}`, { packSize: 2 })).status, 404, 'andere organisatie');
-  await admin.put(`/api/stock/items/${sprayer.id}`, { packSize: 25, orderMinQty: 50 });
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${sprayer.id}`, { priceTiers: [{ minQty: 1, discountPct: 5 }] })).status, 400);
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${sprayer.id}`, { packSize: 0 })).status, 400);
+  assert.strictEqual((await vreemd.put(`/app/api/stock/items/${sprayer.id}`, { packSize: 2 })).status, 404, 'andere organisatie');
+  await admin.put(`/app/api/stock/items/${sprayer.id}`, { packSize: 25, orderMinQty: 50 });
 });
 
 test('groothandelsvenster: alleen voor groothandelsklanten', async () => {
   const { base, shopper } = await setup();
   const anonymous = createClient(base, { followRedirects: false });
-  const guest = await anonymous.get('/winkel/groothandel/');
+  const guest = await anonymous.get('/groothandel/');
   assert.strictEqual(guest.status, 302);
   assert.match(guest.location, /inloggen/);
   const person = await shopper();
   const business = await shopper({ business: true });
   const wholesale = await shopper({ business: true, wholesale: true });
   for (const client of [person.client, business.client]) {
-    assert.strictEqual((await client.get('/winkel/groothandel/')).status, 404);
-    assert.strictEqual((await postForm(base, client, '/winkel/groothandel/', { action: 'plakken', lijst: 'SPR 50' })).status, 404);
-    assert.doesNotMatch((await client.get('/winkel/')).text, /groothandel\//, 'geen kopje Groothandel');
+    assert.strictEqual((await client.get('/groothandel/')).status, 404);
+    assert.strictEqual((await postForm(base, client, '/groothandel/', { action: 'plakken', lijst: 'SPR 50' })).status, 404);
+    assert.doesNotMatch((await client.get('/')).text, /groothandel\//, 'geen kopje Groothandel');
   }
-  const page = await wholesale.client.get('/winkel/groothandel/');
+  const page = await wholesale.client.get('/groothandel/');
   assert.strictEqual(page.status, 200);
   assert.match(page.text, /Sproeier groothandel/);
   assert.match(page.text, /name="q:SPR"/);
   assert.match(page.text, /per 25, min\. 50/);
   assert.match(page.text, /vanaf 100: € 6,80/, 'staffelprijs 15% op 8,00 excl. btw');
-  assert.match((await wholesale.client.get('/winkel/')).text, /href="groothandel\/">Groothandel/);
-  assert.strictEqual((await postForm(base, wholesale.client, '/winkel/groothandel/', { action: 'plakken', lijst: 'SPR 50' }, { 'sec-fetch-site': 'cross-site' })).status, 403);
+  assert.match((await wholesale.client.get('/')).text, /href="groothandel\/">Groothandel/);
+  assert.strictEqual((await postForm(base, wholesale.client, '/groothandel/', { action: 'plakken', lijst: 'SPR 50' }, { 'sec-fetch-site': 'cross-site' })).status, 403);
 });
 
 test('snelbestellijst: aantallen worden afgerond, staffel- en klantkorting rekenen mee', async () => {
   const { base, shopper } = await setup();
   const wholesale = await shopper({ business: true, wholesale: true });
-  const list = await postForm(base, wholesale.client, '/winkel/groothandel/', { action: 'bestellen', 'q:SPR': '30', 'q:SLANG': '120', 'q:LEEG': '' });
+  const list = await postForm(base, wholesale.client, '/groothandel/', { action: 'bestellen', 'q:SPR': '30', 'q:SLANG': '120', 'q:LEEG': '' });
   assert.strictEqual(list.status, 200, 'er is een aanpassing te melden, dus de pagina blijft staan');
   assert.match(list.text, /SPR: 30 → 50/);
   assert.match(list.text, /2 artikelen in je winkelwagen/);
@@ -248,14 +248,14 @@ test('snelbestellijst: aantallen worden afgerond, staffel- en klantkorting reken
   assert.match(cart, /value="120"/, 'meer dan 99 stuks kan');
   assert.match(cart, /€\s8,00/, 'zonder staffel de zakelijke prijs excl. btw');
   // Meer bestellen: bij 100 stuks geldt de staffel van 15%.
-  const more = await postForm(base, wholesale.client, '/winkel/groothandel/', { action: 'bestellen', 'q:SPR': '50' });
+  const more = await postForm(base, wholesale.client, '/groothandel/', { action: 'bestellen', 'q:SPR': '50' });
   assert.strictEqual(more.status, 303, 'alles gelukt zonder melding: door naar de winkelwagen');
   assert.match(more.location, /winkelwagen/);
   cart = await cartHtml(wholesale.client);
   assert.match(cart, /value="100"/);
   assert.match(cart, /€\s6,80/);
   assert.match(cart, /15% staffelkorting/);
-  const empty = await postForm(base, wholesale.client, '/winkel/groothandel/', { action: 'bestellen', 'q:SPR': '' });
+  const empty = await postForm(base, wholesale.client, '/groothandel/', { action: 'bestellen', 'q:SPR': '' });
   assert.strictEqual(empty.status, 200);
   assert.match(empty.text, /minstens één artikel/);
 });
@@ -263,10 +263,10 @@ test('snelbestellijst: aantallen worden afgerond, staffel- en klantkorting reken
 test('vaste klantkorting wint van een kleinere staffel; een gewone zakelijke klant krijgt geen groothandelsvoorwaarden', async () => {
   const { base, shopper } = await setup();
   const discounted = await shopper({ business: true, wholesale: true, discount: 20 });
-  await postForm(base, discounted.client, '/winkel/groothandel/', { action: 'plakken', lijst: 'SLANG\t10' });
+  await postForm(base, discounted.client, '/groothandel/', { action: 'plakken', lijst: 'SLANG\t10' });
   assert.match(await cartHtml(discounted.client), /€\s4,00[\s\S]*20% groothandelskorting/, '20% op 5,00');
   const business = await shopper({ business: true });
-  await postForm(base, business.client, '/winkel/winkelwagen/', { action: 'add', code: 'SPR', qty: '30' });
+  await postForm(base, business.client, '/winkelwagen/', { action: 'add', code: 'SPR', qty: '30' });
   const cart = await cartHtml(business.client);
   assert.match(cart, /€\s8,00/);
   assert.doesNotMatch(cart, /korting/);
@@ -276,7 +276,7 @@ test('vaste klantkorting wint van een kleinere staffel; een gewone zakelijke kla
 test('bestellen op artikelcode: plakken uit Excel, onbekende codes en aantallen die niet passen', async () => {
   const { base, shopper } = await setup();
   const wholesale = await shopper({ business: true, wholesale: true });
-  const pasted = await postForm(base, wholesale.client, '/winkel/groothandel/', { action: 'plakken', lijst: 'Artikelcode\tAantal\nspr\t60\nslang\t7\nONBEKEND\t5\nSLANG x 3\nkapot;' });
+  const pasted = await postForm(base, wholesale.client, '/groothandel/', { action: 'plakken', lijst: 'Artikelcode\tAantal\nspr\t60\nslang\t7\nONBEKEND\t5\nSLANG x 3\nkapot;' });
   assert.strictEqual(pasted.status, 200);
   assert.match(pasted.text, /SPR: 60 → 75/);
   assert.match(pasted.text, /ONBEKEND: Onbekende artikelcode/);
@@ -285,7 +285,7 @@ test('bestellen op artikelcode: plakken uit Excel, onbekende codes en aantallen 
   const cart = await cartHtml(wholesale.client);
   assert.match(cart, /value="75"/);
   assert.match(cart, /value="10"/, 'dubbele codes zijn opgeteld');
-  const nothing = await postForm(base, wholesale.client, '/winkel/groothandel/', { action: 'plakken', lijst: '   ' });
+  const nothing = await postForm(base, wholesale.client, '/groothandel/', { action: 'plakken', lijst: '   ' });
   assert.strictEqual(nothing.status, 200);
   assert.match(nothing.text, /Er is niets aan je winkelwagen toegevoegd/);
 });
@@ -294,24 +294,24 @@ test('winkelwagen en bestelling: een aantal dat niet past kan niet worden afgere
   const { base, shopper } = await setup();
   const wholesale = await shopper({ business: true, wholesale: true });
   // Rechtstreeks 30 stuks via de gewone winkelwagen: past niet bij per 25, minimaal 50.
-  await postForm(base, wholesale.client, '/winkel/winkelwagen/', { action: 'add', code: 'SPR', qty: '30' });
+  await postForm(base, wholesale.client, '/winkelwagen/', { action: 'add', code: 'SPR', qty: '30' });
   assert.match(await cartHtml(wholesale.client), /Minimaal 50 stuks, en alleen per 25/);
-  const blocked = await createClient(base, { jar: wholesale.client.jar, followRedirects: false }).get('/winkel/afrekenen/');
+  const blocked = await createClient(base, { jar: wholesale.client.jar, followRedirects: false }).get('/afrekenen/');
   assert.strictEqual(blocked.status, 302, 'afrekenen kan pas als de aantallen kloppen');
   assert.match(blocked.location, /winkelwagen/);
-  await postForm(base, wholesale.client, '/winkel/winkelwagen/', { action: 'set', code: 'SPR', qty: '100' });
+  await postForm(base, wholesale.client, '/winkelwagen/', { action: 'set', code: 'SPR', qty: '100' });
   const placed = await postCheckout(base, wholesale.client, { name: 'Pieter', company: 'Groothandel Tuinzaken BV', email: 'pieter@groothandel.example', phone: '', street: '', postcode: '', city: '', note: '', shippingMethod: 'ophalen', country: 'NL', action: 'place', paymentMethod: 'rekening' });
   assert.strictEqual(placed.status, 303, placed.text.slice(0, 300));
   assert.match(placed.location, /bestelling\//);
-  const page = await wholesale.client.get('/winkel/groothandel/');
+  const page = await wholesale.client.get('/groothandel/');
   assert.match(page.text, /Eerder besteld/);
   const orderId = page.text.match(/name="orderId" value="([^"]+)"/)[1];
-  const again = await postForm(base, wholesale.client, '/winkel/groothandel/', { action: 'opnieuw', orderId });
+  const again = await postForm(base, wholesale.client, '/groothandel/', { action: 'opnieuw', orderId });
   assert.strictEqual(again.status, 303);
   assert.match(await cartHtml(wholesale.client), /value="100"/);
-  const unknown = await postForm(base, wholesale.client, '/winkel/groothandel/', { action: 'opnieuw', orderId: 'bestaat-niet' });
+  const unknown = await postForm(base, wholesale.client, '/groothandel/', { action: 'opnieuw', orderId: 'bestaat-niet' });
   assert.strictEqual(unknown.status, 200);
   assert.match(unknown.text, /niet gevonden/);
   const other = await shopper({ business: true, wholesale: true });
-  assert.match((await postForm(base, other.client, '/winkel/groothandel/', { action: 'opnieuw', orderId })).text, /niet gevonden/, 'een bestelling van een andere klant is niet te herhalen');
+  assert.match((await postForm(base, other.client, '/groothandel/', { action: 'opnieuw', orderId })).text, /niet gevonden/, 'een bestelling van een andere klant is niet te herhalen');
 });

@@ -77,7 +77,7 @@ async function setup() {
   const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor: () => ({ configured: () => false, send: async () => {} }) }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  const saved = await admin.put('/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
+  const saved = await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
     pickup: { enabled: true, label: 'Ophalen in Nunspeet', note: 'Ma-vr 8-17 uur' },
     dpd: { enabled: true, defaultWeightGrams: 1000, zones: [
       { country: 'NL', name: 'Nederland', freeFrom: 100, tiers: [{ upToGrams: 2000, price: 6.95 }, { upToGrams: 10000, price: 11.95 }] },
@@ -88,7 +88,7 @@ async function setup() {
   for (const item of [
     { code: 'LICHT', name: 'Licht artikel', onHand: 50, salePrice: 10, weightGrams: 400 },
     { code: 'ZWAAR', name: 'Zware pomp', onHand: 5, salePrice: 20, weightGrams: 12000 },
-  ]) assert.strictEqual((await admin.post('/api/stock/items', item)).status, 201);
+  ]) assert.strictEqual((await admin.post('/app/api/stock/items', item)).status, 201);
   let counter = 0;
   /**
    * Registreert een klant en geeft zijn client terug.
@@ -97,7 +97,7 @@ async function setup() {
   const shopper = async () => {
     counter += 1;
     const client = createClient(base);
-    await postForm(base, client, '/winkel/registreren/', { displayName: `Klant ${counter}`, email: `k${counter}@voorbeeld.nl`, password: PW, password2: PW, website: '' });
+    await postForm(base, client, '/registreren/', { displayName: `Klant ${counter}`, email: `k${counter}@voorbeeld.nl`, password: PW, password2: PW, website: '' });
     return client;
   };
   return { base, admin, vreemd: await createLogin(base, { password: PW })('vreemd', 'ander'), shopper };
@@ -112,14 +112,14 @@ async function setup() {
  * @returns {Promise<void>}
  */
 async function addToCart(base, client, code, qty) {
-  assert.strictEqual((await postForm(base, client, '/winkel/winkelwagen/', { action: 'add', code, qty: String(qty) })).status, 303);
+  assert.strictEqual((await postForm(base, client, '/winkelwagen/', { action: 'add', code, qty: String(qty) })).status, 303);
 }
 
 test('afrekenen: ophalen, DPD met tarief, gratis vanaf, te zwaar en ander land', async () => {
   const { base, admin, shopper } = await setup();
   const customer = await shopper();
   await addToCart(base, customer, 'LICHT', 2);
-  const page = await customer.get('/winkel/afrekenen/');
+  const page = await customer.get('/afrekenen/');
   assert.match(page.text, /Ophalen in Nunspeet/);
   assert.match(page.text, /Ma-vr 8-17 uur/);
   assert.match(page.text, /€ 6,95/);
@@ -130,25 +130,25 @@ test('afrekenen: ophalen, DPD met tarief, gratis vanaf, te zwaar en ander land',
   assert.match(page.text, /data-total="\d+(\.\d+)?"/);
   assert.match(page.text, /afrekenen\.js/);
   assert.match(page.text, /data-expected-total/);
-  const script = await customer.get('/winkel/assets/afrekenen.js');
+  const script = await customer.get('/assets/afrekenen.js');
   assert.strictEqual(script.status, 200);
   assert.match(script.text, /showChosenShipping/);
   assert.match(page.text, /data-shipping-options/, 'de verzendopties staan in een eigen onderdeel dat op de achtergrond wordt ververst');
   assert.match(script.text, /refreshTotals/, 'land en btw-nummer werken het totaal op de achtergrond bij');
   assert.match(script.text, /getAttribute\('action'\)/, 'form.action zou de knop met naam action teruggeven in plaats van het adres');
   // De achtergrondberekening stuurt alleen land, methode en btw-nummer en gebruikt alleen de onderdelen uit het antwoord.
-  const background = await postForm(base, customer, '/winkel/afrekenen/', { action: 'update', country: 'BE', shippingMethod: 'dpd' });
+  const background = await postForm(base, customer, '/afrekenen/', { action: 'update', country: 'BE', shippingMethod: 'dpd' });
   assert.strictEqual(background.status, 200);
   assert.match(background.text, /data-shipping-options/);
   assert.match(background.text, /value="\d+(\.\d+)?" data-expected-total/);
-  const be = await postForm(base, customer, '/winkel/afrekenen/', { ...FIELDS, action: 'update', country: 'BE' });
+  const be = await postForm(base, customer, '/afrekenen/', { ...FIELDS, action: 'update', country: 'BE' });
   assert.strictEqual(be.status, 200);
   assert.match(be.text, /€ 14,50/);
   // Ophalen: geen adres nodig, gratis.
   const pickup = await postCheckout(base, customer, { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'ophalen', country: 'NL', action: 'place' });
   assert.strictEqual(pickup.status, 303, pickup.text);
-  const pickupOrder = (await admin.get('/api/admin/web-orders')).body.items[0];
-  const pickupDetail = (await admin.get(`/api/admin/web-orders/${pickupOrder.id}`)).body.order;
+  const pickupOrder = (await admin.get('/app/api/admin/web-orders')).body.items[0];
+  const pickupDetail = (await admin.get(`/app/api/admin/web-orders/${pickupOrder.id}`)).body.order;
   assert.strictEqual(pickupDetail.total, 24.2);
   assert.strictEqual(pickupDetail.shipping.method, 'ophalen');
   assert.strictEqual(pickupDetail.address.street, '');
@@ -156,8 +156,8 @@ test('afrekenen: ophalen, DPD met tarief, gratis vanaf, te zwaar en ander land',
   await addToCart(base, customer, 'LICHT', 2);
   const dpd = await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'dpd', country: 'NL', action: 'place' });
   assert.strictEqual(dpd.status, 303, dpd.text);
-  const dpdOrder = (await admin.get('/api/admin/web-orders')).body.items.find((order) => order.id !== pickupOrder.id);
-  const dpdDetail = (await admin.get(`/api/admin/web-orders/${dpdOrder.id}`)).body.order;
+  const dpdOrder = (await admin.get('/app/api/admin/web-orders')).body.items.find((order) => order.id !== pickupOrder.id);
+  const dpdDetail = (await admin.get(`/app/api/admin/web-orders/${dpdOrder.id}`)).body.order;
   assert.strictEqual(dpdDetail.total, 31.15, '2 × 12,10 + 6,95 verzending');
   assert.deepStrictEqual([dpdDetail.shipping.price, dpdDetail.shipping.free, dpdDetail.shipping.weightGrams], [6.95, false, 800]);
   assert.strictEqual(dpdDetail.address.country, 'NL');
@@ -165,7 +165,7 @@ test('afrekenen: ophalen, DPD met tarief, gratis vanaf, te zwaar en ander land',
   await addToCart(base, customer, 'LICHT', 10);
   const free = await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'dpd', country: 'NL', action: 'place' });
   assert.strictEqual(free.status, 303);
-  const freeOrder = (await admin.get('/api/admin/web-orders')).body.items.find((order) => order.total === 121);
+  const freeOrder = (await admin.get('/app/api/admin/web-orders')).body.items.find((order) => order.total === 121);
   assert.ok(freeOrder, 'geen verzendkosten boven € 100');
   // Te zwaar voor DPD in België, een postcode die niet bij het land past en een onbekende methode.
   await addToCart(base, customer, 'ZWAAR', 1);
@@ -183,15 +183,15 @@ test('volgcode: bij verzonden of achteraf, alleen bij DPD; rechten en andere org
   await addToCart(base, customer, 'LICHT', 1);
   const placed = await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'dpd', country: 'NL', action: 'place' });
   assert.strictEqual(placed.status, 303);
-  const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
-  const tracking = `/api/admin/web-orders/${orderId}/tracking`;
+  const orderId = (await admin.get('/app/api/admin/web-orders')).body.items[0].id;
+  const tracking = `/app/api/admin/web-orders/${orderId}/tracking`;
   assert.strictEqual((await admin.post(tracking, { trackingCode: '015012345678' })).status, 409, 'nog niet verzonden');
-  const bad = await admin.post(`/api/admin/web-orders/${orderId}/status`, { status: 'verzonden', trackingCode: '<x>' });
+  const bad = await admin.post(`/app/api/admin/web-orders/${orderId}/status`, { status: 'verzonden', trackingCode: '<x>' });
   assert.strictEqual(bad.status, 400);
-  const shipped = await admin.post(`/api/admin/web-orders/${orderId}/status`, { status: 'verzonden', trackingCode: '015012345678' });
+  const shipped = await admin.post(`/app/api/admin/web-orders/${orderId}/status`, { status: 'verzonden', trackingCode: '015012345678' });
   assert.strictEqual(shipped.status, 200);
   assert.strictEqual(shipped.body.order.shipping.tracking.code, '015012345678');
-  const page = await customer.get(`/winkel/${placed.location.slice(3)}`);
+  const page = await customer.get(`/${placed.location.slice(3)}`);
   assert.match(page.text, /tracking\.dpd\.de\/status\/nl_NL\/parcel\/015012345678/);
   const changed = await admin.post(tracking, { trackingCode: 'ABCDEF123456' });
   assert.strictEqual(changed.body.order.shipping.tracking.code, 'ABCDEF123456');
@@ -202,17 +202,17 @@ test('volgcode: bij verzonden of achteraf, alleen bij DPD; rechten en andere org
   // Ophalen heeft geen volgcode.
   await addToCart(base, customer, 'LICHT', 1);
   await postCheckout(base, customer, { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'ophalen', action: 'place' });
-  const pickupId = (await admin.get('/api/admin/web-orders')).body.items.find((order) => order.id !== orderId).id;
-  await admin.post(`/api/admin/web-orders/${pickupId}/status`, { status: 'verzonden' });
-  assert.strictEqual((await admin.post(`/api/admin/web-orders/${pickupId}/tracking`, { trackingCode: '015012345678' })).status, 409);
+  const pickupId = (await admin.get('/app/api/admin/web-orders')).body.items.find((order) => order.id !== orderId).id;
+  await admin.post(`/app/api/admin/web-orders/${pickupId}/status`, { status: 'verzonden' });
+  assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${pickupId}/tracking`, { trackingCode: '015012345678' })).status, 409);
 });
 
 test('verzendinstelling: alleen de hoofdtenant en het gewicht van een artikel', async () => {
   const { admin, vreemd } = await setup();
-  const item = (await admin.get('/api/stock')).body.items.find((entry) => entry.code === 'ZWAAR');
+  const item = (await admin.get('/app/api/stock')).body.items.find((entry) => entry.code === 'ZWAAR');
   assert.strictEqual(item.weightGrams, 12000);
-  assert.strictEqual((await admin.put(`/api/stock/items/${item.id}`, { weightGrams: 9000 })).body.weightGrams, 9000);
-  assert.strictEqual((await admin.put(`/api/stock/items/${item.id}`, { weightGrams: -5 })).status, 400);
-  const own = await vreemd.put('/api/admin/settings', { shopShipping: { pickup: { enabled: false }, dpd: { enabled: false } } });
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${item.id}`, { weightGrams: 9000 })).body.weightGrams, 9000);
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${item.id}`, { weightGrams: -5 })).status, 400);
+  const own = await vreemd.put('/app/api/admin/settings', { shopShipping: { pickup: { enabled: false }, dpd: { enabled: false } } });
   assert.notStrictEqual(own.status, 200, 'een andere organisatie mag de webshopverzending niet instellen');
 });

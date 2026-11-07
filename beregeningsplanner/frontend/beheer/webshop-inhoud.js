@@ -63,7 +63,7 @@
    */
   function imageUrl(reference) {
     const [kind, name] = String(reference || '').split(':');
-    if (kind === 'asset' && name) return `../winkel/assets/${encodeURIComponent(name)}`;
+    if (kind === 'asset' && name) return `../../assets/${encodeURIComponent(name)}`;
     return kind === 'media' && name ? `${IMAGE_URL}${encodeURIComponent(name)}` : '';
   }
 
@@ -272,7 +272,7 @@
     const hasAbout = pages.some((page) => page.slug === 'over-ons');
     const legalButtons = Object.values(state.view.defaults.legal || {}).filter((legal) => !pages.some((page) => page.slug === legal.slug))
       .map((legal) => `<button class="btn" type="button" data-new="${esc(legal.slug)}">${esc(legal.title)} aanpassen</button>`).join(' ');
-    return `<p class="muted small">Vaste pagina's zoals Klantenservice of Verzending &amp; retour. Een pagina staat op <code>winkel/pagina/&lt;naam&gt;/</code> en kan in het menu en/of de voet komen. Pas na Publiceren zien bezoekers de pagina.</p>
+    return `<p class="muted small">Vaste pagina's zoals Klantenservice of Verzending &amp; retour. Een pagina staat op <code>/pagina/&lt;naam&gt;/</code> en kan in het menu en/of de voet komen. Pas na Publiceren zien bezoekers de pagina.</p>
       <div class="row sc-toolbar"><button class="btn primary" type="button" data-new="1">Nieuwe pagina</button>
       ${hasAbout ? '' : '<button class="btn" type="button" data-new="over-ons">Standaardpagina Over ons aanpassen</button>'} ${legalButtons}</div>
       <div class="tablewrap"><table class="grid"><thead><tr><th>Pagina</th><th>Stand</th><th>Laatst</th><th></th></tr></thead>
@@ -309,7 +309,7 @@
       <div class="row">
         ${textField('Titel', 'title', fields.title, { max: 120 })}
         <label>Naam in het adres<input data-slug="1" value="${esc(slug)}" maxlength="60" pattern="[a-z0-9][a-z0-9-]{1,58}[a-z0-9]" ${isNew && slug !== 'over-ons' && !(state.view.defaults.legal || {})[slug] ? '' : 'readonly'} placeholder="bijv. klantenservice">
-          <span class="hint">Kleine letters, cijfers en streepjes: winkel/pagina/<b>${esc(slug || 'naam')}</b>/</span></label>
+          <span class="hint">Kleine letters, cijfers en streepjes: /pagina/<b>${esc(slug || 'naam')}</b>/</span></label>
       </div>
       ${textField('Korte omschrijving (voor zoekmachines)', 'description', fields.description, { max: 200 })}
       <div class="row">
@@ -346,7 +346,7 @@
     if (!view.available) { root.innerHTML = `<div class="notice">${esc(view.message)}</div>`; return; }
     const tabs = [['site', 'Startpagina en gegevens'], ['menu', 'Menu'], ['pages', "Pagina's"], ['images', 'Afbeeldingen']];
     root.innerHTML = `${view.storefront ? '' : '<div class="notice small">De eigen webshop staat uit: bezoekers zien hem pas na het aanzetten bij <a href="#webshop">Webshop en WooCommerce</a>. Het voorbeeld werkt wel.</div>'}
-      <p class="muted small">Pas hier de teksten en afbeeldingen van <code>winkel/</code> aan. Wijzigingen blijven een concept totdat je op <b>Publiceren</b> klikt; met <b>Voorbeeld bekijken</b> zie je het concept zoals bezoekers het straks zien.</p>
+      <p class="muted small">Pas hier de teksten en afbeeldingen van de winkel (<code>/</code>) aan. Wijzigingen blijven een concept totdat je op <b>Publiceren</b> klikt; met <b>Voorbeeld bekijken</b> zie je het concept zoals bezoekers het straks zien.</p>
       <div class="sc-tabs" role="tablist">${tabs.map(([id, label]) => `<button type="button" role="tab" class="btn${state.tab === id ? ' primary' : ''}" aria-selected="${state.tab === id}" data-tab="${id}">${label}</button>`).join('')}</div>
       ${state.tab === 'site' ? siteTab() : state.tab === 'images' ? imagesTab() : state.tab === 'menu' ? '<div id="sc-menu"></div>' : (state.editing ? pageEditor() : pagesTab())}`;
     if (state.tab === 'menu') window.BeheerWebshopMenu.mount($('#sc-menu'), { view: state.view, api, adopt: menuAdopt, toast });
@@ -443,7 +443,7 @@
         try { await saveDraft(); } catch (error) { if (tab) tab.close(); throw error; }
         const slug = state.editing ? state.editing.slug : '';
         const previewPath = state.editing ? (slug === 'over-ons' ? 'over-ons/' : `pagina/${encodeURIComponent(slug)}/`) : '';
-        if (tab) tab.location.href = `../winkel/${previewPath}?voorbeeld=1`;
+        if (tab) tab.location.href = `../../${previewPath}?voorbeeld=1`;
         render();
         return;
       }

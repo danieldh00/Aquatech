@@ -1,12 +1,12 @@
 // HTML voor bestellen in de eigen webshop (storefront.js): winkelwagen,
 // afrekenen en de bevestiging van een bestelling. Server-side opgebouwd, zonder
-// scripts; alle adressen zijn relatief aan de pagina (/winkel/<pagina>/).
+// scripts; alle adressen zijn relatief aan de pagina (/<pagina>/).
 
 const { layout, escapeHtml, formatPrice } = require('./storefront-pages');
 
 /** Relatief pad van deze pagina's naar de shop-startpagina. */
 const ROOT = '../';
-/** Relatief pad van het besteldetail (/winkel/bestelling/<id>/) naar de shop-startpagina. */
+/** Relatief pad van het besteldetail (/bestelling/<id>/) naar de shop-startpagina. */
 const DETAIL_ROOT = '../../';
 /** Namen van de bestelstatussen voor het verloop (web-orders.js, STATUSES). */
 const STATUS_LABELS = { nieuw: 'Nieuw', verzonden: 'Verzonden', afgerond: 'Afgerond', geannuleerd: 'Geannuleerd' };

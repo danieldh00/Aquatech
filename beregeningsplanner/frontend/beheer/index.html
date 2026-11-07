@@ -256,8 +256,8 @@
       <section id="tab-webshop" class="tabpane" hidden>
         <p class="muted small">Koppel de webshop van je organisatie: de stuklijst in de planner, de Excel-export en nieuwe offertes gebruiken dan de naam, prijs en link uit de webshop. Een testomgeving heeft een eigen koppeling.</p>
         <form id="s-shop" class="card-form settings">
-          <h3>Eigen webshop (winkel/)</h3>
-          <label class="chk"><input type="checkbox" name="storefront"> <span>Eigen webshop tonen op <code>winkel/</code> (openbaar, alleen bekijken): voorraadartikelen met verkoopprijs en <i>Naar webshop</i> aan, zonder bestellen. Alleen voor de hoofdtenant.</span></label>
+          <h3>Eigen webshop (startpagina /)</h3>
+          <label class="chk"><input type="checkbox" name="storefront"> <span>Eigen webshop als startpagina tonen (<code>/</code>, openbaar); uit = bezoekers komen direct in de app (<code>/app/</code>). Toont voorraadartikelen met verkoopprijs en <i>Naar webshop</i> aan. Alleen voor de hoofdtenant.</span></label>
           <label class="chk"><input type="checkbox" name="shopOrdering"> <span>Bestellen in de webshop: winkelwagen en afrekenen voor ingelogde klanten (op rekening, of online betalen als dat hieronder aan staat). Uit = de knop <i>In winkelwagen</i> blijft uitgeschakeld. Bestellingen zie je onder <i>Verkoop &gt; Webshopbestellingen</i>. Alleen voor de hoofdtenant.</span></label>
           <label class="chk"><input type="checkbox" name="shopPlanner"> <span>Kopje <i>Planner</i> in de webshop: een bezoeker maakt met naam, e-mail en wachtwoord een klantaccount en gaat meteen door naar de planner. Uit = kopje verborgen en de pagina geweigerd. Alleen voor de hoofdtenant.</span></label>
           <div class="err" role="alert"></div>
@@ -286,7 +286,7 @@
             <input name="mollieApiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="test_… of live_…, leeg = ongewijzigd">
             <span class="muted small">Te vinden in je Mollie-dashboard onder Ontwikkelaars → API-sleutels. Begin met een <code>test_</code>-sleutel: dan is er geen echt geld mee gemoeid. De sleutel wordt versleuteld opgeslagen en nooit teruggestuurd naar de browser.</span>
           </div>
-          <label>Webadres van de webshop<input name="publicUrl" type="url" placeholder="https://aquatech.den-hollander.com/winkel/" spellcheck="false"></label>
+          <label>Webadres van de webshop<input name="publicUrl" type="url" placeholder="https://aquatech.den-hollander.com/" spellcheck="false"></label>
           <span class="muted small">Het openbare adres van de webshop, voor de terugkeer van de klant en de melding van Mollie (<code>mollie/webhook/…</code>). Moet vanaf internet bereikbaar zijn en met https beginnen.</span>
           <label>Op rekening bestellen<select name="onAccount">
             <option value="iedereen">Voor iedereen (naast online betalen)</option>

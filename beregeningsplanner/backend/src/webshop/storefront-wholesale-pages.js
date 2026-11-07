@@ -1,5 +1,5 @@
 // HTML van het groothandelsvenster van de eigen webshop (storefront.js,
-// /winkel/groothandel/): voor groothandelsklanten een snelbestellijst met alle
+// /groothandel/): voor groothandelsklanten een snelbestellijst met alle
 // artikelen en varianten (een aantal per regel, één knop voor de hele lijst), een
 // vak om artikelcodes met aantallen te plakken (bijvoorbeeld uit Excel) en de
 // laatste bestellingen om opnieuw te bestellen. Server-side opgebouwd; het script
@@ -8,7 +8,7 @@
 const { layout, escapeHtml, formatPrice } = require('./storefront-pages');
 const Wholesale = require('./wholesale');
 
-/** Relatief pad van deze pagina (/winkel/groothandel/) naar de shop-startpagina. */
+/** Relatief pad van deze pagina (/groothandel/) naar de shop-startpagina. */
 const ROOT = '../';
 
 /**

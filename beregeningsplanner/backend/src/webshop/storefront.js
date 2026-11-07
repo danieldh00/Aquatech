@@ -2,7 +2,7 @@
 // pagina's voor de artikelen uit de voorraad: startpagina, hoofdcategorie
 // (/groep/), categorie, zoeken (/zoeken/) en productpagina (/product/<slug>/, zoals WooCommerce). Geen winkelwagen
 // of betaling; wel inloggen en registreren (accounts.js: dezelfde accounts als de planner). De shop is een Express-router die op een eigen
-// domein of onder een pad (bijv. /winkel/) kan worden gemonteerd en alleen
+// domein of onder een pad (bijv. de hoofdmap /) kan worden gemonteerd en alleen
 // de gegevenslaag (storefront-data.js) nodig heeft; daardoor later ook als
 // eigen container te draaien. Staat uit tot de instelling `storefront` aan is.
 const fs = require('fs');
@@ -67,7 +67,7 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 /**
  * Maakt de router van de webshop.
  * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
- * @returns {Function} Express-router, te monteren met app.use('/winkel', router).
+ * @returns {Function} Express-router, te monteren met app.use('/', router) (zie server.js).
  */
 function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onReturn = () => {} }) {
   const router = express.Router();
@@ -264,7 +264,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
      * @param {string} fallback Adres als er geen bestemming is.
      * @returns {string} Het relatieve adres.
      */
-    const destination = (next, fallback) => (next === 'planner' && plannerOn() ? '../../beregening/' : next === 'afrekenen' ? '../afrekenen/' : fallback);
+    const destination = (next, fallback) => (next === 'planner' && plannerOn() ? '../app/beregening/' : next === 'afrekenen' ? '../afrekenen/' : fallback);
     router.get('/inloggen', (req, res) => {
       if (withSlash(req, res)) return;
       const next = nextOf(req.query.volgende);
@@ -283,7 +283,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const out = await accounts.login(req, res, { login: req.body?.login, password: req.body?.password });
         const next = nextOf(req.body?.volgende);
         if (out.error) return sendWithGroups(req, res, out.status, (groups) => loginPage({ error: out.error, login: String(req.body?.login ?? '').slice(0, 200), next }, groups));
-        res.redirect(303, out.user.must_change_password ? '../../wachtwoord' : destination(next, '../account/'));
+        res.redirect(303, out.user.must_change_password ? '../app/wachtwoord' : destination(next, '../account/'));
       } catch (error) { next(error); }
     });
     router.post('/registreren', form, async (req, res, next) => {
@@ -300,7 +300,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     router.get('/planner', (req, res) => {
       if (withSlash(req, res)) return;
       if (!plannerOn()) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../', groups));
-      if (accounts.viewer(req)) return res.redirect(302, '../../beregening/');
+      if (accounts.viewer(req)) return res.redirect(302, '../app/beregening/');
       sendWithGroups(req, res, 200, (groups) => plannerPage({}, groups));
     });
     router.post('/planner', form, async (req, res, next) => {
@@ -310,7 +310,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const out = await accounts.register(req, res, { ...(req.body || {}), password2: undefined });
         if (out.skipped) return res.redirect(303, '../');
         if (out.error) return sendWithGroups(req, res, out.status, (groups) => plannerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200) }, groups));
-        res.redirect(303, '../../beregening/');
+        res.redirect(303, '../app/beregening/');
       } catch (error) { next(error); }
     });
     router.post('/uitloggen', (req, res) => {
