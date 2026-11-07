@@ -104,7 +104,7 @@ function createClient(baseUrl, { jar = new Map(), emptyJsonBody = true, followRe
      * @param {string} [tenant] Organisatiecode (leeg = hoofdtenant).
      * @returns {Promise<object>} Het antwoord.
      */
-    login: (username, password, tenant = '') => request('POST', '/api/auth/login', { username, password, tenant }),
+    login: (username, password, tenant = '') => request('POST', '/app/api/auth/login', { username, password, tenant }),
   };
 }
 
@@ -138,7 +138,7 @@ function createLogin(baseUrl, { password, extraBody = {}, organizationField = 't
    */
   return async function loginAs(username, organization) {
     const client = createClient(baseUrl, clientOptions);
-    const response = await client.post('/api/auth/login', { username, password, ...extraBody, [organizationField]: organization });
+    const response = await client.post('/app/api/auth/login', { username, password, ...extraBody, [organizationField]: organization });
     assert.strictEqual(response.status, 200, JSON.stringify(response.body));
     return client;
   };
@@ -171,9 +171,9 @@ async function postForm(base, client, urlPath, fields, headers = {}) {
  * @returns {Promise<{ status: number, location: string, text: string }>} Het antwoord van het plaatsen.
  */
 async function postCheckout(base, client, fields, headers = {}) {
-  const overview = await postForm(base, client, '/winkel/afrekenen/', { ...fields, action: 'update' }, headers);
+  const overview = await postForm(base, client, '/afrekenen/', { ...fields, action: 'update' }, headers);
   const shown = overview.status === 200 ? overview.text.match(/name="expectedTotal" value="([^"]+)"/) : null;
-  return postForm(base, client, '/winkel/afrekenen/', { terms: 'ja', ...fields, ...(shown ? { expectedTotal: shown[1] } : {}) }, headers);
+  return postForm(base, client, '/afrekenen/', { terms: 'ja', ...fields, ...(shown ? { expectedTotal: shown[1] } : {}) }, headers);
 }
 
 module.exports = { createClient, storeCookies, listen, createLogin, postForm, postCheckout };

@@ -127,38 +127,41 @@ const lines = [{ id: 'a', section: 'materiaal', description: 'Sproeier', qty: 4,
  * @returns {Promise<object>} De werkorder.
  */
 async function workOrder(client) {
-  const quote = (await client.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen' }, lines } })).body;
-  await client.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
-  return (await client.post('/api/workorders', { quoteId: quote.id })).body;
+  const quote = (await client.post('/app/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen' }, lines } })).body;
+  await client.put(`/app/api/quotes/${quote.id}`, { status: 'akkoord' });
+  return (await client.post('/app/api/workorders', { quoteId: quote.id })).body;
 }
 
 test('app: manifest, service worker en iconen zonder inloggen, zonder gegevens', async () => {
   const { server, base } = await setup();
   try {
     const anon = createClient(base);
-    const man = await anon.get('/manifest.json');
+    const man = await anon.get('/app/manifest.json');
     assert.strictEqual(man.status, 200);
     assert.strictEqual(man.body.start_url, './', 'relatief (padprefix achter een proxy)');
     assert.strictEqual(man.body.scope, './');
     assert.strictEqual(man.body.display, 'standalone');
     for (const icon of man.body.icons) {
       assert.ok(!icon.src.startsWith('/'), icon.src);
-      const response = await fetch(`${base}/${icon.src}`);
+      const response = await fetch(`${base}/app/${icon.src}`);
       assert.strictEqual(response.status, 200, icon.src);
       assert.match(response.headers.get('content-type'), /image\/png/);
     }
     assert.ok(man.body.icons.some((i) => i.purpose === 'maskable'));
-    const sw = await anon.get('/sw.js');
+    const sw = await anon.get('/app/sw.js');
     assert.strictEqual(sw.status, 200);
     assert.match(sw.headers.get('content-type'), /javascript/);
     assert.match(sw.headers.get('cache-control'), /no-cache/, 'nieuwe versie altijd ophalen');
     assert.match(sw.text, /importScripts\(`shared\/offline-core\.js/);
-    assert.strictEqual((await anon.get('/shared/offline-core.js')).status, 200);
-    assert.strictEqual((await anon.get('/shared/icons/apple-touch-icon.png')).status, 200);
+    // De oude worker met bereik / ruimt zichzelf op via /sw.js.
+    const cleanup = await anon.get('/sw.js');
+    assert.match(cleanup.text, /unregister\(\)/);
+    assert.strictEqual((await anon.get('/app/shared/offline-core.js')).status, 200);
+    assert.strictEqual((await anon.get('/app/shared/icons/apple-touch-icon.png')).status, 200);
     // Andere bestanden blijven achter de login.
-    assert.strictEqual((await anon.get('/shared/offline.js')).status, 401);
-    assert.strictEqual((await anon.get('/werkorders/werkorders.js')).status, 401);
-    assert.strictEqual((await anon.get('/shared/icons/../roles.js')).status, 401);
+    assert.strictEqual((await anon.get('/app/shared/offline.js')).status, 401);
+    assert.strictEqual((await anon.get('/app/werkorders/werkorders.js')).status, 401);
+    assert.strictEqual((await anon.get('/app/shared/icons/../roles.js')).status, 401);
   } finally {
     server.close();
   }
@@ -190,23 +193,23 @@ test('Idempotency-Key: herhaalde foto-upload wordt niet dubbel opgeslagen, per g
     const wo = await workOrder(kees);
     const photo = { image: sitePhotoPng('voor', 1).toString('base64'), kind: 'voor' };
     const key = { 'Idempotency-Key': 'f0e1d2c3-b4a5-4697-8899-aabbccddeeff' };
-    const first = await kees.post(`/api/workorders/${wo.id}/photos`, photo, key);
+    const first = await kees.post(`/app/api/workorders/${wo.id}/photos`, photo, key);
     assert.strictEqual(first.status, 201);
-    const second = await kees.post(`/api/workorders/${wo.id}/photos`, photo, key);
+    const second = await kees.post(`/app/api/workorders/${wo.id}/photos`, photo, key);
     assert.strictEqual(second.status, 201);
     assert.strictEqual(second.body.id, first.body.id, 'zelfde antwoord');
     assert.strictEqual(second.headers.get('idempotent-replayed'), 'true');
     // Dezelfde sleutel van een andere gebruiker is een ander verzoek.
-    const other = await baas.post(`/api/workorders/${wo.id}/photos`, photo, key);
+    const other = await baas.post(`/app/api/workorders/${wo.id}/photos`, photo, key);
     assert.notStrictEqual(other.body.id, first.body.id);
     // Zonder sleutel gewoon opnieuw.
-    await kees.post(`/api/workorders/${wo.id}/photos`, photo);
-    assert.strictEqual((await kees.get(`/api/workorders/${wo.id}/photos`)).body.items.length, 3);
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, photo, { 'Idempotency-Key': 'te kort' })).status, 400);
+    await kees.post(`/app/api/workorders/${wo.id}/photos`, photo);
+    assert.strictEqual((await kees.get(`/app/api/workorders/${wo.id}/photos`)).body.items.length, 3);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/photos`, photo, { 'Idempotency-Key': 'te kort' })).status, 400);
     // Een geweigerd verzoek wordt niet onthouden.
     const bad = { 'Idempotency-Key': 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' };
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: 'eA==' }, bad)).status, 400);
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, photo, bad)).status, 201);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/photos`, { image: 'eA==' }, bad)).status, 400);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/photos`, photo, bad)).status, 201);
   } finally {
     server.close();
   }
@@ -262,7 +265,7 @@ test('Idempotency-Key: begrensd in aantal en tijd, lopend verzoek geeft in_progr
        */
       on(event, handler) { this.handlers[event] = handler; },
     };
-    const req = { method: 'POST', baseUrl: '/api', path: '/x', get: (name) => (name === 'Idempotency-Key' ? key : undefined) };
+    const req = { method: 'POST', baseUrl: '/app/api', path: '/x', get: (name) => (name === 'Idempotency-Key' ? key : undefined) };
     middleware(req, res, () => {
       if (finish) { res.status(201).json({ n: Math.random() }); res.handlers.finish(); } else resolve({ next: true, res });
     });
@@ -292,24 +295,24 @@ test('werkorder: offline wijziging op een oude basis geeft 409 conflict, met de 
     const wo = await workOrder(kees);
     const base = wo.updatedAt;
     await new Promise((resolve) => setTimeout(resolve, 5));
-    const office = await baas.put(`/api/workorders/${wo.id}`, { data: { ...wo.data, instructions: 'Kantoor' } });
+    const office = await baas.put(`/app/api/workorders/${wo.id}`, { data: { ...wo.data, instructions: 'Kantoor' } });
     assert.strictEqual(office.status, 200);
     assert.notStrictEqual(office.body.updatedAt, base);
 
-    const stale = await kees.put(`/api/workorders/${wo.id}`, { data: { ...wo.data, siteNotes: 'Hond' } }, { [HEADERS.ifBase]: base });
+    const stale = await kees.put(`/app/api/workorders/${wo.id}`, { data: { ...wo.data, siteNotes: 'Hond' } }, { [HEADERS.ifBase]: base });
     assert.strictEqual(stale.status, 409);
     assert.strictEqual(stale.body.error, 'conflict');
     assert.strictEqual(stale.body.updatedAt, office.body.updatedAt);
-    assert.strictEqual((await kees.get(`/api/workorders/${wo.id}`)).body.data.instructions, 'Kantoor', 'niets overschreven');
+    assert.strictEqual((await kees.get(`/app/api/workorders/${wo.id}`)).body.data.instructions, 'Kantoor', 'niets overschreven');
 
-    const fresh = await kees.put(`/api/workorders/${wo.id}`, { data: { ...office.body.data, siteNotes: 'Hond' } }, { [HEADERS.ifBase]: office.body.updatedAt });
+    const fresh = await kees.put(`/app/api/workorders/${wo.id}`, { data: { ...office.body.data, siteNotes: 'Hond' } }, { [HEADERS.ifBase]: office.body.updatedAt });
     assert.strictEqual(fresh.status, 200);
     assert.strictEqual(fresh.body.data.siteNotes, 'Hond');
     // Zonder kop (gewoon online opslaan) blijft het zoals het was.
-    assert.strictEqual((await kees.put(`/api/workorders/${wo.id}`, { data: fresh.body.data }, { [HEADERS.base]: 'oud' })).status, 200);
+    assert.strictEqual((await kees.put(`/app/api/workorders/${wo.id}`, { data: fresh.body.data }, { [HEADERS.base]: 'oud' })).status, 200);
     // Rechten en tenant blijven gelden.
-    assert.strictEqual((await klaas.put(`/api/workorders/${wo.id}`, { data: fresh.body.data }, { [HEADERS.ifBase]: 'x' })).status, 403);
-    assert.strictEqual((await kees.put('/api/workorders/bestaat-niet', { data: fresh.body.data }, { [HEADERS.ifBase]: 'x' })).status, 404);
+    assert.strictEqual((await klaas.put(`/app/api/workorders/${wo.id}`, { data: fresh.body.data }, { [HEADERS.ifBase]: 'x' })).status, 403);
+    assert.strictEqual((await kees.put('/app/api/workorders/bestaat-niet', { data: fresh.body.data }, { [HEADERS.ifBase]: 'x' })).status, 404);
   } finally {
     server.close();
   }

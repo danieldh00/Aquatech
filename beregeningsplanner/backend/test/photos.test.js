@@ -166,33 +166,33 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
   const { db, server, base, as } = await setup();
   try {
     const kees = await as('kees'), baas = await as('baas'), klaas = await as('klaas'), piet = await as('piet');
-    const klaasId = (await klaas.get('/api/me')).body.user.id;
-    const quote = (await kees.post('/api/quotes', { data: { title: 'Aanleg beregening', customer: { name: 'Fam. Klaassen', address: 'Tuinstraat 1\n8071 AB Nunspeet' }, lines } })).body;
-    await kees.put(`/api/quotes/${quote.id}`, { status: 'akkoord', customerId: klaasId });
-    const wo = (await kees.post('/api/workorders', { quoteId: quote.id })).body;
+    const klaasId = (await klaas.get('/app/api/me')).body.user.id;
+    const quote = (await kees.post('/app/api/quotes', { data: { title: 'Aanleg beregening', customer: { name: 'Fam. Klaassen', address: 'Tuinstraat 1\n8071 AB Nunspeet' }, lines } })).body;
+    await kees.put(`/app/api/quotes/${quote.id}`, { status: 'akkoord', customerId: klaasId });
+    const wo = (await kees.post('/app/api/workorders', { quoteId: quote.id })).body;
     // Tweede klant zonder account (dossier op naam).
-    const q2 = (await kees.post('/api/quotes', { data: { title: 'Druppelslang border', customer: { name: 'Bakker' }, lines } })).body;
-    await kees.put(`/api/quotes/${q2.id}`, { status: 'akkoord' });
-    const wo2 = (await kees.post('/api/workorders', { quoteId: q2.id })).body;
+    const q2 = (await kees.post('/app/api/quotes', { data: { title: 'Druppelslang border', customer: { name: 'Bakker' }, lines } })).body;
+    await kees.put(`/app/api/quotes/${q2.id}`, { status: 'akkoord' });
+    const wo2 = (await kees.post('/app/api/workorders', { quoteId: q2.id })).body;
 
     const jpeg = fakeJpeg();
     const thumb = sitePhotoPng('oplevering', 2, 60, 40);
-    assert.strictEqual((await klaas.post(`/api/workorders/${wo.id}/photos`, { image: jpeg.toString('base64') })).status, 403, 'klant uploadt niet');
-    const up = await kees.post(`/api/workorders/${wo.id}/photos`, { image: `data:image/jpeg;base64,${jpeg.toString('base64')}`, thumb: thumb.toString('base64'),
+    assert.strictEqual((await klaas.post(`/app/api/workorders/${wo.id}/photos`, { image: jpeg.toString('base64') })).status, 403, 'klant uploadt niet');
+    const up = await kees.post(`/app/api/workorders/${wo.id}/photos`, { image: `data:image/jpeg;base64,${jpeg.toString('base64')}`, thumb: thumb.toString('base64'),
       kind: 'oplevering', caption: 'Gazon klaar', takenAt: '2026-05-01T10:00:00Z' });
     assert.strictEqual(up.status, 201);
     assert.deepStrictEqual([up.body.kind, up.body.caption, up.body.width, up.body.height, up.body.customerVisible, up.body.uploadedBy.displayName],
       ['oplevering', 'Gazon klaar', 640, 480, true, 'Kees']);
     assert.strictEqual(up.body.size, cleanJpeg(jpeg).body.length);
-    const hidden = (await kees.post(`/api/workorders/${wo.id}/photos`, { image: sitePhotoPng('tijdens', 1).toString('base64'), kind: 'tijdens', customerVisible: false })).body;
+    const hidden = (await kees.post(`/app/api/workorders/${wo.id}/photos`, { image: sitePhotoPng('tijdens', 1).toString('base64'), kind: 'tijdens', customerVisible: false })).body;
     assert.strictEqual(hidden.mime, 'image/png');
 
     // Ongeldige invoer.
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: Buffer.from('<svg/>').toString('base64') })).status, 400);
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: 'niet base64!' })).status, 400);
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: jpeg.toString('base64'), thumb: Buffer.from('x'.repeat(40)).toString('base64') })).status, 400);
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: jpeg.toString('base64'), thumb: sitePhotoPng('te breed', 1, 1100, 40).toString('base64') })).status, 400, 'miniatuur te groot');
-    assert.strictEqual((await kees.post('/api/workorders/bestaat-niet/photos', { image: jpeg.toString('base64') })).status, 404);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/photos`, { image: Buffer.from('<svg/>').toString('base64') })).status, 400);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/photos`, { image: 'niet base64!' })).status, 400);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/photos`, { image: jpeg.toString('base64'), thumb: Buffer.from('x'.repeat(40)).toString('base64') })).status, 400);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/photos`, { image: jpeg.toString('base64'), thumb: sitePhotoPng('te breed', 1, 1100, 40).toString('base64') })).status, 400, 'miniatuur te groot');
+    assert.strictEqual((await kees.post('/app/api/workorders/bestaat-niet/photos', { image: jpeg.toString('base64') })).status, 404);
 
     // Versleuteld in de database: geen JPEG/PNG-bytes in de rij.
     const row = db.prepare('SELECT image, thumb FROM work_order_photos WHERE id = ?').get(up.body.id);
@@ -200,68 +200,68 @@ test('API: foto\'s bij een werkorder, klant ziet alleen zichtbare foto\'s van zi
     assert.match(row.thumb, /^f1:/);
 
     // Ophalen door de ploeg: zonder EXIF, en de miniatuur.
-    const img = await kees.get(`/api/workorders/${wo.id}/photos/${up.body.id}`);
+    const img = await kees.get(`/app/api/workorders/${wo.id}/photos/${up.body.id}`);
     assert.strictEqual(img.status, 200);
     assert.strictEqual(img.type, 'image/jpeg');
     assert.ok(!img.raw.includes('GPSLatitude'));
     assert.deepStrictEqual(img.raw, cleanJpeg(jpeg).body);
-    const th = await kees.get(`/api/workorders/${wo.id}/photos/${up.body.id}?thumb=1`);
+    const th = await kees.get(`/app/api/workorders/${wo.id}/photos/${up.body.id}?thumb=1`);
     assert.strictEqual(th.type, 'image/png');
     assert.deepStrictEqual(th.raw, thumb);
-    assert.strictEqual((await kees.get(`/api/workorders/${wo2.id}/photos/${up.body.id}`)).status, 404, 'foto hoort bij een andere werkorder');
+    assert.strictEqual((await kees.get(`/app/api/workorders/${wo2.id}/photos/${up.body.id}`)).status, 404, 'foto hoort bij een andere werkorder');
 
-    const list = (await kees.get(`/api/workorders/${wo.id}/photos`)).body;
+    const list = (await kees.get(`/app/api/workorders/${wo.id}/photos`)).body;
     assert.deepStrictEqual(list.items.map((photo) => photo.id), [up.body.id, hidden.id]);
     assert.strictEqual(list.items[0].url, `api/workorders/${wo.id}/photos/${up.body.id}`);
 
     // Klantportaal: alleen zichtbare foto's van de eigen werkorder.
-    assert.strictEqual((await klaas.get(`/api/portal/photos/${up.body.id}`)).status, 200);
-    assert.strictEqual((await klaas.get(`/api/portal/photos/${up.body.id}?thumb=1`)).type, 'image/png');
-    assert.strictEqual((await klaas.get(`/api/portal/photos/${hidden.id}`)).status, 404, 'niet zichtbaar gezet');
-    assert.strictEqual((await piet.get(`/api/portal/photos/${up.body.id}`)).status, 404, 'andere klant');
-    assert.strictEqual((await createClient(base).get(`/api/portal/photos/${up.body.id}`)).status, 401);
-    assert.strictEqual((await baas.get(`/api/portal/photos/${hidden.id}`)).status, 200, 'medewerker ziet alles');
+    assert.strictEqual((await klaas.get(`/app/api/portal/photos/${up.body.id}`)).status, 200);
+    assert.strictEqual((await klaas.get(`/app/api/portal/photos/${up.body.id}?thumb=1`)).type, 'image/png');
+    assert.strictEqual((await klaas.get(`/app/api/portal/photos/${hidden.id}`)).status, 404, 'niet zichtbaar gezet');
+    assert.strictEqual((await piet.get(`/app/api/portal/photos/${up.body.id}`)).status, 404, 'andere klant');
+    assert.strictEqual((await createClient(base).get(`/app/api/portal/photos/${up.body.id}`)).status, 401);
+    assert.strictEqual((await baas.get(`/app/api/portal/photos/${hidden.id}`)).status, 200, 'medewerker ziet alles');
     // Offerte terug naar concept of verwijderd: dan ook geen losse foto's meer (zelfde regel als het dossier).
     db.prepare("UPDATE quotes SET status = 'concept' WHERE id = ?").run(quote.id);
-    assert.strictEqual((await klaas.get(`/api/portal/photos/${up.body.id}`)).status, 404, 'offerte is concept');
+    assert.strictEqual((await klaas.get(`/app/api/portal/photos/${up.body.id}`)).status, 404, 'offerte is concept');
     db.prepare("UPDATE quotes SET status = 'akkoord', deleted_at = ? WHERE id = ?").run(new Date().toISOString(), quote.id);
-    assert.strictEqual((await klaas.get(`/api/portal/photos/${up.body.id}`)).status, 404, 'offerte is verwijderd');
+    assert.strictEqual((await klaas.get(`/app/api/portal/photos/${up.body.id}`)).status, 404, 'offerte is verwijderd');
     db.prepare('UPDATE quotes SET deleted_at = NULL WHERE id = ?').run(quote.id);
-    assert.strictEqual((await klaas.get(`/api/portal/photos/${up.body.id}`)).status, 200);
-    assert.strictEqual((await klaas.get(`/api/workorders/${wo.id}/photos`)).status, 403);
+    assert.strictEqual((await klaas.get(`/app/api/portal/photos/${up.body.id}`)).status, 200);
+    assert.strictEqual((await klaas.get(`/app/api/workorders/${wo.id}/photos`)).status, 403);
     // Het opleverdossier in het portaal toont alleen de zichtbare foto's, met de portaal-URL.
-    const pw = (await klaas.get(`/api/portal/workorders/${wo.id}`)).body;
+    const pw = (await klaas.get(`/app/api/portal/workorders/${wo.id}`)).body;
     assert.deepStrictEqual(pw.photos.map((photo) => [photo.id, photo.url]), [[up.body.id, `api/portal/photos/${up.body.id}`]]);
     assert.ok(!('uploadedBy' in pw.photos[0]), 'geen medewerkersnaam naar de klant');
 
     // Wijzigen: zichtbaar zetten, bijschrift, soort.
-    const ch = await kees.patch(`/api/workorders/${wo.id}/photos/${hidden.id}`, { customerVisible: true, caption: 'Leidingwerk', kind: 'onzin' });
+    const ch = await kees.patch(`/app/api/workorders/${wo.id}/photos/${hidden.id}`, { customerVisible: true, caption: 'Leidingwerk', kind: 'onzin' });
     assert.deepStrictEqual([ch.body.customerVisible, ch.body.caption, ch.body.kind], [true, 'Leidingwerk', 'tijdens']);
-    assert.strictEqual((await klaas.get(`/api/portal/photos/${hidden.id}`)).status, 200);
+    assert.strictEqual((await klaas.get(`/app/api/portal/photos/${hidden.id}`)).status, 200);
 
     // Dossiers: één per klant (account of naam).
-    await kees.put(`/api/workorders/${wo.id}`, { status: 'gereed', data: { ...wo.data, report: { notes: 'Alles werkt', completedOn: '2026-05-02', signedBy: 'K. Klaassen' } } });
-    assert.strictEqual((await klaas.get('/api/dossiers')).status, 403);
-    const dossiers = (await kees.get('/api/dossiers')).body.items;
+    await kees.put(`/app/api/workorders/${wo.id}`, { status: 'gereed', data: { ...wo.data, report: { notes: 'Alles werkt', completedOn: '2026-05-02', signedBy: 'K. Klaassen' } } });
+    assert.strictEqual((await klaas.get('/app/api/dossiers')).status, 403);
+    const dossiers = (await kees.get('/app/api/dossiers')).body.items;
     assert.strictEqual(dossiers.length, 2);
     const accountDossier = dossiers.find((dossier) => dossier.account);
     assert.deepStrictEqual([accountDossier.key, accountDossier.name, accountDossier.installations, accountDossier.completed, accountDossier.photos, accountDossier.lastCompletedOn], [`a-${klaasId}`, 'Fam. Klaassen', 1, 1, 2, '2026-05-02']);
     const nameDossier = dossiers.find((dossier) => !dossier.account);
     assert.match(nameDossier.key, /^n-[0-9a-f]{16}$/);
-    const detail = (await kees.get(`/api/dossiers/${encodeURIComponent(accountDossier.key)}`)).body;
+    const detail = (await kees.get(`/app/api/dossiers/${encodeURIComponent(accountDossier.key)}`)).body;
     assert.strictEqual(detail.customer.name, 'Fam. Klaassen');
     assert.deepStrictEqual(detail.addresses, ['Tuinstraat 1, 8071 AB Nunspeet']);
     assert.strictEqual(detail.installations[0].report.signedBy, 'K. Klaassen');
     assert.strictEqual(detail.installations[0].photos.length, 2);
     assert.deepStrictEqual(detail.installations[0].materials.map((material) => material.description), ['Sproeier']);
     assert.deepStrictEqual(detail.quotes.map((x) => x.number), [quote.number]);
-    assert.strictEqual((await kees.get(`/api/dossiers/${nameDossier.key}`)).body.quotes.length, 1);
-    assert.strictEqual((await kees.get('/api/dossiers/n-0000000000000000')).status, 404);
+    assert.strictEqual((await kees.get(`/app/api/dossiers/${nameDossier.key}`)).body.quotes.length, 1);
+    assert.strictEqual((await kees.get('/app/api/dossiers/n-0000000000000000')).status, 404);
 
     // Verwijderen; definitief wissen van de werkorder neemt de foto's mee.
-    assert.strictEqual((await kees.del(`/api/workorders/${wo.id}/photos/${up.body.id}`)).status, 200);
-    assert.strictEqual((await kees.get(`/api/workorders/${wo.id}/photos/${up.body.id}`)).status, 404);
-    assert.strictEqual((await baas.del(`/api/admin/workorders/${wo.id}`)).status, 200);
+    assert.strictEqual((await kees.del(`/app/api/workorders/${wo.id}/photos/${up.body.id}`)).status, 200);
+    assert.strictEqual((await kees.get(`/app/api/workorders/${wo.id}/photos/${up.body.id}`)).status, 404);
+    assert.strictEqual((await baas.del(`/app/api/admin/workorders/${wo.id}`)).status, 200);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM work_order_photos').get().n, 0);
     const audit = db.prepare("SELECT action FROM audit WHERE action LIKE 'foto_%'").all().map((row) => row.action);
     assert.ok(audit.includes('foto_toegevoegd') && audit.includes('foto_verwijderd'));
@@ -274,20 +274,20 @@ test('API: maximaal aantal foto\'s per werkorder en grote foto via de eigen limi
   const { db, server, as } = await setup();
   try {
     const kees = await as('kees');
-    const quote = (await kees.post('/api/quotes', { data: { title: 'X', customer: { name: 'Y' }, lines } })).body;
-    await kees.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
-    const wo = (await kees.post('/api/workorders', { quoteId: quote.id })).body;
+    const quote = (await kees.post('/app/api/quotes', { data: { title: 'X', customer: { name: 'Y' }, lines } })).body;
+    await kees.put(`/app/api/quotes/${quote.id}`, { status: 'akkoord' });
+    const wo = (await kees.post('/app/api/workorders', { quoteId: quote.id })).body;
     // ~2 MB: groter dan de 1 MB van de werkorder-API, past binnen de fotolimiet.
     const big = Buffer.concat([fakeJpeg({ exif: false }).subarray(0, -2), Buffer.alloc(2 * 1024 * 1024, 7), Buffer.from([0xff, 0xd9])]);
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: big.toString('base64') })).status, 201);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/photos`, { image: big.toString('base64') })).status, 201);
     const tooBig = Buffer.concat([big, Buffer.alloc(3 * 1024 * 1024)]);
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/photos`, { image: tooBig.toString('base64') })).status, 413);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/photos`, { image: tooBig.toString('base64') })).status, 413);
     const id = db.prepare('SELECT id FROM work_order_photos').get().id;
     const row = db.prepare('SELECT * FROM work_order_photos WHERE id = ?').get(id);
     const ins = db.prepare(`INSERT INTO work_order_photos (id, tenant_id, work_order_id, uploaded_by, kind, caption, customer_visible, mime, width, height, size, taken_at, image, thumb, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (let i = 0; i < 99; i++) ins.run(`x${i}`, row.tenant_id, row.work_order_id, null, 'voor', '', 1, row.mime, 1, 1, 1, null, 'f1:a:b:c', 'f1:a:b:c', row.created_at);
-    const response = await kees.post(`/api/workorders/${wo.id}/photos`, { image: fakeJpeg().toString('base64') });
+    const response = await kees.post(`/app/api/workorders/${wo.id}/photos`, { image: fakeJpeg().toString('base64') });
     assert.strictEqual(response.status, 409);
     assert.strictEqual(response.body.error, 'too_many_photos');
   } finally {

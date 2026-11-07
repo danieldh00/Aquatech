@@ -148,29 +148,29 @@ test('webshopbestellingen: factuur + debiteur, definitief, betaald, automatisch 
   try {
     const baas = await as('baas');
     // Nog niet aangezet.
-    assert.strictEqual((await baas.post('/api/invoices/shop-orders/sync')).status, 409);
+    assert.strictEqual((await baas.post('/app/api/invoices/shop-orders/sync')).status, 409);
     // Webshop koppelen (REST, voorraad gaat niet naar de webshop) en ophalen aanzetten vanaf 1 oktober.
-    assert.strictEqual((await baas.put('/api/admin/shop', { url: 'http://shop.test', mode: 'rest', consumerKey: 'ck_test_1234567890', consumerSecret: 'cs_test_1234567890' })).status, 200);
-    const conf = (await baas.get('/api/invoices/settings')).body;
+    assert.strictEqual((await baas.put('/app/api/admin/shop', { url: 'http://shop.test', mode: 'rest', consumerKey: 'ck_test_1234567890', consumerSecret: 'cs_test_1234567890' })).status, 200);
+    const conf = (await baas.get('/app/api/invoices/settings')).body;
     assert.strictEqual(conf.shop.rest, true);
     assert.strictEqual(conf.settings.shopOrders.enabled, false);
-    const put = await baas.put('/api/invoices/settings', { ...conf.settings, autoSend: true, debtorStart: 5000, shopOrders: { enabled: true, status: 'completed', since: '2026-10-01' } });
+    const put = await baas.put('/app/api/invoices/settings', { ...conf.settings, autoSend: true, debtorStart: 5000, shopOrders: { enabled: true, status: 'completed', since: '2026-10-01' } });
     assert.strictEqual(put.status, 200);
     assert.strictEqual(put.body.settings.shopOrders.finalize, true);
     // Voorraad: PE-25 met 50 op voorraad (zonder voorraadsync boekt de factuur af).
-    const item = (await baas.post('/api/stock/items', { code: 'PE-25', name: 'PE-buis', unit: 'm', onHand: 50, salePrice: 2, revenueGroup: 'producten' })).body;
+    const item = (await baas.post('/app/api/stock/items', { code: 'PE-25', name: 'PE-buis', unit: 'm', onHand: 50, salePrice: 2, revenueGroup: 'producten' })).body;
 
-    const response = await baas.post('/api/invoices/shop-orders/sync');
+    const response = await baas.post('/app/api/invoices/shop-orders/sync');
     assert.strictEqual(response.status, 200, JSON.stringify(response.body));
     assert.deepStrictEqual([response.body.found, response.body.imported, response.body.finalized, response.body.paid, response.body.sent, response.body.skipped], [3, 2, 2, 1, 2, 1]);
     assert.strictEqual(shop.calls.find((call) => call.path.endsWith('/orders')).query.modified_after, '2026-10-01T00:00:00');
-    const list = (await baas.get('/api/invoices')).body.items;
+    const list = (await baas.get('/app/api/invoices')).body.items;
     assert.strictEqual(list.length, 2);
     const paid = list.find((i) => i.status === 'betaald');
     assert.strictEqual(paid.source, 'webshop');
     assert.ok(paid.number.startsWith('F2026-'));
     assert.ok(paid.sentAt);
-    const full = (await baas.get(`/api/invoices/${paid.id}`)).body;
+    const full = (await baas.get(`/app/api/invoices/${paid.id}`)).body;
     assert.strictEqual(full.debtorNumber, 5000);
     assert.strictEqual(full.total, 32.61);
     // Mail met de pdf als bijlage, betaald = "al voldaan".
@@ -180,17 +180,17 @@ test('webshopbestellingen: factuur + debiteur, definitief, betaald, automatisch 
     assert.strictEqual(message.attachments[0].contentType, 'application/pdf');
     assert.ok(message.attachments[0].content.subarray(0, 5).equals(Buffer.from('%PDF-')));
     // Voorraad afgeboekt (2 bestellingen x 10).
-    assert.strictEqual((await baas.get(`/api/stock/items/${item.id}`)).body.onHand, 30);
+    assert.strictEqual((await baas.get(`/app/api/stock/items/${item.id}`)).body.onHand, 30);
     // Debiteuren: twee (verschillende e-mailadressen), nummers vanaf 5000.
-    const debtors = (await baas.get('/api/debtors')).body.items;
+    const debtors = (await baas.get('/app/api/debtors')).body.items;
     assert.deepStrictEqual(debtors.map((debtor) => debtor.number).sort(), [5000, 5001]);
     assert.strictEqual(debtors.find((debtor) => debtor.number === 5001).openTotal, 32.61);
     assert.strictEqual(debtors[0].source, 'webshop');
 
     // Opnieuw ophalen: niets dubbel.
-    const again = await baas.post('/api/invoices/shop-orders/sync');
+    const again = await baas.post('/app/api/invoices/shop-orders/sync');
     assert.strictEqual(again.body.imported, 0);
-    assert.strictEqual((await baas.get('/api/invoices')).body.items.length, 2);
+    assert.strictEqual((await baas.get('/app/api/invoices')).body.items.length, 2);
   } finally {
     server.close();
   }
@@ -200,52 +200,52 @@ test('factuur versturen: voorstel, pdf, handmatig versturen, automatisch bij def
   const { server, as, sent, mail } = await setup();
   try {
     const baas = await as('baas');
-    const inv = (await baas.post('/api/invoices', { data: { customer: { name: 'Jan', email: 'jan@voorbeeld.test' }, lines: [{ description: 'Sproeier', qty: 2, price: 10 }] } })).body;
+    const inv = (await baas.post('/app/api/invoices', { data: { customer: { name: 'Jan', email: 'jan@voorbeeld.test' }, lines: [{ description: 'Sproeier', qty: 2, price: 10 }] } })).body;
     // Concept versturen kan niet.
-    assert.strictEqual((await baas.post(`/api/invoices/${inv.id}/send`, { to: 'jan@voorbeeld.test' })).status, 409);
-    const fin = (await baas.post(`/api/invoices/${inv.id}/finalize`, {})).body;
+    assert.strictEqual((await baas.post(`/app/api/invoices/${inv.id}/send`, { to: 'jan@voorbeeld.test' })).status, 409);
+    const fin = (await baas.post(`/app/api/invoices/${inv.id}/finalize`, {})).body;
     assert.strictEqual(fin.autoSent, false);
     assert.strictEqual(sent.length, 0);
-    const draft = (await baas.get(`/api/invoices/${inv.id}/mail`)).body;
+    const draft = (await baas.get(`/app/api/invoices/${inv.id}/mail`)).body;
     assert.strictEqual(draft.to, 'jan@voorbeeld.test');
     assert.match(draft.message, /Beste Jan/);
     assert.match(draft.message, /€\s24,20/);
-    const pdf = await baas.get(`/api/invoices/${inv.id}/pdf?download=1`);
+    const pdf = await baas.get(`/app/api/invoices/${inv.id}/pdf?download=1`);
     assert.strictEqual(pdf.status, 200);
     assert.strictEqual(pdf.type, 'application/pdf');
     assert.ok(pdf.raw.subarray(0, 5).equals(Buffer.from('%PDF-')));
-    assert.strictEqual((await baas.post(`/api/invoices/${inv.id}/send`, { to: 'geen-adres' })).status, 400);
-    const response = await baas.post(`/api/invoices/${inv.id}/send`, { to: 'jan@voorbeeld.test, boekhouding@voorbeeld.test', subject: 'Uw factuur', message: 'Hallo' });
+    assert.strictEqual((await baas.post(`/app/api/invoices/${inv.id}/send`, { to: 'geen-adres' })).status, 400);
+    const response = await baas.post(`/app/api/invoices/${inv.id}/send`, { to: 'jan@voorbeeld.test, boekhouding@voorbeeld.test', subject: 'Uw factuur', message: 'Hallo' });
     assert.strictEqual(response.status, 200, JSON.stringify(response.body));
     assert.strictEqual(response.body.sentTo, 'jan@voorbeeld.test, boekhouding@voorbeeld.test');
     assert.strictEqual(sent[0].subject, 'Uw factuur');
     assert.match(sent[0].attachments[0].filename, /^Factuur F2026-0001\.pdf$/);
 
     // Automatisch bij definitief.
-    const conf = (await baas.get('/api/invoices/settings')).body.settings;
-    await baas.put('/api/invoices/settings', { ...conf, autoSend: true });
-    const two = (await baas.post('/api/invoices', { data: { customer: { name: 'Piet', email: 'piet@voorbeeld.test' }, lines: [{ description: 'Arbeid', qty: 1, price: 50, group: 'arbeid' }] } })).body;
-    assert.strictEqual((await baas.post(`/api/invoices/${two.id}/finalize`, {})).body.autoSent, true);
+    const conf = (await baas.get('/app/api/invoices/settings')).body.settings;
+    await baas.put('/app/api/invoices/settings', { ...conf, autoSend: true });
+    const two = (await baas.post('/app/api/invoices', { data: { customer: { name: 'Piet', email: 'piet@voorbeeld.test' }, lines: [{ description: 'Arbeid', qty: 1, price: 50, group: 'arbeid' }] } })).body;
+    assert.strictEqual((await baas.post(`/app/api/invoices/${two.id}/finalize`, {})).body.autoSent, true);
     assert.strictEqual(sent.length, 2);
     // Zonder e-mailadres of mailserver: de reden staat op de factuur.
-    const three = (await baas.post('/api/invoices', { data: { customer: { name: 'Zonder mail' }, lines: [{ description: 'X', qty: 1, price: 5 }] } })).body;
-    const f3 = (await baas.post(`/api/invoices/${three.id}/finalize`, {})).body;
+    const three = (await baas.post('/app/api/invoices', { data: { customer: { name: 'Zonder mail' }, lines: [{ description: 'X', qty: 1, price: 5 }] } })).body;
+    const f3 = (await baas.post(`/app/api/invoices/${three.id}/finalize`, {})).body;
     assert.strictEqual(f3.autoSent, false);
     assert.match(f3.sendError, /geen geldig e-mailadres/);
     mail.on = false;
-    assert.strictEqual((await baas.post(`/api/invoices/${inv.id}/send`, { to: 'jan@voorbeeld.test' })).status, 409);
+    assert.strictEqual((await baas.post(`/app/api/invoices/${inv.id}/send`, { to: 'jan@voorbeeld.test' })).status, 409);
     // Dezelfde klant krijgt dezelfde debiteur.
-    const four = (await baas.post('/api/invoices', { data: { customer: { name: 'Jan Andere Naam', email: 'JAN@voorbeeld.test' }, lines: [{ description: 'X', qty: 1, price: 5 }] } })).body;
-    const f4 = (await baas.post(`/api/invoices/${four.id}/finalize`, {})).body;
-    assert.strictEqual(f4.debtorId, (await baas.get(`/api/invoices/${inv.id}`)).body.debtorId);
-    const deb = (await baas.get(`/api/debtors/${f4.debtorId}`)).body;
+    const four = (await baas.post('/app/api/invoices', { data: { customer: { name: 'Jan Andere Naam', email: 'JAN@voorbeeld.test' }, lines: [{ description: 'X', qty: 1, price: 5 }] } })).body;
+    const f4 = (await baas.post(`/app/api/invoices/${four.id}/finalize`, {})).body;
+    assert.strictEqual(f4.debtorId, (await baas.get(`/app/api/invoices/${inv.id}`)).body.debtorId);
+    const deb = (await baas.get(`/app/api/debtors/${f4.debtorId}`)).body;
     assert.strictEqual(deb.name, 'Jan Andere Naam');
     assert.strictEqual(deb.number, 1000);
-    const upd = await baas.put(`/api/debtors/${deb.id}`, { name: '', email: 'x' });
+    const upd = await baas.put(`/app/api/debtors/${deb.id}`, { name: '', email: 'x' });
     assert.strictEqual(upd.status, 400);
-    assert.strictEqual((await baas.put(`/api/debtors/${deb.id}`, { name: 'Jan de Vries' })).body.name, 'Jan de Vries');
+    assert.strictEqual((await baas.put(`/app/api/debtors/${deb.id}`, { name: 'Jan de Vries' })).body.name, 'Jan de Vries');
     // Export heeft het debiteurnummer.
-    const exp = (await baas.get('/api/invoices/export')).body.items;
+    const exp = (await baas.get('/app/api/invoices/export')).body.items;
     assert.ok(exp.every((i) => i.debtorNumber >= 1000));
     assert.strictEqual(Core.exportRows(exp, conf)[0].debtorNumber, exp[0].debtorNumber);
   } finally {
@@ -257,20 +257,20 @@ test('debiteuren en versturen: recht facturen en scheiding tussen organisaties',
   const { server, as } = await setup();
   try {
     const baas = await as('baas');
-    const inv = (await baas.post('/api/invoices', { data: { customer: { name: 'Jan', email: 'jan@voorbeeld.test' }, lines: [{ description: 'X', qty: 1, price: 5 }] } })).body;
-    const fin = (await baas.post(`/api/invoices/${inv.id}/finalize`, {})).body;
+    const inv = (await baas.post('/app/api/invoices', { data: { customer: { name: 'Jan', email: 'jan@voorbeeld.test' }, lines: [{ description: 'X', qty: 1, price: 5 }] } })).body;
+    const fin = (await baas.post(`/app/api/invoices/${inv.id}/finalize`, {})).body;
     const kees = await as('kees');
-    for (const [method, urlPath] of [['get', '/api/debtors'], ['get', `/api/debtors/${fin.debtorId}`], ['get', `/api/invoices/${inv.id}/pdf`], ['get', `/api/invoices/${inv.id}/mail`],
-      ['post', `/api/invoices/${inv.id}/send`], ['post', '/api/invoices/shop-orders/sync']]) {
+    for (const [method, urlPath] of [['get', '/app/api/debtors'], ['get', `/app/api/debtors/${fin.debtorId}`], ['get', `/app/api/invoices/${inv.id}/pdf`], ['get', `/app/api/invoices/${inv.id}/mail`],
+      ['post', `/app/api/invoices/${inv.id}/send`], ['post', '/app/api/invoices/shop-orders/sync']]) {
       assert.strictEqual((await kees[method](urlPath, method === 'post' ? { to: 'a@b.test' } : undefined)).status, 403, urlPath);
     }
-    await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
+    await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
     const piet = await as('piet', 'groen');
-    assert.strictEqual((await piet.get(`/api/debtors/${fin.debtorId}`)).status, 404);
-    assert.strictEqual((await piet.put(`/api/debtors/${fin.debtorId}`, { name: 'Hack' })).status, 404);
-    assert.strictEqual((await piet.get(`/api/invoices/${inv.id}/pdf`)).status, 404);
-    assert.strictEqual((await piet.post(`/api/invoices/${inv.id}/send`, { to: 'a@b.test' })).status, 404);
-    assert.strictEqual((await piet.get('/api/debtors')).body.items.length, 0);
+    assert.strictEqual((await piet.get(`/app/api/debtors/${fin.debtorId}`)).status, 404);
+    assert.strictEqual((await piet.put(`/app/api/debtors/${fin.debtorId}`, { name: 'Hack' })).status, 404);
+    assert.strictEqual((await piet.get(`/app/api/invoices/${inv.id}/pdf`)).status, 404);
+    assert.strictEqual((await piet.post(`/app/api/invoices/${inv.id}/send`, { to: 'a@b.test' })).status, 404);
+    assert.strictEqual((await piet.get('/app/api/debtors')).body.items.length, 0);
   } finally {
     server.close();
   }

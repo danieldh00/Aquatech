@@ -79,5 +79,5 @@ jobs:
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3301/api/health && break; sleep 2; done
           docker logs solo
           docker logs solo 2>&1 | grep -q 'eerste beheerdersaccount'
-          curl -s http://127.0.0.1:3301/ | grep -q 'Beheerder aanmaken'
+          curl -s http://127.0.0.1:3301/app/ | grep -q 'Beheerder aanmaken'
           docker stop -t 10 solo

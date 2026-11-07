@@ -188,20 +188,20 @@ async function setup(appOpts = {}) {
 test('API: werkorder alleen uit een geaccordeerde offerte, alleen voor beheerder en installateur', async () => {
   const { server, base, as } = await setup();
   try {
-    assert.strictEqual((await createClient(base).get('/api/workorders')).status, 401);
+    assert.strictEqual((await createClient(base).get('/app/api/workorders')).status, 401);
     const kees = await as('kees'), baas = await as('baas'), klaas = await as('klaas');
     const quote = quoteFromGarden();
-    const savedQuote = (await kees.post('/api/quotes', { data: quote.data })).body;
+    const savedQuote = (await kees.post('/app/api/quotes', { data: quote.data })).body;
 
-    assert.strictEqual((await kees.post('/api/workorders', { quoteId: savedQuote.id })).status, 409, 'concept: nog geen akkoord');
-    assert.strictEqual((await kees.post('/api/workorders', { quoteId: 'bestaat-niet' })).status, 404);
-    await kees.put(`/api/quotes/${savedQuote.id}`, { status: 'akkoord' });
+    assert.strictEqual((await kees.post('/app/api/workorders', { quoteId: savedQuote.id })).status, 409, 'concept: nog geen akkoord');
+    assert.strictEqual((await kees.post('/app/api/workorders', { quoteId: 'bestaat-niet' })).status, 404);
+    await kees.put(`/app/api/quotes/${savedQuote.id}`, { status: 'akkoord' });
 
-    assert.strictEqual((await klaas.get('/api/workorders')).status, 403, 'klant ziet geen werkorders');
-    assert.strictEqual((await klaas.post('/api/workorders', { quoteId: savedQuote.id })).status, 403);
+    assert.strictEqual((await klaas.get('/app/api/workorders')).status, 403, 'klant ziet geen werkorders');
+    assert.strictEqual((await klaas.post('/app/api/workorders', { quoteId: savedQuote.id })).status, 403);
 
     // Zonder data bouwt de server de werkorder zelf uit de offerte.
-    const firstOrder = await kees.post('/api/workorders', { quoteId: savedQuote.id });
+    const firstOrder = await kees.post('/app/api/workorders', { quoteId: savedQuote.id });
     assert.strictEqual(firstOrder.status, 201);
     const year = new Date().getFullYear();
     assert.strictEqual(firstOrder.body.number, `WO-${year}-0001`);
@@ -214,37 +214,37 @@ test('API: werkorder alleen uit een geaccordeerde offerte, alleen voor beheerder
 
     // Met data uit de browser (zones); de koppeling komt altijd uit de offerte.
     const built = plain(WorkOrderCore.fromQuote(savedQuote, garden(), lib)).data;
-    const secondOrder = await baas.post('/api/workorders', { quoteId: savedQuote.id, data: { ...built, quoteId: 'nep', quoteNumber: 'nep', plannedDate: `${year}-05-01` } });
+    const secondOrder = await baas.post('/app/api/workorders', { quoteId: savedQuote.id, data: { ...built, quoteId: 'nep', quoteNumber: 'nep', plannedDate: `${year}-05-01` } });
     assert.strictEqual(secondOrder.body.number, `WO-${year}-0002`);
     assert.strictEqual(secondOrder.body.status, 'gepland', 'met datum meteen gepland');
     assert.strictEqual(secondOrder.body.data.quoteId, savedQuote.id);
     assert.strictEqual(secondOrder.body.data.quoteNumber, savedQuote.number);
     assert.ok(secondOrder.body.data.zones.length >= 2);
 
-    assert.deepStrictEqual((await kees.get(`/api/workorders?quote=${savedQuote.id}`)).body.items.map((workOrder) => workOrder.number).sort(), [firstOrder.body.number, secondOrder.body.number]);
+    assert.deepStrictEqual((await kees.get(`/app/api/workorders?quote=${savedQuote.id}`)).body.items.map((workOrder) => workOrder.number).sort(), [firstOrder.body.number, secondOrder.body.number]);
 
     // Toewijzen: alleen aan beheerders en installateurs.
-    const staff = (await kees.get('/api/workorder-staff')).body.items;
+    const staff = (await kees.get('/app/api/workorder-staff')).body.items;
     assert.deepStrictEqual(staff.map((user) => user.displayName), ['Baas', 'Kees']);
     const keesId = staff.find((user) => user.displayName === 'Kees').id;
-    const klaasId = (await klaas.get('/api/me')).body.user.id;
-    assert.strictEqual((await kees.put(`/api/workorders/${firstOrder.body.id}`, { assigneeId: klaasId })).status, 400);
+    const klaasId = (await klaas.get('/app/api/me')).body.user.id;
+    assert.strictEqual((await kees.put(`/app/api/workorders/${firstOrder.body.id}`, { assigneeId: klaasId })).status, 400);
     const steps = firstOrder.body.data.steps.map((step, i) => ({ ...step, done: i === 0, actualHours: i === 0 ? 0.5 : null }));
-    const updated = await kees.put(`/api/workorders/${firstOrder.body.id}`, { assigneeId: keesId, status: 'bezig', data: { ...firstOrder.body.data, steps, quoteId: 'nep' } });
+    const updated = await kees.put(`/app/api/workorders/${firstOrder.body.id}`, { assigneeId: keesId, status: 'bezig', data: { ...firstOrder.body.data, steps, quoteId: 'nep' } });
     assert.strictEqual(updated.status, 200);
     assert.strictEqual(updated.body.assignee.displayName, 'Kees');
     assert.strictEqual(updated.body.status, 'bezig');
     assert.strictEqual(updated.body.progress.done, 1);
     assert.strictEqual(updated.body.progress.actualHours, 0.5);
     assert.strictEqual(updated.body.data.quoteId, savedQuote.id, 'koppeling ligt vast');
-    assert.strictEqual((await kees.put(`/api/workorders/${firstOrder.body.id}`, { status: 'weg' })).status, 400);
+    assert.strictEqual((await kees.put(`/app/api/workorders/${firstOrder.body.id}`, { status: 'weg' })).status, 400);
 
     // Verwijderen; definitief wissen alleen door een beheerder.
-    assert.strictEqual((await kees.del(`/api/workorders/${firstOrder.body.id}`)).status, 200);
-    assert.strictEqual((await kees.get(`/api/workorders/${firstOrder.body.id}`)).status, 404);
-    assert.strictEqual((await kees.del(`/api/admin/workorders/${secondOrder.body.id}`)).status, 403);
-    assert.strictEqual((await baas.del(`/api/admin/workorders/${secondOrder.body.id}`)).status, 200);
-    const thirdOrder = await kees.post('/api/workorders', { quoteId: savedQuote.id });
+    assert.strictEqual((await kees.del(`/app/api/workorders/${firstOrder.body.id}`)).status, 200);
+    assert.strictEqual((await kees.get(`/app/api/workorders/${firstOrder.body.id}`)).status, 404);
+    assert.strictEqual((await kees.del(`/app/api/admin/workorders/${secondOrder.body.id}`)).status, 403);
+    assert.strictEqual((await baas.del(`/app/api/admin/workorders/${secondOrder.body.id}`)).status, 200);
+    const thirdOrder = await kees.post('/app/api/workorders', { quoteId: savedQuote.id });
     assert.strictEqual(thirdOrder.body.number, `WO-${year}-0002`, 'na definitief wissen telt alleen het hoogste bestaande nummer');
   } finally {
     server.close();
@@ -261,36 +261,36 @@ test('API: inplannen en klantlink: de klant ziet de afspraak en bevestigt of vra
   const { server, base, as } = await setup({ mailerFor });
   try {
     const kees = await as('kees'), klaas = await as('klaas'), baas = await as('baas');
-    assert.strictEqual((await baas.put('/api/quote-profile', { profile: { email: 'info@example.com' } })).status, 200);
+    assert.strictEqual((await baas.put('/app/api/quote-profile', { profile: { email: 'info@example.com' } })).status, 200);
     const quote = quoteFromGarden();
-    const savedQuote = (await kees.post('/api/quotes', { data: { ...quote.data, customer: { ...quote.data.customer, email: 'jansen@example.com' } } })).body;
-    await kees.put(`/api/quotes/${savedQuote.id}`, { status: 'akkoord' });
-    const wo = (await kees.post('/api/workorders', { quoteId: savedQuote.id })).body;
+    const savedQuote = (await kees.post('/app/api/quotes', { data: { ...quote.data, customer: { ...quote.data.customer, email: 'jansen@example.com' } } })).body;
+    await kees.put(`/app/api/quotes/${savedQuote.id}`, { status: 'akkoord' });
+    const wo = (await kees.post('/app/api/workorders', { quoteId: savedQuote.id })).body;
     assert.strictEqual(wo.appointment.state, 'geen');
-    const page = `${base}/openbaar/afspraak.html`;
+    const page = `${base}/app/openbaar/afspraak.html`;
 
     // Zonder datum geen afspraak om te versturen.
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/send`, { to: 'jansen@example.com', url: page })).status, 409);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/send`, { to: 'jansen@example.com', url: page })).status, 409);
 
     // Inplannen vanuit de planning: datum + uitvoerder, status gaat naar Gepland.
-    const keesId = (await kees.get('/api/me')).body.user.id;
+    const keesId = (await kees.get('/app/api/me')).body.user.id;
     /**
      * Datum een aantal dagen vanaf vandaag.
      * @param {number} days Aantal dagen.
      * @returns {string} JJJJ-MM-DD.
      */
     const future = (days) => new Date(Date.now() + days * 864e5).toISOString().slice(0, 10);
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/schedule`, { plannedDate: 'morgen' })).status, 400);
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/schedule`, { days: 0 })).status, 400);
-    assert.strictEqual((await klaas.post(`/api/workorders/${wo.id}/schedule`, { plannedDate: future(10) })).status, 403);
-    let scheduled = await kees.post(`/api/workorders/${wo.id}/schedule`, { plannedDate: future(10), startTime: '08:00', endTime: '12:00', assigneeId: keesId });
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/schedule`, { plannedDate: 'morgen' })).status, 400);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/schedule`, { days: 0 })).status, 400);
+    assert.strictEqual((await klaas.post(`/app/api/workorders/${wo.id}/schedule`, { plannedDate: future(10) })).status, 403);
+    let scheduled = await kees.post(`/app/api/workorders/${wo.id}/schedule`, { plannedDate: future(10), startTime: '08:00', endTime: '12:00', assigneeId: keesId });
     assert.strictEqual(scheduled.status, 200);
     assert.deepStrictEqual([scheduled.body.status, scheduled.body.plannedDate, scheduled.body.endTime, scheduled.body.assignee.displayName, scheduled.body.appointment.state], ['gepland', future(10), '12:00', 'Kees', 'niet_gedeeld']);
     assert.strictEqual(scheduled.body.data.title, wo.data.title, 'de rest van de werkorder blijft staan');
 
     // Link: alleen naar de afspraakpagina.
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/share`, { url: `${base}/openbaar/offerte.html` })).status, 400);
-    const sh = await kees.post(`/api/workorders/${wo.id}/send`, { to: 'jansen@example.com', subject: 'Uw afspraak', message: 'Beste familie Jansen', url: page });
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/share`, { url: `${base}/app/openbaar/offerte.html` })).status, 400);
+    const sh = await kees.post(`/app/api/workorders/${wo.id}/send`, { to: 'jansen@example.com', subject: 'Uw afspraak', message: 'Beste familie Jansen', url: page });
     assert.strictEqual(sh.status, 200);
     assert.strictEqual(sh.body.appointment.state, 'wacht');
     assert.strictEqual(sh.body.share.sentTo, 'jansen@example.com');
@@ -298,13 +298,13 @@ test('API: inplannen en klantlink: de klant ziet de afspraak en bevestigt of vra
     assert.ok(sent[0].text.includes(sh.body.share.url), 'link staat in de e-mail');
     const token = sh.body.share.url.split('#t=')[1];
     // Dezelfde link bij opnieuw delen.
-    assert.strictEqual((await kees.post(`/api/workorders/${wo.id}/share`, { url: page })).body.share.url, sh.body.share.url);
+    assert.strictEqual((await kees.post(`/app/api/workorders/${wo.id}/share`, { url: page })).body.share.url, sh.body.share.url);
 
     // De openbare pagina en haar bestanden zijn zonder inlog bereikbaar.
-    for (const file of ['/openbaar/afspraak.html', '/openbaar/afspraak.js', '/openbaar/afspraak.css', '/werkorders/workorder-core.js']) {
+    for (const file of ['/app/openbaar/afspraak.html', '/app/openbaar/afspraak.js', '/app/openbaar/afspraak.css', '/app/werkorders/workorder-core.js']) {
       assert.strictEqual((await fetch(base + file)).status, 200, file);
     }
-    assert.strictEqual((await fetch(`${base}/werkorders/werkorders.js`)).status, 401, 'de rest van de module niet');
+    assert.strictEqual((await fetch(`${base}/app/werkorders/werkorders.js`)).status, 401, 'de rest van de module niet');
 
     /**
      * Verzoek aan de openbare afspraak-API met het token in de kop.
@@ -314,7 +314,7 @@ test('API: inplannen en klantlink: de klant ziet de afspraak en bevestigt of vra
      * @param {string} [tokenValue] Token (standaard dat van de werkorder).
      * @returns {Promise<{ status: number, body: * }>} Status en JSON.
      */
-    const publicRequest = (method, urlPath, body, tokenValue = token) => fetch(`${base}/api/public/appointment${urlPath}`, {
+    const publicRequest = (method, urlPath, body, tokenValue = token) => fetch(`${base}/app/api/public/appointment${urlPath}`, {
       method, headers: { 'X-Afspraak-Token': tokenValue, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
     }).then(async (response) => ({ status: response.status, body: await response.json() }));
     assert.strictEqual((await publicRequest('GET', '', null, 'x'.repeat(32))).status, 404);
@@ -324,7 +324,7 @@ test('API: inplannen en klantlink: de klant ziet de afspraak en bevestigt of vra
     assert.strictEqual(appointment.body.appointment.steps, undefined, 'geen uitvoeringsplan voor de klant');
     assert.strictEqual(appointment.body.appointment.materials, undefined);
     assert.strictEqual(JSON.stringify(appointment.body).includes('Kees'), false, 'geen namen van medewerkers');
-    assert.ok((await kees.get(`/api/workorders/${wo.id}`)).body.share.viewedAt, 'geopend wordt bijgehouden');
+    assert.ok((await kees.get(`/app/api/workorders/${wo.id}`)).body.share.viewedAt, 'geopend wordt bijgehouden');
 
     // Reageren: naam verplicht, bij een ander moment ook een toelichting.
     assert.strictEqual((await publicRequest('POST', '/respond', { answer: 'bevestigd', name: '' })).status, 400);
@@ -335,34 +335,34 @@ test('API: inplannen en klantlink: de klant ziet de afspraak en bevestigt of vra
     assert.strictEqual(r1.body.appointment.appointment.state, 'ander_moment');
     assert.strictEqual((await publicRequest('POST', '/respond', { answer: 'bevestigd', name: 'Jan Jansen' })).status, 409, 'één reactie per moment');
     assert.ok(sent.some((message) => /ander moment/.test(message.subject)), 'bericht naar het bedrijf');
-    const view = (await kees.get(`/api/workorders/${wo.id}`)).body;
+    const view = (await kees.get(`/app/api/workorders/${wo.id}`)).body;
     assert.deepStrictEqual([view.appointment.state, view.appointment.response.reason], ['ander_moment', 'Liever de week erna.']);
 
     // Verschuiven: de klant moet het nieuwe moment opnieuw bevestigen.
-    scheduled = await kees.post(`/api/workorders/${wo.id}/schedule`, { plannedDate: future(17), days: 2 });
+    scheduled = await kees.post(`/app/api/workorders/${wo.id}/schedule`, { plannedDate: future(17), days: 2 });
     assert.strictEqual(scheduled.body.appointment.state, 'wacht');
     assert.strictEqual(scheduled.body.appointment.response.current, false);
     const r2 = await publicRequest('POST', '/respond', { answer: 'bevestigd', name: 'Jan Jansen' });
     assert.strictEqual(r2.status, 200);
     assert.deepStrictEqual(r2.body.appointment.dates.length, 2);
-    assert.strictEqual((await kees.get('/api/workorders')).body.items[0].appointment.state, 'bevestigd');
+    assert.strictEqual((await kees.get('/app/api/workorders')).body.items[0].appointment.state, 'bevestigd');
     // Alleen de tijd veranderen is ook een ander moment.
-    scheduled = await kees.post(`/api/workorders/${wo.id}/schedule`, { startTime: '09:00' });
+    scheduled = await kees.post(`/app/api/workorders/${wo.id}/schedule`, { startTime: '09:00' });
     assert.strictEqual(scheduled.body.appointment.state, 'wacht');
-    await kees.post(`/api/workorders/${wo.id}/schedule`, { startTime: '08:00' });
-    assert.strictEqual((await kees.get(`/api/workorders/${wo.id}`)).body.appointment.state, 'bevestigd', 'terug naar het bevestigde moment');
+    await kees.post(`/app/api/workorders/${wo.id}/schedule`, { startTime: '08:00' });
+    assert.strictEqual((await kees.get(`/app/api/workorders/${wo.id}`)).body.appointment.state, 'bevestigd', 'terug naar het bevestigde moment');
 
     // Geannuleerd: niet meer te bevestigen; uit de planning = terug naar Nieuw.
-    await kees.put(`/api/workorders/${wo.id}`, { status: 'geannuleerd' });
-    await kees.post(`/api/workorders/${wo.id}/schedule`, { startTime: '10:00' });
+    await kees.put(`/app/api/workorders/${wo.id}`, { status: 'geannuleerd' });
+    await kees.post(`/app/api/workorders/${wo.id}/schedule`, { startTime: '10:00' });
     assert.strictEqual((await publicRequest('POST', '/respond', { answer: 'bevestigd', name: 'Jan Jansen' })).status, 409);
-    await kees.put(`/api/workorders/${wo.id}`, { status: 'gepland' });
-    scheduled = await kees.post(`/api/workorders/${wo.id}/schedule`, { plannedDate: '' });
+    await kees.put(`/app/api/workorders/${wo.id}`, { status: 'gepland' });
+    scheduled = await kees.post(`/app/api/workorders/${wo.id}/schedule`, { plannedDate: '' });
     assert.deepStrictEqual([scheduled.body.status, scheduled.body.appointment.state], ['open', 'geen']);
 
     // Ingetrokken link: niets meer te zien.
     assert.strictEqual((await publicRequest('GET', '')).status, 200);
-    assert.strictEqual((await kees.del(`/api/workorders/${wo.id}/share`)).status, 200);
+    assert.strictEqual((await kees.del(`/app/api/workorders/${wo.id}/share`)).status, 200);
     assert.strictEqual((await publicRequest('GET', '')).status, 404);
   } finally {
     server.close();
@@ -374,29 +374,29 @@ test('API: startscherm (my-day): klussen van de dag per uitvoerder, meerdaagse k
   try {
     const kees = await as('kees'), baas = await as('baas'), klaas = await as('klaas');
     const quote = quoteFromGarden();
-    const savedQuote = (await kees.post('/api/quotes', { data: { ...quote.data, customer: { ...quote.data.customer, phone: '06 12345678', contact: 'Jan Jansen' } } })).body;
-    await kees.put(`/api/quotes/${savedQuote.id}`, { status: 'akkoord' });
+    const savedQuote = (await kees.post('/app/api/quotes', { data: { ...quote.data, customer: { ...quote.data.customer, phone: '06 12345678', contact: 'Jan Jansen' } } })).body;
+    await kees.put(`/app/api/quotes/${savedQuote.id}`, { status: 'akkoord' });
     /**
      * Maakt een werkorder uit de geaccordeerde offerte.
      * @returns {Promise<object>} De werkorder.
      */
-    const createWorkOrder = async () => (await kees.post('/api/workorders', { quoteId: savedQuote.id })).body;
-    const keesId = (await kees.get('/api/me')).body.user.id;
-    const baasId = (await baas.get('/api/me')).body.user.id;
+    const createWorkOrder = async () => (await kees.post('/app/api/workorders', { quoteId: savedQuote.id })).body;
+    const keesId = (await kees.get('/app/api/me')).body.user.id;
+    const baasId = (await baas.get('/app/api/me')).body.user.id;
     const [orderA, orderB, orderC, orderD] = [await createWorkOrder(), await createWorkOrder(), await createWorkOrder(), await createWorkOrder()];
     // Vrijdag 11 jan 2030, 2 werkdagen: vrijdag en maandag 14 jan.
-    await kees.post(`/api/workorders/${orderA.id}/schedule`, { plannedDate: '2030-01-11', startTime: '10:00', endTime: '16:00', days: 2, assigneeId: keesId });
-    await kees.post(`/api/workorders/${orderB.id}/schedule`, { plannedDate: '2030-01-14', startTime: '08:00', assigneeId: keesId });
-    await kees.post(`/api/workorders/${orderC.id}/schedule`, { plannedDate: '2030-01-14', startTime: '09:00', assigneeId: baasId });
-    await kees.post(`/api/workorders/${orderD.id}/schedule`, { plannedDate: '2030-01-21', assigneeId: keesId });
+    await kees.post(`/app/api/workorders/${orderA.id}/schedule`, { plannedDate: '2030-01-11', startTime: '10:00', endTime: '16:00', days: 2, assigneeId: keesId });
+    await kees.post(`/app/api/workorders/${orderB.id}/schedule`, { plannedDate: '2030-01-14', startTime: '08:00', assigneeId: keesId });
+    await kees.post(`/app/api/workorders/${orderC.id}/schedule`, { plannedDate: '2030-01-14', startTime: '09:00', assigneeId: baasId });
+    await kees.post(`/app/api/workorders/${orderD.id}/schedule`, { plannedDate: '2030-01-21', assigneeId: keesId });
 
-    assert.strictEqual((await klaas.get('/api/my-day')).status, 403, 'klant heeft geen startscherm');
-    assert.strictEqual((await kees.get('/api/my-day?date=morgen')).status, 400);
-    const now = (await kees.get('/api/my-day')).body;
+    assert.strictEqual((await klaas.get('/app/api/my-day')).status, 403, 'klant heeft geen startscherm');
+    assert.strictEqual((await kees.get('/app/api/my-day?date=morgen')).status, 400);
+    const now = (await kees.get('/app/api/my-day')).body;
     assert.match(now.date, /^\d{4}-\d{2}-\d{2}$/);
     assert.strictEqual(now.date, now.today, 'zonder datum: vandaag');
 
-    let day = (await kees.get('/api/my-day?date=2030-01-14')).body;
+    let day = (await kees.get('/app/api/my-day?date=2030-01-14')).body;
     assert.deepStrictEqual(day.items.map((item) => item.number), [orderB.number, orderA.number], 'op starttijd');
     const second = day.items.find((item) => item.id === orderA.id);
     assert.strictEqual(second.dayNumber, 2);
@@ -407,15 +407,15 @@ test('API: startscherm (my-day): klussen van de dag per uitvoerder, meerdaagse k
     assert.strictEqual(second.photos, 0);
     assert.strictEqual(day.next.id, orderD.id, 'eerstvolgende klus na deze dag');
 
-    assert.deepStrictEqual((await kees.get('/api/my-day?date=2030-01-12')).body.items, [], 'zaterdag telt niet als werkdag');
-    day = (await kees.get('/api/my-day?date=2030-01-14&all=1')).body;
+    assert.deepStrictEqual((await kees.get('/app/api/my-day?date=2030-01-12')).body.items, [], 'zaterdag telt niet als werkdag');
+    day = (await kees.get('/app/api/my-day?date=2030-01-14&all=1')).body;
     assert.deepStrictEqual(day.items.map((item) => item.number), [orderB.number, orderC.number, orderA.number], 'hele ploeg, op starttijd');
     assert.strictEqual(day.next, null);
-    assert.deepStrictEqual((await baas.get('/api/my-day?date=2030-01-14')).body.items.map((item) => item.id), [orderC.id]);
+    assert.deepStrictEqual((await baas.get('/app/api/my-day?date=2030-01-14')).body.items.map((item) => item.id), [orderC.id]);
 
     // Geannuleerd valt weg.
-    await kees.put(`/api/workorders/${orderB.id}`, { status: 'geannuleerd' });
-    assert.deepStrictEqual((await kees.get('/api/my-day?date=2030-01-14')).body.items.map((item) => item.id), [orderA.id]);
+    await kees.put(`/app/api/workorders/${orderB.id}`, { status: 'geannuleerd' });
+    assert.deepStrictEqual((await kees.get('/app/api/my-day?date=2030-01-14')).body.items.map((item) => item.id), [orderA.id]);
   } finally {
     server.close();
   }

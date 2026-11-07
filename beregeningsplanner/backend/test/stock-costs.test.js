@@ -130,22 +130,22 @@ test('rapportage: periode en indeling', () => {
 
 test('rapportage webshop: kostprijs uit de laag, retour tegen dezelfde prijs, rechten en tenant', async () => {
   const world = await setup();
-  const bus = (await world.admin.get('/api/stock')).body.items.find((item) => item.code === 'BUS');
-  const begin = (await world.admin.get(`/api/stock/items/${bus.id}`)).body.layers[0];
+  const bus = (await world.admin.get('/app/api/stock')).body.items.find((item) => item.code === 'BUS');
+  const begin = (await world.admin.get(`/app/api/stock/items/${bus.id}`)).body.layers[0];
   assert.strictEqual(begin.unitCost, null, 'beginvoorraad zonder inkoopprijs is onbekend');
-  const filled = await world.admin.put(`/api/stock/items/${bus.id}/layers/${begin.id}`, { unitCost: 4 });
+  const filled = await world.admin.put(`/app/api/stock/items/${bus.id}/layers/${begin.id}`, { unitCost: 4 });
   assert.strictEqual(filled.status, 200, JSON.stringify(filled.body));
-  assert.strictEqual((await world.vreemd.put(`/api/stock/items/${bus.id}/layers/${begin.id}`, { unitCost: 1 })).status, 404, 'andere organisatie');
-  assert.strictEqual((await world.shoppers[0].client.put(`/api/stock/items/${bus.id}/layers/${begin.id}`, { unitCost: 1 })).status, 403, 'klant');
-  assert.strictEqual((await world.shoppers[0].client.post(`/api/stock/items/${bus.id}/cost-prices`, { price: 1 })).status, 403, 'klant');
-  assert.strictEqual((await world.vreemd.post(`/api/stock/items/${bus.id}/cost-prices`, { price: 1 })).status, 404, 'andere organisatie');
+  assert.strictEqual((await world.vreemd.put(`/app/api/stock/items/${bus.id}/layers/${begin.id}`, { unitCost: 1 })).status, 404, 'andere organisatie');
+  assert.strictEqual((await world.shoppers[0].client.put(`/app/api/stock/items/${bus.id}/layers/${begin.id}`, { unitCost: 1 })).status, 403, 'klant');
+  assert.strictEqual((await world.shoppers[0].client.post(`/app/api/stock/items/${bus.id}/cost-prices`, { price: 1 })).status, 403, 'klant');
+  assert.strictEqual((await world.vreemd.post(`/app/api/stock/items/${bus.id}/cost-prices`, { price: 1 })).status, 404, 'andere organisatie');
 
   const id = await order(world, world.shoppers[0]);
   // De inkoopprijs stijgt vóór het verzenden: de verkoop komt nog uit de oude partij.
-  assert.strictEqual((await world.admin.post(`/api/stock/items/${bus.id}/cost-prices`, { price: 6, note: 'Prijsverhoging' })).status, 201);
-  assert.strictEqual((await world.admin.post(`/api/admin/web-orders/${id}/status`, { status: 'verzonden' })).status, 200);
+  assert.strictEqual((await world.admin.post(`/app/api/stock/items/${bus.id}/cost-prices`, { price: 6, note: 'Prijsverhoging' })).status, 201);
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/status`, { status: 'verzonden' })).status, 200);
 
-  const report = (await world.admin.get('/api/admin/webshop-report')).body;
+  const report = (await world.admin.get('/app/api/admin/webshop-report')).body;
   assert.strictEqual(report.totals.revenue, 20);
   assert.strictEqual(report.totals.cost, 8, '2 × de oude inkoopprijs van 4');
   assert.strictEqual(report.totals.margin, 12);
@@ -155,27 +155,27 @@ test('rapportage webshop: kostprijs uit de laag, retour tegen dezelfde prijs, re
   assert.deepStrictEqual(report.categories.map((category) => category.name), ['Overig']);
   assert.strictEqual(report.series.reduce((sum, period) => sum + period.revenue, 0), 20);
   assert.strictEqual(report.stock.value, 192, '48 × 4 (de oude partij)');
-  assert.strictEqual((await world.admin.get('/api/admin/webshop-report')).body.totals.lines, 1, 'niet dubbel bij opnieuw ophalen');
+  assert.strictEqual((await world.admin.get('/app/api/admin/webshop-report')).body.totals.lines, 1, 'niet dubbel bij opnieuw ophalen');
 
   // Retour terug op voorraad: omzet en inkoop gaan er tegen dezelfde prijs af.
-  const asked = await postForm(world.base, world.shoppers[0].client, `/winkel/bestelling/${id}/retour`, { 'qty:BUS': '1', reason: 'defect' });
+  const asked = await postForm(world.base, world.shoppers[0].client, `/bestelling/${id}/retour`, { 'qty:BUS': '1', reason: 'defect' });
   assert.strictEqual(asked.status, 303);
-  const record = (await world.admin.get('/api/admin/web-returns')).body.items[0];
-  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/decision`, { approve: true })).status, 200);
-  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/complete`, { restock: true })).status, 200);
-  const after = (await world.admin.get('/api/admin/webshop-report?lines=1')).body;
+  const record = (await world.admin.get('/app/api/admin/web-returns')).body.items[0];
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/decision`, { approve: true })).status, 200);
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/complete`, { restock: true })).status, 200);
+  const after = (await world.admin.get('/app/api/admin/webshop-report?lines=1')).body;
   assert.strictEqual(after.totals.revenue, 10);
   assert.strictEqual(after.totals.cost, 4);
   assert.strictEqual(after.totals.margin, 6);
   assert.deepStrictEqual(after.lines.map((line) => [line.kind, line.qty, line.revenue, line.cost]), [['verkoop', 2, 20, 8], ['retour', -1, -10, -4]]);
-  const again = (await world.admin.get('/api/admin/webshop-report?lines=1')).body;
+  const again = (await world.admin.get('/app/api/admin/webshop-report?lines=1')).body;
   assert.strictEqual(again.lines.length, 2, 'een tweede rapportage voegt geen regels toe');
-  const layers = (await world.admin.get(`/api/stock/items/${bus.id}`)).body.layers;
+  const layers = (await world.admin.get(`/app/api/stock/items/${bus.id}`)).body.layers;
   assert.deepStrictEqual(layers.map((layer) => [layer.remaining, layer.unitCost]), [[48, 4], [1, 4]], 'de retour komt terug als partij van 4');
 
-  assert.strictEqual((await world.vreemd.get('/api/admin/webshop-report')).body.totals.lines, 0, 'andere organisatie ziet niets');
-  assert.strictEqual((await world.shoppers[0].client.get('/api/admin/webshop-report')).status, 403, 'klant heeft geen beheerrecht');
-  assert.strictEqual((await world.admin.get('/api/admin/webshop-report?from=2026-13-01')).status, 400);
+  assert.strictEqual((await world.vreemd.get('/app/api/admin/webshop-report')).body.totals.lines, 0, 'andere organisatie ziet niets');
+  assert.strictEqual((await world.shoppers[0].client.get('/app/api/admin/webshop-report')).status, 403, 'klant heeft geen beheerrecht');
+  assert.strictEqual((await world.admin.get('/app/api/admin/webshop-report?from=2026-13-01')).status, 400);
 });
 
 

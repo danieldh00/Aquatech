@@ -129,15 +129,15 @@ async function views(base, jars) {
   const out = {};
   for (const [who, jar] of Object.entries(jars)) {
     const client = createClient(base, { jar: new Map(jar) });
-    for (const urlPath of ['/api/me', '/api/plans?all=1', '/api/quotes?all=1', '/api/workorders', '/api/catalog', '/api/admin/users', '/api/admin/history?limit=1000',
-      '/api/admin/plans?deleted=1', '/api/admin/settings', '/api/platform/tenants', '/api/admin/audit?limit=1000', '/api/service-requests', '/api/portal']) {
+    for (const urlPath of ['/app/api/me', '/app/api/plans?all=1', '/app/api/quotes?all=1', '/app/api/workorders', '/app/api/catalog', '/app/api/admin/users', '/app/api/admin/history?limit=1000',
+      '/app/api/admin/plans?deleted=1', '/app/api/admin/settings', '/app/api/platform/tenants', '/app/api/admin/audit?limit=1000', '/app/api/service-requests', '/app/api/portal']) {
       const response = await client.get(urlPath);
       out[`${who} ${urlPath}`] = { status: response.status, body: response.body };
     }
-    const plans = (await client.get('/api/plans?all=1')).body?.items || [];
-    for (const plan of plans) out[`${who} plan ${plan.id}`] = (await client.get(`/api/plans/${plan.id}`)).body;
-    const quotes = (await client.get('/api/quotes?all=1')).body?.items || [];
-    for (const quote of quotes) out[`${who} offerte ${quote.id}`] = (await client.get(`/api/quotes/${quote.id}`)).body;
+    const plans = (await client.get('/app/api/plans?all=1')).body?.items || [];
+    for (const plan of plans) out[`${who} plan ${plan.id}`] = (await client.get(`/app/api/plans/${plan.id}`)).body;
+    const quotes = (await client.get('/app/api/quotes?all=1')).body?.items || [];
+    for (const quote of quotes) out[`${who} offerte ${quote.id}`] = (await client.get(`/app/api/quotes/${quote.id}`)).body;
   }
   return out;
 }
@@ -155,15 +155,15 @@ test('overstap SQLite → PostgreSQL: alle gegevens één op één, ingelogd bli
     const jars = {};
     try {
       const baas = createClient(base);
-      assert.strictEqual((await baas.post('/api/auth/login', { username: 'baas', password: PW })).status, 200);
-      assert.strictEqual((await baas.put('/api/admin/settings', { anthropicApiKey: KEY })).status, 200);
-      const tenant = (await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
-      const env = (await baas.post(`/api/platform/tenants/${tenant.id}/environments`, { name: 'Test' })).body.tenant;
-      const seed = await baas.post(`/api/platform/tenants/${env.id}/testdata`, { shareBase: 'https://app.voorbeeld.nl/openbaar/offerte.html' });
+      assert.strictEqual((await baas.post('/app/api/auth/login', { username: 'baas', password: PW })).status, 200);
+      assert.strictEqual((await baas.put('/app/api/admin/settings', { anthropicApiKey: KEY })).status, 200);
+      const tenant = (await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
+      const env = (await baas.post(`/app/api/platform/tenants/${tenant.id}/environments`, { name: 'Test' })).body.tenant;
+      const seed = await baas.post(`/app/api/platform/tenants/${env.id}/testdata`, { shareBase: 'https://app.voorbeeld.nl/openbaar/offerte.html' });
       assert.strictEqual(seed.status, 201);
       const inst = createClient(base);
       const instName = seed.body.accounts.find((account) => account.username.endsWith('.installateur')).username;
-      assert.strictEqual((await inst.post('/api/auth/login', { username: instName, password: seed.body.password, tenant: 'groen' })).status, 200);
+      assert.strictEqual((await inst.post('/app/api/auth/login', { username: instName, password: seed.body.password, tenant: 'groen' })).status, 200);
       jars.baas = [...baas.jar];
       jars.installateur = [...inst.jar];
     } finally {
@@ -198,12 +198,12 @@ test('overstap SQLite → PostgreSQL: alle gegevens één op één, ingelogd bli
       assert.strictEqual(before['installateur /api/quotes?all=1'].body.items.length, 6, 'vergelijking met echte gegevens');
       assert.ok(before['installateur /api/workorders'].body.items.length === 4 && before['baas /api/platform/tenants'].body.items.length === 2);
       for (const key of Object.keys(before)) assert.deepStrictEqual(after[key], before[key], key);
-      assert.strictEqual((await createClient(base, { jar: new Map(jars.baas) }).get('/api/admin/settings')).body.settings.anthropicApiKey.hint, '…WXYZ');
+      assert.strictEqual((await createClient(base, { jar: new Map(jars.baas) }).get('/app/api/admin/settings')).body.settings.anthropicApiKey.hint, '…WXYZ');
       // En verder werken op PostgreSQL.
       const baas = createClient(base, { jar: new Map(jars.baas) });
-      const created = await baas.post('/api/plans', { data: { meta: { name: 'Nieuw na overstap' }, areas: [], sprinklers: [], zones: [], elements: [] } });
+      const created = await baas.post('/app/api/plans', { data: { meta: { name: 'Nieuw na overstap' }, areas: [], sprinklers: [], zones: [], elements: [] } });
       assert.strictEqual(created.status, 201);
-      assert.ok((await baas.get('/api/admin/history?search=NIEUW')).body.items.some((entry) => entry.title === 'Nieuw na overstap'), 'zoeken blijft hoofdletterongevoelig');
+      assert.ok((await baas.get('/app/api/admin/history?search=NIEUW')).body.items.some((entry) => entry.title === 'Nieuw na overstap'), 'zoeken blijft hoofdletterongevoelig');
     } finally {
       server.close();
     }

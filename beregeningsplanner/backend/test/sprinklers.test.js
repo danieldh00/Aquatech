@@ -183,11 +183,11 @@ test('API sproeierbibliotheek: inlezen, rechten, andere organisatie en terug naa
   const { db, server, base, as } = await setup();
   try {
     const anon = createClient(base);
-    assert.strictEqual((await anon.get('/api/sprinkler-library')).status, 401);
+    assert.strictEqual((await anon.get('/app/api/sprinkler-library')).status, 401);
     const baas = await as('baas');
     const kees = await as('kees');
     const gert = await as('gert', 'groen');
-    assert.deepStrictEqual((await kees.get('/api/sprinkler-library')).body, { own: null, updatedAt: null });
+    assert.deepStrictEqual((await kees.get('/app/api/sprinkler-library')).body, { own: null, updatedAt: null });
 
     const file = Lib.toSheets(Lib.merge(null));
     const sheets = Object.fromEntries(Object.entries(file).map(([sheet, rows]) => [sheet, [Lib.SHEETS[sheet].map((column) => column[0]), ...rows]]));
@@ -196,24 +196,24 @@ test('API sproeierbibliotheek: inlezen, rechten, andere organisatie en terug naa
     raw.nozzles.find((nozzle) => nozzle.key === 'MP3000').price = 11;
     raw.nozzles.push({ key: 'kapot', group: 'x' });
 
-    assert.strictEqual((await kees.put('/api/sprinkler-library', raw)).status, 403, 'installateur mag niet inlezen');
-    const put = await baas.put('/api/sprinkler-library', raw);
+    assert.strictEqual((await kees.put('/app/api/sprinkler-library', raw)).status, 403, 'installateur mag niet inlezen');
+    const put = await baas.put('/app/api/sprinkler-library', raw);
     assert.strictEqual(put.status, 200, JSON.stringify(put.body));
     assert.strictEqual(put.body.counts.own, 2, 'alleen afwijkingen van de standaard opgeslagen');
     assert.strictEqual(put.body.problems.length, 1);
     const rows = db.prepare('SELECT kind, key FROM sprinkler_library ORDER BY kind, key').all().map((row) => `${row.kind}:${row.key}`);
     assert.deepStrictEqual(rows, ['body:POP20', 'nozzle:MP3000']);
 
-    const seen = await kees.get('/api/sprinkler-library');
+    const seen = await kees.get('/app/api/sprinkler-library');
     assert.deepStrictEqual(seen.body.own.bodies.map((body) => body.key), ['POP20']);
-    assert.deepStrictEqual((await gert.get('/api/sprinkler-library')).body.own, null, 'andere organisatie ziet niets');
-    assert.strictEqual((await gert.del('/api/sprinkler-library')).body.removed, 0, 'en kan niets wissen');
+    assert.deepStrictEqual((await gert.get('/app/api/sprinkler-library')).body.own, null, 'andere organisatie ziet niets');
+    assert.strictEqual((await gert.del('/app/api/sprinkler-library')).body.removed, 0, 'en kan niets wissen');
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM sprinkler_library').get().n, 2);
 
-    assert.strictEqual((await baas.put('/api/sprinkler-library', { bodies: [], nozzles: [{ key: 'x' }] })).status, 400);
-    assert.strictEqual((await kees.del('/api/sprinkler-library')).status, 403);
-    assert.strictEqual((await baas.del('/api/sprinkler-library')).body.removed, 2);
-    assert.strictEqual((await baas.get('/api/sprinkler-library')).body.own, null);
+    assert.strictEqual((await baas.put('/app/api/sprinkler-library', { bodies: [], nozzles: [{ key: 'x' }] })).status, 400);
+    assert.strictEqual((await kees.del('/app/api/sprinkler-library')).status, 403);
+    assert.strictEqual((await baas.del('/app/api/sprinkler-library')).body.removed, 2);
+    assert.strictEqual((await baas.get('/app/api/sprinkler-library')).body.own, null);
     const audit = db.prepare("SELECT action FROM audit WHERE action LIKE 'sproeierbibliotheek%' ORDER BY created_at").all().map((row) => row.action);
     assert.deepStrictEqual(audit, ['sproeierbibliotheek_ingelezen', 'sproeierbibliotheek_standaard']);
   } finally {

@@ -40,9 +40,9 @@ async function setup(items) {
   const { server, base } = await listen(createApp({ secret: 'f'.repeat(64), db }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
   for (const [index, [code, categories, price]] of items.entries()) {
-    assert.strictEqual((await admin.post('/api/stock/items', { code, name: `Artikel ${code}`, onHand: 5, salePrice: price ?? 10 })).status, 201);
+    assert.strictEqual((await admin.post('/app/api/stock/items', { code, name: `Artikel ${code}`, onHand: 5, salePrice: price ?? 10 })).status, 201);
     db.prepare('INSERT INTO shop_products (tenant_id, id, name, image, categories) VALUES (?, ?, ?, ?, ?)').run(main, String(index + 1), code, '', JSON.stringify(categories));
     db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE tenant_id = ? AND code = ?').run(String(index + 1), main, code);
   }
@@ -109,7 +109,7 @@ test('webshop: koppen zonder link, flyouts per niveau en categoriepagina', async
     ['P1', ['Pop-up sproeiers'], 8],
   ];
   const { anonymous } = await setup(items);
-  const home = (await anonymous.get('/winkel/')).text;
+  const home = (await anonymous.get('/')).text;
   assert.ok(!/<a [^>]*href="groep\/[^"]*"[^>]*>(Leidingen|Beregening)/.test(home.split('<main')[0]), 'koppen in het menu zijn geen link');
   const nav = home.split('<main')[0];
   assert.match(nav, /<span class="nav-heading" tabindex="0">Leidingen &amp; toebehoren<\/span><ul class="nav-drop">/);
@@ -118,7 +118,7 @@ test('webshop: koppen zonder link, flyouts per niveau en categoriepagina', async
   assert.match(nav, /<summary>Tyleen &amp; koppelingen<\/summary>/, 'ingeklapte niveaus in het smalle menu');
   assert.ok(!/Beregening oud/.test(nav), 'verborgen categorie niet in het menu');
 
-  const group = await anonymous.get('/winkel/groep/leidingen-toebehoren/');
+  const group = await anonymous.get('/groep/leidingen-toebehoren/');
   assert.strictEqual(group.status, 200);
   assert.match(group.text, /<h1>Leidingen &amp; toebehoren<\/h1>/);
   assert.match(group.text, /Ontdek ons ruime leidingen en slangen assortiment/);
@@ -126,7 +126,7 @@ test('webshop: koppen zonder link, flyouts per niveau en categoriepagina', async
   assert.match(group.text, />3 producten</);
   assert.match(group.text, /<h2>Categorie<\/h2>/);
 
-  const category = await anonymous.get('/winkel/categorie/eindkap-tyleen/');
+  const category = await anonymous.get('/categorie/eindkap-tyleen/');
   assert.strictEqual(category.status, 200);
   assert.match(category.text, /Shop<\/a> › <a href="..\/..\/groep\/leidingen-toebehoren\/">Leidingen &amp; toebehoren<\/a> › <a href="..\/..\/categorie\/tyleen-en-koppelingen\/">Tyleen &amp; koppelingen<\/a> › <a href="..\/..\/categorie\/tyleenkoppelingen\/">Tyleen koppelingen<\/a> › <span>Eindkap tyleenkoppeling<\/span>/);
   assert.match(category.text, /<h2>Prijs<\/h2>/);
@@ -134,26 +134,26 @@ test('webshop: koppen zonder link, flyouts per niveau en categoriepagina', async
   assert.match(category.text, /aria-current="page">Eindkap tyleenkoppeling/, 'huidige categorie in de zijbalk');
   assert.ok(!category.text.includes('cat-blocks'), 'een categorie zonder subcategorieën heeft geen blokken');
 
-  const parent = await anonymous.get('/winkel/categorie/tyleenkoppelingen/');
+  const parent = await anonymous.get('/categorie/tyleenkoppelingen/');
   assert.match(parent.text, /class="cat-block" href="..\/..\/categorie\/eindkap-tyleen\/"/);
   assert.match(parent.text, /Eindkap tyleenkoppeling<\/strong><span>3 producten/);
   assert.ok(!/class="product-card"/.test(parent.text), 'geen producten rechtstreeks in de categorie');
 
-  const filtered = await anonymous.get('/winkel/categorie/eindkap-tyleen/?min=10&max=20');
+  const filtered = await anonymous.get('/categorie/eindkap-tyleen/?min=10&max=20');
   assert.match(filtered.text, /Resultaat 1–1 van de 1 resultaat/);
   assert.match(filtered.text, /Artikel E2/);
   assert.ok(!filtered.text.includes('Artikel E1'));
-  const cheapFirst = (await anonymous.get('/winkel/categorie/eindkap-tyleen/?sorteer=prijs-hoog')).text;
+  const cheapFirst = (await anonymous.get('/categorie/eindkap-tyleen/?sorteer=prijs-hoog')).text;
   assert.ok(cheapFirst.indexOf('Artikel E3') < cheapFirst.indexOf('Artikel E1'), 'prijs hoog - laag');
-  assert.strictEqual((await anonymous.get('/winkel/categorie/eindkap-tyleen/?min=abc&pagina=999&sorteer=x')).status, 200);
-  assert.strictEqual((await anonymous.get('/winkel/categorie/bestaat-niet/')).status, 404);
+  assert.strictEqual((await anonymous.get('/categorie/eindkap-tyleen/?min=abc&pagina=999&sorteer=x')).status, 200);
+  assert.strictEqual((await anonymous.get('/categorie/bestaat-niet/')).status, 404);
 });
 
 test('webshop: lange lijsten staan op meerdere pagina\'s', async () => {
   const { anonymous } = await setup(Array.from({ length: 30 }, (_, index) => [`K${index}`, ['Eindkap tyleenkoppeling'], 1 + index]));
-  const first = (await anonymous.get('/winkel/categorie/eindkap-tyleen/')).text;
+  const first = (await anonymous.get('/categorie/eindkap-tyleen/')).text;
   assert.match(first, /Resultaat 1–24 van de 30 resultaten/);
   assert.match(first, /<nav class="pager"/);
-  const second = (await anonymous.get('/winkel/categorie/eindkap-tyleen/?pagina=2')).text;
+  const second = (await anonymous.get('/categorie/eindkap-tyleen/?pagina=2')).text;
   assert.match(second, /Resultaat 25–30 van de 30 resultaten/);
 });

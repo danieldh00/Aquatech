@@ -91,49 +91,49 @@ test('nieuws: beheerder plaatst, collega en klant lezen, melding en gezien', asy
     // Account van voor deze versie: krijgt één melding voor de laatste versie.
     // Accounts aangemaakt vóór de laatste versie, zodat de test niet afhangt van de dag waarop hij draait.
     db.prepare('UPDATE users SET created_at = ?').run('2026-01-01T08:00:00.000Z');
-    assert.strictEqual((await kees.get('/api/me')).body.news, 1);
+    assert.strictEqual((await kees.get('/app/api/me')).body.news, 1);
 
-    const intern = await baas.post('/api/news', { title: 'Teamoverleg', body: 'Vrijdag 8:00 in de werkplaats.\nhttps://voorbeeld.nl/agenda', mail: true });
+    const intern = await baas.post('/app/api/news', { title: 'Teamoverleg', body: 'Vrijdag 8:00 in de werkplaats.\nhttps://voorbeeld.nl/agenda', mail: true });
     assert.strictEqual(intern.status, 201, JSON.stringify(intern.body));
     assert.strictEqual(intern.body.mailed.sent, 1, 'alleen collega\'s met een e-mailadres, niet de afzender of klanten');
     assert.deepStrictEqual(sent.map((message) => message.to), ['kees@voorbeeld.nl']);
     assert.match(sent[0].subject, /Nieuws: Teamoverleg/);
-    const open = await baas.post('/api/news', { title: 'Zomerstop', body: 'Van 1 tot 14 augustus zijn we dicht.', audience: 'iedereen', pinned: true });
+    const open = await baas.post('/app/api/news', { title: 'Zomerstop', body: 'Van 1 tot 14 augustus zijn we dicht.', audience: 'iedereen', pinned: true });
     assert.strictEqual(open.status, 201);
 
     // Kees ziet beide berichten (vastgezet eerst), Klaas alleen het openbare.
-    const kn = (await kees.get('/api/news')).body;
+    const kn = (await kees.get('/app/api/news')).body;
     assert.deepStrictEqual(kn.items.map((i) => i.title), ['Zomerstop', 'Teamoverleg']);
     assert.strictEqual(kn.canPost, false);
     assert.ok(kn.releases.length > 0);
-    const cn = (await klaas.get('/api/news')).body;
+    const cn = (await klaas.get('/app/api/news')).body;
     assert.deepStrictEqual(cn.items.map((i) => i.title), ['Zomerstop']);
     assert.ok(!JSON.stringify(cn.releases).includes('Uitbesteden'));
 
     // Melding: Kees 2 berichten + laatste versie, Klaas 1 bericht + versie, Baas geen eigen berichten.
-    assert.strictEqual((await kees.get('/api/me')).body.news, 3);
-    assert.strictEqual((await klaas.get('/api/me')).body.news, 2);
-    assert.strictEqual((await baas.get('/api/me')).body.news, 1);
+    assert.strictEqual((await kees.get('/app/api/me')).body.news, 3);
+    assert.strictEqual((await klaas.get('/app/api/me')).body.news, 2);
+    assert.strictEqual((await baas.get('/app/api/me')).body.news, 1);
 
     // Pagina bekeken: alles gezien, zonder auditregel.
-    assert.strictEqual((await kees.post('/api/news/seen', {})).status, 200);
-    assert.strictEqual((await kees.get('/api/me')).body.news, 0);
-    const prefs = (await kees.get('/api/me')).body.preferences;
+    assert.strictEqual((await kees.post('/app/api/news/seen', {})).status, 200);
+    assert.strictEqual((await kees.get('/app/api/me')).body.news, 0);
+    const prefs = (await kees.get('/app/api/me')).body.preferences;
     assert.strictEqual(prefs.seenRelease, Releases.latest);
     assert.ok(prefs.newsSeenAt);
     // Het profielformulier laat de stand van Nieuws staan.
-    await kees.put('/api/account/profile', { preferences: { startPage: 'planning', mailCopy: false } });
-    assert.strictEqual((await kees.get('/api/me')).body.preferences.seenRelease, Releases.latest);
+    await kees.put('/app/api/account/profile', { preferences: { startPage: 'planning', mailCopy: false } });
+    assert.strictEqual((await kees.get('/app/api/me')).body.preferences.seenRelease, Releases.latest);
 
     // Bewerken, vastzetten en verwijderen.
     const id = intern.body.item.id;
-    const upd = await baas.put(`/api/news/${id}`, { pinned: true, title: 'Teamoverleg (verzet)' });
+    const upd = await baas.put(`/app/api/news/${id}`, { pinned: true, title: 'Teamoverleg (verzet)' });
     assert.strictEqual(upd.status, 200);
     assert.strictEqual(upd.body.item.pinned, true);
     assert.strictEqual(upd.body.item.body, intern.body.item.body);
-    assert.strictEqual((await baas.put(`/api/news/${id}`, { title: '' })).status, 400);
-    assert.strictEqual((await baas.del(`/api/news/${open.body.item.id}`)).status, 200);
-    assert.strictEqual((await baas.del(`/api/news/${open.body.item.id}`)).status, 404);
+    assert.strictEqual((await baas.put(`/app/api/news/${id}`, { title: '' })).status, 400);
+    assert.strictEqual((await baas.del(`/app/api/news/${open.body.item.id}`)).status, 200);
+    assert.strictEqual((await baas.del(`/app/api/news/${open.body.item.id}`)).status, 404);
 
     // Auditlog zonder de inhoud van het bericht.
     const audit = db.prepare("SELECT action, detail FROM audit WHERE action LIKE 'nieuws_%'").all();
@@ -152,25 +152,25 @@ test('nieuws: rechten en tenantscheiding', async () => {
     const kees = await as('kees');
     const klaas = await as('klaas');
     // Zonder inloggen niets.
-    assert.strictEqual((await createClient(base).get('/api/news')).status, 401);
+    assert.strictEqual((await createClient(base).get('/app/api/news')).status, 401);
     // Zonder het recht nieuws geen plaatsen, wijzigen of verwijderen.
-    assert.strictEqual((await kees.post('/api/news', { title: 'x', body: 'y' })).status, 403);
-    assert.strictEqual((await klaas.post('/api/news', { title: 'x', body: 'y' })).status, 403);
-    const item = (await baas.post('/api/news', { title: 'Intern', body: 'Alleen voor ons.' })).body.item;
-    assert.strictEqual((await kees.put(`/api/news/${item.id}`, { title: 'z' })).status, 403);
-    assert.strictEqual((await kees.del(`/api/news/${item.id}`)).status, 403);
+    assert.strictEqual((await kees.post('/app/api/news', { title: 'x', body: 'y' })).status, 403);
+    assert.strictEqual((await klaas.post('/app/api/news', { title: 'x', body: 'y' })).status, 403);
+    const item = (await baas.post('/app/api/news', { title: 'Intern', body: 'Alleen voor ons.' })).body.item;
+    assert.strictEqual((await kees.put(`/app/api/news/${item.id}`, { title: 'z' })).status, 403);
+    assert.strictEqual((await kees.del(`/app/api/news/${item.id}`)).status, 403);
 
     // Een andere organisatie ziet en wijzigt het bericht niet.
-    const made = await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
+    const made = await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
     assert.strictEqual(made.status, 201, JSON.stringify(made.body));
     const piet = await as('piet', 'groen');
-    assert.deepStrictEqual((await piet.get('/api/news')).body.items, []);
-    assert.strictEqual((await piet.put(`/api/news/${item.id}`, { title: 'gekaapt' })).status, 404);
-    assert.strictEqual((await piet.del(`/api/news/${item.id}`)).status, 404);
-    assert.strictEqual((await piet.get('/api/me')).body.news <= 1, true);
+    assert.deepStrictEqual((await piet.get('/app/api/news')).body.items, []);
+    assert.strictEqual((await piet.put(`/app/api/news/${item.id}`, { title: 'gekaapt' })).status, 404);
+    assert.strictEqual((await piet.del(`/app/api/news/${item.id}`)).status, 404);
+    assert.strictEqual((await piet.get('/app/api/me')).body.news <= 1, true);
 
     // De pagina zelf.
-    const page = await kees.get('/nieuws/');
+    const page = await kees.get('/app/nieuws/');
     assert.strictEqual(page.status, 200);
     assert.match(page.text, /nieuws\.js/);
   } finally {

@@ -49,7 +49,7 @@
     try { org.value = fromUrl ?? localStorage.getItem('aquatech_org') ?? ''; } catch (_) { org.value = fromUrl || ''; }
     if (org.value) document.getElementById('user').focus();
     // Relatief tot de root van de app (de pagina kan op elk pad staan).
-    const root = (() => { const b = location.pathname.replace(/[^/]*$/, '').split('/').filter(Boolean).map(() => '..').join('/'); return b ? b + '/' : ''; })();
+    const root = (() => { const b = location.pathname.replace(/[^/]*$/, '').split('/').filter(Boolean).slice(1).map(() => '..').join('/'); return b ? b + '/' : ''; })();
     // Knop "Direct een tekening maken" alleen als de organisatie dat toestaat.
     let drawTimer = null;
     async function checkDraw() {
@@ -69,7 +69,7 @@
       b.disabled = true; e.textContent = '';
       try {
         // Relatief tot de root van de app (de pagina kan op elk pad staan).
-        const base = location.pathname.replace(/[^/]*$/, '').split('/').filter(Boolean).map(() => '..').join('/');
+        const base = location.pathname.replace(/[^/]*$/, '').split('/').filter(Boolean).slice(1).map(() => '..').join('/');
         const res = await fetch((base ? base + '/' : '') + 'api/auth/login', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tenant: org.value.trim(), username: document.getElementById('user').value.trim(), password: document.getElementById('code').value, code: document.getElementById('code').value }),

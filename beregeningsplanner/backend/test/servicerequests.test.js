@@ -42,24 +42,24 @@ test('meldingen: klant meldt met foto, medewerker antwoordt en maakt een werkord
   const { db, server, base, as } = await setup();
   try {
     const kees = await as('kees'), pim = await as('pim'), klaas = await as('klaas'), piet = await as('piet'), bram = await as('bram', 'blauw');
-    const klaasId = (await klaas.get('/api/me')).body.user.id;
+    const klaasId = (await klaas.get('/app/api/me')).body.user.id;
 
     // Installatie van Klaas: werkorder uit een geaccordeerde offerte aan zijn account.
     const data = { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1\n8071 AB Nunspeet' },
       lines: [{ section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 20, vat: 21 }] };
-    const quote = (await kees.post('/api/quotes', { data, customerId: klaasId })).body;
-    await kees.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
-    const inst = (await kees.post('/api/workorders', { quoteId: quote.id })).body;
-    await kees.put(`/api/workorders/${inst.id}`, { status: 'gereed', data: { ...inst.data, zones: [{ name: 'Zone 1', kind: 'Gazon', parts: '4× sproeier' }] } });
+    const quote = (await kees.post('/app/api/quotes', { data, customerId: klaasId })).body;
+    await kees.put(`/app/api/quotes/${quote.id}`, { status: 'akkoord' });
+    const inst = (await kees.post('/app/api/workorders', { quoteId: quote.id })).body;
+    await kees.put(`/app/api/workorders/${inst.id}`, { status: 'gereed', data: { ...inst.data, zones: [{ name: 'Zone 1', kind: 'Gazon', parts: '4× sproeier' }] } });
 
     // Alleen klanten melden; medewerkers niet (en omgekeerd).
-    assert.strictEqual((await kees.post('/api/portal/requests', { subject: 'x', description: 'iets aan de hand' })).status, 403);
-    assert.strictEqual((await klaas.get('/api/service-requests')).status, 403);
-    assert.strictEqual((await klaas.post('/api/portal/requests', { subject: 'Lek', description: 'kort' })).status, 400, 'te korte omschrijving');
-    const otherInst = (await piet.post('/api/portal/requests', { subject: 'Lek', description: 'Er lekt water bij de kraan.', installationId: inst.id }));
+    assert.strictEqual((await kees.post('/app/api/portal/requests', { subject: 'x', description: 'iets aan de hand' })).status, 403);
+    assert.strictEqual((await klaas.get('/app/api/service-requests')).status, 403);
+    assert.strictEqual((await klaas.post('/app/api/portal/requests', { subject: 'Lek', description: 'kort' })).status, 400, 'te korte omschrijving');
+    const otherInst = (await piet.post('/app/api/portal/requests', { subject: 'Lek', description: 'Er lekt water bij de kraan.', installationId: inst.id }));
     assert.strictEqual(otherInst.status, 400, 'installatie van een ander');
 
-    const created = await klaas.post('/api/portal/requests', {
+    const created = await klaas.post('/app/api/portal/requests', {
       kind: 'storing', urgent: true, subject: 'Zone 1 gaat niet aan', description: 'Sinds gisteren gaat zone 1 niet meer aan.',
       address: 'Tuinstraat 1, 8071 AB Nunspeet', phone: '0341 000 000', preferred: 'Ochtend', installationId: inst.id,
     });
@@ -70,39 +70,39 @@ test('meldingen: klant meldt met foto, medewerker antwoordt en maakt een werkord
 
     // Foto: op inhoud gecontroleerd, alleen bij een eigen, lopende melding.
     const img = sitePhotoPng('voor', 3).toString('base64');
-    assert.strictEqual((await klaas.post(`/api/portal/requests/${request.id}/photos`, { image: Buffer.from('geen foto').toString('base64') })).status, 400);
-    assert.strictEqual((await piet.post(`/api/portal/requests/${request.id}/photos`, { image: img })).status, 404);
-    const photo = (await klaas.post(`/api/portal/requests/${request.id}/photos`, { image: img })).body;
+    assert.strictEqual((await klaas.post(`/app/api/portal/requests/${request.id}/photos`, { image: Buffer.from('geen foto').toString('base64') })).status, 400);
+    assert.strictEqual((await piet.post(`/app/api/portal/requests/${request.id}/photos`, { image: img })).status, 404);
+    const photo = (await klaas.post(`/app/api/portal/requests/${request.id}/photos`, { image: img })).body;
     assert.ok(photo.id && photo.url === `api/portal/requests/${request.id}/photos/${photo.id}`);
-    const extra = (await klaas.post(`/api/portal/requests/${request.id}/photos`, { image: img })).body;
-    assert.strictEqual((await klaas.del(`/api/portal/requests/${request.id}/photos/${extra.id}`)).status, 200);
-    assert.strictEqual((await klaas.get(`/api/portal/requests/${request.id}/photos/${photo.id}`)).type, 'image/png');
-    assert.strictEqual((await piet.get(`/api/portal/requests/${request.id}/photos/${photo.id}`)).status, 404);
-    assert.strictEqual((await piet.get(`/api/portal/requests/${request.id}`)).status, 404);
-    assert.deepStrictEqual((await piet.get('/api/portal')).body.requests, []);
+    const extra = (await klaas.post(`/app/api/portal/requests/${request.id}/photos`, { image: img })).body;
+    assert.strictEqual((await klaas.del(`/app/api/portal/requests/${request.id}/photos/${extra.id}`)).status, 200);
+    assert.strictEqual((await klaas.get(`/app/api/portal/requests/${request.id}/photos/${photo.id}`)).type, 'image/png');
+    assert.strictEqual((await piet.get(`/app/api/portal/requests/${request.id}/photos/${photo.id}`)).status, 404);
+    assert.strictEqual((await piet.get(`/app/api/portal/requests/${request.id}`)).status, 404);
+    assert.deepStrictEqual((await piet.get('/app/api/portal')).body.requests, []);
     const stored = db.prepare('SELECT image FROM service_request_photos WHERE id = ?').get(photo.id).image;
     assert.ok(!stored.includes(img.slice(0, 40)), 'versleuteld opgeslagen');
 
     // Medewerker (ook een planner): overzicht, detail, andere tenant ziet niets.
-    const list = (await pim.get('/api/service-requests?open=1')).body.items;
+    const list = (await pim.get('/app/api/service-requests?open=1')).body.items;
     assert.deepStrictEqual(list.map((x) => [x.id, x.photoCount]), [[request.id, 1]]);
-    assert.strictEqual((await bram.get(`/api/service-requests/${request.id}`)).status, 404);
-    assert.deepStrictEqual((await bram.get('/api/service-requests')).body.items, []);
-    assert.strictEqual((await bram.put(`/api/service-requests/${request.id}`, { status: 'afgewezen' })).status, 404);
-    assert.strictEqual((await bram.post(`/api/service-requests/${request.id}/workorder`)).status, 404);
-    assert.strictEqual((await bram.get(`/api/service-requests/${request.id}/photos/${photo.id}`)).status, 404);
-    assert.strictEqual((await kees.get(`/api/service-requests/${request.id}/photos/${photo.id}?thumb=1`)).type, 'image/png');
+    assert.strictEqual((await bram.get(`/app/api/service-requests/${request.id}`)).status, 404);
+    assert.deepStrictEqual((await bram.get('/app/api/service-requests')).body.items, []);
+    assert.strictEqual((await bram.put(`/app/api/service-requests/${request.id}`, { status: 'afgewezen' })).status, 404);
+    assert.strictEqual((await bram.post(`/app/api/service-requests/${request.id}/workorder`)).status, 404);
+    assert.strictEqual((await bram.get(`/app/api/service-requests/${request.id}/photos/${photo.id}`)).status, 404);
+    assert.strictEqual((await kees.get(`/app/api/service-requests/${request.id}/photos/${photo.id}?thumb=1`)).type, 'image/png');
 
-    const upd = await kees.put(`/api/service-requests/${request.id}`, { status: 'in_behandeling', reply: 'Wij komen langs.', note: 'Waarschijnlijk het ventiel' });
+    const upd = await kees.put(`/app/api/service-requests/${request.id}`, { status: 'in_behandeling', reply: 'Wij komen langs.', note: 'Waarschijnlijk het ventiel' });
     assert.strictEqual(upd.status, 200);
     assert.deepStrictEqual([upd.body.status, upd.body.handledBy, upd.body.note], ['in_behandeling', 'Kees', 'Waarschijnlijk het ventiel']);
-    assert.strictEqual((await kees.put(`/api/service-requests/${request.id}`, { status: 'ingepland' })).status, 400, 'ingepland volgt uit de werkorder');
-    let mine = (await klaas.get(`/api/portal/requests/${request.id}`)).body;
+    assert.strictEqual((await kees.put(`/app/api/service-requests/${request.id}`, { status: 'ingepland' })).status, 400, 'ingepland volgt uit de werkorder');
+    let mine = (await klaas.get(`/app/api/portal/requests/${request.id}`)).body;
     assert.deepStrictEqual([mine.reply, mine.note], ['Wij komen langs.', undefined], 'antwoord wel, notitie niet');
 
     // Werkorder maken: klantgegevens, omschrijving, zones van de installatie en de foto gaan mee.
-    assert.strictEqual((await kees.post(`/api/service-requests/${request.id}/workorder`, { assigneeId: 'onbekend' })).status, 400);
-    const conv = await kees.post(`/api/service-requests/${request.id}/workorder`, {});
+    assert.strictEqual((await kees.post(`/app/api/service-requests/${request.id}/workorder`, { assigneeId: 'onbekend' })).status, 400);
+    const conv = await kees.post(`/app/api/service-requests/${request.id}/workorder`, {});
     assert.strictEqual(conv.status, 201, JSON.stringify(conv.body));
     const wo = conv.body.workOrder;
     assert.strictEqual(conv.body.item.status, 'ingepland');
@@ -111,35 +111,35 @@ test('meldingen: klant meldt met foto, medewerker antwoordt en maakt een werkord
     assert.ok(wo.data.instructions.includes(request.number) && wo.data.instructions.includes('Sinds gisteren'));
     assert.deepStrictEqual(wo.data.zones.map((zone) => zone.name), ['Zone 1']);
     assert.strictEqual(wo.quoteId, null);
-    assert.strictEqual((await kees.post(`/api/service-requests/${request.id}/workorder`)).status, 409, 'maar één keer');
-    assert.strictEqual((await kees.put(`/api/service-requests/${request.id}`, { status: 'nieuw' })).status, 409);
-    const photos = (await kees.get(`/api/workorders/${wo.id}/photos`)).body.items;
+    assert.strictEqual((await kees.post(`/app/api/service-requests/${request.id}/workorder`)).status, 409, 'maar één keer');
+    assert.strictEqual((await kees.put(`/app/api/service-requests/${request.id}`, { status: 'nieuw' })).status, 409);
+    const photos = (await kees.get(`/app/api/workorders/${wo.id}/photos`)).body.items;
     assert.deepStrictEqual(photos.map((photo) => [photo.kind, photo.customerVisible]), [['voor', true]]);
 
     // Klant: de werkorder staat in zijn portaal (met de foto), niet bij een ander.
-    const portal = (await klaas.get('/api/portal')).body;
+    const portal = (await klaas.get('/app/api/portal')).body;
     assert.ok(portal.workorders.some((workOrder) => workOrder.id === wo.id));
     assert.strictEqual(portal.requests[0].workOrder.id, wo.id);
-    const dossier = (await klaas.get(`/api/portal/workorders/${wo.id}`)).body;
+    const dossier = (await klaas.get(`/app/api/portal/workorders/${wo.id}`)).body;
     assert.ok(!JSON.stringify(dossier).includes('Sinds gisteren'), 'geen interne instructies naar de klant');
     assert.strictEqual(dossier.photos.length, 1);
-    assert.strictEqual((await klaas.get(`/api/${dossier.photos[0].url.replace(/^api\//, '')}`)).type, 'image/png');
-    assert.strictEqual((await piet.get(`/api/portal/workorders/${wo.id}`)).status, 404);
-    await kees.put(`/api/workorders/${wo.id}`, { status: 'gepland', data: { ...wo.data, plannedDate: '2030-01-07', startTime: '09:00' } });
-    assert.strictEqual((await klaas.post(`/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' })).status, 200, 'afspraak bevestigen via het portaal');
+    assert.strictEqual((await klaas.get(`/app/api/${dossier.photos[0].url.replace(/^api\//, '')}`)).type, 'image/png');
+    assert.strictEqual((await piet.get(`/app/api/portal/workorders/${wo.id}`)).status, 404);
+    await kees.put(`/app/api/workorders/${wo.id}`, { status: 'gepland', data: { ...wo.data, plannedDate: '2030-01-07', startTime: '09:00' } });
+    assert.strictEqual((await klaas.post(`/app/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' })).status, 200, 'afspraak bevestigen via het portaal');
 
     // Na het omzetten geen foto's of intrekken meer.
-    assert.strictEqual((await klaas.post(`/api/portal/requests/${request.id}/photos`, { image: img })).status, 409);
-    assert.strictEqual((await klaas.post(`/api/portal/requests/${request.id}/withdraw`)).status, 409);
+    assert.strictEqual((await klaas.post(`/app/api/portal/requests/${request.id}/photos`, { image: img })).status, 409);
+    assert.strictEqual((await klaas.post(`/app/api/portal/requests/${request.id}/withdraw`)).status, 409);
 
     // Tweede melding: intrekken, daarna geen werkorder meer.
-    const r2 = (await klaas.post('/api/portal/requests', { kind: 'onderhoud', subject: 'Winterklaar', description: 'Graag winterklaar maken.' })).body;
+    const r2 = (await klaas.post('/app/api/portal/requests', { kind: 'onderhoud', subject: 'Winterklaar', description: 'Graag winterklaar maken.' })).body;
     assert.strictEqual(r2.number.slice(-4), '0002');
     assert.strictEqual(r2.urgent, false);
-    mine = (await klaas.post(`/api/portal/requests/${r2.id}/withdraw`)).body;
+    mine = (await klaas.post(`/app/api/portal/requests/${r2.id}/withdraw`)).body;
     assert.strictEqual(mine.status, 'ingetrokken');
-    assert.strictEqual((await kees.post(`/api/service-requests/${r2.id}/workorder`)).status, 409);
-    assert.deepStrictEqual((await kees.get('/api/service-requests?open=1')).body.items, []);
+    assert.strictEqual((await kees.post(`/app/api/service-requests/${r2.id}/workorder`)).status, 409);
+    assert.deepStrictEqual((await kees.get('/app/api/service-requests?open=1')).body.items, []);
   } finally {
     server.close();
   }
@@ -150,7 +150,7 @@ test('meldingen: klant kan niet onbeperkt melden', async () => {
   try {
     const klaas = await as('klaas');
     let last = 0;
-    for (let i = 0; i < 11; i++) last = (await klaas.post('/api/portal/requests', { subject: `Melding ${i}`, description: 'Er is iets mis met de beregening.' })).status;
+    for (let i = 0; i < 11; i++) last = (await klaas.post('/app/api/portal/requests', { subject: `Melding ${i}`, description: 'Er is iets mis met de beregening.' })).status;
     assert.strictEqual(last, 429);
   } finally {
     server.close();

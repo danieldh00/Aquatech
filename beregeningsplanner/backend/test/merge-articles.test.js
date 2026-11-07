@@ -66,43 +66,43 @@ test('samenvoegen via de API: voorraad, prijs, afbeelding en reserveringen blijv
     const sizes = [['PEB-16', '16 mm', 0.5, 1.2, 100], ['PEB-20', '20 mm', 0.7, 1.6, 50], ['PEB-25', '25 mm', 0.9, 2.1, 0]];
     const made = [];
     for (const [code, size, costPrice, salePrice, onHand] of sizes) {
-      const response = await baas.post('/api/stock/items', { code, name: `PE-buis ${size}`, unit: 'm', costPrice, salePrice, vatRate: 9, minQty: 10, onHand });
+      const response = await baas.post('/app/api/stock/items', { code, name: `PE-buis ${size}`, unit: 'm', costPrice, salePrice, vatRate: 9, minQty: 10, onHand });
       assert.strictEqual(response.status, 201, JSON.stringify(response.body));
       made.push(response.body);
     }
-    const other = (await baas.post('/api/stock/items', { code: 'LOS', name: 'Losse kraan', unit: 'st' })).body;
+    const other = (await baas.post('/app/api/stock/items', { code: 'LOS', name: 'Losse kraan', unit: 'st' })).body;
     db.prepare('UPDATE stock_items SET image_id = ? WHERE id = ?').run('img-1', made[1].id);
     db.prepare('UPDATE stock_items SET shop_product_id = ?, shop_dirty = 1 WHERE id = ?').run('77', made[0].id);
 
     // Een werkorder met PEB-20 reserveert 5 m; dat moet na het samenvoegen zo blijven.
-    const quote = (await baas.post('/api/quotes', { data: { title: 'Buis', customer: { name: 'Fam. Jansen' },
+    const quote = (await baas.post('/app/api/quotes', { data: { title: 'Buis', customer: { name: 'Fam. Jansen' },
       lines: [{ section: 'materiaal', code: 'PEB-20', description: 'PE-buis 20 mm', qty: 5, unit: 'm', price: 1.6 }] } })).body;
-    await baas.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
-    const workOrder = (await baas.post('/api/workorders', { quoteId: quote.id })).body;
-    assert.strictEqual((await baas.get(`/api/stock/items/${made[1].id}`)).body.reserved, 5);
+    await baas.put(`/app/api/quotes/${quote.id}`, { status: 'akkoord' });
+    const workOrder = (await baas.post('/app/api/workorders', { quoteId: quote.id })).body;
+    assert.strictEqual((await baas.get(`/app/api/stock/items/${made[1].id}`)).body.reserved, 5);
 
-    const suggestions = await baas.get('/api/stock/merge-suggestions');
+    const suggestions = await baas.get('/app/api/stock/merge-suggestions');
     assert.strictEqual(suggestions.status, 200);
     assert.strictEqual(suggestions.body.groups.length, 1);
     const group = suggestions.body.groups[0];
     assert.deepStrictEqual(group.items.map((entry) => entry.code), ['PEB-16', 'PEB-20', 'PEB-25']);
     assert.strictEqual(group.code, 'PEB');
-    assert.strictEqual((await pien.get('/api/stock/merge-suggestions')).status, 403);
-    assert.strictEqual((await klant.get('/api/stock/merge-suggestions')).status, 403);
+    assert.strictEqual((await pien.get('/app/api/stock/merge-suggestions')).status, 403);
+    assert.strictEqual((await klant.get('/app/api/stock/merge-suggestions')).status, 403);
 
     const body = { ids: group.items.map((entry) => entry.id), code: group.code, name: group.name, attributeName: group.attributeName,
       values: Object.fromEntries(group.items.map((entry) => [entry.id, entry.value])) };
-    assert.strictEqual((await pien.post('/api/stock/merge', body)).status, 403);
+    assert.strictEqual((await pien.post('/app/api/stock/merge', body)).status, 403);
     // Controles: te weinig, dubbele waarde, bestaande code, ander soort artikel, onbekend id.
-    assert.strictEqual((await baas.post('/api/stock/merge', { ...body, ids: [made[0].id] })).status, 400);
-    assert.strictEqual((await baas.post('/api/stock/merge', { ...body, values: { ...body.values, [made[1].id]: '16 MM' } })).status, 409);
-    assert.strictEqual((await baas.post('/api/stock/merge', { ...body, code: 'LOS' })).status, 409);
-    assert.strictEqual((await baas.post('/api/stock/merge', { ...body, ids: [...body.ids.slice(0, 2), other.id], values: { ...body.values, [other.id]: '30 mm' } })).status, 409, 'andere eenheid');
-    assert.strictEqual((await baas.post('/api/stock/merge', { ...body, ids: [...body.ids.slice(0, 2), 'bestaat-niet'], values: { ...body.values, 'bestaat-niet': '30 mm' } })).status, 404);
-    assert.strictEqual((await baas.post('/api/stock/merge', { ...body, attributeName: '' })).status, 400);
+    assert.strictEqual((await baas.post('/app/api/stock/merge', { ...body, ids: [made[0].id] })).status, 400);
+    assert.strictEqual((await baas.post('/app/api/stock/merge', { ...body, values: { ...body.values, [made[1].id]: '16 MM' } })).status, 409);
+    assert.strictEqual((await baas.post('/app/api/stock/merge', { ...body, code: 'LOS' })).status, 409);
+    assert.strictEqual((await baas.post('/app/api/stock/merge', { ...body, ids: [...body.ids.slice(0, 2), other.id], values: { ...body.values, [other.id]: '30 mm' } })).status, 409, 'andere eenheid');
+    assert.strictEqual((await baas.post('/app/api/stock/merge', { ...body, ids: [...body.ids.slice(0, 2), 'bestaat-niet'], values: { ...body.values, 'bestaat-niet': '30 mm' } })).status, 404);
+    assert.strictEqual((await baas.post('/app/api/stock/merge', { ...body, attributeName: '' })).status, 400);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE parent_id IS NOT NULL').get().n, 0, 'afgewezen verzoeken veranderen niets');
 
-    const merged = await baas.post('/api/stock/merge', body);
+    const merged = await baas.post('/app/api/stock/merge', body);
     assert.strictEqual(merged.status, 201, JSON.stringify(merged.body));
     assert.strictEqual(merged.body.merged, 3);
     assert.strictEqual(merged.body.unlinked, 1);
@@ -115,7 +115,7 @@ test('samenvoegen via de API: voorraad, prijs, afbeelding en reserveringen blijv
 
     // Dezelfde artikelen (id, code, voorraad, prijs, minimum) zijn nu varianten.
     for (const [index, [code, size, costPrice, salePrice, onHand]] of sizes.entries()) {
-      const variant = (await baas.get(`/api/stock/items/${made[index].id}`)).body;
+      const variant = (await baas.get(`/app/api/stock/items/${made[index].id}`)).body;
       assert.strictEqual(variant.code, code);
       assert.strictEqual(variant.parentId, parent.id);
       assert.deepStrictEqual(variant.values, { Maat: size });
@@ -125,25 +125,25 @@ test('samenvoegen via de API: voorraad, prijs, afbeelding en reserveringen blijv
       assert.strictEqual(variant.minQty, 10);
       assert.strictEqual(variant.shop.productId, null);
     }
-    assert.strictEqual((await baas.get(`/api/stock/items/${made[1].id}`)).body.reserved, 5, 'reservering van de werkorder blijft');
-    assert.strictEqual((await baas.get(`/api/stock/items/${made[1].id}`)).body.imageId, 'img-1');
+    assert.strictEqual((await baas.get(`/app/api/stock/items/${made[1].id}`)).body.reserved, 5, 'reservering van de werkorder blijft');
+    assert.strictEqual((await baas.get(`/app/api/stock/items/${made[1].id}`)).body.imageId, 'img-1');
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_movements WHERE item_id = ?').get(made[0].id).n, 1, 'boekingen blijven');
-    const workOrderStock = (await baas.get(`/api/stock/workorders/${workOrder.id}`)).body;
+    const workOrderStock = (await baas.get(`/app/api/stock/workorders/${workOrder.id}`)).body;
     assert.deepStrictEqual(workOrderStock.lines.map((line) => [line.code, line.reserved]), [['PEB-20', 5]]);
     assert.deepStrictEqual(workOrderStock.chooseVariant, []);
 
     // Nog een keer samenvoegen kan niet: het zijn nu varianten.
-    assert.strictEqual((await baas.post('/api/stock/merge', { ...body, code: 'PEB-NIEUW' })).status, 409);
-    const listed = (await baas.get('/api/stock')).body.items;
+    assert.strictEqual((await baas.post('/app/api/stock/merge', { ...body, code: 'PEB-NIEUW' })).status, 409);
+    const listed = (await baas.get('/app/api/stock')).body.items;
     assert.strictEqual(listed.filter((item) => item.hasVariants).length, 1);
-    assert.deepStrictEqual((await baas.get('/api/stock/merge-suggestions')).body.groups, []);
+    assert.deepStrictEqual((await baas.get('/app/api/stock/merge-suggestions')).body.groups, []);
 
     // Andere organisatie ziet de artikelen niet en kan ze niet samenvoegen.
-    const created = await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
+    const created = await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
     assert.strictEqual(created.status, 201, JSON.stringify(created.body));
     const piet = await as('piet', 'groen');
-    assert.deepStrictEqual((await piet.get('/api/stock/merge-suggestions')).body.groups, []);
-    const otherTenant = await piet.post('/api/stock/merge', { ...body, code: 'ANDERS' });
+    assert.deepStrictEqual((await piet.get('/app/api/stock/merge-suggestions')).body.groups, []);
+    const otherTenant = await piet.post('/app/api/stock/merge', { ...body, code: 'ANDERS' });
     assert.strictEqual(otherTenant.status, 404);
   } finally { server.close(); }
 });
@@ -194,58 +194,58 @@ test('samenvoeging terugdraaien via de API: artikelen weer los met hun voorraad,
     const pien = await as('pien');
     const made = [];
     for (const [code, size, onHand] of [['KR-16', '16 mm', 10], ['KR-20', '20 mm', 4]]) {
-      made.push((await baas.post('/api/stock/items', { code, name: `Kraan ${size}`, unit: 'st', costPrice: 2, salePrice: 5, onHand })).body);
+      made.push((await baas.post('/app/api/stock/items', { code, name: `Kraan ${size}`, unit: 'st', costPrice: 2, salePrice: 5, onHand })).body);
     }
     db.prepare('UPDATE stock_items SET shop_product_id = ?, shop_price_seen = 5, shop_dirty = 1 WHERE id = ?').run('88', made[0].id);
     const body = { ids: made.map((item) => item.id), code: 'KR', name: 'Kraan', attributeName: 'Maat', values: { [made[0].id]: '16 mm', [made[1].id]: '20 mm' } };
-    const merged = (await baas.post('/api/stock/merge', body)).body;
+    const merged = (await baas.post('/app/api/stock/merge', body)).body;
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_merges').get().n, 1, 'het samenvoegen komt in het logboek');
     // Na het samenvoegen verandert de voorraad nog: die mutatie moet het terugdraaien overleven.
-    assert.strictEqual((await baas.post(`/api/stock/items/${made[1].id}/movements`, { kind: 'ontvangst', qty: 6, note: 'Pakbon' })).status, 201);
+    assert.strictEqual((await baas.post(`/app/api/stock/items/${made[1].id}/movements`, { kind: 'ontvangst', qty: 6, note: 'Pakbon' })).status, 201);
 
-    const preview = await baas.get(`/api/stock/items/${merged.item.id}/unmerge`);
+    const preview = await baas.get(`/app/api/stock/items/${merged.item.id}/unmerge`);
     assert.strictEqual(preview.status, 200);
     assert.strictEqual(preview.body.logged, true);
     assert.strictEqual(preview.body.restoresLinks, 1);
     assert.deepStrictEqual(preview.body.variants.map((variant) => variant.code), ['KR-16', 'KR-20']);
-    assert.strictEqual((await baas.get(`/api/stock/items/${made[0].id}/unmerge`)).status, 409, 'een los artikel is geen hoofdartikel');
-    assert.strictEqual((await pien.get(`/api/stock/items/${merged.item.id}/unmerge`)).status, 403);
-    assert.strictEqual((await pien.post(`/api/stock/items/${merged.item.id}/unmerge`, {})).status, 403);
+    assert.strictEqual((await baas.get(`/app/api/stock/items/${made[0].id}/unmerge`)).status, 409, 'een los artikel is geen hoofdartikel');
+    assert.strictEqual((await pien.get(`/app/api/stock/items/${merged.item.id}/unmerge`)).status, 403);
+    assert.strictEqual((await pien.post(`/app/api/stock/items/${merged.item.id}/unmerge`, {})).status, 403);
 
     // Een andere organisatie kan het hoofdartikel niet terugdraaien (404).
-    assert.strictEqual((await baas.post('/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } })).status, 201);
+    assert.strictEqual((await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } })).status, 201);
     const piet = await as('piet', 'groen');
-    assert.strictEqual((await piet.post(`/api/stock/items/${merged.item.id}/unmerge`, {})).status, 404);
+    assert.strictEqual((await piet.post(`/app/api/stock/items/${merged.item.id}/unmerge`, {})).status, 404);
 
     // Een variant die na het samenvoegen een nieuwe koppeling kreeg, houdt die; de preview telt hem niet mee.
     db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('555', made[0].id);
-    assert.strictEqual((await baas.get(`/api/stock/items/${merged.item.id}/unmerge`)).body.restoresLinks, 0);
+    assert.strictEqual((await baas.get(`/app/api/stock/items/${merged.item.id}/unmerge`)).body.restoresLinks, 0);
     db.prepare('UPDATE stock_items SET shop_product_id = NULL WHERE id = ?').run(made[0].id);
 
     // Is het hoofdartikel inmiddels aan een webshopproduct gekoppeld, dan blijft het staan.
     db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('99', merged.item.id);
-    assert.strictEqual((await baas.post(`/api/stock/items/${merged.item.id}/unmerge`, {})).status, 409);
+    assert.strictEqual((await baas.post(`/app/api/stock/items/${merged.item.id}/unmerge`, {})).status, 409);
     db.prepare('UPDATE stock_items SET shop_product_id = NULL WHERE id = ?').run(merged.item.id);
 
-    const undone = await baas.post(`/api/stock/items/${merged.item.id}/unmerge`, {});
+    const undone = await baas.post(`/app/api/stock/items/${merged.item.id}/unmerge`, {});
     assert.strictEqual(undone.status, 200, JSON.stringify(undone.body));
     assert.strictEqual(undone.body.restored, 2);
     assert.strictEqual(undone.body.linksRestored, 1);
-    assert.strictEqual((await baas.get(`/api/stock/items/${merged.item.id}`)).status, 404, 'het hoofdartikel is weg');
-    const first = (await baas.get(`/api/stock/items/${made[0].id}`)).body;
+    assert.strictEqual((await baas.get(`/app/api/stock/items/${merged.item.id}`)).status, 404, 'het hoofdartikel is weg');
+    const first = (await baas.get(`/app/api/stock/items/${made[0].id}`)).body;
     assert.strictEqual(first.parentId, null);
     assert.strictEqual(first.name, 'Kraan 16 mm');
     assert.strictEqual(first.shop.productId, '88', 'de webshopkoppeling is terug');
-    const second = (await baas.get(`/api/stock/items/${made[1].id}`)).body;
+    const second = (await baas.get(`/app/api/stock/items/${made[1].id}`)).body;
     assert.strictEqual(second.parentId, null);
     assert.strictEqual(second.onHand, 10, 'de ontvangst na het samenvoegen blijft');
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_movements WHERE item_id = ?').get(made[1].id).n, 2);
-    const listed = (await baas.get('/api/stock')).body.items;
+    const listed = (await baas.get('/app/api/stock')).body.items;
     assert.strictEqual(listed.filter((item) => item.hasVariants || item.parentId).length, 0);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_merges WHERE undone_at IS NOT NULL').get().n, 1);
-    assert.strictEqual((await baas.post(`/api/stock/items/${merged.item.id}/unmerge`, {})).status, 404, 'nog een keer kan niet');
+    assert.strictEqual((await baas.post(`/app/api/stock/items/${merged.item.id}/unmerge`, {})).status, 404, 'nog een keer kan niet');
     // Opnieuw samenvoegen met dezelfde code kan weer.
-    assert.strictEqual((await baas.post('/api/stock/merge', body)).status, 201);
+    assert.strictEqual((await baas.post('/app/api/stock/merge', body)).status, 201);
   } finally { server.close(); }
 });
 

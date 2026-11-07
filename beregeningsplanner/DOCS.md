@@ -559,7 +559,7 @@ van de werkorder. Daardoor is alles vanzelf gekoppeld.
 
 ## Eigen webshop (opzet)
 
-Openbare, alleen-lezen pagina's op `winkel/` (stap 1 van een eigen webshop;
+Openbare, alleen-lezen pagina's op de hoofdmap `/` (sinds 1.7.1; voorheen `winkel/`, de app staat onder `/app/`) (stap 1 van een eigen webshop;
 winkelwagen, betaling en varianten volgen). Aanzetten: Beheer → Integraties →
 Webshop en WooCommerce → *Eigen webshop tonen*; uit = overal 404. De shop toont de
 voorraadartikelen van de hoofdtenant die een verkoopprijs hebben, niet

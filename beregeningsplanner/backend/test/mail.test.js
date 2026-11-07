@@ -69,25 +69,25 @@ test('API: e-mail en WAN-IP alleen voor beheerders, wachtwoord nooit terug', asy
   const as = createLogin(base, { password: 'Tuin-Plan-2026!' });
   try {
     const baas = await as('baas'), kees = await as('kees');
-    assert.strictEqual((await createClient(base).get('/api/admin/wan-ip')).status, 401);
-    assert.strictEqual((await kees.get('/api/admin/wan-ip')).status, 403);
-    assert.strictEqual((await kees.put('/api/admin/mail', { config: { host: 'smtp.x' } })).status, 403);
-    const ip = await baas.get('/api/admin/wan-ip');
+    assert.strictEqual((await createClient(base).get('/app/api/admin/wan-ip')).status, 401);
+    assert.strictEqual((await kees.get('/app/api/admin/wan-ip')).status, 403);
+    assert.strictEqual((await kees.put('/app/api/admin/mail', { config: { host: 'smtp.x' } })).status, 403);
+    const ip = await baas.get('/app/api/admin/wan-ip');
     assert.strictEqual(ip.status, 200);
     assert.strictEqual(ip.body.ip, '93.184.215.14');
-    await baas.get('/api/admin/wan-ip');
+    await baas.get('/app/api/admin/wan-ip');
     assert.strictEqual(lookups, 1, 'onthouden');
 
-    const put = await baas.put('/api/admin/mail', { config: { mode: 'smtp', host: 'smtp.bedrijf.nl', port: 587, user: 'info', from: 'info@bedrijf.nl' }, password: 'geheim-wachtwoord' });
+    const put = await baas.put('/app/api/admin/mail', { config: { mode: 'smtp', host: 'smtp.bedrijf.nl', port: 587, user: 'info', from: 'info@bedrijf.nl' }, password: 'geheim-wachtwoord' });
     assert.strictEqual(put.status, 200);
     assert.strictEqual(put.body.passwordSet, true);
     assert.ok(!JSON.stringify(put.body).includes('geheim-wachtwoord'));
-    assert.ok(!JSON.stringify((await baas.get('/api/admin/settings')).body).includes('geheim-wachtwoord'));
+    assert.ok(!JSON.stringify((await baas.get('/app/api/admin/settings')).body).includes('geheim-wachtwoord'));
 
-    const conn = await baas.put('/api/admin/mail', { config: { mode: 'connector', host: 'bedrijf-nl.mail.protection.outlook.com', port: 25, from: 'info@bedrijf.nl' } });
+    const conn = await baas.put('/app/api/admin/mail', { config: { mode: 'connector', host: 'bedrijf-nl.mail.protection.outlook.com', port: 25, from: 'info@bedrijf.nl' } });
     assert.strictEqual(conn.body.config.mode, 'connector');
     assert.strictEqual(conn.body.config.user, '');
-    assert.strictEqual((await baas.post('/api/admin/mail/test', { to: 'info@bedrijf.nl' })).status, 200);
+    assert.strictEqual((await baas.post('/app/api/admin/mail/test', { to: 'info@bedrijf.nl' })).status, 200);
     assert.strictEqual(sent.length, 1);
     assert.strictEqual(sent[0].auth, undefined);
   } finally {

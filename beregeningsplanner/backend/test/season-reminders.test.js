@@ -71,32 +71,32 @@ test('verzendronde: één mail per klant per jaar, alleen met installatie in de 
      */
     const install = async (installer, customerId) => {
       const data = { title: 'Aanleg', customer: { name: 'Klant' }, lines: [{ section: 'materiaal', description: 'Sproeier', qty: 1, unit: 'st', price: 20, vat: 21 }] };
-      const quote = (await installer.post('/api/quotes', { data, customerId })).body;
-      await installer.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
-      assert.strictEqual((await installer.post('/api/workorders', { quoteId: quote.id })).status, 201);
+      const quote = (await installer.post('/app/api/quotes', { data, customerId })).body;
+      await installer.put(`/app/api/quotes/${quote.id}`, { status: 'akkoord' });
+      assert.strictEqual((await installer.post('/app/api/workorders', { quoteId: quote.id })).status, 201);
     };
-    const klaasId = (await klaasClient.get('/api/me')).body.user.id;
-    const janId = (await janClient.get('/api/me')).body.user.id;
+    const klaasId = (await klaasClient.get('/app/api/me')).body.user.id;
+    const janId = (await janClient.get('/app/api/me')).body.user.id;
     const basId = store.listUsers(other.id).find((user) => user.username === 'bas').id;
     await install(kees, klaasId);
     await install(kees, janId);
     await install(bram, basId);
 
     // Alleen een beheerder zet het aan; standaard staat het uit.
-    assert.strictEqual((await kees.put('/api/admin/settings', { seasonReminders: { enabled: true } })).status, 403);
+    assert.strictEqual((await kees.put('/app/api/admin/settings', { seasonReminders: { enabled: true } })).status, 403);
     assert.deepStrictEqual(await app.locals.seasonRemindersAll(new Date('2026-03-16T08:00:00Z')), {});
-    let portal = (await klaasClient.get('/api/portal')).body;
+    let portal = (await klaasClient.get('/app/api/portal')).body;
     assert.deepStrictEqual([portal.remindersEnabled, portal.reminderMails], [false, true]);
 
-    const saved = await anne.put('/api/admin/settings', { seasonReminders: { enabled: true, portalUrl: 'https://app.voorbeeld.test/portaal/', items: sanitizeSeasonReminders({}).items } });
+    const saved = await anne.put('/app/api/admin/settings', { seasonReminders: { enabled: true, portalUrl: 'https://app.voorbeeld.test/portaal/', items: sanitizeSeasonReminders({}).items } });
     assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
-    portal = (await klaasClient.get('/api/portal')).body;
+    portal = (await klaasClient.get('/app/api/portal')).body;
     assert.strictEqual(portal.remindersEnabled, true);
 
     // Jan meldt zich af in zijn portaal.
-    const optOut = await janClient.put('/api/account/profile', { preferences: { seasonReminders: false } });
+    const optOut = await janClient.put('/app/api/account/profile', { preferences: { seasonReminders: false } });
     assert.strictEqual(optOut.body.preferences.seasonReminders, false);
-    assert.strictEqual((await janClient.get('/api/portal')).body.reminderMails, false);
+    assert.strictEqual((await janClient.get('/app/api/portal')).body.reminderMails, false);
 
     // Vóór de datum niets; daarna alleen Klaas (Piet heeft geen installatie, Bas is van Blauw).
     assert.deepStrictEqual(await app.locals.seasonRemindersAll(new Date('2026-03-14T08:00:00Z')), {});
@@ -112,7 +112,7 @@ test('verzendronde: één mail per klant per jaar, alleen met installatie in de 
 
     // Testomgeving erft de instellingen, maar mailt geen echte klant met een werkorder daar.
     const testEnvironment = store.createEnvironment(main, { name: 'Test' }).tenant;
-    assert.strictEqual((await anne.post('/api/environment', { tenantId: testEnvironment.id })).status, 200);
+    assert.strictEqual((await anne.post('/app/api/environment', { tenantId: testEnvironment.id })).status, 200);
     await install(anne, piet.user ? piet.user.id : piet.id);
     const testRound = await app.locals.seasonRemindersAll(new Date('2026-03-17T08:00:00Z'));
     assert.strictEqual(testRound[testEnvironment.id], undefined);
@@ -121,7 +121,7 @@ test('verzendronde: één mail per klant per jaar, alleen met installatie in de 
     // Een uitgeschakelde organisatie verstuurt niets, ook niet met herinneringen aan.
     await store.createAccount(other.id, { username: 'bea', displayName: 'Bea', role: 'beheerder', password: PW });
     const beaClient = await as('bea', 'blauw');
-    assert.strictEqual((await beaClient.put('/api/admin/settings', { seasonReminders: { enabled: true, items: sanitizeSeasonReminders({}).items } })).status, 200);
+    assert.strictEqual((await beaClient.put('/app/api/admin/settings', { seasonReminders: { enabled: true, items: sanitizeSeasonReminders({}).items } })).status, 200);
     store.updateTenant(other.id, { disabled: true });
     assert.strictEqual((await app.locals.seasonRemindersAll(new Date('2026-03-17T08:00:00Z')))[other.id], undefined);
     store.updateTenant(other.id, { disabled: false });

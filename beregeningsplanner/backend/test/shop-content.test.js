@@ -34,9 +34,9 @@ async function setup() {
   servers.push(server);
   const login = createLogin(base, { password: PW });
   const admin = await login('baas');
-  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
   for (const item of [{ code: 'SPR-1', name: 'Sproeier Pro', onHand: 5, salePrice: 10 }, { code: 'BUIS-25', name: 'PE buis 25 mm', onHand: 100, salePrice: 1.5 }]) {
-    assert.strictEqual((await admin.post('/api/stock/items', item)).status, 201);
+    assert.strictEqual((await admin.post('/app/api/stock/items', item)).status, 201);
   }
   return { db, base, store, admin, customer: await login('jan.klant'), anonymous: createClient(base) };
 }
@@ -85,64 +85,64 @@ test('normalizeSite vult aan met de standaard en weigert ongeldige waarden', () 
 
 test('blokken: concept, voorbeeld, publiceren en vorige versie terugzetten', async () => {
   const { admin, anonymous } = await setup();
-  const start = await admin.get('/api/admin/shop-content');
+  const start = await admin.get('/app/api/admin/shop-content');
   assert.strictEqual(start.status, 200);
   assert.strictEqual(start.body.available, true);
   assert.strictEqual(start.body.site.isDefault, true);
   assert.ok(start.body.assets.includes('hero-tuin.jpg'));
-  assert.match((await anonymous.get('/winkel/')).text, /Welkom op onze webshop/);
+  assert.match((await anonymous.get('/')).text, /Welkom op onze webshop/);
 
-  const draft = await admin.put('/api/admin/shop-content/site', { hero: { title: 'Tuinseizoen is begonnen' }, notice: { enabled: false } });
+  const draft = await admin.put('/app/api/admin/shop-content/site', { hero: { title: 'Tuinseizoen is begonnen' }, notice: { enabled: false } });
   assert.strictEqual(draft.status, 200);
   assert.strictEqual(draft.body.site.hasDraft, true);
   assert.strictEqual(draft.body.site.draft.hero.title, 'Tuinseizoen is begonnen');
   assert.strictEqual(draft.body.site.draft.hero.text, DEFAULT_SITE.hero.text, 'rest blijft standaard');
 
   // Bezoekers zien het concept niet, een beheerder met ?voorbeeld=1 wel.
-  assert.match((await anonymous.get('/winkel/')).text, /Welkom op onze webshop/);
-  assert.match((await anonymous.get('/winkel/?voorbeeld=1')).text, /Welkom op onze webshop/);
-  const preview = await admin.get('/winkel/?voorbeeld=1');
+  assert.match((await anonymous.get('/')).text, /Welkom op onze webshop/);
+  assert.match((await anonymous.get('/?voorbeeld=1')).text, /Welkom op onze webshop/);
+  const preview = await admin.get('/?voorbeeld=1');
   assert.match(preview.text, /Tuinseizoen is begonnen/);
   assert.doesNotMatch(preview.text, /shop-notice/);
   assert.strictEqual(preview.headers.get('cache-control'), 'no-store');
   assert.match(preview.headers.get('x-robots-tag'), /noindex/);
 
-  const published = await admin.post('/api/admin/shop-content/site/publish', {});
+  const published = await admin.post('/app/api/admin/shop-content/site/publish', {});
   assert.strictEqual(published.status, 200);
   assert.strictEqual(published.body.site.hasDraft, false);
   assert.strictEqual(published.body.site.isDefault, false);
-  const live = await anonymous.get('/winkel/');
+  const live = await anonymous.get('/');
   assert.match(live.text, /Tuinseizoen is begonnen/);
   assert.doesNotMatch(live.text, /shop-notice/);
 
-  assert.strictEqual((await admin.post('/api/admin/shop-content/site/publish', {})).status, 409, 'zonder concept niets te publiceren');
-  assert.strictEqual((await admin.post('/api/admin/shop-content/site/revert', {})).status, 409, 'nog geen vorige versie');
+  assert.strictEqual((await admin.post('/app/api/admin/shop-content/site/publish', {})).status, 409, 'zonder concept niets te publiceren');
+  assert.strictEqual((await admin.post('/app/api/admin/shop-content/site/revert', {})).status, 409, 'nog geen vorige versie');
 
-  await admin.put('/api/admin/shop-content/site', { hero: { title: 'Tweede versie' } });
-  assert.match((await admin.get('/winkel/?voorbeeld=1')).text, /Tweede versie/);
-  const discarded = await admin.post('/api/admin/shop-content/site/discard', {});
+  await admin.put('/app/api/admin/shop-content/site', { hero: { title: 'Tweede versie' } });
+  assert.match((await admin.get('/?voorbeeld=1')).text, /Tweede versie/);
+  const discarded = await admin.post('/app/api/admin/shop-content/site/discard', {});
   assert.strictEqual(discarded.body.site.hasDraft, false);
-  assert.match((await admin.get('/winkel/?voorbeeld=1')).text, /Tuinseizoen is begonnen/);
+  assert.match((await admin.get('/?voorbeeld=1')).text, /Tuinseizoen is begonnen/);
 
-  await admin.put('/api/admin/shop-content/site', { hero: { title: 'Tweede versie' } });
-  const republished = await admin.post('/api/admin/shop-content/site/publish', {});
+  await admin.put('/app/api/admin/shop-content/site', { hero: { title: 'Tweede versie' } });
+  const republished = await admin.post('/app/api/admin/shop-content/site/publish', {});
   assert.strictEqual(republished.body.site.canRevert, true);
-  const reverted = await admin.post('/api/admin/shop-content/site/revert', {});
+  const reverted = await admin.post('/app/api/admin/shop-content/site/revert', {});
   assert.strictEqual(reverted.status, 200);
-  assert.match((await anonymous.get('/winkel/')).text, /Tuinseizoen is begonnen/);
+  assert.match((await anonymous.get('/')).text, /Tuinseizoen is begonnen/);
 });
 
 test('contactgegevens, voordelen en merken komen uit de gepubliceerde blokken', async () => {
   const { admin, anonymous } = await setup();
-  await admin.put('/api/admin/shop-content/site', {
+  await admin.put('/app/api/admin/shop-content/site', {
     contact: { phone: '085 1234567', email: 'verkoop@voorbeeld.nl', kvk: '12345678', address: 'Hoofdstraat 1, Nunspeet' },
     footer: { about: 'Wij leveren <b>alles</b>' },
     benefits: { items: [{ title: 'Gratis advies', text: 'Bel ons' }] },
     brands: { title: 'Merken die wij voeren', items: [{ image: 'asset:merk-dab.webp', name: 'DAB' }] },
     business: { enabled: false },
   });
-  await admin.post('/api/admin/shop-content/site/publish', {});
-  const home = (await anonymous.get('/winkel/')).text;
+  await admin.post('/app/api/admin/shop-content/site/publish', {});
+  const home = (await anonymous.get('/')).text;
   assert.match(home, /href="tel:\+31851234567"/);
   assert.match(home, /verkoop@voorbeeld\.nl/);
   assert.match(home, /K\.v\.k\.: 12345678/);
@@ -158,47 +158,47 @@ test('contactgegevens, voordelen en merken komen uit de gepubliceerde blokken', 
 test('vaste pagina: concept, publiceren, menu, voet en Over ons overschrijven', async () => {
   const { admin, anonymous, base } = await setup();
   const body = '<h2>Verzending</h2><p>Binnen 2 werkdagen <a href="https://voorbeeld.nl">geleverd</a>.</p><script>alert(1)</script>';
-  const saved = await admin.put('/api/admin/shop-content/pages/verzending-retour', { title: 'Verzending & retour', description: 'Hoe wij leveren', body, menu: true, footer: true, order: 5 });
+  const saved = await admin.put('/app/api/admin/shop-content/pages/verzending-retour', { title: 'Verzending & retour', description: 'Hoe wij leveren', body, menu: true, footer: true, order: 5 });
   assert.strictEqual(saved.status, 200);
   assert.strictEqual(saved.body.pages.length, 1);
   assert.ok(!saved.body.pages[0].draft.body.includes('script'));
-  assert.strictEqual((await anonymous.get('/winkel/pagina/verzending-retour/')).status, 404, 'concept is niet openbaar');
-  assert.match((await admin.get('/winkel/pagina/verzending-retour/?voorbeeld=1')).text, /Binnen 2 werkdagen/);
-  assert.doesNotMatch((await anonymous.get('/winkel/')).text, /Verzending &amp; retour/);
+  assert.strictEqual((await anonymous.get('/pagina/verzending-retour/')).status, 404, 'concept is niet openbaar');
+  assert.match((await admin.get('/pagina/verzending-retour/?voorbeeld=1')).text, /Binnen 2 werkdagen/);
+  assert.doesNotMatch((await anonymous.get('/')).text, /Verzending &amp; retour/);
 
-  assert.strictEqual((await admin.post('/api/admin/shop-content/pages/verzending-retour/publish', {})).status, 200);
-  const page = await anonymous.get('/winkel/pagina/verzending-retour/');
+  assert.strictEqual((await admin.post('/app/api/admin/shop-content/pages/verzending-retour/publish', {})).status, 200);
+  const page = await anonymous.get('/pagina/verzending-retour/');
   assert.strictEqual(page.status, 200);
   assert.match(page.text, /<h1>Verzending &amp; retour<\/h1>/);
   assert.match(page.text, /<a href="https:\/\/voorbeeld.nl" rel="noopener noreferrer">geleverd<\/a>/);
   assert.match(page.text, /<meta name="description" content="Hoe wij leveren">/);
-  const home = (await anonymous.get('/winkel/')).text;
+  const home = (await anonymous.get('/')).text;
   assert.match(home, /<li class="nav-about"><a href="pagina\/verzending-retour\/">Verzending &amp; retour<\/a><\/li>/);
   assert.match(home, /<li><a href="pagina\/verzending-retour\/">Verzending &amp; retour<\/a><\/li>/, 'ook in de voet');
-  assert.strictEqual((await createClient(base, { followRedirects: false }).get('/winkel/pagina/verzending-retour')).location, 'verzending-retour/');
+  assert.strictEqual((await createClient(base, { followRedirects: false }).get('/pagina/verzending-retour')).location, 'verzending-retour/');
 
   // Over ons: standaardpagina totdat er een eigen versie is.
-  assert.match((await anonymous.get('/winkel/over-ons/')).text, /Waarom Aquatechshop/);
-  await admin.put('/api/admin/shop-content/pages/over-ons', { title: 'Over ons', body: '<p>Ons eigen verhaal.</p>' });
-  await admin.post('/api/admin/shop-content/pages/over-ons/publish', {});
-  const about = (await anonymous.get('/winkel/over-ons/')).text;
+  assert.match((await anonymous.get('/over-ons/')).text, /Waarom Aquatechshop/);
+  await admin.put('/app/api/admin/shop-content/pages/over-ons', { title: 'Over ons', body: '<p>Ons eigen verhaal.</p>' });
+  await admin.post('/app/api/admin/shop-content/pages/over-ons/publish', {});
+  const about = (await anonymous.get('/over-ons/')).text;
   assert.match(about, /Ons eigen verhaal/);
   assert.doesNotMatch(about, /Waarom Aquatechshop/);
-  assert.doesNotMatch((await anonymous.get('/winkel/')).text, /pagina\/over-ons/, 'Over ons staat al in het menu');
-  await admin.post('/api/admin/shop-content/pages/over-ons/revert', {}).then((out) => assert.strictEqual(out.status, 409));
-  assert.strictEqual((await admin.del('/api/admin/shop-content/pages/over-ons')).status, 200);
-  assert.match((await anonymous.get('/winkel/over-ons/')).text, /Waarom Aquatechshop/);
+  assert.doesNotMatch((await anonymous.get('/')).text, /pagina\/over-ons/, 'Over ons staat al in het menu');
+  await admin.post('/app/api/admin/shop-content/pages/over-ons/revert', {}).then((out) => assert.strictEqual(out.status, 409));
+  assert.strictEqual((await admin.del('/app/api/admin/shop-content/pages/over-ons')).status, 200);
+  assert.match((await anonymous.get('/over-ons/')).text, /Waarom Aquatechshop/);
 
-  assert.strictEqual((await admin.del('/api/admin/shop-content/pages/verzending-retour')).status, 200);
-  assert.strictEqual((await anonymous.get('/winkel/pagina/verzending-retour/')).status, 404);
-  assert.strictEqual((await admin.del('/api/admin/shop-content/pages/bestaat-niet')).status, 404);
-  assert.strictEqual((await admin.put('/api/admin/shop-content/pages/ab', { title: 'x' })).status, 400);
-  assert.strictEqual((await admin.put('/api/admin/shop-content/pages/geen-titel', { title: '' })).status, 400);
+  assert.strictEqual((await admin.del('/app/api/admin/shop-content/pages/verzending-retour')).status, 200);
+  assert.strictEqual((await anonymous.get('/pagina/verzending-retour/')).status, 404);
+  assert.strictEqual((await admin.del('/app/api/admin/shop-content/pages/bestaat-niet')).status, 404);
+  assert.strictEqual((await admin.put('/app/api/admin/shop-content/pages/ab', { title: 'x' })).status, 400);
+  assert.strictEqual((await admin.put('/app/api/admin/shop-content/pages/geen-titel', { title: '' })).status, 400);
 });
 
 test('afbeeldingen uploaden, tonen in een pagina en pas verwijderen als ze ongebruikt zijn', async () => {
   const { admin, anonymous, db } = await setup();
-  const upload = await admin.post('/api/admin/shop-content/images', { name: 'C:\\fotos\\tuin.png', data: `data:image/png;base64,${PIXEL_PNG.toString('base64')}` });
+  const upload = await admin.post('/app/api/admin/shop-content/images', { name: 'C:\\fotos\\tuin.png', data: `data:image/png;base64,${PIXEL_PNG.toString('base64')}` });
   assert.strictEqual(upload.status, 201);
   const image = upload.body.image;
   assert.strictEqual(image.name, 'tuin.png');
@@ -206,72 +206,74 @@ test('afbeeldingen uploaden, tonen in een pagina en pas verwijderen als ze ongeb
   const stored = db.prepare('SELECT data FROM shop_images WHERE id = ?').get(image.id).data;
   assert.match(stored, /^f1:/, 'versleuteld opgeslagen');
 
-  const fromAdmin = await admin.get(`/api/admin/shop-content/images/${image.id}`);
+  const fromAdmin = await admin.get(`/app/api/admin/shop-content/images/${image.id}`);
   assert.strictEqual(fromAdmin.status, 200);
   assert.deepStrictEqual(fromAdmin.raw, PIXEL_PNG);
-  assert.strictEqual((await anonymous.get(`/api/admin/shop-content/images/${image.id}`)).status, 401);
+  assert.strictEqual((await anonymous.get(`/app/api/admin/shop-content/images/${image.id}`)).status, 401);
 
-  await admin.put('/api/admin/shop-content/pages/foto', { title: 'Foto', body: `<p><img src="media:${image.id}" alt="Tuin"></p>` });
-  await admin.post('/api/admin/shop-content/pages/foto/publish', {});
-  assert.match((await anonymous.get('/winkel/pagina/foto/')).text, new RegExp(`<img loading="lazy" src="\\.\\./\\.\\./media/${image.id}"`));
-  const served = await anonymous.get(`/winkel/media/${image.id}`);
+  await admin.put('/app/api/admin/shop-content/pages/foto', { title: 'Foto', body: `<p><img src="media:${image.id}" alt="Tuin"></p>` });
+  await admin.post('/app/api/admin/shop-content/pages/foto/publish', {});
+  assert.match((await anonymous.get('/pagina/foto/')).text, new RegExp(`<img loading="lazy" src="\\.\\./\\.\\./media/${image.id}"`));
+  const served = await anonymous.get(`/media/${image.id}`);
   assert.strictEqual(served.status, 200);
   assert.strictEqual(served.type, 'image/png');
   assert.match(served.headers.get('cache-control'), /immutable/);
-  assert.strictEqual((await anonymous.get('/winkel/media/00000000-0000-0000-0000-000000000000')).status, 404);
-  assert.strictEqual((await anonymous.get('/winkel/media/niet-een-id')).status, 404);
+  assert.strictEqual((await anonymous.get('/media/00000000-0000-0000-0000-000000000000')).status, 404);
+  assert.strictEqual((await anonymous.get('/media/niet-een-id')).status, 404);
 
-  assert.strictEqual((await admin.del(`/api/admin/shop-content/images/${image.id}`)).status, 409, 'in gebruik');
-  await admin.del('/api/admin/shop-content/pages/foto');
-  assert.strictEqual((await admin.del(`/api/admin/shop-content/images/${image.id}`)).status, 200);
-  assert.strictEqual((await anonymous.get(`/winkel/media/${image.id}`)).status, 404);
+  assert.strictEqual((await admin.del(`/app/api/admin/shop-content/images/${image.id}`)).status, 409, 'in gebruik');
+  await admin.del('/app/api/admin/shop-content/pages/foto');
+  assert.strictEqual((await admin.del(`/app/api/admin/shop-content/images/${image.id}`)).status, 200);
+  assert.strictEqual((await anonymous.get(`/media/${image.id}`)).status, 404);
 
   // Alleen echte afbeeldingen; een script met een png-naam of een SVG wordt geweigerd.
-  assert.strictEqual((await admin.post('/api/admin/shop-content/images', { name: 'x.png', data: Buffer.from('<script>alert(1)</script>').toString('base64') })).status, 400);
+  assert.strictEqual((await admin.post('/app/api/admin/shop-content/images', { name: 'x.png', data: Buffer.from('<script>alert(1)</script>').toString('base64') })).status, 400);
   const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
-  assert.strictEqual((await admin.post('/api/admin/shop-content/images', { name: 'x.svg', data: svg.toString('base64') })).status, 400);
-  assert.strictEqual((await admin.post('/api/admin/shop-content/images', { name: 'x.png' })).status, 400);
+  assert.strictEqual((await admin.post('/app/api/admin/shop-content/images', { name: 'x.svg', data: svg.toString('base64') })).status, 400);
+  assert.strictEqual((await admin.post('/app/api/admin/shop-content/images', { name: 'x.png' })).status, 400);
 });
 
 test('rechten en tenantgrenzen van de webshop-inhoud', async () => {
   const { admin, customer, anonymous, base, store } = await setup();
   for (const client of [anonymous, customer]) {
-    const out = await client.get('/api/admin/shop-content');
+    const out = await client.get('/app/api/admin/shop-content');
     assert.strictEqual(out.status, client === anonymous ? 401 : 403);
-    assert.strictEqual((await client.put('/api/admin/shop-content/site', { hero: { title: 'Hack' } })).status, client === anonymous ? 401 : 403);
-    assert.strictEqual((await client.post('/api/admin/shop-content/images', { data: PIXEL_PNG.toString('base64') })).status, client === anonymous ? 401 : 403);
+    assert.strictEqual((await client.put('/app/api/admin/shop-content/site', { hero: { title: 'Hack' } })).status, client === anonymous ? 401 : 403);
+    assert.strictEqual((await client.post('/app/api/admin/shop-content/images', { data: PIXEL_PNG.toString('base64') })).status, client === anonymous ? 401 : 403);
   }
   // Een klant ziet het voorbeeld niet en een bezoeker ook niet.
-  await admin.put('/api/admin/shop-content/site', { hero: { title: 'Geheim concept' } });
-  assert.doesNotMatch((await customer.get('/winkel/?voorbeeld=1')).text, /Geheim concept/);
-  assert.doesNotMatch((await anonymous.get('/winkel/?voorbeeld=1')).text, /Geheim concept/);
+  await admin.put('/app/api/admin/shop-content/site', { hero: { title: 'Geheim concept' } });
+  assert.doesNotMatch((await customer.get('/?voorbeeld=1')).text, /Geheim concept/);
+  assert.doesNotMatch((await anonymous.get('/?voorbeeld=1')).text, /Geheim concept/);
 
   // Een andere organisatie heeft eigen beheerders, maar geen webshop-inhoud: 404.
   const groen = store.createTenant({ name: 'Groen', slug: 'groen' }).tenant.id;
   await store.createAccount(groen, { username: 'tuinman', displayName: 'Tuinman', role: 'beheerder', password: PW });
   const other = await createLogin(base, { password: PW })('tuinman', 'groen');
-  const view = await other.get('/api/admin/shop-content');
+  const view = await other.get('/app/api/admin/shop-content');
   assert.strictEqual(view.status, 200);
   assert.strictEqual(view.body.available, false);
-  assert.strictEqual((await other.put('/api/admin/shop-content/site', { hero: { title: 'Hack' } })).status, 404);
-  assert.strictEqual((await other.put('/api/admin/shop-content/menu', { roots: [] })).status, 404);
+  assert.strictEqual((await other.put('/app/api/admin/shop-content/site', { hero: { title: 'Hack' } })).status, 404);
+  assert.strictEqual((await other.put('/app/api/admin/shop-content/menu', { roots: [] })).status, 404);
   for (const action of ['publish', 'discard', 'revert']) {
-    assert.strictEqual((await other.post(`/api/admin/shop-content/menu/${action}`, {})).status, 404);
+    assert.strictEqual((await other.post(`/app/api/admin/shop-content/menu/${action}`, {})).status, 404);
   }
-  assert.strictEqual((await other.put('/api/admin/shop-content/pages/hack', { title: 'Hack' })).status, 404);
-  assert.strictEqual((await other.post('/api/admin/shop-content/site/publish', {})).status, 404);
-  assert.strictEqual((await other.post('/api/admin/shop-content/images', { data: PIXEL_PNG.toString('base64') })).status, 404);
-  assert.match((await admin.get('/winkel/?voorbeeld=1')).text, /Geheim concept/);
+  assert.strictEqual((await other.put('/app/api/admin/shop-content/pages/hack', { title: 'Hack' })).status, 404);
+  assert.strictEqual((await other.post('/app/api/admin/shop-content/site/publish', {})).status, 404);
+  assert.strictEqual((await other.post('/app/api/admin/shop-content/images', { data: PIXEL_PNG.toString('base64') })).status, 404);
+  assert.match((await admin.get('/?voorbeeld=1')).text, /Geheim concept/);
 });
 
 test('webshop uit: beheerder ziet voorbeeld mét opmaak en afbeeldingen, bezoeker niets', async () => {
-  const { admin, anonymous } = await setup();
-  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: false })).status, 200);
-  assert.strictEqual((await anonymous.get('/winkel/assets/winkel.css')).status, 404);
-  assert.strictEqual((await anonymous.get('/winkel/?voorbeeld=1')).status, 404);
-  assert.strictEqual((await admin.get('/winkel/?voorbeeld=1')).status, 200);
-  assert.strictEqual((await admin.get('/winkel/assets/winkel.css')).status, 200);
-  assert.strictEqual((await admin.get('/winkel/')).status, 404, 'zonder voorbeeld ziet ook een beheerder de uitgeschakelde shop niet');
+  const { base, admin, anonymous } = await setup();
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: false })).status, 200);
+  assert.strictEqual((await anonymous.get('/assets/winkel.css')).status, 404);
+  assert.strictEqual((await anonymous.get('/?voorbeeld=1')).status, 404);
+  assert.strictEqual((await admin.get('/?voorbeeld=1')).status, 200);
+  assert.strictEqual((await admin.get('/assets/winkel.css')).status, 200);
+  const adminRoot = await createClient(base, { jar: admin.jar, followRedirects: false }).get('/');
+  assert.strictEqual(adminRoot.status, 302, 'zonder voorbeeld ziet ook een beheerder de uitgeschakelde shop niet');
+  assert.strictEqual(adminRoot.location, 'app/');
 });
 
 test('de webshop-inhoud heeft geen SELECT * en staat in de standaard-assets', () => {

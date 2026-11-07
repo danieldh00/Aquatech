@@ -53,13 +53,13 @@ async function setup() {
   const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor: () => ({ configured: () => false, send: async () => {} }) }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  await admin.put('/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
+  await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
     pickup: { enabled: true }, dpd: { enabled: true, defaultWeightGrams: 1000, zones: [
       { country: 'NL', tiers: [{ upToGrams: 2000, price: 6.95 }] }, { country: 'BE', tiers: [{ upToGrams: 5000, price: 14.5 }] },
     ] },
   } });
-  assert.strictEqual((await admin.post('/api/stock/items', { code: 'BUS', name: 'Sproeier zakelijk', onHand: 50, salePrice: 10, businessPrice: 8, weightGrams: 400 })).status, 201);
-  assert.strictEqual((await admin.post('/api/stock/items', { code: 'GEEN', name: 'Zonder zakelijke prijs', onHand: 50, salePrice: 5, weightGrams: 100 })).status, 201);
+  assert.strictEqual((await admin.post('/app/api/stock/items', { code: 'BUS', name: 'Sproeier zakelijk', onHand: 50, salePrice: 10, businessPrice: 8, weightGrams: 400 })).status, 201);
+  assert.strictEqual((await admin.post('/app/api/stock/items', { code: 'GEEN', name: 'Zonder zakelijke prijs', onHand: 50, salePrice: 5, weightGrams: 100 })).status, 201);
   let counter = 0;
   /**
    * Registreert een klant in de shop.
@@ -68,12 +68,12 @@ async function setup() {
   const shopper = async () => {
     counter += 1;
     const client = createClient(base);
-    await postForm(base, client, '/winkel/registreren/', { displayName: `Klant ${counter}`, email: `k${counter}@voorbeeld.nl`, password: PW, password2: PW, website: '' });
-    const users = (await admin.get('/api/admin/users')).body.items;
+    await postForm(base, client, '/registreren/', { displayName: `Klant ${counter}`, email: `k${counter}@voorbeeld.nl`, password: PW, password2: PW, website: '' });
+    const users = (await admin.get('/app/api/admin/users')).body.items;
     return { client, id: users.find((user) => user.email === `k${counter}@voorbeeld.nl`).id };
   };
   const business = await shopper();
-  assert.strictEqual((await admin.patch(`/api/admin/users/${business.id}`, { customerGroup: 'zakelijk' })).status, 200);
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${business.id}`, { customerGroup: 'zakelijk' })).status, 200);
   const private1 = await shopper();
   return { base, admin, vreemd: await createLogin(base, { password: PW })('vreemd', 'ander'), business, private1 };
 }
@@ -87,23 +87,23 @@ async function setup() {
  * @returns {Promise<void>}
  */
 async function addToCart(base, client, code, qty) {
-  assert.strictEqual((await postForm(base, client, '/winkel/winkelwagen/', { action: 'add', code, qty: String(qty) })).status, 303);
+  assert.strictEqual((await postForm(base, client, '/winkelwagen/', { action: 'add', code, qty: String(qty) })).status, 303);
 }
 
 test('zakelijke klant ziet prijzen excl. btw en betaalt de zakelijke prijs; particulier niet', async () => {
   const { base, admin, business, private1 } = await setup();
   await addToCart(base, business.client, 'BUS', 2);
   await addToCart(base, business.client, 'GEEN', 1);
-  const cart = await business.client.get('/winkel/winkelwagen/');
+  const cart = await business.client.get('/winkelwagen/');
   assert.match(cart.text, /Prijs excl\. btw/);
   assert.match(cart.text, /€\s8,00/, 'zakelijke prijs');
   assert.match(cart.text, /€\s5,00/, 'zonder zakelijke prijs geldt de verkoopprijs');
   assert.match(cart.text, /Totaal excl\. btw/);
   await addToCart(base, private1.client, 'BUS', 2);
-  const own = await private1.client.get('/winkel/winkelwagen/');
+  const own = await private1.client.get('/winkelwagen/');
   assert.doesNotMatch(own.text, /excl\. btw/);
   assert.match(own.text, /€\s12,10/);
-  assert.strictEqual((await admin.get('/api/stock')).body.items.find((item) => item.code === 'BUS').businessPrice, 8);
+  assert.strictEqual((await admin.get('/app/api/stock')).body.items.find((item) => item.code === 'BUS').businessPrice, 8);
 });
 
 test('zakelijke bestelling: bedrijfsnaam verplicht, btw-nummer gecontroleerd en btw in Nederland gewoon berekend', async () => {
@@ -115,29 +115,29 @@ test('zakelijke bestelling: bedrijfsnaam verplicht, btw-nummer gecontroleerd en 
   assert.match(badVat.text, /btw-nummer/);
   const placed = await postCheckout(base, business.client, { ...COMPANY, vatNumber: 'nl 1234.56789 b01' });
   assert.strictEqual(placed.status, 303, placed.text);
-  const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
-  const order = (await admin.get(`/api/admin/web-orders/${orderId}`)).body.order;
+  const orderId = (await admin.get('/app/api/admin/web-orders')).body.items[0].id;
+  const order = (await admin.get(`/app/api/admin/web-orders/${orderId}`)).body.order;
   assert.strictEqual(order.customerGroup, 'zakelijk');
   assert.deepStrictEqual(order.vat, { number: 'NL123456789B01', shifted: false });
   assert.strictEqual(order.total, 26.31, '2 × 8,00 + DPD 6,95 incl. btw');
   assert.strictEqual(order.lines[0].lineExcl, 16);
   assert.strictEqual(order.totals.byRate[0].excl, 21.74);
-  const page = await business.client.get(`/winkel/${placed.location.slice(3)}`);
+  const page = await business.client.get(`/${placed.location.slice(3)}`);
   assert.match(page.text, /Totaal excl\. btw/);
 });
 
 test('btw verlegd naar een bedrijf met btw-nummer in een ander EU-land', async () => {
   const { base, admin, business } = await setup();
   await addToCart(base, business.client, 'BUS', 2);
-  const preview = await postForm(base, business.client, '/winkel/afrekenen/', { ...COMPANY, postcode: '9000', country: 'BE', vatNumber: 'BE0123456789', action: 'update' });
+  const preview = await postForm(base, business.client, '/afrekenen/', { ...COMPANY, postcode: '9000', country: 'BE', vatNumber: 'BE0123456789', action: 'update' });
   assert.strictEqual(preview.status, 200);
   assert.match(preview.text, /Btw verlegd/);
   const placed = await postCheckout(base, business.client, { ...COMPANY, postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' });
   assert.strictEqual(placed.status, 303, placed.text);
-  const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
-  const order = (await admin.get(`/api/admin/web-orders/${orderId}`)).body.order;
+  const orderId = (await admin.get('/app/api/admin/web-orders')).body.items[0].id;
+  const order = (await admin.get(`/app/api/admin/web-orders/${orderId}`)).body.order;
   assert.strictEqual(order.vat.shifted, true);
-  assert.match((await business.client.get(`/winkel/${placed.location.slice(3)}`)).text, /Totaal \(btw verlegd\)/);
+  assert.match((await business.client.get(`/${placed.location.slice(3)}`)).text, /Totaal \(btw verlegd\)/);
   assert.strictEqual(order.total, 27.98, '2 × 8,00 + verzending 11,98 zonder btw');
   assert.deepStrictEqual(order.totals.byRate.map((row) => [row.rate, row.vat]), [[0, 0]]);
   assert.strictEqual(order.lines[0].vatRate, 0);
@@ -145,26 +145,26 @@ test('btw verlegd naar een bedrijf met btw-nummer in een ander EU-land', async (
   await addToCart(base, business.client, 'BUS', 2);
   const plain = await postCheckout(base, business.client, { ...COMPANY, postcode: '9000', country: 'BE' });
   assert.strictEqual(plain.status, 303);
-  const second = (await admin.get('/api/admin/web-orders')).body.items.find((item) => item.id !== orderId);
-  assert.strictEqual((await admin.get(`/api/admin/web-orders/${second.id}`)).body.order.vat.shifted, false);
+  const second = (await admin.get('/app/api/admin/web-orders')).body.items.find((item) => item.id !== orderId);
+  assert.strictEqual((await admin.get(`/app/api/admin/web-orders/${second.id}`)).body.order.vat.shifted, false);
 });
 
 test('verouderd totaal: eerst opnieuw tonen, pas daarna bestellen', async () => {
   const { base, admin, business } = await setup();
   await addToCart(base, business.client, 'BUS', 2);
   const fields = { ...COMPANY, terms: 'ja', postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' };
-  const stale = await postForm(base, business.client, '/winkel/afrekenen/', { ...fields, expectedTotal: '38.7' });
+  const stale = await postForm(base, business.client, '/afrekenen/', { ...fields, expectedTotal: '38.7' });
   assert.strictEqual(stale.status, 200, 'niet geplaatst');
   assert.match(stale.text, /Het totaal is bijgewerkt/);
-  assert.strictEqual((await admin.get('/api/admin/web-orders')).body.items.length, 0);
-  const missing = await postForm(base, business.client, '/winkel/afrekenen/', fields);
+  assert.strictEqual((await admin.get('/app/api/admin/web-orders')).body.items.length, 0);
+  const missing = await postForm(base, business.client, '/afrekenen/', fields);
   assert.strictEqual(missing.status, 200, 'zonder totaal ook niet geplaatst');
-  const invalid = await postForm(base, business.client, '/winkel/afrekenen/', { ...fields, expectedTotal: 'abc' });
+  const invalid = await postForm(base, business.client, '/afrekenen/', { ...fields, expectedTotal: 'abc' });
   assert.strictEqual(invalid.status, 200, 'ongeldig totaal ook niet geplaatst');
   const shown = stale.text.match(/name="expectedTotal" value="([^"]+)"/);
   assert.ok(shown, 'actueel totaal ontbreekt in het formulier');
   assert.strictEqual(shown[1], '27.98');
-  const placed = await postForm(base, business.client, '/winkel/afrekenen/', { ...fields, expectedTotal: shown[1] });
+  const placed = await postForm(base, business.client, '/afrekenen/', { ...fields, expectedTotal: shown[1] });
   assert.strictEqual(placed.status, 303, placed.text);
 });
 
@@ -173,8 +173,8 @@ test('particulier met btw-nummer in het formulier: genegeerd, gewoon btw', async
   await addToCart(base, private1.client, 'BUS', 2);
   const placed = await postCheckout(base, private1.client, { ...COMPANY, company: '', postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' });
   assert.strictEqual(placed.status, 303, placed.text);
-  const orderId = (await admin.get('/api/admin/web-orders')).body.items[0].id;
-  const order = (await admin.get(`/api/admin/web-orders/${orderId}`)).body.order;
+  const orderId = (await admin.get('/app/api/admin/web-orders')).body.items[0].id;
+  const order = (await admin.get(`/app/api/admin/web-orders/${orderId}`)).body.order;
   assert.strictEqual(order.customerGroup, '');
   assert.strictEqual(order.vat, null);
   assert.strictEqual(order.total, 38.7, '2 × 12,10 + DPD België 14,50');
@@ -182,8 +182,8 @@ test('particulier met btw-nummer in het formulier: genegeerd, gewoon btw', async
 
 test('klantgroep wijzigen: alleen met recht, geldige waarde, andere organisatie 404', async () => {
   const { admin, vreemd, business, private1 } = await setup();
-  assert.strictEqual((await admin.patch(`/api/admin/users/${private1.id}`, { customerGroup: 'vip' })).status, 400);
-  assert.strictEqual((await private1.client.patch(`/api/admin/users/${private1.id}`, { customerGroup: 'zakelijk' })).status, 403, 'een klant kiest zijn groep niet zelf');
-  assert.strictEqual((await vreemd.patch(`/api/admin/users/${business.id}`, { customerGroup: '' })).status, 404);
-  assert.strictEqual((await admin.patch(`/api/admin/users/${business.id}`, { customerGroup: '' })).body.customerGroup, '');
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${private1.id}`, { customerGroup: 'vip' })).status, 400);
+  assert.strictEqual((await private1.client.patch(`/app/api/admin/users/${private1.id}`, { customerGroup: 'zakelijk' })).status, 403, 'een klant kiest zijn groep niet zelf');
+  assert.strictEqual((await vreemd.patch(`/app/api/admin/users/${business.id}`, { customerGroup: '' })).status, 404);
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${business.id}`, { customerGroup: '' })).body.customerGroup, '');
 });

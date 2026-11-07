@@ -89,12 +89,12 @@ test('API: uren en materiaal boeken, eigen regels, collega alleen met planning, 
     const vreemd = await as('vreemd', 'ander');
     // Installateurs zonder het recht planning (monteurs): alleen eigen regels.
     const noPlanning = ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'werkorders', 'uitvoerder'];
-    assert.strictEqual((await baas.patch('/api/admin/roles/installateur', { rights: noPlanning })).status, 200);
-    const pietId = (await piet.get('/api/me')).body.user.id;
-    const quote = (await kees.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Klaassen' }, lines } })).body;
-    await kees.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
-    const wo = (await kees.post('/api/workorders', { quoteId: quote.id })).body;
-    const url = `/api/workorders/${wo.id}`;
+    assert.strictEqual((await baas.patch('/app/api/admin/roles/installateur', { rights: noPlanning })).status, 200);
+    const pietId = (await piet.get('/app/api/me')).body.user.id;
+    const quote = (await kees.post('/app/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Klaassen' }, lines } })).body;
+    await kees.put(`/app/api/quotes/${quote.id}`, { status: 'akkoord' });
+    const wo = (await kees.post('/app/api/workorders', { quoteId: quote.id })).body;
+    const url = `/app/api/workorders/${wo.id}`;
     const workDate = today();
 
     // Rechten.
@@ -102,7 +102,7 @@ test('API: uren en materiaal boeken, eigen regels, collega alleen met planning, 
     assert.strictEqual((await klaas.post(`${url}/hours`, { workDate, hours: 1 })).status, 403);
     assert.strictEqual((await vreemd.get(`${url}/worklog`)).status, 404, 'andere organisatie');
     assert.strictEqual((await vreemd.post(`${url}/hours`, { workDate, hours: 1 })).status, 404);
-    assert.strictEqual((await kees.post('/api/workorders/bestaat-niet/hours', { workDate, hours: 1 })).status, 404);
+    assert.strictEqual((await kees.post('/app/api/workorders/bestaat-niet/hours', { workDate, hours: 1 })).status, 404);
 
     // Uren boeken (eigen), met clientId: opnieuw versturen telt één keer.
     const clientId = '0b8f8c1e-7a1d-4a7e-9d3a-1c2b3d4e5f60';
@@ -127,7 +127,7 @@ test('API: uren en materiaal boeken, eigen regels, collega alleen met planning, 
     const ch = await kees.put(`${url}/hours/${h1.body.id}`, { startTime: '', endTime: '', hours: 7.5 });
     assert.deepStrictEqual([ch.status, ch.body.minutes, ch.body.note], [200, 450, 'Leidingen']);
     assert.strictEqual((await piet.del(`${url}/hours/${travel.id}`)).status, 403);
-    assert.strictEqual((await kees.put(`/api/workorders/bestaat-niet/hours/${h1.body.id}`, { hours: 1 })).status, 404);
+    assert.strictEqual((await kees.put(`/app/api/workorders/bestaat-niet/hours/${h1.body.id}`, { hours: 1 })).status, 404);
 
     // Materiaal: verbruik en retour, extra artikel.
     const m1 = await kees.post(`${url}/materials`, { usedOn: workDate, code: 'SPR-1', description: 'Sproeier', unit: 'st', qty: 5, materialId: wo.data.materials[0].id });
@@ -148,18 +148,18 @@ test('API: uren en materiaal boeken, eigen regels, collega alleen met planning, 
     assert.ok((await pim.get(`${url}/worklog`)).body.canManage);
 
     // Overzicht toont de geboekte uren.
-    const listed = (await kees.get('/api/workorders')).body.items.find((workOrder) => workOrder.id === wo.id);
+    const listed = (await kees.get('/app/api/workorders')).body.items.find((workOrder) => workOrder.id === wo.id);
     assert.deepStrictEqual(listed.logged, { minutes: 600, materials: 3 });
 
     // Urenstaat over een periode: eigen uren, planner ziet iedereen.
-    const mine = (await kees.get(`/api/worklog?from=${workDate}&to=${workDate}`)).body;
+    const mine = (await kees.get(`/app/api/worklog?from=${workDate}&to=${workDate}`)).body;
     assert.deepStrictEqual(mine.hours.map((entry) => entry.user.displayName), ['Kees', 'Kees']);
     assert.strictEqual(mine.hours[0].workOrder.number, wo.number);
-    assert.strictEqual((await kees.get(`/api/worklog?from=${workDate}&to=${workDate}&user=${pietId}`)).status, 403);
-    assert.strictEqual((await pim.get(`/api/worklog?from=${workDate}&to=${workDate}`)).body.hours.length, 3);
-    assert.strictEqual((await pim.get(`/api/worklog?from=${workDate}&to=${workDate}&user=${pietId}`)).body.hours.length, 1);
-    assert.strictEqual((await kees.get('/api/worklog?from=2026-01-01&to=2028-01-01')).status, 400);
-    assert.strictEqual((await vreemd.get(`/api/worklog?from=${workDate}&to=${workDate}`)).body.hours.length, 0, 'andere organisatie ziet niets');
+    assert.strictEqual((await kees.get(`/app/api/worklog?from=${workDate}&to=${workDate}&user=${pietId}`)).status, 403);
+    assert.strictEqual((await pim.get(`/app/api/worklog?from=${workDate}&to=${workDate}`)).body.hours.length, 3);
+    assert.strictEqual((await pim.get(`/app/api/worklog?from=${workDate}&to=${workDate}&user=${pietId}`)).body.hours.length, 1);
+    assert.strictEqual((await kees.get('/app/api/worklog?from=2026-01-01&to=2028-01-01')).status, 400);
+    assert.strictEqual((await vreemd.get(`/app/api/worklog?from=${workDate}&to=${workDate}`)).body.hours.length, 0, 'andere organisatie ziet niets');
 
     // Afgerond: installateur kan niet meer boeken, planner wel.
     await kees.put(url, { status: 'gereed' });
@@ -174,7 +174,7 @@ test('API: uren en materiaal boeken, eigen regels, collega alleen met planning, 
     assert.ok(audit.includes('materiaal_geboekt') && audit.includes('uren_verwijderd'));
 
     // Definitief wissen van de werkorder neemt de registratie mee.
-    assert.strictEqual((await baas.del(`/api/admin/workorders/${wo.id}`)).status, 200);
+    assert.strictEqual((await baas.del(`/app/api/admin/workorders/${wo.id}`)).status, 200);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM work_order_hours').get().n, 0);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM work_order_materials').get().n, 0);
   } finally {
