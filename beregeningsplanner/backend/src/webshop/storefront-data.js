@@ -248,7 +248,7 @@ function attributeNamesOf(attributesJson) {
  * en categorieën, categorie-indeling en prijs inclusief btw. Varianten van een
  * hoofdartikel (parent_id) komen als één regel in `products`, met hun keuzes
  * in `variants`; elke variant blijft los bereikbaar via `variantProducts`.
- * @param {object[]} rows Rijen met id, code, name, unit, on_hand, sale_price, business_price, vat_rate, categories en image (en optioneel order_pack_size, order_min_qty en price_tiers: de groothandelsvoorwaarden); bij varianten parent_id en variant_values, bij hoofdartikelen has_variants=1 en attributes.
+ * @param {object[]} rows Rijen met id, code, name, unit, on_hand, updated_at, sale_price, business_price, vat_rate, categories en image (en optioneel order_pack_size, order_min_qty en price_tiers: de groothandelsvoorwaarden); bij varianten parent_id en variant_values, bij hoofdartikelen has_variants=1 en attributes.
  * @param {Map<string, number>} [soldByCode] Het verkochte aantal per artikelcode (webshopverkopen), voor de meest verkochte producten.
  * @param {object[]} [tree] De categorieboom (standaard die van Aquatechshop.nl); producten waarvan een categorienaam in de boom staat komen in de diepste passende categorie.
  * @returns {{ products: object[], variantProducts: object[], categories: object[], groups: object[], featured: object[], bestsellers: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image; bij een hoofdartikel met varianten ook `variants` [{ slug, code, label, meta, priceIncl, inStock, image }] en `attributeName`, met de laagste prijs en op voorraad als een variant dat is) en categories (alle categorieën plat: slug, name, count = producten inclusief subcategorieën, ownCount, groupSlug, parentSlug, depth, intro, image, hidden en children = de subcategorieën als objecten) op naam gesorteerd; variantProducts = de varianten als gewoon product (met parentSlug en parentName); groups = hoofdcategorieën met hun bovenste categorieën (slug, name, categories, count, intro, image); featured = uitgelichte producten; bestsellers = de meest verkochte producten met foto (leeg zonder verkopen).
@@ -324,7 +324,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE) {
       ...placementOf(row.categories), priceExcl, vatRate,
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
       priceBusiness, priceBusinessIncl: Math.round(priceBusiness * (1 + vatRate / 100) * 100) / 100,
-      inStock: stockOf(row), image: imageOf(row),
+      inStock: stockOf(row), image: imageOf(row), updatedAt: String(row.updated_at || '').slice(0, 10),
       // Groothandelsvoorwaarden (alleen gebruikt op de groothandelspagina's): verpakkingseenheid, minimale afname en staffels.
       packSize: Number(row.order_pack_size) || 1, minimum: Wholesale.minimumOf({ packSize: row.order_pack_size, orderMinQty: row.order_min_qty }), tiers: Wholesale.tiersOf(row.price_tiers),
     };
@@ -354,6 +354,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE) {
       ...placement,
       priceExcl: cheapest.priceExcl, vatRate: cheapest.vatRate, priceIncl: cheapest.priceIncl,
       priceBusiness: cheapestBusiness.priceBusiness, priceBusinessIncl: cheapestBusiness.priceBusinessIncl,
+      updatedAt: [String(parent.updated_at || '').slice(0, 10), ...variants.map((variant) => variant.updatedAt)].sort().pop(),
       inStock: variants.some((variant) => variant.inStock), image: imageOf(parent) || (variants.find((variant) => variant.image) || {}).image || '',
       attributeName: attributeNames.length === 1 ? attributeNames[0] : 'Uitvoeringen',
       variants: variants.map((variant) => ({
@@ -404,7 +405,7 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE } = {}) {
       const cached = !preview && cache.get(tenantId);
       // Een andere boom (na publiceren) geeft een nieuwe catalogus, ook binnen de cachetijd.
       if (cached && cached.until > Date.now() && cached.tree === tree) return cached.catalog;
-      const rows = db.prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, p.in_stock AS shop_in_stock, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, p.categories, p.image
+      const rows = db.prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, p.in_stock AS shop_in_stock, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, i.updated_at, p.categories, p.image
         FROM stock_items i
         LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
         LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id

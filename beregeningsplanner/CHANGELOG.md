@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.7.2
+
+De webshop is beter vindbaar voor zoekmachines en AI-zoekers (ChatGPT, Perplexity, Google, Copilot).
+
+- Nieuw `webshop/seo.js` (zuivere functies): Schema.org JSON-LD, `robots.txt`, sitemap, `llms.txt` en productfeed.
+- Elke pagina krijgt een canonical-link, OpenGraph- en Twitter-regels. Pagina's die niet bedoeld zijn voor zoekresultaten
+  (account, winkelwagen, afrekenen, zoeken, niet gevonden) krijgen `noindex, follow`. De pagina's waren al server-side opgebouwd.
+- JSON-LD: startpagina `Store` (LocalBusiness: Nunspeet, KvK, contact) en `WebSite` met zoekfunctie; product `Product` met
+  `Offer` (prijs incl. btw, voorraad, afbeelding; hoofdartikel `AggregateOffer`); categorie en product `BreadcrumbList`;
+  de pagina met slug `veelgestelde-vragen` (Beheer > Webshop-inhoud) wordt `FAQPage`: elke kop (h2 tot en met h4) is een vraag,
+  de tekst eronder het antwoord.
+- `GET /robots.txt` (Googlebot, Bingbot, GPTBot, OAI-SearchBot, ChatGPT-User, PerplexityBot, ClaudeBot, Claude-SearchBot,
+  Google-Extended e.a. expliciet toegestaan; app, API en klantpagina's uitgesloten; verwijst naar de sitemap),
+  `GET /sitemap.xml` (met `lastmod` uit `stock_items.updated_at`), `GET /llms.txt` en `GET /productfeed.xml`
+  (Google Merchant Center, RSS 2.0 met `g:`-velden; artikelen zonder afbeelding en varianten apart). Alleen als de shop aan staat;
+  anders blijft `robots.txt` bij `Disallow: /`.
+- Het webadres in de adressen komt uit Beheer > Betalen (*Webadres van de webshop*), anders uit het verzoek.
+- Geen databasewijziging; één extra kolom (`updated_at`) in de bestaande cataloguskwery. Tests: `test/seo.test.js`.
+
 ## 1.7.1
 
 De webshop is de startpagina; de app staat onder `/app/`.

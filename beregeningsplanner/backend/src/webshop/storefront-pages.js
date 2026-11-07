@@ -7,12 +7,15 @@
 const { version: SHOP_VERSION } = require('../../package.json');
 const { DEFAULT_SITE } = require('./shop-content');
 const { LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
+const Seo = require('./seo');
 
 const SHOP_NAME = 'Aquatechshop.nl';
 /** Maximaal aantal resultaten op de zoekpagina. */
 const MAX_SEARCH_RESULTS = 60;
 /** Aantal subcategorieën per hoofdcategorie op de startpagina. */
 const HOME_SUBCATEGORIES = 6;
+/** Sleutel van de pagina uit Beheer waarvan de koppen vragen en de tekst eronder antwoorden zijn (wordt een FAQPage voor zoekmachines). */
+const FAQ_SLUG = 'veelgestelde-vragen';
 
 /**
  * Maakt tekst veilig voor in HTML (tekst en attributen).
@@ -35,17 +38,17 @@ function formatPrice(amount) {
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
-let activeShop = { ordering: false, cartCount: 0, business: false, wholesale: false };
+let activeShop = { ordering: false, cartCount: 0, business: false, wholesale: false, baseUrl: '' };
 
 /**
  * Bouwt pagina's op met de inhoud uit Beheer. Het opbouwen is synchroon, dus
  * zolang `render` loopt hoort elke pagina bij deze inhoud; daarna geldt weer de vorige.
  * @param {{ site: object, pages: object[] }} content De inhoud (zie shop-content.js, publicContent).
  * @param {Function} render Functie die de pagina('s) opbouwt en iets teruggeeft.
- * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean }} [shop] Of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
+ * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean, baseUrl?: string }} [shop] Het volledige webadres van de shop (met slash achteraan; leeg = geen canonical-link en OpenGraph), of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
  * @returns {*} Wat `render` teruggeeft.
  */
-function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, wholesale: false }) {
+function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, wholesale: false, baseUrl: '' }) {
   const previous = activeContent;
   const previousShop = activeShop;
   activeContent = content;
@@ -181,12 +184,37 @@ function navigation(groups, root) {
 }
 
 /**
+ * De kopregels voor zoekmachines en delen: canonical-link, OpenGraph, Twitter-kaart, robots en JSON-LD.
+ * Zonder webadres van de shop (activeShop.baseUrl) of zonder canonicalPath is er geen canonical en OpenGraph;
+ * een pagina zonder canonicalPath (account, winkelwagen, zoeken, niet gevonden) krijgt noindex.
+ * @param {{ title: string, description: string, canonicalPath: ?string, ogImage: string, ogType: string, jsonLd: object[], root: string }} input De gegevens van de pagina (zie layout).
+ * @returns {string} De HTML-regels (leeg als er niets te zetten is).
+ */
+function seoHead({ title, description, canonicalPath, ogImage, ogType, jsonLd, root }) {
+  const { baseUrl } = activeShop;
+  const robots = canonicalPath == null ? '<meta name="robots" content="noindex, follow">\n' : '';
+  if (!baseUrl || canonicalPath == null) return robots;
+  const url = Seo.absoluteUrl(baseUrl, canonicalPath);
+  const image = ogImage || Seo.absoluteUrl(baseUrl, assetUrl(root, 'aquatechshop-logo.png').replace(/^(\.\.\/)+/, ''));
+  return `<link rel="canonical" href="${escapeHtml(url)}">
+<meta property="og:site_name" content="${escapeHtml(SHOP_NAME)}">
+<meta property="og:locale" content="nl_NL">
+<meta property="og:type" content="${escapeHtml(ogType)}">
+<meta property="og:title" content="${escapeHtml(title)}">
+<meta property="og:description" content="${escapeHtml(description)}">
+<meta property="og:url" content="${escapeHtml(url)}">
+<meta property="og:image" content="${escapeHtml(image)}">
+<meta name="twitter:card" content="${ogImage ? 'summary_large_image' : 'summary'}">
+${Seo.jsonLdBlock(jsonLd)}`;
+}
+
+/**
  * Het kader om elke pagina: kop met logo, zoeken, winkelwagen en account,
  * menu van productgroepen, inhoud en voet.
- * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean, variantScript?: boolean, script?: string|string[], refresh?: string }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina) en variantScript = of de pagina het script voor de keuzelijsten van varianten laadt en script = de naam (of namen) van andere scripts uit de assets die de pagina laadt (leeg = geen) en refresh = een adres waar de pagina de bezoeker meteen heen stuurt (leeg = niet).
+ * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean, variantScript?: boolean, script?: string|string[], refresh?: string, canonicalPath?: ?string, ogImage?: string, ogType?: string, jsonLd?: object[] }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina) en variantScript = of de pagina het script voor de keuzelijsten van varianten laadt en script = de naam (of namen) van andere scripts uit de assets die de pagina laadt (leeg = geen) en refresh = een adres waar de pagina de bezoeker meteen heen stuurt (leeg = niet) en canonicalPath = het pad van de pagina vanaf de startpagina ('' = startpagina) voor de canonical-link, OpenGraph en zoekmachines (null = geen: de pagina is dan voor zoekmachines niet bedoeld en krijgt noindex) en ogImage = volledig adres van de afbeelding voor delen (leeg = het logo) en ogType = het OpenGraph-type ('website' of 'product') en jsonLd = Schema.org-objecten voor in de pagina.
  * @returns {string} De volledige HTML-pagina.
  */
-function layout({ root, title, description, body, groups, query = '', wide = false, variantScript = false, script = '', refresh = '' }) {
+function layout({ root, title, description, body, groups, query = '', wide = false, variantScript = false, script = '', refresh = '', canonicalPath = null, ogImage = '', ogType = 'website', jsonLd = [] }) {
   const home = root || './';
   const { site, pages } = activeContent;
   const phone = site.contact.phone;
@@ -201,7 +229,7 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <meta name="description" content="${escapeHtml(description)}">
-${refresh ? `<meta http-equiv="refresh" content="0;url=${escapeHtml(refresh)}">\n` : ''}<link rel="icon" type="image/png" href="${assetUrl(root, 'favicon.png')}">
+${seoHead({ title, description, canonicalPath, ogImage, ogType, jsonLd, root })}${refresh ? `<meta http-equiv="refresh" content="0;url=${escapeHtml(refresh)}">\n` : ''}<link rel="icon" type="image/png" href="${assetUrl(root, 'favicon.png')}">
 <link rel="stylesheet" href="${assetUrl(root, 'brand.css')}">
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
 ${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
@@ -412,6 +440,25 @@ ${sent === 'fout' ? '<p class="error" role="alert">Versturen is niet gelukt. Con
 }
 
 /**
+ * Het volledige adres van de afbeelding bovenaan de startpagina, voor delen op social media en in zoekresultaten.
+ * @param {string} reference 'asset:<bestand>' of 'media:<id>' (zie imageSrc).
+ * @returns {string} Het volledige adres, leeg zonder webadres van de shop of zonder afbeelding.
+ */
+function homeImage(reference) {
+  const source = imageSrc('', reference);
+  return activeShop.baseUrl && source ? Seo.absoluteUrl(activeShop.baseUrl, source) : '';
+}
+
+/**
+ * De gestructureerde gegevens van de startpagina: het bedrijf (Nunspeet) en de website met zoekfunctie.
+ * @param {string} heroReference De afbeelding bovenaan de startpagina (voor het bedrijfsbeeld).
+ * @returns {object[]} De Schema.org-objecten (leeg zonder webadres van de shop).
+ */
+function homeJsonLd(heroReference) {
+  return activeShop.baseUrl ? Seo.organizationJsonLd(activeContent.site, activeShop.baseUrl, SHOP_NAME, homeImage(heroReference)) : [];
+}
+
+/**
  * Startpagina in de opzet van aquatechshop.nl: foto met kop, assortimentsbalk,
  * populaire producten, producten per hoofdcategorie, voordelen, merken en een
  * oproep voor een zakelijk account.
@@ -426,7 +473,7 @@ function homePage(catalog) {
   const heroHref = linkHref(hero.link, root, first ? `groep/${escapeHtml(first.slug)}/` : '');
   const heroImage = imageSrc(root, hero.image);
   const intro = `<section class="home-hero">${heroImage ? `<img src="${heroImage}" alt=""${hero.image === DEFAULT_SITE.hero.image ? ' width="1440" height="419"' : ''}>` : ''}${hero.title || hero.text || heroButton ? `<div class="home-hero-text">${hero.title ? `<h1>${escapeHtml(hero.title)}</h1>` : ''}${hero.text ? `<p>${escapeHtml(hero.text)}</p>` : ''}${heroButton && heroHref ? `<a class="button" href="${heroHref}">${escapeHtml(heroButton)}</a>` : ''}</div>` : ''}</section>`;
-  if (!catalog.products.length) return layout({ root, groups: catalog.groups, wide: true, title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}<div class="wrap"><p class="muted">De webshop wordt gevuld. Kom snel terug.</p></div>` });
+  if (!catalog.products.length) return layout({ root, groups: catalog.groups, wide: true, canonicalPath: '', jsonLd: homeJsonLd(hero.image), ogImage: homeImage(hero.image), title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}<div class="wrap"><p class="muted">De webshop wordt gevuld. Kom snel terug.</p></div>` });
   const tiles = catalog.groups.map((group) => {
     const showcase = groupShowcase(group, catalog.products);
     return `<a class="assortment-tile" href="groep/${escapeHtml(group.slug)}/"><span class="product-image">${showcase ? `<img src="${productImageSrc(root, showcase.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><span>${escapeHtml(group.name)}</span></a>`;
@@ -468,7 +515,7 @@ function homePage(catalog) {
   const businessHref = linkHref(businessBlock.link, root, `${root}registreren/`);
   const withForm = Boolean(businessBlock.form && activeShop.businessForm);
   const business = businessBlock.enabled ? `<section class="business${withForm ? ' with-form' : ''}">${businessImage ? `<img src="${businessImage}" alt="" loading="lazy">` : ''}<div class="business-text"><h2>${escapeHtml(businessBlock.title)}</h2>${businessBlock.text ? `<p>${escapeHtml(businessBlock.text)}</p>` : ''}${businessBlock.button && !withForm ? `<a class="button" href="${businessHref}">${escapeHtml(businessBlock.button)}</a>` : ''}</div>${withForm ? businessForm(root, activeShop.businessSent) : ''}</section>` : '';
-  return layout({ root, wide: true, title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}\n${assortment}\n${popular}\n${banners}\n${perGroup}\n${benefits}\n${brands}\n${quote}\n${business}`, groups: catalog.groups });
+  return layout({ root, wide: true, canonicalPath: '', jsonLd: homeJsonLd(hero.image), ogImage: homeImage(hero.image), title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}\n${assortment}\n${popular}\n${banners}\n${perGroup}\n${benefits}\n${brands}\n${quote}\n${business}`, groups: catalog.groups });
 }
 
 /**
@@ -601,7 +648,9 @@ ${blocks}
 ${list}
 </section>
 </div>`;
-  return layout({ root, wide: true, variantScript: shown.some((product) => product.variants), title: `${subject.name} – ${SHOP_NAME}`, description: `${subject.name} van AquaTech Service: ${productCount(subject.count)}.`, body, groups });
+  const browsePath = `${category ? `categorie/${category.slug}` : `groep/${group.slug}`}/${page > 1 ? `?pagina=${page}` : ''}`;
+  const breadcrumbSteps = [{ name: 'Shop', path: '' }, { name: group.name, path: `groep/${group.slug}/` }, ...chain.map((item) => ({ name: item.name, path: `categorie/${item.slug}/` }))];
+  return layout({ root, wide: true, canonicalPath: browsePath, jsonLd: [Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], variantScript: shown.some((product) => product.variants), title: `${subject.name} – ${SHOP_NAME}`, description: `${subject.name} van AquaTech Service: ${productCount(subject.count)}.`, body, groups });
 }
 
 /**
@@ -682,7 +731,12 @@ function productPage(product, groups, chosenCode = '') {
     ${parentLink}
   </div>
 </article>`;
-  return layout({ root, title: `${product.name} – ${SHOP_NAME}`, description: `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`, body, groups });
+  const productPath = `product/${product.slug}/`;
+  // Een variantpagina heeft één aanbieding (de eigen prijs en voorraad); een hoofdartikel een prijsbereik over de varianten.
+  const jsonProduct = product.parentSlug ? { ...product, variants: [] } : product;
+  const productDescription = `${product.name}, artikelnummer ${product.code}${product.categoryName ? `, uit de categorie ${product.categoryName}` : ''} bij ${SHOP_NAME}.`;
+  const breadcrumbSteps = [{ name: 'Shop', path: '' }, ...(group ? [{ name: group.name, path: `groep/${group.slug}/` }] : []), { name: product.categoryName, path: `categorie/${product.categorySlug}/` }, { name: product.name, path: productPath }];
+  return layout({ root, canonicalPath: productPath, ogType: 'product', ogImage: Seo.imageUrlOf(activeShop.baseUrl, imageUrl), jsonLd: [Seo.productJsonLd({ product: jsonProduct, baseUrl: activeShop.baseUrl, canonicalPath: productPath, shopName: SHOP_NAME, description: productDescription }), Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], title: `${product.name} – ${SHOP_NAME}`, description: `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`, body, groups });
 }
 
 /**
@@ -712,7 +766,7 @@ function aboutPage(groups) {
 <div class="about-values">${values.map(([heading, text]) => `<div class="about-value"><strong>${heading}</strong><span>${text}</span></div>`).join('')}</div>
 <p class="about-claim">Kwaliteit, service en betaalbaarheid komen bij ons samen.</p>
 </div>`;
-  return layout({ root, groups, wide: true, title: `Over ons – ${SHOP_NAME}`, description: 'Aquatechshop.nl is ontstaan vanuit HVT Beregening: scherpe tarieven, een eigen technische dienst en levering op locatie.', body });
+  return layout({ root, groups, wide: true, canonicalPath: 'over-ons/', title: `Over ons – ${SHOP_NAME}`, description: 'Aquatechshop.nl is ontstaan vanuit HVT Beregening: scherpe tarieven, een eigen technische dienst en levering op locatie.', body });
 }
 
 /**
@@ -728,7 +782,7 @@ function contentPage(page, groups, root) {
 <article class="cms-page"><h1>${escapeHtml(page.title)}</h1>
 ${body}
 </article></div>`;
-  return layout({ root, groups, wide: true, title: `${page.title} – ${SHOP_NAME}`, description: page.description || `${page.title} bij ${SHOP_NAME}.`, body: html });
+  return layout({ root, groups, wide: true, canonicalPath: page.slug === 'over-ons' ? 'over-ons/' : `pagina/${page.slug}/`, jsonLd: page.slug === FAQ_SLUG ? [Seo.faqJsonLd(Seo.faqEntriesOf(page.body))] : [], title: `${page.title} – ${SHOP_NAME}`, description: page.description || `${page.title} bij ${SHOP_NAME}.`, body: html });
 }
 
 /**

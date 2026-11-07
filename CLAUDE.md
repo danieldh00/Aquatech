@@ -412,6 +412,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   vervalt na `holdHours` (`app.locals.webPaymentsExpire`, elk uur). Redirect
   naar Mollie loopt via GET `bestelling/<id>/betalen/` (CSP `form-action
   'self'` blokkeert een redirect direct vanuit het formulier).
+- **Vindbaarheid voor zoekmachines en AI** (1.7.2, `webshop/seo.js`, geen migratie): zuivere functies voor JSON-LD (`Store`, `WebSite`, `Product`/`Offer`, `BreadcrumbList`, `FAQPage` uit de Beheer-pagina `veelgestelde-vragen`), `robots.txt`, `sitemap.xml`, `llms.txt` en `productfeed.xml` (Merchant Center); routes in `storefront.js` (alleen bij shop aan), `layout()` in storefront-pages.js zet canonical/OpenGraph via `seoHead`. Een pagina zonder `canonicalPath` krijgt `noindex`; **een nieuwe openbare pagina die in zoekresultaten hoort geeft dus een `canonicalPath` mee** (en komt in `sitemapEntriesOf`). Webadres: `shopPayment.publicUrl`, anders de host van het verzoek (`publicBaseUrl`). Prijzen in JSON-LD/feed zijn altijd consumentenprijzen incl. btw.
 - **Adres via postcode** (1.5.5, PDOK Locatieserver): `backend/src/platform/address-lookup.js`
   (server haalt op, 24 u cache, tests via `createApp({ addressFetch })`), routes
   `GET /api/address-lookup` (login) en `GET /winkel/adres/`; de browser belt nooit

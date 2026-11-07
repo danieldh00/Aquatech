@@ -21,10 +21,11 @@ const { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage } = req
 const { wholesalePage, orderableProducts } = require('./storefront-wholesale-pages');
 const Wholesale = require('./wholesale');
 const { returnsBlock } = require('./storefront-return-pages');
-const { legalDefaults } = require('./legal-pages');
+const { legalDefaults, LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
-const { validPaymentId } = require('./mollie');
+const { validPaymentId, cleanPublicUrl } = require('./mollie');
+const Seo = require('./seo');
 const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, MAX_QTY } = require('./storefront-cart');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
@@ -91,6 +92,43 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   };
 
   /**
+   * Het volledige webadres van de shop (met slash achteraan) voor canonical-links, de sitemap en de feeds:
+   * het webadres uit Beheer (Betalen), anders het adres waarmee dit verzoek binnenkwam.
+   * @param {object} req Het verzoek.
+   * @returns {string} Het webadres, leeg als de host van het verzoek niet bruikbaar is.
+   */
+  const publicBaseUrl = (req) => {
+    const payment = settingsFor(tenantId).get('shopPayment');
+    const configured = cleanPublicUrl(payment && payment.publicUrl);
+    if (configured) return configured;
+    const host = String(req.headers.host || '');
+    if (!/^[a-z0-9.-]+(:\d{1,5})?$/i.test(host)) return '';
+    return `${req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol}://${host}/`;
+  };
+  /**
+   * De vaste pagina's van de shop (Over ons, de pagina's uit Beheer en de juridische pagina's) met slug en titel.
+   * @param {object} req Het verzoek.
+   * @returns {{ slug: string, title: string }[]} De pagina's.
+   */
+  const infoPagesOf = (req) => {
+    const own = contentOf(req).pages.map((page) => ({ slug: page.slug, title: page.title }));
+    const legal = LEGAL_SLUGS.filter((slug) => !own.some((page) => page.slug === slug)).map((slug) => ({ slug, title: LEGAL_TITLES[slug] }));
+    return [...(own.some((page) => page.slug === 'over-ons') ? [] : [{ slug: 'over-ons', title: 'Over ons' }]), ...own, ...legal];
+  };
+  /**
+   * Stuurt een tekstbestand voor zoekmachines of AI-zoekers (robots.txt, sitemap, llms.txt, productfeed) met een uur cache.
+   * @param {object} res Het antwoord.
+   * @param {string} type Content-Type.
+   * @param {?string} body De inhoud, of null als het webadres van de shop onbekend is (dan 404).
+   * @returns {void}
+   */
+  const sendSeoFile = (res, type, body) => {
+    if (body == null) { res.status(404).end(); return; }
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.type(type).send(body);
+  };
+
+  /**
    * Bouwt een HTML-pagina op met de inhoud uit Beheer en stuurt hem met de kopjes van de shop.
    * @param {object} req Het verzoek.
    * @param {object} res Het antwoord.
@@ -108,7 +146,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const viewer = accounts ? accounts.viewer(req) : null;
     const business = Boolean(viewer) && viewer.customerGroup === 'zakelijk';
     if (business) res.setHeader('Cache-Control', 'private, no-store');
-    const html = renderWith(contentOf(req), render, { ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
+    const html = renderWith(contentOf(req), render, { baseUrl: preview ? '' : publicBaseUrl(req), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
     const withPlanner = html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : ''));
     // In een voorbeeld blijven de menu- en categorielinks in het concept, ook voor categorieën die er alleen in staan.
     // Ook het zoekformulier houdt de voorbeeldstatus vast (verborgen veld), anders valt een zoekopdracht terug op de gepubliceerde boom.
@@ -170,6 +208,26 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   router.get('/assets/fonts/:name', (req, res) => {
     if (!FONT_FILE.test(req.params.name)) return res.status(404).end();
     sendAsset(res, path.join(SHARED_DIR, 'fonts', req.params.name), 'font/woff2', Boolean(req.query.v), 86400);
+  });
+
+  // Voor zoekmachines en AI-zoekers (seo.js): robots.txt, sitemap, llms.txt en de productfeed voor Google Merchant Center.
+  router.get('/robots.txt', (req, res) => {
+    const baseUrl = publicBaseUrl(req);
+    sendSeoFile(res, 'text/plain; charset=utf-8', baseUrl ? Seo.robotsTxt(baseUrl) : null);
+  });
+  router.get('/sitemap.xml', (req, res) => {
+    const baseUrl = publicBaseUrl(req);
+    sendSeoFile(res, 'application/xml; charset=utf-8', baseUrl ? Seo.sitemapXml(Seo.sitemapEntriesOf({ catalog: data.catalogOf(tenantId), pages: infoPagesOf(req) }), baseUrl) : null);
+  });
+  router.get('/llms.txt', (req, res) => {
+    const baseUrl = publicBaseUrl(req);
+    const catalog = baseUrl ? data.catalogOf(tenantId) : null;
+    sendSeoFile(res, 'text/plain; charset=utf-8', baseUrl ? Seo.llmsTxt({ shopName: 'Aquatechshop.nl', baseUrl, site: contentOf(req).site, groups: catalog.groups, pages: infoPagesOf(req) }) : null);
+  });
+  router.get('/productfeed.xml', (req, res) => {
+    const baseUrl = publicBaseUrl(req);
+    const catalog = baseUrl ? data.catalogOf(tenantId) : null;
+    sendSeoFile(res, 'application/xml; charset=utf-8', baseUrl ? Seo.merchantFeedXml({ shopName: 'Aquatechshop.nl', baseUrl, products: catalog.products, groups: catalog.groups }) : null);
   });
 
   router.get('/', (req, res) => {

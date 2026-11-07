@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.2',
+      date: '2026-11-07',
+      title: 'Webshop beter te vinden',
+      items: [
+        { text: 'De webshop is nu klaargezet voor Google, Bing en AI-zoekers zoals ChatGPT en Perplexity: producten, prijzen en voorraad staan in een vorm die zij goed kunnen lezen.' },
+        { text: 'Er is een sitemap, een samenvatting voor AI (llms.txt) en een productfeed voor Google Merchant Center. Vul bij Beheer > Betalen het webadres van de webshop in, dan gebruiken ze het juiste adres.', for: ['beheer'] },
+        { text: 'Zet een pagina met de naam "veelgestelde-vragen" in Beheer > Webshop-inhoud: elke kop is een vraag, de tekst eronder het antwoord. Zoekmachines tonen die dan als vraag en antwoord.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.7.1',
       date: '2026-11-07',
       title: 'De webshop is de startpagina',

@@ -547,7 +547,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (legacyAppRedirect(req, res)) return undefined;
     if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found' });
     if (req.path === '/sw.js') return sendCleanupWorker(res);
-    if (req.path === '/robots.txt') return res.type('text').send('User-agent: *\nDisallow: /app/\nDisallow: /api/\nDisallow: /winkelwagen/\nDisallow: /afrekenen/\nDisallow: /account/\nDisallow: /inloggen/\nDisallow: /registreren/\nDisallow: /bestelling/\nDisallow: /bestellingen/\nDisallow: /groothandel/\n');
+    // Webshop uit: er is niets om te vinden (robots.txt van de shop zelf staat in webshop/storefront.js).
+    if (req.path === '/robots.txt' && !settingsFor(tenant.id).get('storefront')) return res.type('text').send('User-agent: *\nDisallow: /\n');
     // Webshop uit: de hoofdpagina is dan de app (voorbeeld voor beheerders blijft kunnen).
     if (req.path === '/' && !settingsFor(tenant.id).get('storefront') && !Object.prototype.hasOwnProperty.call(req.query, 'voorbeeld')) return res.redirect(302, 'app/');
     return storefrontRouter(req, res, next);

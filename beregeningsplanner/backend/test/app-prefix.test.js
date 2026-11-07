@@ -74,7 +74,7 @@ test('webshop uit: / stuurt naar de app; /sw.js ruimt de oude worker op; robots.
     assert.match(worker.text, /unregister\(\)/);
     assert.match(worker.headers.get('cache-control'), /no-cache/);
     const robots = await client.get('/robots.txt');
-    assert.match(robots.text, /Disallow: \/app\//);
+    assert.match(robots.text, /Disallow: \/\n/);
   } finally { server.close(); }
 });
 

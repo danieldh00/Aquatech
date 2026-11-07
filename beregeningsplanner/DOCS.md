@@ -575,6 +575,19 @@ van de voorraad zie je alleen *Op voorraad* of *Niet op voorraad* (stand min res
 staat in `backend/src/webshop/storefront*.js` en is een Express-router die
 later ook op een eigen domein of in een eigen container kan draaien.
 
+### Vindbaarheid (zoekmachines en AI-zoekers)
+
+Sinds 1.7.2 is de shop ingericht voor Google, Bing en AI-zoekers (ChatGPT, Perplexity, Copilot, Claude). De pagina's
+worden op de server opgebouwd, dus crawlers die geen JavaScript uitvoeren zien prijs en voorraad meteen.
+Per pagina staan een canonical-link, OpenGraph-regels en gestructureerde gegevens (Schema.org JSON-LD): `Store` en `WebSite`
+op de startpagina, `Product` met `Offer` op een productpagina en `BreadcrumbList` op categorie en product. Een pagina met de
+slug `veelgestelde-vragen` (Beheer → Webshop-inhoud) wordt een `FAQPage`: elke kop is een vraag, de tekst eronder het antwoord.
+Openbare bestanden: `robots.txt` (AI-crawlers expliciet toegestaan, persoonlijke pagina's uitgesloten), `sitemap.xml`,
+`llms.txt` en `productfeed.xml` (Google Merchant Center; alleen artikelen met afbeelding). Vul bij Beheer → Betalen het
+*Webadres van de webshop* in, anders wordt het adres uit het verzoek gebruikt. Zelf te doen: de site aanmelden in Google Search
+Console en Bing Webmaster Tools (sitemap `/sitemap.xml`), een Merchant Center-account met de feed `/productfeed.xml` (en
+verzendkosten daar instellen) en een Google-bedrijfsprofiel.
+
 ## Gebruikers, rollen en historie van aanvragen
 
 Elke rol ziet op het dashboard alleen de modules die erbij horen; de server
