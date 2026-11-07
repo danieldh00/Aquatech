@@ -195,8 +195,8 @@ test('overstap SQLite → PostgreSQL: alle gegevens één op één, ingelogd bli
     try {
       const after = await views(base, jars);
       assert.ok(Object.keys(before).length > 30);
-      assert.strictEqual(before['installateur /api/quotes?all=1'].body.items.length, 6, 'vergelijking met echte gegevens');
-      assert.ok(before['installateur /api/workorders'].body.items.length === 4 && before['baas /api/platform/tenants'].body.items.length === 2);
+      assert.strictEqual(before['installateur /app/api/quotes?all=1'].body.items.length, 6, 'vergelijking met echte gegevens');
+      assert.ok(before['installateur /app/api/workorders'].body.items.length === 4 && before['baas /app/api/platform/tenants'].body.items.length === 2);
       for (const key of Object.keys(before)) assert.deepStrictEqual(after[key], before[key], key);
       assert.strictEqual((await createClient(base, { jar: new Map(jars.baas) }).get('/app/api/admin/settings')).body.settings.anthropicApiKey.hint, '…WXYZ');
       // En verder werken op PostgreSQL.
