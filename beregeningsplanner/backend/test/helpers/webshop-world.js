@@ -35,7 +35,7 @@ async function until(check) {
 
 /**
  * Hoofdtenant met beheerder, een artikel, een tweede organisatie en twee klanten; mails worden onderschept.
- * @param {{ mollie?: boolean, addressFetch?: Function }} [options] mollie: zet online betalen aan met een nagebootste Mollie (testsleutel en webadres https://winkel.example/winkel/); addressFetch: nagebootste PDOK voor het opzoeken van adressen (standaard de vaste testadressen uit pdok-fake.js).
+ * @param {{ mollie?: boolean, addressFetch?: Function }} [options] mollie: zet online betalen aan met een nagebootste Mollie (testsleutel en webadres https://winkel.example/); addressFetch: nagebootste PDOK voor het opzoeken van adressen (standaard de vaste testadressen uit pdok-fake.js).
  * @returns {Promise<object>} base, admin, vreemd, sent (verstuurde mails), mailFailing (zet .on aan om mails te laten mislukken), shoppers (twee klanten), app, db en bij mollie de nagebootste Mollie.
  */
 async function setup({ mollie = false, addressFetch = createPdokFake().fetchImpl } = {}) {
@@ -57,14 +57,14 @@ async function setup({ mollie = false, addressFetch = createPdokFake().fetchImpl
   const { server, base } = await listen(app);
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  await admin.put('/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
+  await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
     pickup: { enabled: true }, dpd: { enabled: true, defaultWeightGrams: 1000, zones: [{ country: 'NL', tiers: [{ upToGrams: 2000, price: 6.95 }] }] },
   } });
   if (mollie) {
-    const saved = await admin.put('/api/admin/settings', { shopPayment: { online: true, publicUrl: 'https://winkel.example/winkel/', onAccount: 'iedereen', holdHours: 24 }, mollieApiKey: 'test_abcdefghij1234567' });
+    const saved = await admin.put('/app/api/admin/settings', { shopPayment: { online: true, publicUrl: 'https://winkel.example/', onAccount: 'iedereen', holdHours: 24 }, mollieApiKey: 'test_abcdefghij1234567' });
     assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
   }
-  assert.strictEqual((await admin.post('/api/stock/items', { code: 'BUS', name: 'Sproeier', onHand: 50, salePrice: 10, weightGrams: 400 })).status, 201);
+  assert.strictEqual((await admin.post('/app/api/stock/items', { code: 'BUS', name: 'Sproeier', onHand: 50, salePrice: 10, weightGrams: 400 })).status, 201);
   let counter = 0;
   /**
    * Registreert een klant in de shop.
@@ -73,7 +73,7 @@ async function setup({ mollie = false, addressFetch = createPdokFake().fetchImpl
   const shopper = async () => {
     counter += 1;
     const client = createClient(base);
-    await postForm(base, client, '/winkel/registreren/', { displayName: `Klant ${counter}`, email: `k${counter}@voorbeeld.nl`, password: PW, password2: PW, website: '' });
+    await postForm(base, client, '/registreren/', { displayName: `Klant ${counter}`, email: `k${counter}@voorbeeld.nl`, password: PW, password2: PW, website: '' });
     return { client };
   };
   return { base, admin, vreemd: await createLogin(base, { password: PW })('vreemd', 'ander'), sent, mailFailing, shoppers: [await shopper(), await shopper()], app, db, mollie: mollieFake };
@@ -87,10 +87,10 @@ async function setup({ mollie = false, addressFetch = createPdokFake().fetchImpl
  * @returns {Promise<string>} Id van de bestelling.
  */
 async function order(world, shopper, fields = {}) {
-  await postForm(world.base, shopper.client, '/winkel/winkelwagen/', { action: 'add', code: 'BUS', qty: '2' });
+  await postForm(world.base, shopper.client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '2' });
   const placed = await postCheckout(world.base, shopper.client, { ...PERSON, ...fields });
   assert.strictEqual(placed.status, 303, placed.text);
-  return (await world.admin.get('/api/admin/web-orders')).body.items[0].id;
+  return (await world.admin.get('/app/api/admin/web-orders')).body.items[0].id;
 }
 
 /**

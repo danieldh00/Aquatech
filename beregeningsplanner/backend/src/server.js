@@ -171,6 +171,55 @@ function isPublicPlanner(req) {
   return PLANNER_FILES.has(decodedPath) || (decodedPath.startsWith('/beregening/') && !decodedPath.endsWith('.html') && /\.[a-z0-9]+(\.gz)?$/i.test(decodedPath));
 }
 
+// Oude adressen van de app (vóór de webshop de hoofdmap werd): eerste padstukken
+// die nu onder /app/ staan, naast de modules zelf (zie isModule).
+const LEGACY_APP_ROOTS = new Set(['shared', 'dashboard', 'openbaar', 'login', 'wachtwoord', 'manifest.json']);
+
+/**
+ * Stuurt een oud app-adres (`/beregening/`, `/login`, `/openbaar/offerte.html`)
+ * door naar `app/...` en een oud webshopadres (`/winkel/...`) naar de hoofdmap.
+ * De doorverwijzing is relatief, zodat hij ook achter een padprefix werkt.
+ * @param {object} req Het verzoek (buiten /app).
+ * @param {object} res Het antwoord.
+ * @returns {boolean} true als er is doorgestuurd.
+ */
+function legacyAppRedirect(req, res) {
+  const segments = req.path.split('/').filter(Boolean);
+  const first = segments[0];
+  if (!first) return false;
+  const query = req.originalUrl.slice(req.path.length);
+  const up = '../'.repeat(req.path.endsWith('/') ? segments.length : Math.max(segments.length - 1, 0));
+  const trailing = req.path.endsWith('/') ? '/' : '';
+  if (first === 'winkel') {
+    const rest = segments.slice(1).join('/');
+    return Boolean(res.redirect(301, `${up}${rest}${rest ? trailing : ''}${query}` || `./${query}`));
+  }
+  if (first === 'admin') return Boolean(res.redirect(302, `${up}app/beheer/${segments.slice(1).join('/')}${segments.length > 1 ? trailing : ''}${query}`));
+  if (LEGACY_APP_ROOTS.has(first) || isModule(first)) return Boolean(res.redirect(302, `${up}app${req.path}${query}`));
+  return false;
+}
+
+/**
+ * Stuurt een service worker die zichzelf opruimt. Een eerder geïnstalleerde
+ * app-worker met bereik `/` (toen de app de hoofdmap was) haalt `/sw.js`
+ * opnieuw op, schrijft zich dan uit en wist de pagina-cache; de app heeft nu
+ * een eigen worker onder /app/.
+ * @param {object} res Het antwoord.
+ * @returns {void}
+ */
+function sendCleanupWorker(res) {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.type('application/javascript').send(`self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    for (const name of await caches.keys()) { if (name.startsWith('aquatech-shell-')) await caches.delete(name); }
+    await self.registration.unregister();
+    for (const client of await self.clients.matchAll({ type: 'window' })) { client.navigate(client.url); }
+  })());
+});
+`);
+}
+
 /**
  * Een module is een map direct onder frontend/ met een eigen index.html.
  * @param {string} name Naam van de map.
@@ -414,11 +463,26 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const aiAvailable = (tenantId = tenant.id) => settingsFor(tenantId).get('aiEnabled') && currentAnalyzer(tenantId).available;
 
   const app = express();
+  /** De webshop-router (op de hoofdmap, zie createStorefront); wordt verderop gevuld. */
+  let storefrontRouter = null;
 
   app.disable('x-powered-by');
   // Per verzoek een eigen geheugen voor gegevens die binnen één verzoek
   // meermaals nodig zijn (zoals de tenant); zie withRequestCache in store.js.
   app.use((req, res, next) => withRequestCache(next));
+  // Alles van de app (dashboard, modules, API, inloggen) staat onder /app/; de
+  // hoofdmap is de webshop. Het voorvoegsel gaat hier eraf, zodat de rest van de
+  // app ongewijzigd werkt (`req.inApp` onthoudt dat het verzoek van de app is).
+  app.use((req, res, next) => {
+    const match = /^\/app(?=[/?]|$)/.exec(req.url);
+    if (!match) return next();
+    req.inApp = true;
+    const rest = req.url.slice(match[0].length);
+    if (rest === '' || rest.startsWith('?')) return res.redirect(302, `app/${rest}`);
+    req.url = rest;
+    req.originalUrl = rest;
+    next();
+  });
   // Modules roepen de API relatief aan ('api/...'), dus vanuit beregening/
   // komt dat binnen als /beregening/api/...: zelfde API, prefix eraf.
   app.use((req, res, next) => {
@@ -473,6 +537,20 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // API-antwoorden bevatten persoonsgegevens: nooit in een (proxy)cache.
     if (req.url.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
     next();
+  });
+
+  // Buiten /app: de webshop, de oude adressen (doorverwijzing) en de gezondheidscontrole.
+  app.use((req, res, next) => {
+    if (req.inApp || req.path === '/api/health') return next();
+    // Uit de oude webshop-URL gebleven webhooks van Mollie: nog een tijdje intern doorgeven.
+    if (/^\/winkel\/mollie\/webhook\//.test(req.path)) req.url = req.url.slice('/winkel'.length);
+    if (legacyAppRedirect(req, res)) return undefined;
+    if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found' });
+    if (req.path === '/sw.js') return sendCleanupWorker(res);
+    if (req.path === '/robots.txt') return res.type('text').send('User-agent: *\nDisallow: /app/\nDisallow: /api/\nDisallow: /winkelwagen/\nDisallow: /afrekenen/\nDisallow: /account/\nDisallow: /inloggen/\nDisallow: /registreren/\nDisallow: /bestelling/\nDisallow: /bestellingen/\nDisallow: /groothandel/\n');
+    // Webshop uit: de hoofdpagina is dan de app (voorbeeld voor beheerders blijft kunnen).
+    if (req.path === '/' && !settingsFor(tenant.id).get('storefront') && !Object.prototype.hasOwnProperty.call(req.query, 'voorbeeld')) return res.redirect(302, 'app/');
+    return storefrontRouter(req, res, next);
   });
 
   // Wijzigingen via de API alleen vanaf de eigen site. SameSite=Lax houdt
@@ -2204,11 +2282,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     sendAuthPage(res, authPage(req));
   });
 
-  // Eigen webshop (alleen lezen, openbaar, zie webshop/storefront.js); uit
+  // Eigen webshop (hoofdmap /, openbaar, zie webshop/storefront.js); uit
   // zolang de instelling `storefront` van de hoofdtenant uit staat.
   // Inloggen en registreren in de shop gebruiken dezelfde accounts (rol klant).
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
-  app.use('/winkel', createStorefront({
+  storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
@@ -2218,7 +2296,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const user = identify(req);
       return Boolean(user) && Roles.can(user, 'beheer') && user.tenant_id === tenant.id;
     },
-  }));
+  });
 
   // Scripts, stylesheets, lettertypen en afbeeldingen (geen HTML, geen API).
   const STATIC_ASSET = /\.(js|css|png|jpe?g|svg|webp|gif|ico|woff2?|map|json|traineddata(\.gz)?|wasm)$/i;

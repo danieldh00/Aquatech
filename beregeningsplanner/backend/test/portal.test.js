@@ -59,32 +59,32 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
   const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const as = createLogin(base, { password: PW, extraBody: { mustChangePassword: false } });
   try {
-    assert.strictEqual((await createClient(base).get('/api/portal')).status, 401);
+    assert.strictEqual((await createClient(base).get('/app/api/portal')).status, 401);
     const kees = await as('kees'), klaas = await as('klaas'), piet = await as('piet');
-    assert.strictEqual((await kees.get('/api/portal')).status, 403, 'medewerker heeft geen portaal');
+    assert.strictEqual((await kees.get('/app/api/portal')).status, 403, 'medewerker heeft geen portaal');
 
-    const klaasId = (await klaas.get('/api/me')).body.user.id;
-    assert.ok((await klaas.get('/api/me')).body.rights.includes('portaal'));
-    await klaas.post('/api/plans', { data: { meta: { name: 'Mijn tuin', address: 'Dorpsstraat 1' }, areas: [] } });
-    await piet.post('/api/plans', { data: { meta: { name: 'Tuin Piet' }, areas: [] } });
+    const klaasId = (await klaas.get('/app/api/me')).body.user.id;
+    assert.ok((await klaas.get('/app/api/me')).body.rights.includes('portaal'));
+    await klaas.post('/app/api/plans', { data: { meta: { name: 'Mijn tuin', address: 'Dorpsstraat 1' }, areas: [] } });
+    await piet.post('/app/api/plans', { data: { meta: { name: 'Tuin Piet' }, areas: [] } });
 
     const data = { title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1\n8071 AB Nunspeet' },
       lines: [{ section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 20, vat: 21 }, { section: 'arbeid', description: 'Sleuven graven', qty: 3, unit: 'uur', price: 55, vat: 21 }] };
-    const concept = (await kees.post('/api/quotes', { data, customerId: klaasId })).body;
-    let portal = (await klaas.get('/api/portal')).body;
+    const concept = (await kees.post('/app/api/quotes', { data, customerId: klaasId })).body;
+    let portal = (await klaas.get('/app/api/portal')).body;
     assert.deepStrictEqual(portal.plans.map((x) => x.title), ['Mijn tuin']);
     assert.deepStrictEqual(portal.quotes, [], 'concept is niet zichtbaar');
     assert.strictEqual(portal.contact.companyName, 'AquaTech Service');
 
-    await kees.put(`/api/quotes/${concept.id}`, { status: 'akkoord' });
-    const wo = (await kees.post('/api/workorders', { quoteId: concept.id })).body;
-    await kees.put(`/api/workorders/${wo.id}`, { status: 'gepland', data: { ...wo.data, plannedDate: PLANNED_DATE, startTime: '08:00', instructions: 'Sleutel onder de mat' } });
+    await kees.put(`/app/api/quotes/${concept.id}`, { status: 'akkoord' });
+    const wo = (await kees.post('/app/api/workorders', { quoteId: concept.id })).body;
+    await kees.put(`/app/api/workorders/${wo.id}`, { status: 'gepland', data: { ...wo.data, plannedDate: PLANNED_DATE, startTime: '08:00', instructions: 'Sleutel onder de mat' } });
     // Een werkorder van een offerte zonder klantaccount telt niet mee.
-    const other = (await kees.post('/api/quotes', { data })).body;
-    await kees.put(`/api/quotes/${other.id}`, { status: 'akkoord' });
-    const wo2 = (await kees.post('/api/workorders', { quoteId: other.id })).body;
+    const other = (await kees.post('/app/api/quotes', { data })).body;
+    await kees.put(`/app/api/quotes/${other.id}`, { status: 'akkoord' });
+    const wo2 = (await kees.post('/app/api/workorders', { quoteId: other.id })).body;
 
-    portal = (await klaas.get('/api/portal')).body;
+    portal = (await klaas.get('/app/api/portal')).body;
     assert.deepStrictEqual(portal.quotes.map((x) => x.number), [concept.number]);
     assert.deepStrictEqual(portal.workorders.map((x) => x.number), [wo.number]);
     assert.strictEqual(portal.workorders[0].status, 'gepland');
@@ -92,26 +92,26 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
     assert.strictEqual(portal.workorders[0].startTime, '08:00');
     assert.ok(!JSON.stringify(portal).includes('Sleutel'), 'geen interne instructies');
     assert.strictEqual(portal.workorders[0].appointment.state, 'wacht', 'ingepland zonder reactie: wacht op de klant');
-    assert.strictEqual((await piet.post(`/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' })).status, 404);
-    const response = await klaas.post(`/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' });
+    assert.strictEqual((await piet.post(`/app/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' })).status, 404);
+    const response = await klaas.post(`/app/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' });
     assert.strictEqual(response.status, 200);
     assert.deepStrictEqual([response.body.appointment.state, response.body.appointment.response.name], ['bevestigd', 'Klaas Jansen']);
-    assert.strictEqual((await klaas.post(`/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' })).status, 409);
+    assert.strictEqual((await klaas.post(`/app/api/portal/workorders/${wo.id}/appointment`, { answer: 'bevestigd' })).status, 409);
 
-    const detail = await klaas.get(`/api/portal/workorders/${wo.id}`);
+    const detail = await klaas.get(`/app/api/portal/workorders/${wo.id}`);
     assert.strictEqual(detail.status, 200);
     assert.strictEqual(detail.body.materials.length, 1);
     assert.ok(detail.body.steps.length >= 1);
     assert.deepStrictEqual(detail.body.photos, []);
-    assert.strictEqual((await klaas.get(`/api/portal/workorders/${wo2.id}`)).status, 404, 'niet van deze klant');
-    assert.strictEqual((await piet.get(`/api/portal/workorders/${wo.id}`)).status, 404, 'andere klant');
-    const pp = (await piet.get('/api/portal')).body;
+    assert.strictEqual((await klaas.get(`/app/api/portal/workorders/${wo2.id}`)).status, 404, 'niet van deze klant');
+    assert.strictEqual((await piet.get(`/app/api/portal/workorders/${wo.id}`)).status, 404, 'andere klant');
+    const pp = (await piet.get('/app/api/portal')).body;
     assert.deepStrictEqual([pp.quotes.length, pp.workorders.length, pp.plans.map((x) => x.title)], [0, 0, ['Tuin Piet']]);
 
     // Verwijderde werkorder verdwijnt uit het portaal.
     // Afgerond: blijft zichtbaar als opleverdossier.
-    await kees.put(`/api/workorders/${wo.id}`, { status: 'gereed' });
-    assert.strictEqual((await klaas.get('/api/portal')).body.workorders[0].status, 'gereed');
+    await kees.put(`/app/api/workorders/${wo.id}`, { status: 'gereed' });
+    assert.strictEqual((await klaas.get('/app/api/portal')).body.workorders[0].status, 'gereed');
   } finally {
     server.close();
   }

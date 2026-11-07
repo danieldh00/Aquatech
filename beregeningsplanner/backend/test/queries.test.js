@@ -77,128 +77,128 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
   const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const client = createClient(base);
   try {
-    assert.strictEqual((await client.post('/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
-    await client.get('/api/me');
+    assert.strictEqual((await client.post('/app/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
+    await client.get('/app/api/me');
     const probe = instrument(db);
 
     // Elk verzoek: sessie + gebruiker + tenant in één query, verder niets
     // (last_seen_at is net geschreven, het aantal beheerders is bekend).
     probe.reset();
-    assert.strictEqual((await client.get('/api/account/profile')).status, 200);
+    assert.strictEqual((await client.get('/app/api/account/profile')).status, 200);
     assert.strictEqual(probe.stats.queries, 1, probe.stats.sql.join('\n'));
 
     // Statische bestanden van een pagina: één sessiecontrole, daarna even geen query.
     probe.reset();
-    for (const file of ['/shared/brand.css', '/dashboard/modules.js', '/shared/sidebar.js']) assert.strictEqual((await client.get(file)).status, 200, file);
+    for (const file of ['/app/shared/brand.css', '/app/dashboard/modules.js', '/app/shared/sidebar.js']) assert.strictEqual((await client.get(file)).status, 200, file);
     assert.ok(probe.stats.queries <= 1, probe.stats.sql.join('\n'));
     // Na uitloggen geen bestanden meer.
     const other = createClient(`http://127.0.0.1:${server.address().port}`);
-    assert.strictEqual((await other.post('/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
-    assert.strictEqual((await other.get('/beheer/beheer.js')).status, 200);
-    await other.post('/api/auth/logout');
-    assert.strictEqual((await other.get('/beheer/beheer.js')).status, 401);
+    assert.strictEqual((await other.post('/app/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
+    assert.strictEqual((await other.get('/app/beheer/beheer.js')).status, 200);
+    await other.post('/app/api/auth/logout');
+    assert.strictEqual((await other.get('/app/beheer/beheer.js')).status, 401);
 
     // Een plan met een grote achtergrond (foto van de tekening).
     const background = { src: `data:image/png;base64,${'A'.repeat(400000)}` };
-    const id = (await client.post('/api/plans', { data: plan({ background }) })).body.id;
+    const id = (await client.post('/app/api/plans', { data: plan({ background }) })).body.id;
 
     // Automatisch opslaan leest het plan niet terug uit de database.
     probe.reset();
-    assert.strictEqual((await client.put(`/api/plans/${id}`, { data: plan({ background }) })).status, 200);
+    assert.strictEqual((await client.put(`/app/api/plans/${id}`, { data: plan({ background }) })).status, 200);
     assert.ok(probe.stats.bytes < 5000, `opslaan las ${probe.stats.bytes} tekens`);
 
     // Het overzicht haalt alleen de vlakken en aantallen op, niet de achtergrond of het hele plan.
     probe.reset();
-    const list = (await client.get('/api/plans')).body.items;
+    const list = (await client.get('/app/api/plans')).body.items;
     assert.deepStrictEqual(list[0].summary, { areas: 1, totalM2: 50, m2ByType: { lawn: 50 }, sprinklers: 1, zones: 0, elements: 0 });
     assert.ok(probe.stats.bytes < 5000, `overzicht las ${probe.stats.bytes} tekens`);
     assert.strictEqual(probe.stats.queries, 2);
 
     // Gebruikersbeheer stuurt nooit de wachtwoord-hash mee uit de database.
     probe.reset();
-    assert.strictEqual((await client.get('/api/admin/users')).status, 200);
+    assert.strictEqual((await client.get('/app/api/admin/users')).status, 200);
     assert.ok(!probe.stats.sql.some((sql) => /SELECT u\.\*/.test(sql)));
 
     // AI-kosten: vaste aantallen queries, ongeacht het aantal verzoeken
     // (sessie + totaal + per periode/gebruiker/functie/model; lijst: aantal + pagina).
     probe.reset();
-    assert.strictEqual((await client.get('/api/admin/ai-usage')).status, 200);
+    assert.strictEqual((await client.get('/app/api/admin/ai-usage')).status, 200);
     assert.strictEqual(probe.stats.queries, 6, probe.stats.sql.join('\n'));
     probe.reset();
-    assert.strictEqual((await client.get('/api/admin/ai-usage/requests')).status, 200);
+    assert.strictEqual((await client.get('/app/api/admin/ai-usage/requests')).status, 200);
     assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
 
     // Voorraad: overzicht in één query (stand + reserveringen samen), een
     // artikel in vier (artikel, reserveringen, mutaties, prijshistorie + voorraadlagen samen),
     // ongeacht het aantal artikelen en mutaties.
-    assert.strictEqual((await client.post('/api/stock/import', { codes: ['PE-25', 'PE-32', 'FIT-T-25', 'VAL-24V', 'BOX-STD'] })).status, 200);
+    assert.strictEqual((await client.post('/app/api/stock/import', { codes: ['PE-25', 'PE-32', 'FIT-T-25', 'VAL-24V', 'BOX-STD'] })).status, 200);
     probe.reset();
-    const stock = (await client.get('/api/stock')).body.items;
+    const stock = (await client.get('/app/api/stock')).body.items;
     assert.strictEqual(stock.length, 5);
     assert.strictEqual(probe.stats.queries, 2, probe.stats.sql.join('\n'));
     probe.reset();
-    assert.strictEqual((await client.get(`/api/stock/items/${stock[0].id}`)).status, 200);
+    assert.strictEqual((await client.get(`/app/api/stock/items/${stock[0].id}`)).status, 200);
     assert.strictEqual(probe.stats.queries, 5, probe.stats.sql.join('\n'));
     // Werkregistratie: vaste aantallen queries, ongeacht het aantal regels
     // (sessie + werkorder + uren + materiaal; urenstaat: sessie + uren + materiaal).
     const lines = [{ id: 'a', section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 10 }];
-    const qid = (await client.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1, 8071 AB Nunspeet' }, lines } })).body.id;
-    await client.put(`/api/quotes/${qid}`, { status: 'akkoord' });
-    const wo = (await client.post('/api/workorders', { quoteId: qid })).body;
+    const qid = (await client.post('/app/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1, 8071 AB Nunspeet' }, lines } })).body.id;
+    await client.put(`/app/api/quotes/${qid}`, { status: 'akkoord' });
+    const wo = (await client.post('/app/api/workorders', { quoteId: qid })).body;
     const day = new Date().toISOString().slice(0, 10);
     for (let i = 0; i < 5; i++) {
-      assert.strictEqual((await client.post(`/api/workorders/${wo.id}/hours`, { workDate: day, hours: 1 })).status, 201);
-      assert.strictEqual((await client.post(`/api/workorders/${wo.id}/materials`, { usedOn: day, description: 'Sproeier', qty: 1 })).status, 201);
+      assert.strictEqual((await client.post(`/app/api/workorders/${wo.id}/hours`, { workDate: day, hours: 1 })).status, 201);
+      assert.strictEqual((await client.post(`/app/api/workorders/${wo.id}/materials`, { usedOn: day, description: 'Sproeier', qty: 1 })).status, 201);
     }
     probe.reset();
-    assert.strictEqual((await client.get(`/api/workorders/${wo.id}/worklog`)).status, 200);
+    assert.strictEqual((await client.get(`/app/api/workorders/${wo.id}/worklog`)).status, 200);
     assert.strictEqual(probe.stats.queries, 4, probe.stats.sql.join('\n'));
     probe.reset();
-    assert.strictEqual((await client.get(`/api/worklog?from=${day}&to=${day}`)).status, 200);
+    assert.strictEqual((await client.get(`/app/api/worklog?from=${day}&to=${day}`)).status, 200);
     assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
     // Nacalculatie: vast aantal queries, ongeacht het aantal boekingen en artikelen
     // (sessie + werkorder + melding + offerte + uren + materiaal + facturen; zonder artikelcodes geen voorraadquery).
     probe.reset();
-    assert.strictEqual((await client.get(`/api/workorders/${wo.id}/costing`)).status, 200);
+    assert.strictEqual((await client.get(`/app/api/workorders/${wo.id}/costing`)).status, 200);
     assert.strictEqual(probe.stats.queries, 7, probe.stats.sql.join('\n'));
     // Installatiedossier per locatie: vast aantal queries, niet per werkorder of melding.
     probe.reset();
-    const locations = (await client.get('/api/locations')).body.items;
+    const locations = (await client.get('/app/api/locations')).body.items;
     assert.strictEqual(locations.length, 1);
     assert.ok(probe.stats.queries <= 4, probe.stats.sql.join('\n'));
     probe.reset();
-    assert.strictEqual((await client.get(`/api/locations/${locations[0].key}`)).body.materials[0].used, 5);
+    assert.strictEqual((await client.get(`/app/api/locations/${locations[0].key}`)).body.materials[0].used, 5);
     assert.ok(probe.stats.queries <= 7, probe.stats.sql.join('\n'));
     // Het werkorderoverzicht telt de geboekte uren met twee queries, niet per werkorder.
     probe.reset();
-    assert.strictEqual((await client.get('/api/workorders')).body.items[0].logged.minutes, 300);
+    assert.strictEqual((await client.get('/app/api/workorders')).body.items[0].logged.minutes, 300);
     assert.ok(probe.stats.queries <= 5, probe.stats.sql.join('\n'));
     // Facturen: overzicht en export in een vast aantal queries, ongeacht het
     // aantal facturen (geen query per factuur of regel).
     for (let i = 0; i < 4; i++) {
-      const inv = (await client.post('/api/invoices', { data: { customer: { name: `Klant ${i}` }, lines: [{ description: 'Sproeier', qty: 2, price: 10 }] } })).body;
-      assert.strictEqual((await client.post(`/api/invoices/${inv.id}/finalize`, {})).status, 200);
+      const inv = (await client.post('/app/api/invoices', { data: { customer: { name: `Klant ${i}` }, lines: [{ description: 'Sproeier', qty: 2, price: 10 }] } })).body;
+      assert.strictEqual((await client.post(`/app/api/invoices/${inv.id}/finalize`, {})).status, 200);
     }
     probe.reset();
-    assert.strictEqual((await client.get('/api/invoices')).body.items.length, 4);
+    assert.strictEqual((await client.get('/app/api/invoices')).body.items.length, 4);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
     probe.reset();
-    assert.strictEqual((await client.get('/api/invoices/export')).body.items.length, 4);
+    assert.strictEqual((await client.get('/app/api/invoices/export')).body.items.length, 4);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
     // Debiteuren met aantal facturen en openstaand bedrag: één query.
     probe.reset();
-    assert.strictEqual((await client.get('/api/debtors')).body.items.length, 4);
+    assert.strictEqual((await client.get('/app/api/debtors')).body.items.length, 4);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
     // Sproeierbibliotheek: alle eigen regels in één query (sessie + bibliotheek).
     const Lib = require('../../frontend/beregening/js/sprinklerlib.js');
     const own = { bodies: Lib.DEFAULTS.bodies.map((body) => ({ ...body, key: `X-${body.key}` })), nozzles: Lib.DEFAULTS.nozzles.map((nozzle) => ({ ...nozzle, key: `X-${nozzle.key}` })) };
-    assert.strictEqual((await client.put('/api/sprinkler-library', own)).status, 200);
+    assert.strictEqual((await client.put('/app/api/sprinkler-library', own)).status, 200);
     probe.reset();
-    assert.strictEqual((await client.get('/api/sprinkler-library')).body.own.nozzles.length, own.nozzles.length);
+    assert.strictEqual((await client.get('/app/api/sprinkler-library')).body.own.nozzles.length, own.nozzles.length);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
     // Visma-status: wachtende facturen in één telling.
     probe.reset();
-    assert.strictEqual((await client.get('/api/visma')).body.connected, false);
+    assert.strictEqual((await client.get('/app/api/visma')).body.connected, false);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
   } finally {
     server.close();

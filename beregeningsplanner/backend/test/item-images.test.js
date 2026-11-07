@@ -49,7 +49,7 @@ async function setup() {
   servers.push(server);
   const login = createLogin(base, { password: PW });
   const admin = await login('baas');
-  await admin.put('/api/admin/settings', { storefront: true });
+  await admin.put('/app/api/admin/settings', { storefront: true });
   return { db, main, admin, klant: await login('klant'), vreemd: await login('vreemd', 'ander'), anonymous: createClient(base), downloads, responses };
 }
 
@@ -60,7 +60,7 @@ async function setup() {
  * @returns {Promise<object>} Het artikel.
  */
 async function article(client, code) {
-  const out = await client.post('/api/stock/items', { code, name: `Artikel ${code}`, onHand: 3, salePrice: 10 });
+  const out = await client.post('/app/api/stock/items', { code, name: `Artikel ${code}`, onHand: 3, salePrice: 10 });
   assert.strictEqual(out.status, 201, JSON.stringify(out.body));
   return out.body;
 }
@@ -69,11 +69,11 @@ test('artikelafbeelding: uploaden, delen, vervangen en verwijderen', async () =>
   const { admin, db, main } = await setup();
   const first = await article(admin, 'IMG-1');
   const second = await article(admin, 'IMG-2');
-  const put = await admin.put(`/api/stock/items/${first.id}/image`, { name: 'foto.png', data: pngBase64(1) });
+  const put = await admin.put(`/app/api/stock/items/${first.id}/image`, { name: 'foto.png', data: pngBase64(1) });
   assert.strictEqual(put.status, 200, JSON.stringify(put.body));
   assert.match(put.body.imageId, /^[0-9a-f-]{36}$/);
-  assert.strictEqual((await admin.get(`/api/stock/items/${first.id}`)).body.imageId, put.body.imageId);
-  const file = await admin.get(`/api/stock/images/${put.body.imageId}`);
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${first.id}`)).body.imageId, put.body.imageId);
+  const file = await admin.get(`/app/api/stock/images/${put.body.imageId}`);
   assert.strictEqual(file.status, 200);
   assert.match(file.type, /image\/png/);
   assert.ok(file.size > 50);
@@ -81,33 +81,33 @@ test('artikelafbeelding: uploaden, delen, vervangen en verwijderen', async () =>
   assert.ok(!db.prepare('SELECT data FROM item_images WHERE tenant_id = ?').get(main).data.includes('PNG'));
 
   // Dezelfde afbeelding bij een tweede artikel: één opgeslagen afbeelding.
-  const shared = await admin.put(`/api/stock/items/${second.id}/image`, { name: 'zelfde.png', data: pngBase64(1) });
+  const shared = await admin.put(`/app/api/stock/items/${second.id}/image`, { name: 'zelfde.png', data: pngBase64(1) });
   assert.strictEqual(shared.body.imageId, put.body.imageId);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 1);
 
   // Vervangen bij het eerste artikel: de gedeelde afbeelding blijft voor het tweede.
-  const replaced = await admin.put(`/api/stock/items/${first.id}/image`, { name: 'nieuw.png', data: pngBase64(2) });
+  const replaced = await admin.put(`/app/api/stock/items/${first.id}/image`, { name: 'nieuw.png', data: pngBase64(2) });
   assert.notStrictEqual(replaced.body.imageId, put.body.imageId);
-  assert.strictEqual((await admin.get(`/api/stock/images/${put.body.imageId}`)).status, 200);
+  assert.strictEqual((await admin.get(`/app/api/stock/images/${put.body.imageId}`)).status, 200);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 2);
 
   // Verwijderen: de afbeelding zelf verdwijnt als niemand haar meer gebruikt.
-  assert.strictEqual((await admin.del(`/api/stock/items/${first.id}/image`)).status, 200);
-  assert.strictEqual((await admin.get(`/api/stock/items/${first.id}`)).body.imageId, null);
-  assert.strictEqual((await admin.get(`/api/stock/images/${replaced.body.imageId}`)).status, 404);
-  assert.strictEqual((await admin.del(`/api/stock/items/${second.id}/image`)).status, 200);
+  assert.strictEqual((await admin.del(`/app/api/stock/items/${first.id}/image`)).status, 200);
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${first.id}`)).body.imageId, null);
+  assert.strictEqual((await admin.get(`/app/api/stock/images/${replaced.body.imageId}`)).status, 404);
+  assert.strictEqual((await admin.del(`/app/api/stock/items/${second.id}/image`)).status, 200);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 0);
 });
 
 test('artikelafbeelding: een echt verwijderd artikel ruimt zijn afbeelding op', async () => {
   const { admin, db, main } = await setup();
   // Zonder voorraadmutaties wordt het artikel echt verwijderd (anders gearchiveerd).
-  const created = await admin.post('/api/stock/items', { code: 'IMG-DEL', name: 'Artikel IMG-DEL', onHand: 0, salePrice: 10 });
+  const created = await admin.post('/app/api/stock/items', { code: 'IMG-DEL', name: 'Artikel IMG-DEL', onHand: 0, salePrice: 10 });
   assert.strictEqual(created.status, 201, JSON.stringify(created.body));
   const item = created.body;
-  assert.strictEqual((await admin.put(`/api/stock/items/${item.id}/image`, { name: 'weg.png', data: pngBase64(7) })).status, 200);
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${item.id}/image`, { name: 'weg.png', data: pngBase64(7) })).status, 200);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 1);
-  assert.strictEqual((await admin.del(`/api/stock/items/${item.id}`)).status, 200);
+  assert.strictEqual((await admin.del(`/app/api/stock/items/${item.id}`)).status, 200);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 0);
 });
 
@@ -116,9 +116,9 @@ test('mediabibliotheek: alle afbeeldingen met hun artikelen en de artikelen zond
   const first = await article(admin, 'LIB-1');
   const second = await article(admin, 'LIB-2');
   const third = await article(admin, 'LIB-3');
-  const shared = (await admin.put(`/api/stock/items/${first.id}/image`, { name: 'a.png', data: pngBase64(20) })).body.imageId;
-  await admin.put(`/api/stock/items/${second.id}/image`, { name: 'b.png', data: pngBase64(20) });
-  const library = (await admin.get('/api/stock/images')).body;
+  const shared = (await admin.put(`/app/api/stock/items/${first.id}/image`, { name: 'a.png', data: pngBase64(20) })).body.imageId;
+  await admin.put(`/app/api/stock/items/${second.id}/image`, { name: 'b.png', data: pngBase64(20) });
+  const library = (await admin.get('/app/api/stock/images')).body;
   assert.strictEqual(library.images.length, 1);
   assert.strictEqual(library.images[0].id, shared);
   assert.deepStrictEqual(library.images[0].items.map((item) => item.code), ['LIB-1', 'LIB-2']);
@@ -126,50 +126,50 @@ test('mediabibliotheek: alle afbeeldingen met hun artikelen en de artikelen zond
   assert.ok(!JSON.stringify(library).includes('"data"'), 'geen inhoud in de lijst');
   assert.deepStrictEqual(library.missing.map((item) => item.code), ['LIB-3']);
   assert.strictEqual(library.missing[0].id, third.id);
-  assert.strictEqual((await klant.get('/api/stock/images')).status, 403);
-  assert.deepStrictEqual((await vreemd.get('/api/stock/images')).body, { images: [], missing: [] });
+  assert.strictEqual((await klant.get('/app/api/stock/images')).status, 403);
+  assert.deepStrictEqual((await vreemd.get('/app/api/stock/images')).body, { images: [], missing: [] });
 });
 
 test('artikelafbeelding: ongeldige bestanden, rechten en andere organisatie', async () => {
   const { admin, klant, vreemd, anonymous } = await setup();
   const item = await article(admin, 'IMG-3');
-  const text = await admin.put(`/api/stock/items/${item.id}/image`, { name: 'tekst.png', data: Buffer.from('Dit is geen afbeelding, maar tekst.').toString('base64') });
+  const text = await admin.put(`/app/api/stock/items/${item.id}/image`, { name: 'tekst.png', data: Buffer.from('Dit is geen afbeelding, maar tekst.').toString('base64') });
   assert.strictEqual(text.status, 400);
-  assert.strictEqual((await admin.put(`/api/stock/items/${item.id}/image`, { name: 'leeg.png' })).status, 400);
-  assert.strictEqual((await admin.put('/api/stock/items/bestaat-niet/image', { name: 'a.png', data: pngBase64(3) })).status, 404);
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${item.id}/image`, { name: 'leeg.png' })).status, 400);
+  assert.strictEqual((await admin.put('/app/api/stock/items/bestaat-niet/image', { name: 'a.png', data: pngBase64(3) })).status, 404);
 
-  const stored = (await admin.put(`/api/stock/items/${item.id}/image`, { name: 'a.png', data: pngBase64(3) })).body;
+  const stored = (await admin.put(`/app/api/stock/items/${item.id}/image`, { name: 'a.png', data: pngBase64(3) })).body;
   // Geen recht: klant en anoniem.
-  assert.strictEqual((await klant.put(`/api/stock/items/${item.id}/image`, { name: 'a.png', data: pngBase64(4) })).status, 403);
-  assert.strictEqual((await klant.del(`/api/stock/items/${item.id}/image`)).status, 403);
-  assert.strictEqual((await klant.get(`/api/stock/images/${stored.imageId}`)).status, 403);
-  assert.strictEqual((await klant.post('/api/stock/images-import', { after: '' })).status, 403);
-  assert.strictEqual((await anonymous.get(`/api/stock/images/${stored.imageId}`)).status, 401);
+  assert.strictEqual((await klant.put(`/app/api/stock/items/${item.id}/image`, { name: 'a.png', data: pngBase64(4) })).status, 403);
+  assert.strictEqual((await klant.del(`/app/api/stock/items/${item.id}/image`)).status, 403);
+  assert.strictEqual((await klant.get(`/app/api/stock/images/${stored.imageId}`)).status, 403);
+  assert.strictEqual((await klant.post('/app/api/stock/images-import', { after: '' })).status, 403);
+  assert.strictEqual((await anonymous.get(`/app/api/stock/images/${stored.imageId}`)).status, 401);
   // Andere organisatie: artikel en afbeelding bestaan daar niet.
-  assert.strictEqual((await vreemd.put(`/api/stock/items/${item.id}/image`, { name: 'a.png', data: pngBase64(5) })).status, 404);
-  assert.strictEqual((await vreemd.del(`/api/stock/items/${item.id}/image`)).status, 404);
-  assert.strictEqual((await vreemd.get(`/api/stock/images/${stored.imageId}`)).status, 404);
-  assert.strictEqual((await admin.get(`/api/stock/items/${item.id}`)).body.imageId, stored.imageId);
+  assert.strictEqual((await vreemd.put(`/app/api/stock/items/${item.id}/image`, { name: 'a.png', data: pngBase64(5) })).status, 404);
+  assert.strictEqual((await vreemd.del(`/app/api/stock/items/${item.id}/image`)).status, 404);
+  assert.strictEqual((await vreemd.get(`/app/api/stock/images/${stored.imageId}`)).status, 404);
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${item.id}`)).body.imageId, stored.imageId);
 });
 
 test('artikelafbeelding: de openbare shop toont de eigen afbeelding', async () => {
   const { admin, anonymous } = await setup();
   const item = await article(admin, 'IMG-4');
-  const { imageId } = (await admin.put(`/api/stock/items/${item.id}/image`, { name: 'shop.png', data: pngBase64(6) })).body;
-  const home = await anonymous.get('/winkel/');
+  const { imageId } = (await admin.put(`/app/api/stock/items/${item.id}/image`, { name: 'shop.png', data: pngBase64(6) })).body;
+  const home = await anonymous.get('/');
   assert.ok(home.text.includes(`src="artikelfoto/${imageId}"`), 'startpagina verwijst naar de eigen afbeelding');
-  const product = await anonymous.get(`/winkel/product/${/product\/([^/"]+)\//.exec(home.text)[1]}/`);
+  const product = await anonymous.get(`/product/${/product\/([^/"]+)\//.exec(home.text)[1]}/`);
   assert.ok(product.text.includes(`src="../../artikelfoto/${imageId}"`), 'productpagina verwijst naar de eigen afbeelding');
-  const picture = await anonymous.get(`/winkel/artikelfoto/${imageId}`);
+  const picture = await anonymous.get(`/artikelfoto/${imageId}`);
   assert.strictEqual(picture.status, 200);
   assert.match(picture.type, /image\/png/);
   assert.match(picture.headers.get('cache-control'), /immutable/);
   // Daarna uit het geheugen; verwijderen in Aquatech haalt hem daar ook weg.
-  assert.strictEqual((await anonymous.get(`/winkel/artikelfoto/${imageId}`)).status, 200);
-  assert.strictEqual((await admin.del(`/api/stock/items/${item.id}/image`)).status, 200);
-  assert.strictEqual((await anonymous.get(`/winkel/artikelfoto/${imageId}`)).status, 404, 'verwijderde afbeelding komt niet meer uit het geheugen');
-  assert.strictEqual((await anonymous.get('/winkel/artikelfoto/00000000-0000-0000-0000-000000000000')).status, 404);
-  assert.strictEqual((await anonymous.get('/winkel/artikelfoto/geen-id')).status, 404);
+  assert.strictEqual((await anonymous.get(`/artikelfoto/${imageId}`)).status, 200);
+  assert.strictEqual((await admin.del(`/app/api/stock/items/${item.id}/image`)).status, 200);
+  assert.strictEqual((await anonymous.get(`/artikelfoto/${imageId}`)).status, 404, 'verwijderde afbeelding komt niet meer uit het geheugen');
+  assert.strictEqual((await anonymous.get('/artikelfoto/00000000-0000-0000-0000-000000000000')).status, 404);
+  assert.strictEqual((await anonymous.get('/artikelfoto/geen-id')).status, 404);
 });
 
 test('afbeeldingen uit de webshop overnemen: eenmalig, per portie en herhaalbaar', async () => {
@@ -185,9 +185,9 @@ test('afbeeldingen uit de webshop overnemen: eenmalig, per portie en herhaalbaar
   responses.set('https://oud.example/a.png', Buffer.from(pngBase64(10), 'base64'));
   responses.set('https://oud.example/b.png', Buffer.from(pngBase64(11), 'base64'));
 
-  assert.deepStrictEqual((await admin.get('/api/stock/images-import')).body, { pending: 4 });
-  assert.strictEqual((await klant.get('/api/stock/images-import')).status, 403);
-  const run = await admin.post('/api/stock/images-import', { after: '' });
+  assert.deepStrictEqual((await admin.get('/app/api/stock/images-import')).body, { pending: 4 });
+  assert.strictEqual((await klant.get('/app/api/stock/images-import')).status, 403);
+  const run = await admin.post('/app/api/stock/images-import', { after: '' });
   assert.strictEqual(run.status, 200, JSON.stringify(run.body));
   assert.strictEqual(run.body.processed, 4);
   assert.strictEqual(run.body.imported, 3);
@@ -198,7 +198,7 @@ test('afbeeldingen uit de webshop overnemen: eenmalig, per portie en herhaalbaar
   assert.strictEqual(run.body.pending, 1, 'het artikel met een kapot adres blijft over');
   // Elk adres is één keer opgehaald, ook al gebruiken twee artikelen dezelfde afbeelding.
   assert.deepStrictEqual([...downloads].sort(), ['https://oud.example/a.png', 'https://oud.example/b.png', 'https://oud.example/kapot.png']);
-  const [one, two, three, four, five] = await Promise.all(items.map(async (item) => (await admin.get(`/api/stock/items/${item.id}`)).body.imageId));
+  const [one, two, three, four, five] = await Promise.all(items.map(async (item) => (await admin.get(`/app/api/stock/items/${item.id}`)).body.imageId));
   assert.ok(one && one === two, 'gedeelde afbeelding');
   assert.ok(three && three !== one);
   assert.strictEqual(four, null);
@@ -208,13 +208,13 @@ test('afbeeldingen uit de webshop overnemen: eenmalig, per portie en herhaalbaar
 
   // Opnieuw uitvoeren is veilig: alleen het kapotte adres wordt nog eens geprobeerd.
   downloads.length = 0;
-  const again = await admin.post('/api/stock/images-import', { after: '' });
+  const again = await admin.post('/app/api/stock/images-import', { after: '' });
   assert.strictEqual(again.body.imported, 0);
   assert.strictEqual(again.body.failed.length, 1);
   assert.deepStrictEqual(downloads, ['https://oud.example/kapot.png']);
   // Zodra het adres het wel doet, lukt het alsnog.
   responses.set('https://oud.example/kapot.png', Buffer.from(pngBase64(12), 'base64'));
-  const fixed = await admin.post('/api/stock/images-import', { after: '' });
+  const fixed = await admin.post('/app/api/stock/images-import', { after: '' });
   assert.strictEqual(fixed.body.imported, 1);
   assert.strictEqual(fixed.body.pending, 0);
   assert.strictEqual(fixed.body.failed.length, 0);
@@ -226,15 +226,15 @@ test('afbeeldingen overnemen: geen http-adressen en geen ongeldige bestanden', a
   db.prepare('INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories) VALUES (?, ?, ?, ?, 10, ?, ?, ?, 1, ?, ?)').run(main, 'p9', 'OLD-9', 'x', 'EUR', '', 'http://oud.example/a.png', 'OLD-9', '[]');
   db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE tenant_id = ? AND id = ?').run('p9', main, item.id);
   // http (zonder s) wordt nooit opgehaald.
-  const refused = await admin.post('/api/stock/images-import', { after: '' });
+  const refused = await admin.post('/app/api/stock/images-import', { after: '' });
   assert.strictEqual(refused.body.failed.length, 1);
   assert.deepStrictEqual(downloads, []);
   // Geen afbeelding maar tekst: geweigerd na het ophalen.
   db.prepare('UPDATE shop_products SET image = ? WHERE tenant_id = ?').run('https://oud.example/tekst.png', main);
   responses.set('https://oud.example/tekst.png', Buffer.from('<html>geen afbeelding</html>'));
-  const notImage = await admin.post('/api/stock/images-import', { after: '' });
+  const notImage = await admin.post('/app/api/stock/images-import', { after: '' });
   assert.strictEqual(notImage.body.failed.length, 1);
-  assert.strictEqual((await admin.get(`/api/stock/items/${item.id}`)).body.imageId, null);
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${item.id}`)).body.imageId, null);
 });
 
 test('afbeeldingen overnemen: veel artikelen en verschillende adressen met dezelfde foto geven één afbeelding', async () => {
@@ -252,7 +252,7 @@ test('afbeeldingen overnemen: veel artikelen en verschillende adressen met dezel
   let after = '';
   let stored = 0;
   do {
-    const part = await admin.post('/api/stock/images-import', { after });
+    const part = await admin.post('/app/api/stock/images-import', { after });
     assert.strictEqual(part.status, 200, JSON.stringify(part.body));
     stored += part.body.stored;
     after = part.body.next;

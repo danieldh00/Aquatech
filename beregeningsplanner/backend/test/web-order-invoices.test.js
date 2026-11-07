@@ -32,12 +32,12 @@ async function setup() {
   const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor: () => ({ configured: () => false, send: async () => {} }) }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  await admin.put('/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
+  await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
     pickup: { enabled: true }, dpd: { enabled: true, defaultWeightGrams: 1000, zones: [
       { country: 'NL', tiers: [{ upToGrams: 2000, price: 6.95 }] }, { country: 'BE', tiers: [{ upToGrams: 5000, price: 14.5 }] },
     ] },
   } });
-  assert.strictEqual((await admin.post('/api/stock/items', { code: 'BUS', name: 'Sproeier', onHand: 50, salePrice: 10, businessPrice: 8, weightGrams: 400 })).status, 201);
+  assert.strictEqual((await admin.post('/app/api/stock/items', { code: 'BUS', name: 'Sproeier', onHand: 50, salePrice: 10, businessPrice: 8, weightGrams: 400 })).status, 201);
   let counter = 0;
   /**
    * Registreert een klant in de shop.
@@ -46,12 +46,12 @@ async function setup() {
   const shopper = async () => {
     counter += 1;
     const client = createClient(base);
-    await postForm(base, client, '/winkel/registreren/', { displayName: `Klant ${counter}`, email: `k${counter}@voorbeeld.nl`, password: PW, password2: PW, website: '' });
-    const users = (await admin.get('/api/admin/users')).body.items;
+    await postForm(base, client, '/registreren/', { displayName: `Klant ${counter}`, email: `k${counter}@voorbeeld.nl`, password: PW, password2: PW, website: '' });
+    const users = (await admin.get('/app/api/admin/users')).body.items;
     return { client, id: users.find((user) => user.email === `k${counter}@voorbeeld.nl`).id };
   };
   const business = await shopper();
-  assert.strictEqual((await admin.patch(`/api/admin/users/${business.id}`, { customerGroup: 'zakelijk' })).status, 200);
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${business.id}`, { customerGroup: 'zakelijk' })).status, 200);
   return { base, admin, vreemd: await createLogin(base, { password: PW })('vreemd', 'ander'), business, private1: await shopper() };
 }
 
@@ -63,10 +63,10 @@ async function setup() {
  * @returns {Promise<string>} Id van de nieuwste bestelling.
  */
 async function order(world, shopper, fields = {}) {
-  await postForm(world.base, shopper.client, '/winkel/winkelwagen/', { action: 'add', code: 'BUS', qty: '2' });
+  await postForm(world.base, shopper.client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '2' });
   const placed = await postCheckout(world.base, shopper.client, { ...COMPANY, ...fields });
   assert.strictEqual(placed.status, 303, placed.text);
-  return (await world.admin.get('/api/admin/web-orders')).body.items[0].id;
+  return (await world.admin.get('/app/api/admin/web-orders')).body.items[0].id;
 }
 
 /**
@@ -75,36 +75,36 @@ async function order(world, shopper, fields = {}) {
  * @param {string} id Id van de bestelling.
  * @returns {Promise<object>} Het antwoord van de server.
  */
-const ship = (world, id) => world.admin.post(`/api/admin/web-orders/${id}/status`, { status: 'verzonden' });
+const ship = (world, id) => world.admin.post(`/app/api/admin/web-orders/${id}/status`, { status: 'verzonden' });
 
 test('Verzonden maakt een definitieve factuur met debiteur en boekt de voorraad niet dubbel af', async () => {
   const world = await setup();
   const id = await order(world, world.private1, { company: '' });
-  assert.strictEqual((await world.admin.get(`/api/admin/web-orders/${id}`)).body.invoice, null);
+  assert.strictEqual((await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.invoice, null);
   const shipped = await ship(world, id);
   assert.strictEqual(shipped.status, 200);
   const invoice = shipped.body.invoice;
   assert.ok(invoice && /^F\d{4}-0001$/.test(invoice.number), JSON.stringify(invoice));
   assert.strictEqual(invoice.status, 'definitief');
   assert.strictEqual(invoice.total, 31.15, '2 × 12,10 + verzending 6,95, gelijk aan de bestelling');
-  const detail = (await world.admin.get(`/api/invoices/${invoice.id}`)).body;
+  const detail = (await world.admin.get(`/app/api/invoices/${invoice.id}`)).body;
   assert.strictEqual(detail.source, 'webshop');
   assert.strictEqual(detail.data.customer.name, 'Els Bakker');
   assert.deepStrictEqual(detail.data.lines.map((line) => [line.code, line.qty, line.price, line.vat]), [['BUS', 2, 10, 21], ['', 1, 5.74, 21]]);
   assert.ok(detail.debtorId, 'debiteur gekoppeld');
-  assert.strictEqual((await world.admin.get('/api/stock')).body.items.find((item) => item.code === 'BUS').onHand, 48, 'één keer afgeboekt');
-  assert.strictEqual((await world.admin.get(`/api/admin/web-orders/${id}`)).body.invoice.number, invoice.number);
+  assert.strictEqual((await world.admin.get('/app/api/stock')).body.items.find((item) => item.code === 'BUS').onHand, 48, 'één keer afgeboekt');
+  assert.strictEqual((await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.invoice.number, invoice.number);
 });
 
 test('een tweede aanvraag maakt geen tweede factuur', async () => {
   const world = await setup();
   const id = await order(world, world.private1);
   const first = (await ship(world, id)).body.invoice;
-  const again = await world.admin.post(`/api/admin/web-orders/${id}/invoice`, {});
+  const again = await world.admin.post(`/app/api/admin/web-orders/${id}/invoice`, {});
   assert.strictEqual(again.status, 200);
   assert.strictEqual(again.body.created, false);
   assert.strictEqual(again.body.invoice.id, first.id);
-  assert.strictEqual((await world.admin.get('/api/invoices')).body.items.filter((item) => item.source === 'webshop').length, 1);
+  assert.strictEqual((await world.admin.get('/app/api/invoices')).body.items.filter((item) => item.source === 'webshop').length, 1);
 });
 
 test('btw verlegd: factuur zonder btw met vermelding en het btw-nummer', async () => {
@@ -112,7 +112,7 @@ test('btw verlegd: factuur zonder btw met vermelding en het btw-nummer', async (
   const id = await order(world, world.business, { postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' });
   const invoice = (await ship(world, id)).body.invoice;
   assert.strictEqual(invoice.total, 27.98);
-  const detail = (await world.admin.get(`/api/invoices/${invoice.id}`)).body;
+  const detail = (await world.admin.get(`/app/api/invoices/${invoice.id}`)).body;
   assert.match(detail.data.notes, /BTW verlegd naar afnemer \(btw-nummer BE0123456789\)/);
   assert.strictEqual(detail.data.customer.vatNumber, 'BE0123456789');
   assert.strictEqual(detail.data.customer.name, 'Bakker Tuinen BV');
@@ -122,14 +122,14 @@ test('btw verlegd: factuur zonder btw met vermelding en het btw-nummer', async (
 
 test('instellingen: uit = geen factuur (later alsnog met de knop), niet definitief = concept', async () => {
   const world = await setup();
-  await world.admin.put('/api/invoices/settings', { webOrders: { enabled: false } });
+  await world.admin.put('/app/api/invoices/settings', { webOrders: { enabled: false } });
   const id = await order(world, world.private1);
   const shipped = await ship(world, id);
   assert.strictEqual(shipped.status, 200);
   assert.strictEqual(shipped.body.invoice, null);
-  assert.strictEqual((await world.admin.post(`/api/admin/web-orders/${id}/invoice`, {})).status, 409);
-  await world.admin.put('/api/invoices/settings', { webOrders: { enabled: true, finalize: false } });
-  const made = await world.admin.post(`/api/admin/web-orders/${id}/invoice`, {});
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/invoice`, {})).status, 409);
+  await world.admin.put('/app/api/invoices/settings', { webOrders: { enabled: true, finalize: false } });
+  const made = await world.admin.post(`/app/api/admin/web-orders/${id}/invoice`, {});
   assert.strictEqual(made.status, 200);
   assert.strictEqual(made.body.created, true);
   assert.strictEqual(made.body.invoice.status, 'concept');
@@ -138,25 +138,25 @@ test('instellingen: uit = geen factuur (later alsnog met de knop), niet definiti
 test('geen factuur voor een bestelling die nog niet is verzonden', async () => {
   const world = await setup();
   const id = await order(world, world.private1);
-  assert.strictEqual((await world.admin.post(`/api/admin/web-orders/${id}/invoice`, {})).status, 409);
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/invoice`, {})).status, 409);
 });
 
 test('rechten en omgevingen: ander account 403, andere omgeving 404', async () => {
   const world = await setup();
   const id = await order(world, world.private1);
   await ship(world, id);
-  assert.strictEqual((await world.private1.client.post(`/api/admin/web-orders/${id}/invoice`, {})).status, 403);
-  assert.strictEqual((await world.vreemd.post(`/api/admin/web-orders/${id}/invoice`, {})).status, 404);
-  assert.strictEqual((await world.vreemd.get(`/api/admin/web-orders/${id}`)).status, 404);
+  assert.strictEqual((await world.private1.client.post(`/app/api/admin/web-orders/${id}/invoice`, {})).status, 403);
+  assert.strictEqual((await world.vreemd.post(`/app/api/admin/web-orders/${id}/invoice`, {})).status, 404);
+  assert.strictEqual((await world.vreemd.get(`/app/api/admin/web-orders/${id}`)).status, 404);
 });
 
 test('een concept dat bleef staan omdat definitief maken mislukte wordt bij opnieuw proberen afgemaakt', async () => {
   const world = await setup();
-  await world.admin.put('/api/invoices/settings', { webOrders: { enabled: true, finalize: false } });
+  await world.admin.put('/app/api/invoices/settings', { webOrders: { enabled: true, finalize: false } });
   const id = await order(world, world.private1);
   const concept = (await ship(world, id)).body.invoice;
   assert.strictEqual(concept.status, 'concept');
-  await world.admin.put('/api/invoices/settings', { webOrders: { enabled: true, finalize: true } });
+  await world.admin.put('/app/api/invoices/settings', { webOrders: { enabled: true, finalize: true } });
   // Zonder bewaarde fout blijft een bewust concept met rust.
-  assert.strictEqual((await world.admin.post(`/api/admin/web-orders/${id}/invoice`, {})).body.invoice.status, 'concept');
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/invoice`, {})).body.invoice.status, 'concept');
 });

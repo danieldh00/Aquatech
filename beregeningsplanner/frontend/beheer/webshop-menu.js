@@ -139,7 +139,7 @@
    */
   function imageUrl(reference) {
     const [kind, name] = String(reference || '').split(':');
-    if (kind === 'asset' && name) return `../winkel/assets/${encodeURIComponent(name)}`;
+    if (kind === 'asset' && name) return `../../assets/${encodeURIComponent(name)}`;
     return kind === 'media' && name ? `${IMAGE_URL}${encodeURIComponent(name)}` : '';
   }
 
@@ -154,7 +154,7 @@
       <label>Uitleg boven de pagina<textarea data-mf="intro" rows="3" maxlength="2000">${esc(node.intro)}</textarea><span class="hint">Een lege regel begint een nieuwe alinea; een regel die met ## begint is een tussenkop.</span></label>
       <label>Afbeelding in het blok${imagePicker(node.image)}<span class="hint">Eigen foto's upload je eerst bij het tabblad Afbeeldingen.</span></label>
       ${isRoot ? '' : `<label>Webshopcategorieën<input data-mf="match" maxlength="400" value="${esc(node.match.join(' | '))}" autocomplete="off" placeholder="Leeg = de naam hierboven"><span class="hint">Producten met een van deze categorieën in de webshop komen in deze categorie; meerdere namen scheid je met |. Een andere naam hierboven verandert dit niet.</span></label>`}
-      ${node._new ? '' : `<p class="muted small">Adres: <code>winkel/${isRoot ? 'groep' : 'categorie'}/${esc(isRoot ? node.group : node.slug)}/</code> (blijft gelijk bij hernoemen)</p>`}
+      ${node._new ? '' : `<p class="muted small">Adres: <code>/${isRoot ? 'groep' : 'categorie'}/${esc(isRoot ? node.group : node.slug)}/</code> (blijft gelijk bij hernoemen)</p>`}
     </div>`;
   }
 
@@ -260,7 +260,7 @@
       if (action === 'preview') {
         const tab = window.open('about:blank', '_blank');
         try { await saveDraft(); } catch (error) { if (tab) tab.close(); throw error; }
-        if (tab) tab.location.href = '../winkel/?voorbeeld=1';
+        if (tab) tab.location.href = '../../?voorbeeld=1';
         else state.toast('Het voorbeeldtabblad kon niet worden geopend. Sta pop-ups toe voor deze pagina.', true);
         render();
         return;

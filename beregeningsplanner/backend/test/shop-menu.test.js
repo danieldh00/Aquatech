@@ -28,10 +28,10 @@ async function setup() {
   servers.push(server);
   const login = createLogin(base, { password: PW });
   const admin = await login('baas');
-  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
   const items = [['E1', ['Eindkap tyleenkoppeling']], ['X1', ['Iets nieuws']]];
   for (const [index, [code, categories]] of items.entries()) {
-    assert.strictEqual((await admin.post('/api/stock/items', { code, name: `Artikel ${code}`, onHand: 5, salePrice: 10 })).status, 201);
+    assert.strictEqual((await admin.post('/app/api/stock/items', { code, name: `Artikel ${code}`, onHand: 5, salePrice: 10 })).status, 201);
     db.prepare('INSERT INTO shop_products (tenant_id, id, name, image, categories) VALUES (?, ?, ?, ?, ?)').run(main, String(index + 1), code, '', JSON.stringify(categories));
     db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE tenant_id = ? AND code = ?').run(String(index + 1), main, code);
   }
@@ -125,55 +125,55 @@ test('normalizeTree: vaste koppen, unieke adressen, grenzen en geen rommel', () 
 
 test('menuboom: concept is alleen een voorbeeld, publiceren zet hem live, hernoemen houdt de indeling', async () => {
   const { admin, anonymous } = await setup();
-  const first = await admin.get('/api/admin/shop-content');
+  const first = await admin.get('/app/api/admin/shop-content');
   assert.strictEqual(first.body.menu.isDefault, true);
   assert.ok(first.body.defaults.menu.roots.length >= 4);
   assert.deepStrictEqual(first.body.unplaced.map((entry) => entry.name), ['Iets nieuws']);
 
   const roots = renamed('eindkap-tyleen', 'Eindkappen');
-  const saved = await admin.put('/api/admin/shop-content/menu', { roots });
+  const saved = await admin.put('/app/api/admin/shop-content/menu', { roots });
   assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
-  assert.ok(!(await anonymous.get('/winkel/')).text.includes('Eindkappen'), 'concept is niet live');
-  const preview = await admin.get('/winkel/?voorbeeld=1');
+  assert.ok(!(await anonymous.get('/')).text.includes('Eindkappen'), 'concept is niet live');
+  const preview = await admin.get('/?voorbeeld=1');
   assert.ok(preview.text.includes('Eindkappen'), 'voorbeeld toont het concept');
   assert.match(preview.text, /href="categorie\/eindkap-tyleen\/\?voorbeeld=1"/, 'links in het voorbeeld blijven in het voorbeeld');
   assert.match(preview.text, /<form class="shop-search"[^>]*><input type="hidden" name="voorbeeld" value="1">/, 'zoeken houdt het voorbeeld vast');
-  assert.doesNotMatch((await admin.get('/winkel/')).text, /voorbeeld=1/);
+  assert.doesNotMatch((await admin.get('/')).text, /voorbeeld=1/);
   assert.doesNotMatch(preview.text, /nav-flip/, 'submenu\'s klappen standaard naar rechts');
   assert.match(preview.text, /src="assets\/menu\.js/);
-  assert.strictEqual((await admin.get('/winkel/assets/menu.js')).status, 200);
-  assert.ok(!(await anonymous.get('/winkel/?voorbeeld=1')).text.includes('Eindkappen'), 'bezoeker ziet nooit het voorbeeld');
+  assert.strictEqual((await admin.get('/assets/menu.js')).status, 200);
+  assert.ok(!(await anonymous.get('/?voorbeeld=1')).text.includes('Eindkappen'), 'bezoeker ziet nooit het voorbeeld');
 
-  assert.strictEqual((await admin.post('/api/admin/shop-content/menu/publish', {})).status, 200);
-  const live = (await anonymous.get('/winkel/')).text;
+  assert.strictEqual((await admin.post('/app/api/admin/shop-content/menu/publish', {})).status, 200);
+  const live = (await anonymous.get('/')).text;
   assert.ok(live.includes('Eindkappen'));
-  assert.strictEqual((await anonymous.get('/winkel/categorie/eindkap-tyleen/')).status, 200, 'adres blijft gelijk');
-  assert.ok((await anonymous.get('/winkel/categorie/eindkap-tyleen/')).text.includes('Artikel E1'), 'product blijft in de categorie');
+  assert.strictEqual((await anonymous.get('/categorie/eindkap-tyleen/')).status, 200, 'adres blijft gelijk');
+  assert.ok((await anonymous.get('/categorie/eindkap-tyleen/')).text.includes('Artikel E1'), 'product blijft in de categorie');
 
-  assert.strictEqual((await admin.put('/api/admin/shop-content/menu', { roots: renamed('eindkap-tyleen', 'Kapjes') })).status, 200);
-  assert.strictEqual((await admin.post('/api/admin/shop-content/menu/publish', {})).status, 200);
-  assert.ok((await anonymous.get('/winkel/')).text.includes('Kapjes'));
-  assert.strictEqual((await admin.post('/api/admin/shop-content/menu/revert', {})).status, 200);
-  const back = (await anonymous.get('/winkel/')).text;
+  assert.strictEqual((await admin.put('/app/api/admin/shop-content/menu', { roots: renamed('eindkap-tyleen', 'Kapjes') })).status, 200);
+  assert.strictEqual((await admin.post('/app/api/admin/shop-content/menu/publish', {})).status, 200);
+  assert.ok((await anonymous.get('/')).text.includes('Kapjes'));
+  assert.strictEqual((await admin.post('/app/api/admin/shop-content/menu/revert', {})).status, 200);
+  const back = (await anonymous.get('/')).text;
   assert.ok(back.includes('Eindkappen') && !back.includes('Kapjes'), 'vorige versie terug');
 });
 
 test('menuboom: concept weggooien en rechten', async () => {
   const { admin, customer, anonymous } = await setup();
-  assert.strictEqual((await admin.put('/api/admin/shop-content/menu', { roots: renamed('eindkap-tyleen', 'Eindkappen') })).status, 200);
-  const discarded = await admin.post('/api/admin/shop-content/menu/discard', {});
+  assert.strictEqual((await admin.put('/app/api/admin/shop-content/menu', { roots: renamed('eindkap-tyleen', 'Eindkappen') })).status, 200);
+  const discarded = await admin.post('/app/api/admin/shop-content/menu/discard', {});
   assert.strictEqual(discarded.status, 200);
   assert.strictEqual(discarded.body.menu.hasDraft, false);
-  const tooMany = await admin.put('/api/admin/shop-content/menu', { roots: [{ group: 'beregening', name: 'A', children: Array.from({ length: 601 }, (_, index) => ({ name: `Cat ${index}` })) }] });
+  const tooMany = await admin.put('/app/api/admin/shop-content/menu', { roots: [{ group: 'beregening', name: 'A', children: Array.from({ length: 601 }, (_, index) => ({ name: `Cat ${index}` })) }] });
   assert.strictEqual(tooMany.status, 400, 'te grote boom wordt geweigerd');
   assert.strictEqual(tooMany.body.error, 'tree_too_large');
-  const nameless = await admin.put('/api/admin/shop-content/menu', { roots: [{ group: 'beregening', name: 'A', children: [{ name: '  ', children: [{ name: 'Kind' }] }] }] });
+  const nameless = await admin.put('/app/api/admin/shop-content/menu', { roots: [{ group: 'beregening', name: 'A', children: [{ name: '  ', children: [{ name: 'Kind' }] }] }] });
   assert.strictEqual(nameless.status, 400, 'categorie zonder naam wordt geweigerd in plaats van stil verwijderd');
   assert.strictEqual(nameless.body.error, 'invalid_name');
   for (const [client, expected] of [[customer, 403], [anonymous, 401]]) {
-    assert.strictEqual((await client.put('/api/admin/shop-content/menu', { roots: [] })).status, expected);
+    assert.strictEqual((await client.put('/app/api/admin/shop-content/menu', { roots: [] })).status, expected);
     for (const action of ['publish', 'discard', 'revert']) {
-      assert.strictEqual((await client.post(`/api/admin/shop-content/menu/${action}`, {})).status, expected);
+      assert.strictEqual((await client.post(`/app/api/admin/shop-content/menu/${action}`, {})).status, expected);
     }
   }
 });

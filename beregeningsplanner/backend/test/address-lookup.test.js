@@ -49,44 +49,44 @@ test('API in de app: alleen ingelogd, ongeldige invoer 400, storing 502', async 
   const pdok = createPdokFake();
   const world = await setup({ addressFetch: pdok.fetchImpl });
   const anonymous = createClient(world.base);
-  const found = await world.admin.get('/api/address-lookup?postcode=8071AB&huisnummer=12&toevoeging=a');
+  const found = await world.admin.get('/app/api/address-lookup?postcode=8071AB&huisnummer=12&toevoeging=a');
   assert.strictEqual(found.status, 200);
   assert.strictEqual(found.body.street, 'Tuinstraat');
   assert.strictEqual(found.body.suffix, 'A');
-  assert.strictEqual((await world.admin.get('/api/address-lookup?postcode=8071AB&huisnummer=99')).body.found, false);
-  assert.strictEqual((await world.admin.get('/api/address-lookup?postcode=foutje&huisnummer=1')).status, 400);
-  assert.strictEqual((await world.admin.get('/api/address-lookup?postcode=8071AB')).status, 400);
-  const plain = await world.admin.get('/api/address-lookup?postcode=8071AB&huisnummer=1');
+  assert.strictEqual((await world.admin.get('/app/api/address-lookup?postcode=8071AB&huisnummer=99')).body.found, false);
+  assert.strictEqual((await world.admin.get('/app/api/address-lookup?postcode=foutje&huisnummer=1')).status, 400);
+  assert.strictEqual((await world.admin.get('/app/api/address-lookup?postcode=8071AB')).status, 400);
+  const plain = await world.admin.get('/app/api/address-lookup?postcode=8071AB&huisnummer=1');
   assert.match(plain.headers.get('cache-control'), /no-store/);
   pdok.down.on = true;
-  const down = await world.admin.get('/api/address-lookup?postcode=8071AB&huisnummer=5');
+  const down = await world.admin.get('/app/api/address-lookup?postcode=8071AB&huisnummer=5');
   assert.strictEqual(down.status, 502);
   assert.match(down.body.message, /later opnieuw/);
-  await world.admin.put('/api/admin/settings', { guestAccess: false });
-  assert.strictEqual((await anonymous.get('/api/address-lookup?postcode=8071AB&huisnummer=1')).status, 401);
+  await world.admin.put('/app/api/admin/settings', { guestAccess: false });
+  assert.strictEqual((await anonymous.get('/app/api/address-lookup?postcode=8071AB&huisnummer=1')).status, 401);
 });
 
-test('webshop: route /winkel/adres/, CSP en afrekenformulier', async () => {
+test('webshop: route /adres/, CSP en afrekenformulier', async () => {
   const pdok = createPdokFake();
   const world = await setup({ addressFetch: pdok.fetchImpl });
   const customer = world.shoppers[0].client;
-  const route = await customer.get('/winkel/adres/?postcode=8071AB&huisnummer=1');
+  const route = await customer.get('/adres/?postcode=8071AB&huisnummer=1');
   assert.strictEqual(route.status, 200);
   assert.strictEqual(route.body.city, 'Nunspeet');
-  assert.strictEqual((await customer.get('/winkel/adres/?postcode=x&huisnummer=1')).status, 400);
+  assert.strictEqual((await customer.get('/adres/?postcode=x&huisnummer=1')).status, 400);
   assert.match(route.headers.get('content-security-policy'), /connect-src 'self'/);
-  const script = await customer.get('/winkel/assets/adres.js');
+  const script = await customer.get('/assets/adres.js');
   assert.strictEqual(script.status, 200);
   assert.match(script.type, /javascript/);
-  await postForm(world.base, world.shoppers[0].client, '/winkel/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
-  const checkout = await customer.get('/winkel/afrekenen/');
+  await postForm(world.base, world.shoppers[0].client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
+  const checkout = await customer.get('/afrekenen/');
   assert.strictEqual(checkout.status, 200);
   assert.match(checkout.text, /data-address-endpoint="\.\.\/adres\/"/);
   assert.match(checkout.text, /<div class="address-lookup" data-address-row hidden>/);
   assert.match(checkout.text, /role="status" aria-live="polite"/);
   assert.ok(checkout.text.indexOf('name="postcode"') < checkout.text.indexOf('name="street"'), 'postcode staat boven de straat');
   assert.ok(checkout.text.indexOf('adres.js') < checkout.text.indexOf('afrekenen.js'));
-  assert.strictEqual((await world.admin.get('/api/address-lookup?postcode=8071AB&huisnummer=1')).status, 200);
+  assert.strictEqual((await world.admin.get('/app/api/address-lookup?postcode=8071AB&huisnummer=1')).status, 200);
 });
 
 /**
@@ -300,31 +300,31 @@ test('offerte en melding: het adres moet kloppen met postcode en huisnummer (ser
    * @returns {object} De body voor POST /api/quotes.
    */
   const quoteWith = (address) => ({ data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address }, lines } });
-  const wrongCity = await admin.post('/api/quotes', quoteWith('Tuinstraat 1\n8071 AB Amsterdam'));
+  const wrongCity = await admin.post('/app/api/quotes', quoteWith('Tuinstraat 1\n8071 AB Amsterdam'));
   assert.strictEqual(wrongCity.status, 400);
   assert.strictEqual(wrongCity.body.error, 'invalid_address');
-  assert.strictEqual((await admin.post('/api/quotes', quoteWith('Dorpsstraat 1, Nunspeet'))).status, 400, 'geen postcode');
-  const good = await admin.post('/api/quotes', quoteWith('Tuinstraat 1\n8071 AB Nunspeet'));
+  assert.strictEqual((await admin.post('/app/api/quotes', quoteWith('Dorpsstraat 1, Nunspeet'))).status, 400, 'geen postcode');
+  const good = await admin.post('/app/api/quotes', quoteWith('Tuinstraat 1\n8071 AB Nunspeet'));
   assert.strictEqual(good.status, 201);
-  assert.strictEqual((await admin.post('/api/quotes', quoteWith(''))).status, 201, 'zonder adres kan het nog');
-  const tampered = await admin.put(`/api/quotes/${good.body.id}`, quoteWith('Tuinstraat 1\n8071 AB Elburg'));
+  assert.strictEqual((await admin.post('/app/api/quotes', quoteWith(''))).status, 201, 'zonder adres kan het nog');
+  const tampered = await admin.put(`/app/api/quotes/${good.body.id}`, quoteWith('Tuinstraat 1\n8071 AB Elburg'));
   assert.strictEqual(tampered.status, 400);
-  assert.strictEqual((await admin.put(`/api/quotes/${good.body.id}`, quoteWith('Tuinstraat 1\n8071 AB Nunspeet'))).status, 200);
+  assert.strictEqual((await admin.put(`/app/api/quotes/${good.body.id}`, quoteWith('Tuinstraat 1\n8071 AB Nunspeet'))).status, 200);
 });
 
 test('afrekenen: straat en woonplaats komen uit PDOK, niet uit de browser', async () => {
   const world = await setup();
   const { base } = world;
   const customer = world.shoppers[0].client;
-  await postForm(base, customer, '/winkel/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
+  await postForm(base, customer, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
   const fields = { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'dpd', country: 'NL', terms: 'ja', postcode: '8071ab', street: 'tuinstraat 1', city: 'Amsterdam' };
   const wrongStreet = await postCheckout(base, customer, { ...fields, street: 'Dorpsstraat 1' });
   assert.strictEqual(wrongStreet.status, 400);
   assert.match(wrongStreet.text, /klopt niet met de postcode/);
   const placed = await postCheckout(base, customer, fields);
   assert.strictEqual(placed.status, 303, 'de verkeerde woonplaats uit de browser wordt vervangen');
-  const list = await world.admin.get('/api/admin/web-orders');
-  const detail = await world.admin.get(`/api/admin/web-orders/${list.body.items[0].id}`);
+  const list = await world.admin.get('/app/api/admin/web-orders');
+  const detail = await world.admin.get(`/app/api/admin/web-orders/${list.body.items[0].id}`);
   assert.deepStrictEqual([detail.body.order.address.street, detail.body.order.address.postcode, detail.body.order.address.city], ['Tuinstraat 1', '8071 AB', 'Nunspeet']);
 });
 
@@ -363,14 +363,14 @@ test('adrestekst ontleden: cijfers in de straatnaam tellen niet mee en een losse
 
 test('adrescontrole: een adres dat geen tekst is wordt geweigerd', async () => {
   const world = await setup();
-  const rejected = await world.admin.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: ['Dorpsstraat 1, Amsterdam'] }, lines: [] } });
+  const rejected = await world.admin.post('/app/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen', address: ['Dorpsstraat 1, Amsterdam'] }, lines: [] } });
   assert.strictEqual(rejected.status, 400);
 });
 
 test('afrekenen: een ongeldige postcode of lege straat geeft een foutmelding in plaats van ongecontroleerd opslaan', async () => {
   const world = await setup();
   const customer = world.shoppers[0].client;
-  await postForm(world.base, customer, '/winkel/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
+  await postForm(world.base, customer, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
   const fields = { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'dpd', country: 'NL', terms: 'ja', street: 'Verzonnenlaan 1', city: 'Nergens' };
   const bad = await postCheckout(world.base, customer, { ...fields, postcode: '0000AB' });
   assert.strictEqual(bad.status, 400);

@@ -19,6 +19,13 @@ poort 3300). **Niets in de app mag van Home Assistant afhangen** (besluit
 Daniël 2026-10-18): geen ingress, geen HA-opties, geen Supervisor-detectie.
 De HA-verpakking is in 0.29.1 verwijderd; Home Assistant speelt geen rol meer.
 
+**Adresindeling** (1.7.1): de webshop is de hoofdmap `/`; de hele app (dashboard, modules, `/app/api`,
+inloggen, openbare offerte-/afspraaklinks, `sw.js`/`manifest.json`) staat onder `/app/`. `server.js` haalt het
+voorvoegsel eraf (`req.inApp`), dus binnen de app blijven alle paden en relatieve URL's zoals ze waren; de shop-router
+(`webshop/storefront.js`) staat op `/`. Oude adressen worden doorgestuurd (`legacyAppRedirect`: modules, `/login`,
+`/openbaar/…`, `/admin`, `/winkel/…`); `/api/health` werkt op beide plekken, andere `/api/…` buiten `/app` is 404.
+Webshop uit (standaard) → `/` stuurt naar `app/`. Tests: app-paden met `/app/…`, shop-paden zonder `/winkel`.
+
 Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 (3100), `danieldh00/Russianlanguageapp` (3000). Deze app gebruikt **poort 3300**.
 

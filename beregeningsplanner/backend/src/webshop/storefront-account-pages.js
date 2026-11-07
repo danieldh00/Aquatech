@@ -1,13 +1,13 @@
 // HTML van het account in de eigen webshop (storefront.js): inloggen,
 // registreren en "mijn account". Hetzelfde account werkt in de planner en het
-// klantportaal. Alle adressen zijn relatief aan de pagina (/winkel/<pagina>/).
+// klantportaal. Alle adressen zijn relatief aan de pagina (/<pagina>/).
 
 const { layout, escapeHtml } = require('./storefront-pages');
 
 /** Relatief pad van deze pagina's naar de shop-startpagina. */
 const ROOT = '../';
 /** Relatief pad naar de hoofdmap van de app (planner, portaal, profiel). */
-const APP_ROOT = '../../';
+const APP_ROOT = '../app/';
 
 /**
  * Een invoerveld met label.

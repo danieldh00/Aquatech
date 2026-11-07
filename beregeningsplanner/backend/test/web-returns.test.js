@@ -16,7 +16,7 @@ const { setup, order, until, mailsWith } = require('./helpers/webshop-world');
  */
 async function shippedOrder(world) {
   const id = await order(world, world.shoppers[0]);
-  assert.strictEqual((await world.admin.post(`/api/admin/web-orders/${id}/status`, { status: 'verzonden' })).status, 200);
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/status`, { status: 'verzonden' })).status, 200);
   return id;
 }
 
@@ -27,7 +27,7 @@ async function shippedOrder(world) {
  * @param {object} fields De velden van het formulier (qty:BUS, reason, note).
  * @returns {Promise<object>} Het antwoord (status, location, text).
  */
-const requestReturn = (world, id, fields) => postForm(world.base, world.shoppers[0].client, `/winkel/bestelling/${id}/retour`, fields);
+const requestReturn = (world, id, fields) => postForm(world.base, world.shoppers[0].client, `/bestelling/${id}/retour`, fields);
 
 /**
  * Het voorraadartikel BUS uit de voorraadlijst.
@@ -35,7 +35,7 @@ const requestReturn = (world, id, fields) => postForm(world.base, world.shoppers
  * @returns {Promise<object>} Het artikel.
  */
 async function stockOf(admin) {
-  return (await admin.get('/api/stock')).body.items.find((item) => item.code === 'BUS');
+  return (await admin.get('/app/api/stock')).body.items.find((item) => item.code === 'BUS');
 }
 
 /**
@@ -44,7 +44,7 @@ async function stockOf(admin) {
  * @returns {Promise<object>} De retour.
  */
 async function latestReturn(admin) {
-  return (await admin.get('/api/admin/web-returns')).body.items[0];
+  return (await admin.get('/app/api/admin/web-returns')).body.items[0];
 }
 
 test('retour van aanvraag tot creditnota: mails, voorraad terug en creditregel', async () => {
@@ -52,7 +52,7 @@ test('retour van aanvraag tot creditnota: mails, voorraad terug en creditregel',
   const [customer, other] = world.shoppers;
   const id = await shippedOrder(world);
   assert.strictEqual((await stockOf(world.admin)).onHand, 48);
-  const page = await customer.client.get(`/winkel/bestelling/${id}/`);
+  const page = await customer.client.get(`/bestelling/${id}/`);
   assert.match(page.text, /Retourneren/);
   assert.match(page.text, /name="qty:BUS"/);
 
@@ -67,48 +67,48 @@ test('retour van aanvraag tot creditnota: mails, voorraad terug en creditregel',
   const [confirmation] = await until(() => { const found = mailsWith(world.sent, /We hebben je retour .* ontvangen/); return found.length ? found : null; });
   assert.strictEqual(confirmation.to, 'els@bakker.example');
   assert.match(confirmation.text, /1 × Sproeier \(BUS\)/);
-  assert.match((await customer.client.get(`/winkel/bestelling/${id}/`)).text, /Aangevraagd/);
+  assert.match((await customer.client.get(`/bestelling/${id}/`)).text, /Aangevraagd/);
   assert.match((await requestReturn(world, id, { 'qty:BUS': '2', reason: 'defect' })).text, /kunnen nog 1 terug/, 'wat al in een retour zit telt mee');
 
   assert.strictEqual((await requestReturn(world, id, { 'qty:BUS': '1', reason: 'anders' })).status, 303, 'het laatste stuk kan nog');
-  const foreign = await postForm(world.base, other.client, `/winkel/bestelling/${id}/retour`, { 'qty:BUS': '1', reason: 'anders' });
+  const foreign = await postForm(world.base, other.client, `/bestelling/${id}/retour`, { 'qty:BUS': '1', reason: 'anders' });
   assert.strictEqual(foreign.status, 404, 'een andere klant kan geen retour op deze bestelling');
 
-  const list = (await world.admin.get('/api/admin/web-returns')).body;
+  const list = (await world.admin.get('/app/api/admin/web-returns')).body;
   assert.strictEqual(list.total, 2);
   const record = list.items.find((item) => item.note === 'Kapot bij uitpakken');
   assert.strictEqual(record.status, 'aangevraagd');
-  assert.strictEqual((await world.vreemd.get(`/api/admin/web-returns/${record.id}`)).status, 404, 'andere organisatie');
-  assert.strictEqual((await customer.client.get('/api/admin/web-returns')).status, 403, 'klant heeft geen beheerrecht');
+  assert.strictEqual((await world.vreemd.get(`/app/api/admin/web-returns/${record.id}`)).status, 404, 'andere organisatie');
+  assert.strictEqual((await customer.client.get('/app/api/admin/web-returns')).status, 403, 'klant heeft geen beheerrecht');
   for (const action of ['decision', 'complete', 'credit']) {
-    assert.strictEqual((await world.vreemd.post(`/api/admin/web-returns/${record.id}/${action}`, { approve: true })).status, 404, `andere organisatie: ${action}`);
-    assert.strictEqual((await customer.client.post(`/api/admin/web-returns/${record.id}/${action}`, { approve: true })).status, 403, `klant heeft geen beheerrecht: ${action}`);
+    assert.strictEqual((await world.vreemd.post(`/app/api/admin/web-returns/${record.id}/${action}`, { approve: true })).status, 404, `andere organisatie: ${action}`);
+    assert.strictEqual((await customer.client.post(`/app/api/admin/web-returns/${record.id}/${action}`, { approve: true })).status, 403, `klant heeft geen beheerrecht: ${action}`);
   }
-  assert.strictEqual((await world.admin.get(`/api/admin/web-returns/${record.id}`)).body.return.status, 'aangevraagd', 'status ongewijzigd');
+  assert.strictEqual((await world.admin.get(`/app/api/admin/web-returns/${record.id}`)).body.return.status, 'aangevraagd', 'status ongewijzigd');
 
-  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/complete`, {})).status, 409, 'eerst goedkeuren');
-  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/decision`, { approve: false })).status, 400, 'afwijzen vraagt een reden');
-  const approved = await world.admin.post(`/api/admin/web-returns/${record.id}/decision`, { approve: true, note: 'Graag in de originele verpakking.' });
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/complete`, {})).status, 409, 'eerst goedkeuren');
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/decision`, { approve: false })).status, 400, 'afwijzen vraagt een reden');
+  const approved = await world.admin.post(`/app/api/admin/web-returns/${record.id}/decision`, { approve: true, note: 'Graag in de originele verpakking.' });
   assert.strictEqual(approved.status, 200);
   assert.strictEqual(approved.body.return.status, 'goedgekeurd');
   const [approval] = await until(() => { const found = mailsWith(world.sent, /is goedgekeurd/); return found.length ? found : null; });
   assert.match(approval.text, /originele verpakking/);
 
-  const done = await world.admin.post(`/api/admin/web-returns/${record.id}/complete`, { restock: true });
+  const done = await world.admin.post(`/app/api/admin/web-returns/${record.id}/complete`, { restock: true });
   assert.strictEqual(done.status, 200);
   assert.strictEqual(done.body.return.status, 'afgerond');
   assert.strictEqual((await stockOf(world.admin)).onHand, 49, 'het artikel is teruggeboekt');
   assert.ok(done.body.credit.credit, JSON.stringify(done.body.credit));
-  const credit = (await world.admin.get(`/api/invoices/${done.body.credit.credit.invoiceId}`)).body;
+  const credit = (await world.admin.get(`/app/api/invoices/${done.body.credit.credit.invoiceId}`)).body;
   assert.strictEqual(credit.kind, 'credit');
   assert.strictEqual(credit.status, 'definitief');
   assert.deepStrictEqual(credit.data.lines.map((line) => [line.code, line.qty]), [['BUS', -1]], 'alleen de teruggestuurde regel, zonder verzendkosten');
   assert.strictEqual(credit.total, -12.1, '10,00 excl. + 21% btw');
   assert.strictEqual((await stockOf(world.admin)).onHand, 49, 'de creditnota boekt de voorraad niet nog eens');
-  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/complete`, {})).status, 409, 'niet twee keer afronden');
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/complete`, {})).status, 409, 'niet twee keer afronden');
   const [finished] = await until(() => { const found = mailsWith(world.sent, /is ontvangen en afgehandeld/); return found.length ? found : null; });
   assert.match(finished.text, new RegExp(credit.number));
-  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/credit`, {})).body.credit.existing, true, 'opnieuw vragen maakt geen tweede creditnota');
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/credit`, {})).body.credit.existing, true, 'opnieuw vragen maakt geen tweede creditnota');
 });
 
 test('afwijzen met reden en intrekken door de klant', async () => {
@@ -117,16 +117,16 @@ test('afwijzen met reden en intrekken door de klant', async () => {
   const id = await shippedOrder(world);
   assert.strictEqual((await requestReturn(world, id, { 'qty:BUS': '2', reason: 'niet_nodig' })).status, 303);
   const first = await latestReturn(world.admin);
-  const rejected = await world.admin.post(`/api/admin/web-returns/${first.id}/decision`, { approve: false, note: 'Gebruikte artikelen nemen we niet terug.' });
+  const rejected = await world.admin.post(`/app/api/admin/web-returns/${first.id}/decision`, { approve: false, note: 'Gebruikte artikelen nemen we niet terug.' });
   assert.strictEqual(rejected.body.return.status, 'afgewezen');
   const [mail] = await until(() => { const found = mailsWith(world.sent, /is afgewezen/); return found.length ? found : null; });
   assert.match(mail.text, /Gebruikte artikelen/);
-  assert.match((await customer.client.get(`/winkel/bestelling/${id}/`)).text, /Gebruikte artikelen nemen we niet terug/);
+  assert.match((await customer.client.get(`/bestelling/${id}/`)).text, /Gebruikte artikelen nemen we niet terug/);
 
   const again = await requestReturn(world, id, { 'qty:BUS': '2', reason: 'verkeerd' });
   assert.strictEqual(again.status, 409, 'een afgewezen retour kan niet opnieuw worden ingediend');
   assert.match(again.text, /al in een retour afgewezen/);
-  const page = (await customer.client.get(`/winkel/bestelling/${id}/`)).text;
+  const page = (await customer.client.get(`/bestelling/${id}/`)).text;
   assert.doesNotMatch(page, /name="qty:BUS"/, 'geen formulier meer voor wat is afgewezen');
   assert.match(page, /status-afgewezen/);
   assert.match(page, /kan niet opnieuw worden ingediend/);
@@ -135,13 +135,13 @@ test('afwijzen met reden en intrekken door de klant', async () => {
   assert.strictEqual((await requestReturn(world, secondOrder, { 'qty:BUS': '2', reason: 'verkeerd' })).status, 303);
   const second = await latestReturn(world.admin);
   const other = world.shoppers[1];
-  const withdrawUrl = `/winkel/bestelling/${secondOrder}/retour/${second.id}/intrekken`;
+  const withdrawUrl = `/bestelling/${secondOrder}/retour/${second.id}/intrekken`;
   assert.strictEqual((await postForm(world.base, other.client, withdrawUrl, {})).status, 404, 'alleen de eigen retour');
   const withdrawn = await postForm(world.base, customer.client, withdrawUrl, {});
   assert.strictEqual(withdrawn.status, 303);
   assert.strictEqual(withdrawn.location, '../../');
-  assert.strictEqual((await world.admin.get(`/api/admin/web-returns/${second.id}`)).body.return.status, 'ingetrokken');
-  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${second.id}/decision`, { approve: true })).status, 409, 'een ingetrokken retour is klaar');
+  assert.strictEqual((await world.admin.get(`/app/api/admin/web-returns/${second.id}`)).body.return.status, 'ingetrokken');
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${second.id}/decision`, { approve: true })).status, 409, 'een ingetrokken retour is klaar');
   assert.strictEqual((await requestReturn(world, secondOrder, { 'qty:BUS': '2', reason: 'verkeerd' })).status, 303, 'ingetrokken telt niet mee');
 });
 
@@ -151,23 +151,23 @@ test('geen retour voor verzending, en zonder terugboeken blijft de voorraad staa
   const early = await requestReturn(world, id, { 'qty:BUS': '1', reason: 'defect' });
   assert.strictEqual(early.status, 409);
   assert.match(early.text, /pas als de bestelling is verzonden/);
-  assert.strictEqual((await world.admin.post(`/api/admin/web-orders/${id}/status`, { status: 'verzonden' })).status, 200);
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/status`, { status: 'verzonden' })).status, 200);
   assert.strictEqual((await requestReturn(world, id, { 'qty:BUS': '1', reason: 'defect' })).status, 303);
   const record = await latestReturn(world.admin);
-  await world.admin.post(`/api/admin/web-returns/${record.id}/decision`, { approve: true });
-  const done = await world.admin.post(`/api/admin/web-returns/${record.id}/complete`, { restock: false });
+  await world.admin.post(`/app/api/admin/web-returns/${record.id}/decision`, { approve: true });
+  const done = await world.admin.post(`/app/api/admin/web-returns/${record.id}/complete`, { restock: false });
   assert.strictEqual(done.body.return.restock, false);
   assert.strictEqual((await stockOf(world.admin)).onHand, 48, 'beschadigd: niet terug op voorraad');
 });
 
 test('zonder facturen voor webshopbestellingen geen creditnota, met melding', async () => {
   const world = await setup();
-  await world.admin.put('/api/invoices/settings', { webOrders: { enabled: false } });
+  await world.admin.put('/app/api/invoices/settings', { webOrders: { enabled: false } });
   const id = await shippedOrder(world);
   await requestReturn(world, id, { 'qty:BUS': '1', reason: 'defect' });
   const record = await latestReturn(world.admin);
-  await world.admin.post(`/api/admin/web-returns/${record.id}/decision`, { approve: true });
-  const done = await world.admin.post(`/api/admin/web-returns/${record.id}/complete`, {});
+  await world.admin.post(`/app/api/admin/web-returns/${record.id}/decision`, { approve: true });
+  const done = await world.admin.post(`/app/api/admin/web-returns/${record.id}/complete`, {});
   assert.strictEqual(done.status, 200);
   assert.match(done.body.credit.skipped, /staan uit/);
   assert.match(done.body.return.creditError, /staan uit/);
@@ -243,15 +243,15 @@ test('mislukte mail over de afgeronde retour kan opnieuw worden verstuurd', asyn
   const id = await shippedOrder(world);
   assert.strictEqual((await requestReturn(world, id, { 'qty:BUS': '1', reason: 'defect' })).status, 303);
   const record = await latestReturn(world.admin);
-  await world.admin.post(`/api/admin/web-returns/${record.id}/decision`, { approve: true });
+  await world.admin.post(`/app/api/admin/web-returns/${record.id}/decision`, { approve: true });
   world.mailFailing.on = true;
-  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/complete`, {})).status, 200);
-  await until(async () => { const found = (await world.admin.get(`/api/admin/web-returns/${record.id}`)).body; return found.return?.mail?.sent === false ? found : null; });
-  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 502, 'mailserver nog stuk');
-  assert.strictEqual((await world.vreemd.post(`/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 404, 'andere tenant');
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/complete`, {})).status, 200);
+  await until(async () => { const found = (await world.admin.get(`/app/api/admin/web-returns/${record.id}`)).body; return found.return?.mail?.sent === false ? found : null; });
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 502, 'mailserver nog stuk');
+  assert.strictEqual((await world.vreemd.post(`/app/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 404, 'andere tenant');
   world.mailFailing.on = false;
-  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 200);
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 200);
   assert.strictEqual(mailsWith(world.sent, /is ontvangen en afgehandeld/).length, 1);
-  assert.strictEqual((await world.admin.post(`/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 409, 'niet twee keer');
-  assert.strictEqual((await world.shoppers[0].client.post(`/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 403);
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 409, 'niet twee keer');
+  assert.strictEqual((await world.shoppers[0].client.post(`/app/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 403);
 });

@@ -34,10 +34,10 @@ async function setup() {
   const { server, base } = await listen(createApp({ secret: SECRET, db, mailerFor }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
-  assert.strictEqual((await admin.put('/api/quote-profile', { profile: { email: 'info@bedrijf.nl', name: 'Bedrijf' } })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/quote-profile', { profile: { email: 'info@bedrijf.nl', name: 'Bedrijf' } })).status, 200);
   for (const item of [{ code: 'SPR-1', name: 'Sproeier Pro', onHand: 5, salePrice: 10 }, { code: 'BUIS-25', name: 'PE buis 25 mm', onHand: 100, salePrice: 1.5 }]) {
-    assert.strictEqual((await admin.post('/api/stock/items', item)).status, 201);
+    assert.strictEqual((await admin.post('/app/api/stock/items', item)).status, 201);
   }
   for (const [index, code] of ['SPR-1', 'BUIS-25'].entries()) {
     db.prepare('INSERT INTO shop_products (tenant_id, id, name, image, categories) VALUES (?, ?, ?, ?, ?)').run(main, String(index + 1), code, `https://shop.test/${index}.jpg`, '["Leidingen"]');
@@ -81,7 +81,7 @@ test('catalogus: variantverkopen tellen samen voor het hoofdartikel', () => {
 
 test('startpagina: hero zonder tekst, banners, kolommen, citaat en tabbladen na een verkoop', async () => {
   const { db, base, main } = await setup();
-  const home = await (await fetch(`${base}/winkel/`)).text();
+  const home = await (await fetch(`${base}/`)).text();
   assert.doesNotMatch(home, /home-hero-text/, 'geen tekst over de hero');
   assert.match(home, /home-banners/);
   assert.match(home, /Efficiënt bewateren met een druppelslang/);
@@ -103,9 +103,9 @@ test('startpagina: hero zonder tekst, banners, kolommen, citaat en tabbladen na 
 
 test('zakelijk formulier: alleen met mailserver en e-mailadres, anders de knop', async () => {
   const { base, admin } = await setup();
-  assert.match(await (await fetch(`${base}/winkel/`)).text(), /class="business-form"/);
-  assert.strictEqual((await admin.put('/api/quote-profile', { profile: { email: '' } })).status, 200);
-  const without = await (await fetch(`${base}/winkel/`)).text();
+  assert.match(await (await fetch(`${base}/`)).text(), /class="business-form"/);
+  assert.strictEqual((await admin.put('/app/api/quote-profile', { profile: { email: '' } })).status, 200);
+  const without = await (await fetch(`${base}/`)).text();
   assert.doesNotMatch(without, /class="business-form"/);
   assert.match(without, /Account aanmaken/);
 });
@@ -113,30 +113,30 @@ test('zakelijk formulier: alleen met mailserver en e-mailadres, anders de knop',
 test('zakelijk formulier: mail naar het bedrijf, valstrik en limiet', async () => {
   const { base, sent } = await setup();
   const client = { jar: new Map() };
-  const home = await (await fetch(`${base}/winkel/`)).text();
+  const home = await (await fetch(`${base}/`)).text();
   assert.match(home, /<form class="business-form" id="zakelijk" method="post" action="zakelijk-aanvraag\/">/);
 
-  const ok = await postForm(base, client, '/winkel/zakelijk-aanvraag/', { company: 'Tuinbedrijf Jansen', email: 'jan@jansen.nl', phone: '0612345678', message: 'Graag prijzen', website: '' });
+  const ok = await postForm(base, client, '/zakelijk-aanvraag/', { company: 'Tuinbedrijf Jansen', email: 'jan@jansen.nl', phone: '0612345678', message: 'Graag prijzen', website: '' });
   assert.strictEqual(ok.status, 303);
   assert.strictEqual(ok.location, '../?aanvraag=ja#zakelijk');
   assert.strictEqual(sent.length, 1);
   assert.strictEqual(sent[0].to, 'info@bedrijf.nl');
   assert.strictEqual(sent[0].replyTo, 'jan@jansen.nl');
   assert.match(sent[0].text, /Tuinbedrijf Jansen/);
-  assert.match(await (await fetch(`${base}/winkel/?aanvraag=ja`)).text(), /Bedankt voor je aanvraag/);
+  assert.match(await (await fetch(`${base}/?aanvraag=ja`)).text(), /Bedankt voor je aanvraag/);
 
-  const robot = await postForm(base, client, '/winkel/zakelijk-aanvraag/', { company: 'Spam', email: 'bot@spam.nl', phone: '1', website: 'http://spam' });
+  const robot = await postForm(base, client, '/zakelijk-aanvraag/', { company: 'Spam', email: 'bot@spam.nl', phone: '1', website: 'http://spam' });
   assert.strictEqual(robot.location, '../?aanvraag=ja#zakelijk');
   assert.strictEqual(sent.length, 1, 'robot krijgt een nep-bevestiging maar geen mail');
 
-  const invalid = await postForm(base, client, '/winkel/zakelijk-aanvraag/', { company: '', email: 'geen-adres', phone: '' });
+  const invalid = await postForm(base, client, '/zakelijk-aanvraag/', { company: '', email: 'geen-adres', phone: '' });
   assert.strictEqual(invalid.location, '../?aanvraag=fout#zakelijk');
   assert.strictEqual(sent.length, 1);
 
-  const foreign = await postForm(base, client, '/winkel/zakelijk-aanvraag/', { company: 'X', email: 'x@x.nl', phone: '1' }, { 'sec-fetch-site': 'cross-site' });
+  const foreign = await postForm(base, client, '/zakelijk-aanvraag/', { company: 'X', email: 'x@x.nl', phone: '1' }, { 'sec-fetch-site': 'cross-site' });
   assert.strictEqual(foreign.status, 403);
 
-  for (let attempt = 0; attempt < 4; attempt += 1) await postForm(base, client, '/winkel/zakelijk-aanvraag/', { company: `Bedrijf ${attempt}`, email: 'a@b.nl', phone: '1' });
-  const limited = await postForm(base, client, '/winkel/zakelijk-aanvraag/', { company: 'Te veel', email: 'a@b.nl', phone: '1' });
+  for (let attempt = 0; attempt < 4; attempt += 1) await postForm(base, client, '/zakelijk-aanvraag/', { company: `Bedrijf ${attempt}`, email: 'a@b.nl', phone: '1' });
+  const limited = await postForm(base, client, '/zakelijk-aanvraag/', { company: 'Te veel', email: 'a@b.nl', phone: '1' });
   assert.strictEqual(limited.status, 429);
 });

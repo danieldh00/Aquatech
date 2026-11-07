@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.1
+
+De webshop is de startpagina; de app staat onder `/app/`.
+
+- Alles van de app (dashboard, modules, API, inloggen, openbare offerte- en afspraaklinks, `sw.js`, `manifest.json`)
+  staat onder `/app/`. In `server.js` haalt een middleware het voorvoegsel eraf (`req.inApp`), zodat de rest van
+  de app ongewijzigd werkt; de hoofdmap is de webshop-router (voorheen `/winkel`).
+- Oude adressen worden relatief doorgestuurd (`legacyAppRedirect`): `/beregening/…`, `/login`, `/openbaar/…`
+  e.d. naar `app/…`, `/admin` naar `app/beheer/`, `/winkel/…` naar `/…` (301). `/api/…` buiten `/app` geeft 404,
+  alleen `/api/health` blijft ook op de oude plek. De oude Mollie-webhook `/winkel/mollie/webhook/…` werkt nog.
+- `/sw.js` buiten `/app` is een opruim-worker (schrijft zich uit en wist `aquatech-shell-*`), voor installaties
+  met de oude scope `/`. De worker van de app heeft scope `/app/`.
+- Webshop uit (standaard): `/` stuurt door naar `app/`; `?voorbeeld=1` blijft werken voor beheerders.
+- `robots.txt` sluit `/app/`, `/api/` en klantpagina's van de shop uit.
+- Inlog-, setup- en wachtwoordpagina rekenen de API-basis vanaf `/app/`; shop-knoppen naar planner, portaal en profiel
+  wijzen naar `../app/…`. Beheer-teksten en voorbeeldlinks aangepast. Tests uitgebreid (`test/app-prefix.test.js`).
+- `/planner` blijft de aanmeldpagina van de shop (geen alias naar de app); gebruik `/admin` of `/app/`.
+
 ## 1.7.0
 
 De menuboom van de webshop is aanpasbaar in Beheer.

@@ -35,7 +35,7 @@ async function setup() {
     { code: 'BUIS-25', name: 'PE buis 25 mm', onHand: 100, salePrice: 1.5 },
     { code: 'INTERN', name: 'Alleen intern', onHand: 1 },
     { code: 'NIETSHOP', name: 'Niet naar de shop', onHand: 1, salePrice: 5, shopSync: false },
-  ]) created.push((await admin.post('/api/stock/items', item)).body);
+  ]) created.push((await admin.post('/app/api/stock/items', item)).body);
   return { db, base, admin, anonymous, main, created };
 }
 
@@ -92,18 +92,23 @@ test('catalogus: unieke slugs, categorieën en prijs incl. btw', () => {
 
 test('webshop staat standaard uit en dan is niets bereikbaar', async () => {
   const { anonymous } = await setup();
-  for (const urlPath of ['/winkel/', '/winkel/product/pe-buis-25-mm-buis-25/', '/winkel/assets/winkel.css']) {
+  for (const urlPath of ['/product/pe-buis-25-mm-buis-25/', '/assets/winkel.css']) {
     assert.strictEqual((await anonymous.get(urlPath)).status, 404, urlPath);
   }
+  // Uit: de hoofdpagina is de app (zonder inlog dus de inlogpagina).
+  const { base } = await setup();
+  const root = await createClient(base, { followRedirects: false }).get('/');
+  assert.strictEqual(root.status, 302);
+  assert.strictEqual(root.location, 'app/');
 });
 
 test('webshop aan: start, categorie en product zonder inloggen, zonder interne gegevens', async () => {
   const { db, anonymous, admin, main } = await setup();
-  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
   db.prepare('INSERT INTO shop_products (tenant_id, id, name, image, categories) VALUES (?, ?, ?, ?, ?)').run(main, '77', 'x', 'https://shop.test/buis.jpg', '["Leidingen"]');
   db.prepare("UPDATE stock_items SET shop_product_id = '77' WHERE tenant_id = ? AND code = 'BUIS-25'").run(main);
 
-  const home = await anonymous.get('/winkel/');
+  const home = await anonymous.get('/');
   assert.strictEqual(home.status, 200);
   assert.match(home.type, /text\/html/);
   assert.match(home.text, /Leidingen/);
@@ -113,18 +118,18 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
   assert.ok(!/<script(?![^>]*assets\/menu\.js)/i.test(home.text), 'alleen het menuscript');
 
   const categorySlug = home.text.match(/href="categorie\/(leidingen-[0-9a-f]{6})\//)[1];
-  const category = await anonymous.get(`/winkel/categorie/${categorySlug}/`);
+  const category = await anonymous.get(`/categorie/${categorySlug}/`);
   assert.strictEqual(category.status, 200);
   assert.match(category.text, /PE buis 25 mm/);
 
-  const product = await anonymous.get('/winkel/product/pe-buis-25-mm-buis-25/');
+  const product = await anonymous.get('/product/pe-buis-25-mm-buis-25/');
   assert.strictEqual(product.status, 200);
   assert.match(product.text, /€ 1,82/);
   assert.match(product.text, /Op voorraad/);
   assert.match(product.text, /https:\/\/shop\.test\/buis\.jpg/);
   assert.match(product.text, /Artikelnummer: BUIS-25/);
 
-  const spr = await anonymous.get('/winkel/product/sproeier-b-pro-b-spr-1/');
+  const spr = await anonymous.get('/product/sproeier-b-pro-b-spr-1/');
   assert.strictEqual(spr.status, 200);
   assert.ok(!/GEHEIM|Magazijn A|4,5/.test(spr.text), 'geen interne gegevens');
   assert.match(spr.text, /&lt;b&gt;Pro&lt;\/b&gt;|Sproeier/);
@@ -133,48 +138,47 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
 
 test('webshop: assets, doorverwijzing, 404 en alleen lezen', async () => {
   const { base, admin, anonymous } = await setup();
-  await admin.put('/api/admin/settings', { storefront: true });
-  const noSlash = await createClient(base, { followRedirects: false }).get('/winkel/product/pe-buis-25-mm-buis-25');
+  await admin.put('/app/api/admin/settings', { storefront: true });
+  const noSlash = await createClient(base, { followRedirects: false }).get('/product/pe-buis-25-mm-buis-25');
   assert.strictEqual(noSlash.status, 302);
   assert.strictEqual(noSlash.location, 'pe-buis-25-mm-buis-25/');
-  const root = await createClient(base, { followRedirects: false }).get('/winkel');
-  assert.strictEqual(root.status, 302);
-  assert.strictEqual(root.location, 'winkel/');
+  const root = await createClient(base, { followRedirects: false }).get('/');
+  assert.strictEqual(root.status, 200, 'met de winkel aan is / de winkel');
 
-  assert.strictEqual((await anonymous.get('/winkel/assets/winkel.css')).status, 200);
-  assert.strictEqual((await anonymous.get('/winkel/assets/brand.css')).status, 200);
-  assert.strictEqual((await anonymous.get('/winkel/assets/aquatechshop-logo.png')).status, 200);
-  assert.strictEqual((await anonymous.get('/winkel/assets/favicon.png')).status, 200);
-  assert.strictEqual((await anonymous.get('/winkel/assets/fonts/montserrat-latin-400-normal.woff2')).status, 200);
-  assert.strictEqual((await anonymous.get('/winkel/assets/fonts/..%2F..%2Fserver.js')).status, 404);
-  assert.strictEqual((await anonymous.get('/winkel/assets/constructor')).status, 404);
+  assert.strictEqual((await anonymous.get('/assets/winkel.css')).status, 200);
+  assert.strictEqual((await anonymous.get('/assets/brand.css')).status, 200);
+  assert.strictEqual((await anonymous.get('/assets/aquatechshop-logo.png')).status, 200);
+  assert.strictEqual((await anonymous.get('/assets/favicon.png')).status, 200);
+  assert.strictEqual((await anonymous.get('/assets/fonts/montserrat-latin-400-normal.woff2')).status, 200);
+  assert.strictEqual((await anonymous.get('/assets/fonts/..%2F..%2Fserver.js')).status, 404);
+  assert.strictEqual((await anonymous.get('/assets/constructor')).status, 404);
 
-  const missing = await anonymous.get('/winkel/product/bestaat-niet/');
+  const missing = await anonymous.get('/product/bestaat-niet/');
   assert.strictEqual(missing.status, 404);
   assert.match(missing.text, /Pagina niet gevonden/);
-  assert.strictEqual((await anonymous.get('/winkel/categorie/bestaat-niet/')).status, 404);
-  assert.strictEqual((await anonymous.get('/winkel/onzin/pad')).status, 404);
+  assert.strictEqual((await anonymous.get('/categorie/bestaat-niet/')).status, 404);
+  assert.strictEqual((await anonymous.get('/onzin/pad')).status, 404);
 
-  assert.strictEqual((await anonymous.post('/winkel/', {})).status, 405);
+  assert.strictEqual((await anonymous.post('/', {})).status, 405);
 });
 
 test('webshop-instelling alleen in de hoofdtenant', async () => {
   const { base, db, admin } = await setup();
-  assert.strictEqual((await admin.get('/api/admin/settings')).body.storefrontAllowed, true);
+  assert.strictEqual((await admin.get('/app/api/admin/settings')).body.storefrontAllowed, true);
   const store = createStore(db);
   const groen = store.createTenant({ name: 'Groen', slug: 'groen' }).tenant.id;
   await store.createAccount(groen, { username: 'tuinman', displayName: 'Tuinman', role: 'beheerder', password: PW });
   const other = await createLogin(base, { password: PW })('tuinman', 'groen');
-  const view = await other.get('/api/admin/settings');
+  const view = await other.get('/app/api/admin/settings');
   assert.strictEqual(view.body.storefrontAllowed, false);
   assert.ok(!('storefront' in view.body.settings), 'veld niet in de response van andere tenants');
-  const refused = await other.put('/api/admin/settings', { storefront: true });
+  const refused = await other.put('/app/api/admin/settings', { storefront: true });
   assert.strictEqual(refused.status, 400);
   assert.strictEqual(refused.body.field, 'storefront');
-  const saved = await other.put('/api/admin/settings', { drawingRequests: false });
+  const saved = await other.put('/app/api/admin/settings', { drawingRequests: false });
   assert.strictEqual(saved.status, 200);
   assert.ok(!('storefront' in saved.body.settings), 'veld ook niet in de PUT-response');
-  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
 });
 
 test('HTML-tekens in namen worden gelezen, niet dubbel getoond', () => {
@@ -217,11 +221,11 @@ test('categorieën worden in hoofdcategorieën gegroepeerd', () => {
 
 test('webshop: hoofdcategorie, zoeken, kop en voet', async () => {
   const { db, anonymous, admin, main } = await setup();
-  await admin.put('/api/admin/settings', { storefront: true });
+  await admin.put('/app/api/admin/settings', { storefront: true });
   db.prepare('INSERT INTO shop_products (tenant_id, id, name, image, categories) VALUES (?, ?, ?, ?, ?)').run(main, '77', 'x', 'https://shop.test/buis.jpg', '["Tyleen &amp; koppelingen"]');
   db.prepare("UPDATE stock_items SET shop_product_id = '77' WHERE tenant_id = ? AND code = 'BUIS-25'").run(main);
 
-  const home = await anonymous.get('/winkel/');
+  const home = await anonymous.get('/');
   assert.match(home.text, /assets\/aquatechshop-logo\.png/);
   assert.match(home.text, /rel="icon"/);
   assert.match(home.text, /action="zoeken\/"/);
@@ -230,70 +234,70 @@ test('webshop: hoofdcategorie, zoeken, kop en voet', async () => {
   assert.match(home.text, /Populaire producten/);
   assert.match(home.text, /https:\/\/shop\.test\/buis\.jpg/);
 
-  const group = await anonymous.get('/winkel/groep/leidingen-toebehoren/');
+  const group = await anonymous.get('/groep/leidingen-toebehoren/');
   assert.strictEqual(group.status, 200);
   assert.match(group.text, /Leidingen &amp; toebehoren/);
   assert.match(group.text, /Tyleen &amp; koppelingen/);
-  assert.strictEqual((await anonymous.get('/winkel/groep/bestaat-niet/')).status, 404);
+  assert.strictEqual((await anonymous.get('/groep/bestaat-niet/')).status, 404);
 
-  const found = await anonymous.get('/winkel/zoeken/?q=buis%2025');
+  const found = await anonymous.get('/zoeken/?q=buis%2025');
   assert.strictEqual(found.status, 200);
   assert.match(found.text, /PE buis 25 mm/);
   assert.ok(!found.text.includes('Sproeier'), 'alleen producten die passen');
-  const byCode = await anonymous.get('/winkel/zoeken/?q=spr-1');
+  const byCode = await anonymous.get('/zoeken/?q=spr-1');
   assert.match(byCode.text, /Sproeier/);
   assert.ok(!byCode.text.includes('Alleen intern'));
-  const scripted = await anonymous.get('/winkel/zoeken/?q=%3Cscript%3Ealert(1)%3C/script%3E');
+  const scripted = await anonymous.get('/zoeken/?q=%3Cscript%3Ealert(1)%3C/script%3E');
   assert.ok(!scripted.text.includes('<script>'), 'zoekterm wordt ontsnapt');
-  assert.strictEqual((await anonymous.get('/winkel/zoeken/')).status, 200);
+  assert.strictEqual((await anonymous.get('/zoeken/')).status, 200);
 });
 
 test('webshop: assets met versie in het adres, startpagina in de opzet van aquatechshop.nl', async () => {
   const { admin, anonymous } = await setup();
-  await admin.put('/api/admin/settings', { storefront: true });
+  await admin.put('/app/api/admin/settings', { storefront: true });
   const { version } = require('../package.json');
-  const home = await anonymous.get('/winkel/');
+  const home = await anonymous.get('/');
   for (const name of ['winkel.css', 'brand.css', 'aquatechshop-logo.png', 'hero-tuin.jpg', 'merk-dab.webp', 'usp-bezorgd.png', 'betaalmethoden.png']) {
     assert.ok(home.text.includes(`assets/${name}?v=${version}`), `${name} linkt met de versie`);
   }
-  const versioned = await anonymous.get(`/winkel/assets/winkel.css?v=${version}`);
+  const versioned = await anonymous.get(`/assets/winkel.css?v=${version}`);
   assert.match(versioned.headers.get('cache-control'), /max-age=31536000, immutable/);
-  const unversioned = await anonymous.get('/winkel/assets/winkel.css');
+  const unversioned = await anonymous.get('/assets/winkel.css');
   assert.match(unversioned.headers.get('cache-control'), /max-age=300$/, 'zonder versie maar kort cachen');
   const font = 'montserrat-latin-400-normal.woff2';
-  assert.doesNotMatch((await anonymous.get(`/winkel/assets/fonts/${font}`)).headers.get('cache-control'), /immutable/, 'lettertype zonder versie niet immutable');
-  assert.match((await anonymous.get(`/winkel/assets/fonts/${font}?v=${version}`)).headers.get('cache-control'), /immutable/);
+  assert.doesNotMatch((await anonymous.get(`/assets/fonts/${font}`)).headers.get('cache-control'), /immutable/, 'lettertype zonder versie niet immutable');
+  assert.match((await anonymous.get(`/assets/fonts/${font}?v=${version}`)).headers.get('cache-control'), /immutable/);
   for (const name of ['hero-tuin.jpg', 'merk-rainbird.png', 'usp-prijzen.png', 'zakelijk-achtergrond.jpg', 'betaalmethoden.png']) {
-    assert.strictEqual((await anonymous.get(`/winkel/assets/${name}?v=${version}`)).status, 200, name);
+    assert.strictEqual((await anonymous.get(`/assets/${name}?v=${version}`)).status, 200, name);
   }
   for (const text of ['shop-notice', '06 47212019', 'Product zoeken', 'Over ons', 'Assortiment', 'Onze merken', 'Scherpe zakelijke prijzen', 'zakelijk account aan', 'K.v.k.: 88438252']) {
     assert.ok(home.text.includes(text), text);
   }
-  const product = await anonymous.get('/winkel/product/pe-buis-25-mm-buis-25/');
+  const product = await anonymous.get('/product/pe-buis-25-mm-buis-25/');
   assert.match(product.text, /<button class="button" type="button" disabled>In winkelwagen<\/button>/);
 });
 
 test('webshop: eigen pagina Over ons, vaste kaarthoogte en telefoonlink met naam', async () => {
   const { admin, anonymous } = await setup();
-  await admin.put('/api/admin/settings', { storefront: true });
+  await admin.put('/app/api/admin/settings', { storefront: true });
   const { version } = require('../package.json');
-  const home = await anonymous.get('/winkel/');
+  const home = await anonymous.get('/');
   assert.match(home.text, /href="over-ons\/"/, 'menu verwijst naar de eigen pagina');
   const footer = home.text.match(/<footer class="shop-foot">[\s\S]*?<\/footer>/);
   assert.ok(footer, 'footer aanwezig');
   assert.match(footer[0], /<a href="over-ons\/">Lees ons verhaal<\/a>/, 'footer verwijst naar de eigen pagina');
   assert.ok(!home.text.includes('aquatechservice.nl'), 'geen verwijzing meer naar aquatechservice.nl');
   assert.match(home.text, /class="shop-phone" href="tel:\+31647212019" aria-label="Klantenservice 06 47212019"/);
-  const about = await anonymous.get('/winkel/over-ons/');
+  const about = await anonymous.get('/over-ons/');
   assert.strictEqual(about.status, 200);
   for (const text of ['HVT Beregening', 'Scherpe tarieven', 'Eigen technische dienst', 'Waarom Aquatechshop?', 'Levering op locatie', `over-ons-hero.webp?v=${version}`]) {
     assert.ok(about.text.includes(text), text);
   }
-  assert.match((await anonymous.get('/winkel/over-ons')).text, /Waarom Aquatechshop\?/, 'ook zonder slash bereikbaar');
+  assert.match((await anonymous.get('/over-ons')).text, /Waarom Aquatechshop\?/, 'ook zonder slash bereikbaar');
   for (const name of ['over-ons-hero.webp', 'over-ons-verhaal.png', 'over-ons-tarieven.png', 'over-ons-technische-dienst.png']) {
-    assert.strictEqual((await anonymous.get(`/winkel/assets/${name}?v=${version}`)).status, 200, name);
+    assert.strictEqual((await anonymous.get(`/assets/${name}?v=${version}`)).status, 200, name);
   }
-  const css = await anonymous.get(`/winkel/assets/winkel.css?v=${version}`);
+  const css = await anonymous.get(`/assets/winkel.css?v=${version}`);
   assert.ok(!/\.shop-head \{[^}]*border-bottom/.test(css.text), 'geen streep onder de kopbalk');
   assert.match(css.text, /\.product-name \{[^}]*min-height: 4\.5em/, 'titel van een kaart heeft een vaste hoogte');
   assert.match(css.text, /\.product-row \{[^}]*min-height: 112px/, 'rij groeit mee met grotere tekst');
@@ -320,59 +324,59 @@ test('catalogus: varianten van een hoofdartikel worden één regel met keuzes, l
 
 test('webshop: hoofdartikel met varianten als regel met keuzelijst en eigen script', async () => {
   const { db, admin, anonymous, main } = await setup();
-  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
-  const parent = (await admin.post('/api/stock/items', { code: 'KOP', name: 'Koppeling pp', salePrice: 5 })).body;
-  const made = await admin.put(`/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Maat', values: ['25 mm', '32 mm'] }] });
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
+  const parent = (await admin.post('/app/api/stock/items', { code: 'KOP', name: 'Koppeling pp', salePrice: 5 })).body;
+  const made = await admin.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Maat', values: ['25 mm', '32 mm'] }] });
   assert.strictEqual(made.status, 200, JSON.stringify(made.body));
   db.prepare("UPDATE stock_items SET sale_price = 7, shop_sync = 1, on_hand = 3 WHERE tenant_id = ? AND parent_id IS NOT NULL").run(main);
   db.prepare("UPDATE stock_items SET shop_sync = 1 WHERE tenant_id = ? AND id = ?").run(main, parent.id);
 
-  const home = await anonymous.get('/winkel/');
+  const home = await anonymous.get('/');
   const categorySlug = home.text.match(/href="categorie\/(overig-[0-9a-f]{6})\//)[1];
-  const list = await anonymous.get(`/winkel/categorie/${categorySlug}/`);
+  const list = await anonymous.get(`/categorie/${categorySlug}/`);
   assert.strictEqual(list.text.match(/data-variant-row/g).length, 1, 'één regel voor het hoofdartikel');
   assert.match(list.text, /2 varianten/);
   assert.match(list.text, /<option value="[^"]+" data-code="[^"]+"[^>]*>25 mm<\/option>/);
   assert.match(list.text, /<script src="\.\.\/\.\.\/assets\/varianten\.js\?v=[^"]+" defer><\/script>/);
   assert.match(list.headers.get('content-security-policy'), /script-src 'self'/);
   assert.ok(!list.text.includes('onclick'), 'geen inline script');
-  const script = await anonymous.get('/winkel/assets/varianten.js');
+  const script = await anonymous.get('/assets/varianten.js');
   assert.strictEqual(script.status, 200);
   assert.match(script.type, /javascript/);
 
   const slug = list.text.match(/href="\.\.\/\.\.\/product\/([^/"]+)\/\?v=/)[1];
   const code32 = list.text.match(/data-code="([^"]+)"[^>]*>32 mm<\/option>/)[1];
-  const chosen = await anonymous.get(`/winkel/product/${slug}/?v=${encodeURIComponent(code32)}`);
+  const chosen = await anonymous.get(`/product/${slug}/?v=${encodeURIComponent(code32)}`);
   assert.strictEqual(chosen.status, 200);
   assert.match(chosen.text, /<h1>Koppeling pp<\/h1>/);
   assert.ok(chosen.text.includes(`Artikelnummer: ${code32} | Maat: 32 mm`), 'artikelnummer en kenmerk van de gekozen variant');
-  const byCode = await anonymous.get(`/winkel/zoeken/?q=${encodeURIComponent(code32)}`);
+  const byCode = await anonymous.get(`/zoeken/?q=${encodeURIComponent(code32)}`);
   assert.strictEqual((byCode.text.match(/data-variant-row/g) || []).length, 1, 'zoeken op variantcode vindt het hoofdartikel');
   const variantProduct = createStorefrontData(db).catalogOf(main).variantProducts.find((candidate) => candidate.code === code32);
-  const variantPage = await anonymous.get(`/winkel/product/${variantProduct.slug}/`);
+  const variantPage = await anonymous.get(`/product/${variantProduct.slug}/`);
   assert.strictEqual(variantPage.status, 200);
   assert.match(variantPage.text, new RegExp(`<option value="${code32}" selected>32 mm</option>`), 'variant staat geselecteerd');
   assert.match(variantPage.text, /2 varianten/, 'variantpagina toont de keuzelijst van het hoofdartikel');
-  const redirected = await anonymous.get(`/winkel/product/${slug}?v=${encodeURIComponent(code32)}`);
+  const redirected = await anonymous.get(`/product/${slug}?v=${encodeURIComponent(code32)}`);
   assert.ok(redirected.text.includes(`Artikelnummer: ${code32}`), 'omleiding behoudt de gekozen variant');
   assert.match(variantPage.text, /\?v=[^"]*32[^"]*">Alle uitvoeringen/, 'link naar het hoofdartikel wijst naar de getoonde variant');
-  const mixed = await anonymous.get('/winkel/zoeken/?q=koppeling+25+mm+32+mm');
+  const mixed = await anonymous.get('/zoeken/?q=koppeling+25+mm+32+mm');
   assert.ok(!mixed.text.includes('data-variant-row'), 'woorden uit verschillende varianten tellen niet samen');
-  const found = await anonymous.get('/winkel/zoeken/?q=koppeling');
+  const found = await anonymous.get('/zoeken/?q=koppeling');
   assert.strictEqual(found.text.match(/data-variant-row/g).length, 1);
-  assert.ok(!/<script(?![^>]*assets\/menu\.js)/i.test((await anonymous.get('/winkel/')).text), 'startpagina laadt alleen het menuscript');
+  assert.ok(!/<script(?![^>]*assets\/menu\.js)/i.test((await anonymous.get('/')).text), 'startpagina laadt alleen het menuscript');
 });
 
 test('webshop: voorraadstand uit het systeem en filter alleen op voorraad', async () => {
   const { admin, anonymous } = await setup();
-  assert.strictEqual((await admin.put('/api/admin/settings', { storefront: true })).status, 200);
-  const home = await anonymous.get('/winkel/');
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
+  const home = await anonymous.get('/');
   const categorySlug = home.text.match(/href="categorie\/(overig-[0-9a-f]{6})\//)[1];
-  const all = await anonymous.get(`/winkel/categorie/${categorySlug}/`);
+  const all = await anonymous.get(`/categorie/${categorySlug}/`);
   assert.match(all.text, /Sproeier Pro/);
   assert.match(all.text, /stock in/, 'SPR-1 heeft voorraad');
   assert.match(all.text, /stock out/, 'SPR-2 heeft geen voorraad');
-  const only = await anonymous.get(`/winkel/categorie/${categorySlug}?voorraad=1`);
+  const only = await anonymous.get(`/categorie/${categorySlug}?voorraad=1`);
   assert.ok(!only.text.includes('stock out'), 'alleen producten op voorraad (omleiding behoudt de keuze)');
   assert.match(only.text, /stock in/);
   assert.match(only.text, /aria-current="true">Alleen op voorraad/);

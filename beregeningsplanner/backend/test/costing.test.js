@@ -99,29 +99,29 @@ test('API: nacalculatie alleen met het recht, andere tenant 404, met kostprijs u
   try {
     const as = createLogin(base, { password: PW });
     const baas = await as('baas'), kees = await as('kees'), vreemd = await as('vreemd', 'ander');
-    assert.strictEqual((await baas.put('/api/quote-profile', { profile: { hourlyRate: 50, hourlyCost: 30 } })).body.profile.hourlyCost, 30);
-    const quote = (await baas.post('/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen' }, lines } })).body;
-    await baas.put(`/api/quotes/${quote.id}`, { status: 'akkoord' });
-    const workOrder = (await baas.post('/api/workorders', { quoteId: quote.id })).body;
-    assert.strictEqual((await baas.post('/api/stock/import', { codes: ['PE-25'] })).status, 200);
-    const pipe = (await baas.get('/api/stock')).body.items.find((item) => item.code === 'PE-25');
-    assert.strictEqual((await baas.put(`/api/stock/items/${pipe.id}`, { costPrice: 1 })).status, 200);
+    assert.strictEqual((await baas.put('/app/api/quote-profile', { profile: { hourlyRate: 50, hourlyCost: 30 } })).body.profile.hourlyCost, 30);
+    const quote = (await baas.post('/app/api/quotes', { data: { title: 'Aanleg', customer: { name: 'Fam. Jansen' }, lines } })).body;
+    await baas.put(`/app/api/quotes/${quote.id}`, { status: 'akkoord' });
+    const workOrder = (await baas.post('/app/api/workorders', { quoteId: quote.id })).body;
+    assert.strictEqual((await baas.post('/app/api/stock/import', { codes: ['PE-25'] })).status, 200);
+    const pipe = (await baas.get('/app/api/stock')).body.items.find((item) => item.code === 'PE-25');
+    assert.strictEqual((await baas.put(`/app/api/stock/items/${pipe.id}`, { costPrice: 1 })).status, 200);
     const day = new Date().toISOString().slice(0, 10);
-    await kees.post(`/api/workorders/${workOrder.id}/hours`, { workDate: day, hours: 5 });
-    await kees.post(`/api/workorders/${workOrder.id}/materials`, { usedOn: day, code: 'PE-25', description: 'PE-buis', unit: 'm', qty: 55 });
+    await kees.post(`/app/api/workorders/${workOrder.id}/hours`, { workDate: day, hours: 5 });
+    await kees.post(`/app/api/workorders/${workOrder.id}/materials`, { usedOn: day, code: 'PE-25', description: 'PE-buis', unit: 'm', qty: 55 });
 
     // Inkoopprijzen gaan niet mee met de verkoopgegevens voor facturen.
-    const articles = (await baas.get('/api/invoices/articles')).body.articles;
+    const articles = (await baas.get('/app/api/invoices/articles')).body.articles;
     assert.strictEqual(articles['PE-25'].costPrice, undefined);
     // Ook de factuurinstellingen geven de kostprijs per uur niet mee.
-    assert.strictEqual((await baas.get('/api/invoices/settings')).body.profile.hourlyCost, undefined);
+    assert.strictEqual((await baas.get('/app/api/invoices/settings')).body.profile.hourlyCost, undefined);
     // De kostprijs per uur is intern: niet voor een installateur zonder nacalculatie.
-    assert.strictEqual((await kees.get('/api/quote-profile')).body.profile.hourlyCost, undefined);
-    assert.strictEqual((await baas.get('/api/quote-profile')).body.profile.hourlyCost, 30);
-    const url = `/api/workorders/${workOrder.id}/costing`;
+    assert.strictEqual((await kees.get('/app/api/quote-profile')).body.profile.hourlyCost, undefined);
+    assert.strictEqual((await baas.get('/app/api/quote-profile')).body.profile.hourlyCost, 30);
+    const url = `/app/api/workorders/${workOrder.id}/costing`;
     assert.strictEqual((await kees.get(url)).status, 403, 'installateur heeft standaard geen nacalculatie');
     assert.strictEqual((await vreemd.get(url)).status, 404, 'andere organisatie');
-    assert.strictEqual((await baas.get('/api/workorders/bestaat-niet/costing')).status, 404);
+    assert.strictEqual((await baas.get('/app/api/workorders/bestaat-niet/costing')).status, 404);
     const costing = (await baas.get(url)).body;
     assert.deepStrictEqual([costing.workOrder.number, costing.quote.number], [workOrder.number, quote.number]);
     assert.deepStrictEqual([costing.labour.actualHours, costing.cost.labour, costing.cost.materials, costing.cost.complete], [5, 150, 55, true]);

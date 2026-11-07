@@ -23,7 +23,7 @@ function start(opts = {}) {
  * @param {object} body De body (image, fresh, ...).
  * @returns {Promise<Response>} Het fetch-antwoord.
  */
-const post = (base, body) => fetch(`${base}/api/plan/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const post = (base, body) => fetch(`${base}/app/api/plan/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 test('validate: schaal uit referentiemaat, ongeldige vlakken weg, coördinaten begrensd', () => {
   const result = validate({
@@ -67,7 +67,7 @@ test('schema is strikt (additionalProperties false, alles required)', () => {
 test('zonder API-sleutel: status niet beschikbaar en analyse 409', async () => {
   const { server, base } = await start();
   try {
-    const st = await (await fetch(`${base}/api/plan/status`)).json();
+    const st = await (await fetch(`${base}/app/api/plan/status`)).json();
     assert.strictEqual(st.available, false);
     const res = await post(base, { image: PNG, width: 10, height: 10 });
     assert.strictEqual(res.status, 409);
@@ -88,7 +88,7 @@ test('analyse met nagebootste AI-dienst, daglimiet en invoercontrole', async () 
     const limited = await post(base, { image: PNG, width: 10, height: 10, fresh: true });
     assert.strictEqual(limited.status, 429);
     assert.strictEqual(calls, 2);
-    assert.strictEqual((await (await fetch(`${base}/api/plan/status`)).json()).remainingToday, 0);
+    assert.strictEqual((await (await fetch(`${base}/app/api/plan/status`)).json()).remainingToday, 0);
   } finally { server.close(); }
 });
 
@@ -138,9 +138,9 @@ test('leren: kleurtellingen bij een AI-herkenning, opgeteld per omgeving, invoer
    * @param {object} body De tellingen.
    * @returns {Promise<Response>} Het fetch-antwoord.
    */
-  const learn = (body) => fetch(`${base}/api/plan/learn`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const learn = (body) => fetch(`${base}/app/api/plan/learn`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   try {
-    const empty = await (await fetch(`${base}/api/plan/learned`)).json();
+    const empty = await (await fetch(`${base}/app/api/plan/learned`)).json();
     assert.strictEqual(empty.examples, 0);
     const { recognition } = await (await post(base, { image: PNG, width: 10, height: 10 })).json();
     assert.strictEqual(recognition.learned, false);
@@ -151,7 +151,7 @@ test('leren: kleurtellingen bij een AI-herkenning, opgeteld per omgeving, invoer
     assert.strictEqual((await learn({ recognitionId: recognition.id, samples })).status, 200);
     // één keer per herkenning
     assert.strictEqual((await learn({ recognitionId: recognition.id, samples })).status, 404);
-    const learned = await (await fetch(`${base}/api/plan/learned`)).json();
+    const learned = await (await fetch(`${base}/app/api/plan/learned`)).json();
     assert.strictEqual(learned.examples, 1);
     assert.deepStrictEqual(learned.bins['100'], [0, 50, 0, 0, 0, 0]);
     const again = await (await post(base, { image: PNG, width: 10, height: 10 })).json();
@@ -166,8 +166,8 @@ test('met toegangscode: analyse vereist inloggen', async () => {
   const { server, base } = await start({ analyzer, accessCode: 'geheim' });
   try {
     assert.strictEqual((await post(base, { image: PNG, width: 10, height: 10 })).status, 401);
-    assert.strictEqual((await fetch(`${base}/api/plan/status`)).status, 401);
-    assert.strictEqual((await fetch(`${base}/api/plan/learned`)).status, 401);
+    assert.strictEqual((await fetch(`${base}/app/api/plan/status`)).status, 401);
+    assert.strictEqual((await fetch(`${base}/app/api/plan/learned`)).status, 401);
   } finally { server.close(); }
 });
 
