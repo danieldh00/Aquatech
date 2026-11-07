@@ -125,6 +125,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   const sendSeoFile = (res, type, body) => {
     if (body == null) { res.status(404).end(); return; }
     res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Vary', 'Host, X-Forwarded-Proto');
     res.type(type).send(body);
   };
 
