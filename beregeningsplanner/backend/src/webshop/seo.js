@@ -221,7 +221,7 @@ function sitemapEntriesOf({ catalog, pages }) {
     if (!category.hidden && category.count > 0) entries.push({ path: `categorie/${category.slug}/` });
   }
   for (const page of pages) entries.push({ path: page.slug === 'over-ons' ? 'over-ons/' : `pagina/${page.slug}/` });
-  for (const product of [...catalog.products, ...catalog.variantProducts]) entries.push({ path: `product/${product.slug}/`, lastModified: product.updatedAt || '' });
+  for (const product of [...catalog.products, ...(catalog.variantProducts || [])]) entries.push({ path: `product/${product.slug}/`, lastModified: product.updatedAt || '' });
   return entries;
 }
 
