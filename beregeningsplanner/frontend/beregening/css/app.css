@@ -34,6 +34,9 @@ body {
   color: #fff; text-decoration: none; font-size: 13px; white-space: nowrap;
   border: 1px solid rgba(255,255,255,0.35); border-radius: 6px;
 }
+.topbar [data-shop-link][hidden] { display: none !important; }
+body.has-nav .topbar .home-link.shop-link:not([hidden]) { display: flex; }
+.to-cart { margin: 12px 0; }
 .home-link:hover { background: rgba(255,255,255,0.12); }
 .project-title { flex: 1; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .actions, .quick { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -243,6 +246,7 @@ table.list.missing td { color: var(--danger); }
   .actions .btn .mi, #btn-help .mi { display: inline-flex; justify-content: center; width: 22px; }
   .actions .menu-only { display: inline; }
   .topbar .actions a.menu-only { display: inline-flex; margin-top: auto; border-top-color: rgba(255,255,255,0.2); border-radius: 0; }
+  .topbar .actions a.menu-only + a.menu-only { margin-top: 0; border-top-width: 0; }
   .menu-backdrop { position: fixed; inset: 0; z-index: 11; background: rgba(0,0,0,0.35); }
   body.menu-open .menu-backdrop { display: block; }
   .layout { grid-template-columns: 290px 1fr; }
@@ -325,7 +329,7 @@ table.list.missing td { color: var(--danger); }
 .review-bar.anon { background: var(--at-navy); color: #fff; }
 .review-bar.anon .rv-login { color: #fff; }
 .review-bar.anon .btn:not(.primary) { color: var(--text); }
-body.anon #btn-myplans, body.anon .home-link, body.anon a.menu-only[href="../"] { display: none; }
+body.anon #btn-myplans, body.anon .home-link, body.anon [data-shop-link], body.anon a.menu-only[href="../"] { display: none; }
 .submit-card { width: min(480px, 100%); }
 .submit-card label { display: block; margin: 8px 0; font-size: 13px; color: var(--muted); }
 .submit-card label[hidden], .submit-card p[hidden] { display: none; }

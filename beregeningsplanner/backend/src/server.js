@@ -2010,7 +2010,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/api/config', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     identify(req);
-    res.json({ modules: settingsFor(req.tenantId).get('modules'), ai: Boolean(aiAvailable(req.tenantId)) });
+    // De eigen webshop hoort alleen bij de hoofdtenant: alleen daar een link terug naar de winkel en "in winkelwagen" vanuit de planner.
+    const shopSettings = settingsFor(tenant.id);
+    const shopOn = req.tenantId === tenant.id && Boolean(shopSettings.get('storefront'));
+    res.json({ modules: settingsFor(req.tenantId).get('modules'), ai: Boolean(aiAvailable(req.tenantId)), shop: shopOn ? { ordering: shopSettings.get('shopOrdering') === true } : null });
   });
 
   // ---------- Hoofdbeheer: alle tenants en hun testomgevingen ----------

@@ -236,6 +236,7 @@ a.shop-action:hover { background: var(--at-page); }
 .form-field { display: grid; gap: 4px; font-weight: 600; font-size: 0.9rem; }
 .form-field input { padding: 10px 12px; border: 1px solid var(--at-line); border-radius: 8px; font: inherit; font-weight: 400; }
 .form-field small { color: var(--at-muted); font-weight: 400; }
+.form-info { padding: 10px 12px; border-radius: 8px; color: var(--at-notice-green); border: 1px solid var(--at-notice-green); }
 .form-error { padding: 10px 12px; border-radius: 8px; color: var(--at-stock-out); border: 1px solid var(--at-stock-out); }
 .account-aside { color: var(--at-muted); font-size: 0.9rem; }
 .account-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }

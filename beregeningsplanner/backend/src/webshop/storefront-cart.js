@@ -81,6 +81,43 @@ function addCartLines(current, additions) {
 }
 
 /**
+ * Zet de hoeveelheden uit een plan in de winkelwagen: een artikel dat er al in zit krijgt het aantal uit het plan (niet erbij,
+ * zodat nogmaals klikken niets verdubbelt), nieuwe artikelen komen achteraan. Wat niet meer past (te veel regels of een te grote cookie) blijft weg.
+ * @param {{ code: string, qty: number }[]} current De huidige regels.
+ * @param {{ code: string, qty: number }[]} planned De regels uit het plan (codes in hoofdletters, aantal van 1 of meer).
+ * @returns {{ lines: { code: string, qty: number }[], skipped: string[] }} De nieuwe wagen en de codes die niet pasten.
+ */
+function setCartLines(current, planned) {
+  let next = current.map((line) => ({ ...line }));
+  const skipped = [];
+  for (const entry of planned) {
+    const qty = Math.min(MAX_QTY, Math.max(1, Math.floor(Number(entry.qty)) || 1));
+    const existing = next.find((line) => line.code === entry.code);
+    const candidate = existing ? next.map((line) => (line === existing ? { ...line, qty } : line)) : [...next, { code: entry.code, qty }];
+    if (candidate.length > MAX_LINES || encodeCart(candidate).length > MAX_COOKIE_CHARS) skipped.push(entry.code);
+    else next = candidate;
+  }
+  return { lines: next, skipped };
+}
+
+/**
+ * Leest de gevraagde artikelen uit het formulier van de planner: velden `q:<code>` met het aantal (kommagetallen naar boven afgerond).
+ * @param {object} body De velden van het formulier.
+ * @returns {{ code: string, qty: number }[]} De regels (hoogstens MAX_LINES, elke code één keer).
+ */
+function plannedLinesFrom(body) {
+  const lines = [];
+  for (const [key, value] of Object.entries(body || {})) {
+    if (!key.startsWith('q:')) continue;
+    const code = key.slice(2).trim().toUpperCase().slice(0, 60);
+    const qty = Math.ceil(Number(value));
+    if (code && qty >= 1 && !lines.some((line) => line.code === code)) lines.push({ code, qty: Math.min(MAX_QTY, qty) });
+    if (lines.length >= MAX_LINES) break;
+  }
+  return lines;
+}
+
+/**
  * Bewaart de winkelwagen in de cookie (een lege wagen wist de cookie).
  * @param {object} req Het verzoek (voor https-detectie).
  * @param {object} res Het antwoord.
@@ -141,4 +178,4 @@ function cartActionRejected(before, after, fields) {
   return false;
 }
 
-module.exports = { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, CART_COOKIE, MAX_QTY };
+module.exports = { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, CART_COOKIE, MAX_QTY };
