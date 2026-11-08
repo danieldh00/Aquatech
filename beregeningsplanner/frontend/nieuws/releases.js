@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.3',
+      date: '2026-11-08',
+      title: 'Van de planner naar de webshop',
+      items: [
+        { text: 'In de planner staat nu een knop Webshop bovenin, zodat je met één klik terug bent in de winkel.' },
+        { text: 'Bij de stuklijst staat de knop Alles in winkelwagen: al het materiaal uit je plan staat dan meteen in je winkelwagen, met de prijzen en de voorraad van dat moment. Nogmaals klikken zet niets dubbel.' },
+      ],
+    },
+    {
       version: '1.7.2',
       date: '2026-11-07',
       title: 'Webshop beter te vinden',

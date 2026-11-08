@@ -186,7 +186,7 @@
       </div>
       ${mainHtml}
       ${section('Beheer', items.filter((module) => module.status === 'actief' && module.group === 'beheer'))}
-      ${data.profile ? `<div class="at-nav-list at-nav-foot">${link({ id: 'profiel', title: 'Mijn profiel', icon: 'user', status: 'actief', href: `${base}profiel/` })}</div>` : ''}
+      ${data.profile || data.shop ? `<div class="at-nav-list at-nav-foot">${data.shop ? link({ id: 'webshop', title: 'Naar de webshop', icon: 'cart', status: 'actief', href: `${base}../` }) : ''}${data.profile ? link({ id: 'profiel', title: 'Mijn profiel', icon: 'user', status: 'actief', href: `${base}profiel/` }) : ''}</div>` : ''}
       <button type="button" class="at-nav-collapse" title="Zijbalk in- of uitklappen" aria-label="Zijbalk in- of uitklappen">
         <span class="at-nav-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></span><span class="at-nav-label">Inklappen</span>
       </button>`;
@@ -280,7 +280,7 @@
   Promise.all([getJson('api/me'), getJson('api/config')]).then(([me, config]) => {
     if (!me) return; // offline: laat de laatste stand staan
     // Mijn profiel alleen met een eigen account (niet met de toegangscode).
-    const data = { rights: me.rights || [], disabled: (config && config.modules) || {}, profile: Boolean(me.preferences), news: me.news || 0 };
+    const data = { rights: me.rights || [], disabled: (config && config.modules) || {}, profile: Boolean(me.preferences), news: me.news || 0, shop: Boolean(config && config.shop) };
     if (tools.usesSidebar(data.rights)) {
       store.set(CACHE, JSON.stringify(data));
       render(data);

@@ -575,6 +575,14 @@ van de voorraad zie je alleen *Op voorraad* of *Niet op voorraad* (stand min res
 staat in `backend/src/webshop/storefront*.js` en is een Express-router die
 later ook op een eigen domein of in een eigen container kan draaien.
 
+### Van de planner naar de webshop en terug (1.7.3)
+
+In de planner staat bovenin een knop *Webshop* (en in het menu en de zijbalk *Naar de webshop*) zodra de eigen webshop aan staat
+(`api/config` → `shop`). Staat bestellen ook aan, dan heeft de stuklijst de knop *Alles in winkelwagen*: een formulier naar
+`POST /winkelwagen/planner` met `q:<code>` per regel. De winkel prijst de wagen zelf (incl. of excl. btw, varianten, voorraad,
+groothandelsvoorwaarden); onbekende of niet te bestellen codes worden op de winkelwagenpagina gemeld. Het aantal uit het plan
+vervangt het aantal in de wagen, dus nogmaals klikken verdubbelt niets.
+
 ### Vindbaarheid (zoekmachines en AI-zoekers)
 
 Sinds 1.7.2 is de shop ingericht voor Google, Bing en AI-zoekers (ChatGPT, Perplexity, Copilot, Claude). De pagina's

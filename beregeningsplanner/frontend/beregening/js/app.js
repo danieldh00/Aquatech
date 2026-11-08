@@ -183,6 +183,7 @@
         });
       }
       this._loadRights().then(() => { this._restoreOwnedDraft(); this._initReview(); });
+      this._loadShop();
       this._openFromUrl();
       window.addEventListener('beforeunload', () => this._flushSync());
     },
@@ -421,6 +422,19 @@
         const res = await fetch('api/me', { cache: 'no-store' });
         if (res.ok) this.rights = (await res.json()).rights || [];
       } catch (error) { /* offline: alles tonen, de server beslist */ }
+    },
+    /**
+     * Leest uit api/config of de eigen webshop aan staat: dan komt er een link terug naar de winkel en,
+     * als bestellen aan staat, de knop "Alles in winkelwagen" bij de stuklijst.
+     * @returns {Promise<void>} klaar als de link getoond is
+     */
+    async _loadShop() {
+      if (location.protocol === 'file:' || ANON || !window.AquatechCommon) return;
+      const config = await window.AquatechCommon.getJson('api/config');
+      this.shop = config && config.shop ? config.shop : null;
+      if (!this.shop) return;
+      for (const link of document.querySelectorAll('[data-shop-link]')) link.hidden = false;
+      if (STEPS[this.step].id === 'bom') this.renderStepPanel();
     },
     /**
      * Heeft de gebruiker dit recht (zonder bekende rechten: ja, de server beslist)?
@@ -2055,8 +2069,23 @@
         ${missing.length && (this._can('offertes') || this._can('voorraad')) ? `<h3>Niet in je assortiment (${missing.length})</h3>
           <p class="hint small">Deze onderdelen zijn nodig, maar staan niet als artikel in Artikelen of de webshop. Ze tellen niet mee in de stuklijst en de offerte.${this._can('voorraad') ? ' <a href="../artikelen/">Artikel toevoegen</a>' : ''}</p>
           <table class="list bom missing">${missing.map((row) => `<tr title="${escapeHtml(row.code)}"><td>${escapeHtml(row.name)} <span class="small">(${escapeHtml(row.code)})</span></td><td class="num">${row.qty} ${escapeHtml(row.unit)}</td></tr>`).join('')}</table>` : ''}
+        ${this._cartForm(rows)}
         ${this._shopStatus(rows)}
       `;
+    },
+    /**
+     * Knop onder de stuklijst die al het materiaal in één keer in de winkelwagen van de webshop zet
+     * (een gewoon formulier naar de winkel: prijzen, btw, varianten en voorraad bepaalt de winkel zelf).
+     * @param {object[]} rows de regels van de stuklijst (code, qty)
+     * @returns {string} HTML, leeg als de webshop niet bestelbaar is of er geen regels zijn
+     */
+    _cartForm(rows) {
+      if (!this.shop || !this.shop.ordering || !rows.length) return '';
+      const fields = rows.map((row) => `<input type="hidden" name="q:${escapeHtml(row.code)}" value="${escapeHtml(String(row.qty))}">`).join('');
+      return `<form class="to-cart" method="post" action="../../winkelwagen/planner/">${fields}
+        <button type="submit" class="btn primary">Alles in winkelwagen</button>
+        <p class="hint small">Zet het materiaal uit deze stuklijst in je winkelwagen in de webshop. Prijzen en voorraad zie je daar.</p>
+      </form>`;
     },
     /**
      * Regel onder de stuklijst over het eigen assortiment en de webshopprijzen.

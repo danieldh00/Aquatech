@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.3
+
+Terug naar de webshop vanuit de app, en het materiaal uit een plan in één klik in de winkelwagen.
+
+- `GET /api/config` geeft `shop` mee (`{ ordering }`, anders `null`): alleen voor de hoofdtenant met `storefront` aan.
+- Planner: knop *Webshop* in de kopbalk en *Naar de webshop* in het menu; in de zijbalk (beheerders) onderaan *Naar de webshop*.
+- Stuklijst in de planner: knop *Alles in winkelwagen* (alleen als `shopOrdering` aan staat) die een gewoon formulier naar
+  `POST /winkelwagen/planner` stuurt (velden `q:<code>`; kommagetallen naar boven afgerond). Prijzen (incl. of excl. btw voor
+  zakelijke klanten), varianten, voorraad en groothandelsvoorwaarden komen uit de bestaande `priceCart`; een groothandelsklant
+  krijgt aantallen volgens verpakkingseenheid en minimum. Het aantal uit het plan *vervangt* het aantal in de wagen (`setCartLines`),
+  dus nogmaals klikken verdubbelt niets. Onbekende of niet te bestellen codes worden op de winkelwagenpagina gemeld (`?plan=&niet=`).
+- Geen databasewijziging. Tests: `test/planner-cart.test.js`.
+
 ## 1.7.2
 
 De webshop is beter vindbaar voor zoekmachines en AI-zoekers (ChatGPT, Perplexity, Google, Copilot).
