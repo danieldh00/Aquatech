@@ -439,10 +439,13 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const priced = orders.priceCart(tenantId, wanted, priceOptionsOf(req));
         const viewer = accounts.viewer(req);
         // Een groothandelsklant bestelt per verpakkingseenheid en vanaf een minimum: die aantallen kloppen dan meteen.
-        const known = priced.lines.map((line) => ({ code: String(line.code).toUpperCase(), qty: viewer && viewer.wholesale ? Wholesale.roundUpQty(line.qty, { packSize: line.packSize, orderMinQty: line.minimum }) : line.qty }));
+        const rounded = priced.lines.map((line) => ({ code: String(line.code).toUpperCase(), qty: viewer && viewer.wholesale ? Wholesale.roundUpQty(line.qty, { packSize: line.packSize, orderMinQty: line.minimum }) : line.qty }));
+        // Een afgerond aantal boven het maximum per regel kan niet besteld worden: die regel blijft weg en een bestaande regel in de wagen ongewijzigd.
+        const known = rounded.filter((line) => line.qty <= MAX_QTY);
+        const tooMany = rounded.filter((line) => line.qty > MAX_QTY).map((line) => line.code);
         const merged = setCartLines(readCart(req), known);
         writeCart(req, res, merged.lines);
-        const notOrderable = [...priced.missing, ...merged.skipped];
+        const notOrderable = [...priced.missing, ...tooMany, ...merged.skipped];
         res.redirect(303, `../?plan=${known.length - merged.skipped.length}${notOrderable.length ? `&niet=${encodeURIComponent(notOrderable.join(','))}` : ''}`);
       });
       /**

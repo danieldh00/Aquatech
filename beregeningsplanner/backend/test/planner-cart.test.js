@@ -109,4 +109,9 @@ test('planner → winkelwagen: een groothandelsklant krijgt aantallen die bij de
   const cart = (await client.get('/winkelwagen/')).text;
   assert.match(cart, /name="qty" value="50"/, '30 wordt het minimum van 50');
   assert.doesNotMatch(cart, /Minimaal 50 stuks/);
+  // Afgerond boven het maximum (9999 met verpakkingseenheid 25 wordt 10000): niet toevoegen, bestaande regel blijft.
+  await postForm(base, client, '/winkelwagen/planner/', { 'q:PAK': '60' });
+  const over = await postForm(base, client, '/winkelwagen/planner/', { 'q:PAK': '9999' });
+  assert.strictEqual(over.location, '../?plan=0&niet=PAK');
+  assert.match((await client.get('/winkelwagen/')).text, /name="qty" value="75"/);
 });
