@@ -8,6 +8,8 @@ Nalopen van tweestapsverificatie en RLS uit 1.7.5 (review achteraf, PR #138).
   in te typen is.
 - Tweestapsverificatie: hooguit 10 mislukte codes per account voor alle bezoekers samen (`loginGuard.blocked` met `accountMax`);
   de grens per bezoeker en de accountgrens voor wachtwoorden blijven zoals ze waren.
+  Na de wachttijd (`loginGuard.wait`) wordt de blokkering opnieuw gecontroleerd, zodat gelijktijdige pogingen de grens niet
+  overschrijden.
 - `test/tenant-rls.test.js`: de controle op een policy per tabel met `tenant_id` keek naar geen enkele tabel (vergeleek een
   tekst met kolomobjecten) en controleert nu echt elke tabel.
 

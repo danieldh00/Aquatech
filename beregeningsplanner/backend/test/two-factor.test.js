@@ -112,6 +112,16 @@ test('inloggen met tweestapsverificatie: code nodig, geen hergebruik, herstelcod
   assert.strictEqual((await createClient(base).post('/app/api/auth/login', { username: 'piet', password: PW })).status, 200);
 });
 
+test('tweede stap: hooguit 10 verkeerde codes per account, ook bij gelijktijdige pogingen', async () => {
+  const { base, login } = await setup();
+  await enable(await login('piet'));
+  const attempts = await Promise.all(Array.from({ length: 14 }, () => createClient(base).post('/app/api/auth/login', { username: 'piet', password: PW, totp: '000000' })));
+  const wrong = attempts.filter((attempt) => attempt.body.error === 'totp_wrong').length;
+  assert.ok(wrong <= 10, `${wrong} codes gecontroleerd`);
+  const after = await createClient(base).post('/app/api/auth/login', { username: 'piet', password: PW, totp: '000000' });
+  assert.strictEqual(after.status, 429);
+});
+
 test('beheerder zet tweestapsverificatie van een collega uit; andere tenant 404, zonder recht 403', async () => {
   const { store, main, login } = await setup();
   const piet = await login('piet');
