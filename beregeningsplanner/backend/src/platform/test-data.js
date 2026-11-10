@@ -865,7 +865,12 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
     }
     // Artikel met varianten: een hoofdartikel met het kenmerk Lengte, elke
     // lengte een eigen code, prijs en voorraad.
-    const hose = stock.create(tenantId, admin, { code: 'TUINSLANG', name: 'Tuinslang 1/2"', unit: 'st', costPrice: 14, salePrice: 24.95, minQty: 0 }, { resync: false });
+    const hose = stock.create(tenantId, admin, {
+      code: 'TUINSLANG', name: 'Tuinslang 1/2"', unit: 'st', costPrice: 14, salePrice: 24.95, minQty: 0,
+      // Omschrijving en specificaties voor de productpagina en de feed (12); de varianten tonen die van het hoofdartikel.
+      description: 'Soepele tuinslang van versterkt pvc, knikvrij en uv-bestendig.\n\n• Geschikt voor drinkwater\n• Werkdruk tot 10 bar',
+      specifications: [{ name: 'Binnendiameter', value: '1/2 inch (13 mm)' }, { name: 'Materiaal', value: 'Pvc met textielversterking' }, { name: 'Werkdruk', value: '10 bar' }],
+    }, { resync: false });
     if (hose.error) throw new Error(`Testdata: hoofdartikel mislukt (${hose.error})`);
     if (itemImages) itemImages.setForItem(tenantId, hose.item.id, { name: 'tuinslang.png', data: sitePhotoPng('voor', 7).toString('base64') });
     const hoseVariants = stock.setVariants(tenantId, hose.item.id, [{ name: 'Lengte', values: ['15 m', '25 m', '50 m'] }]);

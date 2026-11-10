@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.7.5
+
+Vervolg op de audit van 1.7.3: de punten uit *Functioneel beter* die nog openstonden (8, 12, 5 en de tussenstap van 1).
+
+**Reservering per bestelling (8)**
+- Instelling `shopPayment.accountHoldDays` (0-90, standaard 14; Beheer > Webshop > Betalen). Een nieuwe bestelling krijgt
+  `data.reservedUntil`: online na `holdHours` uur, op rekening na `accountHoldDays` dagen (0 = tot verzenden of annuleren).
+- `webOrders.releaseExpired` (elk uur, `app.locals.webOrdersRelease`): een bestelling op rekening waarvan de termijn voorbij is,
+  geeft zijn reservering vrij (`data.reservationReleasedAt`, regel in het verloop); de bestelling blijft staan en verzenden boekt
+  gewoon af. Online bestellingen vervallen zoals voorheen via `expireUnpaid`. Bestellingen in Beheer tonen de stand.
+
+**Omschrijving en specificaties (12)**
+- Migratie 50: `stock_items.description` (platte tekst, max. 5000), `stock_items.specifications` (JSON, max. 30) en
+  `shop_products.description` (omschrijving uit de oude webshop, bij elke synchronisatie als platte tekst).
+- `artikelen/item-details.js` (zuivere functies). De shop toont de eigen tekst, anders die van het webshopproduct (met de zichtbare
+  kenmerken die niet voor variaties zijn als specificaties), anders die van het hoofdartikel.
+- Productpagina: blok Omschrijving en Specificaties, meta-omschrijving en JSON-LD `description` uit de tekst; de productfeed
+  gebruikt de omschrijving (tot 5000 tekens).
+- Artikelen: velden Omschrijving en Specificaties (naam: waarde per regel) met de knop *Overnemen uit webshop*.
+
+**Inloggen (5)**
+- Oplopende vertraging per account en bezoeker (`loginGuard.wait`): na drie mislukte pogingen 1, 2, 4 en daarna 8 seconden voor
+  elke volgende poging, ook in de webshop. Tests zetten hem uit met `createApp({ loginDelayMs: 0 })`.
+
+**Snelheid webshop (1, tussenstap)**
+- Omschrijvingen per productpagina en voor de feed in dezelfde geheugencache als de catalogus (30 s); een shop-pagina kost met een
+  warme cache geen query (test in `queries.test.js`).
+
 ## 1.7.4
 
 Alle bevindingen uit de veiligheids- en logica-audit van 1.7.3 opgelost of bewust vastgelegd (behalve W-02: op rekening voor
