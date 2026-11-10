@@ -284,6 +284,18 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
   }
 
   /**
+   * Haalt de sessie van een API-verzoek alvast op zonder de hoofdthread stil te zetten (store.prefetchSession); de
+   * controle zelf (session) gebeurt daarna gewoon. Een fout hier telt niet: session zoekt dan zelf.
+   * @param {object} req Het Express-verzoek.
+   * @returns {Promise<void>}
+   */
+  async function prefetch(req) {
+    if (req._session !== undefined || !store.prefetchSession) return;
+    const token = parseCookies(req.headers.cookie)[sessionCookieName(req)];
+    if (token) await store.prefetchSession(token).catch(() => {});
+  }
+
+  /**
    * Of het verzoek een geldige sessie heeft.
    * @param {object} req Het Express-verzoek.
    * @returns {boolean} true als iemand is ingelogd.
@@ -487,7 +499,7 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
     appendCookie(res, `${name}=; Path=/; Max-Age=0; SameSite=Lax`);
   }
 
-  return { readSigned, setSigned, setPlain, clearNamed, requireAccess, isAuthenticated, isAuthenticatedForAsset, session, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
+  return { readSigned, setSigned, setPlain, clearNamed, requireAccess, isAuthenticated, isAuthenticatedForAsset, session, prefetch, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
 }
 
 module.exports = { createAuth, remoteIp, clientKey, parseCookies, sessionCookieName, COOKIE_NAME, GUEST_COOKIE };

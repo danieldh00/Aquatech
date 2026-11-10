@@ -385,18 +385,40 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE) {
   return { products, variantProducts, categories: categoryList, groups, featured: pickFeatured(products), bestsellers };
 }
 
+// De catalogus van een omgeving (parameters: tenant, tenant): niet-gearchiveerde artikelen met verkoopprijs die naar de
+// webshop mogen, met reservering, categorie en afbeelding van het gekoppelde webshopproduct.
+const CATALOG_SQL = `SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, p.in_stock AS shop_in_stock, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, i.updated_at, p.categories, p.image
+        FROM stock_items i
+        LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
+        LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
+        WHERE i.tenant_id = ? AND i.archived = 0 AND ((i.shop_sync = 1 AND i.has_variants = 0 AND i.sale_price IS NOT NULL) OR i.has_variants = 1)`;
+// Meest verkocht (parameters: tenant, vanaf): afboekingen van webshopverkopen (eigen bestellingen en de oude webshop).
+const SOLD_SQL = `SELECT i.code, SUM(-m.qty) AS qty FROM stock_movements m JOIN stock_items i ON i.tenant_id = m.tenant_id AND i.id = m.item_id
+        WHERE m.tenant_id = ? AND m.created_at >= ? AND m.kind = 'afboeking' AND m.qty < 0 AND (m.source = 'webshop' OR m.source LIKE 'bestelling:%')
+        GROUP BY i.code`;
+
+/**
+ * Vanaf wanneer verkopen meetellen voor *meest verkocht*: de laatste 180 dagen.
+ * @returns {string} Het moment als ISO-tekst.
+ */
+const soldSince = () => new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString();
+
 /**
  * Maakt de gegevenslaag van de webshop, met een korte cache per omgeving
  * (de pagina's zijn openbaar: niet bij elk bezoek een databasequery).
  * @param {object} db De database.
  * @param {{ treeOf?: Function }} [options] treeOf(tenantId, preview) = de categorieboom van een omgeving (uit Beheer; zonder de standaardboom).
- * @returns {{ catalogOf: Function, clearCache: Function }} catalogOf(tenantId, { preview }) en clearCache().
+ * @returns {{ catalogOf: Function, warm: Function, detailsOf: Function, clearCache: Function }} catalogOf(tenantId, { preview }), warm(tenantId), detailsOf en clearCache().
  */
 function createStorefrontData(db, { treeOf = () => DEFAULT_TREE } = {}) {
   const cache = new Map();
   // Omschrijvingen per productpagina (en de hele feed) met dezelfde bewaartijd als de catalogus, zodat een
   // productpagina met een warme cache geen query kost (1 uit de audit van 1.7.3). Begrensd in aantal.
   const detailsCache = new Map();
+  // Lopende opvragingen van warm per omgeving (één tegelijk).
+  const warming = new Map();
+  // Telt elke clearCache: een opvraging die begon vóór het wissen, vult de cache daarna niet met oude gegevens.
+  let generation = 0;
   return {
     /**
      * De catalogus van een omgeving: niet-gearchiveerde voorraadartikelen met
@@ -411,19 +433,36 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE } = {}) {
       const cached = !preview && cache.get(tenantId);
       // Een andere boom (na publiceren) geeft een nieuwe catalogus, ook binnen de cachetijd.
       if (cached && cached.until > Date.now() && cached.tree === tree) return cached.catalog;
-      const rows = db.prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, p.in_stock AS shop_in_stock, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, i.updated_at, p.categories, p.image
-        FROM stock_items i
-        LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
-        LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
-        WHERE i.tenant_id = ? AND i.archived = 0 AND ((i.shop_sync = 1 AND i.has_variants = 0 AND i.sale_price IS NOT NULL) OR i.has_variants = 1)`).all(tenantId, tenantId);
-      // Meest verkocht: afboekingen van webshopverkopen (eigen bestellingen en de oude webshop) van de laatste 180 dagen.
-      const since = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString();
-      const sold = db.prepare(`SELECT i.code, SUM(-m.qty) AS qty FROM stock_movements m JOIN stock_items i ON i.tenant_id = m.tenant_id AND i.id = m.item_id
-        WHERE m.tenant_id = ? AND m.created_at >= ? AND m.kind = 'afboeking' AND m.qty < 0 AND (m.source = 'webshop' OR m.source LIKE 'bestelling:%')
-        GROUP BY i.code`).all(tenantId, since);
+      const rows = db.prepare(CATALOG_SQL).all(tenantId, tenantId);
+      const sold = db.prepare(SOLD_SQL).all(tenantId, soldSince());
       const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])), tree);
       if (!preview) cache.set(tenantId, { catalog, tree, until: Date.now() + CACHE_MS });
       return catalog;
+    },
+    /**
+     * Vult de cache van de gepubliceerde catalogus alvast via db.async (met PostgreSQL de pool, beide queries tegelijk),
+     * zodat een shop-pagina daarna catalogOf zonder query uit het geheugen haalt en de hoofdthread niet stilstaat. Doet
+     * niets als de cache nog geldig is; gelijktijdige verzoeken wachten op dezelfde opvraging.
+     * @param {string} tenantId De omgeving.
+     * @returns {Promise<void>}
+     */
+    warm(tenantId) {
+      if (!db.async) return Promise.resolve();
+      const tree = treeOf(tenantId, false);
+      const cached = cache.get(tenantId);
+      if (cached && cached.until > Date.now() && cached.tree === tree) return Promise.resolve();
+      const running = warming.get(tenantId);
+      if (running) return running;
+      const started = generation;
+      const job = Promise.all([db.async.all(CATALOG_SQL, tenantId, tenantId), db.async.all(SOLD_SQL, tenantId, soldSince())])
+        .then(([rows, sold]) => {
+          if (started !== generation) return;
+          const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])), tree);
+          cache.set(tenantId, { catalog, tree, until: Date.now() + CACHE_MS });
+        })
+        .finally(() => warming.delete(tenantId));
+      warming.set(tenantId, job);
+      return job;
     },
     /**
      * Omschrijving en specificaties per artikelcode voor de productpagina of de feed (12): eigen tekst, anders die van
@@ -447,7 +486,7 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE } = {}) {
      * Wist de cache (tests).
      * @returns {void}
      */
-    clearCache() { cache.clear(); detailsCache.clear(); },
+    clearCache() { generation++; cache.clear(); detailsCache.clear(); },
   };
 
   /**
