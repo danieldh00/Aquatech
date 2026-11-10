@@ -42,7 +42,7 @@ const FIELDS = {
   shopShipping: { type: 'object', default: {}, sanitize: sanitizeShipping },
   // Betalen in de webshop (webshop/mollie.js): online betalen via Mollie, op rekening en de bewaartijd van onbetaalde bestellingen; de API-sleutel staat apart en versleuteld.
   shopPayment: { type: 'object', default: {}, sanitize: sanitizePayment },
-  mollieApiKey: { type: 'secret', default: '', min: 10, max: 200, hint: true },
+  mollieApiKey: { type: 'secret', default: '', min: 10, max: 200, hint: true, liveOnly: true },
   anthropicApiKey: { type: 'secret', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
   aiEnabled: { type: 'bool', default: true },
   aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },
@@ -68,13 +68,13 @@ const FIELDS = {
   quoteProfile: { type: 'object', default: {}, sanitize: sanitizeProfile },
   // Eigen SMTP-server voor offertes en bevestigingen (mailer.js); het
   // wachtwoord staat apart en versleuteld.
-  mailServer: { type: 'object', default: {}, sanitize: sanitizeMail },
-  mailPassword: { type: 'secret', default: '', min: 1 },
+  mailServer: { type: 'object', default: {}, sanitize: sanitizeMail, liveOnly: true },
+  mailPassword: { type: 'secret', default: '', min: 1, liveOnly: true },
   // Webshopkoppeling (shop.js): webadres, ophaalwijze, btw en handmatige
   // koppeling; de sleutels van de WooCommerce REST API staan apart en versleuteld.
-  shopSource: { type: 'object', default: {}, sanitize: sanitizeShop },
-  shopConsumerKey: { type: 'secret', default: '', min: 10, hint: true },
-  shopConsumerSecret: { type: 'secret', default: '', min: 10 },
+  shopSource: { type: 'object', default: {}, sanitize: sanitizeShop, liveOnly: true },
+  shopConsumerKey: { type: 'secret', default: '', min: 10, hint: true, liveOnly: true },
+  shopConsumerSecret: { type: 'secret', default: '', min: 10, liveOnly: true },
   // Opdrachten uitbesteden aan andere organisaties op het platform
   // (outsourcing.js): versturen en ontvangen staan standaard uit en zet de
   // beheerder zelf aan; region = werkgebied dat andere organisaties zien.
@@ -85,7 +85,7 @@ const FIELDS = {
   invoicing: { type: 'object', default: {}, sanitize: sanitizeInvoicing },
   // Seizoensherinneringen voor klanten (season-reminders.js): aan/uit, adres
   // van het klantportaal voor de knop in de mail, en de herinneringen.
-  seasonReminders: { type: 'object', default: {}, sanitize: sanitizeSeasonReminders },
+  seasonReminders: { type: 'object', default: {}, sanitize: sanitizeSeasonReminders, liveOnly: true },
   // Kleurthema (shared/theme.js): alleen door een hoofdbeheerder te kiezen via
   // Hoofdbeheer (platform: niet via Beheer > Instellingen). In de hoofdtenant
   // geldt het voor alle organisaties, in een live-tenant als eigen thema.
@@ -97,9 +97,34 @@ const FIELDS = {
   // internal = alleen via /api/visma, niet via Beheer > Instellingen.
   vismaApp: { type: 'object', default: {}, sanitize: sanitizeVismaApp, platform: true },
   vismaClientSecret: { type: 'secret', default: '', min: 8, platform: true },
-  visma: { type: 'object', default: {}, sanitize: sanitizeVisma, internal: true },
-  vismaRefreshToken: { type: 'secret', default: '', min: 1, max: 4000, internal: true },
+  visma: { type: 'object', default: {}, sanitize: sanitizeVisma, internal: true, liveOnly: true },
+  vismaRefreshToken: { type: 'secret', default: '', min: 1, max: 4000, internal: true, liveOnly: true },
 };
+
+/**
+ * Instellingen die bij een nieuwe testomgeving niet van live worden overgenomen: koppelingen met de buitenwereld
+ * (webshop, betalen, mail, boekhouding, herinneringen aan klanten). Een testomgeving mag de echte systemen nooit raken;
+ * wie in test een koppeling wil proberen, stelt die daar zelf in.
+ */
+const LIVE_ONLY_KEYS = Object.keys(FIELDS).filter((key) => FIELDS[key].liveOnly);
+
+/**
+ * Maakt een opgeslagen instelling geschikt voor een nieuwe testomgeving: bij facturen gaan het automatisch
+ * versturen en het inlezen van webshopbestellingen uit; de rest blijft zoals het is.
+ * @param {string} key Naam van de instelling.
+ * @param {string} value De opgeslagen waarde (tekst uit de tabel settings).
+ * @returns {string} De waarde voor de testomgeving.
+ */
+function valueForTest(key, value) {
+  if (key !== 'invoicing') return value;
+  try {
+    const invoicing = JSON.parse(value);
+    if (!invoicing || typeof invoicing !== 'object') return value;
+    return JSON.stringify({ ...invoicing, autoSend: false, shopOrders: { ...(invoicing.shopOrders || {}), enabled: false } });
+  } catch {
+    return value;
+  }
+}
 
 class SettingsError extends Error {
   /**
@@ -313,4 +338,4 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
   return { get, update, view, FIELDS };
 }
 
-module.exports = { createSettings, SettingsError, FIELDS };
+module.exports = { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest };

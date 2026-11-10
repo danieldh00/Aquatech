@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.4',
+      date: '2026-11-10',
+      title: 'Testomgeving staat los van de echte koppelingen',
+      items: [
+        { text: 'Een nieuwe testomgeving neemt de koppelingen met de webshop, betalen, mail en de boekhouding niet meer over, en ook geen sleutels of wachtwoorden. Testen kan zo nooit de echte webshop, boekhouding of klanten raken. Wil je in test een koppeling proberen, dan stel je die daar zelf in.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.7.3',
       date: '2026-11-08',
       title: 'Van de planner naar de webshop',

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.7.4
+
+Een testomgeving raakt de echte systemen niet meer (bevinding T-01 uit de audit).
+
+- `settings.js`: instellingen met `liveOnly` (`shopSource`, `shopConsumerKey`, `shopConsumerSecret`, `mollieApiKey`, `mailServer`,
+  `mailPassword`, `seasonReminders`, `visma`, `vismaRefreshToken`) worden bij het aanmaken van een testomgeving niet overgenomen
+  (`LIVE_ONLY_KEYS`). Ook de overige geheimen gaan niet meer mee; de AI-sleutel van live blijft in test bruikbaar via `aiTenantOf`.
+- `invoicing` gaat wel mee, maar met `autoSend` en `shopOrders.enabled` uit (`valueForTest`).
+- De achtergrondtaken (webshopsync, webshopbestellingen, Visma, herinneringen) doen daardoor in een nieuwe testomgeving niets, tot
+  iemand daar zelf een koppeling instelt.
+- Hoofdbeheer: de toelichting bij *Testomgeving aanmaken* noemt dit.
+
 ## 1.7.3
 
 Terug naar de webshop vanuit de app, en het materiaal uit een plan in één klik in de winkelwagen.

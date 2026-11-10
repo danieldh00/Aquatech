@@ -208,9 +208,9 @@ test('testomgeving: los van live, wisselen zonder opnieuw inloggen', async () =>
     assert.deepStrictEqual((await piet.get('/app/api/plans')).body.items.map((plan) => plan.title), ['Live plan']);
     const envSettings = (await piet.get('/app/api/admin/settings')).body.settings;
     assert.strictEqual(envSettings.aiDailyLimit.value, 7);
-    // De versleutelde API-sleutel is opnieuw versleuteld voor de testomgeving overgenomen.
-    assert.strictEqual(envSettings.anthropicApiKey.set, true);
-    assert.strictEqual(envSettings.anthropicApiKey.hint, '…kkkk');
+    // Geheimen gaan niet mee naar de testomgeving; de AI-sleutel van live blijft daar wel bruikbaar.
+    assert.strictEqual(envSettings.anthropicApiKey.set, false);
+    assert.strictEqual((await piet.get('/app/api/admin/settings')).body.aiFromLive, true);
     await piet.post('/app/api/plans', { data: plan('Test plan') });
     await piet.put('/app/api/admin/settings', { aiDailyLimit: 3 });
     assert.deepStrictEqual((await piet.get('/app/api/admin/users')).body.items.map((user) => user.username).sort(), ['jan', 'piet']);
@@ -459,4 +459,41 @@ test('migratie: de globale index op gebruikersnaam vervalt, uniek per tenant bli
   db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u1', ?, 'jan', 'Jan', 'klant', 'account', '')").run(t1);
   db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u2', ?, 'jan', 'Jan', 'klant', 'account', '')").run(t2);
   assert.throws(() => db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u3', ?, 'jan', 'Jan', 'klant', 'account', '')").run(t2));
+});
+
+test('testomgeving neemt geen koppelingen en geheimen van live over', async () => {
+  const { server, base } = await start(await platformDb());
+  try {
+    const baas = createClient(base);
+    await baas.login('baas', 'Tuin-Plan-2026!');
+    const tenant = (await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
+    const piet = createClient(base);
+    await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
+    const saved = await piet.put('/app/api/admin/settings', {
+      aiDailyLimit: 7,
+      shopSource: { url: 'https://winkel.example.com', mode: 'rest', push: true, pushStock: true },
+      shopConsumerKey: `ck_${'a'.repeat(30)}`, shopConsumerSecret: `cs_${'b'.repeat(30)}`,
+      mailServer: { host: 'smtp.example.com', port: 587, from: 'info@example.com' }, mailPassword: 'Mail-Geheim-2029!',
+      seasonReminders: { enabled: true },
+      invoicing: { prefix: 'GR', autoSend: true, shopOrders: { enabled: true, since: '2026-01-01' } },
+    });
+    assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
+
+    const env = (await baas.post(`/app/api/platform/tenants/${tenant.id}/environments`, { name: 'Acceptatie' })).body.tenant;
+    assert.strictEqual((await piet.post('/app/api/environment', { tenantId: env.id })).status, 200);
+    const settings = (await piet.get('/app/api/admin/settings')).body.settings;
+    // Gewone instellingen gaan mee, koppelingen met de buitenwereld en geheimen niet.
+    assert.strictEqual(settings.aiDailyLimit.value, 7);
+    assert.strictEqual(settings.shopSource.source, 'standaard');
+    assert.ok(!settings.shopSource.value.url);
+    assert.strictEqual(settings.mailServer.source, 'standaard');
+    assert.strictEqual(settings.seasonReminders.source, 'standaard');
+    for (const secret of ['shopConsumerKey', 'shopConsumerSecret', 'mailPassword']) assert.strictEqual(settings[secret].set, false, secret);
+    // Facturen: de inrichting gaat mee, automatisch versturen en webshopbestellingen inlezen staan uit.
+    assert.strictEqual(settings.invoicing.value.prefix, 'GR');
+    assert.strictEqual(settings.invoicing.value.autoSend, false);
+    assert.strictEqual(settings.invoicing.value.shopOrders.enabled, false);
+  } finally {
+    server.close();
+  }
 });

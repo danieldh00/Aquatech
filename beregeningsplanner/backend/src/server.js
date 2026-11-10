@@ -10,7 +10,7 @@ const { createRecognitionStore, sanitizeSamples, imageHash } = require('./berege
 const { openDb, openDatabase, isPg } = require('./database/db');
 const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf } = require('./platform/store');
 const testdata = require('./platform/test-data');
-const { createSettings, SettingsError, FIELDS } = require('./platform/settings');
+const { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest } = require('./platform/settings');
 const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
 const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody } = require('./verkoop/quotes');
@@ -2079,16 +2079,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   app.post('/api/platform/tenants/:id/environments', requireJson, (req, res) => {
-    // Geheimen zijn versleuteld per tenant: die niet als ruwe rij kopiëren,
-    // maar opnieuw opslaan via de instellingen van de nieuwe omgeving.
+    // Een testomgeving mag de echte systemen nooit raken: geheimen (sleutels, wachtwoorden, tokens) en koppelingen
+    // met de buitenwereld (webshop, betalen, mail, boekhouding, herinneringen) gaan niet mee. De AI-sleutel van live
+    // blijft bruikbaar via aiTenantOf.
     const secrets = Object.keys(FIELDS).filter((key) => FIELDS[key].type === 'secret');
-    const out = store.createEnvironment(req.params.id, { name: req.body?.name, copyPlans: Boolean(req.body?.copyPlans), skipSettings: secrets });
+    const out = store.createEnvironment(req.params.id, { name: req.body?.name, copyPlans: Boolean(req.body?.copyPlans), skipSettings: [...new Set([...secrets, ...LIVE_ONLY_KEYS])], valueForTest });
     if (out.error) return platformError(res, out);
-    const from = settingsFor(req.params.id);
-    const view = from.view();
-    const patch = {};
-    for (const key of secrets) if (view[key].source === 'instellingen' && from.get(key)) patch[key] = from.get(key);
-    if (Object.keys(patch).length) settingsFor(out.tenant.id).update(patch, req.user.id);
     audit(req, 'testomgeving_aangemaakt', { tenantId: out.tenant.id, parentId: req.params.id, slug: out.tenant.slug, copied: out.copied }, undefined, tenant.id);
     console.log(`Testomgeving ${out.tenant.name} (${out.tenant.slug}) aangemaakt door ${req.user.display_name}, ${out.copied} plannen gekopieerd`);
     res.status(201).json({ tenant: store.tenantRow(out.tenant), copied: out.copied });

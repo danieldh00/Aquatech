@@ -381,7 +381,7 @@
    */
   function envDialog(tenant) {
     modal(`<h2>Testomgeving voor ${esc(tenant.name)}</h2>
-      <p class="muted small">Een testomgeving staat volledig los van live: eigen plannen, historie en instellingen (die worden nu gekopieerd). Gebruikers zijn dezelfde; beheerders van ${esc(tenant.name)} kunnen erin wisselen zonder opnieuw in te loggen.</p>
+      <p class="muted small">Een testomgeving staat volledig los van live: eigen plannen, historie en instellingen (die worden nu gekopieerd, behalve koppelingen met webshop, betalen, mail en boekhouding en alle sleutels en wachtwoorden: die stel je in test zelf in). Gebruikers zijn dezelfde; beheerders van ${esc(tenant.name)} kunnen erin wisselen zonder opnieuw in te loggen.</p>
       <form id="e-form" class="card-form">
         <div class="row">
           <label>Naam<input name="name" maxlength="60" value="Test" required></label>

@@ -844,10 +844,10 @@ function createStore(db) {
    * (nieuwe id's, zelfde eigenaar), zodat je met echte data kunt testen zonder
    * live te raken.
    * @param {string} parentId Id van de live-tenant.
-   * @param {{ name?: string, copyPlans?: boolean, skipSettings?: string[] }} [options] Naam, plannen kopiëren, en instellingen die de server zelf (opnieuw versleuteld) kopieert.
+   * @param {{ name?: string, copyPlans?: boolean, skipSettings?: string[], valueForTest?: Function }} [options] Naam, plannen kopiëren, instellingen die niet worden overgenomen (geheimen en koppelingen met de buitenwereld) en valueForTest(key, value) dat een overgenomen waarde aanpast voor test.
    * @returns {{ tenant: object, copied: number }|{ error: string, status?: number }} De omgeving en het aantal gekopieerde plannen, of een foutmelding.
    */
-  function createEnvironment(parentId, { name, copyPlans = false, skipSettings = [] } = {}) {
+  function createEnvironment(parentId, { name, copyPlans = false, skipSettings = [], valueForTest = (key, value) => value } = {}) {
     const parent = getTenant(parentId);
     if (!parent || parent.environment !== 'live') return { error: 'Live-tenant niet gevonden.', status: 404 };
     const label = String(name || '').trim() || 'Test';
@@ -861,11 +861,11 @@ function createStore(db) {
       prepare("INSERT INTO tenants (id, slug, name, environment, parent_id, created_at, updated_at) VALUES (?, ?, ?, 'test', ?, ?, ?)")
         .run(id, slug, label, parent.id, timestamp, timestamp);
       forgetTenants();
-      // Versleutelde geheimen horen bij de tenant (zie settings.js); die
-      // kopieert de server opnieuw versleuteld (skipSettings).
+      // Versleutelde geheimen horen bij de tenant (zie settings.js) en koppelingen
+      // met de buitenwereld horen alleen bij live: beide slaat de server over (skipSettings).
       for (const row of prepare('SELECT key, value, updated_by FROM settings WHERE tenant_id = ?').all(parent.id)) {
         if (skipSettings.includes(row.key)) continue;
-        prepare('INSERT INTO settings (tenant_id, key, value, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)').run(id, row.key, row.value, timestamp, row.updated_by);
+        prepare('INSERT INTO settings (tenant_id, key, value, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)').run(id, row.key, valueForTest(row.key, row.value), timestamp, row.updated_by);
       }
       let copied = 0;
       if (copyPlans) {
