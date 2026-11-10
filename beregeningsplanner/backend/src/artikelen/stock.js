@@ -47,6 +47,7 @@ const { transaction } = require('../database/db');
 const { loadArticles } = require('../webshop/shop');
 const { suggestGroups, MAX_GROUP_SIZE } = require('./variant-suggestions');
 const Wholesale = require('../webshop/wholesale');
+const ItemDetails = require('./item-details');
 const { createStockCosts, parsePrice } = require('./stock-costs');
 
 const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
@@ -311,6 +312,9 @@ function sanitizeItem(raw, { partial = false } = {}) {
     if (unitContent !== null && (!Number.isFinite(unitContent) || unitContent <= 0 || unitContent > 100000)) return { error: 'Ongeldige inhoud per eenheid (groter dan 0, hoogstens 100.000).', field: 'unitContent' };
     out.unitContent = unitContent === null ? null : Math.round(unitContent * 1000) / 1000;
   }
+  // Omschrijving en specificaties voor de productpagina en de feed (12); los opgeslagen, niet in de overzichten.
+  if (!partial || input.description !== undefined) out.description = ItemDetails.sanitizeDescription(input.description);
+  if (!partial || input.specifications !== undefined) out.specifications = ItemDetails.sanitizeSpecifications(input.specifications);
   if (!partial || input.priceTiers !== undefined) {
     const tiers = Wholesale.sanitizeTiers(input.priceTiers);
     if (tiers.error) return { error: tiers.error, field: 'priceTiers' };
@@ -517,6 +521,36 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Slaat de omschrijving en/of specificaties van een artikel op (alleen de meegestuurde velden).
+   * Moet binnen de transactie van de aanroeper lopen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van het artikel.
+   * @param {{ description?: string, specifications?: object[] }} fields De opgeschoonde velden (sanitizeItem).
+   * @returns {void}
+   */
+  function saveDetails(tenantId, id, fields) {
+    if (fields.description !== undefined) prepare('UPDATE stock_items SET description = ? WHERE tenant_id = ? AND id = ?').run(fields.description, tenantId, id);
+    if (fields.specifications !== undefined) prepare('UPDATE stock_items SET specifications = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(fields.specifications), tenantId, id);
+  }
+
+  /**
+   * De eigen omschrijving en specificaties van een artikel, plus die van het gekoppelde webshopproduct
+   * (wat de shop toont zolang het artikel er zelf geen heeft).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van het artikel.
+   * @returns {{ description: string, specifications: object[], shopDescription: string, shopSpecifications: object[] }} De teksten.
+   */
+  function detailsOf(tenantId, id) {
+    const row = prepare(`SELECT i.description, i.specifications, p.description AS shop_description, p.attributes AS shop_attributes
+      FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
+      WHERE i.tenant_id = ? AND i.id = ?`).get(tenantId, id) || {};
+    return {
+      description: ItemDetails.sanitizeDescription(row.description), specifications: ItemDetails.specificationsOf(row.specifications),
+      shopDescription: ItemDetails.plainTextFromHtml(row.shop_description), shopSpecifications: ItemDetails.specificationsFromShop(row.shop_attributes),
+    };
+  }
+
+  /**
    * Eén artikel met reserveringen en de laatste mutaties.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het artikel.
@@ -529,7 +563,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       // Hoofdartikel: geen eigen voorraad, wel de varianten met hun totalen.
       const variants = listRows(tenantId, { archived: true, parentId: itemRow.id });
       const parent = withTotals(shapeItem(itemRow), variants.filter((variant) => !variant.archived), variants.length ? variants[0].familyOrders : 0);
-      return { ...parent, variants, reservations: [], movements: [] };
+      return { ...parent, ...detailsOf(tenantId, itemRow.id), variants, reservations: [], movements: [] };
     }
     const reservations = reservationsOf(tenantId, itemRow.id);
     const item = shapeItem(itemRow, reservations.reduce((sum, reservation) => sum + reservation.qty, 0), reservations.length);
@@ -538,7 +572,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const parentRow = itemRow.parent_id ? prepare('SELECT id, code, name, attributes, archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemRow.parent_id) : null;
     const parent = parentRow ? { id: parentRow.id, code: parentRow.code, name: parentRow.name, attributes: parseJson(parentRow.attributes, []), archived: Boolean(parentRow.archived) } : null;
     const history = costs.historyOf(tenantId, itemRow.id);
-    return { ...item, parent, reservations, movements, costPrices: history.prices, layers: history.layers };
+    return { ...item, ...detailsOf(tenantId, itemRow.id), parent, reservations, movements, costPrices: history.prices, layers: history.layers };
   }
 
   /**
@@ -601,6 +635,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
            sale_price, business_price, vat_rate, revenue_group, shop_sync, weight_grams, order_pack_size, order_min_qty, price_tiers, unit_content)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.businessPrice ?? null, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null, fields.packSize ?? 1, fields.orderMinQty ?? 1, JSON.stringify(fields.priceTiers || []), fields.unitContent ?? null);
+      if (fields.description || fields.specifications.length) saveDetails(tenantId, id, fields);
       costs.noteFormPrice(tenantId, id, null, fields.costPrice, user);
       const start = Number(raw && raw.onHand);
       if (Number.isFinite(start) && start > 0 && start <= MAX_QTY) book(tenantId, id, start, { kind: 'ontvangst', note: 'Beginvoorraad', user });
@@ -664,6 +699,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.businessPrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0, merged.weightGrams,
           merged.packSize, mergedTerms.orderMinQty, JSON.stringify(merged.priceTiers), merged.unitContent ?? null,
           toShop && merged.shopSync ? 1 : 0, tenantId, existing.id);
+      if (fields.description !== undefined || fields.specifications !== undefined) saveDetails(tenantId, existing.id, fields);
       // Een andere inkoopprijs komt als nieuwe regel in de historie (de oude blijft staan).
       costs.noteFormPrice(tenantId, existing.id, existing.cost_price, merged.costPrice, user);
       if (archived && !existing.archived) prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);

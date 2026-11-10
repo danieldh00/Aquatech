@@ -236,7 +236,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   router.get('/productfeed.xml', (req, res) => {
     const baseUrl = publicBaseUrl(req);
     const catalog = baseUrl ? data.catalogOf(tenantId) : null;
-    sendSeoFile(res, 'application/xml; charset=utf-8', baseUrl ? Seo.merchantFeedXml({ shopName: 'Aquatechshop.nl', baseUrl, products: catalog.products, groups: catalog.groups }) : null);
+    sendSeoFile(res, 'application/xml; charset=utf-8', baseUrl ? Seo.merchantFeedXml({ shopName: 'Aquatechshop.nl', baseUrl, products: catalog.products, groups: catalog.groups, details: data.detailsOf ? data.detailsOf(tenantId) : new Map() }) : null);
   });
 
   router.get('/', (req, res) => {
@@ -1032,7 +1032,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       || (parent ? { ...variant, variants: parent.variants, attributeName: parent.attributeName } : variant);
     if (!product) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
     const chosenCode = typeof req.query.v === 'string' ? req.query.v.slice(0, 80) : (variant ? variant.code : '');
-    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : '')));
+    const details = !data.detailsOf ? new Map() : data.detailsOf(tenantId, [product.code, ...(product.variants || []).map((entry) => entry.code)]);
+    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details));
   });
 
   router.use((req, res) => {

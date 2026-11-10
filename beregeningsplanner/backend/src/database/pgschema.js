@@ -881,6 +881,12 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE stock_items ADD COLUMN unit_content DOUBLE PRECISION;
   `,
+  // 50: omschrijving en specificaties per artikel (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN description ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN specifications ${TEXT_TYPE} NOT NULL DEFAULT '[]';
+  ALTER TABLE shop_products ADD COLUMN description ${TEXT_TYPE} NOT NULL DEFAULT '';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

@@ -116,11 +116,14 @@ test('productfeed: prijs, voorraad en afbeelding; varianten apart; zonder foto n
   assert.ok(!feed.includes('GEEN-FOTO'), 'Merchant Center eist een afbeelding');
   assert.match(feed, /<g:id>HOOFD-25<\/g:id>[\s\S]*<g:availability>out_of_stock<\/g:availability>[\s\S]*<g:item_group_id>HOOFD<\/g:item_group_id>/);
   assert.match(feed, /<link>https:\/\/shop\.example\.nl\/product\/slang-25\/<\/link>/);
+  assert.match(feed, /<description>Sproeier &lt;Pro&gt; \(artikelnummer SPR-1\) van Aquatechshop\.nl\.<\/description>/, 'zonder omschrijving de standaardtekst');
+  const described = Seo.merchantFeedXml({ shopName: 'Aquatechshop.nl', baseUrl: BASE, groups: [], products: [PRODUCT], details: new Map([['SPR-1', { description: 'Regel één\n\nRegel & twee', specifications: [] }]]) });
+  assert.match(described, /<description>Regel één Regel &amp; twee<\/description>/, 'de eigen omschrijving op één regel (12)');
 });
 
 /**
  * Hoofdtenant met beheerder, aangezette shop en twee artikelen.
- * @returns {Promise<{ anonymous: object, admin: object }>} Een client zonder en een met inlog.
+ * @returns {Promise<{ anonymous: object, admin: object, base: string, db: object, main: string }>} Een client zonder en een met inlog, het adres, de database en de hoofdtenant.
  */
 async function setupShop() {
   const db = openDb();
@@ -133,7 +136,7 @@ async function setupShop() {
   await admin.post('/app/api/stock/items', { code: 'SPR-1', name: 'Sproeier Pro', onHand: 5, salePrice: 10 });
   await admin.post('/app/api/stock/items', { code: 'BUIS-25', name: 'PE buis 25 mm', onHand: 0, salePrice: 1.5 });
   assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);
-  return { anonymous: createClient(base), admin, base };
+  return { anonymous: createClient(base), admin, base, db, main };
 }
 
 test('shop: canonical, OpenGraph en JSON-LD op startpagina en product; noindex op zoeken en account', async () => {
@@ -199,4 +202,32 @@ test('shop: zonder ingevuld webadres geen canonical en geen sitemap, ook niet me
   const home = await fetch(`${base}/`, { headers: { Host: 'evil.example' } });
   assert.doesNotMatch(await home.text(), /rel="canonical"|evil\.example/);
   assert.strictEqual((await fetch(`${base}/sitemap.xml`, { headers: { Host: 'evil.example' } })).status, 404);
+});
+
+test('productpagina: eigen omschrijving en specificaties, anders die uit de oude webshop; ook in JSON-LD en de meta-omschrijving (12)', async () => {
+  const { anonymous, admin, db, main } = await setupShop();
+  const items = (await admin.get('/app/api/stock')).body.items;
+  const sproeier = items.find((item) => item.code === 'SPR-1');
+  const buis = items.find((item) => item.code === 'BUIS-25');
+  const saved = await admin.put(`/app/api/stock/items/${sproeier.id}`, { description: 'Een sterke sproeier.\n\n• Instelbaar\n• Robuust <b>', specifications: 'Aansluiting: 1/2 inch\nzonder dubbele punt\nWorp: 4-6 m' });
+  assert.strictEqual(saved.status, 200);
+  const detail = (await admin.get(`/app/api/stock/items/${sproeier.id}`)).body;
+  assert.strictEqual(detail.description, 'Een sterke sproeier.\n\n• Instelbaar\n• Robuust <b>');
+  assert.deepStrictEqual(detail.specifications, [{ name: 'Aansluiting', value: '1/2 inch' }, { name: 'Worp', value: '4-6 m' }]);
+  const page = await anonymous.get('/product/sproeier-pro-spr-1/');
+  assert.match(page.text, /<h2>Omschrijving<\/h2>\n<p>Een sterke sproeier\.<\/p>\n<ul><li>Instelbaar<\/li><li>Robuust &lt;b&gt;<\/li><\/ul>/);
+  assert.match(page.text, /<th scope="row">Aansluiting<\/th><td>1\/2 inch<\/td>/);
+  assert.match(page.text, /<meta name="description" content="Een sterke sproeier\. • Instelbaar • Robuust &lt;b&gt;">/);
+  assert.strictEqual(jsonLdOf(page.text).find((item) => item['@type'] === 'Product').description, 'Een sterke sproeier. • Instelbaar • Robuust <b>');
+  // Terugval: de omschrijving en zichtbare kenmerken van het gekoppelde webshopproduct.
+  db.prepare("INSERT INTO shop_products (tenant_id, id, sku, name, attributes, description) VALUES (?, '77', 'BUIS-25', 'Buis', ?, ?)")
+    .run(main, JSON.stringify([{ name: 'Diameter', visible: true, variation: false, options: ['25 mm'] }, { name: 'Kleur', visible: true, variation: true, options: ['Zwart'] }]), 'PE-buis voor beregening.');
+  db.prepare("UPDATE stock_items SET shop_product_id = '77' WHERE tenant_id = ? AND id = ?").run(main, buis.id);
+  const fallback = await anonymous.get('/product/pe-buis-25-mm-buis-25/');
+  assert.match(fallback.text, /<p>PE-buis voor beregening\.<\/p>/);
+  assert.match(fallback.text, /<th scope="row">Diameter<\/th><td>25 mm<\/td>/);
+  assert.ok(!fallback.text.includes('>Kleur<'), 'een kenmerk voor variaties is geen specificatie');
+  const buisDetail = (await admin.get(`/app/api/stock/items/${buis.id}`)).body;
+  assert.strictEqual(buisDetail.description, '');
+  assert.strictEqual(buisDetail.shopDescription, 'PE-buis voor beregening.');
 });

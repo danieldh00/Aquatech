@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const { decodeHtmlEntities } = require('./html-entities');
 const Wholesale = require('./wholesale');
 const { DEFAULT_TREE, placeIn } = require('./category-tree');
+const ItemDetails = require('../artikelen/item-details');
 
 /** Hoe lang (ms) een opgebouwde catalogus per omgeving wordt hergebruikt. */
 const CACHE_MS = 30 * 1000;
@@ -418,6 +419,23 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE } = {}) {
       const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])), tree);
       if (!preview) cache.set(tenantId, { catalog, tree, until: Date.now() + CACHE_MS });
       return catalog;
+    },
+    /**
+     * Omschrijving en specificaties per artikelcode voor de productpagina of de feed (12): eigen tekst, anders die van
+     * het webshopproduct, anders die van het hoofdartikel. Eén query (niet in de catalogus, want die staat in het geheugen).
+     * @param {string} tenantId De omgeving.
+     * @param {string[]|null} [codes] Alleen deze codes (de productpagina: het artikel en zijn varianten); null = alle artikelen (de feed).
+     * @returns {Map<string, { description: string, specifications: object[] }>} Per code wat de shop toont.
+     */
+    detailsOf(tenantId, codes = null) {
+      const wanted = Array.isArray(codes) ? [...new Set(codes.map(String))].slice(0, 500) : null;
+      if (wanted && !wanted.length) return new Map();
+      const filter = wanted ? ` AND (i.code IN (${wanted.map(() => '?').join(',')}) OR i.id IN (SELECT v.parent_id FROM stock_items v WHERE v.tenant_id = ? AND v.code IN (${wanted.map(() => '?').join(',')})))` : '';
+      const rows = db.prepare(`SELECT i.id, i.code, i.parent_id, i.description, i.specifications, p.description AS shop_description, p.attributes AS shop_attributes
+        FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
+        WHERE i.tenant_id = ? AND i.archived = 0${filter}`).all(tenantId, ...(wanted ? [...wanted, tenantId, ...wanted] : []));
+      const parents = new Map(rows.filter((row) => !row.parent_id).map((row) => [row.id, ItemDetails.shownDetails(row)]));
+      return new Map(rows.map((row) => [row.code, row.parent_id ? ItemDetails.shownDetails(row, parents.get(row.parent_id) || null) : parents.get(row.id)]));
     },
     /**
      * Wist de cache (tests).

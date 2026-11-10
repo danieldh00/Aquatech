@@ -104,8 +104,8 @@ function createShopStore(db) {
   function replaceProducts(tenantId, products, syncedAt) {
     transaction(db, () => {
       prepare('DELETE FROM shop_products WHERE tenant_id = ?').run(tenantId);
-      const insert = prepare(`INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories, parent_id, attributes, type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      const insert = prepare(`INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories, parent_id, attributes, type, description)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       const seen = new Set();
       for (const product of products) {
         if (seen.has(product.id)) continue;
@@ -113,7 +113,7 @@ function createShopStore(db) {
         insert.run(tenantId, product.id, product.sku.slice(0, 100), product.name.slice(0, 300), product.price, product.currency.slice(0, 3), product.url.slice(0, 1000),
           product.image.slice(0, 1000), product.inStock ? 1 : 0, product.code.slice(0, 40), JSON.stringify(product.categories.slice(0, 20)),
           product.parentId ? String(product.parentId) : null, JSON.stringify(attributesToKeep(product.attributes)),
-          product.parentId ? 'variation' : product.type === 'variable' ? 'variable' : 'simple');
+          product.parentId ? 'variation' : product.type === 'variable' ? 'variable' : 'simple', String(product.description || '').slice(0, 5000));
       }
       setStatus(tenantId, { syncedAt, productCount: seen.size, error: null });
     });

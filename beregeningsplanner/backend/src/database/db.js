@@ -1096,6 +1096,14 @@ const MIGRATIONS = [
   `
   ALTER TABLE stock_items ADD COLUMN unit_content REAL;
   `,
+  // 50: omschrijving en specificaties per artikel (12 uit de audit van 1.7.3), voor de
+  // productpagina en de productfeed; shop_products.description bewaart de omschrijving uit de
+  // oude webshop (platte tekst) als terugval zolang het artikel er zelf geen heeft.
+  `
+  ALTER TABLE stock_items ADD COLUMN description TEXT NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN specifications TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE shop_products ADD COLUMN description TEXT NOT NULL DEFAULT '';
+  `,
 ];
 
 /**
