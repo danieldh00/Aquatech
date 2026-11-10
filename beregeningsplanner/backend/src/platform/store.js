@@ -984,9 +984,9 @@ function createStore(db) {
       const userMarks = users.map(() => '?').join(', ');
       for (const table of tables) {
         const columnInfo = tableColumns(db, table);
-        for (const fk of foreignKeys(db, table)) {
-          if (fk.table !== 'users' || columnInfo.find((column) => column.name === fk.from)?.notnull) continue;
-          prepare(`UPDATE ${table} SET ${fk.from} = NULL WHERE ${fk.from} IN (${userMarks})`).run(...users);
+        for (const foreignKey of foreignKeys(db, table)) {
+          if (foreignKey.table !== 'users' || columnInfo.find((column) => column.name === foreignKey.from)?.notnull) continue;
+          prepare(`UPDATE ${table} SET ${foreignKey.from} = NULL WHERE ${foreignKey.from} IN (${userMarks})`).run(...users);
         }
       }
     }

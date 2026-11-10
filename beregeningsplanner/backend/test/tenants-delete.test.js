@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -177,12 +178,14 @@ test('testomgeving met bestellingen, meldingen en andere latere tabellen is te v
 
     // Een rij in elke tabel met tenant_id die het wissen vroeger miste, met een verwijzing naar een testgebruiker.
     const seeded = seedLateTables(db, env.id, users[0].id);
-    assert.ok(seeded.length > 0, 'minstens één tabel gevuld');
+    assert.deepStrictEqual(seeded, ['roles', 'service_requests', 'stock_merges', 'stock_units', 'web_orders', 'web_returns']);
 
     const reset = await baas.post(`/app/api/platform/tenants/${env.id}/reset`);
     assert.strictEqual(reset.status, 200, JSON.stringify(reset.body));
+    // Leegmaken wist alles behalve de instellingen en de rollen van de omgeving.
     for (const table of seeded) {
-      assert.strictEqual(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id = ?`).get(env.id).n, 0, `${table} leeg na leegmaken`);
+      const expected = table === 'roles' ? 1 : 0;
+      assert.strictEqual(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id = ?`).get(env.id).n, expected, `${table} na leegmaken`);
     }
 
     assert.strictEqual((await baas.post(`/app/api/platform/tenants/${env.id}/testdata`)).status, 201);
@@ -243,28 +246,26 @@ test('een mislukte verwijdering geeft een duidelijke melding en wist niets', asy
 });
 
 /**
- * Vult elke tabel met tenant_id die niet door de oude lijst werd gewist met één rij, voor zover dat zonder
- * verplichte kolommen kan, en laat een nullable kolom naar de gegeven gebruiker verwijzen.
+ * Zet in elke tabel die de oude wislijst miste één geldige rij, met verwijzingen naar een testgebruiker (en
+ * web_returns naar de bestelling). Een mislukte insert laat de test falen, zodat geen tabel stilzwijgend wordt overgeslagen.
  * @param {object} db De database.
  * @param {string} tenantId De omgeving.
  * @param {string} userId Een gebruiker uit die omgeving.
  * @returns {string[]} De tabellen waarin een rij is gezet.
  */
 function seedLateTables(db, tenantId, userId) {
-  const filled = [];
-  for (const table of ['roles', 'service_requests', 'stock_merges', 'stock_units', 'web_orders', 'web_returns']) {
-    const columns = tableColumns(db, table);
-    const values = {};
-    for (const column of columns) {
-      if (column.name === 'tenant_id') values[column.name] = tenantId;
-      else if (column.name === 'id') values[column.name] = `test-${table}-${Date.now()}`;
-      else if (/user|customer|owner|created_by/.test(column.name) && column.name.endsWith('id')) values[column.name] = userId;
-      else if (column.notnull && column.dflt_value == null && !column.pk) values[column.name] = /_at$|^created|^updated/.test(column.name) ? 1 : (/(qty|total|amount|count|number|price|rank|position)/.test(column.name) ? 1 : 'x');
-    }
-    try {
-      db.prepare(`INSERT INTO ${table} (${Object.keys(values).join(', ')}) VALUES (${Object.keys(values).map(() => '?').join(', ')})`).run(...Object.values(values));
-      filled.push(table);
-    } catch (error) { /* een tabel met strengere verplichte velden slaan we over */ }
+  const suffix = `${tenantId.slice(0, 8)}-${crypto.randomBytes(4).toString('hex')}`;
+  const rows = {
+    roles: { tenant_id: tenantId, role_key: `eigen-${suffix}`, label: 'Eigen rol', description: '', kind: 'medewerker', rights: '[]', created_at: 1, updated_at: 1 },
+    service_requests: { id: `sr-${suffix}`, tenant_id: tenantId, number: `M-${suffix}`, customer_id: userId, customer_name: 'Klant', kind: 'storing', urgent: 0, subject: 'Storing', description: '', address: '', phone: '', email: '', preferred: '', status: 'nieuw', reply: '', note: '', handled_by: userId, handled_by_name: '', created_at: 1, updated_at: 1 },
+    stock_merges: { id: `sm-${suffix}`, tenant_id: tenantId, parent_id: `p-${suffix}`, parent_code: 'P', parent_name: 'Hoofdartikel', snapshot: '{}', created_by: userId, created_at: 1 },
+    stock_units: { id: `su-${suffix}`, tenant_id: tenantId, name: 'doos', created_at: 1 },
+    web_orders: { id: `wo-${suffix}`, tenant_id: tenantId, number: `W-${suffix}`, user_id: userId, status: 'nieuw', customer_name: 'Klant', email: 'klant@example.nl', total: 100, data: '{}', created_at: 1, updated_at: 1 },
+    web_returns: { id: `wr-${suffix}`, tenant_id: tenantId, order_id: `wo-${suffix}`, user_id: userId, number: `R-${suffix}`, status: 'nieuw', data: '{}', created_at: 1, updated_at: 1 },
+  };
+  for (const [table, values] of Object.entries(rows)) {
+    const names = Object.keys(values);
+    db.prepare(`INSERT INTO ${table} (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`).run(...Object.values(values));
   }
-  return filled;
+  return Object.keys(rows);
 }
