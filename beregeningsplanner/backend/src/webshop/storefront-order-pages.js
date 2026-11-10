@@ -201,7 +201,7 @@ ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 ${checkoutField({ name: 'name', label: 'Naam', value: value.name || '', autocomplete: 'name' })}
 ${checkoutField({ name: 'company', label: business ? 'Bedrijfsnaam' : 'Bedrijfsnaam (optioneel)', value: value.company || '', autocomplete: 'organization', required: business })}
 ${business ? checkoutField({ name: 'vatNumber', label: 'Btw-nummer (optioneel, bijvoorbeeld BE0123456789)', value: value.vatNumber || '', autocomplete: 'off', required: false }) : ''}
-${checkoutField({ name: 'email', label: 'E-mailadres', value: value.email || '', autocomplete: 'email', type: 'email' })}
+${viewer.email ? `<label class="form-field"><span>E-mailadres</span><input name="email" type="email" value="${escapeHtml(viewer.email)}" autocomplete="email" readonly><small>De bevestiging gaat naar het e-mailadres van je account; wijzigen kan in <a href="../app/profiel/">Mijn profiel</a>.</small></label>` : checkoutField({ name: 'email', label: 'E-mailadres', value: value.email || '', autocomplete: 'email', type: 'email' })}
 ${checkoutField({ name: 'phone', label: 'Telefoon (optioneel)', value: value.phone || '', autocomplete: 'tel', required: false, type: 'tel' })}
 ${shippingChoice(quote, country, method, summaries, business)}
 <h2>Afleveradres</h2>

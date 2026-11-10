@@ -196,3 +196,60 @@ test('tijdelijk wachtwoord: de shop stuurt door naar het wachtwoordscherm, uitlo
   assert.strictEqual((await postForm(base, client, '/uitloggen/', {})).location, '../');
   assert.strictEqual((await client.get('/')).status, 200);
 });
+
+test('wachtwoord vergeten, herstellen en e-mailadres bevestigen (A-02)', async () => {
+  const db = openDb();
+  const store = createStore(db);
+  const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
+  const sent = [];
+  /**
+   * Nep-mailserver die de berichten bewaart.
+   * @returns {{ configured: Function, send: Function }} De mailfuncties.
+   */
+  const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
+  const { server, base } = await listen(createApp({ secret: SECRET, db, mailerFor }));
+  servers.push(server);
+  const admin = await createLogin(base, { password: PW })('baas');
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
+  /**
+   * Haalt het token uit de laatste mail met dit onderwerp.
+   * @param {string} subject Het onderwerp.
+   * @returns {string} Het token uit de link (#t=…).
+   */
+  const tokenFrom = (subject) => {
+    const message = [...sent].reverse().find((item) => item.subject === subject);
+    assert.ok(message, `geen mail "${subject}"`);
+    return /#t=([A-Za-z0-9_-]+)/.exec(message.text)[1];
+  };
+  const visitor = createClient(base);
+  assert.strictEqual((await postForm(base, visitor, '/registreren/', { displayName: 'Els', email: 'els@voorbeeld.nl', password: PW, password2: PW, website: '' })).status, 303);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.match((await visitor.get('/account/')).text, /nog niet bevestigd/);
+  // Bevestigen met de link: daarna bevestigd; de link werkt maar één keer.
+  const verifyToken = tokenFrom('Bevestig je e-mailadres');
+  assert.match((await postForm(base, visitor, '/e-mail-bevestigen/', { token: verifyToken })).text, /is bevestigd/);
+  assert.strictEqual((await postForm(base, visitor, '/e-mail-bevestigen/', { token: verifyToken })).status, 400);
+  assert.match((await visitor.get('/account/')).text, /e-mailadres is bevestigd/);
+
+  // Wachtwoord vergeten: hetzelfde antwoord voor een onbekend adres, geen mail.
+  const before = sent.length;
+  const unknown = await postForm(base, createClient(base), '/wachtwoord-vergeten/', { email: 'niemand@voorbeeld.nl' });
+  assert.strictEqual(unknown.status, 200);
+  assert.match(unknown.text, /Als er een account met dit e-mailadres is/);
+  assert.strictEqual(sent.length, before);
+  const asked = await postForm(base, createClient(base), '/wachtwoord-vergeten/', { email: 'ELS@voorbeeld.nl' });
+  assert.match(asked.text, /Als er een account met dit e-mailadres is/);
+  const resetToken = tokenFrom('Nieuw wachtwoord kiezen');
+  assert.strictEqual((await postForm(base, createClient(base), '/wachtwoord-herstellen/', { token: resetToken, password: 'kort', password2: 'kort' })).status, 400);
+  const NEW_PW = 'Nieuw-Tuin-Plan-2027!';
+  const reset = await postForm(base, createClient(base), '/wachtwoord-herstellen/', { token: resetToken, password: NEW_PW, password2: NEW_PW });
+  assert.strictEqual(reset.status, 200);
+  assert.match(reset.text, /wachtwoord is gewijzigd/);
+  assert.strictEqual((await postForm(base, createClient(base), '/wachtwoord-herstellen/', { token: resetToken, password: NEW_PW, password2: NEW_PW })).status, 400, 'link werkt één keer');
+  assert.strictEqual((await visitor.get('/app/api/me')).body.user, null, 'oude sessie vervallen');
+  assert.strictEqual((await postForm(base, createClient(base), '/inloggen/', { login: 'els@voorbeeld.nl', password: PW })).status, 401);
+  assert.strictEqual((await postForm(base, createClient(base), '/inloggen/', { login: 'els@voorbeeld.nl', password: NEW_PW })).status, 303);
+  // Alleen de hash staat in de database.
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM account_tokens WHERE token_hash = ?').get(resetToken).n, 0);
+});

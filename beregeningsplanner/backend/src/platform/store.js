@@ -23,7 +23,7 @@ const withRequestCache = (callback) => requestCache.run(new Map(), callback);
 // verzoek: sessie + gebruiker + tenant).
 const USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'password_hash', 'disabled', 'created_at',
   'last_seen_at', 'platform_admin', 'must_change_password', 'email', 'phone', 'preferences', 'customer_group',
-  'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount'];
+  'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount', 'email_verified_at'];
 const TENANT_COLUMNS = ['id', 'slug', 'name', 'created_at', 'environment', 'parent_id', 'disabled', 'updated_at'];
 // Nergens SELECT *: een nieuwe (grote) kolom komt zo nooit ongemerkt mee.
 const USER_COLS = USER_COLUMNS.join(', ');
@@ -358,6 +358,8 @@ function createStore(db) {
     if (!changed.length) return { user, changed };
     prepare('UPDATE users SET display_name = ?, email = ?, phone = ?, preferences = ? WHERE id = ?')
       .run(next.display_name, next.email, next.phone, JSON.stringify(prefs), user.id);
+    // Een ander e-mailadres is (nog) niet bevestigd.
+    if (changed.includes('email')) prepare('UPDATE users SET email_verified_at = NULL WHERE id = ?').run(user.id);
     return { user: getUser(user.id), changed };
   }
 
@@ -475,6 +477,20 @@ function createStore(db) {
     const address = String(email || '').trim().toLowerCase();
     if (!address) return [];
     return prepare("SELECT id FROM users WHERE tenant_id = ? AND email = ? AND kind = 'account' AND disabled = 0 LIMIT 2").all(tenantId, address).map((row) => row.id);
+  }
+
+  /**
+   * Zet het e-mailadres van een account op bevestigd, maar alleen als het nog
+   * hetzelfde adres is als waar de bevestigingslink heen ging (A-02).
+   * @param {string} tenantId De tenant.
+   * @param {string} id Id van de gebruiker.
+   * @param {string} email Het adres uit de link.
+   * @returns {boolean} true als het adres nu bevestigd is.
+   */
+  function markEmailVerified(tenantId, id, email) {
+    const address = String(email || '').trim().toLowerCase();
+    if (!address) return false;
+    return prepare('UPDATE users SET email_verified_at = ? WHERE tenant_id = ? AND id = ? AND email = ?').run(currentTimestamp(), tenantId, String(id), address).changes > 0;
   }
 
   /**
@@ -672,6 +688,7 @@ function createStore(db) {
       prepare('DELETE FROM support_grants WHERE user_id = ?').run(user.id);
       prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
       prepare('DELETE FROM season_reminders_sent WHERE user_id = ?').run(user.id);
+      prepare('DELETE FROM account_tokens WHERE tenant_id = ? AND user_id = ?').run(user.tenant_id, user.id);
       prepare('DELETE FROM users WHERE id = ?').run(user.id);
       return { user: user, moved };
     });
@@ -1796,7 +1813,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, systemUser, createGuest, createAccount, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, systemUser, createGuest, createAccount, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, markEmailVerified, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
     createSession, findSessionWithUser, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
     planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing, pendingDrawingChars, purgeStaleDrawings,

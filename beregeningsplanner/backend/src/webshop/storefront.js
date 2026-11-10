@@ -16,7 +16,7 @@ const { createStorefrontData } = require('./storefront-data');
 const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
 const { DEFAULT_SITE } = require('./shop-content');
 const { wantsBusiness } = require('./business-profile');
-const { loginPage, registerPage, accountPage, plannerPage } = require('./storefront-account-pages');
+const { loginPage, registerPage, accountPage, plannerPage, forgotPage, resetPage, verifyPage } = require('./storefront-account-pages');
 const { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage } = require('./storefront-order-pages');
 const { wholesalePage, orderableProducts } = require('./storefront-wholesale-pages');
 const Wholesale = require('./wholesale');
@@ -47,6 +47,7 @@ const ASSETS = {
   'adres.js': { file: path.join(SHARED_DIR, 'address-lookup.js'), type: 'text/javascript; charset=utf-8' },
   'afrekenen.js': { file: path.join(__dirname, 'storefront-checkout.js'), type: 'text/javascript; charset=utf-8' },
   'groothandel.js': { file: path.join(__dirname, 'storefront-wholesale.js'), type: 'text/javascript; charset=utf-8' },
+  'account-link.js': { file: path.join(__dirname, 'storefront-account-link.js'), type: 'text/javascript; charset=utf-8' },
   'favicon.png': { file: path.join(SHARED_DIR, 'icons', 'favicon-48.png'), type: 'image/png' },
 };
 /** Afbeeldingen van de shop zelf (logo, hero, merken, pictogrammen) uit de map assets/ naast dit bestand. */
@@ -55,8 +56,8 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
   const type = IMAGE_TYPES[path.extname(name)];
   if (type) ASSETS[name] = { file: path.join(__dirname, 'assets', name), type };
 }
-/** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner). */
-const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakelijk)\/?$/;
+/** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner, wachtwoord vergeten en herstellen, e-mail bevestigen). */
+const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakelijk|account\/bevestigen|wachtwoord-vergeten|wachtwoord-herstellen|e-mail-bevestigen)\/?$/;
 /** Paden waar de winkelwagen, het groothandelsvenster, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
 const ORDER_POSTS = /^\/(winkelwagen(?:\/planner)?|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/retour(\/[^/]+\/intrekken)?)\/?$/;
 /** Pad van het aanvraagformulier voor een zakelijk account op de startpagina. */
@@ -306,7 +307,62 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       const viewer = accounts.viewer(req);
       if (!viewer) return res.redirect(302, '../inloggen/');
       res.setHeader('Cache-Control', 'no-store');
-      sendWithGroups(req, res, 200, (groups) => accountPage(viewer, groups, { ordering: orderingOn(), profile: accounts.businessProfile(viewer), requested: req.query.aangevraagd === '1' }));
+      sendWithGroups(req, res, 200, (groups) => accountPage(viewer, groups, { ordering: orderingOn(), profile: accounts.businessProfile(viewer), requested: req.query.aangevraagd === '1',
+        verification: { available: accounts.mailReady(), sent: ['ja', 'nee'].includes(req.query.bevestiging) ? req.query.bevestiging : '' } }));
+    });
+    router.post('/account/bevestigen', async (req, res, next) => {
+      if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+      const viewer = accounts.viewer(req);
+      if (!viewer) return res.redirect(303, '../../inloggen/');
+      try {
+        const sent = !viewer.emailVerified && await accounts.sendVerification(viewer, publicBaseUrl(req));
+        res.redirect(303, `../?bevestiging=${sent ? 'ja' : 'nee'}`);
+      } catch (error) { next(error); }
+    });
+    router.get('/wachtwoord-vergeten', (req, res) => {
+      if (withSlash(req, res)) return;
+      res.setHeader('Cache-Control', 'no-store');
+      sendWithGroups(req, res, 200, (groups) => forgotPage({}, groups));
+    });
+    router.post('/wachtwoord-vergeten', form, async (req, res, next) => {
+      if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+      try {
+        req.shopBaseUrl = publicBaseUrl(req);
+        const email = String(req.body?.email ?? '').slice(0, 200);
+        const out = await accounts.forgotPassword(req, res, email);
+        res.setHeader('Cache-Control', 'no-store');
+        if (out.error) return sendWithGroups(req, res, out.status, (groups) => forgotPage({ error: out.error, email }, groups));
+        sendWithGroups(req, res, 200, (groups) => forgotPage({ sent: true }, groups));
+      } catch (error) { next(error); }
+    });
+    router.get('/wachtwoord-herstellen', (req, res) => {
+      if (withSlash(req, res)) return;
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      sendWithGroups(req, res, 200, (groups) => resetPage({}, groups));
+    });
+    router.post('/wachtwoord-herstellen', form, async (req, res, next) => {
+      if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+      try {
+        const out = await accounts.resetPassword(req, res, req.body || {});
+        res.setHeader('Cache-Control', 'no-store');
+        if (out.error) return sendWithGroups(req, res, out.status, (groups) => resetPage({ error: out.error, expired: Boolean(out.expired) }, groups));
+        // Alle sessies van het account zijn vervallen (nieuw wachtwoord): opnieuw inloggen.
+        sendWithGroups(req, res, 200, (groups) => resetPage({ done: true }, groups));
+      } catch (error) { next(error); }
+    });
+    router.get('/e-mail-bevestigen', (req, res) => {
+      if (withSlash(req, res)) return;
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      sendWithGroups(req, res, 200, (groups) => verifyPage({}, groups));
+    });
+    router.post('/e-mail-bevestigen', form, (req, res) => {
+      if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+      const out = accounts.verifyEmail(req, res, req.body?.token);
+      res.setHeader('Cache-Control', 'no-store');
+      if (out.error) return sendWithGroups(req, res, out.status, (groups) => verifyPage({ error: out.error }, groups));
+      sendWithGroups(req, res, 200, (groups) => verifyPage({ done: true }, groups));
     });
     router.post('/account/zakelijk', form, (req, res) => {
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
@@ -358,6 +414,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     router.post('/registreren', form, async (req, res, next) => {
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
       try {
+        req.shopBaseUrl = publicBaseUrl(req);
         const out = await accounts.register(req, res, req.body || {});
         if (out.skipped) return res.redirect(303, '../');
         const next = nextOf(req.body?.volgende) === 'afrekenen' ? 'afrekenen' : '';
@@ -376,6 +433,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
       if (!plannerOn()) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../', groups));
       try {
+        req.shopBaseUrl = publicBaseUrl(req);
         const out = await accounts.register(req, res, { ...(req.body || {}), password2: undefined });
         if (out.skipped) return res.redirect(303, '../');
         if (out.error) return sendWithGroups(req, res, out.status, (groups) => plannerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200) }, groups));
@@ -671,6 +729,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             }
             placed = { ...body, street: resolved.street, postcode: resolved.postcode, city: resolved.city };
           }
+          // De bevestiging gaat naar het e-mailadres van het account, niet naar een vrij ingevuld adres (W-08).
+          if (viewer.email) placed = { ...placed, email: viewer.email };
           // Btw verleggen (W-01): alleen met het goedgekeurde nummer van het account, en VIES moet het op dit moment niet ongeldig noemen.
           const approvedVatNumber = viewer.profile ? viewer.profile.vatNumber : '';
           let viesResult = null;

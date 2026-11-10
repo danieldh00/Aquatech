@@ -720,8 +720,8 @@
       try {
         const image = await new Promise((resolve, reject) => {
           const element = new Image();
-          element.onload = () => resolve(element);
-          element.onerror = () => reject(new Error('Achtergrond niet te lezen.'));
+          element.addEventListener('load', () => resolve(element));
+          element.addEventListener('error', () => reject(new Error('Achtergrond niet te lezen.')));
           element.src = background.dataUrl;
         });
         let maxWidth = 1600;

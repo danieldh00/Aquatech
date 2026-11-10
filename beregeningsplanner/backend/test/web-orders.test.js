@@ -140,9 +140,11 @@ test('bestelling plaatsen reserveert de voorraad en stuurt een bevestiging', asy
   assert.strictEqual(spr.onHand, 5);
   assert.strictEqual(spr.reserved, 2);
   assert.strictEqual(spr.available, 3);
-  assert.strictEqual(sent.length, 1, 'bevestiging aan de klant (geen bedrijfsadres ingesteld)');
-  assert.strictEqual(sent[0].to, 'piet@voorbeeld.nl');
-  assert.match(sent[0].subject, /WEB-\d{4}-0001/);
+  const orderMails = sent.filter((message) => /bestelling/i.test(message.subject));
+  assert.strictEqual(orderMails.length, 1, 'bevestiging aan de klant (geen bedrijfsadres ingesteld)');
+  assert.strictEqual(orderMails[0].to, 'klant1@voorbeeld.nl', 'naar het adres van het account, niet het ingevulde (W-08)');
+  assert.match(orderMails[0].subject, /WEB-\d{4}-0001/);
+  assert.ok(sent.some((message) => message.subject === 'Bevestig je e-mailadres' && message.to === 'klant1@voorbeeld.nl'), 'bevestigingsmail na registreren (A-02)');
   const list = await admin.get('/app/api/admin/web-orders');
   assert.strictEqual(list.body.total, 1);
   assert.strictEqual(list.body.items[0].status, 'nieuw');

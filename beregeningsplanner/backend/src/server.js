@@ -3,6 +3,7 @@ const fs = require('fs');
 const express = require('express');
 
 const { createAuth, remoteIp, clientKey, parseCookies } = require('./beveiliging/auth');
+const { createAccountTokens } = require('./platform/account-tokens');
 const { createRateLimiter } = require('./beveiliging/rate-limit');
 const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
@@ -2315,7 +2316,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Eigen webshop (hoofdmap /, openbaar, zie webshop/storefront.js); uit
   // zolang de instelling `storefront` van de hoofdtenant uit staat.
   // Inloggen en registreren in de shop gebruiken dezelfde accounts (rol klant).
-  const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard });
+  const accountTokens = createAccountTokens(database);
+  const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
@@ -2456,6 +2458,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const removed = store.applyRetention(environment.id, { ipDays: environmentSettings.get('ipRetentionDays'), auditDays: environmentSettings.get('auditRetentionDays') });
       removed.aiUsage = aiUsage.prune(environment.id, environmentSettings.get('auditRetentionDays'));
       removed.drawings = store.purgeStaleDrawings(environment.id, DRAWING_RETENTION_DAYS);
+      removed.accountTokens = accountTokens.purgeExpired(environment.id);
       for (const [kind, count] of Object.entries(removed)) total[kind] = (total[kind] || 0) + count;
     }
     return total;

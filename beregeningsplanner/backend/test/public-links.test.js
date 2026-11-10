@@ -8,6 +8,11 @@ const DAY = 86400000;
 const NOW = Date.parse('2026-11-10T12:00:00Z');
 
 test('linkExpired: termijn na delen en na de datum van de offerte of afspraak', () => {
+  /**
+   * Tijdstip een aantal dagen voor NOW.
+   * @param {number} days Aantal dagen.
+   * @returns {string} ISO-tijdstip.
+   */
   const daysAgo = (days) => new Date(NOW - days * DAY).toISOString();
   assert.strictEqual(linkExpired({ sharedAt: daysAgo(10) }, NOW), false);
   assert.strictEqual(linkExpired({ sharedAt: daysAgo(181) }, NOW), true);

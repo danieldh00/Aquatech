@@ -32,12 +32,12 @@ ${field({ name: 'vatNumber', label: 'Btw-nummer (optioneel)', value: vatNumber, 
 
 /**
  * De pagina met een formulier in het kader van de shop.
- * @param {{ title: string, heading: string, form: string, aside: string, groups: object[] }} options Titel, kop, formulier, tekst eronder en menu.
+ * @param {{ title: string, heading: string, form: string, aside: string, groups: object[], script?: string }} options Titel, kop, formulier, tekst eronder, menu en eventueel een script uit de assets.
  * @returns {string} De HTML-pagina.
  */
-function formPage({ title, heading, form, aside, groups }) {
+function formPage({ title, heading, form, aside, groups, script = '' }) {
   const body = `<section class="account-card"><h1>${escapeHtml(heading)}</h1>${form}<p class="account-aside">${aside}</p></section>`;
-  return layout({ root: ROOT, title: `${title} – Aquatechshop.nl`, description: `${heading} bij Aquatechshop.nl.`, body, groups });
+  return layout({ root: ROOT, title: `${title} – Aquatechshop.nl`, description: `${heading} bij Aquatechshop.nl.`, body, groups, script });
 }
 
 /**
@@ -55,7 +55,7 @@ ${field({ name: 'password', label: 'Wachtwoord', type: 'password', autocomplete:
 <button class="button" type="submit">Inloggen</button>
 </form>`;
   return formPage({ title: 'Inloggen', heading: 'Inloggen', form, groups,
-    aside: `Nog geen account? <a href="${ROOT}registreren/">Registreer je</a>. Je account werkt ook in de planner en het klantportaal.` });
+    aside: `<a href="${ROOT}wachtwoord-vergeten/">Wachtwoord vergeten?</a> Nog geen account? <a href="${ROOT}registreren/">Registreer je</a>. Je account werkt ook in de planner en het klantportaal.` });
 }
 
 /**
@@ -109,17 +109,89 @@ ${businessFields(values)}
 }
 
 /**
+ * Het blok over het e-mailadres op "Mijn account": bevestigd, of een knop om de bevestigingsmail opnieuw te sturen.
+ * @param {{ email: string, emailVerified: boolean }} viewer De ingelogde gebruiker.
+ * @param {{ available?: boolean, sent?: string, verified?: boolean }} state available: er kan gemaild worden; sent: 'ja' of 'nee' na opnieuw versturen; verified: net bevestigd.
+ * @returns {string} HTML van het blok (leeg zonder e-mailadres of zonder mailserver bij een onbevestigd adres).
+ */
+function verificationSection(viewer, { available = false, sent = '', verified = false } = {}) {
+  if (!viewer.email) return '';
+  if (viewer.emailVerified) return `<p class="note">${verified ? 'Bedankt, ' : ''}je e-mailadres is bevestigd.</p>`;
+  if (!available) return '';
+  const status = sent === 'ja' ? '<p class="note" role="status">We hebben een nieuwe bevestigingsmail gestuurd.</p>' : sent === 'nee' ? '<p class="form-error" role="alert">Er is net al een mail verstuurd. Probeer het later opnieuw.</p>' : '';
+  return `<div class="business-status">${status}<form method="post" action="${ROOT}account/bevestigen/"><p>Je e-mailadres is nog niet bevestigd. Klik op de link in de mail die we stuurden. <button class="button secondary" type="submit">Mail opnieuw sturen</button></p></form></div>`;
+}
+
+/**
+ * Wachtwoord vergeten: het e-mailadres invullen, of de melding dat de mail onderweg is.
+ * @param {{ error?: string, email?: string, sent?: boolean }} state Foutmelding, ingevuld adres en of het formulier is verstuurd.
+ * @param {object[]} groups Alle hoofdcategorieën.
+ * @returns {string} De HTML-pagina.
+ */
+function forgotPage({ error = '', email = '', sent = false } = {}, groups = []) {
+  const form = sent
+    ? '<p role="status">Als er een account met dit e-mailadres is, krijg je binnen een paar minuten een mail met een link om een nieuw wachtwoord te kiezen. De link werkt één uur. Kijk ook in je map met ongewenste mail.</p>'
+    : `<p>Vul het e-mailadres van je account in. Je krijgt een mail met een link om een nieuw wachtwoord te kiezen.</p>
+${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
+<form method="post" action="./" class="account-form">
+${field({ name: 'email', label: 'E-mailadres', type: 'email', value: email, autocomplete: 'email' })}
+<button class="button" type="submit">Stuur de link</button>
+</form>`;
+  return formPage({ title: 'Wachtwoord vergeten', heading: 'Wachtwoord vergeten', form, groups, aside: `Weet je het weer? <a href="${ROOT}inloggen/">Log in</a>.` });
+}
+
+/**
+ * Nieuw wachtwoord kiezen met de link uit de mail (het token zet storefront-account-link.js in het formulier).
+ * @param {{ error?: string, done?: boolean, expired?: boolean }} state Foutmelding, of het gelukt is en of de link niet meer werkt.
+ * @param {object[]} groups Alle hoofdcategorieën.
+ * @returns {string} De HTML-pagina.
+ */
+function resetPage({ error = '', done = false, expired = false } = {}, groups = []) {
+  const form = done
+    ? `<p role="status">Je wachtwoord is gewijzigd. Je bent op al je apparaten uitgelogd; log in met je nieuwe wachtwoord.</p><p><a class="button" href="${ROOT}inloggen/">Inloggen</a></p>`
+    : expired
+      ? `<p class="form-error" role="alert">${escapeHtml(error)}</p><p><a class="button" href="${ROOT}wachtwoord-vergeten/">Nieuwe link aanvragen</a></p>`
+      : `${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
+<form method="post" action="./" class="account-form" data-token-form>
+<input type="hidden" name="token" value="">
+${field({ name: 'password', label: 'Nieuw wachtwoord', type: 'password', autocomplete: 'new-password', hint: 'Minimaal 12 tekens.' })}
+${field({ name: 'password2', label: 'Nieuw wachtwoord herhalen', type: 'password', autocomplete: 'new-password' })}
+<button class="button" type="submit">Wachtwoord opslaan</button>
+</form>`;
+  return formPage({ title: 'Nieuw wachtwoord', heading: 'Nieuw wachtwoord kiezen', form, groups, aside: `Werkt de link niet meer? <a href="${ROOT}wachtwoord-vergeten/">Vraag een nieuwe aan</a>.`, script: 'account-link.js' });
+}
+
+/**
+ * E-mailadres bevestigen met de link uit de mail: het script verstuurt het formulier meteen.
+ * @param {{ error?: string, done?: boolean }} state Foutmelding en of het gelukt is.
+ * @param {object[]} groups Alle hoofdcategorieën.
+ * @returns {string} De HTML-pagina.
+ */
+function verifyPage({ error = '', done = false } = {}, groups = []) {
+  const form = done
+    ? `<p role="status">Bedankt, je e-mailadres is bevestigd.</p><p><a class="button" href="${ROOT}account/">Naar mijn account</a></p>`
+    : `${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
+<form method="post" action="./" class="account-form" data-token-form data-auto-submit>
+<input type="hidden" name="token" value="">
+<p>Een moment, we bevestigen je e-mailadres.</p>
+<button class="button" type="submit">E-mailadres bevestigen</button>
+</form>`;
+  return formPage({ title: 'E-mailadres bevestigen', heading: 'E-mailadres bevestigen', form, groups, aside: `<a href="${ROOT}account/">Naar mijn account</a>`, script: error ? '' : 'account-link.js' });
+}
+
+/**
  * "Mijn account": wie is ingelogd, met knoppen naar de planner en het portaal.
  * @param {{ displayName: string, username: string, email: string, isCustomer: boolean }} viewer De ingelogde gebruiker.
  * @param {object[]} groups Alle hoofdcategorieën.
- * @param {{ ordering?: boolean, profile?: object, error?: string, values?: object, requested?: boolean }} [options] ordering: bestellen staat aan, dus een knop naar de bestelhistorie; profile: klantgroep en bedrijfsgegevens uit het account; error/values: fout en ingevulde waarden van het aanvraagformulier; requested: de aanvraag is net verstuurd.
+ * @param {{ ordering?: boolean, profile?: object, error?: string, values?: object, requested?: boolean, verification?: object }} [options] ordering: bestellen staat aan, dus een knop naar de bestelhistorie; profile: klantgroep en bedrijfsgegevens uit het account; error/values: fout en ingevulde waarden van het aanvraagformulier; requested: de aanvraag is net verstuurd; verification: zie verificationSection.
  * @returns {string} De HTML-pagina.
  */
-function accountPage(viewer, groups = [], { ordering = false, profile = {}, error = '', values = {}, requested = false } = {}) {
+function accountPage(viewer, groups = [], { ordering = false, profile = {}, error = '', values = {}, requested = false, verification = {} } = {}) {
   const orders = ordering ? `<a class="button" href="${ROOT}bestellingen/">Mijn bestellingen</a>` : '';
   const portal = viewer.isCustomer ? `<a class="button secondary" href="${APP_ROOT}portaal/">Mijn portaal</a>` : '';
   const body = `<section class="account-card"><h1>Mijn account</h1>
 <p>Ingelogd als <strong>${escapeHtml(viewer.displayName)}</strong> (${escapeHtml(viewer.username)}${viewer.email ? `, ${escapeHtml(viewer.email)}` : ''}).</p>
+${verificationSection(viewer, verification)}
 ${businessSection(viewer, profile, { error, values, requested })}
 <div class="account-actions">
 ${orders}
@@ -152,4 +224,4 @@ ${field({ name: 'password', label: 'Wachtwoord', type: 'password', autocomplete:
     aside: `Al een account? <a href="${ROOT}inloggen/?volgende=planner">Log in</a>.` });
 }
 
-module.exports = { loginPage, registerPage, accountPage, plannerPage };
+module.exports = { loginPage, registerPage, accountPage, plannerPage, forgotPage, resetPage, verifyPage };

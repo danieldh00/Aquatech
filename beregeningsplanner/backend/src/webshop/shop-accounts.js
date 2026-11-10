@@ -5,6 +5,8 @@
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { clientKey } = require('../beveiliging/auth');
 const { sanitizeBusinessProfile, wantsBusiness } = require('./business-profile');
+const { validEmail } = require('../platform/mailer');
+const { passwordProblem } = require('../platform/store');
 
 /** Mislukte inlogpogingen per gebruiker waarna de gebruiker tijdelijk is geblokkeerd. */
 const LOGIN_MAX_FAILURES = 10;
@@ -12,11 +14,12 @@ const LOGIN_MAX_FAILURES = 10;
 /**
  * Maakt de accountfuncties van de webshop.
  * @param {{ store: object, auth: object, tenant: object, audit: Function, clearEnvironment: Function, impersonation: object, loginGuard: object }} deps Opslag, sessies, de hoofdtenant waar de shop bij hoort en de blokkering van het hoofdinlogscherm (per account en bezoeker).
- * @returns {{ viewer: Function, login: Function, register: Function, logout: Function, businessProfile: Function, requestBusiness: Function }} De functies.
+ * @returns {{ viewer: Function, login: Function, register: Function, logout: Function, businessProfile: Function, requestBusiness: Function, mailReady: Function, sendVerification: Function, forgotPassword: Function, resetPassword: Function, verifyEmail: Function }} De functies.
  */
-function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard }) {
+function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, tokens = null, mailerFor = null, settingsFor = null, mailBody = null }) {
   const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyFn: (req) => `login:${clientKey(req)}` });
   const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `register:${clientKey(req)}` });
+  const recoveryLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `herstel:${clientKey(req)}` });
 
   /**
    * Past een limiet toe zonder JSON-antwoord: zegt of het verzoek te veel is.
@@ -40,7 +43,7 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
     const session = auth.session(req);
     const user = session?.via === 'user' ? session.user : null;
     if (!user || user.kind !== 'account' || user.tenant_id !== tenant.id) return null;
-    return { id: user.id, displayName: user.display_name, username: user.username, email: user.email || '', customerGroup: user.customer_group || '',
+    return { id: user.id, displayName: user.display_name, username: user.username, email: user.email || '', emailVerified: Boolean(user.email_verified_at), customerGroup: user.customer_group || '',
       wholesale: user.customer_group === 'zakelijk' && Boolean(Number(user.wholesale)), wholesaleDiscount: Number(user.wholesale_discount) || 0,
       isCustomer: store.roles.keysOfKind(user.tenant_id, 'klant').includes(user.role) };
   }
@@ -117,7 +120,116 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
     if (out.error) return { error: out.error, status: 400 };
     startSession(req, res, out.user);
     audit(req, 'klant_geregistreerd', { via: 'winkel', zakelijkAangevraagd: Boolean(business) }, out.user.id, out.user.tenant_id);
+    // Bevestigingsmail op de achtergrond: een mailfout houdt de registratie niet tegen.
+    if (req.shopBaseUrl) sendVerification(out.user, req.shopBaseUrl).catch((error) => console.warn(`Bevestigingsmail niet verstuurd: ${error.message}`));
     return { user: out.user };
+  }
+
+  /**
+   * Of mails voor wachtwoord vergeten en bevestigen kunnen worden verstuurd.
+   * @returns {boolean} true als er een mailserver is ingesteld.
+   */
+  function mailReady() {
+    if (!tokens || !mailerFor || !settingsFor || !mailBody) return false;
+    try { return mailerFor(settingsFor(tenant.id)).configured(); } catch { return false; }
+  }
+
+  /**
+   * Verstuurt een mail met een eenmalige link.
+   * @param {{ id: string, display_name?: string, displayName?: string, email: string }} user Het account.
+   * @param {'wachtwoord'|'e-mail'} purpose Soort link.
+   * @param {string} link Volledig adres van de pagina; het token komt erachter als #t=…
+   * @returns {Promise<boolean>} true als de mail is verstuurd.
+   */
+  async function sendLink(user, purpose, link) {
+    if (!mailReady() || !validEmail(user.email)) return false;
+    const issued = tokens.issue(tenant.id, user.id, purpose, user.email);
+    if (issued.limited) return false;
+    const settings = settingsFor(tenant.id);
+    const profile = settings.get('quoteProfile') || {};
+    const name = user.display_name || user.displayName || '';
+    const url = `${link}#t=${issued.token}`;
+    const lines = purpose === 'wachtwoord'
+      ? [`Beste ${name},`, 'Je hebt gevraagd om een nieuw wachtwoord voor je account bij de webshop. Kies een nieuw wachtwoord via deze link (hij werkt één uur en één keer):', url, 'Heb je dit niet zelf gevraagd? Dan kun je deze mail negeren; je wachtwoord blijft zoals het is.']
+      : [`Beste ${name},`, 'Bevestig je e-mailadres voor je account bij de webshop via deze link (hij werkt zeven dagen):', url, 'Heb je geen account aangemaakt? Dan kun je deze mail negeren.'];
+    const body = mailBody(profile, lines);
+    await mailerFor(settings).send({ to: user.email, subject: purpose === 'wachtwoord' ? 'Nieuw wachtwoord kiezen' : 'Bevestig je e-mailadres', text: body.text, html: body.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+    return true;
+  }
+
+  /**
+   * Stuurt (opnieuw) een bevestigingslink naar het e-mailadres van een account.
+   * @param {object} user Het account (rij of viewer met id, naam en e-mail).
+   * @param {string} baseUrl Volledig webadres van de shop (met slash).
+   * @returns {Promise<boolean>} true als de mail is verstuurd.
+   */
+  function sendVerification(user, baseUrl) {
+    return sendLink(user, 'e-mail', `${baseUrl}e-mail-bevestigen/`);
+  }
+
+  /**
+   * Wachtwoord vergeten: stuurt een herstellink als er een account met dit adres is. Het antwoord is altijd hetzelfde, zodat niet te zien is of een adres bestaat.
+   * @param {object} req Het verzoek (req.shopBaseUrl = webadres van de shop).
+   * @param {object} res Het antwoord (alleen de Retry-After-kop bij een limiet).
+   * @param {string} email Het ingevulde e-mailadres.
+   * @returns {Promise<{ ok: true }|{ error: string, status: number }>} Gelukt (ook als er geen account is), of een fout.
+   */
+  async function forgotPassword(req, res, email) {
+    if (limited(recoveryLimiter, req, res)) return { error: 'Te veel aanvragen vanaf dit adres. Probeer het later opnieuw.', status: 429 };
+    const address = String(email ?? '').trim().toLowerCase().slice(0, 200);
+    if (!validEmail(address)) return { error: 'Vul een geldig e-mailadres in.', status: 400 };
+    if (!mailReady()) return { error: 'Wachtwoord herstellen per mail is nu niet mogelijk. Neem contact met ons op.', status: 503 };
+    const ids = store.accountIdsByEmail(tenant.id, address);
+    // Alleen bij precies één account: bij een gedeeld adres weet niemand welk account bedoeld is.
+    if (ids.length === 1) {
+      const user = store.getUser(ids[0]);
+      try {
+        if (await sendLink(user, 'wachtwoord', `${req.shopBaseUrl}wachtwoord-herstellen/`)) audit(req, 'wachtwoord_herstel_aangevraagd', { via: 'winkel' }, user.id, tenant.id);
+      } catch (error) {
+        console.warn(`Herstelmail niet verstuurd: ${error.message}`);
+      }
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Zet een nieuw wachtwoord met een herstellink. Alle sessies van het account vervallen; de bezoeker logt daarna opnieuw in.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {{ token: string, password: string, password2: string }} fields Het token uit de link en het nieuwe wachtwoord (twee keer).
+   * @returns {Promise<{ ok: true }|{ error: string, status: number, expired?: boolean }>} Gelukt, of een fout.
+   */
+  async function resetPassword(req, res, fields) {
+    if (limited(recoveryLimiter, req, res)) return { error: 'Te veel pogingen vanaf dit adres. Probeer het later opnieuw.', status: 429 };
+    const password = String(fields.password ?? '').slice(0, 1024);
+    if (password !== String(fields.password2 ?? '')) return { error: 'De wachtwoorden zijn niet gelijk.', status: 400 };
+    const problem = passwordProblem(password);
+    if (problem) return { error: problem, status: 400 };
+    if (!tokens) return { error: 'Deze link is ongeldig of verlopen.', status: 400, expired: true };
+    const used = tokens.consume(tenant.id, String(fields.token ?? ''), 'wachtwoord');
+    if (!used) return { error: 'Deze link is ongeldig, al gebruikt of verlopen. Vraag een nieuwe aan.', status: 400, expired: true };
+    const out = await store.updateAccount(tenant.id, used.userId, { password, mustChangePassword: false });
+    if (out.error) return { error: out.error, status: out.status || 400 };
+    // Wie de link uit zijn mail gebruikt, heeft daarmee ook dat adres bevestigd.
+    store.markEmailVerified(tenant.id, used.userId, used.email);
+    loginGuard.clear(req, `${tenant.id}:${out.user.username}`);
+    audit(req, 'wachtwoord_hersteld', { via: 'winkel' }, used.userId, tenant.id);
+    return { ok: true };
+  }
+
+  /**
+   * Bevestigt een e-mailadres met de link uit de mail.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {string} token Het token uit de link.
+   * @returns {{ ok: true }|{ error: string, status: number }} Gelukt, of een fout.
+   */
+  function verifyEmail(req, res, token) {
+    if (limited(recoveryLimiter, req, res)) return { error: 'Te veel pogingen vanaf dit adres. Probeer het later opnieuw.', status: 429 };
+    const used = tokens ? tokens.consume(tenant.id, String(token ?? ''), 'e-mail') : null;
+    if (!used || !store.markEmailVerified(tenant.id, used.userId, used.email)) return { error: 'Deze link is ongeldig, al gebruikt of verlopen. Vraag op Mijn account een nieuwe aan.', status: 400 };
+    audit(req, 'e-mail_bevestigd', { via: 'winkel' }, used.userId, tenant.id);
+    return { ok: true };
   }
 
   /**
@@ -159,7 +271,7 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
     return { ok: true };
   }
 
-  return { viewer, mustChangePassword, login, register, logout, businessProfile, requestBusiness };
+  return { viewer, mustChangePassword, login, register, logout, businessProfile, requestBusiness, mailReady, sendVerification, forgotPassword, resetPassword, verifyEmail };
 }
 
 module.exports = { createShopAccounts };
