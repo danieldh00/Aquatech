@@ -10,6 +10,7 @@ const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregeni
 const { createRecognitionStore, sanitizeSamples, imageHash } = require('./beregening/recognitions');
 const { openDb, openDatabase, isPg } = require('./database/db');
 const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf } = require('./platform/store');
+const { withScope, limitTo, bindStream } = require('./database/tenant-scope');
 const testdata = require('./platform/test-data');
 const { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest } = require('./platform/settings');
 const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
@@ -472,7 +473,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.disable('x-powered-by');
   // Per verzoek een eigen geheugen voor gegevens die binnen één verzoek
   // meermaals nodig zijn (zoals de tenant); zie withRequestCache in store.js.
-  app.use((req, res, next) => withRequestCache(next));
+  app.use((req, res, next) => withRequestCache(() => withScope(() => { bindStream(req); next(); })));
   // Alles van de app (dashboard, modules, API, inloggen) staat onder /app/; de
   // hoofdmap is de webshop. Het voorvoegsel gaat hier eraf, zodat de rest van de
   // app ongewijzigd werkt (`req.inApp` onthoudt dat het verzoek van de app is).
@@ -890,6 +891,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
     req.user = user;
     req.tenantId = user ? user.tenant_id : tenant.id;
+    // Vanaf hier ziet de database (PostgreSQL, policies) alleen de omgevingen van de eigen organisatie; een
+    // hoofdbeheerder werkt platformbreed (2 uit de audit van 1.7.3, database/tenant-scope.js).
+    if (user && !user.platform_admin) limitTo(store.familyIds(user.home_tenant_id || user.tenant_id));
     return user;
   }
 

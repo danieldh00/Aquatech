@@ -14,6 +14,14 @@ const fs = require('fs');
 const path = require('path');
 const { Worker, MessageChannel, receiveMessageOnPort } = require('worker_threads');
 const { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS } = require('./pgschema');
+const { scopeKey } = require('./tenant-scope');
+
+/** Tenantafscherming via policies (tenant-scope.js); PG_TENANT_RLS=0 zet hem uit als noodgreep. */
+const TENANT_RLS = process.env.PG_TENANT_RLS !== '0';
+/** De rol zonder BYPASSRLS waarmee een beperkt verzoek zijn queries doet (SET ROLE in de werkthread). */
+const APP_ROLE = 'aquatech_app';
+/** Tabellen met tenant_id die bewust over organisaties heen gelezen worden (geen policy). */
+const CROSS_TENANT_TABLES = ['work_order_offers'];
 
 const TIMEOUT_MS = Math.max(1000, Number(process.env.DATABASE_TIMEOUT_MS) || 30000);
 const SUPABASE_CA = path.join(__dirname, 'certs', 'supabase-root-2021.crt');
@@ -153,6 +161,8 @@ class PgDatabase {
     this.bridge = bridge;
     this.schema = schema;
     this.cache = new Map();
+    // Pas na tenantPolicies (rol en policies klaar) gaan beperkte verzoeken als APP_ROLE.
+    this.tenantRls = false;
   }
 
   /**
@@ -162,7 +172,7 @@ class PgDatabase {
    * @returns {{ rows: object[], rowCount: number }} Het resultaat.
    */
   query(sql, params = []) {
-    return this.bridge.call({ op: 'query', schema: this.schema, sql, params: params.map(toPgValue) });
+    return this.bridge.call({ op: 'query', schema: this.schema, scope: this.tenantRls ? scopeKey() : '', sql, params: params.map(toPgValue) });
   }
 
   /**
@@ -205,7 +215,7 @@ class PgDatabase {
    * @returns {void}
    */
   exec(sql) {
-    this.bridge.call({ op: 'exec', schema: this.schema, sql: String(sql).replace(/^\s*BEGIN\s+IMMEDIATE\b/i, 'BEGIN') });
+    this.bridge.call({ op: 'exec', schema: this.schema, scope: this.tenantRls ? scopeKey() : '', sql: String(sql).replace(/^\s*BEGIN\s+IMMEDIATE\b/i, 'BEGIN') });
   }
 
   /**
@@ -292,6 +302,7 @@ function openPg(url, { schema = process.env.DATABASE_SCHEMA || 'aquatech' } = {}
   if (!SCHEMA_NAME.test(schema)) throw new Error(`DATABASE_SCHEMA "${schema}": alleen kleine letters, cijfers en _.`);
   const db = new PgDatabase(bridgeFor(url), schema);
   migratePg(db);
+  db.tenantRls = TENANT_RLS && (tenantPolicies(db) || tenantPolicies(db));
   return db;
 }
 
@@ -361,6 +372,56 @@ BEGIN
     EXECUTE format('REVOKE ALL ON ALL TABLES IN SCHEMA %I FROM authenticated', current_schema());
   END IF;
 END $$`);
+}
+
+/**
+ * Tenantafscherming (2 uit de audit van 1.7.3): de rol APP_ROLE (zonder BYPASSRLS, ook als de eigenaar dat wel heeft,
+ * zoals in Supabase) krijgt rechten op de tabellen, en elke tabel een policy voor die rol: met tenant_id alleen rijen
+ * van de omgevingen in `aquatech.tenants` (tenant-scope.js), zonder tenant_id alles. Een beperkt verzoek doet zijn
+ * queries als APP_ROLE; opstarten, onderhoud en de hoofdbeheerder blijven de eigenaar. Lukt het aanmaken van de rol
+ * niet (te weinig rechten), dan werkt de app zoals voorheen (met het tenantfilter in de code) en meldt dat.
+ * @param {PgDatabase} db De database.
+ * @returns {boolean} true als de afscherming actief is.
+ */
+function tenantPolicies(db) {
+  const excluded = CROSS_TENANT_TABLES.map((name) => `'${name}'`).join(', ');
+  try {
+    db.exec(`DO $$
+DECLARE t record;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${APP_ROLE}') THEN
+    BEGIN
+      CREATE ROLE ${APP_ROLE} NOLOGIN NOBYPASSRLS;
+    EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+    END;
+  END IF;
+  BEGIN
+    EXECUTE format('GRANT ${APP_ROLE} TO %I', current_user);
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO ${APP_ROLE}', current_schema());
+  EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %I TO ${APP_ROLE}', current_schema());
+  EXECUTE format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA %I TO ${APP_ROLE}', current_schema());
+  FOR t IN SELECT tb.table_name AS tablename,
+      EXISTS (SELECT 1 FROM information_schema.columns c WHERE c.table_schema = tb.table_schema AND c.table_name = tb.table_name AND c.column_name = 'tenant_id')
+        AND tb.table_name NOT IN (${excluded}) AS scoped
+      FROM information_schema.tables tb WHERE tb.table_schema = current_schema() AND tb.table_type = 'BASE TABLE' LOOP
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = current_schema() AND tablename = t.tablename AND policyname = 'aquatech_tenant') THEN
+      IF t.scoped THEN
+        EXECUTE format($p$CREATE POLICY aquatech_tenant ON %I TO ${APP_ROLE} USING (tenant_id = ANY (string_to_array(current_setting('aquatech.tenants', true), ',')))$p$, t.tablename);
+      ELSE
+        EXECUTE format('CREATE POLICY aquatech_tenant ON %I TO ${APP_ROLE} USING (true)', t.tablename);
+      END IF;
+    END IF;
+  END LOOP;
+END $$`);
+    // Controle: kan deze verbinding de rol aannemen? Anders zou elk beperkt verzoek mislukken.
+    db.exec(`SET ROLE ${APP_ROLE}; RESET ROLE`);
+    return true;
+  } catch (error) {
+    console.warn(`Tenantafscherming in PostgreSQL niet actief (${error.message}); het tenantfilter in de code blijft gelden.`);
+    return false;
+  }
 }
 
 /**
