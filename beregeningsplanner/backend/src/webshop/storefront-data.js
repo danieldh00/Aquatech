@@ -11,6 +11,8 @@ const ItemDetails = require('../artikelen/item-details');
 
 /** Hoe lang (ms) een opgebouwde catalogus per omgeving wordt hergebruikt. */
 const CACHE_MS = 30 * 1000;
+/** Hoogstens zoveel productpagina's met omschrijving in de cache. */
+const DETAILS_CACHE_MAX = 2000;
 /** Categorie voor artikelen zonder categorie in de webshop. */
 const FALLBACK_CATEGORY = 'Overig';
 /** Aantal uitgelichte producten op de startpagina. */
@@ -392,6 +394,9 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE) {
  */
 function createStorefrontData(db, { treeOf = () => DEFAULT_TREE } = {}) {
   const cache = new Map();
+  // Omschrijvingen per productpagina (en de hele feed) met dezelfde bewaartijd als de catalogus, zodat een
+  // productpagina met een warme cache geen query kost (1 uit de audit van 1.7.3). Begrensd in aantal.
+  const detailsCache = new Map();
   return {
     /**
      * De catalogus van een omgeving: niet-gearchiveerde voorraadartikelen met
@@ -430,19 +435,35 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE } = {}) {
     detailsOf(tenantId, codes = null) {
       const wanted = Array.isArray(codes) ? [...new Set(codes.map(String))].slice(0, 500) : null;
       if (wanted && !wanted.length) return new Map();
-      const filter = wanted ? ` AND (i.code IN (${wanted.map(() => '?').join(',')}) OR i.id IN (SELECT v.parent_id FROM stock_items v WHERE v.tenant_id = ? AND v.code IN (${wanted.map(() => '?').join(',')})))` : '';
-      const rows = db.prepare(`SELECT i.id, i.code, i.parent_id, i.description, i.specifications, p.description AS shop_description, p.attributes AS shop_attributes
-        FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
-        WHERE i.tenant_id = ? AND i.archived = 0${filter}`).all(tenantId, ...(wanted ? [...wanted, tenantId, ...wanted] : []));
-      const parents = new Map(rows.filter((row) => !row.parent_id).map((row) => [row.id, ItemDetails.shownDetails(row)]));
-      return new Map(rows.map((row) => [row.code, row.parent_id ? ItemDetails.shownDetails(row, parents.get(row.parent_id) || null) : parents.get(row.id)]));
+      const cacheKey = `${tenantId}|${wanted ? wanted.join('|') : '*'}`;
+      const hit = detailsCache.get(cacheKey);
+      if (hit && hit.until > Date.now()) return hit.details;
+      const details = readDetails(tenantId, wanted);
+      if (detailsCache.size >= DETAILS_CACHE_MAX) detailsCache.delete(detailsCache.keys().next().value);
+      detailsCache.set(cacheKey, { details, until: Date.now() + CACHE_MS });
+      return details;
     },
     /**
      * Wist de cache (tests).
      * @returns {void}
      */
-    clearCache() { cache.clear(); },
+    clearCache() { cache.clear(); detailsCache.clear(); },
   };
+
+  /**
+   * Leest de omschrijving en specificaties uit de database (zie detailsOf).
+   * @param {string} tenantId De omgeving.
+   * @param {string[]|null} wanted De codes, of null voor alle artikelen.
+   * @returns {Map<string, { description: string, specifications: object[] }>} Per code wat de shop toont.
+   */
+  function readDetails(tenantId, wanted) {
+    const filter = wanted ? ` AND (i.code IN (${wanted.map(() => '?').join(',')}) OR i.id IN (SELECT v.parent_id FROM stock_items v WHERE v.tenant_id = ? AND v.code IN (${wanted.map(() => '?').join(',')})))` : '';
+    const rows = db.prepare(`SELECT i.id, i.code, i.parent_id, i.description, i.specifications, p.description AS shop_description, p.attributes AS shop_attributes
+      FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
+      WHERE i.tenant_id = ? AND i.archived = 0${filter}`).all(tenantId, ...(wanted ? [...wanted, tenantId, ...wanted] : []));
+    const parents = new Map(rows.filter((row) => !row.parent_id).map((row) => [row.id, ItemDetails.shownDetails(row)]));
+    return new Map(rows.map((row) => [row.code, row.parent_id ? ItemDetails.shownDetails(row, parents.get(row.parent_id) || null) : parents.get(row.id)]));
+  }
 }
 
 const GROUP_SLUGS = [...GROUPS.map((group) => group.slug), OTHER_GROUP.slug];
