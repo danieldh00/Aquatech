@@ -32,12 +32,12 @@ function fakeAnalyzerFactory(calls = []) {
 }
 
 /**
- * Start een testserver met toegangscode 'geheim', eigen database en nep-AI.
+ * Start een testserver met toegangscode 'Geheim-Code-2026', eigen database en nep-AI.
  * @param {object} [opts] Extra opties voor createApp.
  * @returns {Promise<{ app: object, server: import('http').Server, base: string }>} App, server en adres.
  */
 async function start(opts = {}) {
-  const app = createApp({ accessCode: 'geheim', secret: SECRET, db: openDb(), createAnalyzer: fakeAnalyzerFactory(), ...opts });
+  const app = createApp({ accessCode: 'Geheim-Code-2026', secret: SECRET, db: openDb(), createAnalyzer: fakeAnalyzerFactory(), ...opts });
   return { app, ...(await listen(app)) };
 }
 
@@ -47,7 +47,7 @@ async function start(opts = {}) {
  * @param {string} [code] De toegangscode.
  * @returns {Promise<object>} De ingelogde client.
  */
-async function admin(base, code = 'geheim') {
+async function admin(base, code = 'Geheim-Code-2026') {
   const client = createClient(base);
   const response = await client.post('/app/api/auth/login', { code });
   assert.strictEqual(response.status, 200);
@@ -103,6 +103,11 @@ test('ongeldige waarden worden geweigerd', () => {
   assert.throws(() => settings.update({ aiEnabled: 'ja' }), SettingsError);
   assert.throws(() => settings.update({ onbekend: 1 }), SettingsError);
   assert.strictEqual(settings.get('aiDailyLimit'), 30);
+});
+
+test('een te korte ACCESS_CODE als startwaarde telt niet', () => {
+  assert.strictEqual(freshSettings({ env: { ACCESS_CODE: 'kortecode' } }).get('accessCode'), '');
+  assert.strictEqual(freshSettings({ env: { ACCESS_CODE: 'Lange-Code-2026' } }).get('accessCode'), 'Lange-Code-2026');
 });
 
 test('instellingen blijven bewaard na een herstart', () => {
@@ -212,7 +217,7 @@ test('nieuwe toegangscode: andere toestellen uit, de beheerder blijft ingelogd',
     assert.strictEqual(response.status, 200);
     assert.strictEqual((await adminClient.get('/app/api/admin/settings')).status, 200);
     assert.strictEqual((await other.get('/app/api/admin/settings')).status, 401);
-    assert.strictEqual((await createClient(base).post('/app/api/auth/login', { code: 'geheim' })).status, 401);
+    assert.strictEqual((await createClient(base).post('/app/api/auth/login', { code: 'Geheim-Code-2026' })).status, 401);
     assert.strictEqual((await createClient(base).post('/app/api/auth/login', { code: 'nieuwe-code-2026' })).status, 200);
   } finally {
     server.close();
@@ -227,7 +232,7 @@ test('wie met de toegangscode beheert, kan die niet leegmaken', async () => {
     assert.strictEqual(response.status, 400);
     assert.strictEqual(response.body.field, 'accessCode');
     const reset = await adminClient.put('/app/api/admin/settings', { reset: ['accessCode'] });
-    // Startwaarde is 'geheim' (uit de opstartparameters), dus terugzetten mag.
+    // Startwaarde is 'Geheim-Code-2026' (uit de opstartparameters), dus terugzetten mag.
     assert.strictEqual(reset.status, 200);
     // Met een beheerdersaccount mag het wel.
     await adminClient.post('/app/api/admin/users', { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!', mustChangePassword: false });

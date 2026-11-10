@@ -13,12 +13,12 @@ const { listen } = require('./helpers/http-client');
 const SECRET = 'x'.repeat(64);
 
 /**
- * Start een testserver met toegangscode 'geheim'.
+ * Start een testserver met toegangscode 'Geheim-Code-2026'.
  * @param {object} [opts] Extra opties voor createApp.
  * @returns {Promise<{ server: import('http').Server, base: string }>} De server en zijn adres.
  */
 function start(opts = {}) {
-  return listen(createApp({ accessCode: 'geheim', secret: SECRET, ...opts }));
+  return listen(createApp({ accessCode: 'Geheim-Code-2026', secret: SECRET, ...opts }));
 }
 
 /**
@@ -38,7 +38,7 @@ async function dbWithAdmin() {
  * @param {string} [code] De toegangscode.
  * @returns {Promise<{ res: Response, cookie: string }>} Het antwoord en de sessie-cookie.
  */
-async function login(base, code = 'geheim') {
+async function login(base, code = 'Geheim-Code-2026') {
   const res = await fetch(`${base}/app/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -127,7 +127,7 @@ test('andere toegangscode maakt oude cookies ongeldig', async () => {
   const first = await start();
   const { cookie } = await login(first.base);
   first.server.close();
-  const second = await start({ accessCode: 'nieuw' });
+  const second = await start({ accessCode: 'Nieuwe-Code-2027' });
   try {
     const res = await fetch(`${second.base}/`, { headers: { cookie } });
     assert.strictEqual(res.status, 401);
@@ -278,7 +278,7 @@ test('eerste start met toegangscode: de code is nodig om de beheerder aan te mak
      */
     const post = (body) => fetch(`${base}/app/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     assert.strictEqual((await post({ username: 'daniel', password: 'Tuin-Plan-2026!', code: 'fout' })).status, 401);
-    assert.strictEqual((await post({ username: 'daniel', password: 'Tuin-Plan-2026!', code: 'geheim' })).status, 201);
+    assert.strictEqual((await post({ username: 'daniel', password: 'Tuin-Plan-2026!', code: 'Geheim-Code-2026' })).status, 201);
   } finally {
     server.close();
   }
@@ -374,7 +374,7 @@ test('snelheid: scripts met versie blijven in de browsercache, Excel pas bij exp
 test('via https heet de sessiecookie __Host-aquatech_session met Secure; de gewone naam telt dan niet (A-03)', async () => {
   const { server, base } = await start();
   try {
-    const res = await fetch(`${base}/app/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https' }, body: JSON.stringify({ code: 'geheim' }) });
+    const res = await fetch(`${base}/app/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https' }, body: JSON.stringify({ code: 'Geheim-Code-2026' }) });
     assert.strictEqual(res.status, 200);
     const setCookie = res.headers.get('set-cookie') || '';
     assert.match(setCookie, /^__Host-aquatech_session=[^;]+; Path=\/; .*Secure/);

@@ -11,6 +11,8 @@ const { openDb, MIGRATIONS } = require('../src/database/db');
 const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
 
 const { createStore } = require('../src/platform/store');
+const { createSettings } = require('../src/platform/settings');
+const { createVault } = require('../src/beveiliging/vault');
 const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'z'.repeat(64);
@@ -438,10 +440,16 @@ test('gebruikersnamen zijn uniek per tenant; de organisatiecode kiest de tenant'
     const tester = await as('tester', 'Bloem-Perk-2029!', 'groen');
     assert.strictEqual((await tester.get('/app/api/me')).body.tenant.id, env.id);
 
-    // Blokkade na te veel fouten geldt per tenant en per bezoeker (A-01): de raadpoger zit vast, de echte Piet en de Piet van Blauw niet.
-    for (let i = 0; i < 10; i++) assert.strictEqual((await loginFrom(base, '127.0.2.1', 'piet', 'fout', 'groen')).status, 401);
-    assert.strictEqual((await loginFrom(base, '127.0.2.1', 'piet', 'Gras-Pomp-2027!', 'groen')).status, 429);
+    // Blokkade na te veel fouten (A-01), elke bezoeker onder de grens van 10 per adres zodat de loginGuard zelf blokkeert.
+    // Een raadpoger blokkeert de echte Piet niet: na 9 fouten vanaf één adres logt Piet vanaf een ander adres gewoon in.
+    for (let i = 0; i < 9; i++) assert.strictEqual((await loginFrom(base, '127.0.2.1', 'piet', 'fout', 'groen')).status, 401);
     assert.strictEqual((await loginFrom(base, nextIp(), 'piet', 'Gras-Pomp-2027!', 'groen')).status, 200);
+    // Raden vanaf veel adressen tegelijk stopt bij de ruime grens per account (100 fouten), ook voor het juiste wachtwoord.
+    for (let i = 0; i < 100; i++) assert.strictEqual((await loginFrom(base, `127.0.3.${Math.floor(i / 9) + 1}`, 'piet', 'fout', 'groen')).status, 401);
+    const locked = await loginFrom(base, nextIp(), 'piet', 'Gras-Pomp-2027!', 'groen');
+    assert.strictEqual(locked.status, 429);
+    assert.strictEqual(locked.body.error, 'locked');
+    // De blokkade geldt per tenant: de Piet van Blauw logt gewoon in.
     assert.strictEqual((await loginFrom(base, nextIp(), 'piet', 'Haag-Slang-2028!', 'blauw')).status, 200);
   } finally {
     server.close();
@@ -463,11 +471,20 @@ test('migratie: de globale index op gebruikersnaam vervalt, uniek per tenant bli
 });
 
 test('testomgeving neemt geen koppelingen en geheimen van live over', async () => {
-  const { server, base } = await start(await platformDb());
+  const db = await platformDb();
+  const vault = createVault();
+  const { server, base } = await start(db, { vault });
   try {
     const baas = createClient(base);
     await baas.login('baas', 'Tuin-Plan-2026!');
     const tenant = (await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', password: 'Gras-Pomp-2027!', mustChangePassword: false } })).body.tenant;
+    createSettings({ db, tenantId: tenant.id, vault }).update({
+      visma: { companyName: 'Live BV', autoSync: true },
+      vismaRefreshToken: 'refresh-geheim',
+    });
+    const vismaKeys = ['visma', 'vismaRefreshToken'];
+    const vismaRows = db.prepare('SELECT key FROM settings WHERE tenant_id = ? AND key IN (?, ?)');
+    assert.deepStrictEqual(vismaRows.all(tenant.id, ...vismaKeys).map((row) => row.key).sort(), vismaKeys);
     const piet = createClient(base);
     await piet.login('piet', 'Gras-Pomp-2027!', 'groen');
     const saved = await piet.put('/app/api/admin/settings', {
@@ -481,6 +498,14 @@ test('testomgeving neemt geen koppelingen en geheimen van live over', async () =
     assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
 
     const env = (await baas.post(`/app/api/platform/tenants/${tenant.id}/environments`, { name: 'Acceptatie' })).body.tenant;
+    assert.deepStrictEqual(vismaRows.all(env.id, ...vismaKeys), []);
+    const main = (await baas.get('/app/api/platform/tenants')).body.mainTenantId;
+    assert.strictEqual((await baas.put('/app/api/admin/settings', { mollieApiKey: 'test_abcdefghij1234567' })).status, 200);
+    const mollieRow = db.prepare('SELECT key FROM settings WHERE tenant_id = ? AND key = ?');
+    assert.ok(mollieRow.get(main, 'mollieApiKey'));
+    const mainEnv = await baas.post(`/app/api/platform/tenants/${main}/environments`, { name: 'Acceptatie' });
+    assert.strictEqual(mainEnv.status, 201);
+    assert.ok(!mollieRow.get(mainEnv.body.tenant.id, 'mollieApiKey'));
     assert.strictEqual((await piet.post('/app/api/environment', { tenantId: env.id })).status, 200);
     const settings = (await piet.get('/app/api/admin/settings')).body.settings;
     // Gewone instellingen gaan mee, koppelingen met de buitenwereld en geheimen niet.

@@ -69,7 +69,7 @@ function createAccountTokens(db) {
       const row = prepare('SELECT id, user_id, email, expires_at, used_at FROM account_tokens WHERE token_hash = ? AND tenant_id = ? AND purpose = ?')
         .get(sha256(token), tenantId, purpose);
       if (!row || row.used_at || row.expires_at < new Date().toISOString()) return null;
-      prepare('UPDATE account_tokens SET used_at = ? WHERE id = ?').run(new Date().toISOString(), row.id);
+      prepare('UPDATE account_tokens SET used_at = ? WHERE id = ? AND tenant_id = ?').run(new Date().toISOString(), row.id, tenantId);
       return { userId: row.user_id, email: row.email };
     });
   }

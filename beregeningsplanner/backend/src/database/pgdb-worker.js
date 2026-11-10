@@ -39,7 +39,12 @@ async function connect() {
   await connection.connect();
   // Eén query mag het hele proces niet onbeperkt stilzetten (alle queries lopen synchroon over deze ene verbinding, G-01):
   // PostgreSQL breekt een query na deze tijd af. Per sessie gezet, dus ook via de session pooler van Supabase.
-  await connection.query(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
+  try {
+    await connection.query(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
+  } catch (error) {
+    await connection.end().catch(() => {});
+    throw error;
+  }
   client = connection;
   schema = null;
 }

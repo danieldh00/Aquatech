@@ -97,7 +97,7 @@ const FIELDS = {
   // staan in de hoofdtenant (Hoofdbeheer). Per omgeving: de keuzes in
   // Facturen → Visma en het refresh token van de verbonden administratie;
   // internal = alleen via /api/visma, niet via Beheer > Instellingen.
-  vismaApp: { type: 'object', default: {}, sanitize: sanitizeVismaApp, platform: true },
+  vismaApp: { type: 'object', default: {}, sanitize: sanitizeVismaApp, platform: true, liveOnly: true },
   vismaClientSecret: { type: 'secret', default: '', min: 8, platform: true },
   visma: { type: 'object', default: {}, sanitize: sanitizeVisma, internal: true, liveOnly: true },
   vismaRefreshToken: { type: 'secret', default: '', min: 1, max: 4000, internal: true, liveOnly: true },
@@ -234,7 +234,12 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
     if (!definition) throw new Error(`Onbekende instelling ${key}`);
     switch (source(key, initial)) {
       case 'instellingen': return coerce(definition, stored[key]);
-      case 'omgeving': return coerce(definition, env[definition.env]);
+      case 'omgeving': {
+        const value = coerce(definition, env[definition.env]);
+        // Een te korte startwaarde (bijv. ACCESS_CODE) telt niet: dezelfde minimale lengte als in het instellingenscherm.
+        if (definition.min && typeof value === 'string' && value && value.length < definition.min) return definition.default;
+        return value;
+      }
       default: return definition.type === 'flags' ? {} : definition.type === 'object' ? coerce(definition, definition.default) : definition.default;
     }
   }

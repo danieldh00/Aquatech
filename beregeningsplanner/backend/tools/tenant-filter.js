@@ -56,11 +56,21 @@ function listSourceFiles() {
 }
 
 /**
- * Maakt een SQL-tekst vergelijkbaar: witruimte samengevoegd en ingekort.
+ * Maakt een SQL-tekst vergelijkbaar: witruimte samengevoegd (de volledige tekst, zodat twee lange queries met hetzelfde
+ * begin niet als één uitzondering tellen).
  * @param {string} sql De SQL.
  * @returns {string} De genormaliseerde tekst.
  */
-const normalizeSql = (sql) => sql.replace(/\s+/g, ' ').trim().slice(0, 200);
+const normalizeSql = (sql) => sql.replace(/\s+/g, ' ').trim();
+
+/**
+ * Of de SQL op de tenant filtert: een voorwaarde op tenant_id (`tenant_id = ?`, `x.tenant_id = y.tenant_id`,
+ * `tenant_id IN (…)`), of bij een INSERT de kolom tenant_id. Alleen tenant_id in de gekozen kolommen telt niet.
+ * @param {string} text De SQL-tekst.
+ * @returns {boolean} true als er een tenantvoorwaarde is.
+ */
+const hasTenantCondition = (text) => /\btenant_id\s*(?:=|IN\s*\(|IS\b)|=\s*(?:[a-z_]+\.)?tenant_id\b/i.test(text)
+  || (/^\s*INSERT\b/i.test(text) && /\btenant_id\b/.test(text));
 
 /**
  * Zoekt in de broncode van één bestand de SQL-teksten op tabellen met tenant_id zonder tenantfilter.
@@ -81,7 +91,7 @@ function scanSource(relativeFile, source, tables) {
   const check = (text, node) => {
     if (!/\b(SELECT|UPDATE|DELETE|INSERT)\b/.test(text)) return;
     const touched = [...text.matchAll(/\b(?:FROM|JOIN|UPDATE|INTO)\s+([a-z_]+)/g)].map((match) => match[1]).filter((table) => tables.has(table));
-    if (!touched.length || /tenant_id/.test(text)) return;
+    if (!touched.length || hasTenantCondition(text)) return;
     findings.push({ file: relativeFile, line: node.loc.start.line, sql: normalizeSql(text) });
   };
   walk.full(tree, (node) => {
@@ -105,7 +115,15 @@ function scanAll() {
  * @returns {{ file: string, sql: string }[]} De lijst (leeg als het bestand ontbreekt).
  */
 function readBaseline() {
-  try { return JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf8')).exceptions || []; } catch { return []; }
+  let text;
+  try {
+    text = fs.readFileSync(BASELINE_FILE, 'utf8');
+  } catch (error) {
+    // Alleen een ontbrekend bestand is een lege lijst; een leesfout of ongeldige JSON moet opvallen.
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+  return JSON.parse(text).exceptions || [];
 }
 
 /**

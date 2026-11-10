@@ -18,3 +18,10 @@ test('de controle herkent een query zonder tenantfilter', () => {
   const found = scanSource('proef.js', source, new Set(['quotes']));
   assert.deepStrictEqual(found.map((entry) => [entry.line, entry.sql]), [[1, 'SELECT id FROM quotes WHERE id = ?']]);
 });
+
+test('tenant_id alleen in de gekozen kolommen telt niet als tenantfilter', () => {
+  const { scanSource } = require('../tools/tenant-filter');
+  const source = "const sql = 'SELECT tenant_id, id FROM quotes WHERE id = ?';\nconst insert = 'INSERT INTO quotes (id, tenant_id) VALUES (?, ?)';\nconst joined = 'SELECT r.id FROM quotes r JOIN users u ON u.tenant_id = r.tenant_id WHERE r.id = ?';\n";
+  const found = scanSource('proef.js', source, new Set(['quotes', 'users']));
+  assert.deepStrictEqual(found.map((entry) => entry.line), [1]);
+});

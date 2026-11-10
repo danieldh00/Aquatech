@@ -179,7 +179,7 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
     if (limited(recoveryLimiter, req, res)) return { error: 'Te veel aanvragen vanaf dit adres. Probeer het later opnieuw.', status: 429 };
     const address = String(email ?? '').trim().toLowerCase().slice(0, 200);
     if (!validEmail(address)) return { error: 'Vul een geldig e-mailadres in.', status: 400 };
-    if (!mailReady()) return { error: 'Wachtwoord herstellen per mail is nu niet mogelijk. Neem contact met ons op.', status: 503 };
+    if (!mailReady() || !req.shopBaseUrl) return { error: 'Wachtwoord herstellen per mail is nu niet mogelijk. Neem contact met ons op.', status: 503 };
     const ids = store.accountIdsByEmail(tenant.id, address);
     // Alleen bij precies één account: bij een gedeeld adres weet niemand welk account bedoeld is.
     if (ids.length === 1) {

@@ -1720,10 +1720,10 @@ function createStore(db) {
    */
   function purgeStaleDrawings(tenantId, days) {
     const cutoff = new Date(Date.now() - days * 86400000).toISOString();
-    const stale = prepare(`SELECT id, owner_id FROM plans
-      WHERE tenant_id = ? AND submitted_via = 'openbaar' AND review_status = 'ter_controle' AND review_requested_at < ?`).all(tenantId, cutoff);
-    if (!stale.length) return 0;
     return transaction(db, () => {
+      const stale = prepare(`SELECT id, owner_id FROM plans
+        WHERE tenant_id = ? AND submitted_via = 'openbaar' AND review_status = 'ter_controle' AND review_requested_at < ?`).all(tenantId, cutoff);
+      if (!stale.length) return 0;
       const planIds = stale.map((row) => row.id);
       const ownerIds = [...new Set(stale.map((row) => row.owner_id).filter(Boolean))];
       const planMarks = planIds.map(() => '?').join(', ');

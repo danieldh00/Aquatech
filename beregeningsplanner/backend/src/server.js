@@ -667,6 +667,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      */
     clear: (req, account) => { failures.delete(`${account}@${clientKey(req)}`); failures.delete(account); },
   };
+  /**
+   * Ruimt de verlopen tellers van mislukte inlogpogingen op, zodat de lijst in het geheugen niet blijft groeien.
+   * @returns {void}
+   */
+  app.locals.pruneLoginFailures = () => {
+    for (const [name, entry] of failures) if (entry.reset <= Date.now()) failures.delete(name);
+  };
 
   app.get('/api/health', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -2463,6 +2470,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {Object<string, number>} Aantal opgeruimde regels per soort.
    */
   app.locals.maintenance = () => {
+    app.locals.pruneLoginFailures();
     const total = {};
     for (const environment of allEnvironments()) {
       const environmentSettings = settingsFor(environment.id);

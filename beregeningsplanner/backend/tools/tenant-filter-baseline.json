@@ -7,6 +7,10 @@
     },
     {
       "file": "beveiliging/impersonation.js",
+      "sql": "SELECT id, tenant_id, user_id, created_at, expires_at, revoked_at FROM support_grants WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY expires_at DESC LIMIT 1"
+    },
+    {
+      "file": "beveiliging/impersonation.js",
       "sql": "SELECT id, user_id, created_at, expires_at FROM support_grants WHERE user_id IN (${}) AND revoked_at IS NULL AND expires_at > ? ORDER BY expires_at"
     },
     {
@@ -30,10 +34,6 @@
       "sql": "SELECT ${} FROM impersonations WHERE user_id = ? AND ended_at IS NULL"
     },
     {
-      "file": "platform/account-tokens.js",
-      "sql": "UPDATE account_tokens SET used_at = ? WHERE id = ?"
-    },
-    {
       "file": "platform/ai-usage.js",
       "sql": "SELECT ${} FROM ai_usage a WHERE ${}"
     },
@@ -43,7 +43,7 @@
     },
     {
       "file": "platform/ai-usage.js",
-      "sql": "SELECT a.user_id AS k, u.display_name, u.username, u.kind, ${} FROM ai_usage a LEFT JOIN users u ON u.id = a.user_id WHERE ${} GROUP BY a.user_id, u.display_name, u.username, u.kind ORDER BY cost_eur_"
+      "sql": "SELECT a.user_id AS k, u.display_name, u.username, u.kind, ${} FROM ai_usage a LEFT JOIN users u ON u.id = a.user_id WHERE ${} GROUP BY a.user_id, u.display_name, u.username, u.kind ORDER BY cost_eur_micro DESC, requests DESC"
     },
     {
       "file": "platform/ai-usage.js",
@@ -223,7 +223,7 @@
     },
     {
       "file": "platform/store.js",
-      "sql": "SELECT h.id, h.plan_id, h.user_id, h.action, h.title, h.customer, h.address, h.summary, h.ip, h.created_at, h.updated_at, h.snapshot IS NOT NULL AS has_snapshot, u.username, u.display_name, u.role, u."
+      "sql": "SELECT h.id, h.plan_id, h.user_id, h.action, h.title, h.customer, h.address, h.summary, h.ip, h.created_at, h.updated_at, h.snapshot IS NOT NULL AS has_snapshot, u.username, u.display_name, u.role, u.kind, EXISTS (SELECT 1 FROM plans p WHERE p.id = h.plan_id AND p.deleted_at IS NULL) AS plan_exists"
     },
     {
       "file": "platform/store.js",
@@ -260,6 +260,10 @@
     {
       "file": "platform/test-data.js",
       "sql": "UPDATE quotes SET shared_at = ?, sent_at = ?, sent_to = ?, view_count = ?, viewed_at = ?, last_viewed_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "SELECT id, tenant_id, number, status, data, acceptance FROM quotes WHERE id = ?"
     },
     {
       "file": "platform/test-data.js",
@@ -307,6 +311,10 @@
     },
     {
       "file": "uitvoering/outsourcing.js",
+      "sql": "SELECT ${} FROM work_order_offers WHERE receiver_tenant_id = ? AND received_work_order_id IS NOT NULL"
+    },
+    {
+      "file": "uitvoering/outsourcing.js",
       "sql": "UPDATE work_order_offers SET status = 'ingetrokken', updated_at = ? WHERE id = ?"
     },
     {
@@ -316,6 +324,10 @@
     {
       "file": "uitvoering/outsourcing.js",
       "sql": "UPDATE work_order_offers SET declined = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/outsourcing.js",
+      "sql": "UPDATE work_order_offers SET status = 'geaccepteerd', receiver_tenant_id = ?, receiver_name = ?, received_work_order_id = ?, responded_by_name = ?, responded_at = ?, updated_at = ? WHERE id = ?"
     },
     {
       "file": "uitvoering/photos.js",
@@ -391,6 +403,10 @@
     },
     {
       "file": "verkoop/quotes.js",
+      "sql": "SELECT q.id, q.tenant_id, q.owner_id, q.plan_id, q.number, q.status, q.title, q.customer, q.total_excl, q.total_incl, q.data, q.created_at, q.updated_at, q.customer_id, q.share_hash, q.share_token, q.share_url, q.shared_at, q.viewed_at, q.last_viewed_at, q.view_count, q.sent_at, q.sent_to, q.responded_at, q.acceptance, c.display_name AS customer_name FROM quotes q LEFT JOIN users c ON c.id = q.customer_id"
+    },
+    {
+      "file": "verkoop/quotes.js",
       "sql": "SELECT data FROM quotes WHERE id = ?"
     },
     {
@@ -411,7 +427,7 @@
     },
     {
       "file": "verkoop/quotes.js",
-      "sql": "UPDATE quotes SET share_hash = ?, share_token = ?, share_url = ?, shared_at = ?, view_count = 0, viewed_at = NULL, last_viewed_at = NULL, status = CASE WHEN status = 'concept' THEN 'verzonden' ELSE st"
+      "sql": "UPDATE quotes SET share_hash = ?, share_token = ?, share_url = ?, shared_at = ?, view_count = 0, viewed_at = NULL, last_viewed_at = NULL, status = CASE WHEN status = 'concept' THEN 'verzonden' ELSE status END, updated_at = ? WHERE id = ?"
     },
     {
       "file": "verkoop/quotes.js",

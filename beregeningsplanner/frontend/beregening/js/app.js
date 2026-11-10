@@ -761,7 +761,11 @@
         let res;
         if (ANON) {
           const { calc, serverId, ...data } = this.state;
-          data.background = await this._compactBackground(data.background);
+          const original = data.background;
+          data.background = await this._compactBackground(original);
+          if (original && !data.background) {
+            this.toast('De achtergrond is te groot en wordt niet meegestuurd.', true);
+          }
           res = await fetch('api/public/drawing', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
