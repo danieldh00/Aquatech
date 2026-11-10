@@ -197,6 +197,11 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
     `tools/tenant-filter-baseline.json` (alleen korter). PostgreSQL `statement_timeout` 30 s (`PG_STATEMENT_TIMEOUT_MS`).
   - Bewust zo gelaten: op rekening voor iedereen (W-02, testfase), limieten in het geheugen (één container), WooCommerce-voorraadsync
     (wordt uitgefaseerd), klantweergave met live-klanten van de eigen organisatie.
+- **Functioneel beter uit de audit** (1.7.5): reservering per bestelling (`data.reservedUntil`, `shopPayment.accountHoldDays`,
+  `webOrders.releaseExpired` elk uur: op rekening alleen de reservering vrij, bestelling blijft); omschrijving + specificaties per
+  artikel (migratie 50, `artikelen/item-details.js`, terugval op `shop_products.description` en zichtbare niet-variatiekenmerken,
+  `data.detailsOf` in storefront-data.js met cache); oplopende loginvertraging `loginGuard.wait` (tests: `createApp({ loginDelayMs: 0 })`
+  bij veel mislukte pogingen). Een warme shop-pagina kost 0 queries (`queries.test.js`), houd dat zo.
 - **Verwijderen** (0.33.0): live-tenant via `DELETE /api/platform/tenants/:id`
   met `{ confirm: <slug> }` (`store.deleteTenant`: wist elke tabel met
   `tenant_id` voor de tenant + testomgevingen, uit het schema gelezen, met
