@@ -135,12 +135,20 @@ dl.kv dd { margin: 0; }
 
 /* Indeling: zijmenu met groepen en zoekveld, daarnaast de gekozen sectie */
 .bh { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; align-items: start; }
-.bh-nav { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.bh-nav { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 24px); overflow-y: auto; }
 .bh-search { width: 100%; box-sizing: border-box; }
 .bh-toggle { display: none; }
-.bh-group { margin-bottom: 12px; }
-.bh-group-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 10px 4px; }
-.bh-link { display: block; padding: 7px 10px; border-radius: 6px; color: var(--text); text-decoration: none; font-size: 14px; border-left: 3px solid transparent; }
+.bh-group { margin-bottom: 2px; }
+.bh-group-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 6px 10px; border: 0; border-radius: 6px; background: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--text); text-align: left; cursor: pointer; }
+.bh-group-title:hover { background: var(--primary-soft); }
+.bh-group-title:focus-visible, .bh-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.bh-chevron { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--muted); transition: transform 0.15s; }
+.bh-group.open .bh-chevron, .bh-nav.searching .bh-chevron { transform: rotate(180deg); }
+.bh-nav.searching .bh-group-title { cursor: default; }
+/* Secties springen in langs een lijn; een ingeklapte groep toont ze niet (bij zoeken wel). */
+.bh-group-body { display: none; margin: 1px 0 4px 12px; padding-left: 6px; border-left: 1px solid var(--line); }
+.bh-group.open .bh-group-body, .bh-nav.searching .bh-group-body { display: block; }
+.bh-link { display: block; padding: 5px 10px; border-radius: 6px; color: var(--text); text-decoration: none; font-size: 13px; border-left: 3px solid transparent; }
 .bh-link:hover { background: var(--primary-soft); }
 .bh-link.active { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; border-left-color: var(--primary); }
 .bh-none { padding: 0 10px; }

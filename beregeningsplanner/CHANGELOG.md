@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.8
+
+Zijbalk overzichtelijker: genest, compacter en met vaste plekken voor wat nog komt.
+
+- Indeling in `NAV_GROUPS` (dashboard/modules.js): Verkoop (Offertes, Bestellingen, Klantdossiers, Facturen), Magazijn, Inkoop,
+  Artikelen, Planner & werk (planner, plannenoverzicht, planning, werkorders, meldingen, uitbesteden), Webshop, Rapportage en
+  Beheer. Een module kiest zijn plek met `navGroup`; een groep met één module is een gewone link, een lege groep bestaat niet.
+  Pagina's die nog moeten komen (klanten, inkoop, leveranciers, backorders, te picken) hoeven alleen één regel met de juiste
+  `navGroup` en `status: 'actief'`. Nieuw: `navSections` (zuiver, `test/sidebar.test.js`) en `navTitle` (korte titel).
+- Compactere rijen (32 px, kleinere iconen en tekst; 44 px op een telefoon), modules springen in langs een lijn onder de
+  groepskop, de actieve pagina en de groep waarin je zit zijn duidelijk gemarkeerd. De groep met de huidige pagina staat open en is
+  in te klappen; de keuze voor andere groepen wordt onthouden (localStorage `aquatech_nav_groups`).
+- Voetregel: Naar de webshop, Hoofdbeheer en Mijn profiel. Aantallen (Nieuws) komen uit `BADGES` in sidebar.js en staan bij een
+  ingeklapte groep op de groepskop.
+- Beheer: het menu binnen Beheer heeft dezelfde stijl: compacte, inklapbare groepen (de groep met de gekozen sectie staat open, de
+  rest wordt per browser onthouden, zoeken opent alle groepen met een treffer). Webshop-inhoud en Webshop en WooCommerce staan nu
+  samen in een eigen groep *Webshop*; E-mail en AI-herkenning in *Koppelingen*. Sectie-id's en adressen (`beheer/#mail`) blijven gelijk.
+- Snelheid: geen extra verzoeken of queries; de zijbalk tekent niet opnieuw als de stand uit de server gelijk is aan de cache.
 ## 1.7.7
 
 Databasepool (tussenstap 1 uit *Functioneel beter* van de audit van 1.7.3): losse queries hoeven de server niet meer stil te

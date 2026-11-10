@@ -1,6 +1,9 @@
 // Beheer: de indeling in groepen en secties (zijmenu met zoekveld). De
 // pagina's en formulieren zelf staan in index.html; dit bestand bepaalt welke
-// sectie waar hoort, toont er telkens één en laat de gebruiker zoeken.
+// sectie waar hoort, toont er telkens één en laat de gebruiker zoeken. De
+// groepen zijn inklapbaar: de groep met de gekozen sectie staat open, de keuze
+// voor de andere groepen wordt per browser onthouden; bij zoeken staan alle
+// groepen met een treffer open.
 (function () {
   'use strict';
 
@@ -14,17 +17,19 @@
       { id: 'users', label: 'Gebruikers', pane: 'users', words: 'account wachtwoord toevoegen bekijken als klant gasten inloglink organisatiecode' },
       { id: 'roles', label: 'Rollen', pane: 'roles', words: 'rechten planner installateur klant' },
     ] },
+    { title: 'Webshop', sections: [
+      { id: 'shopinhoud', label: 'Webshop-inhoud', pane: 'shopinhoud', words: 'winkel teksten pagina hero mededeling banner afbeeldingen merken contact over ons klantenservice bewerken publiceren concept menu' },
+      { id: 'webshop', label: 'Webshop en WooCommerce', pane: 'webshop', words: 'woocommerce winkel sku prijzen voorraad synchroniseren koppeling kopje planner betalen mollie' },
+    ] },
     { title: 'Modules', sections: [
       { id: 'modules', label: 'Modules aan/uit', pane: 'settings', form: 's-modules', words: 'zijbalk dashboard uitzetten' },
       { id: 'sproeiers', label: 'Planner: sproeierbibliotheek', pane: 'sproeiers', words: 'behuizingen nozzles rotor sproeiers excel' },
       { id: 'outsourcing', label: 'Uitbesteden', pane: 'settings', form: 's-outsourcing', words: 'werkorders organisaties werkgebied ontvangen' },
       { id: 'season', label: 'Seizoensherinneringen', pane: 'settings', form: 's-season', words: 'mail herinnering winterklaar onderhoud klantportaal' },
     ] },
-    { title: 'Integraties', sections: [
+    { title: 'Koppelingen', sections: [
       { id: 'mail', label: 'E-mail', pane: 'settings', form: 's-mail', words: 'smtp exchange office 365 connector afzender wan ip offertes versturen' },
       { id: 'ai', label: 'AI-herkenning', pane: 'settings', form: 's-ai', words: 'anthropic claude api sleutel model limiet koers dag uur' },
-      { id: 'shopinhoud', label: 'Webshop-inhoud', pane: 'shopinhoud', words: 'winkel teksten pagina hero mededeling banner afbeeldingen merken contact over ons klantenservice bewerken publiceren concept' },
-      { id: 'webshop', label: 'Webshop en WooCommerce', pane: 'webshop', words: 'woocommerce winkel sku prijzen voorraad synchroniseren koppeling kopje planner' },
     ] },
     { title: 'Toegang & beveiliging', sections: [
       { id: 'access', label: 'Inloggen en bezoekers', pane: 'settings', form: 's-access', words: 'gasten toegangscode tekening indienen openbaar' },
@@ -42,6 +47,28 @@
 
   /** Alle formulieren van het tabblad Instellingen: er is er telkens één zichtbaar. */
   const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-mail', 's-ai', 's-access', 's-security', 's-backup'];
+
+  const OPEN_KEY = 'aquatech_beheer_groups';
+
+  /**
+   * Leest welke groepen de gebruiker zelf heeft opengeklapt.
+   * @returns {object} Groepstitel → true.
+   */
+  function readOpenGroups() {
+    try { return JSON.parse(localStorage.getItem(OPEN_KEY) || '{}') || {}; } catch (error) { return {}; }
+  }
+
+  /**
+   * Onthoudt dat een groep open of dicht is (alleen open wordt bewaard).
+   * @param {string} title Titel van de groep.
+   * @param {boolean} open true = open.
+   * @returns {void}
+   */
+  function saveOpenGroup(title, open) {
+    const saved = readOpenGroups();
+    if (open) saved[title] = true; else delete saved[title];
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify(saved)); } catch (error) { /* geen opslag */ }
+  }
 
   const sections = GROUPS.flatMap((group) => group.sections.map((section) => ({ ...section, group: group.title })));
 
@@ -75,20 +102,22 @@
 
   /**
    * Bouwt het zijmenu met zoekveld.
-   * @param {object} options `allowed(section)`: mag deze sectie getoond worden; `onSelect(id)`: er is een sectie gekozen.
+   * @param {object} options `allowed(section)`: mag deze sectie getoond worden; `onSelect(id)`: er is een sectie gekozen; `startId`: de sectie waarmee de pagina opent (haar groep staat open).
    * @returns {void}
    */
   function build(options) {
     const nav = document.getElementById('bh-nav');
     const groups = GROUPS.map((group) => ({ ...group, sections: group.sections.filter(options.allowed) })).filter((group) => group.sections.length);
+    const savedOpen = readOpenGroups();
+    const startId = options.startId || '';
     nav.innerHTML = `
       <input type="search" id="bh-search" class="bh-search" placeholder="Zoek instelling…" aria-label="Zoek een instelling in Beheer" autocomplete="off">
       <button type="button" class="bh-toggle" id="bh-toggle" aria-expanded="false"><span id="bh-current"></span><span aria-hidden="true">▾</span></button>
       <div class="bh-list" id="bh-list">
-        ${groups.map((group) => `<div class="bh-group" data-group="${escapeHtml(group.title)}">
-          <div class="bh-group-title">${escapeHtml(group.title)}</div>
-          ${group.sections.map((section) => `<a class="bh-link" href="#${escapeHtml(section.id)}" data-section="${escapeHtml(section.id)}"
-            data-search="${escapeHtml(`${section.label} ${section.words} ${group.title}`.toLowerCase())}">${escapeHtml(section.label)}</a>`).join('')}
+        ${groups.map((group) => `<div class="bh-group${savedOpen[group.title] || group.sections.some((section) => section.id === startId) ? ' open' : ''}" data-group="${escapeHtml(group.title)}">
+          <button type="button" class="bh-group-title" aria-expanded="${Boolean(savedOpen[group.title] || group.sections.some((section) => section.id === startId))}"><span>${escapeHtml(group.title)}</span><svg class="bh-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="bh-group-body">${group.sections.map((section) => `<a class="bh-link" href="#${escapeHtml(section.id)}" data-section="${escapeHtml(section.id)}"
+            data-search="${escapeHtml(`${section.label} ${section.words} ${group.title}`.toLowerCase())}">${escapeHtml(section.label)}</a>`).join('')}</div>
         </div>`).join('')}
         <p class="bh-none muted small" id="bh-none" hidden>Niets gevonden. Probeer een ander woord, bijvoorbeeld <i>sleutel</i>, <i>mail</i> of <i>back-up</i>.</p>
       </div>`;
@@ -107,6 +136,16 @@
      * @param {MouseEvent} event De klik.
      */
     list.onclick = (event) => {
+      const head = event.target.closest('.bh-group-title');
+      if (head) {
+        if (nav.classList.contains('searching')) return;
+        const group = head.closest('.bh-group');
+        const open = group.classList.toggle('open');
+        head.setAttribute('aria-expanded', String(open));
+        // De groep met de gekozen sectie staat bij elk bezoek weer open; alleen de andere keuzes blijven bewaard.
+        if (!group.querySelector('.bh-link.active')) saveOpenGroup(group.dataset.group, open);
+        return;
+      }
       const link = event.target.closest('.bh-link');
       if (!link) return;
       event.preventDefault();
@@ -122,8 +161,14 @@
         link.hidden = !hit;
         if (hit) found += 1;
       });
-      nav.querySelectorAll('.bh-group').forEach((group) => { group.hidden = !group.querySelector('.bh-link:not([hidden])'); });
+      nav.querySelectorAll('.bh-group').forEach((group) => {
+        group.hidden = !group.querySelector('.bh-link:not([hidden])');
+        const head = group.querySelector('.bh-group-title');
+        head.disabled = words.length > 0;
+        head.setAttribute('aria-expanded', String(words.length > 0 || group.classList.contains('open')));
+      });
       document.getElementById('bh-none').hidden = found > 0;
+      nav.classList.toggle('searching', words.length > 0);
       if (words.length) { list.classList.add('open'); toggle.setAttribute('aria-expanded', 'true'); }
     };
 
@@ -156,7 +201,12 @@
     document.querySelectorAll('.bh-link').forEach((link) => {
       const active = link.dataset.section === section.id;
       link.classList.toggle('active', active);
-      if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+      if (active) {
+        link.setAttribute('aria-current', 'page');
+        const group = link.closest('.bh-group');
+        group.classList.add('open');
+        group.querySelector('.bh-group-title').setAttribute('aria-expanded', 'true');
+      } else link.removeAttribute('aria-current');
     });
     document.getElementById('bh-title').textContent = section.label;
     const current = document.getElementById('bh-current');

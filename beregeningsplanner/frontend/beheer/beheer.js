@@ -1326,6 +1326,7 @@
       ? `Gebruikersnamen zijn uniek binnen deze organisatie. Gebruikers loggen in met organisatiecode <b>${esc(me.loginCode)}</b> (of via <a href="${esc(link)}">deze inloglink</a>, die de code al invult).`
       : 'Gebruikersnamen zijn uniek binnen deze organisatie. Gebruikers loggen in met een lege organisatiecode.';
     window.BeheerIndeling.build({
+      startId: window.BeheerIndeling.resolve(location.hash.slice(1)) || 'history',
       /**
        * Back-ups zijn alleen voor hoofdbeheerders zichtbaar.
        * @param {object} section De sectie.

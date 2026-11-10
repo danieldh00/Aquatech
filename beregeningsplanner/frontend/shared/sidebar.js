@@ -8,8 +8,12 @@
 // - Breed scherm: vast links, in te klappen tot een smalle iconenbalk
 //   (per browser onthouden). Pagina's met <body data-nav-compact> (de
 //   planner) beginnen ingeklapt.
-// - Modules staan in inklapbare groepen (Ontwerpen, Verkoop, Uitvoering); de
-//   groep met de huidige pagina staat open, de rest onthoudt de gebruiker.
+// - Modules staan in genestelde, inklapbare groepen (Verkoop, Artikelen,
+//   Planner & werk, Beheer, ...; indeling in NAV_GROUPS en `navGroup` in
+//   dashboard/modules.js). De groep met de huidige pagina staat open, de rest
+//   onthoudt de gebruiker. Aantallen (Nieuws) staan als bolletje bij de link
+//   en, bij een ingeklapte groep, op de groepskop. Onderaan een compacte
+//   voetregel (webshop, Hoofdbeheer, profiel).
 // - Smal scherm (< 900px): lade van links via de menuknop in de kopbalk.
 (function (root) {
   const tools = root.AquatechModuleTools;
@@ -27,12 +31,11 @@
   const CACHE = 'aquatech_nav';
   const COMPACT = 'aquatech_nav_compact';
   const OPEN_GROUPS = 'aquatech_nav_groups';
-  /** De inklapbare groepen van de zijbalk, in volgorde (een module kiest er één met `navGroup` in dashboard/modules.js). */
-  const GROUPS = [
-    { key: 'ontwerpen', title: 'Ontwerpen' },
-    { key: 'verkoop', title: 'Verkoop' },
-    { key: 'uitvoering', title: 'Uitvoering' },
-  ];
+  /**
+   * Aantal te tonen bij een module (bolletje), per module-id. Alleen waar de
+   * gegevens al in api/me zitten; een nieuw aantal is hier één regel.
+   */
+  const BADGES = { nieuws: (data) => data.news || 0 };
   const store = {
     /**
      * Leest een waarde uit localStorage.
@@ -50,6 +53,7 @@
 
   const body = document.body;
   let nav = null;
+  let lastSignature = '';
 
   /**
    * Leest welke groepen de gebruiker zelf heeft opengeklapt (per browser onthouden).
@@ -91,53 +95,61 @@
    * @param {object} data { rights, disabled, profile, news }.
    */
   function render(data) {
+    // Dezelfde stand als de vorige keer (cache en server zijn meestal gelijk): niet opnieuw tekenen.
+    const signature = JSON.stringify(data);
+    if (nav && signature === lastSignature) return;
+    lastSignature = signature;
     // Alleen modules die er al zijn; geplande modules staan in Beheer >
     // Modules en komen pas in de zijbalk als ze klaar zijn.
-    const items = [{ id: '', title: 'Overzicht', icon: 'home', status: 'actief', href: base || './' }]
-      .concat(tools.visible(data.rights, data.disabled).filter((module) => module.status === 'actief' && module.href).map((module) => ({ ...module, href: module.href ? base + module.href : '' })));
+    const items = [{ id: '', navGroup: 'top', title: 'Overzicht', icon: 'home', status: 'actief', href: base || './' }]
+      .concat(tools.visible(data.rights, data.disabled).filter((module) => module.status === 'actief' && module.href).map((module) => ({ ...module, href: base + module.href })));
     const profile = { id: 'profiel', href: `${base}profiel/` };
-    const active = currentId(items.filter((module) => module.href).concat(data.profile ? [profile] : []));
+    const active = currentId(items.concat(data.profile ? [profile] : []));
+    /**
+     * Aantal dat bij een module hoort (0 = geen bolletje).
+     * @param {object} module De module.
+     * @returns {number} Het aantal.
+     */
+    const countOf = (module) => (BADGES[module.id] ? BADGES[module.id](data) : 0);
     /**
      * Link naar een module in de zijbalk.
      * @param {object} module De module (id, title, icon, href).
      * @returns {string} HTML van de link.
      */
     const link = (module) => {
-      const badge = module.id === 'nieuws' && tools.newsBadge ? tools.newsBadge(data.news || 0) : '';
-      const label = `<span class="at-nav-ico">${tools.icon(module.icon)}${badge}</span><span class="at-nav-label">${esc(module.title)}</span>`;
+      const badge = module.id === 'nieuws' && tools.newsBadge ? tools.newsBadge(countOf(module)) : '';
+      const title = module.navTitle || module.title;
+      const label = `<span class="at-nav-ico">${tools.icon(module.icon)}${badge}</span><span class="at-nav-label">${esc(title)}</span>`;
       const currentAttribute = module.id === active ? ' aria-current="page"' : '';
-      return `<a class="at-nav-item" href="${esc(module.href)}" title="${esc(module.title)}"${currentAttribute}>${label}</a>`;
+      return `<a class="at-nav-item" href="${esc(module.href)}" title="${esc(title)}"${currentAttribute}>${label}</a>`;
     };
-    /**
-     * Groep links met een kopje.
-     * @param {string} title Kopje (leeg = geen kopje).
-     * @param {object[]} list De modules.
-     * @returns {string} HTML van de groep (leeg zonder modules).
-     */
-    const section = (title, list) => (list.length
-      ? `<div class="at-nav-list">${title ? `<div class="at-nav-group">${esc(title)}</div>` : ''}${list.map(link).join('')}</div>`
-      : '');
     const openGroups = readOpenGroups();
     /**
-     * Inklapbare groep links; met één zichtbare module is het gewoon een link. De groep met de huidige pagina staat altijd open.
-     * @param {{key: string, title: string}} group De groep.
-     * @param {object[]} list De modules in de groep.
-     * @returns {string} HTML van de groep (leeg zonder modules).
+     * Inklapbare groep met de modules ingesprongen eronder; met één module is het gewoon een link.
+     * De groep met de huidige pagina staat open (en is gemarkeerd, ook als de gebruiker hem dichtklapt).
+     * @param {{key: string, title: string, icon: string, items: object[]}} group De groep.
+     * @returns {string} HTML van de groep.
      */
-    const collapsible = (group, list) => {
-      if (list.length < 2) return list.map(link).join('');
-      const open = list.some((module) => module.id === active) || openGroups[group.key] === true;
-      return `<div class="at-nav-sec${open ? ' open' : ''}" data-group="${esc(group.key)}">
-        <button type="button" class="at-nav-sec-head" aria-expanded="${open}"><span class="at-nav-label">${esc(group.title)}</span>
+    const collapsible = (group) => {
+      if (!group.title || group.items.length < 2) return group.items.map(link).join('');
+      const hasActive = group.items.some((module) => module.id === active);
+      const open = hasActive || openGroups[group.key] === true;
+      const total = group.items.reduce((sum, module) => sum + countOf(module), 0);
+      const totalBadge = total > 0 ? `<span class="at-nav-sec-count" title="Nieuw sinds je vorige bezoek">${total > 9 ? '9+' : total}</span>` : '';
+      return `<div class="at-nav-sec${open ? ' open' : ''}${hasActive ? ' has-active' : ''}" data-group="${esc(group.key)}">
+        <button type="button" class="at-nav-sec-head" aria-expanded="${open}" aria-controls="at-nav-sec-${esc(group.key)}">
+          <span class="at-nav-ico">${tools.icon(group.icon)}</span><span class="at-nav-label">${esc(group.title)}</span>${totalBadge}
           <svg class="ico at-nav-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
-        <div class="at-nav-list at-nav-sec-body">${list.map(link).join('')}</div>
+        <div class="at-nav-list at-nav-sec-body" id="at-nav-sec-${esc(group.key)}">${group.items.map(link).join('')}</div>
       </div>`;
     };
-    const mainItems = items.filter((module) => module.status === 'actief' && module.group !== 'beheer');
-    const topItems = mainItems.filter((module) => module.id === '' || module.navGroup === 'top');
-    const looseItems = mainItems.filter((module) => !topItems.includes(module) && !GROUPS.some((group) => group.key === module.navGroup));
-    const mainHtml = `<div class="at-nav-list">${topItems.map(link).join('')}</div>
-      <div class="at-nav-list">${GROUPS.map((group) => collapsible(group, mainItems.filter((module) => module.navGroup === group.key))).join('')}${looseItems.map(link).join('')}</div>`;
+    const sections = tools.navSections(items);
+    const footerItems = (sections.find((section) => section.key === 'footer') || { items: [] }).items;
+    const mainSections = sections.filter((section) => section.key !== 'footer');
+    const mainHtml = mainSections.map((section) => `<div class="at-nav-list${section.key === 'top' ? ' at-nav-top' : ''}">${collapsible(section)}</div>`).join('');
+    const footerLinks = (data.shop ? link({ id: 'webshop', title: 'Naar de webshop', icon: 'cart', status: 'actief', href: `${base}../` }) : '')
+      + footerItems.map(link).join('')
+      + (data.profile ? link({ id: 'profiel', title: 'Mijn profiel', icon: 'user', status: 'actief', href: profile.href }) : '');
     if (!nav) {
       nav = document.createElement('nav');
       nav.className = 'at-nav';
@@ -162,12 +174,12 @@
         const head = event.target.closest('.at-nav-sec-head');
         if (!head) return;
         const group = head.closest('.at-nav-sec');
-        // De groep met de huidige pagina blijft open, anders verdwijnt de actieve link.
-        if (group.querySelector('[aria-current="page"]')) return;
         const open = group.classList.toggle('open');
         head.setAttribute('aria-expanded', String(open));
+        // De groep met de huidige pagina staat bij elk bezoek weer open; alleen de keuze voor de andere groepen blijft bewaard.
+        if (group.classList.contains('has-active')) return;
         const saved = readOpenGroups();
-        saved[group.dataset.group] = open;
+        if (open) saved[group.dataset.group] = true; else delete saved[group.dataset.group];
         store.set(OPEN_GROUPS, JSON.stringify(saved));
       });
       /**
@@ -185,8 +197,7 @@
         <button type="button" class="at-nav-close" aria-label="Menu sluiten" title="Menu sluiten">✕</button>
       </div>
       ${mainHtml}
-      ${section('Beheer', items.filter((module) => module.status === 'actief' && module.group === 'beheer'))}
-      ${data.profile || data.shop ? `<div class="at-nav-list at-nav-foot">${data.shop ? link({ id: 'webshop', title: 'Naar de webshop', icon: 'cart', status: 'actief', href: `${base}../` }) : ''}${data.profile ? link({ id: 'profiel', title: 'Mijn profiel', icon: 'user', status: 'actief', href: `${base}profiel/` }) : ''}</div>` : ''}
+      ${footerLinks ? `<div class="at-nav-list at-nav-foot">${footerLinks}</div>` : ''}
       <button type="button" class="at-nav-collapse" title="Zijbalk in- of uitklappen" aria-label="Zijbalk in- of uitklappen">
         <span class="at-nav-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></span><span class="at-nav-label">Inklappen</span>
       </button>`;
@@ -259,6 +270,7 @@
     if (nav) nav.remove();
     document.querySelectorAll('.at-nav-backdrop, .at-nav-toggle').forEach((element) => element.remove());
     nav = null;
+    lastSignature = '';
     body.classList.remove('has-nav', 'nav-compact', 'nav-open');
   }
 

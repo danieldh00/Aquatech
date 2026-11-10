@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.8',
+      date: '2026-11-10',
+      title: 'Overzichtelijker zijbalk',
+      items: [
+        { text: 'De zijbalk is opnieuw ingedeeld: Verkoop, Artikelen, Planner & werk en Beheer zijn nette, inklapbare groepen met compactere regels. Alleen de groep waarin je zit staat open en de actieve pagina is duidelijk gemarkeerd.', for: ['beheer'] },
+        { text: 'Het menu binnen Beheer is ook inklapbaar en compacter; de webshopinstellingen staan nu bij elkaar in een eigen groep.', for: ['beheer'] },
+        { text: 'Onderaan de zijbalk staan nu de webshop, Hoofdbeheer en je profiel bij elkaar.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.7.7',
       date: '2026-11-10',
       title: 'Sneller bij drukte',
