@@ -143,7 +143,8 @@ dl.kv dd { margin: 0; }
 .bh-group-title:hover { background: var(--primary-soft); }
 .bh-group-title:focus-visible, .bh-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .bh-chevron { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--muted); transition: transform 0.15s; }
-.bh-group.open .bh-chevron { transform: rotate(180deg); }
+.bh-group.open .bh-chevron, .bh-nav.searching .bh-chevron { transform: rotate(180deg); }
+.bh-nav.searching .bh-group-title { cursor: default; }
 /* Secties springen in langs een lijn; een ingeklapte groep toont ze niet (bij zoeken wel). */
 .bh-group-body { display: none; margin: 1px 0 4px 12px; padding-left: 6px; border-left: 1px solid var(--line); }
 .bh-group.open .bh-group-body, .bh-nav.searching .bh-group-body { display: block; }

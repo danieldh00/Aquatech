@@ -5,6 +5,7 @@ const { after } = test;
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
+const { createVault } = require('../src/beveiliging/vault');
 const { createStore } = require('../src/platform/store');
 const { sitePhotoPng } = require('../src/platform/test-data');
 const { createLogin, createClient, listen } = require('./helpers/http-client');
@@ -27,6 +28,7 @@ const pngBase64 = (seed) => sitePhotoPng('voor', seed, 48, 32).toString('base64'
  */
 async function setup() {
   const db = openDb();
+  const vault = createVault();
   const store = createStore(db);
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
@@ -45,12 +47,12 @@ async function setup() {
     const body = responses.get(url);
     return body ? new Response(body, { status: 200, headers: { 'Content-Type': 'image/png' } }) : new Response('niet gevonden', { status: 404 });
   };
-  const { server, base } = await listen(createApp({ secret: SECRET, db, imageFetch }));
+  const { server, base } = await listen(createApp({ secret: SECRET, db, imageFetch, vault }));
   servers.push(server);
   const login = createLogin(base, { password: PW });
   const admin = await login('baas');
   await admin.put('/app/api/admin/settings', { storefront: true });
-  return { db, main, admin, klant: await login('klant'), vreemd: await login('vreemd', 'ander'), anonymous: createClient(base), downloads, responses };
+  return { db, main, vault, admin, klant: await login('klant'), vreemd: await login('vreemd', 'ander'), anonymous: createClient(base), downloads, responses };
 }
 
 /**
@@ -66,7 +68,7 @@ async function article(client, code) {
 }
 
 test('artikelafbeelding: uploaden, delen, vervangen en verwijderen', async () => {
-  const { admin, db, main } = await setup();
+  const { admin, db, main, vault } = await setup();
   const first = await article(admin, 'IMG-1');
   const second = await article(admin, 'IMG-2');
   const put = await admin.put(`/app/api/stock/items/${first.id}/image`, { name: 'foto.png', data: pngBase64(1) });
@@ -77,9 +79,9 @@ test('artikelafbeelding: uploaden, delen, vervangen en verwijderen', async () =>
   assert.strictEqual(file.status, 200);
   assert.match(file.type, /image\/png/);
   assert.ok(file.size > 50);
-  // In de database staat hij versleuteld, niet als PNG. De tekst is base64: een PNG begint daarin met de handtekening iVBORw0KGgo
-  // (het losse woord "PNG" kan in willekeurige versleutelde tekst toevallig voorkomen en maakte deze test af en toe rood).
-  assert.ok(!db.prepare('SELECT data FROM item_images WHERE tenant_id = ?').get(main).data.includes('iVBORw0KGgo'));
+  const stored = db.prepare('SELECT data FROM item_images WHERE tenant_id = ?').get(main).data;
+  assert.match(stored, /^f1:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$/);
+  assert.deepStrictEqual(vault.openBytes(stored, `${main}:artikel-afbeelding:${put.body.imageId}`), Buffer.from(pngBase64(1), 'base64'));
 
   // Dezelfde afbeelding bij een tweede artikel: één opgeslagen afbeelding.
   const shared = await admin.put(`/app/api/stock/items/${second.id}/image`, { name: 'zelfde.png', data: pngBase64(1) });

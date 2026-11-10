@@ -138,6 +138,7 @@
     list.onclick = (event) => {
       const head = event.target.closest('.bh-group-title');
       if (head) {
+        if (nav.classList.contains('searching')) return;
         const group = head.closest('.bh-group');
         const open = group.classList.toggle('open');
         head.setAttribute('aria-expanded', String(open));
@@ -160,7 +161,12 @@
         link.hidden = !hit;
         if (hit) found += 1;
       });
-      nav.querySelectorAll('.bh-group').forEach((group) => { group.hidden = !group.querySelector('.bh-link:not([hidden])'); });
+      nav.querySelectorAll('.bh-group').forEach((group) => {
+        group.hidden = !group.querySelector('.bh-link:not([hidden])');
+        const head = group.querySelector('.bh-group-title');
+        head.disabled = words.length > 0;
+        head.setAttribute('aria-expanded', String(words.length > 0 || group.classList.contains('open')));
+      });
       document.getElementById('bh-none').hidden = found > 0;
       nav.classList.toggle('searching', words.length > 0);
       if (words.length) { list.classList.add('open'); toggle.setAttribute('aria-expanded', 'true'); }
