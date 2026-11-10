@@ -2032,6 +2032,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {Promise<{ expired: number }>} Het aantal vervallen bestellingen.
    */
   app.locals.webPaymentsExpire = () => webPayments.expireUnpaid(tenant.id);
+  /**
+   * Geeft de voorraad vrij van webshopbestellingen op rekening waarvan de reserveringstermijn voorbij is (elk uur).
+   * @returns {{ released: number }} Het aantal vrijgegeven bestellingen.
+   */
+  app.locals.webOrdersRelease = () => webOrders.releaseExpired(tenant.id);
   webOrders.onShipped((tenantId, order, user) => webOrderInvoices.onShipped(tenantId, order, user));
   webOrders.onShipped((tenantId, order) => webOrderMail.sendShipment(tenantId, order));
   webOrders.onCancelled((tenantId, order, user) => webOrderInvoices.creditCancelled(tenantId, order, user));
@@ -2560,6 +2565,12 @@ if (require.main === module) {
       if (total) console.log(`Bewaartermijnen toegepast: ${JSON.stringify(removed)}`);
     } catch (err) {
       console.error('Onderhoud mislukt:', err);
+    }
+    try {
+      const freed = app.locals.webOrdersRelease();
+      if (freed.released) console.log(`Reserveringen van webshopbestellingen op rekening vrijgegeven: ${freed.released}`);
+    } catch (error) {
+      console.error('Reserveringen van webshopbestellingen vrijgeven mislukt:', error.message);
     }
     app.locals.webPaymentsExpire()
       .then((out) => { if (out.expired) console.log(`Onbetaalde webshopbestellingen vervallen: ${out.expired}`); })

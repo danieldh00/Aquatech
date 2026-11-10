@@ -56,6 +56,17 @@
   const PAY_METHODS = { ideal: 'iDEAL', creditcard: 'creditcard', bancontact: 'Bancontact', paypal: 'PayPal', applepay: 'Apple Pay', banktransfer: 'overboeking' };
 
   /**
+   * De stand van de voorraadreservering van een nieuwe bestelling (8): tot wanneer hij vastligt of dat hij is vrijgegeven.
+   * @param {object} order De bestelling.
+   * @returns {string} HTML-tekst (met een regelafbreking vooraf), leeg als er niets te melden is.
+   */
+  const reservationText = (order) => {
+    if (order.status !== 'nieuw') return '';
+    if (order.reservationReleasedAt) return `<br><strong>Reservering vervallen</strong> op ${when(order.reservationReleasedAt)}: de voorraad is weer vrij. Verzenden kan nog, mits er voorraad is.`;
+    if (order.reservedUntil) return `<br>Voorraad gereserveerd tot ${when(order.reservedUntil)}.`;
+    return '';
+  };
+  /**
    * De betaling van een bestelling als tekst voor het detail.
    * @param {object} order De bestelling (payment en pay).
    * @returns {string} Bijv. "online betaald op 1 nov 2026 (iDEAL)" of "op rekening".
@@ -103,7 +114,7 @@
         <tr><th colspan="3">${order.vat && order.vat.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num"><b>${euro(order.totals.total)}</b></td></tr></tbody></table></div>
       ${trackingForm}
       ${invoiceLine}
-      <p class="muted small">Betaling: ${paymentText(order)} · ${mail}${shipMail ? ` · ${shipMail}` : ''}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})`).join(' → ')}</p>
+      <p class="muted small">Betaling: ${paymentText(order)} · ${mail}${shipMail ? ` · ${shipMail}` : ''}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})${step.note ? `: ${esc(step.note)}` : ''}`).join(' → ')}${reservationText(order)}</p>
       <p>${buttons}${canRefund ? ' <button class="btn primary" id="wo-refund">Terugbetalen via Mollie</button>' : ''} <button class="btn" id="wo-close">Sluiten</button></p>`;
     box.hidden = false;
     /** Sluit het detail. */

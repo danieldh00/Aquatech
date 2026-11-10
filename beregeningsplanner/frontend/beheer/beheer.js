@@ -815,6 +815,7 @@
     form.publicUrl.value = payment.publicUrl || '';
     form.onAccount.value = payment.onAccount || 'iedereen';
     form.holdHours.value = payment.holdHours || 24;
+    form.accountHoldDays.value = payment.accountHoldDays == null ? 14 : payment.accountHoldDays;
     const keyState = $('#s-payment-key-state');
     keyState.textContent = key.set ? `Ingesteld${key.hint ? ` (${key.hint})` : ''}.` : 'Niet ingesteld: online betalen kan pas met een sleutel.';
     keyState.className = `state ${key.set ? 'ok' : 'off'}`;
@@ -963,7 +964,7 @@
      */
     paymentForm.onsubmit = (event) => {
       event.preventDefault();
-      const patch = { shopPayment: { online: paymentForm.online.checked, publicUrl: paymentForm.publicUrl.value.trim(), onAccount: paymentForm.onAccount.value, holdHours: Number(paymentForm.holdHours.value) } };
+      const patch = { shopPayment: { online: paymentForm.online.checked, publicUrl: paymentForm.publicUrl.value.trim(), onAccount: paymentForm.onAccount.value, holdHours: Number(paymentForm.holdHours.value), accountHoldDays: Number(paymentForm.accountHoldDays.value) } };
       if (paymentForm.mollieApiKey.value.trim()) patch.mollieApiKey = paymentForm.mollieApiKey.value.trim();
       saveSettings(paymentForm, patch, 'Betalen opgeslagen');
     };

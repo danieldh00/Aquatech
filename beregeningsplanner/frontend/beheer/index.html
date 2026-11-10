@@ -294,7 +294,9 @@
             <option value="nooit">Niet aanbieden (alleen online betalen)</option>
           </select></label>
           <label>Onbetaalde bestelling vasthouden (uren)<input name="holdHours" type="number" min="1" max="168" step="1"></label>
-          <span class="muted small">Na deze tijd vervalt een onbetaalde online bestelling en komt de voorraad vrij. Bij een betaalde bestelling die je annuleert, boek je de betaling zelf terug in je Mollie-dashboard.</span>
+          <span class="muted small">Na deze tijd vervalt een onbetaalde online bestelling en komt de voorraad vrij. Een betaalde bestelling die je annuleert, betaal je terug vanuit de bestelling.</span>
+          <label>Bestelling op rekening vasthouden (dagen)<input name="accountHoldDays" type="number" min="0" max="90" step="1"></label>
+          <span class="muted small">Zo lang houdt een nieuwe bestelling op rekening de voorraad vast. Daarna komt de voorraad weer vrij in de shop; de bestelling blijft staan en kan nog steeds verzonden worden. 0 = vasthouden tot verzenden of annuleren.</span>
           <p><button class="btn primary" type="submit">Betalen opslaan</button></p>
           <div class="err" role="alert"></div>
         </form>

@@ -24,7 +24,7 @@ const { returnsBlock } = require('./storefront-return-pages');
 const { legalDefaults, LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
-const { validPaymentId, cleanPublicUrl } = require('./mollie');
+const { validPaymentId, cleanPublicUrl, sanitizePayment } = require('./mollie');
 const Seo = require('./seo');
 const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, convertPlannedQty, MAX_QTY } = require('./storefront-cart');
 
@@ -767,7 +767,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
               }
             }
           }
-          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer), vatNumber: approvedVatNumber, vies: viesResult, addressUnverified }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer));
+          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer), vatNumber: approvedVatNumber, vies: viesResult, addressUnverified }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer), sanitizePayment(settingsFor(tenantId).get('shopPayment')));
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
             const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));

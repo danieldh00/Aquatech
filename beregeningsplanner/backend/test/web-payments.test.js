@@ -39,7 +39,7 @@ test('de instelling bewaart de sleutel versleuteld en toont hem nooit', async ()
   assert.strictEqual(view.shopPayment.value.publicUrl, 'https://winkel.example/');
   const invalid = await world.admin.put('/app/api/admin/settings', { shopPayment: { online: true, publicUrl: 'http://evil.example/', onAccount: 'zomaar', holdHours: 9999 } });
   assert.strictEqual(invalid.status, 200);
-  assert.deepStrictEqual(invalid.body.settings.shopPayment.value, { online: true, publicUrl: '', onAccount: 'iedereen', holdHours: 24 }, 'http buiten localhost, onbekende keuze en bewaartijd worden gesaneerd');
+  assert.deepStrictEqual(invalid.body.settings.shopPayment.value, { online: true, publicUrl: '', onAccount: 'iedereen', holdHours: 24, accountHoldDays: 14 }, 'http buiten localhost, onbekende keuze en bewaartijd worden gesaneerd');
 });
 
 test('de betaalinstelling is alleen voor beheerders van de hoofdtenant', async () => {
