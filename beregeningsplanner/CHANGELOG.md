@@ -2,15 +2,70 @@
 
 ## 1.7.4
 
-Een testomgeving raakt de echte systemen niet meer (bevinding T-01 uit de audit).
+Alle bevindingen uit de veiligheids- en logica-audit van 1.7.3 opgelost of bewust vastgelegd (behalve W-02: op rekening voor
+iedereen blijft zo zolang er getest wordt, besluit Daniël).
 
+**Testomgeving (T-01)**
 - `settings.js`: instellingen met `liveOnly` (`shopSource`, `shopConsumerKey`, `shopConsumerSecret`, `mollieApiKey`, `mailServer`,
   `mailPassword`, `seasonReminders`, `visma`, `vismaRefreshToken`) worden bij het aanmaken van een testomgeving niet overgenomen
   (`LIVE_ONLY_KEYS`). Ook de overige geheimen gaan niet meer mee; de AI-sleutel van live blijft in test bruikbaar via `aiTenantOf`.
 - `invoicing` gaat wel mee, maar met `autoSend` en `shopOrders.enabled` uit (`valueForTest`).
-- De achtergrondtaken (webshopsync, webshopbestellingen, Visma, herinneringen) doen daardoor in een nieuwe testomgeving niets, tot
-  iemand daar zelf een koppeling instelt.
 - Hoofdbeheer: de toelichting bij *Testomgeving aanmaken* noemt dit.
+
+**Inloggen (A-01, A-03, A-04, A-05)**
+- Mislukte pogingen tellen per account én bezoeker (`loginGuard` in server.js): wie het wachtwoord van een ander raadt, blokkeert
+  alleen zichzelf; een ruime grens per account (100) stopt raden vanaf veel adressen.
+- Toegangscode minstens 12 tekens. Verplicht wachtwoord wijzigen geldt ook in de webshop.
+- Via https heet de sessiecookie `__Host-aquatech_session` (`sessionCookieName` in auth.js); een cookie zonder voorvoegsel
+  (bijvoorbeeld gezet door een ander subdomein) telt via https niet.
+
+**Wachtwoord vergeten en e-mail bevestigen (A-02, W-08)**
+- Migratie 48: tabel `account_tokens` (alleen SHA-256 van het token, verlooptijd, eenmalig) en `users.email_verified_at`.
+- `platform/account-tokens.js`; shop: *Wachtwoord vergeten* (link 1 uur, één keer, sessies vervallen, neutraal antwoord, limiet per
+  bezoeker en per account), bevestigingsmail bij registreren (7 dagen) en opnieuw sturen vanuit het account. Het token staat in
+  `#t=` en gaat als kop naar de server. Een ander e-mailadres in het profiel maakt de bevestiging leeg.
+- Afrekenen: de bevestiging gaat naar het e-mailadres van het account (veld alleen-lezen).
+
+**Btw verleggen (W-01)**
+- `webshop/vies.js`: controle bij VIES (EU) bij het plaatsen. Verleggen alleen met het btw-nummer dat een beheerder bij het
+  zakelijke account heeft goedgekeurd én dat VIES niet ongeldig noemt; *onbereikbaar* verlegt wel, maar wordt vastgelegd.
+  Uitkomst (met consultatienummer als het eigen btw-nummer in het bedrijfsprofiel staat) in `data.vat.vies`, zichtbaar in Beheer.
+
+**Webshopbestellingen (W-03, W-04, W-09, W-11, W-12)**
+- Een artikel op een open webshopbestelling kan niet worden verwijderd of gearchiveerd (409 `reserved_by_order`).
+- Creditnota bij retour volgt de factuurregels (geen centverschil na een afrondingsregel).
+- Bestelnummer via `MAX()` op de unieke index in plaats van alle bestellingen van het jaar.
+- Adres niet gevonden bij PDOK (nieuwbouw) of PDOK onbereikbaar: de klant kan straat en woonplaats zelf invullen (vinkje);
+  de bestelling krijgt `address.unverified` en Beheer toont *Adres niet gecontroleerd*.
+- Bestellimiet: pogingen per bezoeker ruim (40/uur), geplaatste bestellingen per account 10/uur (geteld in de database).
+
+**Retouren en terugbetalen (W-05)**
+- Volledige retour door een consument (alle artikelen, ook over meerdere retouren): de verzendkosten gaan mee in de creditnota.
+- `POST /api/admin/web-orders/:id/refund` (`{ returnId }` = bedrag van de definitieve creditnota; zonder = geannuleerde bestelling,
+  het restbedrag) via de Mollie Refunds-API (`mollie.createRefund`, idempotentiesleutel per retour/annulering, nooit twee keer).
+  Knoppen in Beheer bij de retour en de geannuleerde bestelling.
+- De Mollie-webhook legt terugbetalingen (ook uit het Mollie-dashboard) en terugboekingen door de bank (`chargedBack`,
+  `chargebackAt`) vast; Beheer toont ze.
+
+**Planner naar winkelwagen (W-10)**
+- Migratie 49: `stock_items.unit_content` (*Inhoud per eenheid* in Artikelen, bijv. 50 voor een rol van 50 m).
+- De planner stuurt de eenheid mee (`u:<code>`); andere eenheid met inhoud → omrekenen en naar boven afronden, zonder inhoud →
+  niet in de wagen en gemeld (`?eenheid=`).
+
+**Tekening indienen en klantlinks (T-03, G-02)**
+- `drawingRequests` staat standaard uit; per inzending hoogstens 2 MB (de browser verkleint de achtergrond), hoogstens 40 MB
+  onbehandeld per organisatie; onbehandelde openbare inzendingen worden na 60 dagen gewist (AVG).
+- Offerte- en afspraaklinks verlopen (`platform/public-links.js`): 180 dagen na delen of 90 dagen na de geldigheids-/afspraakdatum,
+  wat het laatst is.
+
+**Overig (T-02, W-07, G-01, A-06, W-06, T-04)**
+- `tools/tenant-filter.js` + `test/tenant-filter.test.js`: elke nieuwe SQL-tekst op een tabel met `tenant_id` moet op de tenant
+  filteren; bestaande uitzonderingen in `tools/tenant-filter-baseline.json` (alleen korter maken).
+- Canonical, sitemap, feeds en links in mails gebruiken alleen het webadres uit Beheer (`shopPayment.publicUrl`), nooit de Host-kop.
+- PostgreSQL: `statement_timeout` 30 s per verbinding (`PG_STATEMENT_TIMEOUT_MS`).
+- Vastgelegd zonder codewijziging: limieten en idempotentie in het geheugen zijn goed zolang er één container is (A-06);
+  WooCommerce-voorraadsync wordt uitgefaseerd met de eigen shop (W-06); klantweergave toont bewust ook live-klanten van de eigen
+  organisatie, met alleen testgegevens (T-04, wens Daniël 1.3.6).
 
 ## 1.7.3
 

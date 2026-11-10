@@ -182,6 +182,21 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - **Testomgeving zonder koppelingen** (1.7.4): bij het aanmaken van een testomgeving gaan geheimen en instellingen met
   `liveOnly` in settings.js (webshop, Mollie, mail, Visma, seizoensherinneringen) niet mee; `invoicing` wel, met `autoSend` en
   `shopOrders.enabled` uit (`valueForTest`). **Een nieuwe instelling die een extern systeem aanstuurt krijgt `liveOnly: true`.**
+- **Audit 1.7.3 opgelost** (1.7.4, PR #136; Excel in de projectbestanden `audit-fable/`):
+  - *Wachtwoord vergeten / e-mail bevestigen* (migratie 48, `platform/account-tokens.js`, `shop-accounts.js`): eenmalige links,
+    alleen SHA-256 in `account_tokens`, token in `#t=`; `users.email_verified_at`. Bestelmail naar het accountadres.
+  - *VIES* (`webshop/vies.js`, tests `createApp({ viesFetch })` + `test/helpers/vies-fake.js`): btw verleggen alleen met het
+    goedgekeurde nummer van het account en niet als VIES het ongeldig noemt; bewijs in `data.vat.vies`.
+  - *Terugbetalen* (`webPayments.refund`, `POST /api/admin/web-orders/:id/refund`, `mollie.createRefund`): sleutel per retour of
+    annulering; webhook legt `refundedTotal`/`chargedBack` vast. Volledige consumentenretour crediteert ook de verzendkosten.
+  - *Eenheden planner → wagen* (migratie 49, `stock_items.unit_content`, `convertPlannedQty` in storefront-cart.js).
+  - *Adres zonder PDOK*: vinkje `addressManual` bij afrekenen → `address.unverified`. Bestellimiet per account (`orders.countSince`).
+  - *Webadres*: canonical, sitemap, feeds en links in mails alleen uit `shopPayment.publicUrl` (`publicBaseUrl`), nooit de Host-kop.
+  - *Sessiecookie* via https `__Host-aquatech_session` (`sessionCookieName`). Klantlinks verlopen (`platform/public-links.js`).
+  - *Tenantfilter*: `tools/tenant-filter.js` (`npm run tenant-filter`) + `test/tenant-filter.test.js`; uitzonderingen in
+    `tools/tenant-filter-baseline.json` (alleen korter). PostgreSQL `statement_timeout` 30 s (`PG_STATEMENT_TIMEOUT_MS`).
+  - Bewust zo gelaten: op rekening voor iedereen (W-02, testfase), limieten in het geheugen (één container), WooCommerce-voorraadsync
+    (wordt uitgefaseerd), klantweergave met live-klanten van de eigen organisatie.
 - **Verwijderen** (0.33.0): live-tenant via `DELETE /api/platform/tenants/:id`
   met `{ confirm: <slug> }` (`store.deleteTenant`: wist elke tabel met
   `tenant_id` voor de tenant + testomgevingen, uit het schema gelezen, met
@@ -612,6 +627,9 @@ de PR-beschrijving kort hoe eraan voldaan is.
   of frontend. Invoer server-side saneren (`sanitize`), parameters altijd
   via `?`, nooit tekst in SQL plakken.
 - Tests voor elke nieuwe route: andere tenant → 404, ontbrekend recht → 403.
+- Een nieuwe query op een tabel met `tenant_id` filtert op `tenant_id`; `test/tenant-filter.test.js` faalt anders
+  (echte uitzondering: reden in de PR en `node tools/tenant-filter.js --update`).
+- Links naar de shop in mails en SEO altijd via `publicBaseUrl` (webadres uit Beheer), nooit uit `req.headers.host`.
 
 ## Codestijl (wens Daniël 2026-10-22, geldt voor alle code)
 
