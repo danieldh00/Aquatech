@@ -637,6 +637,35 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     else entry.count += 1;
   };
 
+  // Inlogpogingen tellen per account én bezoeker: wie het wachtwoord van een ander raadt, blokkeert alleen zichzelf en
+  // sluit de echte gebruiker niet buiten. Daarnaast geldt een ruime grens per account voor alle bezoekers samen, zodat
+  // raden vanaf veel adressen tegelijk ook stopt.
+  const ACCOUNT_MAX_FAILURES = 100;
+  const loginGuard = {
+    /**
+     * Is inloggen op dit account voor deze bezoeker geblokkeerd?
+     * @param {object} req Het verzoek (bepaalt de bezoeker).
+     * @param {string} account Sleutel van het account (`<organisatie>:<gebruikersnaam>`).
+     * @param {number} [max] Aantal mislukte pogingen van deze bezoeker waarna hij geblokkeerd is.
+     * @returns {boolean} true als hij geblokkeerd is.
+     */
+    blocked: (req, account, max = 10) => lockedOut(`${account}@${clientKey(req)}`, max) || lockedOut(account, ACCOUNT_MAX_FAILURES),
+    /**
+     * Telt een mislukte poging van deze bezoeker op dit account.
+     * @param {object} req Het verzoek.
+     * @param {string} account Sleutel van het account.
+     * @returns {void}
+     */
+    fail: (req, account) => { failed(`${account}@${clientKey(req)}`); failed(account); },
+    /**
+     * Wist de tellers na een geslaagde login.
+     * @param {object} req Het verzoek.
+     * @param {string} account Sleutel van het account.
+     * @returns {void}
+     */
+    clear: (req, account) => { failures.delete(`${account}@${clientKey(req)}`); failures.delete(account); },
+  };
+
   app.get('/api/health', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json({ ok: true, version });
@@ -656,7 +685,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const orgCode = String(req.body?.tenant ?? '').trim().toLowerCase().slice(0, 60);
       let home = store.loginTenant(orgCode);
       const key = `${home?.id || orgCode}:${username}`;
-      if (lockedOut(key)) {
+      if (loginGuard.blocked(req, key)) {
         audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, home?.id);
         return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
       }
@@ -669,10 +698,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // Die poging telt mee voor de gebruikersnaam in de hoofdtenant, los van
       // de ingevulde code (anders geeft elke verzonnen code nieuwe pogingen).
       const mainKey = `${tenant.id}:${username}`;
-      if (!user && home?.id !== tenant.id && !lockedOut(mainKey)) {
+      if (!user && home?.id !== tenant.id && !loginGuard.blocked(req, mainKey)) {
         const admin = await store.authenticate(tenant.id, username, password);
-        if (admin?.platform_admin) { user = admin; home = tenant; failures.delete(mainKey); }
-        else if (!admin) failed(mainKey);
+        if (admin?.platform_admin) { user = admin; home = tenant; loginGuard.clear(req, mainKey); }
+        else if (!admin) loginGuard.fail(req, mainKey);
       }
       // Testaccounts hebben platformbreed unieke namen: met een verkeerde of
       // vergeten organisatiecode (de browser onthoudt de vorige) zoeken we in de
@@ -680,23 +709,23 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const testAccount = !user ? store.loginTenantOfTestAccount(username) : null;
       if (testAccount && testAccount.home.id !== home?.id) {
         const testKey = `${testAccount.home.id}:${username}`;
-        if (lockedOut(testKey)) {
+        if (loginGuard.blocked(req, testKey)) {
           audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, testAccount.home.id);
           return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
         }
         const testUser = await store.authenticate(testAccount.home.id, username, password);
-        if (testUser) { user = testUser; home = testAccount.home; failures.delete(testKey); }
-        else failed(testKey);
+        if (testUser) { user = testUser; home = testAccount.home; loginGuard.clear(req, testKey); }
+        else loginGuard.fail(req, testKey);
       } else if (!user && !testAccount) {
         // Onbekende naam: toch een hash uitrekenen, zodat de looptijd niet verraadt of een testaccount bestaat.
         await store.authenticate(null, username, password);
       }
       if (!user) {
-        failed(key);
+        loginGuard.fail(req, key);
         audit(req, 'inloggen_mislukt', { username, organisatie: orgCode }, null, home?.id);
         return res.status(401).json({ error: 'wrong_login', message: 'Onjuiste organisatiecode, gebruikersnaam of wachtwoord.' });
       }
-      failures.delete(`${home?.id || orgCode}:${username}`);
+      loginGuard.clear(req, `${home?.id || orgCode}:${username}`);
       // Testaccounts horen bij een testomgeving van de organisatie.
       if ((home.disabled || !organizationActive(user.tenant_id)) && !user.platform_admin) {
         audit(req, 'inloggen_geweigerd', { username, reden: 'tenant_uitgeschakeld' }, user.id, user.tenant_id);
@@ -2285,7 +2314,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Eigen webshop (hoofdmap /, openbaar, zie webshop/storefront.js); uit
   // zolang de instelling `storefront` van de hoofdtenant uit staat.
   // Inloggen en registreren in de shop gebruiken dezelfde accounts (rol klant).
-  const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
+  const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,

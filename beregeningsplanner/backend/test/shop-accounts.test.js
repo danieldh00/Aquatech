@@ -182,3 +182,17 @@ test('kopje Planner: aanmelden met drie velden, doorsturen naar de planner, uit 
   assert.strictEqual((await postForm(base, createClient(base), '/planner/', { displayName: 'Z', email: 'z@voorbeeld.nl', password: PW })).status, 404);
   assert.strictEqual(store.accountIdsByEmail(main, 'z@voorbeeld.nl').length, 0);
 });
+
+test('tijdelijk wachtwoord: de shop stuurt door naar het wachtwoordscherm, uitloggen blijft werken', async () => {
+  const { base, store, main } = await setup();
+  await store.createAccount(main, { username: 'tijdelijk', displayName: 'Tijdelijk', role: 'klant', password: PW }, { mustChangePassword: true });
+  const client = createClient(base, { followRedirects: false });
+  assert.strictEqual((await postForm(base, client, '/inloggen/', { login: 'tijdelijk', password: PW })).location, '../app/wachtwoord');
+  assert.deepStrictEqual([(await client.get('/')).status, (await client.get('/')).location], [302, 'app/wachtwoord']);
+  assert.strictEqual((await client.get('/account/')).location, '../app/wachtwoord');
+  assert.strictEqual((await postForm(base, client, '/winkelwagen/planner', { 'q:X': '1' })).location, '../app/wachtwoord');
+  // Bestanden van de shop en uitloggen blijven bereikbaar.
+  assert.strictEqual((await client.get('/assets/winkel.css')).status, 200);
+  assert.strictEqual((await postForm(base, client, '/uitloggen/', {})).location, '../');
+  assert.strictEqual((await client.get('/')).status, 200);
+});

@@ -11,10 +11,10 @@ const LOGIN_MAX_FAILURES = 10;
 
 /**
  * Maakt de accountfuncties van de webshop.
- * @param {{ store: object, auth: object, tenant: object, audit: Function, clearEnvironment: Function, impersonation: object, lockedOut: Function, failed: Function, failures: Map }} deps Opslag, sessies, de hoofdtenant waar de shop bij hoort en de blokkering van het hoofdinlogscherm.
+ * @param {{ store: object, auth: object, tenant: object, audit: Function, clearEnvironment: Function, impersonation: object, loginGuard: object }} deps Opslag, sessies, de hoofdtenant waar de shop bij hoort en de blokkering van het hoofdinlogscherm (per account en bezoeker).
  * @returns {{ viewer: Function, login: Function, register: Function, logout: Function, businessProfile: Function, requestBusiness: Function }} De functies.
  */
-function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures }) {
+function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard }) {
   const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyFn: (req) => `login:${clientKey(req)}` });
   const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `register:${clientKey(req)}` });
 
@@ -46,6 +46,16 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
   }
 
   /**
+   * Moet de ingelogde bezoeker eerst zijn wachtwoord wijzigen (tijdelijk wachtwoord van een beheerder)?
+   * @param {object} req Het verzoek.
+   * @returns {boolean} true als er een account is ingelogd dat zijn wachtwoord nog moet wijzigen.
+   */
+  function mustChangePassword(req) {
+    const session = auth.session(req);
+    return Boolean(session?.via === 'user' && session.user && Number(session.user.must_change_password));
+  }
+
+  /**
    * Zet de sessie voor een gebruiker (zoals bij het gewone inloggen).
    * @param {object} req Het verzoek.
    * @param {object} res Het antwoord.
@@ -69,18 +79,18 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
     if (limited(loginLimiter, req, res)) return { error: 'Te veel pogingen. Probeer het over een kwartier opnieuw.', status: 429 };
     const username = store.loginNameFor(tenant.id, String(typed ?? '').slice(0, 200)).slice(0, 60);
     const key = `${tenant.id}:${username}`;
-    if (lockedOut(key, LOGIN_MAX_FAILURES)) {
+    if (loginGuard.blocked(req, key, LOGIN_MAX_FAILURES)) {
       audit(req, 'inloggen_geblokkeerd', { username, via: 'winkel' }, null, tenant.id);
       return { error: 'Te veel mislukte pogingen voor dit account. Probeer het over een kwartier opnieuw.', status: 429 };
     }
     const found = await store.authenticate(tenant.id, username, String(password ?? '').slice(0, 1024));
     const user = found && found.tenant_id === tenant.id ? found : null;
     if (!user) {
-      failed(key);
+      loginGuard.fail(req, key);
       audit(req, 'inloggen_mislukt', { username, via: 'winkel' }, null, tenant.id);
       return { error: 'Onjuist e-mailadres, gebruikersnaam of wachtwoord.', status: 401 };
     }
-    failures.delete(key);
+    loginGuard.clear(req, key);
     startSession(req, res, user);
     audit(req, 'ingelogd', { via: 'winkel' }, user.id, user.tenant_id);
     return { user };
@@ -149,7 +159,7 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
     return { ok: true };
   }
 
-  return { viewer, login, register, logout, businessProfile, requestBusiness };
+  return { viewer, mustChangePassword, login, register, logout, businessProfile, requestBusiness };
 }
 
 module.exports = { createShopAccounts };

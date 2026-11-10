@@ -199,6 +199,16 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   const imageLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 1200, keyFn: (req) => `foto:${clientKey(req)}` });
   router.use((req, res, next) => (req.path.startsWith('/artikelfoto/') ? imageLimiter : limiter)(req, res, next));
 
+  // Een account met een tijdelijk wachtwoord kiest eerst een eigen wachtwoord, net als in de app: pagina's en formulieren
+  // van de shop sturen door naar het wachtwoordscherm (uitloggen en de melding van de betaaldienst blijven werken).
+  router.use((req, res, next) => {
+    const page = req.method === 'GET' && req.path.endsWith('/') && !req.path.startsWith('/adres/');
+    const form = req.method === 'POST' && !/^\/uitloggen\/?$/.test(req.path) && !req.path.startsWith('/mollie/');
+    if (!accounts || !(page || form) || !accounts.mustChangePassword(req)) return next();
+    const depth = req.path.split('/').filter(Boolean).length - (req.path.endsWith('/') ? 0 : 1);
+    return res.redirect(req.method === 'POST' ? 303 : 302, `${'../'.repeat(Math.max(depth, 0))}app/wachtwoord`);
+  });
+
   if (addressLookup) registerAddressRoute(router, '/adres/', addressLookup, createRateLimiter({ windowMs: 60 * 1000, max: 30, keyFn: (req) => `adres:${clientKey(req)}` }));
 
   router.get('/assets/:name', (req, res) => {

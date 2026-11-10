@@ -84,10 +84,10 @@ test('volgorde: database > omgeving > standaard', () => {
 
 test('geheimen komen nooit volledig in het overzicht', () => {
   const settings = freshSettings();
-  settings.update({ anthropicApiKey: KEY, accessCode: 'abcd1234' });
+  settings.update({ anthropicApiKey: KEY, accessCode: 'abcd1234efgh' });
   const view = JSON.stringify(settings.view());
   assert.ok(!view.includes(KEY));
-  assert.ok(!view.includes('abcd1234'));
+  assert.ok(!view.includes('abcd1234efgh'));
   assert.deepStrictEqual(settings.view().anthropicApiKey, { set: true, source: 'instellingen', hint: '…WXYZ' });
   assert.deepStrictEqual(settings.view().accessCode, { set: true, source: 'instellingen' });
   // Leegmaken is een bewuste waarde en gaat voor op de startwaarde.
@@ -99,7 +99,7 @@ test('ongeldige waarden worden geweigerd', () => {
   const settings = freshSettings();
   assert.throws(() => settings.update({ aiDailyLimit: 9999 }), SettingsError);
   assert.throws(() => settings.update({ aiDailyLimit: '5' }), SettingsError);
-  assert.throws(() => settings.update({ accessCode: 'ab' }), SettingsError);
+  assert.throws(() => settings.update({ accessCode: 'kortecode' }), SettingsError);
   assert.throws(() => settings.update({ aiEnabled: 'ja' }), SettingsError);
   assert.throws(() => settings.update({ onbekend: 1 }), SettingsError);
   assert.strictEqual(settings.get('aiDailyLimit'), 30);
@@ -208,12 +208,12 @@ test('nieuwe toegangscode: andere toestellen uit, de beheerder blijft ingelogd',
   try {
     const adminClient = await admin(base);
     const other = await admin(base);
-    const response = await adminClient.put('/app/api/admin/settings', { accessCode: 'nieuwecode' });
+    const response = await adminClient.put('/app/api/admin/settings', { accessCode: 'nieuwe-code-2026' });
     assert.strictEqual(response.status, 200);
     assert.strictEqual((await adminClient.get('/app/api/admin/settings')).status, 200);
     assert.strictEqual((await other.get('/app/api/admin/settings')).status, 401);
     assert.strictEqual((await createClient(base).post('/app/api/auth/login', { code: 'geheim' })).status, 401);
-    assert.strictEqual((await createClient(base).post('/app/api/auth/login', { code: 'nieuwecode' })).status, 200);
+    assert.strictEqual((await createClient(base).post('/app/api/auth/login', { code: 'nieuwe-code-2026' })).status, 200);
   } finally {
     server.close();
   }

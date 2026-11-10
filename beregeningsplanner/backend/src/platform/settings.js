@@ -24,7 +24,8 @@ const AiModels = require(path.join(FRONTEND_DIR, 'shared', 'ai-models.js'));
 // en staan versleuteld in de database (AES-256-GCM, zie vault.js).
 
 const FIELDS = {
-  accessCode: { type: 'secret', env: 'ACCESS_CODE', default: '', min: 4 },
+  // De toegangscode geeft zonder persoonlijk account volledige beheerrechten: daarom minstens 12 tekens.
+  accessCode: { type: 'secret', env: 'ACCESS_CODE', default: '', min: 12 },
   // Zonder toegangscode mogen bezoekers zonder inloggen als gast werken.
   guestAccess: { type: 'bool', env: 'GUEST_ACCESS', default: false },
   // Bezoekers zonder account mogen een tekening maken en ter controle
