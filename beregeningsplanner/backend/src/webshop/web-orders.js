@@ -494,6 +494,8 @@ function createWebOrderStore(db, { stock }) {
       if (status === 'verzonden' && data.payment === 'online' && !(data.pay && data.pay.status === 'betaald')) return { error: 'Deze bestelling is nog niet betaald: verzenden kan pas na de betaling.', status: 409 };
       // Een vrijgegeven reservering (8): de voorraad kan intussen voor een ander gereserveerd zijn; alleen verzenden wat vrij is.
       if (status === 'verzonden' && data.reservationReleasedAt) {
+        // Dezelfde rijsloten als bij het plaatsen: tot het einde van de transactie kan niemand deze voorraad reserveren.
+        lockItems(tenantId, data.lines);
         const short = stock.shortageFor(tenantId, data.lines.map((line) => ({ itemId: line.itemId, qty: line.qty })), `order:${row.id}`);
         if (short.length) return { error: `De reservering van deze bestelling was vervallen en er is niet genoeg vrije voorraad meer voor: ${short.map((item) => item.name).join(', ')}.`, status: 409 };
       }
