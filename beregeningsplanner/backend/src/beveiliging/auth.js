@@ -165,6 +165,15 @@ function safeEqual(left, right) {
 }
 
 const GUEST_COOKIE = 'aquatech_guest';
+
+/**
+ * Naam van de sessiecookie voor dit verzoek. Via https het voorvoegsel __Host- (A-03 uit de audit van 1.7.3): de browser
+ * accepteert die cookie alleen met Secure, Path=/ en zonder Domain, dus een zusterapp op een ander subdomein kan hem niet
+ * zetten of overschrijven (cookie tossing). Via http (lokaal testen) de gewone naam, want __Host- vereist Secure.
+ * @param {object} req Het verzoek (X-Forwarded-Proto van de tunnel).
+ * @returns {string} De naam van de cookie.
+ */
+const sessionCookieName = (req) => (req && req.headers && req.headers['x-forwarded-proto'] === 'https' ? `__Host-${COOKIE_NAME}` : COOKIE_NAME);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -269,7 +278,7 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
    */
   function session(req) {
     if (req._session !== undefined) return req._session;
-    const found = verifySession(parseCookies(req.headers.cookie)[COOKIE_NAME]);
+    const found = verifySession(parseCookies(req.headers.cookie)[sessionCookieName(req)]);
     req._session = !found ? null : found.subject === 'code' ? { via: 'code', row: found.row } : { via: 'user', user: found.user, row: found.row };
     return req._session;
   }
@@ -307,7 +316,7 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
    * @returns {boolean} true als het bestand mag worden geleverd.
    */
   function isAuthenticatedForAsset(req) {
-    const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
+    const token = parseCookies(req.headers.cookie)[sessionCookieName(req)];
     if (!token) return isAuthenticated(req);
     const key = assetKey(token);
     if ((assetSessions.get(key) || 0) > Date.now()) return true;
@@ -379,11 +388,11 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
    * @returns {void}
    */
   function setCookie(req, res, subject = 'code') {
-    const old = parseCookies(req.headers.cookie)[COOKIE_NAME];
+    const old = parseCookies(req.headers.cookie)[sessionCookieName(req)];
     if (old) { store.deleteSession(old); assetSessions.delete(assetKey(old)); }
     req._session = undefined;
     const sessionTenant = subject === 'code' ? tenantId : store.getUser(subject)?.tenant_id || tenantId;
-    appendCookie(res, cookieAttrs(req, COOKIE_NAME, issue(subject, req), maxDays(sessionTenant) * DAY_MS));
+    appendCookie(res, cookieAttrs(req, sessionCookieName(req), issue(subject, req), maxDays(sessionTenant) * DAY_MS));
   }
 
   /**
@@ -393,9 +402,9 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
    * @returns {void}
    */
   function clearCookie(req, res) {
-    const old = parseCookies(req.headers.cookie)[COOKIE_NAME];
+    const old = parseCookies(req.headers.cookie)[sessionCookieName(req)];
     if (old) { store.deleteSession(old); assetSessions.delete(assetKey(old)); }
-    appendCookie(res, `${COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
+    appendCookie(res, `${sessionCookieName(req)}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}`);
   }
 
   /**
@@ -481,4 +490,4 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
   return { readSigned, setSigned, setPlain, clearNamed, requireAccess, isAuthenticated, isAuthenticatedForAsset, session, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
 }
 
-module.exports = { createAuth, remoteIp, clientKey, parseCookies, COOKIE_NAME, GUEST_COOKIE };
+module.exports = { createAuth, remoteIp, clientKey, parseCookies, sessionCookieName, COOKIE_NAME, GUEST_COOKIE };

@@ -211,7 +211,7 @@ test('wachtwoord vergeten, herstellen en e-mailadres bevestigen (A-02)', async (
   const { server, base } = await listen(createApp({ secret: SECRET, db, mailerFor }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);
   /**
    * Haalt het token uit de laatste mail met dit onderwerp.
    * @param {string} subject Het onderwerp.

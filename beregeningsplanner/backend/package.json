@@ -8,7 +8,8 @@
     "start": "node --disable-warning=ExperimentalWarning src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node --test",
-    "codestyle": "node tools/codestyle.js"
+    "codestyle": "node tools/codestyle.js",
+    "tenant-filter": "node tools/tenant-filter.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

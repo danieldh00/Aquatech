@@ -14,6 +14,8 @@ const flag = new Int32Array(signal);
 let client = null;
 let schema = null; // search_path van de huidige verbinding
 let inTransaction = false;
+/** Hoogstens zoveel milliseconden per query (PG_STATEMENT_TIMEOUT_MS, standaard 30 s; 0 = geen grens). */
+const STATEMENT_TIMEOUT_MS = Math.max(0, Math.floor(Number(process.env.PG_STATEMENT_TIMEOUT_MS ?? 30000)) || 0);
 
 const CONN_CODES = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', '57P01', '57P02', '57P03', '08000', '08003', '08006']);
 /**
@@ -35,6 +37,9 @@ async function connect() {
   // volgende query maakt een nieuwe verbinding.
   connection.on('error', () => { if (client === connection) client = null; });
   await connection.connect();
+  // Eén query mag het hele proces niet onbeperkt stilzetten (alle queries lopen synchroon over deze ene verbinding, G-01):
+  // PostgreSQL breekt een query na deze tijd af. Per sessie gezet, dus ook via de session pooler van Supabase.
+  await connection.query(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
   client = connection;
   schema = null;
 }

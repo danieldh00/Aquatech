@@ -1,0 +1,441 @@
+{
+  "note": "Queries zonder tenant_id in de tekst, gecontroleerd in de audit van 1.7.3 (opzoeking op een uniek id uit een rij die al op de tenant is gefilterd, een token-hash of een opdracht over alle omgevingen). Deze lijst wordt alleen korter.",
+  "exceptions": [
+    {
+      "file": "beregening/recognitions.js",
+      "sql": "UPDATE plan_recognitions SET samples = ?, user_id = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "beveiliging/impersonation.js",
+      "sql": "SELECT id, user_id, created_at, expires_at FROM support_grants WHERE user_id IN (${}) AND revoked_at IS NULL AND expires_at > ? ORDER BY expires_at"
+    },
+    {
+      "file": "beveiliging/impersonation.js",
+      "sql": "UPDATE support_grants SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL"
+    },
+    {
+      "file": "beveiliging/impersonation.js",
+      "sql": "UPDATE support_grants SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?"
+    },
+    {
+      "file": "beveiliging/impersonation.js",
+      "sql": "SELECT ${} FROM impersonations WHERE id = ?"
+    },
+    {
+      "file": "beveiliging/impersonation.js",
+      "sql": "UPDATE impersonations SET ended_at = ?, ended_reason = ? WHERE id = ? AND ended_at IS NULL"
+    },
+    {
+      "file": "beveiliging/impersonation.js",
+      "sql": "SELECT ${} FROM impersonations WHERE user_id = ? AND ended_at IS NULL"
+    },
+    {
+      "file": "platform/account-tokens.js",
+      "sql": "UPDATE account_tokens SET used_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/ai-usage.js",
+      "sql": "SELECT ${} FROM ai_usage a WHERE ${}"
+    },
+    {
+      "file": "platform/ai-usage.js",
+      "sql": "SELECT substr(a.created_at, 1, ${}) AS k, ${} FROM ai_usage a WHERE ${} GROUP BY 1 ORDER BY 1"
+    },
+    {
+      "file": "platform/ai-usage.js",
+      "sql": "SELECT a.user_id AS k, u.display_name, u.username, u.kind, ${} FROM ai_usage a LEFT JOIN users u ON u.id = a.user_id WHERE ${} GROUP BY a.user_id, u.display_name, u.username, u.kind ORDER BY cost_eur_"
+    },
+    {
+      "file": "platform/ai-usage.js",
+      "sql": "SELECT a.feature AS k, ${} FROM ai_usage a WHERE ${} GROUP BY a.feature ORDER BY 1"
+    },
+    {
+      "file": "platform/ai-usage.js",
+      "sql": "SELECT a.model AS k, ${} FROM ai_usage a WHERE ${} GROUP BY a.model ORDER BY 1"
+    },
+    {
+      "file": "platform/ai-usage.js",
+      "sql": "SELECT COUNT(*) AS n FROM ai_usage a WHERE ${}"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET display_name = ?, email = ?, phone = ?, preferences = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET email_verified_at = NULL WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "SELECT ${} FROM users WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET email = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "DELETE FROM users WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET display_name = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET role = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET disabled = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET platform_admin = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET role = 'beheerder' WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET must_change_password = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET customer_group = ?, business_request = '' WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET password_hash = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE quotes SET customer_id = NULL WHERE customer_id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE service_requests SET customer_id = NULL WHERE customer_id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE service_requests SET handled_by = NULL WHERE handled_by = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE work_orders SET assignee_id = NULL WHERE assignee_id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE work_order_photos SET uploaded_by = NULL WHERE uploaded_by = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE settings SET updated_by = NULL WHERE updated_by = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE history SET user_id = NULL WHERE user_id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE audit SET user_id = NULL WHERE user_id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE news SET author_id = NULL WHERE author_id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE shop_content SET updated_by = NULL WHERE updated_by = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE shop_content SET published_by = NULL WHERE published_by = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE shop_images SET created_by = NULL WHERE created_by = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "DELETE FROM impersonations WHERE admin_id = ? OR user_id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "DELETE FROM support_grants WHERE user_id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "DELETE FROM sessions WHERE user_id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "DELETE FROM season_reminders_sent WHERE user_id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "SELECT COUNT(*) AS n FROM users WHERE kind = 'account' AND platform_admin = 1 AND disabled = 0"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET email = ?, phone = ?, preferences = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET email = ?, phone = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE history SET created_at = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE sessions SET fingerprint = ? WHERE user_id = ? AND via = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "DELETE FROM sessions WHERE id_hash = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "DELETE FROM sessions WHERE expires_at < ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE users SET last_seen_at = ? WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < ?)"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE history SET title = ?, customer = ?, address = ?, summary = ?, snapshot = ?, ip = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "SELECT h.id, h.plan_id, h.user_id, h.action, h.title, h.customer, h.address, h.summary, h.ip, h.created_at, h.updated_at, h.snapshot IS NOT NULL AS has_snapshot, u.username, u.display_name, u.role, u."
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "SELECT display_name FROM users WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE plans SET review_status = 'ter_controle', review_question = ?, review_requested_at = ?, reviewed_by = NULL, reviewed_at = NULL, submitted_via = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE plans SET review_status = 'goedgekeurd', reviewed_by = ?, reviewed_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE plans SET review_status = 'concept', reviewed_by = NULL, reviewed_at = NULL WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE plans SET title = ?, customer = ?, address = ?, data = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE plans SET review_status = 'ter_controle', review_requested_at = ?, reviewed_by = NULL, reviewed_at = NULL WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "DELETE FROM plans WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "UPDATE plans SET deleted_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "UPDATE quotes SET shared_at = ?, sent_at = ?, sent_to = ?, view_count = ?, viewed_at = ?, last_viewed_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "SELECT acceptance FROM quotes WHERE id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "UPDATE quotes SET acceptance = ?, responded_at = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "UPDATE work_orders SET appointment = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "UPDATE work_orders SET created_at = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "UPDATE work_order_offers SET created_at = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "UPDATE service_requests SET created_at = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "UPDATE service_request_photos SET created_at = ? WHERE request_id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "UPDATE news SET created_at = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "UPDATE ai_usage SET created_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/test-data.js",
+      "sql": "UPDATE plan_recognitions SET created_at = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/outsourcing.js",
+      "sql": "SELECT ${} FROM work_order_offers WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/outsourcing.js",
+      "sql": "UPDATE work_order_offers SET status = 'ingetrokken', updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/outsourcing.js",
+      "sql": "UPDATE work_order_offers SET status = 'afgewezen', responded_by_name = ?, responded_at = ?, reason = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/outsourcing.js",
+      "sql": "UPDATE work_order_offers SET declined = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/photos.js",
+      "sql": "UPDATE work_order_photos SET kind = ?, caption = ?, customer_visible = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/photos.js",
+      "sql": "SELECT id, number, status, title, total_incl, created_at FROM quotes WHERE ${} ORDER BY created_at DESC"
+    },
+    {
+      "file": "uitvoering/service-requests.js",
+      "sql": "UPDATE service_requests SET updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/service-requests.js",
+      "sql": "UPDATE service_requests SET status = 'ingetrokken', updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/service-requests.js",
+      "sql": "UPDATE service_requests SET status = ?, reply = ?, note = ?, handled_by = ?, handled_by_name = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/service-requests.js",
+      "sql": "UPDATE service_requests SET status = 'ingepland', work_order_id = ?, handled_by = ?, handled_by_name = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "UPDATE work_orders SET status = ?, title = ?, customer = ?, address = ?, planned_date = ?, assignee_id = ?, data = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "UPDATE work_orders SET status = ?, planned_date = ?, assignee_id = ?, data = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "UPDATE work_orders SET share_url = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "UPDATE work_orders SET share_hash = ?, share_token = ?, share_url = ?, shared_at = ?, viewed_at = NULL WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "UPDATE work_orders SET share_hash = NULL, share_token = NULL, shared_at = NULL WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "UPDATE work_orders SET sent_at = ?, sent_to = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "SELECT ${} FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "UPDATE work_orders SET viewed_at = COALESCE(viewed_at, ?) WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "SELECT ${} FROM work_orders WHERE id = ? AND deleted_at IS NULL"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "UPDATE work_orders SET appointment = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "SELECT ${} FROM work_orders WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "UPDATE work_orders SET deleted_at = ? WHERE id = ?"
+    },
+    {
+      "file": "verkoop/quotes.js",
+      "sql": "SELECT data FROM quotes WHERE id = ?"
+    },
+    {
+      "file": "verkoop/quotes.js",
+      "sql": "UPDATE quotes SET plan_id = ?, status = ?, title = ?, customer = ?, total_excl = ?, total_incl = ?, data = ?, updated_at = ?, customer_id = ? WHERE id = ?"
+    },
+    {
+      "file": "verkoop/quotes.js",
+      "sql": "SELECT status, CASE WHEN acceptance IS NULL THEN 0 ELSE 1 END AS accepted FROM quotes WHERE id = ?"
+    },
+    {
+      "file": "verkoop/quotes.js",
+      "sql": "UPDATE quotes SET status = ?, data = ?, total_excl = ?, total_incl = ?, acceptance = ?, responded_at = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "verkoop/quotes.js",
+      "sql": "UPDATE quotes SET share_url = ? WHERE id = ?"
+    },
+    {
+      "file": "verkoop/quotes.js",
+      "sql": "UPDATE quotes SET share_hash = ?, share_token = ?, share_url = ?, shared_at = ?, view_count = 0, viewed_at = NULL, last_viewed_at = NULL, status = CASE WHEN status = 'concept' THEN 'verzonden' ELSE st"
+    },
+    {
+      "file": "verkoop/quotes.js",
+      "sql": "UPDATE quotes SET share_hash = NULL, share_token = NULL, shared_at = NULL WHERE id = ?"
+    },
+    {
+      "file": "verkoop/quotes.js",
+      "sql": "UPDATE quotes SET sent_at = ?, sent_to = ?, status = CASE WHEN status = 'concept' THEN 'verzonden' ELSE status END WHERE id = ?"
+    },
+    {
+      "file": "verkoop/quotes.js",
+      "sql": "UPDATE quotes SET viewed_at = COALESCE(viewed_at, ?), last_viewed_at = ?, view_count = view_count + 1 WHERE id = ?"
+    },
+    {
+      "file": "verkoop/quotes.js",
+      "sql": "UPDATE quotes SET deleted_at = ? WHERE id = ?"
+    },
+    {
+      "file": "webshop/web-orders.js",
+      "sql": "SELECT COUNT(*) AS n FROM web_orders WHERE ${}"
+    },
+    {
+      "file": "webshop/web-orders.js",
+      "sql": "SELECT ${}${} FROM web_orders WHERE ${} ORDER BY created_at DESC, number DESC LIMIT ? OFFSET ?"
+    }
+  ]
+}

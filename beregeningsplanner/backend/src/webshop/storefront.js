@@ -93,18 +93,15 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   };
 
   /**
-   * Het volledige webadres van de shop (met slash achteraan) voor canonical-links, de sitemap en de feeds:
-   * het webadres uit Beheer (Betalen), anders het adres waarmee dit verzoek binnenkwam.
-   * @param {object} req Het verzoek.
-   * @returns {string} Het webadres, leeg als de host van het verzoek niet bruikbaar is.
+   * Het volledige webadres van de shop (met slash achteraan) voor canonical-links, de sitemap, de feeds en de links in
+   * mails (wachtwoord herstellen, e-mail bevestigen): alleen het webadres uit Beheer (Betalen), nooit de Host-kop van het
+   * verzoek, want die kan een bezoeker zelf kiezen (W-07; anders een vreemd domein in canonical/sitemap of in een herstellink).
+   * @param {object} req Het verzoek (niet gebruikt; de vorm blijft gelijk voor de aanroepers).
+   * @returns {string} Het webadres, leeg zolang het niet is ingevuld (dan geen canonical, sitemap, feeds of mail-links).
    */
   const publicBaseUrl = (req) => {
     const payment = settingsFor(tenantId).get('shopPayment');
-    const configured = cleanPublicUrl(payment && payment.publicUrl);
-    if (configured) return configured;
-    const host = String(req.headers.host || '');
-    if (!/^[a-z0-9.-]+(:\d{1,5})?$/i.test(host)) return '';
-    return `${req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol}://${host}/`;
+    return cleanPublicUrl(payment && payment.publicUrl);
   };
   /**
    * De vaste pagina's van de shop (Over ons, de pagina's uit Beheer en de juridische pagina's) met slug en titel.

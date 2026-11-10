@@ -370,3 +370,20 @@ test('snelheid: scripts met versie blijven in de browsercache, Excel pas bij exp
     assert.ok(common > 0 && common < html.indexOf('shared/sidebar.js') && common < html.indexOf('</head>'), `${page}: shared/common.js in de kop, vóór de zijbalk`);
   }
 });
+
+test('via https heet de sessiecookie __Host-aquatech_session met Secure; de gewone naam telt dan niet (A-03)', async () => {
+  const { server, base } = await start();
+  try {
+    const res = await fetch(`${base}/app/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https' }, body: JSON.stringify({ code: 'geheim' }) });
+    assert.strictEqual(res.status, 200);
+    const setCookie = res.headers.get('set-cookie') || '';
+    assert.match(setCookie, /^__Host-aquatech_session=[^;]+; Path=\/; .*Secure/);
+    const token = setCookie.split(';')[0].split('=')[1];
+    const asHost = await fetch(`${base}/app/api/me`, { headers: { cookie: `__Host-aquatech_session=${token}`, 'X-Forwarded-Proto': 'https' } });
+    assert.ok((await asHost.json()).user, 'ingelogd met de __Host-cookie');
+    const tossed = await fetch(`${base}/app/api/me`, { headers: { cookie: `aquatech_session=${token}`, 'X-Forwarded-Proto': 'https' } });
+    assert.ok(!(await tossed.json()).user, 'een cookie zonder voorvoegsel (bijv. van een ander subdomein) telt via https niet');
+  } finally {
+    server.close();
+  }
+});

@@ -142,7 +142,8 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
    * @returns {Promise<boolean>} true als de mail is verstuurd.
    */
   async function sendLink(user, purpose, link) {
-    if (!mailReady() || !validEmail(user.email)) return false;
+    // Zonder webadres van de shop (Beheer > Betalen) geen link: die zou anders naar een adres uit het verzoek wijzen (W-07).
+    if (!mailReady() || !validEmail(user.email) || !/^https?:\/\//.test(String(link))) return false;
     const issued = tokens.issue(tenant.id, user.id, purpose, user.email);
     if (issued.limited) return false;
     const settings = settingsFor(tenant.id);
