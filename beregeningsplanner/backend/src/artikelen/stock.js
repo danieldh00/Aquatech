@@ -551,7 +551,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   const detailsOf = (row) => ({
     description: ItemDetails.sanitizeDescription(row.description), specifications: ItemDetails.specificationsOf(row.specifications),
-    shopDescription: ItemDetails.plainTextFromHtml(row.shop_description), shopSpecifications: ItemDetails.specificationsFromShop(row.shop_attributes),
+    shopDescription: ItemDetails.sanitizeDescription(row.shop_description), shopSpecifications: ItemDetails.specificationsFromShop(row.shop_attributes),
   });
 
 

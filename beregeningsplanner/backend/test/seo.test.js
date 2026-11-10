@@ -230,4 +230,7 @@ test('productpagina: eigen omschrijving en specificaties, anders die uit de oude
   const buisDetail = (await admin.get(`/app/api/stock/items/${buis.id}`)).body;
   assert.strictEqual(buisDetail.description, '');
   assert.strictEqual(buisDetail.shopDescription, 'PE-buis voor beregening.');
+  // De opgeslagen webshoptekst is al platte tekst: vergelijkingstekens blijven staan.
+  db.prepare("UPDATE shop_products SET description = ? WHERE tenant_id = ? AND id = '77'").run('Diameter < 20 mm > 10 mm', main);
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${buis.id}`)).body.shopDescription, 'Diameter < 20 mm > 10 mm');
 });
