@@ -16,8 +16,14 @@ const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { clientKey } = require('../beveiliging/auth');
 
 const LIMITS = { name: 80, email: 120, phone: 30, address: 300, question: 2000 };
-// Grootste plan (met foto of PDF van de tekening als achtergrond) in tekens JSON.
-const MAX_PLAN_CHARS = 7 * 1024 * 1024;
+// Grootste openbaar ingediende plan in tekens JSON; de planner verkleint de
+// achtergrond (foto of PDF van de tekening) vóór het indienen (T-03).
+const MAX_PLAN_CHARS = 2 * 1024 * 1024;
+// Alle openbaar ingediende tekeningen die nog op een controle wachten samen,
+// per organisatie: daarboven worden nieuwe aanvragen even geweigerd.
+const MAX_PENDING_CHARS = 40 * 1024 * 1024;
+// Na zoveel dagen zonder behandeling wordt een openbaar ingediende tekening opgeruimd.
+const RETENTION_DAYS = 60;
 const PER_IP_HOUR = 10;
 const PER_TENANT_DAY = 30;
 
@@ -105,7 +111,11 @@ function registerDrawingRoutes(app, ctx) {
     if (!found) return res.status(404).json({ error: 'not_available', message: 'Bij deze organisatie kun je (nog) geen tekening indienen.' });
     const input = sanitizeSubmission(body);
     if (input.error) return res.status(400).json({ error: 'invalid', message: input.error });
-    if (JSON.stringify(input.value.data).length > MAX_PLAN_CHARS) return res.status(413).json({ error: 'too_large', message: 'De tekening is te groot (maximaal 7 MB, inclusief de achtergrond).' });
+    const planChars = JSON.stringify(input.value.data).length;
+    if (planChars > MAX_PLAN_CHARS) return res.status(413).json({ error: 'too_large', message: 'De tekening is te groot (maximaal 2 MB, inclusief de achtergrond).' });
+    if (store.pendingDrawingChars(found.tenant.id) + planChars > MAX_PENDING_CHARS) {
+      return res.status(503).json({ error: 'queue_full', message: 'Er liggen op dit moment te veel tekeningen te wachten. Probeer het over een paar dagen opnieuw of neem contact op.' });
+    }
     req.drawingTenant = found.tenant.id;
     let allowed = false;
     tenantLimiter(req, res, () => { allowed = true; });
@@ -167,4 +177,4 @@ function registerDrawingRoutes(app, ctx) {
   });
 }
 
-module.exports = { registerDrawingRoutes, sanitizeSubmission, LIMITS, MAX_PLAN_CHARS, PER_IP_HOUR, PER_TENANT_DAY };
+module.exports = { registerDrawingRoutes, sanitizeSubmission, LIMITS, MAX_PLAN_CHARS, MAX_PENDING_CHARS, RETENTION_DAYS, PER_IP_HOUR, PER_TENANT_DAY };

@@ -16,6 +16,7 @@ const { createMailer, validEmail } = require('../platform/mailer');
 const { preferencesOf } = require('../platform/store');
 const { ifBaseOf } = require('../beveiliging/idempotency');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
+const { linkExpired } = require('../platform/public-links');
 
 /**
  * Kopie (bcc) van een verstuurde mail naar de afzender, als die dat in Mijn
@@ -144,7 +145,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
       w.planned_date, w.assignee_id, w.data, w.created_at, w.updated_at, w.share_hash, w.share_token, w.share_url, w.shared_at,
       w.viewed_at, w.sent_at, w.sent_to, w.appointment, o.display_name AS owner_name, a.display_name AS assignee_name ${FROM}`;
   // Wat de openbare afspraakpagina en de reactie van de klant nodig hebben.
-  const PUBLIC_COLS = 'id, tenant_id, number, status, data, appointment, share_hash';
+  const PUBLIC_COLS = 'id, tenant_id, number, status, data, appointment, share_hash, shared_at, planned_date';
   const LIST_SELECT = `SELECT w.id, w.tenant_id, w.owner_id, w.quote_id, w.plan_id, w.number, w.status, w.title, w.customer, w.address,
       w.planned_date, w.assignee_id, w.data, w.created_at, w.updated_at, w.share_hash, w.appointment,
       o.display_name AS owner_name, a.display_name AS assignee_name ${FROM}`;
@@ -469,13 +470,16 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
   }
 
   /**
-   * Zoeken op token (over alle tenants; het token is het enige geheim).
+   * Zoeken op token (over alle tenants; het token is het enige geheim). Een verlopen link telt als onbekend.
    * @param {string} token Het token uit de link.
    * @returns {object|null} Rij met PUBLIC_COLS, of null.
    */
   function byToken(token) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
-    return prepare(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL`).get(sha256(token)) || null;
+    const workOrderRow = prepare(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL`).get(sha256(token)) || null;
+    // Verlopen link (G-02): 180 dagen na delen, of 90 dagen na de geplande datum als die later ligt.
+    if (workOrderRow && linkExpired({ sharedAt: workOrderRow.shared_at, referenceDate: workOrderRow.planned_date })) return null;
+    return workOrderRow;
   }
 
   /**

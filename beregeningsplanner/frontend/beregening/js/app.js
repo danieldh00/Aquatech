@@ -708,6 +708,45 @@
       (ANON ? form.name : form.question).focus();
     },
     /**
+     * Verkleint de achtergrond vóór het openbaar indienen: de server neemt
+     * hooguit 2 MB per tekening aan. Een grote foto of PDF-pagina wordt een
+     * JPEG van maximaal 1600 pixels breed; de schaal (meter per pixel) gaat mee,
+     * zodat de tekening op dezelfde plek blijft liggen.
+     * @param {object|null} background De achtergrond van het plan.
+     * @returns {Promise<object|null>} De (eventueel verkleinde) achtergrond.
+     */
+    async _compactBackground(background) {
+      if (!background || !background.dataUrl || background.dataUrl.length < 900 * 1024) return background;
+      try {
+        const image = await new Promise((resolve, reject) => {
+          const element = new Image();
+          element.onload = () => resolve(element);
+          element.onerror = () => reject(new Error('Achtergrond niet te lezen.'));
+          element.src = background.dataUrl;
+        });
+        let maxWidth = 1600;
+        let dataUrl = background.dataUrl;
+        let factor = 1;
+        // Kleiner en zachter tot hij past; een heel grote achtergrond valt anders weg.
+        for (let attempt = 0; attempt < 4 && dataUrl.length >= 900 * 1024; attempt++) {
+          factor = Math.min(1, maxWidth / image.naturalWidth);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * factor));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * factor));
+          const context = canvas.getContext('2d');
+          context.fillStyle = '#fff';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          maxWidth = Math.round(maxWidth * 0.75);
+        }
+        if (dataUrl.length >= 1.5 * 1024 * 1024) return null;
+        return { ...background, dataUrl, scale: background.scale / factor };
+      } catch (error) {
+        return null;
+      }
+    },
+    /**
      * Dient de tekening in (zonder account) of biedt het plan ter controle aan.
      * @returns {Promise<void>} klaar na versturen of melding
      */
@@ -722,6 +761,7 @@
         let res;
         if (ANON) {
           const { calc, serverId, ...data } = this.state;
+          data.background = await this._compactBackground(data.background);
           res = await fetch('api/public/drawing', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

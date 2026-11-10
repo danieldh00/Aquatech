@@ -1682,6 +1682,46 @@ function createStore(db) {
   }
 
   /**
+   * Hoeveel tekens openbaar ingediende tekeningen die nog op een controle
+   * wachten samen in de database innemen (begrenzing per organisatie, T-03).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {number} Aantal tekens JSON.
+   */
+  function pendingDrawingChars(tenantId) {
+    const row = prepare(`SELECT COALESCE(SUM(LENGTH(data)), 0) AS chars FROM plans
+      WHERE tenant_id = ? AND submitted_via = 'openbaar' AND review_status = 'ter_controle'`).get(tenantId);
+    return Number(row.chars) || 0;
+  }
+
+  /**
+   * Ruimt openbaar ingediende tekeningen op die na een termijn nog steeds op
+   * een controle wachten (niemand heeft ze behandeld): plan en historie-inhoud
+   * weg, de contactgegevens van de aanvrager gewist (AVG, T-03).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {number} days Bewaartermijn in dagen.
+   * @returns {number} Aantal opgeruimde tekeningen.
+   */
+  function purgeStaleDrawings(tenantId, days) {
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+    const stale = prepare(`SELECT id, owner_id FROM plans
+      WHERE tenant_id = ? AND submitted_via = 'openbaar' AND review_status = 'ter_controle' AND review_requested_at < ?`).all(tenantId, cutoff);
+    if (!stale.length) return 0;
+    return transaction(db, () => {
+      const planIds = stale.map((row) => row.id);
+      const ownerIds = [...new Set(stale.map((row) => row.owner_id).filter(Boolean))];
+      const planMarks = planIds.map(() => '?').join(', ');
+      prepare(`UPDATE history SET snapshot = NULL, title = 'Gewist plan', customer = '', address = '', summary = '{}', ip = ''
+        WHERE tenant_id = ? AND plan_id IN (${planMarks})`).run(tenantId, ...planIds);
+      prepare(`DELETE FROM plans WHERE tenant_id = ? AND id IN (${planMarks})`).run(tenantId, ...planIds);
+      if (ownerIds.length) {
+        prepare(`UPDATE users SET email = '', phone = '', display_name = 'Gewiste aanvrager' WHERE tenant_id = ? AND kind = 'gast' AND id IN (${ownerIds.map(() => '?').join(', ')})`)
+          .run(tenantId, ...ownerIds);
+      }
+      return planIds.length;
+    });
+  }
+
+  /**
    * Maakt een nieuw plan aan (zonder id) of slaat een bestaand plan op. Past
    * een klant een goedgekeurd plan aan, dan gaat het opnieuw ter controle.
    * @param {object} user De ingelogde gebruiker.
@@ -1759,7 +1799,7 @@ function createStore(db) {
     ensureTenant, systemUser, createGuest, createAccount, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
     createSession, findSessionWithUser, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
-    planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing,
+    planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing, pendingDrawingChars, purgeStaleDrawings,
   };
 }
 

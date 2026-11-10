@@ -51,7 +51,7 @@ const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
-const { registerDrawingRoutes } = require('./beregening/drawings');
+const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
 const { createAiUsageStore } = require('./platform/ai-usage');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
 const crypto = require('crypto');
@@ -2453,6 +2453,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const environmentSettings = settingsFor(environment.id);
       const removed = store.applyRetention(environment.id, { ipDays: environmentSettings.get('ipRetentionDays'), auditDays: environmentSettings.get('auditRetentionDays') });
       removed.aiUsage = aiUsage.prune(environment.id, environmentSettings.get('auditRetentionDays'));
+      removed.drawings = store.purgeStaleDrawings(environment.id, DRAWING_RETENTION_DAYS);
       for (const [kind, count] of Object.entries(removed)) total[kind] = (total[kind] || 0) + count;
     }
     return total;

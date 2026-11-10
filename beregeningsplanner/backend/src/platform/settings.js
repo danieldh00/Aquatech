@@ -29,8 +29,9 @@ const FIELDS = {
   // Zonder toegangscode mogen bezoekers zonder inloggen als gast werken.
   guestAccess: { type: 'bool', env: 'GUEST_ACCESS', default: false },
   // Bezoekers zonder account mogen een tekening maken en ter controle
-  // indienen (knop op de inlogpagina, zie drawings.js).
-  drawingRequests: { type: 'bool', default: true },
+  // indienen (knop op de inlogpagina, zie drawings.js). Standaard uit: een
+  // organisatie zet het zelf aan (T-03, openbaar formulier dat opslag kost).
+  drawingRequests: { type: 'bool', default: false },
   // Eigen webshop (webshop/storefront.js): openbare pagina's op /winkel/ met
   // de artikelen uit de voorraad. Standaard uit.
   storefront: { type: 'bool', default: false },
