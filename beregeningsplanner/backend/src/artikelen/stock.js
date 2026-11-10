@@ -534,21 +534,26 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
-   * De eigen omschrijving en specificaties van een artikel, plus die van het gekoppelde webshopproduct
-   * (wat de shop toont zolang het artikel er zelf geen heeft).
+   * Een artikel met zijn eigen omschrijving en specificaties en die van het gekoppelde webshopproduct, in één query
+   * (voor de detailweergave; de overzichten halen deze grote kolommen niet op).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het artikel.
+   * @returns {object|undefined} De rij met ITEM_COLS plus description, specifications, shop_description en shop_attributes.
+   */
+  const findItemWithDetails = (tenantId, id) => prepare(`SELECT ${ITEM_COLS.split(', ').map((column) => `i.${column}`).join(', ')}, i.description, i.specifications, p.description AS shop_description, p.attributes AS shop_attributes
+    FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
+    WHERE i.tenant_id = ? AND i.id = ?`).get(tenantId, String(id));
+  /**
+   * De omschrijving en specificaties uit een rij van findItemWithDetails: de eigen en die van het webshopproduct
+   * (wat de shop toont zolang het artikel er zelf geen heeft).
+   * @param {object} row De rij.
    * @returns {{ description: string, specifications: object[], shopDescription: string, shopSpecifications: object[] }} De teksten.
    */
-  function detailsOf(tenantId, id) {
-    const row = prepare(`SELECT i.description, i.specifications, p.description AS shop_description, p.attributes AS shop_attributes
-      FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
-      WHERE i.tenant_id = ? AND i.id = ?`).get(tenantId, id) || {};
-    return {
-      description: ItemDetails.sanitizeDescription(row.description), specifications: ItemDetails.specificationsOf(row.specifications),
-      shopDescription: ItemDetails.plainTextFromHtml(row.shop_description), shopSpecifications: ItemDetails.specificationsFromShop(row.shop_attributes),
-    };
-  }
+  const detailsOf = (row) => ({
+    description: ItemDetails.sanitizeDescription(row.description), specifications: ItemDetails.specificationsOf(row.specifications),
+    shopDescription: ItemDetails.plainTextFromHtml(row.shop_description), shopSpecifications: ItemDetails.specificationsFromShop(row.shop_attributes),
+  });
+
 
   /**
    * Eén artikel met reserveringen en de laatste mutaties.
@@ -557,13 +562,13 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {object|null} Het artikel, of null.
    */
   function get(tenantId, id) {
-    const itemRow = findItem(tenantId, id);
+    const itemRow = findItemWithDetails(tenantId, id);
     if (!itemRow) return null;
     if (Number(itemRow.has_variants)) {
       // Hoofdartikel: geen eigen voorraad, wel de varianten met hun totalen.
       const variants = listRows(tenantId, { archived: true, parentId: itemRow.id });
       const parent = withTotals(shapeItem(itemRow), variants.filter((variant) => !variant.archived), variants.length ? variants[0].familyOrders : 0);
-      return { ...parent, ...detailsOf(tenantId, itemRow.id), variants, reservations: [], movements: [] };
+      return { ...parent, ...detailsOf(itemRow), variants, reservations: [], movements: [] };
     }
     const reservations = reservationsOf(tenantId, itemRow.id);
     const item = shapeItem(itemRow, reservations.reduce((sum, reservation) => sum + reservation.qty, 0), reservations.length);
@@ -572,7 +577,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const parentRow = itemRow.parent_id ? prepare('SELECT id, code, name, attributes, archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemRow.parent_id) : null;
     const parent = parentRow ? { id: parentRow.id, code: parentRow.code, name: parentRow.name, attributes: parseJson(parentRow.attributes, []), archived: Boolean(parentRow.archived) } : null;
     const history = costs.historyOf(tenantId, itemRow.id);
-    return { ...item, ...detailsOf(tenantId, itemRow.id), parent, reservations, movements, costPrices: history.prices, layers: history.layers };
+    return { ...item, ...detailsOf(itemRow), parent, reservations, movements, costPrices: history.prices, layers: history.layers };
   }
 
   /**

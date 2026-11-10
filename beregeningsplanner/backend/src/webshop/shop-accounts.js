@@ -86,6 +86,7 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
       audit(req, 'inloggen_geblokkeerd', { username, via: 'winkel' }, null, tenant.id);
       return { error: 'Te veel mislukte pogingen voor dit account. Probeer het over een kwartier opnieuw.', status: 429 };
     }
+    if (loginGuard.wait) await loginGuard.wait(req, key);
     const found = await store.authenticate(tenant.id, username, String(password ?? '').slice(0, 1024));
     const user = found && found.tenant_id === tenant.id ? found : null;
     if (!user) {

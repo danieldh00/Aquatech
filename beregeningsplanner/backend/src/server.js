@@ -290,7 +290,7 @@ function staticHeaders(version) {
  * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, wanIp = createWanIp() }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, wanIp = createWanIp(), loginDelayMs = 1000 }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -643,6 +643,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // sluit de echte gebruiker niet buiten. Daarnaast geldt een ruime grens per account voor alle bezoekers samen, zodat
   // raden vanaf veel adressen tegelijk ook stopt.
   const ACCOUNT_MAX_FAILURES = 100;
+  /** Na zoveel mislukte pogingen van een bezoeker op een account begint de oplopende vertraging. */
+  const LOGIN_DELAY_AFTER = 3;
   const loginGuard = {
     /**
      * Is inloggen op dit account voor deze bezoeker geblokkeerd?
@@ -666,6 +668,20 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @returns {void}
      */
     clear: (req, account) => { failures.delete(`${account}@${clientKey(req)}`); failures.delete(account); },
+    /**
+     * Oplopende vertraging (5 uit de audit van 1.7.3): na drie mislukte pogingen van deze bezoeker op dit account wacht
+     * elke volgende poging langer (1, 2, 4, daarna 8 seconden) voordat het wachtwoord wordt gecontroleerd. Een echte
+     * gebruiker merkt er na een tikfout niets van; raden wordt traag. Alleen deze bezoeker wacht, anderen niet.
+     * @param {object} req Het verzoek.
+     * @param {string} account Sleutel van het account.
+     * @returns {Promise<void>} Klaar na de wachttijd (meteen als er niets te wachten valt).
+     */
+    wait: (req, account) => {
+      const entry = failures.get(`${account}@${clientKey(req)}`);
+      const count = entry && entry.reset > Date.now() ? entry.count : 0;
+      const delay = count >= LOGIN_DELAY_AFTER ? loginDelayMs * 2 ** Math.min(count - LOGIN_DELAY_AFTER, 3) : 0;
+      return delay > 0 ? new Promise((resolve) => { setTimeout(resolve, delay).unref(); }) : Promise.resolve();
+    },
   };
   /**
    * Ruimt de verlopen tellers van mislukte inlogpogingen op, zodat de lijst in het geheugen niet blijft groeien.
@@ -698,6 +714,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, home?.id);
         return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
       }
+      await loginGuard.wait(req, key);
       // Ook bij een onbekende code een wachtwoord controleren (gelijke looptijd).
       const password = String(req.body?.password ?? '').slice(0, 1024);
       let user = await store.authenticate(home?.id || null, username, password);
