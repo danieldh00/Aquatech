@@ -50,6 +50,8 @@ function poolFor(url, config) {
   let pool = pools.get(url);
   if (!pool) {
     pool = new Pool({ ...config, max: POOL_SIZE, idleTimeoutMillis: IDLE_MS, allowExitOnIdle: true });
+    // Bescherm ook clients die zijn uitgecheckt en geen idle-listener van de pool hebben.
+    pool.on('connect', (client) => client.on('error', () => {}));
     // Een verbinding die wegvalt terwijl hij ongebruikt in de pool ligt: de pool gooit hem weg, het proces blijft draaien.
     pool.on('error', () => {});
     pools.set(url, pool);

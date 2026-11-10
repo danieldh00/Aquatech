@@ -215,7 +215,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   PostgreSQL via `pg.Pool` (`PG_POOL_SIZE`, standaard 5, 0 = uit; houdt `search_path`, `statement_timeout` en de RLS-scope per
   verbinding bij), met SQLite synchroon in een Promise. **Alleen losse queries, nooit een transactie** (geweigerd; transacties
   blijven `db.prepare`/`transaction`). Nu gebruikt voor de sessie van API-verzoeken (`store.prefetchSession`) en de
-  webshopcatalogus (`storefrontData.warm`). Een trage leesquery die de server niet mag stilzetten: via `db.async`. Supabase:
+  webshopcatalogus (`storefrontData.warm`). Een trage leesquery die de server niet mag stilzetten: via `db.async` (alleen met een actieve PostgreSQL-pool; bij SQLite en `PG_POOL_SIZE=0` draait de query synchroon en blokkeert een trage query de eventloop alsnog). Supabase:
   Session pooler houden (niet 6543), *Pool Size* ≥ `PG_POOL_SIZE` + 2.
 - **Verwijderen** (0.33.0): live-tenant via `DELETE /api/platform/tenants/:id`
   met `{ confirm: <slug> }` (`store.deleteTenant`: wist elke tabel met
