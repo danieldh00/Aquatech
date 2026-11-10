@@ -1397,11 +1397,12 @@ function createStore(db) {
       SELECT ${PUBLIC_USER_COLUMNS},
         (SELECT COUNT(*) FROM plans p WHERE p.owner_id = u.id AND p.deleted_at IS NULL) AS plan_count,
         (SELECT COUNT(*) FROM history h WHERE h.user_id = u.id) AS history_count,
-        (SELECT COUNT(*) FROM sessions s WHERE s.tenant_id = u.tenant_id AND s.user_id = u.id AND s.expires_at > ?) AS session_count
+        (SELECT COUNT(*) FROM sessions s WHERE s.tenant_id = u.tenant_id AND s.user_id = u.id AND s.expires_at > ?) AS session_count,
+        CASE WHEN u.totp_enabled_at IS NOT NULL AND u.totp_secret IS NOT NULL THEN 1 ELSE 0 END AS totp_on
       FROM users u WHERE u.tenant_id = ? ${includeGuests ? '' : "AND u.kind <> 'gast'"}
       ORDER BY CASE u.kind WHEN 'systeem' THEN 0 WHEN 'account' THEN 1 ELSE 2 END, lower(u.display_name)`)
       .all(currentTimestamp(), tenantId)
-      .map((user) => ({ ...publicUser(user), planCount: user.plan_count, historyCount: user.history_count, sessionCount: user.session_count }));
+      .map((user) => ({ ...publicUser(user), planCount: user.plan_count, historyCount: user.history_count, sessionCount: user.session_count, twoFactor: Boolean(Number(user.totp_on)) }));
   }
 
   /**

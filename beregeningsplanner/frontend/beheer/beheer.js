@@ -449,7 +449,7 @@
         <td class="num">${user.sessionCount || 0}</td>
         <td>${editable && roleOf(user.role) && roleOf(user.role).kind === 'klant' ? businessCell(user) : ''}</td>
         <td>${editable ? `<input type="checkbox" data-mustchange="${esc(user.id)}"${user.mustChangePassword ? ' checked' : ''} aria-label="Wachtwoord wijzigen bij volgende aanmelding">` : ''}</td>
-        <td>${user.sessionCount ? `<button class="btn small" data-logout="${esc(user.id)}">Uitloggen</button> ` : ''}${editable ? `<button class="btn small" data-pw="${esc(user.id)}">Wachtwoord</button> <button class="btn small" data-toggle="${esc(user.id)}">${user.disabled ? 'Inschakelen' : 'Uitschakelen'}</button>` : ''}
+        <td>${user.sessionCount ? `<button class="btn small" data-logout="${esc(user.id)}">Uitloggen</button> ` : ''}${user.twoFactor ? `<button class="btn small" data-totp="${esc(user.id)}" title="Tweestapsverificatie staat aan">2FA uitzetten</button> ` : ''}${editable ? `<button class="btn small" data-pw="${esc(user.id)}">Wachtwoord</button> <button class="btn small" data-toggle="${esc(user.id)}">${user.disabled ? 'Inschakelen' : 'Uitschakelen'}</button>` : ''}
           ${user.historyCount ? `<button class="btn small" data-hist="${esc(user.id)}">Aanvragen</button>` : ''}
           ${user.kind !== 'systeem' && user.id !== state.meId ? `<button class="btn small danger" data-del="${esc(user.id)}">Verwijderen</button>` : ''}</td>
       </tr>`;
@@ -552,6 +552,17 @@
       button.onclick = async () => {
         if (!confirm('Deze gebruiker op alle toestellen uitloggen?')) return;
         try { await api(`users/${encodeURIComponent(button.dataset.logout)}/logout`, { method: 'POST' }); toast('Uitgelogd op alle toestellen'); } catch (error) { toast(error.message, true); }
+        loadUsers();
+      };
+    });
+    table.querySelectorAll('[data-totp]').forEach((button) => {
+      /**
+       * Zet de tweestapsverificatie van de gebruiker uit (telefoon kwijt); daarna logt hij in met alleen het wachtwoord.
+       * @returns {Promise<void>}
+       */
+      button.onclick = async () => {
+        if (!confirm('Tweestapsverificatie van deze gebruiker uitzetten? Hij logt daarna in met alleen zijn wachtwoord en kan het op zijn profiel opnieuw aanzetten.')) return;
+        try { await api(`users/${encodeURIComponent(button.dataset.totp)}/totp`, { method: 'DELETE' }); toast('Tweestapsverificatie uitgezet'); } catch (error) { toast(error.message, true); }
         loadUsers();
       };
     });

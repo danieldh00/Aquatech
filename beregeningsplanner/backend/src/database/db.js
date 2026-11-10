@@ -1104,6 +1104,15 @@ const MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN specifications TEXT NOT NULL DEFAULT '[]';
   ALTER TABLE shop_products ADD COLUMN description TEXT NOT NULL DEFAULT '';
   `,
+  // 51: tweestapsverificatie per account (5 uit de audit van 1.7.3, beveiliging/two-factor.js): totp_secret =
+  // het geheim versleuteld met de kluis, totp_enabled_at = sinds wanneer het aan staat (leeg = nog niet bevestigd),
+  // totp_last_step = de tijdstap van de laatst gebruikte code (geen hergebruik), totp_recovery = SHA-256 van de herstelcodes.
+  `
+  ALTER TABLE users ADD COLUMN totp_secret TEXT;
+  ALTER TABLE users ADD COLUMN totp_enabled_at TEXT;
+  ALTER TABLE users ADD COLUMN totp_last_step INTEGER;
+  ALTER TABLE users ADD COLUMN totp_recovery TEXT NOT NULL DEFAULT '[]';
+  `,
 ];
 
 /**

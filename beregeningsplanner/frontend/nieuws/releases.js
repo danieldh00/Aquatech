@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.6',
+      date: '2026-11-10',
+      title: 'Tweestapsverificatie',
+      items: [
+        { text: 'Je kunt je account nu extra beveiligen met tweestapsverificatie: zet het aan bij Mijn profiel en scan de QR-code met een authenticator-app. Bij het inloggen vraagt de app dan ook om de code van je telefoon. Bewaar de herstelcodes voor als je je telefoon kwijt bent.' },
+        { text: 'Beheer > Gebruikers: is een collega zijn telefoon kwijt, dan kun je zijn tweestapsverificatie uitzetten met de knop 2FA uitzetten.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.7.5',
       date: '2026-11-10',
       title: 'Productomschrijvingen en slimmer reserveren',

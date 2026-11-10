@@ -25,6 +25,7 @@ const { registerCostingRoutes } = require('./uitvoering/costing');
 const { createShopAccounts } = require('./webshop/shop-accounts');
 const { sanitizeBusinessProfile } = require('./webshop/business-profile');
 const { createImpersonationStore, createImpersonation } = require('./beveiliging/impersonation');
+const { createTwoFactor, registerTwoFactorRoutes } = require('./beveiliging/two-factor');
 const { createStorefront } = require('./webshop/storefront');
 const { createVies } = require('./webshop/vies');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
@@ -643,6 +644,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // sluit de echte gebruiker niet buiten. Daarnaast geldt een ruime grens per account voor alle bezoekers samen, zodat
   // raden vanaf veel adressen tegelijk ook stopt.
   const ACCOUNT_MAX_FAILURES = 100;
+  const twoFactor = createTwoFactor(database, { vault });
   /** Na zoveel mislukte pogingen van een bezoeker op een account begint de oplopende vertraging. */
   const LOGIN_DELAY_AFTER = 3;
   const loginGuard = {
@@ -752,6 +754,23 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         return res.status(401).json({ error: 'wrong_login', message: 'Onjuiste organisatiecode, gebruikersnaam of wachtwoord.' });
       }
       loginGuard.clear(req, `${home?.id || orgCode}:${username}`);
+      // Tweede stap (5 uit de audit van 1.7.3): met tweestapsverificatie aan moet er een code uit de app of een
+      // herstelcode bij. Verkeerde codes tellen apart per account, met dezelfde blokkering en vertraging.
+      const totpKey = `totp:${user.id}`;
+      if (loginGuard.blocked(req, totpKey)) {
+        audit(req, 'inloggen_geblokkeerd', { username, via: 'tweestaps' }, user.id, user.tenant_id);
+        return res.status(429).json({ error: 'locked', message: 'Te veel verkeerde codes. Probeer het over een kwartier opnieuw.' });
+      }
+      await loginGuard.wait(req, totpKey);
+      const second = twoFactor.check(user, String(req.body?.totp ?? '').slice(0, 40));
+      if (!second.ok) {
+        if (second.missing) return res.status(401).json({ error: 'totp_required', message: 'Vul de code uit je authenticator-app in.' });
+        loginGuard.fail(req, totpKey);
+        audit(req, 'inloggen_mislukt', { username, via: 'tweestaps' }, user.id, user.tenant_id);
+        return res.status(401).json({ error: 'totp_wrong', message: 'De code klopt niet. Gebruik de nieuwste code uit de app of een herstelcode.' });
+      }
+      if (second.required) loginGuard.clear(req, totpKey);
+      if (second.recoveryUsed) audit(req, 'herstelcode_gebruikt', {}, user.id, user.tenant_id);
       // Testaccounts horen bij een testomgeving van de organisatie.
       if ((home.disabled || !organizationActive(user.tenant_id)) && !user.platform_admin) {
         audit(req, 'inloggen_geweigerd', { username, reden: 'tenant_uitgeschakeld' }, user.id, user.tenant_id);
@@ -1296,6 +1315,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {string} Id van de tenant met de gebruikers.
    */
   const usersTenantOf = (req) => (req.user && req.user.home_tenant_id === req.tenantId ? req.tenantId : homeOf(req.tenantId));
+  registerTwoFactorRoutes(app, { twoFactor, auth, store, identify, requireJson, requireRight, usersTenantOf, audit, guard: loginGuard });
 
   /**
    * Een hoofdbeheerder kan alleen door een (andere) hoofdbeheerder worden
@@ -2357,7 +2377,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // zolang de instelling `storefront` van de hoofdtenant uit staat.
   // Inloggen en registreren in de shop gebruiken dezelfde accounts (rol klant).
   const accountTokens = createAccountTokens(database);
-  const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
+  const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,

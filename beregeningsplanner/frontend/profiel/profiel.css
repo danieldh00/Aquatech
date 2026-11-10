@@ -25,3 +25,11 @@
   #f-details { grid-row: auto; }
 }
 .pcard [hidden] { display: none; }
+
+/* Tweestapsverificatie */
+.tf-badge { display: inline-block; margin-left: 8px; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: var(--at-green-soft); color: var(--at-navy); vertical-align: middle; }
+.tf-badge.on { background: var(--at-green); color: #fff; }
+.tf-qr { width: 200px; max-width: 100%; margin: 8px 0; background: #fff; }
+.tf-qr svg { display: block; width: 100%; height: auto; }
+.tf-secret-line code { word-break: break-all; }
+.tf-recovery { padding: 12px; border: 1px solid var(--at-green-soft); border-radius: 8px; font-size: 1rem; line-height: 1.6; user-select: all; }

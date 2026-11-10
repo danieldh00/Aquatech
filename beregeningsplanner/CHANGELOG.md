@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.6
+
+Vervolg op de audit van 1.7.3, punt 5: tweestapsverificatie per account.
+
+- Migratie 51: `users.totp_secret` (versleuteld met de kluis, AAD `<tenant>:totp:<gebruiker>`), `totp_enabled_at`,
+  `totp_last_step` (een code werkt maar één keer) en `totp_recovery` (alleen SHA-256 van tien herstelcodes).
+- `beveiliging/totp.js`: TOTP volgens RFC 6238 (HMAC-SHA1, 30 s, 6 cijfers, één stap speling) zonder bibliotheek, getest
+  tegen de testvectoren. `beveiliging/two-factor.js`: opslag en routes `GET /api/account/totp`, `POST …/setup`, `…/confirm`,
+  `…/disable` (wachtwoord + code) en `DELETE /api/admin/users/:id/totp` (beheerder, telefoon kwijt).
+- Inloggen: met 2FA aan geeft `/api/auth/login` zonder code 401 `totp_required` (pas na een goed wachtwoord) en bij een
+  verkeerde code 401 `totp_wrong`; verkeerde codes tellen apart (`totp:<gebruiker>`) met dezelfde blokkering en vertraging.
+  Het codeveld op de inlogpagina verschijnt pas als het account erom vraagt. Een account met 2FA logt niet via de winkel in.
+- Mijn profiel: blok Tweestapsverificatie met QR-code (eigen encoder `shared/qr-code.js`, in de browser), sleutel om over te
+  typen en de herstelcodes (één keer getoond). Beheer > Gebruikers: knop *2FA uitzetten*.
+
 ## 1.7.5
 
 Vervolg op de audit van 1.7.3: de punten uit *Functioneel beter* die nog openstonden (8, 12, 5 en de tussenstap van 1).
