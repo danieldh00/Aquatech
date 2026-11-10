@@ -77,8 +77,9 @@ test('artikelafbeelding: uploaden, delen, vervangen en verwijderen', async () =>
   assert.strictEqual(file.status, 200);
   assert.match(file.type, /image\/png/);
   assert.ok(file.size > 50);
-  // In de database staat hij versleuteld, niet als PNG.
-  assert.ok(!db.prepare('SELECT data FROM item_images WHERE tenant_id = ?').get(main).data.includes('PNG'));
+  // In de database staat hij versleuteld, niet als PNG. De tekst is base64: een PNG begint daarin met de handtekening iVBORw0KGgo
+  // (het losse woord "PNG" kan in willekeurige versleutelde tekst toevallig voorkomen en maakte deze test af en toe rood).
+  assert.ok(!db.prepare('SELECT data FROM item_images WHERE tenant_id = ?').get(main).data.includes('iVBORw0KGgo'));
 
   // Dezelfde afbeelding bij een tweede artikel: één opgeslagen afbeelding.
   const shared = await admin.put(`/app/api/stock/items/${second.id}/image`, { name: 'zelfde.png', data: pngBase64(1) });
