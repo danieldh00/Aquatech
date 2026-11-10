@@ -160,3 +160,15 @@ test('een concept dat bleef staan omdat definitief maken mislukte wordt bij opni
   // Zonder bewaarde fout blijft een bewust concept met rust.
   assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/invoice`, {})).body.invoice.status, 'concept');
 });
+
+test('creditnota bij retour volgt de factuurregels, ook als een artikel over twee regels staat', () => {
+  const { creditLinesFor } = require('../src/verkoop/web-order-invoices');
+  // Drie stuks: twee tegen de gewone prijs en één met een centverschil (zo maakt fromWebOrder het factuurbedrag gelijk aan het betaalde bedrag).
+  const lines = [{ code: 'BUS', qty: -2, price: 8.26, vat: 21 }, { code: 'BUS', qty: -1, price: 8.27, vat: 21 }, { code: 'KLEP', qty: -1, price: 20, vat: 21 }];
+  assert.deepStrictEqual(creditLinesFor(lines, [{ code: 'bus', qty: 2 }]).map((line) => [line.qty, line.price]), [[-2, 8.26]]);
+  assert.deepStrictEqual(creditLinesFor(lines, [{ code: 'BUS', qty: 3 }]).map((line) => [line.qty, line.price]), [[-2, 8.26], [-1, 8.27]]);
+  // Een tweede retour na een eerdere van twee stuks krijgt het laatste stuk met het centverschil.
+  assert.deepStrictEqual(creditLinesFor(lines, [{ code: 'BUS', qty: 1 }], new Map([['BUS', 2]])).map((line) => [line.qty, line.price]), [[-1, 8.27]]);
+  // Een artikel dat niet op de factuur staat geeft geen regel; meer dan gefactureerd wordt niet gecrediteerd.
+  assert.deepStrictEqual(creditLinesFor(lines, [{ code: 'WEG', qty: 1 }, { code: 'KLEP', qty: 5 }]).map((line) => [line.code, line.qty]), [['KLEP', -1]]);
+});

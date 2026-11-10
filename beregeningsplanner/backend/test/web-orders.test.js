@@ -275,3 +275,27 @@ test('een klant met bestellingen kan worden verwijderd; de bestelling blijft sta
   assert.strictEqual(removed.status, 200, JSON.stringify(removed.body));
   assert.strictEqual((await admin.get('/app/api/admin/web-orders')).body.total, 1);
 });
+
+test('een artikel op een open bestelling kan niet worden verwijderd of gearchiveerd; daarna wel', async () => {
+  const { base, admin, vreemd, shopper } = await setup();
+  const customer = await shopper();
+  await addToCart(base, customer, 'SPR-1', 2);
+  assert.strictEqual((await postCheckout(base, customer, CHECKOUT)).status, 303);
+  const [placed] = (await admin.get('/app/api/admin/web-orders')).body.items;
+  const item = await stockOf(admin, 'SPR-1');
+
+  const removed = await admin.request('DELETE', `/app/api/stock/items/${item.id}`);
+  assert.strictEqual(removed.status, 409);
+  assert.strictEqual(removed.body.error, 'reserved_by_order');
+  assert.deepStrictEqual(removed.body.orders, [placed.number]);
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${item.id}`, { archived: true })).status, 409);
+  assert.strictEqual((await stockOf(admin, 'SPR-1')).reserved, 2, 'de reservering blijft staan');
+  // Een andere organisatie ziet het artikel niet.
+  assert.strictEqual((await vreemd.request('DELETE', `/app/api/stock/items/${item.id}`)).status, 404);
+
+  // Na verzenden houdt de bestelling het artikel niet meer vast.
+  assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${placed.id}/status`, { status: 'verzonden' })).status, 200);
+  const gone = await admin.request('DELETE', `/app/api/stock/items/${item.id}`);
+  assert.strictEqual(gone.status, 200);
+  assert.strictEqual(gone.body.archived, true);
+});

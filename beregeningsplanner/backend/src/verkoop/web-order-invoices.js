@@ -100,6 +100,36 @@ function fromWebOrder(order, articles, settings) {
 }
 
 /**
+ * Bepaalt de regels van een creditnota bij een retour. Een artikel kan op de factuur over twee regels staan (de gewone
+ * prijs en één stuk met een centverschil, zie fromWebOrder): de teruggestuurde stuks worden in die volgorde gecrediteerd,
+ * na de stuks die bij eerdere retouren al zijn gecrediteerd. Zo is het gecrediteerde bedrag precies wat voor die stuks is gefactureerd.
+ * @param {object[]} creditLines De regels van de volledige creditering (Core.creditOf: aantallen negatief).
+ * @param {{ code: string, qty: number }[]} returned De teruggestuurde regels van deze retour.
+ * @param {Map<string, number>} [earlier] Per code (hoofdletters) het aantal dat bij eerdere retouren al is gecrediteerd.
+ * @returns {object[]} De regels voor de creditnota (aantallen negatief).
+ */
+function creditLinesFor(creditLines, returned, earlier = new Map()) {
+  const out = [];
+  for (const line of returned) {
+    const code = String(line.code || '').toUpperCase();
+    let skip = earlier.get(code) || 0;
+    let wanted = Math.abs(Number(line.qty) || 0);
+    for (const candidate of creditLines) {
+      if (wanted <= 0) break;
+      if (String(candidate.code || '').toUpperCase() !== code) continue;
+      const capacity = Math.abs(Number(candidate.qty) || 0);
+      const skipped = Math.min(skip, capacity);
+      skip -= skipped;
+      const take = Math.min(wanted, capacity - skipped);
+      if (take <= 0) continue;
+      out.push({ ...candidate, qty: -take });
+      wanted -= take;
+    }
+  }
+  return out;
+}
+
+/**
  * Maakt het factureren van webshopbestellingen.
  * @param {{ orders: object, invoices: object, returns?: object, debtors?: object, stock?: object, sender?: object, settingsFor: Function, log?: object }} ctx De opslagen en hulpfuncties van de server (settingsFor(tenantId) geeft de instellingen van een omgeving).
  * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditCancelled: Function, creditReturn: Function }} De functies.
@@ -323,11 +353,16 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
       let created = record.credit ? invoices.get(tenantId, record.credit.invoiceId) : null;
       if (!created) {
         const draft = Core.creditOf(original);
-        const byCode = new Map(draft.lines.map((line) => [String(line.code || '').toUpperCase(), line]));
-        draft.lines = record.lines.map((line) => {
-          const match = byCode.get(String(line.code || '').toUpperCase());
-          return match ? { ...match, qty: -Math.abs(line.qty) } : null;
-        }).filter(Boolean);
+        // Wat bij eerdere retouren van deze bestelling al is gecrediteerd telt mee voor de verdeling over de factuurregels.
+        const earlier = new Map();
+        for (const other of returns.listForOrder(tenantId, record.orderId)) {
+          if (other.id === record.id || !other.credit) continue;
+          for (const line of other.lines) {
+            const code = String(line.code || '').toUpperCase();
+            earlier.set(code, (earlier.get(code) || 0) + Math.abs(Number(line.qty) || 0));
+          }
+        }
+        draft.lines = creditLinesFor(draft.lines, record.lines, earlier);
         if (!draft.lines.length) return skip('De teruggestuurde artikelen staan niet op de factuur: er is geen creditnota gemaakt.');
         draft.intro = `Creditering van factuur ${original.number} voor retour ${record.number}`;
         // Tussen het lezen van de retour en het vastleggen hieronder zit geen await en de database is synchroon: gelijktijdige aanvragen in dit proces kunnen er dus niet tussen komen, en een tweede aanvraag ziet de gekoppelde creditnota.
@@ -356,4 +391,4 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
   return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped, creditCancelled, creditReturn };
 }
 
-module.exports = { createWebOrderInvoices, fromWebOrder, invoiceKey };
+module.exports = { createWebOrderInvoices, fromWebOrder, creditLinesFor, invoiceKey };

@@ -1016,7 +1016,7 @@
      */
     $('#d-remove').onclick = async () => {
       const item = state.item;
-      if (!confirm(`${item.code} verwijderen?\n\nHeeft het artikel al mutaties, dan wordt het gearchiveerd (het logboek blijft bewaard). Reserveringen op werkorders vervallen.`)) return;
+      if (!confirm(`${item.code} verwijderen?\n\nHeeft het artikel al mutaties, dan wordt het gearchiveerd (het logboek blijft bewaard). Reserveringen op werkorders vervallen. Staat het artikel op een open webshopbestelling, dan kan het niet weg.`)) return;
       try {
         const result = await api(`stock/items/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
         toast(result.archived ? `${item.code} gearchiveerd` : `${item.code} verwijderd`);

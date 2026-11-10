@@ -547,9 +547,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    *   Soort, werkorder, bron, opmerking, gebruiker, tijdstip, de inkoopprijs per eenheid (ontvangst) en bij een retour waar de afboeking vandaan kwam
    *   (standaard dezelfde bron of werkorder).
    * @returns {string} Id van de mutatie.
+   * @throws {Error} Met code item_missing als het artikel niet (meer) bestaat.
    */
   function book(tenantId, itemId, delta, { kind, workOrder = null, source = '', note = '', user = null, at = currentTimestamp(), unitCost, costBasis }) {
     const before = prepare('SELECT id, on_hand, cost_price, created_at FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemId);
+    if (!before) throw Object.assign(new Error('Het artikel van deze boeking bestaat niet meer.'), { code: 'item_missing', status: 409 });
     // Een verkoop in de webshop zelf (source 'webshop') hoeft niet terug.
     const toShop = source === 'webshop' ? 0 : 1;
     // Een ontvangst of telling betekent dat Aquatech de voorraad voortaan bijhoudt; een verkoop alleen niet.
@@ -564,12 +566,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(id, tenantId, itemId, kind, round3(delta), round3(balance), workOrder ? workOrder.id : null, workOrder ? workOrder.number : '',
         source, cleanText(note, 300), user ? user.id : null, user ? cleanText(user.display_name || user.displayName, 120) : '', at);
-    if (before) {
-      costs.record(tenantId, before, {
-        movementId: id, delta, onHandBefore: Number(before.on_hand), kind, at, unitCost,
-        costBasis: costBasis || { source, workOrderId: workOrder ? workOrder.id : null },
-      });
-    }
+    costs.record(tenantId, before, {
+      movementId: id, delta, onHandBefore: Number(before.on_hand), kind, at, unitCost,
+      costBasis: costBasis || { source, workOrderId: workOrder ? workOrder.id : null },
+    });
     return id;
   }
 
@@ -637,6 +637,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       if (mergedTerms.error) return { error: mergedTerms.error, field: mergedTerms.field, status: 400 };
       const archived = raw && raw.archived !== undefined ? (raw.archived ? 1 : 0) : existing.archived;
       const isParent = Boolean(Number(existing.has_variants));
+      if (archived && !existing.archived) {
+        const variantIds = isParent ? prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id).map((variant) => variant.id) : [];
+        const held = heldByOrders(tenantId, [existing.id, ...variantIds]);
+        if (held) return held;
+      }
       if (!archived && existing.archived && existing.parent_id) {
         const parentRow = prepare('SELECT archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, existing.parent_id);
         if (parentRow && parentRow.archived) return { error: 'Zet eerst het hoofdartikel terug uit het archief.', status: 409 };
@@ -692,6 +697,23 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Zoekt de open webshopbestellingen die een van deze artikelen reserveren. Zo'n artikel mag niet weg of het archief in:
+   * de bestelling kan anders niet meer worden verzonden.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string[]} itemIds Id's van de artikelen (het artikel zelf en zijn varianten).
+   * @returns {{ error: string, status: number, orders: string[] }|null} De fout met de bestelnummers, of null als niets het tegenhoudt.
+   */
+  function heldByOrders(tenantId, itemIds) {
+    if (!itemIds.length) return null;
+    const numbers = prepare(`SELECT DISTINCT o.number FROM stock_reservations r
+        JOIN web_orders o ON o.tenant_id = r.tenant_id AND r.work_order_id = 'order:' || o.id
+      WHERE r.tenant_id = ? AND r.item_id IN (${itemIds.map(() => '?').join(', ')}) ORDER BY o.number`).all(tenantId, ...itemIds).map((row) => row.number);
+    if (!numbers.length) return null;
+    const shown = numbers.slice(0, 5).join(', ');
+    return { error: `Dit artikel staat op ${numbers.length === 1 ? 'een open webshopbestelling' : 'open webshopbestellingen'} (${shown}${numbers.length > 5 ? ' en meer' : ''}). Verzend of annuleer die eerst.`, status: 409, orders: numbers };
+  }
+
+  /**
    * Verwijdert of archiveert één artikel binnen een lopende transactie: zonder
    * mutaties echt weg, anders gearchiveerd (het logboek blijft).
    * @param {string} tenantId Id van de omgeving.
@@ -716,17 +738,18 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * (gearchiveerd) bestaan zolang er een gearchiveerde variant is.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het artikel.
-   * @returns {object|null} { deleted, code } of { archived, code }, of null.
+   * @returns {object|null} { deleted, code } of { archived, code }, { error, status, orders } als een open webshopbestelling het artikel reserveert, of null.
    */
   function remove(tenantId, id) {
     return transaction(db, () => {
       const existing = findItem(tenantId, id);
       if (!existing) return null;
       let keepParent = false;
-      if (Number(existing.has_variants)) {
-        for (const variant of prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id)) {
-          if (removeRow(tenantId, variant)) keepParent = true;
-        }
+      const variants = Number(existing.has_variants) ? prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id) : [];
+      const held = heldByOrders(tenantId, [existing.id, ...variants.map((variant) => variant.id)]);
+      if (held) return held;
+      for (const variant of variants) {
+        if (removeRow(tenantId, variant)) keepParent = true;
       }
       if (keepParent) {
         prepare('UPDATE stock_items SET archived = 1, updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, existing.id);
@@ -788,8 +811,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const wanted = combinations(attributes);
       const wantedKeys = new Set(wanted.map(valuesKey));
       // Een weggehaalde waarde: die varianten gaan weg (met boekingen: archief), net als bij verwijderen.
-      for (const variant of live) {
-        if (wantedKeys.has(valuesKey(parseJson(variant.variant_values, {})))) continue;
+      const leaving = live.filter((variant) => !wantedKeys.has(valuesKey(parseJson(variant.variant_values, {}))));
+      const held = heldByOrders(tenantId, leaving.map((variant) => variant.id));
+      if (held) return { ...held, field: 'attributes' };
+      for (const variant of leaving) {
         removeRow(tenantId, variant);
         removed++;
       }
@@ -1003,6 +1028,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const log = mergeLogOf(tenantId, parent.id);
       const inLog = new Map((log ? log.snapshot : []).map((entry) => [entry.id, entry]));
       const children = prepare('SELECT id, code, archived, archived_by_parent, shop_product_id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, parent.id);
+      // Een na het samenvoegen bijgemaakte variant gaat weg; dat kan niet zolang een open webshopbestelling hem reserveert.
+      const held = heldByOrders(tenantId, [parent.id, ...(log ? children.filter((child) => !inLog.has(child.id)).map((child) => child.id) : [])]);
+      if (held) return held;
       const reopened = [];
       const wantedLinks = [...new Set([...inLog.values()].map((entry) => entry.shopProductId).filter(Boolean))];
       const taken = new Set(wantedLinks.length
@@ -2054,6 +2082,7 @@ function registerStockRoutes(app, ctx) {
   app.delete('/api/stock/items/:id', requireStock, (req, res) => {
     const out = stock.remove(tenantOf(req), req.params.id);
     if (!out) return notFound(res);
+    if (out.error) return res.status(out.status).json({ error: 'reserved_by_order', message: out.error, orders: out.orders });
     // Ook bij archiveren: een hoofdartikel kan varianten (met eigen afbeelding) echt verwijderd hebben.
     if (ctx.pruneImages) ctx.pruneImages(tenantOf(req));
     audit(req, out.deleted ? 'voorraad_artikel_verwijderd' : 'voorraad_artikel_gearchiveerd', { itemId: req.params.id, code: out.code });
