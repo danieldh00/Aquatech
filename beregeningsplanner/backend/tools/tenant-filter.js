@@ -67,6 +67,9 @@ const normalizeSql = (sql) => sql.replace(/\s+/g, ' ').trim();
  * Of de SQL op de tenant filtert: tenant_id gebonden aan een parameter of waarde (`tenant_id = ?`, `x.tenant_id = ${…}`,
  * `tenant_id IN (…)`, `? = tenant_id`), of bij een INSERT de kolom tenant_id. Alleen tenant_id in de gekozen kolommen, of
  * alleen een koppeling tussen tabellen (`u.tenant_id = r.tenant_id`), telt niet: die beperkt niet tot de tenant van het verzoek.
+ * Let op: dit is een tekstscanner en een vangnet, geen garantie. Hij begrijpt de SQL niet: een tenant_id-voorwaarde in een
+ * OR-tak (`tenant_id = ? OR 1 = 1`) of alleen in een subquery telt ook als gefilterd. De echte controle blijft de review
+ * (en de tests per route: andere tenant → 404).
  * @param {string} text De SQL-tekst (bij een template staan de ${}-delen als `${}`).
  * @returns {boolean} true als er een tenantvoorwaarde is.
  */

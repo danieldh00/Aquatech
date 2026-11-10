@@ -27,3 +27,10 @@ test('tenant_id alleen in de gekozen kolommen of in een koppeling telt niet als 
   const bound = "const joined = 'SELECT r.id FROM quotes r JOIN users u ON u.tenant_id = r.tenant_id WHERE r.tenant_id = ? AND r.id = ?';\nconst template = `SELECT id FROM quotes WHERE tenant_id = ${'x'} AND id = ?`;\n";
   assert.deepStrictEqual(scanSource('proef.js', bound, new Set(['quotes', 'users'])), []);
 });
+
+test('beperking van de tekstscanner: een tenantvoorwaarde in een OR-tak of alleen in een subquery telt als gefilterd', () => {
+  // Vastgelegd gedrag (zie hasTenantCondition): de scanner is een vangnet, geen garantie. Deze queries komen erdoor.
+  const { scanSource } = require('../tools/tenant-filter');
+  const source = "const either = 'SELECT id FROM quotes WHERE tenant_id = ? OR 1 = 1';\nconst nested = 'SELECT id FROM quotes WHERE id IN (SELECT quote_id FROM users WHERE tenant_id = ?)';\n";
+  assert.deepStrictEqual(scanSource('proef.js', source, new Set(['quotes', 'users'])), []);
+});

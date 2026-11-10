@@ -1706,7 +1706,7 @@ function createStore(db) {
    */
   function pendingDrawingChars(tenantId) {
     const row = prepare(`SELECT COALESCE(SUM(LENGTH(data)), 0) AS chars FROM plans
-      WHERE tenant_id = ? AND submitted_via = 'openbaar' AND review_status = 'ter_controle'`).get(tenantId);
+      WHERE tenant_id = ? AND submitted_via = 'openbaar' AND review_status = 'ter_controle' AND deleted_at IS NULL`).get(tenantId);
     return Number(row.chars) || 0;
   }
 
