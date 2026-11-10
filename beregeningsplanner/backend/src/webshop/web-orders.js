@@ -186,12 +186,23 @@ function createWebOrderStore(db, { stock }) {
    */
   function nextNumber(tenantId, year) {
     const head = `WEB-${year}-`;
-    let max = 0;
-    for (const row of prepare('SELECT number FROM web_orders WHERE tenant_id = ? AND substr(number, 1, ?) = ?').all(tenantId, head.length, head)) {
-      const sequence = Number(row.number.slice(head.length));
-      if (Number.isInteger(sequence) && sequence > max) max = sequence;
-    }
+    // Alleen het hoogste volgnummer via de unieke index (tenant_id, number), niet alle bestellingen van het jaar (W-09).
+    // De grenzen houden het bij nummers met een cijfer na het voorvoegsel (':' komt na '9').
+    const row = prepare('SELECT MAX(CAST(substr(number, ?) AS INTEGER)) AS last FROM web_orders WHERE tenant_id = ? AND number > ? AND number < ?')
+      .get(head.length + 1, tenantId, head, `${head}:`);
+    const max = Number(row && row.last) || 0;
     return `${head}${String(max + 1).padStart(4, '0')}`;
+  }
+
+  /**
+   * Telt de bestellingen die een account sinds een moment heeft geplaatst (voor de bestellimiet per account, W-12).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} userId Id van het account.
+   * @param {string} since ISO-moment.
+   * @returns {number} Het aantal bestellingen.
+   */
+  function countSince(tenantId, userId, since) {
+    return Number(prepare('SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND user_id = ? AND created_at > ?').get(tenantId, String(userId), since).n) || 0;
   }
 
   /**
@@ -280,7 +291,7 @@ function createWebOrderStore(db, { stock }) {
    * opnieuw, legt de bestelling vast en reserveert de voorraad, alles in één
    * transactie.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ id: string, group?: string, wholesale?: ?{ discountPct: number }, vatNumber?: string, vies?: object }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg), bij een groothandelsklant zijn vaste korting, het goedgekeurde btw-nummer van het account en de uitkomst van de VIES-controle (vies.js) als bewijs bij verlegging.
+   * @param {{ id: string, group?: string, wholesale?: ?{ discountPct: number }, vatNumber?: string, vies?: object, addressUnverified?: boolean }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg), bij een groothandelsklant zijn vaste korting, het goedgekeurde btw-nummer van het account en de uitkomst van de VIES-controle (vies.js) als bewijs bij verlegging, en of het bezorgadres met de hand is ingevuld zonder PDOK-controle.
    * @param {object} rawFields De gegevens van het afrekenformulier (zie sanitizeCheckout, plus shippingMethod en country).
    * @param {{ code: string, qty: number }[]} wanted De winkelwagen.
    * @param {object} [shippingConfig] De verzendinstelling (shipping.js); standaard de startwaarden.
@@ -322,7 +333,7 @@ function createWebOrderStore(db, { stock }) {
       const data = {
         lines: calculated.lines.map((line) => ({ itemId: line.itemId, code: line.code, name: line.name, unit: line.unit, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal, ...(line.lineExcl !== undefined ? { lineExcl: line.lineExcl } : {}) })),
         customer: { name: fields.name, company: fields.company, email: fields.email, phone: fields.phone },
-        address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' } : { street: fields.street, postcode: fields.postcode, city: fields.city, country },
+        address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' } : { street: fields.street, postcode: fields.postcode, city: fields.city, country, ...(user.addressUnverified ? { unverified: true } : {}) },
         shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method === 'dpd', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
         customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted, ...(calculated.shifted && user.vies ? { vies: user.vies } : {}) } : null,
         note: fields.note, totals, payment: online ? 'online' : 'op rekening', consent: { terms: true, at: timestamp },
@@ -566,7 +577,7 @@ function createWebOrderStore(db, { stock }) {
       .all(tenantId, String(before), Math.max(1, Math.floor(limit)), Math.max(0, Math.floor(skip))).map((row) => row.id);
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, onShipped, onCancelled, onTracking };
+  return { priceCart, shippingQuote, orderTotals, place, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, onShipped, onCancelled, onTracking };
 }
 
 /**

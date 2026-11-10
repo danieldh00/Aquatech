@@ -301,3 +301,31 @@ test('een artikel op een open bestelling kan niet worden verwijderd of gearchive
   assert.strictEqual(gone.status, 200);
   assert.strictEqual(gone.body.archived, true);
 });
+
+test('adres niet gevonden: met "zelf invullen" toch bestellen, gemarkeerd als niet gecontroleerd (W-11); mislukte pogingen tellen niet voor de limiet (W-12)', async () => {
+  const { base, admin, shopper } = await setup();
+  const customer = await shopper();
+  await addToCart(base, customer, 'SPR-1', 1);
+  const newBuild = { ...CHECKOUT, street: 'Nieuwbouwlaan 7', postcode: '8071 ZZ', city: 'Nunspeet' };
+  // Een klant die zijn adres een paar keer probeert, loopt niet tegen de bestellimiet aan.
+  for (let attempt = 0; attempt < 11; attempt += 1) {
+    const refused = await postCheckout(base, customer, newBuild);
+    assert.strictEqual(refused.status, 400);
+    assert.match(refused.text, /zelf invult/);
+  }
+  assert.strictEqual((await postCheckout(base, customer, { ...newBuild, addressManual: 'ja', city: '' })).status, 400, 'zonder woonplaats niet');
+  const placed = await postCheckout(base, customer, { ...newBuild, addressManual: 'ja' });
+  assert.strictEqual(placed.status, 303);
+  const list = (await admin.get('/app/api/admin/web-orders')).body.items;
+  assert.strictEqual(list.length, 1);
+  assert.match(list[0].number, /^WEB-\d{4}-0001$/);
+  const detail = (await admin.get(`/app/api/admin/web-orders/${list[0].id}`)).body.order;
+  assert.strictEqual(detail.address.street, 'Nieuwbouwlaan 7');
+  assert.strictEqual(detail.address.unverified, true);
+  // Een gevonden adres krijgt geen markering, en het volgnummer loopt door.
+  await addToCart(base, customer, 'SPR-1', 1);
+  assert.strictEqual((await postCheckout(base, customer, { ...CHECKOUT, addressManual: 'ja' })).status, 303);
+  const second = (await admin.get('/app/api/admin/web-orders')).body.items.find((order) => order.id !== list[0].id);
+  assert.match(second.number, /-0002$/);
+  assert.strictEqual((await admin.get(`/app/api/admin/web-orders/${second.id}`)).body.order.address.unverified, undefined);
+});

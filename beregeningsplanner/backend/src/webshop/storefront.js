@@ -10,7 +10,7 @@ const path = require('path');
 const express = require('express');
 const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
-const { registerAddressRoute } = require('../platform/address-lookup');
+const { registerAddressRoute, normalizePostcode } = require('../platform/address-lookup');
 const { clientKey } = require('../beveiliging/auth');
 const { createStorefrontData } = require('./storefront-data');
 const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
@@ -447,18 +447,27 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     });
 
     if (orders) {
-      const orderLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `order:${clientKey(req)}` });
+      // Pogingen per bezoeker ruim (een adres corrigeren telt mee, meerdere klanten achter één bedrijfsadres), geplaatste bestellingen per account krap (W-12).
+      const attemptLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 40, keyFn: (req) => `bestelpoging:${clientKey(req)}` });
+      /** Hoogstens zoveel geplaatste bestellingen per account per uur. */
+      const ORDERS_PER_HOUR = 10;
       /**
-       * Past de bestellimiet toe zonder JSON-antwoord.
+       * Past de limiet op bestelpogingen toe zonder JSON-antwoord.
        * @param {object} req Het verzoek.
        * @param {object} res Het antwoord.
        * @returns {boolean} true als het verzoek geweigerd moet worden.
        */
-      const orderLimited = (req, res) => {
+      const attemptsLimited = (req, res) => {
         let refused = false;
-        orderLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
+        attemptLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
         return refused;
       };
+      /**
+       * Of een account dit uur al het maximum aantal bestellingen heeft geplaatst (geteld in de database, dus ook na een herstart).
+       * @param {object} viewer Het ingelogde account.
+       * @returns {boolean} true als er geen bestelling meer bij mag.
+       */
+      const ordersLimited = (viewer) => orders.countSince(tenantId, viewer.id, new Date(Date.now() - 60 * 60 * 1000).toISOString()) >= ORDERS_PER_HOUR;
       /**
        * Antwoord als bestellen uit staat: de pagina bestaat dan niet.
        * @param {object} req Het verzoek.
@@ -726,18 +735,23 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             }
           }
         }
-        if (orderLimited(req, res)) return res.status(429).type('text').send('Te veel bestellingen vanaf dit adres. Probeer het later opnieuw.');
+        if (attemptsLimited(req, res)) return res.status(429).type('text').send('Te veel bestelpogingen vanaf dit adres. Probeer het later opnieuw.');
+        if (ordersLimited(viewer)) return res.status(429).type('text').send('Je hebt het afgelopen uur al veel bestellingen geplaatst. Probeer het later opnieuw of neem contact met ons op.');
         try {
-          // Een Nederlands bezorgadres komt altijd uit postcode + huisnummer (PDOK): straat en woonplaats uit de browser worden niet vertrouwd.
+          // Een Nederlands bezorgadres komt uit postcode + huisnummer (PDOK): straat en woonplaats uit de browser worden niet vertrouwd,
+          // behalve als de klant aangeeft dat zijn adres niet gevonden wordt (dan 'niet gecontroleerd').
           let placed = body;
+          let addressUnverified = false;
           if (addressGuard && String(body.shippingMethod || '') === 'dpd' && String(body.country || 'NL').toUpperCase() === 'NL') {
             const resolved = await addressGuard.resolveParts({ street: String(body.street || '').trim(), postcode: String(body.postcode || '').trim() });
-            if (!resolved.ok) {
+            // Niet gevonden of PDOK onbereikbaar, en de klant vult het adres bewust zelf in: bestellen mag, met de markering 'niet gecontroleerd' voor de medewerker (W-11).
+            const manual = !resolved.ok && body.addressManual === 'ja' && String(body.street || '').trim().length >= 3 && String(body.city || '').trim().length >= 2 && Boolean(normalizePostcode(body.postcode));
+            if (manual) addressUnverified = true;
+            else if (!resolved.ok) {
               res.setHeader('Cache-Control', 'no-store');
               const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
-              return sendWithGroups(req, res, resolved.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: resolved.message, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
-            }
-            placed = { ...body, street: resolved.street, postcode: resolved.postcode, city: resolved.city };
+              return sendWithGroups(req, res, resolved.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: `${resolved.message} Wordt je adres niet gevonden (bijvoorbeeld nieuwbouw)? Vink dan onder het adres aan dat je het zelf invult.`, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
+            } else placed = { ...body, street: resolved.street, postcode: resolved.postcode, city: resolved.city };
           }
           // De bevestiging gaat naar het e-mailadres van het account, niet naar een vrij ingevuld adres (W-08).
           if (viewer.email) placed = { ...placed, email: viewer.email };
@@ -756,7 +770,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
               }
             }
           }
-          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer), vatNumber: approvedVatNumber, vies: viesResult }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer));
+          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer), vatNumber: approvedVatNumber, vies: viesResult, addressUnverified }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer));
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
             const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));

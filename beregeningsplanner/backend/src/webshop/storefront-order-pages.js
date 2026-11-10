@@ -210,6 +210,7 @@ ${checkoutField({ name: 'postcode', label: 'Postcode', value: value.postcode || 
 ${addressLookupRow()}
 ${checkoutField({ name: 'street', label: 'Straat en huisnummer', value: value.street || '', autocomplete: 'street-address', required: false })}
 ${checkoutField({ name: 'city', label: 'Woonplaats', value: value.city || '', autocomplete: 'address-level2', required: false })}
+<label class="terms-check"><input type="checkbox" name="addressManual" value="ja" data-address-manual${value.addressManual === 'ja' ? ' checked' : ''}><span>Mijn adres wordt niet gevonden (bijvoorbeeld nieuwbouw) of het opzoeken werkt nu niet: ik vul straat en woonplaats zelf in. We controleren het adres dan zelf voordat we verzenden.</span></label>
 <label class="form-field"><span>Opmerking (optioneel)</span><textarea name="note" rows="3" maxlength="500">${escapeHtml(value.note || '')}</textarea></label>
 ${paymentChoice(paymentOptions, value.paymentMethod)}
 <label class="terms-check"><input type="checkbox" name="terms" value="ja" required${value.terms === 'ja' ? ' checked' : ''}><span>Ik ga akkoord met de <a href="${ROOT}pagina/algemene-voorwaarden/" target="_blank" rel="noopener">algemene voorwaarden</a> en heb de <a href="${ROOT}pagina/privacyverklaring/" target="_blank" rel="noopener">privacyverklaring</a> gelezen. Als consument heb je <a href="${ROOT}pagina/herroepingsrecht/" target="_blank" rel="noopener">herroepingsrecht</a>.</span></label>
