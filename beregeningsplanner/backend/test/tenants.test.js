@@ -438,9 +438,10 @@ test('gebruikersnamen zijn uniek per tenant; de organisatiecode kiest de tenant'
     const tester = await as('tester', 'Bloem-Perk-2029!', 'groen');
     assert.strictEqual((await tester.get('/app/api/me')).body.tenant.id, env.id);
 
-    // Blokkade na te veel fouten geldt per tenant: de Piet van Blauw kan nog in.
+    // Blokkade na te veel fouten geldt per tenant en per bezoeker (A-01): de raadpoger zit vast, de echte Piet en de Piet van Blauw niet.
     for (let i = 0; i < 10; i++) assert.strictEqual((await loginFrom(base, '127.0.2.1', 'piet', 'fout', 'groen')).status, 401);
-    assert.strictEqual((await loginFrom(base, nextIp(), 'piet', 'Gras-Pomp-2027!', 'groen')).status, 429);
+    assert.strictEqual((await loginFrom(base, '127.0.2.1', 'piet', 'Gras-Pomp-2027!', 'groen')).status, 429);
+    assert.strictEqual((await loginFrom(base, nextIp(), 'piet', 'Gras-Pomp-2027!', 'groen')).status, 200);
     assert.strictEqual((await loginFrom(base, nextIp(), 'piet', 'Haag-Slang-2028!', 'blauw')).status, 200);
   } finally {
     server.close();

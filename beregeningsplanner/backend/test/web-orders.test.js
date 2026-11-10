@@ -38,7 +38,7 @@ async function setup() {
   const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);
   for (const item of [
     { code: 'SPR-1', name: 'Sproeier Pro', onHand: 5, salePrice: 10 },
     { code: 'BUIS-25', name: 'PE buis 25 mm', onHand: 100, salePrice: 1.5 },
