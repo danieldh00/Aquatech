@@ -162,3 +162,109 @@ test('hoofdbeheerder verwijdert een back-up; ongeldige namen niet', async () => 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('testomgeving met bestellingen, meldingen en andere latere tabellen is te verwijderen en leeg te maken', async () => {
+  const db = await platformDb();
+  const { server, base } = await start(db);
+  try {
+    const baas = createClient(base);
+    await baas.login('baas', PW);
+    const tenant = (await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen' })).body.tenant;
+    const env = (await baas.post(`/app/api/platform/tenants/${tenant.id}/environments`, { name: 'Test' })).body.tenant;
+    assert.strictEqual((await baas.post(`/app/api/platform/tenants/${env.id}/testdata`)).status, 201);
+    const users = db.prepare('SELECT id FROM users WHERE tenant_id = ?').all(env.id);
+    assert.ok(users.length > 0);
+
+    // Een rij in elke tabel met tenant_id die het wissen vroeger miste, met een verwijzing naar een testgebruiker.
+    const seeded = seedLateTables(db, env.id, users[0].id);
+    assert.ok(seeded.length > 0, 'minstens één tabel gevuld');
+
+    const reset = await baas.post(`/app/api/platform/tenants/${env.id}/reset`);
+    assert.strictEqual(reset.status, 200, JSON.stringify(reset.body));
+    for (const table of seeded) {
+      assert.strictEqual(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id = ?`).get(env.id).n, 0, `${table} leeg na leegmaken`);
+    }
+
+    assert.strictEqual((await baas.post(`/app/api/platform/tenants/${env.id}/testdata`)).status, 201);
+    seedLateTables(db, env.id, db.prepare('SELECT id FROM users WHERE tenant_id = ?').get(env.id).id);
+    const out = await baas.del(`/app/api/platform/tenants/${env.id}`);
+    assert.strictEqual(out.status, 200, JSON.stringify(out.body));
+    for (const table of tenantTables(db)) {
+      assert.strictEqual(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id = ?`).get(env.id).n, 0, `${table} leeg na verwijderen`);
+    }
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM tenants WHERE id = ?').get(env.id).n, 0);
+    // De live-tenant en zijn gegevens blijven.
+    assert.ok(createStore(db).getTenant(tenant.id));
+  } finally {
+    server.close();
+  }
+});
+
+test('verwijderen weigert de omgeving waar je nu in werkt', async () => {
+  const db = await platformDb();
+  const { server, base } = await start(db);
+  try {
+    const baas = createClient(base);
+    await baas.login('baas', PW);
+    const tenant = (await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen' })).body.tenant;
+    const env = (await baas.post(`/app/api/platform/tenants/${tenant.id}/environments`, { name: 'Test' })).body.tenant;
+    assert.strictEqual((await baas.post('/app/api/environment', { tenantId: env.id })).status, 200);
+    const own = await baas.del(`/app/api/platform/tenants/${env.id}`);
+    assert.strictEqual(own.status, 409);
+    assert.strictEqual(own.body.error, 'current_tenant');
+    const parent = await baas.del(`/app/api/platform/tenants/${tenant.id}`, { confirm: 'groen' });
+    assert.strictEqual(parent.status, 409);
+    assert.ok(createStore(db).getTenant(env.id));
+  } finally {
+    server.close();
+  }
+});
+
+test('een mislukte verwijdering geeft een duidelijke melding en wist niets', async () => {
+  const db = await platformDb();
+  const store = createStore(db);
+  const tenant = store.createTenant({ name: 'Groen BV', slug: 'groen' });
+  const env = store.createEnvironment(tenant.tenant?.id || tenant.id, { name: 'Test' }).tenant;
+  // Een rij in de hoofdtenant die verplicht naar de testomgeving verwijst: blokkeert het wissen.
+  const original = db.prepare.bind(db);
+  /**
+   * Laat het laatste DELETE van de tenantrij mislukken, alsof een foreign key nog naar de omgeving verwijst.
+   * @param {string} sql De query.
+   * @returns {object} Het statement.
+   */
+  db.prepare = function failOnTenantDelete(sql) {
+    return /DELETE FROM tenants WHERE id = \?/.test(sql) ? { run() { throw new Error('foreign key constraint failed'); } } : original(sql);
+  };
+  const out = store.deleteEnvironment(env.id);
+  db.prepare = original;
+  assert.strictEqual(out.status, 500);
+  assert.match(out.error, /Testomgeving verwijderen is mislukt; er is niets gewist\. Oorzaak: foreign key constraint failed/);
+  assert.ok(store.getTenant(env.id), 'omgeving staat er nog');
+});
+
+/**
+ * Vult elke tabel met tenant_id die niet door de oude lijst werd gewist met één rij, voor zover dat zonder
+ * verplichte kolommen kan, en laat een nullable kolom naar de gegeven gebruiker verwijzen.
+ * @param {object} db De database.
+ * @param {string} tenantId De omgeving.
+ * @param {string} userId Een gebruiker uit die omgeving.
+ * @returns {string[]} De tabellen waarin een rij is gezet.
+ */
+function seedLateTables(db, tenantId, userId) {
+  const filled = [];
+  for (const table of ['roles', 'service_requests', 'stock_merges', 'stock_units', 'web_orders', 'web_returns']) {
+    const columns = tableColumns(db, table);
+    const values = {};
+    for (const column of columns) {
+      if (column.name === 'tenant_id') values[column.name] = tenantId;
+      else if (column.name === 'id') values[column.name] = `test-${table}-${Date.now()}`;
+      else if (/user|customer|owner|created_by/.test(column.name) && column.name.endsWith('id')) values[column.name] = userId;
+      else if (column.notnull && column.dflt_value == null && !column.pk) values[column.name] = /_at$|^created|^updated/.test(column.name) ? 1 : (/(qty|total|amount|count|number|price|rank|position)/.test(column.name) ? 1 : 'x');
+    }
+    try {
+      db.prepare(`INSERT INTO ${table} (${Object.keys(values).join(', ')}) VALUES (${Object.keys(values).map(() => '?').join(', ')})`).run(...Object.values(values));
+      filled.push(table);
+    } catch (error) { /* een tabel met strengere verplichte velden slaan we over */ }
+  }
+  return filled;
+}

@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.9',
+      date: '2026-11-10',
+      title: 'Testomgeving verwijderen werkt weer',
+      items: [
+        { text: 'Een testomgeving of tenant verwijderen of leegmaken lukt weer. Gaat het toch mis, dan staat in de melding wat de oorzaak is en is er niets gewist.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.7.8',
       date: '2026-11-10',
       title: 'Overzichtelijker zijbalk',
