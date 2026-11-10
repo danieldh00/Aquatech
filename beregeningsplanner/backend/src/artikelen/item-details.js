@@ -116,7 +116,7 @@ function specificationsFromShop(attributesJson) {
  */
 function shownDetails(row, parent = null) {
   const own = sanitizeDescription(row.description);
-  const shop = plainTextFromHtml(row.shop_description);
+  const shop = sanitizeDescription(row.shop_description);
   const ownSpecs = specificationsOf(row.specifications);
   const shopSpecs = specificationsFromShop(row.shop_attributes);
   return {

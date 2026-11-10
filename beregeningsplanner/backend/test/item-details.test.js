@@ -28,6 +28,7 @@ test('de shop toont eigen tekst, anders die van de webshop, anders die van het h
   assert.deepStrictEqual(own, { description: 'Eigen', specifications: [{ name: 'A', value: 'B' }] });
   const shop = ItemDetails.shownDetails({ description: '', specifications: '[]', shop_description: 'Webshop', shop_attributes: shopAttributes });
   assert.deepStrictEqual(shop, { description: 'Webshop', specifications: [{ name: 'Maat', value: '25, 32' }] });
+  assert.strictEqual(ItemDetails.shownDetails({ description: '', specifications: '[]', shop_description: 'Diameter < 20 mm > 10 mm' }).description, 'Diameter < 20 mm > 10 mm', 'opgeslagen platte tekst niet opnieuw als HTML');
   const variant = ItemDetails.shownDetails({ description: '', specifications: '[]' }, { description: 'Van het hoofdartikel', specifications: [{ name: 'X', value: 'Y' }] });
   assert.deepStrictEqual(variant, { description: 'Van het hoofdartikel', specifications: [{ name: 'X', value: 'Y' }] });
 });
