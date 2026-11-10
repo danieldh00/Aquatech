@@ -106,6 +106,7 @@
     $('span', note).textContent = !item.description && !(item.specifications || []).length
       ? 'Leeg: de shop toont de omschrijving en specificaties uit de oude webshop.'
       : 'De oude webshop heeft ook een omschrijving en/of specificaties.';
+    /** Neemt de omschrijving en specificaties uit de oude webshop over in de velden (nog niet opgeslagen). */
     $('#d-details-copy').onclick = () => {
       if (item.shopDescription) formElement.description.value = item.shopDescription;
       if ((item.shopSpecifications || []).length) formElement.specifications.value = specificationsText(item.shopSpecifications);

@@ -30,6 +30,12 @@ function sanitizeDescription(raw) {
  * @returns {{ name: string, value: string }[]} Hoogstens MAX_SPECIFICATIONS specificaties met naam en waarde.
  */
 function sanitizeSpecifications(raw) {
+  /**
+   * Eén regel tekst zonder stuurtekens en dubbele spaties.
+   * @param {*} value De invoer.
+   * @param {number} maxLength Hoogstens zoveel tekens.
+   * @returns {string} De opgeschoonde tekst.
+   */
   const clean = (value, maxLength) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/ {2,}/g, ' ').trim().slice(0, maxLength);
   let entries = [];
   if (Array.isArray(raw)) entries = raw.map((entry) => (entry && typeof entry === 'object' ? { name: entry.name, value: entry.value } : {}));
