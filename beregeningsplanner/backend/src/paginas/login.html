@@ -37,7 +37,7 @@
     <input id="code" name="code" type="password" autocomplete="current-password" required>
     <div id="totp-wrap" hidden>
       <label for="totp" style="margin-top:12px">Code uit je authenticator-app</label>
-      <input id="totp" name="totp" inputmode="numeric" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="6 cijfers of een herstelcode">
+      <input id="totp" name="totp" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="6 cijfers of een herstelcode">
     </div>
     <button id="b" type="submit">Inloggen</button>
     <div class="err" id="e" role="alert"></div>

@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.6',
+      date: '2026-11-10',
+      title: 'Herstelcode makkelijker invoeren',
+      items: [
+        { text: 'Inloggen met een herstelcode op je telefoon: het codeveld toont nu een gewoon toetsenbord, zodat je ook letters en het streepje kunt typen.' },
+      ],
+    },
+    {
       version: '1.7.5',
       date: '2026-11-10',
       title: 'Tweestapsverificatie, productomschrijvingen en slimmer reserveren',

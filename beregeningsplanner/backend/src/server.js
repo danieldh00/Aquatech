@@ -655,9 +655,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @param {object} req Het verzoek (bepaalt de bezoeker).
      * @param {string} account Sleutel van het account (`<organisatie>:<gebruikersnaam>`).
      * @param {number} [max] Aantal mislukte pogingen van deze bezoeker waarna hij geblokkeerd is.
+     * @param {number} [accountMax] Aantal mislukte pogingen voor alle bezoekers samen.
      * @returns {boolean} true als hij geblokkeerd is.
      */
-    blocked: (req, account, max = 10) => lockedOut(`${account}@${clientKey(req)}`, max) || lockedOut(account, ACCOUNT_MAX_FAILURES),
+    blocked: (req, account, max = 10, accountMax = ACCOUNT_MAX_FAILURES) => lockedOut(`${account}@${clientKey(req)}`, max) || lockedOut(account, accountMax),
     /**
      * Telt een mislukte poging van deze bezoeker op dit account.
      * @param {object} req Het verzoek.
@@ -762,7 +763,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // Tweede stap (5 uit de audit van 1.7.3): met tweestapsverificatie aan moet er een code uit de app of een
       // herstelcode bij. Verkeerde codes tellen apart per account, met dezelfde blokkering en vertraging.
       const totpKey = `totp:${user.id}`;
-      if (loginGuard.blocked(req, totpKey)) {
+      if (loginGuard.blocked(req, totpKey, 10, 10)) {
         audit(req, 'inloggen_geblokkeerd', { username, via: 'tweestaps' }, user.id, user.tenant_id);
         return res.status(429).json({ error: 'locked', message: 'Te veel verkeerde codes. Probeer het over een kwartier opnieuw.' });
       }
