@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.7
+
+Databasepool (tussenstap 1 uit *Functioneel beter* van de audit van 1.7.3): losse queries hoeven de server niet meer stil te
+zetten.
+
+- Nieuw `db.async` (`database/async-db.js`): `get/all/run(sql, ...params)` met dezelfde ?-SQL als `db.prepare`, als Promise.
+  Met PostgreSQL via een pool (`database/pg-pool.js`, `pg.Pool` in de hoofdthread, `PG_POOL_SIZE`, standaard 5, 0 = uit);
+  met SQLite (en zonder pool) de synchrone query in een Promise. Per verbinding houdt de pool `statement_timeout`,
+  `search_path` en de tenantafscherming (`aquatech.tenants` + `SET ROLE`, `tenant-scope.js`) bij, in één rondgang als ze
+  veranderen. Geen transacties via `db.async` (geweigerd): die blijven synchroon, anders kan een transactie in de pool
+  vastlopen op de wachtende hoofdthread. Een verbroken verbinding wordt weggegooid en de query één keer opnieuw geprobeerd.
+- De sessiecontrole van elk API-verzoek (`store.prefetchSession`, `auth.prefetch`) haalt de sessie vooraf via de pool op;
+  de controle zelf blijft gelijk en valt bij een fout terug op de gewone query. Zelfde aantal queries per verzoek.
+- Webshop: `storefrontData.warm` vult de catalogus via de pool (twee queries tegelijk, één opvraging per omgeving tegelijk)
+  voordat een pagina met een koude cache getekend wordt; een wissen tijdens het ophalen laat geen oude catalogus achter.
+- `test/queries.test.js` telt ook queries via `db.async`; nieuw `test/db-async.test.js` (tegelijk uitvoeren, timer loopt door,
+  afscherming en schema per verzoek).
+
 ## 1.7.6
 
 Nalopen van tweestapsverificatie en RLS uit 1.7.5 (review achteraf, PR #138).

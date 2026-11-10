@@ -7,6 +7,10 @@
 // er is. Elke query is daardoor (net als bij SQLite) blokkerend; alle queries
 // lopen na elkaar over één verbinding, dus transacties lopen nooit door elkaar.
 //
+// Daarnaast heeft de database een asynchrone kant (db.async, async-db.js en
+// pg-pool.js): losse queries over een pool van verbindingen, zonder de
+// hoofdthread stil te zetten.
+//
 // SQL schrijft de code met ?-parameters (SQLite-stijl); die worden hier
 // omgezet naar $1, $2, ... Dialectverschillen (JSON, schema opvragen) lost
 // db.js op met kleine hulpfuncties.
@@ -15,6 +19,7 @@ const path = require('path');
 const { Worker, MessageChannel, receiveMessageOnPort } = require('worker_threads');
 const { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS } = require('./pgschema');
 const { scopeKey } = require('./tenant-scope');
+const { syncAsync } = require('./async-db');
 
 /** Tenantafscherming via policies (tenant-scope.js); PG_TENANT_RLS=0 zet hem uit als noodgreep. */
 const TENANT_RLS = process.env.PG_TENANT_RLS !== '0';
@@ -176,17 +181,27 @@ class PgDatabase {
   }
 
   /**
-   * Bereidt een SQL-opdracht met ?-parameters voor (de omzetting wordt onthouden).
-   * @param {string} sql SQL in SQLite-stijl.
-   * @returns {{ get: Function, all: Function, run: Function }} Statement met dezelfde functies als node:sqlite.
+   * De SQL voor PostgreSQL ($1, $2, ...) bij SQL in SQLite-stijl; de omzetting wordt onthouden (ook voor db.async).
+   * @param {string} sql SQL met ?-parameters.
+   * @returns {string} SQL met $-parameters.
    */
-  prepare(sql) {
+  pgText(sql) {
     let text = this.cache.get(sql);
     if (!text) {
       text = toPgParams(sql);
       if (this.cache.size > 2000) this.cache.clear();
       this.cache.set(sql, text);
     }
+    return text;
+  }
+
+  /**
+   * Bereidt een SQL-opdracht met ?-parameters voor (de omzetting wordt onthouden).
+   * @param {string} sql SQL in SQLite-stijl.
+   * @returns {{ get: Function, all: Function, run: Function }} Statement met dezelfde functies als node:sqlite.
+   */
+  prepare(sql) {
+    const text = this.pgText(sql);
     return {
       /**
        * Eerste rij van het resultaat.
@@ -303,6 +318,9 @@ function openPg(url, { schema = process.env.DATABASE_SCHEMA || 'aquatech' } = {}
   const db = new PgDatabase(bridgeFor(url), schema);
   migratePg(db);
   db.tenantRls = TENANT_RLS && (tenantPolicies(db) || tenantPolicies(db));
+  // Losse queries die de hoofdthread niet stilzetten (pg-pool.js); zonder pool (PG_POOL_SIZE=0) via deze verbinding.
+  const { createPoolAsync, POOL_SIZE } = require('./pg-pool');
+  db.async = POOL_SIZE ? createPoolAsync({ url, config: pgConfig(url), db, toPgValue, DatabaseError }) : syncAsync(db);
   return db;
 }
 

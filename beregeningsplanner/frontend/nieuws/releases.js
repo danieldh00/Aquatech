@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.7',
+      date: '2026-11-10',
+      title: 'Sneller bij drukte',
+      items: [
+        { text: 'De app en de webshop wachten minder op elkaar: het controleren van je sessie en het laden van de webshopcatalogus gaan nu via meerdere databaseverbindingen tegelijk, zodat andere verzoeken intussen doorlopen.' },
+      ],
+    },
+    {
       version: '1.7.6',
       date: '2026-11-10',
       title: 'Herstelcode makkelijker invoeren',

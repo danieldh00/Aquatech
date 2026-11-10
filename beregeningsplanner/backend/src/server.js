@@ -495,6 +495,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (match && isModule(match[1])) req.url = match[2];
     next();
   });
+  // De sessie van een API-verzoek alvast ophalen via db.async (met PostgreSQL de pool): die query zet de hoofdthread
+  // dan niet stil, zodat andere verzoeken intussen doorlopen. Statische bestanden niet (die hebben een eigen cache).
+  app.use((req, res, next) => {
+    if (!req.url.startsWith('/api/')) return next();
+    auth.prefetch(req).then(() => next(), () => next());
+    return undefined;
+  });
   // Grote limiet alleen voor de plananalyse (afbeelding als base64).
   app.use('/api/plan/analyze', express.json({ limit: '12mb' }));
   // Kleurtellingen van een herkend plan (zie recognitions.js).

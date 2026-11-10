@@ -211,6 +211,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   werkthread doet `SET ROLE` per query. **Nieuwe code die bewust over organisaties heen werkt** (achtergrondtaak, audit,
   uitbesteden) gebruikt `asSystem(fn)` of `pinSystem()`; luisteraars op de request-stream via `bindStream`. Noodschakelaar
   `PG_TENANT_RLS=0`; zonder CREATEROLE alleen een waarschuwing. `test/tenant-rls.test.js`.
+- **Databasepool** (1.7.7, `database/async-db.js` + `pg-pool.js`): `db.async.get/all/run(sql, ...params)` = Promise, met
+  PostgreSQL via `pg.Pool` (`PG_POOL_SIZE`, standaard 5, 0 = uit; houdt `search_path`, `statement_timeout` en de RLS-scope per
+  verbinding bij), met SQLite synchroon in een Promise. **Alleen losse queries, nooit een transactie** (geweigerd; transacties
+  blijven `db.prepare`/`transaction`). Nu gebruikt voor de sessie van API-verzoeken (`store.prefetchSession`) en de
+  webshopcatalogus (`storefrontData.warm`). Een trage leesquery die de server niet mag stilzetten: via `db.async`. Supabase:
+  Session pooler houden (niet 6543), *Pool Size* ≥ `PG_POOL_SIZE` + 2.
 - **Verwijderen** (0.33.0): live-tenant via `DELETE /api/platform/tenants/:id`
   met `{ confirm: <slug> }` (`store.deleteTenant`: wist elke tabel met
   `tenant_id` voor de tenant + testomgevingen, uit het schema gelezen, met

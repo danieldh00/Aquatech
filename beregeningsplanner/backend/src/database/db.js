@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
+const { syncAsync } = require('./async-db');
 
 // Elke migratie verhoogt PRAGMA user_version met één. Nooit een bestaande
 // migratie aanpassen; altijd een nieuwe toevoegen.
@@ -1161,6 +1162,8 @@ function openSqlite(file = ':memory:') {
     if (check.join() !== 'ok') console.error(`Database-controle meldt problemen: ${check.slice(0, 5).join('; ')}`);
   }
   migrate(db);
+  // Dezelfde queries als Promise (async-db.js); met PostgreSQL loopt db.async over een pool.
+  db.async = syncAsync(db);
   return db;
 }
 

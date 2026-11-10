@@ -196,6 +196,13 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   // Een categorie toont alle producten met hun foto: de afbeeldingen krijgen een ruimere eigen limiet.
   const imageLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 1200, keyFn: (req) => `foto:${clientKey(req)}` });
   router.use((req, res, next) => (req.path.startsWith('/artikelfoto/') ? imageLimiter : limiter)(req, res, next));
+  // De catalogus alvast ophalen via de pool (data.warm), zodat een pagina met een koude cache de hoofdthread niet
+  // stilzet. Niet voor bestanden en afbeeldingen, en niet bij een voorbeeld (dat wordt niet onthouden).
+  router.use((req, res, next) => {
+    if (!data.warm || (req.method !== 'GET' && req.method !== 'HEAD') || /^\/(assets|media|artikelfoto)\//.test(req.path) || isPreview(req)) return next();
+    data.warm(tenantId).then(() => next(), () => next());
+    return undefined;
+  });
 
   // Een account met een tijdelijk wachtwoord kiest eerst een eigen wachtwoord, net als in de app: pagina's en formulieren
   // van de shop sturen door naar het wachtwoordscherm (uitloggen en de melding van de betaaldienst blijven werken).

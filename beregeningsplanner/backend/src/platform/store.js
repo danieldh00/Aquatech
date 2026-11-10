@@ -1270,6 +1270,20 @@ function createStore(db) {
     FROM sessions s LEFT JOIN users u ON u.id = s.user_id LEFT JOIN tenants t ON t.id = u.tenant_id
     WHERE s.id_hash = ?`;
   /**
+   * Haalt de sessie van dit verzoek alvast asynchroon op (db.async: met PostgreSQL via de pool, zonder de hoofdthread
+   * stil te zetten). findSessionWithUser gebruikt de rij daarna zonder nieuwe query. Zonder geheugen per verzoek of
+   * bij een fout gebeurt er niets: dan zoekt findSessionWithUser zelf.
+   * @param {string} token Het token uit de cookie.
+   * @returns {Promise<void>}
+   */
+  async function prefetchSession(token) {
+    const memo = requestCache.getStore();
+    if (!memo || !db.async || typeof token !== 'string' || !/^[\w-]{40,60}$/.test(token)) return;
+    const hash = tokenHash(token);
+    memo.set(`session:${hash}`, (await db.async.get(SESSION_SQL, hash)) || null);
+  }
+
+  /**
    * Zoekt bij elk verzoek de sessie met de gebruiker en diens tenant in één
    * query op. De tenant gaat ook in het geheugen van het verzoek, zodat
    * getTenant hem daarna niet opnieuw ophaalt.
@@ -1278,7 +1292,15 @@ function createStore(db) {
    */
   function findSessionWithUser(token) {
     if (typeof token !== 'string' || !/^[\w-]{40,60}$/.test(token)) return null;
-    const joined = prepare(SESSION_SQL).get(tokenHash(token));
+    const hash = tokenHash(token);
+    const memo = requestCache.getStore();
+    const prefetchKey = `session:${hash}`;
+    let joined;
+    // Al opgehaald door prefetchSession (via de pool): één keer gebruiken, daarna weer uit de database.
+    if (memo?.has(prefetchKey)) {
+      joined = memo.get(prefetchKey);
+      memo.delete(prefetchKey);
+    } else joined = prepare(SESSION_SQL).get(hash);
     if (!joined) return null;
     /**
      * Haalt de kolommen met een voorvoegsel (u_ of t_) uit de samengevoegde rij.
@@ -1291,7 +1313,6 @@ function createStore(db) {
       created_at: joined.created_at, last_seen_at: joined.last_seen_at, expires_at: joined.expires_at };
     const user = joined.u_id ? pick('u_', USER_COLUMNS) : null;
     const tenant = joined.t_id ? pick('t_', TENANT_COLUMNS) : null;
-    const memo = requestCache.getStore();
     if (memo && tenant) memo.set(`tenant:${tenant.id}`, tenant);
     return { row, user, tenant };
   }
@@ -1827,7 +1848,7 @@ function createStore(db) {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
     ensureTenant, familyIds, systemUser, createGuest, createAccount, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, markEmailVerified, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
-    createSession, findSessionWithUser, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
+    createSession, findSessionWithUser, prefetchSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
     planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing, pendingDrawingChars, purgeStaleDrawings,
   };

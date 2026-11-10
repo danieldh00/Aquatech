@@ -48,6 +48,15 @@ function instrument(db) {
     };
     return new Proxy(statement, { get: (target, property) => (['get', 'all', 'run'].includes(property) ? wrap(property) : typeof target[property] === 'function' ? target[property].bind(target) : target[property]) });
   };
+  // Ook de queries via db.async (de pool): die tellen even zwaar als een gewone query.
+  const asyncDb = db.async;
+  db.async = Object.fromEntries(['get', 'all', 'run'].map((method) => [method, async (sql, ...args) => {
+    const result = await asyncDb[method](sql, ...args);
+    stats.queries++;
+    stats.bytes += size(result);
+    stats.sql.push(sql.replace(/\s+/g, ' ').slice(0, 80));
+    return result;
+  }]));
   return {
     /** Zet de tellers op nul. */
     reset() { stats.queries = 0; stats.bytes = 0; stats.sql = []; },
