@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.9
+
+Testomgeving en tenant verwijderen of leegmaken werkt weer, met een duidelijke melding als het toch misgaat.
+
+- Oorzaak: "Verwijderen" en "Leegmaken" van een testomgeving gebruikten een vaste lijst tabellen (`clearData`) die sinds de webshop,
+  meldingen en artikelen niet meer volledig was (`roles`, `service_requests`, `service_request_photos`, `stock_merges`,
+  `stock_units`, `web_orders`, `web_returns`). Een rij daarin blokkeerde het verwijderen van de omgeving door een foreign key en gaf
+  alleen "Interne fout".
+- Nu gaat het wissen van een testomgeving, leegmaken en verwijderen van een tenant allemaal door `wipeTenantData` (store.js): elke
+  tabel met een `tenant_id` uit het schema, in één transactie met uitgestelde foreign keys, dus een nieuwe tabel gaat vanzelf mee. Bij
+  leegmaken blijven instellingen, webshopkoppeling en rollen staan (`KEPT_ON_RESET`).
+- Mislukt het toch, dan is er niets gewist en toont de melding de oorzaak (`guardedWipe`), bijvoorbeeld "Testomgeving verwijderen is
+  mislukt; er is niets gewist. Oorzaak: …", en staat de fout in het serverlog.
+- De omgeving waarin je nu werkt (of de tenant waaronder die hangt) kan niet worden verwijderd: 409 `current_tenant` met de uitleg om
+  eerst te wisselen. De hoofdtenant blijft beschermd.
+- Tests (`tenants-delete.test.js`, ook tegen PostgreSQL): rijen in de gemiste tabellen, leegmaken, huidige omgeving en een mislukte
+  verwijdering. Snelheid: alleen bij beheeracties, geen invloed op gewone verzoeken.
+
 ## 1.7.8
 
 Zijbalk overzichtelijker: genest, compacter en met vaste plekken voor wat nog komt.

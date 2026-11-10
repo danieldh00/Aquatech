@@ -2227,6 +2227,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // tenantcode (slug) worden meegestuurd als { confirm }.
   app.delete('/api/platform/tenants/:id', (req, res) => {
     const tenantRow = store.getTenant(req.params.id);
+    // Niet de omgeving verwijderen waar je nu in werkt (of de tenant waar die onder hangt): wissel eerst naar een andere.
+    if (tenantRow && tenantRow.id !== tenant.id && (tenantRow.id === req.tenantId || tenantRow.id === store.getTenant(req.tenantId)?.parent_id)) {
+      return res.status(409).json({ error: 'current_tenant', message: `Je werkt nu in ${tenantRow.name}. Wissel eerst naar een andere omgeving (rechtsboven) en verwijder daarna.` });
+    }
     if (tenantRow && tenantRow.environment === 'live') {
       if (tenantRow.id !== tenant.id && String(req.body?.confirm ?? req.query.confirm ?? '').trim().toLowerCase() !== tenantRow.slug) {
         return res.status(400).json({ error: 'confirm_required', message: `Typ ter bevestiging de tenantcode "${tenantRow.slug}" over.` });

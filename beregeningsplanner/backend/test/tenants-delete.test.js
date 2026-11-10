@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -162,3 +163,109 @@ test('hoofdbeheerder verwijdert een back-up; ongeldige namen niet', async () => 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('testomgeving met bestellingen, meldingen en andere latere tabellen is te verwijderen en leeg te maken', async () => {
+  const db = await platformDb();
+  const { server, base } = await start(db);
+  try {
+    const baas = createClient(base);
+    await baas.login('baas', PW);
+    const tenant = (await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen' })).body.tenant;
+    const env = (await baas.post(`/app/api/platform/tenants/${tenant.id}/environments`, { name: 'Test' })).body.tenant;
+    assert.strictEqual((await baas.post(`/app/api/platform/tenants/${env.id}/testdata`)).status, 201);
+    const users = db.prepare('SELECT id FROM users WHERE tenant_id = ?').all(env.id);
+    assert.ok(users.length > 0);
+
+    // Een rij in elke tabel met tenant_id die het wissen vroeger miste, met een verwijzing naar een testgebruiker.
+    const seeded = seedLateTables(db, env.id, users[0].id);
+    assert.deepStrictEqual(seeded, ['roles', 'service_requests', 'stock_merges', 'stock_units', 'web_orders', 'web_returns']);
+
+    const reset = await baas.post(`/app/api/platform/tenants/${env.id}/reset`);
+    assert.strictEqual(reset.status, 200, JSON.stringify(reset.body));
+    // Leegmaken wist alles behalve de instellingen en de rollen van de omgeving.
+    for (const table of seeded) {
+      const expected = table === 'roles' ? 1 : 0;
+      assert.strictEqual(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id = ?`).get(env.id).n, expected, `${table} na leegmaken`);
+    }
+
+    assert.strictEqual((await baas.post(`/app/api/platform/tenants/${env.id}/testdata`)).status, 201);
+    seedLateTables(db, env.id, db.prepare('SELECT id FROM users WHERE tenant_id = ?').get(env.id).id);
+    const out = await baas.del(`/app/api/platform/tenants/${env.id}`);
+    assert.strictEqual(out.status, 200, JSON.stringify(out.body));
+    for (const table of tenantTables(db)) {
+      assert.strictEqual(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id = ?`).get(env.id).n, 0, `${table} leeg na verwijderen`);
+    }
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM tenants WHERE id = ?').get(env.id).n, 0);
+    // De live-tenant en zijn gegevens blijven.
+    assert.ok(createStore(db).getTenant(tenant.id));
+  } finally {
+    server.close();
+  }
+});
+
+test('verwijderen weigert de omgeving waar je nu in werkt', async () => {
+  const db = await platformDb();
+  const { server, base } = await start(db);
+  try {
+    const baas = createClient(base);
+    await baas.login('baas', PW);
+    const tenant = (await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen' })).body.tenant;
+    const env = (await baas.post(`/app/api/platform/tenants/${tenant.id}/environments`, { name: 'Test' })).body.tenant;
+    assert.strictEqual((await baas.post('/app/api/environment', { tenantId: env.id })).status, 200);
+    const own = await baas.del(`/app/api/platform/tenants/${env.id}`);
+    assert.strictEqual(own.status, 409);
+    assert.strictEqual(own.body.error, 'current_tenant');
+    const parent = await baas.del(`/app/api/platform/tenants/${tenant.id}`, { confirm: 'groen' });
+    assert.strictEqual(parent.status, 409);
+    assert.ok(createStore(db).getTenant(env.id));
+  } finally {
+    server.close();
+  }
+});
+
+test('een mislukte verwijdering geeft een duidelijke melding en wist niets', async () => {
+  const db = await platformDb();
+  const store = createStore(db);
+  const tenant = store.createTenant({ name: 'Groen BV', slug: 'groen' });
+  const env = store.createEnvironment(tenant.tenant?.id || tenant.id, { name: 'Test' }).tenant;
+  // Een rij in de hoofdtenant die verplicht naar de testomgeving verwijst: blokkeert het wissen.
+  const original = db.prepare.bind(db);
+  /**
+   * Laat het laatste DELETE van de tenantrij mislukken, alsof een foreign key nog naar de omgeving verwijst.
+   * @param {string} sql De query.
+   * @returns {object} Het statement.
+   */
+  db.prepare = function failOnTenantDelete(sql) {
+    return /DELETE FROM tenants WHERE id = \?/.test(sql) ? { run() { throw new Error('foreign key constraint failed'); } } : original(sql);
+  };
+  const out = store.deleteEnvironment(env.id);
+  db.prepare = original;
+  assert.strictEqual(out.status, 500);
+  assert.match(out.error, /Testomgeving verwijderen is mislukt; er is niets gewist\. Oorzaak: foreign key constraint failed/);
+  assert.ok(store.getTenant(env.id), 'omgeving staat er nog');
+});
+
+/**
+ * Zet in elke tabel die de oude wislijst miste één geldige rij, met verwijzingen naar een testgebruiker (en
+ * web_returns naar de bestelling). Een mislukte insert laat de test falen, zodat geen tabel stilzwijgend wordt overgeslagen.
+ * @param {object} db De database.
+ * @param {string} tenantId De omgeving.
+ * @param {string} userId Een gebruiker uit die omgeving.
+ * @returns {string[]} De tabellen waarin een rij is gezet.
+ */
+function seedLateTables(db, tenantId, userId) {
+  const suffix = `${tenantId.slice(0, 8)}-${crypto.randomBytes(4).toString('hex')}`;
+  const rows = {
+    roles: { tenant_id: tenantId, role_key: `eigen-${suffix}`, label: 'Eigen rol', description: '', kind: 'medewerker', rights: '[]', created_at: 1, updated_at: 1 },
+    service_requests: { id: `sr-${suffix}`, tenant_id: tenantId, number: `M-${suffix}`, customer_id: userId, customer_name: 'Klant', kind: 'storing', urgent: 0, subject: 'Storing', description: '', address: '', phone: '', email: '', preferred: '', status: 'nieuw', reply: '', note: '', handled_by: userId, handled_by_name: '', created_at: 1, updated_at: 1 },
+    stock_merges: { id: `sm-${suffix}`, tenant_id: tenantId, parent_id: `p-${suffix}`, parent_code: 'P', parent_name: 'Hoofdartikel', snapshot: '{}', created_by: userId, created_at: 1 },
+    stock_units: { id: `su-${suffix}`, tenant_id: tenantId, name: 'doos', created_at: 1 },
+    web_orders: { id: `wo-${suffix}`, tenant_id: tenantId, number: `W-${suffix}`, user_id: userId, status: 'nieuw', customer_name: 'Klant', email: 'klant@example.nl', total: 100, data: '{}', created_at: 1, updated_at: 1 },
+    web_returns: { id: `wr-${suffix}`, tenant_id: tenantId, order_id: `wo-${suffix}`, user_id: userId, number: `R-${suffix}`, status: 'nieuw', data: '{}', created_at: 1, updated_at: 1 },
+  };
+  for (const [table, values] of Object.entries(rows)) {
+    const names = Object.keys(values);
+    db.prepare(`INSERT INTO ${table} (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`).run(...Object.values(values));
+  }
+  return Object.keys(rows);
+}

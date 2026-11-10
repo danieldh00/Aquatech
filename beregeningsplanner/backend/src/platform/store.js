@@ -954,43 +954,70 @@ function createStore(db) {
   }
 
   /**
-   * Maakt een omgeving leeg: plannen, offertes, werkorders, voorraad, facturen,
+   * Tabellen met gegevens die bij "Leegmaken" van een testomgeving blijven staan: de instellingen
+   * en de webshopkoppeling van de omgeving, en de rollen.
+   */
+  const KEPT_ON_RESET = ['settings', 'shop_products', 'shop_sync', 'roles'];
+
+  /**
+   * Wist alle rijen met een tenant_id van de gegeven omgevingen, uit de tabellen die in het schema
+   * staan, zodat een nieuwe tabel vanzelf meegaat. Verwijzingen naar de gewiste gebruikers in
+   * andere tabellen (bijv. het auditlog van de hoofdtenant) worden leeggemaakt. Moet binnen een
+   * transactie draaien: de foreign keys worden pas bij COMMIT gecontroleerd, dus de volgorde
+   * van wissen doet er niet toe.
+   * @param {string[]} ids Id's van de omgevingen.
+   * @param {string[]} [keepTables] Tabellen die ongemoeid blijven.
+   * @returns {Object<string, number>} Het aantal gewiste rijen per tabel.
+   */
+  function wipeTenantData(ids, keepTables = []) {
+    const tables = listTables(db).filter((name) => name !== 'tenants');
+    const marks = ids.map(() => '?').join(', ');
+    const counts = {};
+    deferForeignKeys(db);
+    const users = prepare(`SELECT id FROM users WHERE tenant_id IN (${marks})`).all(...ids).map((row) => row.id);
+    for (const table of tables) {
+      if (keepTables.includes(table) || !tableColumns(db, table).some((column) => column.name === 'tenant_id')) continue;
+      const changes = prepare(`DELETE FROM ${table} WHERE tenant_id IN (${marks})`).run(...ids).changes;
+      if (changes) counts[table] = changes;
+    }
+    if (users.length) {
+      const userMarks = users.map(() => '?').join(', ');
+      for (const table of tables) {
+        const columnInfo = tableColumns(db, table);
+        for (const foreignKey of foreignKeys(db, table)) {
+          if (foreignKey.table !== 'users' || columnInfo.find((column) => column.name === foreignKey.from)?.notnull) continue;
+          prepare(`UPDATE ${table} SET ${foreignKey.from} = NULL WHERE ${foreignKey.from} IN (${userMarks})`).run(...users);
+        }
+      }
+    }
+    return counts;
+  }
+
+  /**
+   * Voert een verwijderactie in één transactie uit. Mislukt het (bijv. door een foreign key die
+   * nog naar de omgeving verwijst), dan is er niets gewist en komt er een foutmelding met de
+   * technische oorzaak terug, in plaats van een generieke serverfout.
+   * @param {string} action Wat er gebeurde, voor de foutmelding (bijv. "Testomgeving verwijderen").
+   * @param {Function} callback De wijzigingen.
+   * @returns {*|{ error: string, status: number }} Wat de functie teruggeeft, of een foutmelding.
+   */
+  function guardedWipe(action, callback) {
+    try {
+      return transaction(db, callback);
+    } catch (error) {
+      console.error(`${action} mislukt:`, error);
+      return { error: `${action} is mislukt; er is niets gewist. Oorzaak: ${String(error.message || error).slice(0, 300)}`, status: 500 };
+    }
+  }
+
+  /**
+   * Maakt een omgeving leeg: plannen, offertes, werkorders, voorraad, facturen, bestellingen,
    * debiteuren, historie, auditlog, sessies en gasten weg; instellingen blijven.
    * @param {string} tenantId De omgeving.
-   * @returns {void}
+   * @returns {Object<string, number>} Het aantal gewiste rijen per tabel.
    */
   function clearData(tenantId) {
-    prepare('DELETE FROM history WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM audit WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM sessions WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM season_reminders_sent WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM work_order_photos WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM work_order_hours WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM work_order_materials WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM work_order_offers WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM news WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM shop_content WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM shop_images WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM sprinkler_library WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM ai_usage WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM plan_recognitions WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM invoices WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM debtors WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM stock_reservations WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM stock_movements WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM stock_cost_entries WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM stock_layers WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM stock_cost_prices WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM web_sale_lines WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM item_images WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM stock_items WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM work_orders WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM impersonations WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM support_grants WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM quotes WHERE tenant_id = ?').run(tenantId);
-    prepare('DELETE FROM plans WHERE tenant_id = ?').run(tenantId);
-    prepare(`DELETE FROM users WHERE tenant_id = ? AND NOT EXISTS (SELECT 1 FROM plans p WHERE p.owner_id = users.id)
-      AND NOT EXISTS (SELECT 1 FROM quotes o WHERE o.owner_id = users.id)`).run(tenantId);
+    return wipeTenantData([tenantId], KEPT_ON_RESET);
   }
 
   /**
@@ -1001,25 +1028,24 @@ function createStore(db) {
   function resetEnvironment(id) {
     const out = testEnvironment(id);
     if (out.error) return out;
-    transaction(db, () => clearData(out.tenant.id));
+    const result = guardedWipe('Testomgeving leegmaken', () => clearData(out.tenant.id));
+    if (result.error) return result;
     return { tenant: out.tenant };
   }
 
   /**
-   * Verwijdert een testomgeving met alles erin.
+   * Verwijdert een testomgeving met alles erin: elke tabel met een tenant_id, in één transactie.
    * @param {string} id Id van de testomgeving.
    * @returns {{ ok: true }|{ error: string, status: number }} Klaar, of een foutmelding.
    */
   function deleteEnvironment(id) {
     const out = testEnvironment(id);
     if (out.error) return out;
-    transaction(db, () => {
-      clearData(out.tenant.id);
-      prepare('DELETE FROM settings WHERE tenant_id = ?').run(out.tenant.id);
-      prepare('DELETE FROM shop_products WHERE tenant_id = ?').run(out.tenant.id);
-      prepare('DELETE FROM shop_sync WHERE tenant_id = ?').run(out.tenant.id);
+    const result = guardedWipe('Testomgeving verwijderen', () => {
+      wipeTenantData([out.tenant.id]);
       prepare('DELETE FROM tenants WHERE id = ?').run(out.tenant.id);
     });
+    if (result?.error) return result;
     forgetTenants();
     return { ok: true };
   }
@@ -1040,37 +1066,13 @@ function createStore(db) {
     if (tenant.environment !== 'live') return { error: 'Verwijder een testomgeving via de testomgeving zelf.', status: 409 };
     if (tenant.id === mainTenantId || tenant.slug === 'default') return { error: 'De hoofdtenant kan niet worden verwijderd.', status: 409 };
     const ids = [tenant.id, ...prepare('SELECT id FROM tenants WHERE parent_id = ?').all(tenant.id).map((row) => row.id)];
-    const tables = listTables(db).filter((name) => name !== 'tenants');
-    /**
-     * Kolommen van een tabel.
-     * @param {string} table Naam van de tabel.
-     * @returns {object[]} De kolommen.
-     */
-    const columns = (table) => tableColumns(db, table);
-    const marks = ids.map(() => '?').join(', ');
-    const counts = {};
-    transaction(db, () => {
-      // Pas bij COMMIT controleren: de volgorde van wissen doet er dan niet toe.
-      deferForeignKeys(db);
-      const users = prepare(`SELECT id FROM users WHERE tenant_id IN (${marks})`).all(...ids).map((row) => row.id);
-      for (const table of tables) {
-        if (!columns(table).some((column) => column.name === 'tenant_id')) continue;
-        const changes = prepare(`DELETE FROM ${table} WHERE tenant_id IN (${marks})`).run(...ids).changes;
-        if (changes) counts[table] = changes;
-      }
-      if (users.length) {
-        const userMarks = users.map(() => '?').join(', ');
-        for (const table of tables) {
-          const columnInfo = columns(table);
-          for (const fk of foreignKeys(db, table)) {
-            if (fk.table !== 'users' || columnInfo.find((column) => column.name === fk.from)?.notnull) continue;
-            prepare(`UPDATE ${table} SET ${fk.from} = NULL WHERE ${fk.from} IN (${userMarks})`).run(...users);
-          }
-        }
-      }
+    const counts = guardedWipe('Tenant verwijderen', () => {
+      const wiped = wipeTenantData(ids);
       prepare(`DELETE FROM tenants WHERE parent_id = ?`).run(tenant.id);
       prepare('DELETE FROM tenants WHERE id = ?').run(tenant.id);
+      return wiped;
     });
+    if (counts.error) return counts;
     forgetTenants();
     return { tenant: tenant, ids, counts };
   }
