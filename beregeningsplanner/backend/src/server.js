@@ -2029,10 +2029,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   webOrders.onShipped((tenantId, order) => webOrderMail.sendShipment(tenantId, order));
   webOrders.onCancelled((tenantId, order, user) => webOrderInvoices.creditCancelled(tenantId, order, user));
   webOrders.onTracking((tenantId, order) => webOrderMail.sendShipment(tenantId, order, { onlyNewTracking: true }));
-  registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices });
+  registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
   webReturns.onRequested((tenantId, record) => webReturnMail.sendRequested(tenantId, record));
   webReturns.onDecided((tenantId, record) => webReturnMail.sendDecision(tenantId, record));
-  registerWebReturnRoutes(app, { returns: webReturns, requireJson, audit, credits: webOrderInvoices, mail: webReturnMail });
+  /**
+   * Of de bestelling van een retour online is betaald en of deze retour al via Mollie is terugbetaald (voor de knop in Beheer).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} record De retour.
+   * @returns {?{ orderId: string, refunded: ?object }} De terugbetaalstand, of null bij betalen op rekening.
+   */
+  const refundOfReturn = (tenantId, record) => {
+    const order = webOrders.get(tenantId, record.orderId);
+    if (!order || order.payment !== 'online' || !order.pay || order.pay.status !== 'betaald') return null;
+    return { orderId: order.id, refunded: (order.pay.refunds || []).find((entry) => entry.key === `retour:${record.id}`) || null };
+  };
+  registerWebReturnRoutes(app, { returns: webReturns, requireJson, audit, credits: webOrderInvoices, mail: webReturnMail, refundOf: refundOfReturn });
   // Margerapportage van de webshop: omzet, inkoop (FIFO-voorraadlagen) en marge (web-sales.js).
   registerWebSalesRoutes(app, { sales: createWebSalesStore(database, { stock: stockStore }) });
   registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),

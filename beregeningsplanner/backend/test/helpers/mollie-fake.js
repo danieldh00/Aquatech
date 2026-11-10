@@ -9,6 +9,7 @@
 function createMollieFake() {
   const payments = new Map();
   const byKey = new Map();
+  const refundsByKey = new Map();
   const calls = [];
   const down = { on: false };
   let counter = 0;
@@ -45,6 +46,21 @@ function createMollieFake() {
       payments.set(id, payment);
       if (key) byKey.set(key, id);
       return respond(201, payment);
+    }
+    const refundMatch = apiPath.match(/^\/payments\/(tr_[A-Za-z0-9]+)\/refunds$/);
+    if (init.method === 'POST' && refundMatch) {
+      const payment = payments.get(refundMatch[1]);
+      if (!payment) return respond(404, { title: 'Not Found', detail: 'No payment exists with token' });
+      const key = init.headers['Idempotency-Key'];
+      if (key && refundsByKey.has(key)) return respond(201, refundsByKey.get(key));
+      const body = JSON.parse(init.body);
+      const refunded = payment.amountRefunded ? Number(payment.amountRefunded.value) : 0;
+      if (payment.status !== 'paid' || refunded + Number(body.amount.value) > Number(payment.amount.value) + 0.001) return respond(422, { title: 'Unprocessable Entity', detail: 'The amount is higher than the remaining amount' });
+      counter += 1;
+      const refund = { id: `re_test${String(counter).padStart(4, '0')}`, status: 'pending', amount: body.amount, description: body.description };
+      payment.amountRefunded = { currency: 'EUR', value: (refunded + Number(body.amount.value)).toFixed(2) };
+      if (key) refundsByKey.set(key, refund);
+      return respond(201, refund);
     }
     const match = apiPath.match(/^\/payments\/(tr_[A-Za-z0-9]+)$/);
     if (init.method === 'GET' && match) return payments.has(match[1]) ? respond(200, payments.get(match[1])) : respond(404, { title: 'Not Found', detail: 'No payment exists with token' });

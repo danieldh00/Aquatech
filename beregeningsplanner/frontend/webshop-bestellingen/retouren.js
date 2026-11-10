@@ -21,6 +21,12 @@
    * @returns {string} Bijv. "22 okt 2026 10:15" (– zonder tijdstip).
    */
   const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : '–');
+  /**
+   * Bedrag in euro's.
+   * @param {*} value Het bedrag.
+   * @returns {string} Bijv. "€ 1.234,50".
+   */
+  const euro = (value) => `€ ${Number(value || 0).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const PAGE = 50;
   const state = { status: '', offset: 0, statuses: {} };
   /** Toont een melding; wordt door init vervangen door die van Beheer. */
@@ -57,7 +63,7 @@
     try {
       const out = await api(`/${encodeURIComponent(record.id)}/${action}`, { method: 'POST', body });
       toast(done);
-      renderDetail(out.return);
+      await open(out.return.id);
       load();
     } catch (error) { toast(error.message, true); button.disabled = false; }
   }
@@ -65,13 +71,17 @@
   /**
    * Tekent het detail van een retour met de knoppen die bij zijn status horen.
    * @param {object} record De retour (met regels, reden en verloop).
+   * @param {?{ orderId: string, refunded: ?object }} [refund] Of de bestelling online is betaald en of deze retour al is terugbetaald.
    * @returns {void}
    */
-  function renderDetail(record) {
+  function renderDetail(record, refund = null) {
     const box = $('#wr-detail');
     const lines = record.lines.map((line) => `<tr><td>${esc(line.name)}<span class="sub">${esc(line.code)}</span></td><td class="num">${line.qty}</td></tr>`).join('');
     const credit = record.credit ? `<p>Creditnota: <a href="../facturen/?id=${encodeURIComponent(record.credit.invoiceId)}">${esc(record.credit.number || 'concept')}</a> (${esc(record.credit.status)})</p>`
       : record.status === 'afgerond' ? `<p>${record.creditError ? `${esc(record.creditError)} ` : 'Er is nog geen creditnota. '}<button class="btn" id="wr-credit">Creditnota maken</button></p>` : '';
+    // Online betaald: het bedrag van de definitieve creditnota via Mollie terugbetalen (één keer per retour).
+    const refundLine = refund && record.credit && record.credit.status !== 'concept'
+      ? `<p>${refund.refunded ? `Terugbetaald via Mollie: ${euro(refund.refunded.amount)} (${when(refund.refunded.at)})` : '<button class="btn primary" id="wr-refund">Terugbetalen via Mollie</button> <span class="muted small">het bedrag van de creditnota</span>'}</p>` : '';
     const resend = record.status === 'afgerond' && !(record.mail && record.mail.kind === 'afgerond' && record.mail.sent) ? ' <button class="btn" id="wr-resend">Mail opnieuw versturen</button>' : '';
     const mail = (record.mail ? (record.mail.sent ? `Laatste mail (${esc(record.mail.kind)}) verstuurd ${when(record.mail.at)}` : `Laatste mail (${esc(record.mail.kind)}) niet verstuurd: ${esc(record.mail.error)}`) : 'Nog geen mail verstuurd') + resend;
     let actions = '';
@@ -88,6 +98,7 @@
       <p><b>Reden:</b> ${esc(record.reasonLabel)}${record.note ? `<br><b>Toelichting klant:</b> ${esc(record.note)}` : ''}${record.decisionNote ? `<br><b>Jouw toelichting:</b> ${esc(record.decisionNote)}` : ''}</p>
       ${record.status === 'afgerond' ? `<p>${record.restock ? 'De artikelen zijn teruggeboekt op voorraad.' : 'De artikelen zijn niet teruggeboekt op voorraad.'}</p>` : ''}
       ${credit}
+      ${refundLine}
       <p class="muted small">${mail}<br>Verloop: ${record.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})`).join(' → ')}</p>
       ${actions}
       <div class="row actions"><button class="btn" id="wr-close">Sluiten</button></div>`;
@@ -132,6 +143,24 @@
        */
       makeCredit.onclick = () => act(record, 'credit', {}, 'Creditnota gemaakt', makeCredit);
     }
+    const refundButton = $('#wr-refund');
+    if (refundButton) {
+      /**
+       * Betaalt het bedrag van de creditnota terug via Mollie (na bevestiging; geld gaat echt terug).
+       * @returns {Promise<void>}
+       */
+      refundButton.onclick = async () => {
+        if (!confirm('Het bedrag van de creditnota via Mollie terugbetalen aan de klant? Dit kan niet ongedaan worden gemaakt.')) return;
+        refundButton.disabled = true;
+        try {
+          const res = await fetch(`../api/admin/web-orders/${encodeURIComponent(refund.orderId)}/refund`, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ returnId: record.id }) });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
+          toast(`Terugbetaald: ${euro(body.refund.amount)}`);
+          await open(record.id);
+        } catch (error) { toast(error.message, true); refundButton.disabled = false; }
+      };
+    }
   }
 
   /**
@@ -140,7 +169,7 @@
    * @returns {Promise<void>}
    */
   async function open(id) {
-    try { const out = await api(`/${encodeURIComponent(id)}`); renderDetail(out.return); $('#wr-detail').scrollIntoView({ block: 'nearest' }); } catch (error) { toast(error.message, true); }
+    try { const out = await api(`/${encodeURIComponent(id)}`); renderDetail(out.return, out.refund); $('#wr-detail').scrollIntoView({ block: 'nearest' }); } catch (error) { toast(error.message, true); }
   }
 
   /**

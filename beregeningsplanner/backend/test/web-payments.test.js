@@ -385,3 +385,63 @@ test('de factuur van een bestelling heeft hetzelfde totaal als de bestelling, oo
   assert.ok(!data.lines.some((line) => /afronding/i.test(line.description)), 'geen aparte afrondingsregel');
   assert.strictEqual(Core.totals(data, Core.sanitizeSettings({})).vatTotal, 2.12);
 });
+
+test('volledige retour door een consument: verzendkosten in de creditnota en terugbetalen via Mollie, één keer (W-05)', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const { id, paymentId } = await placeOnline(world, customer);
+  world.mollie.set(paymentId, 'paid');
+  await webhook(world, id, paymentId);
+  await until(async () => Boolean((await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.invoice));
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/status`, { status: 'verzonden' })).status, 200);
+  const placed = (await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.order;
+  assert.ok(placed.shipping.price > 0, 'de bestelling heeft verzendkosten');
+  assert.strictEqual((await postForm(world.base, customer.client, `/bestelling/${id}/retour`, { 'qty:BUS': '2', reason: 'niet_nodig' })).status, 303);
+  const record = (await world.admin.get('/app/api/admin/web-returns')).body.items[0];
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/decision`, { approve: true, note: '' })).status, 200);
+  const done = await world.admin.post(`/app/api/admin/web-returns/${record.id}/complete`, { restock: true });
+  assert.strictEqual(done.status, 200);
+  const detail = (await world.admin.get(`/app/api/admin/web-returns/${record.id}`)).body;
+  assert.ok(detail.return.credit && detail.return.credit.status !== 'concept', 'creditnota definitief');
+  assert.deepStrictEqual(detail.refund, { orderId: id, refunded: null });
+  const credit = (await world.admin.get(`/app/api/invoices/${detail.return.credit.invoiceId}`)).body;
+  const creditInvoice = credit.invoice || credit;
+  assert.ok(creditInvoice.data.lines.some((line) => /^Verzendkosten/.test(line.description)), 'verzendkosten in de creditnota');
+  assert.strictEqual(Math.abs(creditInvoice.total), placed.totals.total, 'alles terug, ook de verzending');
+
+  assert.strictEqual((await world.vreemd.post(`/app/api/admin/web-orders/${id}/refund`, { returnId: record.id })).status, 404, 'andere organisatie');
+  assert.strictEqual((await customer.client.post(`/app/api/admin/web-orders/${id}/refund`, { returnId: record.id })).status, 403, 'klant heeft geen beheerrecht');
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/refund`, {})).status, 409, 'zonder retour alleen bij een geannuleerde bestelling');
+  const refunded = await world.admin.post(`/app/api/admin/web-orders/${id}/refund`, { returnId: record.id });
+  assert.strictEqual(refunded.status, 200, JSON.stringify(refunded.body));
+  assert.strictEqual(refunded.body.refund.amount, placed.totals.total);
+  const call = world.mollie.calls.find((entry) => /\/refunds$/.test(entry.url));
+  assert.strictEqual(call.body.amount.value, placed.totals.total.toFixed(2));
+  assert.ok(call.headers['Idempotency-Key'], 'met idempotentiesleutel');
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/refund`, { returnId: record.id })).status, 409, 'niet twee keer');
+  assert.ok((await world.admin.get(`/app/api/admin/web-returns/${record.id}`)).body.refund.refunded);
+  // Mollie meldt de terugbetaling en later een terugboeking door de bank via de webhook.
+  assert.strictEqual((await webhook(world, id, paymentId)).status, 200);
+  let pay = (await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.order.pay;
+  assert.strictEqual(pay.refundedTotal, placed.totals.total);
+  world.mollie.set(paymentId, 'paid', { amountChargedBack: { currency: 'EUR', value: '5.00' } });
+  await webhook(world, id, paymentId);
+  pay = (await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.order.pay;
+  assert.strictEqual(pay.chargedBack, 5);
+  assert.ok(pay.chargebackAt);
+});
+
+test('een geannuleerde online betaalde bestelling wordt in één keer terugbetaald (W-05)', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const { id, paymentId } = await placeOnline(world, customer);
+  world.mollie.set(paymentId, 'paid');
+  await webhook(world, id, paymentId);
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/refund`, {})).status, 409, 'eerst annuleren');
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/status`, { status: 'geannuleerd' })).status, 200);
+  const out = await world.admin.post(`/app/api/admin/web-orders/${id}/refund`, {});
+  assert.strictEqual(out.status, 200);
+  assert.strictEqual(out.body.order.pay.refundNeeded, false);
+  assert.strictEqual(out.body.order.pay.refunds.length, 1);
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/refund`, {})).status, 409);
+});

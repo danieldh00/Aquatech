@@ -584,10 +584,10 @@ function createWebOrderStore(db, { stock }) {
  * Registreert de API-routes van Beheer voor bestellingen (recht `beheer`,
  * door de poort van /api/admin; alles per omgeving van de beheerder).
  * @param {object} app De Express-app.
- * @param {{ orders: object, requireJson: Function, audit: Function, invoices?: object }} ctx De opslag en hulpfuncties van de server; met invoices (web-order-invoices.js) toont Beheer de factuur en kan hij opnieuw gemaakt worden.
+ * @param {{ orders: object, requireJson: Function, audit: Function, invoices?: object, payments?: object, returns?: object }} ctx De opslag en hulpfuncties van de server; met invoices (web-order-invoices.js) toont Beheer de factuur en kan hij opnieuw gemaakt worden, met payments (web-payments.js) en returns kan Beheer via Mollie terugbetalen.
  * @returns {void}
  */
-function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = null }) {
+function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = null, payments = null, returns = null }) {
   /**
    * Geeft een afwijzing van een async handler door aan Express.
    * @param {Function} handler De async handler (req, res).
@@ -623,6 +623,29 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
     audit(req, 'webshop_bestelling_status', { number: out.order.number, status: out.order.status });
     res.json({ order: out.order, invoice: invoices ? invoices.invoiceFor(req.tenantId, out.order.id) : null });
   });
+
+  // Terugbetalen via Mollie (W-05): bij een retour het bedrag van de definitieve creditnota, bij een geannuleerde bestelling wat er nog over is.
+  app.post('/api/admin/web-orders/:id/refund', requireJson, wrap(async (req, res) => {
+    if (!payments) return res.status(404).json({ error: 'not_found', message: 'Online betalen staat niet aan.' });
+    const order = orders.get(req.tenantId, req.params.id);
+    if (!order) return res.status(404).json({ error: 'not_found', message: 'Bestelling niet gevonden.' });
+    const returnId = req.body && req.body.returnId ? String(req.body.returnId) : '';
+    let request;
+    if (returnId) {
+      const record = returns ? returns.get(req.tenantId, returnId) : null;
+      if (!record || record.orderId !== order.id) return res.status(404).json({ error: 'not_found', message: 'Retour niet gevonden.' });
+      const amount = invoices ? invoices.refundAmountOf(req.tenantId, record) : null;
+      if (amount === null) return res.status(409).json({ error: 'no_credit', message: 'Maak eerst de creditnota (definitief); dat bedrag wordt terugbetaald.' });
+      request = { amount, description: `Terugbetaling retour ${record.number}`, key: `retour:${record.id}` };
+    } else {
+      if (order.status !== 'geannuleerd') return res.status(409).json({ error: 'not_cancelled', message: 'Zonder retour kan alleen een geannuleerde bestelling worden terugbetaald.' });
+      request = { amount: order.totals.total, description: `Terugbetaling bestelling ${order.number}`, key: 'annulering' };
+    }
+    const out = await payments.refund(req.tenantId, order.id, request);
+    if (out.error) return res.status(out.status || 400).json({ error: 'refund_failed', message: out.error });
+    audit(req, 'webshop_bestelling_terugbetaald', { number: order.number, amount: out.refund.amount, ...(returnId ? { returnId } : {}) });
+    res.json({ order: out.order, refund: out.refund });
+  }));
 
   app.post('/api/admin/web-orders/:id/tracking', requireJson, (req, res) => {
     const out = orders.setTracking(req.tenantId, req.params.id, String(req.body?.trackingCode || ''));

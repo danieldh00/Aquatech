@@ -64,8 +64,11 @@
     if (order.payment !== 'online' || !order.pay) return 'op rekening';
     const pay = order.pay;
     const method = PAY_METHODS[pay.method] || pay.method;
-    const refund = pay.refundNeeded ? ' · <b>betaald en geannuleerd: terugbetalen via Mollie</b>' : order.status === 'geannuleerd' && pay.status === 'betaald' ? ' · geannuleerd: betaling zelf terugboeken via Mollie' : '';
-    return `online via Mollie, ${esc(PAY_LABELS[pay.status] || pay.status)}${pay.status === 'betaald' ? ` op ${when(pay.paidAt)}${method ? ` (${esc(method)})` : ''}` : ''}${pay.mode === 'test' ? ' · testbetaling' : ''}${refund}`;
+    const refund = pay.refundNeeded ? ' · <b>betaald en geannuleerd: nog terugbetalen</b>' : '';
+    const refunds = (pay.refunds || []).map((entry) => ` · terugbetaald ${euro(entry.amount)} (${when(entry.at)})`).join('');
+    const outsideRefund = Number(pay.refundedTotal) > (pay.refunds || []).reduce((sum, entry) => sum + Number(entry.amount || 0), 0) + 0.005 ? ` · volgens Mollie in totaal ${euro(pay.refundedTotal)} terugbetaald` : '';
+    const chargeback = Number(pay.chargedBack) > 0 ? ` · <b>teruggeboekt door de bank (chargeback): ${euro(pay.chargedBack)}</b>` : '';
+    return `online via Mollie, ${esc(PAY_LABELS[pay.status] || pay.status)}${pay.status === 'betaald' ? ` op ${when(pay.paidAt)}${method ? ` (${esc(method)})` : ''}` : ''}${pay.mode === 'test' ? ' · testbetaling' : ''}${refund}${refunds}${outsideRefund}${chargeback}`;
   }
 
   /**
@@ -80,6 +83,8 @@
     const vat = order.totals.byRate.map((row) => `<tr><td colspan="3">Waarvan ${row.rate}% btw over ${euro(row.excl)}</td><td class="num">${euro(row.vat)}</td></tr>`).join('');
     const unpaid = order.payment === 'online' && !(order.pay && order.pay.status === 'betaald');
     const buttons = (NEXT[order.status] || []).filter(([status]) => !(status === 'verzonden' && unpaid)).map(([status, label]) => `<button class="btn ${status === 'geannuleerd' ? 'danger' : 'primary'}" data-status="${status}">${label}</button>`).join(' ');
+    // Een geannuleerde, online betaalde bestelling kan in één keer via Mollie worden terugbetaald (W-05).
+    const canRefund = order.status === 'geannuleerd' && order.payment === 'online' && order.pay && order.pay.status === 'betaald' && !(order.pay.refunds || []).some((entry) => entry.key === 'annulering');
     const shipping = order.shipping;
     const shippingRow = shipping ? `<tr><td colspan="3">${esc(shipping.label)}</td><td class="num">${shipping.price > 0 ? euro(shipping.price) : 'Gratis'}</td></tr>` : '';
     const canTrack = shipping && shipping.method === 'dpd' && ['verzonden', 'afgerond'].includes(order.status);
@@ -99,7 +104,7 @@
       ${trackingForm}
       ${invoiceLine}
       <p class="muted small">Betaling: ${paymentText(order)} · ${mail}${shipMail ? ` · ${shipMail}` : ''}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})`).join(' → ')}</p>
-      <p>${buttons} <button class="btn" id="wo-close">Sluiten</button></p>`;
+      <p>${buttons}${canRefund ? ' <button class="btn primary" id="wo-refund">Terugbetalen via Mollie</button>' : ''} <button class="btn" id="wo-close">Sluiten</button></p>`;
     box.hidden = false;
     /** Sluit het detail. */
     $('#wo-close').onclick = () => { box.hidden = true; state.openId = null; };
@@ -116,6 +121,22 @@
           toast('Factuur gemaakt');
           open(order.id);
         } catch (error) { toast(error.message, true); makeInvoice.disabled = false; }
+      };
+    }
+    const refundButton = $('#wo-refund');
+    if (refundButton) {
+      /**
+       * Betaalt de geannuleerde bestelling terug via Mollie (na bevestiging; geld gaat echt terug).
+       * @returns {Promise<void>}
+       */
+      refundButton.onclick = async () => {
+        if (!confirm(`Bestelling ${order.number} via Mollie terugbetalen aan de klant? Dit kan niet ongedaan worden gemaakt.`)) return;
+        refundButton.disabled = true;
+        try {
+          const out = await api(`/${encodeURIComponent(order.id)}/refund`, { method: 'POST', body: {} });
+          toast(`Terugbetaald: ${euro(out.refund.amount)}`);
+          open(order.id);
+        } catch (error) { toast(error.message, true); refundButton.disabled = false; }
       };
     }
     const saveTracking = $('#wo-tracking-save');
@@ -139,7 +160,7 @@
        * @returns {Promise<void>}
        */
       button.onclick = async () => {
-        if (button.dataset.status === 'geannuleerd' && !confirm(order.pay && order.pay.status === 'betaald' ? 'Bestelling annuleren? De reservering vervalt. De betaling boek je zelf terug in Mollie.' : 'Bestelling annuleren? De reservering vervalt.')) return;
+        if (button.dataset.status === 'geannuleerd' && !confirm(order.pay && order.pay.status === 'betaald' ? 'Bestelling annuleren? De reservering vervalt. Daarna kun je de betaling hier via Mollie terugbetalen.' : 'Bestelling annuleren? De reservering vervalt.')) return;
         button.disabled = true;
         try {
           const trackingInput = $('#wo-tracking');

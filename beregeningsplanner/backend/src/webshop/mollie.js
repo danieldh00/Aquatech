@@ -91,7 +91,7 @@ const validPaymentId = (value) => /^tr_[A-Za-z0-9]{4,40}$/.test(String(value || 
 /**
  * Maakt de Mollie-client.
  * @param {{ fetchImpl?: Function }} [options] fetchImpl vervangt de netwerkaanroep (tests).
- * @returns {{ createPayment: Function, getPayment: Function }} De functies.
+ * @returns {{ createPayment: Function, getPayment: Function, createRefund: Function }} De functies.
  */
 function createMollie({ fetchImpl = fetch } = {}) {
   /**
@@ -143,7 +143,7 @@ function createMollie({ fetchImpl = fetch } = {}) {
    * Vraagt een betaling op.
    * @param {string} apiKey De API-sleutel.
    * @param {string} id Het Mollie-betaling-id (tr_…).
-   * @returns {Promise<{ id: string, status: string, method: string, paidAt: ?string, amount: number, orderId: string, checkoutUrl: string, mode: string }>} De stand van de betaling.
+   * @returns {Promise<{ id: string, status: string, method: string, paidAt: ?string, amount: number, orderId: string, checkoutUrl: string, mode: string, amountRefunded: number, amountChargedBack: number }>} De stand van de betaling, met wat er is terugbetaald en teruggeboekt (chargeback).
    */
   async function getPayment(apiKey, id) {
     if (!validPaymentId(id)) throw new MollieError('Ongeldig betaling-id.', 422);
@@ -153,10 +153,28 @@ function createMollie({ fetchImpl = fetch } = {}) {
       id: String(out.id || id), status: String(out.status || ''), method: String(out.method || ''), paidAt: out.paidAt ? String(out.paidAt) : null,
       amount: out.amount ? Number(out.amount.value) : NaN, orderId: out.metadata && typeof out.metadata === 'object' ? String(out.metadata.orderId || '') : '',
       checkoutUrl: checkout ? String(checkout) : '', mode: String(out.mode || ''),
+      amountRefunded: out.amountRefunded ? Number(out.amountRefunded.value) || 0 : 0, amountChargedBack: out.amountChargedBack ? Number(out.amountChargedBack.value) || 0 : 0,
     };
   }
 
-  return { createPayment, getPayment };
+  /**
+   * Betaalt (een deel van) een betaling terug (W-05 uit de audit van 1.7.3).
+   * @param {string} apiKey De API-sleutel.
+   * @param {string} paymentId Het Mollie-betaling-id (tr_…).
+   * @param {{ amount: number, description: string, idempotencyKey: string }} refund Bedrag in euro, omschrijving voor de klant en de sleutel tegen dubbel terugbetalen.
+   * @returns {Promise<{ id: string, status: string, amount: number }>} Het id van de terugbetaling (re_…), de status en het bedrag.
+   */
+  async function createRefund(apiKey, paymentId, { amount, description, idempotencyKey }) {
+    if (!validPaymentId(paymentId)) throw new MollieError('Ongeldig betaling-id.', 422);
+    const out = await call(apiKey, 'POST', `/payments/${paymentId}/refunds`, {
+      idempotencyKey,
+      body: { amount: { currency: 'EUR', value: (Math.round(amount * 100) / 100).toFixed(2) }, description: String(description).slice(0, 140) },
+    });
+    if (!/^re_[A-Za-z0-9]{4,40}$/.test(String(out.id || ''))) throw new MollieError('Mollie gaf geen terugbetaling terug.');
+    return { id: String(out.id), status: String(out.status || ''), amount: out.amount ? Number(out.amount.value) : amount };
+  }
+
+  return { createPayment, getPayment, createRefund };
 }
 
 module.exports = { createMollie, MollieError, sanitizePayment, configOf, validPaymentId, cleanPublicUrl, ON_ACCOUNT, DEFAULT_HOLD_HOURS };
