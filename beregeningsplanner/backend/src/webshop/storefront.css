@@ -188,6 +188,12 @@ a.shop-action:hover { background: var(--at-page); }
 .stock.out { color: var(--at-stock-out); }
 
 .product-detail { display: grid; gap: 24px; grid-template-columns: 1fr; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 12px; padding: 16px; margin-top: 8px; }
+.product-details { background: var(--at-white); border: 1px solid var(--at-line); border-radius: 12px; padding: 4px 16px 16px; margin-top: 16px; }
+.product-details h2 { margin: 1em 0 0.5em; }
+.product-details p, .product-details ul { margin: 0 0 0.8em; max-width: 75ch; }
+.product-specs { border-collapse: collapse; width: 100%; max-width: 640px; }
+.product-specs th, .product-specs td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--at-line); vertical-align: top; }
+.product-specs th { width: 40%; font-weight: 600; color: var(--at-muted); }
 .product-image.large { background: var(--at-white); max-height: 420px; }
 .sku { color: var(--at-muted); margin: 0 0 8px; }
 .price { font-size: 1.6rem; font-weight: 700; margin: 8px 0; }

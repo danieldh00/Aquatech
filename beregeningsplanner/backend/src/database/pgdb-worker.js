@@ -13,6 +13,7 @@ const flag = new Int32Array(signal);
 
 let client = null;
 let schema = null; // search_path van de huidige verbinding
+let scope = null; // aquatech.tenants van de huidige verbinding (tenant-scope.js); null = onbekend
 let inTransaction = false;
 /** Hoogstens zoveel milliseconden per query (PG_STATEMENT_TIMEOUT_MS, standaard 30 s; 0 = geen grens). */
 const STATEMENT_TIMEOUT_MS = Math.max(0, Math.floor(Number(process.env.PG_STATEMENT_TIMEOUT_MS ?? 30000)) || 0);
@@ -47,6 +48,7 @@ async function connect() {
   }
   client = connection;
   schema = null;
+  scope = null;
 }
 
 /**
@@ -57,8 +59,23 @@ async function connect() {
 async function useSchema(name) {
   if (name === schema) return;
   if (!/^[a-z_][a-z0-9_]{0,62}$/.test(name)) throw new Error(`Ongeldige schemanaam: ${name}`);
-  await client.query(`CREATE SCHEMA IF NOT EXISTS "${name}"; SET search_path TO "${name}"`);
+  // Als de eigenaar (een beperkte rol mag geen schema aanmaken); useScope zet de beperking daarna opnieuw.
+  await client.query(`RESET ROLE; CREATE SCHEMA IF NOT EXISTS "${name}"; SET search_path TO "${name}"`);
   schema = name;
+  scope = null;
+}
+
+/**
+ * Zet de omgevingen die het verzoek mag zien op de verbinding (alleen als ze veranderen).
+ * @param {string} tenants Komma-gescheiden tenant-id's, of '' voor geen beperking.
+ * @returns {Promise<void>}
+ */
+async function useScope(tenants) {
+  if (tenants === scope) return;
+  // Beperkt = als de rol zonder BYPASSRLS (de policies gelden); leeg = weer als de eigenaar.
+  await client.query("SELECT set_config('aquatech.tenants', $1, false)", [tenants]);
+  await client.query(tenants ? 'SET ROLE aquatech_app' : 'RESET ROLE');
+  scope = tenants;
 }
 
 /**
@@ -69,6 +86,8 @@ async function useSchema(name) {
 async function run(message) {
   if (!client) await connect();
   await useSchema(message.schema);
+  // Afsluiten van een transactie zonder eerst set_config: na een fout in de transactie zou dat zelf mislukken.
+  if (!/^\s*(COMMIT|ROLLBACK|END)\b/i.test(message.sql || '')) await useScope(message.scope || '');
   if (message.op === 'exec') return client.query(message.sql);
   return client.query({ text: message.sql, values: message.params });
 }
@@ -81,7 +100,9 @@ async function run(message) {
 function txState(sql) {
   const head = String(sql).trimStart().slice(0, 10).toUpperCase();
   if (head.startsWith('BEGIN')) inTransaction = true;
-  else if (head.startsWith('COMMIT') || head.startsWith('ROLLBACK') || head.startsWith('END')) inTransaction = false;
+  else if (head.startsWith('COMMIT') || head.startsWith('END')) inTransaction = false;
+  // Een teruggedraaide transactie draait ook set_config terug: de volgende query zet de omgevingen opnieuw.
+  else if (head.startsWith('ROLLBACK')) { inTransaction = false; scope = null; }
 }
 
 /**
@@ -121,7 +142,7 @@ port.on('message', async (msg) => {
   try {
     reply = { id: msg.id, ...(await handle(msg)) };
   } catch (err) {
-    if (/^\s*(COMMIT|ROLLBACK|END)/i.test(msg.sql || '')) inTransaction = false;
+    if (/^\s*(COMMIT|ROLLBACK|END)/i.test(msg.sql || '')) { inTransaction = false; scope = null; }
     reply = { id: msg.id, error: { message: err.message, code: err.code, detail: err.detail, constraint: err.constraint, table: err.table } };
   }
   port.postMessage(reply);

@@ -187,7 +187,11 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
    */
   async function expireUnpaid(tenantId) {
     const config = configOf(settingsFor(tenantId));
-    const cutoff = new Date(Date.now() - config.holdHours * 3600 * 1000).toISOString();
+    // De deadline per bestelling (data.reservedUntil, vastgelegd bij het plaatsen) telt, niet de huidige instelling:
+    // selecteer alles ouder dan het kortst mogelijke (1 uur) en controleer per bestelling.
+    const nowIso = new Date().toISOString();
+    const cutoff = new Date(Date.now() - 3600 * 1000).toISOString();
+    const fallback = new Date(Date.now() - config.holdHours * 3600 * 1000).toISOString();
     let expired = 0;
     let kept = 0;
     for (;;) {
@@ -196,6 +200,8 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
       for (const id of batch) {
         try {
           const order = orders.get(tenantId, id);
+          const deadline = order && order.reservedUntil;
+          if (order && (deadline ? deadline > nowIso : order.createdAt > fallback)) { kept += 1; continue; }
           if (order && order.pay && order.pay.id && !config.apiKey) { kept += 1; continue; }
           if (order && order.pay && order.pay.id) {
             const out = await sync(tenantId, id);

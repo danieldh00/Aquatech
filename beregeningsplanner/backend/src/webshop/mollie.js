@@ -12,6 +12,8 @@ const API = 'https://api.mollie.com/v2';
 const ON_ACCOUNT = ['iedereen', 'zakelijk', 'nooit'];
 /** Standaard aantal uren dat een onbetaalde bestelling de voorraad vasthoudt. */
 const DEFAULT_HOLD_HOURS = 24;
+/** Standaard zoveel dagen houdt een bestelling op rekening de voorraad vast (0 = tot verzenden of annuleren). */
+const DEFAULT_ACCOUNT_HOLD_DAYS = 14;
 /** Hoe lang we op Mollie wachten (milliseconden). */
 const TIMEOUT_MS = 15000;
 
@@ -50,16 +52,19 @@ function cleanPublicUrl(raw) {
 /**
  * Saneert de instelling `shopPayment`. Lege of onbruikbare invoer geeft de standaardwaarden.
  * @param {*} raw De ingevoerde instelling.
- * @returns {{ online: boolean, publicUrl: string, onAccount: string, holdHours: number }} De gesaneerde instelling.
+ * @returns {{ online: boolean, publicUrl: string, onAccount: string, holdHours: number, accountHoldDays: number }} De gesaneerde instelling.
  */
 function sanitizePayment(raw) {
   const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const hours = Math.floor(Number(input.holdHours));
+  // Alleen hele dagen: 0,5 wordt niet stilletjes 0 (dat zou het vrijgeven uitzetten) maar valt terug op de standaard.
+  const days = input.accountHoldDays === '' || input.accountHoldDays == null ? NaN : Number(input.accountHoldDays);
   return {
     online: input.online === true,
     publicUrl: cleanPublicUrl(input.publicUrl),
     onAccount: ON_ACCOUNT.includes(input.onAccount) ? input.onAccount : 'iedereen',
     holdHours: Number.isFinite(hours) && hours >= 1 && hours <= 168 ? hours : DEFAULT_HOLD_HOURS,
+    accountHoldDays: Number.isInteger(days) && days >= 0 && days <= 90 ? days : DEFAULT_ACCOUNT_HOLD_DAYS,
   };
 }
 
@@ -177,4 +182,4 @@ function createMollie({ fetchImpl = fetch } = {}) {
   return { createPayment, getPayment, createRefund };
 }
 
-module.exports = { createMollie, MollieError, sanitizePayment, configOf, validPaymentId, cleanPublicUrl, ON_ACCOUNT, DEFAULT_HOLD_HOURS };
+module.exports = { createMollie, MollieError, sanitizePayment, configOf, validPaymentId, cleanPublicUrl, ON_ACCOUNT, DEFAULT_HOLD_HOURS, DEFAULT_ACCOUNT_HOLD_DAYS };

@@ -34,7 +34,7 @@ async function setup() {
   await store.createAccount(tid, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW });
   await store.createAccount(tid, { username: 'pim', displayName: 'Pim', role: 'planner', password: PW });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: PW });
-  const { server, base } = await listen(createApp({ secret: 'x'.repeat(64), db }));
+  const { server, base } = await listen(createApp({ secret: 'x'.repeat(64), db, loginDelayMs: 0 }));
   return { db, store, tid, server, base, as: createLogin(base, { password: PW }) };
 }
 
@@ -128,7 +128,7 @@ test('inloggen: blokkade per account en bezoeker, ruime grens per account, verzo
   const store = createStore(db);
   const tid = store.ensureTenant().id;
   await store.createAccount(tid, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW });
-  const { server: codeServer, base: codeBase } = await listen(createApp({ secret: 'x'.repeat(64), db, accessCode: 'juiste-code-123' }));
+  const { server: codeServer, base: codeBase } = await listen(createApp({ secret: 'x'.repeat(64), db, accessCode: 'juiste-code-123', loginDelayMs: 0 }));
   try {
     let ip = 1;
     /**

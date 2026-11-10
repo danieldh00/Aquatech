@@ -30,6 +30,20 @@ const PAGE_LIMIT = 200;
 const EXPORT_LIMIT = 500;
 
 /**
+ * Tot wanneer een nieuwe bestelling de voorraad vasthoudt (8): online kort (de bewaartijd van een onbetaalde
+ * bestelling), op rekening lang (dagen), of zonder einde.
+ * @param {string} placedAt Moment van bestellen (ISO).
+ * @param {boolean} online Of de klant online betaalt.
+ * @param {{ holdHours?: number, accountHoldDays?: number }} hold De bewaartijden uit de instelling shopPayment.
+ * @returns {string|null} Het moment (ISO), of null als de reservering blijft tot verzenden of annuleren.
+ */
+function reservedUntilOf(placedAt, online, hold) {
+  const start = Date.parse(placedAt);
+  if (online) return Number(hold.holdHours) > 0 ? new Date(start + Number(hold.holdHours) * 3600 * 1000).toISOString() : null;
+  return Number(hold.accountHoldDays) > 0 ? new Date(start + Number(hold.accountHoldDays) * 86400 * 1000).toISOString() : null;
+}
+
+/**
  * Rondt af op twee decimalen.
  * @param {*} value Het bedrag.
  * @returns {number} Het afgeronde bedrag.
@@ -222,7 +236,7 @@ function createWebOrderStore(db, { stock }) {
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -240,6 +254,20 @@ function createWebOrderStore(db, { stock }) {
     const codes = [...new Set(wanted.map((line) => String(line.code || '').trim().toUpperCase()).filter(Boolean))].sort().slice(0, MAX_LINES);
     if (!codes.length) return;
     prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND code IN (${codes.map(() => '?').join(', ')}) ORDER BY id FOR UPDATE`).all(tenantId, ...codes);
+  }
+
+  /**
+   * Vergrendelt de voorraadrijen van een geplaatste bestelling op id (in vaste volgorde), zodat een gewijzigde
+   * artikelcode het slot niet omzeilt. Alleen onder PostgreSQL; moet binnen een transactie lopen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ itemId: string }[]} lines De regels van de bestelling.
+   * @returns {void}
+   */
+  function lockItemIds(tenantId, lines) {
+    if (!isPg(db)) return;
+    const ids = [...new Set(lines.map((line) => String(line.itemId || '')).filter(Boolean))].sort().slice(0, MAX_LINES);
+    if (!ids.length) return;
+    prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND id IN (${ids.map(() => '?').join(', ')}) ORDER BY id FOR UPDATE`).all(tenantId, ...ids);
   }
 
   /**
@@ -297,9 +325,10 @@ function createWebOrderStore(db, { stock }) {
    * @param {object} [shippingConfig] De verzendinstelling (shipping.js); standaard de startwaarden.
    * @param {?number} [expectedTotal] Het totaal dat de klant bevestigde; wijkt het berekende totaal af, dan volgt een fout (409) en wordt niet besteld.
    * @param {string[]} [paymentOptions] De betaalwijzen die de klant mag kiezen: 'rekening' en/of 'online'. Is er maar één, dan hoeft de klant niets te kiezen.
+   * @param {{ holdHours?: number, accountHoldDays?: number }} [hold] Hoe lang de bestelling de voorraad vasthoudt: online zoveel uur, op rekening zoveel dagen (0 = tot verzenden of annuleren). Het moment komt in `data.reservedUntil`.
    * @returns {{ order?: object, error?: string, field?: string, status?: number, cart?: object }} De bestelling, of een foutmelding (met de actuele winkelwagen bij een probleem met prijs of voorraad).
    */
-  function place(tenantId, user, rawFields, wanted, shippingConfig = Shipping.DEFAULT_CONFIG, expectedTotal = null, paymentOptions = ['rekening']) {
+  function place(tenantId, user, rawFields, wanted, shippingConfig = Shipping.DEFAULT_CONFIG, expectedTotal = null, paymentOptions = ['rekening'], hold = {}) {
     const input = rawFields && typeof rawFields === 'object' ? rawFields : {};
     const method = String(input.shippingMethod || '');
     const country = method === 'ophalen' ? 'NL' : String(input.country || 'NL').toUpperCase();
@@ -324,6 +353,7 @@ function createWebOrderStore(db, { stock }) {
       const fields = checked.value;
       const timestamp = currentTimestamp();
       const id = crypto.randomUUID();
+      const reservedUntil = reservedUntilOf(timestamp, online, hold);
       if (isPg(db)) prepare('SELECT pg_advisory_xact_lock(hashtext(?)) AS locked').get(`web-orders:${tenantId}:${timestamp.slice(0, 4)}`);
       const number = nextNumber(tenantId, timestamp.slice(0, 4));
       // De verzendkosten zijn een eigen regel in de btw-opbouw (alleen als ze niet gratis zijn).
@@ -338,6 +368,7 @@ function createWebOrderStore(db, { stock }) {
         customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted, ...(calculated.shifted && user.vies ? { vies: user.vies } : {}) } : null,
         note: fields.note, totals, payment: online ? 'online' : 'op rekening', consent: { terms: true, at: timestamp },
         ...(online ? { pay: { provider: 'mollie', status: 'open', id: null, ids: [], checkoutUrl: '', createdAt: timestamp, paidAt: null } } : {}),
+        ...(reservedUntil ? { reservedUntil } : {}),
         history: [{ at: timestamp, status: 'nieuw', by: fields.name }],
       };
       prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)
@@ -475,6 +506,13 @@ function createWebOrderStore(db, { stock }) {
       if (!TRANSITIONS[row.status].includes(status)) return { error: `Een bestelling met status ${STATUSES[row.status]} kan niet naar ${STATUSES[status]}.`, status: 409 };
       const data = JSON.parse(row.data);
       if (status === 'verzonden' && data.payment === 'online' && !(data.pay && data.pay.status === 'betaald')) return { error: 'Deze bestelling is nog niet betaald: verzenden kan pas na de betaling.', status: 409 };
+      // Een vrijgegeven reservering (8): de voorraad kan intussen voor een ander gereserveerd zijn; alleen verzenden wat vrij is.
+      if (status === 'verzonden' && data.reservationReleasedAt) {
+        // Rijsloten op id (zoals bij het plaatsen, maar ongevoelig voor een gewijzigde code): tot het einde van de transactie kan niemand deze voorraad reserveren.
+        lockItemIds(tenantId, data.lines);
+        const short = stock.shortageFor(tenantId, data.lines.map((line) => ({ itemId: line.itemId, qty: line.qty })), `order:${row.id}`);
+        if (short.length) return { error: `De reservering van deze bestelling was vervallen en er is niet genoeg vrije voorraad meer voor: ${short.map((item) => item.name).join(', ')}.`, status: 409 };
+      }
       const timestamp = currentTimestamp();
       if (status === 'verzonden') stock.issueOrder(tenantId, { id: row.id, number: row.number }, data.lines.map((line) => ({ itemId: line.itemId, qty: line.qty })), user);
       if (status === 'geannuleerd') stock.releaseOrder(tenantId, row.id);
@@ -577,7 +615,47 @@ function createWebOrderStore(db, { stock }) {
       .all(tenantId, String(before), Math.max(1, Math.floor(limit)), Math.max(0, Math.floor(skip))).map((row) => row.id);
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, onShipped, onCancelled, onTracking };
+  /**
+   * Geeft de voorraad vrij van nieuwe bestellingen op rekening waarvan de reserveringstermijn (`data.reservedUntil`)
+   * voorbij is (8). De bestelling blijft staan en kan nog steeds verzonden worden (dan wordt gewoon afgeboekt); alleen
+   * de reservering vervalt, zodat de voorraad weer in de shop beschikbaar is. Online bestellingen lopen via
+   * web-payments.expireUnpaid (die annuleert ze). Eén query voor de open bestellingen; een bestelling die al vrijgegeven
+   * is telt niet opnieuw.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} [now] Het huidige moment (ISO); standaard nu.
+   * @returns {{ released: number }} Het aantal vrijgegeven bestellingen.
+   */
+  function releaseExpired(tenantId, now = currentTimestamp()) {
+    // Per pagina van 500 bladeren tot er 500 verlopen zijn: niet-verlopen bestellingen verdringen verlopen dan niet.
+    const page = prepare(`SELECT id, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND data LIKE '%"reservedUntil"%' AND data NOT LIKE '%"reservationReleasedAt"%' AND data NOT LIKE '%"payment":"online"%' ORDER BY created_at, id LIMIT 500 OFFSET ?`);
+    const candidates = [];
+    for (let offset = 0; candidates.length < 500; offset += 500) {
+      const rows = page.all(tenantId, offset);
+      for (const row of rows) {
+        const until = JSON.parse(row.data).reservedUntil;
+        if (typeof until === 'string' && until <= now && candidates.length < 500) candidates.push(row);
+      }
+      if (rows.length < 500) break;
+    }
+    let released = 0;
+    for (const candidate of candidates) {
+      const done = transaction(db, () => {
+        const row = readForUpdate(tenantId, candidate.id, 'status, data');
+        if (!row || row.status !== 'nieuw') return false;
+        const data = JSON.parse(row.data);
+        if (data.reservationReleasedAt || !data.reservedUntil || data.reservedUntil > now) return false;
+        stock.releaseOrder(tenantId, candidate.id);
+        data.reservationReleasedAt = now;
+        data.history = [...(Array.isArray(data.history) ? data.history : []), { at: now, status: 'nieuw', by: 'Systeem', note: 'Reserveringstermijn voorbij: voorraad vrijgegeven' }];
+        prepare('UPDATE web_orders SET data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), now, tenantId, candidate.id);
+        return true;
+      });
+      if (done) released += 1;
+    }
+    return { released };
+  }
+
+  return { priceCart, shippingQuote, orderTotals, place, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, onShipped, onCancelled, onTracking };
 }
 
 /**

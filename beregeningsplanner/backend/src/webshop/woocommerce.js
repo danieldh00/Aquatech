@@ -17,6 +17,7 @@ const net = require('net');
 const { publicAddress } = require('../beveiliging/netguard');
 const { pinnedFetch, readLimited } = require('../beveiliging/pinned-fetch');
 const { decodeHtmlEntities } = require('./html-entities');
+const { plainTextFromHtml } = require('../artikelen/item-details');
 
 const PER_PAGE = 100;
 const MAX_PAGES = 50;
@@ -144,7 +145,7 @@ const exTax = (price, shop) => (price == null ? null : round2(shop.pricesInclude
  * Zet een product uit de Store API om naar het eigen formaat.
  * @param {object} product Het product.
  * @param {object} shop De koppelinstelling.
- * @returns {object} id, sku, name, price (excl. btw), currency, url, image, inStock, categories en code.
+ * @returns {object} id, sku, name, price (excl. btw), currency, url, image, inStock, categories, description (platte tekst) en code.
  */
 function fromStoreApi(product, shop) {
   const prices = product.prices || {};
@@ -163,6 +164,7 @@ function fromStoreApi(product, shop) {
     image: product.images?.[0]?.src || '',
     inStock: product.is_in_stock !== false,
     categories: (product.categories || []).map((category) => decodeHtmlEntities(category.name)).filter(Boolean),
+    description: plainTextFromHtml(product.description || product.short_description || ''),
     code: '',
     type: 'simple',
     parentId: null,
@@ -174,7 +176,7 @@ function fromStoreApi(product, shop) {
  * Zet een product uit de REST API v3 om naar het eigen formaat, met normale prijs, voorraad en meta aquatech_code.
  * @param {object} product Het product.
  * @param {object} shop De koppelinstelling.
- * @returns {object} id, sku, name, price, regularPrice, rawRegular, stockQty, currency, url, image, inStock, categories en code.
+ * @returns {object} id, sku, name, price, regularPrice, rawRegular, stockQty, currency, url, image, inStock, categories, description (platte tekst) en code.
  */
 function fromRestV3(product, shop) {
   const meta = (product.meta_data || []).find((entry) => entry.key === 'aquatech_code');
@@ -195,6 +197,7 @@ function fromRestV3(product, shop) {
     image: product.images?.[0]?.src || '',
     inStock: product.stock_status !== 'outofstock',
     categories: (product.categories || []).map((category) => decodeHtmlEntities(category.name)).filter(Boolean),
+    description: plainTextFromHtml(product.description || product.short_description || ''),
     code: meta ? String(meta.value || '').trim() : '',
     type: product.type === 'variable' ? 'variable' : 'simple',
     parentId: null,
@@ -232,6 +235,7 @@ function fromRestV3Variation(variation, parent, shop) {
     image: variation.image?.src || parent.images?.[0]?.src || '',
     inStock: variation.stock_status !== 'outofstock',
     categories: (parent.categories || []).map((category) => decodeHtmlEntities(category.name)).filter(Boolean),
+    description: plainTextFromHtml(variation.description || ''),
     code: meta ? String(meta.value || '').trim() : '',
     type: 'variation',
     parentId: String(parent.id),

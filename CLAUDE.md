@@ -197,6 +197,20 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
     `tools/tenant-filter-baseline.json` (alleen korter). PostgreSQL `statement_timeout` 30 s (`PG_STATEMENT_TIMEOUT_MS`).
   - Bewust zo gelaten: op rekening voor iedereen (W-02, testfase), limieten in het geheugen (één container), WooCommerce-voorraadsync
     (wordt uitgefaseerd), klantweergave met live-klanten van de eigen organisatie.
+- **Functioneel beter uit de audit** (1.7.5): reservering per bestelling (`data.reservedUntil`, `shopPayment.accountHoldDays`,
+  `webOrders.releaseExpired` elk uur: op rekening alleen de reservering vrij, bestelling blijft); omschrijving + specificaties per
+  artikel (migratie 50, `artikelen/item-details.js`, terugval op `shop_products.description` en zichtbare niet-variatiekenmerken,
+  `data.detailsOf` in storefront-data.js met cache); oplopende loginvertraging `loginGuard.wait` (tests: `createApp({ loginDelayMs: 0 })`
+  bij veel mislukte pogingen). Een warme shop-pagina kost 0 queries (`queries.test.js`), houd dat zo.
+- **Tweestapsverificatie** (1.7.5, migratie 51, `beveiliging/totp.js` + `two-factor.js`, `shared/qr-code.js`): geheim versleuteld
+  in `users.totp_secret`, herstelcodes alleen als SHA-256, `totp_last_step` = elke code één keer. Login geeft 401
+  `totp_required`/`totp_wrong` (veld `totp`), telling `totp:<user>` in `loginGuard`; winkelinlog weigert zo'n account. Reset door
+  beheerder: `DELETE /api/admin/users/:id/totp`.
+- **Echte RLS in PostgreSQL** (1.7.5, `database/tenant-scope.js`, `tenantPolicies` in pgdb.js): rol `aquatech_app` + policy
+  `aquatech_tenant` per tabel op `current_setting('aquatech.tenants')`; `identify()` zet de scope (`limitTo(familyIds)`), de
+  werkthread doet `SET ROLE` per query. **Nieuwe code die bewust over organisaties heen werkt** (achtergrondtaak, audit,
+  uitbesteden) gebruikt `asSystem(fn)` of `pinSystem()`; luisteraars op de request-stream via `bindStream`. Noodschakelaar
+  `PG_TENANT_RLS=0`; zonder CREATEROLE alleen een waarschuwing. `test/tenant-rls.test.js`.
 - **Verwijderen** (0.33.0): live-tenant via `DELETE /api/platform/tenants/:id`
   met `{ confirm: <slug> }` (`store.deleteTenant`: wist elke tabel met
   `tenant_id` voor de tenant + testomgevingen, uit het schema gelezen, met

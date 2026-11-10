@@ -10,6 +10,7 @@ const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregeni
 const { createRecognitionStore, sanitizeSamples, imageHash } = require('./beregening/recognitions');
 const { openDb, openDatabase, isPg } = require('./database/db');
 const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf } = require('./platform/store');
+const { withScope, limitTo, bindStream } = require('./database/tenant-scope');
 const testdata = require('./platform/test-data');
 const { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest } = require('./platform/settings');
 const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
@@ -25,6 +26,7 @@ const { registerCostingRoutes } = require('./uitvoering/costing');
 const { createShopAccounts } = require('./webshop/shop-accounts');
 const { sanitizeBusinessProfile } = require('./webshop/business-profile');
 const { createImpersonationStore, createImpersonation } = require('./beveiliging/impersonation');
+const { createTwoFactor, registerTwoFactorRoutes } = require('./beveiliging/two-factor');
 const { createStorefront } = require('./webshop/storefront');
 const { createVies } = require('./webshop/vies');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
@@ -290,7 +292,7 @@ function staticHeaders(version) {
  * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, wanIp = createWanIp() }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, wanIp = createWanIp(), loginDelayMs = 1000 }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -472,7 +474,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.disable('x-powered-by');
   // Per verzoek een eigen geheugen voor gegevens die binnen één verzoek
   // meermaals nodig zijn (zoals de tenant); zie withRequestCache in store.js.
-  app.use((req, res, next) => withRequestCache(next));
+  app.use((req, res, next) => withRequestCache(() => withScope(() => { bindStream(req); next(); })));
   // Alles van de app (dashboard, modules, API, inloggen) staat onder /app/; de
   // hoofdmap is de webshop. Het voorvoegsel gaat hier eraf, zodat de rest van de
   // app ongewijzigd werkt (`req.inApp` onthoudt dat het verzoek van de app is).
@@ -644,6 +646,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // sluit de echte gebruiker niet buiten. Daarnaast geldt een ruime grens per account voor alle bezoekers samen, zodat
   // raden vanaf veel adressen tegelijk ook stopt.
   const ACCOUNT_MAX_FAILURES = 100;
+  const twoFactor = createTwoFactor(database, { vault });
+  /** Na zoveel mislukte pogingen van een bezoeker op een account begint de oplopende vertraging. */
+  const LOGIN_DELAY_AFTER = 3;
   const loginGuard = {
     /**
      * Is inloggen op dit account voor deze bezoeker geblokkeerd?
@@ -667,6 +672,20 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @returns {void}
      */
     clear: (req, account) => { failures.delete(`${account}@${clientKey(req)}`); failures.delete(account); },
+    /**
+     * Oplopende vertraging (5 uit de audit van 1.7.3): na drie mislukte pogingen van deze bezoeker op dit account wacht
+     * elke volgende poging langer (1, 2, 4, daarna 8 seconden) voordat het wachtwoord wordt gecontroleerd. Een echte
+     * gebruiker merkt er na een tikfout niets van; raden wordt traag. Alleen deze bezoeker wacht, anderen niet.
+     * @param {object} req Het verzoek.
+     * @param {string} account Sleutel van het account.
+     * @returns {Promise<void>} Klaar na de wachttijd (meteen als er niets te wachten valt).
+     */
+    wait: (req, account) => {
+      const entry = failures.get(`${account}@${clientKey(req)}`);
+      const count = entry && entry.reset > Date.now() ? entry.count : 0;
+      const delay = count >= LOGIN_DELAY_AFTER ? loginDelayMs * 2 ** Math.min(count - LOGIN_DELAY_AFTER, 3) : 0;
+      return delay > 0 ? new Promise((resolve) => { setTimeout(resolve, delay).unref(); }) : Promise.resolve();
+    },
   };
   /**
    * Ruimt de verlopen tellers van mislukte inlogpogingen op, zodat de lijst in het geheugen niet blijft groeien.
@@ -699,6 +718,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, home?.id);
         return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
       }
+      await loginGuard.wait(req, key);
       // Ook bij een onbekende code een wachtwoord controleren (gelijke looptijd).
       const password = String(req.body?.password ?? '').slice(0, 1024);
       let user = await store.authenticate(home?.id || null, username, password);
@@ -709,6 +729,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // de ingevulde code (anders geeft elke verzonnen code nieuwe pogingen).
       const mainKey = `${tenant.id}:${username}`;
       if (!user && home?.id !== tenant.id && !loginGuard.blocked(req, mainKey)) {
+        // Ook hier de oplopende vertraging, met de teller van het hoofdaccount (wisselende codes omzeilen hem niet).
+        await loginGuard.wait(req, mainKey);
         const admin = await store.authenticate(tenant.id, username, password);
         if (admin?.platform_admin) { user = admin; home = tenant; loginGuard.clear(req, mainKey); }
         else if (!admin) loginGuard.fail(req, mainKey);
@@ -723,6 +745,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
           audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, testAccount.home.id);
           return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
         }
+        await loginGuard.wait(req, testKey);
         const testUser = await store.authenticate(testAccount.home.id, username, password);
         if (testUser) { user = testUser; home = testAccount.home; loginGuard.clear(req, testKey); }
         else loginGuard.fail(req, testKey);
@@ -736,6 +759,23 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         return res.status(401).json({ error: 'wrong_login', message: 'Onjuiste organisatiecode, gebruikersnaam of wachtwoord.' });
       }
       loginGuard.clear(req, `${home?.id || orgCode}:${username}`);
+      // Tweede stap (5 uit de audit van 1.7.3): met tweestapsverificatie aan moet er een code uit de app of een
+      // herstelcode bij. Verkeerde codes tellen apart per account, met dezelfde blokkering en vertraging.
+      const totpKey = `totp:${user.id}`;
+      if (loginGuard.blocked(req, totpKey)) {
+        audit(req, 'inloggen_geblokkeerd', { username, via: 'tweestaps' }, user.id, user.tenant_id);
+        return res.status(429).json({ error: 'locked', message: 'Te veel verkeerde codes. Probeer het over een kwartier opnieuw.' });
+      }
+      await loginGuard.wait(req, totpKey);
+      const second = twoFactor.check(user, String(req.body?.totp ?? '').slice(0, 40));
+      if (!second.ok) {
+        if (second.missing) return res.status(401).json({ error: 'totp_required', message: 'Vul de code uit je authenticator-app in.' });
+        loginGuard.fail(req, totpKey);
+        audit(req, 'inloggen_mislukt', { username, via: 'tweestaps' }, user.id, user.tenant_id);
+        return res.status(401).json({ error: 'totp_wrong', message: 'De code klopt niet. Gebruik de nieuwste code uit de app of een herstelcode.' });
+      }
+      if (second.required) loginGuard.clear(req, totpKey);
+      if (second.recoveryUsed) audit(req, 'herstelcode_gebruikt', {}, user.id, user.tenant_id);
       // Testaccounts horen bij een testomgeving van de organisatie.
       if ((home.disabled || !organizationActive(user.tenant_id)) && !user.platform_admin) {
         audit(req, 'inloggen_geweigerd', { username, reden: 'tenant_uitgeschakeld' }, user.id, user.tenant_id);
@@ -855,6 +895,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
     req.user = user;
     req.tenantId = user ? user.tenant_id : tenant.id;
+    // Vanaf hier ziet de database (PostgreSQL, policies) alleen de omgevingen van de eigen organisatie; een
+    // hoofdbeheerder werkt platformbreed (2 uit de audit van 1.7.3, database/tenant-scope.js).
+    if (user && !user.platform_admin) limitTo(store.familyIds(user.home_tenant_id || user.tenant_id));
     return user;
   }
 
@@ -1280,6 +1323,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {string} Id van de tenant met de gebruikers.
    */
   const usersTenantOf = (req) => (req.user && req.user.home_tenant_id === req.tenantId ? req.tenantId : homeOf(req.tenantId));
+  registerTwoFactorRoutes(app, { twoFactor, auth, store, identify, requireJson, requireRight, usersTenantOf, audit, guard: loginGuard });
 
   /**
    * Een hoofdbeheerder kan alleen door een (andere) hoofdbeheerder worden
@@ -2033,6 +2077,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {Promise<{ expired: number }>} Het aantal vervallen bestellingen.
    */
   app.locals.webPaymentsExpire = () => webPayments.expireUnpaid(tenant.id);
+  /**
+   * Geeft de voorraad vrij van webshopbestellingen op rekening waarvan de reserveringstermijn voorbij is (elk uur).
+   * @returns {{ released: number }} Het aantal vrijgegeven bestellingen.
+   */
+  app.locals.webOrdersRelease = () => webOrders.releaseExpired(tenant.id);
   webOrders.onShipped((tenantId, order, user) => webOrderInvoices.onShipped(tenantId, order, user));
   webOrders.onShipped((tenantId, order) => webOrderMail.sendShipment(tenantId, order));
   webOrders.onCancelled((tenantId, order, user) => webOrderInvoices.creditCancelled(tenantId, order, user));
@@ -2336,7 +2385,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // zolang de instelling `storefront` van de hoofdtenant uit staat.
   // Inloggen en registreren in de shop gebruiken dezelfde accounts (rol klant).
   const accountTokens = createAccountTokens(database);
-  const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
+  const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
@@ -2561,6 +2610,12 @@ if (require.main === module) {
       if (total) console.log(`Bewaartermijnen toegepast: ${JSON.stringify(removed)}`);
     } catch (err) {
       console.error('Onderhoud mislukt:', err);
+    }
+    try {
+      const freed = app.locals.webOrdersRelease();
+      if (freed.released) console.log(`Reserveringen van webshopbestellingen op rekening vrijgegeven: ${freed.released}`);
+    } catch (error) {
+      console.error('Reserveringen van webshopbestellingen vrijgeven mislukt:', error.message);
     }
     app.locals.webPaymentsExpire()
       .then((out) => { if (out.expired) console.log(`Onbetaalde webshopbestellingen vervallen: ${out.expired}`); })

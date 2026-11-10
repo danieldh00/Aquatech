@@ -242,11 +242,23 @@ function llmsTxt({ shopName, baseUrl, site, groups, pages }) {
 }
 
 /**
+ * De omschrijving van een artikel in de feed: de eigen of overgenomen tekst (Merchant Center staat tot 5000 tekens toe),
+ * anders de korte standaardtekst.
+ * @param {{ description?: string }|undefined} details Wat het artikel toont (storefront-data.detailsOf).
+ * @param {string} fallback De standaardtekst.
+ * @returns {string} De omschrijving.
+ */
+function feedDescription(details, fallback) {
+  const text = details && details.description ? details.description.replace(/\s+/g, ' ').trim() : '';
+  return text ? text.slice(0, 5000) : fallback;
+}
+
+/**
  * De productfeed voor Google Merchant Center (RSS 2.0 met g:-velden): elk artikel met foto, ook elke variant apart.
- * @param {{ shopName: string, baseUrl: string, products: object[], groups: object[] }} input products = uit de catalogus, groups = hoofdcategorieën (voor product_type).
+ * @param {{ shopName: string, baseUrl: string, products: object[], groups: object[], details?: Map<string, { description: string }> }} input products = uit de catalogus, groups = hoofdcategorieën (voor product_type), details = omschrijving per artikelcode (storefront-data.detailsOf; zonder een korte standaardtekst).
  * @returns {string} Het XML-document.
  */
-function merchantFeedXml({ shopName, baseUrl, products, groups }) {
+function merchantFeedXml({ shopName, baseUrl, products, groups, details = new Map() }) {
   const groupName = new Map(groups.map((group) => [group.slug, group.name]));
   const items = [];
   /**
@@ -261,7 +273,7 @@ function merchantFeedXml({ shopName, baseUrl, products, groups }) {
     items.push(`    <item>
       <g:id>${escapeXml(entry.id)}</g:id>
       <title>${escapeXml(entry.title.slice(0, 150))}</title>
-      <description>${escapeXml(`${entry.title} (artikelnummer ${entry.id}) van ${shopName}.`)}</description>
+      <description>${escapeXml(feedDescription(details.get(entry.id) || details.get(entry.product.code), `${entry.title} (artikelnummer ${entry.id}) van ${shopName}.`))}</description>
       <link>${escapeXml(absoluteUrl(baseUrl, `product/${entry.slug}/`))}</link>
       <g:image_link>${escapeXml(image)}</g:image_link>
       <g:availability>${entry.inStock ? 'in_stock' : 'out_of_stock'}</g:availability>

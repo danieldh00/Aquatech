@@ -28,7 +28,7 @@ async function start(opts = {}) {
   const store = createStore(db);
   // Zoals na het instelscherm: de eerste beheerder is hoofdbeheerder.
   if (!opts.noAdmin) await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  const app = createApp({ secret: SECRET, db, ...opts });
+  const app = createApp({ secret: SECRET, db, loginDelayMs: 0, ...opts });
   return { app, db, store, ...(await listen(app)) };
 }
 
@@ -417,4 +417,33 @@ test('mailserver en webshop alleen op een openbaar adres (geen toegang tot het e
   const { fetchProducts } = require('../src/webshop/woocommerce');
   await assert.rejects(fetchProducts({ url: 'https://shop.example', mode: 'store' }, { allowInsecure: false, fetchImpl: async () => { throw new Error('niet ophalen'); },
     resolveHost: async () => { throw Object.assign(new Error('x'), { code: 'private_host' }); } }), { code: 'invalid_url' });
+});
+
+test('oplopende vertraging: na drie mislukte pogingen wacht deze bezoeker langer, een andere bezoeker niet (5)', async () => {
+  const { server, base } = await start({ loginDelayMs: 150 });
+  try {
+    /**
+     * Logt in vanaf een bepaald adres en meet hoe lang het antwoord duurt.
+     * @param {string} ip Het adres van de bezoeker (CF-Connecting-IP achter de tunnel).
+     * @param {string} password Het wachtwoord.
+     * @returns {Promise<{ status: number, ms: number }>} De status en de looptijd in milliseconden.
+     */
+    const timed = async (ip, password) => {
+      const started = Date.now();
+      const response = await fetch(`${base}/app/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip, Origin: base }, body: JSON.stringify({ username: 'baas', password }) });
+      return { status: response.status, ms: Date.now() - started };
+    };
+    const first = [];
+    for (let i = 0; i < 3; i++) first.push(await timed('203.0.113.50', 'fout-fout-fout'));
+    assert.ok(first.every((attempt) => attempt.status === 401));
+    const fourth = await timed('203.0.113.50', 'fout-fout-fout');
+    const fifth = await timed('203.0.113.50', 'fout-fout-fout');
+    assert.ok(fourth.ms >= 140, `vierde poging wacht (${fourth.ms} ms)`);
+    assert.ok(fifth.ms >= 290, `vijfde poging wacht langer (${fifth.ms} ms)`);
+    const other = await timed('198.51.100.60', PW);
+    assert.strictEqual(other.status, 200, 'een andere bezoeker logt gewoon in');
+    assert.ok(other.ms < fifth.ms, 'zonder de vertraging van de ander');
+  } finally {
+    server.close();
+  }
 });

@@ -698,14 +698,46 @@ ${shown.map((product) => listItem(product, root)).join('\n')}
 }
 
 /**
+ * Kort een tekst in tot een maximale lengte op een woordgrens, op één regel (voor meta-omschrijvingen en JSON-LD).
+ * @param {string} text De tekst.
+ * @param {number} maxLength Hoogstens zoveel tekens.
+ * @returns {string} De ingekorte tekst (met … als er iets af is).
+ */
+function shortText(text, maxLength) {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim();
+  if (flat.length <= maxLength) return flat;
+  const cut = flat.slice(0, maxLength - 1);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > maxLength * 0.6 ? cut.slice(0, space) : cut).trim()}…`;
+}
+
+/**
+ * Het blok Omschrijving en Specificaties onder een product (12): alinea's uit de platte tekst (lege regel = nieuwe
+ * alinea, een regel met • = lijstpunt) en een tabel met de specificaties.
+ * @param {{ description: string, specifications: { name: string, value: string }[] }} details Wat het artikel toont.
+ * @returns {string} De HTML, leeg als er niets is.
+ */
+function detailsSection(details) {
+  const blocks = details.description ? details.description.split(/\n{2,}/).map((block) => {
+    const lines = block.split('\n');
+    if (lines.every((line) => line.startsWith('• '))) return `<ul>${lines.map((line) => `<li>${escapeHtml(line.slice(2))}</li>`).join('')}</ul>`;
+    return `<p>${lines.map(escapeHtml).join('<br>')}</p>`;
+  }).join('\n') : '';
+  const specs = details.specifications.length ? `<table class="product-specs"><tbody>${details.specifications.map((entry) => `<tr><th scope="row">${escapeHtml(entry.name)}</th><td>${escapeHtml(entry.value)}</td></tr>`).join('')}</tbody></table>` : '';
+  if (!blocks && !specs) return '';
+  return `<section class="product-details">${blocks ? `<h2>Omschrijving</h2>\n${blocks}` : ''}${specs ? `<h2>Specificaties</h2>\n${specs}` : ''}</section>`;
+}
+
+/**
  * Productpagina: afbeelding, naam, artikelnummer, prijs en voorraadstand. Bij een
  * hoofdartikel met varianten een keuzelijst en de gegevens van de gekozen variant.
  * @param {object} product Het product uit de catalogus (of een variant, met parentSlug en parentName).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {string} [chosenCode] Artikelnummer van de gekozen variant (alleen bij een hoofdartikel; anders de eerste op voorraad).
+ * @param {Map<string, { description: string, specifications: object[] }>} [details] Omschrijving en specificaties per artikelcode (storefront-data.detailsOf).
  * @returns {string} De HTML-pagina.
  */
-function productPage(product, groups, chosenCode = '') {
+function productPage(product, groups, chosenCode = '', details = new Map()) {
   const root = '../../';
   const variants = product.variants || [];
   const chosen = variants.length ? (variants.find((variant) => variant.code === chosenCode) || variants.find((variant) => variant.inStock) || variants[0]) : null;
@@ -717,6 +749,7 @@ function productPage(product, groups, chosenCode = '') {
       <label>${escapeHtml(product.attributeName)} <span class="variant-count">(${variants.length} varianten)</span><select name="v">${variants.map((variant) => `<option value="${escapeHtml(variant.code)}"${variant === chosen ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('')}</select></label>
       <button class="button secondary" type="submit">Kies</button>
     </form>` : '';
+  const shownDetails = details.get(shown.code) || details.get(product.code) || { description: '', specifications: [] };
   const parentLink = product.parentSlug ? `<p class="note"><a href="${root}product/${escapeHtml(product.parentSlug)}/?v=${encodeURIComponent(shown.code)}">Alle uitvoeringen van ${escapeHtml(product.parentName)}</a></p>` : '';
   const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a>${group ? ` › <a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : ''} › <a href="${root}categorie/${escapeHtml(product.categorySlug)}/">${escapeHtml(product.categoryName)}</a> › <span>${escapeHtml(product.name)}</span></nav>
 <article class="product-detail">
@@ -730,13 +763,14 @@ function productPage(product, groups, chosenCode = '') {
     ${activeShop.ordering ? orderForm(root, shown.code, shown.inStock, 'product-order') : '<button class="button" type="button" disabled>In winkelwagen</button>\n    <p class="note">Online bestellen volgt binnenkort.</p>'}
     ${parentLink}
   </div>
-</article>`;
+</article>
+${detailsSection(shownDetails)}`;
   const productPath = `product/${product.slug}/`;
   // Een variantpagina heeft één aanbieding (de eigen prijs en voorraad); een hoofdartikel een prijsbereik over de varianten.
   const jsonProduct = product.parentSlug ? { ...product, variants: [] } : product;
-  const productDescription = `${product.name}, artikelnummer ${product.code}${product.categoryName ? `, uit de categorie ${product.categoryName}` : ''} bij ${SHOP_NAME}.`;
+  const productDescription = shownDetails.description ? shortText(shownDetails.description, 500) : `${product.name}, artikelnummer ${product.code}${product.categoryName ? `, uit de categorie ${product.categoryName}` : ''} bij ${SHOP_NAME}.`;
   const breadcrumbSteps = [{ name: 'Shop', path: '' }, ...(group ? [{ name: group.name, path: `groep/${group.slug}/` }] : []), { name: product.categoryName, path: `categorie/${product.categorySlug}/` }, { name: product.name, path: productPath }];
-  return layout({ root, canonicalPath: productPath, ogType: 'product', ogImage: Seo.imageUrlOf(activeShop.baseUrl, imageUrl), jsonLd: [Seo.productJsonLd({ product: jsonProduct, baseUrl: activeShop.baseUrl, canonicalPath: productPath, shopName: SHOP_NAME, description: productDescription }), Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], title: `${product.name} – ${SHOP_NAME}`, description: `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`, body, groups });
+  return layout({ root, canonicalPath: productPath, ogType: 'product', ogImage: Seo.imageUrlOf(activeShop.baseUrl, imageUrl), jsonLd: [Seo.productJsonLd({ product: jsonProduct, baseUrl: activeShop.baseUrl, canonicalPath: productPath, shopName: SHOP_NAME, description: productDescription }), Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], title: `${product.name} – ${SHOP_NAME}`, description: shownDetails.description ? shortText(shownDetails.description, 155) : `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`, body, groups });
 }
 
 /**

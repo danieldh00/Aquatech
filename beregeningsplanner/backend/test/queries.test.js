@@ -223,3 +223,25 @@ test('queries: geen SELECT * in de backend', () => {
   }
   assert.deepStrictEqual(hits, []);
 });
+
+test('webshop: met een warme cache kost een shop-pagina geen query, ook de productpagina met omschrijving niet (1)', async () => {
+  const db = openDb();
+  const store = createStore(db);
+  const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PASSWORD, mustChangePassword: false }, { platformAdmin: true });
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  try {
+    const admin = createClient(base);
+    assert.strictEqual((await admin.post('/app/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
+    assert.strictEqual((await admin.post('/app/api/stock/items', { code: 'SPR-1', name: 'Sproeier Pro', onHand: 5, salePrice: 10 })).status, 201);
+    assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);
+    const visitor = createClient(base);
+    const counter = instrument(db);
+    for (const url of ['/', '/product/sproeier-pro-spr-1/', '/zoeken/?q=spr']) assert.strictEqual((await visitor.get(url)).status, 200);
+    counter.reset();
+    for (const url of ['/', '/product/sproeier-pro-spr-1/', '/zoeken/?q=spr', '/categorie/overig/']) await visitor.get(url);
+    assert.strictEqual(counter.stats.queries, 0, counter.stats.sql.join('\n'));
+  } finally {
+    server.close();
+  }
+});

@@ -20,7 +20,7 @@ const CHECKOUT = { name: 'Piet Tuin', company: '', email: 'piet@voorbeeld.nl', p
 
 /**
  * Hoofdtenant met beheerder, de webshop met bestellen aan en een paar artikelen.
- * @returns {Promise<object>} base, db, main, admin, vreemd (beheerder van een andere organisatie), sent (verstuurde mails) en shopper() dat een nieuwe klant registreert.
+ * @returns {Promise<object>} app, base, db, main, admin, vreemd (beheerder van een andere organisatie), sent (verstuurde mails) en shopper() dat een nieuwe klant registreert.
  */
 async function setup() {
   const db = openDb();
@@ -35,7 +35,8 @@ async function setup() {
    * @returns {{ configured: Function, send: Function }} De mailfuncties.
    */
   const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
-  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor }));
+  const app = createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor });
+  const { server, base } = await listen(app);
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);
@@ -57,7 +58,7 @@ async function setup() {
     return client;
   };
   const vreemd = await createLogin(base, { password: PW })('vreemd', 'ander');
-  return { base, db, main, admin, vreemd, sent, shopper };
+  return { app, base, db, main, admin, vreemd, sent, shopper };
 }
 
 /**
@@ -328,4 +329,61 @@ test('adres niet gevonden: met "zelf invullen" toch bestellen, gemarkeerd als ni
   const second = (await admin.get('/app/api/admin/web-orders')).body.items.find((order) => order.id !== list[0].id);
   assert.match(second.number, /-0002$/);
   assert.strictEqual((await admin.get(`/app/api/admin/web-orders/${second.id}`)).body.order.address.unverified, undefined);
+});
+
+test('een bestelling op rekening houdt de voorraad zo lang vast als ingesteld en geeft hem daarna vrij; verzenden kan nog (8)', async () => {
+  const { app, base, db, admin, shopper } = await setup();
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { shopPayment: { online: false, publicUrl: `${base}/`, accountHoldDays: 3 } })).status, 200);
+  const customer = await shopper();
+  await addToCart(base, customer, 'SPR-1', 2);
+  assert.strictEqual((await postCheckout(base, customer, CHECKOUT)).status, 303);
+  const [placed] = (await admin.get('/app/api/admin/web-orders')).body.items;
+  const detail = (await admin.get(`/app/api/admin/web-orders/${placed.id}`)).body.order;
+  const days = (Date.parse(detail.reservedUntil) - Date.parse(detail.createdAt)) / 86400000;
+  assert.ok(Math.abs(days - 3) < 0.001, 'drie dagen na het bestellen');
+  assert.deepStrictEqual(app.locals.webOrdersRelease(), { released: 0 }, 'nog binnen de termijn');
+  assert.strictEqual((await stockOf(admin, 'SPR-1')).reserved, 2);
+  const data = JSON.parse(db.prepare('SELECT data FROM web_orders WHERE id = ?').get(placed.id).data);
+  data.reservedUntil = new Date(Date.now() - 1000).toISOString();
+  db.prepare('UPDATE web_orders SET data = ? WHERE id = ?').run(JSON.stringify(data), placed.id);
+  assert.deepStrictEqual(app.locals.webOrdersRelease(), { released: 1 });
+  assert.deepStrictEqual(app.locals.webOrdersRelease(), { released: 0 }, 'niet twee keer');
+  assert.strictEqual((await stockOf(admin, 'SPR-1')).reserved, 0, 'voorraad weer vrij');
+  const released = (await admin.get(`/app/api/admin/web-orders/${placed.id}`)).body.order;
+  assert.strictEqual(released.status, 'nieuw', 'de bestelling blijft staan');
+  assert.ok(released.reservationReleasedAt);
+  assert.match(released.history.at(-1).note, /vrijgegeven/);
+  assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${placed.id}/status`, { status: 'verzonden' })).status, 200);
+  assert.strictEqual((await stockOf(admin, 'SPR-1')).onHand, 3, 'verzenden boekt gewoon af');
+});
+
+test('een vrijgegeven bestelling verzenden kan niet als de voorraad intussen aan een ander is toegezegd (8)', async () => {
+  const { app, base, db, admin, shopper } = await setup();
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { shopPayment: { online: false, publicUrl: `${base}/`, accountHoldDays: 3 } })).status, 200);
+  const first = await shopper();
+  await addToCart(base, first, 'SPR-1', 2);
+  assert.strictEqual((await postCheckout(base, first, CHECKOUT)).status, 303);
+  const [placed] = (await admin.get('/app/api/admin/web-orders')).body.items;
+  const data = JSON.parse(db.prepare('SELECT data FROM web_orders WHERE id = ?').get(placed.id).data);
+  data.reservedUntil = new Date(Date.now() - 1000).toISOString();
+  db.prepare('UPDATE web_orders SET data = ? WHERE id = ?').run(JSON.stringify(data), placed.id);
+  assert.deepStrictEqual(app.locals.webOrdersRelease(), { released: 1 });
+  const second = await shopper();
+  await addToCart(base, second, 'SPR-1', 4);
+  assert.strictEqual((await postCheckout(base, second, CHECKOUT)).status, 303);
+  const refused = await admin.post(`/app/api/admin/web-orders/${placed.id}/status`, { status: 'verzonden' });
+  assert.strictEqual(refused.status, 409, 'nog maar één stuk vrij');
+  assert.strictEqual((await stockOf(admin, 'SPR-1')).onHand, 5, 'niets afgeboekt');
+});
+
+test('met 0 dagen blijft een bestelling op rekening gereserveerd tot verzenden of annuleren (8)', async () => {
+  const { app, base, admin, shopper } = await setup();
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { shopPayment: { online: false, publicUrl: `${base}/`, accountHoldDays: 0 } })).status, 200);
+  const customer = await shopper();
+  await addToCart(base, customer, 'SPR-1', 1);
+  assert.strictEqual((await postCheckout(base, customer, CHECKOUT)).status, 303);
+  const [placed] = (await admin.get('/app/api/admin/web-orders')).body.items;
+  assert.strictEqual((await admin.get(`/app/api/admin/web-orders/${placed.id}`)).body.order.reservedUntil, null);
+  assert.deepStrictEqual(app.locals.webOrdersRelease(), { released: 0 });
+  assert.strictEqual((await stockOf(admin, 'SPR-1')).reserved, 1);
 });

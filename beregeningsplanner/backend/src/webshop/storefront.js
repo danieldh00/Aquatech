@@ -24,7 +24,7 @@ const { returnsBlock } = require('./storefront-return-pages');
 const { legalDefaults, LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
-const { validPaymentId, cleanPublicUrl } = require('./mollie');
+const { validPaymentId, cleanPublicUrl, sanitizePayment } = require('./mollie');
 const Seo = require('./seo');
 const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, convertPlannedQty, MAX_QTY } = require('./storefront-cart');
 
@@ -236,7 +236,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   router.get('/productfeed.xml', (req, res) => {
     const baseUrl = publicBaseUrl(req);
     const catalog = baseUrl ? data.catalogOf(tenantId) : null;
-    sendSeoFile(res, 'application/xml; charset=utf-8', baseUrl ? Seo.merchantFeedXml({ shopName: 'Aquatechshop.nl', baseUrl, products: catalog.products, groups: catalog.groups }) : null);
+    sendSeoFile(res, 'application/xml; charset=utf-8', baseUrl ? Seo.merchantFeedXml({ shopName: 'Aquatechshop.nl', baseUrl, products: catalog.products, groups: catalog.groups, details: data.detailsOf ? data.detailsOf(tenantId) : new Map() }) : null);
   });
 
   router.get('/', (req, res) => {
@@ -767,7 +767,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
               }
             }
           }
-          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer), vatNumber: approvedVatNumber, vies: viesResult, addressUnverified }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer));
+          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer), vatNumber: approvedVatNumber, vies: viesResult, addressUnverified }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer), sanitizePayment(settingsFor(tenantId).get('shopPayment')));
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
             const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
@@ -1032,7 +1032,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       || (parent ? { ...variant, variants: parent.variants, attributeName: parent.attributeName } : variant);
     if (!product) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
     const chosenCode = typeof req.query.v === 'string' ? req.query.v.slice(0, 80) : (variant ? variant.code : '');
-    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : '')));
+    const details = !data.detailsOf ? new Map() : data.detailsOf(tenantId, [product.code, ...(product.variants || []).map((entry) => entry.code)]);
+    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details));
   });
 
   router.use((req, res) => {

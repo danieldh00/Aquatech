@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { AsyncLocalStorage } = require('async_hooks');
+const { asSystem } = require('../database/tenant-scope');
 const { transaction, listTables, tableColumns, foreignKeys, deferForeignKeys, jsonWithout, jsonDigest } = require('../database/db');
 
 // Geheugen per HTTP-verzoek (server.js: withRequestCache): dezelfde tenant
@@ -18,6 +19,9 @@ const requestCache = new AsyncLocalStorage();
  * @returns {*} Wat de functie teruggeeft.
  */
 const withRequestCache = (callback) => requestCache.run(new Map(), callback);
+/** Omgevingen per organisatie (live-tenant → id's), 30 s geldig; gedeeld door alle stores in dit proces, zodat een
+ * nieuwe of gewiste omgeving het via elke store wist (familyIds, forgetTenants). */
+const familyCache = new Map();
 
 // Kolommen van users en tenants voor de sessiecontrole (één query per
 // verzoek: sessie + gebruiker + tenant).
@@ -714,7 +718,14 @@ function createStore(db) {
     const tenant = tenantId && getTenant(tenantId);
     if (!tenant) return [];
     const root = tenant.environment === 'test' && tenant.parent_id ? tenant.parent_id : tenant.id;
-    return [root, ...prepare('SELECT id FROM tenants WHERE parent_id = ? ORDER BY created_at').all(root).map((row) => row.id)];
+    // 30 s onthouden: identify() vraagt de familie bij elk verzoek (tenantafscherming); een nieuwe of gewiste
+    // omgeving wist dit geheugen meteen (forgetTenants).
+    const known = familyCache.get(root);
+    if (known && known.until > Date.now()) return known.ids;
+    const ids = [root, ...prepare('SELECT id FROM tenants WHERE parent_id = ? ORDER BY created_at').all(root).map((row) => row.id)];
+    if (familyCache.size > 1000) familyCache.clear();
+    familyCache.set(root, { ids, until: Date.now() + 30000 });
+    return ids;
   }
 
   /**
@@ -764,7 +775,7 @@ function createStore(db) {
    * Wist het geheugen van dit verzoek (na een wijziging van een tenant).
    * @returns {void}
    */
-  const forgetTenants = () => requestCache.getStore()?.clear();
+  const forgetTenants = () => { familyCache.clear(); requestCache.getStore()?.clear(); };
   /**
    * Haalt een tenant op met zijn slug (organisatiecode).
    * @param {string} slug De slug.
@@ -1322,8 +1333,9 @@ function createStore(db) {
    * @param {object} entry tenantId, userId, action, detail (zonder geheimen) en ip.
    */
   function audit({ tenantId, userId = null, action, detail = {}, ip = '' }) {
-    prepare('INSERT INTO audit (id, tenant_id, user_id, action, detail, ip, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(newId(), tenantId, userId, action, JSON.stringify(detail || {}), String(ip).slice(0, 64), currentTimestamp());
+    // Als systeem: een hoofdbeheerder die als een ander werkt, schrijft in het log van zijn eigen organisatie.
+    asSystem(() => prepare('INSERT INTO audit (id, tenant_id, user_id, action, detail, ip, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(newId(), tenantId, userId, action, JSON.stringify(detail || {}), String(ip).slice(0, 64), currentTimestamp()));
   }
 
   /**
@@ -1397,11 +1409,12 @@ function createStore(db) {
       SELECT ${PUBLIC_USER_COLUMNS},
         (SELECT COUNT(*) FROM plans p WHERE p.owner_id = u.id AND p.deleted_at IS NULL) AS plan_count,
         (SELECT COUNT(*) FROM history h WHERE h.user_id = u.id) AS history_count,
-        (SELECT COUNT(*) FROM sessions s WHERE s.tenant_id = u.tenant_id AND s.user_id = u.id AND s.expires_at > ?) AS session_count
+        (SELECT COUNT(*) FROM sessions s WHERE s.tenant_id = u.tenant_id AND s.user_id = u.id AND s.expires_at > ?) AS session_count,
+        CASE WHEN u.totp_enabled_at IS NOT NULL AND u.totp_secret IS NOT NULL THEN 1 ELSE 0 END AS totp_on
       FROM users u WHERE u.tenant_id = ? ${includeGuests ? '' : "AND u.kind <> 'gast'"}
       ORDER BY CASE u.kind WHEN 'systeem' THEN 0 WHEN 'account' THEN 1 ELSE 2 END, lower(u.display_name)`)
       .all(currentTimestamp(), tenantId)
-      .map((user) => ({ ...publicUser(user), planCount: user.plan_count, historyCount: user.history_count, sessionCount: user.session_count }));
+      .map((user) => ({ ...publicUser(user), planCount: user.plan_count, historyCount: user.history_count, sessionCount: user.session_count, twoFactor: Boolean(Number(user.totp_on)) }));
   }
 
   /**
@@ -1813,7 +1826,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, systemUser, createGuest, createAccount, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, markEmailVerified, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, familyIds, systemUser, createGuest, createAccount, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, markEmailVerified, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
     createSession, findSessionWithUser, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
     planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing, pendingDrawingChars, purgeStaleDrawings,

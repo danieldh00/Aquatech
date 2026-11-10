@@ -18,6 +18,7 @@
 // de klantweergave heeft de beheerder alleen de rechten van de klant.
 const crypto = require('crypto');
 const { parseCookies } = require('./auth');
+const { asSystem } = require('../database/tenant-scope');
 
 const IMP_COOKIE = 'aquatech_imp';
 const IMP_HINT = 'aquatech_imp_hint';
@@ -151,9 +152,10 @@ function createImpersonationStore(db) {
    * @returns {object[]} Begin, einde, naam van de hoofdbeheerder en de omgeving, nieuwste eerst.
    */
   function recentFor(userId, limit = 10) {
-    return prepare(`SELECT i.started_at, i.expires_at, i.ended_at, a.display_name AS admin_name, t.name AS tenant_name, t.environment AS environment
+    // Als systeem: de naam van de hoofdbeheerder staat in de hoofdtenant, buiten de organisatie van de gebruiker.
+    return asSystem(() => prepare(`SELECT i.started_at, i.expires_at, i.ended_at, a.display_name AS admin_name, t.name AS tenant_name, t.environment AS environment
       FROM impersonations i LEFT JOIN users a ON a.id = i.admin_id LEFT JOIN tenants t ON t.id = i.tenant_id
-      WHERE i.user_id = ? ORDER BY i.started_at DESC LIMIT ?`).all(String(userId), limit);
+      WHERE i.user_id = ? ORDER BY i.started_at DESC LIMIT ?`).all(String(userId), limit));
   }
 
   return { activeGrant, activeGrants, grant, revoke, start, get, end, openFor, recentFor };

@@ -19,7 +19,7 @@ const PW = 'Tuin-Plan-2026!';
  */
 function storeProducts() {
   const list = [
-    { id: 1, sku: 'PE-25', name: 'PE buis 25mm per meter', permalink: 'https://shop.test/pe-25', prices: { price: '121', currency_code: 'EUR', currency_minor_unit: 2 }, is_in_stock: true },
+    { id: 1, sku: 'PE-25', name: 'PE buis 25mm per meter', permalink: 'https://shop.test/pe-25', prices: { price: '121', currency_code: 'EUR', currency_minor_unit: 2 }, is_in_stock: true, description: '<p>Zwarte <strong>PE</strong>-buis</p>' },
     { id: 2, sku: 'pe25-alt', name: 'Andere buis', permalink: 'https://shop.test/pe-25b', prices: { price: '99', currency_minor_unit: 2 } },
     { id: 3, sku: 'VAL24', name: 'Magneetventiel Hunter PGV', permalink: 'https://shop.test/pgv', prices: { price: '3630', currency_minor_unit: 2 } },
   ];
@@ -73,6 +73,7 @@ test('Store API: alle pagina\'s, prijs omgerekend naar excl. btw', async () => {
     const pe = products.find((product) => product.sku === 'PE-25');
     assert.strictEqual(pe.price, 1.0); // 1,21 incl. -> 1,00 excl.
     assert.strictEqual(pe.url, 'https://shop.test/pe-25');
+    assert.strictEqual(pe.description, 'Zwarte PE-buis', 'omschrijving als platte tekst (12)');
   } finally {
     shop.server.close();
   }

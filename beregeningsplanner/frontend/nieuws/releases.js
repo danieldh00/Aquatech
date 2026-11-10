@@ -13,6 +13,19 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.5',
+      date: '2026-11-10',
+      title: 'Tweestapsverificatie, productomschrijvingen en slimmer reserveren',
+      items: [
+        { text: 'Productpagina’s in de webshop tonen nu een omschrijving en een tabel met specificaties. Zolang je bij een artikel niets invult, komt de tekst uit de oude webshop.' },
+        { text: 'Artikelen: nieuwe velden Omschrijving en Specificaties voor de webshop, met een knop om de tekst uit de oude webshop over te nemen en aan te passen.', for: ['voorraad'] },
+        { text: 'Een bestelling op rekening houdt de voorraad nu een vast aantal dagen vast (standaard 14, in te stellen bij Beheer > Webshop > Betalen). Daarna komt de voorraad weer vrij in de shop; de bestelling blijft staan en kan nog verzonden worden.', for: ['beheer'] },
+        { text: 'Je kunt je account nu extra beveiligen met tweestapsverificatie: zet het aan bij Mijn profiel en scan de QR-code met een authenticator-app. Bij het inloggen vraagt de app dan ook om de code van je telefoon. Bewaar de herstelcodes voor als je je telefoon kwijt bent.' },
+        { text: 'Beheer > Gebruikers: is een collega de telefoon kwijt, dan kun je diens tweestapsverificatie uitzetten met de knop 2FA uitzetten.', for: ['beheer'] },
+        { text: 'Inloggen: na drie verkeerde wachtwoorden wacht elke volgende poging iets langer. Na een tikfout merk je er niets van; raden wordt zo erg traag.' },
+      ],
+    },
+    {
       version: '1.7.4',
       date: '2026-11-10',
       title: 'Veiliger en slimmer: webshop, inloggen en testomgeving',

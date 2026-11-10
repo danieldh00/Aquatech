@@ -83,6 +83,35 @@
    * @returns {string} bijvoorbeeld "50:10, 100:15"
    */
   const tiersText = (tiers) => (tiers || []).map((tier) => `${tier.minQty}:${tier.discountPct}`).join(', ');
+  /**
+   * Specificaties als tekst voor het invulveld: per regel "naam: waarde".
+   * @param {{ name: string, value: string }[]} specifications De specificaties.
+   * @returns {string} De tekst.
+   */
+  const specificationsText = (specifications) => (specifications || []).map((entry) => `${entry.name}: ${entry.value}`).join('\n');
+  /**
+   * Vult omschrijving en specificaties in het artikelformulier en toont wat de oude webshop heeft (12): zolang het
+   * artikel zelf niets heeft, toont de shop die tekst; met de knop neem je hem over om aan te passen.
+   * @param {HTMLFormElement} formElement Het formulier.
+   * @param {object} item Het artikel (description, specifications, shopDescription, shopSpecifications).
+   * @returns {void}
+   */
+  const renderDetails = (formElement, item) => {
+    formElement.description.value = item.description || '';
+    formElement.specifications.value = specificationsText(item.specifications);
+    const hasShop = Boolean(item.shopDescription) || Boolean((item.shopSpecifications || []).length);
+    const note = $('#d-details-shop');
+    note.hidden = !hasShop;
+    if (!hasShop) return;
+    $('span', note).textContent = !item.description && !(item.specifications || []).length
+      ? 'Leeg: de shop toont de omschrijving en specificaties uit de oude webshop.'
+      : 'De oude webshop heeft ook een omschrijving en/of specificaties.';
+    /** Neemt de omschrijving en specificaties uit de oude webshop over in de velden (nog niet opgeslagen). */
+    $('#d-details-copy').onclick = () => {
+      if (item.shopDescription) formElement.description.value = item.shopDescription;
+      if ((item.shopSpecifications || []).length) formElement.specifications.value = specificationsText(item.shopSpecifications);
+    };
+  };
   const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 
   const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null };
@@ -612,6 +641,7 @@
     formElement.unitContent.value = item.unitContent == null ? '' : item.unitContent;
     formElement.orderMinQty.value = item.orderMinQty > 1 ? item.orderMinQty : '';
     formElement.priceTiers.value = tiersText(item.priceTiers);
+    renderDetails(formElement, item);
     $('#d-shop').innerHTML = item.shop.error ? `Webshop: <span class="err">${esc(item.shop.error)}</span>`
       : !item.shop.productId ? (item.shopSync ? 'Nog niet gekoppeld aan een webshopproduct (koppelen gaat op SKU = artikelcode).' : '')
         : item.shop.pending ? 'Webshop: wijziging wordt binnen enkele seconden verstuurd.'
@@ -1003,6 +1033,7 @@
           minQty: num(editForm.minQty.value), reorderQty: num(editForm.reorderQty.value), costPrice: num(editForm.costPrice.value),
           salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), weightGrams: num(editForm.weightGrams.value), businessPrice: num(editForm.businessPrice.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
           packSize: num(editForm.packSize.value), orderMinQty: num(editForm.orderMinQty.value), priceTiers: parseTiers(editForm.priceTiers.value), unitContent: num(editForm.unitContent.value),
+          description: editForm.description.value, specifications: editForm.specifications.value,
         } }) };
         toast('Opgeslagen');
         await loadUnits().catch((error) => toast(error.message, true));
