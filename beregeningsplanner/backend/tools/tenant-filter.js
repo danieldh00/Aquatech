@@ -64,12 +64,13 @@ function listSourceFiles() {
 const normalizeSql = (sql) => sql.replace(/\s+/g, ' ').trim();
 
 /**
- * Of de SQL op de tenant filtert: een voorwaarde op tenant_id (`tenant_id = ?`, `x.tenant_id = y.tenant_id`,
- * `tenant_id IN (…)`), of bij een INSERT de kolom tenant_id. Alleen tenant_id in de gekozen kolommen telt niet.
- * @param {string} text De SQL-tekst.
+ * Of de SQL op de tenant filtert: tenant_id gebonden aan een parameter of waarde (`tenant_id = ?`, `x.tenant_id = ${…}`,
+ * `tenant_id IN (…)`, `? = tenant_id`), of bij een INSERT de kolom tenant_id. Alleen tenant_id in de gekozen kolommen, of
+ * alleen een koppeling tussen tabellen (`u.tenant_id = r.tenant_id`), telt niet: die beperkt niet tot de tenant van het verzoek.
+ * @param {string} text De SQL-tekst (bij een template staan de ${}-delen als `${}`).
  * @returns {boolean} true als er een tenantvoorwaarde is.
  */
-const hasTenantCondition = (text) => /\btenant_id\s*(?:=|IN\s*\(|IS\b)|=\s*(?:[a-z_]+\.)?tenant_id\b/i.test(text)
+const hasTenantCondition = (text) => /\btenant_id\s*(?:=\s*(?:\?|\$\{\}|'|\d)|IN\s*\(|IS\b)|(?:\?|\$\{\})\s*=\s*(?:[a-z_]+\.)?tenant_id\b/i.test(text)
   || (/^\s*INSERT\b/i.test(text) && /\btenant_id\b/.test(text));
 
 /**

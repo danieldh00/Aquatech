@@ -34,6 +34,10 @@
       "sql": "SELECT ${} FROM impersonations WHERE user_id = ? AND ended_at IS NULL"
     },
     {
+      "file": "beveiliging/impersonation.js",
+      "sql": "SELECT i.started_at, i.expires_at, i.ended_at, a.display_name AS admin_name, t.name AS tenant_name, t.environment AS environment FROM impersonations i LEFT JOIN users a ON a.id = i.admin_id LEFT JOIN tenants t ON t.id = i.tenant_id WHERE i.user_id = ? ORDER BY i.started_at DESC LIMIT ?"
+    },
+    {
       "file": "platform/ai-usage.js",
       "sql": "SELECT ${} FROM ai_usage a WHERE ${}"
     },
@@ -55,7 +59,15 @@
     },
     {
       "file": "platform/ai-usage.js",
+      "sql": "SELECT a.tenant_id AS k, t.name, t.slug, t.environment, ${} FROM ai_usage a LEFT JOIN tenants t ON t.id = a.tenant_id WHERE ${} GROUP BY a.tenant_id, t.name, t.slug, t.environment ORDER BY cost_eur_micro DESC, requests DESC"
+    },
+    {
+      "file": "platform/ai-usage.js",
       "sql": "SELECT COUNT(*) AS n FROM ai_usage a WHERE ${}"
+    },
+    {
+      "file": "platform/ai-usage.js",
+      "sql": "SELECT ${}, u.display_name, u.username, u.kind, t.name AS tenant_name, t.environment FROM ai_usage a LEFT JOIN users u ON u.id = a.user_id LEFT JOIN tenants t ON t.id = a.tenant_id WHERE ${} ORDER BY a.created_at DESC, a.id LIMIT ${} OFFSET ${}"
     },
     {
       "file": "platform/store.js",
@@ -179,6 +191,10 @@
     },
     {
       "file": "platform/store.js",
+      "sql": "SELECT ${}, (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id AND u.kind = 'account') AS user_count, (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id AND u.kind = 'account' AND u.role = 'beheerder' AND u.disabled = 0) AS admin_count, (SELECT COUNT(*) FROM plans p WHERE p.tenant_id = t.id AND p.deleted_at IS NULL) AS plan_count, (SELECT MAX(h.updated_at) FROM history h WHERE h.tenant_id = t.id) AS last_activity FROM tenants t ORDER BY lower(t.name), t.created_at"
+    },
+    {
+      "file": "platform/store.js",
       "sql": "UPDATE users SET email = ?, phone = ?, preferences = ? WHERE id = ?"
     },
     {
@@ -191,6 +207,10 @@
     },
     {
       "file": "platform/store.js",
+      "sql": "SELECT t.id, t.parent_id FROM users u JOIN tenants t ON t.id = u.tenant_id WHERE u.username = ? AND u.kind = 'account' AND t.environment = 'test' AND t.parent_id IS NOT NULL LIMIT 1"
+    },
+    {
+      "file": "platform/store.js",
       "sql": "UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?"
     },
     {
@@ -200,6 +220,10 @@
     {
       "file": "platform/store.js",
       "sql": "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "SELECT s.id_hash, s.tenant_id, s.user_id, s.via, s.fingerprint, s.created_at, s.last_seen_at, s.expires_at, ${}, ${} FROM sessions s LEFT JOIN users u ON u.id = s.user_id LEFT JOIN tenants t ON t.id = u.tenant_id WHERE s.id_hash = ?"
     },
     {
       "file": "platform/store.js",
@@ -224,6 +248,10 @@
     {
       "file": "platform/store.js",
       "sql": "SELECT h.id, h.plan_id, h.user_id, h.action, h.title, h.customer, h.address, h.summary, h.ip, h.created_at, h.updated_at, h.snapshot IS NOT NULL AS has_snapshot, u.username, u.display_name, u.role, u.kind, EXISTS (SELECT 1 FROM plans p WHERE p.id = h.plan_id AND p.deleted_at IS NULL) AS plan_exists"
+    },
+    {
+      "file": "platform/store.js",
+      "sql": "(SELECT COUNT(*) FROM history h WHERE h.tenant_id = p.tenant_id AND h.plan_id = p.id) AS history_count,"
     },
     {
       "file": "platform/store.js",
@@ -306,8 +334,16 @@
       "sql": "UPDATE plan_recognitions SET created_at = ?, updated_at = ? WHERE id = ?"
     },
     {
+      "file": "uitvoering/locations.js",
+      "sql": "AND (EXISTS (SELECT 1 FROM quotes qu WHERE qu.id = w.quote_id AND qu.tenant_id = w.tenant_id AND qu.deleted_at IS NULL AND qu.customer_id = ? AND qu.status <> 'concept') OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?))"
+    },
+    {
       "file": "uitvoering/outsourcing.js",
       "sql": "SELECT ${} FROM work_order_offers WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/outsourcing.js",
+      "sql": "SELECT ${} FROM work_order_offers f JOIN tenants s ON s.id = f.tenant_id WHERE f.tenant_id <> ? AND s.environment = ? AND ((f.status = 'aangeboden' AND (f.to_tenant_id = ? OR f.to_tenant_id IS NULL)) OR f.receiver_tenant_id = ? OR (f.status = 'afgewezen' AND f.to_tenant_id = ?)) ORDER BY f.created_at DESC LIMIT 200"
     },
     {
       "file": "uitvoering/outsourcing.js",
@@ -339,6 +375,10 @@
     },
     {
       "file": "uitvoering/service-requests.js",
+      "sql": "sr.id, sr.number, sr.customer_id, sr.customer_name, sr.kind, sr.urgent, sr.subject, sr.description, sr.address, sr.phone, sr.email, sr.preferred, sr.installation_id, sr.status, sr.reply, sr.note, sr.handled_by_name, sr.work_order_id, sr.created_at, sr.updated_at, w.number AS wo_number, w.status AS wo_status, w.planned_date AS wo_planned, i.number AS inst_number, i.title AS inst_title, (SELECT COUNT(*) FROM service_request_photos p WHERE p.tenant_id = sr.tenant_id AND p.request_id = sr.id) AS photo_count"
+    },
+    {
+      "file": "uitvoering/service-requests.js",
       "sql": "UPDATE service_requests SET updated_at = ? WHERE id = ?"
     },
     {
@@ -352,6 +392,10 @@
     {
       "file": "uitvoering/service-requests.js",
       "sql": "UPDATE service_requests SET status = 'ingepland', work_order_id = ?, handled_by = ?, handled_by_name = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "uitvoering/workorders.js",
+      "sql": "AND (EXISTS (SELECT 1 FROM quotes qu WHERE qu.id = w.quote_id AND qu.tenant_id = w.tenant_id AND qu.deleted_at IS NULL AND qu.customer_id = ? AND qu.status <> 'concept') OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?))"
     },
     {
       "file": "uitvoering/workorders.js",
@@ -402,6 +446,10 @@
       "sql": "UPDATE work_orders SET deleted_at = ? WHERE id = ?"
     },
     {
+      "file": "verkoop/invoices.js",
+      "sql": "(SELECT d.number FROM debtors d WHERE d.tenant_id = invoices.tenant_id AND d.id = invoices.debtor_id) AS debtor_number"
+    },
+    {
       "file": "verkoop/quotes.js",
       "sql": "SELECT q.id, q.tenant_id, q.owner_id, q.plan_id, q.number, q.status, q.title, q.customer, q.total_excl, q.total_incl, q.data, q.created_at, q.updated_at, q.customer_id, q.share_hash, q.share_token, q.share_url, q.shared_at, q.viewed_at, q.last_viewed_at, q.view_count, q.sent_at, q.sent_to, q.responded_at, q.acceptance, c.display_name AS customer_name FROM quotes q LEFT JOIN users c ON c.id = q.customer_id"
     },
@@ -444,6 +492,10 @@
     {
       "file": "verkoop/quotes.js",
       "sql": "UPDATE quotes SET deleted_at = ? WHERE id = ?"
+    },
+    {
+      "file": "webshop/shop-sync.js",
+      "sql": "COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0)"
     },
     {
       "file": "webshop/web-orders.js",
