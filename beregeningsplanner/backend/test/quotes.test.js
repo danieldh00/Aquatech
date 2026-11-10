@@ -417,6 +417,9 @@ test('digitale offerte: link, openbare pagina, opties, tekenen, vastleggen en e-
     const q4 = (await piet.post('/app/api/quotes', { data: { ...data, validUntil: '2020-01-01' } })).body;
     const t4 = (await piet.post(`/app/api/quotes/${q4.id}/share`, { url: URL_OK })).body.share.url.split('#t=')[1];
     assert.strictEqual((await publicRequest(t4, 'POST', { answer: 'akkoord', name: 'J. Jansen', terms: true, signature: SIGNATURE })).status, 409);
+    // Link verlopen (G-02): 180 dagen na delen en 90 dagen na de geldigheidsdatum.
+    db.prepare('UPDATE quotes SET shared_at = ? WHERE id = ?').run(new Date(Date.now() - 181 * 86400000).toISOString(), q4.id);
+    assert.strictEqual((await publicRequest(t4)).status, 404, 'verlopen link werkt niet meer');
     // Uitgeschakelde organisatie: de link werkt niet.
     db.prepare('UPDATE tenants SET disabled = 1 WHERE id = ?').run(tid);
     assert.strictEqual((await publicRequest(t4)).status, 404);

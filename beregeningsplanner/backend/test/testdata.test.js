@@ -273,6 +273,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
       web_returns: 'retouren horen bij bestellingen van de eigen webshop; een testomgeving heeft geen webshop',
       web_sale_lines: 'verkoopregels voor de margerapportage ontstaan uit bestellingen van de eigen webshop; een testomgeving heeft geen webshop',
       shop_images: 'afbeeldingen van de eigen webshop horen bij de hoofdtenant; een testomgeving heeft geen webshop',
+      account_tokens: 'eenmalige links voor wachtwoord vergeten en e-mail bevestigen ontstaan alleen per mail in de eigen webshop (hoofdtenant), met een korte geldigheid',
     };
     const tables = listTables(db).filter((table) => tableColumns(db, table).some((column) => column.name === 'tenant_id'));
     for (const table of tables) {

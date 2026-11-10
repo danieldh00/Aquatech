@@ -3,6 +3,7 @@ const fs = require('fs');
 const express = require('express');
 
 const { createAuth, remoteIp, clientKey, parseCookies } = require('./beveiliging/auth');
+const { createAccountTokens } = require('./platform/account-tokens');
 const { createRateLimiter } = require('./beveiliging/rate-limit');
 const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
@@ -10,7 +11,7 @@ const { createRecognitionStore, sanitizeSamples, imageHash } = require('./berege
 const { openDb, openDatabase, isPg } = require('./database/db');
 const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf } = require('./platform/store');
 const testdata = require('./platform/test-data');
-const { createSettings, SettingsError, FIELDS } = require('./platform/settings');
+const { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest } = require('./platform/settings');
 const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
 const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody } = require('./verkoop/quotes');
@@ -25,6 +26,7 @@ const { createShopAccounts } = require('./webshop/shop-accounts');
 const { sanitizeBusinessProfile } = require('./webshop/business-profile');
 const { createImpersonationStore, createImpersonation } = require('./beveiliging/impersonation');
 const { createStorefront } = require('./webshop/storefront');
+const { createVies } = require('./webshop/vies');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
 const { createShopSync } = require('./webshop/shop-sync');
 const { createShopContentStore, registerShopContentRoutes } = require('./webshop/shop-content');
@@ -51,7 +53,7 @@ const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
-const { registerDrawingRoutes } = require('./beregening/drawings');
+const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
 const { createAiUsageStore } = require('./platform/ai-usage');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
 const crypto = require('crypto');
@@ -285,10 +287,10 @@ function staticHeaders(version) {
 
 /**
  * Bouwt de Express-app met alle routes en opslag.
- * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch en wanIp (tests vervangen hiermee de buitenwereld).
+ * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, wanIp = createWanIp() }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, wanIp = createWanIp() }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -355,10 +357,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   const getAccessCode = () => settings.get('accessCode');
   /**
-   * Gasten (zonder inloggen) alleen als dat aanstaat en er geen code is.
+   * Gasten (zonder inloggen) alleen als dat aanstaat en er geen code is. Een te korte ACCESS_CODE (geweigerd) telt als
+   * code: dan blijven gasten buiten in plaats van dat iedereen binnenkomt.
    * @returns {boolean} true als gasten mogen.
    */
-  const guestsAllowed = () => !getAccessCode() && settings.get('guestAccess');
+  const guestsAllowed = () => !getAccessCode() && !settings.rejectedStart('accessCode') && settings.get('guestAccess');
   // Nog geen beheerder met een eigen account: eerst het instelscherm.
   // Is er eenmaal een actieve beheerder, dan blijft dat zo (de laatste
   // beheerder is niet uit te schakelen of te verwijderen): daarna niet bij elk
@@ -637,6 +640,42 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     else entry.count += 1;
   };
 
+  // Inlogpogingen tellen per account én bezoeker: wie het wachtwoord van een ander raadt, blokkeert alleen zichzelf en
+  // sluit de echte gebruiker niet buiten. Daarnaast geldt een ruime grens per account voor alle bezoekers samen, zodat
+  // raden vanaf veel adressen tegelijk ook stopt.
+  const ACCOUNT_MAX_FAILURES = 100;
+  const loginGuard = {
+    /**
+     * Is inloggen op dit account voor deze bezoeker geblokkeerd?
+     * @param {object} req Het verzoek (bepaalt de bezoeker).
+     * @param {string} account Sleutel van het account (`<organisatie>:<gebruikersnaam>`).
+     * @param {number} [max] Aantal mislukte pogingen van deze bezoeker waarna hij geblokkeerd is.
+     * @returns {boolean} true als hij geblokkeerd is.
+     */
+    blocked: (req, account, max = 10) => lockedOut(`${account}@${clientKey(req)}`, max) || lockedOut(account, ACCOUNT_MAX_FAILURES),
+    /**
+     * Telt een mislukte poging van deze bezoeker op dit account.
+     * @param {object} req Het verzoek.
+     * @param {string} account Sleutel van het account.
+     * @returns {void}
+     */
+    fail: (req, account) => { failed(`${account}@${clientKey(req)}`); failed(account); },
+    /**
+     * Wist de tellers na een geslaagde login.
+     * @param {object} req Het verzoek.
+     * @param {string} account Sleutel van het account.
+     * @returns {void}
+     */
+    clear: (req, account) => { failures.delete(`${account}@${clientKey(req)}`); failures.delete(account); },
+  };
+  /**
+   * Ruimt de verlopen tellers van mislukte inlogpogingen op, zodat de lijst in het geheugen niet blijft groeien.
+   * @returns {void}
+   */
+  app.locals.pruneLoginFailures = () => {
+    for (const [name, entry] of failures) if (entry.reset <= Date.now()) failures.delete(name);
+  };
+
   app.get('/api/health', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json({ ok: true, version });
@@ -656,7 +695,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const orgCode = String(req.body?.tenant ?? '').trim().toLowerCase().slice(0, 60);
       let home = store.loginTenant(orgCode);
       const key = `${home?.id || orgCode}:${username}`;
-      if (lockedOut(key)) {
+      if (loginGuard.blocked(req, key)) {
         audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, home?.id);
         return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
       }
@@ -669,10 +708,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // Die poging telt mee voor de gebruikersnaam in de hoofdtenant, los van
       // de ingevulde code (anders geeft elke verzonnen code nieuwe pogingen).
       const mainKey = `${tenant.id}:${username}`;
-      if (!user && home?.id !== tenant.id && !lockedOut(mainKey)) {
+      if (!user && home?.id !== tenant.id && !loginGuard.blocked(req, mainKey)) {
         const admin = await store.authenticate(tenant.id, username, password);
-        if (admin?.platform_admin) { user = admin; home = tenant; failures.delete(mainKey); }
-        else if (!admin) failed(mainKey);
+        if (admin?.platform_admin) { user = admin; home = tenant; loginGuard.clear(req, mainKey); }
+        else if (!admin) loginGuard.fail(req, mainKey);
       }
       // Testaccounts hebben platformbreed unieke namen: met een verkeerde of
       // vergeten organisatiecode (de browser onthoudt de vorige) zoeken we in de
@@ -680,23 +719,23 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const testAccount = !user ? store.loginTenantOfTestAccount(username) : null;
       if (testAccount && testAccount.home.id !== home?.id) {
         const testKey = `${testAccount.home.id}:${username}`;
-        if (lockedOut(testKey)) {
+        if (loginGuard.blocked(req, testKey)) {
           audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, testAccount.home.id);
           return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
         }
         const testUser = await store.authenticate(testAccount.home.id, username, password);
-        if (testUser) { user = testUser; home = testAccount.home; failures.delete(testKey); }
-        else failed(testKey);
+        if (testUser) { user = testUser; home = testAccount.home; loginGuard.clear(req, testKey); }
+        else loginGuard.fail(req, testKey);
       } else if (!user && !testAccount) {
         // Onbekende naam: toch een hash uitrekenen, zodat de looptijd niet verraadt of een testaccount bestaat.
         await store.authenticate(null, username, password);
       }
       if (!user) {
-        failed(key);
+        loginGuard.fail(req, key);
         audit(req, 'inloggen_mislukt', { username, organisatie: orgCode }, null, home?.id);
         return res.status(401).json({ error: 'wrong_login', message: 'Onjuiste organisatiecode, gebruikersnaam of wachtwoord.' });
       }
-      failures.delete(`${home?.id || orgCode}:${username}`);
+      loginGuard.clear(req, `${home?.id || orgCode}:${username}`);
       // Testaccounts horen bij een testomgeving van de organisatie.
       if ((home.disabled || !organizationActive(user.tenant_id)) && !user.platform_admin) {
         audit(req, 'inloggen_geweigerd', { username, reden: 'tenant_uitgeschakeld' }, user.id, user.tenant_id);
@@ -1998,10 +2037,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   webOrders.onShipped((tenantId, order) => webOrderMail.sendShipment(tenantId, order));
   webOrders.onCancelled((tenantId, order, user) => webOrderInvoices.creditCancelled(tenantId, order, user));
   webOrders.onTracking((tenantId, order) => webOrderMail.sendShipment(tenantId, order, { onlyNewTracking: true }));
-  registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices });
+  registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
   webReturns.onRequested((tenantId, record) => webReturnMail.sendRequested(tenantId, record));
   webReturns.onDecided((tenantId, record) => webReturnMail.sendDecision(tenantId, record));
-  registerWebReturnRoutes(app, { returns: webReturns, requireJson, audit, credits: webOrderInvoices, mail: webReturnMail });
+  /**
+   * Of de bestelling van een retour online is betaald en of deze retour al via Mollie is terugbetaald (voor de knop in Beheer).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} record De retour.
+   * @returns {?{ orderId: string, refunded: ?object }} De terugbetaalstand, of null bij betalen op rekening.
+   */
+  const refundOfReturn = (tenantId, record) => {
+    const order = webOrders.get(tenantId, record.orderId);
+    if (!order || order.payment !== 'online' || !order.pay || order.pay.status !== 'betaald') return null;
+    return { orderId: order.id, refunded: (order.pay.refunds || []).find((entry) => entry.key === `retour:${record.id}`) || null };
+  };
+  registerWebReturnRoutes(app, { returns: webReturns, requireJson, audit, credits: webOrderInvoices, mail: webReturnMail, refundOf: refundOfReturn });
   // Margerapportage van de webshop: omzet, inkoop (FIFO-voorraadlagen) en marge (web-sales.js).
   registerWebSalesRoutes(app, { sales: createWebSalesStore(database, { stock: stockStore }) });
   registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
@@ -2079,16 +2129,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   app.post('/api/platform/tenants/:id/environments', requireJson, (req, res) => {
-    // Geheimen zijn versleuteld per tenant: die niet als ruwe rij kopiëren,
-    // maar opnieuw opslaan via de instellingen van de nieuwe omgeving.
+    // Een testomgeving mag de echte systemen nooit raken: geheimen (sleutels, wachtwoorden, tokens) en koppelingen
+    // met de buitenwereld (webshop, betalen, mail, boekhouding, herinneringen) gaan niet mee. De AI-sleutel van live
+    // blijft bruikbaar via aiTenantOf.
     const secrets = Object.keys(FIELDS).filter((key) => FIELDS[key].type === 'secret');
-    const out = store.createEnvironment(req.params.id, { name: req.body?.name, copyPlans: Boolean(req.body?.copyPlans), skipSettings: secrets });
+    const out = store.createEnvironment(req.params.id, { name: req.body?.name, copyPlans: Boolean(req.body?.copyPlans), skipSettings: [...new Set([...secrets, ...LIVE_ONLY_KEYS])], valueForTest });
     if (out.error) return platformError(res, out);
-    const from = settingsFor(req.params.id);
-    const view = from.view();
-    const patch = {};
-    for (const key of secrets) if (view[key].source === 'instellingen' && from.get(key)) patch[key] = from.get(key);
-    if (Object.keys(patch).length) settingsFor(out.tenant.id).update(patch, req.user.id);
     audit(req, 'testomgeving_aangemaakt', { tenantId: out.tenant.id, parentId: req.params.id, slug: out.tenant.slug, copied: out.copied }, undefined, tenant.id);
     console.log(`Testomgeving ${out.tenant.name} (${out.tenant.slug}) aangemaakt door ${req.user.display_name}, ${out.copied} plannen gekopieerd`);
     res.status(201).json({ tenant: store.tenantRow(out.tenant), copied: out.copied });
@@ -2289,10 +2335,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Eigen webshop (hoofdmap /, openbaar, zie webshop/storefront.js); uit
   // zolang de instelling `storefront` van de hoofdtenant uit staat.
   // Inloggen en registreren in de shop gebruiken dezelfde accounts (rol klant).
-  const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, lockedOut, failed, failures });
+  const accountTokens = createAccountTokens(database);
+  const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
+    vies: createVies(viesFetch ? { fetchImpl: viesFetch } : {}),
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
     // Een beheerder van de hoofdorganisatie bekijkt het concept met ?voorbeeld=1.
@@ -2423,11 +2471,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {Object<string, number>} Aantal opgeruimde regels per soort.
    */
   app.locals.maintenance = () => {
+    app.locals.pruneLoginFailures();
     const total = {};
     for (const environment of allEnvironments()) {
       const environmentSettings = settingsFor(environment.id);
       const removed = store.applyRetention(environment.id, { ipDays: environmentSettings.get('ipRetentionDays'), auditDays: environmentSettings.get('auditRetentionDays') });
       removed.aiUsage = aiUsage.prune(environment.id, environmentSettings.get('auditRetentionDays'));
+      removed.drawings = store.purgeStaleDrawings(environment.id, DRAWING_RETENTION_DAYS);
+      removed.accountTokens = accountTokens.purgeExpired(environment.id);
       for (const [kind, count] of Object.entries(removed)) total[kind] = (total[kind] || 0) + count;
     }
     return total;

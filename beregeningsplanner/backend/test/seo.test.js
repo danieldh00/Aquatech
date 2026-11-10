@@ -132,8 +132,8 @@ async function setupShop() {
   const admin = await createLogin(base, { password: PW })('baas');
   await admin.post('/app/api/stock/items', { code: 'SPR-1', name: 'Sproeier Pro', onHand: 5, salePrice: 10 });
   await admin.post('/app/api/stock/items', { code: 'BUIS-25', name: 'PE buis 25 mm', onHand: 0, salePrice: 1.5 });
-  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
-  return { anonymous: createClient(base), admin };
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);
+  return { anonymous: createClient(base), admin, base };
 }
 
 test('shop: canonical, OpenGraph en JSON-LD op startpagina en product; noindex op zoeken en account', async () => {
@@ -191,4 +191,12 @@ test('shop uit: sitemap, llms.txt en feed bestaan niet', async () => {
   const anonymous = createClient(base);
   for (const urlPath of ['/sitemap.xml', '/llms.txt', '/productfeed.xml']) assert.strictEqual((await anonymous.get(urlPath)).status, 404, urlPath);
   assert.match((await anonymous.get('/robots.txt')).text, /Disallow: \/\n/);
+});
+
+test('shop: zonder ingevuld webadres geen canonical en geen sitemap, ook niet met een vervalste Host-kop (W-07)', async () => {
+  const { admin, base } = await setupShop();
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { shopPayment: { online: false, publicUrl: '' } })).status, 200);
+  const home = await fetch(`${base}/`, { headers: { Host: 'evil.example' } });
+  assert.doesNotMatch(await home.text(), /rel="canonical"|evil\.example/);
+  assert.strictEqual((await fetch(`${base}/sitemap.xml`, { headers: { Host: 'evil.example' } })).status, 404);
 });

@@ -34,11 +34,11 @@ ${totals.byRate.filter((row) => row.rate > 0).map((row) => `<tr class="sub"><td 
  * @param {{ lines: object[], missing: string[], totals: object, ok: boolean }} cart De geprijsde winkelwagen (zie web-orders.js, priceCart).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {string} [notice] Een melding bovenaan, bijvoorbeeld dat een wijziging niet meer in de wagen paste.
- * @param {?{ added: number, notOrderable: string[] }} [fromPlan] Uitkomst van "in winkelwagen" vanuit de planner: aantal toegevoegde artikelen en de codes die niet te bestellen zijn.
+ * @param {?{ added: number, notOrderable: string[], otherUnit?: string[] }} [fromPlan] Uitkomst van "in winkelwagen" vanuit de planner: aantal toegevoegde artikelen, de codes die niet te bestellen zijn en de codes die de shop in een andere eenheid verkoopt.
  * @returns {string} De HTML-pagina.
  */
 function cartPage(cart, groups = [], notice = '', fromPlan = null) {
-  const planInfo = fromPlan ? `${fromPlan.added > 0 ? `<div class="form-info" role="status"><p>Het materiaal uit je plan staat in je winkelwagen (${fromPlan.added} ${fromPlan.added === 1 ? 'artikel' : 'artikelen'}). Controleer de aantallen en reken af.</p></div>` : ''}${fromPlan.notOrderable.length ? `<div class="form-error" role="alert"><p>Deze onderdelen uit je plan zijn niet in de webshop te bestellen: ${fromPlan.notOrderable.map(escapeHtml).join(', ')}.</p></div>` : ''}` : '';
+  const planInfo = fromPlan ? `${fromPlan.added > 0 ? `<div class="form-info" role="status"><p>Het materiaal uit je plan staat in je winkelwagen (${fromPlan.added} ${fromPlan.added === 1 ? 'artikel' : 'artikelen'}). Controleer de aantallen en reken af.</p></div>` : ''}${fromPlan.notOrderable.length ? `<div class="form-error" role="alert"><p>Deze onderdelen uit je plan zijn niet in de webshop te bestellen: ${fromPlan.notOrderable.map(escapeHtml).join(', ')}.</p></div>` : ''}${fromPlan.otherUnit && fromPlan.otherUnit.length ? `<div class="form-error" role="alert"><p>Deze onderdelen verkopen we in een andere eenheid dan je plan (bijvoorbeeld per rol in plaats van per meter) en staan daarom niet in je winkelwagen: ${fromPlan.otherUnit.map(escapeHtml).join(', ')}. Kies zelf het aantal dat je nodig hebt.</p></div>` : ''}` : '';
   if (!cart.lines.length && !cart.missing.length) {
     return layout({ root: ROOT, title: 'Winkelwagen – Aquatechshop.nl', description: 'Je winkelwagen bij Aquatechshop.nl.', groups,
       body: `<section class="cart"><h1>Winkelwagen</h1>${planInfo}<p>Je winkelwagen is leeg.</p><p><a class="button" href="${ROOT}">Verder winkelen</a></p></section>` });
@@ -102,7 +102,7 @@ function summaryData(option, summary, business) {
     'data-total': String(summary.totals.total),
     'data-total-text': formatPrice(summary.totals.total),
     'data-total-caption': totalCaption(business, summary.shifted),
-    'data-note': vatNoteText(business, summary.shifted),
+    'data-note': vatNoteText(business, summary.shifted, summary.otherNumber),
   };
   return Object.entries(attributes).map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join('');
 }
@@ -121,11 +121,13 @@ function totalCaption(business, shifted) {
  * De opmerking over de btw onder het totaal op de pagina Afrekenen.
  * @param {boolean} business true voor een zakelijke klant.
  * @param {boolean} shifted true als de btw is verlegd.
+ * @param {boolean} [otherNumber] true als verleggen alleen niet kan omdat het nummer niet het goedgekeurde nummer van het account is.
  * @returns {string} De tekst, of leeg voor een particulier.
  */
-function vatNoteText(business, shifted) {
+function vatNoteText(business, shifted, otherNumber = false) {
   if (shifted) return 'Btw verlegd: je bestelling wordt zonder btw gefactureerd (intracommunautaire levering).';
-  return business ? 'Prijzen excl. btw; de btw komt er bij het afrekenen bovenop. Heb je een btw-nummer van het land van aflevering (buiten Nederland), vul het in en de btw wordt verlegd.' : '';
+  if (business && otherNumber) return 'Dit btw-nummer is niet het goedgekeurde btw-nummer van je zakelijke account, dus de btw wordt niet verlegd. Neem contact met ons op om het btw-nummer van je account te laten wijzigen.';
+  return business ? 'Prijzen excl. btw; de btw komt er bij het afrekenen bovenop. Bij levering buiten Nederland wordt de btw verlegd met het btw-nummer van je zakelijke account.' : '';
 }
 
 /**
@@ -187,7 +189,7 @@ function checkoutPage({ cart, quote, country, method, summary = null, summaries 
   const shippingShown = summary ? (business ? summary.shipping.priceExcl : summary.shipping.price) : 0;
   const shippingRow = `<li data-ship-row${chosen ? '' : ' hidden'}><span data-ship-label>${chosen ? escapeHtml(shippingCaption(chosen.label, chosen.price > 0, business)) : ''}</span><span data-ship-price>${chosen ? (chosen.price > 0 ? escapeHtml(formatPrice(shippingShown)) : 'Gratis') : ''}</span></li>`;
   const total = summary ? summary.totals.total : cart.totals.total;
-  const noteText = vatNoteText(business, Boolean(summary && summary.shifted));
+  const noteText = vatNoteText(business, Boolean(summary && summary.shifted), Boolean(summary && summary.otherNumber));
   const vatNote = `<p class="note" data-vat-note${noteText ? '' : ' hidden'}>${escapeHtml(noteText)}</p>`;
   const body = `<section class="cart checkout"><h1>Afrekenen</h1>
 ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
@@ -199,7 +201,7 @@ ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 ${checkoutField({ name: 'name', label: 'Naam', value: value.name || '', autocomplete: 'name' })}
 ${checkoutField({ name: 'company', label: business ? 'Bedrijfsnaam' : 'Bedrijfsnaam (optioneel)', value: value.company || '', autocomplete: 'organization', required: business })}
 ${business ? checkoutField({ name: 'vatNumber', label: 'Btw-nummer (optioneel, bijvoorbeeld BE0123456789)', value: value.vatNumber || '', autocomplete: 'off', required: false }) : ''}
-${checkoutField({ name: 'email', label: 'E-mailadres', value: value.email || '', autocomplete: 'email', type: 'email' })}
+${viewer.email ? `<label class="form-field"><span>E-mailadres</span><input name="email" type="email" value="${escapeHtml(viewer.email)}" autocomplete="email" readonly><small>De bevestiging gaat naar het e-mailadres van je account; wijzigen kan in <a href="../app/profiel/">Mijn profiel</a>.</small></label>` : checkoutField({ name: 'email', label: 'E-mailadres', value: value.email || '', autocomplete: 'email', type: 'email' })}
 ${checkoutField({ name: 'phone', label: 'Telefoon (optioneel)', value: value.phone || '', autocomplete: 'tel', required: false, type: 'tel' })}
 ${shippingChoice(quote, country, method, summaries, business)}
 <h2>Afleveradres</h2>
@@ -208,6 +210,7 @@ ${checkoutField({ name: 'postcode', label: 'Postcode', value: value.postcode || 
 ${addressLookupRow()}
 ${checkoutField({ name: 'street', label: 'Straat en huisnummer', value: value.street || '', autocomplete: 'street-address', required: false })}
 ${checkoutField({ name: 'city', label: 'Woonplaats', value: value.city || '', autocomplete: 'address-level2', required: false })}
+<label class="terms-check"><input type="checkbox" name="addressManual" value="ja" data-address-manual${value.addressManual === 'ja' ? ' checked' : ''}><span>Mijn adres wordt niet gevonden (bijvoorbeeld nieuwbouw) of het opzoeken werkt nu niet: ik vul straat en woonplaats zelf in. We controleren het adres dan zelf voordat we verzenden.</span></label>
 <label class="form-field"><span>Opmerking (optioneel)</span><textarea name="note" rows="3" maxlength="500">${escapeHtml(value.note || '')}</textarea></label>
 ${paymentChoice(paymentOptions, value.paymentMethod)}
 <label class="terms-check"><input type="checkbox" name="terms" value="ja" required${value.terms === 'ja' ? ' checked' : ''}><span>Ik ga akkoord met de <a href="${ROOT}pagina/algemene-voorwaarden/" target="_blank" rel="noopener">algemene voorwaarden</a> en heb de <a href="${ROOT}pagina/privacyverklaring/" target="_blank" rel="noopener">privacyverklaring</a> gelezen. Als consument heb je <a href="${ROOT}pagina/herroepingsrecht/" target="_blank" rel="noopener">herroepingsrecht</a>.</span></label>

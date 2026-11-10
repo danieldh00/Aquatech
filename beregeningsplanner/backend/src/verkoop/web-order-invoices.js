@@ -100,9 +100,60 @@ function fromWebOrder(order, articles, settings) {
 }
 
 /**
+ * Bepaalt de regels van een creditnota bij een retour. Een artikel kan op de factuur over twee regels staan (de gewone
+ * prijs en één stuk met een centverschil, zie fromWebOrder): de teruggestuurde stuks worden in die volgorde gecrediteerd,
+ * na de stuks die bij eerdere retouren al zijn gecrediteerd. Zo is het gecrediteerde bedrag precies wat voor die stuks is gefactureerd.
+ * @param {object[]} creditLines De regels van de volledige creditering (Core.creditOf: aantallen negatief).
+ * @param {{ code: string, qty: number }[]} returned De teruggestuurde regels van deze retour.
+ * @param {Map<string, number>} [earlier] Per code (hoofdletters) het aantal dat bij eerdere retouren al is gecrediteerd.
+ * @returns {object[]} De regels voor de creditnota (aantallen negatief).
+ */
+function creditLinesFor(creditLines, returned, earlier = new Map()) {
+  const out = [];
+  for (const line of returned) {
+    const code = String(line.code || '').toUpperCase();
+    let skip = earlier.get(code) || 0;
+    let wanted = Math.abs(Number(line.qty) || 0);
+    for (const candidate of creditLines) {
+      if (wanted <= 0) break;
+      if (String(candidate.code || '').toUpperCase() !== code) continue;
+      const capacity = Math.abs(Number(candidate.qty) || 0);
+      const skipped = Math.min(skip, capacity);
+      skip -= skipped;
+      const take = Math.min(wanted, capacity - skipped);
+      if (take <= 0) continue;
+      out.push({ ...candidate, qty: -take });
+      wanted -= take;
+    }
+  }
+  return out;
+}
+
+/**
+ * Of alle artikelen van een bestelling terug zijn: deze retour samen met wat eerder is gecrediteerd.
+ * @param {{ code: string, qty: number }[]} orderLines De regels van de bestelling.
+ * @param {{ code: string, qty: number }[]} returned De teruggestuurde regels van deze retour.
+ * @param {Map<string, number>} earlier Per code wat bij eerdere retouren al is gecrediteerd.
+ * @returns {boolean} true als van elke regel het hele aantal terug is.
+ */
+function fullyReturned(orderLines, returned, earlier) {
+  const back = new Map(earlier);
+  for (const line of returned) {
+    const code = String(line.code || '').toUpperCase();
+    back.set(code, (back.get(code) || 0) + Math.abs(Number(line.qty) || 0));
+  }
+  const ordered = new Map();
+  for (const line of orderLines || []) {
+    const code = String(line.code || '').toUpperCase();
+    ordered.set(code, (ordered.get(code) || 0) + Math.abs(Number(line.qty) || 0));
+  }
+  return ordered.size > 0 && [...ordered].every(([code, qty]) => (back.get(code) || 0) >= qty);
+}
+
+/**
  * Maakt het factureren van webshopbestellingen.
  * @param {{ orders: object, invoices: object, returns?: object, debtors?: object, stock?: object, sender?: object, settingsFor: Function, log?: object }} ctx De opslagen en hulpfuncties van de server (settingsFor(tenantId) geeft de instellingen van een omgeving).
- * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditCancelled: Function, creditReturn: Function }} De functies.
+ * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditCancelled: Function, creditReturn: Function, refundAmountOf: Function }} De functies.
  */
 function createWebOrderInvoices({ orders, invoices, returns = null, debtors = null, stock = null, sender = null, settingsFor, log = console }) {
   // Facturen waarvan de mail nu onderweg is (tenant:factuur), tegen dubbel mailen bij gelijktijdige verzoeken.
@@ -323,12 +374,24 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
       let created = record.credit ? invoices.get(tenantId, record.credit.invoiceId) : null;
       if (!created) {
         const draft = Core.creditOf(original);
-        const byCode = new Map(draft.lines.map((line) => [String(line.code || '').toUpperCase(), line]));
-        draft.lines = record.lines.map((line) => {
-          const match = byCode.get(String(line.code || '').toUpperCase());
-          return match ? { ...match, qty: -Math.abs(line.qty) } : null;
-        }).filter(Boolean);
+        // Wat bij eerdere retouren van deze bestelling al is gecrediteerd telt mee voor de verdeling over de factuurregels.
+        const earlier = new Map();
+        for (const other of returns.listForOrder(tenantId, record.orderId)) {
+          if (other.id === record.id || !other.credit) continue;
+          for (const line of other.lines) {
+            const code = String(line.code || '').toUpperCase();
+            earlier.set(code, (earlier.get(code) || 0) + Math.abs(Number(line.qty) || 0));
+          }
+        }
+        const allCreditLines = draft.lines;
+        draft.lines = creditLinesFor(allCreditLines, record.lines, earlier);
         if (!draft.lines.length) return skip('De teruggestuurde artikelen staan niet op de factuur: er is geen creditnota gemaakt.');
+        // Stuurt een consument alles terug (met eerdere retouren samen), dan gaan de verzendkosten heen ook terug (herroepingsrecht, W-05).
+        const order = orders.get ? orders.get(tenantId, record.orderId) : null;
+        if (order && order.customerGroup !== 'zakelijk' && fullyReturned(order.lines, record.lines, earlier)) {
+          const shippingLine = allCreditLines.find((line) => !line.code && /^Verzendkosten/.test(String(line.description || '')));
+          if (shippingLine) draft.lines.push(shippingLine);
+        }
         draft.intro = `Creditering van factuur ${original.number} voor retour ${record.number}`;
         // Tussen het lezen van de retour en het vastleggen hieronder zit geen await en de database is synchroon: gelijktijdige aanvragen in dit proces kunnen er dus niet tussen komen, en een tweede aanvraag ziet de gekoppelde creditnota.
         created = invoices.create(tenantId, user, draft, settings, { kind: 'credit', creditOf: original.id, customerId: original.customerId, debtorId: original.debtorId });
@@ -353,7 +416,20 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     }
   }
 
-  return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped, creditCancelled, creditReturn };
+  /**
+   * Het bedrag om terug te betalen voor een retour: het totaal van de definitieve creditnota (positief).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} record De retour (met credit).
+   * @returns {?number} Het bedrag incl. btw, of null zolang er geen definitieve creditnota is.
+   */
+  function refundAmountOf(tenantId, record) {
+    if (!record || !record.credit || !record.credit.invoiceId) return null;
+    const credit = invoices.get(tenantId, record.credit.invoiceId);
+    if (!credit || credit.status === 'concept') return null;
+    return Math.abs(Number(credit.total) || 0);
+  }
+
+  return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped, creditCancelled, creditReturn, refundAmountOf };
 }
 
-module.exports = { createWebOrderInvoices, fromWebOrder, invoiceKey };
+module.exports = { createWebOrderInvoices, fromWebOrder, creditLinesFor, fullyReturned, invoiceKey };

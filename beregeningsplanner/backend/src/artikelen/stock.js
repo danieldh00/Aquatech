@@ -305,6 +305,12 @@ function sanitizeItem(raw, { partial = false } = {}) {
     if (!partial || input.packSize !== undefined) out.packSize = terms.packSize;
     if (!partial || input.orderMinQty !== undefined) out.orderMinQty = terms.orderMinQty;
   }
+  // Inhoud per verkoopeenheid in de eenheid van de planner (bijv. 50 voor een rol van 50 m); leeg = geen omrekening.
+  if (!partial || input.unitContent !== undefined) {
+    const unitContent = input.unitContent === '' || input.unitContent == null ? null : Number(input.unitContent);
+    if (unitContent !== null && (!Number.isFinite(unitContent) || unitContent <= 0 || unitContent > 100000)) return { error: 'Ongeldige inhoud per eenheid (groter dan 0, hoogstens 100.000).', field: 'unitContent' };
+    out.unitContent = unitContent === null ? null : Math.round(unitContent * 1000) / 1000;
+  }
   if (!partial || input.priceTiers !== undefined) {
     const tiers = Wholesale.sanitizeTiers(input.priceTiers);
     if (tiers.error) return { error: tiers.error, field: 'priceTiers' };
@@ -356,7 +362,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {void}
    */
   const dirty = (tenantId) => { if (dirtyHook) dirtyHook(tenantId); };
-  const SALE_COLS = 'stock_managed, sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error, order_pack_size, order_min_qty, price_tiers';
+  const SALE_COLS = 'stock_managed, sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error, order_pack_size, order_min_qty, price_tiers, unit_content';
   const VARIANT_COLS = 'parent_id, has_variants, attributes, variant_values, image_id';
   const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}, ${VARIANT_COLS}`;
   const MOVE_COLS = 'm.id, m.item_id, m.kind, m.qty, m.balance, m.work_order_id, m.work_order_number, m.source, m.note, m.user_name, m.created_at';
@@ -381,6 +387,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       salePrice: itemRow.sale_price == null ? null : Number(itemRow.sale_price), businessPrice: itemRow.business_price == null ? null : Number(itemRow.business_price), vatRate: Number(itemRow.vat_rate ?? 21), revenueGroup: itemRow.revenue_group || 'producten',
       weightGrams: itemRow.weight_grams == null ? null : Number(itemRow.weight_grams),
       packSize: Number(itemRow.order_pack_size) || 1, orderMinQty: Number(itemRow.order_min_qty) || 1, priceTiers: Wholesale.tiersOf(itemRow.price_tiers),
+      unitContent: itemRow.unit_content == null ? null : Number(itemRow.unit_content),
       stockManaged: itemRow.stock_managed === undefined ? true : Boolean(Number(itemRow.stock_managed)),
       shopSync: itemRow.shop_sync === undefined ? true : Boolean(Number(itemRow.shop_sync)),
       shop: { productId: itemRow.shop_product_id || null, pending: Boolean(Number(itemRow.shop_dirty)), syncedAt: itemRow.shop_synced_at || null, error: itemRow.shop_error || '' },
@@ -460,7 +467,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     if (family) { where += ' AND i.parent_id = ?'; args.push(family); }
     return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
         i.sale_price, i.business_price, i.vat_rate, i.revenue_group, i.weight_grams, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
-        i.order_pack_size, i.order_min_qty, i.price_tiers, i.parent_id, i.has_variants, i.attributes, i.variant_values, i.image_id,
+        i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.parent_id, i.has_variants, i.attributes, i.variant_values, i.image_id,
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders, COALESCE(f.orders, 0) AS family_orders
       FROM stock_items i
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ?${reservedFilter} GROUP BY item_id) r ON r.item_id = i.id
@@ -547,9 +554,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    *   Soort, werkorder, bron, opmerking, gebruiker, tijdstip, de inkoopprijs per eenheid (ontvangst) en bij een retour waar de afboeking vandaan kwam
    *   (standaard dezelfde bron of werkorder).
    * @returns {string} Id van de mutatie.
+   * @throws {Error} Met code item_missing als het artikel niet (meer) bestaat.
    */
   function book(tenantId, itemId, delta, { kind, workOrder = null, source = '', note = '', user = null, at = currentTimestamp(), unitCost, costBasis }) {
     const before = prepare('SELECT id, on_hand, cost_price, created_at FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemId);
+    if (!before) throw Object.assign(new Error('Het artikel van deze boeking bestaat niet meer.'), { code: 'item_missing', status: 409 });
     // Een verkoop in de webshop zelf (source 'webshop') hoeft niet terug.
     const toShop = source === 'webshop' ? 0 : 1;
     // Een ontvangst of telling betekent dat Aquatech de voorraad voortaan bijhoudt; een verkoop alleen niet.
@@ -564,12 +573,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(id, tenantId, itemId, kind, round3(delta), round3(balance), workOrder ? workOrder.id : null, workOrder ? workOrder.number : '',
         source, cleanText(note, 300), user ? user.id : null, user ? cleanText(user.display_name || user.displayName, 120) : '', at);
-    if (before) {
-      costs.record(tenantId, before, {
-        movementId: id, delta, onHandBefore: Number(before.on_hand), kind, at, unitCost,
-        costBasis: costBasis || { source, workOrderId: workOrder ? workOrder.id : null },
-      });
-    }
+    costs.record(tenantId, before, {
+      movementId: id, delta, onHandBefore: Number(before.on_hand), kind, at, unitCost,
+      costBasis: costBasis || { source, workOrderId: workOrder ? workOrder.id : null },
+    });
     return id;
   }
 
@@ -591,9 +598,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const id = crypto.randomUUID();
       const timestamp = currentTimestamp();
       prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
-           sale_price, business_price, vat_rate, revenue_group, shop_sync, weight_grams, order_pack_size, order_min_qty, price_tiers)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.businessPrice ?? null, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null, fields.packSize ?? 1, fields.orderMinQty ?? 1, JSON.stringify(fields.priceTiers || []));
+           sale_price, business_price, vat_rate, revenue_group, shop_sync, weight_grams, order_pack_size, order_min_qty, price_tiers, unit_content)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.businessPrice ?? null, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null, fields.packSize ?? 1, fields.orderMinQty ?? 1, JSON.stringify(fields.priceTiers || []), fields.unitContent ?? null);
       costs.noteFormPrice(tenantId, id, null, fields.costPrice, user);
       const start = Number(raw && raw.onHand);
       if (Number.isFinite(start) && start > 0 && start <= MAX_QTY) book(tenantId, id, start, { kind: 'ontvangst', note: 'Beginvoorraad', user });
@@ -631,12 +638,17 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const merged = {
         code: existing.code, name: existing.name, unit: existing.unit, location: existing.location, minQty: existing.min_qty, reorderQty: existing.reorder_qty, costPrice: existing.cost_price, notes: existing.notes,
         salePrice: existing.sale_price, businessPrice: existing.business_price ?? null, vatRate: Number(existing.vat_rate), revenueGroup: existing.revenue_group, shopSync: Boolean(Number(existing.shop_sync)), weightGrams: existing.weight_grams ?? null,
-        packSize: Number(existing.order_pack_size) || 1, orderMinQty: Number(existing.order_min_qty) || 1, priceTiers: Wholesale.tiersOf(existing.price_tiers), ...fields,
+        packSize: Number(existing.order_pack_size) || 1, orderMinQty: Number(existing.order_min_qty) || 1, priceTiers: Wholesale.tiersOf(existing.price_tiers), unitContent: existing.unit_content ?? null, ...fields,
       };
       const mergedTerms = Wholesale.sanitizeTerms(merged);
       if (mergedTerms.error) return { error: mergedTerms.error, field: mergedTerms.field, status: 400 };
       const archived = raw && raw.archived !== undefined ? (raw.archived ? 1 : 0) : existing.archived;
       const isParent = Boolean(Number(existing.has_variants));
+      if (archived && !existing.archived) {
+        const variantIds = isParent ? prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id).map((variant) => variant.id) : [];
+        const held = heldByOrders(tenantId, [existing.id, ...variantIds]);
+        if (held) return held;
+      }
       if (!archived && existing.archived && existing.parent_id) {
         const parentRow = prepare('SELECT archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, existing.parent_id);
         if (parentRow && parentRow.archived) return { error: 'Zet eerst het hoofdartikel terug uit het archief.', status: 409 };
@@ -646,11 +658,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const toShop = !isParent && ((merged.salePrice ?? null) !== (existing.sale_price ?? null) || merged.vatRate !== Number(existing.vat_rate) || (merged.shopSync && !Number(existing.shop_sync)));
       prepare(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, reorder_qty = ?, cost_price = ?, notes = ?, archived = ?, archived_by_parent = 0, updated_at = ?,
            sale_price = ?, business_price = ?, vat_rate = ?, revenue_group = ?, shop_sync = ?, weight_grams = ?,
-           order_pack_size = ?, order_min_qty = ?, price_tiers = ?,
+           order_pack_size = ?, order_min_qty = ?, price_tiers = ?, unit_content = ?,
            shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
          WHERE tenant_id = ? AND id = ?`)
         .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.businessPrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0, merged.weightGrams,
-          merged.packSize, mergedTerms.orderMinQty, JSON.stringify(merged.priceTiers),
+          merged.packSize, mergedTerms.orderMinQty, JSON.stringify(merged.priceTiers), merged.unitContent ?? null,
           toShop && merged.shopSync ? 1 : 0, tenantId, existing.id);
       // Een andere inkoopprijs komt als nieuwe regel in de historie (de oude blijft staan).
       costs.noteFormPrice(tenantId, existing.id, existing.cost_price, merged.costPrice, user);
@@ -692,6 +704,23 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Zoekt de open webshopbestellingen die een van deze artikelen reserveren. Zo'n artikel mag niet weg of het archief in:
+   * de bestelling kan anders niet meer worden verzonden.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string[]} itemIds Id's van de artikelen (het artikel zelf en zijn varianten).
+   * @returns {{ error: string, status: number, orders: string[] }|null} De fout met de bestelnummers, of null als niets het tegenhoudt.
+   */
+  function heldByOrders(tenantId, itemIds) {
+    if (!itemIds.length) return null;
+    const numbers = prepare(`SELECT DISTINCT o.number FROM stock_reservations r
+        JOIN web_orders o ON o.tenant_id = r.tenant_id AND r.work_order_id = 'order:' || o.id
+      WHERE r.tenant_id = ? AND r.item_id IN (${itemIds.map(() => '?').join(', ')}) ORDER BY o.number`).all(tenantId, ...itemIds).map((row) => row.number);
+    if (!numbers.length) return null;
+    const shown = numbers.slice(0, 5).join(', ');
+    return { error: `Dit artikel staat op ${numbers.length === 1 ? 'een open webshopbestelling' : 'open webshopbestellingen'} (${shown}${numbers.length > 5 ? ' en meer' : ''}). Verzend of annuleer die eerst.`, status: 409, orders: numbers };
+  }
+
+  /**
    * Verwijdert of archiveert één artikel binnen een lopende transactie: zonder
    * mutaties echt weg, anders gearchiveerd (het logboek blijft).
    * @param {string} tenantId Id van de omgeving.
@@ -716,17 +745,18 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * (gearchiveerd) bestaan zolang er een gearchiveerde variant is.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het artikel.
-   * @returns {object|null} { deleted, code } of { archived, code }, of null.
+   * @returns {object|null} { deleted, code } of { archived, code }, { error, status, orders } als een open webshopbestelling het artikel reserveert, of null.
    */
   function remove(tenantId, id) {
     return transaction(db, () => {
       const existing = findItem(tenantId, id);
       if (!existing) return null;
       let keepParent = false;
-      if (Number(existing.has_variants)) {
-        for (const variant of prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id)) {
-          if (removeRow(tenantId, variant)) keepParent = true;
-        }
+      const variants = Number(existing.has_variants) ? prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id) : [];
+      const held = heldByOrders(tenantId, [existing.id, ...variants.map((variant) => variant.id)]);
+      if (held) return held;
+      for (const variant of variants) {
+        if (removeRow(tenantId, variant)) keepParent = true;
       }
       if (keepParent) {
         prepare('UPDATE stock_items SET archived = 1, updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, existing.id);
@@ -788,8 +818,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const wanted = combinations(attributes);
       const wantedKeys = new Set(wanted.map(valuesKey));
       // Een weggehaalde waarde: die varianten gaan weg (met boekingen: archief), net als bij verwijderen.
-      for (const variant of live) {
-        if (wantedKeys.has(valuesKey(parseJson(variant.variant_values, {})))) continue;
+      const leaving = live.filter((variant) => !wantedKeys.has(valuesKey(parseJson(variant.variant_values, {}))));
+      const held = heldByOrders(tenantId, leaving.map((variant) => variant.id));
+      if (held) return { ...held, field: 'attributes' };
+      for (const variant of leaving) {
         removeRow(tenantId, variant);
         removed++;
       }
@@ -1003,6 +1035,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const log = mergeLogOf(tenantId, parent.id);
       const inLog = new Map((log ? log.snapshot : []).map((entry) => [entry.id, entry]));
       const children = prepare('SELECT id, code, archived, archived_by_parent, shop_product_id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, parent.id);
+      // Een na het samenvoegen bijgemaakte variant gaat weg; dat kan niet zolang een open webshopbestelling hem reserveert.
+      const held = heldByOrders(tenantId, [parent.id, ...(log ? children.filter((child) => !inLog.has(child.id)).map((child) => child.id) : [])]);
+      if (held) return held;
       const reopened = [];
       const wantedLinks = [...new Set([...inLog.values()].map((entry) => entry.shopProductId).filter(Boolean))];
       const taken = new Set(wantedLinks.length
@@ -2054,6 +2089,7 @@ function registerStockRoutes(app, ctx) {
   app.delete('/api/stock/items/:id', requireStock, (req, res) => {
     const out = stock.remove(tenantOf(req), req.params.id);
     if (!out) return notFound(res);
+    if (out.error) return res.status(out.status).json({ error: 'reserved_by_order', message: out.error, orders: out.orders });
     // Ook bij archiveren: een hoofdartikel kan varianten (met eigen afbeelding) echt verwijderd hebben.
     if (ctx.pruneImages) ctx.pruneImages(tenantOf(req));
     audit(req, out.deleted ? 'voorraad_artikel_verwijderd' : 'voorraad_artikel_gearchiveerd', { itemId: req.params.id, code: out.code });

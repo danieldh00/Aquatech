@@ -10,13 +10,13 @@ const path = require('path');
 const express = require('express');
 const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
-const { registerAddressRoute } = require('../platform/address-lookup');
+const { registerAddressRoute, normalizePostcode } = require('../platform/address-lookup');
 const { clientKey } = require('../beveiliging/auth');
 const { createStorefrontData } = require('./storefront-data');
 const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
 const { DEFAULT_SITE } = require('./shop-content');
 const { wantsBusiness } = require('./business-profile');
-const { loginPage, registerPage, accountPage, plannerPage } = require('./storefront-account-pages');
+const { loginPage, registerPage, accountPage, plannerPage, forgotPage, resetPage, verifyPage } = require('./storefront-account-pages');
 const { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage } = require('./storefront-order-pages');
 const { wholesalePage, orderableProducts } = require('./storefront-wholesale-pages');
 const Wholesale = require('./wholesale');
@@ -26,7 +26,7 @@ const Shipping = require('./shipping');
 const Vat = require('./vat');
 const { validPaymentId, cleanPublicUrl } = require('./mollie');
 const Seo = require('./seo');
-const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, MAX_QTY } = require('./storefront-cart');
+const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, convertPlannedQty, MAX_QTY } = require('./storefront-cart');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
 const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
@@ -47,6 +47,7 @@ const ASSETS = {
   'adres.js': { file: path.join(SHARED_DIR, 'address-lookup.js'), type: 'text/javascript; charset=utf-8' },
   'afrekenen.js': { file: path.join(__dirname, 'storefront-checkout.js'), type: 'text/javascript; charset=utf-8' },
   'groothandel.js': { file: path.join(__dirname, 'storefront-wholesale.js'), type: 'text/javascript; charset=utf-8' },
+  'account-link.js': { file: path.join(__dirname, 'storefront-account-link.js'), type: 'text/javascript; charset=utf-8' },
   'favicon.png': { file: path.join(SHARED_DIR, 'icons', 'favicon-48.png'), type: 'image/png' },
 };
 /** Afbeeldingen van de shop zelf (logo, hero, merken, pictogrammen) uit de map assets/ naast dit bestand. */
@@ -55,8 +56,8 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
   const type = IMAGE_TYPES[path.extname(name)];
   if (type) ASSETS[name] = { file: path.join(__dirname, 'assets', name), type };
 }
-/** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner). */
-const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakelijk)\/?$/;
+/** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner, wachtwoord vergeten en herstellen, e-mail bevestigen). */
+const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakelijk|account\/bevestigen|wachtwoord-vergeten|wachtwoord-herstellen|e-mail-bevestigen)\/?$/;
 /** Paden waar de winkelwagen, het groothandelsvenster, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
 const ORDER_POSTS = /^\/(winkelwagen(?:\/planner)?|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/retour(\/[^/]+\/intrekken)?)\/?$/;
 /** Pad van het aanvraagformulier voor een zakelijk account op de startpagina. */
@@ -67,10 +68,10 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
+ * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, vies?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), vies = de controle van btw-nummers bij VIES (vies.js; zonder wordt verlegd zonder die controle), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/', router) (zie server.js).
  */
-function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, onOrder = () => {}, onReturn = () => {} }) {
+function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, vies = null, onOrder = () => {}, onReturn = () => {} }) {
   const router = express.Router();
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: clientKey });
 
@@ -92,18 +93,15 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   };
 
   /**
-   * Het volledige webadres van de shop (met slash achteraan) voor canonical-links, de sitemap en de feeds:
-   * het webadres uit Beheer (Betalen), anders het adres waarmee dit verzoek binnenkwam.
-   * @param {object} req Het verzoek.
-   * @returns {string} Het webadres, leeg als de host van het verzoek niet bruikbaar is.
+   * Het volledige webadres van de shop (met slash achteraan) voor canonical-links, de sitemap, de feeds en de links in
+   * mails (wachtwoord herstellen, e-mail bevestigen): alleen het webadres uit Beheer (Betalen), nooit de Host-kop van het
+   * verzoek, want die kan een bezoeker zelf kiezen (W-07; anders een vreemd domein in canonical/sitemap of in een herstellink).
+   * @param {object} req Het verzoek (niet gebruikt; de vorm blijft gelijk voor de aanroepers).
+   * @returns {string} Het webadres, leeg zolang het niet is ingevuld (dan geen canonical, sitemap, feeds of mail-links).
    */
   const publicBaseUrl = (req) => {
     const payment = settingsFor(tenantId).get('shopPayment');
-    const configured = cleanPublicUrl(payment && payment.publicUrl);
-    if (configured) return configured;
-    const host = String(req.headers.host || '');
-    if (!/^[a-z0-9.-]+(:\d{1,5})?$/i.test(host)) return '';
-    return `${req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol}://${host}/`;
+    return cleanPublicUrl(payment && payment.publicUrl);
   };
   /**
    * De vaste pagina's van de shop (Over ons, de pagina's uit Beheer en de juridische pagina's) met slug en titel.
@@ -198,6 +196,16 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   // Een categorie toont alle producten met hun foto: de afbeeldingen krijgen een ruimere eigen limiet.
   const imageLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 1200, keyFn: (req) => `foto:${clientKey(req)}` });
   router.use((req, res, next) => (req.path.startsWith('/artikelfoto/') ? imageLimiter : limiter)(req, res, next));
+
+  // Een account met een tijdelijk wachtwoord kiest eerst een eigen wachtwoord, net als in de app: pagina's en formulieren
+  // van de shop sturen door naar het wachtwoordscherm (uitloggen en de melding van de betaaldienst blijven werken).
+  router.use((req, res, next) => {
+    const page = req.method === 'GET' && req.path.endsWith('/') && !req.path.startsWith('/adres/');
+    const form = req.method === 'POST' && !/^\/uitloggen\/?$/.test(req.path) && !req.path.startsWith('/mollie/');
+    if (!accounts || !(page || form) || !accounts.mustChangePassword(req)) return next();
+    const depth = req.path.split('/').filter(Boolean).length - (req.path.endsWith('/') ? 0 : 1);
+    return res.redirect(req.method === 'POST' ? 303 : 302, `${'../'.repeat(Math.max(depth, 0))}app/wachtwoord`);
+  });
 
   if (addressLookup) registerAddressRoute(router, '/adres/', addressLookup, createRateLimiter({ windowMs: 60 * 1000, max: 30, keyFn: (req) => `adres:${clientKey(req)}` }));
 
@@ -296,7 +304,62 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       const viewer = accounts.viewer(req);
       if (!viewer) return res.redirect(302, '../inloggen/');
       res.setHeader('Cache-Control', 'no-store');
-      sendWithGroups(req, res, 200, (groups) => accountPage(viewer, groups, { ordering: orderingOn(), profile: accounts.businessProfile(viewer), requested: req.query.aangevraagd === '1' }));
+      sendWithGroups(req, res, 200, (groups) => accountPage(viewer, groups, { ordering: orderingOn(), profile: accounts.businessProfile(viewer), requested: req.query.aangevraagd === '1',
+        verification: { available: accounts.mailReady(), sent: ['ja', 'nee'].includes(req.query.bevestiging) ? req.query.bevestiging : '' } }));
+    });
+    router.post('/account/bevestigen', async (req, res, next) => {
+      if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+      const viewer = accounts.viewer(req);
+      if (!viewer) return res.redirect(303, '../../inloggen/');
+      try {
+        const sent = !viewer.emailVerified && await accounts.sendVerification(viewer, publicBaseUrl(req));
+        res.redirect(303, `../?bevestiging=${sent ? 'ja' : 'nee'}`);
+      } catch (error) { next(error); }
+    });
+    router.get('/wachtwoord-vergeten', (req, res) => {
+      if (withSlash(req, res)) return;
+      res.setHeader('Cache-Control', 'no-store');
+      sendWithGroups(req, res, 200, (groups) => forgotPage({}, groups));
+    });
+    router.post('/wachtwoord-vergeten', form, async (req, res, next) => {
+      if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+      try {
+        req.shopBaseUrl = publicBaseUrl(req);
+        const email = String(req.body?.email ?? '').slice(0, 200);
+        const out = await accounts.forgotPassword(req, res, email);
+        res.setHeader('Cache-Control', 'no-store');
+        if (out.error) return sendWithGroups(req, res, out.status, (groups) => forgotPage({ error: out.error, email }, groups));
+        sendWithGroups(req, res, 200, (groups) => forgotPage({ sent: true }, groups));
+      } catch (error) { next(error); }
+    });
+    router.get('/wachtwoord-herstellen', (req, res) => {
+      if (withSlash(req, res)) return;
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      sendWithGroups(req, res, 200, (groups) => resetPage({}, groups));
+    });
+    router.post('/wachtwoord-herstellen', form, async (req, res, next) => {
+      if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+      try {
+        const out = await accounts.resetPassword(req, res, req.body || {});
+        res.setHeader('Cache-Control', 'no-store');
+        if (out.error) return sendWithGroups(req, res, out.status, (groups) => resetPage({ error: out.error, expired: Boolean(out.expired) }, groups));
+        // Alle sessies van het account zijn vervallen (nieuw wachtwoord): opnieuw inloggen.
+        sendWithGroups(req, res, 200, (groups) => resetPage({ done: true }, groups));
+      } catch (error) { next(error); }
+    });
+    router.get('/e-mail-bevestigen', (req, res) => {
+      if (withSlash(req, res)) return;
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      sendWithGroups(req, res, 200, (groups) => verifyPage({}, groups));
+    });
+    router.post('/e-mail-bevestigen', form, (req, res) => {
+      if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+      const out = accounts.verifyEmail(req, res, req.body?.token);
+      res.setHeader('Cache-Control', 'no-store');
+      if (out.error) return sendWithGroups(req, res, out.status, (groups) => verifyPage({ error: out.error }, groups));
+      sendWithGroups(req, res, 200, (groups) => verifyPage({ done: true }, groups));
     });
     router.post('/account/zakelijk', form, (req, res) => {
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
@@ -348,6 +411,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     router.post('/registreren', form, async (req, res, next) => {
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
       try {
+        req.shopBaseUrl = publicBaseUrl(req);
         const out = await accounts.register(req, res, req.body || {});
         if (out.skipped) return res.redirect(303, '../');
         const next = nextOf(req.body?.volgende) === 'afrekenen' ? 'afrekenen' : '';
@@ -366,6 +430,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
       if (!plannerOn()) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../', groups));
       try {
+        req.shopBaseUrl = publicBaseUrl(req);
         const out = await accounts.register(req, res, { ...(req.body || {}), password2: undefined });
         if (out.skipped) return res.redirect(303, '../');
         if (out.error) return sendWithGroups(req, res, out.status, (groups) => plannerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200) }, groups));
@@ -379,18 +444,27 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     });
 
     if (orders) {
-      const orderLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `order:${clientKey(req)}` });
+      // Pogingen per bezoeker ruim (een adres corrigeren telt mee, meerdere klanten achter één bedrijfsadres), geplaatste bestellingen per account krap (W-12).
+      const attemptLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 40, keyFn: (req) => `bestelpoging:${clientKey(req)}` });
+      /** Hoogstens zoveel geplaatste bestellingen per account per uur. */
+      const ORDERS_PER_HOUR = 10;
       /**
-       * Past de bestellimiet toe zonder JSON-antwoord.
+       * Past de limiet op bestelpogingen toe zonder JSON-antwoord.
        * @param {object} req Het verzoek.
        * @param {object} res Het antwoord.
        * @returns {boolean} true als het verzoek geweigerd moet worden.
        */
-      const orderLimited = (req, res) => {
+      const attemptsLimited = (req, res) => {
         let refused = false;
-        orderLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
+        attemptLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
         return refused;
       };
+      /**
+       * Of een account dit uur al het maximum aantal bestellingen heeft geplaatst (geteld in de database, dus ook na een herstart).
+       * @param {object} viewer Het ingelogde account.
+       * @returns {boolean} true als er geen bestelling meer bij mag.
+       */
+      const ordersLimited = (viewer) => orders.countSince(tenantId, viewer.id, new Date(Date.now() - 60 * 60 * 1000).toISOString()) >= ORDERS_PER_HOUR;
       /**
        * Antwoord als bestellen uit staat: de pagina bestaat dan niet.
        * @param {object} req Het verzoek.
@@ -427,7 +501,13 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (!orderingOn()) return orderingOff(req, res);
         res.setHeader('Cache-Control', 'no-store');
         const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
-        const fromPlan = req.query.plan === undefined ? null : { added: Math.max(0, Math.floor(Number(req.query.plan)) || 0), notOrderable: String(req.query.niet || '').split(',').map((code) => code.replace(/[^A-Za-z0-9._\- ]/g, '').trim().slice(0, 60)).filter(Boolean).slice(0, 60) };
+        /**
+         * Leest een lijst artikelcodes uit de zoekopdracht (alleen veilige tekens, hoogstens 60).
+         * @param {*} value De waarde uit de zoekopdracht.
+         * @returns {string[]} De codes.
+         */
+        const codesOf = (value) => String(value || '').split(',').map((code) => code.replace(/[^A-Za-z0-9._\- ]/g, '').trim().slice(0, 60)).filter(Boolean).slice(0, 60);
+        const fromPlan = req.query.plan === undefined ? null : { added: Math.max(0, Math.floor(Number(req.query.plan)) || 0), notOrderable: codesOf(req.query.niet), otherUnit: codesOf(req.query.eenheid) };
         sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups, req.query.vol === '1' ? 'Je winkelwagen is vol: deze wijziging paste er niet meer bij. Plaats eerst deze bestelling en bestel de rest daarna.' : '', fromPlan));
       });
       // Het materiaal uit de stuklijst van de planner in één keer in de winkelwagen (formulier uit de planner, velden q:<code>).
@@ -438,15 +518,19 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (!wanted.length) return res.redirect(303, '../');
         const priced = orders.priceCart(tenantId, wanted, priceOptionsOf(req));
         const viewer = accounts.viewer(req);
+        const plannedByCode = new Map(wanted.map((line) => [line.code, line]));
+        // De eenheid van het plan (meestal meter of stuk) moet passen bij die van het artikel: anders omrekenen met de inhoud per eenheid, of weglaten (W-10).
+        const converted = priced.lines.map((line) => ({ line, qty: convertPlannedQty(plannedByCode.get(String(line.code).toUpperCase()), line) }));
+        const otherUnit = converted.filter((entry) => entry.qty === null).map((entry) => String(entry.line.code).toUpperCase());
         // Een groothandelsklant bestelt per verpakkingseenheid en vanaf een minimum: die aantallen kloppen dan meteen.
-        const rounded = priced.lines.map((line) => ({ code: String(line.code).toUpperCase(), qty: viewer && viewer.wholesale ? Wholesale.roundUpQty(line.qty, { packSize: line.packSize, orderMinQty: line.minimum }) : line.qty }));
+        const rounded = converted.filter((entry) => entry.qty !== null).map(({ line, qty }) => ({ code: String(line.code).toUpperCase(), qty: viewer && viewer.wholesale ? Wholesale.roundUpQty(qty, { packSize: line.packSize, orderMinQty: line.minimum }) : qty }));
         // Een afgerond aantal boven het maximum per regel kan niet besteld worden: die regel blijft weg en een bestaande regel in de wagen ongewijzigd.
         const known = rounded.filter((line) => line.qty <= MAX_QTY);
         const tooMany = rounded.filter((line) => line.qty > MAX_QTY).map((line) => line.code);
         const merged = setCartLines(readCart(req), known);
         writeCart(req, res, merged.lines);
         const notOrderable = [...priced.missing, ...tooMany, ...merged.skipped];
-        res.redirect(303, `../?plan=${known.length - merged.skipped.length}${notOrderable.length ? `&niet=${encodeURIComponent(notOrderable.join(','))}` : ''}`);
+        res.redirect(303, `../?plan=${known.length - merged.skipped.length}${notOrderable.length ? `&niet=${encodeURIComponent(notOrderable.join(','))}` : ''}${otherUnit.length ? `&eenheid=${encodeURIComponent(otherUnit.join(','))}` : ''}`);
       });
       /**
        * Controleert dat de bezoeker een groothandelsklant is bij een bestelling; anders is de pagina er niet (of moet hij eerst inloggen).
@@ -584,9 +668,10 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
        * Bepaalt het land en de verzendmethode die bij het afrekenen getoond worden.
        * @param {object} cart De geprijsde winkelwagen.
        * @param {object} input Het gekozen land en de gekozen methode (query of formulier).
+       * @param {object|null} viewer De ingelogde klant (withBusinessProfile): alleen het goedgekeurde btw-nummer van zijn account verlegt de btw.
        * @returns {{ quote: object, country: string, method: string, summary: ?object, summaries: object }} De opties, het land (een bezorgbaar land), de methode (de gekozen, anders de eerste beschikbare), de totalen bij die methode en de totalen per beschikbare methode.
        */
-      const checkoutChoice = (cart, input) => {
+      const checkoutChoice = (cart, input, viewer) => {
         const config = shippingConfig();
         const countries = Shipping.countriesOf(config);
         const asked = String(input.country || input.land || '').toUpperCase();
@@ -599,7 +684,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const group = cart.pricesExcl ? 'zakelijk' : '';
         const vatNumber = Vat.normalizeVatNumber(input.vatNumber);
         const summaries = {};
-        for (const option of available) summaries[option.method] = orders.orderTotals(cart, option, { group, country, vatNumber });
+        const approvedVatNumber = viewer && viewer.profile ? viewer.profile.vatNumber : '';
+        for (const option of available) summaries[option.method] = orders.orderTotals(cart, option, { group, country, vatNumber, approvedVatNumber });
         return { quote, country, method, summary: chosen ? summaries[method] : null, summaries };
       };
 
@@ -618,7 +704,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (!cart.lines.length || !cart.ok) return res.redirect(302, '../winkelwagen/');
         const viewer = withBusinessProfile(accounts.viewer(req));
         if (!viewer) return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups));
-        sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), ...checkoutChoice(cart, { vatNumber: viewer.profile ? viewer.profile.vatNumber : '', ...(req.query || {}) }) }, groups));
+        sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), ...checkoutChoice(cart, { vatNumber: viewer.profile ? viewer.profile.vatNumber : '', ...(req.query || {}) }, viewer) }, groups));
       });
       router.post('/afrekenen', form, async (req, res, next) => {
         if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
@@ -631,13 +717,13 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           res.setHeader('Cache-Control', 'no-store');
           const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
           if (!cart.lines.length || !cart.ok) return res.redirect(303, '../winkelwagen/');
-          return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), values: body, ...checkoutChoice(cart, body) }, groups));
+          return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), values: body, ...checkoutChoice(cart, body, viewer) }, groups));
         }
         // Hoort het getoonde totaal niet bij de actuele invoer (btw-nummer, land, methode) of ontbreekt het? Dan eerst opnieuw tonen, zonder te bestellen.
         {
           const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
           if (cart.lines.length && cart.ok) {
-            const choice = checkoutChoice(cart, body);
+            const choice = checkoutChoice(cart, body, viewer);
             const shown = String(body.expectedTotal === undefined ? '' : body.expectedTotal).trim();
             const current = choice.summary ? choice.summary.totals.total : null;
             if (current !== null && (!/^\d+(\.\d+)?$/.test(shown) || Math.abs(Number(shown) - current) > 0.005)) {
@@ -646,24 +732,46 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             }
           }
         }
-        if (orderLimited(req, res)) return res.status(429).type('text').send('Te veel bestellingen vanaf dit adres. Probeer het later opnieuw.');
+        if (attemptsLimited(req, res)) return res.status(429).type('text').send('Te veel bestelpogingen vanaf dit adres. Probeer het later opnieuw.');
+        if (ordersLimited(viewer)) return res.status(429).type('text').send('Je hebt het afgelopen uur al veel bestellingen geplaatst. Probeer het later opnieuw of neem contact met ons op.');
         try {
-          // Een Nederlands bezorgadres komt altijd uit postcode + huisnummer (PDOK): straat en woonplaats uit de browser worden niet vertrouwd.
+          // Een Nederlands bezorgadres komt uit postcode + huisnummer (PDOK): straat en woonplaats uit de browser worden niet vertrouwd,
+          // behalve als de klant aangeeft dat zijn adres niet gevonden wordt (dan 'niet gecontroleerd').
           let placed = body;
+          let addressUnverified = false;
           if (addressGuard && String(body.shippingMethod || '') === 'dpd' && String(body.country || 'NL').toUpperCase() === 'NL') {
             const resolved = await addressGuard.resolveParts({ street: String(body.street || '').trim(), postcode: String(body.postcode || '').trim() });
-            if (!resolved.ok) {
+            // Niet gevonden of PDOK onbereikbaar, en de klant vult het adres bewust zelf in: bestellen mag, met de markering 'niet gecontroleerd' voor de medewerker (W-11).
+            const manual = !resolved.ok && body.addressManual === 'ja' && String(body.street || '').trim().length >= 3 && String(body.city || '').trim().length >= 2 && Boolean(normalizePostcode(body.postcode));
+            if (manual) addressUnverified = true;
+            else if (!resolved.ok) {
               res.setHeader('Cache-Control', 'no-store');
               const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
-              return sendWithGroups(req, res, resolved.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: resolved.message, values: body, ...checkoutChoice(cart, body) }, groups));
-            }
-            placed = { ...body, street: resolved.street, postcode: resolved.postcode, city: resolved.city };
+              return sendWithGroups(req, res, resolved.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: `${resolved.message} Wordt je adres niet gevonden (bijvoorbeeld nieuwbouw)? Vink dan onder het adres aan dat je het zelf invult.`, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
+            } else placed = { ...body, street: resolved.street, postcode: resolved.postcode, city: resolved.city };
           }
-          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer) }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer));
+          // De bevestiging gaat naar het e-mailadres van het account, niet naar een vrij ingevuld adres (W-08).
+          if (viewer.email) placed = { ...placed, email: viewer.email };
+          // Btw verleggen (W-01): alleen met het goedgekeurde nummer van het account, en VIES moet het op dit moment niet ongeldig noemen.
+          const approvedVatNumber = viewer.profile ? viewer.profile.vatNumber : '';
+          let viesResult = null;
+          {
+            const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
+            const choice = cart.lines.length ? checkoutChoice(cart, body, viewer) : null;
+            if (choice && choice.summary && choice.summary.shifted && vies) {
+              const requester = Vat.normalizeVatNumber((settingsFor(tenantId).get('quoteProfile') || {}).vatNumber);
+              viesResult = await vies.check(approvedVatNumber, Vat.validVatNumber(requester) ? requester : '');
+              if (viesResult.status === 'ongeldig') {
+                res.setHeader('Cache-Control', 'no-store');
+                return sendWithGroups(req, res, 409, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: `Het btw-nummer ${approvedVatNumber} is volgens VIES (de btw-database van de EU) op dit moment niet geldig, dus de btw kan niet worden verlegd. Neem contact met ons op, of laat het btw-nummer leeg om met btw te bestellen.`, values: body, ...choice }, groups));
+              }
+            }
+          }
+          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer), vatNumber: approvedVatNumber, vies: viesResult, addressUnverified }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer));
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
             const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
-            return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: out.error, values: body, ...checkoutChoice(cart, body) }, groups));
+            return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: out.error, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
           }
           writeCart(req, res, []);
           // De bestelling staat al vast: een fout in audit of mail mag de klant niet naar een foutpagina sturen, en de ene stap niet de andere overslaan.

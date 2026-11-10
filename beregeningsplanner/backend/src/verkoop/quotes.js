@@ -9,6 +9,7 @@ const { createVault } = require('../beveiliging/vault');
 const { createMailer, validEmail } = require('../platform/mailer');
 const { preferencesOf } = require('../platform/store');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
+const { linkExpired } = require('../platform/public-links');
 
 /**
  * Kopie (bcc) van een verstuurde mail naar de afzender, als die dat in Mijn
@@ -484,13 +485,17 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   /**
    * Zoekt een offerte op het token van de openbare link (over alle tenants;
    * het token is het enige geheim). De volledige rij, zodat publicView en
-   * decide niet opnieuw hoeven te lezen.
+   * decide niet opnieuw hoeven te lezen. Een verlopen link telt als onbekend.
    * @param {string} token Het token.
    * @returns {object|null} De rij, of null.
    */
   function byToken(token) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
-    return prepare(`${FULL_SQL} WHERE q.share_hash = ? AND q.deleted_at IS NULL`).get(sha256(token)) || null;
+    const quoteRow = prepare(`${FULL_SQL} WHERE q.share_hash = ? AND q.deleted_at IS NULL`).get(sha256(token)) || null;
+    if (!quoteRow) return null;
+    // Verlopen link (G-02): 180 dagen na delen, of 90 dagen na de geldigheidsdatum als die later ligt.
+    const data = parseJson(quoteRow.data) || {};
+    return linkExpired({ sharedAt: quoteRow.shared_at, referenceDate: data.validUntil }) ? null : quoteRow;
   }
 
   /**

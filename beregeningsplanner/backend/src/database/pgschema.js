@@ -860,6 +860,27 @@ const PG_MIGRATIONS = [
     WHERE shop_product_id IS NOT NULL AND has_variants = 0 AND on_hand = 0 AND shop_stock_seen IS NULL
       AND NOT EXISTS (SELECT 1 FROM stock_movements m WHERE m.tenant_id = stock_items.tenant_id AND m.item_id = stock_items.id);
   `,
+  // 48: wachtwoord vergeten en e-mailadres bevestigen (zie db.js).
+  `
+  CREATE TABLE account_tokens (
+    id          ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id   ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    user_id     ${TEXT_TYPE} NOT NULL ${references('users(id)')},
+    purpose     ${TEXT_TYPE} NOT NULL CHECK (purpose IN ('wachtwoord', 'e-mail')),
+    token_hash  ${TEXT_TYPE} NOT NULL,
+    email       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    expires_at  ${TEXT_TYPE} NOT NULL,
+    used_at     ${TEXT_TYPE},
+    created_at  ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX account_tokens_hash ON account_tokens (token_hash);
+  CREATE INDEX account_tokens_user ON account_tokens (tenant_id, user_id, purpose, created_at);
+  ALTER TABLE users ADD COLUMN email_verified_at ${TEXT_TYPE};
+  `,
+  // 49: inhoud per verkoopeenheid voor de planner (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN unit_content DOUBLE PRECISION;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

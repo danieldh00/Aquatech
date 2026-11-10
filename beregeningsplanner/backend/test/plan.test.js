@@ -163,7 +163,7 @@ test('leren: kleurtellingen bij een AI-herkenning, opgeteld per omgeving, invoer
 
 test('met toegangscode: analyse vereist inloggen', async () => {
   const analyzer = { available: true, analyze: async () => { throw new Error('mag niet aangeroepen worden'); } };
-  const { server, base } = await start({ analyzer, accessCode: 'geheim' });
+  const { server, base } = await start({ analyzer, accessCode: 'Geheim-Code-2026' });
   try {
     assert.strictEqual((await post(base, { image: PNG, width: 10, height: 10 })).status, 401);
     assert.strictEqual((await fetch(`${base}/app/api/plan/status`)).status, 401);

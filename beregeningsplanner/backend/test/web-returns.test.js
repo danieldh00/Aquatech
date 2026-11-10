@@ -65,7 +65,7 @@ test('retour van aanvraag tot creditnota: mails, voorraad terug en creditregel',
   assert.strictEqual(asked.status, 303);
   assert.strictEqual(asked.location, './');
   const [confirmation] = await until(() => { const found = mailsWith(world.sent, /We hebben je retour .* ontvangen/); return found.length ? found : null; });
-  assert.strictEqual(confirmation.to, 'els@bakker.example');
+  assert.strictEqual(confirmation.to, 'k1@voorbeeld.nl', 'naar het e-mailadres van het account (W-08)');
   assert.match(confirmation.text, /1 × Sproeier \(BUS\)/);
   assert.match((await customer.client.get(`/bestelling/${id}/`)).text, /Aangevraagd/);
   assert.match((await requestReturn(world, id, { 'qty:BUS': '2', reason: 'defect' })).text, /kunnen nog 1 terug/, 'wat al in een retour zit telt mee');
@@ -226,7 +226,7 @@ test('mislukt definitief maken van de creditnota: een nieuwe poging maakt het co
     },
   };
   const record = { id: 'r1', orderId: 'o1', number: 'WEB-1-R1', lines: [{ code: 'BUS', qty: 1 }], credit: null, creditError: '' };
-  const returns = { get: () => ({ ...record }), updateData: (tenantId, id, patch) => Object.assign(record, patch) };
+  const returns = { get: () => ({ ...record }), listForOrder: () => [{ ...record }], updateData: (tenantId, id, patch) => Object.assign(record, patch) };
   const credits = createWebOrderInvoices({ orders: {}, invoices, returns, settingsFor: () => ({ get: () => undefined }) });
   const failed = await credits.creditReturn('t', 'r1', null);
   assert.match(failed.error, /Boekhouding even niet bereikbaar/);

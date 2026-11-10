@@ -10,7 +10,7 @@ test('Verzonden met volgcode: de klant krijgt een mail met de DPD-link', async (
   const id = await order(world, world.shoppers[0]);
   assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/status`, { status: 'verzonden', trackingCode: 'abc123456789' })).status, 200);
   const [mail] = await until(() => { const found = mailsWith(world.sent, /onderweg/); return found.length ? found : null; });
-  assert.strictEqual(mail.to, 'els@bakker.example');
+  assert.strictEqual(mail.to, 'k1@voorbeeld.nl', 'naar het e-mailadres van het account (W-08)');
   assert.match(mail.subject, /volgcode abc123456789/);
   assert.match(mail.text, /tracking\.dpd\.de\/status\/nl_NL\/parcel\/abc123456789/);
   const detail = (await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.order;

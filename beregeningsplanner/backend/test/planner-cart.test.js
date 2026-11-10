@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { setCartLines, plannedLinesFrom } = require('../src/webshop/storefront-cart');
+const { setCartLines, plannedLinesFrom, convertPlannedQty } = require('../src/webshop/storefront-cart');
 const { createLogin, createClient, listen, postForm } = require('./helpers/http-client');
 
 const SECRET = 'f'.repeat(64);
@@ -47,10 +47,21 @@ test('setCartLines: zet het aantal uit het plan (niet erbij) en meldt wat niet p
 });
 
 test('plannedLinesFrom: kommagetallen naar boven, ongeldige regels vallen af', () => {
-  assert.deepStrictEqual(plannedLinesFrom({ 'q:pe-32': '12.2', 'q:ROT-1': '3', 'q:NUL': '0', 'q:KAPOT': 'x', 'q:': '4', overig: '9', 'q:PE-32 ': '1' }),
-    [{ code: 'PE-32', qty: 13 }, { code: 'ROT-1', qty: 3 }]);
+  assert.deepStrictEqual(plannedLinesFrom({ 'q:pe-32': '12.2', 'u:pe-32': 'm', 'q:ROT-1': '3', 'q:NUL': '0', 'q:KAPOT': 'x', 'q:': '4', overig: '9', 'q:PE-32 ': '1' }),
+    [{ code: 'PE-32', qty: 13, planQty: 12.2, unit: 'm' }, { code: 'ROT-1', qty: 3, planQty: 3, unit: '' }]);
   assert.deepStrictEqual(plannedLinesFrom(null), []);
   assert.strictEqual(plannedLinesFrom({ 'q:A': '99999' })[0].qty, 9999);
+});
+
+test('convertPlannedQty: zelfde eenheid blijft, andere eenheid met inhoud wordt omgerekend, anders niet (W-10)', () => {
+  const planned = { qty: 38, planQty: 37.4, unit: 'm' };
+  assert.strictEqual(convertPlannedQty(planned, { unit: 'Meter' }), 38, 'meter = m');
+  assert.strictEqual(convertPlannedQty(planned, { unit: 'rol', unitContent: 50 }), 1, '37,4 m = 1 rol van 50 m');
+  assert.strictEqual(convertPlannedQty({ qty: 100, planQty: 100, unit: 'm' }, { unit: 'rol', unitContent: 50 }), 2, 'precies 2 rollen');
+  assert.strictEqual(convertPlannedQty({ qty: 101, planQty: 100.5, unit: 'm' }, { unit: 'rol', unitContent: 50 }), 3);
+  assert.strictEqual(convertPlannedQty(planned, { unit: 'rol' }), null, 'geen inhoud: niet om te rekenen');
+  assert.strictEqual(convertPlannedQty({ qty: 4, planQty: 4, unit: 'stuks' }, { unit: 'st' }), 4, 'stuks = st');
+  assert.strictEqual(convertPlannedQty({ qty: 4, planQty: 4, unit: '' }, { unit: 'rol' }), 4, 'zonder eenheid uit het plan blijft het aantal');
 });
 
 test('api/config: de webshop-link alleen bij de hoofdtenant met een webshop die aan staat', async () => {
@@ -114,4 +125,22 @@ test('planner → winkelwagen: een groothandelsklant krijgt aantallen die bij de
   const over = await postForm(base, client, '/winkelwagen/planner/', { 'q:PAK': '9999' });
   assert.strictEqual(over.location, '../?plan=0&niet=PAK');
   assert.match((await client.get('/winkelwagen/')).text, /name="qty" value="75"/);
+});
+
+test('planner → winkelwagen: artikel per rol wordt omgerekend of gemeld als andere eenheid (W-10)', async () => {
+  const { base, admin } = await setup();
+  await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true });
+  const roll = (await admin.post('/app/api/stock/items', { code: 'SLANG-50', name: 'Druppelslang rol 50 m', unit: 'rol', onHand: 20, salePrice: 60, unitContent: 50 })).body;
+  await admin.post('/app/api/stock/items', { code: 'SLANG-X', name: 'Slang zonder inhoud', unit: 'rol', onHand: 20, salePrice: 40 });
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${roll.id}`)).body.unitContent, 50, 'inhoud per eenheid opgeslagen');
+  const client = createClient(base);
+  const sent = await postForm(base, client, '/winkelwagen/planner/', { 'q:SLANG-50': '73.2', 'u:SLANG-50': 'm', 'q:SLANG-X': '37', 'u:SLANG-X': 'm', 'q:PE-32': '12', 'u:PE-32': 'm' });
+  assert.strictEqual(sent.status, 303);
+  assert.strictEqual(sent.location, '../?plan=2&eenheid=SLANG-X');
+  const cart = (await client.get('/winkelwagen/?plan=2&eenheid=SLANG-X')).text;
+  assert.match(cart, /in een andere eenheid dan je plan[^<]*SLANG-X/);
+  assert.match(cart, /name="code" value="SLANG-50"[\s\S]*?name="qty" value="2"|name="qty" value="2"[\s\S]*?SLANG-50/, '73,2 m = 2 rollen');
+  assert.doesNotMatch(cart, /name="code" value="SLANG-X"/);
+  const bad = await admin.post('/app/api/stock/items', { code: 'FOUT', name: 'Fout', unitContent: -1 });
+  assert.strictEqual(bad.status, 400);
 });

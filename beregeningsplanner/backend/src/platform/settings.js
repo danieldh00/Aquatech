@@ -24,12 +24,14 @@ const AiModels = require(path.join(FRONTEND_DIR, 'shared', 'ai-models.js'));
 // en staan versleuteld in de database (AES-256-GCM, zie vault.js).
 
 const FIELDS = {
-  accessCode: { type: 'secret', env: 'ACCESS_CODE', default: '', min: 4 },
+  // De toegangscode geeft zonder persoonlijk account volledige beheerrechten: daarom minstens 12 tekens.
+  accessCode: { type: 'secret', env: 'ACCESS_CODE', default: '', min: 12 },
   // Zonder toegangscode mogen bezoekers zonder inloggen als gast werken.
   guestAccess: { type: 'bool', env: 'GUEST_ACCESS', default: false },
   // Bezoekers zonder account mogen een tekening maken en ter controle
-  // indienen (knop op de inlogpagina, zie drawings.js).
-  drawingRequests: { type: 'bool', default: true },
+  // indienen (knop op de inlogpagina, zie drawings.js). Standaard uit: een
+  // organisatie zet het zelf aan (T-03, openbaar formulier dat opslag kost).
+  drawingRequests: { type: 'bool', default: false },
   // Eigen webshop (webshop/storefront.js): openbare pagina's op /winkel/ met
   // de artikelen uit de voorraad. Standaard uit.
   storefront: { type: 'bool', default: false },
@@ -42,7 +44,7 @@ const FIELDS = {
   shopShipping: { type: 'object', default: {}, sanitize: sanitizeShipping },
   // Betalen in de webshop (webshop/mollie.js): online betalen via Mollie, op rekening en de bewaartijd van onbetaalde bestellingen; de API-sleutel staat apart en versleuteld.
   shopPayment: { type: 'object', default: {}, sanitize: sanitizePayment },
-  mollieApiKey: { type: 'secret', default: '', min: 10, max: 200, hint: true },
+  mollieApiKey: { type: 'secret', default: '', min: 10, max: 200, hint: true, liveOnly: true },
   anthropicApiKey: { type: 'secret', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
   aiEnabled: { type: 'bool', default: true },
   aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },
@@ -68,13 +70,13 @@ const FIELDS = {
   quoteProfile: { type: 'object', default: {}, sanitize: sanitizeProfile },
   // Eigen SMTP-server voor offertes en bevestigingen (mailer.js); het
   // wachtwoord staat apart en versleuteld.
-  mailServer: { type: 'object', default: {}, sanitize: sanitizeMail },
-  mailPassword: { type: 'secret', default: '', min: 1 },
+  mailServer: { type: 'object', default: {}, sanitize: sanitizeMail, liveOnly: true },
+  mailPassword: { type: 'secret', default: '', min: 1, liveOnly: true },
   // Webshopkoppeling (shop.js): webadres, ophaalwijze, btw en handmatige
   // koppeling; de sleutels van de WooCommerce REST API staan apart en versleuteld.
-  shopSource: { type: 'object', default: {}, sanitize: sanitizeShop },
-  shopConsumerKey: { type: 'secret', default: '', min: 10, hint: true },
-  shopConsumerSecret: { type: 'secret', default: '', min: 10 },
+  shopSource: { type: 'object', default: {}, sanitize: sanitizeShop, liveOnly: true },
+  shopConsumerKey: { type: 'secret', default: '', min: 10, hint: true, liveOnly: true },
+  shopConsumerSecret: { type: 'secret', default: '', min: 10, liveOnly: true },
   // Opdrachten uitbesteden aan andere organisaties op het platform
   // (outsourcing.js): versturen en ontvangen staan standaard uit en zet de
   // beheerder zelf aan; region = werkgebied dat andere organisaties zien.
@@ -85,7 +87,7 @@ const FIELDS = {
   invoicing: { type: 'object', default: {}, sanitize: sanitizeInvoicing },
   // Seizoensherinneringen voor klanten (season-reminders.js): aan/uit, adres
   // van het klantportaal voor de knop in de mail, en de herinneringen.
-  seasonReminders: { type: 'object', default: {}, sanitize: sanitizeSeasonReminders },
+  seasonReminders: { type: 'object', default: {}, sanitize: sanitizeSeasonReminders, liveOnly: true },
   // Kleurthema (shared/theme.js): alleen door een hoofdbeheerder te kiezen via
   // Hoofdbeheer (platform: niet via Beheer > Instellingen). In de hoofdtenant
   // geldt het voor alle organisaties, in een live-tenant als eigen thema.
@@ -95,11 +97,36 @@ const FIELDS = {
   // staan in de hoofdtenant (Hoofdbeheer). Per omgeving: de keuzes in
   // Facturen → Visma en het refresh token van de verbonden administratie;
   // internal = alleen via /api/visma, niet via Beheer > Instellingen.
-  vismaApp: { type: 'object', default: {}, sanitize: sanitizeVismaApp, platform: true },
+  vismaApp: { type: 'object', default: {}, sanitize: sanitizeVismaApp, platform: true, liveOnly: true },
   vismaClientSecret: { type: 'secret', default: '', min: 8, platform: true },
-  visma: { type: 'object', default: {}, sanitize: sanitizeVisma, internal: true },
-  vismaRefreshToken: { type: 'secret', default: '', min: 1, max: 4000, internal: true },
+  visma: { type: 'object', default: {}, sanitize: sanitizeVisma, internal: true, liveOnly: true },
+  vismaRefreshToken: { type: 'secret', default: '', min: 1, max: 4000, internal: true, liveOnly: true },
 };
+
+/**
+ * Instellingen die bij een nieuwe testomgeving niet van live worden overgenomen: koppelingen met de buitenwereld
+ * (webshop, betalen, mail, boekhouding, herinneringen aan klanten). Een testomgeving mag de echte systemen nooit raken;
+ * wie in test een koppeling wil proberen, stelt die daar zelf in.
+ */
+const LIVE_ONLY_KEYS = Object.keys(FIELDS).filter((key) => FIELDS[key].liveOnly);
+
+/**
+ * Maakt een opgeslagen instelling geschikt voor een nieuwe testomgeving: bij facturen gaan het automatisch
+ * versturen en het inlezen van webshopbestellingen uit; de rest blijft zoals het is.
+ * @param {string} key Naam van de instelling.
+ * @param {string} value De opgeslagen waarde (tekst uit de tabel settings).
+ * @returns {string} De waarde voor de testomgeving.
+ */
+function valueForTest(key, value) {
+  if (key !== 'invoicing') return value;
+  try {
+    const invoicing = JSON.parse(value);
+    if (!invoicing || typeof invoicing !== 'object') return value;
+    return JSON.stringify({ ...invoicing, autoSend: false, shopOrders: { ...(invoicing.shopOrders || {}), enabled: false } });
+  } catch {
+    return value;
+  }
+}
 
 class SettingsError extends Error {
   /**
@@ -207,9 +234,27 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
     if (!definition) throw new Error(`Onbekende instelling ${key}`);
     switch (source(key, initial)) {
       case 'instellingen': return coerce(definition, stored[key]);
-      case 'omgeving': return coerce(definition, env[definition.env]);
+      case 'omgeving': {
+        const value = coerce(definition, env[definition.env]);
+        // Een te korte startwaarde (bijv. ACCESS_CODE) telt niet: dezelfde minimale lengte als in het instellingenscherm.
+        if (definition.min && typeof value === 'string' && value && value.length < definition.min) return definition.default;
+        return value;
+      }
       default: return definition.type === 'flags' ? {} : definition.type === 'object' ? coerce(definition, definition.default) : definition.default;
     }
+  }
+
+  /**
+   * Of de startwaarde uit de omgeving van een instelling geweigerd is omdat hij te kort is (zie get). Een geweigerde
+   * ACCESS_CODE mag niet betekenen dat er geen code is: dan zouden gasten zonder inloggen binnenkomen.
+   * @param {string} key Naam van de instelling.
+   * @returns {boolean} true als de omgeving een te korte waarde geeft en er niets in de database staat.
+   */
+  function rejectedStart(key) {
+    const definition = FIELDS[key];
+    if (!definition || !definition.min || source(key) !== 'omgeving') return false;
+    const value = coerce(definition, env[definition.env]);
+    return typeof value === 'string' && Boolean(value) && value.length < definition.min;
   }
 
   /**
@@ -310,7 +355,7 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
     return out;
   }
 
-  return { get, update, view, FIELDS };
+  return { get, rejectedStart, update, view, FIELDS };
 }
 
-module.exports = { createSettings, SettingsError, FIELDS };
+module.exports = { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest };

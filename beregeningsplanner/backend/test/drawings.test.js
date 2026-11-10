@@ -6,7 +6,8 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { sanitizeSubmission, PER_IP_HOUR } = require('../src/beregening/drawings');
+const { sanitizeSubmission, PER_IP_HOUR, RETENTION_DAYS } = require('../src/beregening/drawings');
+const { createSettings } = require('../src/platform/settings');
 const { createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'd'.repeat(64);
@@ -44,6 +45,8 @@ async function setup() {
   await store.createAccount(main.id, { username: 'klaas', displayName: 'Klaas Klant', role: 'klant', password: PW });
   const groen = store.createTenant({ name: 'Groen BV', slug: 'groen' }).tenant;
   await store.createAccount(groen.id, { username: 'gerrit', displayName: 'Gerrit', role: 'installateur', password: PW });
+  // Tekening indienen staat standaard uit (T-03); hier aan voor beide organisaties.
+  for (const tenantId of [main.id, groen.id]) createSettings({ db, tenantId }).update({ drawingRequests: true });
   const { server, base } = await listen(createApp({ secret: SECRET, db }));
   return { db, store, main, groen, server, base };
 }
@@ -224,6 +227,41 @@ test('leren van een goedgekeurd plan: recht plannen.goedkeuren, eigen tenant, al
     const learned = (await kees.get('/app/api/plan/learned')).body;
     assert.deepStrictEqual([learned.examples, learned.bins['10'][1]], [1, 200]);
     assert.strictEqual((await gerrit.get('/app/api/plan/learned')).body.examples, 0, 'andere organisatie leert niet mee');
+  } finally {
+    server.close();
+  }
+});
+
+test('tekening indienen staat standaard uit (T-03)', async () => {
+  const db = openDb();
+  const store = createStore(db);
+  store.ensureTenant();
+  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  try {
+    const anon = createClient(base);
+    assert.strictEqual((await anon.get('/app/api/public/drawing')).body.enabled, false);
+    assert.strictEqual((await anon.post('/app/api/public/drawing', submission())).status, 404);
+  } finally {
+    server.close();
+  }
+});
+
+test('te grote tekening geweigerd; onbehandelde tekeningen na de termijn opgeruimd (T-03)', async () => {
+  const { db, store, main, server, base } = await setup();
+  try {
+    const anon = createClient(base);
+    const huge = submission({ data: { ...plan('Groot'), background: { dataUrl: `data:image/jpeg;base64,${'A'.repeat(2 * 1024 * 1024)}`, scale: 0.01 } } });
+    assert.strictEqual((await anon.post('/app/api/public/drawing', huge)).status, 413);
+    assert.strictEqual((await anon.post('/app/api/public/drawing', submission())).status, 201);
+    assert.ok(store.pendingDrawingChars(main.id) > 0);
+    assert.strictEqual(store.purgeStaleDrawings(main.id, RETENTION_DAYS), 0, 'een verse aanvraag blijft staan');
+    const old = new Date(Date.now() - (RETENTION_DAYS + 1) * 86400000).toISOString();
+    db.prepare('UPDATE plans SET review_requested_at = ? WHERE tenant_id = ?').run(old, main.id);
+    assert.strictEqual(store.purgeStaleDrawings(main.id, RETENTION_DAYS), 1);
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM plans WHERE tenant_id = ?').get(main.id).n, 0);
+    const guest = db.prepare("SELECT email, phone, display_name FROM users WHERE tenant_id = ? AND kind = 'gast'").get(main.id);
+    assert.deepStrictEqual({ ...guest }, { email: '', phone: '', display_name: 'Gewiste aanvrager' });
+    assert.strictEqual(store.pendingDrawingChars(main.id), 0);
   } finally {
     server.close();
   }

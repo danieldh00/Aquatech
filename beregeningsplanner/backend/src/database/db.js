@@ -1069,6 +1069,33 @@ const MIGRATIONS = [
     WHERE shop_product_id IS NOT NULL AND has_variants = 0 AND on_hand = 0 AND shop_stock_seen IS NULL
       AND NOT EXISTS (SELECT 1 FROM stock_movements m WHERE m.tenant_id = stock_items.tenant_id AND m.item_id = stock_items.id);
   `,
+  // 48: wachtwoord vergeten en e-mailadres bevestigen (webshop, A-02 uit de audit van 1.7.3).
+  // account_tokens: eenmalige links per mail; alleen de SHA-256 van het token, met een
+  // verlooptijd en het e-mailadres waar de link heen ging. users.email_verified_at = moment
+  // waarop het huidige e-mailadres is bevestigd (leeg = niet bevestigd; een ander adres maakt het leeg).
+  `
+  CREATE TABLE account_tokens (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    user_id     TEXT NOT NULL REFERENCES users(id),
+    purpose     TEXT NOT NULL CHECK (purpose IN ('wachtwoord', 'e-mail')),
+    token_hash  TEXT NOT NULL,
+    email       TEXT NOT NULL DEFAULT '',
+    expires_at  TEXT NOT NULL,
+    used_at     TEXT,
+    created_at  TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX account_tokens_hash ON account_tokens (token_hash);
+  CREATE INDEX account_tokens_user ON account_tokens (tenant_id, user_id, purpose, created_at);
+  ALTER TABLE users ADD COLUMN email_verified_at TEXT;
+  `,
+  // 49: inhoud per verkoopeenheid (W-10 uit de audit van 1.7.3): hoeveel van de
+  // eenheid van de planner (meestal meter) één eenheid van het artikel bevat, bijv. 50
+  // voor een rol van 50 m. Leeg = geen omrekening; de planner zet het artikel dan alleen
+  // in de winkelwagen als de eenheden gelijk zijn.
+  `
+  ALTER TABLE stock_items ADD COLUMN unit_content REAL;
+  `,
 ];
 
 /**

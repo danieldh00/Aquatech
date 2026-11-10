@@ -23,7 +23,7 @@ const withRequestCache = (callback) => requestCache.run(new Map(), callback);
 // verzoek: sessie + gebruiker + tenant).
 const USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'password_hash', 'disabled', 'created_at',
   'last_seen_at', 'platform_admin', 'must_change_password', 'email', 'phone', 'preferences', 'customer_group',
-  'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount'];
+  'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount', 'email_verified_at'];
 const TENANT_COLUMNS = ['id', 'slug', 'name', 'created_at', 'environment', 'parent_id', 'disabled', 'updated_at'];
 // Nergens SELECT *: een nieuwe (grote) kolom komt zo nooit ongemerkt mee.
 const USER_COLS = USER_COLUMNS.join(', ');
@@ -358,6 +358,8 @@ function createStore(db) {
     if (!changed.length) return { user, changed };
     prepare('UPDATE users SET display_name = ?, email = ?, phone = ?, preferences = ? WHERE id = ?')
       .run(next.display_name, next.email, next.phone, JSON.stringify(prefs), user.id);
+    // Een ander e-mailadres is (nog) niet bevestigd.
+    if (changed.includes('email')) prepare('UPDATE users SET email_verified_at = NULL WHERE id = ?').run(user.id);
     return { user: getUser(user.id), changed };
   }
 
@@ -475,6 +477,20 @@ function createStore(db) {
     const address = String(email || '').trim().toLowerCase();
     if (!address) return [];
     return prepare("SELECT id FROM users WHERE tenant_id = ? AND email = ? AND kind = 'account' AND disabled = 0 LIMIT 2").all(tenantId, address).map((row) => row.id);
+  }
+
+  /**
+   * Zet het e-mailadres van een account op bevestigd, maar alleen als het nog
+   * hetzelfde adres is als waar de bevestigingslink heen ging (A-02).
+   * @param {string} tenantId De tenant.
+   * @param {string} id Id van de gebruiker.
+   * @param {string} email Het adres uit de link.
+   * @returns {boolean} true als het adres nu bevestigd is.
+   */
+  function markEmailVerified(tenantId, id, email) {
+    const address = String(email || '').trim().toLowerCase();
+    if (!address) return false;
+    return prepare('UPDATE users SET email_verified_at = ? WHERE tenant_id = ? AND id = ? AND email = ?').run(currentTimestamp(), tenantId, String(id), address).changes > 0;
   }
 
   /**
@@ -672,6 +688,7 @@ function createStore(db) {
       prepare('DELETE FROM support_grants WHERE user_id = ?').run(user.id);
       prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
       prepare('DELETE FROM season_reminders_sent WHERE user_id = ?').run(user.id);
+      prepare('DELETE FROM account_tokens WHERE tenant_id = ? AND user_id = ?').run(user.tenant_id, user.id);
       prepare('DELETE FROM users WHERE id = ?').run(user.id);
       return { user: user, moved };
     });
@@ -844,10 +861,10 @@ function createStore(db) {
    * (nieuwe id's, zelfde eigenaar), zodat je met echte data kunt testen zonder
    * live te raken.
    * @param {string} parentId Id van de live-tenant.
-   * @param {{ name?: string, copyPlans?: boolean, skipSettings?: string[] }} [options] Naam, plannen kopiëren, en instellingen die de server zelf (opnieuw versleuteld) kopieert.
+   * @param {{ name?: string, copyPlans?: boolean, skipSettings?: string[], valueForTest?: Function }} [options] Naam, plannen kopiëren, instellingen die niet worden overgenomen (geheimen en koppelingen met de buitenwereld) en valueForTest(key, value) dat een overgenomen waarde aanpast voor test.
    * @returns {{ tenant: object, copied: number }|{ error: string, status?: number }} De omgeving en het aantal gekopieerde plannen, of een foutmelding.
    */
-  function createEnvironment(parentId, { name, copyPlans = false, skipSettings = [] } = {}) {
+  function createEnvironment(parentId, { name, copyPlans = false, skipSettings = [], valueForTest = (key, value) => value } = {}) {
     const parent = getTenant(parentId);
     if (!parent || parent.environment !== 'live') return { error: 'Live-tenant niet gevonden.', status: 404 };
     const label = String(name || '').trim() || 'Test';
@@ -861,11 +878,11 @@ function createStore(db) {
       prepare("INSERT INTO tenants (id, slug, name, environment, parent_id, created_at, updated_at) VALUES (?, ?, ?, 'test', ?, ?, ?)")
         .run(id, slug, label, parent.id, timestamp, timestamp);
       forgetTenants();
-      // Versleutelde geheimen horen bij de tenant (zie settings.js); die
-      // kopieert de server opnieuw versleuteld (skipSettings).
+      // Versleutelde geheimen horen bij de tenant (zie settings.js) en koppelingen
+      // met de buitenwereld horen alleen bij live: beide slaat de server over (skipSettings).
       for (const row of prepare('SELECT key, value, updated_by FROM settings WHERE tenant_id = ?').all(parent.id)) {
         if (skipSettings.includes(row.key)) continue;
-        prepare('INSERT INTO settings (tenant_id, key, value, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)').run(id, row.key, row.value, timestamp, row.updated_by);
+        prepare('INSERT INTO settings (tenant_id, key, value, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)').run(id, row.key, valueForTest(row.key, row.value), timestamp, row.updated_by);
       }
       let copied = 0;
       if (copyPlans) {
@@ -1682,6 +1699,46 @@ function createStore(db) {
   }
 
   /**
+   * Hoeveel tekens openbaar ingediende tekeningen die nog op een controle
+   * wachten samen in de database innemen (begrenzing per organisatie, T-03).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {number} Aantal tekens JSON.
+   */
+  function pendingDrawingChars(tenantId) {
+    const row = prepare(`SELECT COALESCE(SUM(LENGTH(data)), 0) AS chars FROM plans
+      WHERE tenant_id = ? AND submitted_via = 'openbaar' AND review_status = 'ter_controle' AND deleted_at IS NULL`).get(tenantId);
+    return Number(row.chars) || 0;
+  }
+
+  /**
+   * Ruimt openbaar ingediende tekeningen op die na een termijn nog steeds op
+   * een controle wachten (niemand heeft ze behandeld): plan en historie-inhoud
+   * weg, de contactgegevens van de aanvrager gewist (AVG, T-03).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {number} days Bewaartermijn in dagen.
+   * @returns {number} Aantal opgeruimde tekeningen.
+   */
+  function purgeStaleDrawings(tenantId, days) {
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+    return transaction(db, () => {
+      const stale = prepare(`SELECT id, owner_id FROM plans
+        WHERE tenant_id = ? AND submitted_via = 'openbaar' AND review_status = 'ter_controle' AND review_requested_at < ?`).all(tenantId, cutoff);
+      if (!stale.length) return 0;
+      const planIds = stale.map((row) => row.id);
+      const ownerIds = [...new Set(stale.map((row) => row.owner_id).filter(Boolean))];
+      const planMarks = planIds.map(() => '?').join(', ');
+      prepare(`UPDATE history SET snapshot = NULL, title = 'Gewist plan', customer = '', address = '', summary = '{}', ip = ''
+        WHERE tenant_id = ? AND plan_id IN (${planMarks})`).run(tenantId, ...planIds);
+      prepare(`DELETE FROM plans WHERE tenant_id = ? AND id IN (${planMarks})`).run(tenantId, ...planIds);
+      if (ownerIds.length) {
+        prepare(`UPDATE users SET email = '', phone = '', display_name = 'Gewiste aanvrager' WHERE tenant_id = ? AND kind = 'gast' AND id IN (${ownerIds.map(() => '?').join(', ')})`)
+          .run(tenantId, ...ownerIds);
+      }
+      return planIds.length;
+    });
+  }
+
+  /**
    * Maakt een nieuw plan aan (zonder id) of slaat een bestaand plan op. Past
    * een klant een goedgekeurd plan aan, dan gaat het opnieuw ter controle.
    * @param {object} user De ingelogde gebruiker.
@@ -1756,10 +1813,10 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, systemUser, createGuest, createAccount, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, systemUser, createGuest, createAccount, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, markEmailVerified, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
     createSession, findSessionWithUser, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
-    planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing,
+    planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing, pendingDrawingChars, purgeStaleDrawings,
   };
 }
 

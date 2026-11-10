@@ -128,7 +128,7 @@ function createWebOrderStore(db, { stock }) {
    * @param {string} tenantId Id van de omgeving.
    * @param {{ code: string, qty: number }[]} wanted De gewenste artikelen en aantallen.
    * @param {{ group?: string, wholesale?: ?{ discountPct: number } }} [customer] De klantgroep: 'zakelijk' rekent met de zakelijke prijs (excl. btw, anders de verkoopprijs) en toont prijzen excl. btw. Met `wholesale` (alleen bij zakelijk) gelden ook de groothandelsvoorwaarden: staffelkorting, de vaste korting `discountPct` van de klant, verpakkingseenheid en minimale afname.
-   * @returns {{ lines: object[], missing: string[], totals: object, ok: boolean, pricesExcl: boolean }} De regels (itemId, code, name, unit, qty, available, unitExcl, vatRate, unitIncl, lineTotal, enough, weightGrams en bij zakelijk lineExcl; bij groothandel ook listExcl, discountPct, discountSource en packProblem), de codes die niet (meer) te koop zijn, de totalen, of er besteld kan worden en of de prijzen excl. btw getoond worden.
+   * @returns {{ lines: object[], missing: string[], totals: object, ok: boolean, pricesExcl: boolean }} De regels (itemId, code, name, unit, unitContent, qty, available, unitExcl, vatRate, unitIncl, lineTotal, enough, weightGrams en bij zakelijk lineExcl; bij groothandel ook listExcl, discountPct, discountSource en packProblem), de codes die niet (meer) te koop zijn, de totalen, of er besteld kan worden en of de prijzen excl. btw getoond worden.
    */
   function priceCart(tenantId, wanted, { group = '', wholesale = null } = {}) {
     const business = group === 'zakelijk';
@@ -140,7 +140,7 @@ function createWebOrderStore(db, { stock }) {
       if (code && qty >= 1) unique.set(code, Math.min(MAX_QTY, (unique.get(code) || 0) + qty));
     }
     const codes = [...unique.keys()].slice(0, MAX_LINES);
-    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, p.name AS parent_name,
+    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, p.name AS parent_name,
         (SELECT sp.in_stock FROM shop_products sp WHERE sp.tenant_id = i.tenant_id AND sp.id = i.shop_product_id) AS shop_in_stock,
         COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
       FROM stock_items i
@@ -171,7 +171,7 @@ function createWebOrderStore(db, { stock }) {
       lines.push({
         itemId: row.id, code: row.code, name: row.parent_name && label ? `${row.parent_name} (${label})` : row.name, unit: row.unit || 'st', qty, available,
         unitExcl, vatRate, unitIncl, lineTotal: business ? round2(lineExcl * (1 + vatRate / 100)) : round2(unitIncl * qty), enough: available >= qty,
-        weightGrams: row.weight_grams == null ? null : Number(row.weight_grams), ...(business ? { lineExcl } : {}),
+        weightGrams: row.weight_grams == null ? null : Number(row.weight_grams), unitContent: row.unit_content == null ? null : Number(row.unit_content), ...(business ? { lineExcl } : {}),
         ...(wholesaleTerms ? { listExcl, discountPct: priced.discountPct, discountSource: priced.source, packSize: terms.packSize, minimum: Wholesale.minimumOf(terms), packProblem: Wholesale.quantityProblem(qty, terms) } : {}),
       });
     }
@@ -186,12 +186,23 @@ function createWebOrderStore(db, { stock }) {
    */
   function nextNumber(tenantId, year) {
     const head = `WEB-${year}-`;
-    let max = 0;
-    for (const row of prepare('SELECT number FROM web_orders WHERE tenant_id = ? AND substr(number, 1, ?) = ?').all(tenantId, head.length, head)) {
-      const sequence = Number(row.number.slice(head.length));
-      if (Number.isInteger(sequence) && sequence > max) max = sequence;
-    }
+    // Alleen het hoogste volgnummer via de unieke index (tenant_id, number), niet alle bestellingen van het jaar (W-09).
+    // De grenzen houden het bij nummers met een cijfer na het voorvoegsel (':' komt na '9').
+    const row = prepare('SELECT MAX(CAST(substr(number, ?) AS INTEGER)) AS last FROM web_orders WHERE tenant_id = ? AND number > ? AND number < ?')
+      .get(head.length + 1, tenantId, head, `${head}:`);
+    const max = Number(row && row.last) || 0;
     return `${head}${String(max + 1).padStart(4, '0')}`;
+  }
+
+  /**
+   * Telt de bestellingen die een account sinds een moment heeft geplaatst (voor de bestellimiet per account, W-12).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} userId Id van het account.
+   * @param {string} since ISO-moment.
+   * @returns {number} Het aantal bestellingen.
+   */
+  function countSince(tenantId, userId, since) {
+    return Number(prepare('SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND user_id = ? AND created_at > ?').get(tenantId, String(userId), since).n) || 0;
   }
 
   /**
@@ -259,18 +270,20 @@ function createWebOrderStore(db, { stock }) {
    * met btw-verlegging als die van toepassing is (zie vat.js).
    * @param {object} cart De geprijsde winkelwagen (priceCart, met dezelfde klantgroep).
    * @param {object} option De gekozen verzendoptie (shippingQuote, options).
-   * @param {{ group: string, country: string, vatNumber: string }} customer Klantgroep, land van aflevering en genormaliseerd btw-nummer.
-   * @returns {{ lines: object[], shipping: { price: number, priceExcl: number, vatRate: number }, shifted: boolean, totals: object }} De regels (bij verlegging zonder btw), de verzendkosten incl. en excl. btw, of de btw is verlegd en de totalen.
+   * @param {{ group: string, country: string, vatNumber: string, approvedVatNumber?: string }} customer Klantgroep, land van aflevering, genormaliseerd btw-nummer en het door een beheerder goedgekeurde btw-nummer van het account.
+   * @returns {{ lines: object[], shipping: { price: number, priceExcl: number, vatRate: number }, shifted: boolean, otherNumber: boolean, totals: object }} De regels (bij verlegging zonder btw), de verzendkosten incl. en excl. btw, of de btw is verlegd, of verleggen alleen faalt op een ander nummer dan dat van het account, en de totalen.
    */
-  function orderTotals(cart, option, { group, country, vatNumber }) {
-    const shifted = Vat.vatShifted({ group, method: option.method, country, vatNumber });
+  function orderTotals(cart, option, { group, country, vatNumber, approvedVatNumber = '' }) {
+    const shifted = Vat.vatShifted({ group, method: option.method, country, vatNumber, approvedVatNumber });
+    // Verleggen zou kunnen, maar niet met dit nummer: de klant krijgt uitleg bij het totaal.
+    const otherNumber = !shifted && Vat.vatShiftPossible({ group, method: option.method, country, vatNumber });
     const lines = shifted ? cart.lines.map((line) => ({ ...line, vatRate: 0, unitIncl: line.unitExcl, lineTotal: line.lineExcl })) : cart.lines;
     const shippingExcl = round2(option.price / (1 + Shipping.SHIPPING_VAT_RATE / 100));
     const shippingRate = shifted ? 0 : Shipping.SHIPPING_VAT_RATE;
     const business = group === 'zakelijk';
     const shipping = { price: shifted ? shippingExcl : option.price, priceExcl: shippingExcl, vatRate: shippingRate };
     const shippingLine = option.price > 0 ? [business ? { vatRate: shippingRate, lineExcl: shippingExcl, lineTotal: shifted ? shippingExcl : round2(shippingExcl * (1 + shippingRate / 100)) } : { vatRate: shippingRate, lineTotal: option.price }] : [];
-    return { lines, shipping, shifted, totals: totalsOf([...lines, ...shippingLine]) };
+    return { lines, shipping, shifted, otherNumber, totals: totalsOf([...lines, ...shippingLine]) };
   }
 
   /**
@@ -278,7 +291,7 @@ function createWebOrderStore(db, { stock }) {
    * opnieuw, legt de bestelling vast en reserveert de voorraad, alles in één
    * transactie.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ id: string, group?: string, wholesale?: ?{ discountPct: number } }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg) en bij een groothandelsklant zijn vaste korting.
+   * @param {{ id: string, group?: string, wholesale?: ?{ discountPct: number }, vatNumber?: string, vies?: object, addressUnverified?: boolean }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg), bij een groothandelsklant zijn vaste korting, het goedgekeurde btw-nummer van het account en de uitkomst van de VIES-controle (vies.js) als bewijs bij verlegging, en of het bezorgadres met de hand is ingevuld zonder PDOK-controle.
    * @param {object} rawFields De gegevens van het afrekenformulier (zie sanitizeCheckout, plus shippingMethod en country).
    * @param {{ code: string, qty: number }[]} wanted De winkelwagen.
    * @param {object} [shippingConfig] De verzendinstelling (shipping.js); standaard de startwaarden.
@@ -314,15 +327,15 @@ function createWebOrderStore(db, { stock }) {
       if (isPg(db)) prepare('SELECT pg_advisory_xact_lock(hashtext(?)) AS locked').get(`web-orders:${tenantId}:${timestamp.slice(0, 4)}`);
       const number = nextNumber(tenantId, timestamp.slice(0, 4));
       // De verzendkosten zijn een eigen regel in de btw-opbouw (alleen als ze niet gratis zijn).
-      const calculated = orderTotals(cart, option, { group, country, vatNumber: fields.vatNumber });
+      const calculated = orderTotals(cart, option, { group, country, vatNumber: fields.vatNumber, approvedVatNumber: user.vatNumber || '' });
       const totals = calculated.totals;
       if (expectedTotal !== null && !(Math.abs(expectedTotal - totals.total) <= 0.005)) return { error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', status: 409 };
       const data = {
         lines: calculated.lines.map((line) => ({ itemId: line.itemId, code: line.code, name: line.name, unit: line.unit, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal, ...(line.lineExcl !== undefined ? { lineExcl: line.lineExcl } : {}) })),
         customer: { name: fields.name, company: fields.company, email: fields.email, phone: fields.phone },
-        address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' } : { street: fields.street, postcode: fields.postcode, city: fields.city, country },
+        address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' } : { street: fields.street, postcode: fields.postcode, city: fields.city, country, ...(user.addressUnverified ? { unverified: true } : {}) },
         shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method === 'dpd', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
-        customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted } : null,
+        customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted, ...(calculated.shifted && user.vies ? { vies: user.vies } : {}) } : null,
         note: fields.note, totals, payment: online ? 'online' : 'op rekening', consent: { terms: true, at: timestamp },
         ...(online ? { pay: { provider: 'mollie', status: 'open', id: null, ids: [], checkoutUrl: '', createdAt: timestamp, paidAt: null } } : {}),
         history: [{ at: timestamp, status: 'nieuw', by: fields.name }],
@@ -564,17 +577,17 @@ function createWebOrderStore(db, { stock }) {
       .all(tenantId, String(before), Math.max(1, Math.floor(limit)), Math.max(0, Math.floor(skip))).map((row) => row.id);
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, onShipped, onCancelled, onTracking };
+  return { priceCart, shippingQuote, orderTotals, place, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, onShipped, onCancelled, onTracking };
 }
 
 /**
  * Registreert de API-routes van Beheer voor bestellingen (recht `beheer`,
  * door de poort van /api/admin; alles per omgeving van de beheerder).
  * @param {object} app De Express-app.
- * @param {{ orders: object, requireJson: Function, audit: Function, invoices?: object }} ctx De opslag en hulpfuncties van de server; met invoices (web-order-invoices.js) toont Beheer de factuur en kan hij opnieuw gemaakt worden.
+ * @param {{ orders: object, requireJson: Function, audit: Function, invoices?: object, payments?: object, returns?: object }} ctx De opslag en hulpfuncties van de server; met invoices (web-order-invoices.js) toont Beheer de factuur en kan hij opnieuw gemaakt worden, met payments (web-payments.js) en returns kan Beheer via Mollie terugbetalen.
  * @returns {void}
  */
-function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = null }) {
+function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = null, payments = null, returns = null }) {
   /**
    * Geeft een afwijzing van een async handler door aan Express.
    * @param {Function} handler De async handler (req, res).
@@ -610,6 +623,29 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
     audit(req, 'webshop_bestelling_status', { number: out.order.number, status: out.order.status });
     res.json({ order: out.order, invoice: invoices ? invoices.invoiceFor(req.tenantId, out.order.id) : null });
   });
+
+  // Terugbetalen via Mollie (W-05): bij een retour het bedrag van de definitieve creditnota, bij een geannuleerde bestelling wat er nog over is.
+  app.post('/api/admin/web-orders/:id/refund', requireJson, wrap(async (req, res) => {
+    if (!payments) return res.status(404).json({ error: 'not_found', message: 'Online betalen staat niet aan.' });
+    const order = orders.get(req.tenantId, req.params.id);
+    if (!order) return res.status(404).json({ error: 'not_found', message: 'Bestelling niet gevonden.' });
+    const returnId = req.body && req.body.returnId ? String(req.body.returnId) : '';
+    let request;
+    if (returnId) {
+      const record = returns ? returns.get(req.tenantId, returnId) : null;
+      if (!record || record.orderId !== order.id) return res.status(404).json({ error: 'not_found', message: 'Retour niet gevonden.' });
+      const amount = invoices ? invoices.refundAmountOf(req.tenantId, record) : null;
+      if (amount === null) return res.status(409).json({ error: 'no_credit', message: 'Maak eerst de creditnota (definitief); dat bedrag wordt terugbetaald.' });
+      request = { amount, description: `Terugbetaling retour ${record.number}`, key: `retour:${record.id}` };
+    } else {
+      if (order.status !== 'geannuleerd') return res.status(409).json({ error: 'not_cancelled', message: 'Zonder retour kan alleen een geannuleerde bestelling worden terugbetaald.' });
+      request = { amount: order.totals.total, description: `Terugbetaling bestelling ${order.number}`, key: 'annulering' };
+    }
+    const out = await payments.refund(req.tenantId, order.id, request);
+    if (out.error) return res.status(out.status || 400).json({ error: 'refund_failed', message: out.error });
+    audit(req, 'webshop_bestelling_terugbetaald', { number: order.number, amount: out.refund.amount, ...(returnId ? { returnId } : {}) });
+    res.json({ order: out.order, refund: out.refund });
+  }));
 
   app.post('/api/admin/web-orders/:id/tracking', requireJson, (req, res) => {
     const out = orders.setTracking(req.tenantId, req.params.id, String(req.body?.trackingCode || ''));

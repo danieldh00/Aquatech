@@ -101,20 +101,25 @@ test('uitgeschakelde organisatie: ook accounts in haar testomgeving en de AI-rou
   }
 });
 
-test('inloggen: verzonnen organisatiecodes geven geen extra pogingen op een hoofdbeheerder; toegangscode heeft een totaalgrens', async () => {
+test('inloggen: blokkade per account en bezoeker, ruime grens per account, verzonnen codes geven geen extra pogingen; toegangscode heeft een totaalgrens', async () => {
   const { server, base } = await setup();
   try {
-    // Elke poging van een ander (doorgegeven) IP-adres, zodat alleen de grens per gebruiker telt.
-    let ip = 1;
     /**
-     * Eén inlogpoging vanaf een nieuw IP-adres.
+     * Eén inlogpoging vanaf het opgegeven IP-adres.
      * @param {object} body De inloggegevens.
+     * @param {string} address Het (doorgegeven) IP-adres van de bezoeker.
      * @returns {Promise<object>} Het antwoord.
      */
-    const attempt = (body) => createClient(base).request('POST', '/app/api/auth/login', body, { 'X-Forwarded-For': `203.0.113.${ip++}` });
-    for (let i = 0; i < 10; i++) assert.strictEqual((await attempt({ username: 'hoofd', password: 'fout-fout-fout-1', tenant: `code-${i}` })).status, 401);
-    assert.strictEqual((await attempt({ username: 'hoofd', password: PW, tenant: 'nog-een-code' })).status, 401, 'via een andere code niet meer');
-    assert.strictEqual((await attempt({ username: 'hoofd', password: PW })).status, 429, 'de gebruikersnaam in de hoofdtenant is geblokkeerd');
+    const attempt = (body, address) => createClient(base).request('POST', '/app/api/auth/login', body, { 'X-Forwarded-For': address });
+    // Eén bezoeker raadt met steeds een andere code: na tien pogingen is hij zelf geblokkeerd, ook met het goede wachtwoord.
+    for (let i = 0; i < 10; i++) assert.strictEqual((await attempt({ username: 'hoofd', password: 'fout-fout-fout-1', tenant: `code-${i}` }, '203.0.113.1')).status, 401);
+    assert.strictEqual((await attempt({ username: 'hoofd', password: PW }, '203.0.113.1')).status, 429, 'de rader is geblokkeerd');
+    // De echte gebruiker (ander adres) is daardoor niet buitengesloten.
+    assert.strictEqual((await attempt({ username: 'hoofd', password: PW }, '203.0.113.2')).status, 200, 'de eigenaar kan nog inloggen');
+    // Raden vanaf veel adressen tegelijk stopt bij de grens per account (100 pogingen).
+    let ip = 10;
+    for (let i = 0; i < 100; i++) assert.strictEqual((await attempt({ username: 'hoofd', password: 'fout-fout-fout-1', tenant: `code-${i % 7}` }, `198.51.100.${ip++}`)).status, 401);
+    assert.strictEqual((await attempt({ username: 'hoofd', password: PW }, '203.0.113.3')).status, 429, 'het account is nu voor iedereen geblokkeerd');
   } finally {
     server.close();
   }

@@ -15,12 +15,12 @@ const SECRET = 'y'.repeat(64);
 const GUESTS = { accessCode: '', env: { GUEST_ACCESS: 'true' } };
 
 /**
- * Start een testserver met toegangscode 'geheim' en een eigen database.
+ * Start een testserver met toegangscode 'Geheim-Code-2026' en een eigen database.
  * @param {object} [opts] Extra opties voor createApp.
  * @returns {Promise<{ server: import('http').Server, base: string }>} De server en zijn adres.
  */
 function start(opts = {}) {
-  return listen(createApp({ accessCode: 'geheim', secret: SECRET, db: openDb(), ...opts }));
+  return listen(createApp({ accessCode: 'Geheim-Code-2026', secret: SECRET, db: openDb(), ...opts }));
 }
 
 /**
@@ -92,7 +92,7 @@ test('beheerder maakt gebruikers aan en ziet de historie van alle aanvragen', as
   const { server, base } = await start();
   try {
     const admin = createClient(base);
-    assert.strictEqual((await admin.post('/app/api/auth/login', { code: 'geheim' })).status, 200);
+    assert.strictEqual((await admin.post('/app/api/auth/login', { code: 'Geheim-Code-2026' })).status, 200);
     assert.strictEqual((await admin.get('/app/api/me')).body.user.role, 'beheerder');
 
     assert.strictEqual((await admin.post('/app/api/admin/users', { username: 'x', role: 'gebruiker', password: 'kort', mustChangePassword: false })).status, 400);
@@ -160,7 +160,7 @@ test('uitgeschakelde gebruiker of nieuw wachtwoord: sessie vervalt', async () =>
   const { server, base } = await start();
   try {
     const admin = createClient(base);
-    await admin.post('/app/api/auth/login', { code: 'geheim' });
+    await admin.post('/app/api/auth/login', { code: 'Geheim-Code-2026' });
     const anna = (await admin.post('/app/api/admin/users', { username: 'anna', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false })).body;
     const annaClient = createClient(base);
     await annaClient.post('/app/api/auth/login', { username: 'anna', password: 'Tuin-Plan-2026!' });
@@ -252,7 +252,7 @@ test('plannenoverzicht: samenvatting per plan; beheerder ziet alles plus histori
   const { server, base } = await start();
   try {
     const admin = createClient(base);
-    await admin.post('/app/api/auth/login', { code: 'geheim' });
+    await admin.post('/app/api/auth/login', { code: 'Geheim-Code-2026' });
     await admin.post('/app/api/admin/users', { username: 'joop', displayName: 'Joop', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false });
     const joop = createClient(base);
     await joop.post('/app/api/auth/login', { username: 'joop', password: 'Tuin-Plan-2026!' });

@@ -6,6 +6,10 @@ const { after } = test;
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { createPdokFake } = require('./helpers/pdok-fake');
+const { createViesFake } = require('./helpers/vies-fake');
+
+/** Nagebootste VIES: BE0123456789 is geldig, de rest ongeldig. */
+const viesFake = createViesFake({ valid: ['BE0123456789'] });
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createLogin, createClient, listen, postForm, postCheckout } = require('./helpers/http-client');
@@ -29,7 +33,7 @@ async function setup() {
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   const other = store.createTenant({ slug: 'ander', name: 'Ander BV' }).tenant;
   await store.createAccount(other.id, { username: 'vreemd', displayName: 'Vreemd', role: 'beheerder', password: PW, mustChangePassword: false });
-  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor: () => ({ configured: () => false, send: async () => {} }) }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, viesFetch: viesFake.fetchImpl, secret: SECRET, db, mailerFor: () => ({ configured: () => false, send: async () => {} }) }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
@@ -51,7 +55,7 @@ async function setup() {
     return { client, id: users.find((user) => user.email === `k${counter}@voorbeeld.nl`).id };
   };
   const business = await shopper();
-  assert.strictEqual((await admin.patch(`/app/api/admin/users/${business.id}`, { customerGroup: 'zakelijk' })).status, 200);
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${business.id}`, { customerGroup: 'zakelijk', companyName: 'Bakker Tuinen BV', kvkNumber: '12345678', vatNumber: 'BE0123456789' })).status, 200);
   return { base, admin, vreemd: await createLogin(base, { password: PW })('vreemd', 'ander'), business, private1: await shopper() };
 }
 
@@ -159,4 +163,16 @@ test('een concept dat bleef staan omdat definitief maken mislukte wordt bij opni
   await world.admin.put('/app/api/invoices/settings', { webOrders: { enabled: true, finalize: true } });
   // Zonder bewaarde fout blijft een bewust concept met rust.
   assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/invoice`, {})).body.invoice.status, 'concept');
+});
+
+test('creditnota bij retour volgt de factuurregels, ook als een artikel over twee regels staat', () => {
+  const { creditLinesFor } = require('../src/verkoop/web-order-invoices');
+  // Drie stuks: twee tegen de gewone prijs en één met een centverschil (zo maakt fromWebOrder het factuurbedrag gelijk aan het betaalde bedrag).
+  const lines = [{ code: 'BUS', qty: -2, price: 8.26, vat: 21 }, { code: 'BUS', qty: -1, price: 8.27, vat: 21 }, { code: 'KLEP', qty: -1, price: 20, vat: 21 }];
+  assert.deepStrictEqual(creditLinesFor(lines, [{ code: 'bus', qty: 2 }]).map((line) => [line.qty, line.price]), [[-2, 8.26]]);
+  assert.deepStrictEqual(creditLinesFor(lines, [{ code: 'BUS', qty: 3 }]).map((line) => [line.qty, line.price]), [[-2, 8.26], [-1, 8.27]]);
+  // Een tweede retour na een eerdere van twee stuks krijgt het laatste stuk met het centverschil.
+  assert.deepStrictEqual(creditLinesFor(lines, [{ code: 'BUS', qty: 1 }], new Map([['BUS', 2]])).map((line) => [line.qty, line.price]), [[-1, 8.27]]);
+  // Een artikel dat niet op de factuur staat geeft geen regel; meer dan gefactureerd wordt niet gecrediteerd.
+  assert.deepStrictEqual(creditLinesFor(lines, [{ code: 'WEG', qty: 1 }, { code: 'KLEP', qty: 5 }]).map((line) => [line.code, line.qty]), [['KLEP', -1]]);
 });

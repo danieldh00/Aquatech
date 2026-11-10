@@ -372,10 +372,10 @@ function createWebReturnStore(db, { orders, stock }) {
  * Registreert de API-routes van Beheer voor retouren (recht `beheer`, door de
  * poort van /api/admin; alles per omgeving van de beheerder).
  * @param {object} app De Express-app.
- * @param {{ returns: object, requireJson: Function, audit: Function, credits?: object, mail?: object }} ctx De opslag en hulpfuncties van de server; met credits (web-order-invoices.js) maakt Beheer de creditnota en met mail (web-returns-mail.js) krijgt de klant bericht als de retour is afgerond.
+ * @param {{ returns: object, requireJson: Function, audit: Function, credits?: object, mail?: object, refundOf?: Function }} ctx De opslag en hulpfuncties van de server; met credits (web-order-invoices.js) maakt Beheer de creditnota en met mail (web-returns-mail.js) krijgt de klant bericht als de retour is afgerond, en refundOf(tenantId, retour) zegt of de bestelling online is betaald en of deze retour al is terugbetaald.
  * @returns {void}
  */
-function registerWebReturnRoutes(app, { returns, requireJson, audit, credits = null, mail = null }) {
+function registerWebReturnRoutes(app, { returns, requireJson, audit, credits = null, mail = null, refundOf = null }) {
   const sendingCompletion = new Set();
   /**
    * Geeft een afwijzing van een async handler door aan Express.
@@ -391,7 +391,7 @@ function registerWebReturnRoutes(app, { returns, requireJson, audit, credits = n
   app.get('/api/admin/web-returns/:id', (req, res) => {
     const found = returns.get(req.tenantId, req.params.id);
     if (!found) return res.status(404).json({ error: 'not_found', message: 'Retour niet gevonden.' });
-    res.json({ return: found });
+    res.json({ return: found, refund: refundOf ? refundOf(req.tenantId, found) : null });
   });
 
   app.post('/api/admin/web-returns/:id/decision', requireJson, (req, res) => {

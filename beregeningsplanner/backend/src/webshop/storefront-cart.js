@@ -100,21 +100,52 @@ function setCartLines(current, planned) {
   return { lines: next, skipped };
 }
 
+/** Andere schrijfwijzen van dezelfde eenheid (planner en Artikelen gebruiken niet altijd dezelfde afkorting). */
+const UNIT_ALIASES = { stuk: 'st', stuks: 'st', stk: 'st', meter: 'm', mtr: 'm', rollen: 'rol' };
+
 /**
- * Leest de gevraagde artikelen uit het formulier van de planner: velden `q:<code>` met het aantal (kommagetallen naar boven afgerond).
+ * Maakt een eenheid vergelijkbaar: kleine letters, zonder spaties en punten, en vaste afkortingen.
+ * @param {string} unit De eenheid, bijvoorbeeld 'Meter' of 'st.'.
+ * @returns {string} De vergelijkbare vorm, bijvoorbeeld 'm' of 'st'.
+ */
+function unitKey(unit) {
+  const text = String(unit || '').toLowerCase().replace(/[\s.]/g, '');
+  return UNIT_ALIASES[text] || text;
+}
+
+/**
+ * Leest de gevraagde artikelen uit het formulier van de planner: velden `q:<code>` met het aantal en `u:<code>` met de eenheid van de planner.
  * @param {object} body De velden van het formulier.
- * @returns {{ code: string, qty: number }[]} De regels (hoogstens MAX_LINES, elke code één keer).
+ * @returns {{ code: string, qty: number, planQty: number, unit: string }[]} De regels (hoogstens MAX_LINES, elke code één keer): het naar boven afgeronde aantal, het aantal van het plan en de eenheid.
  */
 function plannedLinesFrom(body) {
+  const fields = body || {};
   const lines = [];
-  for (const [key, value] of Object.entries(body || {})) {
+  for (const [key, value] of Object.entries(fields)) {
     if (!key.startsWith('q:')) continue;
     const code = key.slice(2).trim().toUpperCase().slice(0, 60);
-    const qty = Math.ceil(Number(value));
-    if (code && qty >= 1 && !lines.some((line) => line.code === code)) lines.push({ code, qty: Math.min(MAX_QTY, qty) });
+    const planQty = Number(value);
+    const qty = Math.ceil(planQty);
+    const unit = String(fields[`u:${key.slice(2)}`] || '').trim().slice(0, 12);
+    if (code && qty >= 1 && !lines.some((line) => line.code === code)) lines.push({ code, qty: Math.min(MAX_QTY, qty), planQty: Math.min(MAX_QTY, planQty), unit });
     if (lines.length >= MAX_LINES) break;
   }
   return lines;
+}
+
+/**
+ * Rekent het aantal van de planner om naar het aantal van het artikel in de shop (W-10 uit de audit van 1.7.3).
+ * Dezelfde eenheid: het aantal blijft. Een andere eenheid met een inhoud per eenheid (bijv. 50 m per rol):
+ * delen en naar boven afronden. Een andere eenheid zonder inhoud: niet om te rekenen.
+ * @param {{ qty: number, planQty: number, unit: string }} planned De regel uit de planner.
+ * @param {{ unit: string, unitContent?: ?number }} article Het artikel in de shop.
+ * @returns {?number} Het aantal voor de winkelwagen, of null als de eenheden niet om te rekenen zijn.
+ */
+function convertPlannedQty(planned, article) {
+  if (!planned.unit || unitKey(planned.unit) === unitKey(article.unit)) return planned.qty;
+  const content = Number(article.unitContent);
+  if (!(content > 0)) return null;
+  return Math.max(1, Math.ceil(planned.planQty / content - 1e-9));
 }
 
 /**
@@ -178,4 +209,4 @@ function cartActionRejected(before, after, fields) {
   return false;
 }
 
-module.exports = { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, CART_COOKIE, MAX_QTY };
+module.exports = { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, convertPlannedQty, unitKey, CART_COOKIE, MAX_QTY };

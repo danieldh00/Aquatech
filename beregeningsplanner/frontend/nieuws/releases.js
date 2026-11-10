@@ -13,6 +13,23 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.7.4',
+      date: '2026-11-10',
+      title: 'Veiliger en slimmer: webshop, inloggen en testomgeving',
+      items: [
+        { text: 'Wachtwoord vergeten in de webshop? Vraag een nieuw wachtwoord aan via de link bij Inloggen; je krijgt een mail met een link die één uur en één keer werkt. Bij een nieuw account bevestig je je e-mailadres via een mail.', for: ['portaal'] },
+        { text: 'Staat je adres niet in de lijst, bijvoorbeeld bij nieuwbouw? Bij afrekenen kun je straat en woonplaats nu zelf invullen. De bevestiging van je bestelling gaat altijd naar het e-mailadres van je account.', for: ['portaal'] },
+        { text: 'Alles in winkelwagen vanuit de planner kijkt nu naar de eenheid: verkopen we een artikel per rol, dan rekent de winkel de meters om naar rollen (als bij het artikel de inhoud per eenheid is ingevuld), anders zie je welk artikel je zelf moet kiezen.' },
+        { text: 'Artikelen: nieuw veld Inhoud per eenheid, bijvoorbeeld 50 voor een rol van 50 meter. De planner gebruikt dat om meters om te rekenen naar rollen.', for: ['voorraad'] },
+        { text: 'Retouren: stuurt een particuliere klant alles terug, dan gaan de verzendkosten mee in de creditnota. Online betaalde bestellingen betaal je terug met één knop (Terugbetalen via Mollie) bij de retour of bij een geannuleerde bestelling, en terugboekingen door de bank zie je bij de bestelling.', for: ['beheer'] },
+        { text: 'Btw verleggen voor zakelijke klanten in de EU gebeurt alleen nog met het goedgekeurde btw-nummer en na een controle bij VIES (de btw-database van de EU). De uitkomst staat bij de bestelling als bewijs.', for: ['beheer'] },
+        { text: 'Een nieuwe testomgeving neemt de koppelingen met de webshop, betalen, mail en de boekhouding niet meer over, en ook geen sleutels of wachtwoorden. Testen kan zo nooit de echte webshop, boekhouding of klanten raken.', for: ['beheer'] },
+        { text: 'Inloggen: iemand die het wachtwoord van een ander probeert te raden, blokkeert alleen zichzelf en niet meer de echte gebruiker. De toegangscode moet minstens 12 tekens zijn.', for: ['beheer'] },
+        { text: 'Tekening indienen zonder account staat standaard uit (aanzetten in Beheer > Instellingen). Links naar offertes en afspraken verlopen na een tijd, en onbehandelde ingediende tekeningen worden na 60 dagen gewist.', for: ['beheer'] },
+        { text: 'Een artikel dat in een open webshopbestelling zit kan niet meer worden verwijderd of gearchiveerd, zodat de bestelling gewoon verzonden kan worden.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.7.3',
       date: '2026-11-08',
       title: 'Van de planner naar de webshop',

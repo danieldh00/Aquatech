@@ -38,7 +38,7 @@ async function setup() {
   const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);
   for (const item of [
     { code: 'SPR-1', name: 'Sproeier Pro', onHand: 5, salePrice: 10 },
     { code: 'BUIS-25', name: 'PE buis 25 mm', onHand: 100, salePrice: 1.5 },
@@ -140,9 +140,11 @@ test('bestelling plaatsen reserveert de voorraad en stuurt een bevestiging', asy
   assert.strictEqual(spr.onHand, 5);
   assert.strictEqual(spr.reserved, 2);
   assert.strictEqual(spr.available, 3);
-  assert.strictEqual(sent.length, 1, 'bevestiging aan de klant (geen bedrijfsadres ingesteld)');
-  assert.strictEqual(sent[0].to, 'piet@voorbeeld.nl');
-  assert.match(sent[0].subject, /WEB-\d{4}-0001/);
+  const orderMails = sent.filter((message) => /bestelling/i.test(message.subject));
+  assert.strictEqual(orderMails.length, 1, 'bevestiging aan de klant (geen bedrijfsadres ingesteld)');
+  assert.strictEqual(orderMails[0].to, 'klant1@voorbeeld.nl', 'naar het adres van het account, niet het ingevulde (W-08)');
+  assert.match(orderMails[0].subject, /WEB-\d{4}-0001/);
+  assert.ok(sent.some((message) => message.subject === 'Bevestig je e-mailadres' && message.to === 'klant1@voorbeeld.nl'), 'bevestigingsmail na registreren (A-02)');
   const list = await admin.get('/app/api/admin/web-orders');
   assert.strictEqual(list.body.total, 1);
   assert.strictEqual(list.body.items[0].status, 'nieuw');
@@ -274,4 +276,56 @@ test('een klant met bestellingen kan worden verwijderd; de bestelling blijft sta
   const removed = await admin.del(`/app/api/admin/users/${klant.id}`);
   assert.strictEqual(removed.status, 200, JSON.stringify(removed.body));
   assert.strictEqual((await admin.get('/app/api/admin/web-orders')).body.total, 1);
+});
+
+test('een artikel op een open bestelling kan niet worden verwijderd of gearchiveerd; daarna wel', async () => {
+  const { base, admin, vreemd, shopper } = await setup();
+  const customer = await shopper();
+  await addToCart(base, customer, 'SPR-1', 2);
+  assert.strictEqual((await postCheckout(base, customer, CHECKOUT)).status, 303);
+  const [placed] = (await admin.get('/app/api/admin/web-orders')).body.items;
+  const item = await stockOf(admin, 'SPR-1');
+
+  const removed = await admin.request('DELETE', `/app/api/stock/items/${item.id}`);
+  assert.strictEqual(removed.status, 409);
+  assert.strictEqual(removed.body.error, 'reserved_by_order');
+  assert.deepStrictEqual(removed.body.orders, [placed.number]);
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${item.id}`, { archived: true })).status, 409);
+  assert.strictEqual((await stockOf(admin, 'SPR-1')).reserved, 2, 'de reservering blijft staan');
+  // Een andere organisatie ziet het artikel niet.
+  assert.strictEqual((await vreemd.request('DELETE', `/app/api/stock/items/${item.id}`)).status, 404);
+
+  // Na verzenden houdt de bestelling het artikel niet meer vast.
+  assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${placed.id}/status`, { status: 'verzonden' })).status, 200);
+  const gone = await admin.request('DELETE', `/app/api/stock/items/${item.id}`);
+  assert.strictEqual(gone.status, 200);
+  assert.strictEqual(gone.body.archived, true);
+});
+
+test('adres niet gevonden: met "zelf invullen" toch bestellen, gemarkeerd als niet gecontroleerd (W-11); mislukte pogingen tellen niet voor de limiet (W-12)', async () => {
+  const { base, admin, shopper } = await setup();
+  const customer = await shopper();
+  await addToCart(base, customer, 'SPR-1', 1);
+  const newBuild = { ...CHECKOUT, street: 'Nieuwbouwlaan 7', postcode: '8071 ZZ', city: 'Nunspeet' };
+  // Een klant die zijn adres een paar keer probeert, loopt niet tegen de bestellimiet aan.
+  for (let attempt = 0; attempt < 11; attempt += 1) {
+    const refused = await postCheckout(base, customer, newBuild);
+    assert.strictEqual(refused.status, 400);
+    assert.match(refused.text, /zelf invult/);
+  }
+  assert.strictEqual((await postCheckout(base, customer, { ...newBuild, addressManual: 'ja', city: '' })).status, 400, 'zonder woonplaats niet');
+  const placed = await postCheckout(base, customer, { ...newBuild, addressManual: 'ja' });
+  assert.strictEqual(placed.status, 303);
+  const list = (await admin.get('/app/api/admin/web-orders')).body.items;
+  assert.strictEqual(list.length, 1);
+  assert.match(list[0].number, /^WEB-\d{4}-0001$/);
+  const detail = (await admin.get(`/app/api/admin/web-orders/${list[0].id}`)).body.order;
+  assert.strictEqual(detail.address.street, 'Nieuwbouwlaan 7');
+  assert.strictEqual(detail.address.unverified, true);
+  // Een gevonden adres krijgt geen markering, en het volgnummer loopt door.
+  await addToCart(base, customer, 'SPR-1', 1);
+  assert.strictEqual((await postCheckout(base, customer, { ...CHECKOUT, addressManual: 'ja' })).status, 303);
+  const second = (await admin.get('/app/api/admin/web-orders')).body.items.find((order) => order.id !== list[0].id);
+  assert.match(second.number, /-0002$/);
+  assert.strictEqual((await admin.get(`/app/api/admin/web-orders/${second.id}`)).body.order.address.unverified, undefined);
 });

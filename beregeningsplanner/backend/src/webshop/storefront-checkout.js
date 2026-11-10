@@ -122,11 +122,12 @@ function setUpAddressLookup(form) {
   const streetInput = form.querySelector('input[name="street"]');
   const cityInput = form.querySelector('input[name="city"]');
   const statusElement = row.querySelector('[data-address-status]');
+  const manualCheckbox = form.querySelector('[data-address-manual]');
   /**
-   * Of straat en woonplaats nu uit de opzoeking komen (Nederland) en dus niet met de hand te wijzigen zijn.
-   * @returns {boolean} true bij Nederland.
+   * Of straat en woonplaats nu uit de opzoeking komen (Nederland, zonder handmatige invoer) en dus niet met de hand te wijzigen zijn.
+   * @returns {boolean} true bij Nederland zonder handmatige invoer.
    */
-  const isDutch = () => !countryField || countryField.value === 'NL';
+  const isDutch = () => (!countryField || countryField.value === 'NL') && !(manualCheckbox && manualCheckbox.checked);
   /**
    * Zet straat en woonplaats alleen-lezen voor Nederland en bewerkbaar voor andere landen.
    * @returns {void}
@@ -137,6 +138,8 @@ function setUpAddressLookup(form) {
   };
   syncReadOnly();
   if (countryField) countryField.addEventListener('change', syncReadOnly);
+  // Adres niet gevonden of PDOK onbereikbaar: de klant vult het zelf in, de server bewaart het als 'niet gecontroleerd' (W-11).
+  if (manualCheckbox) manualCheckbox.addEventListener('change', syncReadOnly);
   const lookup = window.AddressLookup.attach({
     postcodeInput,
     numberInput: row.querySelector('[data-address-number]'),

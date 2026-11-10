@@ -10,13 +10,20 @@
 // shopPayment vervalt hij en komt de voorraad vrij (expireUnpaid, elk uur).
 const { configOf, validPaymentId } = require('./mollie');
 
+/**
+ * Rondt een bedrag af op centen (leeg of ongeldig = 0).
+ * @param {*} value Het bedrag.
+ * @returns {number} Het afgeronde bedrag.
+ */
+const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;
+
 /** Hoe de Mollie-status bij ons heet: betaald, nog open of mislukt. */
 const MOLLIE_STATES = { paid: 'betaald', open: 'open', pending: 'open', authorized: 'open', canceled: 'mislukt', expired: 'mislukt', failed: 'mislukt' };
 
 /**
  * Maakt de betaalfuncties voor webshopbestellingen.
  * @param {{ orders: object, mollie: object, settingsFor: Function, log?: object }} deps De bestelopslag (web-orders.js), de Mollie-client (mollie.js), de instellingen per omgeving en de logger.
- * @returns {{ start: Function, sync: Function, expireUnpaid: Function, onPaid: Function, optionsFor: Function }} De functies.
+ * @returns {{ start: Function, sync: Function, expireUnpaid: Function, onPaid: Function, optionsFor: Function, refund: Function }} De functies.
  */
 function createWebPayments({ orders, mollie, settingsFor, log = console }) {
   const paidHooks = [];
@@ -73,9 +80,22 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
         return { ...pay, status: 'betaald', paidAt: payment.paidAt || new Date().toISOString(), method: payment.method || pay.method || '', paidId: payment.id, ...(order.status === 'geannuleerd' ? { refundNeeded: true } : {}) };
       }
       if (state === 'mislukt' && pay.status === 'open' && pay.id === payment.id) return { ...pay, status: 'mislukt', failedAt: new Date().toISOString(), failure: payment.status };
+      // Na betaald: terugbetalingen (ook vanuit het Mollie-dashboard) en terugboekingen door de bank (chargeback) vastleggen (W-05).
+      if (pay.status === 'betaald' && pay.paidId === payment.id) {
+        const refunded = round2(payment.amountRefunded);
+        const chargedBack = round2(payment.amountChargedBack);
+        if (refunded === round2(pay.refundedTotal) && chargedBack === round2(pay.chargedBack)) return null;
+        const settled = refunded + chargedBack >= order.totals.total - 0.005;
+        return {
+          ...pay, refundedTotal: refunded, chargedBack,
+          ...(chargedBack > round2(pay.chargedBack) ? { chargebackAt: new Date().toISOString() } : {}),
+          ...(settled ? { refundNeeded: false } : {}),
+        };
+      }
       return null;
     });
     if (out.error) return { becamePaid: false };
+    if (out.changed && out.order.pay.chargebackAt && round2(out.order.pay.chargedBack) > 0 && state === 'betaald') log.warn(`Terugboeking (chargeback) van ${round2(out.order.pay.chargedBack)} euro bij bestelling ${out.order.number}.`);
     const becamePaid = Boolean(out.changed) && out.order.pay.status === 'betaald' && out.order.pay.paidId === payment.id;
     if (becamePaid) runPaidHooks(tenantId, out.order);
     return { order: out.order, becamePaid };
@@ -194,7 +214,40 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
     return { expired };
   }
 
-  return { start, sync, expireUnpaid, onPaid, optionsFor };
+  /**
+   * Betaalt (een deel van) een online betaalde bestelling terug via Mollie (W-05): bij een retour het bedrag van de
+   * creditnota, bij een geannuleerde bestelling wat er nog over is. Dezelfde sleutel betaalt nooit twee keer terug
+   * (ook Mollie krijgt hem als idempotentiesleutel).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} orderId Id van de bestelling.
+   * @param {{ amount: number, description: string, key: string }} refund Bedrag in euro, omschrijving voor de klant en de sleutel (bijv. retour:<id> of annulering).
+   * @returns {Promise<{ order?: object, refund?: object, error?: string, status?: number }>} De bijgewerkte bestelling en de terugbetaling, of de fout.
+   */
+  async function refund(tenantId, orderId, { amount, description, key }) {
+    const order = orders.get(tenantId, orderId);
+    if (!order) return { error: 'Bestelling niet gevonden.', status: 404 };
+    if (order.payment !== 'online' || !order.pay || order.pay.status !== 'betaald' || !order.pay.paidId) return { error: 'Deze bestelling is niet online betaald: terugbetalen gaat buiten de webshop om.', status: 409 };
+    const config = configOf(settingsFor(tenantId));
+    if (!config.apiKey) return { error: 'Mollie is niet ingesteld.', status: 409 };
+    const earlier = Array.isArray(order.pay.refunds) ? order.pay.refunds : [];
+    if (earlier.some((entry) => entry.key === key)) return { error: 'Dit is al terugbetaald.', status: 409 };
+    const done = Math.max(earlier.reduce((sum, entry) => sum + Number(entry.amount || 0), 0), round2(order.pay.refundedTotal)) + round2(order.pay.chargedBack);
+    const remaining = round2(order.totals.total - done);
+    const value = Math.min(round2(amount), remaining);
+    if (!(value > 0)) return { error: 'Er valt niets (meer) terug te betalen.', status: 409 };
+    let made;
+    try {
+      made = await mollie.createRefund(config.apiKey, order.pay.paidId, { amount: value, description, idempotencyKey: `terug:${order.id}:${key}` });
+    } catch (error) {
+      return { error: `Terugbetalen via Mollie lukte niet: ${String(error.message || error).slice(0, 200)}`, status: 502 };
+    }
+    const at = new Date().toISOString();
+    const out = orders.changePay(tenantId, order.id, (pay) => ((pay.refunds || []).some((entry) => entry.key === key) ? null
+      : { ...pay, refunds: [...(pay.refunds || []), { id: made.id, key, amount: value, at, status: made.status }], refundNeeded: false }));
+    return { order: out.order || order, refund: { id: made.id, amount: value, status: made.status } };
+  }
+
+  return { start, sync, expireUnpaid, onPaid, optionsFor, refund };
 }
 
 module.exports = { createWebPayments, MOLLIE_STATES };
