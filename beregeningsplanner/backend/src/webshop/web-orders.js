@@ -259,18 +259,20 @@ function createWebOrderStore(db, { stock }) {
    * met btw-verlegging als die van toepassing is (zie vat.js).
    * @param {object} cart De geprijsde winkelwagen (priceCart, met dezelfde klantgroep).
    * @param {object} option De gekozen verzendoptie (shippingQuote, options).
-   * @param {{ group: string, country: string, vatNumber: string }} customer Klantgroep, land van aflevering en genormaliseerd btw-nummer.
-   * @returns {{ lines: object[], shipping: { price: number, priceExcl: number, vatRate: number }, shifted: boolean, totals: object }} De regels (bij verlegging zonder btw), de verzendkosten incl. en excl. btw, of de btw is verlegd en de totalen.
+   * @param {{ group: string, country: string, vatNumber: string, approvedVatNumber?: string }} customer Klantgroep, land van aflevering, genormaliseerd btw-nummer en het door een beheerder goedgekeurde btw-nummer van het account.
+   * @returns {{ lines: object[], shipping: { price: number, priceExcl: number, vatRate: number }, shifted: boolean, otherNumber: boolean, totals: object }} De regels (bij verlegging zonder btw), de verzendkosten incl. en excl. btw, of de btw is verlegd, of verleggen alleen faalt op een ander nummer dan dat van het account, en de totalen.
    */
-  function orderTotals(cart, option, { group, country, vatNumber }) {
-    const shifted = Vat.vatShifted({ group, method: option.method, country, vatNumber });
+  function orderTotals(cart, option, { group, country, vatNumber, approvedVatNumber = '' }) {
+    const shifted = Vat.vatShifted({ group, method: option.method, country, vatNumber, approvedVatNumber });
+    // Verleggen zou kunnen, maar niet met dit nummer: de klant krijgt uitleg bij het totaal.
+    const otherNumber = !shifted && Vat.vatShiftPossible({ group, method: option.method, country, vatNumber });
     const lines = shifted ? cart.lines.map((line) => ({ ...line, vatRate: 0, unitIncl: line.unitExcl, lineTotal: line.lineExcl })) : cart.lines;
     const shippingExcl = round2(option.price / (1 + Shipping.SHIPPING_VAT_RATE / 100));
     const shippingRate = shifted ? 0 : Shipping.SHIPPING_VAT_RATE;
     const business = group === 'zakelijk';
     const shipping = { price: shifted ? shippingExcl : option.price, priceExcl: shippingExcl, vatRate: shippingRate };
     const shippingLine = option.price > 0 ? [business ? { vatRate: shippingRate, lineExcl: shippingExcl, lineTotal: shifted ? shippingExcl : round2(shippingExcl * (1 + shippingRate / 100)) } : { vatRate: shippingRate, lineTotal: option.price }] : [];
-    return { lines, shipping, shifted, totals: totalsOf([...lines, ...shippingLine]) };
+    return { lines, shipping, shifted, otherNumber, totals: totalsOf([...lines, ...shippingLine]) };
   }
 
   /**
@@ -278,7 +280,7 @@ function createWebOrderStore(db, { stock }) {
    * opnieuw, legt de bestelling vast en reserveert de voorraad, alles in één
    * transactie.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ id: string, group?: string, wholesale?: ?{ discountPct: number } }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg) en bij een groothandelsklant zijn vaste korting.
+   * @param {{ id: string, group?: string, wholesale?: ?{ discountPct: number }, vatNumber?: string, vies?: object }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg), bij een groothandelsklant zijn vaste korting, het goedgekeurde btw-nummer van het account en de uitkomst van de VIES-controle (vies.js) als bewijs bij verlegging.
    * @param {object} rawFields De gegevens van het afrekenformulier (zie sanitizeCheckout, plus shippingMethod en country).
    * @param {{ code: string, qty: number }[]} wanted De winkelwagen.
    * @param {object} [shippingConfig] De verzendinstelling (shipping.js); standaard de startwaarden.
@@ -314,7 +316,7 @@ function createWebOrderStore(db, { stock }) {
       if (isPg(db)) prepare('SELECT pg_advisory_xact_lock(hashtext(?)) AS locked').get(`web-orders:${tenantId}:${timestamp.slice(0, 4)}`);
       const number = nextNumber(tenantId, timestamp.slice(0, 4));
       // De verzendkosten zijn een eigen regel in de btw-opbouw (alleen als ze niet gratis zijn).
-      const calculated = orderTotals(cart, option, { group, country, vatNumber: fields.vatNumber });
+      const calculated = orderTotals(cart, option, { group, country, vatNumber: fields.vatNumber, approvedVatNumber: user.vatNumber || '' });
       const totals = calculated.totals;
       if (expectedTotal !== null && !(Math.abs(expectedTotal - totals.total) <= 0.005)) return { error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', status: 409 };
       const data = {
@@ -322,7 +324,7 @@ function createWebOrderStore(db, { stock }) {
         customer: { name: fields.name, company: fields.company, email: fields.email, phone: fields.phone },
         address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' } : { street: fields.street, postcode: fields.postcode, city: fields.city, country },
         shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method === 'dpd', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
-        customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted } : null,
+        customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted, ...(calculated.shifted && user.vies ? { vies: user.vies } : {}) } : null,
         note: fields.note, totals, payment: online ? 'online' : 'op rekening', consent: { terms: true, at: timestamp },
         ...(online ? { pay: { provider: 'mollie', status: 'open', id: null, ids: [], checkoutUrl: '', createdAt: timestamp, paidAt: null } } : {}),
         history: [{ at: timestamp, status: 'nieuw', by: fields.name }],

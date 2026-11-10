@@ -1,7 +1,8 @@
 // Btw voor zakelijke klanten in de eigen webshop: het formaat van een Europees
 // btw-nummer per land en de vraag of de btw wordt verlegd (levering naar een
 // ander EU-land aan een bedrijf met btw-nummer). Zuivere functies; het nummer
-// wordt hier alleen op formaat gecontroleerd, niet bij VIES opgezocht.
+// wordt hier op formaat en tegen het goedgekeurde nummer van het account
+// gecontroleerd, de VIES-controle zit in vies.js.
 
 /** Voorvoegsel van het btw-nummer per landcode (Griekenland gebruikt EL). */
 const VAT_PREFIX = { GR: 'EL' };
@@ -43,13 +44,22 @@ function vatNumberFits(vatNumber, country) {
 }
 
 /**
- * Of de btw wordt verlegd: een bedrijf met een geldig btw-nummer van het land van aflevering, in een ander EU-land dan Nederland (EL is geen landcode van een bestemming: Griekenland is GR).
+ * Of de levering in aanmerking komt voor verlegging, los van welk nummer het is: een zakelijke klant, bezorging in een ander EU-land dan Nederland (EL is geen landcode van een bestemming: Griekenland is GR) en een geldig btw-nummer van dat land.
  * @param {{ group: string, method: string, country: string, vatNumber: string }} order Klantgroep, verzendmethode, land en btw-nummer.
- * @returns {boolean} true als de bestelling zonder btw wordt gefactureerd.
+ * @returns {boolean} true als verleggen met dit nummer zou kunnen.
  */
-function vatShifted({ group, method, country, vatNumber }) {
+function vatShiftPossible({ group, method, country, vatNumber }) {
   if (group !== 'zakelijk' || method !== 'dpd' || country === 'NL' || country === 'EL') return false;
   return validVatNumber(vatNumber) && vatNumberFits(vatNumber, country);
 }
 
-module.exports = { normalizeVatNumber, validVatNumber, vatNumberFits, vatShifted };
+/**
+ * Of de btw wordt verlegd: zoals vatShiftPossible, en het nummer is het btw-nummer dat een beheerder bij het zakelijke account heeft goedgekeurd (W-01). Een ander nummer in het afrekenformulier verlegt niets.
+ * @param {{ group: string, method: string, country: string, vatNumber: string, approvedVatNumber?: string }} order Klantgroep, verzendmethode, land, ingevuld btw-nummer en het goedgekeurde btw-nummer van het account.
+ * @returns {boolean} true als de bestelling zonder btw wordt gefactureerd.
+ */
+function vatShifted({ group, method, country, vatNumber, approvedVatNumber = '' }) {
+  return vatShiftPossible({ group, method, country, vatNumber }) && Boolean(approvedVatNumber) && vatNumber === approvedVatNumber;
+}
+
+module.exports = { normalizeVatNumber, validVatNumber, vatNumberFits, vatShiftPossible, vatShifted };

@@ -5,6 +5,10 @@ const { after } = test;
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { createPdokFake } = require('./helpers/pdok-fake');
+const { createViesFake } = require('./helpers/vies-fake');
+
+/** Nagebootste VIES: BE0123456789 is geldig, de rest ongeldig. */
+const viesFake = createViesFake({ valid: ['BE0123456789'] });
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const Vat = require('../src/webshop/vat');
@@ -24,8 +28,10 @@ test('btw-nummer: formaat, landvoorvoegsel en verleggen', () => {
   assert.ok(Vat.validVatNumber('BE0123456789') && Vat.validVatNumber('NL123456789B01') && Vat.validVatNumber('DE123456789') && Vat.validVatNumber('EL123456789'));
   assert.ok(!Vat.validVatNumber(Vat.normalizeVatNumber('SE123456789012XYZ')), 'te lang wordt niet afgekapt tot geldig');
   assert.ok(!Vat.validVatNumber('BE12') && !Vat.validVatNumber('XX123456789') && !Vat.validVatNumber(''));
-  assert.ok(Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'BE', vatNumber: 'BE0123456789' }));
-  assert.ok(Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'GR', vatNumber: 'EL123456789' }), 'Griekenland gebruikt EL');
+  assert.ok(Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'BE', vatNumber: 'BE0123456789', approvedVatNumber: 'BE0123456789' }));
+  assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'BE', vatNumber: 'BE0123456789' }), 'zonder goedgekeurd nummer op het account niet (W-01)');
+  assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'BE', vatNumber: 'BE0123456789', approvedVatNumber: 'BE0999999999' }), 'ander nummer dan op het account');
+  assert.ok(Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'GR', vatNumber: 'EL123456789', approvedVatNumber: 'EL123456789' }), 'Griekenland gebruikt EL');
   assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'EL', vatNumber: 'EL123456789' }), 'EL is geen bestemmingscode');
   assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'NL', vatNumber: 'NL123456789B01' }), 'Nederland: gewoon btw');
   assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'BE', vatNumber: 'DE123456789' }), 'nummer van een ander land');
@@ -50,7 +56,7 @@ async function setup() {
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   const other = store.createTenant({ slug: 'ander', name: 'Ander BV' }).tenant;
   await store.createAccount(other.id, { username: 'vreemd', displayName: 'Vreemd', role: 'beheerder', password: PW, mustChangePassword: false });
-  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor: () => ({ configured: () => false, send: async () => {} }) }));
+  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, viesFetch: viesFake.fetchImpl, secret: SECRET, db, mailerFor: () => ({ configured: () => false, send: async () => {} }) }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
@@ -73,7 +79,7 @@ async function setup() {
     return { client, id: users.find((user) => user.email === `k${counter}@voorbeeld.nl`).id };
   };
   const business = await shopper();
-  assert.strictEqual((await admin.patch(`/app/api/admin/users/${business.id}`, { customerGroup: 'zakelijk' })).status, 200);
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${business.id}`, { customerGroup: 'zakelijk', companyName: 'Bakker Tuinen BV', kvkNumber: '12345678', vatNumber: 'BE0123456789' })).status, 200);
   const private1 = await shopper();
   return { base, admin, vreemd: await createLogin(base, { password: PW })('vreemd', 'ander'), business, private1 };
 }
@@ -186,4 +192,27 @@ test('klantgroep wijzigen: alleen met recht, geldige waarde, andere organisatie 
   assert.strictEqual((await private1.client.patch(`/app/api/admin/users/${private1.id}`, { customerGroup: 'zakelijk' })).status, 403, 'een klant kiest zijn groep niet zelf');
   assert.strictEqual((await vreemd.patch(`/app/api/admin/users/${business.id}`, { customerGroup: '' })).status, 404);
   assert.strictEqual((await admin.patch(`/app/api/admin/users/${business.id}`, { customerGroup: '' })).body.customerGroup, '');
+});
+
+test('btw verleggen alleen met het goedgekeurde nummer en als VIES het niet ongeldig noemt (W-01)', async () => {
+  const { base, admin, business } = await setup();
+  await addToCart(base, business.client, 'BUS', 2);
+  // Een ander nummer dan op het account: gewoon btw, met uitleg.
+  const other = await postForm(base, business.client, '/afrekenen/', { ...COMPANY, postcode: '9000', country: 'BE', vatNumber: 'BE0999999999', action: 'update' });
+  assert.match(other.text, /niet het goedgekeurde btw-nummer/);
+  assert.doesNotMatch(other.text, /Totaal \(btw verlegd\)/);
+  // Het goedgekeurde nummer: verlegd, met de VIES-uitkomst als bewijs in de bestelling.
+  const placed = await postCheckout(base, business.client, { ...COMPANY, postcode: '9000', country: 'BE', vatNumber: 'BE0123456789' });
+  assert.strictEqual(placed.status, 303, placed.text);
+  const orderId = (await admin.get('/app/api/admin/web-orders')).body.items[0].id;
+  const order = (await admin.get(`/app/api/admin/web-orders/${orderId}`)).body.order;
+  assert.strictEqual(order.vat.shifted, true);
+  assert.strictEqual(order.vat.vies.status, 'geldig');
+  // Het account krijgt een nummer dat VIES ongeldig noemt: niet bestellen met verlegging.
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${business.id}`, { vatNumber: 'BE0999999999' })).status, 200);
+  await addToCart(base, business.client, 'BUS', 1);
+  const refused = await postCheckout(base, business.client, { ...COMPANY, postcode: '9000', country: 'BE', vatNumber: 'BE0999999999' });
+  assert.strictEqual(refused.status, 409);
+  assert.match(refused.text, /volgens VIES/);
+  assert.strictEqual((await admin.get('/app/api/admin/web-orders')).body.items.length, 1, 'geen tweede bestelling');
 });

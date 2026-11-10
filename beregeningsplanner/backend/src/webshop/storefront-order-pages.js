@@ -102,7 +102,7 @@ function summaryData(option, summary, business) {
     'data-total': String(summary.totals.total),
     'data-total-text': formatPrice(summary.totals.total),
     'data-total-caption': totalCaption(business, summary.shifted),
-    'data-note': vatNoteText(business, summary.shifted),
+    'data-note': vatNoteText(business, summary.shifted, summary.otherNumber),
   };
   return Object.entries(attributes).map(([name, value]) => ` ${name}="${escapeHtml(value)}"`).join('');
 }
@@ -121,11 +121,13 @@ function totalCaption(business, shifted) {
  * De opmerking over de btw onder het totaal op de pagina Afrekenen.
  * @param {boolean} business true voor een zakelijke klant.
  * @param {boolean} shifted true als de btw is verlegd.
+ * @param {boolean} [otherNumber] true als verleggen alleen niet kan omdat het nummer niet het goedgekeurde nummer van het account is.
  * @returns {string} De tekst, of leeg voor een particulier.
  */
-function vatNoteText(business, shifted) {
+function vatNoteText(business, shifted, otherNumber = false) {
   if (shifted) return 'Btw verlegd: je bestelling wordt zonder btw gefactureerd (intracommunautaire levering).';
-  return business ? 'Prijzen excl. btw; de btw komt er bij het afrekenen bovenop. Heb je een btw-nummer van het land van aflevering (buiten Nederland), vul het in en de btw wordt verlegd.' : '';
+  if (business && otherNumber) return 'Dit btw-nummer is niet het goedgekeurde btw-nummer van je zakelijke account, dus de btw wordt niet verlegd. Neem contact met ons op om het btw-nummer van je account te laten wijzigen.';
+  return business ? 'Prijzen excl. btw; de btw komt er bij het afrekenen bovenop. Bij levering buiten Nederland wordt de btw verlegd met het btw-nummer van je zakelijke account.' : '';
 }
 
 /**
@@ -187,7 +189,7 @@ function checkoutPage({ cart, quote, country, method, summary = null, summaries 
   const shippingShown = summary ? (business ? summary.shipping.priceExcl : summary.shipping.price) : 0;
   const shippingRow = `<li data-ship-row${chosen ? '' : ' hidden'}><span data-ship-label>${chosen ? escapeHtml(shippingCaption(chosen.label, chosen.price > 0, business)) : ''}</span><span data-ship-price>${chosen ? (chosen.price > 0 ? escapeHtml(formatPrice(shippingShown)) : 'Gratis') : ''}</span></li>`;
   const total = summary ? summary.totals.total : cart.totals.total;
-  const noteText = vatNoteText(business, Boolean(summary && summary.shifted));
+  const noteText = vatNoteText(business, Boolean(summary && summary.shifted), Boolean(summary && summary.otherNumber));
   const vatNote = `<p class="note" data-vat-note${noteText ? '' : ' hidden'}>${escapeHtml(noteText)}</p>`;
   const body = `<section class="cart checkout"><h1>Afrekenen</h1>
 ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
