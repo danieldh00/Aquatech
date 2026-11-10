@@ -2,7 +2,7 @@
 
 ## 1.7.5
 
-Vervolg op de audit van 1.7.3: de punten uit *Functioneel beter* die nog openstonden (8, 12, 5 en de tussenstap van 1).
+Vervolg op de audit van 1.7.3: de punten uit *Functioneel beter* die nog openstonden (8, 12, 5, 2 en de tussenstap van 1).
 
 **Reservering per bestelling (8)**
 - Instelling `shopPayment.accountHoldDays` (0-90, standaard 14; Beheer > Webshop > Betalen). Een nieuwe bestelling krijgt
@@ -23,6 +23,29 @@ Vervolg op de audit van 1.7.3: de punten uit *Functioneel beter* die nog opensto
 **Inloggen (5)**
 - Oplopende vertraging per account en bezoeker (`loginGuard.wait`): na drie mislukte pogingen 1, 2, 4 en daarna 8 seconden voor
   elke volgende poging, ook in de webshop. Tests zetten hem uit met `createApp({ loginDelayMs: 0 })`.
+
+**Tweestapsverificatie (5)**
+- Migratie 51: `users.totp_secret` (versleuteld met de kluis, AAD `<tenant>:totp:<gebruiker>`), `totp_enabled_at`,
+  `totp_last_step` (een code werkt maar één keer) en `totp_recovery` (alleen SHA-256 van tien herstelcodes).
+- `beveiliging/totp.js`: TOTP volgens RFC 6238 (HMAC-SHA1, 30 s, 6 cijfers, één stap speling) zonder bibliotheek, getest
+  tegen de testvectoren. `beveiliging/two-factor.js`: opslag en routes `GET /api/account/totp`, `POST …/setup`, `…/confirm`,
+  `…/disable` (wachtwoord + code) en `DELETE /api/admin/users/:id/totp` (beheerder, telefoon kwijt).
+- Inloggen: met 2FA aan geeft `/api/auth/login` zonder code 401 `totp_required` (pas na een goed wachtwoord) en bij een
+  verkeerde code 401 `totp_wrong`; verkeerde codes tellen apart (`totp:<gebruiker>`) met dezelfde blokkering en vertraging.
+  Het codeveld op de inlogpagina verschijnt pas als het account erom vraagt. Een account met 2FA logt niet via de winkel in.
+- Mijn profiel: blok Tweestapsverificatie met QR-code (eigen encoder `shared/qr-code.js`, in de browser), sleutel om over te
+  typen en de herstelcodes (één keer getoond). Beheer > Gebruikers: knop *2FA uitzetten*.
+
+**Tenantafscherming in PostgreSQL (2)**
+- Rol `aquatech_app` (zonder BYPASSRLS) met een policy `aquatech_tenant` op elke tabel met `tenant_id`:
+  `tenant_id = ANY(string_to_array(current_setting('aquatech.tenants', true), ','))`; tabellen zonder `tenant_id` krijgen
+  `USING (true)`, `work_order_offers` (tussen organisaties) blijft zonder beperking.
+- Per verzoek een scope (`database/tenant-scope.js`, AsyncLocalStorage): `identify()` beperkt een gewone gebruiker tot de omgevingen
+  van zijn organisatie (`store.familyIds`, 30 s cache). `pgdb.js` stuurt de scope mee; de werkthread zet `aquatech.tenants` en
+  `SET ROLE aquatech_app` (zonder scope `RESET ROLE`). Hoofdbeheerder, achtergrondtaken en bewust organisatie-overstijgende code
+  (audit, uitbesteden, supportweergave) via `asSystem`/`pinSystem`.
+- Uit te zetten met `PG_TENANT_RLS=0`. Mag de databasegebruiker geen rol aanmaken, dan logt de server een waarschuwing en
+  werkt hij zoals voorheen (alleen de filters in de code). SQLite: geen verandering.
 
 **Snelheid webshop (1, tussenstap)**
 - Omschrijvingen per productpagina en voor de feed in dezelfde geheugencache als de catalogus (30 s); een shop-pagina kost met een

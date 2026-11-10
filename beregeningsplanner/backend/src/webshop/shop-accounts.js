@@ -13,10 +13,10 @@ const LOGIN_MAX_FAILURES = 10;
 
 /**
  * Maakt de accountfuncties van de webshop.
- * @param {{ store: object, auth: object, tenant: object, audit: Function, clearEnvironment: Function, impersonation: object, loginGuard: object }} deps Opslag, sessies, de hoofdtenant waar de shop bij hoort en de blokkering van het hoofdinlogscherm (per account en bezoeker).
+ * @param {{ store: object, auth: object, tenant: object, audit: Function, clearEnvironment: Function, impersonation: object, loginGuard: object, twoFactor?: object }} deps Opslag, sessies, de hoofdtenant waar de shop bij hoort, de blokkering van het hoofdinlogscherm (per account en bezoeker) en de tweestapsverificatie (zo'n account logt niet via de winkel in).
  * @returns {{ viewer: Function, login: Function, register: Function, logout: Function, businessProfile: Function, requestBusiness: Function, mailReady: Function, sendVerification: Function, forgotPassword: Function, resetPassword: Function, verifyEmail: Function }} De functies.
  */
-function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, tokens = null, mailerFor = null, settingsFor = null, mailBody = null }) {
+function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor = null, tokens = null, mailerFor = null, settingsFor = null, mailBody = null }) {
   const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyFn: (req) => `login:${clientKey(req)}` });
   const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `register:${clientKey(req)}` });
   const recoveryLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `herstel:${clientKey(req)}` });
@@ -95,6 +95,11 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
       return { error: 'Onjuist e-mailadres, gebruikersnaam of wachtwoord.', status: 401 };
     }
     loginGuard.clear(req, key);
+    // Een account met tweestapsverificatie logt in via de app (daar wordt de code gevraagd), niet via de winkel.
+    if (twoFactor && twoFactor.stateOf(user.tenant_id, user.id).enabled) {
+      audit(req, 'inloggen_geweigerd', { username, via: 'winkel', reden: 'tweestaps' }, user.id, user.tenant_id);
+      return { error: 'Dit account gebruikt tweestapsverificatie. Log in via de app op app/login; daar vul je ook de code in.', status: 403 };
+    }
     startSession(req, res, user);
     audit(req, 'ingelogd', { via: 'winkel' }, user.id, user.tenant_id);
     return { user };

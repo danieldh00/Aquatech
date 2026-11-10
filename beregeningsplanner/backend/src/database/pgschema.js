@@ -887,6 +887,13 @@ const PG_MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN specifications ${TEXT_TYPE} NOT NULL DEFAULT '[]';
   ALTER TABLE shop_products ADD COLUMN description ${TEXT_TYPE} NOT NULL DEFAULT '';
   `,
+  // 51: tweestapsverificatie per account (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN totp_secret ${TEXT_TYPE};
+  ALTER TABLE users ADD COLUMN totp_enabled_at ${TEXT_TYPE};
+  ALTER TABLE users ADD COLUMN totp_last_step BIGINT;
+  ALTER TABLE users ADD COLUMN totp_recovery ${TEXT_TYPE} NOT NULL DEFAULT '[]';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

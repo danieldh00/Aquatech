@@ -20,6 +20,7 @@ const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
+const { asSystem, pinSystem } = require('../database/tenant-scope');
 const { createMailer, validEmail } = require('../platform/mailer');
 const { mailBody } = require('../verkoop/quotes');
 
@@ -266,6 +267,16 @@ function createOutsourcingStore(db, { workorders }) {
    * @returns {object} Werkorder-id → rol, aanbod, status en partner.
    */
   function marks(tenantId) {
+    // Als systeem: de voortgang staat in de werkorder bij de ontvangende organisatie.
+    return asSystem(() => marksOf(tenantId));
+  }
+
+  /**
+   * Zie marks (zonder de afscherming).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {object} Per werkorder-id de stand van het uitbesteden.
+   */
+  function marksOf(tenantId) {
     const out = {};
     for (const offerRow of prepare(`SELECT ${COLS} FROM work_order_offers WHERE tenant_id = ? AND status IN ('aangeboden', 'geaccepteerd')`).all(tenantId)) {
       out[offerRow.work_order_id] = { role: 'uitbesteed', offerId: offerRow.id, status: offerRow.status, partner: offerRow.receiver_name || '', direct: Boolean(offerRow.to_tenant_id), execution: execution(offerRow) };
@@ -363,6 +374,9 @@ function createOutsourcingStore(db, { workorders }) {
  * @param {object} ctx outsourcing, store, requireRight, requireJson, audit, settingsForTenant(id), tenantActive(id) en mailerFor(settings).
  */
 function registerOutsourcingRoutes(app, ctx) {
+  // Uitbesteden werkt per ontwerp tussen organisaties (aanbod, partners, voortgang bij de ontvanger): deze routes lopen
+  // zonder de tenantafscherming in de database; de controles hieronder bepalen wie wat ziet.
+  app.use('/api/outsourcing', (req, res, next) => { pinSystem(); next(); });
   const { outsourcing, store, requireRight, requireJson, audit, settingsForTenant } = ctx;
   const tenantActive = ctx.tenantActive || (() => true);
   const mailerFor = ctx.mailerFor || ((settings) => createMailer(settings));
