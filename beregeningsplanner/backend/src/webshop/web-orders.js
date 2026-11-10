@@ -257,6 +257,20 @@ function createWebOrderStore(db, { stock }) {
   }
 
   /**
+   * Vergrendelt de voorraadrijen van een geplaatste bestelling op id (in vaste volgorde), zodat een gewijzigde
+   * artikelcode het slot niet omzeilt. Alleen onder PostgreSQL; moet binnen een transactie lopen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ itemId: string }[]} lines De regels van de bestelling.
+   * @returns {void}
+   */
+  function lockItemIds(tenantId, lines) {
+    if (!isPg(db)) return;
+    const ids = [...new Set(lines.map((line) => String(line.itemId || '')).filter(Boolean))].sort().slice(0, MAX_LINES);
+    if (!ids.length) return;
+    prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND id IN (${ids.map(() => '?').join(', ')}) ORDER BY id FOR UPDATE`).all(tenantId, ...ids);
+  }
+
+  /**
    * Leest de bestelling voor een wijziging; onder PostgreSQL met een rijslot tot het einde van de transactie.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de bestelling.
@@ -494,8 +508,8 @@ function createWebOrderStore(db, { stock }) {
       if (status === 'verzonden' && data.payment === 'online' && !(data.pay && data.pay.status === 'betaald')) return { error: 'Deze bestelling is nog niet betaald: verzenden kan pas na de betaling.', status: 409 };
       // Een vrijgegeven reservering (8): de voorraad kan intussen voor een ander gereserveerd zijn; alleen verzenden wat vrij is.
       if (status === 'verzonden' && data.reservationReleasedAt) {
-        // Dezelfde rijsloten als bij het plaatsen: tot het einde van de transactie kan niemand deze voorraad reserveren.
-        lockItems(tenantId, data.lines);
+        // Rijsloten op id (zoals bij het plaatsen, maar ongevoelig voor een gewijzigde code): tot het einde van de transactie kan niemand deze voorraad reserveren.
+        lockItemIds(tenantId, data.lines);
         const short = stock.shortageFor(tenantId, data.lines.map((line) => ({ itemId: line.itemId, qty: line.qty })), `order:${row.id}`);
         if (short.length) return { error: `De reservering van deze bestelling was vervallen en er is niet genoeg vrije voorraad meer voor: ${short.map((item) => item.name).join(', ')}.`, status: 409 };
       }
