@@ -726,6 +726,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // de ingevulde code (anders geeft elke verzonnen code nieuwe pogingen).
       const mainKey = `${tenant.id}:${username}`;
       if (!user && home?.id !== tenant.id && !loginGuard.blocked(req, mainKey)) {
+        // Ook hier de oplopende vertraging, met de teller van het hoofdaccount (wisselende codes omzeilen hem niet).
+        await loginGuard.wait(req, mainKey);
         const admin = await store.authenticate(tenant.id, username, password);
         if (admin?.platform_admin) { user = admin; home = tenant; loginGuard.clear(req, mainKey); }
         else if (!admin) loginGuard.fail(req, mainKey);
@@ -740,6 +742,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
           audit(req, 'inloggen_geblokkeerd', { username, organisatie: orgCode }, null, testAccount.home.id);
           return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen voor deze gebruiker. Probeer het over een kwartier opnieuw.' });
         }
+        await loginGuard.wait(req, testKey);
         const testUser = await store.authenticate(testAccount.home.id, username, password);
         if (testUser) { user = testUser; home = testAccount.home; loginGuard.clear(req, testKey); }
         else loginGuard.fail(req, testKey);

@@ -1511,6 +1511,28 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Welke artikelen niet genoeg vrije voorraad hebben voor deze regels: stand min wat anderen gereserveerd hebben (de
+   * eigen reservering telt niet mee). Artikelen zonder voorraadbeheer tellen niet. Eén query.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ itemId: string, qty: number }[]} lines Artikel en aantal.
+   * @param {string} ownKey De eigen reservering (bijv. `order:<id>`), die niet meetelt.
+   * @returns {{ id: string, name: string, needed: number, free: number }[]} De artikelen met te weinig vrije voorraad.
+   */
+  function shortageFor(tenantId, lines, ownKey) {
+    const needed = new Map();
+    for (const line of lines || []) if (line.itemId) needed.set(line.itemId, round3((needed.get(line.itemId) || 0) + Number(line.qty || 0)));
+    if (!needed.size) return [];
+    const ids = [...needed.keys()];
+    const rows = prepare(`SELECT i.id, i.name, i.on_hand, i.stock_managed,
+        (SELECT COALESCE(SUM(r.qty), 0) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id AND r.work_order_id <> ?) AS reserved
+      FROM stock_items i WHERE i.tenant_id = ? AND i.id IN (${ids.map(() => '?').join(', ')})`).all(String(ownKey), tenantId, ...ids);
+    return rows
+      .filter((itemRow) => itemRow.stock_managed === undefined || Number(itemRow.stock_managed))
+      .map((itemRow) => ({ id: itemRow.id, name: itemRow.name, needed: needed.get(itemRow.id), free: round3(Number(itemRow.on_hand) - Number(itemRow.reserved)) }))
+      .filter((item) => item.free < item.needed);
+  }
+
+  /**
    * Laat de reservering van een webshopbestelling vervallen (annuleren of na het afboeken).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} orderId Id van de bestelling.
@@ -1893,7 +1915,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     units, addUnit, removeUnit, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants,
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
-    reorderProposal, reserveOrder, releaseOrder, issueOrder, onDirty: setDirtyHook,
+    reorderProposal, reserveOrder, releaseOrder, issueOrder, shortageFor, onDirty: setDirtyHook,
     addCostPrice, setLayerCost, stockValue: costs.stockValue,
   };
 }

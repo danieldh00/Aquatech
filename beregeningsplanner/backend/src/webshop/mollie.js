@@ -57,13 +57,14 @@ function cleanPublicUrl(raw) {
 function sanitizePayment(raw) {
   const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const hours = Math.floor(Number(input.holdHours));
-  const days = input.accountHoldDays === '' || input.accountHoldDays == null ? NaN : Math.floor(Number(input.accountHoldDays));
+  // Alleen hele dagen: 0,5 wordt niet stilletjes 0 (dat zou het vrijgeven uitzetten) maar valt terug op de standaard.
+  const days = input.accountHoldDays === '' || input.accountHoldDays == null ? NaN : Number(input.accountHoldDays);
   return {
     online: input.online === true,
     publicUrl: cleanPublicUrl(input.publicUrl),
     onAccount: ON_ACCOUNT.includes(input.onAccount) ? input.onAccount : 'iedereen',
     holdHours: Number.isFinite(hours) && hours >= 1 && hours <= 168 ? hours : DEFAULT_HOLD_HOURS,
-    accountHoldDays: Number.isFinite(days) && days >= 0 && days <= 90 ? days : DEFAULT_ACCOUNT_HOLD_DAYS,
+    accountHoldDays: Number.isInteger(days) && days >= 0 && days <= 90 ? days : DEFAULT_ACCOUNT_HOLD_DAYS,
   };
 }
 

@@ -964,7 +964,7 @@
      */
     paymentForm.onsubmit = (event) => {
       event.preventDefault();
-      const patch = { shopPayment: { online: paymentForm.online.checked, publicUrl: paymentForm.publicUrl.value.trim(), onAccount: paymentForm.onAccount.value, holdHours: Number(paymentForm.holdHours.value), accountHoldDays: Number(paymentForm.accountHoldDays.value) } };
+      const patch = { shopPayment: { online: paymentForm.online.checked, publicUrl: paymentForm.publicUrl.value.trim(), onAccount: paymentForm.onAccount.value, holdHours: Number(paymentForm.holdHours.value), accountHoldDays: paymentForm.accountHoldDays.value.trim() === '' ? '' : Number(paymentForm.accountHoldDays.value) } };
       if (paymentForm.mollieApiKey.value.trim()) patch.mollieApiKey = paymentForm.mollieApiKey.value.trim();
       saveSettings(paymentForm, patch, 'Betalen opgeslagen');
     };

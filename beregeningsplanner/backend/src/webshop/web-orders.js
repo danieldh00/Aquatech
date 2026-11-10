@@ -492,6 +492,11 @@ function createWebOrderStore(db, { stock }) {
       if (!TRANSITIONS[row.status].includes(status)) return { error: `Een bestelling met status ${STATUSES[row.status]} kan niet naar ${STATUSES[status]}.`, status: 409 };
       const data = JSON.parse(row.data);
       if (status === 'verzonden' && data.payment === 'online' && !(data.pay && data.pay.status === 'betaald')) return { error: 'Deze bestelling is nog niet betaald: verzenden kan pas na de betaling.', status: 409 };
+      // Een vrijgegeven reservering (8): de voorraad kan intussen voor een ander gereserveerd zijn; alleen verzenden wat vrij is.
+      if (status === 'verzonden' && data.reservationReleasedAt) {
+        const short = stock.shortageFor(tenantId, data.lines.map((line) => ({ itemId: line.itemId, qty: line.qty })), `order:${row.id}`);
+        if (short.length) return { error: `De reservering van deze bestelling was vervallen en er is niet genoeg vrije voorraad meer voor: ${short.map((item) => item.name).join(', ')}.`, status: 409 };
+      }
       const timestamp = currentTimestamp();
       if (status === 'verzonden') stock.issueOrder(tenantId, { id: row.id, number: row.number }, data.lines.map((line) => ({ itemId: line.itemId, qty: line.qty })), user);
       if (status === 'geannuleerd') stock.releaseOrder(tenantId, row.id);
@@ -605,9 +610,17 @@ function createWebOrderStore(db, { stock }) {
    * @returns {{ released: number }} Het aantal vrijgegeven bestellingen.
    */
   function releaseExpired(tenantId, now = currentTimestamp()) {
-    const candidates = prepare(`SELECT id, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND data LIKE '%"reservedUntil"%' AND data NOT LIKE '%"reservationReleasedAt"%' AND data NOT LIKE '%"payment":"online"%' ORDER BY created_at, id LIMIT 500`)
-      .all(tenantId)
-      .filter((row) => { const until = JSON.parse(row.data).reservedUntil; return typeof until === 'string' && until <= now; });
+    // Per pagina van 500 bladeren tot er 500 verlopen zijn: niet-verlopen bestellingen verdringen verlopen dan niet.
+    const page = prepare(`SELECT id, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND data LIKE '%"reservedUntil"%' AND data NOT LIKE '%"reservationReleasedAt"%' AND data NOT LIKE '%"payment":"online"%' ORDER BY created_at, id LIMIT 500 OFFSET ?`);
+    const candidates = [];
+    for (let offset = 0; candidates.length < 500; offset += 500) {
+      const rows = page.all(tenantId, offset);
+      for (const row of rows) {
+        const until = JSON.parse(row.data).reservedUntil;
+        if (typeof until === 'string' && until <= now && candidates.length < 500) candidates.push(row);
+      }
+      if (rows.length < 500) break;
+    }
     let released = 0;
     for (const candidate of candidates) {
       const done = transaction(db, () => {

@@ -63,6 +63,8 @@
   const reservationText = (order) => {
     if (order.status !== 'nieuw') return '';
     if (order.reservationReleasedAt) return `<br><strong>Reservering vervallen</strong> op ${when(order.reservationReleasedAt)}: de voorraad is weer vrij. Verzenden kan nog, mits er voorraad is.`;
+    // Een betaalde online bestelling houdt haar voorraad tot verzenden of annuleren; de betaaltermijn speelt dan niet meer.
+    if (order.payment === 'online' && order.pay && order.pay.status === 'betaald') return '<br>Voorraad gereserveerd tot verzenden of annuleren.';
     if (order.reservedUntil) return `<br>Voorraad gereserveerd tot ${when(order.reservedUntil)}.`;
     return '';
   };

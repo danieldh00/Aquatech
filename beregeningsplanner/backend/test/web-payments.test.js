@@ -22,6 +22,23 @@ async function placeOnline(world, shopper) {
 }
 
 /**
+ * Zet bestellingen terug in de tijd: aanmaakmoment en de vastgelegde reserveringstermijn (data.reservedUntil) liggen dan het opgegeven aantal uren eerder.
+ * @param {object} world De testopzet.
+ * @param {number} hours Hoeveel uur geleden de bestelling geplaatst is.
+ * @param {string} [orderId] Alleen deze bestelling (leeg = allemaal).
+ * @returns {void}
+ */
+const backdate = (world, hours, orderId) => {
+  const rows = world.db.prepare('SELECT id, created_at, data FROM web_orders').all().filter((row) => !orderId || row.id === orderId);
+  const createdAt = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+  for (const row of rows) {
+    const data = JSON.parse(row.data);
+    if (data.reservedUntil) data.reservedUntil = new Date(Date.parse(createdAt) + (Date.parse(data.reservedUntil) - Date.parse(row.created_at))).toISOString();
+    world.db.prepare('UPDATE web_orders SET created_at = ?, data = ? WHERE id = ?').run(createdAt, JSON.stringify(data), row.id);
+  }
+};
+
+/**
  * Laat Mollie de webhook voor een betaling aanroepen (zonder cookies, zoals Mollie zelf).
  * @param {object} world Het resultaat van setup.
  * @param {string} orderId Het bestel-id in het adres van de webhook.
@@ -37,9 +54,9 @@ test('de instelling bewaart de sleutel versleuteld en toont hem nooit', async ()
   assert.strictEqual(view.mollieApiKey.value, undefined);
   assert.strictEqual(view.mollieApiKey.hint, '…4567');
   assert.strictEqual(view.shopPayment.value.publicUrl, 'https://winkel.example/');
-  const invalid = await world.admin.put('/app/api/admin/settings', { shopPayment: { online: true, publicUrl: 'http://evil.example/', onAccount: 'zomaar', holdHours: 9999 } });
+  const invalid = await world.admin.put('/app/api/admin/settings', { shopPayment: { online: true, publicUrl: 'http://evil.example/', onAccount: 'zomaar', holdHours: 9999, accountHoldDays: 0.5 } });
   assert.strictEqual(invalid.status, 200);
-  assert.deepStrictEqual(invalid.body.settings.shopPayment.value, { online: true, publicUrl: '', onAccount: 'iedereen', holdHours: 24, accountHoldDays: 14 }, 'http buiten localhost, onbekende keuze en bewaartijd worden gesaneerd');
+  assert.deepStrictEqual(invalid.body.settings.shopPayment.value, { online: true, publicUrl: '', onAccount: 'iedereen', holdHours: 24, accountHoldDays: 14 }, 'http buiten localhost, onbekende keuze, bewaartijd en een halve dag worden gesaneerd');
 });
 
 test('de betaalinstelling is alleen voor beheerders van de hoofdtenant', async () => {
@@ -211,8 +228,7 @@ test('een onbetaalde online bestelling vervalt na de bewaartijd, een betaalde ni
   const unpaid = await placeOnline(world, first);
   const paid = await placeOnline(world, second);
   world.mollie.set(paid.paymentId, 'paid');
-  const old = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
-  world.db.prepare('UPDATE web_orders SET created_at = ?').run(old);
+  backdate(world, 25);
   assert.deepStrictEqual(await world.app.locals.webPaymentsExpire(), { expired: 1 });
   const expired = (await world.admin.get(`/app/api/admin/web-orders/${unpaid.id}`)).body.order;
   assert.strictEqual(expired.status, 'geannuleerd');
@@ -221,6 +237,17 @@ test('een onbetaalde online bestelling vervalt na de bewaartijd, een betaalde ni
   assert.strictEqual(kept.status, 'nieuw');
   assert.strictEqual(kept.pay.status, 'betaald', 'bleek bij Mollie toch betaald');
   assert.deepStrictEqual(await world.app.locals.webPaymentsExpire(), { expired: 0 });
+});
+
+test('een kortere bewaartijd geldt niet voor een bestelling die al geplaatst is', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const { id } = await placeOnline(world, customer);
+  const current = (await world.admin.get('/app/api/admin/settings')).body.settings.shopPayment.value;
+  assert.strictEqual((await world.admin.put('/app/api/admin/settings', { shopPayment: { ...current, holdHours: 1 } })).status, 200);
+  backdate(world, 2);
+  assert.deepStrictEqual(await world.app.locals.webPaymentsExpire(), { expired: 0 }, 'de bij het plaatsen vastgelegde 24 uur tellen');
+  assert.strictEqual((await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.order.status, 'nieuw');
 });
 
 test('betaald na annuleren: de betaling wordt vastgelegd met een waarschuwing om terug te betalen', async () => {
@@ -277,7 +304,7 @@ test('zonder Mollie-sleutel blijft een onbetaalde online bestelling staan in pla
   const [customer] = world.shoppers;
   const { id } = await placeOnline(world, customer);
   await world.admin.put('/app/api/admin/settings', { mollieApiKey: '' });
-  world.db.prepare('UPDATE web_orders SET created_at = ?').run(new Date(Date.now() - 25 * 3600 * 1000).toISOString());
+  backdate(world, 25);
   assert.deepStrictEqual(await world.app.locals.webPaymentsExpire(), { expired: 0 });
   const detail = (await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.order;
   assert.strictEqual(detail.status, 'nieuw');
@@ -289,8 +316,8 @@ test('een bestelling die blijft staan houdt latere onbetaalde bestellingen niet 
   const withPayment = await placeOnline(world, first);
   const withoutPayment = await order(world, second, { paymentMethod: 'online' });
   await world.admin.put('/app/api/admin/settings', { mollieApiKey: '' });
-  world.db.prepare('UPDATE web_orders SET created_at = ?').run(new Date(Date.now() - 25 * 3600 * 1000).toISOString());
-  world.db.prepare('UPDATE web_orders SET created_at = ? WHERE id = ?').run(new Date(Date.now() - 48 * 3600 * 1000).toISOString(), withPayment.id);
+  backdate(world, 25);
+  backdate(world, 48, withPayment.id);
   assert.deepStrictEqual(await world.app.locals.webPaymentsExpire(), { expired: 1 });
   assert.strictEqual((await world.admin.get(`/app/api/admin/web-orders/${withPayment.id}`)).body.order.status, 'nieuw');
   assert.strictEqual((await world.admin.get(`/app/api/admin/web-orders/${withoutPayment}`)).body.order.status, 'geannuleerd');
