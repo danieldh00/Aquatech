@@ -12,13 +12,34 @@
 // bijv. 'beheer' (beheerders) of 'hoofdbeheer' (hoofdbeheerders van het
 // platform). Zonder `right` ziet iedereen de module. Met `alt` krijgt wie
 // het recht `alt.right` heeft (en niet `alt.unless`) een andere titel en
-// omschrijving. `group: 'beheer'` zet een module in de zijbalk onder het
-// kopje Beheer. `navGroup` (top | ontwerpen | verkoop | uitvoering) plaatst een
-// module in de zijbalk bovenaan of in die inklapbare groep; zonder navGroup
-// staat de module los onder de groepen (zie GROUPS in shared/sidebar.js). De API controleert de rechten ook zelf. Beheerders en
-// hoofdbeheerders zien de modules in een vaste zijbalk (shared/sidebar.js)
-// in plaats van als tegels; een nieuwe module verschijnt daar vanzelf.
+// omschrijving. `navGroup` plaatst een module in de zijbalk: een sleutel uit
+// NAV_GROUPS hieronder (de volgorde van de groepen en van de modules in een
+// groep volgt de lijst; een groep met één module is gewoon een link, een groep
+// zonder zichtbare modules bestaat niet). `navTitle` is een kortere titel voor
+// de zijbalk. Toekomstige pagina's (klanten, inkooporders, leveranciers,
+// backorders, te picken, ...) krijgen hun plek door één regel met de juiste
+// `navGroup`; zolang `status` niet 'actief' is verschijnt er niets in de zijbalk.
+// De API controleert de rechten ook zelf. Beheerders en hoofdbeheerders zien de
+// modules in een vaste zijbalk (shared/sidebar.js) in plaats van als tegels; een
+// nieuwe module verschijnt daar vanzelf.
 (function (root) {
+  /**
+   * De groepen van de zijbalk, in volgorde. `top` en `footer` zijn geen
+   * inklapbare groep: bovenaan en in de voetregel staan losse links.
+   */
+  const NAV_GROUPS = [
+    { key: 'top', title: '', icon: 'home' },
+    { key: 'verkoop', title: 'Verkoop', icon: 'tag' },
+    { key: 'magazijn', title: 'Magazijn', icon: 'box' },
+    { key: 'inkoop', title: 'Inkoop', icon: 'truck' },
+    { key: 'artikelen', title: 'Artikelen', icon: 'box' },
+    { key: 'planner', title: 'Planner & werk', icon: 'sprinkler' },
+    { key: 'webshop', title: 'Webshop', icon: 'cart' },
+    { key: 'rapportage', title: 'Rapportage', icon: 'chart' },
+    { key: 'beheer', title: 'Beheer', icon: 'shield' },
+    { key: 'footer', title: '', icon: 'user' },
+  ];
+
   const MODULES = [
     {
       id: 'portaal',
@@ -40,27 +61,6 @@
       status: 'actief',
     },
     {
-      id: 'beregening',
-      navGroup: 'ontwerpen',
-      title: 'Beregeningsplanner',
-      description: 'Tuinberegening ontwerpen: vlakken tekenen of een plan laten herkennen, sproeiers, zones en leidingen, en een stuklijst met Excel-export.',
-      href: 'beregening/',
-      icon: 'sprinkler',
-      status: 'actief',
-      right: 'plannen',
-    },
-    {
-      id: 'plannen',
-      navGroup: 'ontwerpen',
-      title: 'Plannenoverzicht',
-      description: 'Alle beregeningsplannen in één tabel: projectnaam, klant, adres, oppervlaktes, sproeiers en zones, met Excel-export. Installateurs en beheerders zien de plannen van de hele organisatie.',
-      href: 'plannen/',
-      icon: 'table',
-      status: 'actief',
-      right: 'plannen',
-      alt: { right: 'plannen', unless: 'plannen.alle', title: 'Mijn plannen', description: 'Uw beregeningsplannen in één tabel: projectnaam, adres, oppervlaktes, sproeiers en zones, met Excel-export.' },
-    },
-    {
       id: 'offertes',
       navGroup: 'verkoop',
       title: 'Offertes',
@@ -73,24 +73,15 @@
       alt: { right: 'offertes.klant', unless: 'offertes', title: 'Mijn offertes', description: 'De offertes die voor u klaarstaan: bekijken, afdrukken en akkoord geven of afwijzen.' },
     },
     {
-      id: 'werkorders',
-      navGroup: 'uitvoering',
-      title: 'Werkorders',
-      description: 'Werkorders uit geaccordeerde offertes: uitvoeringsplan met werkstappen en uren, zone-indeling, materiaallijst om te verzamelen, planning, toewijzing en een werkbon als PDF of Excel.',
-      href: 'werkorders/',
-      icon: 'clipboard',
+      id: 'webshop-bestellingen',
+      navGroup: 'verkoop',
+      title: 'Webshopbestellingen',
+      navTitle: 'Bestellingen',
+      description: 'Bestellingen en retouren uit de eigen webshop: status wijzigen, verzenden met volgcode, retouren goedkeuren of afwijzen, een rapportage van omzet, inkoop en marge, en exporteren naar Excel.',
+      href: 'webshop-bestellingen/',
+      icon: 'box',
       status: 'actief',
-      right: 'werkorders',
-    },
-    {
-      id: 'meldingen',
-      navGroup: 'uitvoering',
-      title: 'Meldingen',
-      description: 'Storingen en onderhoudsverzoeken die klanten via hun portaal melden, met foto\'s: reageren en er met één klik een werkorder van maken.',
-      href: 'meldingen/',
-      icon: 'alert',
-      status: 'actief',
-      right: 'werkorders',
+      right: 'beheer',
     },
     {
       id: 'klantdossier',
@@ -103,25 +94,6 @@
       right: 'werkorders',
     },
     {
-      id: 'planning',
-      navGroup: 'uitvoering',
-      title: 'Planning',
-      description: 'Weekagenda van de werkorders per uitvoerder: inplannen door te slepen, en de klant bevestigt de afspraak via een link.',
-      href: 'planning/',
-      icon: 'calendar',
-      status: 'actief',
-      right: 'planning',
-    },
-    {
-      id: 'voorraad',
-      title: 'Artikelen',
-      description: 'Artikelen op voorraad met stand, locatie en minimumvoorraad. Werkorders reserveren hun materialen en boeken ze af bij verbruik of oplevering; ontvangsten, tellingen en correcties, met Excel-export.',
-      href: 'artikelen/',
-      icon: 'box',
-      status: 'actief',
-      right: 'voorraad',
-    },
-    {
       id: 'facturen',
       navGroup: 'verkoop',
       title: 'Facturen',
@@ -132,18 +104,69 @@
       right: 'facturen',
     },
     {
-      id: 'webshop-bestellingen',
-      navGroup: 'verkoop',
-      title: 'Webshopbestellingen',
-      description: 'Bestellingen en retouren uit de eigen webshop: status wijzigen, verzenden met volgcode, retouren goedkeuren of afwijzen, een rapportage van omzet, inkoop en marge, en exporteren naar Excel.',
-      href: 'webshop-bestellingen/',
+      id: 'voorraad',
+      navGroup: 'artikelen',
+      title: 'Artikelen',
+      description: 'Artikelen op voorraad met stand, locatie en minimumvoorraad. Werkorders reserveren hun materialen en boeken ze af bij verbruik of oplevering; ontvangsten, tellingen en correcties, met Excel-export.',
+      href: 'artikelen/',
       icon: 'box',
       status: 'actief',
-      right: 'beheer',
+      right: 'voorraad',
+    },
+    {
+      id: 'beregening',
+      navGroup: 'planner',
+      title: 'Beregeningsplanner',
+      description: 'Tuinberegening ontwerpen: vlakken tekenen of een plan laten herkennen, sproeiers, zones en leidingen, en een stuklijst met Excel-export.',
+      href: 'beregening/',
+      icon: 'sprinkler',
+      status: 'actief',
+      right: 'plannen',
+    },
+    {
+      id: 'plannen',
+      navGroup: 'planner',
+      title: 'Plannenoverzicht',
+      description: 'Alle beregeningsplannen in één tabel: projectnaam, klant, adres, oppervlaktes, sproeiers en zones, met Excel-export. Installateurs en beheerders zien de plannen van de hele organisatie.',
+      href: 'plannen/',
+      icon: 'table',
+      status: 'actief',
+      right: 'plannen',
+      alt: { right: 'plannen', unless: 'plannen.alle', title: 'Mijn plannen', description: 'Uw beregeningsplannen in één tabel: projectnaam, adres, oppervlaktes, sproeiers en zones, met Excel-export.' },
+    },
+    {
+      id: 'planning',
+      navGroup: 'planner',
+      title: 'Planning',
+      description: 'Weekagenda van de werkorders per uitvoerder: inplannen door te slepen, en de klant bevestigt de afspraak via een link.',
+      href: 'planning/',
+      icon: 'calendar',
+      status: 'actief',
+      right: 'planning',
+    },
+    {
+      id: 'werkorders',
+      navGroup: 'planner',
+      title: 'Werkorders',
+      description: 'Werkorders uit geaccordeerde offertes: uitvoeringsplan met werkstappen en uren, zone-indeling, materiaallijst om te verzamelen, planning, toewijzing en een werkbon als PDF of Excel.',
+      href: 'werkorders/',
+      icon: 'clipboard',
+      status: 'actief',
+      right: 'werkorders',
+    },
+    {
+      id: 'meldingen',
+      navGroup: 'planner',
+      title: 'Meldingen',
+      description: 'Storingen en onderhoudsverzoeken die klanten via hun portaal melden, met foto\'s: reageren en er met één klik een werkorder van maken.',
+      href: 'meldingen/',
+      icon: 'alert',
+      status: 'actief',
+      right: 'werkorders',
     },
     {
       id: 'uitbesteden',
-      navGroup: 'uitvoering',
+      navGroup: 'planner',
       title: 'Uitbesteden',
       description: 'Te veel werk? Bied een werkorder aan bij een andere organisatie op het platform, of neem opdrachten van anderen aan. Staat aan als de beheerder het in de instellingen aanzet.',
       href: 'uitbesteden/',
@@ -153,23 +176,23 @@
     },
     {
       id: 'beheer',
+      navGroup: 'beheer',
       title: 'Beheer',
       description: 'Historie van alle aanvragen, de plannen van alle gebruikers, gebruikersbeheer en de instellingen van de app (API-sleutel, toegangscode, modules).',
       href: 'beheer/',
       icon: 'shield',
       status: 'actief',
       right: 'beheer',
-      group: 'beheer',
     },
     {
       id: 'hoofdbeheer',
+      navGroup: 'footer',
       title: 'Hoofdbeheer',
       description: 'Alle tenants (klanten) van het platform: aanmaken, wijzigen, uitschakelen, gebruikers beheren en testomgevingen naast live draaien.',
       href: 'hoofdbeheer/',
       icon: 'globe',
       status: 'actief',
       right: 'hoofdbeheer',
-      group: 'beheer',
     },
   ];
 
@@ -191,6 +214,9 @@
     shield: '<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>',
     cart: '<path d="M3 4h2l2.4 11h10.2L20 7H6.2"/><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/>',
+    tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/>',
+    truck: '<path d="M2 6h11v10H2z"/><path d="M13 9h4l4 3v4h-8z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
+    chart: '<path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 16v-5"/><path d="M12 16V8"/><path d="M16 16v-3"/>',
     module: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   };
   /**
@@ -227,6 +253,21 @@
    */
   const usesSidebar = (rights) => (rights || []).includes('beheer') || (rights || []).includes('hoofdbeheer');
 
+  /**
+   * Deelt de modules in over de groepen van de zijbalk (zuivere functie, getest).
+   * Een module met een onbekende of ontbrekende `navGroup` komt als losse link
+   * onderaan de hoofdlijst terecht, zodat er niets zoekraakt.
+   * @param {object[]} items De modules die de gebruiker ziet (al op status en recht gefilterd).
+   * @returns {{key: string, title: string, icon: string, items: object[]}[]} De groepen met minstens één module, in de volgorde van NAV_GROUPS; losse modules in een groep `overig` vóór `beheer`.
+   */
+  function navSections(items) {
+    const known = new Set(NAV_GROUPS.map((group) => group.key));
+    const sections = NAV_GROUPS.map((group) => ({ ...group, items: items.filter((module) => module.navGroup === group.key) }));
+    const loose = items.filter((module) => !known.has(module.navGroup));
+    if (loose.length) sections.splice(sections.findIndex((section) => section.key === 'beheer'), 0, { key: 'overig', title: '', icon: 'module', items: loose });
+    return sections.filter((section) => section.items.length);
+  }
+
   root.AquatechModules = MODULES;
   /**
    * Aantal nieuwe items bij Nieuws (api/me `news`) als bolletje; de pagina Nieuws
@@ -236,6 +277,6 @@
    */
   const newsBadge = (count) => (count > 0 ? `<span class="news-count" data-news-count title="Nieuw sinds je vorige bezoek">${count > 9 ? '9+' : count}</span>` : '');
 
-  root.AquatechModuleTools = { ICONS, icon, visible, usesSidebar, newsBadge };
+  root.AquatechModuleTools = { ICONS, NAV_GROUPS, icon, visible, usesSidebar, navSections, newsBadge };
   if (typeof module !== 'undefined' && module.exports) module.exports = MODULES;
 })(typeof window !== 'undefined' ? window : globalThis);
