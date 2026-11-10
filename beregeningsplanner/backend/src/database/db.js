@@ -1089,6 +1089,13 @@ const MIGRATIONS = [
   CREATE INDEX account_tokens_user ON account_tokens (tenant_id, user_id, purpose, created_at);
   ALTER TABLE users ADD COLUMN email_verified_at TEXT;
   `,
+  // 49: inhoud per verkoopeenheid (W-10 uit de audit van 1.7.3): hoeveel van de
+  // eenheid van de planner (meestal meter) één eenheid van het artikel bevat, bijv. 50
+  // voor een rol van 50 m. Leeg = geen omrekening; de planner zet het artikel dan alleen
+  // in de winkelwagen als de eenheden gelijk zijn.
+  `
+  ALTER TABLE stock_items ADD COLUMN unit_content REAL;
+  `,
 ];
 
 /**

@@ -26,7 +26,7 @@ const Shipping = require('./shipping');
 const Vat = require('./vat');
 const { validPaymentId, cleanPublicUrl } = require('./mollie');
 const Seo = require('./seo');
-const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, MAX_QTY } = require('./storefront-cart');
+const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, convertPlannedQty, MAX_QTY } = require('./storefront-cart');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
 const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
@@ -495,7 +495,13 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (!orderingOn()) return orderingOff(req, res);
         res.setHeader('Cache-Control', 'no-store');
         const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
-        const fromPlan = req.query.plan === undefined ? null : { added: Math.max(0, Math.floor(Number(req.query.plan)) || 0), notOrderable: String(req.query.niet || '').split(',').map((code) => code.replace(/[^A-Za-z0-9._\- ]/g, '').trim().slice(0, 60)).filter(Boolean).slice(0, 60) };
+        /**
+         * Leest een lijst artikelcodes uit de zoekopdracht (alleen veilige tekens, hoogstens 60).
+         * @param {*} value De waarde uit de zoekopdracht.
+         * @returns {string[]} De codes.
+         */
+        const codesOf = (value) => String(value || '').split(',').map((code) => code.replace(/[^A-Za-z0-9._\- ]/g, '').trim().slice(0, 60)).filter(Boolean).slice(0, 60);
+        const fromPlan = req.query.plan === undefined ? null : { added: Math.max(0, Math.floor(Number(req.query.plan)) || 0), notOrderable: codesOf(req.query.niet), otherUnit: codesOf(req.query.eenheid) };
         sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups, req.query.vol === '1' ? 'Je winkelwagen is vol: deze wijziging paste er niet meer bij. Plaats eerst deze bestelling en bestel de rest daarna.' : '', fromPlan));
       });
       // Het materiaal uit de stuklijst van de planner in één keer in de winkelwagen (formulier uit de planner, velden q:<code>).
@@ -506,15 +512,19 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (!wanted.length) return res.redirect(303, '../');
         const priced = orders.priceCart(tenantId, wanted, priceOptionsOf(req));
         const viewer = accounts.viewer(req);
+        const plannedByCode = new Map(wanted.map((line) => [line.code, line]));
+        // De eenheid van het plan (meestal meter of stuk) moet passen bij die van het artikel: anders omrekenen met de inhoud per eenheid, of weglaten (W-10).
+        const converted = priced.lines.map((line) => ({ line, qty: convertPlannedQty(plannedByCode.get(String(line.code).toUpperCase()), line) }));
+        const otherUnit = converted.filter((entry) => entry.qty === null).map((entry) => String(entry.line.code).toUpperCase());
         // Een groothandelsklant bestelt per verpakkingseenheid en vanaf een minimum: die aantallen kloppen dan meteen.
-        const rounded = priced.lines.map((line) => ({ code: String(line.code).toUpperCase(), qty: viewer && viewer.wholesale ? Wholesale.roundUpQty(line.qty, { packSize: line.packSize, orderMinQty: line.minimum }) : line.qty }));
+        const rounded = converted.filter((entry) => entry.qty !== null).map(({ line, qty }) => ({ code: String(line.code).toUpperCase(), qty: viewer && viewer.wholesale ? Wholesale.roundUpQty(qty, { packSize: line.packSize, orderMinQty: line.minimum }) : qty }));
         // Een afgerond aantal boven het maximum per regel kan niet besteld worden: die regel blijft weg en een bestaande regel in de wagen ongewijzigd.
         const known = rounded.filter((line) => line.qty <= MAX_QTY);
         const tooMany = rounded.filter((line) => line.qty > MAX_QTY).map((line) => line.code);
         const merged = setCartLines(readCart(req), known);
         writeCart(req, res, merged.lines);
         const notOrderable = [...priced.missing, ...tooMany, ...merged.skipped];
-        res.redirect(303, `../?plan=${known.length - merged.skipped.length}${notOrderable.length ? `&niet=${encodeURIComponent(notOrderable.join(','))}` : ''}`);
+        res.redirect(303, `../?plan=${known.length - merged.skipped.length}${notOrderable.length ? `&niet=${encodeURIComponent(notOrderable.join(','))}` : ''}${otherUnit.length ? `&eenheid=${encodeURIComponent(otherUnit.join(','))}` : ''}`);
       });
       /**
        * Controleert dat de bezoeker een groothandelsklant is bij een bestelling; anders is de pagina er niet (of moet hij eerst inloggen).

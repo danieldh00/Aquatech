@@ -877,6 +877,10 @@ const PG_MIGRATIONS = [
   CREATE INDEX account_tokens_user ON account_tokens (tenant_id, user_id, purpose, created_at);
   ALTER TABLE users ADD COLUMN email_verified_at ${TEXT_TYPE};
   `,
+  // 49: inhoud per verkoopeenheid voor de planner (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN unit_content DOUBLE PRECISION;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

@@ -34,11 +34,11 @@ ${totals.byRate.filter((row) => row.rate > 0).map((row) => `<tr class="sub"><td 
  * @param {{ lines: object[], missing: string[], totals: object, ok: boolean }} cart De geprijsde winkelwagen (zie web-orders.js, priceCart).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {string} [notice] Een melding bovenaan, bijvoorbeeld dat een wijziging niet meer in de wagen paste.
- * @param {?{ added: number, notOrderable: string[] }} [fromPlan] Uitkomst van "in winkelwagen" vanuit de planner: aantal toegevoegde artikelen en de codes die niet te bestellen zijn.
+ * @param {?{ added: number, notOrderable: string[], otherUnit?: string[] }} [fromPlan] Uitkomst van "in winkelwagen" vanuit de planner: aantal toegevoegde artikelen, de codes die niet te bestellen zijn en de codes die de shop in een andere eenheid verkoopt.
  * @returns {string} De HTML-pagina.
  */
 function cartPage(cart, groups = [], notice = '', fromPlan = null) {
-  const planInfo = fromPlan ? `${fromPlan.added > 0 ? `<div class="form-info" role="status"><p>Het materiaal uit je plan staat in je winkelwagen (${fromPlan.added} ${fromPlan.added === 1 ? 'artikel' : 'artikelen'}). Controleer de aantallen en reken af.</p></div>` : ''}${fromPlan.notOrderable.length ? `<div class="form-error" role="alert"><p>Deze onderdelen uit je plan zijn niet in de webshop te bestellen: ${fromPlan.notOrderable.map(escapeHtml).join(', ')}.</p></div>` : ''}` : '';
+  const planInfo = fromPlan ? `${fromPlan.added > 0 ? `<div class="form-info" role="status"><p>Het materiaal uit je plan staat in je winkelwagen (${fromPlan.added} ${fromPlan.added === 1 ? 'artikel' : 'artikelen'}). Controleer de aantallen en reken af.</p></div>` : ''}${fromPlan.notOrderable.length ? `<div class="form-error" role="alert"><p>Deze onderdelen uit je plan zijn niet in de webshop te bestellen: ${fromPlan.notOrderable.map(escapeHtml).join(', ')}.</p></div>` : ''}${fromPlan.otherUnit && fromPlan.otherUnit.length ? `<div class="form-error" role="alert"><p>Deze onderdelen verkopen we in een andere eenheid dan je plan (bijvoorbeeld per rol in plaats van per meter) en staan daarom niet in je winkelwagen: ${fromPlan.otherUnit.map(escapeHtml).join(', ')}. Kies zelf het aantal dat je nodig hebt.</p></div>` : ''}` : '';
   if (!cart.lines.length && !cart.missing.length) {
     return layout({ root: ROOT, title: 'Winkelwagen – Aquatechshop.nl', description: 'Je winkelwagen bij Aquatechshop.nl.', groups,
       body: `<section class="cart"><h1>Winkelwagen</h1>${planInfo}<p>Je winkelwagen is leeg.</p><p><a class="button" href="${ROOT}">Verder winkelen</a></p></section>` });

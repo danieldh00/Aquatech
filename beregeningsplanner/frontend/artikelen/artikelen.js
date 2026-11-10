@@ -484,7 +484,7 @@
           code: formElement.code.value, name: formElement.name.value, unit: formElement.unit.value, location: formElement.location.value,
           onHand: num(formElement.onHand.value), minQty: num(formElement.minQty.value), reorderQty: num(formElement.reorderQty.value), costPrice: num(formElement.costPrice.value),
           salePrice: num(formElement.salePrice.value), vatRate: Number(formElement.vatRate.value), weightGrams: num(formElement.weightGrams.value), businessPrice: num(formElement.businessPrice.value), revenueGroup: formElement.revenueGroup.value, shopSync: formElement.shopSync.checked,
-          packSize: num(formElement.packSize.value), orderMinQty: num(formElement.orderMinQty.value), priceTiers: parseTiers(formElement.priceTiers.value),
+          packSize: num(formElement.packSize.value), orderMinQty: num(formElement.orderMinQty.value), priceTiers: parseTiers(formElement.priceTiers.value), unitContent: num(formElement.unitContent.value),
         } });
         formElement.hidden = true;
         toast(`${item.code} toegevoegd`);
@@ -609,6 +609,7 @@
     formElement.revenueGroup.value = item.revenueGroup;
     formElement.shopSync.checked = item.shopSync;
     formElement.packSize.value = item.packSize > 1 ? item.packSize : '';
+    formElement.unitContent.value = item.unitContent == null ? '' : item.unitContent;
     formElement.orderMinQty.value = item.orderMinQty > 1 ? item.orderMinQty : '';
     formElement.priceTiers.value = tiersText(item.priceTiers);
     $('#d-shop').innerHTML = item.shop.error ? `Webshop: <span class="err">${esc(item.shop.error)}</span>`
@@ -1001,7 +1002,7 @@
           code: editForm.code.value, name: editForm.name.value, unit: editForm.unit.value, location: editForm.location.value, notes: editForm.notes.value,
           minQty: num(editForm.minQty.value), reorderQty: num(editForm.reorderQty.value), costPrice: num(editForm.costPrice.value),
           salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), weightGrams: num(editForm.weightGrams.value), businessPrice: num(editForm.businessPrice.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
-          packSize: num(editForm.packSize.value), orderMinQty: num(editForm.orderMinQty.value), priceTiers: parseTiers(editForm.priceTiers.value),
+          packSize: num(editForm.packSize.value), orderMinQty: num(editForm.orderMinQty.value), priceTiers: parseTiers(editForm.priceTiers.value), unitContent: num(editForm.unitContent.value),
         } }) };
         toast('Opgeslagen');
         await loadUnits().catch((error) => toast(error.message, true));

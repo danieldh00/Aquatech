@@ -128,7 +128,7 @@ function createWebOrderStore(db, { stock }) {
    * @param {string} tenantId Id van de omgeving.
    * @param {{ code: string, qty: number }[]} wanted De gewenste artikelen en aantallen.
    * @param {{ group?: string, wholesale?: ?{ discountPct: number } }} [customer] De klantgroep: 'zakelijk' rekent met de zakelijke prijs (excl. btw, anders de verkoopprijs) en toont prijzen excl. btw. Met `wholesale` (alleen bij zakelijk) gelden ook de groothandelsvoorwaarden: staffelkorting, de vaste korting `discountPct` van de klant, verpakkingseenheid en minimale afname.
-   * @returns {{ lines: object[], missing: string[], totals: object, ok: boolean, pricesExcl: boolean }} De regels (itemId, code, name, unit, qty, available, unitExcl, vatRate, unitIncl, lineTotal, enough, weightGrams en bij zakelijk lineExcl; bij groothandel ook listExcl, discountPct, discountSource en packProblem), de codes die niet (meer) te koop zijn, de totalen, of er besteld kan worden en of de prijzen excl. btw getoond worden.
+   * @returns {{ lines: object[], missing: string[], totals: object, ok: boolean, pricesExcl: boolean }} De regels (itemId, code, name, unit, unitContent, qty, available, unitExcl, vatRate, unitIncl, lineTotal, enough, weightGrams en bij zakelijk lineExcl; bij groothandel ook listExcl, discountPct, discountSource en packProblem), de codes die niet (meer) te koop zijn, de totalen, of er besteld kan worden en of de prijzen excl. btw getoond worden.
    */
   function priceCart(tenantId, wanted, { group = '', wholesale = null } = {}) {
     const business = group === 'zakelijk';
@@ -140,7 +140,7 @@ function createWebOrderStore(db, { stock }) {
       if (code && qty >= 1) unique.set(code, Math.min(MAX_QTY, (unique.get(code) || 0) + qty));
     }
     const codes = [...unique.keys()].slice(0, MAX_LINES);
-    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, p.name AS parent_name,
+    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, p.name AS parent_name,
         (SELECT sp.in_stock FROM shop_products sp WHERE sp.tenant_id = i.tenant_id AND sp.id = i.shop_product_id) AS shop_in_stock,
         COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
       FROM stock_items i
@@ -171,7 +171,7 @@ function createWebOrderStore(db, { stock }) {
       lines.push({
         itemId: row.id, code: row.code, name: row.parent_name && label ? `${row.parent_name} (${label})` : row.name, unit: row.unit || 'st', qty, available,
         unitExcl, vatRate, unitIncl, lineTotal: business ? round2(lineExcl * (1 + vatRate / 100)) : round2(unitIncl * qty), enough: available >= qty,
-        weightGrams: row.weight_grams == null ? null : Number(row.weight_grams), ...(business ? { lineExcl } : {}),
+        weightGrams: row.weight_grams == null ? null : Number(row.weight_grams), unitContent: row.unit_content == null ? null : Number(row.unit_content), ...(business ? { lineExcl } : {}),
         ...(wholesaleTerms ? { listExcl, discountPct: priced.discountPct, discountSource: priced.source, packSize: terms.packSize, minimum: Wholesale.minimumOf(terms), packProblem: Wholesale.quantityProblem(qty, terms) } : {}),
       });
     }

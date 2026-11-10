@@ -2116,12 +2116,12 @@
     /**
      * Knop onder de stuklijst die al het materiaal in één keer in de winkelwagen van de webshop zet
      * (een gewoon formulier naar de winkel: prijzen, btw, varianten en voorraad bepaalt de winkel zelf).
-     * @param {object[]} rows de regels van de stuklijst (code, qty)
+     * @param {object[]} rows de regels van de stuklijst (code, qty, unit: de winkel rekent om of laat een artikel in een andere eenheid weg)
      * @returns {string} HTML, leeg als de webshop niet bestelbaar is of er geen regels zijn
      */
     _cartForm(rows) {
       if (!this.shop || !this.shop.ordering || !rows.length) return '';
-      const fields = rows.map((row) => `<input type="hidden" name="q:${escapeHtml(row.code)}" value="${escapeHtml(String(row.qty))}">`).join('');
+      const fields = rows.map((row) => `<input type="hidden" name="q:${escapeHtml(row.code)}" value="${escapeHtml(String(row.qty))}"><input type="hidden" name="u:${escapeHtml(row.code)}" value="${escapeHtml(row.unit || '')}">`).join('');
       return `<form class="to-cart" method="post" action="../../winkelwagen/planner/">${fields}
         <button type="submit" class="btn primary">Alles in winkelwagen</button>
         <p class="hint small">Zet het materiaal uit deze stuklijst in je winkelwagen in de webshop. Prijzen en voorraad zie je daar.</p>
