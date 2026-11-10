@@ -112,6 +112,24 @@ test('inloggen met tweestapsverificatie: code nodig, geen hergebruik, herstelcod
   assert.strictEqual((await createClient(base).post('/app/api/auth/login', { username: 'piet', password: PW })).status, 200);
 });
 
+test('tweede stap: hooguit 10 verkeerde codes per account, ook bij gelijktijdige pogingen', async () => {
+  const { base, login } = await setup();
+  await enable(await login('piet'));
+  // Elke poging van een eigen adres, zodat alleen de accountbrede grens telt (niet de grens per bezoeker).
+  /**
+   * Een inlogpoging met een verkeerde code vanaf een eigen bezoekeradres.
+   * @param {number} index Volgnummer van de poging (bepaalt het adres).
+   * @returns {Promise<object>} Het antwoord.
+   */
+  const attempt = (index) => createClient(base).request('POST', '/app/api/auth/login', { username: 'piet', password: PW, totp: '000000' }, { 'X-Forwarded-For': `198.51.100.${index + 1}` });
+  const attempts = await Promise.all(Array.from({ length: 14 }, (_, index) => attempt(index)));
+  const wrong = attempts.filter((answer) => answer.body.error === 'totp_wrong').length;
+  assert.strictEqual(wrong, 10, `${wrong} codes gecontroleerd`);
+  const after = await attempt(50);
+  assert.strictEqual(after.status, 429);
+  assert.strictEqual(after.body.error, 'locked');
+});
+
 test('beheerder zet tweestapsverificatie van een collega uit; andere tenant 404, zonder recht 403', async () => {
   const { store, main, login } = await setup();
   const piet = await login('piet');

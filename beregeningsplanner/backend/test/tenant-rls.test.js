@@ -61,7 +61,7 @@ test('policy: een query zonder tenantfilter ziet in een verzoek alleen de eigen 
 
 test('policy op elke tabel (met tenant_id beperkt, behalve bewust gedeelde)', needPg, () => {
   const db = openDb();
-  const withTenant = listTables(db).filter((table) => tableColumns(db, table).includes('tenant_id'));
+  const withTenant = listTables(db).filter((table) => tableColumns(db, table).some((column) => column.name === 'tenant_id'));
   const policies = new Set(db.prepare("SELECT tablename FROM pg_policies WHERE schemaname = current_schema() AND policyname = 'aquatech_tenant'").all().map((row) => row.tablename));
   for (const table of withTenant) {
     if (table === 'work_order_offers') continue;

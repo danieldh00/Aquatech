@@ -655,9 +655,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @param {object} req Het verzoek (bepaalt de bezoeker).
      * @param {string} account Sleutel van het account (`<organisatie>:<gebruikersnaam>`).
      * @param {number} [max] Aantal mislukte pogingen van deze bezoeker waarna hij geblokkeerd is.
+     * @param {number} [accountMax] Aantal mislukte pogingen voor alle bezoekers samen.
      * @returns {boolean} true als hij geblokkeerd is.
      */
-    blocked: (req, account, max = 10) => lockedOut(`${account}@${clientKey(req)}`, max) || lockedOut(account, ACCOUNT_MAX_FAILURES),
+    blocked: (req, account, max = 10, accountMax = ACCOUNT_MAX_FAILURES) => lockedOut(`${account}@${clientKey(req)}`, max) || lockedOut(account, accountMax),
     /**
      * Telt een mislukte poging van deze bezoeker op dit account.
      * @param {object} req Het verzoek.
@@ -762,11 +763,20 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // Tweede stap (5 uit de audit van 1.7.3): met tweestapsverificatie aan moet er een code uit de app of een
       // herstelcode bij. Verkeerde codes tellen apart per account, met dezelfde blokkering en vertraging.
       const totpKey = `totp:${user.id}`;
-      if (loginGuard.blocked(req, totpKey)) {
+      /**
+       * Of de tweede stap voor dit account geblokkeerd is (10 verkeerde codes); zo ja, staat het antwoord 429 al klaar.
+       * @returns {boolean} true als het verzoek is afgewezen.
+       */
+      const totpLocked = () => {
+        if (!loginGuard.blocked(req, totpKey, 10, 10)) return false;
         audit(req, 'inloggen_geblokkeerd', { username, via: 'tweestaps' }, user.id, user.tenant_id);
-        return res.status(429).json({ error: 'locked', message: 'Te veel verkeerde codes. Probeer het over een kwartier opnieuw.' });
-      }
+        res.status(429).json({ error: 'locked', message: 'Te veel verkeerde codes. Probeer het over een kwartier opnieuw.' });
+        return true;
+      };
+      if (totpLocked()) return undefined;
       await loginGuard.wait(req, totpKey);
+      // Opnieuw na het wachten: een gelijktijdig verzoek kan intussen de tiende fout hebben vastgelegd.
+      if (totpLocked()) return undefined;
       const second = twoFactor.check(user, String(req.body?.totp ?? '').slice(0, 40));
       if (!second.ok) {
         if (second.missing) return res.status(401).json({ error: 'totp_required', message: 'Vul de code uit je authenticator-app in.' });
