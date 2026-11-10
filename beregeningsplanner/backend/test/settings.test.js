@@ -108,6 +108,10 @@ test('ongeldige waarden worden geweigerd', () => {
 test('een te korte ACCESS_CODE als startwaarde telt niet', () => {
   assert.strictEqual(freshSettings({ env: { ACCESS_CODE: 'kortecode' } }).get('accessCode'), '');
   assert.strictEqual(freshSettings({ env: { ACCESS_CODE: 'Lange-Code-2026' } }).get('accessCode'), 'Lange-Code-2026');
+  // De geweigerde code is wel zichtbaar als geweigerd, zodat gasten dan buiten blijven (server.js guestsAllowed).
+  assert.strictEqual(freshSettings({ env: { ACCESS_CODE: 'kortecode' } }).rejectedStart('accessCode'), true);
+  assert.strictEqual(freshSettings({ env: { ACCESS_CODE: 'Lange-Code-2026' } }).rejectedStart('accessCode'), false);
+  assert.strictEqual(freshSettings({ env: {} }).rejectedStart('accessCode'), false);
 });
 
 test('instellingen blijven bewaard na een herstart', () => {

@@ -245,6 +245,19 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
   }
 
   /**
+   * Of de startwaarde uit de omgeving van een instelling geweigerd is omdat hij te kort is (zie get). Een geweigerde
+   * ACCESS_CODE mag niet betekenen dat er geen code is: dan zouden gasten zonder inloggen binnenkomen.
+   * @param {string} key Naam van de instelling.
+   * @returns {boolean} true als de omgeving een te korte waarde geeft en er niets in de database staat.
+   */
+  function rejectedStart(key) {
+    const definition = FIELDS[key];
+    if (!definition || !definition.min || source(key) !== 'omgeving') return false;
+    const value = coerce(definition, env[definition.env]);
+    return typeof value === 'string' && Boolean(value) && value.length < definition.min;
+  }
+
+  /**
    * Slaat gewijzigde velden op in de database (weggelaten velden worden verwijderd).
    * @param {object} next Alle opgeslagen waarden na de wijziging.
    * @param {string[]} changed Namen van de gewijzigde velden.
@@ -342,7 +355,7 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
     return out;
   }
 
-  return { get, update, view, FIELDS };
+  return { get, rejectedStart, update, view, FIELDS };
 }
 
 module.exports = { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest };

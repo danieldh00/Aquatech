@@ -357,10 +357,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   const getAccessCode = () => settings.get('accessCode');
   /**
-   * Gasten (zonder inloggen) alleen als dat aanstaat en er geen code is.
+   * Gasten (zonder inloggen) alleen als dat aanstaat en er geen code is. Een te korte ACCESS_CODE (geweigerd) telt als
+   * code: dan blijven gasten buiten in plaats van dat iedereen binnenkomt.
    * @returns {boolean} true als gasten mogen.
    */
-  const guestsAllowed = () => !getAccessCode() && settings.get('guestAccess');
+  const guestsAllowed = () => !getAccessCode() && !settings.rejectedStart('accessCode') && settings.get('guestAccess');
   // Nog geen beheerder met een eigen account: eerst het instelscherm.
   // Is er eenmaal een actieve beheerder, dan blijft dat zo (de laatste
   // beheerder is niet uit te schakelen of te verwijderen): daarna niet bij elk

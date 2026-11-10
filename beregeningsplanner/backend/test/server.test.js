@@ -151,6 +151,17 @@ test('gasten aan en geen code: de planner is openbaar en inloggen is niet nodig'
   }
 });
 
+test('gasten aan met een te korte toegangscode uit de omgeving: inloggen blijft verplicht', async () => {
+  const { server, base } = await start({ accessCode: '', env: { GUEST_ACCESS: 'true', ACCESS_CODE: 'kortecode' }, db: await dbWithAdmin() });
+  try {
+    assert.strictEqual((await fetch(`${base}/app/`)).status, 401);
+    const status = await (await fetch(`${base}/app/api/auth/status`)).json();
+    assert.strictEqual(status.loginRequired, true);
+  } finally {
+    server.close();
+  }
+});
+
 // Alle pagina's (dashboard + modules): scripts en stylesheets relatief en lokaal.
 const PAGES = ['index.html', ...fs.readdirSync(FRONTEND_DIR)
   .filter((dir) => fs.existsSync(path.join(FRONTEND_DIR, dir, 'index.html')))
