@@ -913,6 +913,8 @@ function registerQuoteRoutes(app, ctx) {
       const changed = settings.update(patch, req.user?.id);
       if (changed.length) audit(req, 'instellingen_gewijzigd', { fields: changed });
     } catch (error) {
+      // Alleen een ongeldige instelling is een 400 met de melding; een andere fout (database) wordt een 500 met foutcode.
+      if (!error || error.name !== 'SettingsError') throw error;
       return res.status(400).json({ error: 'invalid_setting', message: error.message });
     }
     res.json(mailView(settings));

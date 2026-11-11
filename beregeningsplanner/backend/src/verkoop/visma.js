@@ -696,6 +696,8 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
     try {
       settingsFor(mainTenantId).update(patch, req.user.id);
     } catch (error) {
+      // Alleen een ongeldige instelling is een 400 met de melding; een andere fout (database) wordt een 500 met foutcode.
+      if (!error || error.name !== 'SettingsError') throw error;
       return res.status(400).json({ error: 'invalid_setting', field: error.field, message: error.message });
     }
     audit(req, 'instellingen_gewijzigd', { fields: Object.keys(patch) }, undefined, mainTenantId);

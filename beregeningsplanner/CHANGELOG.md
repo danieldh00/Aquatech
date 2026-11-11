@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.1
+
+Foutmeldingen nalopen, eindcontrole.
+
+- Opslaan van instellingen in Offertes (mail), Facturen, Visma en Webshop: alleen een ongeldige instelling (`SettingsError`) geeft
+  een 400 met de melding; een andere fout (bijvoorbeeld van de database) wordt een 500 met foutcode in plaats van een 400 met de
+  interne tekst. `SettingsError` heeft een vaste `name`, omdat deze modules de klasse niet kunnen importeren (kringverwijzing met
+  settings.js).
+
 ## 1.9.0
 
 Foutmeldingen nalopen, deel 4: de webshop.
