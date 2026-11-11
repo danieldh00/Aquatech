@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.10.3
+## 1.10.4
 
 Interne notitie per offerte (punt 9 van bundel A). Geen migratie: de notitie staat in de offertegegevens (`data.internalNote`, maximaal 2000 tekens).
 
@@ -9,6 +9,16 @@ Interne notitie per offerte (punt 9 van bundel A). Geen migratie: de notitie sta
 - Een kopie van een offerte neemt de notitie mee; een factuur krijgt hem niet.
 - Het akkoordbewijs (`acceptance.contentHash`) wordt berekend over de gegevens zonder interne notities (offerte en regels), zodat de interne notities er niet in doorwerken (`withoutInternalNotes` in quotes.js, gedeeld met `forCustomer`). De hash blijft een hash van de volledige offerte, ook van regelprijzen die de klant bij de opmaak *totaal per onderdeel* niet ziet.
 - Tests: `internal-note.test.js` (kern, opslaan en lezen, portaal, openbare link, werkorder, klantportaal-werkorder).
+
+## 1.10.3
+
+AI-koppeling: handleiding en extra rechtentest (vervolg op punt 28). Geen migratie.
+
+- **Handleiding** bij Beheer > Instellingen > AI-koppeling en in Mijn profiel: stap voor stap koppelen in Claude (Connectors) en ChatGPT (ontwikkelaarsmodus, connector met OAuth), met een voorbeeldzin. Knop *Kopiëren* bij het adres in Beheer; het adres komt van de server (het webadres uit Beheer als dat is ingevuld).
+- **Alleen intern**: een klant (rol van het soort klant of gast) kan niet koppelen, ziet het blok in Mijn profiel niet (`/api/account/connections` geeft 403 `internal_only`) en een toestemming van een account dat klant wordt vervalt bij het eerste verzoek.
+- Test: een rolwijziging beperkt een al gekoppelde app direct tot wat de gebruiker in de app mag (planner: alleen artikelen zoeken). Wordt het account klant, dan werkt geen enkele koppeling meer: een koppeling die dan wordt gebruikt, wordt direct ingetrokken, en oude koppelingen kan hij zelf intrekken. Na terugzetten naar installateur moet hij de ingetrokken koppelingen opnieuw maken.
+- **Intrekken als klant**: een account dat klant is geworden kan een eigen oude koppeling nog intrekken (`DELETE /api/account/connections/:id`); de lijst blijft verborgen.
+- Test: de controle op een vervalste CSRF-code in het toestemmingsscherm veranderde soms niets (als de code al met een x begon) en faalde daardoor af en toe; nu wijzigt hij altijd een teken.
 
 ## 1.10.2
 

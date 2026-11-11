@@ -13,12 +13,20 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.10.3',
+      version: '1.10.4',
       date: '2026-11-11',
       title: 'Interne notitie bij een offerte',
       items: [
         { text: 'Onderaan een offerte staat nu een interne notitie voor jezelf en collega\'s. De klant ziet hem nooit: niet in de offerte, de pdf, de mail of het portaal.', for: ['offertes'] },
         { text: 'Maak je een werkorder uit de offerte, dan staat de notitie ook in de werkorder (en kun je hem daar aanpassen).', for: ['werkorders'] },
+      ],
+    },
+    {
+      version: '1.10.3',
+      date: '2026-11-11',
+      title: 'Handleiding voor de AI-koppeling',
+      items: [
+        { text: 'Bij de AI-koppeling (Beheer > Instellingen en Mijn profiel) staat nu een stap-voor-stap handleiding voor Claude en ChatGPT, met een knop om het adres te kopiëren.', for: ['offertes', 'beheer'] },
       ],
     },
     {

@@ -357,7 +357,7 @@ test('toestemmingsscherm: CSRF, ander account, andere site en weigeren', async (
   const second = consentFields((await admin.get(authorizeUrl({ client_id: clientId, code_challenge: pkcePair().challenge }))).text);
   assert.strictEqual((await postForm(base, installer, '/app/oauth/authorize', { ...second, decision: 'allow' })).status, 403);
   const third = consentFields((await admin.get(authorizeUrl({ client_id: clientId, code_challenge: pkcePair().challenge }))).text);
-  assert.strictEqual((await postForm(base, admin, '/app/oauth/authorize', { ...third, csrf: third.csrf.replace(/^./, 'x'), decision: 'allow' })).status, 403);
+  assert.strictEqual((await postForm(base, admin, '/app/oauth/authorize', { ...third, csrf: (third.csrf[0] === 'x' ? 'y' : 'x') + third.csrf.slice(1), decision: 'allow' })).status, 403);
   const fourth = consentFields((await admin.get(authorizeUrl({ client_id: clientId, code_challenge: pkcePair().challenge }))).text);
   const denied = await postForm(base, admin, '/app/oauth/authorize', { ...fourth, decision: 'deny' });
   assert.strictEqual(new URL(denied.location).searchParams.get('error'), 'access_denied');
@@ -369,12 +369,51 @@ test('rechten: een klant kan niet koppelen en een smalle scope geeft minder tool
   const clientId = (await register(base)).body.client_id;
   const customer = await as('klant1');
   assert.strictEqual((await customer.get(authorizeUrl({ client_id: clientId, code_challenge: pkcePair().challenge }))).status, 403);
+  // Alleen intern: een klant ziet in Mijn profiel niets van de koppeling (de API weigert) en een eerdere toestemming werkt niet.
+  const forCustomer = await customer.get('/app/api/account/connections');
+  assert.strictEqual(forCustomer.status, 403);
+  assert.strictEqual(forCustomer.body.error, 'internal_only');
   const narrow = await connect(base, admin, { scope: 'artikelen.lezen' });
   assert.strictEqual(narrow.scope, 'artikelen.lezen');
   assert.deepStrictEqual((await mcp(base, narrow.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name), ['zoek_artikelen']);
   const blocked = await callTool(base, narrow.accessToken, 'maak_concept_offerte', { regels: [{ omschrijving: 'x', aantal: 1 }] });
   assert.strictEqual(blocked.isError, true);
   assert.strictEqual((await mcp(base, narrow.accessToken, { method: 'tools/call', params: { name: 'verwijder_alles', arguments: {} } })).body.error.code, -32602);
+});
+
+test('rechten volgen de rol op dit moment: een andere rol beperkt de AI direct tot wat de gebruiker in de app mag', async () => {
+  const { base, admin, installer } = await setup();
+  const connection = await connect(base, installer);
+  // Een tweede koppeling die tijdens de klantrol niet wordt gebruikt: die moet de gebruiker als klant nog kunnen intrekken.
+  const firstIds = (await installer.get('/app/api/account/connections')).body.items.map((item) => item.id);
+  const spare = await connect(base, installer);
+  const spareId = (await installer.get('/app/api/account/connections')).body.items.map((item) => item.id).find((id) => !firstIds.includes(id));
+  assert.ok(spareId);
+  /**
+   * De namen van de tools die de AI nu ziet.
+   * @returns {Promise<string[]>} De namen.
+   */
+  const toolNames = async () => (await mcp(base, connection.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name);
+  assert.deepStrictEqual(await toolNames(), ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'maak_concept_offerte']);
+  const userId = (await installer.get('/app/api/me')).body.user.id;
+  // Planner: geen offertes en geen klanten in de app, dus ook niet via de AI (hetzelfde token).
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'planner' })).status, 200);
+  assert.deepStrictEqual(await toolNames(), ['zoek_artikelen']);
+  for (const [name, args] of [['zoek_klant', { zoekterm: 'Klant' }], ['maak_klant', { naam: 'Nieuw' }], ['maak_concept_offerte', { regels: [{ omschrijving: 'x', aantal: 1 }] }]]) {
+    assert.strictEqual((await callTool(base, connection.accessToken, name, args)).isError, true, name);
+  }
+  // Een rol van het soort klant: de koppeling werkt helemaal niet meer (alleen intern).
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'klant' })).status, 200);
+  assert.strictEqual((await mcp(base, connection.accessToken, { method: 'ping' })).status, 401);
+  // Als klant ziet hij de lijst niet, maar intrekken van een eigen oude koppeling mag wel.
+  assert.strictEqual((await installer.get('/app/api/account/connections')).status, 403);
+  assert.strictEqual((await installer.del(`/app/api/account/connections/${spareId}`)).status, 200);
+  // Terug naar installateur: de gebruikte toestemming is ingetrokken, dus opnieuw koppelen geeft de rechten terug.
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'installateur' })).status, 200);
+  assert.strictEqual((await mcp(base, connection.accessToken, { method: 'ping' })).status, 401);
+  assert.strictEqual((await mcp(base, spare.accessToken, { method: 'ping' })).status, 401);
+  const again = await connect(base, installer);
+  assert.strictEqual((await callTool(base, again.accessToken, 'zoek_klant', { zoekterm: 'Klant' })).isError, false);
 });
 
 test('organisaties zijn gescheiden: een andere organisatie ziet geen klanten en kan ze niet gebruiken', async () => {

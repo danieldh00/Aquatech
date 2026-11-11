@@ -962,7 +962,7 @@ notitie weg. Klanten zien die notities nooit.
 **Beveiliging**: OAuth 2.1 met PKCE (S256) en dynamische registratie; redirects alleen naar claude.ai,
 claude.com, chatgpt.com, chat.openai.com of loopback. Codes en tokens alleen als SHA-256 in `oauth_grants`;
 toegangstoken 1 uur, vernieuwingstoken 30 dagen (roteert, hergebruik trekt de toestemming in), toestemming
-hoogstens 90 dagen. Een wachtwoordwijziging, uitgeschakeld account, uitgeschakelde omgeving of de koppeling
+hoogstens 90 dagen. Alleen voor medewerkers: klanten kunnen niet koppelen (een account dat klant is geworden kan een oude koppeling wel nog intrekken). Een wachtwoordwijziging, uitgeschakeld account, uitgeschakelde omgeving of de koppeling
 uit maakt elk token direct ongeldig. Elk verzoek werkt met de rechten van de rol op dat moment, binnen de
 eigen organisatie (RLS). Intrekken in Mijn profiel of door de app (RFC 7009). Limieten per bezoeker en per
 toestemming; acties staan in het auditlog.

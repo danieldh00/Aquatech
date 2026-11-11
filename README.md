@@ -35,7 +35,9 @@ webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als databas
 - **AI-koppeling** (Beheer → Instellingen → AI-koppeling, per omgeving, standaard uit): voeg het adres
   `https://<server>/app/mcp` toe als connector in Claude of ChatGPT. Na inloggen en toestemming kan de AI klanten
   en artikelen zoeken, een particuliere klant aanmaken en een **concept**-offerte klaarzetten; versturen doet de
-  medewerker zelf. Gekoppelde apps staan in Mijn profiel en zijn daar in te trekken.
+  medewerker zelf. Alleen voor medewerkers (klanten kunnen niet koppelen); elke medewerker koppelt zijn eigen account met de
+  rechten van zijn rol. Een stap-voor-stap handleiding voor Claude en ChatGPT staat bij de instelling en in Mijn profiel,
+  waar ook de gekoppelde apps staan en in te trekken zijn.
 - **Beveiliging**: sessies alleen als hash, wachtwoorden met scrypt, tweestapsverificatie (TOTP), versleutelde
   back-ups (dagelijks, ook vóór elke update), auditlog. Zie *Beveiliging en privacy* in `beregeningsplanner/DOCS.md`.
 
