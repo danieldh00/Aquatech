@@ -187,6 +187,17 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   }
 
   /**
+   * De offertegegevens zoals de klant ze krijgt: zonder de interne notitie van de offerte (data.internalNote) en van de
+   * regels (line.note). Ook het akkoordbewijs (contentHash) wordt hierover berekend, zodat de interne notities er niet in doorwerken (de hash blijft een hash van de volledige offerte, dus ook van de regelprijzen bij de opmaak "totaal per onderdeel").
+   * @param {object} data De offertegegevens.
+   * @returns {object} De gegevens zonder interne notities.
+   */
+  function withoutInternalNotes(data) {
+    const { internalNote, ...rest } = data;
+    return { ...rest, lines: data.lines.map(({ note, ...line }) => line) };
+  }
+
+  /**
    * Wat een klant van een offerte te zien krijgt. Met de opmaak "totaal per
    * onderdeel" geen prijzen per regel, wel per onderdeel en btw-tarief de som
    * van de vaste regels (zodat de klantpagina bij een andere optiekeuze het
@@ -196,9 +207,10 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   function forCustomer(quote) {
     const { share, ...rest } = quote;
-    // De interne notitie per regel (zie Core.sanitizeLine) gaat nooit naar de klant.
-    const lines = quote.data.lines.map(({ note, ...line }) => line);
-    const out = { ...rest, data: { ...quote.data, lines }, totals: Core.totals(quote.data) };
+    // De interne notities (per regel en van de offerte) gaan nooit naar de klant.
+    const customerData = withoutInternalNotes(quote.data);
+    const lines = customerData.lines;
+    const out = { ...rest, data: { ...customerData, lines }, totals: Core.totals(quote.data) };
     if (quote.data.layout === 'totaal') {
       // Zonder regelprijzen kan de klantpagina het totaal bij een andere
       // optiekeuze niet herberekenen; daarom per sectie en btw-tarief de som
@@ -212,7 +224,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
         fixed.set(key, current);
       }
       out.fixed = [...fixed.values()];
-      out.data = { ...quote.data, lines: lines.map((line) => (line.optional ? line
+      out.data = { ...customerData, lines: lines.map((line) => (line.optional ? line
         : { id: line.id, section: line.section, description: line.description, qty: line.qty, unit: line.unit, optional: false, selected: false })) };
     }
     if (quote.acceptance) {
@@ -413,7 +425,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
       totalExcl: totals.net, totalIncl: totals.total,
       // De betaaltermijn waarmee de klant akkoord ging (ook onderdeel van de inhoud hieronder).
       paymentDays: data.paymentDays === undefined ? null : data.paymentDays,
-      contentHash: sha256(JSON.stringify({ number: quoteRow.number, data, totals })),
+      contentHash: sha256(JSON.stringify({ number: quoteRow.number, data: withoutInternalNotes(data), totals })),
     };
     return transaction(db, () => {
       const current = prepare('SELECT status, CASE WHEN acceptance IS NULL THEN 0 ELSE 1 END AS accepted FROM quotes WHERE id = ?').get(quoteRow.id);

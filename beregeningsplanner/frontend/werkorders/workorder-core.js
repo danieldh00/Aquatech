@@ -191,6 +191,8 @@
       crew: limitText(fields.crew, 200),
       instructions: limitText(fields.instructions, 4000),
       siteNotes: limitText(fields.siteNotes, 2000),
+      // Interne notitie uit de offerte: alleen voor medewerkers.
+      internalNote: limitText(fields.internalNote, 2000),
       design: design ? {
         lawnM2: round2(clampNumber(design.lawnM2, 0, 1e7)),
         sprinklers: Math.round(clampNumber(design.sprinklers, 0, 1e5)),
@@ -561,7 +563,7 @@
         title: quoteData.title || `Werkorder ${quoteRecord.number || ''}`.trim(),
         quoteId: quoteRecord.id, quoteNumber: quoteRecord.number, planId: quoteData.planId, planTitle: quoteData.planTitle,
         customer: { name: customer.name, contact: customer.contact, address: customer.address, email: customer.email, phone: customer.phone },
-        instructions: '', siteNotes: '', design, zones, heads, steps, materials,
+        instructions: '', siteNotes: '', internalNote: quoteData.internalNote || '', design, zones, heads, steps, materials,
       }),
       warnings,
     };
