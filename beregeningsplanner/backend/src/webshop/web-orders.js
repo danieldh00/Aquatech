@@ -12,6 +12,7 @@
 const crypto = require('crypto');
 const { transaction, isPg } = require('../database/db');
 const { validEmail } = require('../platform/mailer');
+const { withCause } = require('../platform/error-report');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
 const Wholesale = require('./wholesale');
@@ -689,7 +690,7 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
   app.post('/api/admin/web-orders/:id/invoice', wrap(async (req, res) => {
     if (!invoices) return res.status(404).json({ error: 'not_found', message: 'Facturen staan niet aan.' });
     const out = invoices.ensureInvoice(req.tenantId, req.params.id, req.user);
-    if (out.error) return res.status(out.status || 400).json({ error: 'invoice_failed', message: out.error });
+    if (out.error) return withCause(res, out.cause).status(out.status || 400).json({ error: 'invoice_failed', message: out.error });
     if (out.created || out.finalizedNow) audit(req, 'webshop_bestelling_factuur', { number: out.invoice.number });
     await invoices.mailIfFinalized(req.tenantId, out);
     res.json({ invoice: out.invoice, created: out.created });
@@ -720,7 +721,7 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
       request = { amount: order.totals.total, description: `Terugbetaling bestelling ${order.number}`, key: 'annulering' };
     }
     const out = await payments.refund(req.tenantId, order.id, request);
-    if (out.error) return res.status(out.status || 400).json({ error: 'refund_failed', message: out.error });
+    if (out.error) return withCause(res, out.cause).status(out.status || 400).json({ error: 'refund_failed', message: out.error });
     audit(req, 'webshop_bestelling_terugbetaald', { number: order.number, amount: out.refund.amount, ...(returnId ? { returnId } : {}) });
     res.json({ order: out.order, refund: out.refund });
   }));

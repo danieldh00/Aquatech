@@ -25,9 +25,10 @@ class MollieError extends Error {
    * Maakt de fout.
    * @param {string} message De melding (nooit de sleutel).
    * @param {number} [status] De HTTP-status van Mollie (0 als Mollie niet bereikbaar was).
+   * @param {Error} [cause] De onderliggende fout (alleen voor het log en de debugmodus).
    */
-  constructor(message, status = 0) {
-    super(message);
+  constructor(message, status = 0, cause = undefined) {
+    super(message, cause ? { cause } : undefined);
     this.name = 'MollieError';
     this.status = status;
   }
@@ -117,12 +118,12 @@ function createMollie({ fetchImpl = fetch } = {}) {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (error) {
-      throw new MollieError(`Mollie is niet bereikbaar: ${error.message}`);
+      throw new MollieError(error && error.name === 'TimeoutError' ? 'Mollie antwoordt niet op tijd. Probeer het later opnieuw.' : 'Mollie is niet bereikbaar. Probeer het later opnieuw.', 0, error);
     }
     let payload = null;
     try { payload = await response.json(); } catch { payload = null; }
     if (!response.ok) {
-      const detail = payload && (payload.detail || payload.title) ? String(payload.detail || payload.title).slice(0, 200) : `HTTP ${response.status}`;
+      const detail = payload && (payload.detail || payload.title) ? String(payload.detail || payload.title).slice(0, 200) : `status ${response.status}`;
       throw new MollieError(`Mollie weigert het verzoek: ${detail}`, response.status);
     }
     return payload || {};
