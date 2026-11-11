@@ -102,3 +102,16 @@ table.lines .c-kind { width: 112px; }
 .cust-list .sub { font-size: .85em; color: var(--muted); }
 .cust-chosen { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0; padding: 8px 10px; border-radius: 8px; background: var(--at-green-soft); }
 .cust-chosen[hidden], .cust-list[hidden] { display: none; }
+
+/* Nieuwe klant vanuit de offerte en het blok Btw verlegd. */
+.cust-pick #e-cust-new { margin: 2px 0 0; }
+.newcust { margin: 10px 0 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--at-surface); }
+.newcust[hidden] { display: none; }
+.newcust h4 { margin: 0 0 10px; font-size: 14px; }
+.vat-shift { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.vat-shift .chk { display: flex; align-items: center; gap: 8px; }
+.vat-shift .chk input { width: auto; margin: 0; }
+.vat-shift #e-vs-box[hidden] { display: none; }
+.vat-shift #e-vs-box { margin-top: 8px; }
+.newcust .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 560px) { .newcust .form-grid { grid-template-columns: minmax(0, 1fr); } }

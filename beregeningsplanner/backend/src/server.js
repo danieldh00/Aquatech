@@ -2007,8 +2007,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     invite: (customer) => shopAccounts.invite(customer),
   });
 
+  // De btw-controle bij VIES: gedeeld door de offertes (btw verleggen) en de webshop.
+  const vies = createVies(viesFetch ? { fetchImpl: viesFetch } : {});
+
   registerQuoteRoutes(app, {
-    quotes: quoteStore, identify, requireUser, requireAdmin, requireRight, requireJson, audit,
+    quotes: quoteStore, vies, identify, requireUser, requireAdmin, requireRight, requireJson, audit,
     // Een offerte uit een plan alleen als dat plan is goedgekeurd.
     planReviewOf: (tenantId, planId) => store.planReviewStatus(tenantId, planId),
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
@@ -2033,7 +2036,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const home = homeOf(tid);
       return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName,
-          email: customer.email, phone: customer.phone, address: customer.address }));
+          email: customer.email, phone: customer.phone, address: customer.address, vatNumber: customer.vatNumber }));
     },
   });
 
@@ -2543,7 +2546,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
-    vies: createVies(viesFetch ? { fetchImpl: viesFetch } : {}),
+    vies,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
     // Een beheerder van de hoofdorganisatie bekijkt het concept met ?voorbeeld=1.

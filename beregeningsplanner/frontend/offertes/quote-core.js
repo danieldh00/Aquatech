@@ -136,6 +136,7 @@
       intro: limitText(fields.intro, 4000),
       terms: limitText(fields.terms, 6000),
       discountPct: round2(clampNumber(fields.discountPct, 0, 100)),
+      vatShift: sanitizeVatShift(fields.vatShift),
       // Op de offerte: alle regels met prijzen, of per onderdeel alleen een totaalbedrag.
       layout: fields.layout === 'totaal' ? 'totaal' : 'specificatie',
       planId: limitText(fields.planId, 64),
@@ -150,6 +151,35 @@
       lines: (Array.isArray(fields.lines) ? fields.lines : []).slice(0, MAX_LINES).map(sanitizeLine),
     };
   }
+
+  /** Uitkomsten van de btw-controle bij VIES die op een offerte kunnen staan. */
+  const VAT_CHECK_STATUSES = ['geldig', 'ongeldig', 'onbereikbaar'];
+
+  /**
+   * Schoont de instelling "btw verlegd" op: aan/uit, het btw-nummer van de afnemer en (alleen als het aan staat) het bewijs van de controle bij VIES.
+   * De server vult het bewijs zelf in bij het opslaan; wat de browser meestuurt wordt daar overschreven.
+   * @param {*} raw De ruwe invoer.
+   * @returns {{ on: boolean, number: string, status: string, checkedAt: string, requestId: string, name: string }} De opgeschoonde instelling.
+   */
+  function sanitizeVatShift(raw) {
+    const shift = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const number = limitText(shift.number, 40).toUpperCase().replace(/[\s.\-]/g, '');
+    const on = shift.on === true && Boolean(number);
+    const status = on && VAT_CHECK_STATUSES.includes(shift.status) ? shift.status : '';
+    return {
+      on, number, status,
+      checkedAt: status ? limitText(shift.checkedAt, 40) : '',
+      requestId: status ? limitText(shift.requestId, 60) : '',
+      name: status ? limitText(shift.name, 120) : '',
+    };
+  }
+
+  /**
+   * Of de btw op deze offerte (of factuur) is verlegd naar de afnemer: aangevinkt én met een btw-nummer.
+   * @param {object} quote Offertegegevens (vatShift).
+   * @returns {boolean} true als de btw is verlegd.
+   */
+  const vatShifted = (quote) => Boolean(quote && quote.vatShift && quote.vatShift.on === true && quote.vatShift.number);
 
   /**
    * Bedrag van een regel: aantal × prijs.
@@ -178,21 +208,23 @@
   /**
    * Totalen: per sectie, subtotaal, korting (naar rato over de btw-tarieven),
    * btw per tarief en het eindbedrag. Alle bedragen in euro's, afgerond op centen.
-   * @param {object} quote Offertegegevens (lines, discountPct).
-   * @returns {object} { bySection, subtotal, discountPct, discount, net, vat, vatTotal, total }.
+   * @param {object} quote Offertegegevens (lines, discountPct, vatShift).
+   * @returns {object} { bySection, subtotal, discountPct, discount, net, vat, vatTotal, shifted, total }.
    */
   function totals(quote) {
     const lines = (quote && quote.lines) || [];
     const discountFraction = clampNumber(quote && quote.discountPct, 0, 100) / 100;
     const bySection = {};
     const bases = new Map();
+    // Btw verlegd naar de afnemer: alles zonder btw.
+    const shifted = vatShifted(quote);
     let subtotal = 0;
     for (const line of lines) {
       if (!included(line)) continue;
       const amount = lineTotal(line);
       bySection[line.section] = round2((bySection[line.section] || 0) + amount);
       subtotal += amount;
-      const rate = Number(line.vat) || 0;
+      const rate = shifted ? 0 : Number(line.vat) || 0;
       bases.set(rate, (bases.get(rate) || 0) + amount * (1 - discountFraction));
     }
     subtotal = round2(subtotal);
@@ -201,7 +233,7 @@
     const vat = [...bases.entries()].sort((left, right) => right[0] - left[0])
       .map(([rate, base]) => ({ rate, base: round2(base), amount: round2((base * rate) / 100) }));
     const vatTotal = round2(vat.reduce((sum, entry) => sum + entry.amount, 0));
-    return { bySection, subtotal, discountPct: round2(discountFraction * 100), discount, net, vat, vatTotal, total: round2(net + vatTotal) };
+    return { bySection, subtotal, discountPct: round2(discountFraction * 100), discount, net, vat, vatTotal, shifted, total: round2(net + vatTotal) };
   }
 
   const PLAN_DEFAULTS = {
@@ -328,7 +360,7 @@
     return { lines, summary, warnings };
   }
 
-  const api = { SECTIONS, VAT_RATES, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, lineTotal, included, chooseOptions, fromPlan, today, addDays, round2 };
+  const api = { SECTIONS, VAT_RATES, vatShifted, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, lineTotal, included, chooseOptions, fromPlan, today, addDays, round2 };
   root.QuoteCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

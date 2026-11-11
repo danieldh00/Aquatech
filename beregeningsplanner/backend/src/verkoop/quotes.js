@@ -21,6 +21,7 @@ const { linkExpired } = require('../platform/public-links');
 const copyTo = (user) => (user && preferencesOf(user).mailCopy && validEmail(user.email) ? user.email : undefined);
 
 const Core = require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js'));
+const { normalizeVatNumber, validVatNumber } = require('../webshop/vat');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 
 // Bedrijfsprofiel: tekstvelden met maximale lengte en getallen [min, max].
@@ -684,6 +685,44 @@ function registerQuoteRoutes(app, ctx) {
     res.json({ profile: settings.get('quoteProfile') });
   });
 
+  /**
+   * Het adres dat bij PDOK moet kloppen: dat van de klant op de offerte, behalve bij een afnemer in een ander EU-land (btw verlegd met een btw-nummer dat niet Nederlands is): dat adres ligt buiten PDOK en wordt vrij getypt.
+   * @param {object} req Het verzoek.
+   * @returns {string|undefined} Het adres om te controleren, of niets als er niets te controleren valt.
+   */
+  function addressToVerify(req) {
+    const data = req.body && req.body.data;
+    const shift = data && data.vatShift;
+    if (shift && shift.on === true) {
+      const number = normalizeVatNumber(shift.number);
+      if (validVatNumber(number) && !number.startsWith('NL')) return undefined;
+    }
+    return data && data.customer && data.customer.address;
+  }
+
+  /**
+   * Controleert "btw verlegd" op een offerte bij VIES en zet het bewijs (uitkomst, tijdstip, consultatienummer, naam) in de gegevens.
+   * Verleggen kan alleen met een geldig btw-nummer uit een ander EU-land dan Nederland; noemt VIES het nummer ongeldig dan wordt niets opgeslagen.
+   * Is VIES niet bereikbaar, dan staat de uitkomst als "onbereikbaar" op de offerte, zodat de gebruiker dat ziet.
+   * @param {object} req Het verzoek (voor de instellingen van de organisatie).
+   * @param {object|undefined} data De ruwe offertegegevens uit de browser (of undefined bij alleen een statuswijziging).
+   * @returns {Promise<{ data: object|undefined }|{ error: string, message: string }>} De gegevens met bewijs, of de fout.
+   */
+  async function applyVatShift(req, data) {
+    const shift = data && data.vatShift;
+    const number = shift ? normalizeVatNumber(shift.number) : '';
+    if (!shift || shift.on !== true || !number) return { data };
+    if (!validVatNumber(number) || number.startsWith('NL')) {
+      return { error: 'invalid_vat_number', message: 'Btw verleggen kan alleen met een geldig btw-nummer uit een ander EU-land dan Nederland.' };
+    }
+    const requester = normalizeVatNumber(settingsOf(req).get('quoteProfile').vatNumber);
+    const result = ctx.vies ? await ctx.vies.check(number, validVatNumber(requester) ? requester : '') : { status: 'onbereikbaar', checkedAt: new Date().toISOString(), requestId: '', name: '' };
+    if (result.status === 'ongeldig') {
+      return { error: 'vat_invalid', message: `Het btw-nummer ${number} is volgens VIES (de btw-database van de EU) niet geldig, dus de btw kan niet worden verlegd.` };
+    }
+    return { data: { ...data, vatShift: { on: true, number, status: result.status, checkedAt: result.checkedAt, requestId: result.requestId, name: result.name } } };
+  }
+
   // Klantaccounts om een offerte aan te koppelen.
   // Zoekt klanten voor de klantkeuze (tot 20, op naam, bedrijf, e-mail, telefoon of adres), met de gegevens die de offerte invult.
   app.get('/api/quote-customers', requireQuotes, (req, res) => {
@@ -712,9 +751,12 @@ function registerQuoteRoutes(app, ctx) {
     res.json(quote);
   });
 
-  app.post('/api/quotes', requireJson, requireQuotes, requireVerifiedAddress(ctx.addressGuard, (req) => req.body?.data?.customer?.address), (req, res) => {
-    const { data, status } = req.body || {};
-    if (!validData(data) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
+  app.post('/api/quotes', requireJson, requireQuotes, requireVerifiedAddress(ctx.addressGuard, addressToVerify), async (req, res) => {
+    const { status } = req.body || {};
+    if (!validData(req.body?.data) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
+    const shifted = await applyVatShift(req, req.body.data);
+    if (shifted.error) return res.status(shifted.error === 'vat_invalid' ? 409 : 400).json({ error: shifted.error, message: shifted.message });
+    const { data } = shifted;
     const customerChoice = customerIdOf(req, req.body.customerId);
     if (customerChoice.error) return badCustomer(res);
     // Uit een plan dat (nog) niet is goedgekeurd geen offerte (een verwijderd
@@ -725,9 +767,12 @@ function registerQuoteRoutes(app, ctx) {
     res.status(201).json(quotes.create(req.user, data, { status, prefix, customerId: customerChoice.value }));
   });
 
-  app.put('/api/quotes/:id', requireJson, requireQuotes, requireVerifiedAddress(ctx.addressGuard, (req) => req.body?.data?.customer?.address, (req) => () => quotes.get(req.user, req.params.id)?.data?.customer?.address), (req, res) => {
-    const { data, status } = req.body || {};
-    if ((data !== undefined && !validData(data)) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
+  app.put('/api/quotes/:id', requireJson, requireQuotes, requireVerifiedAddress(ctx.addressGuard, addressToVerify, (req) => () => quotes.get(req.user, req.params.id)?.data?.customer?.address), async (req, res) => {
+    const { status } = req.body || {};
+    if ((req.body?.data !== undefined && !validData(req.body.data)) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
+    const shifted = await applyVatShift(req, req.body.data);
+    if (shifted.error) return res.status(shifted.error === 'vat_invalid' ? 409 : 400).json({ error: shifted.error, message: shifted.message });
+    const { data } = shifted;
     const customerChoice = customerIdOf(req, req.body.customerId);
     if (customerChoice.error) return badCustomer(res);
     const quote = quotes.update(req.user, req.params.id, data, status, customerChoice.value);

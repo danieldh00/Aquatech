@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.9.9',
+      date: '2026-11-11',
+      title: 'Nieuwe klant en btw verleggen in de offerte',
+      items: [
+        { text: 'In de offerte maak je met één knop een nieuwe klant aan (particulier of zakelijk) en kies je hem meteen.', for: ['offertes', 'klanten'] },
+        { text: 'Btw verleggen voor een zakelijke klant in een ander EU-land: vul het btw-nummer in, het wordt bij VIES gecontroleerd en de offerte en factuur gaan zonder btw.', for: ['offertes'] },
+      ],
+    },
+    {
       version: '1.9.8',
       date: '2026-11-11',
       title: 'Klant kiezen in de offerte',
