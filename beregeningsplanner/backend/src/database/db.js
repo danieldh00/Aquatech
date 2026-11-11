@@ -1114,6 +1114,25 @@ const MIGRATIONS = [
   ALTER TABLE users ADD COLUMN totp_last_step INTEGER;
   ALTER TABLE users ADD COLUMN totp_recovery TEXT NOT NULL DEFAULT '[]';
   `,
+  // 52: logboek van de Visma-koppeling (verkoop/visma-log.js): wat er wanneer naar Visma ging of ervan gelezen is.
+  // Geen foreign key naar users (de regel blijft staan); een herhaalde fout telt op in repeat_count.
+  `
+  CREATE TABLE visma_log (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    created_at   TEXT NOT NULL,
+    kind         TEXT NOT NULL,
+    direction    TEXT NOT NULL DEFAULT '',
+    ok           INTEGER NOT NULL DEFAULT 1,
+    source       TEXT NOT NULL DEFAULT 'automatisch',
+    actor        TEXT NOT NULL DEFAULT '',
+    reference    TEXT NOT NULL DEFAULT '',
+    message      TEXT NOT NULL DEFAULT '',
+    repeat_count INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE INDEX visma_log_tenant ON visma_log (tenant_id, created_at, id);
+  CREATE INDEX visma_log_reference ON visma_log (tenant_id, kind, reference, created_at);
+  `,
 ];
 
 /**

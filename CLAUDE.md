@@ -514,6 +514,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (standaard uit) via `invoices.onFinalized` + `app.locals.vismaAll`, vanaf
   `visma.since`. Tests: nagebootste Visma via `createApp({ vismaFetch })`.
   Veldnamen van de Visma-API nog niet tegen de echte sandbox getest.
+  Overzicht + logboek (1.9.4, migratie 52, `verkoop/visma-log.js`): `describeConnection` (scopes in gewone taal, `visma.scopes` uit het tokenantwoord) in `GET /api/visma` (`overview`); tabel `visma_log` (`vismaLog.record(tenantId, …)` via `visma.note`, herhaalde fout = teller `repeat_count`, leesactie max 1× per 30 min, bewaartermijn `auditRetentionDays`), `GET /api/visma/log` met keyset-cursor. **Elke nieuwe Visma-actie schrijft een logregel (kort, nooit tokens/secrets) en krijgt `origin` (handmatig/automatisch) mee.**
 - **Tekening indienen + controle** (0.52.0, `backend/src/beregening/drawings.js`):
   knop *Direct een tekening maken* op login.html → `beregening/?tekenen&org=`
   (`isPublicPlanner` in server.js: pagina alleen met `?tekenen`, code van

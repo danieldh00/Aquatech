@@ -894,6 +894,24 @@ const PG_MIGRATIONS = [
   ALTER TABLE users ADD COLUMN totp_last_step BIGINT;
   ALTER TABLE users ADD COLUMN totp_recovery ${TEXT_TYPE} NOT NULL DEFAULT '[]';
   `,
+  // 52: logboek van de Visma-koppeling (zie db.js).
+  `
+  CREATE TABLE visma_log (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    created_at   ${TEXT_TYPE} NOT NULL,
+    kind         ${TEXT_TYPE} NOT NULL,
+    direction    ${TEXT_TYPE} NOT NULL DEFAULT '',
+    ok           BIGINT NOT NULL DEFAULT 1,
+    source       ${TEXT_TYPE} NOT NULL DEFAULT 'automatisch',
+    actor        ${TEXT_TYPE} NOT NULL DEFAULT '',
+    reference    ${TEXT_TYPE} NOT NULL DEFAULT '',
+    message      ${TEXT_TYPE} NOT NULL DEFAULT '',
+    repeat_count BIGINT NOT NULL DEFAULT 1
+  );
+  CREATE INDEX visma_log_tenant ON visma_log (tenant_id, created_at, id);
+  CREATE INDEX visma_log_reference ON visma_log (tenant_id, kind, reference, created_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

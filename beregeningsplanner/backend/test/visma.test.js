@@ -7,7 +7,8 @@ const { createApp } = require('../src/server');
 const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { splitAddress, invoiceBody, sanitizeVismaApp, sanitizeVisma } = require('../src/verkoop/visma');
+const { splitAddress, invoiceBody, sanitizeVismaApp, sanitizeVisma, describeConnection, SCOPES } = require('../src/verkoop/visma');
+const { createVismaLog } = require('../src/verkoop/visma-log');
 const { listen, createLogin } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
@@ -43,7 +44,7 @@ function fakeVisma() {
       visma.tokenCalls.push({ form: Object.fromEntries(form), auth: init.headers.Authorization });
       if (form.get('grant_type') === 'authorization_code') {
         if (form.get('code') !== 'goede-code') return reply(400, { error: 'invalid_grant' });
-        return reply(200, { access_token: visma.access, refresh_token: 'refresh-geheim-1', expires_in: 3600 });
+        return reply(200, { access_token: visma.access, refresh_token: 'refresh-geheim-1', expires_in: 3600, scope: 'ea:api ea:sales offline_access' });
       }
       if (form.get('refresh_token') !== 'refresh-geheim-1' && form.get('refresh_token') !== 'refresh-geheim-2') return reply(400, { error: 'invalid_grant' });
       visma.access = `acc-${++refreshCount + 1}`;
@@ -327,6 +328,148 @@ test('visma: rechten en scheiding tussen organisaties', async () => {
     assert.strictEqual((await baas.post('/app/api/visma/disconnect', {})).status, 200);
     assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'andere-app', clientSecret: 'nieuw-geheim-secret' })).status, 200);
     assert.strictEqual((await piet.get('/app/api/visma')).body.environment, 'production');
+  } finally {
+    server.close();
+  }
+});
+
+test('visma-logboek: opslaan, herhaalde fouten samenvoegen, pagineren, bewaartermijn en scheiding', () => {
+  const db = openDb();
+  const store = createStore(db);
+  const first = store.ensureTenant().id;
+  const second = store.createTenant({ name: 'Groen BV', slug: 'groen' }).tenant.id;
+  const vismaLog = createVismaLog(db);
+  /** Wacht tot de klok een milliseconde verder is, zodat regels een vaste volgorde hebben. */
+  const tick = () => { const start = Date.now(); while (Date.now() === start) { /* wachten */ } };
+  // Een herhaalde fout (zelfde onderdeel, verwijzing en melding) wordt één regel met een teller.
+  vismaLog.record(first, { kind: 'factuur', direction: 'naar', ok: false, reference: 'F2026-0001', message: 'Visma: foutje' });
+  tick();
+  vismaLog.record(first, { kind: 'factuur', direction: 'naar', ok: false, reference: 'F2026-0001', message: 'Visma: foutje' });
+  tick();
+  vismaLog.record(first, { kind: 'factuur', direction: 'naar', ok: false, reference: 'F2026-0001', message: 'Visma: andere fout' });
+  tick();
+  assert.strictEqual(vismaLog.list(first).items.length, 2);
+  assert.strictEqual(vismaLog.list(first).items.find((entry) => entry.message === 'Visma: foutje').count, 2);
+  // Na een succes begint een nieuwe fout weer een eigen regel.
+  vismaLog.record(first, { kind: 'factuur', direction: 'naar', ok: true, reference: 'F2026-0001', message: 'Verkoopfactuur aangemaakt in Visma' });
+  tick();
+  vismaLog.record(first, { kind: 'factuur', direction: 'naar', ok: false, reference: 'F2026-0001', message: 'Visma: andere fout' });
+  assert.strictEqual(vismaLog.list(first).items.length, 4);
+  // Een geslaagde leesactie kort na een vorige wordt niet nog eens gelogd.
+  assert.ok(vismaLog.record(first, { kind: 'opties', direction: 'van', ok: true, message: '2 artikelen' }));
+  assert.strictEqual(vismaLog.record(first, { kind: 'opties', direction: 'van', ok: true, message: '2 artikelen' }), null);
+  // Onbekend soort, rare invoer en lange teksten: afgekapt of geweigerd.
+  assert.throws(() => vismaLog.record(first, { kind: 'onzin', ok: true }));
+  tick();
+  vismaLog.record(first, { kind: 'verbonden', direction: 'zijwaarts', ok: true, source: 'iets', actor: 'x'.repeat(500), message: `regel\neinde ${'y'.repeat(900)}` });
+  const odd = vismaLog.list(first).items[0];
+  assert.strictEqual(odd.direction, '');
+  assert.strictEqual(odd.source, 'automatisch');
+  assert.strictEqual(odd.actor.length, 120);
+  assert.ok(odd.message.length <= 300 && !odd.message.includes('\n'));
+  // Alleen fouten.
+  assert.ok(vismaLog.list(first, { onlyErrors: true }).items.every((entry) => !entry.ok));
+  // Paginering met een cursor: alles precies één keer, nieuwste eerst.
+  for (let index = 0; index < 120; index++) vismaLog.record(first, { kind: 'klant', direction: 'naar', ok: true, reference: `Debiteur ${index}`, message: 'Klant aangemaakt in Visma' });
+  const seen = [];
+  let cursor = '';
+  let pages = 0;
+  do {
+    const page = vismaLog.list(first, { limit: 50, before: cursor });
+    seen.push(...page.items.map((entry) => entry.id));
+    cursor = page.next || '';
+    pages++;
+  } while (cursor && pages < 10);
+  assert.strictEqual(seen.length, 126);
+  assert.strictEqual(new Set(seen).size, seen.length);
+  assert.strictEqual(vismaLog.list(first, { limit: 5000 }).items.length, 100, 'hooguit 100 per pagina');
+  assert.strictEqual(vismaLog.list(first, { limit: 'x' }).items.length, 50);
+  assert.strictEqual(vismaLog.list(first, { before: 'rommel' }).items.length, 50, 'een ongeldige cursor wordt genegeerd');
+  // Een andere organisatie ziet niets en kan niets weggooien.
+  assert.strictEqual(vismaLog.list(second).items.length, 0);
+  assert.strictEqual(vismaLog.prune(second, 0), 0);
+  // Bewaartermijn.
+  db.prepare("UPDATE visma_log SET created_at = '2020-01-01T00:00:00.000Z' WHERE tenant_id = ? AND kind = 'klant'").run(first);
+  assert.strictEqual(vismaLog.prune(first, 90), 120);
+  assert.strictEqual(vismaLog.list(first, { limit: 100 }).items.length, 6);
+});
+
+test('visma: overzicht van toestemmingen en onderdelen in gewone taal', () => {
+  // Elke toestemming die de koppeling vraagt heeft een uitleg.
+  const requested = describeConnection('');
+  assert.deepStrictEqual(requested.scopes.map((scope) => scope.key), SCOPES.split(' '));
+  assert.ok(requested.scopes.every((scope) => scope.title && scope.text && !scope.text.includes('niet kent')));
+  assert.deepStrictEqual(describeConnection('ea:api bijzonder').scopes.map((scope) => scope.key), ['ea:api', 'bijzonder']);
+  assert.match(describeConnection('bijzonder').scopes[0].text, /niet kent/);
+  assert.deepStrictEqual(requested.parts.map((part) => part.key), ['customers', 'invoices', 'options', 'company']);
+  assert.ok(requested.parts.every((part) => ['naar', 'van'].includes(part.direction)));
+  assert.match(requested.notDone, /wijzigt of verwijdert niets/);
+  assert.strictEqual(sanitizeVisma({ scopes: 'ea:api <script> ea:sales' }).scopes, 'ea:api ea:sales');
+});
+
+test('visma: logboek via de API – verbinden, doorsturen, fouten, verbreken, rechten en scheiding', async () => {
+  const { db, server, as, visma } = await setup();
+  try {
+    const baas = await as('baas');
+    const kees = await as('kees');
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
+    // Verbinden mislukt (verkeerde state) en lukt daarna: beide staan in het logboek, de toestemmingen zijn die van Visma.
+    assert.match((await baas.get('/app/api/visma/callback?code=goede-code&state=verkeerd')).location, /visma=fout/);
+    await connect(baas);
+    const status = (await baas.get('/app/api/visma')).body;
+    assert.deepStrictEqual(status.overview.scopes.map((scope) => scope.key), ['ea:api', 'ea:sales', 'offline_access']);
+    assert.strictEqual(status.settings.scopes, 'ea:api ea:sales offline_access');
+    await baas.get('/app/api/visma/options');
+    await baas.put('/app/api/visma/settings', { articles: { 'producten:21': ART.producten }, termsOfPaymentId: TERMS });
+    const good = await finalInvoice(baas, { name: 'Jan', email: 'jan@voorbeeld.test' }, [{ description: 'Sproeier', qty: 1, price: 10 }]);
+    const bad = await finalInvoice(baas, { name: 'Piet' }, [{ description: 'Aanleg', qty: 1, price: 50, group: 'arbeid' }]);
+    const sync = await baas.post('/app/api/visma/sync', {});
+    assert.strictEqual(sync.body.sent, 1);
+    assert.strictEqual(sync.body.failed, 1);
+    await baas.post('/app/api/visma/sync', {});
+    await baas.post('/app/api/visma/sync', {});
+    const log = (await baas.get('/app/api/visma/log')).body;
+    /**
+     * De logregels van één soort.
+     * @param {string} kind Soort regel.
+     * @returns {object[]} De regels.
+     */
+    const byKind = (kind) => log.items.filter((entry) => entry.kind === kind);
+    assert.strictEqual(byKind('aanmelding').length, 1);
+    assert.strictEqual(byKind('verbonden')[0].source, 'handmatig');
+    assert.strictEqual(byKind('verbonden')[0].actor, 'Baas');
+    assert.match(byKind('verbonden')[0].message, /AquaTech Service/);
+    assert.strictEqual(byKind('opties').length, 1);
+    assert.strictEqual(byKind('klant')[0].reference, 'Debiteur 1000');
+    const okInvoice = byKind('factuur').find((entry) => entry.ok);
+    assert.strictEqual(okInvoice.reference, good.number);
+    assert.match(okInvoice.message, /nummer 500/);
+    // De mislukte factuur staat één keer, met een teller van het aantal pogingen.
+    const failed = byKind('factuur').filter((entry) => !entry.ok);
+    assert.strictEqual(failed.length, 1);
+    assert.strictEqual(failed[0].reference, bad.number);
+    assert.strictEqual(failed[0].count, 3);
+    assert.match(failed[0].message, /Kies in Facturen/);
+    assert.strictEqual((await baas.get('/app/api/visma/log?errors=1')).body.items.every((entry) => !entry.ok), true);
+    // Pagina's en cursor.
+    const page = (await baas.get('/app/api/visma/log?limit=2')).body;
+    assert.strictEqual(page.items.length, 2);
+    assert.ok(page.next);
+    const rest = (await baas.get(`/app/api/visma/log?limit=100&before=${encodeURIComponent(page.next)}`)).body;
+    assert.strictEqual(page.items.length + rest.items.length, log.items.length);
+    // Geen geheimen in het logboek.
+    const raw = JSON.stringify(db.prepare('SELECT actor, reference, message FROM visma_log').all());
+    for (const secret of ['heel-geheim-secret', 'refresh-geheim', 'acc-1']) assert.ok(!raw.includes(secret), secret);
+    // Verbreken staat erin.
+    await baas.post('/app/api/visma/disconnect', {});
+    const afterOff = (await baas.get('/app/api/visma/log?limit=1')).body.items[0];
+    assert.strictEqual(afterOff.kind, 'verbroken');
+    assert.strictEqual((await baas.get('/app/api/visma')).body.settings.scopes, '');
+    // Rechten: zonder recht facturen geen logboek; andere organisatie ziet het niet.
+    assert.strictEqual((await kees.get('/app/api/visma/log')).status, 403);
+    await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
+    const piet = await as('piet', 'groen');
+    assert.deepStrictEqual((await piet.get('/app/api/visma/log')).body, { items: [], next: null });
   } finally {
     server.close();
   }

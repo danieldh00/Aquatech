@@ -39,7 +39,7 @@
    */
   const num = (value) => (String(value).trim() === '' ? 0 : Number(String(value).replace(',', '.')) || 0);
 
-  const state = { items: [], tab: 'list', invoice: null, settings: null, profile: {}, articles: {}, dirty: false, config: {}, debtors: [], debtor: null, visma: null, vismaOptions: null };
+  const state = { items: [], tab: 'list', invoice: null, settings: null, profile: {}, articles: {}, dirty: false, config: {}, debtors: [], debtor: null, visma: null, vismaOptions: null, vismaLog: { items: [], next: null, onlyErrors: false } };
   /**
    * Formatteert een tijdstip kort met tijd.
    * @param {string} iso tijdstip in ISO-formaat
@@ -391,7 +391,67 @@
     state.visma = status;
     renderVismaApp(appData);
     renderVisma();
+    loadVismaLog(true).catch((error) => toast(error.message, true));
     if (withOptions && state.visma.connected && !state.vismaOptions) await loadVismaOptions();
+  }
+
+  /**
+   * Haalt een pagina van het Visma-logboek op: de eerste (nieuwste) of de volgende.
+   * @param {boolean} reset true om opnieuw te beginnen, false voor de volgende pagina
+   * @returns {Promise<void>}
+   */
+  async function loadVismaLog(reset) {
+    const log = state.vismaLog;
+    const query = new URLSearchParams({ limit: '50' });
+    if (log.onlyErrors) query.set('errors', '1');
+    if (!reset && log.next) query.set('before', log.next);
+    const page = await api(`visma/log?${query}`);
+    log.items = reset ? page.items : log.items.concat(page.items);
+    log.next = page.next;
+    renderVismaLog();
+  }
+
+  const LOG_KINDS = { verbonden: 'Verbonden', verbroken: 'Verbroken', klant: 'Klant', factuur: 'Factuur', opties: 'Artikelen en termijnen', aanmelding: 'Aanmelding' };
+  const LOG_DIRECTIONS = { naar: 'Aquatech → Visma', van: 'Visma → Aquatech' };
+  /**
+   * Zegt wanneer een onderdeel van de koppeling gebeurt.
+   * @param {string} key sleutel van het onderdeel (customers, invoices, options of company)
+   * @param {object} settings de Visma-instellingen (autoSync en since)
+   * @returns {string} de uitleg
+   */
+  function partWhen(key, settings) {
+    if (key === 'customers') return 'Bij de eerste factuur van de debiteur.';
+    if (key === 'options') return 'Als je dit scherm opent of op Artikelen opnieuw ophalen klikt.';
+    if (key === 'company') return 'Bij het verbinden.';
+    if (!settings.autoSync) return 'Alleen met de knop Nu doorsturen of de knop op een factuur.';
+    return `Vanzelf zodra een factuur definitief is (en elke 10 minuten als vangnet)${settings.since ? `, vanaf factuurdatum ${day(settings.since)}` : ''}; ook met de knop.`;
+  }
+
+  /** Toont de toestemmingen en de onderdelen van de koppeling in gewone taal. */
+  function renderVismaOverview() {
+    const visma = state.visma;
+    const overview = visma && visma.overview;
+    $('#vi-overview').hidden = !overview;
+    if (!overview) return;
+    $('#vi-scopes-title').textContent = visma.connected ? 'Toestemmingen die Visma gaf' : 'Toestemmingen die bij het verbinden worden gevraagd';
+    $('#vi-scopes').innerHTML = overview.scopes.map((scope) => `<li><b>${esc(scope.title)}</b> <span class="code">${esc(scope.key)}</span><span class="sub">${esc(scope.text)}</span></li>`).join('');
+    $('#vi-parts').innerHTML = `<thead><tr><th>Onderdeel</th><th>Wat gebeurt er</th></tr></thead><tbody>${
+      overview.parts.map((part) => `<tr><td><b>${esc(part.title)}</b><span class="sub">${esc(LOG_DIRECTIONS[part.direction])}</span></td><td class="wrap">${esc(part.text)}<span class="sub">${esc(partWhen(part.key, visma.settings))}</span></td></tr>`).join('')}</tbody>`;
+    $('#vi-notdone').textContent = overview.notDone;
+  }
+
+  /** Toont de geladen regels van het Visma-logboek. */
+  function renderVismaLog() {
+    const log = state.vismaLog;
+    $('#vi-logcard').hidden = !(state.visma && state.visma.configured);
+    $('#vi-log-empty').hidden = log.items.length > 0;
+    $('#vi-log-empty').textContent = log.onlyErrors ? 'Geen fouten in het logboek.' : 'Nog niets in het logboek.';
+    $('#vi-log').innerHTML = log.items.length ? `<thead><tr><th>Wanneer</th><th>Wat</th><th>Uitkomst</th></tr></thead><tbody>${log.items.map((entry) => `<tr>
+      <td class="nowrap">${esc(when(entry.at))}</td>
+      <td><b>${esc(LOG_KINDS[entry.kind] || entry.kind)}</b>${entry.reference ? ` ${esc(entry.reference)}` : ''}<span class="sub">${esc(LOG_DIRECTIONS[entry.direction] || '')}${entry.direction ? ' · ' : ''}${entry.source === 'handmatig' ? `handmatig${entry.actor ? ` door ${esc(entry.actor)}` : ''}` : 'automatisch'}</span></td>
+      <td class="wrap">${entry.ok ? '<span class="pill ok">gelukt</span>' : '<span class="pill overdue">fout</span>'} ${esc(entry.message)}${entry.count > 1 ? ` <span class="muted">(${esc(entry.count)}×)</span>` : ''}</td>
+    </tr>`).join('')}</tbody>` : '';
+    $('#vi-log-more').hidden = !log.next;
   }
 
   /**
@@ -444,6 +504,7 @@
     $('#vi-sync').hidden = !visma.connected;
     $('#vi-disconnect').hidden = !visma.connected;
     $('#vi-form').hidden = !visma.connected;
+    renderVismaOverview();
     if (visma.connected) renderVismaForm();
   }
 
@@ -542,6 +603,21 @@
         syncButton.disabled = false;
       }
     };
+    /**
+     * Logboek: alleen fouten tonen of niet.
+     * @param {Event} event het wijzigen van het vinkje
+     */
+    $('#vi-log-errors').onchange = (event) => { state.vismaLog.onlyErrors = event.target.checked; loadVismaLog(true).catch((error) => toast(error.message, true)); };
+    /**
+     * Logboek vernieuwen.
+     * @returns {Promise<void>}
+     */
+    $('#vi-log-refresh').onclick = () => loadVismaLog(true).catch((error) => toast(error.message, true));
+    /**
+     * Logboek: de volgende pagina laden.
+     * @returns {Promise<void>}
+     */
+    $('#vi-log-more').onclick = () => loadVismaLog(false).catch((error) => toast(error.message, true));
     /** Haalt de artikelen en termijnen opnieuw uit Visma. */
     $('#vi-reload').onclick = () => { state.vismaOptions = null; $('.err', formElement).textContent = ''; loadVismaOptions(); };
     /**

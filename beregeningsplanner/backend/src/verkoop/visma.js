@@ -22,6 +22,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { withCause } = require('../platform/error-report');
+const { createVismaLog } = require('./visma-log');
 
 const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 
@@ -30,6 +31,20 @@ const HOSTS = {
   sandbox: { identity: 'https://identity-sandbox.test.vismaonline.com', api: 'https://eaccountingapi-sandbox.test.vismaonline.com/v2' },
 };
 const SCOPES = 'ea:api offline_access ea:sales';
+/** Wat elke toestemming (scope) bij Visma in gewone taal betekent, voor Facturen → Visma. */
+const SCOPE_INFO = {
+  'ea:api': { title: 'Toegang tot de eAccounting-API', text: 'Basistoegang om met jouw Visma-administratie te praten.' },
+  'ea:sales': { title: 'Verkoop', text: 'Klanten, artikelen, betalingstermijnen en verkoopfacturen lezen en aanmaken. Dit is de toestemming zoals Visma haar aanbiedt; Aquatech gebruikt er alleen het onderstaande van.' },
+  offline_access: { title: 'Blijvend verbonden', text: 'Je hoeft niet steeds opnieuw in te loggen. Intrekken kan altijd: met Verbinding verbreken hier, of bij Visma onder gekoppelde apps.' },
+};
+/** Waar de koppeling in Visma wel en niet aan komt, in gewone taal. */
+const PARTS = [
+  { key: 'customers', title: 'Klanten (debiteuren)', direction: 'naar', text: 'Een debiteur wordt bij zijn eerste factuur een klant in Visma met hetzelfde nummer. Staat dat klantnummer al in Visma met dezelfde naam, dan wordt die klant gekoppeld. Een bestaande klant wordt nooit gewijzigd.' },
+  { key: 'invoices', title: 'Verkoop- en creditfacturen', direction: 'naar', text: 'Definitieve facturen worden verkoopfacturen in Visma, elke regel op het artikel van zijn omzetcategorie. Visma nummert zelf; ons factuurnummer gaat mee als referentie en het Visma-nummer komt terug bij de factuur.' },
+  { key: 'options', title: 'Artikelen en betalingstermijnen', direction: 'van', text: 'Alleen lezen, om hier te kunnen kiezen. Er wordt niets van bewaard behalve jouw keuze.' },
+  { key: 'company', title: 'Naam van de administratie', direction: 'van', text: 'Alleen lezen, één keer bij het verbinden.' },
+];
+const NOT_DONE = 'Aquatech wijzigt of verwijdert niets in Visma, komt niet aan boekingen, inkoop, bank of salaris en leest geen betalingen terug.';
 const DEFAULT_REDIRECT = 'https://aquatech.den-hollander.com/api/visma/callback';
 const TIMEOUT_MS = 20000;
 const STATE_TTL_MS = 15 * 60 * 1000;
@@ -112,6 +127,21 @@ function sanitizeVisma(raw) {
     environment: input.environment === 'production' ? 'production' : input.environment === 'sandbox' ? 'sandbox' : '',
     connectedAt: typeof input.connectedAt === 'string' ? input.connectedAt.slice(0, 40) : '',
     connectedBy: cleanText(input.connectedBy, 120),
+    scopes: cleanText(input.scopes, 300).split(/\s+/).filter((scope) => /^[\w:.-]{1,60}$/.test(scope)).join(' '),
+  };
+}
+
+/**
+ * Beschrijving van de koppeling in gewone taal: de toestemmingen die Visma gaf en wat de koppeling wel en niet doet.
+ * @param {string} grantedScopes De toestemmingen, gescheiden door spaties (leeg = de aangevraagde).
+ * @returns {{ scopes: object[], parts: object[], notDone: string }} Per toestemming sleutel, titel en uitleg; de onderdelen met richting; en wat de koppeling niet doet.
+ */
+function describeConnection(grantedScopes) {
+  const keys = String(grantedScopes || '').split(/\s+/).filter(Boolean);
+  return {
+    scopes: (keys.length ? keys : SCOPES.split(' ')).map((key) => ({ key, ...(SCOPE_INFO[key] || { title: key, text: 'Toestemming die Aquatech niet kent.' }) })),
+    parts: PARTS,
+    notDone: NOT_DONE,
   };
 }
 
@@ -220,10 +250,10 @@ function invoiceBody(invoice, customerId, vismaSettings, invoicing, creditedInvo
 
 /**
  * Maakt de Visma-koppeling: OAuth2, API-aanroepen en het doorsturen van facturen.
- * @param {object} ctx db, settingsFor(tenantId), debtors, invoices, fetchImpl en log.
- * @returns {object} authorizeUrl, finishConnect, disconnect, api, options, pushInvoice, sync, run, schedule, runAll, status en app.
+ * @param {object} ctx db, settingsFor(tenantId), debtors, invoices, fetchImpl, log en vismaLog (het logboek).
+ * @returns {object} authorizeUrl, finishConnect, disconnect, api, options, pushInvoice, sync, run, schedule, runAll, status, app, note en logbook.
  */
-function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, log = console }) {
+function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, log = console, vismaLog = createVismaLog(db) }) {
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -234,6 +264,19 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
   const tokens = new Map();
   const running = new Map();
   const timers = new Map();
+  /**
+   * Schrijft een regel in het logboek; een fout daarbij mag het doorsturen nooit stoppen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} entry De regel (zie visma-log.js).
+   * @param {{ source?: string, actor?: string }} [origin] Wie of wat het startte (standaard automatisch).
+   */
+  function note(tenantId, entry, origin = {}) {
+    try {
+      vismaLog.record(tenantId, { ...entry, source: origin.source || 'automatisch', actor: origin.actor || '' });
+    } catch (error) {
+      log.warn(`Visma (${tenantId}): logboek schrijven mislukt: ${error.message}`);
+    }
+  }
 
   /**
    * De app-registratie bij Visma van een omgeving.
@@ -312,6 +355,7 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
    * @returns {Promise<{ companyName: string }>} De naam van de administratie.
    */
   async function finishConnect(state, code, { tenantId, userId, userName }) {
+    const origin = { source: 'handmatig', actor: userName || '' };
     const pending = states.get(String(state || ''));
     states.delete(String(state || ''));
     if (!pending || pending.exp < Date.now() || pending.tenantId !== tenantId || pending.userId !== userId) throw new VismaError('invalid_state', 'Deze aanmelding is verlopen of hoort niet bij jouw sessie. Probeer opnieuw te verbinden.', 400);
@@ -323,7 +367,8 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
     settings.update({ vismaRefreshToken: granted.refresh_token }, userId);
     let companyName = '';
     try { companyName = cleanText((await api(tenantId, 'GET', '/companysettings')).Name); } catch { /* naam is niet nodig */ }
-    settings.update({ visma: { ...vismaSettingsOf(tenantId), companyName, environment: app(tenantId).environment, connectedAt: new Date().toISOString(), connectedBy: userName || '' } }, userId);
+    settings.update({ visma: { ...vismaSettingsOf(tenantId), companyName, environment: app(tenantId).environment, connectedAt: new Date().toISOString(), connectedBy: userName || '', scopes: granted.scope || SCOPES } }, userId);
+    note(tenantId, { kind: 'verbonden', direction: 'van', ok: true, message: `Verbonden met ${companyName || 'de Visma-administratie'}` }, origin);
     return { companyName };
   }
 
@@ -331,11 +376,13 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
    * Verbreekt de verbinding met Visma (vergeet de tokens).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} userId Id van de gebruiker.
+   * @param {string} [userName] Naam van de gebruiker (voor het logboek).
    */
-  function disconnect(tenantId, userId) {
+  function disconnect(tenantId, userId, userName = '') {
     tokens.delete(tenantId);
     const settings = settingsFor(tenantId);
-    settings.update({ vismaRefreshToken: '', visma: { ...vismaSettingsOf(tenantId), companyName: '', connectedAt: '', connectedBy: '', environment: '' } }, userId);
+    settings.update({ vismaRefreshToken: '', visma: { ...vismaSettingsOf(tenantId), companyName: '', connectedAt: '', connectedBy: '', environment: '', scopes: '' } }, userId);
+    note(tenantId, { kind: 'verbroken', ok: true, message: 'Verbinding met Visma verbroken; de tokens zijn gewist' }, { source: 'handmatig', actor: userName });
   }
 
   /**
@@ -349,7 +396,13 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
     const refresh = settingsFor(tenantId).get('vismaRefreshToken');
     if (!refresh) throw new VismaError('not_connected', 'Deze omgeving is niet verbonden met Visma.', 409);
     if (!app(tenantId).configured) throw new VismaError('not_configured', 'Vul eerst de app-gegevens van Visma in (Facturen → Visma).', 409);
-    const granted = await tokenRequest(tenantId, { grant_type: 'refresh_token', refresh_token: refresh });
+    let granted;
+    try {
+      granted = await tokenRequest(tenantId, { grant_type: 'refresh_token', refresh_token: refresh });
+    } catch (error) {
+      if (error instanceof VismaError) note(tenantId, { kind: 'aanmelding', ok: false, message: error.message });
+      throw error;
+    }
     tokens.set(tenantId, { access: granted.access_token, exp: Date.now() + (Number(granted.expires_in) || 3600) * 1000 - 60000 });
     // Visma kan een nieuw refresh token geven; dan het nieuwe bewaren.
     if (granted.refresh_token && granted.refresh_token !== refresh) settingsFor(tenantId).update({ vismaRefreshToken: granted.refresh_token });
@@ -419,10 +472,19 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
   /**
    * Artikelen en betalingstermijnen uit Visma, om te kiezen.
    * @param {string} tenantId Id van de omgeving.
+   * @param {{ source?: string, actor?: string }} [origin] Wie het vraagt (voor het logboek).
    * @returns {Promise<{ articles: object[], terms: object[] }>} Actieve artikelen en betalingstermijnen.
    */
-  async function options(tenantId) {
-    const [articles, terms] = await Promise.all([list(tenantId, '/articles'), list(tenantId, '/termsofpayments')]);
+  async function options(tenantId, origin = { source: 'handmatig' }) {
+    let articles;
+    let terms;
+    try {
+      [articles, terms] = await Promise.all([list(tenantId, '/articles'), list(tenantId, '/termsofpayments')]);
+    } catch (error) {
+      if (error instanceof VismaError) note(tenantId, { kind: 'opties', direction: 'van', ok: false, message: error.message }, origin);
+      throw error;
+    }
+    note(tenantId, { kind: 'opties', direction: 'van', ok: true, message: `${articles.length} artikelen en ${terms.length} betalingstermijnen opgehaald` }, origin);
     return {
       articles: articles.filter((article) => article.IsActive !== false).map((article) => ({ id: article.Id, number: cleanText(article.Number, 40), name: cleanText(article.Name, 120) })),
       terms: terms.map((term) => ({ id: term.Id, name: cleanText(term.Name, 120), days: Number(term.NumberOfDays) || 0 })),
@@ -436,9 +498,10 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
    * @param {string} tenantId Id van de omgeving.
    * @param {string} debtorId Id van de debiteur.
    * @param {object} vismaSettings De instelling visma (betalingstermijn).
+   * @param {object} [origin] Wie of wat het startte (voor het logboek).
    * @returns {Promise<string>} Id van de klant in Visma.
    */
-  async function pushDebtor(tenantId, debtorId, vismaSettings) {
+  async function pushDebtor(tenantId, debtorId, vismaSettings, origin = {}) {
     const row = prepare('SELECT visma_customer_id FROM debtors WHERE tenant_id = ? AND id = ?').get(tenantId, debtorId);
     if (!row) throw new VismaError('no_debtor', 'De factuur heeft geen debiteur.', 409);
     if (row.visma_customer_id) return row.visma_customer_id;
@@ -452,8 +515,10 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
         throw new VismaError('number_taken', `Klantnummer ${debtor.number} bestaat in Visma al voor "${cleanText(found.Name)}". Verhoog het eerste debiteurnummer in Facturen → Instellingen.`, 409);
       }
       id = found.Id;
+      note(tenantId, { kind: 'klant', direction: 'naar', ok: true, reference: `Debiteur ${debtor.number}`, message: 'Gekoppeld aan de bestaande klant in Visma' }, origin);
     } else {
       id = (await api(tenantId, 'POST', '/customers', customerBody(debtor, vismaSettings.termsOfPaymentId))).Id;
+      note(tenantId, { kind: 'klant', direction: 'naar', ok: true, reference: `Debiteur ${debtor.number}`, message: 'Klant aangemaakt in Visma' }, origin);
     }
     prepare('UPDATE debtors SET visma_customer_id = ? WHERE tenant_id = ? AND id = ?').run(String(id), tenantId, debtorId);
     return String(id);
@@ -463,9 +528,10 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
    * Stuurt één factuur naar Visma; een fout komt op de factuur (visma_error).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} invoiceId Id van de factuur.
+   * @param {object} [origin] Wie of wat het startte (voor het logboek).
    * @returns {Promise<object>} De bijgewerkte factuur. Gooit een VismaError.
    */
-  async function pushInvoice(tenantId, invoiceId) {
+  async function pushInvoice(tenantId, invoiceId, origin = {}) {
     const invoice = invoices.get(tenantId, invoiceId);
     if (!invoice) throw new VismaError('not_found', 'Factuur niet gevonden.', 404);
     if (invoice.status === 'concept') throw new VismaError('not_final', 'Maak de factuur eerst definitief.', 409);
@@ -476,12 +542,19 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
       const original = invoice.kind === 'credit' && invoice.creditOf ? invoices.get(tenantId, invoice.creditOf) : null;
       const built = invoiceBody(invoice, 'x', vismaSettings, settings, original && original.vismaInvoiceId);
       if (built.error) throw new VismaError('no_article', built.error, 409);
-      const customerId = await pushDebtor(tenantId, invoice.debtorId, vismaSettings);
+      const customerId = await pushDebtor(tenantId, invoice.debtorId, vismaSettings, origin);
       const out = await api(tenantId, 'POST', '/customerinvoices', { ...built.body, CustomerId: customerId });
       prepare("UPDATE invoices SET visma_invoice_id = ?, visma_number = ?, visma_synced_at = ?, visma_error = '' WHERE tenant_id = ? AND id = ?")
         .run(String(out && out.Id), cleanText(out && out.InvoiceNumber, 40), new Date().toISOString(), tenantId, invoice.id);
+      note(tenantId, {
+        kind: 'factuur', direction: 'naar', ok: true, reference: invoice.number,
+        message: `${invoice.kind === 'credit' ? 'Creditfactuur' : 'Verkoopfactuur'} aangemaakt in Visma${out && out.InvoiceNumber ? ` (nummer ${cleanText(out.InvoiceNumber, 40)})` : ''}`,
+      }, origin);
     } catch (error) {
-      if (error instanceof VismaError) prepare('UPDATE invoices SET visma_error = ? WHERE tenant_id = ? AND id = ?').run(error.message.slice(0, 300), tenantId, invoice.id);
+      if (error instanceof VismaError) {
+        prepare('UPDATE invoices SET visma_error = ? WHERE tenant_id = ? AND id = ?').run(error.message.slice(0, 300), tenantId, invoice.id);
+        note(tenantId, { kind: 'factuur', direction: 'naar', ok: false, reference: invoice.number, message: error.message }, origin);
+      }
       throw error;
     }
     return invoices.get(tenantId, invoice.id);
@@ -490,9 +563,10 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
   /**
    * Stuurt alle definitieve facturen vanaf visma.since die nog niet in Visma staan (oudste eerst, hooguit BATCH).
    * @param {string} tenantId Id van de omgeving.
+   * @param {object} [origin] Wie of wat het startte (voor het logboek).
    * @returns {Promise<{ sent: number, failed: number, errors: string[] }|{ skipped: string }>} Aantallen en de eerste foutmeldingen.
    */
-  async function sync(tenantId) {
+  async function sync(tenantId, origin = {}) {
     if (!connected(tenantId)) return { skipped: 'not_connected' };
     const vismaSettings = vismaSettingsOf(tenantId);
     const args = [tenantId];
@@ -502,7 +576,7 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
     const out = { sent: 0, failed: 0, errors: [] };
     for (const id of ids) {
       try {
-        await pushInvoice(tenantId, id);
+        await pushInvoice(tenantId, id, origin);
         out.sent++;
       } catch (error) {
         if (!(error instanceof VismaError)) throw error;
@@ -518,11 +592,12 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
   /**
    * Doorsturen per omgeving na elkaar (nooit twee keer tegelijk).
    * @param {string} tenantId Id van de omgeving.
+   * @param {object} [origin] Wie of wat het startte (voor het logboek).
    * @returns {Promise<object>} Het resultaat van sync.
    */
-  function run(tenantId) {
+  function run(tenantId, origin = {}) {
     const previous = running.get(tenantId) || Promise.resolve();
-    const next = previous.catch(() => {}).then(() => sync(tenantId));
+    const next = previous.catch(() => {}).then(() => sync(tenantId, origin));
     running.set(tenantId, next);
     next.finally(() => { if (running.get(tenantId) === next) running.delete(tenantId); }).catch(() => {});
     return next;
@@ -566,7 +641,7 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
   /**
    * Stand van de koppeling voor het scherm Facturen → Visma.
    * @param {string} tenantId Id van de omgeving.
-   * @returns {object} configured, environment, connected, settings, pending en failed.
+   * @returns {object} configured, environment, connected, settings, overview, pending en failed.
    */
   function status(tenantId) {
     const registration = app(tenantId);
@@ -576,11 +651,11 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
       .get(...[tenantId, ...(vismaSettings.since ? [vismaSettings.since] : [])]);
     return {
       configured: registration.configured, environment: registration.environment, connected: connected(tenantId),
-      settings: vismaSettings, pending: Number(counts && counts.n) || 0, failed: Number(counts && counts.failed) || 0,
+      settings: vismaSettings, overview: describeConnection(vismaSettings.scopes), pending: Number(counts && counts.n) || 0, failed: Number(counts && counts.failed) || 0,
     };
   }
 
-  return { authorizeUrl, finishConnect, disconnect, connected, api, options, pushInvoice, sync, run, schedule, runAll, status, app };
+  return { authorizeUrl, finishConnect, disconnect, connected, api, options, pushInvoice, sync, run, schedule, runAll, status, app, note, logbook: vismaLog };
 }
 
 /**
@@ -623,8 +698,14 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
   });
 
   app.get('/api/visma/options', requireInvoices, limiter, wrap(async (req, res) => {
-    res.json(await visma.options(tenantOf(req)));
+    res.json(await visma.options(tenantOf(req), { source: 'handmatig', actor: req.user.display_name }));
   }));
+
+  // Het logboek van de koppeling, nieuwste eerst, met een cursor voor de volgende pagina.
+  app.get('/api/visma/log', requireInvoices, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(visma.logbook.list(tenantOf(req), { limit: req.query.limit, before: String(req.query.before || '').slice(0, 80), onlyErrors: req.query.errors === '1' }));
+  });
 
   app.put('/api/visma/settings', requireJson, requireInvoices, (req, res) => {
     const settings = settingsFor(tenantOf(req));
@@ -653,7 +734,10 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
      * @returns {object} Het antwoord.
      */
     const back = (query) => res.redirect(303, `../../facturen/?${query}#visma`);
-    if (req.query.error) return back('visma=geweigerd');
+    if (req.query.error) {
+      visma.note(tenantOf(req), { kind: 'aanmelding', ok: false, message: 'Verbinden is afgebroken of geweigerd bij Visma' }, { source: 'handmatig', actor: req.user.display_name });
+      return back('visma=geweigerd');
+    }
     try {
       await visma.finishConnect(String(req.query.state || ''), String(req.query.code || ''), {
         tenantId: tenantOf(req), userId: req.user.id, userName: req.user.display_name,
@@ -661,6 +745,7 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
     } catch (error) {
       if (!(error instanceof VismaError)) throw error;
       console.warn(`Visma verbinden mislukt (${tenantOf(req)}): ${error.code}`);
+      visma.note(tenantOf(req), { kind: 'aanmelding', ok: false, message: `Verbinden mislukt: ${error.message}` }, { source: 'handmatig', actor: req.user.display_name });
       return back(`visma=fout&reden=${encodeURIComponent(error.code)}`);
     }
     audit(req, 'visma_verbonden', {});
@@ -668,20 +753,20 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
   }));
 
   app.post('/api/visma/disconnect', requireJson, requireInvoices, (req, res) => {
-    visma.disconnect(tenantOf(req), req.user.id);
+    visma.disconnect(tenantOf(req), req.user.id, req.user.display_name);
     audit(req, 'visma_verbroken', {});
     res.json(visma.status(tenantOf(req)));
   });
 
   app.post('/api/visma/sync', requireJson, requireInvoices, limiter, wrap(async (req, res) => {
-    const out = await visma.run(tenantOf(req));
+    const out = await visma.run(tenantOf(req), { source: 'handmatig', actor: req.user.display_name });
     if (out.skipped) return res.status(409).json({ error: out.skipped, message: 'Deze omgeving is niet verbonden met Visma.' });
     if (out.sent) audit(req, 'facturen_naar_visma', { count: out.sent });
     res.json({ ...out, status: visma.status(tenantOf(req)) });
   }));
 
   app.post('/api/visma/invoices/:id', requireJson, requireInvoices, limiter, wrap(async (req, res) => {
-    const invoice = await visma.pushInvoice(tenantOf(req), req.params.id);
+    const invoice = await visma.pushInvoice(tenantOf(req), req.params.id, { source: 'handmatig', actor: req.user.display_name });
     audit(req, 'factuur_naar_visma', { invoiceId: invoice.id, number: invoice.number });
     res.json(invoice);
   }));
@@ -724,4 +809,4 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
   });
 }
 
-module.exports = { createVisma, registerVismaRoutes, sanitizeVisma, sanitizeVismaApp, splitAddress, customerBody, invoiceBody, VismaError, HOSTS, SCOPES };
+module.exports = { createVisma, registerVismaRoutes, describeConnection, sanitizeVisma, sanitizeVismaApp, splitAddress, customerBody, invoiceBody, VismaError, HOSTS, SCOPES };
