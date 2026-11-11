@@ -1121,6 +1121,7 @@ const MIGRATIONS = [
     id           TEXT PRIMARY KEY,
     tenant_id    TEXT NOT NULL REFERENCES tenants(id),
     created_at   TEXT NOT NULL,
+    last_at      TEXT NOT NULL,
     kind         TEXT NOT NULL,
     direction    TEXT NOT NULL DEFAULT '',
     ok           INTEGER NOT NULL DEFAULT 1,

@@ -351,6 +351,7 @@ test('visma-logboek: opslaan, herhaalde fouten samenvoegen, pagineren, bewaarter
   assert.strictEqual(vismaLog.list(first).items.length, 2);
   assert.strictEqual(vismaLog.list(first).items.find((entry) => entry.message === 'Visma: foutje').count, 2);
   assert.strictEqual(vismaLog.list(first).items.find((entry) => entry.message === 'Visma: foutje').source, 'handmatig', 'een automatische herhaling overschrijft de bron niet');
+  assert.strictEqual(vismaLog.list(first).items.find((entry) => entry.message === 'Visma: foutje').actor, 'Baas', 'en ook de naam niet');
   // Na een succes begint een nieuwe fout weer een eigen regel.
   vismaLog.record(first, { kind: 'factuur', direction: 'naar', ok: true, reference: 'F2026-0001', message: 'Verkoopfactuur aangemaakt in Visma' });
   tick();
@@ -390,7 +391,7 @@ test('visma-logboek: opslaan, herhaalde fouten samenvoegen, pagineren, bewaarter
   assert.strictEqual(vismaLog.list(second).items.length, 0);
   assert.strictEqual(vismaLog.prune(second, 0), 0);
   // Bewaartermijn.
-  db.prepare("UPDATE visma_log SET created_at = '2020-01-01T00:00:00.000Z' WHERE tenant_id = ? AND kind = 'klant'").run(first);
+  db.prepare("UPDATE visma_log SET created_at = '2020-01-01T00:00:00.000Z', last_at = '2020-01-01T00:00:00.000Z' WHERE tenant_id = ? AND kind = 'klant'").run(first);
   assert.strictEqual(vismaLog.prune(first, 90), 120);
   assert.strictEqual(vismaLog.list(first, { limit: 100 }).items.length, 6);
 });

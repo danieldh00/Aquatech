@@ -900,6 +900,7 @@ const PG_MIGRATIONS = [
     id           ${TEXT_TYPE} PRIMARY KEY,
     tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
     created_at   ${TEXT_TYPE} NOT NULL,
+    last_at      ${TEXT_TYPE} NOT NULL,
     kind         ${TEXT_TYPE} NOT NULL,
     direction    ${TEXT_TYPE} NOT NULL DEFAULT '',
     ok           BIGINT NOT NULL DEFAULT 1,

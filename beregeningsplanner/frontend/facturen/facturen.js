@@ -453,7 +453,7 @@
     $('#vi-log-empty').hidden = log.items.length > 0;
     $('#vi-log-empty').textContent = log.onlyErrors ? 'Geen fouten in het logboek.' : 'Nog niets in het logboek.';
     $('#vi-log').innerHTML = log.items.length ? `<thead><tr><th>Wanneer</th><th>Wat</th><th>Uitkomst</th></tr></thead><tbody>${log.items.map((entry) => `<tr>
-      <td class="nowrap">${esc(when(entry.at))}</td>
+      <td class="nowrap">${esc(when(entry.at))}${entry.count > 1 ? `<span class="sub">laatst ${esc(when(entry.lastAt))}</span>` : ''}</td>
       <td><b>${esc(LOG_KINDS[entry.kind] || entry.kind)}</b>${entry.reference ? ` ${esc(entry.reference)}` : ''}<span class="sub">${esc(LOG_DIRECTIONS[entry.direction] || '')}${entry.direction ? ' · ' : ''}${entry.source === 'handmatig' ? `handmatig${entry.actor ? ` door ${esc(entry.actor)}` : ''}` : 'automatisch'}</span></td>
       <td class="wrap">${entry.ok ? '<span class="pill ok">gelukt</span>' : '<span class="pill overdue">fout</span>'} ${esc(entry.message)}${entry.count > 1 ? ` <span class="muted">(${esc(entry.count)}×)</span>` : ''}</td>
     </tr>`).join('')}</tbody>` : '';
