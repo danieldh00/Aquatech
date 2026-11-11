@@ -37,15 +37,16 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
   /**
    * Wie is er ingelogd (met een eigen account)?
    * @param {object} req Het verzoek.
-   * @returns {{ id: string, displayName: string, username: string, email: string, customerGroup: string, wholesale: boolean, wholesaleDiscount: number, isCustomer: boolean }|null} De gebruiker (wholesale = zakelijke groothandelsklant met zijn vaste korting in %), of null.
+   * @returns {{ id: string, displayName: string, username: string, email: string, customerGroup: string, wholesale: boolean, wholesaleDiscount: number, isCustomer: boolean, isStaff: boolean }|null} De gebruiker (isStaff = medewerker of beheerder, dus geen klant; wholesale = zakelijke groothandelsklant met zijn vaste korting in %), of null.
    */
   function viewer(req) {
     const session = auth.session(req);
     const user = session?.via === 'user' ? session.user : null;
     if (!user || user.kind !== 'account' || user.tenant_id !== tenant.id) return null;
+    const isCustomer = store.roles.keysOfKind(user.tenant_id, 'klant').includes(user.role);
     return { id: user.id, displayName: user.display_name, username: user.username, email: user.email || '', emailVerified: Boolean(user.email_verified_at), customerGroup: user.customer_group || '',
       wholesale: user.customer_group === 'zakelijk' && Boolean(Number(user.wholesale)), wholesaleDiscount: Number(user.wholesale_discount) || 0,
-      isCustomer: store.roles.keysOfKind(user.tenant_id, 'klant').includes(user.role) };
+      isCustomer, isStaff: !isCustomer };
   }
 
   /**

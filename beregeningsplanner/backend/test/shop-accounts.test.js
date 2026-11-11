@@ -253,3 +253,33 @@ test('wachtwoord vergeten, herstellen en e-mailadres bevestigen (A-02)', async (
   // Alleen de hash staat in de database.
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM account_tokens WHERE token_hash = ?').get(resetToken).n, 0);
 });
+
+test('knop naar het beheer in de shopkop: alleen voor medewerkers en beheerders, niet voor klanten of bezoekers', async () => {
+  const { base, store, main, admin } = await setup();
+  await store.createAccount(main, { username: 'jan.klant', displayName: 'Jan', role: 'klant', password: PW });
+  await store.createAccount(main, { username: 'ina.installateur', displayName: 'Ina', role: 'installateur', password: PW });
+  const adminLink = /<a class="shop-action shop-admin" href="app\/" title="Naar het beheer">/;
+  const mobileLink = /<li><a href="app\/">Naar het beheer<\/a><\/li>/;
+
+  const asAdmin = await admin.get('/');
+  assert.match(asAdmin.text, adminLink, 'beheerder ziet de knop in de kop');
+  assert.match(asAdmin.text, mobileLink, 'en in het menu op de telefoon');
+  assert.strictEqual(asAdmin.headers.get('cache-control'), 'private, no-store');
+  const deeper = await admin.get('/account/');
+  assert.match((await admin.get('/over-ons/')).text, /href="\.\.\/app\/" title="Naar het beheer"/, 'relatief adres ook op een diepere pagina');
+  assert.strictEqual(deeper.status, 200);
+
+  const installer = createClient(base);
+  await postForm(base, installer, '/inloggen/', { login: 'ina.installateur', password: PW });
+  assert.match((await installer.get('/')).text, adminLink, 'installateur (medewerker) ziet de knop');
+
+  const customer = createClient(base);
+  await postForm(base, customer, '/inloggen/', { login: 'jan.klant', password: PW });
+  const asCustomer = await customer.get('/');
+  assert.strictEqual(asCustomer.status, 200);
+  assert.doesNotMatch(asCustomer.text, /shop-admin|Naar het beheer/, 'klant ziet de knop niet');
+
+  const visitor = await createClient(base).get('/');
+  assert.doesNotMatch(visitor.text, /shop-admin|Naar het beheer/, 'bezoeker ziet de knop niet');
+  assert.notStrictEqual(visitor.headers.get('cache-control'), 'private, no-store');
+});

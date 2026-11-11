@@ -146,8 +146,10 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     // Een zakelijke klant ziet overal prijzen excl. btw; die pagina's zijn persoonlijk en worden niet gedeeld.
     const viewer = accounts ? accounts.viewer(req) : null;
     const business = Boolean(viewer) && viewer.customerGroup === 'zakelijk';
-    if (business) res.setHeader('Cache-Control', 'private, no-store');
-    const html = renderWith(contentOf(req), render, { baseUrl: preview ? '' : publicBaseUrl(req), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
+    // Een medewerker of beheerder krijgt de knop naar het beheer; die pagina's zijn persoonlijk en worden niet gedeeld.
+    const staff = Boolean(viewer) && viewer.isStaff;
+    if (business || staff) res.setHeader('Cache-Control', 'private, no-store');
+    const html = renderWith(contentOf(req), render, { baseUrl: preview ? '' : publicBaseUrl(req), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, staff, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
     const withPlanner = html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : ''));
     // In een voorbeeld blijven de menu- en categorielinks in het concept, ook voor categorieën die er alleen in staan.
     // Ook het zoekformulier houdt de voorbeeldstatus vast (verborgen veld), anders valt een zoekopdracht terug op de gepubliceerde boom.

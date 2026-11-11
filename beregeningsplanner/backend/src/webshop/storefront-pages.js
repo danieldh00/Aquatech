@@ -38,7 +38,7 @@ function formatPrice(amount) {
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
-let activeShop = { ordering: false, cartCount: 0, business: false, wholesale: false, baseUrl: '' };
+let activeShop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '' };
 
 /**
  * Bouwt pagina's op met de inhoud uit Beheer. Het opbouwen is synchroon, dus
@@ -48,7 +48,7 @@ let activeShop = { ordering: false, cartCount: 0, business: false, wholesale: fa
  * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean, baseUrl?: string }} [shop] Het volledige webadres van de shop (met slash achteraan; leeg = geen canonical-link en OpenGraph), of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
  * @returns {*} Wat `render` teruggeeft.
  */
-function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, wholesale: false, baseUrl: '' }) {
+function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '' }) {
   const previous = activeContent;
   const previousShop = activeShop;
   activeContent = content;
@@ -111,6 +111,7 @@ const ICONS = {
   user: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.2-3.6 4.2-5 8-5s6.8 1.4 8 5"/></svg>',
   menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
   phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19c0 1.5-1.5 2-4 2"/></svg>',
+  admin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0"/><path d="m12 13 4-5"/><circle cx="12" cy="13" r="1.4"/><path d="M4 13v4h16v-4"/></svg>',
   down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
 };
 
@@ -180,7 +181,7 @@ function navigation(groups, root) {
   const desktop = groups.map((group) => `<li class="nav-group"><span class="nav-heading" tabindex="0">${escapeHtml(group.name)}</span><ul class="nav-drop">${flyItems(group.categories)}</ul></li>`).join('');
   const mobile = groups.map((group) => `<li><details><summary>${escapeHtml(group.name)}</summary><ul>${foldItems(group.categories)}</ul></details></li>`).join('');
   return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${search}${about}${desktop}<!--planner:${root}--></ul></nav>
-<details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${mobile}${activeShop.wholesale ? `<li><a href="${root}groothandel/">Groothandel</a></li>` : ''}${extraPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}<!--planner:${root}--></ul></details>`;
+<details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${activeShop.staff ? `<li><a href="${root}app/">Naar het beheer</a></li>` : ''}${mobile}${activeShop.wholesale ? `<li><a href="${root}groothandel/">Groothandel</a></li>` : ''}${extraPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}<!--planner:${root}--></ul></details>`;
 }
 
 /**
@@ -244,7 +245,7 @@ ${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${esc
     </form>
     ${phone ? `<a class="shop-phone" href="${phoneHref}" aria-label="Klantenservice ${escapeHtml(phone)}">${ICONS.phone}<span><small>Klantenservice</small><strong>${escapeHtml(phone)}</strong></span></a>` : ''}
     <div class="shop-actions">
-      <a class="shop-action" href="${root}account/" title="Inloggen of mijn account">${ICONS.user}<span>Account</span></a>
+      ${activeShop.staff ? `<a class="shop-action shop-admin" href="${root}app/" title="Naar het beheer">${ICONS.admin}<span>Beheer</span></a>\n      ` : ''}<a class="shop-action" href="${root}account/" title="Inloggen of mijn account">${ICONS.user}<span>Account</span></a>
       ${activeShop.ordering
     ? `<a class="shop-action cart" href="${root}winkelwagen/" title="Naar je winkelwagen">${ICONS.cart}<span>Winkelwagen</span><b>${activeShop.cartCount}</b></a>`
     : `<span class="shop-action cart" aria-disabled="true" title="De winkelwagen volgt binnenkort">${ICONS.cart}<span>Winkelwagen</span><b>0</b></span>`}

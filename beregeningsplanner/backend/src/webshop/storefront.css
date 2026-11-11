@@ -62,9 +62,11 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .shop-phone span { display: flex; flex-direction: column; line-height: 1.15; }
 .shop-phone small { font-size: 0.75rem; }
 .shop-phone strong { font-size: 1.15rem; }
-.shop-actions { display: flex; gap: 6px; margin-left: auto; }
+.shop-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .shop-action { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; color: var(--at-shop-navy); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
 a.shop-action:hover { background: var(--at-page); }
+a.shop-action.shop-admin { background: var(--at-shop-green); color: var(--at-white); }
+a.shop-action.shop-admin:hover { background: var(--at-shop-green-dark); }
 .shop-action.cart { cursor: default; opacity: 0.75; }
 .shop-action.cart b { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--at-shop-teal); color: var(--at-white); font-size: 0.8rem; }
 
@@ -96,6 +98,7 @@ a.shop-action:hover { background: var(--at-page); }
 .shop-menu ul { list-style: none; margin: 0; padding: 0; }
 .shop-menu > ul { background: var(--at-white); border-bottom: 1px solid var(--at-line); max-height: 70vh; overflow-y: auto; }
 .shop-menu li details > summary { padding: 12px 16px; font-weight: 600; color: var(--at-shop-navy); cursor: pointer; border-top: 1px solid var(--at-line); }
+.shop-menu > ul > li > a { display: block; padding: 12px 16px; font-weight: 700; color: var(--at-shop-green-dark); text-decoration: none; border-top: 1px solid var(--at-line); }
 .shop-menu li li a { display: block; padding: 9px 16px 9px 32px; text-decoration: none; font-size: 0.92rem; }
 .shop-menu li li details > summary { padding: 9px 16px 9px 32px; border-top: 0; font-weight: 400; font-size: 0.92rem; }
 .shop-menu li li li a, .shop-menu li li li details > summary { padding-left: 48px; }

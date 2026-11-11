@@ -6,7 +6,7 @@ webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als databas
 
 | Onderdeel | Wat het doet |
 |---|---|
-| **Webshop** (`/`) | Eigen winkel met categoriemenu, zoeken, varianten, groothandelsvenster, online betalen (Mollie), op rekening, retouren, SEO (sitemap, JSON-LD, productfeed). Staat standaard uit; dan stuurt `/` door naar de app. |
+| **Webshop** (`/`) | Eigen winkel met categoriemenu, zoeken, varianten, groothandelsvenster, online betalen (Mollie), op rekening, retouren, SEO (sitemap, JSON-LD, productfeed). Staat standaard uit; dan stuurt `/` door naar de app. Ingelogde medewerkers en beheerders zien in de kop een knop *Beheer* naar `/app/`. |
 | **App** (`/app/`) | Dashboard en modules. Openbare offerte- en afspraaklinks staan ook onder `/app/`. |
 | Beregening | De beregeningsplanner (hieronder), met *Alles in winkelwagen* vanuit de stuklijst. |
 | Plannen, Offertes, Facturen | Plannen met goedkeuring, digitale offerte met akkoord, facturen (PDF, mail, Visma eAccounting), debiteuren. |
