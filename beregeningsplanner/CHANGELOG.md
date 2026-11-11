@@ -1,8 +1,8 @@
 # Changelog
 
-## 1.10.1
+## 1.10.2
 
-Documenttaal per klant (punt 13 van bundel A): offertes, facturen en de mails daarover in het Nederlands of het Engels. Migratie 57 (`users.document_language`, standaard `nl`).
+Documenttaal per klant (punt 13 van bundel A): offertes, facturen en de mails daarover in het Nederlands of het Engels. Migratie 58 (`users.document_language`, standaard `nl`).
 
 - **Klantkaart**: veld *Documenttaal* (Nederlands of English), ook bij `POST`/`PATCH /api/customers` (recht `klanten`, audit `documenttaal`). `GET /api/quote-customers` geeft `documentLanguage` mee.
 - **Offerte**: `data.language` (`nl`|`en`, `QuoteCore.sanitize`), keuzelijst *Documenttaal* in de editor; een klantkeuze vult de taal van de klant in. Afdruk/PDF, klantweergave en de openbare offertepagina (statusbalk, akkoordformulier, datums en bedragen in de landnotatie) staan in die taal, evenals het conceptbericht bij het versturen en de bevestigingsmail na het akkoord. De mails aan het bedrijf zelf blijven Nederlands.
@@ -10,6 +10,17 @@ Documenttaal per klant (punt 13 van bundel A): offertes, facturen en de mails da
 - Vertaalteksten staan in `shared/doc-text.js` (`DocText`, gedeeld door browser en server; test bewaakt dat beide talen dezelfde sleutels en invulvelden hebben).
 - Bewust niet: webshopfacturen en facturen zonder offerte blijven Nederlands; het schermbeheer (editor, lijsten) blijft Nederlands.
 - Tests: `document-language.test.js` (vertaaltabel, weergave, akkoord, klantkaart met rechten en organisaties, factuur-PDF en -mail).
+
+## 1.10.1
+
+AI-koppeling: een concept-offerte maken vanuit Claude of ChatGPT (punt 28). Migratie 57 (`oauth_grants`).
+
+- **MCP-server** op `POST /app/mcp` (Model Context Protocol, Streamable HTTP zonder sessies, JSON-antwoorden; protocolversies 2024-11-05 t/m 2025-11-25). Tools: `zoek_klant`, `maak_klant` (particulier, adres via PDOK), `zoek_artikelen` (prijzen uit AquaTech) en `maak_concept_offerte`. De AI kan alleen een **concept** maken: versturen, accorderen of wijzigen kan niet. Twijfel bij een artikel of aantal, een onbekende code, een afwijkende genoemde prijs of een ontbrekende verkoopprijs geeft een **notitie per regel** (`line.note`, nooit naar de klant), die de medewerker in de offerte-editor ziet en met *Gecontroleerd* wegklikt.
+- **OAuth 2.1 per gebruiker** (`mcp/oauth-server.js`, `mcp/oauth-grants.js`): metadata volgens RFC 8414 en RFC 9728, dynamische registratie (RFC 7591, ondertekende client-id zonder tabel), PKCE S256 verplicht, alleen redirects naar claude.ai, claude.com, chatgpt.com, chat.openai.com of loopback. Toestemmingsscherm met de gevraagde rechten (`klanten.lezen`, `klanten.aanmaken`, `artikelen.lezen`, `offertes.concept`), begrensd tot de rechten van de rol. Codes, toegangs- en vernieuwingstokens alleen als SHA-256; toegangstoken 1 uur, vernieuwingstoken 30 dagen met rotatie en hergebruikdetectie, toestemming hoogstens 90 dagen, gebonden aan het wachtwoord (wijzigen = ingetrokken). Intrekken via RFC 7009 en in Mijn profiel. Issuer, resource en de offertelink komen uit het webadres in Beheer > Webshop > Betalen zodra dat is ingevuld, anders uit de (gecontroleerde) Host-kop.
+- **Per omgeving aan/uit**: instelling `aiConnector` (Beheer > Instellingen > AI-koppeling, standaard uit). Elk verzoek werkt als de gebruiker in de omgeving van de toestemming, met de rechten van zijn rol op dat moment en RLS op de eigen organisatie.
+- **Mijn profiel**: blok *AI-koppeling* met het adres om toe te voegen en de gekoppelde apps (laatst gebruikt, intrekken).
+- Limieten: registratie 30 per uur, token 120 per 15 minuten (per bezoeker), MCP 120 per minuut per toestemming, klanten aanmaken 30 per uur, concept-offertes 30 per uur en 150 per dag. Audit `ai_koppeling_*` en `offerte_concept_via_ai`.
+- Tests: `mcp.test.js` (ontdekking, registratie, volledige stroom, PKCE/redirect/eenmalige code, gelijktijdig inwisselen, rotatie, CSRF op het toestemmingsscherm, rechten, tenant-isolatie, intrekken, Origin/versie/batch).
 
 ## 1.10.0
 

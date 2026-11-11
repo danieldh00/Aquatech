@@ -244,6 +244,13 @@
           <p class="muted small">Klanten en medewerkers zonder beheerrechten zien nooit details. Wachtwoorden en sleutels worden altijd uit de details gehaald. Zet de modus weer uit als je klaar bent.</p>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-ai-connector" class="card-form settings">
+          <h3>AI-koppeling (Claude en ChatGPT)</h3>
+          <p class="muted small">Medewerkers met het recht Offertes koppelen Claude of ChatGPT aan hun eigen account (Mijn profiel). Na een klantgesprek spreken ze een samenvatting in en zet de AI een offerte als <strong>concept</strong> klaar, met klanten en artikelen uit AquaTech. De AI kan niets versturen, wijzigen of verwijderen; de AI-kosten vallen onder het eigen Claude- of ChatGPT-abonnement.</p>
+          <label class="chk"><input type="checkbox" name="aiConnector"> <span>AI-koppeling toestaan in deze omgeving</span></label>
+          <p class="muted small">Adres van de koppeling: <code id="s-ai-connector-url"></code>. Uitzetten stopt direct alle gekoppelde apps in deze omgeving.</p>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-season" class="card-form settings">
           <h3>Seizoensherinneringen</h3>
           <p class="muted small">Klanten met een installatie (een werkorder) en een e-mailadres krijgen op de gekozen datum één keer per jaar een mail via de mailserver hierboven, en zien de herinnering twee maanden lang in hun portaal met een knop om onderhoud aan te vragen. Klanten kunnen de mails zelf uitzetten in hun portaal.</p>

@@ -116,6 +116,20 @@
         </form>
         <span id="tf-msg" class="form-msg" role="status"></span>
       </div>
+
+      <div id="f-ai" class="pcard" hidden>
+        <h2>AI-koppeling (Claude of ChatGPT)</h2>
+        <p class="hint">Spreek na een klantgesprek in de Claude- of ChatGPT-app een samenvatting in; de AI zet de offerte dan als concept klaar in AquaTech. Jij controleert en verstuurt hem zelf.</p>
+        <div id="ai-setup" hidden>
+          <label class="field"><span class="label">Adres van de koppeling</span>
+            <input id="ai-url" type="text" readonly></label>
+          <p class="hint">Voeg dit adres toe als eigen connector (Claude: Instellingen &gt; Connectors; ChatGPT: Instellingen &gt; Apps en connectors). Daarna log je hier in en geef je toestemming.</p>
+          <div class="form-foot"><button class="btn" type="button" id="ai-copy">Adres kopiëren</button></div>
+        </div>
+        <p class="hint" id="ai-off" hidden>De AI-koppeling staat uit in deze omgeving, of je rol mag geen offertes maken. Een beheerder zet hem aan in Beheer &gt; Instellingen.</p>
+        <ul id="ai-list" class="ai-list"></ul>
+        <span id="ai-msg" class="form-msg" role="status"></span>
+      </div>
     </div>
   </main>
 
@@ -126,5 +140,6 @@
   <script src="profiel.js"></script>
   <script src="../shared/qr-code.js"></script>
   <script src="two-factor.js"></script>
+  <script src="ai-connections.js"></script>
 </body>
 </html>

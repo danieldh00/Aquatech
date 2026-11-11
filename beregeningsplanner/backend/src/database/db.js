@@ -1150,7 +1150,43 @@ const MIGRATIONS = [
   `
   ALTER TABLE users ADD COLUMN payment_days INTEGER;
   `,
-  // 57: documenttaal per klant (Klanten): taal van offertes, facturen en mails ('nl' of 'en').
+  // 57: toestemmingen van de AI-koppeling (mcp/oauth-grants.js, OAuth 2.1 voor Claude en ChatGPT): per toestemming alleen
+  // de SHA-256 van de autorisatiecode, het toegangstoken en het vernieuwingstoken. Geen foreign key naar users (zoals visma_log):
+  // een gewiste gebruiker laat de rij onbruikbaar achter tot het onderhoud hem wist.
+  `
+  CREATE TABLE oauth_grants (
+    id                    TEXT PRIMARY KEY,
+    tenant_id             TEXT NOT NULL REFERENCES tenants(id),
+    user_id               TEXT NOT NULL,
+    client_id_hash        TEXT NOT NULL,
+    client_name           TEXT NOT NULL DEFAULT '',
+    redirect_uri          TEXT NOT NULL,
+    scope                 TEXT NOT NULL DEFAULT '',
+    resource              TEXT NOT NULL DEFAULT '',
+    fingerprint           TEXT NOT NULL DEFAULT '',
+    code_hash             TEXT,
+    code_challenge        TEXT NOT NULL DEFAULT '',
+    code_expires_at       TEXT,
+    code_used_at          TEXT,
+    access_hash           TEXT,
+    access_expires_at     TEXT,
+    refresh_hash          TEXT,
+    refresh_expires_at    TEXT,
+    previous_refresh_hash TEXT,
+    rotated_at            TEXT,
+    created_at            TEXT NOT NULL,
+    last_used_at          TEXT,
+    expires_at            TEXT NOT NULL,
+    revoked_at            TEXT
+  );
+  CREATE UNIQUE INDEX oauth_grants_code ON oauth_grants (tenant_id, code_hash);
+  CREATE UNIQUE INDEX oauth_grants_access ON oauth_grants (tenant_id, access_hash);
+  CREATE UNIQUE INDEX oauth_grants_refresh ON oauth_grants (tenant_id, refresh_hash);
+  CREATE INDEX oauth_grants_previous ON oauth_grants (tenant_id, previous_refresh_hash);
+  CREATE INDEX oauth_grants_user ON oauth_grants (tenant_id, user_id, created_at);
+  CREATE INDEX oauth_grants_expires ON oauth_grants (tenant_id, expires_at);
+  `,
+  // 58: documenttaal per klant (Klanten): taal van offertes, facturen en mails ('nl' of 'en').
   `
   ALTER TABLE users ADD COLUMN document_language TEXT NOT NULL DEFAULT 'nl';
   `,

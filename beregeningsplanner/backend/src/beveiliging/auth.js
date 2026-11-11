@@ -499,7 +499,15 @@ function createAuth({ secret, store, tenantId, getAccessCode, idleDays = () => 1
     appendCookie(res, `${name}=; Path=/; Max-Age=0; SameSite=Lax`);
   }
 
-  return { readSigned, setSigned, setPlain, clearNamed, requireAccess, isAuthenticated, isAuthenticatedForAsset, session, prefetch, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
+  /**
+   * Ondertekent een waarde met het servergeheim (HMAC-SHA256), voor een eigen doel (bijv. de id's van AI-apps in mcp/oauth-server.js).
+   * @param {string} purpose Waarvoor de handtekening is (een handtekening voor het ene doel geldt niet voor een ander).
+   * @param {string} value De waarde.
+   * @returns {string} De handtekening (base64url).
+   */
+  const signValue = (purpose, value) => hmac(secret, `${purpose}:${value}`);
+
+  return { signValue, readSigned, setSigned, setPlain, clearNamed, requireAccess, isAuthenticated, isAuthenticatedForAsset, session, prefetch, checkCode, setCookie, clearCookie, verify, issue, guestId, setGuestCookie, safeEqual };
 }
 
 module.exports = { createAuth, remoteIp, clientKey, parseCookies, sessionCookieName, COOKIE_NAME, GUEST_COOKIE };

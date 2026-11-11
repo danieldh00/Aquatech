@@ -936,6 +936,37 @@ blijft ongewijzigd staan (zonder wat er daarna in PostgreSQL is veranderd).
 `node src/migrate-to-postgres.js --from /data/terug.db --schema <nieuw_schema>`
 naar een leeg schema; zet daarna `DATABASE_SCHEMA` op dat schema.
 
+## AI-koppeling (Claude en ChatGPT)
+
+Met de AI-koppeling maakt een medewerker vanuit Claude of ChatGPT (ook de app op de telefoon) een
+**concept-offerte**: hij spreekt een gesprek in, de AI zoekt de klant en de artikelen en zet de offerte klaar.
+
+1. Een beheerder zet **Beheer → Instellingen → AI-koppeling** aan (per omgeving; standaard uit).
+2. De medewerker voegt in Claude (*Instellingen → Connectors → Eigen connector*) of ChatGPT (*Connectors /
+   apps, ontwikkelaarsmodus*) het adres toe dat in **Mijn profiel → AI-koppeling** staat:
+   `https://<server>/app/mcp`. Er is geen client-id of geheim nodig.
+3. De app stuurt hem naar het AquaTech-inlogscherm en daarna naar een toestemmingsscherm met de gevraagde
+   rechten. *Toestaan* koppelt de app voor deze gebruiker en deze omgeving.
+
+| Tool | Wat het doet | Recht |
+|---|---|---|
+| `zoek_klant` | klanten zoeken op naam, bedrijf, e-mail, telefoon of adres | `offertes` of `klanten` |
+| `maak_klant` | particuliere klant aanmaken, adres via postcode en huisnummer (PDOK) | `klanten` |
+| `zoek_artikelen` | artikelen met code, eenheid, prijs en btw | `offertes`, `voorraad` of `werkorders` |
+| `maak_concept_offerte` | concept-offerte met regels; prijzen altijd uit AquaTech, twijfel als notitie per regel | `offertes` |
+
+De AI kan niets versturen, accorderen of wijzigen. Regels met een notitie (twijfel, onbekende code,
+afwijkende prijs, geen verkoopprijs) zijn geel gemarkeerd in de offerte-editor; *Gecontroleerd* haalt de
+notitie weg. Klanten zien die notities nooit.
+
+**Beveiliging**: OAuth 2.1 met PKCE (S256) en dynamische registratie; redirects alleen naar claude.ai,
+claude.com, chatgpt.com, chat.openai.com of loopback. Codes en tokens alleen als SHA-256 in `oauth_grants`;
+toegangstoken 1 uur, vernieuwingstoken 30 dagen (roteert, hergebruik trekt de toestemming in), toestemming
+hoogstens 90 dagen. Een wachtwoordwijziging, uitgeschakeld account, uitgeschakelde omgeving of de koppeling
+uit maakt elk token direct ongeldig. Elk verzoek werkt met de rechten van de rol op dat moment, binnen de
+eigen organisatie (RLS). Intrekken in Mijn profiel of door de app (RFC 7009). Limieten per bezoeker en per
+toestemming; acties staan in het auditlog.
+
 ## Beveiliging en privacy
 
 Getoetst aan OWASP ASVS (niveau 2) en de AVG.

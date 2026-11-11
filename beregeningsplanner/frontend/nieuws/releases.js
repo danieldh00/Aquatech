@@ -13,12 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.10.1',
+      version: '1.10.2',
       date: '2026-11-11',
       title: 'Offertes en facturen in het Engels',
       items: [
         { text: 'Bij een klant kies je de documenttaal (Nederlands of Engels). De offerte, het akkoordformulier, de factuur-PDF en de bijbehorende mails staan dan in die taal.', for: ['klanten', 'offertes', 'facturen'] },
         { text: 'In de offerte kun je de taal per offerte aanpassen.', for: ['offertes'] },
+      ],
+    },
+    {
+      version: '1.10.1',
+      date: '2026-11-11',
+      title: 'Offerte maken met Claude of ChatGPT',
+      items: [
+        { text: 'Koppel AquaTech aan Claude of ChatGPT (ook in de app op je telefoon): spreek een gesprek in en de AI zoekt de klant en de artikelen en zet een concept-offerte klaar. Jij controleert en verstuurt hem zelf.', for: ['offertes'] },
+        { text: 'Regels waar de AI over twijfelt krijgen een gele notitie in de offerte; klik op Gecontroleerd als het klopt. De klant ziet die notities nooit.', for: ['offertes'] },
+        { text: 'Beheer zet de AI-koppeling per omgeving aan onder Instellingen. In Mijn profiel zie je welke apps gekoppeld zijn en trek je een koppeling in.', for: ['beheer', 'offertes'] },
       ],
     },
     {
