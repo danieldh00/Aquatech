@@ -2108,10 +2108,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const home = { ...account, home_tenant_id: account.tenant_id };
     if (grant.tenantId !== account.tenant_id && !accessibleFor(home).some((accessible) => accessible.id === grant.tenantId)) return null;
     if (!connectorOn(grant.tenantId)) return null;
-    return withRights({ ...home, tenant_id: grant.tenantId, role: account.platform_admin && grant.tenantId !== account.tenant_id ? 'beheerder' : account.role });
+    const user = withRights({ ...home, tenant_id: grant.tenantId, role: account.platform_admin && grant.tenantId !== account.tenant_id ? 'beheerder' : account.role });
+    // Alleen intern: een klant (ook als de rol later van het soort klant is geworden) kan de AI-koppeling nooit gebruiken.
+    if (isCustomer({ tenantId: grant.tenantId }, user)) return null;
+    return user;
   }
   const oauth = registerOAuthRoutes(app, {
     grants: oauthGrants, signValue: auth.signValue, identify, connectorOn, userForGrant, familyOf: familyOfUser, audit,
+    isCustomer: (req, user) => isCustomer(req, user),
     /**
      * Het vaste webadres uit Beheer > Webshop > Betalen (hoofdtenant), alleen de origin; leeg = de Host-kop van het verzoek.
      * @returns {string} Het adres, of een lege tekst.

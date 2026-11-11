@@ -248,7 +248,26 @@
           <h3>AI-koppeling (Claude en ChatGPT)</h3>
           <p class="muted small">Medewerkers met het recht Offertes koppelen Claude of ChatGPT aan hun eigen account (Mijn profiel). Na een klantgesprek spreken ze een samenvatting in en zet de AI een offerte als <strong>concept</strong> klaar, met klanten en artikelen uit AquaTech. De AI kan niets versturen, wijzigen of verwijderen; de AI-kosten vallen onder het eigen Claude- of ChatGPT-abonnement.</p>
           <label class="chk"><input type="checkbox" name="aiConnector"> <span>AI-koppeling toestaan in deze omgeving</span></label>
-          <p class="muted small">Adres van de koppeling: <code id="s-ai-connector-url"></code>. Uitzetten stopt direct alle gekoppelde apps in deze omgeving.</p>
+          <p class="muted small">Adres van de koppeling: <code id="s-ai-connector-url"></code> <button class="btn small" type="button" id="s-ai-connector-copy">Kopiëren</button> Uitzetten stopt direct alle gekoppelde apps in deze omgeving.</p>
+          <details class="ai-guide">
+          <summary>Handleiding: koppelen in Claude of ChatGPT</summary>
+          <p><strong>Claude</strong> (claude.ai of de app, met een betaald abonnement):</p>
+          <ol>
+            <li>Ga op claude.ai naar <em>Instellingen &gt; Connectors</em> en kies <em>Eigen connector toevoegen</em>.</li>
+            <li>Naam: <em>AquaTech</em>. Plak bij URL het adres van de koppeling en klik op <em>Toevoegen</em>.</li>
+            <li>Klik op <em>Verbinden</em>. Je komt op het inlogscherm van AquaTech: log in met je eigen account en klik op <em>Toestaan</em>.</li>
+            <li>Klaar. De koppeling werkt daarna ook in de Claude-app op je telefoon; zet AquaTech in een gesprek aan via de knop met tools.</li>
+          </ol>
+          <p><strong>ChatGPT</strong> (Plus, Pro, Business of Enterprise):</p>
+          <ol>
+            <li>Ga naar <em>Instellingen &gt; Apps en connectors &gt; Geavanceerde instellingen</em> en zet <em>Ontwikkelaarsmodus</em> aan.</li>
+            <li>Kies <em>Connector aanmaken</em>. Naam: <em>AquaTech</em>, plak het adres bij <em>MCP-server-URL</em> en kies bij verificatie <em>OAuth</em>.</li>
+            <li>Log in met je eigen AquaTech-account en klik op <em>Toestaan</em>.</li>
+            <li>Kies in een gesprek AquaTech bij de tools (de knop <em>+</em>).</li>
+          </ol>
+          <p>Daarna zeg je bijvoorbeeld: <em>"Maak een offerte voor Jan de Vries, Dorpsstraat 1 in Nunspeet: acht pop-up sproeiers, veertig meter PE-buis en zes uur aanleg."</em> De AI zoekt de klant en de artikelen en zet een concept-offerte klaar; jij controleert en verstuurt hem in AquaTech.</p>
+          <p>Iedere medewerker koppelt zijn eigen account, met de rechten van zijn rol. Gekoppelde apps zie en trek je in bij <em>Mijn profiel</em>.</p>
+          </details>
           <div class="err" role="alert"></div>
         </form>
         <form id="s-season" class="card-form settings">

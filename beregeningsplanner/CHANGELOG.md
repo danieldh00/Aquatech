@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.2
+
+AI-koppeling: handleiding en extra rechtentest (vervolg op punt 28). Geen migratie.
+
+- **Handleiding** bij Beheer > Instellingen > AI-koppeling en in Mijn profiel: stap voor stap koppelen in Claude (Connectors) en ChatGPT (ontwikkelaarsmodus, connector met OAuth), met een voorbeeldzin. Knop *Kopiëren* bij het adres in Beheer; het adres komt van de server (het webadres uit Beheer als dat is ingevuld).
+- **Alleen intern**: een klant (rol van het soort klant of gast) kan niet koppelen, ziet het blok in Mijn profiel niet (`/api/account/connections` geeft 403 `internal_only`) en een toestemming van een account dat klant wordt vervalt bij het eerste verzoek.
+- Test: een rolwijziging beperkt een al gekoppelde app direct tot wat de gebruiker in de app mag (planner: alleen artikelen zoeken; terug naar installateur zonder opnieuw koppelen).
+
 ## 1.10.1
 
 AI-koppeling: een concept-offerte maken vanuit Claude of ChatGPT (punt 28). Migratie 57 (`oauth_grants`).

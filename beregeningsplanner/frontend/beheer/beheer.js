@@ -593,6 +593,7 @@
     $('#s-debug').debugMode.checked = Boolean(view.debugMode?.value);
     $('#s-ai-connector').aiConnector.checked = Boolean(view.aiConnector?.value);
     $('#s-ai-connector-url').textContent = new URL('../mcp', location.href).href;
+    showConnectorUrl();
     const shopForm = $('#s-shop');
     shopForm.storefront.checked = Boolean(view.storefront?.value);
     shopForm.shopPlanner.checked = view.shopPlanner?.value !== false;
@@ -758,6 +759,20 @@
   }
 
   /**
+   * Toont het adres van de AI-koppeling zoals de server het opgeeft (het webadres uit Beheer als dat is ingevuld).
+   * @returns {Promise<void>}
+   */
+  async function showConnectorUrl() {
+    try {
+      const res = await fetch('../api/account/connections', { cache: 'no-store' });
+      const body = await res.json();
+      if (res.ok && body.url) $('#s-ai-connector-url').textContent = body.url;
+    } catch {
+      // Het adres van deze pagina blijft dan staan.
+    }
+  }
+
+  /**
    * Vult het formulier Betalen met de opgeslagen instelling.
    * @param {object} view De instellingen zoals de server ze toont (shopPayment en mollieApiKey).
    * @returns {void}
@@ -916,6 +931,14 @@
       saveSettings(connectorForm, { aiConnector: connectorForm.aiConnector.checked }, connectorForm.aiConnector.checked ? 'AI-koppeling staat aan' : 'AI-koppeling staat uit');
     };
     connectorForm.addEventListener('submit', (event) => event.preventDefault());
+    $('#s-ai-connector-copy').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText($('#s-ai-connector-url').textContent);
+        toast('Adres gekopieerd');
+      } catch {
+        getSelection().selectAllChildren($('#s-ai-connector-url'));
+      }
+    });
     const shopForm = $('#s-shop');
     /** Zet de eigen webshop (startpagina /) aan of uit. */
     shopForm.storefront.onchange = () => {

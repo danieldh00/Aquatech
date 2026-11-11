@@ -40,3 +40,8 @@
 .ai-list li .ai-meta { display: block; font-size: 0.85rem; color: var(--muted); }
 .ai-list li.empty { color: var(--muted); justify-content: flex-start; }
 #ai-url { font-family: ui-monospace, monospace; font-size: 0.85rem; }
+.ai-guide { margin: 12px 0 0; font-size: 0.9rem; }
+.ai-guide summary { cursor: pointer; font-weight: 600; color: var(--at-navy, inherit); }
+.ai-guide ol { margin: 4px 0 10px; padding-left: 20px; }
+.ai-guide li { margin: 0 0 4px; }
+.ai-guide p { margin: 8px 0 4px; }

@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.10.2',
+      date: '2026-11-11',
+      title: 'Handleiding voor de AI-koppeling',
+      items: [
+        { text: 'Bij de AI-koppeling (Beheer > Instellingen en Mijn profiel) staat nu een stap-voor-stap handleiding voor Claude en ChatGPT, met een knop om het adres te kopiëren.', for: ['offertes', 'beheer'] },
+      ],
+    },
+    {
       version: '1.10.1',
       date: '2026-11-11',
       title: 'Offerte maken met Claude of ChatGPT',
