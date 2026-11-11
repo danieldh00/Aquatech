@@ -94,7 +94,7 @@ function existingKeys(issues) {
  * coderabbit-catchup.js), en alleen bevindingen die nog geen issue hebben.
  * @param {object} client De GitHub-aanroepen (zie createClient).
  * @param {number} number Het nummer van de PR.
- * @param {{allowUnmerged?: boolean}} [options] `allowUnmerged`: ook een PR die niet is gemerged verwerken.
+ * @param {{allowUnmerged?: boolean, origin?: string}} [options] `allowUnmerged`: ook een PR die niet is gemerged verwerken; `origin`: de oorspronkelijke PR's, komt in elk issue.
  * @returns {Promise<{number: number, created: number[], skipped: string}>} Nummers van de nieuwe issues; `skipped` noemt waarom er niets is gedaan.
  */
 async function processPullRequest(client, number, options = {}) {
@@ -109,7 +109,7 @@ async function processPullRequest(client, number, options = {}) {
   const created = [];
   for (const finding of findings) {
     if (known.has(finding.key)) continue;
-    created.push(await client.createIssue({ title: finding.title, body: finding.body, labels: finding.critical ? [LABEL, CRITICAL_LABEL] : [LABEL] }));
+    created.push(await client.createIssue({ title: finding.title, body: options.origin ? `${finding.body}\n\nOorspronkelijke PR's: ${options.origin}` : finding.body, labels: finding.critical ? [LABEL, CRITICAL_LABEL] : [LABEL] }));
     known.add(finding.key);
   }
   return { number, created, skipped: created.length ? '' : 'alles had al een issue' };

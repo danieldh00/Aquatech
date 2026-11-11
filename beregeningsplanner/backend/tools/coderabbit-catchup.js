@@ -99,14 +99,13 @@ async function tick(client, findings, now = new Date()) {
  */
 async function handleOpenCatchup(client, findings, catchup, now) {
   if (await client.hasCodeRabbitReview(catchup.number, catchup.headSha)) {
-    await findings.processPullRequest(findings.findingsClient, catchup.number, { allowUnmerged: true });
     const baselineSha = await client.getRef(BASELINE_BRANCH);
-    const ahead = await client.compareShas(baselineSha, catchup.headSha);
-    const since = new Date(now.getTime() - LOOKBACK_DAYS * 24 * HOUR_MS).toISOString();
-    const covered = new Set(ahead);
-    for (const pull of await client.listMergedPulls(since)) {
-      if (covered.has(pull.mergeCommitSha)) await client.removeLabel(pull.number, PENDING_LABEL);
-    }
+    const covered = new Set(await client.compareShas(baselineSha, catchup.headSha));
+    const since = new Date(new Date(catchup.createdAt).getTime() - LOOKBACK_DAYS * 24 * HOUR_MS).toISOString();
+    const coveredPulls = (await client.listMergedPulls(since)).filter((pull) => covered.has(pull.mergeCommitSha));
+    const origin = coveredPulls.map((pull) => `#${pull.number} ${pull.title}`).join('; ');
+    await findings.processPullRequest(findings.findingsClient, catchup.number, { allowUnmerged: true, origin });
+    for (const pull of coveredPulls) await client.removeLabel(pull.number, PENDING_LABEL);
     await client.updateRef(BASELINE_BRANCH, catchup.headSha, true);
     await client.closePull(catchup.number);
     await client.deleteRef(CATCHUP_BRANCH);
@@ -191,11 +190,10 @@ function createClient(octokit, owner, repo) {
      * Zoekt de commits in head die niet in base zitten.
      * @param {string} base Basiscommit.
      * @param {string} head Kopcommit.
-     * @returns {Promise<string[]>} De commits in head die niet in base zitten (hoogstens 250).
+     * @returns {Promise<string[]>} De commits in head die niet in base zitten (alle pagina's).
      */
     async compareShas(base, head) {
-      const response = await octokit.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${base}...${head}`, per_page: 100 });
-      return response.data.commits.map((commit) => commit.sha);
+      return octokit.paginate(octokit.rest.repos.compareCommitsWithBasehead, { owner, repo, basehead: `${base}...${head}`, per_page: 100 }, (response) => response.data.commits.map((commit) => commit.sha));
     },
     /**
      * Haalt de recent gemergde PR's naar master op.

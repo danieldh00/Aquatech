@@ -242,3 +242,21 @@ test('createClient: getRef geeft null bij 404, createRef verplaatst een bestaand
   assert.strictEqual(await client.hasCodeRabbitReview(1, 'old'), true);
   assert.strictEqual(await client.hasCodeRabbitReview(1, 'new'), false, 'review van een ander telt niet');
 });
+
+test('createClient: compareShas leest alle pagina\'s, ook bij meer dan 100 commits', async () => {
+  const pages = [{ data: { commits: Array.from({ length: 100 }, (_, index) => ({ sha: `a${index}` })) } }, { data: { commits: [{ sha: 'laatste' }] } }];
+  const octokit = {
+    /**
+     * Roept de mapfunctie aan voor elke vaste pagina, zoals octokit.paginate.
+     * @param {Function} _route De route (niet gebruikt).
+     * @param {object} _parameters De parameters (niet gebruikt).
+     * @param {Function} mapper Zet een pagina om naar een lijst.
+     * @returns {Promise<string[]>} De samengevoegde lijst.
+     */
+    paginate: async (_route, _parameters, mapper) => pages.flatMap((page) => mapper(page)),
+    rest: { repos: { compareCommitsWithBasehead: () => {} } },
+  };
+  const shas = await createClient(octokit, 'x', 'y').compareShas('B', 'M');
+  assert.strictEqual(shas.length, 101);
+  assert.strictEqual(shas[100], 'laatste');
+});
