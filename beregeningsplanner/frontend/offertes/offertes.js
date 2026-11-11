@@ -872,7 +872,7 @@
     const choose = parent ? '<button class="btn small primary ap-variant" data-pick-variant title="Dit artikel heeft varianten: kies de maat">Kies maat</button>'
       : variantOf ? '<button class="btn small ghost ap-variant" data-pick-variant title="Een andere variant van dit artikel kiezen">Andere maat</button>' : '';
     return `<tr class="line${line.optional ? ` opt${line.selected ? '' : ' off'}` : ''}" data-line="${esc(line.id)}">
-      <td class="c-desc"><input data-l="description" value="${esc(line.description)}" maxlength="500" placeholder="Omschrijving">${line.code ? `<span class="code">${esc(line.code)}</span>` : ''}${choose}</td>
+      <td class="c-desc"><input data-l="description" value="${esc(line.description)}" maxlength="500" placeholder="Omschrijving">${line.code ? `<span class="code">${esc(line.code)}</span>` : ''}${choose}${line.note ? `<span class="line-note" title="Interne notitie: de klant ziet dit niet">${esc(line.note)} <button class="btn ghost small" data-note-clear title="Notitie weghalen (gecontroleerd)">Gecontroleerd</button></span>` : ''}</td>
       <td class="c-qty"><input data-l="qty" class="num" type="number" step="any" value="${line.qty}" aria-label="Aantal"></td>
       <td class="c-unit"><input data-l="unit" value="${esc(line.unit)}" maxlength="12" aria-label="Eenheid"></td>
       <td class="c-price"><input data-l="price" class="num" type="number" step="0.01" value="${Number(line.price).toFixed(2)}" aria-label="Prijs per eenheid"></td>
@@ -1084,6 +1084,14 @@
           },
         });
         return undefined;
+      }
+      const noteButton = event.target.closest('[data-note-clear]');
+      if (noteButton && quote) {
+        const id = noteButton.closest('[data-line]').dataset.line;
+        const line = quote.data.lines.find((candidate) => candidate.id === id);
+        if (line) line.note = '';
+        renderLines();
+        return changed();
       }
       const deleteButton = event.target.closest('[data-del]');
       if (deleteButton && quote) {

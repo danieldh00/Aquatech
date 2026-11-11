@@ -9,7 +9,7 @@ webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als databas
 | **Webshop** (`/`) | Eigen winkel met categoriemenu, zoeken, varianten, groothandelsvenster, online betalen (Mollie), op rekening, retouren, SEO (sitemap, JSON-LD, productfeed). Staat standaard uit; dan stuurt `/` door naar de app. Ingelogde medewerkers en beheerders zien in de kop een knop *Beheer* naar `/app/`. |
 | **App** (`/app/`) | Dashboard en modules. Openbare offerte- en afspraaklinks staan ook onder `/app/`. |
 | Beregening | De beregeningsplanner (hieronder), met *Alles in winkelwagen* vanuit de stuklijst. |
-| Plannen, Offertes, Facturen | Plannen met goedkeuring, digitale offerte met akkoord (klant kiezen of meteen aanmaken vult de gegevens in; btw verleggen naar een EU-klant met VIES-controle; betaaltermijn per klant op offerte en factuur), facturen (PDF, mail, Visma eAccounting met overzicht van de toestemmingen, een logboek en bediening: pauzeren, onderdelen aan/uit, intrekken), debiteuren. |
+| Plannen, Offertes, Facturen | Plannen met goedkeuring, digitale offerte met akkoord (klant kiezen of meteen aanmaken vult de gegevens in; btw verleggen naar een EU-klant met VIES-controle; betaaltermijn per klant op offerte en factuur; concept-offerte maken vanuit Claude of ChatGPT via de AI-koppeling), facturen (PDF, mail, Visma eAccounting met overzicht van de toestemmingen, een logboek en bediening: pauzeren, onderdelen aan/uit, intrekken), debiteuren. |
 | Werkorders, Planning | Werkorders uit een offerte of melding, agenda, afspraaklink voor de klant, uren en materiaal, foto's, nacalculatie. |
 | Artikelen | Artikelen met varianten en afbeeldingen, voorraad met FIFO-kostprijs, bestelvoorstel, koppeling met WooCommerce. |
 | Webshopbestellingen | Bestellingen, betalingen, terugbetalen, retouren en de margerapportage. |
@@ -32,6 +32,10 @@ webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als databas
   krijgt een **foutcode** (ook in het serverlog). Met de debugmodus aan ziet een beheerder bij een fout een paneel
   met de oorzaak (melding, databasecode, plek in de code), met een knop Kopiëren. Klanten en medewerkers zien die
   details nooit; wachtwoorden en sleutels worden er altijd uit gehaald.
+- **AI-koppeling** (Beheer → Instellingen → AI-koppeling, per omgeving, standaard uit): voeg het adres
+  `https://<server>/app/mcp` toe als connector in Claude of ChatGPT. Na inloggen en toestemming kan de AI klanten
+  en artikelen zoeken, een particuliere klant aanmaken en een **concept**-offerte klaarzetten; versturen doet de
+  medewerker zelf. Gekoppelde apps staan in Mijn profiel en zijn daar in te trekken.
 - **Beveiliging**: sessies alleen als hash, wachtwoorden met scrypt, tweestapsverificatie (TOTP), versleutelde
   back-ups (dagelijks, ook vóór elke update), auditlog. Zie *Beveiliging en privacy* in `beregeningsplanner/DOCS.md`.
 

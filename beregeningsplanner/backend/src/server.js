@@ -9,13 +9,13 @@ const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
 const { createRecognitionStore, sanitizeSamples, imageHash } = require('./beregening/recognitions');
 const { openDb, openDatabase, isPg } = require('./database/db');
-const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf } = require('./platform/store');
+const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf, fingerprintOf } = require('./platform/store');
 const { withScope, limitTo, bindStream } = require('./database/tenant-scope');
 const testdata = require('./platform/test-data');
 const { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest } = require('./platform/settings');
 const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
 const backups = require('./backup');
-const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody } = require('./verkoop/quotes');
+const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody, Core: QuoteCore } = require('./verkoop/quotes');
 const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
 const { createMailer } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
@@ -37,7 +37,7 @@ const { createStorefrontData } = require('./webshop/storefront-data');
 const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
-const { createMollie } = require('./webshop/mollie');
+const { createMollie, cleanPublicUrl } = require('./webshop/mollie');
 const { createWebPayments } = require('./webshop/web-payments');
 const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
 const { createWebSalesStore, registerWebSalesRoutes } = require('./webshop/web-sales');
@@ -61,6 +61,11 @@ const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = requir
 const { createAiUsageStore } = require('./platform/ai-usage');
 const { createErrorReport, catchAsync, withCause } = require('./platform/error-report');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
+const { createOAuthGrants } = require('./mcp/oauth-grants');
+const { registerOAuthRoutes } = require('./mcp/oauth-server');
+const { registerMcpRoutes } = require('./mcp/mcp-server');
+const { createMcpTools } = require('./mcp/mcp-tools');
+const { sanitizeContact } = require('./verkoop/customers');
 const crypto = require('crypto');
 
 const { FRONTEND_DIR, PAGES_DIR } = require('./paths');
@@ -573,6 +578,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/invoices', express.json({ limit: '1mb' }));
   app.use('/api/debtors', express.json({ limit: '16kb' }));
   app.use('/api/visma', express.json({ limit: '32kb' }));
+  // AI-koppeling (mcp/mcp-server.js): een concept-offerte met tot 100 regels.
+  app.use('/mcp', express.json({ limit: '256kb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -591,7 +598,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Buiten /app: de webshop, de oude adressen (doorverwijzing) en de gezondheidscontrole.
   app.use((req, res, next) => {
-    if (req.inApp || req.path === '/api/health') return next();
+    // De ontdekgegevens van de AI-koppeling (OAuth, zie mcp/oauth-server.js) staan volgens de standaard in de hoofdmap.
+    if (req.inApp || req.path === '/api/health' || /^\/\.well-known\/oauth-(authorization-server|protected-resource)(\/|$)/.test(req.path)) return next();
     // Uit de oude webshop-URL gebleven webhooks van Mollie: nog een tijdje intern doorgeven.
     if (/^\/winkel\/mollie\/webhook\//.test(req.path)) req.url = req.url.slice('/winkel'.length);
     if (legacyAppRedirect(req, res)) return undefined;
@@ -2069,6 +2077,129 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     shopMatchOf: (tid) => shopSync.matcher(shopStore.products(tid), (settingsFor(tid).get('shopSource') || {}).mapping),
     shopMirrorOn: (tid) => { const source = settingsFor(tid).get('shopSource'); return Boolean(source && source.url && source.mirror !== false); },
     importLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }) });
+  // ---------- AI-koppeling: Claude of ChatGPT maakt een concept-offerte (zie mcp/) ----------
+  const oauthGrants = createOAuthGrants(database);
+  /**
+   * De omgevingen van de organisatie van een gebruiker (live-tenant en testomgevingen).
+   * @param {object} user De gebruiker.
+   * @returns {string[]} De id's.
+   */
+  const familyOfUser = (user) => store.familyIds(user.home_tenant_id || user.tenant_id);
+  /**
+   * Of de AI-koppeling in een omgeving aan staat (Beheer > Instellingen > AI-koppeling).
+   * @param {string} tenantId De omgeving.
+   * @returns {boolean} true als hij aan staat.
+   */
+  const connectorOn = (tenantId) => settingsFor(tenantId).get('aiConnector') === true;
+  /**
+   * De gebruiker van een toestemming van de AI-koppeling, zoals hij nu werkt in de omgeving van die toestemming. Null als
+   * het account niet meer mag (uitgeschakeld, ander wachtwoord, nieuw wachtwoord verplicht, organisatie of omgeving uit,
+   * omgeving niet meer bereikbaar, koppeling uitgezet).
+   * @param {object} grant De toestemming (oauth-grants.js).
+   * @returns {object|null} De gebruiker met tenant_id = omgeving van de toestemming en de rechten van zijn rol, of null.
+   */
+  function userForGrant(grant) {
+    const account = store.getUser(grant.userId);
+    if (!account || account.disabled || account.kind !== 'account' || account.must_change_password || !account.password_hash) return null;
+    if (!auth.safeEqual(grant.fingerprint, fingerprintOf(account.password_hash))) return null;
+    if (!organizationActive(account.tenant_id)) return null;
+    const environment = store.getTenant(grant.tenantId);
+    if (!environment || environment.disabled || !inScope(environment)) return null;
+    const home = { ...account, home_tenant_id: account.tenant_id };
+    if (grant.tenantId !== account.tenant_id && !accessibleFor(home).some((accessible) => accessible.id === grant.tenantId)) return null;
+    if (!connectorOn(grant.tenantId)) return null;
+    return withRights({ ...home, tenant_id: grant.tenantId, role: account.platform_admin && grant.tenantId !== account.tenant_id ? 'beheerder' : account.role });
+  }
+  const oauth = registerOAuthRoutes(app, {
+    grants: oauthGrants, signValue: auth.signValue, identify, connectorOn, userForGrant, familyOf: familyOfUser, audit,
+    /**
+     * Het vaste webadres uit Beheer > Webshop > Betalen (hoofdtenant), alleen de origin; leeg = de Host-kop van het verzoek.
+     * @returns {string} Het adres, of een lege tekst.
+     */
+    publicOrigin: () => {
+      const publicUrl = cleanPublicUrl((settingsFor(tenant.id).get('shopPayment') || {}).publicUrl);
+      return publicUrl ? new URL(publicUrl).origin : '';
+    },
+    can: (user, right) => Roles.can(user, right),
+    accountOf: (userId) => store.getUser(userId),
+    fingerprintOf,
+    environmentName: (tenantId) => {
+      const environmentRow = store.getTenant(tenantId);
+      if (!environmentRow) return '';
+      return environmentRow.environment === 'test' ? `${environmentRow.name} (testomgeving)` : environmentRow.name;
+    },
+    themeCss: (tenantId) => Theme.css(themeFor(tenantId || tenant.id)),
+    /**
+     * Niet ingelogd op het toestemmingsscherm: de gewone inlogpagina op hetzelfde adres (na inloggen herlaadt die).
+     * @param {object} req Het verzoek.
+     * @param {object} res Het antwoord.
+     * @returns {void}
+     */
+    sendLogin: (req, res) => {
+      res.status(401);
+      res.setHeader('Cache-Control', 'no-store');
+      sendAuthPage(res, needsSetup() ? SETUP_PAGE : LOGIN_PAGE);
+    },
+  });
+  registerMcpRoutes(app, {
+    grants: oauthGrants, userForGrant, connectorOn, familyOf: familyOfUser, originOf: oauth.originOf, resourceOf: oauth.resourceOf, version,
+    tools: createMcpTools({
+      can: (user, right) => Roles.can(user, right),
+      /**
+       * Zoekt actieve klanten van de organisatie (zoals de klantkeuze in de offerte).
+       * @param {object} req Het verzoek.
+       * @param {string} search De zoektekst.
+       * @returns {object[]} De klanten.
+       */
+      searchCustomers: (req, search) => {
+        const home = homeOf(req.tenantId);
+        return store.listCustomerPage(home === req.tenantId ? [req.tenantId] : [home, req.tenantId], { search, limit: 20, activeOnly: true }).items;
+      },
+      /**
+       * Eén klant van de organisatie.
+       * @param {object} req Het verzoek.
+       * @param {string} id Id van de klant.
+       * @returns {object|null} De klant.
+       */
+      getCustomer: (req, id) => {
+        const home = homeOf(req.tenantId);
+        return store.getCustomer(home === req.tenantId ? [req.tenantId] : [home, req.tenantId], id);
+      },
+      /**
+       * Maakt een particuliere klant zonder inlog in de actieve omgeving (zoals Klanten > Nieuwe klant).
+       * @param {object} req Het verzoek.
+       * @param {{ displayName: string, email?: string, phone?: string, address?: string }} input De gegevens (adres al bij PDOK gecontroleerd).
+       * @returns {{ customer: object }|{ error: string }} De klant of de fout.
+       */
+      createCustomer: (req, input) => {
+        const contact = sanitizeContact({ email: input.email ?? '', phone: input.phone ?? '', address: input.address ?? '' });
+        if (contact.error) return { error: contact.error };
+        const out = store.createCustomer(req.tenantId, { displayName: input.displayName, ...contact.contact, business: null });
+        if (out.error) return { error: out.error };
+        audit(req, 'klant_aangemaakt', { userId: out.user.id, zakelijk: false, uitgenodigd: false, via: 'ai-koppeling' });
+        return { customer: store.getCustomer([req.tenantId], out.user.id) };
+      },
+      lookupAddress: (input) => addressLookup.lookup(input),
+      verifyAddress: (text) => addressGuard.verify(text),
+      articleChoices: (tenantId) => stockStore.articleChoices(tenantId),
+      quoteProfile: (req) => settingsFor(req.tenantId).get('quoteProfile'),
+      /**
+       * Maakt de offerte als concept (status vast op concept, nummer zoals in de app).
+       * @param {object} req Het verzoek.
+       * @param {object} data De inhoud.
+       * @param {string|null} customerId Het klantaccount.
+       * @returns {object} De offerte.
+       */
+      createDraft: (req, data, customerId) => {
+        const profile = settingsFor(req.tenantId).get('quoteProfile');
+        const date = new Date().toISOString().slice(0, 10);
+        return quoteStore.create(req.user, { ...data, date, validUntil: QuoteCore.addDays(date, profile.validDays || 30) }, { status: 'concept', prefix: profile.numberPrefix, customerId });
+      },
+      quoteUrl: (req, id) => `${oauth.originOf(req)}/app/offertes/?id=${encodeURIComponent(id)}`,
+      audit,
+    }),
+  });
+
   // Afbeeldingen bij artikelen: uploaden, verwijderen en overnemen uit de oude webshop (zie item-images.js).
   registerItemImageRoutes(app, { images: itemImageStore, requireRight, requireJson, audit,
     importLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => req.tenantId || tenant.id }) });
@@ -2683,6 +2814,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       removed.drawings = store.purgeStaleDrawings(environment.id, DRAWING_RETENTION_DAYS);
       removed.accountTokens = accountTokens.purgeExpired(environment.id);
       removed.vismaLog = vismaLog.prune(environment.id, environmentSettings.get('auditRetentionDays'));
+      removed.oauthGrants = oauthGrants.purge(environment.id);
       for (const [kind, count] of Object.entries(removed)) total[kind] = (total[kind] || 0) + count;
     }
     return total;

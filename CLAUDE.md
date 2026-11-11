@@ -624,6 +624,13 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   Mailfouten (1.8.7): melding altijd via `mailFailure(error)` uit mailer.js (+ `withCause`), nooit `error.message` van nodemailer.
   Webshop (1.9.0): `MollieError` (leesbaar, met `cause`); bij facturen voor webshopbestellingen alleen een `InvoiceStepError` letterlijk bij de bestelling, andere fouten → log + "interne fout"; een foutuitkomst die als JSON naar de browser kan gaan krijgt de oorzaak niet-opsombaar (`withHiddenCause` uit error-report.js).
   Een nieuwe leesbare fout met een onderliggende oorzaak: `new Error(melding, { cause: error })` of `new SourceError(…, status, error)`.
+- **AI-koppeling / MCP-server** (1.10.1, `backend/src/mcp/`, migratie 57 `oauth_grants`): `POST /app/mcp` (stateless, JSON,
+  `mcp-server.js`), tools in `mcp-tools.js` (`zoek_klant`, `maak_klant`, `zoek_artikelen`, `maak_concept_offerte`: alleen concept,
+  prijzen uit de voorraad, twijfel als `line.note` die `forCustomer` weglaat). OAuth 2.1 in `oauth-server.js` (metadata, registratie
+  met ondertekende client-id, `/oauth/authorize|token|revoke`, toestemmingsscherm `paginas/koppelen.html`) en `oauth-grants.js`
+  (tokens `aqt_<soort>_<tenant>.<geheim>`, alleen SHA-256, rotatie). Instelling `aiConnector` per omgeving; `userForGrant` in
+  server.js controleert elk verzoek opnieuw (account, wachtwoord-vingerafdruk, omgeving, koppeling aan). **Een nieuwe tool** krijgt
+  een scope in `SCOPES` (met de rechten van de rol), een limiet en audit bij schrijven, en schrijft hoogstens een concept.
 - Health: `GET /api/health` (versie uit `package.json`).
 
 ## Checklist voor elke nieuwe feature (zonder dat Daniël erom vraagt)
