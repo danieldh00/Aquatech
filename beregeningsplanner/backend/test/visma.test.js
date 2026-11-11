@@ -342,7 +342,7 @@ test('visma-logboek: opslaan, herhaalde fouten samenvoegen, pagineren, bewaarter
   /** Wacht tot de klok een milliseconde verder is, zodat regels een vaste volgorde hebben. */
   const tick = () => { const start = Date.now(); while (Date.now() === start) { /* wachten */ } };
   // Een herhaalde fout (zelfde onderdeel, verwijzing en melding) wordt één regel met een teller.
-  vismaLog.record(first, { kind: 'factuur', direction: 'naar', ok: false, reference: 'F2026-0001', message: 'Visma: foutje' });
+  vismaLog.record(first, { kind: 'factuur', direction: 'naar', ok: false, source: 'handmatig', actor: 'Baas', reference: 'F2026-0001', message: 'Visma: foutje' });
   tick();
   vismaLog.record(first, { kind: 'factuur', direction: 'naar', ok: false, reference: 'F2026-0001', message: 'Visma: foutje' });
   tick();
@@ -350,6 +350,7 @@ test('visma-logboek: opslaan, herhaalde fouten samenvoegen, pagineren, bewaarter
   tick();
   assert.strictEqual(vismaLog.list(first).items.length, 2);
   assert.strictEqual(vismaLog.list(first).items.find((entry) => entry.message === 'Visma: foutje').count, 2);
+  assert.strictEqual(vismaLog.list(first).items.find((entry) => entry.message === 'Visma: foutje').source, 'handmatig', 'een automatische herhaling overschrijft de bron niet');
   // Na een succes begint een nieuwe fout weer een eigen regel.
   vismaLog.record(first, { kind: 'factuur', direction: 'naar', ok: true, reference: 'F2026-0001', message: 'Verkoopfactuur aangemaakt in Visma' });
   tick();

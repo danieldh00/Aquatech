@@ -4,7 +4,7 @@
 //
 // - Een fout die zich herhaalt (hetzelfde onderdeel, dezelfde verwijzing en dezelfde melding,
 //   bijv. een factuur die elke 10 minuten opnieuw mislukt) krijgt geen nieuwe regel maar
-//   verhoogt `repeat_count` en zet `created_at` op het laatste moment: het logboek loopt niet vol.
+//   verhoogt `repeat_count` en zet `created_at` op het laatste moment (bron en naam blijven die van de eerste keer): het logboek loopt niet vol.
 // - Een geslaagde leesactie van hetzelfde onderdeel binnen 30 minuten wordt niet opnieuw gelogd.
 // - Bewaartermijn: die van het auditlog (auditRetentionDays), via prune().
 // - Lijst met keyset-paginering (nieuwste eerst), dus snel bij een groot logboek.
@@ -58,8 +58,9 @@ function createVismaLog(db) {
     const last = prepare('SELECT id, ok, message, created_at FROM visma_log WHERE tenant_id = ? AND kind = ? AND reference = ? ORDER BY created_at DESC, id DESC LIMIT 1')
       .get(tenantId, kind, entry.reference);
     if (last && !entry.ok && !Number(last.ok) && last.message === entry.message) {
-      prepare('UPDATE visma_log SET created_at = ?, repeat_count = repeat_count + 1, source = ?, actor = ? WHERE tenant_id = ? AND id = ?')
-        .run(now.toISOString(), entry.source, entry.actor, tenantId, last.id);
+      // source en actor blijven van de eerste keer: een automatische herhaling wist niet wie het handmatig startte.
+      prepare('UPDATE visma_log SET created_at = ?, repeat_count = repeat_count + 1 WHERE tenant_id = ? AND id = ?')
+        .run(now.toISOString(), tenantId, last.id);
       return last.id;
     }
     if (kind === 'opties' && entry.ok && last && Number(last.ok) && now.getTime() - new Date(last.created_at).getTime() < READ_DEDUPE_MS) return null;
