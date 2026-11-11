@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.6
+
+Foutmeldingen nalopen, deel 1: artikelen en de webshopkoppeling.
+
+- `webshop/woocommerce.js`: `SourceError` krijgt een optionele oorzaak (`cause`). Niet bereikbaar, time-out, DNS, te groot en
+  geen JSON bewaren de onderliggende fout; een foutstatus van de webshop leest het begin van het antwoord (hoogstens 4 kB,
+  `shopReply`) als oorzaak. Bij een weigering (4xx) staat de melding van WooCommerce (zonder HTML, hoogstens 200 tekens) in de
+  melding, bijv. *"De webshop antwoordt met status 400: De SKU KRAAN bestaat al."*.
+- Nieuw `respondShopError(res, error, next)`: een `SourceError` gaat terug met zijn eigen status en melding (oorzaak via
+  `withCause` voor de debugmodus), elke andere fout naar de foutafhandeling (500 + foutcode). Gebruikt in
+  `POST /api/stock/import-shop`, `POST /api/stock/items/:id/publish` en `POST /api/admin/shop/sync`. Voorheen kwam bij
+  artikelen de interne foutmelding (bijv. een databasefout) als *"shop_error"* bij de gebruiker.
+- `artikelen/item-images.js`: de fouten bij het ophalen van een afbeelding bewaren hun oorzaak.
+- Nieuwe test `test/shop-errors.test.js`.
+
 ## 1.8.5
 
 Debugmodus (Beheer > Instellingen > Foutopsporing) en foutcodes bij elke onverwachte fout. Eerste deel van het nalopen van de

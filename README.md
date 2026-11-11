@@ -1,19 +1,48 @@
 # Aquatech
 
-Aquatech is een modulair pakket (in de richting van een ERP voor
-beregeningsbedrijven). De startpagina is een dashboard met een tegel per
-module; de **beregeningsplanner** is de eerste module, planning en
-Artikelen (voorheen voorraadbeheer) volgen.
+Aquatech is een modulair, ERP-achtig pakket voor beregeningsbedrijven, met een eigen webshop. Na het inloggen
+kom je op een dashboard met een tegel per module (beheerders krijgen een zijbalk). Alles draait als één
+webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als database.
+
+| Onderdeel | Wat het doet |
+|---|---|
+| **Webshop** (`/`) | Eigen winkel met categoriemenu, zoeken, varianten, groothandelsvenster, online betalen (Mollie), op rekening, retouren, SEO (sitemap, JSON-LD, productfeed). Staat standaard uit; dan stuurt `/` door naar de app. |
+| **App** (`/app/`) | Dashboard en modules. Openbare offerte- en afspraaklinks staan ook onder `/app/`. |
+| Beregening | De beregeningsplanner (hieronder), met *Alles in winkelwagen* vanuit de stuklijst. |
+| Plannen, Offertes, Facturen | Plannen met goedkeuring, digitale offerte met akkoord, facturen (PDF, mail, Visma eAccounting), debiteuren. |
+| Werkorders, Planning | Werkorders uit een offerte of melding, agenda, afspraaklink voor de klant, uren en materiaal, foto's, nacalculatie. |
+| Artikelen | Artikelen met varianten en afbeeldingen, voorraad met FIFO-kostprijs, bestelvoorstel, koppeling met WooCommerce. |
+| Webshopbestellingen | Bestellingen, betalingen, terugbetalen, retouren en de margerapportage. |
+| Meldingen, Klantportaal, Klantdossier | Storingen en onderhoud melden, opleverdossier en installatiedossier per locatie. |
+| Uitbesteden, Nieuws, Profiel | Werk tussen organisaties, berichten en versielogboek, eigen voorkeuren en tweestapsverificatie. |
+| Beheer, Hoofdbeheer | Instellingen, gebruikers en rollen, back-ups, testomgevingen; platform: organisaties, thema, multitenancy. |
+
+### Beheer in het kort
+
+- **Instellingen** (Beheer → Instellingen) staan in de database en werken zonder herstart: AI-sleutel, mail,
+  webshop, Mollie, Visma, seizoensherinneringen enz. Docker-omgevingsvariabelen zijn alleen startwaarden.
+  Geheimen worden versleuteld opgeslagen en nooit volledig getoond.
+- **Testomgeving**: elke organisatie kan een testomgeving maken met eigen gegevens en testdata. Koppelingen naar
+  buiten (webshop, Mollie, mail, Visma) gaan daar niet mee.
+- **Multitenancy** (Hoofdbeheer → Multitenancy, standaard uit): uit = één organisatie, zonder organisatiecode bij
+  het inloggen. Aan = meer organisaties naast elkaar, elk met eigen gegevens (afgeschermd met `tenant_id` en
+  row-level security in PostgreSQL).
+- **Foutopsporing** (Beheer → Instellingen → Foutopsporing, per omgeving, standaard uit): elke onverwachte fout
+  krijgt een **foutcode** (ook in het serverlog). Met de debugmodus aan ziet een beheerder bij een fout een paneel
+  met de oorzaak (melding, databasecode, plek in de code), met een knop Kopiëren. Klanten en medewerkers zien die
+  details nooit; wachtwoorden en sleutels worden er altijd uit gehaald.
+- **Beveiliging**: sessies alleen als hash, wachtwoorden met scrypt, tweestapsverificatie (TOTP), versleutelde
+  back-ups (dagelijks, ook vóór elke update), auditlog. Zie *Beveiliging en privacy* in `beregeningsplanner/DOCS.md`.
 
 ## Beregeningsplanner
 
 Webapplicatie om een automatische tuinberegening te ontwerpen, geïnspireerd op de werkwijze van de DVS Beregnungsplaner: gebieden tekenen → systeemelementen → sproeiers → zones en leidingen → stuklijst.
 
-De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn drie manieren om hem te draaien:
+De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn twee manieren om hem te draaien:
 
 | Manier | Hoe |
 |---|---|
-| **Eigen server** (Docker) | `docker compose up -d --build` in de root → `http://<server>:3300`; bij de eerste aanmelding maak je het eerste beheerdersaccount aan. Zie *Server (Docker)* in `beregeningsplanner/DOCS.md`. |
+| **Eigen server** (Docker) | `docker compose up -d --build` in de root → `http://<server>:3300/app/`; bij de eerste aanmelding maak je het eerste beheerdersaccount aan. Zie *Server (Docker)* in `beregeningsplanner/DOCS.md`. |
 | **Lokaal** | `beregeningsplanner/frontend/index.html` (dashboard) of `beregeningsplanner/frontend/beregening/index.html` direct in de browser openen |
 
 ## Stappen
@@ -50,20 +79,15 @@ Het `.xlsx`-bestand bevat de tabbladen:
 - **Artikelen en prijzen**: `beregeningsplanner/frontend/beregening/js/catalog.js` → `C.articles` (prijzen zijn indicatief, excl. btw).
 - **Sproeiertypes, druppelslang, buizen en hydraulische uitgangspunten**: eveneens in `beregeningsplanner/frontend/beregening/js/catalog.js`.
 
-## Instellingen
-
-API-sleutel, toegangscode, AI-limieten en modules stel je als beheerder in
-onder **Beheer → Instellingen** (opgeslagen in de database, werkt zonder
-herstart). Docker-omgevingsvariabelen zijn alleen startwaarden.
-
 ## Opslag
 
-Het project wordt automatisch in de browser (localStorage) bewaard. Met **Opslaan/Openen** werk je met een `.aquaplan.json`-bestand, zodat je projecten kunt archiveren of delen.
+Ingelogd wordt een plan op de server bewaard (met historie); zonder server wordt het project in de browser (localStorage) bewaard. Met **Opslaan/Openen** werk je met een `.aquaplan.json`-bestand, zodat je projecten kunt archiveren of delen.
 
 ## Nieuwe module toevoegen
 
 1. Maak `beregeningsplanner/frontend/<id>/index.html` met eigen css/js in die
-   map en laad `../shared/brand.css` voor de huisstijl. Alle URL's relatief; terug naar het dashboard met `href="../"`.
+   map en laad `../shared/brand.css` voor de huisstijl, `../shared/common.js` in de `<head>`, daarna
+   `../dashboard/modules.js` en `../shared/sidebar.js`. Alle URL's relatief; terug naar het dashboard met `href="../"`.
 2. Zet de module in `beregeningsplanner/frontend/dashboard/modules.js` op
    `status: 'actief'` met `href: '<id>/'`.
 3. Klaar: de server serveert elke map met een `index.html` als module (ook
@@ -85,14 +109,15 @@ beregeningsplanner/                  de app
     src/paginas/                     inloggen, eerste beheerder, wachtwoord wijzigen
     src/database/                    SQLite/PostgreSQL, schema en migraties, kopiëren
     src/beveiliging/                 sessies, versleuteling, limieten, netwerkcontrole, meekijken
-    src/platform/                    gebruikers/tenants (store), instellingen, rollen, mail, nieuws, AI-kosten, testdata
+    src/platform/                    gebruikers/tenants (store), instellingen, rollen, mail, nieuws, foutmeldingen, testdata
     src/beregening/                  plan herkennen (AI), geleerde herkenning, tekening indienen, sproeiers
     src/verkoop/                     offertes, facturen (+ PDF en mail), debiteuren, Visma
-    src/webshop/                     WooCommerce: producten, synchronisatie, bestellingen
+    src/webshop/                     eigen webshop (storefront-*), betalen (Mollie), bestellingen, retouren, SEO, WooCommerce
     src/uitvoering/                  werkorders, uren/materiaal, foto's, uitbesteden, meldingen, klantportaal
     src/artikelen/                    artikelen en voorraad
     test/                            node --test (ook tegen PostgreSQL met TEST_DATABASE_URL)
     tools/codestyle.js               controle op de codestijl (npm run codestyle)
+    tools/tenant-filter.js           controle dat elke query op tenant_id filtert (npm run tenant-filter)
   frontend/                          alle paden relatief, gewone <script>-tags (werkt ook via file://)
     index.html, dashboard/           startpagina en moduleregister (dashboard/modules.js)
     shared/                          huisstijl, zijbalk, rollen, thema, offline, gedeelde hulpfuncties
@@ -101,7 +126,7 @@ beregeningsplanner/                  de app
     beheer/, hoofdbeheer/            beheer van de organisatie en van het platform
     offertes/, facturen/             verkoop (rekenkern: quote-core.js, invoice-core.js)
     werkorders/, planning/           uitvoering (rekenkern: workorder-core.js, worklog-core.js)
-    artikelen/, uitbesteden/, meldingen/, klantdossier/, plannen/, nieuws/, profiel/, portaal/
+    artikelen/, webshop-bestellingen/, uitbesteden/, meldingen/, klantdossier/, plannen/, nieuws/, profiel/, portaal/
     openbaar/                        pagina's zonder login (digitale offerte, afspraak)
 ```
 
@@ -109,3 +134,22 @@ Elke module is een map onder `frontend/` met een eigen `index.html`; de
 serverkant van een module staat in de map van het onderwerp onder
 `backend/src/`. Een `*-core.js` in de frontend is UMD en wordt ook door de
 server geladen (dezelfde berekening aan beide kanten).
+
+## Ontwikkelen
+
+```sh
+cd beregeningsplanner/backend && npm install
+DATA_DIR=/tmp/bp PORT=3300 node src/server.js   # http://localhost:3300/app/ -> eerste beheerder aanmaken
+npm test                                        # node --test (SQLite)
+TEST_DATABASE_URL=postgres://… npm test         # dezelfde suite tegen PostgreSQL
+```
+
+- `master` is productie. Elke wijziging gaat via een eigen branch en een pull request; een wijziging in
+  `beregeningsplanner/` vraagt een hogere versie in `backend/package.json`, een regel in `CHANGELOG.md` en in
+  `frontend/nieuws/releases.js`. Werk dit README bij als een PR features of de installatie wijzigt.
+- Een PR merget pas als de tests (SQLite en PostgreSQL), de versiecontrole en de verplichte controles **Claude code
+  review** en **Claude security review** (`.github/workflows/claude-review.yml`) groen zijn. CodeRabbit reviewt ook,
+  maar adviserend: open bevindingen worden na het mergen een issue en in een opruim-PR opgelost.
+- Na het mergen bouwt `release.yml` het image `ghcr.io/danieldh00/aquatech:<versie>`; de server
+  (`deploy/apps01/`) rolt het binnen 15 minuten uit, met een back-up vooraf en rollback bij een fout.
+- Werkafspraken (codestijl, queries, beveiliging, mappen) staan in `CLAUDE.md`.

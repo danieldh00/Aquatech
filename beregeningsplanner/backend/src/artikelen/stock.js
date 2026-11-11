@@ -45,6 +45,7 @@
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { loadArticles } = require('../webshop/shop');
+const { respondShopError } = require('../webshop/woocommerce');
 const { suggestGroups, MAX_GROUP_SIZE } = require('./variant-suggestions');
 const Wholesale = require('../webshop/wholesale');
 const ItemDetails = require('./item-details');
@@ -2056,7 +2057,7 @@ function registerStockRoutes(app, ctx) {
         audit(req, 'voorraad_webshop_overgenomen', { created: out.created, archived: out.archived });
         return res.json(out);
       } catch (error) {
-        return res.status(502).json({ error: 'shop_error', message: String(error.message || 'De webshop is niet bereikbaar.').slice(0, 300) });
+        return respondShopError(res, error, next);
       }
     }
     next();
@@ -2134,7 +2135,7 @@ function registerStockRoutes(app, ctx) {
   });
 
   // Artikel (met varianten) als nieuw product in de webshop zetten; Aquatech is de bron.
-  app.post('/api/stock/items/:id/publish', requireJson, requireStock, ctx.importLimiter || ((req, res, next) => next()), async (req, res) => {
+  app.post('/api/stock/items/:id/publish', requireJson, requireStock, ctx.importLimiter || ((req, res, next) => next()), async (req, res, next) => {
     // Eerst het artikel in deze omgeving: een id van een andere organisatie is 404, ook zonder webshop.
     if (!stock.get(tenantOf(req), req.params.id)) return notFound(res);
     if (!ctx.publishToShop) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' });
@@ -2145,7 +2146,7 @@ function registerStockRoutes(app, ctx) {
       audit(req, 'voorraad_naar_webshop', { itemId: req.params.id, productId: out.productId, variations: out.variations });
       res.json({ ...stock.get(tenantOf(req), req.params.id), published: out });
     } catch (error) {
-      res.status(502).json({ error: 'shop_error', message: String(error.message || 'De webshop is niet bereikbaar.').slice(0, 300) });
+      respondShopError(res, error, next);
     }
   });
 

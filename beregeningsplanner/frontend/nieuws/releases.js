@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.8.6',
+      date: '2026-11-11',
+      title: 'Duidelijkere meldingen bij de webshopkoppeling',
+      items: [
+        { text: 'Weigert de webshop een artikel (bijvoorbeeld omdat de artikelcode daar al bestaat), dan zie je nu de reden die de webshop geeft in plaats van alleen een statuscode.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.8.5',
       date: '2026-11-11',
       title: 'Duidelijkere foutmeldingen en een debugmodus',
