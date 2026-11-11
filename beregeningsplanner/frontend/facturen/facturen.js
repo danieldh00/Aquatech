@@ -456,13 +456,15 @@
 
   /**
    * Slaat een wijziging van de bediening op en ververst de stand en het logboek.
-   * @param {object} change paused (boolean) en/of parts (object met booleans)
+   * @param {object|Function} build paused (boolean) en/of parts (object met booleans), of een functie die dat object maakt
+   *   op het moment dat het verzoek aan de beurt is (zodat een wisselknop de actuele stand gebruikt)
    * @returns {Promise<void>}
    */
-  function saveVismaControls(change) {
+  function saveVismaControls(build) {
     // Na elkaar versturen: een ouder antwoord mag de vinkjes niet terugzetten naar een verouderde stand.
     const run = vismaControlsQueue.then(async () => {
       try {
+        const change = typeof build === 'function' ? build() : build;
         state.visma = await api('visma/controls', { method: 'PUT', body: change });
         renderVisma();
         loadVismaLog(true).catch(() => {});
@@ -660,7 +662,7 @@
      * Bediening: pauzeren of hervatten.
      * @returns {Promise<void>}
      */
-    $('#vi-pause').onclick = () => saveVismaControls({ paused: !state.visma.settings.paused });
+    $('#vi-pause').onclick = () => saveVismaControls(() => ({ paused: !state.visma.settings.paused }));
     /**
      * Bediening: een onderdeel aan of uit.
      * @param {Event} event het wijzigen van een vinkje
