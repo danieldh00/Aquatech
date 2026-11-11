@@ -37,7 +37,7 @@ const { createStorefrontData } = require('./webshop/storefront-data');
 const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
-const { createMollie } = require('./webshop/mollie');
+const { createMollie, cleanPublicUrl } = require('./webshop/mollie');
 const { createWebPayments } = require('./webshop/web-payments');
 const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
 const { createWebSalesStore, registerWebSalesRoutes } = require('./webshop/web-sales');
@@ -2112,6 +2112,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }
   const oauth = registerOAuthRoutes(app, {
     grants: oauthGrants, signValue: auth.signValue, identify, connectorOn, userForGrant, familyOf: familyOfUser, audit,
+    /**
+     * Het vaste webadres uit Beheer > Webshop > Betalen (hoofdtenant), alleen de origin; leeg = de Host-kop van het verzoek.
+     * @returns {string} Het adres, of een lege tekst.
+     */
+    publicOrigin: () => {
+      const publicUrl = cleanPublicUrl((settingsFor(tenant.id).get('shopPayment') || {}).publicUrl);
+      return publicUrl ? new URL(publicUrl).origin : '';
+    },
     can: (user, right) => Roles.can(user, right),
     accountOf: (userId) => store.getUser(userId),
     fingerprintOf,

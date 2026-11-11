@@ -161,6 +161,18 @@ test('ontdekken: metadata van de bron en de autorisatieserver, 401 wijst de weg'
   assert.strictEqual((await fetch(`${base}/app/mcp`)).status, 405);
 });
 
+test('met een webadres in Beheer gelden issuer, resource en links dat adres, niet de Host-kop', async () => {
+  const { base, admin } = await setup();
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { shopPayment: { publicUrl: 'https://winkel.example.nl/' } })).status, 200);
+  const resource = await createClient(base).get('/.well-known/oauth-protected-resource/app/mcp');
+  assert.strictEqual(resource.body.resource, 'https://winkel.example.nl/app/mcp');
+  assert.deepStrictEqual(resource.body.authorization_servers, ['https://winkel.example.nl']);
+  assert.strictEqual((await createClient(base).get('/.well-known/oauth-authorization-server')).body.issuer, 'https://winkel.example.nl');
+  assert.strictEqual((await admin.get('/app/api/account/connections')).body.url, 'https://winkel.example.nl/app/mcp');
+  const anonymous = await mcp(base, null, { method: 'initialize', params: {} });
+  assert.match(anonymous.headers.get('www-authenticate'), /resource_metadata="https:\/\/winkel\.example\.nl\/\.well-known\/oauth-protected-resource\/app\/mcp"/);
+});
+
 test('registreren: alleen bekende AI-apps of de eigen computer', async () => {
   const { base } = await setup();
   const ok = await register(base);

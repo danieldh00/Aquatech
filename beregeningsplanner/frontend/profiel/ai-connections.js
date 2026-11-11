@@ -74,7 +74,7 @@
     $('f-ai').hidden = false;
     $('ai-setup').hidden = !answer.available;
     $('ai-off').hidden = Boolean(answer.available);
-    $('ai-url').value = new URL('../mcp', location.href).href;
+    $('ai-url').value = answer.url || new URL('../mcp', location.href).href;
     renderList(answer.items);
   }
 

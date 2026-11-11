@@ -45,23 +45,17 @@ const LOGO = (/<div class="logo">(<img [^>]+>)<\/div>/.exec(fs.readFileSync(path
 const escapeHtml = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
 
 /**
- * Het webadres van deze server zoals de AI-app hem aanroept (https achter de tunnel). Alleen een geldige hostnaam.
+ * Het webadres uit de Host-kop van het verzoek (https achter de tunnel), alleen met een geldige hostnaam. Alleen de
+ * terugval zolang er in Beheer geen webadres is ingevuld (zie publicOrigin in registerOAuthRoutes).
  * @param {object} req Het verzoek.
  * @returns {string} Bijvoorbeeld https://aquatech.den-hollander.com (zonder slash).
  */
-function originOf(req) {
+function requestOrigin(req) {
   const host = String(req.headers.host || '').toLowerCase();
   const safeHost = /^[a-z0-9.-]{1,253}(:\d{1,5})?$/.test(host) || /^\[[0-9a-f:]+\](:\d{1,5})?$/.test(host) ? host : 'localhost';
   const proto = req.headers['x-forwarded-proto'] === 'https' || req.secure ? 'https' : 'http';
   return `${proto}://${safeHost}`;
 }
-
-/**
- * Het adres van de MCP-server (de "resource" waar de tokens voor gelden).
- * @param {object} req Het verzoek.
- * @returns {string} Het adres.
- */
-const resourceOf = (req) => `${originOf(req)}${MCP_PATH}`;
 
 /**
  * Controleert een terugkeeradres van een AI-app: https naar een bekende AI-app, of de eigen computer.
@@ -131,13 +125,27 @@ const single = (source, name) => {
 /**
  * Registreert de OAuth-routes van de AI-koppeling.
  * @param {object} app De Express-app.
- * @param {object} ctx { grants (createOAuthGrants), signValue(doel, waarde), identify(req), sendLogin(req, res), connectorOn(tenantId),
+ * @param {object} ctx { grants (createOAuthGrants), publicOrigin() (vast webadres zonder slash, of leeg), signValue(doel, waarde), identify(req), sendLogin(req, res), connectorOn(tenantId),
  *   can(user, recht), accountOf(userId) (de gebruiker uit de database), fingerprintOf(passwordHash), environmentName(tenantId),
  *   userForGrant(grant), familyOf(user), themeCss(tenantId), audit(req, actie, detail, gebruiker, omgeving) }.
  * @returns {{ resourceOf: Function, originOf: Function, verifyClient: Function }} Hulpfuncties voor de MCP-server.
  */
 function registerOAuthRoutes(app, ctx) {
   const { grants } = ctx;
+
+  /**
+   * Het webadres van deze server voor issuer, resource, de iss in de redirect en links in toolantwoorden: het vaste
+   * webadres uit Beheer (publicOrigin) zodra dat is ingevuld, anders de (gecontroleerde) Host-kop.
+   * @param {object} req Het verzoek.
+   * @returns {string} Het adres zonder slash achteraan.
+   */
+  const originOf = (req) => (ctx.publicOrigin && ctx.publicOrigin()) || requestOrigin(req);
+  /**
+   * Het adres van de MCP-server (de "resource" waar de tokens voor gelden).
+   * @param {object} req Het verzoek.
+   * @returns {string} Het adres.
+   */
+  const resourceOf = (req) => `${originOf(req)}${MCP_PATH}`;
   const pending = new Map();
 
   /**
@@ -451,7 +459,7 @@ function registerOAuthRoutes(app, ctx) {
   app.get('/api/account/connections', (req, res) => {
     const user = ownAccount(req, res);
     if (!user) return;
-    res.json({ items: grants.listForUser(ctx.familyOf(user), user.id), available: ctx.connectorOn(req.tenantId) && ctx.can(user, 'offertes') });
+    res.json({ items: grants.listForUser(ctx.familyOf(user), user.id), available: ctx.connectorOn(req.tenantId) && ctx.can(user, 'offertes'), url: resourceOf(req) });
   });
   app.delete('/api/account/connections/:id', (req, res) => {
     const user = ownAccount(req, res);
@@ -464,4 +472,4 @@ function registerOAuthRoutes(app, ctx) {
   return { resourceOf, originOf, verifyClient };
 }
 
-module.exports = { registerOAuthRoutes, allowedRedirect, parseScope, scopesFor, originOf, resourceOf, SCOPES, MCP_PATH };
+module.exports = { registerOAuthRoutes, allowedRedirect, parseScope, scopesFor, requestOrigin, SCOPES, MCP_PATH };

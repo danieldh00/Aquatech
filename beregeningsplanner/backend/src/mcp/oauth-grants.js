@@ -15,7 +15,11 @@ const ACCESS_TTL_MS = 60 * 60 * 1000;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** Hoelang een toestemming hoogstens bestaat; daarna moet de gebruiker opnieuw toestaan. */
 const GRANT_TTL_MS = 90 * 24 * 60 * 60 * 1000;
-/** Twee gelijktijdige vernieuwingen met hetzelfde token (netwerkfout, herhaling) tellen binnen deze tijd niet als misbruik. */
+/**
+ * Een tweede vernieuwing met hetzelfde (net geroteerde) token binnen deze tijd (gelijktijdig verzoek, herhaling na een
+ * netwerkfout) trekt de toestemming niet in, maar krijgt wel invalid_grant: het nieuwe token wordt bewust nergens leesbaar
+ * bewaard. Pas daarna telt hergebruik als misbruik en vervalt de hele toestemming.
+ */
 const REFRESH_GRACE_MS = 60 * 1000;
 /** Hoelang een ingetrokken of verlopen toestemming nog zichtbaar blijft voordat het onderhoud hem wist. */
 const KEEP_ENDED_MS = 7 * 24 * 60 * 60 * 1000;
@@ -187,8 +191,8 @@ function createOAuthGrants(db) {
   }
 
   /**
-   * Vernieuwt de tokens met een vernieuwingstoken (rotatie: het oude vervalt). Wordt een vervallen vernieuwingstoken
-   * na de korte marge nog eens gebruikt, dan vervalt de hele toestemming.
+   * Vernieuwt de tokens met een vernieuwingstoken (rotatie: het oude vervalt). Een vervallen vernieuwingstoken geeft
+   * altijd invalid_grant; wordt het na de korte marge (REFRESH_GRACE_MS) nog eens gebruikt, dan vervalt ook de hele toestemming.
    * @param {{ refreshToken: string, clientIdHash: string, resource?: string }} input De aanvraag.
    * @returns {{ tokens: object, grant: object }|{ error: string, description: string }} De tokens of een OAuth-fout.
    */
