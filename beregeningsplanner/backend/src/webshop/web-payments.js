@@ -8,7 +8,7 @@
 // Een mislukte, geannuleerde of verlopen betaling laat de bestelling staan
 // zodat de klant opnieuw kan betalen; na de bewaartijd uit de instelling
 // shopPayment vervalt hij en komt de voorraad vrij (expireUnpaid, elk uur).
-const { configOf, validPaymentId } = require('./mollie');
+const { configOf, validPaymentId, MollieError } = require('./mollie');
 
 /**
  * Rondt een bedrag af op centen (leeg of ongeldig = 0).
@@ -173,7 +173,8 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
       if (!saved.changed) return { paid: true };
       return { checkoutUrl: created.checkoutUrl };
     } catch (error) {
-      log.warn(`Betaling starten voor ${order.number} mislukt: ${error.message}`);
+      // Een storing van Mollie kort in het log; een andere fout (in de app) met de hele aanroepketen.
+      log.warn(`Betaling starten voor ${order.number} mislukt:`, error instanceof MollieError ? error.message : error);
       return { error: 'De betaalpagina is nu niet bereikbaar. Probeer het zo opnieuw.', status: 502 };
     }
   }
@@ -245,7 +246,10 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
     try {
       made = await mollie.createRefund(config.apiKey, order.pay.paidId, { amount: value, description, idempotencyKey: `terug:${order.id}:${key}` });
     } catch (error) {
-      return { error: `Terugbetalen via Mollie lukte niet: ${String(error.message || error).slice(0, 200)}`, status: 502 };
+      // Een weigering of storing van Mollie heeft een leesbare melding; een andere fout is een fout in de app.
+      const reason = error instanceof MollieError ? String(error.message).slice(0, 200) : 'interne fout, de oorzaak staat in het serverlog';
+      if (!(error instanceof MollieError)) log.error(`[fout] Terugbetalen voor ${order.number}:`, error);
+      return Object.defineProperty({ error: `Terugbetalen via Mollie lukte niet: ${reason}`, status: 502 }, 'cause', { value: error, enumerable: false });
     }
     const at = new Date().toISOString();
     const out = orders.changePay(tenantId, order.id, (pay) => ((pay.refunds || []).some((entry) => entry.key === key) ? null
