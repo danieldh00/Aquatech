@@ -62,7 +62,6 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
         await mailer.send({ to: profile.email, subject: content.shop.subject, text: shopMessage.text, html: shopMessage.html });
       }
     } catch (failure) {
-      console.warn('Retourmail niet verstuurd:', failure && failure.code || '', failure && failure.message);
       error = mailFailure(failure).slice(0, 300);
     }
     log({ sent: !error, error });

@@ -125,13 +125,16 @@ const serverReply = (error) => String(error && error.response || '').replace(/\s
 /**
  * Zet een fout van send() om in een melding waar de gebruiker iets mee kan: wat er misging en waar het meestal aan
  * ligt. Eigen fouten van send() (not_configured, invalid_to, invalid_host) zijn al leesbaar. Het ruwe antwoord van de
- * mailserver staat erbij als die er is; de volledige fout gaat met withCause naar de debugmodus.
+ * mailserver staat erbij als die er is. De oorzaak (code en melding, nooit het wachtwoord) gaat altijd naar het
+ * serverlog; met withCause ook naar de debugmodus.
  * @param {Error & { code?: string, command?: string, responseCode?: number, response?: string }} error De fout van send().
  * @returns {string} De melding, beginnend met "Versturen mislukt:".
  */
 function mailFailure(error) {
   const code = String(error && error.code || '');
   const reply = serverReply(error);
+  // Eén plek voor het log, zodat elke aanroeper (offerte, afspraak, factuur, webshop) de oorzaak terugvindt.
+  console.warn('[mail] Versturen mislukt:', code || '(geen code)', String(error && error.message || error).slice(0, 300));
   /**
    * De melding met het antwoord van de mailserver erachter (als die er is).
    * @param {string} text Wat er misging en wat te controleren.
@@ -145,7 +148,9 @@ function mailFailure(error) {
   if (code === 'EAUTH') return withReply('de mailserver weigert de inloggegevens. Controleer gebruikersnaam en wachtwoord (bij Microsoft 365 of Gmail vaak een app-wachtwoord) in Beheer → Integraties → E-mail.');
   // Eerst TLS: een certificaatfout komt van nodemailer vaak als ESOCKET, maar de oplossing is een andere. Alleen bij
   // verbindingsfouten op de tekst letten: een weigering door de server (EAUTH, EENVELOPE, EMESSAGE) houdt zijn eigen melding.
-  if (code === 'ETLS' || (connectionProblem && /certificate|self.signed|TLS|SSL/i.test(String(error && error.message || '')))) {
+  // Een TLS-fout kan ook een eigen code van Node hebben (bijv. SELF_SIGNED_CERT_IN_CHAIN, UNABLE_TO_VERIFY_LEAF_SIGNATURE).
+  const tlsCode = code === 'ETLS' || /CERT|SIGNED|UNABLE_TO_VERIFY|TLS|SSL/.test(code);
+  if (tlsCode || (connectionProblem && /certificate|self.signed|TLS|SSL/i.test(String(error && error.message || '')))) {
     return withReply('de beveiligde verbinding (TLS) met de mailserver lukt niet. Controleer de poort en de instelling SSL/TLS; een ongeldig certificaat wordt niet geaccepteerd.');
   }
   if (connectionProblem) {

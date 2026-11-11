@@ -111,6 +111,8 @@ test('mailFailure: leesbare melding per soort fout, met het antwoord van de mail
   assert.match(mailFailure(Object.assign(new Error('self-signed certificate in certificate chain'), { code: 'ESOCKET' })), /beveiligde verbinding \(TLS\)/);
   assert.match(mailFailure(Object.assign(new Error('Connection closed unexpectedly'), { code: 'ESOCKET' })), /niet bereikbaar/);
   assert.match(mailFailure(Object.assign(new Error('unable to verify the first certificate'), { code: 'ETLS' })), /beveiligde verbinding \(TLS\)/);
+  assert.match(mailFailure(Object.assign(new Error('self-signed certificate in certificate chain'), { code: 'SELF_SIGNED_CERT_IN_CHAIN' })), /beveiligde verbinding \(TLS\)/);
+  assert.match(mailFailure(Object.assign(new Error('unable to verify the first certificate'), { code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' })), /beveiligde verbinding \(TLS\)/);
   assert.match(mailFailure(smtpError('EENVELOPE', { command: 'MAIL FROM', response: '550 5.7.1 Client does not have permissions to send as this sender' })), /weigert het afzenderadres.*\(mailserver: 550 5\.7\.1/);
   assert.match(mailFailure(smtpError('EENVELOPE', { command: 'RCPT TO', response: '550 5.1.1 User unknown' })), /weigert het adres van de ontvanger/);
   assert.match(mailFailure(smtpError('EMESSAGE', { response: '552 Message size exceeds' })), /weigert het bericht/);
@@ -121,6 +123,13 @@ test('mailFailure: leesbare melding per soort fout, met het antwoord van de mail
   // Een weigering door de server houdt zijn eigen melding, ook als TLS/SSL in de tekst staat.
   assert.match(mailFailure(smtpError('EMESSAGE', { response: '550 blocked by SSL policy' })), /weigert het bericht/);
   assert.ok(mailFailure(smtpError('EAUTH', { response: 'x'.repeat(1000) })).length < 450, 'antwoord ingekort');
+
+  // De oorzaak gaat altijd naar het serverlog (één plek voor alle aanroepers).
+  const logged = [];
+  const originalWarn = console.warn;
+  console.warn = (...parts) => logged.push(parts.join(' '));
+  try { mailFailure(new TypeError('sjabloon kapot')); } finally { console.warn = originalWarn; }
+  assert.deepStrictEqual(logged, ['[mail] Versturen mislukt: (geen code) sjabloon kapot']);
 });
 
 test('API: mislukte mail geeft een leesbare melding, de oorzaak alleen in de debugmodus', async () => {

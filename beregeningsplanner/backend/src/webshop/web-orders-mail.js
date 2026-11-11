@@ -88,7 +88,6 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
         await mailer.send({ to: profile.email, subject: `Nieuwe webshopbestelling ${order.number}`, text: shopMail.text, html: shopMail.html });
       }
     } catch (failure) {
-      console.warn('Webshopmail niet verstuurd:', failure && failure.code || '', failure && failure.message);
       error = mailFailure(failure).slice(0, 300);
     }
     orders.updateData(tenantId, order.id, { mail: { sent: !error, error, at: new Date().toISOString() } });
@@ -190,7 +189,6 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
       const subject = pickup ? `Je bestelling ${order.number} staat klaar` : tracking ? `Je bestelling ${order.number} is onderweg (volgcode ${tracking.code})` : `Je bestelling ${order.number} is onderweg`;
       await mailer.send({ to: order.email, subject, text: message.text, html: message.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
     } catch (failure) {
-      console.warn('Webshopmail niet verstuurd:', failure && failure.code || '', failure && failure.message);
       error = mailFailure(failure).slice(0, 300);
     }
     record({ sent: !error, error });
