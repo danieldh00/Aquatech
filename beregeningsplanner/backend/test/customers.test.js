@@ -260,3 +260,16 @@ test('klantkeuze in de offerte: zoekt, begrenst op 20 en laat uitgeschakelde kla
   assert.ok(!(await store.updateAccount(main, one[0].id, { disabled: true })).error);
   assert.deepStrictEqual((await installer.get('/app/api/quote-customers?q=keuze21@')).body.items, []);
 });
+
+test('klantkeuze in de offerte: geen klanten van een andere organisatie, en zonder recht offertes 403', async () => {
+  const { installer, as } = await setup();
+  assert.strictEqual((await installer.post('/app/api/customers', { displayName: 'Gedeelde Zoekterm Eigen' })).status, 201);
+  const foreign = await as('vreemd', 'ander');
+  assert.strictEqual((await foreign.post('/app/api/customers', { displayName: 'Gedeelde Zoekterm Vreemd' })).status, 201);
+  const own = (await installer.get('/app/api/quote-customers?q=gedeelde%20zoekterm')).body.items;
+  assert.deepStrictEqual(own.map((customer) => customer.displayName), ['Gedeelde Zoekterm Eigen']);
+  const theirs = (await foreign.get('/app/api/quote-customers?q=gedeelde%20zoekterm')).body.items;
+  assert.deepStrictEqual(theirs.map((customer) => customer.displayName), ['Gedeelde Zoekterm Vreemd']);
+  const planner = await as('planner1');
+  assert.strictEqual((await planner.get('/app/api/quote-customers?q=gedeelde')).status, 403);
+});
