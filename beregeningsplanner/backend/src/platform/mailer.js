@@ -139,12 +139,16 @@ function mailFailure(error) {
    */
   const withReply = (text) => `Versturen mislukt: ${text}${reply ? ` (mailserver: ${reply})` : ''}`;
   if (['not_configured', 'invalid_to', 'invalid_host'].includes(code)) return `Versturen mislukt: ${error.message}`;
+  // Geen code en geen antwoord: geen fout van de mailserver maar van de app (bijv. bij het opbouwen van de mail).
+  if (!code && !reply) return 'Versturen mislukt door een interne fout; de oorzaak staat in het serverlog.';
+  const connectionProblem = ['ETIMEDOUT', 'ECONNECTION', 'ESOCKET', 'EDNS'].includes(code);
   if (code === 'EAUTH') return withReply('de mailserver weigert de inloggegevens. Controleer gebruikersnaam en wachtwoord (bij Microsoft 365 of Gmail vaak een app-wachtwoord) in Beheer → Integraties → E-mail.');
-  // Eerst TLS: een certificaatfout komt van nodemailer vaak als ESOCKET, maar de oplossing is een andere.
-  if (code === 'ETLS' || /certificate|self.signed|TLS|SSL/i.test(String(error && error.message || ''))) {
+  // Eerst TLS: een certificaatfout komt van nodemailer vaak als ESOCKET, maar de oplossing is een andere. Alleen bij
+  // verbindingsfouten op de tekst letten: een weigering door de server (EAUTH, EENVELOPE, EMESSAGE) houdt zijn eigen melding.
+  if (code === 'ETLS' || (connectionProblem && /certificate|self.signed|TLS|SSL/i.test(String(error && error.message || '')))) {
     return withReply('de beveiligde verbinding (TLS) met de mailserver lukt niet. Controleer de poort en de instelling SSL/TLS; een ongeldig certificaat wordt niet geaccepteerd.');
   }
-  if (code === 'ETIMEDOUT' || code === 'ECONNECTION' || code === 'ESOCKET' || code === 'EDNS') {
+  if (connectionProblem) {
     return withReply('de mailserver is niet bereikbaar. Controleer server en poort (587 met STARTTLS of 465 met SSL/TLS) en of de server naar buiten mag verbinden.');
   }
   if (code === 'EENVELOPE') {
@@ -156,4 +160,7 @@ function mailFailure(error) {
   return withReply('de mailserver gaf een fout.');
 }
 
-module.exports = { createMailer, sanitizeMail, validEmail, mailFailure, MAIL_DEFAULTS };
+// Melding als de mailinstellingen zelf niet te lezen zijn (een interne fout: de oorzaak gaat naar het serverlog).
+const MAIL_SETUP_FAILED = 'Versturen mislukt: de mailinstellingen konden niet worden gelezen.';
+
+module.exports = { createMailer, sanitizeMail, validEmail, mailFailure, MAIL_SETUP_FAILED, MAIL_DEFAULTS };

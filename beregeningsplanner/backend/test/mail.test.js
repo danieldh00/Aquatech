@@ -110,13 +110,16 @@ test('mailFailure: leesbare melding per soort fout, met het antwoord van de mail
   assert.match(mailFailure(smtpError('ECONNECTION')), /niet bereikbaar/);
   assert.match(mailFailure(Object.assign(new Error('self-signed certificate in certificate chain'), { code: 'ESOCKET' })), /beveiligde verbinding \(TLS\)/);
   assert.match(mailFailure(Object.assign(new Error('Connection closed unexpectedly'), { code: 'ESOCKET' })), /niet bereikbaar/);
-  assert.match(mailFailure(new Error('unable to verify the first certificate')), /beveiligde verbinding \(TLS\)/);
+  assert.match(mailFailure(Object.assign(new Error('unable to verify the first certificate'), { code: 'ETLS' })), /beveiligde verbinding \(TLS\)/);
   assert.match(mailFailure(smtpError('EENVELOPE', { command: 'MAIL FROM', response: '550 5.7.1 Client does not have permissions to send as this sender' })), /weigert het afzenderadres.*\(mailserver: 550 5\.7\.1/);
   assert.match(mailFailure(smtpError('EENVELOPE', { command: 'RCPT TO', response: '550 5.1.1 User unknown' })), /weigert het adres van de ontvanger/);
   assert.match(mailFailure(smtpError('EMESSAGE', { response: '552 Message size exceeds' })), /weigert het bericht/);
   assert.strictEqual(mailFailure(Object.assign(new Error('De mailserver moet een openbaar adres hebben.'), { code: 'invalid_host' })), 'Versturen mislukt: De mailserver moet een openbaar adres hebben.');
   // Een onbekende fout: geen interne melding, wel het antwoord van de server als dat er is.
-  assert.strictEqual(mailFailure(new TypeError('Cannot read properties of undefined')), 'Versturen mislukt: de mailserver gaf een fout.');
+  assert.strictEqual(mailFailure(new TypeError('Cannot read properties of undefined')), 'Versturen mislukt door een interne fout; de oorzaak staat in het serverlog.');
+  assert.strictEqual(mailFailure(smtpError('EPROTOCOL', { response: '421 Service not available' })), 'Versturen mislukt: de mailserver gaf een fout. (mailserver: 421 Service not available)');
+  // Een weigering door de server houdt zijn eigen melding, ook als TLS/SSL in de tekst staat.
+  assert.match(mailFailure(smtpError('EMESSAGE', { response: '550 blocked by SSL policy' })), /weigert het bericht/);
   assert.ok(mailFailure(smtpError('EAUTH', { response: 'x'.repeat(1000) })).length < 450, 'antwoord ingekort');
 });
 

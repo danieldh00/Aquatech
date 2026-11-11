@@ -8,9 +8,11 @@ Foutmeldingen nalopen, deel 2: e-mail en verkoop.
   controleren (inloggegevens/app-wachtwoord, server en poort, TLS/certificaat, afzender of ontvanger geweigerd, bericht geweigerd),
   met het antwoord van de mailserver erachter (zonder regeleinden, hoogstens 200 tekens). Een onbekende fout geeft geen interne
   melding meer. Gebruikt bij het versturen van offertes, afspraken, facturen, de testmail en de webshopmails (bestelling,
-  verzending, retour).
+  verzending, retour). Een fout zonder SMTP-code en zonder antwoord (een fout in de app) heet *"interne fout; de oorzaak staat in
+  het serverlog"*; de webshopmails loggen de oorzaak. De TLS-herkenning op de tekst geldt alleen bij verbindingsfouten.
 - De mailroutes bewaren de volledige fout met `withCause` (debugmodus: code, commando, antwoord). Een fout bij het lezen van de
   mailinstellingen in de webshopmails komt in het serverlog in plaats van als ruwe melding bij de bestelling.
+  Die vaste melding is `MAIL_SETUP_FAILED` uit mailer.js.
 - `VismaError` krijgt een optionele oorzaak: niet bereikbaar, mislukte aanmelding (`error`/`error_description` van Visma, nooit
   tokens) en een API-fout (methode, pad zonder query, status en het begin van het antwoord). Het foutantwoord van de Visma-routes
   bewaart de oorzaak.
