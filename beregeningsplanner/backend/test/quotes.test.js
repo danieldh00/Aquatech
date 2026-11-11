@@ -499,6 +499,13 @@ test('API: btw verlegd op een offerte wordt bij VIES gecontroleerd en als bewijs
     assert.strictEqual(forged.status, 200);
     assert.notStrictEqual(forged.body.data.vatShift.requestId, 'VERZONNEN');
     assert.strictEqual(forged.body.data.vatShift.name, 'BAKKER TUINEN BV');
+    // Autosave met hetzelfde nummer hergebruikt het bewaarde bewijs: geen nieuwe vraag aan VIES.
+    const callsBefore = vies.calls.length;
+    const again = await piet.put(`/app/api/quotes/${ok.body.id}`, body({ on: true, number: 'DE 123 456 789' }));
+    assert.strictEqual(again.status, 200);
+    assert.strictEqual(vies.calls.length, callsBefore);
+    assert.strictEqual(again.body.data.vatShift.status, 'geldig');
+    assert.strictEqual(again.body.data.vatShift.checkedAt, forged.body.data.vatShift.checkedAt);
     // Een nummer dat VIES ongeldig noemt wordt niet opgeslagen.
     const invalid = await piet.put(`/app/api/quotes/${ok.body.id}`, body({ on: true, number: 'DE999999999' }));
     assert.strictEqual(invalid.status, 409);

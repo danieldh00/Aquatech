@@ -627,6 +627,7 @@
     else if (shift.status === 'geldig') status.textContent = `Controle bij VIES: geldig${shift.name ? ` (${shift.name})` : ''}, ${new Date(shift.checkedAt).toLocaleDateString('nl-NL')}${shift.requestId ? `, kenmerk ${shift.requestId}` : ''}. Dit staat als bewijs op de offerte.`;
     else if (shift.status === 'onbereikbaar') status.textContent = 'VIES is nu niet bereikbaar: de controle is nog niet vastgelegd. Sla de offerte later opnieuw op.';
     else status.textContent = 'Het btw-nummer wordt bij het opslaan gecontroleerd bij VIES.';
+    if (shift.number) status.textContent += ' De btw-tarieven per regel blijven bewaard, maar tellen niet mee zolang de btw is verlegd.';
   }
 
   /** Zet het vinkje "Btw verlegd" om: de totalen passen zich meteen aan en de offerte wordt bewaard. */
@@ -1335,7 +1336,7 @@
         const start = sectionRow.number + 1;
         for (const line of lines) {
           const notChosen = !QuoteCore.included(line);
-          const row = sheet.addRow([line.code, `${line.description}${line.optional ? (notChosen ? ' (optie, niet gekozen)' : ' (optie)') : ''}`, line.qty, line.unit, line.price, line.vat]);
+          const row = sheet.addRow([line.code, `${line.description}${line.optional ? (notChosen ? ' (optie, niet gekozen)' : ' (optie)') : ''}`, line.qty, line.unit, line.price, QuoteCore.vatShifted(data) ? 'verlegd' : line.vat]);
           // Een niet gekozen optie telt niet mee in de totalen.
           row.getCell(7).value = notChosen ? 0 : { formula: `C${row.number}*E${row.number}` };
           if (notChosen) row.font = { italic: true, color: { argb: 'FF8A96A3' } };

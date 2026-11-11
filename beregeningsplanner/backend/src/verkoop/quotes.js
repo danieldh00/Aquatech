@@ -702,14 +702,20 @@ function registerQuoteRoutes(app, ctx) {
    * Is VIES niet bereikbaar, dan staat de uitkomst als "onbereikbaar" op de offerte, zodat de gebruiker dat ziet.
    * @param {object} req Het verzoek (voor de instellingen van de organisatie).
    * @param {object|undefined} data De ruwe offertegegevens uit de browser (of undefined bij alleen een statuswijziging).
+   * @param {object|null} [stored] De opgeslagen offerte: staat daar al hetzelfde nummer met een geldige uitkomst (of een onbereikbaar van minder dan een minuut geleden), dan wordt dat bewijs hergebruikt en gaat er geen nieuwe vraag naar VIES.
    * @returns {Promise<{ data: object|undefined }|{ error: string, message: string }>} De gegevens met bewijs, of de fout.
    */
-  async function applyVatShift(req, data) {
+  async function applyVatShift(req, data, stored = null) {
     const shift = data && data.vatShift;
     const number = shift ? normalizeVatNumber(shift.number) : '';
     if (!shift || shift.on !== true || !number) return { data };
     if (!validVatNumber(number) || number.startsWith('NL')) {
       return { error: 'invalid_vat_number', message: 'Btw verleggen kan alleen met een geldig btw-nummer uit een ander EU-land dan Nederland.' };
+    }
+    const before = stored && stored.data && stored.data.vatShift;
+    const age = before && before.checkedAt ? Date.now() - Date.parse(before.checkedAt) : Infinity;
+    if (before && before.on === true && before.number === number && (before.status === 'geldig' || (before.status === 'onbereikbaar' && age < 60 * 1000))) {
+      return { data: { ...data, vatShift: { on: true, number, status: before.status, checkedAt: before.checkedAt, requestId: before.requestId, name: before.name } } };
     }
     const requester = normalizeVatNumber(settingsOf(req).get('quoteProfile').vatNumber);
     const result = ctx.vies ? await ctx.vies.check(number, validVatNumber(requester) ? requester : '') : { status: 'onbereikbaar', checkedAt: new Date().toISOString(), requestId: '', name: '' };
@@ -731,7 +737,10 @@ function registerQuoteRoutes(app, ctx) {
     try {
       const data = req.body && req.body.data;
       if (!validData(data)) return next();
-      const shifted = await applyVatShift(req, data);
+      const stored = req.params.id ? quotes.get(req.user, req.params.id) : null;
+      // Een geaccordeerde offerte ligt vast (de opslag geeft 409): daar hoeft VIES niet voor te worden gevraagd.
+      if (stored && stored.acceptance) return next();
+      const shifted = await applyVatShift(req, data, stored);
       if (shifted.error) return res.status(shifted.error === 'vat_invalid' ? 409 : 400).json({ error: shifted.error, message: shifted.message });
       req.body.data = shifted.data;
       req.vatShiftChecked = Boolean(shifted.data.vatShift && shifted.data.vatShift.on === true && shifted.data.vatShift.status === 'geldig');
