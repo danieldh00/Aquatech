@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.9.4',
+      date: '2026-11-11',
+      title: 'Visma-koppeling inzichtelijk',
+      items: [
+        { text: 'Bij Facturen > Visma staat nu in gewone taal welke toestemmingen Visma gaf, wat er heen en weer gaat en wat de koppeling niet doet.', for: ['facturen'] },
+        { text: 'Nieuw logboek bij Visma: wat er wanneer naar Visma is gestuurd of ervan gelezen, ook de fouten. Een fout die steeds terugkomt staat één keer, met een teller.', for: ['facturen'] },
+      ],
+    },
+    {
       version: '1.9.3',
       date: '2026-11-11',
       title: 'Kleuren en Visma per organisatie',

@@ -58,3 +58,18 @@ td .fail { color: var(--danger, #c62828); }
   #vi-arts td { white-space: normal; }
   #vi-arts select { min-width: 0; }
 }
+
+/* Visma: toestemmingen, onderdelen en logboek. */
+.vi-scopes { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; }
+.vi-scopes li { padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
+.vi-scopes .sub { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+#vi-overview h4 { margin: 14px 0 6px; font-size: 14px; }
+#vi-parts td.wrap, #vi-log td.wrap { white-space: normal; }
+#vi-log td.nowrap { white-space: nowrap; }
+#vi-logcard .row { align-items: center; gap: 12px; margin-bottom: 10px; }
+@media (max-width: 640px) {
+  #vi-parts, #vi-parts tbody, #vi-parts tr, #vi-parts td, #vi-log, #vi-log tbody, #vi-log tr, #vi-log td { display: block; width: auto; }
+  #vi-parts thead, #vi-log thead { display: none; }
+  #vi-parts tr, #vi-log tr { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  #vi-parts td, #vi-log td { padding: 2px 0; border: 0; white-space: normal; }
+}

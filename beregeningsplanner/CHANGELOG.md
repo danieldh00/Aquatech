@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.4
+
+Visma-koppeling inzichtelijk: wat mag ze, wat doet ze, en een logboek (Facturen → Visma). Deel 1 van 2; de bediening (onderdelen aan/uit, pauzeren) volgt.
+
+- **Overzicht in gewone taal**: kaart *Wat kan de koppeling?* met de toestemmingen die Visma gaf (uit het tokenantwoord, `visma.scopes`; terugval op de aangevraagde), per onderdeel (klanten, verkoop-/creditfacturen, artikelen en termijnen, administratienaam) de richting en wanneer het gebeurt, en wat de koppeling niet doet. Zuivere functie `describeConnection` in `verkoop/visma.js`, meegegeven in `GET /api/visma` (`overview`).
+- **Logboek** (migratie 52, tabel `visma_log`, `verkoop/visma-log.js`): verbonden/verbroken/afgebroken aanmelding, klant aangemaakt of gekoppeld, factuur doorgestuurd of mislukt, artikelen opgehaald, mislukte vernieuwing van het token; met handmatig/automatisch en de naam van de gebruiker. `GET /api/visma/log?limit=&before=&errors=1` (recht `facturen`), keyset-paginering (nieuwste eerst, 100 per pagina), filter *Alleen fouten*.
+- Een fout die zich herhaalt (zelfde onderdeel, verwijzing en melding) wordt één regel met een teller (bron, naam en tijdstip van de eerste keer blijven staan, `last_at` toont de laatste; sortering en cursor schuiven dus niet) in plaats van elke 10 minuten een nieuwe; een geslaagde leesactie binnen 30 minuten wordt niet opnieuw gelogd. Alleen korte meldingen, nooit tokens, secrets of volledige antwoorden (test bewaakt dat). Bewaartermijn = `auditRetentionDays` (onderhoud elk uur).
+- Prestaties: één query per logpagina via index `(tenant_id, created_at, id)`; schrijven kost één opzoekquery op index `(tenant_id, kind, reference, created_at)` plus één insert/update, alleen bij een Visma-actie; niets op warme paden. Een fout bij het loggen stopt het doorsturen nooit.
+- Tests: logopslag (samenvoegen, paginering, bewaartermijn, organisatiescheiding), API (verbinden, doorsturen, fouten, verbreken, rechten 403, andere organisatie leeg), overzicht, queriebudget; ook tegen PostgreSQL.
+
 ## 1.9.3
 
 Kleuren en Visma-app verhuisd van Hoofdbeheer naar de organisatie zelf.

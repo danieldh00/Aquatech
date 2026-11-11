@@ -100,6 +100,14 @@
             <button class="btn danger" id="vi-disconnect" hidden>Verbinding verbreken</button>
           </div>
         </div>
+        <div class="card-form" id="vi-overview" hidden>
+          <h3>Wat kan de koppeling?</h3>
+          <h4 id="vi-scopes-title">Toestemmingen</h4>
+          <ul class="vi-scopes" id="vi-scopes"></ul>
+          <h4>Wat er heen en weer gaat</h4>
+          <div class="tablewrap"><table class="grid" id="vi-parts"></table></div>
+          <p class="muted small" id="vi-notdone"></p>
+        </div>
         <form id="vi-app" class="card-form settings" novalidate>
           <h3>App-gegevens van Visma</h3>
           <p class="muted small">Registreer een app in het Visma Developer Portal en vul hier de gegevens in. Ze gelden alleen voor deze organisatie. Het secret wordt nooit teruggestuurd naar de browser.</p>
@@ -133,6 +141,17 @@
           </div>
           <div class="err" role="alert"></div>
         </form>
+        <div class="card-form" id="vi-logcard" hidden>
+          <h3>Logboek</h3>
+          <p class="muted small">Wat er naar Visma is gestuurd of ervan gelezen, met de uitkomst. Een fout die zich herhaalt staat één keer, met een teller. Regels verdwijnen na de bewaartermijn van het auditlog.</p>
+          <div class="row">
+            <label class="chk"><input type="checkbox" id="vi-log-errors"> Alleen fouten</label>
+            <button class="btn" type="button" id="vi-log-refresh">Vernieuwen</button>
+          </div>
+          <div class="tablewrap"><table class="grid" id="vi-log"></table></div>
+          <p class="muted small" id="vi-log-empty" hidden>Nog niets in het logboek.</p>
+          <div class="row"><button class="btn" type="button" id="vi-log-more" hidden>Meer laden</button></div>
+        </div>
       </section>
 
       <section id="tab-export" class="tabpane" hidden>

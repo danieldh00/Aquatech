@@ -46,6 +46,7 @@ const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors')
 const { createInvoiceSender } = require('./verkoop/invoice-mail');
 const { createInvoiceStore, registerInvoiceRoutes } = require('./verkoop/invoices');
 const { createVisma, registerVismaRoutes } = require('./verkoop/visma');
+const { createVismaLog } = require('./verkoop/visma-log');
 const { createPortalStore, registerPortalRoutes } = require('./uitvoering/portal');
 const { createLocationStore, registerLocationRoutes } = require('./uitvoering/locations');
 const { createServiceRequestStore, registerServiceRequestRoutes } = require('./uitvoering/service-requests');
@@ -1949,8 +1950,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch,
   });
   // Definitieve facturen als verkoopfactuur naar Visma eAccounting (visma.js).
+  const vismaLog = createVismaLog(database);
   const visma = createVisma({
-    db: database, settingsFor: (id) => settingsFor(id),
+    db: database, settingsFor: (id) => settingsFor(id), vismaLog,
     debtors: debtorStore, invoices: invoiceStore, ...(vismaFetch ? { fetchImpl: vismaFetch } : {}),
   });
   invoiceStore.onFinalized((tid) => visma.schedule(tid));
@@ -2632,6 +2634,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       removed.aiUsage = aiUsage.prune(environment.id, environmentSettings.get('auditRetentionDays'));
       removed.drawings = store.purgeStaleDrawings(environment.id, DRAWING_RETENTION_DAYS);
       removed.accountTokens = accountTokens.purgeExpired(environment.id);
+      removed.vismaLog = vismaLog.prune(environment.id, environmentSettings.get('auditRetentionDays'));
       for (const [kind, count] of Object.entries(removed)) total[kind] = (total[kind] || 0) + count;
     }
     return total;

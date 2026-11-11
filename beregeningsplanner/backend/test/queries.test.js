@@ -209,6 +209,10 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.strictEqual((await client.get('/app/api/visma')).body.connected, false);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
+    // Visma-logboek: één pagina is één query (plus de sessie).
+    probe.reset();
+    assert.deepStrictEqual((await client.get('/app/api/visma/log')).body, { items: [], next: null });
+    assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
   } finally {
     server.close();
   }
