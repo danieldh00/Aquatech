@@ -40,6 +40,8 @@ function fakeVisma() {
     const requestUrl = new URL(url);
     const method = init.method || 'GET';
     if (requestUrl.pathname === '/connect/revocation') {
+      if (visma.onRevocationStart) visma.onRevocationStart();
+      if (visma.holdRevocation) await visma.holdRevocation;
       if (visma.failRevocation) return reply(500, { error: 'server_error' });
       visma.revocations.push({ form: Object.fromEntries(new URLSearchParams(init.body)), auth: init.headers.Authorization });
       return reply(200, {});
@@ -75,6 +77,7 @@ function fakeVisma() {
       return reply(200, { Meta: { TotalNumberOfPages: 1 }, Data: visma.customers.filter((customer) => match && customer.CustomerNumber === match[1]) });
     }
     if (apiPath === '/customers' && method === 'POST') {
+      if (visma.onCustomerPost) await visma.onCustomerPost();
       const customer = { ...JSON.parse(init.body), Id: `cust-${visma.customers.length + 1}` };
       visma.customers.push(customer);
       return reply(201, customer);
@@ -585,6 +588,103 @@ test('visma: bediening – pauzeren, onderdelen aan/uit, klanten niet aanmaken e
     assert.strictEqual(last.kind, 'verbroken');
     assert.strictEqual(last.ok, false);
     assert.match(last.message, /intrekken bij Visma lukte niet/);
+  } finally {
+    server.close();
+  }
+});
+
+test('visma: pauze of onderdeel uit tijdens het aanmaken van de klant houdt de factuur tegen, en een niet-booleaanse pauze doet niets', async () => {
+  const { server, as, visma } = await setup();
+  try {
+    const baas = await as('baas');
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
+    await connect(baas);
+    await baas.put('/app/api/visma/settings', { articles: { 'producten:21': ART.producten }, termsOfPaymentId: TERMS });
+
+    // Een bestaande pauze blijft staan bij een waarde die geen boolean is.
+    assert.strictEqual((await baas.put('/app/api/visma/controls', { paused: true })).body.settings.paused, true);
+    for (const value of ['ja', 'false', 0, null, {}]) {
+      assert.strictEqual((await baas.put('/app/api/visma/controls', { paused: value })).body.settings.paused, true, `paused: ${JSON.stringify(value)}`);
+    }
+    assert.strictEqual((await baas.put('/app/api/visma/controls', { paused: false })).body.settings.paused, false);
+
+    // Pauzeren terwijl de klant wordt aangemaakt: de factuur gaat niet naar Visma, en dat is geen fout van de factuur.
+    const invoice = await finalInvoice(baas, { name: 'Nieuwe Klant' }, [{ description: 'Sproeier', qty: 1, price: 10 }]);
+    /** Pauzeert de koppeling precies op het moment dat Visma de nieuwe klant aanmaakt. */
+    visma.onCustomerPost = async () => { visma.onCustomerPost = null; await baas.put('/app/api/visma/controls', { paused: true }); };
+    const blocked = await baas.post(`/app/api/visma/invoices/${invoice.id}`, {});
+    assert.strictEqual(blocked.status, 409);
+    assert.strictEqual(blocked.body.error, 'paused');
+    assert.strictEqual(visma.invoices.length, 0, 'niets verstuurd');
+    const listed = (await baas.get('/app/api/invoices')).body.items.find((item) => item.id === invoice.id);
+    assert.ok(!listed.vismaError, 'pauze komt niet als fout bij de factuur');
+    assert.ok(!(await baas.get('/app/api/visma/log?limit=100')).body.items.some((entry) => entry.kind === 'factuur' && entry.ok === false), 'en niet als fout in het logboek');
+
+    // Hetzelfde voor een onderdeel dat tijdens het aanmaken van de klant uitgaat.
+    await baas.put('/app/api/visma/controls', { paused: false });
+    const other = await finalInvoice(baas, { name: 'Tweede Klant' }, [{ description: 'Sproeier', qty: 1, price: 10 }]);
+    /** Zet verkoopfacturen uit precies op het moment dat Visma de nieuwe klant aanmaakt. */
+    visma.onCustomerPost = async () => { visma.onCustomerPost = null; await baas.put('/app/api/visma/controls', { parts: { invoices: false } }); };
+    const off = await baas.post(`/app/api/visma/invoices/${other.id}`, {});
+    assert.strictEqual(off.body.error, 'part_off');
+    assert.strictEqual(visma.invoices.length, 0);
+  } finally {
+    server.close();
+  }
+});
+
+test('visma: tijdens het verbreken start er niets nieuws naar Visma en is het intrekken niet te omzeilen', async () => {
+  const { server, as, visma } = await setup();
+  try {
+    const baas = await as('baas');
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
+    await connect(baas);
+    await baas.put('/app/api/visma/settings', { articles: { 'producten:21': ART.producten }, termsOfPaymentId: TERMS });
+    const invoice = await finalInvoice(baas, { name: 'Jan', email: 'jan@voorbeeld.test' }, [{ description: 'Sproeier', qty: 1, price: 10 }]);
+
+    let release;
+    let started;
+    const hasStarted = new Promise((resolve) => { started = resolve; });
+    visma.holdRevocation = new Promise((resolve) => { release = resolve; });
+    visma.onRevocationStart = started;
+    const disconnecting = baas.post('/app/api/visma/disconnect', {});
+    await hasStarted;
+    const during = await baas.post(`/app/api/visma/invoices/${invoice.id}`, {});
+    assert.strictEqual(during.status, 409);
+    assert.strictEqual(during.body.error, 'not_connected');
+    assert.strictEqual((await baas.post('/app/api/visma/sync', {})).body.failed, 1, 'doorsturen tijdens het verbreken mislukt netjes');
+    assert.strictEqual(visma.invoices.length, 0, 'niets naar Visma tijdens het verbreken');
+    release();
+    const off = await disconnecting;
+    assert.strictEqual(off.body.revoked, true);
+    assert.strictEqual(off.body.connected, false);
+    assert.strictEqual(visma.invoices.length, 0);
+    assert.strictEqual(visma.revocations.length, 1);
+
+    // Na het verbreken kan opnieuw verbonden en doorgestuurd worden (de blokkade is weg).
+    visma.holdRevocation = null;
+    await connect(baas);
+    assert.strictEqual((await baas.post(`/app/api/visma/invoices/${invoice.id}`, {})).status, 200);
+  } finally {
+    server.close();
+  }
+});
+
+test('visma: wijzigen van de app-gegevens komt in het logboek, zonder het secret', async () => {
+  const { server, as } = await setup();
+  try {
+    const baas = await as('baas');
+    assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', environment: 'sandbox', clientSecret: 'heel-geheim-secret' })).status, 200);
+    const entries = (await baas.get('/app/api/visma/log?limit=100')).body.items.filter((entry) => entry.kind === 'instelling');
+    assert.strictEqual(entries.length, 1);
+    assert.match(entries[0].message, /clientId/);
+    assert.match(entries[0].message, /clientSecret/);
+    assert.ok(!entries[0].message.includes('heel-geheim-secret') && !entries[0].message.includes('aquatech-test'), 'alleen veldnamen, geen waarden');
+    assert.strictEqual(entries[0].actor, 'Baas');
+    assert.strictEqual(entries[0].source, 'handmatig');
+    // Ongewijzigd opslaan geeft geen nieuwe regel.
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', environment: 'sandbox' });
+    assert.strictEqual((await baas.get('/app/api/visma/log?limit=100')).body.items.filter((entry) => entry.kind === 'instelling').length, 1);
   } finally {
     server.close();
   }

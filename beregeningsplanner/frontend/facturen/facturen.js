@@ -451,20 +451,28 @@
     $('#vi-controls').querySelectorAll('[data-part]').forEach((checkbox) => { checkbox.checked = settings.parts[checkbox.dataset.part] !== false; });
   }
 
+  /** Wachtrij van de bediening: wijzigingen gaan één voor één naar de server. */
+  let vismaControlsQueue = Promise.resolve();
+
   /**
    * Slaat een wijziging van de bediening op en ververst de stand en het logboek.
    * @param {object} change paused (boolean) en/of parts (object met booleans)
    * @returns {Promise<void>}
    */
-  async function saveVismaControls(change) {
-    try {
-      state.visma = await api('visma/controls', { method: 'PUT', body: change });
-      renderVisma();
-      loadVismaLog(true).catch(() => {});
-    } catch (error) {
-      toast(error.message, true);
-      renderVismaControls();
-    }
+  function saveVismaControls(change) {
+    // Na elkaar versturen: een ouder antwoord mag de vinkjes niet terugzetten naar een verouderde stand.
+    const run = vismaControlsQueue.then(async () => {
+      try {
+        state.visma = await api('visma/controls', { method: 'PUT', body: change });
+        renderVisma();
+        loadVismaLog(true).catch(() => {});
+      } catch (error) {
+        toast(error.message, true);
+        renderVismaControls();
+      }
+    });
+    vismaControlsQueue = run;
+    return run;
   }
 
   /** Toont de toestemmingen en de onderdelen van de koppeling in gewone taal. */

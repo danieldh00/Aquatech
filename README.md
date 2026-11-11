@@ -20,7 +20,7 @@ webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als databas
 ### Beheer in het kort
 
 - **Instellingen** (Beheer → Instellingen) staan in de database en werken zonder herstart: AI-sleutel, mail,
-  webshop, Mollie, Visma, seizoensherinneringen enz. Docker-omgevingsvariabelen zijn alleen startwaarden.
+  webshop, Mollie, seizoensherinneringen enz. (Visma staat onder Facturen → Visma). Docker-omgevingsvariabelen zijn alleen startwaarden.
   Geheimen worden versleuteld opgeslagen en nooit volledig getoond.
 - **Testomgeving**: elke organisatie kan een testomgeving maken met eigen gegevens en testdata. Koppelingen naar
   buiten (webshop, Mollie, mail, Visma) gaan daar niet mee.

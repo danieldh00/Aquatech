@@ -14,6 +14,10 @@
   --at-green-light: #5fd08f;
   --at-teal: #2cb0c0;
   --at-danger: #c62828;
+  --at-ok: #2e7d32;
+  --at-warn: #ef6c00;
+  --at-preview-bg: #f4f6f8;
+  --at-ink-strong: #1f2a33;
   --at-surface: #fff;
   --at-shadow: rgba(0, 0, 0, 0.18);
   --at-font: Montserrat, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

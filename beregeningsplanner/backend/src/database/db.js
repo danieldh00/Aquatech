@@ -1134,6 +1134,10 @@ const MIGRATIONS = [
   CREATE INDEX visma_log_tenant ON visma_log (tenant_id, created_at, id);
   CREATE INDEX visma_log_reference ON visma_log (tenant_id, kind, reference, created_at);
   `,
+  // 53: index voor de opschoonquery van het Visma-logboek (tenant_id = ? AND last_at < ?).
+  `
+  CREATE INDEX visma_log_last ON visma_log (tenant_id, last_at);
+  `,
 ];
 
 /**

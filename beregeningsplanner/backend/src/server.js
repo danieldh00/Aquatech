@@ -2335,6 +2335,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // hoofdtenant is de standaard voor organisaties zonder eigen thema. Een testomgeving volgt
   // zijn live-tenant, dus daar werkt dit op de live-tenant. Leeg = huisstijl van AquaTech Service.
   /**
+   * Of het account van de aanvrager in een live-omgeving woont: een testaccount (alleen in een testomgeving) wijzigt het live-thema niet.
+   * @param {object} req Het verzoek.
+   * @returns {boolean} True voor een account van een live-tenant (ook als het in een testomgeving kijkt).
+   */
+  function accountIsLive(req) {
+    const own = store.getTenant(req.user.home_tenant_id || req.user.tenant_id);
+    return Boolean(own && own.environment === 'live');
+  }
+
+  /**
    * Beschrijft het thema van de organisatie van de aanvrager voor het scherm Kleuren.
    * @param {object} req Het verzoek.
    * @returns {{ defaults: object, mainTenantId: string, tenantId: string, tenantName: string, theme: object, inherited: object, canEdit: boolean }} Of de aanvrager mag wijzigen (`canEdit`), het thema van deze organisatie (`theme`, leeg = geen eigen thema) en het standaardthema (`inherited`) waar zij anders op terugvalt.
@@ -2344,7 +2354,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const homeRow = store.getTenant(homeId);
     return { defaults: Theme.DEFAULTS, mainTenantId: tenant.id, tenantId: homeId, tenantName: homeRow ? homeRow.name : '',
       theme: settingsFor(homeId).get('theme'), inherited: settings.get('theme'),
-      canEdit: homeId !== tenant.id || !multitenancyOn() || Boolean(req.user.platform_admin) };
+      canEdit: accountIsLive(req) && (homeId !== tenant.id || !multitenancyOn() || Boolean(req.user.platform_admin)) };
   }
 
   app.get('/api/admin/theme', (req, res) => { res.json(themeView(req)); });
@@ -2353,6 +2363,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const targetId = homeOf(req.tenantId);
     const tenantRow = store.getTenant(targetId);
     if (!tenantRow || tenantRow.environment !== 'live') return res.status(404).json({ error: 'not_found', message: 'Organisatie niet gevonden.' });
+    if (!accountIsLive(req)) return res.status(403).json({ error: 'forbidden', message: 'Een testaccount wijzigt het thema van de live-omgeving niet.' });
     // Het thema van de hoofdtenant is de standaard voor alle andere organisaties: met meer organisaties alleen voor een hoofdbeheerder.
     if (targetId === tenant.id && multitenancyOn() && !req.user.platform_admin) {
       return res.status(403).json({ error: 'forbidden', message: 'Het standaardthema voor alle organisaties wijzigt alleen een hoofdbeheerder.' });

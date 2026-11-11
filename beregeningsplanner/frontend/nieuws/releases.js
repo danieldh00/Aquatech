@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.9.6',
+      date: '2026-11-11',
+      title: 'Kleine verbeteringen',
+      items: [
+        { text: 'Verbinding met Visma verbreken is nu betrouwbaarder: tijdens het verbreken wordt er niets meer doorgestuurd. Pauzeren werkt ook als je het precies tijdens het doorsturen doet.', for: ['facturen'] },
+        { text: 'Een account uit een testomgeving kan de kleuren van de live-omgeving niet meer wijzigen.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.9.5',
       date: '2026-11-11',
       title: 'Visma-koppeling zelf bedienen',

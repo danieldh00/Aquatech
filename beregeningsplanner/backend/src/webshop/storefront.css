@@ -65,8 +65,8 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .shop-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .shop-action { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; color: var(--at-shop-navy); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
 a.shop-action:hover { background: var(--at-page); }
-a.shop-action.shop-admin { background: var(--at-shop-green); color: var(--at-white); }
-a.shop-action.shop-admin:hover { background: var(--at-shop-green-dark); }
+a.shop-action.shop-admin { background: var(--at-shop-green-dark); color: var(--at-white); }
+a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .shop-action.cart { cursor: default; opacity: 0.75; }
 .shop-action.cart b { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--at-shop-teal); color: var(--at-white); font-size: 0.8rem; }
 

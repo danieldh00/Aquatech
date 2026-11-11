@@ -138,6 +138,19 @@ test('beheerder kiest kleuren van de eigen organisatie: standaard, eigen thema, 
     assert.match((await piet.get('/app/shared/theme.css')).text, /--at-navy: #0b3d2e;/);
     assert.strictEqual((await piet.post('/app/api/environment', { tenantId: groen.id })).status, 200);
 
+    // Een beheerder met alleen een testaccount ziet het thema, maar wijzigt het live-thema niet.
+    await store.createAccount(env.id, { username: 'groen.tessa', displayName: 'Tessa', role: 'beheerder', password: PW });
+    const tessa = createClient(base);
+    assert.strictEqual((await tessa.login('groen.tessa', PW, 'groen')).status, 200);
+    response = await tessa.get('/app/api/admin/theme');
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.canEdit, false, 'testaccount mag niet wijzigen');
+    response = await tessa.put('/app/api/admin/theme', { colors: { navy: '#000000' } });
+    assert.strictEqual(response.status, 403);
+    assert.match((await piet.get('/app/shared/theme.css')).text, /--at-navy: #0b3d2e;/, 'live-thema ongewijzigd');
+    response = await tessa.put('/app/api/admin/theme', { colors: null });
+    assert.strictEqual(response.status, 403, 'ook terugzetten mag niet');
+
     // Zonder recht beheer: geen toegang.
     const jan = createClient(base);
     assert.strictEqual((await jan.login('jan', PW, 'groen')).status, 200);
