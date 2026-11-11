@@ -1300,6 +1300,7 @@
     if (section.pane === 'shopinhoud' && activePane !== 'shopinhoud') window.BeheerWebshopInhoud.load();
     if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
+    if (section.pane === 'kleuren') window.BeheerKleuren.load();
     if (section.pane === 'audit') loadAudit();
     activePane = section.pane;
     if (location.hash === `#${section.id}`) return;
@@ -1370,6 +1371,7 @@
     window.BeheerSproeiers.init({ toast });
     window.BeheerRollen.init({ toast, onChange: setRoles });
     window.BeheerAiKosten.init({ toast });
+    window.BeheerKleuren.init({ toast });
     /** Sluit het detailvenster. */
     $('#detail-close').onclick = () => { $('#detail').hidden = true; };
     /**

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.9.3
+
+Kleuren en Visma-app verhuisd van Hoofdbeheer naar de organisatie zelf.
+
+- Nieuwe sectie **Beheer > Kleuren** (groep *Organisatie & gebruikers*, `beheer/kleuren.js`): elke beheerder kiest de kleuren van de
+  eigen organisatie, met contrastcontrole en voorbeeld. Het thema van de hoofdtenant blijft de standaard voor organisaties zonder
+  eigen thema; een testomgeving volgt zijn live-tenant.
+- API `GET|PUT /api/admin/theme` (recht `beheer`) vervangt `/api/platform/theme`. De organisatie komt uit de sessie (`homeOf(req.tenantId)`),
+  een `tenantId` in de invoer wordt niet gebruikt, dus een beheerder raakt nooit een andere organisatie. Een hoofdbeheerder die het
+  thema van een andere organisatie wil wijzigen, opent die organisatie via Hoofdbeheer > Openen. Audit `thema_gewijzigd` staat nu in de eigen organisatie.
+- **Visma per organisatie**: de app-registratie (client ID, omgeving, secret, redirect URI) staat nu per omgeving in Facturen → Visma
+  (`GET|PUT /api/visma/app`, recht `facturen`) in plaats van platformbreed in Hoofdbeheer. `vismaApp`/`vismaClientSecret` zijn `internal` + `liveOnly`;
+  `createVisma` gebruikt `app(tenantId)` voor aanmelden, tokens, API-host en status. `/api/platform/visma` is weg.
+- Hoofdbeheer houdt alleen wat platformbreed is: tenants, hoofdbeheerders en Multitenancy. De knoppen *Kleuren* en *Visma* zijn weg.
+- Geen databasewijziging (bestaande instellingen blijven in de tabel; in ontwikkeling, geen migratie van oude waarden), geen extra queries op warme paden.
+
 ## 1.9.2
 
 Webshop: knop naar het beheer.

@@ -1,5 +1,5 @@
 // Kleurthema van de app, gedeeld door de server (require) en de browser
-// (window.AquatechTheme). Een hoofdbeheerder kiest drie kleuren in Hoofdbeheer;
+// (window.AquatechTheme). Een beheerder kiest drie kleuren in Beheer > Kleuren;
 // de rest (donker groen voor hover/tekst, licht groen voor vlakken) wordt
 // daaruit afgeleid. Zonder keuze geldt de huisstijl van AquaTech Service.
 //

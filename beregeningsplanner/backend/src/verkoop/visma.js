@@ -1,8 +1,9 @@
 // Koppeling met Visma eAccounting (Spiris), deel 3 van "Brincr vervangen".
 //
-// - De app (client ID en secret, sandbox of productie) is één registratie
-//   voor het hele platform: instelling vismaApp + geheim vismaClientSecret in
-//   de hoofdtenant, in te vullen door een hoofdbeheerder (Hoofdbeheer).
+// - Elke organisatie heeft haar eigen app-registratie bij Visma (client ID en
+//   secret, sandbox of productie): instelling vismaApp + geheim
+//   vismaClientSecret per omgeving, in te vullen in Facturen → Visma (recht
+//   facturen). Er is dus geen platformbrede koppeling meer.
 // - Elke organisatie verbindt haar eigen Visma-administratie via OAuth2
 //   (knop in Facturen → Visma). Het refresh token staat versleuteld per
 //   omgeving (geheim vismaRefreshToken); het access token (60 min) alleen in
@@ -65,7 +66,7 @@ const cleanText = (value, maxLength = 200) => String(value == null ? '' : value)
 const guid = (value) => (typeof value === 'string' && /^[0-9a-fA-F-]{32,36}$/.test(value) ? value : '');
 
 /**
- * Schoont de platforminstelling vismaApp op (zonder secret; dat is een eigen geheim).
+ * Schoont de instelling vismaApp op (zonder secret; dat is een eigen geheim).
  * @param {object} raw De invoer.
  * @returns {{ clientId: string, environment: string, redirectUri: string }} De app-registratie.
  */
@@ -219,10 +220,10 @@ function invoiceBody(invoice, customerId, vismaSettings, invoicing, creditedInvo
 
 /**
  * Maakt de Visma-koppeling: OAuth2, API-aanroepen en het doorsturen van facturen.
- * @param {object} ctx db, settingsFor(tenantId), mainTenantId, debtors, invoices, fetchImpl en log.
+ * @param {object} ctx db, settingsFor(tenantId), debtors, invoices, fetchImpl en log.
  * @returns {object} authorizeUrl, finishConnect, disconnect, api, options, pushInvoice, sync, run, schedule, runAll, status en app.
  */
-function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchImpl = fetch, log = console }) {
+function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, log = console }) {
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -235,11 +236,12 @@ function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchIm
   const timers = new Map();
 
   /**
-   * De app-registratie bij Visma (platformbreed, in de hoofdtenant).
+   * De app-registratie bij Visma van een omgeving.
+   * @param {string} tenantId Id van de omgeving.
    * @returns {object} clientId, environment, redirectUri, secret, configured en hosts.
    */
-  function app() {
-    const settings = settingsFor(mainTenantId);
+  function app(tenantId) {
+    const settings = settingsFor(tenantId);
     const registration = settings.get('vismaApp');
     const secret = settings.get('vismaClientSecret');
     return { ...registration, secret, configured: Boolean(registration.clientId && secret), hosts: HOSTS[registration.environment] };
@@ -265,8 +267,8 @@ function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchIm
    * @returns {string} Het adres.
    */
   function authorizeUrl(tenantId, userId) {
-    const registration = app();
-    if (!registration.configured) throw new VismaError('not_configured', 'De Visma-koppeling is nog niet ingesteld door de hoofdbeheerder (Hoofdbeheer → Visma).', 409);
+    const registration = app(tenantId);
+    if (!registration.configured) throw new VismaError('not_configured', 'Vul eerst de app-gegevens van Visma in (Facturen → Visma).', 409);
     const now = Date.now();
     for (const [key, entry] of states) if (entry.exp < now) states.delete(key);
     const state = crypto.randomBytes(24).toString('base64url');
@@ -277,11 +279,12 @@ function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchIm
 
   /**
    * Vraagt tokens op bij Visma.
+   * @param {string} tenantId Id van de omgeving (haar app-registratie wordt gebruikt).
    * @param {object} form De formuliervelden (grant_type en code of refresh_token).
    * @returns {Promise<object>} Het antwoord met access_token (en eventueel refresh_token).
    */
-  async function tokenRequest(form) {
-    const registration = app();
+  async function tokenRequest(tenantId, form) {
+    const registration = app(tenantId);
     let res;
     try {
       res = await fetchImpl(`${registration.hosts.identity}/connect/token`, {
@@ -313,14 +316,14 @@ function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchIm
     states.delete(String(state || ''));
     if (!pending || pending.exp < Date.now() || pending.tenantId !== tenantId || pending.userId !== userId) throw new VismaError('invalid_state', 'Deze aanmelding is verlopen of hoort niet bij jouw sessie. Probeer opnieuw te verbinden.', 400);
     if (!code || typeof code !== 'string' || code.length > 2000) throw new VismaError('invalid_code', 'Visma gaf geen geldige code terug.', 400);
-    const granted = await tokenRequest({ grant_type: 'authorization_code', code, redirect_uri: app().redirectUri });
+    const granted = await tokenRequest(tenantId, { grant_type: 'authorization_code', code, redirect_uri: app(tenantId).redirectUri });
     if (!granted.refresh_token) throw new VismaError('token_failed', 'Visma gaf geen refresh token (scope offline_access ontbreekt).');
     const settings = settingsFor(tenantId);
     tokens.set(tenantId, { access: granted.access_token, exp: Date.now() + (Number(granted.expires_in) || 3600) * 1000 - 60000 });
     settings.update({ vismaRefreshToken: granted.refresh_token }, userId);
     let companyName = '';
     try { companyName = cleanText((await api(tenantId, 'GET', '/companysettings')).Name); } catch { /* naam is niet nodig */ }
-    settings.update({ visma: { ...vismaSettingsOf(tenantId), companyName, environment: app().environment, connectedAt: new Date().toISOString(), connectedBy: userName || '' } }, userId);
+    settings.update({ visma: { ...vismaSettingsOf(tenantId), companyName, environment: app(tenantId).environment, connectedAt: new Date().toISOString(), connectedBy: userName || '' } }, userId);
     return { companyName };
   }
 
@@ -345,8 +348,8 @@ function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchIm
     if (cached && cached.exp > Date.now()) return cached.access;
     const refresh = settingsFor(tenantId).get('vismaRefreshToken');
     if (!refresh) throw new VismaError('not_connected', 'Deze omgeving is niet verbonden met Visma.', 409);
-    if (!app().configured) throw new VismaError('not_configured', 'De Visma-koppeling is nog niet ingesteld door de hoofdbeheerder.', 409);
-    const granted = await tokenRequest({ grant_type: 'refresh_token', refresh_token: refresh });
+    if (!app(tenantId).configured) throw new VismaError('not_configured', 'Vul eerst de app-gegevens van Visma in (Facturen → Visma).', 409);
+    const granted = await tokenRequest(tenantId, { grant_type: 'refresh_token', refresh_token: refresh });
     tokens.set(tenantId, { access: granted.access_token, exp: Date.now() + (Number(granted.expires_in) || 3600) * 1000 - 60000 });
     // Visma kan een nieuw refresh token geven; dan het nieuwe bewaren.
     if (granted.refresh_token && granted.refresh_token !== refresh) settingsFor(tenantId).update({ vismaRefreshToken: granted.refresh_token });
@@ -366,7 +369,7 @@ function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchIm
     const token = await accessToken(tenantId);
     let res;
     try {
-      res = await fetchImpl(`${app().hosts.api}${apiPath}`, {
+      res = await fetchImpl(`${app(tenantId).hosts.api}${apiPath}`, {
         method, headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
         body: body ? JSON.stringify(body) : undefined, redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
       });
@@ -566,7 +569,7 @@ function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchIm
    * @returns {object} configured, environment, connected, settings, pending en failed.
    */
   function status(tenantId) {
-    const registration = app();
+    const registration = app(tenantId);
     const vismaSettings = vismaSettingsOf(tenantId);
     const counts = prepare(`SELECT COUNT(*) AS n, SUM(CASE WHEN visma_error <> '' THEN 1 ELSE 0 END) AS failed FROM invoices
       WHERE tenant_id = ? AND status <> 'concept' AND visma_invoice_id IS NULL${vismaSettings.since ? ' AND invoice_date >= ?' : ''}`)
@@ -583,11 +586,11 @@ function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchIm
 /**
  * Registreert de routes (recht facturen): status, opties uit Visma,
  * instellingen, verbinden (OAuth) en verbreken, nu doorsturen, één factuur
- * doorsturen. Platform (hoofdbeheerder, onder /api/platform): de app-gegevens.
+ * doorsturen en de app-gegevens van de eigen omgeving.
  * @param {object} app De Express-app.
- * @param {object} ctx visma, requireRight, requireJson, audit, settingsFor, mainTenantId en syncLimiter.
+ * @param {object} ctx visma, requireRight, requireJson, audit, settingsFor en syncLimiter.
  */
-function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, settingsFor, mainTenantId, syncLimiter }) {
+function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, settingsFor, syncLimiter }) {
   const requireInvoices = requireRight('facturen');
   /**
    * De actieve omgeving van het verzoek.
@@ -683,26 +686,34 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
     res.json(invoice);
   }));
 
-  // ---------- Platform: de app-registratie bij Visma (hoofdbeheerder) ----------
-  app.get('/api/platform/visma', (req, res) => {
-    const settings = settingsFor(mainTenantId);
-    res.json({ app: settings.get('vismaApp'), secretSet: Boolean(settings.get('vismaClientSecret')), defaultRedirect: DEFAULT_REDIRECT });
+  // ---------- De app-registratie bij Visma van de eigen omgeving (recht facturen) ----------
+  /**
+   * De app-gegevens van een omgeving, zonder het secret.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ app: object, secretSet: boolean, defaultRedirect: string }} De registratie, of het secret is ingevuld, en de standaard redirect URI.
+   */
+  const appView = (tenantId) => {
+    const settings = settingsFor(tenantId);
+    return { app: settings.get('vismaApp'), secretSet: Boolean(settings.get('vismaClientSecret')), defaultRedirect: DEFAULT_REDIRECT };
+  };
+  app.get('/api/visma/app', requireInvoices, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(appView(tenantOf(req)));
   });
-  app.put('/api/platform/visma', requireJson, (req, res) => {
+  app.put('/api/visma/app', requireJson, requireInvoices, (req, res) => {
     const body = req.body || {};
     const patch = { vismaApp: sanitizeVismaApp(body) };
     if (typeof body.clientSecret === 'string' && body.clientSecret.trim()) patch.vismaClientSecret = body.clientSecret.trim();
     if (body.clearSecret === true) patch.vismaClientSecret = '';
     try {
-      settingsFor(mainTenantId).update(patch, req.user.id);
+      settingsFor(tenantOf(req)).update(patch, req.user.id);
     } catch (error) {
       // Alleen een ongeldige instelling is een 400 met de melding; een andere fout (database) wordt een 500 met foutcode.
       if (!error || error.name !== 'SettingsError') throw error;
       return res.status(400).json({ error: 'invalid_setting', field: error.field, message: error.message });
     }
-    audit(req, 'instellingen_gewijzigd', { fields: Object.keys(patch) }, undefined, mainTenantId);
-    const settings = settingsFor(mainTenantId);
-    res.json({ app: settings.get('vismaApp'), secretSet: Boolean(settings.get('vismaClientSecret')), defaultRedirect: DEFAULT_REDIRECT });
+    audit(req, 'instellingen_gewijzigd', { fields: Object.keys(patch) });
+    res.json(appView(tenantOf(req)));
   });
 }
 

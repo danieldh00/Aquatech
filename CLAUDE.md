@@ -356,7 +356,8 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - **Kleurthema** (0.44.0): `frontend/shared/theme.js` (UMD: `sanitize`,
   `problems` = contrast met wit, `derive`, `vars`, `css`, `apply`). Instelling
   `theme` (`platform: true`, Beheer > Instellingen weigert hem), alleen via
-  `GET|PUT /api/platform/theme`. Hoofdtenant = standaard voor iedereen, live-tenant
+  `GET|PUT /api/admin/theme` (Beheer > Kleuren, recht `beheer`, 1.9.3: de organisatie komt uit de sessie, nooit uit de invoer; Hoofdbeheer
+  heeft alleen nog platformbreed: tenants, hoofdbeheerders, Multitenancy). Hoofdtenant = standaard voor iedereen, live-tenant
   optioneel eigen thema (`themeFor` in server.js, testomgeving volgt
   live-tenant). Server levert `shared/theme.css` (openbaar, na brand.css op
   elke pagina, statisch leeg bestand voor file://), injecteert het in
@@ -504,8 +505,10 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - **Visma eAccounting** (0.65.0, `backend/src/verkoop/visma.js`, migratie 28):
   OAuth2 per omgeving (refresh token = geheim `vismaRefreshToken`, keuzes in
   `visma`; beide `internal`: alleen via `/api/visma/*`, recht `facturen`).
-  App-registratie platformbreed in de hoofdtenant (`vismaApp` +
-  `vismaClientSecret`, Hoofdbeheer → Visma, `/api/platform/visma`). Factuur
+  App-registratie óók per omgeving (1.9.3, `vismaApp` + `vismaClientSecret`, beide
+  `internal` + `liveOnly`, formulier in Facturen → Visma, `GET|PUT /api/visma/app`,
+  recht `facturen`; `app(tenantId)` in visma.js): elke organisatie heeft een eigen
+  koppeling, er is niets platformbreeds meer. Factuur
   → verkoopfactuur, debiteur → klant (nummer = debiteurnummer), regel →
   Visma-artikel per omzetcategorie. Automatisch alleen met `visma.autoSync`
   (standaard uit) via `invoices.onFinalized` + `app.locals.vismaAll`, vanaf

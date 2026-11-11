@@ -100,6 +100,23 @@
             <button class="btn danger" id="vi-disconnect" hidden>Verbinding verbreken</button>
           </div>
         </div>
+        <form id="vi-app" class="card-form settings" novalidate>
+          <h3>App-gegevens van Visma</h3>
+          <p class="muted small">Registreer een app in het Visma Developer Portal en vul hier de gegevens in. Ze gelden alleen voor deze organisatie. Het secret wordt nooit teruggestuurd naar de browser.</p>
+          <div class="row">
+            <label>Client ID<input name="clientId" maxlength="120" autocomplete="off" spellcheck="false"></label>
+            <label>Omgeving<select name="environment">
+              <option value="sandbox">Sandbox (testen)</option>
+              <option value="production">Productie</option>
+            </select></label>
+            <label>Client secret<input name="clientSecret" type="password" maxlength="500" autocomplete="new-password"></label>
+          </div>
+          <label class="chk" id="vi-app-clear" hidden><input type="checkbox" name="clearSecret"> Secret wissen</label>
+          <label>Redirect URI<input name="redirectUri" maxlength="300" spellcheck="false"></label>
+          <p class="muted small" id="vi-app-hint"></p>
+          <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="vi-form" class="card-form settings" novalidate hidden>
           <h3>Artikel per omzetcategorie</h3>
           <p class="muted small">Kies voor elke omzetcategorie die je gebruikt een artikel uit Visma (bijv. een artikel <i>Arbeid</i> met omzetrekening 8140 en 21% btw). Een factuur met een regel in een categorie zonder artikel blijft staan met een melding.</p>

@@ -569,7 +569,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/stock', express.json({ limit: '256kb' }));
   app.use('/api/invoices', express.json({ limit: '1mb' }));
   app.use('/api/debtors', express.json({ limit: '16kb' }));
-  app.use(['/api/visma', '/api/platform/visma'], express.json({ limit: '32kb' }));
+  app.use('/api/visma', express.json({ limit: '32kb' }));
   app.use(express.json({ limit: '16kb' }));
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -1669,7 +1669,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const platformField = [...Object.keys(patch), ...resets].find((key) => FIELDS[key]?.platform || FIELDS[key]?.internal);
     if (platformField) {
       return res.status(400).json({ error: 'invalid_setting', field: platformField,
-        message: FIELDS[platformField].internal ? 'Deze instelling wijzig je in de module zelf.' : 'Deze instelling wijzig je in Hoofdbeheer.' });
+        message: FIELDS[platformField].internal ? 'Deze instelling wijzig je in de module zelf.' : (platformField === 'theme' ? 'Kleuren wijzig je in Beheer > Kleuren.' : 'Deze instelling wijzig je in Hoofdbeheer.') });
     }
     if (req.tenantId !== tenant.id && ['storefront', 'shopPlanner', 'shopOrdering', 'shopShipping', 'shopPayment', 'mollieApiKey'].some((key) => [...Object.keys(patch), ...resets].includes(key))) {
       return res.status(400).json({ error: 'invalid_setting', field: 'storefront', message: 'De eigen webshop geldt alleen voor de hoofdtenant.' });
@@ -1950,7 +1950,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
   // Definitieve facturen als verkoopfactuur naar Visma eAccounting (visma.js).
   const visma = createVisma({
-    db: database, settingsFor: (id) => settingsFor(id), mainTenantId: tenant.id,
+    db: database, settingsFor: (id) => settingsFor(id),
     debtors: debtorStore, invoices: invoiceStore, ...(vismaFetch ? { fetchImpl: vismaFetch } : {}),
   });
   invoiceStore.onFinalized((tid) => visma.schedule(tid));
@@ -2329,19 +2329,27 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json({ ok: true });
   });
 
-  // Kleurthema: standaard voor alle organisaties (hoofdtenant) en optioneel een
-  // eigen thema per live-tenant. Leeg = huisstijl van AquaTech Service.
-  app.get('/api/platform/theme', (req, res) => {
-    const tenants = inScopeOnly(store.listTenants()).filter((candidate) => candidate.id !== tenant.id)
-      .map((candidate) => ({ id: candidate.id, name: candidate.name, slug: candidate.slug, theme: settingsFor(candidate.id).get('theme') }));
-    res.json({ defaults: Theme.DEFAULTS, global: settings.get('theme'), mainTenantId: tenant.id, tenants });
-  });
+  // Kleurthema (Beheer > Kleuren): elke organisatie stelt het eigen thema in; het thema van de
+  // hoofdtenant is de standaard voor organisaties zonder eigen thema. Een testomgeving volgt
+  // zijn live-tenant, dus daar werkt dit op de live-tenant. Leeg = huisstijl van AquaTech Service.
+  /**
+   * Beschrijft het thema van de organisatie van de aanvrager voor het scherm Kleuren.
+   * @param {object} req Het verzoek.
+   * @returns {{ defaults: object, mainTenantId: string, tenantId: string, tenantName: string, theme: object, inherited: object }} Het thema van deze organisatie (`theme`, leeg = geen eigen thema) en het standaardthema (`inherited`) waar zij anders op terugvalt.
+   */
+  function themeView(req) {
+    const homeId = homeOf(req.tenantId);
+    const homeRow = store.getTenant(homeId);
+    return { defaults: Theme.DEFAULTS, mainTenantId: tenant.id, tenantId: homeId, tenantName: homeRow ? homeRow.name : '',
+      theme: settingsFor(homeId).get('theme'), inherited: settings.get('theme') };
+  }
 
-  app.put('/api/platform/theme', requireJson, (req, res) => {
-    const targetId = req.body?.tenantId || tenant.id;
+  app.get('/api/admin/theme', (req, res) => { res.json(themeView(req)); });
+
+  app.put('/api/admin/theme', requireJson, (req, res) => {
+    const targetId = homeOf(req.tenantId);
     const tenantRow = store.getTenant(targetId);
-    if (tenantRow && !inScope(tenantRow)) return multitenancyOffError(res);
-    if (!tenantRow || tenantRow.environment !== 'live') return res.status(404).json({ error: 'not_found', message: 'Organisatie niet gevonden (een testomgeving volgt het thema van zijn tenant).' });
+    if (!tenantRow || tenantRow.environment !== 'live') return res.status(404).json({ error: 'not_found', message: 'Organisatie niet gevonden.' });
     const raw = req.body?.colors;
     const target = settingsFor(targetId);
     if (raw == null || (typeof raw === 'object' && !Object.keys(raw).length)) {
@@ -2360,14 +2368,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
     const theme = target.get('theme');
     console.log(`Kleurthema van ${tenantRow.name} gewijzigd door ${req.user.display_name}: ${Object.keys(theme).length ? Object.values(theme).join(' ') : 'standaard'}`);
-    audit(req, 'thema_gewijzigd', { tenantId: targetId, theme }, undefined, tenant.id);
+    audit(req, 'thema_gewijzigd', { tenantId: targetId, theme }, undefined, targetId);
     res.json({ tenantId: targetId, theme });
   });
 
-  // ---------- Visma eAccounting: koppeling per omgeving, app-registratie in Hoofdbeheer ----------
-  // Na de /api/platform-controle, zodat /api/platform/visma alleen voor hoofdbeheerders is.
+  // ---------- Visma eAccounting: koppeling en app-registratie per omgeving (Facturen → Visma) ----------
   registerVismaRoutes(app, {
-    visma, requireRight, requireJson, audit, settingsFor: (id) => settingsFor(id), mainTenantId: tenant.id,
+    visma, requireRight, requireJson, audit, settingsFor: (id) => settingsFor(id),
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => req.tenantId || tenant.id }),
   });
 
@@ -2514,7 +2521,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/shared/theme.css', (req, res) => {
     identify(req);
     res.setHeader('Cache-Control', 'no-cache');
-    res.type('css').send(`/* Kleurthema (Hoofdbeheer > Kleuren). */\n${Theme.css(themeFor(req.tenantId))}`);
+    res.type('css').send(`/* Kleurthema (Beheer > Kleuren). */\n${Theme.css(themeFor(req.tenantId))}`);
   });
 
   /**

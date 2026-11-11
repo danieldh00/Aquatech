@@ -387,7 +387,9 @@
    * @returns {Promise<void>}
    */
   async function loadVisma(withOptions = false) {
-    state.visma = await api('visma');
+    const [status, appData] = await Promise.all([api('visma'), api('visma/app')]);
+    state.visma = status;
+    renderVismaApp(appData);
     renderVisma();
     if (withOptions && state.visma.connected && !state.vismaOptions) await loadVismaOptions();
   }
@@ -407,13 +409,29 @@
     renderVismaForm();
   }
 
+  /**
+   * Vult het formulier met de app-gegevens van Visma (het secret zelf komt nooit terug).
+   * @param {{ app: object, secretSet: boolean, defaultRedirect: string }} data Het antwoord van de server.
+   */
+  function renderVismaApp(data) {
+    const formElement = $('#vi-app');
+    formElement.clientId.value = data.app.clientId || '';
+    formElement.environment.value = data.app.environment || 'sandbox';
+    formElement.redirectUri.value = data.app.redirectUri || data.defaultRedirect;
+    formElement.clientSecret.value = '';
+    formElement.clientSecret.placeholder = data.secretSet ? 'Ingevuld; laat leeg om te behouden' : 'Nog niet ingevuld';
+    formElement.clearSecret.checked = false;
+    $('#vi-app-clear').hidden = !data.secretSet;
+    $('#vi-app-hint').textContent = `Registreer precies deze redirect URI bij Visma (standaard ${data.defaultRedirect}). Andere adressen moeten met https beginnen en op /api/visma/callback eindigen.`;
+  }
+
   /** Toont de stand van de Visma-koppeling en de knoppen die erbij horen. */
   function renderVisma() {
     const visma = state.visma;
     if (!visma) return;
     const settings = visma.settings;
     let html;
-    if (!visma.configured) html = '<p class="notice warn">De koppeling met Visma is nog niet ingesteld door de beheerder van het platform. Zodra dat is gebeurd, kun je hier je administratie verbinden.</p>';
+    if (!visma.configured) html = '<p class="notice warn">Vul hieronder de app-gegevens van Visma in. Daarna kun je hier je administratie verbinden.</p>';
     else if (!visma.connected) html = `<p>Nog niet verbonden. Met <b>Verbinden met Visma</b> log je in bij Visma (${esc(ENVS[visma.environment])}) en kies je de administratie.</p>`;
     else {
       html = `<p><span class="pill st-betaald">Verbonden</span> ${esc(settings.companyName || 'Visma-administratie')}${settings.environment === 'sandbox' ? ' <span class="pill">sandbox</span>' : ''}`
@@ -460,6 +478,27 @@
   /** Koppelt de knoppen en het formulier van Visma. */
   function setupVisma() {
     const formElement = $('#vi-form');
+    /**
+     * Slaat de app-gegevens op; een andere app of omgeving betekent opnieuw verbinden.
+     * @param {SubmitEvent} event het verzenden
+     * @returns {Promise<void>}
+     */
+    $('#vi-app').onsubmit = async (event) => {
+      event.preventDefault();
+      const appForm = $('#vi-app');
+      const errorBox = $('.err', appForm);
+      errorBox.textContent = '';
+      try {
+        const saved = await api('visma/app', { method: 'PUT', body: {
+          clientId: appForm.clientId.value.trim(), environment: appForm.environment.value, redirectUri: appForm.redirectUri.value.trim(),
+          clientSecret: appForm.clientSecret.value, clearSecret: appForm.clearSecret.checked,
+        } });
+        renderVismaApp(saved);
+        state.visma = await api('visma');
+        renderVisma();
+        toast('App-gegevens opgeslagen');
+      } catch (error) { errorBox.textContent = error.message; }
+    };
     /**
      * Start het verbinden met Visma (doorsturen naar de aanmelding).
      * @returns {Promise<void>}

@@ -375,6 +375,27 @@
         <h3>Nozzles</h3>
         <div class="tablewrap"><table class="grid" id="sp-nozzles"></table></div>
       </section>
+      <section id="tab-kleuren" class="tabpane" hidden>
+        <p class="muted small">Kies de kleuren van de app voor deze organisatie. Zonder keuze geldt de huisstijl van AquaTech Service of het standaardthema van het platform. Testomgevingen volgen hun organisatie. Te lichte kleuren worden geweigerd, want er staat witte tekst op.</p>
+        <form id="th-form" class="card-form settings" novalidate>
+          <p class="muted small" id="th-note"></p>
+          <div class="row th-fields" id="th-fields"></div>
+          <div class="th-preview" id="th-preview" aria-label="Voorbeeld">
+            <div class="th-bar"><b>AquaTech</b><span>Dashboard</span></div>
+            <div class="th-body">
+              <h4>Voorbeeld van een pagina</h4>
+              <p class="th-soft">Een licht vlak met <b>donkere actietekst</b>.</p>
+              <div class="th-card">Kaart met accentrand</div>
+              <span class="th-btn">Opslaan</span> <span class="th-btn dark">Knop bij aanwijzen</span>
+            </div>
+          </div>
+          <div class="row">
+            <button class="btn primary" type="submit" id="th-save">Opslaan</button>
+            <button class="btn" type="button" id="th-reset"></button>
+          </div>
+          <div id="th-err" class="err" role="alert"></div>
+        </form>
+      </section>
       <section id="tab-aikosten" class="tabpane" hidden>
         <div class="filters">
           <select id="ai-range" aria-label="Periode">
@@ -427,6 +448,7 @@
 
   <script src="../shared/env.js"></script>
   <script src="../shared/roles.js"></script>
+  <script src="../shared/theme.js"></script>
   <script src="../shared/ai-models.js"></script>
   <script src="../beregening/js/sprinklerlib.js"></script>
   <script src="../beregening/js/catalog.js"></script>
@@ -440,6 +462,7 @@
   <script src="sproeiers.js"></script>
   <script src="rollen.js"></script>
   <script src="aikosten.js"></script>
+  <script src="kleuren.js"></script>
   <script src="beheer.js"></script>
 </body>
 </html>
