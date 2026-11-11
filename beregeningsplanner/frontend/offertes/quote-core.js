@@ -137,6 +137,8 @@
       terms: limitText(fields.terms, 6000),
       discountPct: round2(clampNumber(fields.discountPct, 0, 100)),
       paymentDays: sanitizePaymentDays(fields.paymentDays),
+      // Taal van het document ('nl' of 'en'), uit de documenttaal van de klant.
+      language: fields.language === 'en' ? 'en' : 'nl',
       vatShift: sanitizeVatShift(fields.vatShift),
       // Op de offerte: alle regels met prijzen, of per onderdeel alleen een totaalbedrag.
       layout: fields.layout === 'totaal' ? 'totaal' : 'specificatie',

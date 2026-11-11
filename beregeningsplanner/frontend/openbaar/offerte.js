@@ -64,18 +64,27 @@
     const quote = state.quote;
     const profile = state.profile || {};
     const open = quote.status === 'verzonden' && !quote.acceptance && !expired(quote);
-    document.title = `Offerte ${quote.number}${profile.companyName ? ` – ${profile.companyName}` : ''}`;
-    $('#o-company').textContent = profile.companyName || 'Offerte';
+    const lang = window.DocText.clean(quote.data.language);
+    document.documentElement.lang = lang;
+    /**
+     * Een vaste tekst in de documenttaal van de offerte.
+     * @param {string} key Sleutel uit DocText.
+     * @param {object} [values] Waarden voor {naam}.
+     * @returns {string} De tekst.
+     */
+    const tr = (key, values) => window.DocText.text(lang, key, values);
+    document.title = `${tr('quote.title')} ${quote.number}${profile.companyName ? ` – ${profile.companyName}` : ''}`;
+    $('#o-company').textContent = profile.companyName || tr('quote.title');
     $('#print').innerHTML = QuoteView.documentHtml(quote, profile, { interactive: open });
     $('#print').hidden = false;
     $('#o-print').hidden = false;
     message('');
     const acceptance = quote.acceptance;
-    if (acceptance && acceptance.answer === 'akkoord') status(`U heeft deze offerte geaccordeerd op ${QuoteView.dateTime(acceptance.at)}. Bedankt! U kunt hem hieronder als PDF opslaan.`, 'ok');
-    else if (acceptance && acceptance.answer === 'afgewezen') status(`Deze offerte is afgewezen op ${QuoteView.dateTime(acceptance.at)}. Neem gerust contact op als u een aangepaste offerte wilt.`, 'bad');
-    else if (quote.status !== 'verzonden') status('Deze offerte is al beantwoord.', 'warn');
-    else if (expired(quote)) status(`Deze offerte was geldig tot ${QuoteView.date(quote.data.validUntil)}. Neem contact op voor een nieuwe offerte.`, 'warn');
-    else status(`Bekijk de offerte en geef onderaan uw akkoord. Geldig tot ${QuoteView.date(quote.data.validUntil)}.${preview ? ' (Voorbeeld: het openen telt niet als bekeken.)' : ''}`);
+    if (acceptance && acceptance.answer === 'akkoord') status(tr('public.accepted', { when: QuoteView.dateTime(acceptance.at, lang) }), 'ok');
+    else if (acceptance && acceptance.answer === 'afgewezen') status(tr('public.rejected', { when: QuoteView.dateTime(acceptance.at, lang) }), 'bad');
+    else if (quote.status !== 'verzonden') status(tr('public.answered'), 'warn');
+    else if (expired(quote)) status(tr('public.expired', { date: QuoteView.date(quote.data.validUntil, lang) }), 'warn');
+    else status(`${tr('public.open', { date: QuoteView.date(quote.data.validUntil, lang) })}${preview ? tr('public.preview') : ''}`);
     $('#o-sign').hidden = !open;
     if (!open) return;
     /**
@@ -94,6 +103,7 @@
     };
     state.form = QuoteView.signForm($('#o-sign'), {
       termsLink: Boolean(quote.data.terms),
+      language: lang,
       total: () => QuoteView.totalsOf(quote).total,
       async onRespond(payload) {
         const out = await api('quote/respond', { ...payload, options: QuoteView.selectedOptions(quote) });

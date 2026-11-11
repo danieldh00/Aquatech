@@ -23,6 +23,7 @@ const copyTo = (user) => (user && preferencesOf(user).mailCopy && validEmail(use
 
 const Core = require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js'));
 const InvoiceCore = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
+const DocText = require(path.join(FRONTEND_DIR, 'shared', 'doc-text.js'));
 const { normalizeVatNumber, validVatNumber } = require('../webshop/vat');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 
@@ -214,7 +215,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     }
     if (quote.acceptance) {
       const acceptance = quote.acceptance;
-      out.acceptance = { answer: acceptance.answer, name: acceptance.name, at: acceptance.at, via: acceptance.via, signature: acceptance.signature || null, reason: acceptance.reason || '', totalIncl: acceptance.totalIncl, contentHash: acceptance.contentHash || null , paymentDays: acceptance.paymentDays === undefined ? null : acceptance.paymentDays };
+      out.acceptance = { answer: acceptance.answer, name: acceptance.name, at: acceptance.at, via: acceptance.via, signature: acceptance.signature || null, reason: acceptance.reason || '', totalIncl: acceptance.totalIncl, contentHash: acceptance.contentHash || null, paymentDays: acceptance.paymentDays === undefined ? null : acceptance.paymentDays };
     }
     return out;
   }
@@ -890,15 +891,26 @@ function registerQuoteRoutes(app, ctx) {
     const total = Number(acceptance.totalIncl || 0).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' });
     const jobs = [];
     if (acceptance.answer === 'akkoord' && validEmail(data.customer.email)) {
+      // De bevestiging aan de klant staat in de documenttaal van de offerte.
+      const lang = data.language;
+      /**
+       * Een vaste tekst in de taal van het document.
+       * @param {string} key Sleutel uit DocText.
+       * @param {object} [values] Waarden voor {naam}.
+       * @returns {string} De tekst.
+       */
+      const tr = (key, values) => DocText.text(lang, key, values);
+      const customerWhen = new Date(acceptance.at).toLocaleString(DocText.localeOf(lang), { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Amsterdam' });
+      const customerTotal = Number(acceptance.totalIncl || 0).toLocaleString(DocText.localeOf(lang), { style: 'currency', currency: 'EUR' });
       jobs.push(mailer.send({
         to: data.customer.email, replyTo: profile.email,
-        subject: `Bevestiging: offerte ${row.number} geaccordeerd`,
+        subject: tr('mail.confirmSubject', { number: row.number }),
         ...mailBody(profile, [
-          `Beste ${acceptance.name},`,
-          `Bedankt voor uw akkoord op offerte ${row.number}${data.title ? ` (${data.title})` : ''} op ${when}, voor ${total} incl. btw.`,
-          link ? 'Via de knop hieronder bekijkt u de geaccordeerde offerte met uw handtekening; daar kunt u hem ook als PDF opslaan.' : '',
-          'Wij nemen contact met u op om de werkzaamheden in te plannen.',
-        ], link ? { label: 'Geaccordeerde offerte bekijken', href: link } : null),
+          tr('mail.greeting', { name: acceptance.name }),
+          tr('mail.confirmThanks', { number: row.number, about: data.title ? ` (${data.title})` : '', when: customerWhen, amount: customerTotal }),
+          link ? tr('mail.confirmLink') : '',
+          tr('mail.confirmNext'),
+        ], link ? { label: tr('mail.confirmButton'), href: link } : null),
       }));
     }
     if (validEmail(profile.email)) {
@@ -959,7 +971,7 @@ function registerQuoteRoutes(app, ctx) {
       await mailer.send({
         to: list, replyTo: profile.email, bcc: copyTo(req.user),
         subject: String(subject || `Offerte ${quote.number} van ${profile.companyName}`).slice(0, 300),
-        ...mailBody(profile, text.split(/\n{2,}/), { label: 'Offerte bekijken en accorderen', href: quote.share.url }),
+        ...mailBody(profile, text.split(/\n{2,}/), { label: DocText.text(quote.data && quote.data.language, 'mail.sendButton'), href: quote.share.url }),
       });
     } catch (error) {
       console.warn(`Offerte ${quote.number} niet verstuurd: ${error.code || ''} ${error.message}`);

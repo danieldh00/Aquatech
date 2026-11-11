@@ -929,6 +929,10 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE users ADD COLUMN payment_days INTEGER;
   `,
+  // 57: documenttaal per klant (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN document_language ${TEXT_TYPE} NOT NULL DEFAULT 'nl';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

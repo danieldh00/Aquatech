@@ -1150,6 +1150,10 @@ const MIGRATIONS = [
   `
   ALTER TABLE users ADD COLUMN payment_days INTEGER;
   `,
+  // 57: documenttaal per klant (Klanten): taal van offertes, facturen en mails ('nl' of 'en').
+  `
+  ALTER TABLE users ADD COLUMN document_language TEXT NOT NULL DEFAULT 'nl';
+  `,
 ];
 
 /**

@@ -136,7 +136,7 @@ const PUBLIC_FILES = new Set([
   '/openbaar/offerte.html', '/openbaar/offerte.js', '/openbaar/offerte.css',
   '/openbaar/afspraak.html', '/openbaar/afspraak.js', '/openbaar/afspraak.css', '/werkorders/workorder-core.js',
   '/shared/brand.css', '/shared/theme.css', '/shared/theme.js', '/shared/logo-white.png',
-  '/offertes/quote-core.js', '/offertes/quote-view.js', '/offertes/quote-view.css',
+  '/shared/doc-text.js', '/offertes/quote-core.js', '/offertes/quote-view.js', '/offertes/quote-view.css',
   // Installeerbare app en offline werken: geen gegevens, wel nodig voordat
   // (en nadat) iemand is ingelogd (manifest en service worker worden zonder
   // cookies of buiten de sessie opgehaald).
@@ -2039,7 +2039,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const home = homeOf(tid);
       return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName,
-          email: customer.email, phone: customer.phone, address: customer.address, vatNumber: customer.vatNumber, paymentDays: customer.paymentDays }));
+          email: customer.email, phone: customer.phone, address: customer.address, vatNumber: customer.vatNumber, paymentDays: customer.paymentDays, documentLanguage: customer.documentLanguage }));
     },
   });
 

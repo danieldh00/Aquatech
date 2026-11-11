@@ -136,6 +136,7 @@
     };
   }
 
+  const ENGLISH_PAYMENT_TEXT = 'Please transfer the total amount within {dagen} days to {iban}, quoting invoice number {nummer}.';
   const DEFAULT_SUBJECT = '{soort} {nummer} van {bedrijf}';
   const DEFAULT_MAIL = 'Beste {klant},\n\nIn de bijlage vindt u {soort_klein} {nummer} van {datum} voor {bedrag} incl. btw.\n\n{betaling}\n\nMet vriendelijke groet,\n{bedrijf}';
   // WooCommerce-status die een bestelling tot factuur maakt ("Afgerond" = completed).
@@ -229,6 +230,8 @@
     return {
       date,
       paymentDays,
+      // Taal van het document ('nl' of 'en'), overgenomen van de offerte of de klant.
+      language: fields.language === 'en' ? 'en' : 'nl',
       dueDate: isDate(fields.dueDate) && fields.dueDate >= date ? fields.dueDate : addDays(date, paymentDays === null ? cleanSettings.paymentDays : paymentDays),
       reference: limitText(fields.reference, 120),
       customer: {
@@ -293,12 +296,13 @@
   /**
    * Betaaltekst met {dagen}, {iban}, {nummer}, {vervaldatum} ingevuld.
    * @param {object} settings Factuurinstellingen.
-   * @param {object} [values] { number, iban, dueDate, days } (days: betaaltermijn van deze factuur; leeg = die uit de instellingen).
+   * @param {object} [values] { number, iban, dueDate, days, language } (days: betaaltermijn van deze factuur; leeg = die uit de instellingen; language 'en' = de Engelse standaardtekst).
    * @returns {string} De betaaltekst.
    */
-  function paymentText(settings, { number = '', iban = '', dueDate = '', days = null } = {}) {
+  function paymentText(settings, { number = '', iban = '', dueDate = '', days = null, language = 'nl' } = {}) {
     const cleanSettings = settings && settings.categories ? settings : sanitizeSettings(settings);
-    return cleanSettings.paymentText
+    // De ingestelde betaaltekst is Nederlands; een Engels document krijgt de Engelse standaardtekst.
+    return (language === 'en' ? ENGLISH_PAYMENT_TEXT : cleanSettings.paymentText)
       .replace(/\{dagen\}/g, String(days === null || days === undefined ? cleanSettings.paymentDays : days))
       .replace(/\{iban\}/g, iban || 'onze rekening')
       .replace(/\{nummer\}/g, number || '(volgt)')
@@ -414,6 +418,7 @@
         discountPct: quoteData ? quoteData.discountPct : 0,
         // De betaaltermijn die op de offerte stond (de termijn van de klant), voor de vervaldatum.
         paymentDays: quoteData ? quoteData.paymentDays : null,
+        language: quoteData ? quoteData.language : 'nl',
         workOrderNumber: order.number || '',
         quoteNumber: quote ? quote.number || '' : '',
         lines,

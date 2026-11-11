@@ -171,9 +171,9 @@ function registerCustomerRoutes(app, ctx) {
       return invalid(res, { error: 'Onbekende klantgroep.', field: 'customerGroup' });
     }
     const tenantId = req.tenantId;
-    const out = store.createCustomer(tenantId, { displayName: body.displayName, ...contact.contact, business, paymentDays: body.paymentDays });
+    const out = store.createCustomer(tenantId, { displayName: body.displayName, ...contact.contact, business, paymentDays: body.paymentDays, documentLanguage: body.documentLanguage });
     if (out.error) return invalid(res, { error: out.error, field: out.field || 'displayName' });
-    audit(req, 'klant_aangemaakt', { userId: out.user.id, zakelijk: Boolean(business), uitgenodigd: Boolean(body.invite), betaaltermijn: out.user.paymentDays }, undefined, tenantId);
+    audit(req, 'klant_aangemaakt', { userId: out.user.id, zakelijk: Boolean(business), uitgenodigd: Boolean(body.invite), betaaltermijn: out.user.paymentDays, documenttaal: out.user.documentLanguage }, undefined, tenantId);
     const created = store.getCustomer([tenantId], out.user.id);
     const invite = body.invite ? await sendInvite(created) : null;
     if (invite && invite.sent) audit(req, 'klant_uitgenodigd', { userId: created.id }, undefined, tenantId);
@@ -220,6 +220,7 @@ function registerCustomerRoutes(app, ctx) {
       input.business = checked.profile;
     }
     if (body.paymentDays !== undefined) input.paymentDays = body.paymentDays;
+    if (body.documentLanguage !== undefined) input.documentLanguage = body.documentLanguage;
     // Prijsgevoelige instellingen (zakelijke prijzen excl. btw, groothandel) zijn voor beheerders.
     const pricing = ['customerGroup', 'wholesale', 'wholesaleDiscount'].filter((field) => body[field] !== undefined);
     if (pricing.length && !mayPrice(req)) return res.status(403).json({ error: 'forbidden', message: 'Alleen een beheerder wijzigt de klantgroep en de groothandelsinstellingen.' });
@@ -231,6 +232,7 @@ function registerCustomerRoutes(app, ctx) {
       ...(input.customerGroup !== undefined ? { klantgroep: input.customerGroup || 'particulier' } : {}),
       ...(input.wholesale !== undefined ? { groothandel: Boolean(input.wholesale) } : {}),
       ...(input.paymentDays !== undefined ? { betaaltermijn: input.paymentDays } : {}),
+      ...(input.documentLanguage !== undefined ? { documenttaal: input.documentLanguage } : {}),
       ...(input.wholesaleDiscount !== undefined ? { groothandelskorting: input.wholesaleDiscount } : {}) }, undefined, customer.tenantId);
     res.json({ customer: store.getCustomer([customer.tenantId], customer.id) });
   });
