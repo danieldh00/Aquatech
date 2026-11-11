@@ -127,6 +127,11 @@ test('mailFailure: leesbare melding per soort fout, met het antwoord van de mail
   // De oorzaak gaat altijd naar het serverlog (één plek voor alle aanroepers).
   const logged = [];
   const originalWarn = console.warn;
+  /**
+   * Vangt een logregel op in plaats van hem te tonen.
+   * @param {...*} parts De delen van de regel.
+   * @returns {number} Het aantal opgevangen regels.
+   */
   console.warn = (...parts) => logged.push(parts.join(' '));
   try { mailFailure(new TypeError('sjabloon kapot')); } finally { console.warn = originalWarn; }
   assert.deepStrictEqual(logged, ['[mail] Versturen mislukt: (geen code) sjabloon kapot']);
