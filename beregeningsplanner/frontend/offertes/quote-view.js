@@ -129,8 +129,7 @@
     const acceptance = quote.acceptance;
     let closing;
     if (acceptance && acceptance.answer === 'akkoord') {
-      const accepted = tr('quote.acceptedBy', { name: '\u0001', when: esc(dateTime(acceptance.at, lang)), amount: money(acceptance.totalIncl != null ? acceptance.totalIncl : totals.total), vat: totals.shifted ? tr('quote.vatShifted') : tr('quote.inclVat') })
-        .replace('\u0001', `<b>${esc(acceptance.name)}</b>`);
+      const accepted = tr('quote.acceptedBy', { name: `<b>${esc(acceptance.name)}</b>`, when: esc(dateTime(acceptance.at, lang)), amount: money(acceptance.totalIncl != null ? acceptance.totalIncl : totals.total), vat: totals.shifted ? tr('quote.vatShifted') : tr('quote.inclVat') });
       closing = `<div class="p-accepted">
         <h2>${esc(tr('quote.accepted'))}</h2>
         <div>${accepted}</div>

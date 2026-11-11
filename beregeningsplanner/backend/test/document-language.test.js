@@ -128,6 +128,9 @@ test('offerte: het akkoord en het afgewezen-blok staan in de taal van het docume
   assert.match(accepted, /Accepted digitally/);
   assert.match(accepted, /<b>John<\/b>/);
   assert.match(accepted, /Via the quotation link/);
+  // Een naam met vervangingstekens ($&, $') komt letterlijk in het akkoordblok.
+  const tricky = view.documentHtml({ ...base, acceptance: { answer: 'akkoord', name: "Jan $& Co $'", at: '2026-11-11T10:00:00Z', via: 'link', totalIncl: 30.25, signature: null } }, {});
+  assert.ok(tricky.includes('<b>Jan $&amp; Co $&#39;</b>'), 'naam letterlijk (ge-escaped) in het akkoord');
   const declined = view.documentHtml({ ...base, acceptance: { answer: 'afgewezen', name: 'John', at: '2026-11-11T10:00:00Z', reason: 'Too expensive' } }, {});
   assert.match(declined, /Declined/);
   assert.match(declined, /Reason: Too expensive/);
