@@ -421,7 +421,7 @@
     }
   }
 
-  const LOG_KINDS = { verbonden: 'Verbonden', verbroken: 'Verbroken', klant: 'Klant', factuur: 'Factuur', opties: 'Artikelen en termijnen', aanmelding: 'Aanmelding' };
+  const LOG_KINDS = { verbonden: 'Verbonden', verbroken: 'Verbroken', klant: 'Klant', factuur: 'Factuur', opties: 'Artikelen en termijnen', aanmelding: 'Aanmelding', instelling: 'Bediening' };
   const LOG_DIRECTIONS = { naar: 'Aquatech → Visma', van: 'Visma → Aquatech' };
   /**
    * Zegt wanneer een onderdeel van de koppeling gebeurt.
@@ -435,6 +435,36 @@
     if (key === 'company') return 'Bij het verbinden.';
     if (!settings.autoSync) return 'Alleen met de knop Nu doorsturen of de knop op een factuur.';
     return `Vanzelf zodra een factuur definitief is (en elke 10 minuten als vangnet)${settings.since ? `, vanaf factuurdatum ${day(settings.since)}` : ''}; ook met de knop.`;
+  }
+
+  /** Toont de bediening: pauzeren of hervatten en welke onderdelen aan staan. */
+  function renderVismaControls() {
+    const visma = state.visma;
+    $('#vi-controls').hidden = !(visma && visma.connected);
+    if (!visma || !visma.connected) return;
+    const settings = visma.settings;
+    $('#vi-controls-state').textContent = settings.paused
+      ? 'De koppeling staat op pauze: er gaat niets naar Visma, ook niet met de knop Nu doorsturen.'
+      : 'De koppeling is actief.';
+    $('#vi-pause').textContent = settings.paused ? 'Hervatten' : 'Pauzeren';
+    $('#vi-pause').classList.toggle('primary', Boolean(settings.paused));
+    $('#vi-controls').querySelectorAll('[data-part]').forEach((checkbox) => { checkbox.checked = settings.parts[checkbox.dataset.part] !== false; });
+  }
+
+  /**
+   * Slaat een wijziging van de bediening op en ververst de stand en het logboek.
+   * @param {object} change paused (boolean) en/of parts (object met booleans)
+   * @returns {Promise<void>}
+   */
+  async function saveVismaControls(change) {
+    try {
+      state.visma = await api('visma/controls', { method: 'PUT', body: change });
+      renderVisma();
+      loadVismaLog(true).catch(() => {});
+    } catch (error) {
+      toast(error.message, true);
+      renderVismaControls();
+    }
   }
 
   /** Toont de toestemmingen en de onderdelen van de koppeling in gewone taal. */
@@ -504,14 +534,16 @@
     if (!visma.configured) html = '<p class="notice warn">Vul hieronder de app-gegevens van Visma in. Daarna kun je hier je administratie verbinden.</p>';
     else if (!visma.connected) html = `<p>Nog niet verbonden. Met <b>Verbinden met Visma</b> log je in bij Visma (${esc(ENVS[visma.environment])}) en kies je de administratie.</p>`;
     else {
-      html = `<p><span class="pill st-betaald">Verbonden</span> ${esc(settings.companyName || 'Visma-administratie')}${settings.environment === 'sandbox' ? ' <span class="pill">sandbox</span>' : ''}`
+      html = `<p><span class="pill st-betaald">Verbonden</span>${settings.paused ? ' <span class="pill overdue">Gepauzeerd</span>' : ''} ${esc(settings.companyName || 'Visma-administratie')}${settings.environment === 'sandbox' ? ' <span class="pill">sandbox</span>' : ''}`
         + `${settings.connectedAt ? ` <span class="muted small">sinds ${esc(when(settings.connectedAt))}${settings.connectedBy ? ` door ${esc(settings.connectedBy)}` : ''}</span>` : ''}</p>`
         + `<p class="muted small">${settings.autoSync ? 'Automatisch doorsturen staat aan' : 'Automatisch doorsturen staat uit; gebruik <b>Nu doorsturen</b> of de knop op een factuur'}${settings.since ? `, facturen vanaf ${esc(day(settings.since))}` : ''}. `
-        + `${visma.pending ? `<b>${esc(visma.pending)}</b> ${visma.pending === 1 ? 'factuur wacht' : 'facturen wachten'}${visma.failed ? `, waarvan <span class="fail">${esc(visma.failed)} met een fout</span> (zie de factuur)` : ''}.` : 'Alles is doorgestuurd.'}</p>`;
+        + `${visma.pending ? `<b>${esc(visma.pending)}</b> ${visma.pending === 1 ? 'factuur wacht' : 'facturen wachten'}${visma.failed ? `, waarvan <span class="fail">${esc(visma.failed)} met een fout</span> (zie de factuur)` : ''}.` : (visma.held ? '' : 'Alles is doorgestuurd.')}${visma.held ? ` <b>${esc(visma.held)}</b> ${visma.held === 1 ? 'factuur wacht' : 'facturen wachten'} omdat een onderdeel uit staat (zie Bediening).` : ''}</p>`;
     }
     $('#vi-status').innerHTML = html;
     $('#vi-connect').hidden = !visma.configured || visma.connected;
     $('#vi-sync').hidden = !visma.connected;
+    $('#vi-sync').disabled = Boolean(settings.paused);
+    renderVismaControls();
     $('#vi-disconnect').hidden = !visma.connected;
     $('#vi-form').hidden = !visma.connected;
     renderVismaOverview();
@@ -585,12 +617,15 @@
      * @returns {Promise<void>}
      */
     $('#vi-disconnect').onclick = async () => {
-      if (!confirm('De verbinding met Visma verbreken? Facturen gaan dan niet meer naar Visma tot je opnieuw verbindt. Wat al in Visma staat, blijft daar.')) return;
+      if (!confirm('De verbinding met Visma verbreken? Aquatech trekt de toegang in bij Visma en wist de tokens. Facturen gaan dan niet meer naar Visma tot je opnieuw verbindt. Wat al in Visma staat, blijft daar.')) return;
       try {
-        state.visma = await api('visma/disconnect', { method: 'POST', body: {} });
+        const result = await api('visma/disconnect', { method: 'POST', body: {} });
+        state.visma = result;
         state.vismaOptions = null;
         renderVisma();
-        toast('Verbinding met Visma verbroken');
+        loadVismaLog(true).catch(() => {});
+        if (result.revoked) toast('Verbinding verbroken en de toegang is bij Visma ingetrokken');
+        else toast('Verbroken in Aquatech, maar intrekken bij Visma lukte niet: trek de toegang zo nodig zelf in via Visma.', true);
       } catch (error) { toast(error.message, true); }
     };
     /**
@@ -612,6 +647,21 @@
       } finally {
         syncButton.disabled = false;
       }
+    };
+    /**
+     * Bediening: pauzeren of hervatten.
+     * @returns {Promise<void>}
+     */
+    $('#vi-pause').onclick = () => saveVismaControls({ paused: !state.visma.settings.paused });
+    /**
+     * Bediening: een onderdeel aan of uit.
+     * @param {Event} event het wijzigen van een vinkje
+     * @returns {Promise<void>|undefined}
+     */
+    $('#vi-controls').onchange = (event) => {
+      const part = event.target.dataset && event.target.dataset.part;
+      if (part) return saveVismaControls({ parts: { [part]: event.target.checked } });
+      return undefined;
     };
     /**
      * Logboek: alleen fouten tonen of niet.

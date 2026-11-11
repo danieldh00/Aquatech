@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.9.5',
+      date: '2026-11-11',
+      title: 'Visma-koppeling zelf bedienen',
+      items: [
+        { text: 'Bij Facturen > Visma kun je de koppeling nu pauzeren en hervatten, en facturen, creditfacturen en het aanmaken van klanten los aan of uit zetten. Elke wijziging staat in het logboek.', for: ['facturen'] },
+        { text: 'Verbinding verbreken trekt de toegang nu ook bij Visma in. Lukt dat niet, dan zie je dat en kun je het zelf bij Visma doen.', for: ['facturen'] },
+      ],
+    },
+    {
       version: '1.9.4',
       date: '2026-11-11',
       title: 'Visma-koppeling inzichtelijk',

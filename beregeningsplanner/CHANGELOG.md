@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.5
+
+Visma-koppeling beheersbaar (Facturen → Visma). Deel 2 van 2 van punt 30; deel 1 (overzicht en logboek) was 1.9.4.
+
+- **Pauzeren/hervatten** (`visma.paused`): niets gaat naar Visma, niet automatisch, niet met *Nu doorsturen* en niet met de knop op een factuur (409 `paused`).
+- **Onderdelen aan/uit** (`visma.parts`: `invoices`, `credits`, `customers`, standaard aan): een uitgezet soort factuur blijft wachten (409 `part_off`, telt niet mee als wachtend); met *Klanten aanmaken* uit gaan alleen facturen van debiteuren die al aan een Visma-klant gekoppeld zijn nog mee; de rest wordt bij het doorsturen in bulk overgeslagen (geen herhaalde fouten, de batch blokkeert niet; de status telt ze apart als `held`) en geeft bij de factuurknop 409 `customers_off`. `PUT /api/visma/controls` (recht `facturen`), alleen echte booleans tellen; elke wijziging komt met naam in het logboek (soort *Bediening*) en het auditlog (`visma_bediening`), een ongewijzigde stand maakt geen regel.
+- **Verbinding verbreken trekt het token in**: `POST /connect/revocation` bij Visma met het refresh token (best effort, `revoked` in het antwoord); lukt dat niet, dan wordt er toch lokaal verbroken en zegt het logboek en de melding dat je de toegang zelf bij Visma moet intrekken. Tokens en verbindingsgegevens worden altijd gewist.
+- Geen migratie (instelling `visma` is een JSON-object). Geen extra queries op warme paden: de status telt wachtende facturen nog steeds in één query, nu met dezelfde filters als het doorsturen (`pendingFilter`).
+- Tests: pauzeren (knop, factuurknop, vangnet), creditfacturen/facturen apart, klanten niet aanmaken, rechten 403, invoer, logboek, intrekken gelukt en mislukt; ook tegen PostgreSQL.
+
 ## 1.9.4
 
 Visma-koppeling inzichtelijk: wat mag ze, wat doet ze, en een logboek (Facturen → Visma). Deel 1 van 2; de bediening (onderdelen aan/uit, pauzeren) volgt.
