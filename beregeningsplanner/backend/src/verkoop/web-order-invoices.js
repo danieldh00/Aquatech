@@ -11,6 +11,7 @@
 // krijgt een creditnota voor de teruggestuurde regels bij die factuur.
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
+const { withHiddenCause } = require('../platform/error-report');
 
 const { invoiceFileName } = require('./invoice-pdf');
 
@@ -151,6 +152,27 @@ function fullyReturned(orderLines, returned, earlier) {
 }
 
 /**
+ * Een fout uit een stap van het factureren met een melding die voor de beheerder bedoeld is (bijvoorbeeld
+ * "Factuur heeft geen regels"). Andere fouten zijn fouten in de app: die komen niet letterlijk bij de bestelling.
+ */
+class InvoiceStepError extends Error {}
+
+/**
+ * De reden bij een mislukte stap, leesbaar voor de beheerder. Een onverwachte fout (database, programmeerfout) gaat
+ * volledig naar het serverlog en wordt in de melding een verwijzing daarheen, zodat er geen SQL of interne tekst bij
+ * de bestelling komt te staan.
+ * @param {Error} error De fout.
+ * @param {object} log Het log.
+ * @param {string} where Waar het misging (voor het log).
+ * @returns {string} De reden.
+ */
+function readableReason(error, log, where) {
+  if (error instanceof InvoiceStepError) return String(error.message).slice(0, 250);
+  log.error(`[fout] ${where}:`, error);
+  return 'interne fout, de oorzaak staat in het serverlog';
+}
+
+/**
  * Maakt het factureren van webshopbestellingen.
  * @param {{ orders: object, invoices: object, returns?: object, debtors?: object, stock?: object, sender?: object, settingsFor: Function, log?: object }} ctx De opslagen en hulpfuncties van de server (settingsFor(tenantId) geeft de instellingen van een omgeving).
  * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditCancelled: Function, creditReturn: Function, refundAmountOf: Function }} De functies.
@@ -242,7 +264,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
       const created = invoices.create(tenantId, user, data, settings, { shopOrderId: invoiceKey(order.id), customerId: order.userId, debtorId: debtor ? debtor.id : null });
       if (settings.webOrders.finalize || paidOnline) {
         const finalized = invoices.finalize(tenantId, user, created.id, settings, { skipStock: true });
-        if (finalized && finalized.error) throw new Error(finalized.error);
+        if (finalized && finalized.error) throw new InvoiceStepError(finalized.error);
       }
       orders.updateData(tenantId, order.id, { invoiceError: null });
       settleIfPaidOnline(tenantId, order);
@@ -252,8 +274,9 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
       // Tegelijk al gemaakt (unieke index op de bestelling): de bestaande factuur is goed.
       const raced = /unique|constraint/i.test(error.message) ? invoiceFor(tenantId, order.id) : null;
       if (raced) return { invoice: raced, created: false };
-      orders.updateData(tenantId, order.id, { invoiceError: String(error.message || error).slice(0, 300) });
-      return { error: `Factuur maken mislukt: ${error.message}`, status: 500 };
+      const reason = readableReason(error, log, `Factuur bij webshopbestelling ${order.number}`);
+      orders.updateData(tenantId, order.id, { invoiceError: reason });
+      return withHiddenCause({ error: `Factuur maken mislukt: ${reason}`, status: 500 }, error);
     }
   }
 
@@ -324,21 +347,23 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
         return;
       }
       const made = invoices.credit(tenantId, user, found.id, settings);
-      if (!made || made.error) throw new Error(made && made.error ? made.error : 'Factuur niet gevonden.');
+      if (!made || made.error) throw new InvoiceStepError(made && made.error ? made.error : 'Factuur niet gevonden.');
       let credit = made.invoice;
       orders.updateData(tenantId, order.id, { creditNote: { invoiceId: credit.id, number: credit.number, status: credit.status } });
       let finalizedNow = false;
       if (settings.webOrders.finalize && credit.status === 'concept') {
         const finalized = invoices.finalize(tenantId, user, credit.id, settings, { skipStock: true });
-        if (finalized && finalized.error) throw new Error(finalized.error);
+        if (finalized && finalized.error) throw new InvoiceStepError(finalized.error);
         finalizedNow = true;
         credit = invoices.get(tenantId, credit.id);
       }
       orders.updateData(tenantId, order.id, { creditNote: { invoiceId: credit.id, number: credit.number, status: credit.status }, invoiceError: null });
       await mailIfFinalized(tenantId, { invoice: credit, finalizedNow });
     } catch (error) {
-      orders.updateData(tenantId, order.id, { invoiceError: `Creditnota maken mislukt: ${String(error.message || error).slice(0, 250)}. Maak hem zelf in Facturen.` });
-      log.warn(`Creditnota bij ${order.number}: ${error.message}`);
+      const reason = readableReason(error, log, `Creditnota bij webshopbestelling ${order.number}`);
+      orders.updateData(tenantId, order.id, { invoiceError: `Creditnota maken mislukt: ${reason}. Maak hem zelf in Facturen.` });
+      // Een onverwachte fout staat al met aanroepketen in het log (readableReason); een weigering hier kort.
+      if (error instanceof InvoiceStepError) log.warn(`Creditnota bij ${order.number}: ${reason}`);
     }
   }
 
@@ -401,7 +426,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
       let outcome = { invoice: created, finalizedNow: false };
       if (settings.webOrders.finalize && created.status === 'concept') {
         const finalized = invoices.finalize(tenantId, user, created.id, settings, { skipStock: true });
-        if (finalized && finalized.error) throw new Error(finalized.error);
+        if (finalized && finalized.error) throw new InvoiceStepError(finalized.error);
         outcome = { invoice: finalized.invoice || invoices.get(tenantId, created.id), finalizedNow: true };
       }
       const saved = invoices.get(tenantId, created.id);
@@ -410,9 +435,9 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
       await mailIfFinalized(tenantId, { invoice: saved, finalizedNow: outcome.finalizedNow });
       return { credit };
     } catch (error) {
-      const reason = `Creditnota maken mislukt: ${String(error.message || error).slice(0, 250)}`;
+      const reason = `Creditnota maken mislukt: ${readableReason(error, log, `Creditnota bij retour ${record.number}`)}`;
       returns.updateData(tenantId, record.id, { creditError: reason });
-      return { error: reason, status: 500 };
+      return withHiddenCause({ error: reason, status: 500 }, error);
     }
   }
 
@@ -432,4 +457,4 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
   return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped, creditCancelled, creditReturn, refundAmountOf };
 }
 
-module.exports = { createWebOrderInvoices, fromWebOrder, creditLinesFor, fullyReturned, invoiceKey };
+module.exports = { createWebOrderInvoices, InvoiceStepError, fromWebOrder, creditLinesFor, fullyReturned, invoiceKey };

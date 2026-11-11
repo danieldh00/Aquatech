@@ -7,6 +7,7 @@
 // Retouren). Alles per omgeving (tenantId).
 const crypto = require('crypto');
 const { transaction, isPg } = require('../database/db');
+const { withCause } = require('../platform/error-report');
 
 /** Status van een retour met de tekst voor de klant en Beheer. */
 const STATUSES = { aangevraagd: 'Aangevraagd', goedgekeurd: 'Goedgekeurd', afgewezen: 'Afgewezen', ingetrokken: 'Ingetrokken', afgerond: 'Afgerond' };
@@ -434,7 +435,7 @@ function registerWebReturnRoutes(app, { returns, requireJson, audit, credits = n
     if (!found) return res.status(404).json({ error: 'not_found', message: 'Retour niet gevonden.' });
     if (found.status !== 'afgerond') return res.status(409).json({ error: 'not_completed', message: 'Maak de creditnota nadat de retour is afgerond.' });
     const out = await credits.creditReturn(req.tenantId, found.id, req.user);
-    if (out.error) return res.status(out.status || 400).json({ error: 'credit_failed', message: out.error });
+    if (out.error) return withCause(res, out.cause).status(out.status || 400).json({ error: 'credit_failed', message: out.error });
     res.json({ return: returns.get(req.tenantId, found.id), credit: out });
   }));
 }
