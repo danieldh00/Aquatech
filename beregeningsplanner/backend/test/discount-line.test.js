@@ -97,6 +97,8 @@ test('visma: de korting gaat als fractie per regel mee, ook bij een vast bedrag'
   assert.strictEqual(invoiceBody(make({ discountType: 'amount', discountAmount: 25 }), 'c1', conf, null).body.Rows[1].DiscountPercentage, 0.1);
   assert.strictEqual(invoiceBody(make({ discountPct: 10 }), 'c1', conf, null).body.Rows[1].DiscountPercentage, 0.1);
   assert.strictEqual(invoiceBody(make({}), 'c1', conf, null).body.Rows[1].DiscountPercentage, 0);
+  // Een percentage gaat exact zoals ingevoerd mee, ook bij een subtotaal dat niet deelbaar is door 100.
+  assert.strictEqual(invoiceBody(make({ discountPct: 10, lines: [{ description: 'A', qty: 1, price: 33.33, vat: 21, group: 'producten' }] }), 'c1', conf, null).body.Rows[1].DiscountPercentage, 0.1);
   // Een niet-ronde fractie (10 over 30,03 in drie regels): de som van de regels na korting blijft binnen 1 cent per regel
   // van het factuurtotaal (Visma rondt zelf per regel af, ook bij een percentage).
   const odd = make({ discountType: 'amount', discountAmount: 10, lines: [

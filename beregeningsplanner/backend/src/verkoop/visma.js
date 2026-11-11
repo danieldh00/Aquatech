@@ -216,7 +216,7 @@ function invoiceBody(invoice, customerId, vismaSettings, invoicing, creditedInvo
   const address = splitAddress(details.customer.address);
   // Per regel een kortingsfractie: bij een vast bedrag het deel van het subtotaal dat het kortingsbedrag is.
   const invoiceTotals = Core.totals(details, invoicing);
-  const discountFraction = invoiceTotals.subtotal ? invoiceTotals.discount / invoiceTotals.subtotal : 0;
+  const discountFraction = Core.discountOf(details, invoiceTotals.subtotal).fraction;
   const rows = [];
   const missing = new Set();
   rows.push({ LineNumber: 0, IsTextRow: true, Text: `${invoice.kind === 'credit' ? 'Creditfactuur' : 'Factuur'} ${invoice.number}${details.reference ? ` – ${details.reference}` : ''}`.slice(0, 250) });
