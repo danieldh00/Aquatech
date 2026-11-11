@@ -52,7 +52,7 @@
     if (!Array.isArray(quote.fixed)) return QuoteCore.totals(data);
     const lines = quote.fixed.map((fixed) => ({ section: fixed.section, qty: 1, price: fixed.amount, vat: fixed.vat }))
       .concat(data.lines.filter((line) => line.optional));
-    return QuoteCore.totals({ discountPct: data.discountPct, vatShift: data.vatShift, lines });
+    return QuoteCore.totals({ discountType: data.discountType, discountPct: data.discountPct, discountAmount: data.discountAmount, discountNote: data.discountNote, vatShift: data.vatShift, lines });
   }
 
   /**
@@ -170,7 +170,7 @@
       ${hasOptions ? `<p class="p-optnote">${interactive ? translate('quote.optionsInteractive') : translate('quote.optionsStatic')}</p>` : ''}
       <table class="p-totals">
         <tr><td>${esc(translate('quote.subtotal'))}</td><td class="num">${money(totals.subtotal)}</td></tr>
-        ${totals.discount ? `<tr><td>${esc(translate('quote.discount'))} ${number(totals.discountPct)}%</td><td class="num">− ${money(totals.discount)}</td></tr><tr><td>${esc(translate('quote.netTotal'))}</td><td class="num">${money(totals.net)}</td></tr>` : ''}
+        ${totals.discount ? `<tr><td>${esc(QuoteCore.discountCaption(totals, translate('quote.discount'), number(totals.discountPct)))}</td><td class="num">− ${money(totals.discount)}</td></tr><tr><td>${esc(translate('quote.netTotal'))}</td><td class="num">${money(totals.net)}</td></tr>` : ''}
         ${totals.shifted ? '' : totals.vat.filter((vat) => vat.base).map((vat) => `<tr><td>${esc(translate('quote.vat'))} ${vat.rate}%</td><td class="num">${money(vat.amount)}</td></tr>`).join('')}
         <tr class="grand"><td>${esc(totals.shifted ? translate('quote.totalShifted') : translate('quote.totalIncl'))}</td><td class="num">${money(totals.total)}</td></tr>
       </table>

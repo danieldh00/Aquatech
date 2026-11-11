@@ -8,6 +8,7 @@
   const VAT_RATES = [21, 9, 0];
   const STATUSES = { concept: 'Concept', verzonden: 'Verzonden', akkoord: 'Akkoord', afgewezen: 'Afgewezen' };
   const MAX_LINES = 400;
+  const MAX_DISCOUNT_AMOUNT = 10000000;
 
   // Arbeidsnormen in uren; de uitkomst is een startpunt en per offerte aan te passen.
   const LABOR = {
@@ -139,7 +140,11 @@
       terms: limitText(fields.terms, 6000),
       // Interne notitie: alleen voor medewerkers, nooit op het document, in de mail of voor de klant.
       internalNote: limitText(fields.internalNote, 2000),
-      discountPct: round2(clampNumber(fields.discountPct, 0, 100)),
+      // Korting op het geheel: een percentage óf een vast bedrag (excl. btw), met een bijschrift op het document.
+      discountType: fields.discountType === 'amount' ? 'amount' : 'pct',
+      discountPct: fields.discountType === 'amount' ? 0 : round2(clampNumber(fields.discountPct, 0, 100)),
+      discountAmount: fields.discountType === 'amount' ? round2(clampNumber(fields.discountAmount, 0, MAX_DISCOUNT_AMOUNT)) : 0,
+      discountNote: limitText(fields.discountNote, 120),
       paymentDays: sanitizePaymentDays(fields.paymentDays),
       // Taal van het document ('nl' of 'en'), uit de documenttaal van de klant.
       language: fields.language === 'en' ? 'en' : 'nl',
@@ -224,16 +229,31 @@
   }
 
   /**
+   * Korting op het geheel: het bedrag in euro's (excl. btw) en welk deel van het subtotaal dat is.
+   * Een vast bedrag wordt nooit hoger dan het subtotaal (en volgt het teken ervan).
+   * @param {object} source Gegevens met discountType, discountPct en discountAmount.
+   * @param {number} subtotal Het subtotaal in euro's.
+   * @returns {{ type: string, discount: number, fraction: number }} Het type, het kortingsbedrag en de fractie van het subtotaal.
+   */
+  function discountOf(source, subtotal) {
+    if (source && source.discountType === 'amount') {
+      const amount = Math.min(Math.max(Number(source.discountAmount) || 0, 0), Math.abs(subtotal));
+      const discount = round2(subtotal < 0 ? -amount : amount);
+      return { type: 'amount', discount, fraction: subtotal ? discount / subtotal : 0 };
+    }
+    const fraction = clampNumber(source && source.discountPct, 0, 100) / 100;
+    return { type: 'pct', discount: round2(subtotal * fraction), fraction };
+  }
+
+  /**
    * Totalen: per sectie, subtotaal, korting (naar rato over de btw-tarieven),
    * btw per tarief en het eindbedrag. Alle bedragen in euro's, afgerond op centen.
-   * @param {object} quote Offertegegevens (lines, discountPct, vatShift).
-   * @returns {object} { bySection, subtotal, discountPct, discount, net, vat, vatTotal, shifted, total }.
+   * @param {object} quote Offertegegevens (lines, discountType, discountPct, discountAmount, vatShift).
+   * @returns {object} { bySection, subtotal, discountType, discountPct, discountAmount, discountNote, discount, net, vat, vatTotal, shifted, total }.
    */
   function totals(quote) {
     const lines = (quote && quote.lines) || [];
-    const discountFraction = clampNumber(quote && quote.discountPct, 0, 100) / 100;
     const bySection = {};
-    const bases = new Map();
     // Btw verlegd naar de afnemer: alles zonder btw.
     const shifted = vatShifted(quote);
     let subtotal = 0;
@@ -242,16 +262,35 @@
       const amount = lineTotal(line);
       bySection[line.section] = round2((bySection[line.section] || 0) + amount);
       subtotal += amount;
-      const rate = shifted ? 0 : Number(line.vat) || 0;
-      bases.set(rate, (bases.get(rate) || 0) + amount * (1 - discountFraction));
     }
     subtotal = round2(subtotal);
-    const discount = round2(subtotal * discountFraction);
+    const { type, discount, fraction } = discountOf(quote, subtotal);
+    const bases = new Map();
+    for (const line of lines) {
+      if (!included(line)) continue;
+      const rate = shifted ? 0 : Number(line.vat) || 0;
+      bases.set(rate, (bases.get(rate) || 0) + lineTotal(line) * (1 - fraction));
+    }
     const net = round2(subtotal - discount);
     const vat = [...bases.entries()].sort((left, right) => right[0] - left[0])
       .map(([rate, base]) => ({ rate, base: round2(base), amount: round2((base * rate) / 100) }));
     const vatTotal = round2(vat.reduce((sum, entry) => sum + entry.amount, 0));
-    return { bySection, subtotal, discountPct: round2(discountFraction * 100), discount, net, vat, vatTotal, shifted, total: round2(net + vatTotal) };
+    return {
+      bySection, subtotal, discountType: type, discountPct: round2(fraction * 100), discountAmount: type === 'amount' ? Math.abs(discount) : 0,
+      discountNote: String((quote && quote.discountNote) || ''), discount, net, vat, vatTotal, shifted, total: round2(net + vatTotal),
+    };
+  }
+
+  /**
+   * Omschrijving van de kortingsregel: het woord, het percentage (alleen bij een percentage) en het bijschrift.
+   * @param {object} totals De uitkomst van totals().
+   * @param {string} word Het woord voor korting in de taal van het document.
+   * @param {string} percentText Het percentage zoals het getoond wordt (bijv. "5").
+   * @returns {string} Bijvoorbeeld "Korting 5% – seizoensactie" of "Korting – klant sinds 2015".
+   */
+  function discountCaption(totals, word, percentText) {
+    const percent = totals.discountType === 'amount' ? '' : ` ${percentText}%`;
+    return `${word}${percent}${totals.discountNote ? ` – ${totals.discountNote}` : ''}`;
   }
 
   const PLAN_DEFAULTS = {
@@ -378,7 +417,7 @@
     return { lines, summary, warnings };
   }
 
-  const api = { SECTIONS, VAT_RATES, vatShifted, sanitizePaymentDays, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, lineTotal, included, chooseOptions, fromPlan, today, addDays, round2 };
+  const api = { SECTIONS, VAT_RATES, vatShifted, discountOf, discountCaption, sanitizePaymentDays, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, lineTotal, included, chooseOptions, fromPlan, today, addDays, round2 };
   root.QuoteCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

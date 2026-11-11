@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.10.5',
+      date: '2026-11-11',
+      title: 'Korting als bedrag, met bijschrift',
+      items: [
+        { text: 'Bij een offerte en een factuur kun je de korting nu als vast bedrag (excl. btw) geven in plaats van een percentage, en er een bijschrift bij zetten (bijvoorbeeld "seizoensactie"). Het bijschrift staat naast de korting op het document.', for: ['offertes', 'facturen'] },
+      ],
+    },
+    {
       version: '1.10.4',
       date: '2026-11-11',
       title: 'Interne notitie bij een offerte',

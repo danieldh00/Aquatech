@@ -389,6 +389,7 @@
       field.value = value == null ? '' : value;
     });
     const data = quote.data;
+    renderDiscountFields(data);
     renderVatShift(quote);
     $('#e-plan').innerHTML = data.planId
       ? `Opgebouwd uit plan <a href="../beregening/?plan=${encodeURIComponent(data.planId)}">${esc(data.planTitle || 'beregeningsplan')}</a>${data.planSummary ? ` · ${data.planSummary.sprinklers} sproeiers, ${data.planSummary.zones} zones, ${nl(data.planSummary.lawnM2, 0)} m² gazon` : ''}`
@@ -926,7 +927,7 @@
     }
     $('#e-totals').innerHTML = `
       <tr><td>Subtotaal</td><td class="num">${eur(totals.subtotal)}</td></tr>
-      ${totals.discount ? `<tr><td>Korting ${nl(totals.discountPct)}%</td><td class="num">− ${eur(totals.discount)}</td></tr><tr><td>Totaal excl. btw</td><td class="num">${eur(totals.net)}</td></tr>` : ''}
+      ${totals.discount ? `<tr><td>${esc(QuoteCore.discountCaption(totals, 'Korting', nl(totals.discountPct)))}</td><td class="num">− ${eur(totals.discount)}</td></tr><tr><td>Totaal excl. btw</td><td class="num">${eur(totals.net)}</td></tr>` : ''}
       ${totals.shifted ? '' : totals.vat.filter((vatRow) => vatRow.base).map((vatRow) => `<tr><td>Btw ${vatRow.rate}% over ${eur(vatRow.base)}</td><td class="num">${eur(vatRow.amount)}</td></tr>`).join('')}
       <tr class="grand"><td>${totals.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</td><td class="num">${eur(totals.total)}</td></tr>`;
   }
@@ -1002,6 +1003,16 @@
     });
   }
 
+  /**
+   * Toont bij de korting alleen het veld dat bij het gekozen type hoort (percentage of bedrag).
+   * @param {object} data De offertegegevens.
+   */
+  function renderDiscountFields(data) {
+    const amount = data.discountType === 'amount';
+    $('#e-discount-pct').hidden = amount;
+    $('#e-discount-amount').hidden = !amount;
+  }
+
   /** Koppelt de invoer, knoppen en het menu van de editor. */
   function bindEditor() {
     const view = $('#edit-view');
@@ -1012,8 +1023,9 @@
       if (field) {
         let value = event.target.value;
         if (field === 'discountPct') value = Math.min(100, Math.max(0, Number(value) || 0));
+        if (field === 'discountAmount') value = Math.max(0, Number(value) || 0);
         setPath(quote.data, field, value);
-        if (field === 'discountPct') renderTotals();
+        if (['discountType', 'discountPct', 'discountAmount', 'discountNote'].includes(field)) { renderDiscountFields(quote.data); renderTotals(); }
         if (field === 'vatShift.number') { quote.data.vatShift.status = ''; renderVatShift(quote); renderTotals(); }
         return changed();
       }
@@ -1403,7 +1415,15 @@
         return row.number;
       };
       const subtotalRow = addTotalRow('Subtotaal', { formula: subtotalCells.length ? subtotalCells.join('+') : '0' });
-      const discountRow = addTotalRow('Korting %', data.discountPct / 100, '0.0%');
+      const discountTotals = QuoteCore.totals(data);
+      let discountRow;
+      if (discountTotals.discountType === 'amount') {
+        // Vast bedrag: de regel met het bedrag en daaronder het percentage dat de btw-berekening gebruikt.
+        const amountRow = addTotalRow(QuoteCore.discountCaption(discountTotals, 'Korting (€)', ''), discountTotals.discount);
+        discountRow = addTotalRow('Korting %', { formula: `IF(G${subtotalRow}=0,0,G${amountRow}/G${subtotalRow})` }, '0.0%');
+      } else {
+        discountRow = addTotalRow(QuoteCore.discountCaption(discountTotals, 'Korting %', ''), data.discountPct / 100, '0.0%');
+      }
       const netRow = addTotalRow('Excl. btw', { formula: `G${subtotalRow}*(1-G${discountRow})` });
       const vatRows = [];
       // Btw per tarief: de regels met dat tarief, na korting.

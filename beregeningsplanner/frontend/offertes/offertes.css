@@ -57,6 +57,8 @@ table.lines .code { display: block; font-size: 11px; color: var(--muted); paddin
 .btn.icon:hover { color: #c62828; }
 
 .totals-wrap { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+/* Kortingsvelden naast de totalen: vaste breedte zodat ze niet over de tabel heen lopen. */
+.discount-box { flex: 1 1 280px; max-width: 420px; }
 table.totals { border-collapse: collapse; font-size: 14px; min-width: 300px; margin-left: auto; }
 table.totals td { padding: 4px 8px; }
 table.totals td.num { text-align: right; white-space: nowrap; }

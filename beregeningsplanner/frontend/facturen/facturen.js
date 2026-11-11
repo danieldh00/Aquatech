@@ -790,7 +790,7 @@
         <td class="num">${esc(eur(category.base))}</td></tr>`).join('') || '<tr><td class="muted">–</td></tr>'}</table></div>
       <div><table>
         <tr><td>Subtotaal</td><td class="num">${esc(eur(totals.subtotal))}</td></tr>
-        ${totals.discount ? `<tr><td>Korting ${esc(totals.discountPct)}%</td><td class="num">− ${esc(eur(totals.discount))}</td></tr><tr><td>Totaal excl. btw</td><td class="num">${esc(eur(totals.net))}</td></tr>` : ''}
+        ${totals.discount ? `<tr><td>${esc(InvoiceCore.discountCaption(totals, 'Korting', totals.discountPct))}</td><td class="num">− ${esc(eur(totals.discount))}</td></tr><tr><td>Totaal excl. btw</td><td class="num">${esc(eur(totals.net))}</td></tr>` : ''}
         ${totals.vat.map((vatLine) => `<tr><td>Btw ${vatLine.rate}% over ${esc(eur(vatLine.base))}</td><td class="num">${esc(eur(vatLine.amount))}</td></tr>`).join('')}
         <tr class="grand"><td>Totaal</td><td class="num">${esc(eur(totals.total))}</td></tr>
       </table></div>`;
@@ -831,8 +831,12 @@
     for (const key of ['name', 'contact', 'address', 'email', 'vatNumber']) { customerForm[key].value = data.customer[key] || ''; customerForm[key].disabled = readOnly; }
     const metaForm = $('#m-form');
     for (const key of ['date', 'dueDate', 'reference', 'intro', 'notes']) { metaForm[key].value = data[key] || ''; metaForm[key].disabled = readOnly; }
+    metaForm.discountType.value = data.discountType === 'amount' ? 'amount' : 'pct';
     metaForm.discountPct.value = data.discountPct || '';
-    metaForm.discountPct.disabled = readOnly;
+    metaForm.discountAmount.value = data.discountAmount || '';
+    metaForm.discountNote.value = data.discountNote || '';
+    for (const key of ['discountType', 'discountPct', 'discountAmount', 'discountNote']) metaForm[key].disabled = readOnly;
+    showDiscountField(metaForm.discountType.value);
     $('#article-codes').innerHTML = Object.entries(state.articles).map(([code, article]) => `<option value="${esc(code)}">${esc(article.name)}${article.salePrice != null ? ` – ${esc(eur(article.salePrice))}` : ''}</option>`).join('');
     renderLines();
   }
@@ -857,7 +861,19 @@
     for (const key of ['name', 'contact', 'address', 'email', 'vatNumber']) data.customer[key] = customerForm[key].value;
     const metaForm = $('#m-form');
     for (const key of ['date', 'dueDate', 'reference', 'intro', 'notes']) data[key] = metaForm[key].value;
+    data.discountType = metaForm.discountType.value === 'amount' ? 'amount' : 'pct';
     data.discountPct = num(metaForm.discountPct.value);
+    data.discountAmount = num(metaForm.discountAmount.value);
+    data.discountNote = metaForm.discountNote.value;
+  }
+
+  /**
+   * Toont bij de korting alleen het veld dat bij het gekozen type hoort (percentage of bedrag).
+   * @param {string} type 'pct' of 'amount'
+   */
+  function showDiscountField(type) {
+    $('#m-discount-pct').hidden = type === 'amount';
+    $('#m-discount-amount').hidden = type !== 'amount';
   }
 
   /** Markeert dat er niet-opgeslagen wijzigingen zijn. */
