@@ -4,7 +4,7 @@ language: nl-NL
 reviews:
   profile: chill
   # Keurt de PR goed als alle opmerkingen zijn opgelost, anders "changes requested".
-  request_changes_workflow: true
+  request_changes_workflow: false
   high_level_summary: true
   poem: false
   review_status: true
