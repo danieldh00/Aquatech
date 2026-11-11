@@ -325,6 +325,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }
   const settings = settingsFor(tenant.id);
   /**
+   * Of meer organisaties naast elkaar draaien (Hoofdbeheer > Multitenancy). Uit = alles draait in de hoofdtenant.
+   * @returns {boolean} true als multitenancy aan staat.
+   */
+  const multitenancyOn = () => settings.get('multitenancy');
+  /**
+   * Of een omgeving meedoet. Met multitenancy uit zijn dat de hoofdtenant en zijn testomgevingen; de gegevens van
+   * andere organisaties blijven staan maar zijn niet bereikbaar tot multitenancy weer aan gaat.
+   * @param {object|null} tenantRow De tenant of testomgeving.
+   * @returns {boolean} true als de omgeving meedoet.
+   */
+  const inScope = (tenantRow) => Boolean(tenantRow) && (multitenancyOn() || tenantRow.id === tenant.id || tenantRow.parent_id === tenant.id);
+  /**
+   * Laat alleen de omgevingen over die meedoen.
+   * @param {object[]} tenantRows De omgevingen.
+   * @returns {object[]} De omgevingen die meedoen.
+   */
+  const inScopeOnly = (tenantRows) => (multitenancyOn() ? tenantRows : tenantRows.filter(inScope));
+  /**
    * Kleurthema (shared/theme.js): het eigen thema van de live-tenant (ook voor
    * diens testomgevingen), anders het thema van de hoofdtenant voor iedereen.
    * @param {string} [tenantId] Id van de omgeving (leeg = hoofdtenant).
@@ -348,7 +366,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   function sendAuthPage(res, file, tenantId) {
     if (!authHtml.has(file)) authHtml.set(file, fs.readFileSync(file, 'utf8'));
-    const css = Theme.css(themeFor(tenantId));
+    // Zonder multitenancy geen organisatiecode op de inlogpagina (elementen met data-multi).
+    const css = Theme.css(themeFor(tenantId)) + (file === LOGIN_PAGE && !multitenancyOn() ? '[data-multi]{display:none!important}' : '');
     const html = authHtml.get(file);
     res.type('html').send(css ? html.replace('</head>', `  <style>${css}</style>\n</head>`) : html);
   }
@@ -719,7 +738,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // De organisatiecode bepaalt de organisatie (leeg = hoofdtenant); dezelfde
       // gebruikersnaam kan in meer organisaties bestaan. Testaccounts van een
       // testomgeving loggen in met de code van de organisatie of van die omgeving.
-      const orgCode = String(req.body?.tenant ?? '').trim().toLowerCase().slice(0, 60);
+      // Zonder multitenancy bestaat er één organisatie: een ingevulde of onthouden code telt niet.
+      const orgCode = multitenancyOn() ? String(req.body?.tenant ?? '').trim().toLowerCase().slice(0, 60) : '';
       let home = store.loginTenant(orgCode);
       const key = `${home?.id || orgCode}:${username}`;
       if (loginGuard.blocked(req, key)) {
@@ -746,7 +766,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       // Testaccounts hebben platformbreed unieke namen: met een verkeerde of
       // vergeten organisatiecode (de browser onthoudt de vorige) zoeken we in de
       // testomgeving waar de naam bij hoort, met een eigen blokkering per omgeving.
-      const testAccount = !user ? store.loginTenantOfTestAccount(username) : null;
+      let testAccount = !user ? store.loginTenantOfTestAccount(username) : null;
+      if (testAccount && !inScope(testAccount.home)) testAccount = null;
       if (testAccount && testAccount.home.id !== home?.id) {
         const testKey = `${testAccount.home.id}:${username}`;
         if (loginGuard.blocked(req, testKey)) {
@@ -879,7 +900,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   function organizationActive(tenantId) {
     const home = store.getTenant(tenantId);
-    if (!home || home.disabled) return false;
+    if (!home || home.disabled || !inScope(home)) return false;
     if (!home.parent_id) return true;
     const parent = store.getTenant(home.parent_id);
     return Boolean(parent && !parent.disabled);
@@ -950,7 +971,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!raw) return base;
     const [cookieUserId, cookieTenantId] = raw.split(':');
     if (cookieUserId !== user.id || !cookieTenantId || cookieTenantId === user.tenant_id) return base;
-    if (!store.accessibleTenants(user).some((accessible) => accessible.id === cookieTenantId)) return base;
+    if (!inScopeOnly(store.accessibleTenants(user)).some((accessible) => accessible.id === cookieTenantId)) return base;
     return { ...base, tenant_id: cookieTenantId, role: user.platform_admin ? 'beheerder' : user.role };
   }
 
@@ -960,7 +981,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @param {object} user De gebruiker.
    * @returns {object[]} De omgevingen.
    */
-  const accessibleFor = (user) => store.accessibleTenants({ ...user, tenant_id: user.home_tenant_id || user.tenant_id });
+  const accessibleFor = (user) => inScopeOnly(store.accessibleTenants({ ...user, tenant_id: user.home_tenant_id || user.tenant_id }));
 
   /**
    * Wist de omgevingscookies; alleen wat er is (de sessie-cookie blijft zo de eerste Set-Cookie).
@@ -1105,7 +1126,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   const loginCodeOf = (user) => {
     const tenantRow = user && store.getTenant(user.home_tenant_id || user.tenant_id);
-    return !tenantRow || tenantRow.slug === 'default' ? '' : tenantRow.slug;
+    return !tenantRow || tenantRow.slug === 'default' || !multitenancyOn() ? '' : tenantRow.slug;
   };
 
   // ---------- Eigen wachtwoord wijzigen ----------
@@ -1191,6 +1212,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       preferences: user?.kind === 'account' && !user.impersonation ? preferencesOf(user) : null,
       tenant: active,
       platformAdmin: Boolean(user?.platform_admin),
+      // Of meer organisaties naast elkaar draaien; zo niet, dan verbergt de frontend het tenant-specifieke deel.
+      multitenancy: multitenancyOn(),
       // Organisatiecode waarmee de gebruikers van deze organisatie inloggen
       // (leeg voor de hoofdtenant).
       loginCode: loginCodeOf(user),
@@ -1938,7 +1961,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const tenantActive = (id) => {
     const tenantRow = store.getTenant(id);
     const live = tenantRow && tenantRow.parent_id ? store.getTenant(tenantRow.parent_id) : tenantRow;
-    return Boolean(tenantRow && !tenantRow.disabled && live && !live.disabled);
+    return Boolean(tenantRow && !tenantRow.disabled && live && !live.disabled && inScope(tenantRow));
   };
   const publicLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: clientKey });
 
@@ -2017,6 +2040,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   // ---------- Opdrachten uitbesteden aan andere organisaties (zie outsourcing.js) ----------
+  app.use('/api/outsourcing', (req, res, next) => (multitenancyOn() ? next() : res.status(409).json({ error: 'multitenancy_off', message: 'Uitbesteden werkt alleen met multitenancy aan (Hoofdbeheer > Multitenancy).' })));
   registerOutsourcingRoutes(app, {
     outsourcing: outsourcingStore, store, requireRight, requireJson, audit, mailerFor, tenantActive,
     settingsForTenant: (id) => settingsFor(id),
@@ -2129,7 +2153,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De eigen webshop hoort alleen bij de hoofdtenant: alleen daar een link terug naar de winkel en "in winkelwagen" vanuit de planner.
     const shopSettings = settingsFor(tenant.id);
     const shopOn = req.tenantId === tenant.id && Boolean(shopSettings.get('storefront'));
-    res.json({ modules: settingsFor(req.tenantId).get('modules'), ai: Boolean(aiAvailable(req.tenantId)), shop: shopOn ? { ordering: shopSettings.get('shopOrdering') === true } : null });
+    // Uitbesteden werkt tussen organisaties: zonder multitenancy staat de module uit.
+    const modules = multitenancyOn() ? settingsFor(req.tenantId).get('modules') : { ...settingsFor(req.tenantId).get('modules'), uitbesteden: false };
+    res.json({ modules, ai: Boolean(aiAvailable(req.tenantId)), shop: shopOn ? { ordering: shopSettings.get('shopOrdering') === true } : null });
   });
 
   // ---------- Hoofdbeheer: alle tenants en hun testomgevingen ----------
@@ -2153,13 +2179,47 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   const platformError = (res, out) => res.status(out.status || 400).json({ error: 'invalid_tenant', message: out.error });
 
+  /**
+   * Antwoord voor een handeling op een organisatie die niet meedoet omdat multitenancy uit staat.
+   * @param {object} res Het antwoord.
+   * @returns {object} Het antwoord (409).
+   */
+  const multitenancyOffError = (res) => res.status(409).json({ error: 'multitenancy_off', message: 'Multitenancy staat uit. Zet het aan in Hoofdbeheer > Multitenancy om met meer organisaties te werken.' });
+
+  // Een organisatie buiten de hoofdtenant is niet te benaderen zolang multitenancy uit staat.
+  app.use('/api/platform/tenants/:id', (req, res, next) => {
+    const tenantRow = store.getTenant(req.params.id);
+    if (tenantRow && !inScope(tenantRow)) return multitenancyOffError(res);
+    next();
+  });
+
   app.get('/api/platform/tenants', (req, res) => {
-    res.json({ items: store.listTenants(), mainTenantId: tenant.id, current: req.tenantId });
+    const items = inScopeOnly(store.listTenants());
+    res.json({ items, mainTenantId: tenant.id, current: req.tenantId, multitenancy: multitenancyOn() });
+  });
+
+  // Multitenancy aan of uit. Uitzetten verbergt de andere organisaties (hun gegevens blijven staan); is er zo'n
+  // organisatie, dan moet de hoofdbeheerder dat eerst bevestigen met { acknowledge: true }.
+  app.get('/api/platform/multitenancy', (req, res) => {
+    res.json({ enabled: multitenancyOn(), otherTenants: store.listTenants().filter((live) => live.id !== tenant.id).length });
+  });
+
+  app.put('/api/platform/multitenancy', requireJson, (req, res) => {
+    if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'invalid_multitenancy', message: 'Geef aan of multitenancy aan of uit moet.' });
+    const others = store.listTenants().filter((live) => live.id !== tenant.id).length;
+    if (!req.body.enabled && others && req.body.acknowledge !== true) {
+      return res.status(409).json({ error: 'confirm_required', otherTenants: others, message: `Er zijn nog ${others} andere organisatie(s). Ze worden onbereikbaar (ook voor hun gebruikers) tot je multitenancy weer aanzet. Bevestig om door te gaan.` });
+    }
+    settings.update({ multitenancy: req.body.enabled }, req.user.id);
+    console.log(`Multitenancy ${req.body.enabled ? 'aangezet' : 'uitgezet'} door ${req.user.display_name}`);
+    audit(req, 'multitenancy_gewijzigd', { enabled: req.body.enabled, otherTenants: others }, undefined, tenant.id);
+    res.json({ enabled: multitenancyOn(), otherTenants: others });
   });
 
   // Nieuwe tenant, met optioneel meteen de eerste beheerder. Het account wordt
   // vooraf gecontroleerd; lukt het daarna toch niet, dan gaat de tenant weer weg.
   app.post('/api/platform/tenants', requireJson, wrap(async (req, res) => {
+    if (!multitenancyOn()) return multitenancyOffError(res);
     const { name, slug, admin } = req.body || {};
     const withAdmin = Boolean(admin && (admin.username || admin.password));
     const account = withAdmin ? { username: String(admin.username || '').trim().toLowerCase(), displayName: admin.displayName, role: 'beheerder', password: admin.password } : null;
@@ -2256,7 +2316,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Kleurthema: standaard voor alle organisaties (hoofdtenant) en optioneel een
   // eigen thema per live-tenant. Leeg = huisstijl van AquaTech Service.
   app.get('/api/platform/theme', (req, res) => {
-    const tenants = store.listTenants().filter((candidate) => candidate.id !== tenant.id)
+    const tenants = inScopeOnly(store.listTenants()).filter((candidate) => candidate.id !== tenant.id)
       .map((candidate) => ({ id: candidate.id, name: candidate.name, slug: candidate.slug, theme: settingsFor(candidate.id).get('theme') }));
     res.json({ defaults: Theme.DEFAULTS, global: settings.get('theme'), mainTenantId: tenant.id, tenants });
   });
@@ -2264,6 +2324,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.put('/api/platform/theme', requireJson, (req, res) => {
     const targetId = req.body?.tenantId || tenant.id;
     const tenantRow = store.getTenant(targetId);
+    if (tenantRow && !inScope(tenantRow)) return multitenancyOffError(res);
     if (!tenantRow || tenantRow.environment !== 'live') return res.status(404).json({ error: 'not_found', message: 'Organisatie niet gevonden (een testomgeving volgt het thema van zijn tenant).' });
     const raw = req.body?.colors;
     const target = settingsFor(targetId);
@@ -2584,7 +2645,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   app.locals.seasonRemindersAll = async (today) => {
     // Uit één lijst (geen query per omgeving): een uitgeschakelde organisatie slaat ook haar testomgevingen over.
-    const activeIds = store.listTenants().filter((live) => !live.disabled)
+    const activeIds = inScopeOnly(store.listTenants()).filter((live) => !live.disabled)
       .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
       .map((environment) => environment.id);
     return seasonReminders.runAll(activeIds, today);

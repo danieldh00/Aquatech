@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.0
+
+Multitenancy-schakelaar (Hoofdbeheer > Multitenancy), standaard uit.
+
+- Nieuwe platforminstelling `multitenancy` (settings.js, `platform: true`; startwaarde via `MULTITENANCY`). Uit = één organisatie: alles
+  draait in de hoofdtenant. Datamodel, `tenant_id` en RLS blijven ongewijzigd, aanzetten werkt dus direct.
+- Uit: de organisatiecode bij het inloggen wordt genegeerd (en op de inlogpagina verborgen), omgevingen buiten de hoofdtenant en zijn
+  testomgevingen doen niet mee (`inScope` in server.js: `organizationActive`, `tenantActive`, `accessibleFor`, testaccount-login,
+  seizoensherinneringen), tenant aanmaken en alles op een andere tenant geeft 409 `multitenancy_off`, `/api/outsourcing` is dicht en
+  de module Uitbesteden staat uit in `/api/config`. Testomgevingen van de hoofdtenant werken zoals eerder.
+- Hoofdbeheer: knop Multitenancy (`GET|PUT /api/platform/multitenancy`); het formulier voor nieuwe tenants is verborgen zolang het uit
+  staat. Uitzetten terwijl er andere organisaties zijn vraagt `acknowledge: true`; hun gegevens blijven staan.
+- Een tenant buiten de hoofdtenant verwijderen kan alleen als multitenancy aan staat (alles op zo'n tenant geeft 409 `multitenancy_off`).
+- Tests: `test/multitenancy.test.js`; bestaande tests die meerdere organisaties gebruiken draaien met `MULTITENANCY=1`.
+
 ## 1.7.9
 
 Testomgeving en tenant verwijderen of leegmaken werkt weer, met een duidelijke melding als het toch misgaat.

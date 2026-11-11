@@ -53,7 +53,7 @@ async function setup({ mollie = false, addressFetch = createPdokFake().fetchImpl
    */
   const mailerFor = () => ({ configured: () => true, send: async (message) => { if (mailFailing.on) throw new Error('Mailserver onbereikbaar'); sent.push(message); } });
   const mollieFake = mollie ? createMollieFake() : null;
-  const app = createApp({ secret: SECRET, db, mailerFor, ...(mollieFake ? { mollieFetch: mollieFake.fetchImpl } : {}), addressFetch });
+  const app = createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, mailerFor, ...(mollieFake ? { mollieFetch: mollieFake.fetchImpl } : {}), addressFetch });
   const { server, base } = await listen(app);
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');

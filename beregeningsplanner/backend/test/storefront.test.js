@@ -24,7 +24,7 @@ async function setup() {
   const store = createStore(db);
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   const anonymous = createClient(base);

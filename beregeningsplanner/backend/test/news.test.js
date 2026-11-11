@@ -28,7 +28,7 @@ async function setup(opts = {}) {
     const row = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     store.updateProfile(row.id, { email });
   }
-  const { server, base } = await listen(createApp({ secret: SECRET, db, ...opts }));
+  const { server, base } = await listen(createApp({ secret: SECRET, db, env: { MULTITENANCY: '1' }, ...opts }));
   const as = createLogin(base, { password: PW });
   return { db, store, server, base, as, main };
 }

@@ -174,7 +174,7 @@ async function setup() {
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW }, { mustChangePassword: false });
   const groen = store.createTenant({ name: 'Groen BV', slug: 'groen' }).tenant;
   await store.createAccount(groen.id, { username: 'gert', displayName: 'Gert', role: 'beheerder', password: PW }, { mustChangePassword: false });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
   const as = createLogin(base, { password: PW });
   return { db, server, base, as };
 }

@@ -115,7 +115,7 @@ async function setup() {
   await store.createAccount(tid, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: pw });
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: pw });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: pw });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
   const as = createLogin(base, { password: pw, organizationField: 'organization' });
   return { db, store, server, base, as };
 }

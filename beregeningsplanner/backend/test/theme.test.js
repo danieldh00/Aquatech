@@ -17,7 +17,7 @@ const PW = 'Tuin-Plan-2026!';
  * @returns {Promise<{ server: import('http').Server, base: string }>} De server en zijn adres.
  */
 function start(db) {
-  return listen(createApp({ secret: SECRET, db }));
+  return listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
 }
 
 test('thema-kern: standaard, afleiding, contrast en opschonen', () => {

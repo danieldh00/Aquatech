@@ -74,7 +74,7 @@ async function setup() {
   await store.createAccount(groen.id, { username: 'gerda', displayName: 'Gerda', role: 'beheerder', password: PW }, { mustChangePassword: false });
   await store.createAccount(groen.id, { username: 'gijs', displayName: 'Gijs', role: 'installateur', password: PW }, { mustChangePassword: false });
   const ai = fakeAi();
-  const app = createApp({ secret: SECRET, db, anthropicApiKey: 'sk-ant-platform-sleutel-van-daniel', createAnalyzer: ai.createAnalyzer });
+  const app = createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, anthropicApiKey: 'sk-ant-platform-sleutel-van-daniel', createAnalyzer: ai.createAnalyzer });
   const { server, base } = await listen(app);
   const as = createLogin(base, { password: PW });
   return { db, store, server, base, as, main, groen, ai, app };

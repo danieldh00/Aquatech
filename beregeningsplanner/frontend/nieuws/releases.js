@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.8.0',
+      date: '2026-11-11',
+      title: 'Multitenancy uit te zetten',
+      items: [
+        { text: 'Werk je met één organisatie, dan staat multitenancy nu standaard uit: geen organisatiecode bij het inloggen en geen tenantbeheer. Testomgevingen blijven gewoon werken. Een hoofdbeheerder zet het weer aan via Hoofdbeheer > Multitenancy.', for: ['hoofdbeheer'] },
+      ],
+    },
+    {
       version: '1.7.9',
       date: '2026-11-10',
       title: 'Testomgeving verwijderen werkt weer',

@@ -37,7 +37,7 @@ async function setup(items) {
   const store = createStore(db);
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  const { server, base } = await listen(createApp({ secret: 'f'.repeat(64), db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: 'f'.repeat(64), db }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);

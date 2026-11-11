@@ -47,7 +47,7 @@ async function setup() {
   await store.createAccount(groen.id, { username: 'gerrit', displayName: 'Gerrit', role: 'installateur', password: PW });
   // Tekening indienen staat standaard uit (T-03); hier aan voor beide organisaties.
   for (const tenantId of [main.id, groen.id]) createSettings({ db, tenantId }).update({ drawingRequests: true });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
   return { db, store, main, groen, server, base };
 }
 
@@ -236,7 +236,7 @@ test('tekening indienen staat standaard uit (T-03)', async () => {
   const db = openDb();
   const store = createStore(db);
   store.ensureTenant();
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
   try {
     const anon = createClient(base);
     assert.strictEqual((await anon.get('/app/api/public/drawing')).body.enabled, false);

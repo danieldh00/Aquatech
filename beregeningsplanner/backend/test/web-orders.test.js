@@ -35,7 +35,7 @@ async function setup() {
    * @returns {{ configured: Function, send: Function }} De mailfuncties.
    */
   const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
-  const app = createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor });
+  const app = createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor });
   const { server, base } = await listen(app);
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
@@ -100,7 +100,7 @@ test('bestellen staat standaard uit: geen winkelwagen en knop uitgeschakeld', as
   const store = createStore(db);
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   await admin.put('/app/api/admin/settings', { storefront: true });

@@ -17,7 +17,7 @@ async function start() {
   const db = openDb();
   const store = createStore(db);
   await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  const app = createApp({ secret: SECRET, db });
+  const app = createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db });
   return { store, ...(await listen(app)) };
 }
 

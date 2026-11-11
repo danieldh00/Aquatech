@@ -56,7 +56,7 @@ test('API: klant ziet eigen plannen, offertes en werkorders; anderen niet', asyn
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas Jansen', role: 'klant', password: PW });
   await store.createAccount(tid, { username: 'piet', displayName: 'Piet', role: 'klant', password: PW });
-  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const as = createLogin(base, { password: PW, extraBody: { mustChangePassword: false } });
   try {
     assert.strictEqual((await createClient(base).get('/app/api/portal')).status, 401);

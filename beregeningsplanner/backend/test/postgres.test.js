@@ -116,7 +116,7 @@ test('PostgreSQL-schema is gelijk aan het SQLite-schema', needPg, () => {
  * @returns {Promise<{ server: import('http').Server, base: string }>} De server en zijn adres.
  */
 function start(db, vault) {
-  return listen(createApp({ secret: SECRET, db, vault }));
+  return listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, vault }));
 }
 
 /**

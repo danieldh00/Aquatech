@@ -130,7 +130,7 @@ async function setupShop() {
   const store = createStore(db);
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   await admin.post('/app/api/stock/items', { code: 'SPR-1', name: 'Sproeier Pro', onHand: 5, salePrice: 10 });
@@ -189,7 +189,7 @@ test('shop uit: sitemap, llms.txt en feed bestaan niet', async () => {
   const db = openDb();
   const store = createStore(db);
   store.ensureTenant();
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
   servers.push(server);
   const anonymous = createClient(base);
   for (const urlPath of ['/sitemap.xml', '/llms.txt', '/productfeed.xml']) assert.strictEqual((await anonymous.get(urlPath)).status, 404, urlPath);

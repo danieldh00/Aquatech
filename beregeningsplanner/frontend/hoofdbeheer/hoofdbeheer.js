@@ -65,7 +65,7 @@
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw Object.assign(new Error(body.message || `HTTP ${res.status}`), { status: res.status });
+    if (!res.ok) throw Object.assign(new Error(body.message || `HTTP ${res.status}`), { status: res.status, code: body.error });
     return body;
   }
 
@@ -222,7 +222,61 @@
     state.items = data.items || [];
     state.mainId = data.mainTenantId;
     state.current = data.current;
+    state.multitenancy = Boolean(data.multitenancy);
+    // Zonder multitenancy: geen formulier voor nieuwe tenants; alleen de hoofdtenant en zijn testomgevingen.
+    $('#t-form').hidden = !state.multitenancy;
+    $('#t-multi-note').hidden = state.multitenancy;
     render();
+  }
+
+  /**
+   * Venster om multitenancy aan of uit te zetten. Uitzetten met andere organisaties vraagt eerst om bevestiging.
+   * @returns {Promise<void>}
+   */
+  async function multitenancyDialog() {
+    let data;
+    try { data = await api('platform/multitenancy'); } catch (error) { toast(error.message, true); return; }
+    modal(`<h2>Multitenancy</h2>
+      <p class="muted small">Uit: één organisatie. Alles draait in de hoofdtenant, er is geen tenantbeheer en geen organisatiecode bij het inloggen; testomgevingen blijven werken.
+      Aan: meer organisaties naast elkaar. De gegevens blijven in beide standen gelijk, dus aanzetten werkt direct.</p>
+      ${data.otherTenants ? `<p class="muted small">Er ${data.otherTenants === 1 ? 'is 1 andere organisatie' : `zijn ${data.otherTenants} andere organisaties`}. Bij uitzetten blijven hun gegevens staan, maar zij en hun gebruikers kunnen niet meer in totdat je het weer aanzet.</p>` : ''}
+      <label class="chk"><input type="checkbox" id="mt-on"${data.enabled ? ' checked' : ''}> Multitenancy aan</label>
+      <div class="row"><button class="btn primary" id="mt-save">Opslaan</button></div>
+      <div class="err" role="alert" id="mt-err"></div>`);
+    const saveButton = $('#mt-save');
+    const checkbox = $('#mt-on');
+    /**
+     * Slaat de keuze op; bij organisaties die onbereikbaar worden eerst een bevestiging.
+     * @returns {Promise<void>}
+     */
+    saveButton.onclick = async () => {
+      const enabled = checkbox.checked;
+      if (enabled === data.enabled) { closeModal(); return; }
+      let acknowledge = false;
+      if (!enabled && data.otherTenants) {
+        if (!confirm(`${data.otherTenants} andere organisatie(s) worden onbereikbaar. Doorgaan?`)) return;
+        acknowledge = true;
+      }
+      saveButton.disabled = true;
+      checkbox.disabled = true;
+      try {
+        try {
+          await api('platform/multitenancy', { method: 'PUT', body: acknowledge ? { enabled, acknowledge } : { enabled } });
+        } catch (error) {
+          // Er is intussen een organisatie bijgekomen: de actuele telling opvragen en alsnog om bevestiging vragen.
+          if (error.code !== 'confirm_required') throw error;
+          data = await api('platform/multitenancy');
+          if (!confirm(`${data.otherTenants} andere organisatie(s) worden onbereikbaar. Doorgaan?`)) return;
+          await api('platform/multitenancy', { method: 'PUT', body: { enabled, acknowledge: true } });
+        }
+        closeModal();
+        toast(enabled ? 'Multitenancy staat aan' : 'Multitenancy staat uit');
+        await load();
+      } catch (error) { $('#mt-err').textContent = error.message; } finally {
+        saveButton.disabled = false;
+        checkbox.disabled = false;
+      }
+    };
   }
 
   // ---------- Acties ----------
@@ -917,6 +971,7 @@
    */
   $('#t-theme').onclick = () => themeDialog(state.mainId);
   $('#t-visma').onclick = vismaDialog;
+  $('#t-multi').onclick = multitenancyDialog;
   /**
    * Voert een knop uit de tenanttabel uit.
    * @param {MouseEvent} event de klik

@@ -19,7 +19,7 @@ async function start() {
   const tid = store.ensureTenant().id;
   await store.createAccount(tid, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: PW });
-  const app = createApp({ secret: SECRET, db, accessCode: 'Toegang-Code-2026!' });
+  const app = createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, accessCode: 'Toegang-Code-2026!' });
   return { store, ...(await listen(app)) };
 }
 

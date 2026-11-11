@@ -24,7 +24,7 @@ const SECRET = 'z'.repeat(64);
  * @returns {Promise<{ server: import('http').Server, base: string }>} De server en zijn adres.
  */
 function start(db, opts = {}) {
-  return listen(createApp({ secret: SECRET, db, loginDelayMs: 0, ...opts }));
+  return listen(createApp({ secret: SECRET, db, loginDelayMs: 0, env: { MULTITENANCY: '1' }, ...opts }));
 }
 
 /**

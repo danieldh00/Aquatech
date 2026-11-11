@@ -74,7 +74,7 @@ async function setup() {
   await createUser(tid, 'pim', 'planner');
   await createUser(tid, 'klaas', 'klant');
   await createUser(other.id, 'vreemd', 'beheerder');
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
   const as = createLogin(base, { password: PW });
   return { db, server, as };
 }

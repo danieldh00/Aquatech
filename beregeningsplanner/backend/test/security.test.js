@@ -28,7 +28,7 @@ async function start(opts = {}) {
   const store = createStore(db);
   // Zoals na het instelscherm: de eerste beheerder is hoofdbeheerder.
   if (!opts.noAdmin) await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  const app = createApp({ secret: SECRET, db, loginDelayMs: 0, ...opts });
+  const app = createApp({ secret: SECRET, db, loginDelayMs: 0, env: { MULTITENANCY: '1' }, ...opts });
   return { app, db, store, ...(await listen(app)) };
 }
 
