@@ -924,7 +924,7 @@
     }
     for (const formElement of [$('#c-form'), $('#m-form')]) {
       /** Markeert een wijziging en werkt bij de gegevens de totalen bij. */
-      formElement.oninput = () => { changed(); if (formElement.id === 'm-form') { readForm(); renderTotals(); } };
+      formElement.oninput = () => { changed(); if (formElement.id === 'm-form') { showDiscountField($('#m-form').discountType.value); readForm(); renderTotals(); } };
       /**
        * Voorkomt het verzenden van het formulier (opslaan gaat via de knop).
        * @param {SubmitEvent} event het verzenden

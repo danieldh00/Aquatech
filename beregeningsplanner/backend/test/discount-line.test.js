@@ -97,6 +97,14 @@ test('visma: de korting gaat als fractie per regel mee, ook bij een vast bedrag'
   assert.strictEqual(invoiceBody(make({ discountType: 'amount', discountAmount: 25 }), 'c1', conf, null).body.Rows[1].DiscountPercentage, 0.1);
   assert.strictEqual(invoiceBody(make({ discountPct: 10 }), 'c1', conf, null).body.Rows[1].DiscountPercentage, 0.1);
   assert.strictEqual(invoiceBody(make({}), 'c1', conf, null).body.Rows[1].DiscountPercentage, 0);
+  // Een niet-ronde fractie (10 over 30,03 in drie regels): de som van de regels na korting blijft binnen 1 cent per regel
+  // van het factuurtotaal (Visma rondt zelf per regel af, ook bij een percentage).
+  const odd = make({ discountType: 'amount', discountAmount: 10, lines: [
+    { description: 'A', qty: 1, price: 10.01, vat: 21, group: 'producten' }, { description: 'B', qty: 1, price: 10.01, vat: 21, group: 'producten' }, { description: 'C', qty: 1, price: 10.01, vat: 21, group: 'producten' }] });
+  const rows = invoiceBody(odd, 'c1', conf, null).body.Rows.filter((row) => !row.IsTextRow);
+  const viaVisma = rows.reduce((sum, row) => sum + Math.round(row.UnitPrice * row.Quantity * (1 - row.DiscountPercentage) * 100) / 100, 0);
+  const expected = InvoiceCore.totals(odd.data).net;
+  assert.ok(Math.abs(viaVisma - expected) <= 0.03, `Visma ${viaVisma} tegenover factuur ${expected}`);
 });
 
 test('api: de korting wordt bewaard en de klant ziet bedrag en bijschrift', async () => {

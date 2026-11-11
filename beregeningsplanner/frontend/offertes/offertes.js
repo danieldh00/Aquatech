@@ -1422,7 +1422,7 @@
         const amountRow = addTotalRow(QuoteCore.discountCaption(discountTotals, 'Korting (€)', ''), discountTotals.discount);
         discountRow = addTotalRow('Korting %', { formula: `IF(G${subtotalRow}=0,0,G${amountRow}/G${subtotalRow})` }, '0.0%');
       } else {
-        discountRow = addTotalRow(QuoteCore.discountCaption(discountTotals, 'Korting %', ''), data.discountPct / 100, '0.0%');
+        discountRow = addTotalRow(QuoteCore.discountCaption(discountTotals, 'Korting', nl(discountTotals.discountPct)), data.discountPct / 100, '0.0%');
       }
       const netRow = addTotalRow('Excl. btw', { formula: `G${subtotalRow}*(1-G${discountRow})` });
       const vatRows = [];
