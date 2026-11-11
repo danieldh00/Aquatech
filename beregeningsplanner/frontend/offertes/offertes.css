@@ -92,3 +92,13 @@ input.narrow-wide { width: 220px; }
 #edit-view.locked .lines input, #edit-view.locked .lines select { background: transparent; border-color: transparent; }
 #v-sign { padding: 0 0 20px; }
 table.lines .c-kind { width: 112px; }
+
+/* Klantkeuze bovenaan het klantblok (kleuren via de --at-* variabelen en de gedeelde aliassen) */
+.cust-pick { position: relative; margin-bottom: 12px; }
+.cust-list { position: absolute; left: 0; right: 0; z-index: 5; margin: -2px 0 0; padding: 4px; list-style: none; background: var(--at-surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px var(--at-shadow); max-height: 280px; overflow: auto; }
+.cust-list li { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.cust-list li.active, .cust-list li:hover { background: var(--at-green-soft); }
+.cust-list li.none { cursor: default; color: var(--muted); }
+.cust-list .sub { font-size: .85em; color: var(--muted); }
+.cust-chosen { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0; padding: 8px 10px; border-radius: 8px; background: var(--at-green-soft); }
+.cust-chosen[hidden], .cust-list[hidden] { display: none; }

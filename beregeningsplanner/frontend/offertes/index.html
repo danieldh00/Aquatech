@@ -78,6 +78,14 @@
     <div class="cols">
       <section class="card-form">
         <h3>Klant</h3>
+        <div class="cust-pick">
+          <label>Klant uit de klantenlijst
+            <input id="e-cust-search" type="search" autocomplete="off" maxlength="100" placeholder="Zoek op naam, bedrijf, e-mail, telefoon of adres" role="combobox" aria-expanded="false" aria-controls="e-cust-list">
+          </label>
+          <ul id="e-cust-list" class="cust-list" role="listbox" hidden></ul>
+          <div id="e-cust-chosen" class="cust-chosen" hidden><span id="e-cust-name"></span><button type="button" id="e-cust-clear" class="btn small">Ontkoppelen</button></div>
+          <p class="muted small">Kies een klant: naam, adres, e-mail en telefoon worden ingevuld en de klant ziet de offerte in de app zodra de status <b>Verzonden</b> is. Zonder klant werkt de link onder <b>Digitale offerte</b>. <span id="e-cust-new" hidden>Een nieuwe klant maak je onder <a href="../klanten/">Klanten</a>.</span></p>
+        </div>
         <label>Naam / bedrijf<input data-f="customer.name" maxlength="200"></label>
         <label>T.a.v.<input data-f="customer.contact" maxlength="200"></label>
         <label>Adres<textarea data-address-lookup data-f="customer.address" rows="3" maxlength="400"></textarea></label>
@@ -85,8 +93,6 @@
           <label>E-mail<input data-f="customer.email" type="email" maxlength="200"></label>
           <label>Telefoon<input data-f="customer.phone" maxlength="40"></label>
         </div>
-        <label>Klantaccount<select id="e-account"><option value="">Geen (alleen intern)</option></select></label>
-        <p class="muted small">Met een klantaccount ziet de klant de offerte ook in de app zodra de status <b>Verzonden</b> is. Zonder account werkt de link onder <b>Digitale offerte</b>.</p>
       </section>
       <section class="card-form">
         <h3>Offerte</h3>

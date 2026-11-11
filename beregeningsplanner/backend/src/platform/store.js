@@ -1503,10 +1503,10 @@ function createStore(db) {
    * Eén pagina met klanten voor de Klanten-pagina: zoeken over naam, bedrijf, e-mail, telefoon, adres en gebruikersnaam,
    * eventueel op groep, in twee queries (de pagina en het totaal).
    * @param {string[]} tenantIds De tenants (live-tenant en eventueel de testomgeving).
-   * @param {{ search?: string, group?: string, limit?: number, offset?: number }} [options] group: particulier | zakelijk | groothandel | aanvraag.
+   * @param {{ search?: string, group?: string, limit?: number, offset?: number, activeOnly?: boolean }} [options] group: particulier | zakelijk | groothandel | aanvraag; activeOnly laat uitgeschakelde accounts weg.
    * @returns {{ items: object[], total: number }} De klanten (met `hasLogin`) en het totaal aantal bij dit filter.
    */
-  function listCustomerPage(tenantIds, { search = '', group = '', limit = 50, offset = 0 } = {}) {
+  function listCustomerPage(tenantIds, { search = '', group = '', limit = 50, offset = 0, activeOnly = false } = {}) {
     const ids = [...new Set(tenantIds.map(String))];
     const keys = roles.keysOfKind(ids[0], 'klant');
     if (!keys.length) return { items: [], total: 0 };
@@ -1514,6 +1514,7 @@ function createStore(db) {
     const args = [...keys];
     const filters = { particulier: "u.customer_group = ''", zakelijk: "u.customer_group = 'zakelijk'", groothandel: 'u.wholesale = 1', aanvraag: "u.business_request = 'aangevraagd'" };
     if (filters[group]) where.push(filters[group]);
+    if (activeOnly) where.push('u.disabled = 0');
     const words = String(search || '').trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5);
     for (const word of words) {
       const pattern = `%${word.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;

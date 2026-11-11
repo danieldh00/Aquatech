@@ -69,7 +69,7 @@
 
   const QuoteView = window.QuoteView;
   const state = {
-    me: null, admin: false, all: false, klant: false, customers: [], profile: null, canEdit: false, mail: false,
+    me: null, admin: false, all: false, klant: false, profile: null, canEdit: false, mail: false,
     items: [], sort: { key: 'updatedAt', dir: -1 },
     quote: null, saveTimer: null, saving: null, dirty: false, warnings: [],
   };
@@ -435,7 +435,7 @@
     box.className = `notice ok${isLocked && quote.acceptance.answer !== 'akkoord' ? ' rejected' : ''}`;
     box.innerHTML = isLocked ? acceptanceHtml(quote.acceptance) : '';
     $('#edit-view').classList.toggle('locked', isLocked);
-    document.querySelectorAll('#edit-view .cols input, #edit-view .cols textarea, #edit-view .cols select, #edit-view [data-f], #e-lines input, #e-lines select, #e-lines button, #e-status')
+    document.querySelectorAll('#edit-view .cols input, #edit-view .cols textarea, #edit-view .cols select, #edit-view [data-f], #e-lines input, #e-lines select, #e-lines button, #e-status, #e-cust-clear')
       .forEach((field) => { if (field.id !== 'e-number') field.disabled = isLocked; });
   }
 
@@ -593,16 +593,80 @@
   }
 
   /**
-   * Vult de keuzelijst met het klantaccount waaraan de offerte hangt (de klant ziet hem dan zelf).
+   * Toont aan welke klant de offerte hangt (de klant ziet hem dan zelf in de app) en maakt het zoekveld leeg.
    * @param {object} quote de offerte
    */
   function renderAccount(quote) {
-    const select = $('#e-account');
-    const options = state.customers.slice();
-    if (quote.customerAccount && !options.some((customer) => customer.id === quote.customerAccount.id)) options.push({ ...quote.customerAccount, gone: true });
-    select.innerHTML = '<option value="">Geen (alleen intern)</option>' + options
-      .map((customer) => `<option value="${esc(customer.id)}">${esc(customer.displayName)}${customer.username ? ` (${esc(customer.username)})` : ''}${customer.gone ? ' – uitgeschakeld' : ''}</option>`).join('');
-    select.value = quote.customerId || '';
+    const chosen = $('#e-cust-chosen');
+    const account = quote.customerAccount;
+    chosen.hidden = !quote.customerId;
+    $('#e-cust-name').textContent = quote.customerId ? `Gekoppeld aan ${account ? account.displayName : 'een klant'}` : '';
+    $('#e-cust-search').value = '';
+    closeCustomerList();
+    $('#e-cust-new').hidden = !(state.me.rights || []).includes('klanten');
+  }
+
+  /** Sluit de lijst met zoekresultaten van de klantkeuze. */
+  function closeCustomerList() {
+    const list = $('#e-cust-list');
+    list.hidden = true;
+    list.innerHTML = '';
+    $('#e-cust-search').setAttribute('aria-expanded', 'false');
+    state.customerHits = [];
+  }
+
+  /**
+   * Zoekt klanten op de server en toont de eerste 20 onder het zoekveld.
+   * @returns {Promise<void>}
+   */
+  async function searchCustomers() {
+    const search = $('#e-cust-search').value.trim();
+    const ticket = (state.customerTicket = (state.customerTicket || 0) + 1);
+    let items = [];
+    try {
+      items = ((await api(`quote-customers?q=${encodeURIComponent(search)}`)) || {}).items || [];
+    } catch (error) {
+      toast(error.message, true);
+      return;
+    }
+    if (ticket !== state.customerTicket) return;
+    state.customerHits = items;
+    state.customerHitsFor = search;
+    state.customerActive = items.length ? 0 : -1;
+    const list = $('#e-cust-list');
+    list.innerHTML = items.length
+      ? items.map((customer, index) => `<li role="option" data-i="${index}"${index === 0 ? ' class="active"' : ''}><b>${esc(customer.companyName || customer.displayName)}</b>`
+        + `<span class="sub">${esc([customer.companyName ? customer.displayName : '', customer.address.replace(/\n/g, ', '), customer.email].filter(Boolean).join(' · ') || customer.username)}</span></li>`).join('')
+      : '<li class="none">Geen klanten gevonden.</li>';
+    list.hidden = false;
+    $('#e-cust-search').setAttribute('aria-expanded', 'true');
+  }
+
+  /**
+   * Koppelt de offerte aan de gekozen klant en vult naam, contactpersoon, adres, e-mail en telefoon in.
+   * @param {object} customer de gekozen klant uit de zoekresultaten
+   * @returns {Promise<void>}
+   */
+  async function pickCustomer(customer) {
+    const quote = state.quote;
+    if (!quote || locked()) return;
+    const fields = {
+      'customer.name': customer.companyName || customer.displayName,
+      'customer.contact': customer.companyName ? customer.displayName : '',
+      'customer.address': customer.address || '',
+      'customer.email': customer.email || '',
+      'customer.phone': customer.phone || '',
+    };
+    for (const [path, value] of Object.entries(fields)) {
+      setPath(quote.data, path, value);
+      const input = document.querySelector(`#edit-view [data-f="${path}"]`);
+      if (input) input.value = value;
+    }
+    quote.customerId = customer.id;
+    quote.customerAccount = { id: customer.id, displayName: customer.displayName };
+    state.dirty = true;
+    renderAccount(quote);
+    if (await save({ customerId: customer.id })) toast('Gegevens van de klant ingevuld');
   }
 
   /**
@@ -766,14 +830,14 @@
   /**
    * Slaat de offerte op (wacht op een lopende opslag).
    * @param {object} extra extra velden voor de server, zoals status of customerId
-   * @returns {Promise<void>|undefined} de lopende opslag
+   * @returns {Promise<boolean>} true als de offerte is opgeslagen (of niets te bewaren was)
    */
   async function save(extra = {}) {
     clearTimeout(state.saveTimer);
     const quote = state.quote;
-    if (!quote || locked()) { state.dirty = false; return; }
+    if (!quote || locked()) { state.dirty = false; return false; }
     if (state.saving) await state.saving;
-    if (!state.dirty && !Object.keys(extra).length) return;
+    if (!state.dirty && !Object.keys(extra).length) return true;
     state.dirty = false;
     $('#e-saved').textContent = 'Opslaan…';
     state.saving = (async () => {
@@ -785,17 +849,19 @@
           quote.share = result.share;
           $('#e-saved').textContent = `Opgeslagen ${new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`;
         }
+        return true;
       } catch (error) {
         if (error.code === 'locked') {
           // Inmiddels beantwoord door de klant: de serverversie tonen.
           $('#e-saved').textContent = '';
           toast(error.message, true);
           loadQuote(quote.id);
-          return;
+          return false;
         }
         state.dirty = true;
         $('#e-saved').textContent = 'Niet opgeslagen';
         toast(`Opslaan mislukt: ${error.message}`, true);
+        return false;
       } finally {
         state.saving = null;
       }
@@ -930,15 +996,51 @@
       await save({ status: event.target.value });
       if (state.quote) renderWorkOrder(state.quote);
     };
+    let customerTimer;
+    /** Zoekt na een korte pauze in het typen klanten voor de klantkeuze. */
+    $('#e-cust-search').addEventListener('input', () => { clearTimeout(customerTimer); customerTimer = setTimeout(searchCustomers, 200); });
+    /** Toont bij het openen van het veld meteen de eerste klanten. */
+    $('#e-cust-search').addEventListener('focus', () => { if (!locked()) searchCustomers(); });
     /**
-     * Koppelt de offerte aan een ander klantaccount.
-     * @param {Event} event de wijziging
+     * Pijltjestoetsen kiezen een resultaat, Enter neemt het over en Escape sluit de lijst.
+     * @param {KeyboardEvent} event de toets
+     */
+    $('#e-cust-search').addEventListener('keydown', (event) => {
+      const hits = state.customerHits || [];
+      if (event.key === 'Escape') return closeCustomerList();
+      if (!hits.length) return;
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        state.customerActive = (state.customerActive + (event.key === 'ArrowDown' ? 1 : -1) + hits.length) % hits.length;
+        document.querySelectorAll('#e-cust-list li[data-i]').forEach((item) => item.classList.toggle('active', Number(item.dataset.i) === state.customerActive));
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        // De lijst hoort bij een eerdere zoekopdracht (de nieuwe is nog onderweg): niet de verkeerde klant kiezen.
+        if (state.customerHitsFor !== $('#e-cust-search').value.trim()) return;
+        pickCustomer(hits[state.customerActive] || hits[0]);
+      }
+    });
+    /**
+     * Neemt de aangeklikte klant over (mousedown, zodat het zoekveld de focus niet eerst kwijtraakt).
+     * @param {MouseEvent} event de klik
+     */
+    $('#e-cust-list').addEventListener('mousedown', (event) => {
+      const item = event.target.closest('li[data-i]');
+      if (!item) return;
+      event.preventDefault();
+      pickCustomer((state.customerHits || [])[Number(item.dataset.i)]);
+    });
+    /** Sluit de lijst als het zoekveld de focus verliest. */
+    $('#e-cust-search').addEventListener('blur', () => setTimeout(closeCustomerList, 120));
+    /**
+     * Ontkoppelt de klant van de offerte; de ingevulde gegevens blijven staan.
      * @returns {Promise<void>}
      */
-    $('#e-account').onchange = async (event) => {
+    $('#e-cust-clear').onclick = async () => {
       const quote = state.quote;
-      await save({ customerId: event.target.value || null });
-      if (state.quote === quote) quote.customerId = event.target.value || null;
+      if (!quote) return;
+      await save({ customerId: null });
+      if (state.quote === quote) { quote.customerId = null; quote.customerAccount = null; renderAccount(quote); }
     };
     /**
      * Slaat op en gaat terug naar de herkomst of het overzicht.
@@ -1329,9 +1431,8 @@
       return;
     }
     // Bedrijfsprofiel, klanten en webshopprijzen tegelijk.
-    const [profileResult, customers] = await Promise.all([
+    const [profileResult] = await Promise.all([
       api('quote-profile').catch(() => null),
-      state.klant ? null : api('quote-customers').catch(() => null),
       shop,
     ]);
     if (profileResult) {
@@ -1354,8 +1455,6 @@
       for (const id of ['#l-new-plan', '#l-new-empty', '#l-profile']) $(id).hidden = true;
       $('#l-status').innerHTML = '<option value="">Alle statussen</option>' + ['verzonden', 'akkoord', 'afgewezen', 'verlopen']
         .map((status) => `<option value="${status}">${esc(statusLabel(status))}</option>`).join('');
-    } else {
-      state.customers = (customers && customers.items) || [];
     }
     /** Gaat terug naar de herkomst of het overzicht. */
     $('#v-back').onclick = () => { if (state.back) state.back.go(); else go(''); };

@@ -246,3 +246,37 @@ test('uitnodigen: begrensd per medewerker', async () => {
   }
   assert.strictEqual(last, 429);
 });
+
+test('klantkeuze in de offerte: zoekt, begrenst op 20 en laat uitgeschakelde klanten weg', async () => {
+  const { installer, store, main } = await setup();
+  for (let index = 0; index < 22; index += 1) {
+    assert.strictEqual((await installer.post('/app/api/customers', { displayName: `Keuzeklant ${String(index).padStart(2, '0')}`, email: `keuze${index}@voorbeeld.nl` })).status, 201);
+  }
+  const all = (await installer.get('/app/api/quote-customers?q=keuzeklant')).body.items;
+  assert.strictEqual(all.length, 20);
+  const one = (await installer.get('/app/api/quote-customers?q=keuze21@')).body.items;
+  assert.deepStrictEqual(one.map((customer) => customer.displayName), ['Keuzeklant 21']);
+  assert.strictEqual(one[0].email, 'keuze21@voorbeeld.nl');
+  assert.ok(!(await store.updateAccount(main, one[0].id, { disabled: true })).error);
+  assert.deepStrictEqual((await installer.get('/app/api/quote-customers?q=keuze21@')).body.items, []);
+});
+
+test('klantkeuze in de offerte: geen klanten van een andere organisatie, en zonder recht offertes 403', async () => {
+  const { installer, as } = await setup();
+  assert.strictEqual((await installer.post('/app/api/customers', { displayName: 'Gedeelde Zoekterm Eigen' })).status, 201);
+  const foreign = await as('vreemd', 'ander');
+  assert.strictEqual((await foreign.post('/app/api/customers', { displayName: 'Gedeelde Zoekterm Vreemd' })).status, 201);
+  const own = (await installer.get('/app/api/quote-customers?q=gedeelde%20zoekterm')).body.items;
+  assert.deepStrictEqual(own.map((customer) => customer.displayName), ['Gedeelde Zoekterm Eigen']);
+  const theirs = (await foreign.get('/app/api/quote-customers?q=gedeelde%20zoekterm')).body.items;
+  assert.deepStrictEqual(theirs.map((customer) => customer.displayName), ['Gedeelde Zoekterm Vreemd']);
+  // Een klant van de andere organisatie kan niet aan een eigen offerte worden gehangen.
+  const foreignId = theirs[0].id;
+  const quote = await installer.post('/app/api/quotes', { data: {} });
+  assert.strictEqual(quote.status, 201);
+  const linked = await installer.put(`/app/api/quotes/${quote.body.id}`, { data: {}, customerId: foreignId });
+  assert.strictEqual(linked.status, 400);
+  assert.strictEqual(linked.body.error, 'invalid_customer');
+  const planner = await as('planner1');
+  assert.strictEqual((await planner.get('/app/api/quote-customers?q=gedeelde')).status, 403);
+});

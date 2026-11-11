@@ -2021,6 +2021,20 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const home = homeOf(tid);
       return store.listCustomers(home === tid ? [tid] : [home, tid]);
     },
+    /**
+     * Zoekt klanten voor de klantkeuze in de offerte (tot 20, alleen actieve klanten), met de gegevens die de offerte invult.
+     * Een zoekopdracht in plaats van de hele lijst, want die is bij honderden klanten te groot.
+     * @param {object} req Het verzoek (bepaalt de organisatie).
+     * @param {string} search De zoektekst.
+     * @returns {object[]} De klanten met id, gebruikersnaam, naam, bedrijf, e-mail, telefoon en adres.
+     */
+    searchCustomers: (req, search) => {
+      const tid = req.tenantId || tenant.id;
+      const home = homeOf(tid);
+      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+        .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName,
+          email: customer.email, phone: customer.phone, address: customer.address }));
+    },
   });
 
   // ---------- Werkorders (module Werkorders, zie workorders.js) ----------

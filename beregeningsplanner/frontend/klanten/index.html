@@ -57,22 +57,12 @@
     <div class="klanten-head"><button id="n-back" class="btn" type="button">← Klanten</button></div>
     <section class="intro"><h1>Nieuwe klant</h1></section>
     <form id="n-form" class="card" autocomplete="off">
-      <div class="form-grid">
+      <div class="form-grid cols-4">
         <label class="field">Soort klant
           <select name="customerGroup"><option value="">Particulier</option><option value="zakelijk">Zakelijk</option></select>
         </label>
         <label class="field">Naam
           <input name="displayName" required maxlength="80" placeholder="Jan de Vries">
-        </label>
-        <label class="field" data-business>Bedrijfsnaam
-          <input name="companyName" maxlength="80">
-        </label>
-        <label class="field" data-business>KvK-nummer
-          <input name="kvkNumber" inputmode="numeric" maxlength="12" placeholder="8 cijfers">
-        </label>
-        <label class="field" data-business>Btw-nummer
-          <input name="vatNumber" maxlength="20" placeholder="NL123456789B01">
-          <span class="hint">Optioneel.</span>
         </label>
         <label class="field">E-mailadres
           <input name="email" type="email" maxlength="200">
@@ -80,8 +70,18 @@
         <label class="field">Telefoon
           <input name="phone" type="tel" maxlength="25">
         </label>
-        <label class="field full">Adres
-          <textarea name="address" data-address-lookup rows="2" maxlength="400"></textarea>
+        <label class="field span-2" data-business>Bedrijfsnaam
+          <input name="companyName" maxlength="80">
+        </label>
+        <label class="field" data-business>KvK-nummer
+          <input name="kvkNumber" inputmode="numeric" maxlength="12" placeholder="8 cijfers">
+        </label>
+        <label class="field" data-business>Btw-nummer
+          <input name="vatNumber" maxlength="20" placeholder="NL123456789B01">
+        </label>
+        <label class="field full addr-result">Adres
+          <span class="addr-text" data-addr-text></span>
+          <textarea name="address" data-address-lookup hidden maxlength="400"></textarea>
         </label>
         <label class="field chk full"><input type="checkbox" name="invite"> Meteen een uitnodiging mailen, zodat de klant zelf een wachtwoord kiest</label>
       </div>

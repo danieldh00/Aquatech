@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.9.8',
+      date: '2026-11-11',
+      title: 'Klant kiezen in de offerte',
+      items: [
+        { text: 'Offerte maken gaat sneller: kies bovenaan een klant uit de klantenlijst en naam, adres, e-mail en telefoon worden meteen ingevuld.', for: ['offertes'] },
+        { text: 'Het formulier voor een nieuwe klant is overzichtelijker: het adres staat als gewone tekst, en bedrijfsgegevens zie je alleen bij een zakelijke klant.', for: ['klanten'] },
+      ],
+    },
+    {
       version: '1.9.7',
       date: '2026-11-11',
       title: 'Klanten op één plek',
