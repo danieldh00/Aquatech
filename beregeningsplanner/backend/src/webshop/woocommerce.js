@@ -16,6 +16,7 @@
 const net = require('net');
 const { publicAddress } = require('../beveiliging/netguard');
 const { pinnedFetch, readLimited } = require('../beveiliging/pinned-fetch');
+const { withCause } = require('../platform/error-report');
 const { decodeHtmlEntities } = require('./html-entities');
 const { plainTextFromHtml } = require('../artikelen/item-details');
 
@@ -31,9 +32,10 @@ class SourceError extends Error {
    * @param {string} code Foutcode, bijv. 'unreachable' of 'invalid_url'.
    * @param {string} message Melding voor de gebruiker.
    * @param {number} [status] HTTP-status (standaard 502).
+   * @param {Error} [cause] De onderliggende fout (alleen zichtbaar in de debugmodus).
    */
-  constructor(code, message, status = 502) {
-    super(message);
+  constructor(code, message, status = 502, cause) {
+    super(message, cause ? { cause } : undefined);
     this.code = code;
     this.status = status;
   }
@@ -76,6 +78,27 @@ function normalizeBaseUrl(raw, { allowInsecure = insecureAllowed() } = {}) {
 }
 
 /**
+ * Leest het foutantwoord van de webshop (hoogstens 4 kB) als oorzaak voor de debugmodus. WooCommerce stuurt
+ * meestal { code, message }; die melding komt in shopMessage (zonder HTML, ingekort).
+ * @param {object} res Het antwoord van de webshop.
+ * @param {string} url Het aangeroepen adres (zonder sleutels: die gaan via de Authorization-kop).
+ * @returns {Promise<Error>} Een fout met status, adres en het begin van het antwoord.
+ */
+async function shopReply(res, url) {
+  let text = '';
+  try { text = await readLimited(res, 4096); } catch { text = ''; }
+  let shopMessage = '';
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed.message === 'string') shopMessage = parsed.message.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  } catch { shopMessage = ''; }
+  const reply = new Error(`Webshop ${res.status} op ${String(url).split('?')[0]}: ${text.slice(0, 500)}`);
+  reply.name = 'WebshopAntwoord';
+  reply.shopMessage = shopMessage;
+  return reply;
+}
+
+/**
  * Vraagt JSON op bij de webshop (geen omleidingen, met time-out en groottegrens).
  * @param {string} url Het adres.
  * @param {object} headers Extra koppen (bijv. Authorization).
@@ -94,27 +117,32 @@ async function getJson(url, headers, fetchImpl, { method = 'GET', body } = {}) {
     });
   } catch (error) {
     const message = error.name === 'TimeoutError' ? 'De webshop reageert niet (time-out).' : 'De webshop is niet bereikbaar (of stuurt door naar een ander adres: vul het juiste adres in).';
-    throw new SourceError('unreachable', message);
+    throw new SourceError('unreachable', message, 502, error);
   }
   if (res.status === 401 || res.status === 403) {
     throw new SourceError('unauthorized', method === 'GET'
       ? 'De webshop weigert de toegang: controleer de API-sleutels (leesrechten).'
       : 'De webshop weigert het bijwerken: de API-sleutels moeten lees- en schrijfrechten hebben.');
   }
-  if (res.status === 404) throw new SourceError('not_found', 'Geen WooCommerce-API gevonden op dit adres.');
-  if (!res.ok) throw new SourceError('bad_status', `De webshop antwoordt met status ${res.status}.`);
+  if (res.status === 404) throw new SourceError('not_found', 'Geen WooCommerce-API gevonden op dit adres.', 502, await shopReply(res, url));
+  if (!res.ok) {
+    const reply = await shopReply(res, url);
+    // Een weigering (4xx) van WooCommerce zegt meestal precies wat er mis is (bijv. "SKU bestaat al").
+    const reason = res.status < 500 && reply.shopMessage ? `: ${reply.shopMessage}` : '.';
+    throw new SourceError('bad_status', `De webshop antwoordt met status ${res.status}${reason}`, 502, reply);
+  }
   let text;
   try {
     // Met een grens in bytes ná het uitpakken: lezen stopt zodra het te veel wordt.
     text = await readLimited(res, MAX_BYTES);
   } catch (error) {
-    if (error.code === 'too_large') throw new SourceError('too_large', 'Antwoord van de webshop is te groot.');
-    throw new SourceError('unreachable', 'De webshop brak de verbinding af.');
+    if (error.code === 'too_large') throw new SourceError('too_large', 'Antwoord van de webshop is te groot.', 502, error);
+    throw new SourceError('unreachable', 'De webshop brak de verbinding af.', 502, error);
   }
   try {
     return { body: JSON.parse(text), totalPages: Number(res.headers.get('x-wp-totalpages')) || 0 };
   } catch (error) {
-    throw new SourceError('invalid_json', 'De webshop gaf geen geldige JSON terug.');
+    throw new SourceError('invalid_json', 'De webshop gaf geen geldige JSON terug.', 502, new Error(`${error.message}; begin van het antwoord: ${text.slice(0, 300)}`));
   }
 }
 
@@ -260,7 +288,7 @@ async function connectionFor(shop, { allowInsecure, resolveHost, fetchImpl = nul
     } catch (error) {
       throw error.code === 'private_host'
         ? new SourceError('invalid_url', 'Dit is geen openbaar webadres.', 400)
-        : new SourceError('unreachable', 'De webshop is niet gevonden: controleer het webadres.');
+        : new SourceError('unreachable', 'De webshop is niet gevonden: controleer het webadres.', 502, error);
     }
   }
   const send = fetchImpl || (net.isIP(String(address || '')) ? pinnedFetch(address) : fetch);
@@ -562,4 +590,17 @@ function sanitizeShop(raw) {
   };
 }
 
-module.exports = { fetchProducts, fetchProductWithVariations, fetchOrders, updateProducts, createProduct, updateAttributes, createVariations, shopPrice, normalizeBaseUrl, sanitizeShop, SourceError };
+/**
+ * Stuurt een fout bij het praten met de webshop terug: een SourceError met zijn eigen (leesbare) melding en status,
+ * met de oorzaak voor de debugmodus; elke andere fout is onverwacht en gaat naar de foutafhandeling (500 + foutcode).
+ * @param {object} res Het antwoord.
+ * @param {Error} error De fout.
+ * @param {Function} next Express' next.
+ * @returns {*} Niets bijzonders.
+ */
+function respondShopError(res, error, next) {
+  if (!(error instanceof SourceError)) return next(error);
+  return withCause(res, error).status(error.status).json({ error: error.code, message: error.message });
+}
+
+module.exports = { respondShopError, fetchProducts, fetchProductWithVariations, fetchOrders, updateProducts, createProduct, updateAttributes, createVariations, shopPrice, normalizeBaseUrl, sanitizeShop, SourceError };

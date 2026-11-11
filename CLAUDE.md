@@ -42,7 +42,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   git checkout -B claude/<naam> origin/master
   ```
 - Werkwijze per taak: wijzigen → `npm test` → versie-bump + changelog (als
-  `beregeningsplanner/` is gewijzigd) → `git push -u origin <branch>` → PR naar
+  `beregeningsplanner/` is gewijzigd) → README.md bijwerken (bij features/setup) → `git push -u origin <branch>` → PR naar
   `master` → CI groen (`ci.yml` + `version.yml`) → **Claude-review**
   (`claude-review.yml`: jobs *Claude code review* en *Claude security review*, de
   verplichte controles; opmerkingen oplossen of met reden beantwoorden). **CodeRabbit**
@@ -228,6 +228,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `defer_foreign_keys`; verwijzingen naar gewiste gebruikers elders → NULL).
   Geaccordeerde offerte weg alleen met `{ confirm: <offertenummer> }` (409
   `confirm_required`). Back-ups: `DELETE /api/admin/backups/:name`.
+- **README bijwerken** (wens Daniël 2026-11-11): elke PR die features, modules, instellingen of de installatie/het
+  reviewproces wijzigt, werkt `README.md` (root) in dezelfde PR bij. Het README is het overzicht voor mensen; de details
+  blijven in CLAUDE.md, DOCS.md en CHANGELOG.md.
+- **Multitenancy-schakelaar** (1.8.0, instelling `multitenancy`, `platform: true`, Hoofdbeheer > Multitenancy, standaard uit):
+  uit = alles in de hoofdtenant, geen organisatiecode bij inloggen, andere organisaties kunnen niet inloggen (`inScope` in
+  server.js); datamodel en RLS blijven gelijk. Tests met meer organisaties: `createApp({ env: { MULTITENANCY: '1' } })`.
 - **Testdata beweegt mee met elke feature** (wens Daniël 2026-10-19): een
   nieuwe feature (tabel, status, koppeling) krijgt in dezelfde PR testdata in
   `backend/src/platform/test-data.js` (`buildTestData` voor de opbouw, `seedFeatures`
@@ -605,6 +611,8 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `X-Aquatech-Debug`; `shared/common.js` toont dan `shared/debug-panel.js`. `catchAsync` op app en webshoprouter: async routes
   hoeven geen eigen `wrapAsync` meer. **Een eigen foutantwoord na een `catch` bewaart de oorzaak met `withCause(res, error)`**;
   zet nooit `error.message` van een interne fout rechtstreeks in `message` (alleen bij bewust leesbare fouten, zoals SMTP).
+  Webshopfouten (1.8.6): `respondShopError(res, error, next)` uit woocommerce.js (`SourceError` = leesbaar, met `cause`; rest → 500).
+  Een nieuwe leesbare fout met een onderliggende oorzaak: `new Error(melding, { cause: error })` of `new SourceError(…, status, error)`.
 - Health: `GET /api/health` (versie uit `package.json`).
 
 ## Checklist voor elke nieuwe feature (zonder dat Daniël erom vraagt)
@@ -612,6 +620,10 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 Database-, navigatie- en beveiligingsregels (PR #45, #46, #47) gelden
 standaard voor alle nieuwe code. Controleer ze zelf vóór de PR en noem in
 de PR-beschrijving kort hoe eraan voldaan is.
+
+**Documentatie**: `README.md` (root) bijwerken als de PR features, modules, instellingen, installatie of het
+reviewproces wijzigt; versie-bump + `CHANGELOG.md` + regel bovenaan `frontend/nieuws/releases.js` bij elke wijziging in
+`beregeningsplanner/`.
 
 **Queries** (productie = Supabase over het netwerk, elke query is een rondgang):
 - Geen `SELECT *`/`t.*`: alleen de kolommen die nodig zijn; grote kolommen

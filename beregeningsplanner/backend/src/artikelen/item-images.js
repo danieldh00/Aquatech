@@ -174,20 +174,20 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
       try {
         send = pinnedFetch(await resolveHost(url.hostname));
       } catch (error) {
-        throw new Error('Adres is niet openbaar of niet gevonden.');
+        throw new Error('Adres is niet openbaar of niet gevonden.', { cause: error });
       }
     }
     let response;
     try {
       response = await send(url.href, { headers: { Accept: 'image/jpeg,image/png,image/webp' }, redirect: 'error', signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
     } catch (error) {
-      throw new Error(error && error.name === 'TimeoutError' ? 'Time-out bij het ophalen.' : 'Niet bereikbaar (of doorgestuurd naar een ander adres).');
+      throw new Error(error && error.name === 'TimeoutError' ? 'Time-out bij het ophalen.' : 'Niet bereikbaar (of doorgestuurd naar een ander adres).', { cause: error });
     }
     if (!response.ok) throw new Error(`Status ${response.status}.`);
     try {
       return await readBytesLimited(response, MAX_IMAGE_BYTES);
     } catch (error) {
-      throw new Error(error && error.code === 'too_large' ? 'Afbeelding is te groot.' : 'Lezen is mislukt.');
+      throw new Error(error && error.code === 'too_large' ? 'Afbeelding is te groot.' : 'Lezen is mislukt.', { cause: error });
     }
   }
 

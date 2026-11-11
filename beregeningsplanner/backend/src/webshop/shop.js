@@ -15,7 +15,7 @@ const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const vm = require('vm');
 const { transaction } = require('../database/db');
-const { fetchProducts, normalizeBaseUrl, sanitizeShop, SourceError } = require('./woocommerce');
+const { fetchProducts, normalizeBaseUrl, sanitizeShop, SourceError, respondShopError } = require('./woocommerce');
 
 const CATALOG_FILE = path.join(FRONTEND_DIR, 'beregening', 'js', 'catalog.js');
 
@@ -341,9 +341,8 @@ function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, t
       if (error instanceof SourceError) {
         shop.setStatus(tenantId, { error: error.message });
         console.warn(`Webshop (${tenantId}): ophalen mislukt: ${error.code}`);
-        return res.status(error.status).json({ error: error.code, message: error.message });
       }
-      next(error);
+      respondShopError(res, error, next);
     }
   });
 }
