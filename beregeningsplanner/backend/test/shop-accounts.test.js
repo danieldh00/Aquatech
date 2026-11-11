@@ -255,9 +255,11 @@ test('wachtwoord vergeten, herstellen en e-mailadres bevestigen (A-02)', async (
 });
 
 test('knop naar het beheer in de shopkop: alleen voor medewerkers en beheerders, niet voor klanten of bezoekers', async () => {
-  const { base, store, main, admin } = await setup();
+  const { base, db, store, main, admin } = await setup();
   await store.createAccount(main, { username: 'jan.klant', displayName: 'Jan', role: 'klant', password: PW });
   await store.createAccount(main, { username: 'ina.installateur', displayName: 'Ina', role: 'installateur', password: PW });
+  await store.createAccount(main, { username: 'oud.rol', displayName: 'Oud', role: 'klant', password: PW });
+  db.prepare("UPDATE users SET role = 'bestaat-niet' WHERE username = 'oud.rol' AND tenant_id = ?").run(main);
   const adminLink = /<a class="shop-action shop-admin" href="app\/" title="Naar het beheer">/;
   const mobileLink = /<li><a href="app\/">Naar het beheer<\/a><\/li>/;
 
@@ -278,6 +280,10 @@ test('knop naar het beheer in de shopkop: alleen voor medewerkers en beheerders,
   const asCustomer = await customer.get('/');
   assert.strictEqual(asCustomer.status, 200);
   assert.doesNotMatch(asCustomer.text, /shop-admin|Naar het beheer/, 'klant ziet de knop niet');
+
+  const unknown = createClient(base);
+  await postForm(base, unknown, '/inloggen/', { login: 'oud.rol', password: PW });
+  assert.doesNotMatch((await unknown.get('/')).text, /shop-admin|Naar het beheer/, 'onbekende rol is geen medewerker');
 
   const visitor = await createClient(base).get('/');
   assert.doesNotMatch(visitor.text, /shop-admin|Naar het beheer/, 'bezoeker ziet de knop niet');
