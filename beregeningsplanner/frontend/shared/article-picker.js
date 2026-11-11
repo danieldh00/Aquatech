@@ -42,7 +42,7 @@
     if (!loading) {
       loading = fetch(`${base}api/stock/articles`, { cache: 'no-store' })
         .then((response) => {
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          if (!response.ok) throw new Error(AquatechCommon.statusMessage(response.status));
           return response.json();
         })
         .then((result) => { items = Array.isArray(result.items) ? result.items : []; loading = null; return items; })

@@ -209,7 +209,7 @@
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const out = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(out.message || (res.status === 413 ? 'De foto is te groot.' : `HTTP ${res.status}`));
+    if (!res.ok) throw new Error(out.message || (res.status === 413 ? 'De foto is te groot.' : AquatechCommon.statusMessage(res.status)));
     return out;
   }
 

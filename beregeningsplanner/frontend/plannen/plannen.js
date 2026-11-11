@@ -102,7 +102,7 @@
   async function getJson(url) {
     const res = await fetch(url, { cache: 'no-store' });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(body.message || AquatechCommon.statusMessage(res.status));
     return body;
   }
 
@@ -318,7 +318,7 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: approved ? 'reopen' : 'approve' }),
           });
           const body = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
+          if (!res.ok) throw new Error(body.message || AquatechCommon.statusMessage(res.status));
           plan.review = body.review;
           toast(approved ? 'Goedkeuring ingetrokken' : 'Plan goedgekeurd');
           render();
@@ -340,7 +340,7 @@
         if (!confirm(`"${plan.title}" definitief wissen, inclusief klantgegevens en kopieën in de historie? Dit kan niet ongedaan worden gemaakt (oude back-ups bevatten het plan nog tot ze verlopen).`)) return;
         try {
           const res = await fetch(`../api/admin/plans/${encodeURIComponent(plan.id)}`, { method: 'DELETE', cache: 'no-store' });
-          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || `HTTP ${res.status}`);
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || AquatechCommon.statusMessage(res.status));
           $('#detail').hidden = true;
           toast('Plan definitief gewist');
           load();

@@ -65,7 +65,7 @@
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw Object.assign(new Error(body.message || `HTTP ${res.status}`), { status: res.status, code: body.error });
+    if (!res.ok) throw Object.assign(new Error(body.message || AquatechCommon.statusMessage(res.status)), { status: res.status, code: body.error });
     return body;
   }
 

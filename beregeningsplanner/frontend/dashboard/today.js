@@ -164,7 +164,7 @@
     let data;
     try {
       const res = await fetch(`api/my-day?${query}`, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error(AquatechCommon.statusMessage(res.status));
       data = await res.json();
     } catch (error) {
       if (requestNumber !== state.loading) return;

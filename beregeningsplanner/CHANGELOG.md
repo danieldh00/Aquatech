@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.9
+
+Foutmeldingen nalopen, deel 3: de frontend.
+
+- `AquatechCommon.statusMessage(status)` in `shared/common.js`: een leesbare melding per HTTP-status (401 niet ingelogd,
+  403 geen rechten, 404 niet gevonden, 409 intussen gewijzigd, 413 te groot, 429 te veel verzoeken, 502/503/504 even niet
+  bereikbaar, overige 500+ fout op de server). Vervangt overal `HTTP <status>` als terugval wanneer de server geen `message` geeft.
+- Een netwerkfout (`TypeError` van fetch) wordt in de gedeelde fetch-hulp *"Geen verbinding met de server. Controleer je
+  internetverbinding en probeer het opnieuw."*, met de oorspronkelijke fout als `cause`. Afbreken (`AbortError`) blijft zoals hij was.
+- Onbekende API-route: 404 met `message` *"Deze API-route bestaat niet."*.
+- Tests: `statusMessage` en de netwerkmelding; een test bewaakt dat er geen `HTTP ${…}`-melding meer in de frontend staat.
+
 ## 1.8.8
 
 Naloop van de review op 1.8.7 (de fixes kwamen net na de merge).

@@ -95,7 +95,7 @@
     if (withLines) params.set('lines', '1');
     const res = await fetch(`../api/admin/webshop-report?${params}`, { cache: 'no-store' });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(body.message || AquatechCommon.statusMessage(res.status));
     return body;
   }
 

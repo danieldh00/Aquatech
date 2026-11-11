@@ -67,7 +67,7 @@
   async function api(path) {
     const res = await fetch(`../api/admin/${path}`, { cache: 'no-store' });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(body.message || AquatechCommon.statusMessage(res.status));
     return body;
   }
 

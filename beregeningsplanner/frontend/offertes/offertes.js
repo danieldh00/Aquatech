@@ -100,7 +100,7 @@
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw Object.assign(new Error(result.message || `HTTP ${response.status}`), { code: result.error, status: response.status });
+    if (!response.ok) throw Object.assign(new Error(result.message || AquatechCommon.statusMessage(response.status)), { code: result.error, status: response.status });
     return result;
   }
 

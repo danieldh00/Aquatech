@@ -52,7 +52,7 @@
       body: hasBody ? JSON.stringify(requestOptions.body) : undefined,
     });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.message || `HTTP ${response.status}`);
+    if (!response.ok) throw new Error(body.message || AquatechCommon.statusMessage(response.status));
     return body;
   }
 

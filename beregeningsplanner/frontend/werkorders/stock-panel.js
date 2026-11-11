@@ -44,7 +44,7 @@
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const out = await res.json().catch(() => ({}));
-    if (!res.ok) throw Object.assign(new Error(out.message || `HTTP ${res.status}`), { code: out.error });
+    if (!res.ok) throw Object.assign(new Error(out.message || AquatechCommon.statusMessage(res.status)), { code: out.error });
     return out;
   }
   /**

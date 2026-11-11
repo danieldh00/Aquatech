@@ -396,3 +396,57 @@ test('frontend: common.js laadt het debugpaneel alleen bij een foutantwoord met 
   for (let i = 0; i < 7; i++) context.window.AquatechDebug.show(body);
   assert.strictEqual(panel.children.length, 5, 'hoogstens vijf kaarten');
 });
+
+test('frontend: leesbare melding bij een foutstatus zonder eigen melding en bij geen verbinding', async () => {
+  const { window, document } = fakeDom();
+  /**
+   * Nep-fetch zonder verbinding: gooit zoals de browser een TypeError.
+   * @returns {Promise<never>} Altijd afgewezen.
+   */
+  window.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  const context = vm.createContext({ ...window, window, document, navigator: window.navigator, location: window.location, console });
+  vm.runInContext(fs.readFileSync(path.join(FRONT, 'shared', 'common.js'), 'utf8'), context);
+  const { statusMessage } = context.window.AquatechCommon;
+  assert.match(statusMessage(401), /niet \(meer\) ingelogd/);
+  assert.strictEqual(statusMessage(403), 'Je hebt hier geen rechten voor.');
+  assert.match(statusMessage(404), /^Niet gevonden/);
+  assert.match(statusMessage(502), /even niet bereikbaar/);
+  assert.match(statusMessage(504), /even niet bereikbaar/);
+  assert.match(statusMessage(500), /iets mis op de server/);
+  assert.strictEqual(statusMessage(418), 'Er ging iets mis (status 418).');
+
+  const failure = await context.window.fetch('api/x').catch((error) => error);
+  assert.strictEqual(failure.name, 'TypeError', 'zelfde soort fout, zodat bestaande afhandeling blijft werken');
+  assert.match(failure.message, /^Geen verbinding met de server/);
+  assert.strictEqual(failure.cause.message, 'Failed to fetch');
+
+  // Afbreken blijft afbreken.
+  /**
+   * Nep-fetch die wordt afgebroken.
+   * @returns {Promise<never>} Altijd afgewezen met een AbortError.
+   */
+  window.fetch = async () => { throw Object.assign(new Error('aborted'), { name: 'AbortError' }); };
+  const fresh = vm.createContext({ ...window, window, document, navigator: window.navigator, location: window.location, console });
+  vm.runInContext(fs.readFileSync(path.join(FRONT, 'shared', 'common.js'), 'utf8'), fresh);
+  assert.strictEqual((await fresh.window.fetch('api/x').catch((error) => error)).name, 'AbortError');
+});
+
+test('frontend: modules gebruiken geen kale "HTTP <status>" meer als melding', () => {
+  const offenders = [];
+  /**
+   * Loopt een map door en verzamelt bestanden met een kale HTTP-status als melding.
+   * @param {string} directory De map.
+   * @returns {void}
+   */
+  const walk = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) { if (entry.name !== 'vendor') walk(full); continue; }
+      // sw.js heeft geen AquatechCommon (service worker); de status staat daar in het wachtrijlogboek.
+      if (!entry.name.endsWith('.js') || entry.name === 'sw.js') continue;
+      if (/`HTTP \$\{/.test(fs.readFileSync(full, 'utf8'))) offenders.push(path.relative(FRONT, full));
+    }
+  };
+  walk(FRONT);
+  assert.deepStrictEqual(offenders, [], 'gebruik AquatechCommon.statusMessage(status)');
+});

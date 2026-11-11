@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.8.9',
+      date: '2026-11-11',
+      title: 'Begrijpelijke meldingen als iets niet lukt',
+      items: [
+        { text: 'Lukt een actie niet, dan zie je nu wat er aan de hand is (bijvoorbeeld geen verbinding, geen rechten of niet meer ingelogd) in plaats van een technische code zoals "HTTP 500".' },
+      ],
+    },
+    {
       version: '1.8.8',
       date: '2026-11-11',
       title: 'Kleine verbeteringen in de meldingen bij e-mail',

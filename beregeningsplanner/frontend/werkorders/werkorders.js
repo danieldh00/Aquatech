@@ -103,7 +103,7 @@
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw Object.assign(new Error(result.message || `HTTP ${response.status}`), { code: result.error });
+    if (!response.ok) throw Object.assign(new Error(result.message || AquatechCommon.statusMessage(response.status)), { code: result.error });
     // Zonder verbinding uit de offline cache: van wanneer de gegevens zijn.
     const cachedAt = response.headers.get('X-Aquatech-Cached-At');
     if (cachedAt && result && typeof result === 'object') Object.defineProperty(result, 'cachedAt', { value: cachedAt, enumerable: false });
@@ -1065,7 +1065,7 @@
           }
           answer = await post(true);
         }
-        if (answer.status !== 201) return toast(answer.body.message || `Factuur maken mislukt (HTTP ${answer.status})`, true);
+        if (answer.status !== 201) return toast(answer.body.message || `Factuur maken mislukt: ${AquatechCommon.statusMessage(answer.status)}`, true);
         location.href = `../facturen/?id=${encodeURIComponent(answer.body.id)}`;
       } catch (error) {
         toast(`Factuur maken mislukt: ${error.message}`, true);

@@ -47,7 +47,7 @@
       body: requestOptions.body ? JSON.stringify(requestOptions.body) : undefined,
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(body.message || AquatechCommon.statusMessage(res.status));
     return body;
   }
 

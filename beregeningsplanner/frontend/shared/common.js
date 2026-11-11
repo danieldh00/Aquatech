@@ -241,9 +241,38 @@
       return nativeFetch.apply(this, args).then((response) => {
         if (response.status >= 400 && response.headers.get('X-Aquatech-Debug') === '1') reportDebug(response);
         return response;
+      }, (error) => {
+        // Geen verbinding (fetch gooit dan een TypeError met een technische tekst als "Failed to fetch"): een
+        // melding in gewone taal, zelfde soort fout. Afbreken (AbortError) blijft zoals het is. fetch gooit ook een
+        // TypeError bij een fout in de eigen code (ongeldige URL of kop); de echte oorzaak staat daarom in de console.
+        if (error && error.name === 'TypeError') {
+          if (root.console && typeof root.console.warn === 'function') root.console.warn('[fetch] Verzoek mislukt:', error);
+          throw new TypeError('Geen verbinding met de server. Controleer je internetverbinding en probeer het opnieuw.', { cause: error });
+        }
+        throw error;
       });
     };
   }
 
-  root.AquatechCommon = { getJson, ownerOf, excel, origin, onReturn, leaving, offline };
+  // ---------- Meldingen bij een foutstatus ----------
+  /**
+   * Een melding in gewone taal voor een foutstatus zonder eigen melding van de server (bijvoorbeeld een
+   * HTML-pagina van de proxy tijdens een update). Modules gebruiken dit als terugval na body.message.
+   * @param {number} status De HTTP-status.
+   * @returns {string} De melding.
+   */
+  function statusMessage(status) {
+    const code = Number(status) || 0;
+    if (code === 401) return 'Je bent niet (meer) ingelogd. Log opnieuw in en probeer het nog eens.';
+    if (code === 403) return 'Je hebt hier geen rechten voor.';
+    if (code === 404) return 'Niet gevonden: het item bestaat niet (meer) of hoort bij een andere omgeving.';
+    if (code === 409) return 'Dit kan nu niet, omdat het item intussen is gewijzigd. Vernieuw de pagina en probeer het opnieuw.';
+    if (code === 413) return 'Wat je verstuurt is te groot.';
+    if (code === 429) return 'Te veel verzoeken achter elkaar. Wacht even en probeer het opnieuw.';
+    if (code === 502 || code === 503 || code === 504) return 'De server is even niet bereikbaar (bijvoorbeeld tijdens een update). Probeer het over een minuut opnieuw.';
+    if (code >= 500) return 'Er ging iets mis op de server. Probeer het opnieuw; blijft het gebeuren, meld het dan aan de beheerder.';
+    return `Er ging iets mis (status ${code}).`;
+  }
+
+  root.AquatechCommon = { getJson, ownerOf, excel, origin, onReturn, leaving, offline, statusMessage };
 })(window);
