@@ -10,6 +10,8 @@ const { createStore } = require('../src/platform/store');
 const { signaturePng } = require('../src/platform/test-data');
 const Core = require('../../frontend/offertes/quote-core.js');
 const { createClient, createLogin, listen } = require('./helpers/http-client');
+const { createViesFake } = require('./helpers/vies-fake');
+const InvoiceCore = require('../../frontend/facturen/invoice-core.js');
 
 // Plannerbibliotheken in een sandbox, zoals de offertemodule ze laadt.
 const FRONT = path.join(__dirname, '..', '..', 'frontend', 'beregening', 'js');
@@ -117,10 +119,10 @@ const SIGNATURE = signaturePng();
 
 /**
  * Tenant met beheerder, gebruiker, installateur en twee klanten, plus een testserver.
- * @param {{ mailerFor?: Function }} [options] mailerFor: eigen mailer (zonder = standaard).
+ * @param {{ mailerFor?: Function, viesFetch?: Function }} [options] mailerFor: eigen mailer (zonder = standaard), viesFetch: nagebootste VIES.
  * @returns {Promise<object>} server, base, as (inloggen), store, tid en db.
  */
-async function setup({ mailerFor } = {}) {
+async function setup({ mailerFor, viesFetch } = {}) {
   const db = openDb();
   const store = createStore(db);
   const tid = store.ensureTenant().id;
@@ -129,7 +131,7 @@ async function setup({ mailerFor } = {}) {
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: 'Tuin-Plan-2026!' });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: 'Tuin-Plan-2026!' });
   await store.createAccount(tid, { username: 'mien', displayName: 'Mien', role: 'klant', password: 'Tuin-Plan-2026!' });
-  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, ...(mailerFor ? { mailerFor } : {}) }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, ...(mailerFor ? { mailerFor } : {}), ...(viesFetch ? { viesFetch } : {}) }));
   const as = createLogin(base, { password: 'Tuin-Plan-2026!' });
   return { server, base, as, store, tid, db };
 }
@@ -194,7 +196,7 @@ test('API: klant ziet alleen verzonden offertes voor zijn account en kan akkoord
     // Zoeken geeft de gegevens voor het invullen van de offerte; geen treffer = lege lijst.
     const found = (await piet.get('/app/api/quote-customers?q=mien')).body.items;
     assert.deepStrictEqual(found.map((customer) => customer.displayName), ['Mien']);
-    assert.deepStrictEqual(Object.keys(found[0]).sort(), ['address', 'companyName', 'displayName', 'email', 'id', 'phone', 'username']);
+    assert.deepStrictEqual(Object.keys(found[0]).sort(), ['address', 'companyName', 'displayName', 'email', 'id', 'phone', 'username', 'vatNumber']);
     assert.deepStrictEqual((await piet.get('/app/api/quote-customers?q=bestaatniet')).body.items, []);
     const klaasId = custs.find((customer) => customer.displayName === 'Klaas').id;
     const pietId = (await piet.get('/app/api/me')).body.user.id;
@@ -446,5 +448,138 @@ test('offerte uit plan: geen materiaalopslag op regels met een webshopprijs', ()
     assert.strictEqual(other.price, Core.round2(Catalog.articles[other.code].price * 1.1), 'andere regels met opslag');
   } finally {
     Catalog.articles['PE-25'] = original;
+  }
+});
+
+test('Kern: btw verlegd telt alles zonder btw, alleen met een btw-nummer', () => {
+  const lines = [{ section: 'materiaal', description: 'Sproeier', qty: 4, price: 10, vat: 21 }, { section: 'arbeid', description: 'Montage', qty: 2, price: 50, vat: 9 }];
+  assert.strictEqual(Core.totals({ lines }).vatTotal, 17.4);
+  const shifted = Core.totals({ lines, vatShift: { on: true, number: 'DE123456789', status: 'geldig' } });
+  assert.strictEqual(shifted.shifted, true);
+  assert.strictEqual(shifted.vatTotal, 0);
+  assert.strictEqual(shifted.total, 140);
+  assert.deepStrictEqual(shifted.vat, [{ rate: 0, base: 140, amount: 0 }]);
+  assert.strictEqual(Core.totals({ lines, vatShift: { on: true, number: '', status: 'geldig' } }).shifted, false, 'zonder nummer geen verlegging');
+  assert.strictEqual(Core.totals({ lines, vatShift: { on: true, number: 'DE123456789', status: 'onbereikbaar' } }).vatTotal, 17.4, 'zonder geldige VIES-uitkomst blijft de btw');
+  assert.strictEqual(Core.totals({ lines, vatShift: { on: true, number: 'DE123456789' } }).shifted, false, 'nog niet gecontroleerd');
+  // Opschonen: het nummer wordt genormaliseerd, bewijs alleen als het aan staat en de uitkomst bekend is.
+  const clean = Core.sanitize({ vatShift: { on: true, number: ' de 123.456-789 ', status: 'geldig', requestId: 'X1' } }).vatShift;
+  assert.deepStrictEqual(clean, { on: true, number: 'DE123456789', status: 'geldig', checkedAt: '', requestId: 'X1', name: '' });
+  assert.deepStrictEqual(Core.sanitize({ vatShift: { on: false, number: 'DE123456789', status: 'geldig' } }).vatShift, { on: false, number: 'DE123456789', status: '', checkedAt: '', requestId: '', name: '' });
+  assert.strictEqual(Core.sanitize({ vatShift: { on: true, number: '' } }).vatShift.on, false);
+});
+
+test('API: btw verlegd op een offerte wordt bij VIES gecontroleerd en als bewijs bewaard', async () => {
+  const vies = createViesFake({ valid: ['DE123456789'] });
+  const { server, as } = await setup({ viesFetch: vies.fetchImpl });
+  try {
+    const piet = await as('piet');
+    const lines = [{ section: 'materiaal', description: 'Sproeier', qty: 4, price: 10, vat: 21 }];
+    /**
+     * Offerte-invoer met de gegeven instelling voor verlegde btw.
+     * @param {object} vatShift De instelling.
+     * @returns {object} Het verzoek.
+     */
+    const body = (vatShift) => ({ data: { title: 'Export', lines, vatShift } });
+    const ok = await piet.post('/app/api/quotes', body({ on: true, number: 'de 123 456 789' }));
+    assert.strictEqual(ok.status, 201);
+    assert.strictEqual(ok.body.data.vatShift.number, 'DE123456789');
+    assert.strictEqual(ok.body.data.vatShift.status, 'geldig');
+    assert.strictEqual(ok.body.data.vatShift.name, 'BAKKER TUINEN BV');
+    assert.ok(ok.body.data.vatShift.checkedAt);
+    /**
+     * Totalen van een offerte, berekend uit de opgeslagen gegevens.
+     * @param {string} id De offerte.
+     * @returns {Promise<object>} De totalen.
+     */
+    const totalsOf = async (id) => Core.totals((await piet.get(`/app/api/quotes/${id}`)).body.data);
+    assert.strictEqual((await totalsOf(ok.body.id)).vatTotal, 0);
+    assert.strictEqual((await totalsOf(ok.body.id)).total, 40);
+    assert.strictEqual(ok.body.totalIncl, 40, 'totaal in de lijst is zonder btw');
+    // Bewijs uit de browser wordt overschreven door de uitkomst van de server.
+    const forged = await piet.put(`/app/api/quotes/${ok.body.id}`, body({ on: true, number: 'DE123456789', status: 'geldig', requestId: 'VERZONNEN', name: 'Nep' }));
+    assert.strictEqual(forged.status, 200);
+    assert.notStrictEqual(forged.body.data.vatShift.requestId, 'VERZONNEN');
+    assert.strictEqual(forged.body.data.vatShift.name, 'BAKKER TUINEN BV');
+    // Autosave met hetzelfde nummer hergebruikt het bewaarde bewijs: geen nieuwe vraag aan VIES.
+    const callsBefore = vies.calls.length;
+    const again = await piet.put(`/app/api/quotes/${ok.body.id}`, body({ on: true, number: 'DE 123 456 789' }));
+    assert.strictEqual(again.status, 200);
+    assert.strictEqual(vies.calls.length, callsBefore);
+    assert.strictEqual(again.body.data.vatShift.status, 'geldig');
+    assert.strictEqual(again.body.data.vatShift.checkedAt, forged.body.data.vatShift.checkedAt);
+    // Een nummer dat VIES ongeldig noemt wordt niet opgeslagen.
+    const invalid = await piet.put(`/app/api/quotes/${ok.body.id}`, body({ on: true, number: 'DE999999999' }));
+    assert.strictEqual(invalid.status, 409);
+    assert.strictEqual(invalid.body.error, 'vat_invalid');
+    assert.strictEqual((await piet.get(`/app/api/quotes/${ok.body.id}`)).body.data.vatShift.number, 'DE123456789', 'de oude waarde blijft');
+    // Nederlands of onzin: verleggen kan niet.
+    assert.strictEqual((await piet.post('/app/api/quotes', body({ on: true, number: 'NL123456789B01' }))).status, 400);
+    assert.strictEqual((await piet.post('/app/api/quotes', body({ on: true, number: 'onzin' }))).body.error, 'invalid_vat_number');
+    // Het adres van een afnemer in een ander EU-land ligt buiten PDOK en wordt niet gecontroleerd; zonder verlegging wel.
+    const abroad = { ...body({ on: true, number: 'DE123456789' }) };
+    abroad.data.customer = { name: 'Bakker GmbH', address: 'Gartenweg 4\n80331 München' };
+    assert.strictEqual((await piet.post('/app/api/quotes', abroad)).status, 201);
+    const unchecked = { data: { ...abroad.data, vatShift: { on: false, number: 'DE123456789' } } };
+    assert.strictEqual((await piet.post('/app/api/quotes', unchecked)).status === 201, false, 'zonder verlegging blijft PDOK gelden');
+    // Een Nederlands adres blijft bij PDOK gecontroleerd, ook met een geldig buitenlands btw-nummer.
+    const dutch = body({ on: true, number: 'DE123456789' });
+    dutch.data.customer = { name: 'X', address: 'Nepstraat 1\n1234 AB Nergens' };
+    assert.strictEqual((await piet.post('/app/api/quotes', dutch)).status === 201, false, 'Nederlands adres blijft bij PDOK');
+    // Een vervalste uitkomst zonder nummer slaat de PDOK-controle niet over.
+    const forgedCheck = { data: { title: 'X', lines, customer: { name: 'X', address: 'Nepstraat 1\n1234 AB Nergens' }, vatShift: { on: true, number: '', status: 'geldig' } } };
+    assert.strictEqual((await piet.post('/app/api/quotes', forgedCheck)).status === 201, false, 'vals bewijs zonder nummer omzeilt PDOK niet');
+    // Uitzetten wist het bewijs en rekent weer met btw.
+    const off = await piet.put(`/app/api/quotes/${ok.body.id}`, body({ on: false, number: 'DE123456789', status: 'geldig' }));
+    assert.strictEqual(off.body.data.vatShift.status, '');
+    assert.strictEqual((await totalsOf(ok.body.id)).vatTotal, 8.4);
+    // VIES onbereikbaar: de offerte wordt bewaard en toont dat de controle ontbreekt.
+    vies.state.down = true;
+    const down = await piet.put(`/app/api/quotes/${ok.body.id}`, body({ on: true, number: 'FR12345678901' }));
+    assert.strictEqual(down.status, 200);
+    assert.strictEqual(down.body.data.vatShift.status, 'onbereikbaar');
+    assert.strictEqual(down.body.data.vatShift.name, '');
+    assert.strictEqual((await totalsOf(ok.body.id)).vatTotal, 8.4, 'onbereikbaar: de btw wordt niet verlegd');
+    // Zonder uitkomst van VIES vervalt de PDOK-controle niet: een niet-PDOK-adres wordt dan geweigerd.
+    const bypass = body({ on: true, number: 'ATU12345678' });
+    bypass.data.customer = { name: 'X', address: 'Gartenweg 4\n80331 München' };
+    assert.strictEqual((await piet.post('/app/api/quotes', bypass)).status === 201, false, 'geen omweg om PDOK als VIES niet antwoordt');
+  } finally {
+    server.close();
+  }
+});
+
+test('Factuur uit een offerte met verlegde btw gaat zonder btw, met vermelding', () => {
+  const quote = { number: 'OF-2026-0001', data: { discountPct: 0, vatShift: { on: true, number: 'DE123456789', status: 'geldig' }, lines: [{ section: 'materiaal', description: 'Sproeier', qty: 2, unit: 'st', price: 10, vat: 21 }] } };
+  const built = InvoiceCore.fromWorkOrder({ number: 'WO-2026-0001', data: { customer: { name: 'Bakker GmbH' }, title: 'Export' } }, { quote });
+  assert.deepStrictEqual(built.data.lines.map((line) => line.vat), [0]);
+  assert.match(built.data.notes, /BTW verlegd naar afnemer \(btw-nummer DE123456789\)/);
+  assert.strictEqual(built.data.customer.vatNumber, 'DE123456789');
+  const plain = InvoiceCore.fromWorkOrder({ number: 'WO-2026-0002', data: { customer: { name: 'Jansen' } } }, { quote: { number: 'OF-2', data: { lines: [{ section: 'materiaal', description: 'Sproeier', qty: 1, unit: 'st', price: 10, vat: 21 }] } } });
+  assert.deepStrictEqual(plain.data.lines.map((line) => line.vat), [21]);
+  assert.strictEqual(plain.data.notes, '');
+  const unchecked = InvoiceCore.fromWorkOrder({ number: 'WO-2026-0003', data: { customer: { name: 'Bakker GmbH' } } }, { quote: { number: 'OF-3', data: { vatShift: { on: true, number: 'DE123456789', status: 'onbereikbaar' }, lines: [{ section: 'materiaal', description: 'Sproeier', qty: 1, unit: 'st', price: 10, vat: 21 }] } } });
+  assert.deepStrictEqual(unchecked.data.lines.map((line) => line.vat), [21], 'zonder geldige VIES-uitkomst geen verlegging op de factuur');
+});
+
+test('API: VIES wordt niet gevraagd voor een onbekende offerte en heeft een limiet per gebruiker', async () => {
+  const vies = createViesFake({ valid: ['DE123456789'] });
+  const { server, as } = await setup({ viesFetch: vies.fetchImpl });
+  try {
+    const piet = await as('piet');
+    const before = vies.calls.length;
+    const missing = await piet.put('/app/api/quotes/bestaat-niet', { data: { title: 'Niets', lines: [], vatShift: { on: true, number: 'DE123456789' } } });
+    assert.strictEqual(missing.status, 404);
+    assert.strictEqual(vies.calls.length, before, 'geen VIES-vraag voor een offerte die er niet is');
+    // Een nieuwe vraag aan VIES telt mee: boven de 20 per minuut volgt 429.
+    let limited = 0;
+    for (let i = 0; i < 24; i += 1) {
+      const out = await piet.post('/app/api/quotes', { data: { title: 'Lus', lines: [], vatShift: { on: true, number: `DE1000000${String(i).padStart(2, '0')}` } } });
+      if (out.status === 429) limited += 1;
+    }
+    assert.ok(limited >= 4, `limiet per gebruiker, kreeg ${limited}x 429`);
+    assert.ok(vies.calls.length - before <= 20, 'niet meer dan 20 vragen aan VIES per minuut');
+  } finally {
+    server.close();
   }
 });

@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="../shared/brand.css">
   <link rel="stylesheet" href="../shared/theme.css">
   <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../shared/layout.css">
   <link rel="stylesheet" href="../dashboard/dashboard.css">
   <link rel="stylesheet" href="../beheer/beheer.css">
   <link rel="stylesheet" href="../plannen/plannen.css">
@@ -84,7 +85,43 @@
           </label>
           <ul id="e-cust-list" class="cust-list" role="listbox" hidden></ul>
           <div id="e-cust-chosen" class="cust-chosen" hidden><span id="e-cust-name"></span><button type="button" id="e-cust-clear" class="btn small">Ontkoppelen</button></div>
-          <p class="muted small">Kies een klant: naam, adres, e-mail en telefoon worden ingevuld en de klant ziet de offerte in de app zodra de status <b>Verzonden</b> is. Zonder klant werkt de link onder <b>Digitale offerte</b>. <span id="e-cust-new" hidden>Een nieuwe klant maak je onder <a href="../klanten/">Klanten</a>.</span></p>
+          <p class="muted small">Kies een klant: naam, adres, e-mail en telefoon worden ingevuld en de klant ziet de offerte in de app zodra de status <b>Verzonden</b> is. Zonder klant werkt de link onder <b>Digitale offerte</b>.</p>
+          <button type="button" id="e-cust-new" class="btn small" hidden>+ Nieuwe klant</button>
+          <form id="e-newcust" class="newcust" autocomplete="off" hidden>
+            <h4>Nieuwe klant</h4>
+            <div class="form-grid">
+              <label class="field">Soort klant
+                <select name="customerGroup"><option value="">Particulier</option><option value="zakelijk">Zakelijk</option></select>
+              </label>
+              <label class="field span-2">Naam
+                <input name="displayName" required maxlength="80" placeholder="Jan de Vries">
+              </label>
+              <label class="field span-2">E-mailadres
+                <input name="email" type="email" maxlength="200">
+              </label>
+              <label class="field">Telefoon
+                <input name="phone" type="tel" maxlength="25">
+              </label>
+              <label class="field full" data-business>Bedrijfsnaam
+                <input name="companyName" maxlength="80">
+              </label>
+              <label class="field" data-business>KvK-nummer
+                <input name="kvkNumber" inputmode="numeric" maxlength="12" placeholder="8 cijfers">
+              </label>
+              <label class="field span-2" data-business>Btw-nummer
+                <input name="vatNumber" maxlength="20" placeholder="NL123456789B01">
+              </label>
+              <label class="field full addr-result">Adres
+                <span class="addr-text" data-addr-text></span>
+                <textarea name="address" data-address-lookup hidden maxlength="400"></textarea>
+              </label>
+            </div>
+            <div id="e-newcust-err" class="err" role="alert"></div>
+            <div class="form-actions">
+              <button class="btn primary small" type="submit">Klant opslaan en kiezen</button>
+              <button id="e-newcust-cancel" class="btn small" type="button">Annuleren</button>
+            </div>
+          </form>
         </div>
         <label>Naam / bedrijf<input data-f="customer.name" maxlength="200"></label>
         <label>T.a.v.<input data-f="customer.contact" maxlength="200"></label>
@@ -92,6 +129,13 @@
         <div class="row2">
           <label>E-mail<input data-f="customer.email" type="email" maxlength="200"></label>
           <label>Telefoon<input data-f="customer.phone" maxlength="40"></label>
+        </div>
+        <div class="vat-shift">
+          <label class="chk"><input type="checkbox" id="e-vs-on"> Btw verlegd (zakelijke klant in een ander EU-land)</label>
+          <div id="e-vs-box" hidden>
+            <label>Btw-nummer van de klant<input id="e-vs-number" data-f="vatShift.number" maxlength="40" placeholder="DE123456789" autocomplete="off"></label>
+            <p id="e-vs-status" class="muted small" role="status"></p>
+          </div>
         </div>
       </section>
       <section class="card-form">

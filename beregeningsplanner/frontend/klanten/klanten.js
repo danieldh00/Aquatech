@@ -203,28 +203,6 @@
     form.querySelectorAll('[data-business]').forEach((field) => { field.hidden = !business; });
   }
 
-  /**
-   * Toont het adres uit het (verborgen) adresveld als gewone tekst, met een korte aanwijzing zolang er nog geen is.
-   * @param {HTMLFormElement} form Het formulier met het adresveld.
-   * @returns {void}
-   */
-  function showAddressText(form) {
-    const text = form.querySelector('[data-addr-text]');
-    const address = form.address.value.trim().split(/\s*\n\s*/).join(', ');
-    text.textContent = address || 'Vul hierboven postcode en huisnummer in';
-    text.classList.toggle('empty', !address);
-  }
-
-  /**
-   * Houdt de adrestekst bij als de postcodezoeker het adres invult of wist.
-   * @param {HTMLFormElement} form Het formulier met het adresveld.
-   * @returns {void}
-   */
-  function watchAddressText(form) {
-    form.address.addEventListener('input', () => showAddressText(form));
-    showAddressText(form);
-  }
-
   /** Maakt het formulier voor een nieuwe klant leeg. */
   function openNew() {
     const form = $('#n-form');
@@ -234,7 +212,7 @@
     form.querySelectorAll('.addr-lookup').forEach((group) => group.remove());
     delete form.address.dataset.addressEnhanced;
     if (window.AddressLookup) window.AddressLookup.enhance(form.address);
-    if (!form.address.dataset.textWatched) { form.address.dataset.textWatched = '1'; watchAddressText(form); } else showAddressText(form);
+    if (!form.address.dataset.textWatched) { form.address.dataset.textWatched = '1'; state.refreshAddress = window.AddressLookup.mirror(form.address, form.querySelector('[data-addr-text]')); } else state.refreshAddress();
     show('new');
     form.displayName.focus();
   }
@@ -410,7 +388,7 @@
   function wireDetail() {
     const contact = $('#c-contact');
     if (window.AddressLookup) window.AddressLookup.enhance(contact.address);
-    watchAddressText(contact);
+    window.AddressLookup.mirror(contact.address, contact.querySelector('[data-addr-text]'));
     /**
      * Slaat naam, e-mail, telefoon en adres op.
      * @param {SubmitEvent} event Het verzenden.

@@ -253,12 +253,17 @@
      * @returns {boolean} true als er ingevuld mag worden.
      */
     const isEditable = () => !field.matches(':disabled');
+    /**
+     * Of het adres met de hand wordt getypt (data-address-manual="1", bijvoorbeeld in het buitenland): zonder postcodezoeker en zonder controle.
+     * @returns {boolean} true bij een handmatig adres.
+     */
+    const isManual = () => field.dataset.addressManual === '1';
     let filling = false;
     // Wat deze component zelf in het veld zette: iets anders (door de gebruiker of de pagina) betekent dat dezelfde invoer opnieuw mag invullen.
     let lastWritten = null;
     const lookup = attach({
       postcodeInput, numberInput, suffixInput, statusElement, endpoint, fetchImpl,
-      isActive: isEditable,
+      isActive: () => isEditable() && !isManual(),
       isCurrent: () => field.value === lastWritten,
       getDestination: () => field.value,
       onFound: (address) => {
@@ -285,20 +290,20 @@
     const form = field.closest('form');
     if (form) {
       form.addEventListener('submit', (event) => {
-        if (!isEditable() || !lookup.hasProblem()) return;
+        if (!isEditable() || isManual() || !lookup.hasProblem()) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         postcodeInput.focus();
       }, true);
     }
     /**
-     * Verbergt het rijtje zolang het adresveld niet te bewerken is (bijvoorbeeld een vergrendelde factuur).
+     * Verbergt het rijtje zolang het adresveld niet te bewerken is (bijvoorbeeld een vergrendelde factuur) of met de hand wordt getypt (data-address-manual), en zet het veld dan op bewerkbaar.
      * @returns {void}
      */
-    const syncEditable = () => { group.hidden = !isEditable(); };
+    const syncEditable = () => { group.hidden = !isEditable() || isManual(); field.readOnly = !isManual(); };
     syncEditable();
     const observer = new MutationObserver(syncEditable);
-    observer.observe(field, { attributes: true, attributeFilter: ['disabled'] });
+    observer.observe(field, { attributes: true, attributeFilter: ['disabled', 'data-address-manual'] });
     const fieldset = field.closest('fieldset');
     if (fieldset) observer.observe(fieldset, { attributes: true, attributeFilter: ['disabled'] });
     return group;
@@ -313,7 +318,26 @@
     for (const field of scope.querySelectorAll('textarea[data-address-lookup], input[data-address-lookup]')) enhance(field);
   }
 
-  const api = { parsePostcode, parseHouseNumber, streetLine, fullAddress, attach, enhance, enhanceAll };
+  /**
+   * Toont de waarde van een (verborgen) adresveld als gewone tekst en houdt die bij zodra het veld wijzigt (de postcodezoeker vult het in of wist het).
+   * @param {HTMLInputElement|HTMLTextAreaElement} field Het adresveld.
+   * @param {HTMLElement} element Waar de tekst komt te staan.
+   * @param {string} [emptyText] Wat er staat zolang er nog geen adres is.
+   * @returns {() => void} Functie die de tekst opnieuw vult (bijvoorbeeld na form.reset()).
+   */
+  function mirror(field, element, emptyText = 'Vul hierboven postcode en huisnummer in') {
+    /** Zet de tekst gelijk aan het adresveld, regels gescheiden met een komma. */
+    const refresh = () => {
+      const address = field.value.trim().split(/\s*\n\s*/).join(', ');
+      element.textContent = address || emptyText;
+      element.classList.toggle('empty', !address);
+    };
+    field.addEventListener('input', refresh);
+    refresh();
+    return refresh;
+  }
+
+  const api = { parsePostcode, parseHouseNumber, streetLine, fullAddress, attach, enhance, enhanceAll, mirror };
   if (typeof module === 'object' && module.exports) { module.exports = api; return; }
   root.AddressLookup = api;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => enhanceAll());

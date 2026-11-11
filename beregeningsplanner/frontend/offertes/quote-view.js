@@ -47,7 +47,7 @@
     if (!Array.isArray(quote.fixed)) return QuoteCore.totals(data);
     const lines = quote.fixed.map((fixed) => ({ section: fixed.section, qty: 1, price: fixed.amount, vat: fixed.vat }))
       .concat(data.lines.filter((line) => line.optional));
-    return QuoteCore.totals({ discountPct: data.discountPct, lines });
+    return QuoteCore.totals({ discountPct: data.discountPct, vatShift: data.vatShift, lines });
   }
 
   /**
@@ -88,7 +88,7 @@
       const rows = lines.map((line) => {
         if (line.optional) hasOptions = true;
         if (showPrices) {
-          return `<tr${optionClass(line)}><td>${description(line)}</td><td class="num">${formatNumber(line.qty)}</td><td>${esc(line.unit)}</td><td class="num">${eur(line.price)}</td><td class="num">${line.vat}%</td><td class="num">${eur(QuoteCore.lineTotal(line))}</td></tr>`;
+          return `<tr${optionClass(line)}><td>${description(line)}</td><td class="num">${formatNumber(line.qty)}</td><td>${esc(line.unit)}</td><td class="num">${eur(line.price)}</td><td class="num">${totals.shifted ? 'verlegd' : `${line.vat}%`}</td><td class="num">${eur(QuoteCore.lineTotal(line))}</td></tr>`;
         }
         // Totaal per onderdeel: geen regelprijzen, behalve bij een optie.
         return `<tr${optionClass(line)}><td colspan="4">${description(line)}</td><td class="num">${formatNumber(line.qty)} ${esc(line.unit)}</td><td class="num">${line.optional ? eur(QuoteCore.lineTotal(line)) : ''}</td></tr>`;
@@ -104,7 +104,7 @@
     if (acceptance && acceptance.answer === 'akkoord') {
       closing = `<div class="p-accepted">
         <h2>Digitaal geaccordeerd</h2>
-        <div>Door <b>${esc(acceptance.name)}</b> op ${esc(dateTime(acceptance.at))}, voor ${eur(acceptance.totalIncl != null ? acceptance.totalIncl : totals.total)} incl. btw, met akkoord op de voorwaarden.</div>
+        <div>Door <b>${esc(acceptance.name)}</b> op ${esc(dateTime(acceptance.at))}, voor ${eur(acceptance.totalIncl != null ? acceptance.totalIncl : totals.total)} ${totals.shifted ? '(btw verlegd)' : 'incl. btw'}, met akkoord op de voorwaarden.</div>
         ${acceptance.signature ? `<img src="${esc(acceptance.signature)}" alt="Handtekening van ${esc(acceptance.name)}">` : ''}
         <div class="p-proof">${acceptance.via === 'account' ? 'Via het klantaccount' : 'Via de offertelink'}${acceptance.ip ? ` · IP ${esc(acceptance.ip)}${acceptance.forwardedFor ? ` (opgegeven ${esc(acceptance.forwardedFor)})` : ''}` : ''}${acceptance.contentHash ? ` · kenmerk ${esc(acceptance.contentHash.slice(0, 16))}` : ''}</div>
       </div>`;
@@ -139,9 +139,10 @@
       <table class="p-totals">
         <tr><td>Subtotaal</td><td class="num">${eur(totals.subtotal)}</td></tr>
         ${totals.discount ? `<tr><td>Korting ${formatNumber(totals.discountPct)}%</td><td class="num">− ${eur(totals.discount)}</td></tr><tr><td>Totaal excl. btw</td><td class="num">${eur(totals.net)}</td></tr>` : ''}
-        ${totals.vat.filter((vat) => vat.base).map((vat) => `<tr><td>Btw ${vat.rate}%</td><td class="num">${eur(vat.amount)}</td></tr>`).join('')}
-        <tr class="grand"><td>Totaal incl. btw</td><td class="num">${eur(totals.total)}</td></tr>
+        ${totals.shifted ? '' : totals.vat.filter((vat) => vat.base).map((vat) => `<tr><td>Btw ${vat.rate}%</td><td class="num">${eur(vat.amount)}</td></tr>`).join('')}
+        <tr class="grand"><td>${totals.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</td><td class="num">${eur(totals.total)}</td></tr>
       </table>
+      ${totals.shifted ? `<p class="p-text">Btw verlegd naar de afnemer${data.vatShift.number ? ` (btw-nummer ${esc(data.vatShift.number)})` : ''}: intracommunautaire levering.</p>` : ''}
       ${data.terms ? `<h2 id="p-terms">Voorwaarden</h2><p class="p-text">${esc(data.terms)}</p>` : ''}
       <div class="p-end">
         ${closing}

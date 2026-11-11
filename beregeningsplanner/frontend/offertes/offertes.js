@@ -381,6 +381,7 @@
     $('#e-number').value = quote.number;
     document.title = `Offerte ${quote.number} – AquaTech Service`;
     $('#e-status').value = quote.status;
+    $('#e-newcust').hidden = true;
     renderAccount(quote);
     $('#e-saved').textContent = '';
     document.querySelectorAll('#edit-view [data-f]').forEach((field) => {
@@ -388,6 +389,7 @@
       field.value = value == null ? '' : value;
     });
     const data = quote.data;
+    renderVatShift(quote);
     $('#e-plan').innerHTML = data.planId
       ? `Opgebouwd uit plan <a href="../beregening/?plan=${encodeURIComponent(data.planId)}">${esc(data.planTitle || 'beregeningsplan')}</a>${data.planSummary ? ` · ${data.planSummary.sprinklers} sproeiers, ${data.planSummary.zones} zones, ${nl(data.planSummary.lawnM2, 0)} m² gazon` : ''}`
       : 'Niet gekoppeld aan een plan.';
@@ -435,7 +437,7 @@
     box.className = `notice ok${isLocked && quote.acceptance.answer !== 'akkoord' ? ' rejected' : ''}`;
     box.innerHTML = isLocked ? acceptanceHtml(quote.acceptance) : '';
     $('#edit-view').classList.toggle('locked', isLocked);
-    document.querySelectorAll('#edit-view .cols input, #edit-view .cols textarea, #edit-view .cols select, #edit-view [data-f], #e-lines input, #e-lines select, #e-lines button, #e-status, #e-cust-clear')
+    document.querySelectorAll('#edit-view .cols input, #edit-view .cols textarea, #edit-view .cols select, #edit-view [data-f], #e-lines input, #e-lines select, #e-lines button, #e-status, #e-cust-clear, #e-cust-new, #e-vs-on')
       .forEach((field) => { if (field.id !== 'e-number') field.disabled = isLocked; });
   }
 
@@ -603,7 +605,93 @@
     $('#e-cust-name').textContent = quote.customerId ? `Gekoppeld aan ${account ? account.displayName : 'een klant'}` : '';
     $('#e-cust-search').value = '';
     closeCustomerList();
-    $('#e-cust-new').hidden = !(state.me.rights || []).includes('klanten');
+    $('#e-cust-new').hidden = !(state.me.rights || []).includes('klanten') || !$('#e-newcust').hidden;
+  }
+
+  /**
+   * Toont het blok "Btw verlegd": het vinkje, het btw-nummer van de klant en de uitkomst van de controle bij VIES (zoals de server die bij het opslaan vastlegde).
+   * @param {object} quote de offerte
+   */
+  function renderVatShift(quote) {
+    const shift = quote.data.vatShift || {};
+    $('#e-vs-on').checked = shift.on === true;
+    $('#e-vs-box').hidden = shift.on !== true;
+    if (document.activeElement !== $('#e-vs-number')) $('#e-vs-number').value = shift.number || '';
+    // Een afnemer in een ander EU-land (btw-nummer door VIES geldig bevonden) heeft een adres buiten PDOK: dat typ je dan zelf.
+    const foreign = shift.on === true && shift.status === 'geldig' && /^[A-Za-z]{2}/.test(shift.number || '') && !/^nl/i.test(shift.number);
+    const address = document.querySelector('#edit-view [data-f="customer.address"]');
+    if (foreign) address.dataset.addressManual = '1'; else delete address.dataset.addressManual;
+    const status = $('#e-vs-status');
+    if (shift.on !== true) { status.textContent = ''; return; }
+    if (!shift.number) status.textContent = 'Vul het btw-nummer van de klant in; zonder nummer wordt de btw niet verlegd.';
+    else if (shift.status === 'geldig') status.textContent = `Controle bij VIES: geldig${shift.name ? ` (${shift.name})` : ''}, ${new Date(shift.checkedAt).toLocaleDateString('nl-NL')}${shift.requestId ? `, kenmerk ${shift.requestId}` : ''}. Dit staat als bewijs op de offerte.`;
+    else if (shift.status === 'onbereikbaar') status.textContent = 'VIES is nu niet bereikbaar: de btw wordt pas verlegd als de controle is gelukt. Sla de offerte later opnieuw op.';
+    else status.textContent = 'Het btw-nummer wordt bij het opslaan gecontroleerd bij VIES; daarna wordt de btw verlegd.';
+    if (shift.number) status.textContent += ' De btw-tarieven per regel blijven bewaard, maar tellen niet mee zolang de btw is verlegd.';
+  }
+
+  /** Zet het vinkje "Btw verlegd" om: de totalen passen zich meteen aan en de offerte wordt bewaard. */
+  function toggleVatShift() {
+    const quote = state.quote;
+    if (!quote || locked()) return;
+    quote.data.vatShift = { ...(quote.data.vatShift || { number: '' }), on: $('#e-vs-on').checked, status: '' };
+    renderVatShift(quote);
+    renderTotals();
+    if (quote.data.vatShift.on && !quote.data.vatShift.number) $('#e-vs-number').focus();
+    else changed();
+  }
+
+  /** Opent het formulier voor een nieuwe klant, leeg, met de bedrijfsvelden alleen bij Zakelijk. */
+  function openNewCustomer() {
+    const form = $('#e-newcust');
+    form.reset();
+    $('#e-newcust-err').textContent = '';
+    if (!(state.me.rights || []).includes('beheer')) form.customerGroup.querySelector('option[value="zakelijk"]').remove();
+    syncNewCustomerBusiness();
+    form.hidden = false;
+    $('#e-cust-new').hidden = true;
+    if (!form.address.dataset.textWatched) { form.address.dataset.textWatched = '1'; state.refreshNewAddress = window.AddressLookup.mirror(form.address, form.querySelector('[data-addr-text]')); } else state.refreshNewAddress();
+    form.displayName.focus();
+  }
+
+  /** Sluit het formulier voor een nieuwe klant zonder te bewaren. */
+  function closeNewCustomer() {
+    $('#e-newcust').hidden = true;
+    renderAccount(state.quote);
+  }
+
+  /** Toont de bedrijfsvelden van het nieuwe-klantformulier alleen bij een zakelijke klant. */
+  function syncNewCustomerBusiness() {
+    const form = $('#e-newcust');
+    const business = form.customerGroup.value === 'zakelijk';
+    form.querySelectorAll('[data-business]').forEach((field) => { field.hidden = !business; });
+  }
+
+  /**
+   * Bewaart de nieuwe klant (die daarmee meteen in de klantenlijst staat) en koppelt hem aan de offerte.
+   * @param {SubmitEvent} event het verzenden
+   * @returns {Promise<void>}
+   */
+  async function saveNewCustomer(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('button[type="submit"]');
+    const quote = state.quote;
+    $('#e-newcust-err').textContent = '';
+    const body = { displayName: form.displayName.value, email: form.email.value, phone: form.phone.value, address: form.address.value, customerGroup: form.customerGroup.value };
+    if (body.customerGroup === 'zakelijk') Object.assign(body, { companyName: form.companyName.value, kvkNumber: form.kvkNumber.value, vatNumber: form.vatNumber.value });
+    button.disabled = true;
+    try {
+      const out = await api('customers', { method: 'POST', body });
+      if (state.quote !== quote) return;
+      form.hidden = true;
+      await pickCustomer(out.customer);
+    } catch (error) {
+      $('#e-newcust-err').textContent = error.message;
+      if (error.field && form[error.field]) form[error.field].focus();
+    } finally {
+      button.disabled = false;
+    }
   }
 
   /** Sluit de lijst met zoekresultaten van de klantkeuze. */
@@ -662,6 +750,10 @@
       const input = document.querySelector(`#edit-view [data-f="${path}"]`);
       if (input) input.value = value;
     }
+    // Een btw-nummer van de klant komt alvast in het veld "Btw verlegd"; het vinkje blijft aan de gebruiker.
+    const vatShift = quote.data.vatShift || { on: false, number: '' };
+    if (customer.vatNumber && !vatShift.on) quote.data.vatShift = { ...vatShift, number: customer.vatNumber };
+    $('#e-vs-number').value = (quote.data.vatShift || {}).number || '';
     quote.customerId = customer.id;
     quote.customerAccount = { id: customer.id, displayName: customer.displayName };
     state.dirty = true;
@@ -815,8 +907,8 @@
     $('#e-totals').innerHTML = `
       <tr><td>Subtotaal</td><td class="num">${eur(totals.subtotal)}</td></tr>
       ${totals.discount ? `<tr><td>Korting ${nl(totals.discountPct)}%</td><td class="num">− ${eur(totals.discount)}</td></tr><tr><td>Totaal excl. btw</td><td class="num">${eur(totals.net)}</td></tr>` : ''}
-      ${totals.vat.filter((vatRow) => vatRow.base).map((vatRow) => `<tr><td>Btw ${vatRow.rate}% over ${eur(vatRow.base)}</td><td class="num">${eur(vatRow.amount)}</td></tr>`).join('')}
-      <tr class="grand"><td>Totaal incl. btw</td><td class="num">${eur(totals.total)}</td></tr>`;
+      ${totals.shifted ? '' : totals.vat.filter((vatRow) => vatRow.base).map((vatRow) => `<tr><td>Btw ${vatRow.rate}% over ${eur(vatRow.base)}</td><td class="num">${eur(vatRow.amount)}</td></tr>`).join('')}
+      <tr class="grand"><td>${totals.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</td><td class="num">${eur(totals.total)}</td></tr>`;
   }
 
   /** Markeert de offerte als gewijzigd en slaat na een korte pauze op. */
@@ -847,6 +939,7 @@
           quote.status = result.status;
           quote.totalIncl = result.totalIncl;
           quote.share = result.share;
+          if (result.data && result.data.vatShift) { quote.data.vatShift = result.data.vatShift; renderVatShift(quote); }
           $('#e-saved').textContent = `Opgeslagen ${new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`;
         }
         return true;
@@ -895,6 +988,7 @@
         if (field === 'discountPct') value = Math.min(100, Math.max(0, Number(value) || 0));
         setPath(quote.data, field, value);
         if (field === 'discountPct') renderTotals();
+        if (field === 'vatShift.number') { quote.data.vatShift.status = ''; renderVatShift(quote); renderTotals(); }
         return changed();
       }
       const key = event.target.dataset.l;
@@ -1032,6 +1126,11 @@
     });
     /** Sluit de lijst als het zoekveld de focus verliest. */
     $('#e-cust-search').addEventListener('blur', () => setTimeout(closeCustomerList, 120));
+    $('#e-cust-new').onclick = openNewCustomer;
+    $('#e-newcust-cancel').onclick = closeNewCustomer;
+    $('#e-newcust').onsubmit = saveNewCustomer;
+    $('#e-newcust').customerGroup.onchange = syncNewCustomerBusiness;
+    $('#e-vs-on').onchange = toggleVatShift;
     /**
      * Ontkoppelt de klant van de offerte; de ingevulde gegevens blijven staan.
      * @returns {Promise<void>}
@@ -1237,7 +1336,7 @@
         const start = sectionRow.number + 1;
         for (const line of lines) {
           const notChosen = !QuoteCore.included(line);
-          const row = sheet.addRow([line.code, `${line.description}${line.optional ? (notChosen ? ' (optie, niet gekozen)' : ' (optie)') : ''}`, line.qty, line.unit, line.price, line.vat]);
+          const row = sheet.addRow([line.code, `${line.description}${line.optional ? (notChosen ? ' (optie, niet gekozen)' : ' (optie)') : ''}`, line.qty, line.unit, line.price, QuoteCore.vatShifted(data) ? 'verlegd' : line.vat]);
           // Een niet gekozen optie telt niet mee in de totalen.
           row.getCell(7).value = notChosen ? 0 : { formula: `C${row.number}*E${row.number}` };
           if (notChosen) row.font = { italic: true, color: { argb: 'FF8A96A3' } };
@@ -1275,10 +1374,11 @@
       const vatRows = [];
       // Btw per tarief: de regels met dat tarief, na korting.
       for (const rate of QuoteCore.VAT_RATES) {
+        if (QuoteCore.vatShifted(data)) break;
         if (!data.lines.some((line) => line.vat === rate && QuoteCore.included(line))) continue;
         vatRows.push(addTotalRow(`Btw ${rate}%`, { formula: `SUMIF(F${firstRow}:F${lastRow},${rate},G${firstRow}:G${lastRow})*(1-G${discountRow})*${rate / 100}` }));
       }
-      const grand = addTotalRow('Totaal incl. btw', { formula: `G${netRow}${vatRows.map((rowNumber) => `+G${rowNumber}`).join('')}` });
+      const grand = addTotalRow(QuoteCore.vatShifted(data) ? 'Totaal (btw verlegd)' : 'Totaal incl. btw', { formula: `G${netRow}${vatRows.map((rowNumber) => `+G${rowNumber}`).join('')}` });
       sheet.getRow(grand).getCell(7).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF19924F' } };
       sheet.getRow(grand).getCell(7).font = { bold: true, color: { argb: 'FFFFFFFF' } };
       for (const [title, text] of [['Inleiding', data.intro], ['Voorwaarden', data.terms]]) {

@@ -399,10 +399,14 @@
       if (!lines.length) warnings.push('Op deze werkorder is niets geboekt: vul de regels zelf in.');
     }
     const customer = data.customer || {};
+    // Btw verlegd op de offerte: ook de factuur gaat zonder btw, met de vermelding voor de Belastingdienst.
+    const shift = quoteData && quoteData.vatShift && quoteData.vatShift.on === true && quoteData.vatShift.number && quoteData.vatShift.status === 'geldig' ? quoteData.vatShift : null;
+    if (shift) for (const line of lines) line.vat = 0;
     return {
       data: sanitize({
         reference: data.title || '',
-        customer: { name: customer.name, contact: customer.contact, address: customer.address, email: customer.email, phone: customer.phone },
+        notes: shift ? `BTW verlegd naar afnemer${shift.number ? ` (btw-nummer ${shift.number})` : ''}; intracommunautaire levering.` : '',
+        customer: { name: customer.name, contact: customer.contact, address: customer.address, email: customer.email, phone: customer.phone, vatNumber: shift ? shift.number : '' },
         discountPct: quoteData ? quoteData.discountPct : 0,
         workOrderNumber: order.number || '',
         quoteNumber: quote ? quote.number || '' : '',

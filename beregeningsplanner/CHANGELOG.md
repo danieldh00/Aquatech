@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.9
+
+Offerte: nieuwe klant vanuit de offerte en btw verlegd naar een EU-klant (punt 12 van bundel A). Geen migratie.
+
+- **Nieuwe klant** in de offerte-editor (knop onder het zoekveld, recht `klanten`): soort (Particulier/Zakelijk met KvK en btw), naam, e-mail, telefoon en adres via postcode en huisnummer. *Klant opslaan en kiezen* maakt de klant aan en koppelt hem meteen aan de offerte. Hergebruikt `POST /api/customers`; het adres staat als tekst, `AddressLookup.mirror` is nu gedeeld door de klantenpagina en de offerte.
+- **Btw verlegd** (vinkje bij de klantgegevens): met een btw-nummer uit een ander EU-land gaat de hele offerte zonder btw (rijen, totaal, PDF/afdruk, Excel, klantweergave, lijst). De server controleert het nummer bij VIES en bewaart de uitkomst, het tijdstip, het consultatienummer en de naam als bewijs op de offerte; een nummer dat VIES ongeldig noemt wordt niet opgeslagen (409), een onbereikbaar VIES wordt als zodanig vastgelegd en dan blijft het gewone btw-tarief gelden: de btw wordt alleen verlegd (offerte, afdruk, Excel, factuur) zolang VIES het nummer geldig noemt. Bewijs uit de browser wordt altijd overschreven. Bij een volgende opslag met hetzelfde nummer wordt het bewaarde bewijs hergebruikt (geen nieuwe VIES-vraag per autosave; een onbereikbaar-uitkomst een minuut), een geaccordeerde of onbekende offerte vraagt niets aan VIES, en nieuwe VIES-vragen zijn beperkt tot 20 per minuut per gebruiker. Een adres met een Nederlandse postcode blijft altijd bij PDOK gecontroleerd.
+- Het adres van de klant is vrij te typen (het ligt buiten PDOK) alleen als VIES het btw-nummer geldig noemt; bij een ongeldig, ontbrekend of onbereikbaar antwoord blijft de PDOK-controle gelden. Het btw-nummer van de gekozen klant wordt alvast ingevuld.
+- Een factuur uit een werkorder met zo'n offerte krijgt 0% btw, het btw-nummer van de afnemer en de vermelding *BTW verlegd naar afnemer*.
+- Beperking: een buitenlandse klant als klantrecord kan nog niet (KvK-nummer en PDOK-adres zijn verplicht); op de offerte zelf kan het wel.
+- Tests: kern (totalen, opschonen), API met nagebootste VIES (geldig, ongeldig, NL, onbereikbaar, vals bewijs, adres), factuur uit offerte.
+
 ## 1.9.8
 
 Offerte: klantkeuze bovenaan het klantblok met automatisch invullen (punt 4 van bundel A). Geen migratie.
