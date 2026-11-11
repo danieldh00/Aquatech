@@ -198,7 +198,9 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     const { share, ...rest } = quote;
     // De interne notitie per regel (zie Core.sanitizeLine) gaat nooit naar de klant.
     const lines = quote.data.lines.map(({ note, ...line }) => line);
-    const out = { ...rest, data: { ...quote.data, lines }, totals: Core.totals(quote.data) };
+    // Ook de interne notitie van de offerte (data.internalNote) gaat nooit naar de klant.
+    const { internalNote, ...customerData } = quote.data;
+    const out = { ...rest, data: { ...customerData, lines }, totals: Core.totals(quote.data) };
     if (quote.data.layout === 'totaal') {
       // Zonder regelprijzen kan de klantpagina het totaal bij een andere
       // optiekeuze niet herberekenen; daarom per sectie en btw-tarief de som
@@ -212,7 +214,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
         fixed.set(key, current);
       }
       out.fixed = [...fixed.values()];
-      out.data = { ...quote.data, lines: lines.map((line) => (line.optional ? line
+      out.data = { ...customerData, lines: lines.map((line) => (line.optional ? line
         : { id: line.id, section: line.section, description: line.description, qty: line.qty, unit: line.unit, optional: false, selected: false })) };
     }
     if (quote.acceptance) {

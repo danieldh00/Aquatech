@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.10.3
+
+Interne notitie per offerte (punt 9 van bundel A). Geen migratie: de notitie staat in de offertegegevens (`data.internalNote`, maximaal 2000 tekens).
+
+- **Offerte**: blok *Interne notitie* onder de voorwaarden. De notitie staat nooit op het document, de pdf/afdruk, de Excel, de mail of de openbare link en ontbreekt in alles wat de klant van de offerte ziet (`forCustomer` in quotes.js haalt hem weg, ook in het portaal).
+- **Werkorder**: bij *Werkorder maken* wordt de notitie overgenomen in `data.internalNote` (blok *Interne notitie* in de werkorder, aanpasbaar, alleen voor medewerkers). De klant ziet hem niet in het portaal en hij gaat niet mee bij uitbesteden (`handoverOf` neemt alleen genoemde velden over).
+- Een kopie van een offerte neemt de notitie mee; een factuur krijgt hem niet.
+- Tests: `internal-note.test.js` (kern, opslaan en lezen, portaal, openbare link, werkorder, klantportaal-werkorder).
+
 ## 1.10.2
 
 Documenttaal per klant (punt 13 van bundel A): offertes, facturen en de mails daarover in het Nederlands of het Engels. Migratie 58 (`users.document_language`, standaard `nl`).

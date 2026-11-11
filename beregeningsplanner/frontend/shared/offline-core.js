@@ -348,7 +348,7 @@
   const FIELDS = {
     status: 'status', assigneeId: 'uitvoerder', title: 'omschrijving', customer: 'klantgegevens', plannedDate: 'datum',
     startTime: 'begintijd', endTime: 'eindtijd', days: 'werkdagen', crew: 'ploeg', instructions: 'werkinstructies',
-    siteNotes: 'bijzonderheden locatie', steps: 'werkstappen', materials: 'materialen', report: 'oplevering',
+    siteNotes: 'bijzonderheden locatie', internalNote: 'interne notitie', steps: 'werkstappen', materials: 'materialen', report: 'oplevering',
     zones: 'zone-indeling', caption: 'bijschrift', kind: 'fase', customerVisible: 'zichtbaar voor de klant',
   };
   /**
