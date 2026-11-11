@@ -1,0 +1,54 @@
+name: CodeRabbit-bevindingen
+
+# CodeRabbit is adviserend: zijn goedkeuring is geen merge-vereiste. Wat hij na of bij het mergen nog onopgelost
+# heeft staan, wordt hier een issue met het label `coderabbit-bevinding`, zodat het zichtbaar blijft en door een
+# bouwthread wordt opgepakt. Logica en tests: beregeningsplanner/backend/tools/coderabbit-findings.js.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+  pull_request_review:
+    types: [submitted]
+  # Vangt reviews die na het mergen binnenkomen en gemiste events.
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: "PR-nummer (leeg = alle PR's van de laatste 7 dagen)"
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+# Eén run tegelijk, anders ontstaan dubbele issues.
+concurrency:
+  group: coderabbit-findings
+  cancel-in-progress: false
+
+jobs:
+  findings:
+    # Een review van een ander dan CodeRabbit en een PR die niet is gemerged zijn niet van belang.
+    if: >-
+      github.event_name != 'pull_request_review' && (github.event_name != 'pull_request' || github.event.pull_request.merged)
+      || (github.event_name == 'pull_request_review' && github.event.pull_request.merged_at != null && startsWith(github.event.review.user.login, 'coderabbitai'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        env:
+          EVENT_PULL_REQUEST: ${{ github.event.pull_request.number || github.event.inputs.pull_request }}
+        with:
+          script: |
+            const tool = require('./beregeningsplanner/backend/tools/coderabbit-findings.js');
+            const client = tool.createClient(github, context.repo.owner, context.repo.repo);
+            const number = Number(process.env.EVENT_PULL_REQUEST);
+            const results = number ? [await tool.processPullRequest(client, number)] : await tool.sweep(client, 7);
+            for (const result of results) {
+              if (result.created.length) core.notice(`PR #${result.number}: issue(s) ${result.created.join(', ')} aangemaakt`);
+              else core.info(`PR #${result.number}: ${result.skipped}`);
+            }

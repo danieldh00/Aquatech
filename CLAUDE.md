@@ -43,11 +43,16 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   ```
 - Werkwijze per taak: wijzigen → `npm test` → versie-bump + changelog (als
   `beregeningsplanner/` is gewijzigd) → `git push -u origin <branch>` → PR naar
-  `master` → CI groen (`ci.yml` + `version.yml`) → wachten op de review van
-  **CodeRabbit** (`.coderabbit.yaml`, verplicht via de ruleset op `master`):
-  elke opmerking oplossen of met reden beantwoorden en daarna de discussie als
-  opgelost markeren; een betwiste opmerking zonder akkoord van CodeRabbit gaat
-  naar Daniël. Pas mergen als CodeRabbit de PR heeft goedgekeurd. Daarna de branch verwijderen. Een volgende taak begint opnieuw vanaf
+  `master` → CI groen (`ci.yml` + `version.yml`) → **Claude-review**
+  (`claude-review.yml`: jobs *Claude code review* en *Claude security review*, de
+  verplichte controles; opmerkingen oplossen of met reden beantwoorden). **CodeRabbit**
+  (`.coderabbit.yaml`) reviewt ook maar is adviserend en mag het mergen niet vertragen:
+  onopgeloste bevindingen worden na het mergen een issue met label `coderabbit-bevinding`
+  (`coderabbit-findings.yml`, 1.8.2). Kritiek/beveiliging (label `coderabbit-kritiek`)
+  direct oplossen, de rest bundelen in een opruim-PR na elke bundel of ca. 5 gemergde PR's
+  (Suggested fix letterlijk overnemen, `Closes #…`). **Overgang:** tot Daniël de ruleset op
+  `master` heeft aangepast (Claude-checks erin, CodeRabbit eruit, goedkeuring 0) geldt de
+  goedkeuring van CodeRabbit nog. Daarna de branch verwijderen. Een volgende taak begint opnieuw vanaf
   `origin/master`, niet vanaf een oude featurebranch.
 - Loopt `master` voor op je branch (andere sessie heeft gemerged): eerst
   `git merge origin/master` in je branch, conflicten oplossen, en de versie
@@ -594,7 +599,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   de server weigert een andere eigenaar (409 `owner_mismatch`, 0.69.0).
   Lokaal bewaarde gegevens (planner-concept, terugval-wachtrij) bewaren hun
   eigenaar en worden alleen aan die gebruiker getoond/verstuurd.
-- **Foutmeldingen + debugmodus** (1.8.1, `platform/error-report.js`): elke 500 krijgt een foutcode (`errorId`, ook in het log
+- **Foutmeldingen + debugmodus** (1.8.3, `platform/error-report.js`): elke 500 krijgt een foutcode (`errorId`, ook in het log
   `[fout <code>]`). Instelling `debugMode` (per omgeving, Beheer > Instellingen > Foutopsporing): aan + recht `beheer` → foutantwoorden
   (400+) krijgen `debug` (oorzaak, databasecode, plek in `src/`, aanroepketen; geheimen via `redact` eruit) en kop
   `X-Aquatech-Debug`; `shared/common.js` toont dan `shared/debug-panel.js`. `catchAsync` op app en webshoprouter: async routes

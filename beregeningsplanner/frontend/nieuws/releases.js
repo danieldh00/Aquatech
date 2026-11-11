@@ -13,13 +13,19 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.8.1',
+      version: '1.8.3',
       date: '2026-11-11',
       title: 'Duidelijkere foutmeldingen en een debugmodus',
       items: [
         { text: 'Gaat er onverwacht iets mis, dan krijg je een melding met een foutcode. Geef die code door aan de beheerder: daarmee is de fout terug te vinden.' },
         { text: 'Nieuw in Beheer > Instellingen > Foutopsporing: de debugmodus. Staat die aan, dan zie je als beheerder bij een fout een paneel met de details (wat er misging en waar), dat je met één klik kunt kopiëren. Klanten en medewerkers zien die details nooit.', for: ['beheer'] },
       ],
+    },
+    {
+      version: '1.8.2',
+      date: '2026-11-11',
+      title: 'Controle van wijzigingen door Claude',
+      items: [],
     },
     {
       version: '1.8.0',
