@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.2
+
+Claude-review als eerste, verplichte controle op elke PR; CodeRabbit adviserend, zijn onopgeloste bevindingen blijven als issue bestaan.
+
+- `.github/workflows/claude-review.yml`: jobs `Claude code review` (claude-code-action) en `Claude security review` (claude-code-security-review) op
+  elke PR naar master. Vereist repository-secret `ANTHROPIC_API_KEY` (zonder sleutel falen de jobs met een duidelijke melding); optionele
+  repository-variabele `CLAUDE_REVIEW_MODEL`. Bevindingen komen als opmerkingen op de PR.
+- `.github/workflows/coderabbit-findings.yml` + `backend/tools/coderabbit-findings.js`: na het mergen (en elk uur, en bij een review na het
+  mergen) wordt elke onopgeloste CodeRabbit-reactiedraad een issue met label `coderabbit-bevinding`; opmerkingen buiten een draad (buiten de
+  diff, nitpicks) komen samen in één issue per review. Een verborgen sleutel in het issue voorkomt dubbelen, ook als het issue is gesloten.
+- Tests: `test/coderabbit-findings.test.js`. Geen wijziging in de app zelf.
+
 ## 1.8.0
 
 Multitenancy-schakelaar (Hoofdbeheer > Multitenancy), standaard uit.
