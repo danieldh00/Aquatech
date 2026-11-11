@@ -321,7 +321,7 @@
       date: today(),
       dueDate: '',
       creditOfNumber: invoice.number || fields.creditOfNumber || '',
-      intro: `Creditering van factuur ${invoice.number || ''}`.trim(),
+      intro: `${fields.language === 'en' ? 'Credit note for invoice' : 'Creditering van factuur'} ${invoice.number || ''}`.trim(),
       lines: (fields.lines || []).map((line) => ({ ...line, id: randomId(), qty: -line.qty })),
     };
   }

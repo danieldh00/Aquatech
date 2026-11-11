@@ -190,3 +190,9 @@ test('offerte en factuur: de taal gaat van de offerte naar de factuur, de PDF en
   // De creditfactuur erft de taal.
   assert.strictEqual(InvoiceCore.sanitize(InvoiceCore.creditOf({ number: 'F1', data: invoice.data })).language, 'en');
 });
+
+test('creditfactuur: de inleiding volgt de documenttaal', () => {
+  const InvoiceCore = require(path.join(__dirname, '..', '..', 'frontend', 'facturen', 'invoice-core.js'));
+  assert.match(InvoiceCore.creditOf({ number: 'F-1', data: { language: 'en', lines: [] } }).intro, /^Credit note for invoice F-1$/);
+  assert.match(InvoiceCore.creditOf({ number: 'F-1', data: { language: 'nl', lines: [] } }).intro, /^Creditering van factuur F-1$/);
+});
