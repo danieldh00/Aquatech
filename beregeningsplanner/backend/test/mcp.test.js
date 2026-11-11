@@ -390,6 +390,12 @@ test('organisaties zijn gescheiden: een andere organisatie ziet geen klanten en 
   // Een token van de ene organisatie met de omgeving van een andere erin geplakt werkt niet.
   const swapped = connection.accessToken.replace(/^aqt_at_[^.]+/, `aqt_at_${main}`);
   assert.strictEqual((await mcp(base, swapped, { method: 'ping' })).status, 401);
+  // De koppeling van de andere organisatie is voor een beheerder hier onzichtbaar en niet in te trekken (404).
+  const admin = await as('baas');
+  const foreignGrant = (await outsider.get('/app/api/account/connections')).body.items[0].id;
+  assert.strictEqual((await admin.get('/app/api/account/connections')).body.items.length, 0);
+  assert.strictEqual((await admin.del(`/app/api/account/connections/${foreignGrant}`)).status, 404);
+  assert.strictEqual((await mcp(base, connection.accessToken, { method: 'ping' })).status, 200);
 });
 
 test('uitzetten, uitschakelen, wachtwoord wijzigen en intrekken stoppen de koppeling direct', async () => {
