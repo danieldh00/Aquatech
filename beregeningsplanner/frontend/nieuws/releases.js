@@ -13,7 +13,7 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.10.2',
+      version: '1.10.3',
       date: '2026-11-11',
       title: 'Handleiding voor de AI-koppeling',
       items: [

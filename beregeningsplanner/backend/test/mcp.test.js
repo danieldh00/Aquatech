@@ -357,7 +357,7 @@ test('toestemmingsscherm: CSRF, ander account, andere site en weigeren', async (
   const second = consentFields((await admin.get(authorizeUrl({ client_id: clientId, code_challenge: pkcePair().challenge }))).text);
   assert.strictEqual((await postForm(base, installer, '/app/oauth/authorize', { ...second, decision: 'allow' })).status, 403);
   const third = consentFields((await admin.get(authorizeUrl({ client_id: clientId, code_challenge: pkcePair().challenge }))).text);
-  assert.strictEqual((await postForm(base, admin, '/app/oauth/authorize', { ...third, csrf: third.csrf.replace(/^./, 'x'), decision: 'allow' })).status, 403);
+  assert.strictEqual((await postForm(base, admin, '/app/oauth/authorize', { ...third, csrf: (third.csrf[0] === 'x' ? 'y' : 'x') + third.csrf.slice(1), decision: 'allow' })).status, 403);
   const fourth = consentFields((await admin.get(authorizeUrl({ client_id: clientId, code_challenge: pkcePair().challenge }))).text);
   const denied = await postForm(base, admin, '/app/oauth/authorize', { ...fourth, decision: 'deny' });
   assert.strictEqual(new URL(denied.location).searchParams.get('error'), 'access_denied');
