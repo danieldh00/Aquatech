@@ -27,7 +27,9 @@ jobs:
   # Productie draait op Supabase: dezelfde tests ook tegen PostgreSQL.
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Twee testruns (SQLite + PostgreSQL) duren samen ~14 min; 15 was te krap en
+    # annuleerde de release (1.9.6, 1.10.0) zonder image.
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17
