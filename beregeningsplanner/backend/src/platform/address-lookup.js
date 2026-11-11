@@ -3,6 +3,8 @@
 // CSP dicht blijft); de server onthoudt uitkomsten, begrenst de wachttijd en
 // geeft bij een storing een duidelijke fout in plaats van te blokkeren.
 
+const { withCause } = require('./error-report');
+
 /** Basisadres van de PDOK Locatieserver (vast, geen invoer van een tenant). */
 const PDOK_URL = 'https://api.pdok.nl/bzk/locatieserver/search/v3_1/free';
 /** Hoe lang een gevonden adres onthouden wordt (BAG-adressen veranderen zelden). */
@@ -152,7 +154,7 @@ function registerAddressRoute(router, routePath, service, ...guards) {
       res.json(await service.lookup({ postcode: req.query.postcode, houseNumber: req.query.huisnummer, suffix: req.query.toevoeging }));
     } catch (error) {
       if (error.code === 'invalid') return res.status(400).json({ error: 'invalid', message: 'Vul een geldige postcode (1234 AB) en een huisnummer in.' });
-      res.status(502).json({ error: 'unavailable', message: 'Het adres kon nu niet worden opgezocht. Probeer het later opnieuw.' });
+      withCause(res, error).status(502).json({ error: 'unavailable', message: 'Het adres kon nu niet worden opgezocht. Probeer het later opnieuw.' });
     }
   });
 }

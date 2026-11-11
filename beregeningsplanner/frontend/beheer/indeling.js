@@ -39,6 +39,7 @@
     { title: 'Systeem', sections: [
       { id: 'backup', label: 'Back-ups', pane: 'settings', form: 's-backup', words: 'kopie database herstellen versleuteld', needs: 'backups' },
       { id: 'aikosten', label: 'AI-kosten', pane: 'aikosten', words: 'verbruik tokens kosten export per gebruiker' },
+      { id: 'debug', label: 'Foutopsporing', pane: 'settings', form: 's-debug', words: 'debug debugmodus foutmelding fout foutcode details' },
     ] },
   ];
 
@@ -46,7 +47,7 @@
   const ALIASES = { settings: 'modules' };
 
   /** Alle formulieren van het tabblad Instellingen: er is er telkens één zichtbaar. */
-  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-mail', 's-ai', 's-access', 's-security', 's-backup'];
+  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-mail', 's-ai', 's-access', 's-security', 's-backup', 's-debug'];
 
   const OPEN_KEY = 'aquatech_beheer_groups';
 
