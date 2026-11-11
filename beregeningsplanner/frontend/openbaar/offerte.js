@@ -72,19 +72,19 @@
      * @param {object} [values] Waarden voor {naam}.
      * @returns {string} De tekst.
      */
-    const tr = (key, values) => window.DocText.text(lang, key, values);
-    document.title = `${tr('quote.title')} ${quote.number}${profile.companyName ? ` – ${profile.companyName}` : ''}`;
-    $('#o-company').textContent = profile.companyName || tr('quote.title');
+    const translate = (key, values) => window.DocText.text(lang, key, values);
+    document.title = `${translate('quote.title')} ${quote.number}${profile.companyName ? ` – ${profile.companyName}` : ''}`;
+    $('#o-company').textContent = profile.companyName || translate('quote.title');
     $('#print').innerHTML = QuoteView.documentHtml(quote, profile, { interactive: open });
     $('#print').hidden = false;
     $('#o-print').hidden = false;
     message('');
     const acceptance = quote.acceptance;
-    if (acceptance && acceptance.answer === 'akkoord') status(tr('public.accepted', { when: QuoteView.dateTime(acceptance.at, lang) }), 'ok');
-    else if (acceptance && acceptance.answer === 'afgewezen') status(tr('public.rejected', { when: QuoteView.dateTime(acceptance.at, lang) }), 'bad');
-    else if (quote.status !== 'verzonden') status(tr('public.answered'), 'warn');
-    else if (expired(quote)) status(tr('public.expired', { date: QuoteView.date(quote.data.validUntil, lang) }), 'warn');
-    else status(`${tr('public.open', { date: QuoteView.date(quote.data.validUntil, lang) })}${preview ? tr('public.preview') : ''}`);
+    if (acceptance && acceptance.answer === 'akkoord') status(translate('public.accepted', { when: QuoteView.dateTime(acceptance.at, lang) }), 'ok');
+    else if (acceptance && acceptance.answer === 'afgewezen') status(translate('public.rejected', { when: QuoteView.dateTime(acceptance.at, lang) }), 'bad');
+    else if (quote.status !== 'verzonden') status(translate('public.answered'), 'warn');
+    else if (expired(quote)) status(translate('public.expired', { date: QuoteView.date(quote.data.validUntil, lang) }), 'warn');
+    else status(`${translate('public.open', { date: QuoteView.date(quote.data.validUntil, lang) })}${preview ? translate('public.preview') : ''}`);
     $('#o-sign').hidden = !open;
     if (!open) return;
     /**

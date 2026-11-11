@@ -546,13 +546,13 @@
      * @param {object} [values] Waarden voor {naam}.
      * @returns {string} De tekst.
      */
-    const tr = (key, values) => window.DocText.text(lang, key, values);
-    form.subject.value = `${tr('quote.title')} ${quote.number}${data.title ? ` – ${data.title}` : ''}`;
+    const translate = (key, values) => window.DocText.text(lang, key, values);
+    form.subject.value = `${translate('quote.title')} ${quote.number}${data.title ? ` – ${data.title}` : ''}`;
     form.message.value = [
-      tr('mail.greeting', { name: data.customer.contact || data.customer.name || tr('mail.customer') }),
-      tr('mail.quoteBody', { number: quote.number, about: data.title ? tr('mail.quoteAboutLower', { title: data.title.toLowerCase() }) : '', date: QuoteView.date(data.validUntil, lang) }),
-      tr('mail.quoteQuestions'),
-      `${tr('mail.closing')}\n${profile.companyName || ''}`,
+      translate('mail.greeting', { name: data.customer.contact || data.customer.name || translate('mail.customer') }),
+      translate('mail.quoteBody', { number: quote.number, about: data.title ? translate('mail.quoteAboutLower', { title: data.title.toLowerCase() }) : '', date: QuoteView.date(data.validUntil, lang) }),
+      translate('mail.quoteQuestions'),
+      `${translate('mail.closing')}\n${profile.companyName || ''}`,
     ].join('\n\n');
     $('#send').hidden = false;
     form.to.focus();

@@ -901,18 +901,18 @@ function registerQuoteRoutes(app, ctx) {
        * @param {object} [values] Waarden voor {naam}.
        * @returns {string} De tekst.
        */
-      const tr = (key, values) => DocText.text(lang, key, values);
+      const translate = (key, values) => DocText.text(lang, key, values);
       const customerWhen = new Date(acceptance.at).toLocaleString(DocText.localeOf(lang), { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Amsterdam' });
       const customerTotal = Number(acceptance.totalIncl || 0).toLocaleString(DocText.localeOf(lang), { style: 'currency', currency: 'EUR' });
       jobs.push(mailer.send({
         to: data.customer.email, replyTo: profile.email,
-        subject: tr('mail.confirmSubject', { number: row.number }),
+        subject: translate('mail.confirmSubject', { number: row.number }),
         ...mailBody(profile, [
-          tr('mail.greeting', { name: acceptance.name }),
-          tr('mail.confirmThanks', { number: row.number, about: data.title ? ` (${data.title})` : '', when: customerWhen, amount: customerTotal }),
-          link ? tr('mail.confirmLink') : '',
-          tr('mail.confirmNext'),
-        ], link ? { label: tr('mail.confirmButton'), href: link } : null),
+          translate('mail.greeting', { name: acceptance.name }),
+          translate('mail.confirmThanks', { number: row.number, about: data.title ? ` (${data.title})` : '', when: customerWhen, amount: customerTotal }),
+          link ? translate('mail.confirmLink') : '',
+          translate('mail.confirmNext'),
+        ], link ? { label: translate('mail.confirmButton'), href: link } : null),
       }));
     }
     if (validEmail(profile.email)) {

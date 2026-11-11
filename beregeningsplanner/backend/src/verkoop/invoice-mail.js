@@ -51,20 +51,20 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
      * @param {string} key Sleutel uit DocText.
      * @returns {string} De tekst.
      */
-    const tr = (key) => DocText.text(lang, key);
+    const translate = (key) => DocText.text(lang, key);
     const credit = invoice.kind === 'credit';
     const totals = Core.totals(details, invoicing);
     return {
-      klant: details.customer.contact || details.customer.name || tr('mail.customer'),
+      klant: details.customer.contact || details.customer.name || translate('mail.customer'),
       nummer: invoice.number || `(${DocText.text(lang, 'invoice.draft')})`,
       datum: day(details.date, lang),
       vervaldatum: day(details.dueDate, lang),
       bedrag: eur(totals.total, lang),
       bedrijf: profile.companyName || '',
-      soort: tr(credit ? 'invoice.credit' : 'invoice.title'),
-      soort_klein: tr(credit ? 'invoice.credit' : 'invoice.title').toLowerCase(),
-      betaling: credit ? tr('mail.creditSettled')
-        : invoice.status === 'betaald' ? tr('mail.alreadyPaid')
+      soort: translate(credit ? 'invoice.credit' : 'invoice.title'),
+      soort_klein: translate(credit ? 'invoice.credit' : 'invoice.title').toLowerCase(),
+      betaling: credit ? translate('mail.creditSettled')
+        : invoice.status === 'betaald' ? translate('mail.alreadyPaid')
           : Core.paymentText(invoicing, { number: invoice.number, iban: profile.iban, dueDate: day(details.dueDate, lang), days: details.paymentDays, language: lang }),
     };
   }

@@ -71,7 +71,7 @@
      * @param {object} [values] Waarden voor {naam}.
      * @returns {string} De tekst.
      */
-    const tr = (key, values) => DocText.text(lang, key, values);
+    const translate = (key, values) => DocText.text(lang, key, values);
     /**
      * Bedrag in de notatie van de documenttaal.
      * @param {*} value Het bedrag.
@@ -90,7 +90,7 @@
     const customer = data.customer || {};
     const logo = options.logo || '../shared/logo-white.png';
     const companyLines = [companyProfile.address, [companyProfile.phone, companyProfile.email].filter(Boolean).join(' · '), companyProfile.website].filter(Boolean).join('\n');
-    const recipient = [customer.name, customer.contact ? `${tr('quote.attn')} ${customer.contact}` : '', customer.address].filter(Boolean).join('\n');
+    const recipient = [customer.name, customer.contact ? `${translate('quote.attn')} ${customer.contact}` : '', customer.address].filter(Boolean).join('\n');
     const showPrices = data.layout !== 'totaal';
     const interactive = options.interactive;
     /**
@@ -109,73 +109,73 @@
     const optionClass = (line) => (line.optional ? ` class="p-opt${line.selected ? '' : ' off'}"` : '');
     let hasOptions = false;
     const sections = Object.keys(QuoteCore.SECTIONS).map((key) => {
-      const label = tr(`section.${key}`);
+      const label = translate(`section.${key}`);
       const lines = data.lines.filter((line) => line.section === key);
       if (!lines.length) return '';
       const rows = lines.map((line) => {
         if (line.optional) hasOptions = true;
         if (showPrices) {
-          return `<tr${optionClass(line)}><td>${description(line)}</td><td class="num">${number(line.qty)}</td><td>${esc(line.unit)}</td><td class="num">${money(line.price)}</td><td class="num">${totals.shifted ? tr('quote.shifted') : `${line.vat}%`}</td><td class="num">${money(QuoteCore.lineTotal(line))}</td></tr>`;
+          return `<tr${optionClass(line)}><td>${description(line)}</td><td class="num">${number(line.qty)}</td><td>${esc(line.unit)}</td><td class="num">${money(line.price)}</td><td class="num">${totals.shifted ? translate('quote.shifted') : `${line.vat}%`}</td><td class="num">${money(QuoteCore.lineTotal(line))}</td></tr>`;
         }
         // Totaal per onderdeel: geen regelprijzen, behalve bij een optie.
         return `<tr${optionClass(line)}><td colspan="4">${description(line)}</td><td class="num">${number(line.qty)} ${esc(line.unit)}</td><td class="num">${line.optional ? money(QuoteCore.lineTotal(line)) : ''}</td></tr>`;
       }).join('');
       return `<tr class="p-section"><td colspan="6">${esc(label)}</td></tr>${rows}
-        <tr class="p-sum"><td colspan="5">${esc(tr('quote.sectionTotal', { section: label.toLowerCase() }))}</td><td class="num">${money(totals.bySection[key] || 0)}</td></tr>`;
+        <tr class="p-sum"><td colspan="5">${esc(translate('quote.sectionTotal', { section: label.toLowerCase() }))}</td><td class="num">${money(totals.bySection[key] || 0)}</td></tr>`;
     }).join('');
     const summary = data.planSummary;
-    const design = summary ? [summary.lawnM2 ? `${number(summary.lawnM2, 0)} ${tr('quote.lawn')}` : '', summary.sprinklers ? `${summary.sprinklers} ${tr('quote.sprinklers')}` : '', summary.zones ? `${summary.zones} ${tr('quote.zones')}` : '', summary.level ? `${tr('quote.level')} ${summary.level}` : ''].filter(Boolean).join(' · ') : '';
-    const foot = [companyProfile.companyName, companyProfile.kvk ? `KvK ${companyProfile.kvk}` : '', companyProfile.vatNumber ? `${tr('quote.vat')} ${companyProfile.vatNumber}` : '', companyProfile.iban ? `IBAN ${companyProfile.iban}` : ''].filter(Boolean).join(' · ');
+    const design = summary ? [summary.lawnM2 ? `${number(summary.lawnM2, 0)} ${translate('quote.lawn')}` : '', summary.sprinklers ? `${summary.sprinklers} ${translate('quote.sprinklers')}` : '', summary.zones ? `${summary.zones} ${translate('quote.zones')}` : '', summary.level ? `${translate('quote.level')} ${summary.level}` : ''].filter(Boolean).join(' · ') : '';
+    const foot = [companyProfile.companyName, companyProfile.kvk ? `KvK ${companyProfile.kvk}` : '', companyProfile.vatNumber ? `${translate('quote.vat')} ${companyProfile.vatNumber}` : '', companyProfile.iban ? `IBAN ${companyProfile.iban}` : ''].filter(Boolean).join(' · ');
     const acceptance = quote.acceptance;
     let closing;
     if (acceptance && acceptance.answer === 'akkoord') {
-      const accepted = tr('quote.acceptedBy', { name: `<b>${esc(acceptance.name)}</b>`, when: esc(dateTime(acceptance.at, lang)), amount: money(acceptance.totalIncl != null ? acceptance.totalIncl : totals.total), vat: totals.shifted ? tr('quote.vatShifted') : tr('quote.inclVat') });
+      const accepted = translate('quote.acceptedBy', { name: `<b>${esc(acceptance.name)}</b>`, when: esc(dateTime(acceptance.at, lang)), amount: money(acceptance.totalIncl != null ? acceptance.totalIncl : totals.total), vat: totals.shifted ? translate('quote.vatShifted') : translate('quote.inclVat') });
       closing = `<div class="p-accepted">
-        <h2>${esc(tr('quote.accepted'))}</h2>
+        <h2>${esc(translate('quote.accepted'))}</h2>
         <div>${accepted}</div>
-        ${acceptance.signature ? `<img src="${esc(acceptance.signature)}" alt="${esc(tr('quote.signatureOf', { name: acceptance.name }))}">` : ''}
-        <div class="p-proof">${acceptance.via === 'account' ? esc(tr('quote.viaAccount')) : esc(tr('quote.viaLink'))}${acceptance.ip ? ` · IP ${esc(acceptance.ip)}${acceptance.forwardedFor ? ` (${esc(tr('quote.reported'))} ${esc(acceptance.forwardedFor)})` : ''}` : ''}${acceptance.contentHash ? ` · ${esc(tr('quote.ref'))} ${esc(acceptance.contentHash.slice(0, 16))}` : ''}</div>
+        ${acceptance.signature ? `<img src="${esc(acceptance.signature)}" alt="${esc(translate('quote.signatureOf', { name: acceptance.name }))}">` : ''}
+        <div class="p-proof">${acceptance.via === 'account' ? esc(translate('quote.viaAccount')) : esc(translate('quote.viaLink'))}${acceptance.ip ? ` · IP ${esc(acceptance.ip)}${acceptance.forwardedFor ? ` (${esc(translate('quote.reported'))} ${esc(acceptance.forwardedFor)})` : ''}` : ''}${acceptance.contentHash ? ` · ${esc(translate('quote.ref'))} ${esc(acceptance.contentHash.slice(0, 16))}` : ''}</div>
       </div>`;
     } else if (acceptance && acceptance.answer === 'afgewezen') {
-      closing = `<div class="p-accepted rejected"><h2>${esc(tr('quote.rejected'))}</h2><div>${esc(tr('quote.rejectedBy', { name: acceptance.name || tr('quote.theCustomer'), when: dateTime(acceptance.at, lang) }))}${acceptance.reason ? ` ${esc(tr('quote.reason'))}: ${esc(acceptance.reason)}` : ''}</div></div>`;
+      closing = `<div class="p-accepted rejected"><h2>${esc(translate('quote.rejected'))}</h2><div>${esc(translate('quote.rejectedBy', { name: acceptance.name || translate('quote.theCustomer'), when: dateTime(acceptance.at, lang) }))}${acceptance.reason ? ` ${esc(translate('quote.reason'))}: ${esc(acceptance.reason)}` : ''}</div></div>`;
     } else {
-      closing = `<h2>${esc(tr('quote.forApproval'))}</h2><div class="p-sign"><div>${esc(tr('quote.nameDate'))}</div><div>${esc(tr('quote.signature'))}</div></div>`;
+      closing = `<h2>${esc(translate('quote.forApproval'))}</h2><div class="p-sign"><div>${esc(translate('quote.nameDate'))}</div><div>${esc(translate('quote.signature'))}</div></div>`;
     }
     const head = showPrices
-      ? `<th>${esc(tr('col.description'))}</th><th class="num">${esc(tr('col.qty'))}</th><th>${esc(tr('col.unit'))}</th><th class="num">${esc(tr('col.price'))}</th><th class="num">${esc(tr('col.vat'))}</th><th class="num">${esc(tr('col.total'))}</th>`
-      : `<th colspan="4">${esc(tr('col.description'))}</th><th class="num">${esc(tr('col.qty'))}</th><th class="num"></th>`;
+      ? `<th>${esc(translate('col.description'))}</th><th class="num">${esc(translate('col.qty'))}</th><th>${esc(translate('col.unit'))}</th><th class="num">${esc(translate('col.price'))}</th><th class="num">${esc(translate('col.vat'))}</th><th class="num">${esc(translate('col.total'))}</th>`
+      : `<th colspan="4">${esc(translate('col.description'))}</th><th class="num">${esc(translate('col.qty'))}</th><th class="num"></th>`;
     return `
       <header class="p-head">
         <img src="${esc(logo)}" alt="${esc(companyProfile.companyName)}">
         <div class="p-company"><b>${esc(companyProfile.companyName)}</b>\n${esc(companyLines)}</div>
       </header>
       <div class="p-meta">
-        <div class="p-to"><div class="lbl">${esc(tr('quote.for'))}</div>${esc(recipient || tr('quote.noRecipient'))}</div>
+        <div class="p-to"><div class="lbl">${esc(translate('quote.for'))}</div>${esc(recipient || translate('quote.noRecipient'))}</div>
         <div class="p-info"><table>
-          <tr><td>${esc(tr('quote.number'))}</td><td><b>${esc(quote.number)}</b></td></tr>
-          <tr><td>${esc(tr('quote.date'))}</td><td>${esc(date(data.date, lang))}</td></tr>
-          <tr><td>${esc(tr('quote.validUntil'))}</td><td>${esc(date(data.validUntil, lang))}</td></tr>
-          ${data.paymentDays != null ? `<tr><td>${esc(tr('quote.paymentTerm'))}</td><td>${esc(data.paymentDays)} ${esc(tr('quote.days'))}</td></tr>` : ''}
-          ${data.reference ? `<tr><td>${esc(tr('quote.reference'))}</td><td>${esc(data.reference)}</td></tr>` : ''}
+          <tr><td>${esc(translate('quote.number'))}</td><td><b>${esc(quote.number)}</b></td></tr>
+          <tr><td>${esc(translate('quote.date'))}</td><td>${esc(date(data.date, lang))}</td></tr>
+          <tr><td>${esc(translate('quote.validUntil'))}</td><td>${esc(date(data.validUntil, lang))}</td></tr>
+          ${data.paymentDays != null ? `<tr><td>${esc(translate('quote.paymentTerm'))}</td><td>${esc(data.paymentDays)} ${esc(translate('quote.days'))}</td></tr>` : ''}
+          ${data.reference ? `<tr><td>${esc(translate('quote.reference'))}</td><td>${esc(data.reference)}</td></tr>` : ''}
         </table></div>
       </div>
-      <h1>${esc(tr('quote.title'))}</h1>
+      <h1>${esc(translate('quote.title'))}</h1>
       <div class="p-sub">${esc(data.title)}</div>
       ${data.intro ? `<p class="p-text">${esc(data.intro)}</p>` : ''}
-      ${design ? `<div class="p-design"><b>${esc(tr('quote.design'))}${data.planTitle ? ` ${esc(data.planTitle)}` : ''}:</b> ${esc(design)}</div>` : ''}
+      ${design ? `<div class="p-design"><b>${esc(translate('quote.design'))}${data.planTitle ? ` ${esc(data.planTitle)}` : ''}:</b> ${esc(design)}</div>` : ''}
       <table class="p-lines">
         <thead><tr>${head}</tr></thead>
-        <tbody>${sections || `<tr><td colspan="6">${esc(tr('quote.noLines'))}</td></tr>`}</tbody>
+        <tbody>${sections || `<tr><td colspan="6">${esc(translate('quote.noLines'))}</td></tr>`}</tbody>
       </table>
-      ${hasOptions ? `<p class="p-optnote">${interactive ? tr('quote.optionsInteractive') : tr('quote.optionsStatic')}</p>` : ''}
+      ${hasOptions ? `<p class="p-optnote">${interactive ? translate('quote.optionsInteractive') : translate('quote.optionsStatic')}</p>` : ''}
       <table class="p-totals">
-        <tr><td>${esc(tr('quote.subtotal'))}</td><td class="num">${money(totals.subtotal)}</td></tr>
-        ${totals.discount ? `<tr><td>${esc(tr('quote.discount'))} ${number(totals.discountPct)}%</td><td class="num">− ${money(totals.discount)}</td></tr><tr><td>${esc(tr('quote.netTotal'))}</td><td class="num">${money(totals.net)}</td></tr>` : ''}
-        ${totals.shifted ? '' : totals.vat.filter((vat) => vat.base).map((vat) => `<tr><td>${esc(tr('quote.vat'))} ${vat.rate}%</td><td class="num">${money(vat.amount)}</td></tr>`).join('')}
-        <tr class="grand"><td>${esc(totals.shifted ? tr('quote.totalShifted') : tr('quote.totalIncl'))}</td><td class="num">${money(totals.total)}</td></tr>
+        <tr><td>${esc(translate('quote.subtotal'))}</td><td class="num">${money(totals.subtotal)}</td></tr>
+        ${totals.discount ? `<tr><td>${esc(translate('quote.discount'))} ${number(totals.discountPct)}%</td><td class="num">− ${money(totals.discount)}</td></tr><tr><td>${esc(translate('quote.netTotal'))}</td><td class="num">${money(totals.net)}</td></tr>` : ''}
+        ${totals.shifted ? '' : totals.vat.filter((vat) => vat.base).map((vat) => `<tr><td>${esc(translate('quote.vat'))} ${vat.rate}%</td><td class="num">${money(vat.amount)}</td></tr>`).join('')}
+        <tr class="grand"><td>${esc(totals.shifted ? translate('quote.totalShifted') : translate('quote.totalIncl'))}</td><td class="num">${money(totals.total)}</td></tr>
       </table>
-      ${totals.shifted ? `<p class="p-text">${esc(tr('quote.shiftNote', { number: data.vatShift.number ? ` (${tr('quote.vatNumber')} ${data.vatShift.number})` : '' }))}</p>` : ''}
-      ${data.terms ? `<h2 id="p-terms">${esc(tr('quote.terms'))}</h2><p class="p-text">${esc(data.terms)}</p>` : ''}
+      ${totals.shifted ? `<p class="p-text">${esc(translate('quote.shiftNote', { number: data.vatShift.number ? ` (${translate('quote.vatNumber')} ${data.vatShift.number})` : '' }))}</p>` : ''}
+      ${data.terms ? `<h2 id="p-terms">${esc(translate('quote.terms'))}</h2><p class="p-text">${esc(data.terms)}</p>` : ''}
       <div class="p-end">
         ${closing}
         <footer class="p-foot">${esc(foot)}</footer>
@@ -293,25 +293,25 @@
      * @param {string} key Sleutel uit DocText.
      * @returns {string} De tekst.
      */
-    const tr = (key) => DocText.text(lang, key);
+    const translate = (key) => DocText.text(lang, key);
     container.innerHTML = `
       <div class="sign-form">
-        <h2>${esc(tr('sign.heading'))}</h2>
-        <p class="sum">${esc(tr('sign.totalPre'))} <b data-total></b> ${esc(tr('sign.totalPost'))}</p>
-        <label class="f">${esc(tr('sign.nameLabel'))}<input type="text" data-name maxlength="120" autocomplete="name" placeholder="${esc(tr('sign.namePlaceholder'))}"></label>
-        <div class="f-label">${esc(tr('sign.signatureLabel'))}</div>
-        <div class="pad-wrap"><canvas data-pad aria-label="${esc(tr('sign.padLabel'))}"></canvas>
-          <span class="pad-hint" data-hint>${esc(tr('sign.padHint'))}</span>
-          <button type="button" class="btn small pad-clear" data-clear>${esc(tr('sign.clear'))}</button></div>
-        <label class="terms"><input type="checkbox" data-terms> <span>${esc(tr('sign.terms'))}${options.termsLink ? ` (<a href="#p-terms">${esc(tr('sign.read'))}</a>)` : ''}.</span></label>
+        <h2>${esc(translate('sign.heading'))}</h2>
+        <p class="sum">${esc(translate('sign.totalPre'))} <b data-total></b> ${esc(translate('sign.totalPost'))}</p>
+        <label class="f">${esc(translate('sign.nameLabel'))}<input type="text" data-name maxlength="120" autocomplete="name" placeholder="${esc(translate('sign.namePlaceholder'))}"></label>
+        <div class="f-label">${esc(translate('sign.signatureLabel'))}</div>
+        <div class="pad-wrap"><canvas data-pad aria-label="${esc(translate('sign.padLabel'))}"></canvas>
+          <span class="pad-hint" data-hint>${esc(translate('sign.padHint'))}</span>
+          <button type="button" class="btn small pad-clear" data-clear>${esc(translate('sign.clear'))}</button></div>
+        <label class="terms"><input type="checkbox" data-terms> <span>${esc(translate('sign.terms'))}${options.termsLink ? ` (<a href="#p-terms">${esc(translate('sign.read'))}</a>)` : ''}.</span></label>
         <div class="row">
-          <button type="button" class="btn primary" data-accept>${esc(tr('sign.accept'))}</button>
-          <button type="button" class="btn" data-reject-open>${esc(tr('sign.rejectOpen'))}</button>
+          <button type="button" class="btn primary" data-accept>${esc(translate('sign.accept'))}</button>
+          <button type="button" class="btn" data-reject-open>${esc(translate('sign.rejectOpen'))}</button>
         </div>
         <p class="err" data-err></p>
         <div class="reject-box" data-reject-box hidden>
-          <label class="f">${esc(tr('sign.whyLabel'))}<textarea data-reason rows="3" maxlength="1000"></textarea></label>
-          <div class="row"><button type="button" class="btn" data-reject>${esc(tr('sign.reject'))}</button></div>
+          <label class="f">${esc(translate('sign.whyLabel'))}<textarea data-reason rows="3" maxlength="1000"></textarea></label>
+          <div class="row"><button type="button" class="btn" data-reject>${esc(translate('sign.reject'))}</button></div>
         </div>
       </div>`;
     /**
@@ -357,16 +357,16 @@
      */
     $('[data-accept]').onclick = () => {
       const name = $('[data-name]').value.trim();
-      if (name.length < 2) return showError(tr('sign.enterName'));
-      if (!pad.hasInk()) return showError(tr('sign.needSignature'));
-      if (!$('[data-terms]').checked) return showError(tr('sign.needTerms'));
+      if (name.length < 2) return showError(translate('sign.enterName'));
+      if (!pad.hasInk()) return showError(translate('sign.needSignature'));
+      if (!$('[data-terms]').checked) return showError(translate('sign.needTerms'));
       send({ answer: 'akkoord', name, signature: pad.toDataURL(), terms: true });
     };
     /** Toont of verbergt het vak om af te wijzen. */
     $('[data-reject-open]').onclick = () => { $('[data-reject-box]').hidden = !$('[data-reject-box]').hidden; };
     /** Wijst de offerte af na bevestiging. */
     $('[data-reject]').onclick = () => {
-      if (!confirm(tr('sign.confirmReject'))) return;
+      if (!confirm(translate('sign.confirmReject'))) return;
       send({ answer: 'afgewezen', name: $('[data-name]').value.trim(), reason: $('[data-reason]').value.trim() });
     };
     return { update };

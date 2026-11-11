@@ -83,15 +83,15 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
    * @param {object} [values] Waarden voor {naam}.
    * @returns {string} De tekst.
    */
-  const tr = (key, values) => DocText.text(lang, key, values);
+  const translate = (key, values) => DocText.text(lang, key, values);
   /**
    * Bedrag in de notatie van de documenttaal.
    * @param {*} value Het bedrag.
    * @returns {string} Het bedrag als tekst.
    */
   const money = (value) => eur(value, lang);
-  const kind = tr(credit ? 'invoice.credit' : 'invoice.title');
-  const pdf = createPdf({ title: `${kind} ${invoice.number || tr('invoice.draft')}`, author: company.companyName || '' });
+  const kind = translate(credit ? 'invoice.credit' : 'invoice.title');
+  const pdf = createPdf({ title: `${kind} ${invoice.number || translate('invoice.draft')}`, author: company.companyName || '' });
   const pageWidth = pdf.A4.width;
   const pageHeight = pdf.A4.height;
   const leftEdge = 42;
@@ -121,26 +121,26 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
         pdf.text(addressLine, rightEdge, lineY, { size: 8.5, color: '#ffffff', align: 'right' });
       }
     } else {
-      pdf.text(`${kind} ${invoice.number || `(${tr('invoice.draft')})`} (${tr('invoice.continued')})`, rightEdge, 20, { size: 10, bold: true, color: '#ffffff', align: 'right' });
+      pdf.text(`${kind} ${invoice.number || `(${translate('invoice.draft')})`} (${translate('invoice.continued')})`, rightEdge, 20, { size: 10, bold: true, color: '#ffffff', align: 'right' });
     }
     top = headerHeight + 24;
   }
   header(true);
 
   // ---------- Klant en factuurgegevens ----------
-  const recipientLines = [details.customer.contact ? `${tr('invoice.attn')} ${details.customer.contact}` : '', ...String(details.customer.address || '').split(/\r?\n/)].map((x) => x.trim()).filter(Boolean);
-  pdf.text(tr('invoice.to'), leftEdge, top, { size: 8, color: palette.muted });
+  const recipientLines = [details.customer.contact ? `${translate('invoice.attn')} ${details.customer.contact}` : '', ...String(details.customer.address || '').split(/\r?\n/)].map((x) => x.trim()).filter(Boolean);
+  pdf.text(translate('invoice.to'), leftEdge, top, { size: 8, color: palette.muted });
   pdf.text(details.customer.name, leftEdge, top + 12, { size: 10.5, bold: true });
   let recipientY = top + 26;
   for (const recipientLine of recipientLines.slice(0, 6)) { pdf.text(recipientLine, leftEdge, recipientY, { size: 9.5 }); recipientY += 12.5; }
   const info = [
-    [tr(credit ? 'invoice.creditNumber' : 'invoice.numberLabel'), invoice.number || tr('invoice.concept')],
-    [tr('invoice.dateLabel'), day(details.date, lang)],
-    ...(credit ? [[tr('invoice.creditOf'), details.creditOfNumber]] : [[tr('invoice.dueDate'), day(details.dueDate, lang)]]),
-    ...(invoice.debtorNumber ? [[tr('invoice.debtor'), String(invoice.debtorNumber)]] : []),
-    ...(details.workOrderNumber ? [[tr('invoice.workOrder'), details.workOrderNumber]] : []),
-    ...(details.reference ? [[tr('invoice.about'), details.reference]] : []),
-    ...(details.customer.vatNumber ? [[tr('invoice.customerVat'), details.customer.vatNumber]] : []),
+    [translate(credit ? 'invoice.creditNumber' : 'invoice.numberLabel'), invoice.number || translate('invoice.concept')],
+    [translate('invoice.dateLabel'), day(details.date, lang)],
+    ...(credit ? [[translate('invoice.creditOf'), details.creditOfNumber]] : [[translate('invoice.dueDate'), day(details.dueDate, lang)]]),
+    ...(invoice.debtorNumber ? [[translate('invoice.debtor'), String(invoice.debtorNumber)]] : []),
+    ...(details.workOrderNumber ? [[translate('invoice.workOrder'), details.workOrderNumber]] : []),
+    ...(details.reference ? [[translate('invoice.about'), details.reference]] : []),
+    ...(details.customer.vatNumber ? [[translate('invoice.customerVat'), details.customer.vatNumber]] : []),
   ];
   let infoY = top;
   const infoX = 330;
@@ -152,7 +152,7 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
   }
   top = Math.max(recipientY, infoY) + 18;
 
-  pdf.text(`${kind}${invoice.number ? ` ${invoice.number}` : ` (${tr('invoice.draft')})`}`, leftEdge, top, { size: 18, bold: true, color: credit ? palette.teal : palette.navy });
+  pdf.text(`${kind}${invoice.number ? ` ${invoice.number}` : ` (${translate('invoice.draft')})`}`, leftEdge, top, { size: 18, bold: true, color: credit ? palette.teal : palette.navy });
   top += 30;
   /**
    * Schrijft een alinea met regelafbreking; begint zo nodig een nieuwe pagina.
@@ -177,12 +177,12 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
   function tableHead() {
     pdf.rect(leftEdge, top, rightEdge - leftEdge, 18, { fill: palette.greenSoft });
     const headStyle = { size: 8.5, bold: true, color: palette.navy };
-    pdf.text(tr('col.description'), col.desc, top + 5, headStyle);
-    pdf.text(tr('col.qty'), col.qty, top + 5, { ...headStyle, align: 'right' });
-    pdf.text(tr('col.unit'), col.unit, top + 5, headStyle);
-    pdf.text(tr('col.price'), col.price, top + 5, { ...headStyle, align: 'right' });
-    pdf.text(tr('col.vat'), col.vat, top + 5, { ...headStyle, align: 'right' });
-    pdf.text(tr('col.amount'), col.total, top + 5, { ...headStyle, align: 'right' });
+    pdf.text(translate('col.description'), col.desc, top + 5, headStyle);
+    pdf.text(translate('col.qty'), col.qty, top + 5, { ...headStyle, align: 'right' });
+    pdf.text(translate('col.unit'), col.unit, top + 5, headStyle);
+    pdf.text(translate('col.price'), col.price, top + 5, { ...headStyle, align: 'right' });
+    pdf.text(translate('col.vat'), col.vat, top + 5, { ...headStyle, align: 'right' });
+    pdf.text(translate('col.amount'), col.total, top + 5, { ...headStyle, align: 'right' });
     top += 22;
   }
   tableHead();
@@ -203,9 +203,9 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
 
   // ---------- Totalen ----------
   const rows = [
-    [tr('invoice.subtotal'), money(totals.subtotal)],
-    ...(totals.discount ? [[`${tr('invoice.discount')} ${qtyText(totals.discountPct, lang)}%`, `- ${money(totals.discount)}`]] : []),
-    ...totals.vat.map((vatGroup) => [tr('invoice.vatOver', { rate: vatGroup.rate, base: money(vatGroup.base) }), money(vatGroup.amount)]),
+    [translate('invoice.subtotal'), money(totals.subtotal)],
+    ...(totals.discount ? [[`${translate('invoice.discount')} ${qtyText(totals.discountPct, lang)}%`, `- ${money(totals.discount)}`]] : []),
+    ...totals.vat.map((vatGroup) => [translate('invoice.vatOver', { rate: vatGroup.rate, base: money(vatGroup.base) }), money(vatGroup.amount)]),
   ];
   if (top + rows.length * 14 + 30 > BOTTOM) header(false);
   const totalsX = 330;
@@ -216,13 +216,13 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
   }
   pdf.line(totalsX, top, rightEdge, top, { color: palette.navy, width: 1.4 });
   top += 6;
-  pdf.text(tr('invoice.total'), totalsX, top, { size: 11, bold: true });
+  pdf.text(translate('invoice.total'), totalsX, top, { size: 11, bold: true });
   pdf.text(money(totals.total), col.total, top, { size: 11, bold: true, align: 'right' });
   top += 28;
 
   if (details.notes) paragraph(details.notes);
   const pay = invoice.status === 'betaald'
-    ? tr('invoice.paid', { when: invoice.paidAt ? tr('invoice.paidOn', { date: day(invoice.paidAt, lang) }) : '' })
+    ? translate('invoice.paid', { when: invoice.paidAt ? translate('invoice.paidOn', { date: day(invoice.paidAt, lang) }) : '' })
     : !credit ? Core.paymentText(invoicing, { number: invoice.number, iban: company.iban, dueDate: day(details.dueDate, lang), days: details.paymentDays, language: lang }) : '';
   if (pay) {
     const payLines = wrap(pay, rightEdge - leftEdge - 24, 9.5);
@@ -236,13 +236,13 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
   if (invoicing.footer) paragraph(invoicing.footer, 8, palette.muted);
 
   // ---------- Voet op elke pagina ----------
-  const foot = [company.companyName, company.kvk ? `KvK ${company.kvk}` : '', company.vatNumber ? `${tr('col.vat')} ${company.vatNumber}` : '', company.iban ? `IBAN ${company.iban}` : ''].filter(Boolean).join(' · ');
+  const foot = [company.companyName, company.kvk ? `KvK ${company.kvk}` : '', company.vatNumber ? `${translate('col.vat')} ${company.vatNumber}` : '', company.iban ? `IBAN ${company.iban}` : ''].filter(Boolean).join(' · ');
   const count = pdf.pageCount;
   for (let i = 0; i < count; i++) {
     pdf.setPage(i);
     pdf.line(leftEdge, pageHeight - 46, rightEdge, pageHeight - 46, { color: palette.teal, width: 1.2 });
     pdf.text(foot, leftEdge, pageHeight - 38, { size: 7.5, color: palette.muted });
-    if (count > 1) pdf.text(tr('invoice.page', { page: i + 1, count }), rightEdge, pageHeight - 38, { size: 7.5, color: palette.muted, align: 'right' });
+    if (count > 1) pdf.text(translate('invoice.page', { page: i + 1, count }), rightEdge, pageHeight - 38, { size: 7.5, color: palette.muted, align: 'right' });
   }
   return pdf.toBuffer();
 }
