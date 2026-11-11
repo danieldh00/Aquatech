@@ -600,7 +600,7 @@
     const chosen = $('#e-cust-chosen');
     const account = quote.customerAccount;
     chosen.hidden = !quote.customerId;
-    $('#e-cust-name').textContent = quote.customerId ? `Gekoppeld aan ${account ? account.displayName : 'een klant'}${account && account.username ? ` (${account.username})` : ''}${account && account.disabled ? ' – uitgeschakeld' : ''}` : '';
+    $('#e-cust-name').textContent = quote.customerId ? `Gekoppeld aan ${account ? account.displayName : 'een klant'}` : '';
     $('#e-cust-search').value = '';
     closeCustomerList();
     $('#e-cust-new').hidden = !(state.me.rights || []).includes('klanten');
@@ -663,7 +663,7 @@
       if (input) input.value = value;
     }
     quote.customerId = customer.id;
-    quote.customerAccount = { id: customer.id, displayName: customer.displayName, username: customer.username };
+    quote.customerAccount = { id: customer.id, displayName: customer.displayName };
     state.dirty = true;
     renderAccount(quote);
     if (await save({ customerId: customer.id })) toast('Gegevens van de klant ingevuld');
