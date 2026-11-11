@@ -1186,6 +1186,10 @@ const MIGRATIONS = [
   CREATE INDEX oauth_grants_user ON oauth_grants (tenant_id, user_id, created_at);
   CREATE INDEX oauth_grants_expires ON oauth_grants (tenant_id, expires_at);
   `,
+  // 58: documenttaal per klant (Klanten): taal van offertes, facturen en mails ('nl' of 'en').
+  `
+  ALTER TABLE users ADD COLUMN document_language TEXT NOT NULL DEFAULT 'nl';
+  `,
 ];
 
 /**

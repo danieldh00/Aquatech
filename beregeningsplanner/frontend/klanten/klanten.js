@@ -272,6 +272,7 @@
         <label class="field">E-mailadres<input name="email" type="email" maxlength="200" value="${esc(customer.email)}"></label>
         <label class="field">Telefoon<input name="phone" type="tel" maxlength="25" value="${esc(customer.phone)}"></label>
         <label class="field">Betaaltermijn (dagen)<input name="paymentDays" type="number" min="0" max="365" step="1" inputmode="numeric" placeholder="Standaard" value="${customer.paymentDays == null ? '' : esc(String(customer.paymentDays))}"><span class="hint">Leeg: de standaard van ${esc(String(defaultPaymentDays))} dagen. Komt op de offerte en de factuur.</span></label>
+        <label class="field">Documenttaal<select name="documentLanguage">${Object.entries(window.DocText.LANGUAGES).map(([key, label]) => `<option value="${key}"${customer.documentLanguage === key ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select><span class="hint">Taal van offertes, facturen en de mails daarover.</span></label>
         <label class="field full addr-result">Adres<span class="addr-text" data-addr-text></span><textarea name="address" data-address-lookup hidden maxlength="400">${esc(customer.address)}</textarea></label>
       </div>
       <div class="err" id="c-contact-err" role="alert"></div>
@@ -398,7 +399,7 @@
      */
     contact.onsubmit = (event) => {
       event.preventDefault();
-      patchCustomer({ displayName: contact.displayName.value, email: contact.email.value, phone: contact.phone.value, address: contact.address.value, paymentDays: contact.paymentDays.value }, '#c-contact-err', 'Gegevens opgeslagen');
+      patchCustomer({ displayName: contact.displayName.value, email: contact.email.value, phone: contact.phone.value, address: contact.address.value, paymentDays: contact.paymentDays.value, documentLanguage: contact.documentLanguage.value }, '#c-contact-err', 'Gegevens opgeslagen');
     };
     const business = $('#c-business');
     /** Toont de bedrijfsvelden alleen voor een zakelijke klant. */

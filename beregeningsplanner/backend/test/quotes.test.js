@@ -196,7 +196,7 @@ test('API: klant ziet alleen verzonden offertes voor zijn account en kan akkoord
     // Zoeken geeft de gegevens voor het invullen van de offerte; geen treffer = lege lijst.
     const found = (await piet.get('/app/api/quote-customers?q=mien')).body.items;
     assert.deepStrictEqual(found.map((customer) => customer.displayName), ['Mien']);
-    assert.deepStrictEqual(Object.keys(found[0]).sort(), ['address', 'companyName', 'displayName', 'email', 'id', 'paymentDays', 'phone', 'username', 'vatNumber']);
+    assert.deepStrictEqual(Object.keys(found[0]).sort(), ['address', 'companyName', 'displayName', 'documentLanguage', 'email', 'id', 'paymentDays', 'phone', 'username', 'vatNumber']);
     assert.deepStrictEqual((await piet.get('/app/api/quote-customers?q=bestaatniet')).body.items, []);
     const klaasId = custs.find((customer) => customer.displayName === 'Klaas').id;
     const pietId = (await piet.get('/app/api/me')).body.user.id;

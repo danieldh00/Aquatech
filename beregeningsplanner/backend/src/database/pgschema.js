@@ -963,6 +963,10 @@ const PG_MIGRATIONS = [
   CREATE INDEX oauth_grants_user ON oauth_grants (tenant_id, user_id, created_at);
   CREATE INDEX oauth_grants_expires ON oauth_grants (tenant_id, expires_at);
   `,
+  // 58: documenttaal per klant (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN document_language ${TEXT_TYPE} NOT NULL DEFAULT 'nl';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

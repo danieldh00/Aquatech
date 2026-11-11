@@ -539,12 +539,20 @@
     const link = $('#sf-link');
     link.hidden = !(quote.share && quote.share.url);
     link.innerHTML = link.hidden ? '' : `Link in de e-mail: <a href="${esc(`${quote.share.url}&voorbeeld=1`)}" target="_blank" rel="noopener">${esc(quote.share.url)}</a>`;
-    form.subject.value = `Offerte ${quote.number}${data.title ? ` – ${data.title}` : ''}`;
+    const lang = window.DocText.clean(data.language);
+    /**
+     * Een vaste tekst in de documenttaal van de offerte.
+     * @param {string} key Sleutel uit DocText.
+     * @param {object} [values] Waarden voor {naam}.
+     * @returns {string} De tekst.
+     */
+    const translate = (key, values) => window.DocText.text(lang, key, values);
+    form.subject.value = `${translate('quote.title')} ${quote.number}${data.title ? ` – ${data.title}` : ''}`;
     form.message.value = [
-      `Beste ${data.customer.contact || data.customer.name || 'klant'},`,
-      `Hierbij ontvangt u onze offerte ${quote.number}${data.title ? ` voor ${data.title.toLowerCase()}` : ''}. Via de knop hieronder bekijkt u de offerte online en kunt u direct digitaal akkoord geven. De offerte is geldig tot ${date(data.validUntil)}.`,
-      'Heeft u vragen, neem dan gerust contact met ons op.',
-      `Met vriendelijke groet,\n${profile.companyName || ''}`,
+      translate('mail.greeting', { name: data.customer.contact || data.customer.name || translate('mail.customer') }),
+      translate('mail.quoteBody', { number: quote.number, about: data.title ? translate('mail.quoteAboutLower', { title: data.title.toLowerCase() }) : '', date: QuoteView.date(data.validUntil, lang) }),
+      translate('mail.quoteQuestions'),
+      `${translate('mail.closing')}\n${profile.companyName || ''}`,
     ].join('\n\n');
     $('#send').hidden = false;
     form.to.focus();
@@ -749,6 +757,12 @@
       setPath(quote.data, path, value);
       const input = document.querySelector(`#edit-view [data-f="${path}"]`);
       if (input) input.value = value;
+    }
+    // De documenttaal van de klant bepaalt de taal van de offerte (en van de factuur die daaruit volgt).
+    if (customer.documentLanguage) {
+      quote.data.language = window.DocText.clean(customer.documentLanguage);
+      const languageField = document.querySelector('#edit-view [data-f="language"]');
+      if (languageField) languageField.value = quote.data.language;
     }
     // De betaaltermijn van de klant (of de standaard) komt op de offerte.
     if (customer.paymentDays != null) {

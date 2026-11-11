@@ -141,9 +141,10 @@
       <section class="card-form">
         <h3>Offerte</h3>
         <label>Omschrijving<input data-f="title" maxlength="200" placeholder="Bijv. Aanleg automatische beregening"></label>
-        <div class="row2">
+        <div class="row3">
           <label>Offertenummer<input id="e-number" readonly></label>
           <label>Uw referentie<input data-f="reference" maxlength="120"></label>
+          <label>Documenttaal<select data-f="language"><option value="nl">Nederlands</option><option value="en">English</option></select></label>
         </div>
         <div class="row3">
           <label>Datum<input data-f="date" type="date"></label>
@@ -284,6 +285,7 @@
   <script src="../beregening/js/bom.js"></script>
   <script src="../dashboard/account.js"></script>
   <script src="../shared/article-picker.js"></script>
+  <script src="../shared/doc-text.js"></script>
   <script src="quote-core.js"></script>
   <script src="quote-view.js"></script>
   <script src="offertes.js"></script>

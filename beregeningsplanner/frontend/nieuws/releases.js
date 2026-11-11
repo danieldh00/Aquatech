@@ -21,6 +21,15 @@
       ],
     },
     {
+      version: '1.10.2',
+      date: '2026-11-11',
+      title: 'Offertes en facturen in het Engels',
+      items: [
+        { text: 'Bij een klant kies je de documenttaal (Nederlands of Engels). De offerte, het akkoordformulier, de factuur-PDF en de bijbehorende mails staan dan in die taal.', for: ['klanten', 'offertes', 'facturen'] },
+        { text: 'In de offerte kun je de taal per offerte aanpassen.', for: ['offertes'] },
+      ],
+    },
+    {
       version: '1.10.1',
       date: '2026-11-11',
       title: 'Offerte maken met Claude of ChatGPT',
