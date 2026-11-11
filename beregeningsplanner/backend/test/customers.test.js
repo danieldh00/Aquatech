@@ -66,20 +66,22 @@ test('een klant aanmaken zonder inlog, met adres, en terugvinden met zoeken', as
 });
 
 test('ongeldige invoer wordt geweigerd en het adres moet bij PDOK bestaan', async () => {
-  const { installer } = await setup();
+  const { installer, admin } = await setup();
   assert.strictEqual((await installer.post('/app/api/customers', { displayName: '  ' })).status, 400);
   assert.strictEqual((await installer.post('/app/api/customers', { displayName: 'X', email: 'geen-mail' })).body.field, 'email');
   assert.strictEqual((await installer.post('/app/api/customers', { displayName: 'X', phone: 'abc' })).body.field, 'phone');
   assert.strictEqual((await installer.post('/app/api/customers', { displayName: 'X', address: 'Verzonnen 99\n1234 AB Nergens' })).status, 400);
   assert.strictEqual((await installer.post('/app/api/customers', { displayName: 'X', customerGroup: 'vip' })).body.field, 'customerGroup');
-  const noCompany = await installer.post('/app/api/customers', { displayName: 'Bedrijf', customerGroup: 'zakelijk' });
+  const noCompany = await admin.post('/app/api/customers', { displayName: 'Bedrijf', customerGroup: 'zakelijk' });
   assert.strictEqual(noCompany.status, 400);
   assert.strictEqual(noCompany.body.field, 'companyName');
 });
 
 test('een zakelijke klant aanmaken vult de bedrijfsgegevens', async () => {
-  const { installer } = await setup();
-  const made = await installer.post('/app/api/customers', { displayName: 'Piet Bos', customerGroup: 'zakelijk', companyName: 'Bos Hoveniers BV', kvkNumber: '12345678', vatNumber: 'NL123456789B01' });
+  const { installer, admin } = await setup();
+  const body = { displayName: 'Piet Bos', customerGroup: 'zakelijk', companyName: 'Bos Hoveniers BV', kvkNumber: '12345678', vatNumber: 'NL123456789B01' };
+  assert.strictEqual((await installer.post('/app/api/customers', body)).status, 403, 'een installateur kent geen zakelijke prijzen toe');
+  const made = await admin.post('/app/api/customers', body);
   assert.strictEqual(made.status, 201, JSON.stringify(made.body));
   assert.strictEqual(made.body.customer.customerGroup, 'zakelijk');
   assert.strictEqual(made.body.customer.companyName, 'Bos Hoveniers BV');

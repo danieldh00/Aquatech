@@ -510,6 +510,12 @@
     $('#d-back').onclick = backToList;
     window.addEventListener('popstate', route);
     if (window.AquatechCommon) window.AquatechCommon.onReturn(route);
+    // Een zakelijke klant (prijzen excl. btw) maakt alleen een beheerder aan: voor anderen verdwijnt die keuze.
+    if (window.AquatechCommon) {
+      window.AquatechCommon.getJson('api/me').then((me) => {
+        if (!((me && me.rights) || []).includes('beheer')) $('#n-form').customerGroup.querySelector('option[value="zakelijk"]').remove();
+      }).catch(() => {});
+    }
     route();
   }
 

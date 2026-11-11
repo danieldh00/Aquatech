@@ -161,6 +161,8 @@ function registerCustomerRoutes(app, ctx) {
     const contact = sanitizeContact({ email: body.email, phone: body.phone, address: body.address });
     if (contact.error) return invalid(res, contact);
     let business = null;
+    // Zakelijke prijzen (excl. btw) worden niet door een installateur toegekend, net als bij het wijzigen.
+    if (body.customerGroup === 'zakelijk' && !mayPrice(req)) return res.status(403).json({ error: 'forbidden', message: 'Alleen een beheerder maakt een zakelijke klant.' });
     if (body.customerGroup === 'zakelijk') {
       const checked = sanitizeBusinessProfile(body);
       if (checked.error) return invalid(res, checked);
