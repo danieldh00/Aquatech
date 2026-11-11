@@ -402,13 +402,19 @@
    */
   async function loadVismaLog(reset) {
     const log = state.vismaLog;
+    if (log.loading && !reset) return;
     const query = new URLSearchParams({ limit: '50' });
     if (log.onlyErrors) query.set('errors', '1');
     if (!reset && log.next) query.set('before', log.next);
-    const page = await api(`visma/log?${query}`);
-    log.items = reset ? page.items : log.items.concat(page.items);
-    log.next = page.next;
-    renderVismaLog();
+    log.loading = true;
+    try {
+      const page = await api(`visma/log?${query}`);
+      log.items = reset ? page.items : log.items.concat(page.items);
+      log.next = page.next;
+      renderVismaLog();
+    } finally {
+      log.loading = false;
+    }
   }
 
   const LOG_KINDS = { verbonden: 'Verbonden', verbroken: 'Verbroken', klant: 'Klant', factuur: 'Factuur', opties: 'Artikelen en termijnen', aanmelding: 'Aanmelding' };
