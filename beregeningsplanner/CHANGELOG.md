@@ -1,12 +1,22 @@
 # Changelog
 
-## 1.10.4
+## 1.10.5
 
 Concept-offerte: duidelijker controleren van regels waar de AI over twijfelt. Geen migratie.
 
 - De knop bij een twijfelnotitie heet nu *✓ Markeer als gecontroleerd* en ziet eruit als een echte knop (groene rand). Na het klikken blijft de notitie staan met een groene status *✓ Gecontroleerd* en een knop *Ongedaan maken*; een melding bevestigt de actie. Voorheen verdween de notitie zonder spoor.
 - Regel krijgt `noteChecked` (`QuoteCore.sanitizeLine`, alleen met een notitie). `forCustomer` laat `note` en `noteChecked` weg: de klant ziet geen van beide.
 - Op een smal scherm staat de knop onder de notitie.
+
+## 1.10.4
+
+Interne notitie per offerte (punt 9 van bundel A). Geen migratie: de notitie staat in de offertegegevens (`data.internalNote`, maximaal 2000 tekens).
+
+- **Offerte**: blok *Interne notitie* onder de voorwaarden. De notitie staat nooit op het document, de pdf/afdruk, de Excel, de mail of de openbare link en ontbreekt in alles wat de klant van de offerte ziet (`forCustomer` in quotes.js haalt hem weg, ook in het portaal).
+- **Werkorder**: bij *Werkorder maken* wordt de notitie overgenomen in `data.internalNote` (blok *Interne notitie* in de werkorder, aanpasbaar, alleen voor medewerkers). De klant ziet hem niet in het portaal en hij gaat niet mee bij uitbesteden (`handoverOf` neemt alleen genoemde velden over).
+- Een kopie van een offerte neemt de notitie mee; een factuur krijgt hem niet.
+- Het akkoordbewijs (`acceptance.contentHash`) wordt berekend over de gegevens zonder interne notities (offerte en regels), zodat de interne notities er niet in doorwerken (`withoutInternalNotes` in quotes.js, gedeeld met `forCustomer`). De hash blijft een hash van de volledige offerte, ook van regelprijzen die de klant bij de opmaak *totaal per onderdeel* niet ziet.
+- Tests: `internal-note.test.js` (kern, opslaan en lezen, portaal, openbare link, werkorder, klantportaal-werkorder).
 
 ## 1.10.3
 

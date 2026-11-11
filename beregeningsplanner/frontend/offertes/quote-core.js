@@ -139,6 +139,8 @@
       },
       intro: limitText(fields.intro, 4000),
       terms: limitText(fields.terms, 6000),
+      // Interne notitie: alleen voor medewerkers, nooit op het document, in de mail of voor de klant.
+      internalNote: limitText(fields.internalNote, 2000),
       discountPct: round2(clampNumber(fields.discountPct, 0, 100)),
       paymentDays: sanitizePaymentDays(fields.paymentDays),
       // Taal van het document ('nl' of 'en'), uit de documenttaal van de klant.
