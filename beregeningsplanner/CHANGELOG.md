@@ -2,7 +2,7 @@
 
 ## 1.9.7
 
-Klantenpagina (punt 5) en een opgeruimd formulier Gebruiker toevoegen (punt 25). Eerste PR van bundel A.
+Klantenpagina (punt 5) en een opgeruimd formulier Gebruiker toevoegen (punt 25). Eerste PR van bundel A. Migratie 55: index op facturen per klant.
 
 - **Module Klanten** (`frontend/klanten/`, recht `klanten`: standaard beheerder en installateur, daarmee ook aan eigen rollen te geven): lijst met zoeken (naam, bedrijf, e-mail, telefoon, adres, gebruikersnaam; meerdere woorden = en), filter (particulier, zakelijk, groothandel, open aanvraag), 50 per pagina en Excel-export. Een klant is een account met een rol van het soort klant (dezelfde accounts als webshop en portaal); `GET|POST /api/customers`, `GET|PATCH /api/customers/:id`, `POST /api/customers/:id/invite` in `verkoop/customers.js`.
 - **Klant zonder inlog**: `store.createCustomer` maakt een account zonder wachtwoord (niemand kan erop inloggen); gebruikersnaam = het e-mailadres als dat past, anders `klant-<8 hex>`. Het adres (kolom `users.address`, migratie 54, in `MIGRATIONS` én `PG_MIGRATIONS`) wordt met `requireVerifiedAddress` tegen PDOK gecontroleerd, zoals bij offertes en facturen.

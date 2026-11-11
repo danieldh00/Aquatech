@@ -921,6 +921,10 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE users ADD COLUMN address ${TEXT_TYPE} NOT NULL DEFAULT '';
   `,
+  // 55: index voor de facturen op de klantkaart (zie db.js).
+  `
+  CREATE INDEX invoices_customer ON invoices (tenant_id, customer_id, invoice_date);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

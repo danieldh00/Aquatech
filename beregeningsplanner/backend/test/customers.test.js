@@ -229,6 +229,13 @@ test('nieuwe klant: hetzelfde e-mailadres twee keer wordt geweigerd', async () =
   const second = await installer.post('/app/api/customers', { displayName: 'Tweede', email: 'Dubbel@voorbeeld.nl' });
   assert.strictEqual(second.status, 400);
   assert.strictEqual(second.body.field, 'email');
+  // Ook bij wijzigen: het adres van een ander account mag niet.
+  const third = (await installer.post('/app/api/customers', { displayName: 'Derde' })).body.customer;
+  const clash = await installer.patch(`/app/api/customers/${third.id}`, { email: 'dubbel@voorbeeld.nl' });
+  assert.strictEqual(clash.status, 400);
+  assert.strictEqual(clash.body.field, 'email');
+  assert.strictEqual((await installer.patch(`/app/api/customers/${third.id}`, { email: 'derde@voorbeeld.nl' })).status, 200);
+  assert.strictEqual((await installer.patch(`/app/api/customers/${third.id}`, { email: 'derde@voorbeeld.nl' })).status, 200, 'eigen adres opnieuw opslaan mag');
 });
 
 test('uitnodigen: begrensd per medewerker', async () => {

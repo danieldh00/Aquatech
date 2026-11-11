@@ -337,7 +337,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   als `quotes.customer_id` = klant en offerte ≠ concept. Optioneel:
   `ctx.photos.list(tid, woId, { customerOnly })` en `workorders.respond`
   (afspraak bevestigen, `POST .../appointment`).
-- **Klanten** (1.9.7, module `frontend/klanten/`, recht `klanten`: beheerder + installateur, migratie 54 `users.address`): een klant is een
+- **Klanten** (1.9.7, module `frontend/klanten/`, recht `klanten`: beheerder + installateur, migratie 54 `users.address`, 55 index `invoices_customer`): een klant is een
   account met een rol van het soort klant (`keysOfKind('klant')`), ook zonder inlog (`store.createCustomer`, `password_hash` NULL, niemand
   kan erop inloggen). `verkoop/customers.js`: `GET|POST /api/customers` (zoeken `q`, filter `group`, `limit`/`offset`), `GET|PATCH
   /api/customers/:id` (klantkaart met offertes/werkorders/facturen, elk alleen met het bijbehorende recht), `POST .../invite` (zeven dagen

@@ -1142,6 +1142,10 @@ const MIGRATIONS = [
   `
   ALTER TABLE users ADD COLUMN address TEXT NOT NULL DEFAULT '';
   `,
+  // 55: index voor de facturen op de klantkaart (tenant_id = ? AND customer_id = ? ORDER BY invoice_date).
+  `
+  CREATE INDEX invoices_customer ON invoices (tenant_id, customer_id, invoice_date);
+  `,
 ];
 
 /**

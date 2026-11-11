@@ -210,6 +210,9 @@ function registerCustomerRoutes(app, ctx) {
     if (customer.hasLogin && contact.contact.email !== undefined && contact.contact.email !== customer.email && !mayPrice(req)) {
       return res.status(403).json({ error: 'forbidden', message: 'Alleen een beheerder wijzigt het e-mailadres van een klant die kan inloggen.' });
     }
+    if (contact.contact.email && store.accountIdsByEmail(customer.tenantId, contact.contact.email).some((otherId) => otherId !== customer.id)) {
+      return invalid(res, { error: 'Er is al een account met dit e-mailadres.', field: 'email' });
+    }
     if (Object.keys(contact.contact).length) input.contact = contact.contact;
     if (['companyName', 'kvkNumber', 'vatNumber'].some((field) => body[field] !== undefined)) {
       const checked = sanitizeBusinessProfile({ companyName: customer.companyName, kvkNumber: customer.kvkNumber, vatNumber: customer.vatNumber, ...body });
