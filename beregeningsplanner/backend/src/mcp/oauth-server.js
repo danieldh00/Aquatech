@@ -446,16 +446,18 @@ function registerOAuthRoutes(app, ctx) {
 
   // ---------- Mijn profiel: gekoppelde apps ----------
   /**
-   * De gebruiker voor Mijn profiel: alleen een eigen account (niet meekijkend).
+   * De gebruiker voor Mijn profiel: alleen een eigen account (niet meekijkend). Een klant mag de lijst niet zien
+   * (alleen intern), maar wel een oude koppeling intrekken (bijvoorbeeld van toen het account nog medewerker was).
    * @param {object} req Het verzoek.
    * @param {object} res Het antwoord.
+   * @param {{ allowCustomer?: boolean }} [options] allowCustomer: ook voor een klant (alleen bij intrekken).
    * @returns {object|null} De gebruiker, of null als er al is geantwoord.
    */
-  const ownAccount = (req, res) => {
+  const ownAccount = (req, res, { allowCustomer = false } = {}) => {
     const user = ctx.identify(req);
     if (!user) { res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' }); return null; }
     if (user.kind !== 'account' || user.impersonator || user.impersonation) { res.status(403).json({ error: 'forbidden', message: 'Alleen met je eigen account.' }); return null; }
-    if (ctx.isCustomer(req, user)) { res.status(403).json({ error: 'internal_only', message: 'De AI-koppeling is alleen voor medewerkers.' }); return null; }
+    if (!allowCustomer && ctx.isCustomer(req, user)) { res.status(403).json({ error: 'internal_only', message: 'De AI-koppeling is alleen voor medewerkers.' }); return null; }
     return user;
   };
   app.get('/api/account/connections', (req, res) => {
@@ -464,7 +466,7 @@ function registerOAuthRoutes(app, ctx) {
     res.json({ items: grants.listForUser(ctx.familyOf(user), user.id), available: ctx.connectorOn(req.tenantId) && ctx.can(user, 'offertes'), url: resourceOf(req) });
   });
   app.delete('/api/account/connections/:id', (req, res) => {
-    const user = ownAccount(req, res);
+    const user = ownAccount(req, res, { allowCustomer: true });
     if (!user) return;
     if (!grants.revokeForUser(ctx.familyOf(user), user.id, req.params.id)) return res.status(404).json({ error: 'not_found', message: 'Koppeling niet gevonden.' });
     ctx.audit(req, 'ai_koppeling_ingetrokken', { grantId: req.params.id });

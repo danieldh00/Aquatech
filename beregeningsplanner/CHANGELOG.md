@@ -6,7 +6,8 @@ AI-koppeling: handleiding en extra rechtentest (vervolg op punt 28). Geen migrat
 
 - **Handleiding** bij Beheer > Instellingen > AI-koppeling en in Mijn profiel: stap voor stap koppelen in Claude (Connectors) en ChatGPT (ontwikkelaarsmodus, connector met OAuth), met een voorbeeldzin. Knop *Kopiëren* bij het adres in Beheer; het adres komt van de server (het webadres uit Beheer als dat is ingevuld).
 - **Alleen intern**: een klant (rol van het soort klant of gast) kan niet koppelen, ziet het blok in Mijn profiel niet (`/api/account/connections` geeft 403 `internal_only`) en een toestemming van een account dat klant wordt vervalt bij het eerste verzoek.
-- Test: een rolwijziging beperkt een al gekoppelde app direct tot wat de gebruiker in de app mag (planner: alleen artikelen zoeken; terug naar installateur zonder opnieuw koppelen).
+- Test: een rolwijziging beperkt een al gekoppelde app direct tot wat de gebruiker in de app mag (planner: alleen artikelen zoeken). Wordt het account klant, dan vervalt een koppeling bij het eerste verzoek; terug naar installateur moet hij opnieuw koppelen. Een koppeling die als klant niet is gebruikt, werkt na terugzetten van de rol weer (een klant kan hem nooit gebruiken).
+- **Intrekken als klant**: een account dat klant is geworden kan een eigen oude koppeling nog intrekken (`DELETE /api/account/connections/:id`); de lijst blijft verborgen.
 - Test: de controle op een vervalste CSRF-code in het toestemmingsscherm veranderde soms niets (als de code al met een x begon) en faalde daardoor af en toe; nu wijzigt hij altijd een teken.
 
 ## 1.10.1

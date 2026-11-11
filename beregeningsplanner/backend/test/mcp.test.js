@@ -384,6 +384,11 @@ test('rechten: een klant kan niet koppelen en een smalle scope geeft minder tool
 test('rechten volgen de rol op dit moment: een andere rol beperkt de AI direct tot wat de gebruiker in de app mag', async () => {
   const { base, admin, installer } = await setup();
   const connection = await connect(base, installer);
+  // Een tweede koppeling die tijdens de klantrol niet wordt gebruikt: die moet de gebruiker als klant nog kunnen intrekken.
+  const firstIds = (await installer.get('/app/api/account/connections')).body.items.map((item) => item.id);
+  const spare = await connect(base, installer);
+  const spareId = (await installer.get('/app/api/account/connections')).body.items.map((item) => item.id).find((id) => !firstIds.includes(id));
+  assert.ok(spareId);
   /**
    * De namen van de tools die de AI nu ziet.
    * @returns {Promise<string[]>} De namen.
@@ -400,9 +405,13 @@ test('rechten volgen de rol op dit moment: een andere rol beperkt de AI direct t
   // Een rol van het soort klant: de koppeling werkt helemaal niet meer (alleen intern).
   assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'klant' })).status, 200);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'ping' })).status, 401);
-  // Terug naar installateur: de toestemming is ingetrokken, dus opnieuw koppelen geeft de rechten terug.
+  // Als klant ziet hij de lijst niet, maar intrekken van een eigen oude koppeling mag wel.
+  assert.strictEqual((await installer.get('/app/api/account/connections')).status, 403);
+  assert.strictEqual((await installer.del(`/app/api/account/connections/${spareId}`)).status, 200);
+  // Terug naar installateur: de gebruikte toestemming is ingetrokken, dus opnieuw koppelen geeft de rechten terug.
   assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'installateur' })).status, 200);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'ping' })).status, 401);
+  assert.strictEqual((await mcp(base, spare.accessToken, { method: 'ping' })).status, 401);
   const again = await connect(base, installer);
   assert.strictEqual((await callTool(base, again.accessToken, 'zoek_klant', { zoekterm: 'Klant' })).isError, false);
 });
