@@ -155,7 +155,7 @@ async function setup() {
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: pw });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: pw });
   await store.createAccount(tid, { username: 'piet', displayName: 'Piet', role: 'klant', password: pw });
-  const { server, base } = await listen(createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
   const as = createLogin(base, { password: pw });
   return { db, server, base, as };
 }

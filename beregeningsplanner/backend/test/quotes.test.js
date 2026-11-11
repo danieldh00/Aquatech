@@ -129,7 +129,7 @@ async function setup({ mailerFor } = {}) {
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: 'Tuin-Plan-2026!' });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: 'Tuin-Plan-2026!' });
   await store.createAccount(tid, { username: 'mien', displayName: 'Mien', role: 'klant', password: 'Tuin-Plan-2026!' });
-  const { server, base } = await listen(createApp({ secret: SECRET, db, ...(mailerFor ? { mailerFor } : {}) }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, ...(mailerFor ? { mailerFor } : {}) }));
   const as = createLogin(base, { password: 'Tuin-Plan-2026!' });
   return { server, base, as, store, tid, db };
 }

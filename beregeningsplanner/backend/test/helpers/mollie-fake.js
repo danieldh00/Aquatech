@@ -4,7 +4,7 @@
 
 /**
  * Maakt de nagebootste Mollie.
- * @returns {{ fetchImpl: Function, payments: Map<string, object>, calls: object[], set: Function, down: { on: boolean } }} fetchImpl voor createApp({ mollieFetch }), de betalingen, alle aanroepen, set(id, status, extra) en down.on om Mollie onbereikbaar te maken.
+ * @returns {{ fetchImpl: Function, payments: Map<string, object>, calls: object[], set: Function, down: { on: boolean } }} fetchImpl voor createApp({ env: { MULTITENANCY: '1' }, mollieFetch }), de betalingen, alle aanroepen, set(id, status, extra) en down.on om Mollie onbereikbaar te maken.
  */
 function createMollieFake() {
   const payments = new Map();

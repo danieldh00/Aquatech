@@ -57,7 +57,7 @@ test('verzendronde: één mail per klant per jaar, alleen met installatie in de 
    * @returns {{ configured: Function, send: Function }} De mailer.
    */
   const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
-  const app = createApp({ secret: SECRET, db, mailerFor });
+  const app = createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, mailerFor });
   const { server, base } = await listen(app);
   const as = createLogin(base, { password: PW, extraBody: { mustChangePassword: false } });
   try {

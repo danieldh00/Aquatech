@@ -92,6 +92,11 @@ const FIELDS = {
   // Hoofdbeheer (platform: niet via Beheer > Instellingen). In de hoofdtenant
   // geldt het voor alle organisaties, in een live-tenant als eigen thema.
   theme: { type: 'object', default: {}, sanitize: Theme.sanitize, platform: true },
+  // Multitenancy (Hoofdbeheer > Multitenancy). Uit (standaard) = één organisatie: alles draait in de hoofdtenant, er
+  // is geen tenantbeheer en geen organisatiecode bij het inloggen; de hoofdtenant behoudt zijn testomgevingen.
+  // Aan = meer organisaties naast elkaar. De gegevens (tenant_id, RLS) blijven in beide standen gelijk, zodat
+  // aanzetten direct werkt. Env MULTITENANCY is alleen de startwaarde.
+  multitenancy: { type: 'bool', env: 'MULTITENANCY', default: false, platform: true },
   // Visma eAccounting (visma.js). De app-registratie (client ID, sandbox of
   // productie, redirect URI) en het secret gelden voor het hele platform en
   // staan in de hoofdtenant (Hoofdbeheer). Per omgeving: de keuzes in

@@ -110,7 +110,7 @@ test('API: beheerder stelt in en haalt op, catalogus per tenant, rechten', async
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
   await store.createAccount(other, { username: 'groenbaas', displayName: 'Groen', role: 'beheerder', password: PW });
   const shop = await startShop(paged(storeProducts(), '/wp-json/wc/store/v1/products'));
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
   const as = createLogin(base, { password: PW });
   try {
     const baas = await as('baas');

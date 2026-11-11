@@ -22,7 +22,7 @@ async function setup() {
   const store = createStore(db);
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  const { server, base } = await listen(createApp({ secret: SECRET, db, loginDelayMs: 0 }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, loginDelayMs: 0 }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
@@ -208,7 +208,7 @@ test('wachtwoord vergeten, herstellen en e-mailadres bevestigen (A-02)', async (
    * @returns {{ configured: Function, send: Function }} De mailfuncties.
    */
   const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
-  const { server, base } = await listen(createApp({ secret: SECRET, db, mailerFor, loginDelayMs: 0 }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, mailerFor, loginDelayMs: 0 }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);

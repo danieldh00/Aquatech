@@ -47,7 +47,7 @@ async function setup() {
     const body = responses.get(url);
     return body ? new Response(body, { status: 200, headers: { 'Content-Type': 'image/png' } }) : new Response('niet gevonden', { status: 404 });
   };
-  const { server, base } = await listen(createApp({ secret: SECRET, db, imageFetch, vault }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, imageFetch, vault }));
   servers.push(server);
   const login = createLogin(base, { password: PW });
   const admin = await login('baas');

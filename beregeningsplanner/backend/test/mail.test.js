@@ -65,7 +65,7 @@ test('API: e-mail en WAN-IP alleen voor beheerders, wachtwoord nooit terug', asy
    * @returns {object} De mailer.
    */
   const mailerFor = (settings) => createMailer(settings, { resolveHost: async (host) => host, createTransport: (options) => ({ sendMail: async (message) => { sent.push({ ...message, auth: options.auth }); return {}; } }) });
-  const { server, base } = await listen(createApp({ secret: SECRET, db, wanIp, mailerFor }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, wanIp, mailerFor }));
   const as = createLogin(base, { password: 'Tuin-Plan-2026!' });
   try {
     const baas = await as('baas'), kees = await as('kees');

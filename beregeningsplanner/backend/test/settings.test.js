@@ -253,10 +253,10 @@ test('modules aan/uit via /api/config', async () => {
   const { server, base } = await start();
   try {
     const adminClient = await admin(base);
-    assert.deepStrictEqual((await adminClient.get('/app/api/config')).body.modules, {});
+    assert.deepStrictEqual((await adminClient.get('/app/api/config')).body.modules, { uitbesteden: false });
     await adminClient.put('/app/api/admin/settings', { modules: { planning: false } });
     await adminClient.put('/app/api/admin/settings', { modules: { voorraad: false } });
-    assert.deepStrictEqual((await adminClient.get('/app/api/config')).body.modules, { planning: false, voorraad: false });
+    assert.deepStrictEqual((await adminClient.get('/app/api/config')).body.modules, { planning: false, voorraad: false, uitbesteden: false });
     const bad = await adminClient.put('/app/api/admin/settings', { modules: ['x'] });
     assert.strictEqual(bad.status, 400);
   } finally {

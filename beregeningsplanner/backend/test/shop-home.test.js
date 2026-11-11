@@ -31,7 +31,7 @@ async function setup() {
    * @returns {{ configured: Function, send: Function }} De mailfuncties.
    */
   const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
-  const { server, base } = await listen(createApp({ secret: SECRET, db, mailerFor }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, mailerFor }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
   assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);

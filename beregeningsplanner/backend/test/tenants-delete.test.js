@@ -21,7 +21,7 @@ const PW = 'Tuin-Plan-2026!';
  * @returns {Promise<{ server: import('http').Server, base: string }>} De server en zijn adres.
  */
 function start(db, opts = {}) {
-  return listen(createApp({ secret: SECRET, db, ...opts }));
+  return listen(createApp({ secret: SECRET, db, env: { MULTITENANCY: '1' }, ...opts }));
 }
 
 /**

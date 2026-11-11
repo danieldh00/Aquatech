@@ -95,7 +95,7 @@ async function setup() {
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
   await store.createAccount(main, { username: 'anna', displayName: 'Anna', role: 'beheerder', password: PW });
   const visma = fakeVisma();
-  const app = createApp({ addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, vismaFetch: visma.fetchImpl });
+  const app = createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, vismaFetch: visma.fetchImpl });
   const { server, base } = await listen(app);
   const as = createLogin(base, { password: PW, clientOptions: { followRedirects: false } });
   return { db, app, server, as, visma, main };

@@ -3,7 +3,7 @@
 /**
  * Maakt een nep-VIES.
  * @param {{ valid?: string[], down?: boolean }} [options] De btw-nummers die geldig zijn en of VIES onbereikbaar is.
- * @returns {{ fetchImpl: Function, calls: object[] }} fetch voor createApp({ viesFetch }) en de ontvangen verzoeken.
+ * @returns {{ fetchImpl: Function, calls: object[] }} fetch voor createApp({ env: { MULTITENANCY: '1' }, viesFetch }) en de ontvangen verzoeken.
  */
 function createViesFake({ valid = [], down = false } = {}) {
   const calls = [];

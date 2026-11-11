@@ -26,7 +26,7 @@ async function setup() {
   for (const [username, role, platformAdmin] of [['hoofd', 'beheerder', true], ['baas', 'beheerder'], ['ina', 'installateur'], ['klaas', 'klant']]) {
     ids[username] = (await store.createAccount(tid, { username, displayName: username, role, password: PW }, { platformAdmin })).user.id;
   }
-  const { server, base } = await listen(createApp({ secret: 'x'.repeat(64), db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: 'x'.repeat(64), db }));
   const as = createLogin(base, { password: PW, organizationField: 'org' });
   return { server, as, store, db, tid, ids };
 }

@@ -83,7 +83,7 @@ async function setup({ orders = [], mailOn = true } = {}) {
    */
   const mailerFor = () => ({ configured: () => mail.on, send: async (message) => { sent.push(message); return {}; } });
   const shop = fakeShop(orders);
-  const { server, base } = await listen(createApp({ secret: SECRET, db, mailerFor, shopFetch: shop.fetchImpl }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, mailerFor, shopFetch: shop.fetchImpl }));
   const as = createLogin(base, { password: PW });
   return { db, server, as, sent, mail, shop, main };
 }

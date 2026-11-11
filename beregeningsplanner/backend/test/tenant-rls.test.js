@@ -76,7 +76,7 @@ test('via de app: een beheerder van een andere organisatie ziet geen plannen van
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW, mustChangePassword: false });
   const other = store.createTenant({ slug: 'ander', name: 'Ander BV' }).tenant;
   await store.createAccount(other.id, { username: 'vreemd', displayName: 'Vreemd', role: 'beheerder', password: PW, mustChangePassword: false });
-  const { server, base } = await listen(createApp({ secret: SECRET, db, loginDelayMs: 0 }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, loginDelayMs: 0 }));
   servers.push(server);
   const login = createLogin(base, { password: PW });
   const baas = await login('baas');

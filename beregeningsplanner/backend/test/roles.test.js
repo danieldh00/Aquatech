@@ -29,7 +29,7 @@ async function setup() {
   await store.createAccount(tid, { username: 'ina', displayName: 'Ina', role: 'installateur', password: PW });
   await store.createAccount(tid, { username: 'ivo', displayName: 'Ivo', role: 'installateur', password: PW });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: PW });
-  const { server, base } = await listen(createApp({ secret: 'x'.repeat(64), db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: 'x'.repeat(64), db }));
   const as = createLogin(base, { password: PW });
   return { server, as, store, tid };
 }

@@ -95,7 +95,7 @@ test('API: nacalculatie alleen met het recht, andere tenant 404, met kostprijs u
   for (const [tenantId, username, role] of [[tid, 'baas', 'beheerder'], [tid, 'kees', 'installateur'], [other.id, 'vreemd', 'beheerder']]) {
     await store.createAccount(tenantId, { username, displayName: username, role, password: PW, mustChangePassword: false });
   }
-  const { server, base } = await listen(createApp({ secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
   try {
     const as = createLogin(base, { password: PW });
     const baas = await as('baas'), kees = await as('kees'), vreemd = await as('vreemd', 'ander');
