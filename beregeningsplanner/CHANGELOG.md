@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.0
+
+Betaaltermijn per klant (punt 11 van bundel A). Migratie 56 (`users.payment_days`, leeg = standaard).
+
+- **Klantkaart**: veld *Betaaltermijn (dagen)* bij de gegevens (0 tot 365, leeg = de standaard uit Facturen > Instellingen, die als hulptekst staat). Ook bij `POST /api/customers` en `PATCH /api/customers/:id` (recht `klanten`; audit `betaaltermijn`). `GET /api/customers/:id` geeft `defaultPaymentDays` mee.
+- **Offerte**: veld *Betaaltermijn (dagen)* naast datum en geldigheid; een klantkeuze vult de termijn van de klant in (of de standaard, via `GET /api/quote-customers`). De server vult de standaard in als het veld leeg is, zodat elke opgeslagen offerte een vaste termijn heeft. De termijn staat op de offerte (afdruk, klantweergave) en wordt bij het akkoord vastgelegd in het bewijs (`acceptance.paymentDays`, ook onderdeel van de inhoudshash); na het akkoord ligt hij vast.
+- **Factuur**: een factuur uit een werkorder neemt de termijn van de offerte over (`data.paymentDays`) voor de vervaldatum en de tekst *binnen {dagen} dagen*; een gewijzigde factuurdatum rekent met dezelfde termijn door.
+- Webshopfacturen en losse facturen houden de standaardtermijn.
+- Tests: `payment-terms.test.js` (kern, klantkaart, klantkeuze en standaard, akkoord, factuur).
+
 ## 1.9.9
 
 Offerte: nieuwe klant vanuit de offerte en btw verlegd naar een EU-klant (punt 12 van bundel A). Geen migratie.

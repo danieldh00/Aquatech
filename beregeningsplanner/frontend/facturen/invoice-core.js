@@ -223,9 +223,13 @@
     const customer = fields.customer && typeof fields.customer === 'object' ? fields.customer : {};
     const cleanSettings = settings && settings.categories ? settings : sanitizeSettings(settings);
     const date = isDate(fields.date) ? fields.date : today();
+    // Betaaltermijn van deze factuur (bijv. die van de klant op de offerte); leeg = de standaard uit de instellingen.
+    const paymentDays = fields.paymentDays === null || fields.paymentDays === undefined || fields.paymentDays === '' || !Number.isFinite(Number(fields.paymentDays))
+      ? null : Math.min(365, Math.max(0, Math.round(Number(fields.paymentDays))));
     return {
       date,
-      dueDate: isDate(fields.dueDate) && fields.dueDate >= date ? fields.dueDate : addDays(date, cleanSettings.paymentDays),
+      paymentDays,
+      dueDate: isDate(fields.dueDate) && fields.dueDate >= date ? fields.dueDate : addDays(date, paymentDays === null ? cleanSettings.paymentDays : paymentDays),
       reference: limitText(fields.reference, 120),
       customer: {
         name: limitText(customer.name, 200),
@@ -289,13 +293,13 @@
   /**
    * Betaaltekst met {dagen}, {iban}, {nummer}, {vervaldatum} ingevuld.
    * @param {object} settings Factuurinstellingen.
-   * @param {object} [values] { number, iban, dueDate }.
+   * @param {object} [values] { number, iban, dueDate, days } (days: betaaltermijn van deze factuur; leeg = die uit de instellingen).
    * @returns {string} De betaaltekst.
    */
-  function paymentText(settings, { number = '', iban = '', dueDate = '' } = {}) {
+  function paymentText(settings, { number = '', iban = '', dueDate = '', days = null } = {}) {
     const cleanSettings = settings && settings.categories ? settings : sanitizeSettings(settings);
     return cleanSettings.paymentText
-      .replace(/\{dagen\}/g, String(cleanSettings.paymentDays))
+      .replace(/\{dagen\}/g, String(days === null || days === undefined ? cleanSettings.paymentDays : days))
       .replace(/\{iban\}/g, iban || 'onze rekening')
       .replace(/\{nummer\}/g, number || '(volgt)')
       .replace(/\{vervaldatum\}/g, dueDate);
@@ -408,6 +412,8 @@
         notes: shift ? `BTW verlegd naar afnemer${shift.number ? ` (btw-nummer ${shift.number})` : ''}; intracommunautaire levering.` : '',
         customer: { name: customer.name, contact: customer.contact, address: customer.address, email: customer.email, phone: customer.phone, vatNumber: shift ? shift.number : '' },
         discountPct: quoteData ? quoteData.discountPct : 0,
+        // De betaaltermijn die op de offerte stond (de termijn van de klant), voor de vervaldatum.
+        paymentDays: quoteData ? quoteData.paymentDays : null,
         workOrderNumber: order.number || '',
         quoteNumber: quote ? quote.number || '' : '',
         lines,

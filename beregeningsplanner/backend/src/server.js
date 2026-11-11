@@ -65,6 +65,7 @@ const crypto = require('crypto');
 
 const { FRONTEND_DIR, PAGES_DIR } = require('./paths');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
+const InvoiceCore = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 const MODULES = require(path.join(FRONTEND_DIR, 'dashboard', 'modules.js'));
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
 const LOGIN_PAGE = path.join(PAGES_DIR, 'login.html');
@@ -1996,6 +1997,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerCustomerRoutes(app, {
     store, customers: createCustomerStore(database), requireRight, requireJson, audit, addressGuard,
     can: (user, right) => Roles.can(user, right),
+    // De standaard betaaltermijn (factuurinstellingen) voor klanten zonder eigen termijn.
+    defaultPaymentDays: (req) => InvoiceCore.sanitizeSettings(settingsFor(req.tenantId || tenant.id).get('invoicing')).paymentDays,
     // Klanten horen bij de live-tenant; in een testomgeving komen de testklanten daarvan erbij (zoals customersOf).
     tenantsOf: (req) => {
       const tenantId = req.tenantId || tenant.id;
@@ -2036,7 +2039,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const home = homeOf(tid);
       return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName,
-          email: customer.email, phone: customer.phone, address: customer.address, vatNumber: customer.vatNumber }));
+          email: customer.email, phone: customer.phone, address: customer.address, vatNumber: customer.vatNumber, paymentDays: customer.paymentDays }));
     },
   });
 

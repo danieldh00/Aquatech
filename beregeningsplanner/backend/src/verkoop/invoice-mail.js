@@ -68,7 +68,7 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
       soort_klein: credit ? 'creditfactuur' : 'factuur',
       betaling: credit ? 'Het bedrag verrekenen wij met u.'
         : invoice.status === 'betaald' ? 'Deze factuur is al voldaan, dank u wel.'
-          : Core.paymentText(invoicing, { number: invoice.number, iban: profile.iban, dueDate: day(details.dueDate) }),
+          : Core.paymentText(invoicing, { number: invoice.number, iban: profile.iban, dueDate: day(details.dueDate), days: details.paymentDays }),
     };
   }
 

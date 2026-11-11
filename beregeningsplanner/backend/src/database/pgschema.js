@@ -925,6 +925,10 @@ const PG_MIGRATIONS = [
   `
   CREATE INDEX invoices_customer ON invoices (tenant_id, customer_id, invoice_date);
   `,
+  // 56: betaaltermijn per klant (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN payment_days INTEGER;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

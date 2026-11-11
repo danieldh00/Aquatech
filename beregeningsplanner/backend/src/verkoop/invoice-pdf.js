@@ -201,7 +201,7 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
   if (details.notes) paragraph(details.notes);
   const pay = invoice.status === 'betaald'
     ? `Deze factuur is voldaan${invoice.paidAt ? ` op ${day(invoice.paidAt)}` : ''}. Dank u wel.`
-    : !credit ? Core.paymentText(invoicing, { number: invoice.number, iban: company.iban, dueDate: day(details.dueDate) }) : '';
+    : !credit ? Core.paymentText(invoicing, { number: invoice.number, iban: company.iban, dueDate: day(details.dueDate), days: details.paymentDays }) : '';
   if (pay) {
     const payLines = wrap(pay, rightEdge - leftEdge - 24, 9.5);
     const payHeight = payLines.length * 13 + 14;

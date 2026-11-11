@@ -750,6 +750,12 @@
       const input = document.querySelector(`#edit-view [data-f="${path}"]`);
       if (input) input.value = value;
     }
+    // De betaaltermijn van de klant (of de standaard) komt op de offerte.
+    if (customer.paymentDays != null) {
+      quote.data.paymentDays = customer.paymentDays;
+      const paymentField = document.querySelector('#edit-view [data-f="paymentDays"]');
+      if (paymentField) paymentField.value = customer.paymentDays;
+    }
     // Een btw-nummer van de klant komt alvast in het veld "Btw verlegd"; het vinkje blijft aan de gebruiker.
     const vatShift = quote.data.vatShift || { on: false, number: '' };
     if (customer.vatNumber && !vatShift.on) quote.data.vatShift = { ...vatShift, number: customer.vatNumber };
@@ -940,6 +946,12 @@
           quote.totalIncl = result.totalIncl;
           quote.share = result.share;
           if (result.data && result.data.vatShift) { quote.data.vatShift = result.data.vatShift; renderVatShift(quote); }
+          // De server vult de standaard betaaltermijn in als het veld leeg was.
+          if (result.data && result.data.paymentDays != null && (quote.data.paymentDays === '' || quote.data.paymentDays == null)) {
+            quote.data.paymentDays = result.data.paymentDays;
+            const paymentField = document.querySelector('#edit-view [data-f="paymentDays"]');
+            if (paymentField && document.activeElement !== paymentField) paymentField.value = result.data.paymentDays;
+          }
           $('#e-saved').textContent = `Opgeslagen ${new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`;
         }
         return true;

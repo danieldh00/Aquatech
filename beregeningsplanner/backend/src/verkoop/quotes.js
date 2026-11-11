@@ -22,6 +22,7 @@ const { linkExpired } = require('../platform/public-links');
 const copyTo = (user) => (user && preferencesOf(user).mailCopy && validEmail(user.email) ? user.email : undefined);
 
 const Core = require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js'));
+const InvoiceCore = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 const { normalizeVatNumber, validVatNumber } = require('../webshop/vat');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 
@@ -213,7 +214,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     }
     if (quote.acceptance) {
       const acceptance = quote.acceptance;
-      out.acceptance = { answer: acceptance.answer, name: acceptance.name, at: acceptance.at, via: acceptance.via, signature: acceptance.signature || null, reason: acceptance.reason || '', totalIncl: acceptance.totalIncl, contentHash: acceptance.contentHash || null };
+      out.acceptance = { answer: acceptance.answer, name: acceptance.name, at: acceptance.at, via: acceptance.via, signature: acceptance.signature || null, reason: acceptance.reason || '', totalIncl: acceptance.totalIncl, contentHash: acceptance.contentHash || null , paymentDays: acceptance.paymentDays === undefined ? null : acceptance.paymentDays };
     }
     return out;
   }
@@ -407,6 +408,8 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
       options: data.lines.filter((line) => line.optional && line.selected).map((line) => line.id),
       reason: answer === 'afgewezen' ? String(input.reason || '').trim().slice(0, 1000) : '',
       totalExcl: totals.net, totalIncl: totals.total,
+      // De betaaltermijn waarmee de klant akkoord ging (ook onderdeel van de inhoud hieronder).
+      paymentDays: data.paymentDays === undefined ? null : data.paymentDays,
       contentHash: sha256(JSON.stringify({ number: quoteRow.number, data, totals })),
     };
     return transaction(db, () => {
@@ -781,7 +784,9 @@ function registerQuoteRoutes(app, ctx) {
   // Zoekt klanten voor de klantkeuze (tot 20, op naam, bedrijf, e-mail, telefoon of adres), met de gegevens die de offerte invult.
   app.get('/api/quote-customers', requireQuotes, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ items: ctx.searchCustomers(req, String(req.query.q || '').slice(0, 100)) });
+    const defaultDays = defaultPaymentDays(req);
+    // De betaaltermijn van de klant, of de standaard als die er niet is: de klantkeuze vult dat in op de offerte.
+    res.json({ items: ctx.searchCustomers(req, String(req.query.q || '').slice(0, 100)).map((customer) => ({ ...customer, paymentDays: customer.paymentDays ?? defaultDays })) });
   });
 
   // Eigen offertes; beheerders en installateurs zien met ?all=1 die van
@@ -805,9 +810,26 @@ function registerQuoteRoutes(app, ctx) {
     res.json(quote);
   });
 
+  /**
+   * De standaard betaaltermijn van de organisatie (factuurinstellingen), in dagen.
+   * @param {object} req Het verzoek.
+   * @returns {number} Het aantal dagen.
+   */
+  const defaultPaymentDays = (req) => InvoiceCore.sanitizeSettings(settingsOf(req).get('invoicing')).paymentDays;
+
+  /**
+   * Vult de betaaltermijn van een offerte in met de standaard uit de factuurinstellingen als er nog geen is gekozen, zodat elke opgeslagen offerte een vaste termijn heeft.
+   * @param {object} req Het verzoek.
+   * @param {object} data De offertegegevens uit het verzoek.
+   * @returns {object} De gegevens met een betaaltermijn.
+   */
+  const withPaymentDays = (req, data) => (Core.sanitizePaymentDays(data.paymentDays) !== null ? data : { ...data, paymentDays: defaultPaymentDays(req) });
+
   app.post('/api/quotes', requireJson, requireQuotes, checkVatShift, requireVerifiedAddress(ctx.addressGuard, addressToVerify), (req, res) => {
-    const { data, status } = req.body || {};
-    if (!validData(data) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
+    const body = req.body || {};
+    if (!validData(body.data) || !validStatus(body.status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
+    const data = withPaymentDays(req, body.data);
+    const { status } = body;
     const customerChoice = customerIdOf(req, req.body.customerId);
     if (customerChoice.error) return badCustomer(res);
     // Uit een plan dat (nog) niet is goedgekeurd geen offerte (een verwijderd
@@ -819,8 +841,10 @@ function registerQuoteRoutes(app, ctx) {
   });
 
   app.put('/api/quotes/:id', requireJson, requireQuotes, checkVatShift, requireVerifiedAddress(ctx.addressGuard, addressToVerify, (req) => () => quotes.get(req.user, req.params.id)?.data?.customer?.address), (req, res) => {
-    const { data, status } = req.body || {};
-    if ((data !== undefined && !validData(data)) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
+    const body = req.body || {};
+    if ((body.data !== undefined && !validData(body.data)) || !validStatus(body.status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
+    const data = body.data === undefined ? undefined : withPaymentDays(req, body.data);
+    const { status } = body;
     const customerChoice = customerIdOf(req, req.body.customerId);
     if (customerChoice.error) return badCustomer(res);
     const quote = quotes.update(req.user, req.params.id, data, status, customerChoice.value);

@@ -919,7 +919,7 @@
     /** Vult de vervaldatum uit de factuurdatum en de betaaltermijn. */
     $('#m-form').date.onchange = () => {
       const metaForm = $('#m-form');
-      if (InvoiceCore.isDate(metaForm.date.value)) metaForm.dueDate.value = InvoiceCore.addDays(metaForm.date.value, state.settings.paymentDays);
+      if (InvoiceCore.isDate(metaForm.date.value)) metaForm.dueDate.value = InvoiceCore.addDays(metaForm.date.value, state.invoice.data.paymentDays ?? state.settings.paymentDays);
       changed();
     };
     const table = $('#e-lines');

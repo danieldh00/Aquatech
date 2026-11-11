@@ -136,6 +136,7 @@
       intro: limitText(fields.intro, 4000),
       terms: limitText(fields.terms, 6000),
       discountPct: round2(clampNumber(fields.discountPct, 0, 100)),
+      paymentDays: sanitizePaymentDays(fields.paymentDays),
       vatShift: sanitizeVatShift(fields.vatShift),
       // Op de offerte: alle regels met prijzen, of per onderdeel alleen een totaalbedrag.
       layout: fields.layout === 'totaal' ? 'totaal' : 'specificatie',
@@ -150,6 +151,17 @@
       } : null,
       lines: (Array.isArray(fields.lines) ? fields.lines : []).slice(0, MAX_LINES).map(sanitizeLine),
     };
+  }
+
+  /**
+   * Schoont de betaaltermijn op: een heel aantal dagen van 0 tot 365, of null (nog niet bepaald; de server vult de standaard in).
+   * @param {*} raw De ingevulde waarde.
+   * @returns {number|null} De termijn in dagen, of null.
+   */
+  function sanitizePaymentDays(raw) {
+    if (raw === null || raw === undefined || raw === '') return null;
+    const days = Number(raw);
+    return Number.isFinite(days) ? Math.min(365, Math.max(0, Math.round(days))) : null;
   }
 
   /** Uitkomsten van de btw-controle bij VIES die op een offerte kunnen staan. */
@@ -360,7 +372,7 @@
     return { lines, summary, warnings };
   }
 
-  const api = { SECTIONS, VAT_RATES, vatShifted, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, lineTotal, included, chooseOptions, fromPlan, today, addDays, round2 };
+  const api = { SECTIONS, VAT_RATES, vatShifted, sanitizePaymentDays, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, lineTotal, included, chooseOptions, fromPlan, today, addDays, round2 };
   root.QuoteCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

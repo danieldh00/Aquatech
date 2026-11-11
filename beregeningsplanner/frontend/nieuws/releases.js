@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.10.0',
+      date: '2026-11-11',
+      title: 'Betaaltermijn per klant',
+      items: [
+        { text: 'Bij een klant stel je een eigen betaaltermijn in (in dagen). Zonder eigen termijn geldt de standaard uit de factuurinstellingen.', for: ['klanten'] },
+        { text: 'De betaaltermijn staat op de offerte, wordt vastgelegd bij het akkoord en bepaalt de vervaldatum van de factuur.', for: ['offertes', 'facturen'] },
+      ],
+    },
+    {
       version: '1.9.9',
       date: '2026-11-11',
       title: 'Nieuwe klant en btw verleggen in de offerte',

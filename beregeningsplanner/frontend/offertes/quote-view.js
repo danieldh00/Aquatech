@@ -124,6 +124,7 @@
           <tr><td>Offertenummer</td><td><b>${esc(quote.number)}</b></td></tr>
           <tr><td>Datum</td><td>${esc(date(data.date))}</td></tr>
           <tr><td>Geldig tot</td><td>${esc(date(data.validUntil))}</td></tr>
+          ${data.paymentDays != null ? `<tr><td>Betaaltermijn</td><td>${esc(data.paymentDays)} dagen</td></tr>` : ''}
           ${data.reference ? `<tr><td>Uw referentie</td><td>${esc(data.reference)}</td></tr>` : ''}
         </table></div>
       </div>
