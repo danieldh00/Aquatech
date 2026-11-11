@@ -62,18 +62,29 @@ jobs:
           MODEL_PUSH: ${{ vars.CLAUDE_REVIEW_MODEL_PUSH }}
         run: |
           if [ "$ACTION" = "synchronize" ]; then
-            files=$(gh api "repos/$REPO/compare/$BEFORE...$AFTER" --paginate --jq '.files[].filename' || gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[].filename')
+            objects=$(gh api "repos/$REPO/compare/$BEFORE...$AFTER" --paginate --jq '.files[]' || gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[]')
             model="$MODEL_PUSH"
           else
-            files=$(gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[].filename')
+            objects=$(gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[]')
             model="$MODEL_FULL"
           fi
-          echo "$files"
-          if echo "$files" | grep -Eq '^(beregeningsplanner/(backend/(src|tools|package)|frontend/)|deploy/|scripts/|docker-compose\.yml|beregeningsplanner/Dockerfile)'; then
+          echo "$objects" | jq -r '.filename'
+          # Review nodig = er is code gewijzigd, behalve als dat alleen het veld "version" in package.json/package-lock.json is
+          # (een versie-bump). Een ontbrekende diff of een andere regel in die bestanden telt als code. De job slaagt dan
+          # zonder review, zodat de verplichte check niet ontbreekt.
+          needs_review=$(echo "$objects" | jq -s --arg re '^(beregeningsplanner/(backend/(src|tools|package)|frontend/)|deploy/|scripts/|docker-compose\.yml|beregeningsplanner/Dockerfile)' '
+            [ .[] | select(.filename | test($re)) ] as $code
+            | ($code | length) > 0
+              and ($code | all(
+                  (.filename | test("^beregeningsplanner/backend/package(-lock)?\\.json$"))
+                  and ((.patch // "") | length > 0)
+                  and ((.patch // "") | split("\n") | map(select(test("^[+-]") and (test("^(\\+\\+\\+|---)") | not))) | all(test("^[+-]\\s*\"version\": \""))))
+                | not)')
+          if [ "$needs_review" = "true" ]; then
             echo "review=true" >> "$GITHUB_OUTPUT"
           else
             echo "review=false" >> "$GITHUB_OUTPUT"
-            echo "Geen code gewijzigd: review overgeslagen."
+            echo "Geen code gewijzigd (of alleen een versie-bump): review overgeslagen."
           fi
           echo "model=$model" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
