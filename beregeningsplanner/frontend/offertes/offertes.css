@@ -51,7 +51,13 @@ table.lines tr.section td .sum { float: right; font-weight: 600; color: var(--te
 table.lines tr.add td { border-bottom: 0; padding-bottom: 8px; }
 table.lines .line-note { display: flex; gap: 8px; align-items: center; margin: 4px 0 0; padding: 4px 8px; font-size: 12px; border-radius: 6px;
   background: color-mix(in srgb, var(--at-warn) 12%, transparent); border-left: 3px solid var(--at-warn); }
-table.lines .line-note .btn { margin-left: auto; }
+table.lines .line-note .line-note-text { flex: 1; min-width: 0; }
+table.lines .line-note .btn { flex: none; white-space: nowrap; background: var(--at-surface); }
+table.lines .line-note .btn.note-check { border-color: var(--at-green); color: var(--at-green-dark); font-weight: 600; }
+table.lines .line-note .btn.note-check:hover { background: var(--at-green-soft); }
+table.lines .line-note.checked { background: var(--at-green-soft); border-left-color: var(--at-green); color: var(--muted); }
+table.lines .line-note.checked .line-note-status { color: var(--at-green-dark); }
+@media (max-width: 600px) { table.lines .line-note { flex-wrap: wrap; } table.lines .line-note .btn { margin-left: auto; } }
 table.lines .code { display: block; font-size: 11px; color: var(--muted); padding: 1px 6px 0; }
 .btn.icon { padding: 3px 7px; color: var(--muted); }
 .btn.icon:hover { color: #c62828; }

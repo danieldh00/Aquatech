@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.10.5',
+      date: '2026-11-11',
+      title: 'Duidelijker controleren van AI-regels',
+      items: [
+        { text: 'Bij een regel waar de AI over twijfelt klik je op "Markeer als gecontroleerd". De regel krijgt dan een groene status Gecontroleerd en de notitie blijft voor jou zichtbaar; met Ongedaan maken zet je hem terug. De klant ziet dit nooit.', for: ['offertes'] },
+      ],
+    },
+    {
       version: '1.10.4',
       date: '2026-11-11',
       title: 'Interne notitie bij een offerte',

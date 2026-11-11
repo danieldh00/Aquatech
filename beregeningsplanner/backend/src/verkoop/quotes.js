@@ -194,7 +194,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   function withoutInternalNotes(data) {
     const { internalNote, ...rest } = data;
-    return { ...rest, lines: data.lines.map(({ note, ...line }) => line) };
+    return { ...rest, lines: data.lines.map(({ note, noteChecked, ...line }) => line) };
   }
 
   /**
