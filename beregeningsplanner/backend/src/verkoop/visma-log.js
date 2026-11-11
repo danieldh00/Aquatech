@@ -14,7 +14,7 @@ const MAX_PAGE = 100;
 const DEFAULT_PAGE = 50;
 const READ_DEDUPE_MS = 30 * 60 * 1000;
 const COLUMNS = 'id, created_at, last_at, kind, direction, ok, source, actor, reference, message, repeat_count';
-const KINDS = ['verbonden', 'verbroken', 'klant', 'factuur', 'opties', 'aanmelding'];
+const KINDS = ['verbonden', 'verbroken', 'klant', 'factuur', 'opties', 'aanmelding', 'instelling'];
 const DIRECTIONS = ['naar', 'van', ''];
 
 /**
