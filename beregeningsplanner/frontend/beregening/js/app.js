@@ -379,7 +379,7 @@
         let res = await send(id ? 'PUT' : 'POST', id ? `api/plans/${encodeURIComponent(id)}` : 'api/plans');
         // Plan niet (meer) van deze gebruiker: als nieuw plan bewaren.
         if (res.status === 404 && id) res = await send('POST', 'api/plans');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw new Error(AquatechCommon.statusMessage(res.status));
         const plan = await res.json();
         if (this.state.serverId !== plan.id) {
           this.state.serverId = plan.id;
@@ -506,7 +506,7 @@
     async openServerPlan(id) {
       try {
         const res = await fetch(`api/plans/${encodeURIComponent(id)}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(res.status === 404 ? 'plan niet gevonden' : `HTTP ${res.status}`);
+        if (!res.ok) throw new Error(res.status === 404 ? 'plan niet gevonden' : AquatechCommon.statusMessage(res.status));
         const plan = await res.json();
         this.checkpoint();
         this._apply(plan.data);
@@ -540,7 +540,7 @@
       try {
         if (this._syncPending) { clearTimeout(this._syncT); await this._sync(); }
         const res = await fetch('api/plans', { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw new Error(AquatechCommon.statusMessage(res.status));
         const { items } = await res.json();
         if (!items.length) {
           list.innerHTML = '<p class="hint">Nog geen plannen bewaard. Een plan wordt automatisch bewaard zodra je een vlak tekent.</p>';
@@ -782,7 +782,7 @@
           });
         }
         const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.message || `Indienen mislukt (HTTP ${res.status}).`);
+        if (!res.ok) throw new Error(body.message || `Indienen mislukt: ${AquatechCommon.statusMessage(res.status)}`);
         if (ANON) {
           form.hidden = true;
           $('#submit-ref').textContent = body.reference || '';
@@ -812,7 +812,7 @@
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }),
         });
         const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
+        if (!res.ok) throw new Error(body.message || AquatechCommon.statusMessage(res.status));
         this.review = body.review;
         this._renderReview();
         if (STEPS[this.step].id === 'bom') this.renderStepPanel();

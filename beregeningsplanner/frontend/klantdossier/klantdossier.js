@@ -79,7 +79,7 @@
   async function api(path) {
     const res = await fetch(`../api/${path}`, { cache: 'no-store' });
     const out = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(out.message || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(out.message || AquatechCommon.statusMessage(res.status));
     return out;
   }
 

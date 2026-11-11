@@ -45,7 +45,7 @@
       body: requestOptions.body ? JSON.stringify(requestOptions.body) : undefined,
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(body.message || AquatechCommon.statusMessage(res.status));
     return body;
   }
 
@@ -155,7 +155,7 @@
         try {
           const res = await fetch(`../api/admin/web-orders/${encodeURIComponent(refund.orderId)}/refund`, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ returnId: record.id }) });
           const body = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(body.message || `HTTP ${res.status}`);
+          if (!res.ok) throw new Error(body.message || AquatechCommon.statusMessage(res.status));
           toast(`Terugbetaald: ${euro(body.refund.amount)}`);
           await open(record.id);
         } catch (error) { toast(error.message, true); refundButton.disabled = false; }

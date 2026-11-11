@@ -140,7 +140,7 @@
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const result = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(result.message || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(result.message || AquatechCommon.statusMessage(res.status));
     return result;
   }
 

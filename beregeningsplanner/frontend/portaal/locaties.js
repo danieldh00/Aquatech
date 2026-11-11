@@ -169,7 +169,7 @@
     const body = await res.json().catch(() => null);
     if (requestNumber !== state.latestRequest) return;
     if (!res.ok) {
-      showError((body && body.message) || `HTTP ${res.status}`);
+      showError((body && body.message) || AquatechCommon.statusMessage(res.status));
       return;
     }
     if (!body) {

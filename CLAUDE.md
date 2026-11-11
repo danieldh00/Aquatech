@@ -612,6 +612,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   hoeven geen eigen `wrapAsync` meer. **Een eigen foutantwoord na een `catch` bewaart de oorzaak met `withCause(res, error)`**;
   zet nooit `error.message` van een interne fout rechtstreeks in `message` (alleen bij bewust leesbare fouten, zoals SMTP).
   Webshopfouten (1.8.6): `respondShopError(res, error, next)` uit woocommerce.js (`SourceError` = leesbaar, met `cause`; rest → 500).
+  Frontend (1.8.9): een terugvalmelding bij een status zonder `message` altijd via `AquatechCommon.statusMessage(status)`, nooit `HTTP ${status}` (test bewaakt dat); een netwerkfout geeft de fetch-hulp in common.js al een leesbare melding.
   Mailfouten (1.8.7): melding altijd via `mailFailure(error)` uit mailer.js (+ `withCause`), nooit `error.message` van nodemailer.
   Een nieuwe leesbare fout met een onderliggende oorzaak: `new Error(melding, { cause: error })` of `new SourceError(…, status, error)`.
 - Health: `GET /api/health` (versie uit `package.json`).

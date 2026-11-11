@@ -69,7 +69,7 @@
     const res = await fetch(url, { cache: 'no-store', ...options });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const error = new Error(body.message || `HTTP ${res.status}`);
+      const error = new Error(body.message || AquatechCommon.statusMessage(res.status));
       error.status = res.status;
       throw error;
     }

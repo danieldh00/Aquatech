@@ -592,7 +592,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // Uit de oude webshop-URL gebleven webhooks van Mollie: nog een tijdje intern doorgeven.
     if (/^\/winkel\/mollie\/webhook\//.test(req.path)) req.url = req.url.slice('/winkel'.length);
     if (legacyAppRedirect(req, res)) return undefined;
-    if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found' });
+    if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found', message: 'Deze API-route bestaat niet.' });
     if (req.path === '/sw.js') return sendCleanupWorker(res);
     // Webshop uit: er is niets om te vinden (robots.txt van de shop zelf staat in webshop/storefront.js).
     if (req.path === '/robots.txt' && !settingsFor(tenant.id).get('storefront')) return res.type('text').send('User-agent: *\nDisallow: /\n');
@@ -2462,7 +2462,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   impersonation.register(app, { identify, requireJson, clearEnvironment, wrap });
 
-  app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
+  app.use('/api', (req, res) => res.status(404).json({ error: 'not_found', message: 'Deze API-route bestaat niet.' }));
 
   /**
    * Niet ingelogd: eerst het instelscherm zolang er geen beheerder is, anders

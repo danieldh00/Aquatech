@@ -106,7 +106,7 @@
       throw new OfflineError('Geen verbinding met de server.');
     }
     const result = await res.json().catch(() => ({}));
-    if (!res.ok) throw Object.assign(new Error(result.message || `HTTP ${res.status}`), { code: result.error, status: res.status });
+    if (!res.ok) throw Object.assign(new Error(result.message || AquatechCommon.statusMessage(res.status)), { code: result.error, status: res.status });
     return result;
   }
 
