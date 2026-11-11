@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.9.1',
+      date: '2026-11-11',
+      title: 'Kleine verbetering in foutmeldingen bij instellingen',
+      items: [],
+    },
+    {
       version: '1.9.0',
       date: '2026-11-11',
       title: 'Duidelijkere meldingen bij betalen en facturen in de webshop',

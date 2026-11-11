@@ -144,6 +144,8 @@ class SettingsError extends Error {
    */
   constructor(field, message) {
     super(message);
+    // Op naam herkenbaar: modules die settings.js zelf weer nodig heeft (kringverwijzing) kunnen de klasse niet importeren.
+    this.name = 'SettingsError';
     this.field = field;
   }
 }

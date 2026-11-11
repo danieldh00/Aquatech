@@ -98,6 +98,8 @@ test('geheimen komen nooit volledig in het overzicht', () => {
 test('ongeldige waarden worden geweigerd', () => {
   const settings = freshSettings();
   assert.throws(() => settings.update({ aiDailyLimit: 9999 }), SettingsError);
+  // De naam is vast: routes die de klasse niet kunnen importeren (kringverwijzing) herkennen hem daaraan.
+  assert.throws(() => settings.update({ aiDailyLimit: 9999 }), { name: 'SettingsError' });
   assert.throws(() => settings.update({ aiDailyLimit: '5' }), SettingsError);
   assert.throws(() => settings.update({ accessCode: 'kortecode' }), SettingsError);
   assert.throws(() => settings.update({ aiEnabled: 'ja' }), SettingsError);
