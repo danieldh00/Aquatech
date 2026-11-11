@@ -471,7 +471,7 @@
         renderVismaControls();
       }
     });
-    vismaControlsQueue = run;
+    vismaControlsQueue = run.catch(() => {});
     return run;
   }
 
