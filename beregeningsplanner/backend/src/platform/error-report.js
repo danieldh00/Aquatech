@@ -22,15 +22,17 @@ const ROUTE_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'all', 'use'];
 // Bekende vormen van geheimen die in een foutmelding terecht kunnen komen.
 const SECRET_PATTERNS = [
   // Wachtwoord in een verbindings-URL: postgres://gebruiker:wachtwoord@host
-  [/([a-z][a-z0-9+.-]*:\/\/[^:/?#\s@]*:)[^@/\s]+@/gi, '$1***@'],
+  [/(\b[a-z][a-z0-9+.-]{0,30}:\/\/[^:/?#\s@]*:)[^@/\s]+@/gi, '$1***@'],
   // Autorisatiekoppen en tokens.
   [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{6,}/gi, '$1 ***'],
   // API-sleutels van Anthropic, Mollie en WooCommerce.
   [/\bsk-ant-[A-Za-z0-9_-]{6,}/g, 'sk-ant-***'],
   [/\b(live|test)_[A-Za-z0-9]{20,}/g, '$1_***'],
   [/\b(ck|cs)_[a-f0-9]{20,}/gi, '$1_***'],
-  // Velden als password=..., secret: "...", token=...
-  [/([\w-]*(?:password|passwd|wachtwoord|secret|token|api[_-]?key|access[_-]?code))(["']?\s*[:=]\s*["']?)[^\s"',;&]+/gi, '$1$2***'],
+  // Velden als password=..., secret: "...", token=... (ook met voorvoegsel, zoals refresh_token). Het voorvoegsel
+  // hoeft niet in het patroon: de waarde na het trefwoord wordt vervangen en het voorvoegsel blijft staan. Zo
+  // blijft de regex lineair, ook op lange invoer.
+  [/(password|passwd|wachtwoord|secret|token|api[_-]?key|access[_-]?code)(["']?\s*[:=]\s*["']?)[^\s"',;&]+/gi, '$1$2***'],
 ];
 
 /**

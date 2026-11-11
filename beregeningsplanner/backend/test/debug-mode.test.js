@@ -143,6 +143,14 @@ test('redact, describeError en ownFrames', () => {
   assert.strictEqual(redact('password=hunter2 rest'), 'password=*** rest');
   assert.strictEqual(redact('{"token": "abc123def"}'), '{"token": "***"}');
   assert.strictEqual(redact('refresh_token=abc'), 'refresh_token=***');
+  assert.strictEqual(redact('X-API-KEY: geheim'), 'X-API-KEY: ***');
+  // Lange invoer zonder scheidingstekens blijft snel (geen terugzoeken over de hele tekst).
+  const started = Date.now();
+  redact(`/api/${'a'.repeat(200000)}`, 300000);
+  redact('token'.repeat(40000), 300000);
+  redact('a-'.repeat(100000), 300000);
+  redact('a://b:'.repeat(40000), 300000);
+  assert.ok(Date.now() - started < 500, 'redact moet lineair blijven op lange invoer');
   assert.strictEqual(redact('client_secret: geheim'), 'client_secret: ***');
   assert.strictEqual(redact('x'.repeat(30), 10), `${'x'.repeat(10)}…`);
   assert.strictEqual(redact(undefined), '');
