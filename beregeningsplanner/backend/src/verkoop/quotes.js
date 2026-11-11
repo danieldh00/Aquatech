@@ -686,17 +686,13 @@ function registerQuoteRoutes(app, ctx) {
   });
 
   /**
-   * Het adres dat bij PDOK moet kloppen: dat van de klant op de offerte, behalve bij een afnemer in een ander EU-land (btw verlegd met een btw-nummer dat niet Nederlands is): dat adres ligt buiten PDOK en wordt vrij getypt.
-   * @param {object} req Het verzoek.
+   * Het adres dat bij PDOK moet kloppen: dat van de klant op de offerte, behalve bij een afnemer in een ander EU-land waarvan het btw-nummer door VIES geldig is bevonden (zie checkVatShift): dat adres ligt buiten PDOK en wordt vrij getypt.
+   * @param {object} req Het verzoek (met req.vatShiftChecked uit checkVatShift).
    * @returns {string|undefined} Het adres om te controleren, of niets als er niets te controleren valt.
    */
   function addressToVerify(req) {
     const data = req.body && req.body.data;
-    const shift = data && data.vatShift;
-    if (shift && shift.on === true) {
-      const number = normalizeVatNumber(shift.number);
-      if (validVatNumber(number) && !number.startsWith('NL')) return undefined;
-    }
+    if (req.vatShiftChecked) return undefined;
     return data && data.customer && data.customer.address;
   }
 
@@ -721,6 +717,28 @@ function registerQuoteRoutes(app, ctx) {
       return { error: 'vat_invalid', message: `Het btw-nummer ${number} is volgens VIES (de btw-database van de EU) niet geldig, dus de btw kan niet worden verlegd.` };
     }
     return { data: { ...data, vatShift: { on: true, number, status: result.status, checkedAt: result.checkedAt, requestId: result.requestId, name: result.name } } };
+  }
+
+  /**
+   * Middleware voor het opslaan van een offerte: controleert "btw verlegd" bij VIES vóór de adrescontrole, zodat het PDOK-adres alleen vervalt bij een nummer dat VIES geldig noemt.
+   * Zet req.vatShiftChecked en vervangt req.body.data door de gegevens met het bewijs van de server.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {Function} next De volgende stap.
+   * @returns {Promise<void>}
+   */
+  async function checkVatShift(req, res, next) {
+    try {
+      const data = req.body && req.body.data;
+      if (!validData(data)) return next();
+      const shifted = await applyVatShift(req, data);
+      if (shifted.error) return res.status(shifted.error === 'vat_invalid' ? 409 : 400).json({ error: shifted.error, message: shifted.message });
+      req.body.data = shifted.data;
+      req.vatShiftChecked = Boolean(shifted.data.vatShift && shifted.data.vatShift.on === true && shifted.data.vatShift.status === 'geldig');
+      next();
+    } catch (error) {
+      next(error);
+    }
   }
 
   // Klantaccounts om een offerte aan te koppelen.
@@ -751,12 +769,9 @@ function registerQuoteRoutes(app, ctx) {
     res.json(quote);
   });
 
-  app.post('/api/quotes', requireJson, requireQuotes, requireVerifiedAddress(ctx.addressGuard, addressToVerify), async (req, res) => {
-    const { status } = req.body || {};
-    if (!validData(req.body?.data) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
-    const shifted = await applyVatShift(req, req.body.data);
-    if (shifted.error) return res.status(shifted.error === 'vat_invalid' ? 409 : 400).json({ error: shifted.error, message: shifted.message });
-    const { data } = shifted;
+  app.post('/api/quotes', requireJson, requireQuotes, checkVatShift, requireVerifiedAddress(ctx.addressGuard, addressToVerify), (req, res) => {
+    const { data, status } = req.body || {};
+    if (!validData(data) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
     const customerChoice = customerIdOf(req, req.body.customerId);
     if (customerChoice.error) return badCustomer(res);
     // Uit een plan dat (nog) niet is goedgekeurd geen offerte (een verwijderd
@@ -767,12 +782,9 @@ function registerQuoteRoutes(app, ctx) {
     res.status(201).json(quotes.create(req.user, data, { status, prefix, customerId: customerChoice.value }));
   });
 
-  app.put('/api/quotes/:id', requireJson, requireQuotes, requireVerifiedAddress(ctx.addressGuard, addressToVerify, (req) => () => quotes.get(req.user, req.params.id)?.data?.customer?.address), async (req, res) => {
-    const { status } = req.body || {};
-    if ((req.body?.data !== undefined && !validData(req.body.data)) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
-    const shifted = await applyVatShift(req, req.body.data);
-    if (shifted.error) return res.status(shifted.error === 'vat_invalid' ? 409 : 400).json({ error: shifted.error, message: shifted.message });
-    const { data } = shifted;
+  app.put('/api/quotes/:id', requireJson, requireQuotes, checkVatShift, requireVerifiedAddress(ctx.addressGuard, addressToVerify, (req) => () => quotes.get(req.user, req.params.id)?.data?.customer?.address), (req, res) => {
+    const { data, status } = req.body || {};
+    if ((data !== undefined && !validData(data)) || !validStatus(status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
     const customerChoice = customerIdOf(req, req.body.customerId);
     if (customerChoice.error) return badCustomer(res);
     const quote = quotes.update(req.user, req.params.id, data, status, customerChoice.value);

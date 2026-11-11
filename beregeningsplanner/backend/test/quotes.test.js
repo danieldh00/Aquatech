@@ -523,6 +523,10 @@ test('API: btw verlegd op een offerte wordt bij VIES gecontroleerd en als bewijs
     assert.strictEqual(down.status, 200);
     assert.strictEqual(down.body.data.vatShift.status, 'onbereikbaar');
     assert.strictEqual(down.body.data.vatShift.name, '');
+    // Zonder uitkomst van VIES vervalt de PDOK-controle niet: een niet-PDOK-adres wordt dan geweigerd.
+    const bypass = body({ on: true, number: 'ATU12345678' });
+    bypass.data.customer = { name: 'X', address: 'Gartenweg 4\n80331 München' };
+    assert.strictEqual((await piet.post('/app/api/quotes', bypass)).status === 201, false, 'geen omweg om PDOK als VIES niet antwoordt');
   } finally {
     server.close();
   }
