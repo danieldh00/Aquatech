@@ -127,7 +127,7 @@ const single = (source, name) => {
  * @param {object} app De Express-app.
  * @param {object} ctx { grants (createOAuthGrants), publicOrigin() (vast webadres zonder slash, of leeg), signValue(doel, waarde), identify(req), sendLogin(req, res), connectorOn(tenantId),
  *   can(user, recht), accountOf(userId) (de gebruiker uit de database), fingerprintOf(passwordHash), environmentName(tenantId),
- *   userForGrant(grant), familyOf(user), themeCss(tenantId), audit(req, actie, detail, gebruiker, omgeving) }.
+ *   userForGrant(grant), familyOf(user), isCustomer(req, user) (klant of gast), themeCss(tenantId), audit(req, actie, detail, gebruiker, omgeving) }.
  * @returns {{ resourceOf: Function, originOf: Function, verifyClient: Function }} Hulpfuncties voor de MCP-server.
  */
 function registerOAuthRoutes(app, ctx) {
@@ -342,6 +342,7 @@ function registerOAuthRoutes(app, ctx) {
     if (!user) return ctx.sendLogin(req, res);
     if (user.kind !== 'account' || user.impersonator || user.impersonation) return errorPage(res, 403, 'Koppel een AI-app alleen vanuit je eigen account (niet als gast, met de toegangscode of terwijl je meekijkt).', req.tenantId);
     if (!ctx.connectorOn(req.tenantId)) return errorPage(res, 403, 'De AI-koppeling staat uit in deze omgeving. Een beheerder zet hem aan in Beheer > Instellingen > AI-koppeling.', req.tenantId);
+    if (ctx.isCustomer(req, user)) return errorPage(res, 403, 'De AI-koppeling is alleen voor medewerkers.', req.tenantId);
     if (!ctx.can(user, 'offertes')) return errorPage(res, 403, 'Je rol mag geen offertes maken, dus koppelen heeft geen zin. Vraag een beheerder om het recht Offertes.', req.tenantId);
     const allowed = scopesFor(scopes, user, ctx.can);
     prunePending();
@@ -385,7 +386,7 @@ function registerOAuthRoutes(app, ctx) {
       ctx.audit(req, 'ai_koppeling_geweigerd', { app: host });
       return backToApp(res, entry.redirectUri, { error: 'access_denied', error_description: 'De gebruiker heeft geweigerd.', state: entry.state }, req);
     }
-    if (!ctx.connectorOn(req.tenantId) || !ctx.can(user, 'offertes')) return errorPage(res, 403, 'Koppelen mag (nu) niet in deze omgeving.', req.tenantId);
+    if (!ctx.connectorOn(req.tenantId) || ctx.isCustomer(req, user) || !ctx.can(user, 'offertes')) return errorPage(res, 403, 'Koppelen mag (nu) niet in deze omgeving.', req.tenantId);
     const account = ctx.accountOf(user.id);
     if (!account || !account.password_hash) return errorPage(res, 403, 'Koppel een AI-app alleen vanuit je eigen account.', req.tenantId);
     const { code } = grants.createCode({
@@ -445,15 +446,18 @@ function registerOAuthRoutes(app, ctx) {
 
   // ---------- Mijn profiel: gekoppelde apps ----------
   /**
-   * De gebruiker voor Mijn profiel: alleen een eigen account (niet meekijkend).
+   * De gebruiker voor Mijn profiel: alleen een eigen account (niet meekijkend). Een klant mag de lijst niet zien
+   * (alleen intern), maar wel een oude koppeling intrekken (bijvoorbeeld van toen het account nog medewerker was).
    * @param {object} req Het verzoek.
    * @param {object} res Het antwoord.
+   * @param {{ allowCustomer?: boolean }} [options] allowCustomer: ook voor een klant (alleen bij intrekken).
    * @returns {object|null} De gebruiker, of null als er al is geantwoord.
    */
-  const ownAccount = (req, res) => {
+  const ownAccount = (req, res, { allowCustomer = false } = {}) => {
     const user = ctx.identify(req);
     if (!user) { res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' }); return null; }
     if (user.kind !== 'account' || user.impersonator || user.impersonation) { res.status(403).json({ error: 'forbidden', message: 'Alleen met je eigen account.' }); return null; }
+    if (!allowCustomer && ctx.isCustomer(req, user)) { res.status(403).json({ error: 'internal_only', message: 'De AI-koppeling is alleen voor medewerkers.' }); return null; }
     return user;
   };
   app.get('/api/account/connections', (req, res) => {
@@ -462,7 +466,7 @@ function registerOAuthRoutes(app, ctx) {
     res.json({ items: grants.listForUser(ctx.familyOf(user), user.id), available: ctx.connectorOn(req.tenantId) && ctx.can(user, 'offertes'), url: resourceOf(req) });
   });
   app.delete('/api/account/connections/:id', (req, res) => {
-    const user = ownAccount(req, res);
+    const user = ownAccount(req, res, { allowCustomer: true });
     if (!user) return;
     if (!grants.revokeForUser(ctx.familyOf(user), user.id, req.params.id)) return res.status(404).json({ error: 'not_found', message: 'Koppeling niet gevonden.' });
     ctx.audit(req, 'ai_koppeling_ingetrokken', { grantId: req.params.id });

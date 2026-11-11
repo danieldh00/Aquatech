@@ -123,8 +123,28 @@
         <div id="ai-setup" hidden>
           <label class="field"><span class="label">Adres van de koppeling</span>
             <input id="ai-url" type="text" readonly></label>
-          <p class="hint">Voeg dit adres toe als eigen connector (Claude: Instellingen &gt; Connectors; ChatGPT: Instellingen &gt; Apps en connectors). Daarna log je hier in en geef je toestemming.</p>
+          <p class="hint">Voeg dit adres toe als eigen connector in Claude of ChatGPT; de stappen staan in de handleiding hieronder.</p>
           <div class="form-foot"><button class="btn" type="button" id="ai-copy">Adres kopiëren</button></div>
+          <details class="ai-guide">
+            <summary>Handleiding: koppelen in Claude of ChatGPT</summary>
+            <p><strong>Claude</strong> (claude.ai of de app, met een betaald abonnement):</p>
+            <ol>
+              <li>Ga op claude.ai naar <em>Instellingen &gt; Connectors</em> en kies <em>Eigen connector toevoegen</em>.</li>
+              <li>Naam: <em>AquaTech</em>. Plak bij URL het adres van de koppeling en klik op <em>Toevoegen</em>.</li>
+              <li>Klik op <em>Verbinden</em>. Je komt op het inlogscherm van AquaTech: log in met je eigen account en klik op <em>Toestaan</em>.</li>
+              <li>Klaar. De koppeling werkt daarna ook in de Claude-app op je telefoon; zet AquaTech in een gesprek aan via de knop met tools.</li>
+            </ol>
+            <p><strong>ChatGPT</strong> (Plus, Pro, Business of Enterprise):</p>
+            <ol>
+              <li>Ga naar <em>Instellingen &gt; Apps en connectors &gt; Geavanceerde instellingen</em> en zet <em>Ontwikkelaarsmodus</em> aan.</li>
+              <li>Kies <em>Connector aanmaken</em>. Naam: <em>AquaTech</em>, plak het adres bij <em>MCP-server-URL</em> en kies bij verificatie <em>OAuth</em>.</li>
+              <li>Log in met je eigen AquaTech-account en klik op <em>Toestaan</em>.</li>
+              <li>Kies in een gesprek AquaTech bij de tools (de knop <em>+</em>).</li>
+            </ol>
+            <p>Daarna zeg je bijvoorbeeld: <em>"Maak een offerte voor Jan de Vries, Dorpsstraat 1 in Nunspeet: acht pop-up sproeiers, veertig meter PE-buis en zes uur aanleg."</em> De AI zoekt de klant en de artikelen en zet een concept-offerte klaar; jij controleert en verstuurt hem in AquaTech.</p>
+            <p>Iedere medewerker koppelt zijn eigen account, met de rechten van zijn rol. Gekoppelde apps zie en trek je in bij <em>Mijn profiel</em>.</p>
+          <p class="muted small">Menu- en knopnamen volgens Claude en ChatGPT in november 2026; die apps veranderen hun schermen soms. Heet iets net anders, zoek dan naar <em>connector</em> of <em>MCP</em> in de instellingen.</p>
+          </details>
         </div>
         <p class="hint" id="ai-off" hidden>De AI-koppeling staat uit in deze omgeving, of je rol mag geen offertes maken. Een beheerder zet hem aan in Beheer &gt; Instellingen.</p>
         <ul id="ai-list" class="ai-list"></ul>

@@ -630,7 +630,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   prijzen uit de voorraad, twijfel als `line.note` die `forCustomer` weglaat). OAuth 2.1 in `oauth-server.js` (metadata, registratie
   met ondertekende client-id, `/oauth/authorize|token|revoke`, toestemmingsscherm `paginas/koppelen.html`) en `oauth-grants.js`
   (tokens `aqt_<soort>_<tenant>.<geheim>`, alleen SHA-256, rotatie). Instelling `aiConnector` per omgeving; `userForGrant` in
-  server.js controleert elk verzoek opnieuw (account, wachtwoord-vingerafdruk, omgeving, koppeling aan). **Een nieuwe tool** krijgt
+  server.js controleert elk verzoek opnieuw (account, wachtwoord-vingerafdruk, omgeving, koppeling aan, geen klant: alleen intern, wens Daniël). **Een nieuwe tool** krijgt
   een scope in `SCOPES` (met de rechten van de rol), een limiet en audit bij schrijven, en schrijft hoogstens een concept.
 - Health: `GET /api/health` (versie uit `package.json`).
 
