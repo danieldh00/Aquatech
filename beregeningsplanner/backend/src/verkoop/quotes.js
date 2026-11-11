@@ -196,8 +196,8 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   function forCustomer(quote) {
     const { share, ...rest } = quote;
-    // De interne notitie per regel (zie Core.sanitizeLine) gaat nooit naar de klant.
-    const lines = quote.data.lines.map(({ note, ...line }) => line);
+    // De interne notitie per regel en of die is gecontroleerd (zie Core.sanitizeLine) gaan nooit naar de klant.
+    const lines = quote.data.lines.map(({ note, noteChecked, ...line }) => line);
     const out = { ...rest, data: { ...quote.data, lines }, totals: Core.totals(quote.data) };
     if (quote.data.layout === 'totaal') {
       // Zonder regelprijzen kan de klantpagina het totaal bij een andere

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.4
+
+Concept-offerte: duidelijker controleren van regels waar de AI over twijfelt. Geen migratie.
+
+- De knop bij een twijfelnotitie heet nu *✓ Markeer als gecontroleerd* en ziet eruit als een echte knop (groene rand). Na het klikken blijft de notitie staan met een groene status *✓ Gecontroleerd* en een knop *Ongedaan maken*; een melding bevestigt de actie. Voorheen verdween de notitie zonder spoor.
+- Regel krijgt `noteChecked` (`QuoteCore.sanitizeLine`, alleen met een notitie). `forCustomer` laat `note` en `noteChecked` weg: de klant ziet geen van beide.
+- Op een smal scherm staat de knop onder de notitie.
+
 ## 1.10.3
 
 AI-koppeling: handleiding en extra rechtentest (vervolg op punt 28). Geen migratie.
