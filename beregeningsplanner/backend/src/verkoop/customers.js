@@ -84,7 +84,7 @@ function createCustomerStore(db) {
 /**
  * Registreert de routes van de klantenlijst.
  * @param {object} app De Express-app.
- * @param {object} ctx { store, customers (createCustomerStore), requireRight, requireJson, audit, addressGuard, tenantsOf(req) (de omgevingen met klanten), inviteReady(), invite(user) (async, stuurt de uitnodigingsmail) en can(user, recht) }.
+ * @param {object} ctx { store, customers (createCustomerStore), requireRight, requireJson, audit, addressGuard, tenantsOf(req) (de omgevingen met klanten), defaultPaymentDays(req) (standaard betaaltermijn in dagen), inviteReady(), invite(user) (async, stuurt de uitnodigingsmail) en can(user, recht) }.
  * @returns {void}
  */
 function registerCustomerRoutes(app, ctx) {
@@ -171,9 +171,9 @@ function registerCustomerRoutes(app, ctx) {
       return invalid(res, { error: 'Onbekende klantgroep.', field: 'customerGroup' });
     }
     const tenantId = req.tenantId;
-    const out = store.createCustomer(tenantId, { displayName: body.displayName, ...contact.contact, business });
+    const out = store.createCustomer(tenantId, { displayName: body.displayName, ...contact.contact, business, paymentDays: body.paymentDays });
     if (out.error) return invalid(res, { error: out.error, field: out.field || 'displayName' });
-    audit(req, 'klant_aangemaakt', { userId: out.user.id, zakelijk: Boolean(business), uitgenodigd: Boolean(body.invite) }, undefined, tenantId);
+    audit(req, 'klant_aangemaakt', { userId: out.user.id, zakelijk: Boolean(business), uitgenodigd: Boolean(body.invite), betaaltermijn: out.user.paymentDays }, undefined, tenantId);
     const created = store.getCustomer([tenantId], out.user.id);
     const invite = body.invite ? await sendInvite(created) : null;
     if (invite && invite.sent) audit(req, 'klant_uitgenodigd', { userId: created.id }, undefined, tenantId);
@@ -187,7 +187,7 @@ function registerCustomerRoutes(app, ctx) {
       quotes: ctx.can(req.user, 'offertes'), workOrders: ctx.can(req.user, 'werkorders'), invoices: ctx.can(req.user, 'facturen'),
     });
     res.json({
-      customer, ...documents, dossierKey: `a-${customer.id}`, mayPrice: mayPrice(req), mayDossier: ctx.can(req.user, 'werkorders'),
+      customer, ...documents, defaultPaymentDays: ctx.defaultPaymentDays(req), dossierKey: `a-${customer.id}`, mayPrice: mayPrice(req), mayDossier: ctx.can(req.user, 'werkorders'),
       inviteProblem: customer.email ? (customer.hasLogin ? 'Deze klant kan al inloggen.' : ctx.inviteReady(customer)) : 'Vul eerst een e-mailadres in.',
     });
   });
@@ -219,6 +219,7 @@ function registerCustomerRoutes(app, ctx) {
       if (checked.error) return invalid(res, checked);
       input.business = checked.profile;
     }
+    if (body.paymentDays !== undefined) input.paymentDays = body.paymentDays;
     // Prijsgevoelige instellingen (zakelijke prijzen excl. btw, groothandel) zijn voor beheerders.
     const pricing = ['customerGroup', 'wholesale', 'wholesaleDiscount'].filter((field) => body[field] !== undefined);
     if (pricing.length && !mayPrice(req)) return res.status(403).json({ error: 'forbidden', message: 'Alleen een beheerder wijzigt de klantgroep en de groothandelsinstellingen.' });
@@ -229,6 +230,7 @@ function registerCustomerRoutes(app, ctx) {
     audit(req, 'klant_gewijzigd', { userId: customer.id, fields: Object.keys(input).map((field) => (field === 'contact' ? Object.keys(input.contact).join(',') : field)),
       ...(input.customerGroup !== undefined ? { klantgroep: input.customerGroup || 'particulier' } : {}),
       ...(input.wholesale !== undefined ? { groothandel: Boolean(input.wholesale) } : {}),
+      ...(input.paymentDays !== undefined ? { betaaltermijn: input.paymentDays } : {}),
       ...(input.wholesaleDiscount !== undefined ? { groothandelskorting: input.wholesaleDiscount } : {}) }, undefined, customer.tenantId);
     res.json({ customer: store.getCustomer([customer.tenantId], customer.id) });
   });

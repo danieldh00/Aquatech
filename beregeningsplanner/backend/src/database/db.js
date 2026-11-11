@@ -1146,6 +1146,10 @@ const MIGRATIONS = [
   `
   CREATE INDEX invoices_customer ON invoices (tenant_id, customer_id, invoice_date);
   `,
+  // 56: betaaltermijn per klant in dagen (Klanten); leeg = de standaard uit de factuurinstellingen.
+  `
+  ALTER TABLE users ADD COLUMN payment_days INTEGER;
+  `,
 ];
 
 /**

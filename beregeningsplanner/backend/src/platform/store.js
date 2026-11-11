@@ -38,6 +38,20 @@ const { createRoleStore } = require('./roles');
 const ROLES = Object.keys(Roles.ROLES);
 /** Hoogste vaste groothandelskorting (%) die een beheerder bij een klant kan instellen. */
 const MAX_WHOLESALE_DISCOUNT = 50;
+/** Langste betaaltermijn per klant, in dagen. */
+const MAX_PAYMENT_DAYS = 365;
+
+/**
+ * Controleert een betaaltermijn in dagen: leeg betekent de standaard van de organisatie (null).
+ * @param {*} value De ingevulde waarde.
+ * @returns {{ value: number|null }|{ error: string }} De termijn (null = standaard) of een foutmelding.
+ */
+function cleanPaymentDays(value) {
+  if (value === null || value === undefined || value === '') return { value: null };
+  const days = Number(value);
+  if (!Number.isInteger(days) || days < 0 || days > MAX_PAYMENT_DAYS) return { error: `De betaaltermijn is een heel aantal dagen van 0 tot en met ${MAX_PAYMENT_DAYS}.` };
+  return { value: days };
+}
 // Opeenvolgende wijzigingen van één gebruiker aan één plan binnen dit venster
 // vormen één regel in de historie (anders levert automatisch opslaan honderden
 // regels per plan op).
@@ -306,7 +320,7 @@ function createStore(db) {
   // ---------- Gebruikers ----------
   // Wat publicUser nodig heeft (zonder wachtwoord-hash en voorkeuren).
   const PUBLIC_USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'disabled', 'platform_admin',
-    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group', 'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount', 'address'].map((column) => `u.${column}`).join(', ');
+    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group', 'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount', 'address', 'payment_days'].map((column) => `u.${column}`).join(', ');
 
   /**
    * Een gebruiker zoals de API hem toont (zonder wachtwoord-hash en voorkeuren).
@@ -320,7 +334,8 @@ function createStore(db) {
       disabled: Boolean(user.disabled), platformAdmin: Boolean(user.platform_admin), mustChangePassword: Boolean(user.must_change_password), createdAt: user.created_at, lastSeenAt: user.last_seen_at,
       email: user.email || '', phone: user.phone || '', address: user.address || '', customerGroup: user.customer_group || '',
       companyName: user.company_name || '', kvkNumber: user.kvk_number || '', vatNumber: user.vat_number || '', businessRequest: user.business_request || '',
-      wholesale: Boolean(Number(user.wholesale)), wholesaleDiscount: Number(user.wholesale_discount) || 0 };
+      wholesale: Boolean(Number(user.wholesale)), wholesaleDiscount: Number(user.wholesale_discount) || 0,
+      paymentDays: user.payment_days === null || user.payment_days === undefined ? null : Number(user.payment_days) };
   }
 
   /**
@@ -487,6 +502,8 @@ function createStore(db) {
     if (!role) return { error: 'Er is geen rol van het soort klant. Maak die eerst aan onder Rollen.' };
     const email = String(input.email || '').trim().toLowerCase();
     if (email && accountIdsByEmail(tenantId, email).length) return { error: 'Er bestaat al een klant met dit e-mailadres.', field: 'email' };
+    const paymentDays = cleanPaymentDays(input.paymentDays);
+    if (paymentDays.error) return { error: paymentDays.error, field: 'paymentDays' };
     let username = `klant-${crypto.randomBytes(4).toString('hex')}`;
     while (usernameTaken(tenantId, username)) username = `klant-${crypto.randomBytes(4).toString('hex')}`;
     return transaction(db, () => {
@@ -494,6 +511,7 @@ function createStore(db) {
       prepare("UPDATE users SET customer_group = ?, business_request = '' WHERE tenant_id = ? AND id = ?").run(input.business ? 'zakelijk' : '', tenantId, user.id);
       if (input.business) saveBusinessProfile(tenantId, user.id, input.business);
       saveContact(tenantId, user.id, { email, phone: input.phone || '', address: input.address || '' });
+      if (paymentDays.value !== null) prepare('UPDATE users SET payment_days = ? WHERE tenant_id = ? AND id = ?').run(paymentDays.value, tenantId, user.id);
       return { user: getUser(user.id) };
     });
   }
@@ -623,7 +641,7 @@ function createStore(db) {
    * dat; een nieuw wachtwoord of uitschakelen logt overal uit.
    * @param {string} tenantId De tenant.
    * @param {string} id Id van de gebruiker.
-   * @param {object} rawInput displayName, role, disabled, platformAdmin, mustChangePassword, password, customerGroup ('' of 'zakelijk'), wholesale (groothandelsklant, alleen bij een zakelijke klant), wholesaleDiscount (vaste korting 0-50%) en/of business (gesaneerde bedrijfsgegevens).
+   * @param {object} rawInput displayName, role, disabled, platformAdmin, mustChangePassword, password, customerGroup ('' of 'zakelijk'), wholesale (groothandelsklant, alleen bij een zakelijke klant), wholesaleDiscount (vaste korting 0-50%), paymentDays (betaaltermijn in dagen, null = standaard) en/of business (gesaneerde bedrijfsgegevens).
    * @returns {Promise<{ user: object }|{ error: string, status?: number }>} De gebruiker of een foutmelding.
    */
   async function updateAccount(tenantId, id, rawInput) {
@@ -635,6 +653,11 @@ function createStore(db) {
     if (problem) return { error: problem };
     if (input.username !== undefined) return { error: 'De gebruikersnaam is niet te wijzigen.' };
     if (input.customerGroup !== undefined && !['', 'zakelijk'].includes(input.customerGroup)) return { error: 'Onbekende klantgroep.' };
+    if (input.paymentDays !== undefined) {
+      const paymentDays = cleanPaymentDays(input.paymentDays);
+      if (paymentDays.error) return { error: paymentDays.error };
+      input.paymentDays = paymentDays.value;
+    }
     if (input.wholesaleDiscount !== undefined) {
       const discount = Number(input.wholesaleDiscount);
       if (input.wholesaleDiscount === '' || !Number.isFinite(discount) || discount < 0 || discount > MAX_WHOLESALE_DISCOUNT) return { error: `De groothandelskorting is een percentage van 0 tot en met ${MAX_WHOLESALE_DISCOUNT}.` };
@@ -671,6 +694,7 @@ function createStore(db) {
     if (input.customerGroup !== undefined) prepare("UPDATE users SET customer_group = ?, business_request = '' WHERE id = ?").run(input.customerGroup, user.id);
     if (input.wholesale !== undefined) prepare('UPDATE users SET wholesale = ? WHERE tenant_id = ? AND id = ?').run(input.wholesale ? 1 : 0, tenantId, user.id);
     if (input.wholesaleDiscount !== undefined) prepare('UPDATE users SET wholesale_discount = ? WHERE tenant_id = ? AND id = ?').run(input.wholesaleDiscount, tenantId, user.id);
+    if (input.paymentDays !== undefined) prepare('UPDATE users SET payment_days = ? WHERE tenant_id = ? AND id = ?').run(input.paymentDays, tenantId, user.id);
     if (input.customerGroup === '') prepare('UPDATE users SET wholesale = 0, wholesale_discount = 0 WHERE tenant_id = ? AND id = ?').run(tenantId, user.id);
     if (input.business !== undefined) saveBusinessProfile(tenantId, user.id, input.business);
     if (input.contact !== undefined) saveContact(tenantId, user.id, input.contact);

@@ -262,14 +262,16 @@
   /**
    * De kaart met de contactgegevens van de klant.
    * @param {object} customer De klant.
+   * @param {number} defaultPaymentDays De standaard betaaltermijn in dagen (voor de hulptekst).
    * @returns {string} HTML van de kaart.
    */
-  function contactCard(customer) {
+  function contactCard(customer, defaultPaymentDays) {
     return `<form class="card" id="c-contact" autocomplete="off"><h3>Gegevens</h3>
       <div class="form-grid">
         <label class="field full">Naam<input name="displayName" required maxlength="80" value="${esc(customer.displayName)}"></label>
         <label class="field">E-mailadres<input name="email" type="email" maxlength="200" value="${esc(customer.email)}"></label>
         <label class="field">Telefoon<input name="phone" type="tel" maxlength="25" value="${esc(customer.phone)}"></label>
+        <label class="field">Betaaltermijn (dagen)<input name="paymentDays" type="number" min="0" max="365" step="1" inputmode="numeric" placeholder="Standaard" value="${customer.paymentDays == null ? '' : esc(String(customer.paymentDays))}"><span class="hint">Leeg: de standaard van ${esc(String(defaultPaymentDays))} dagen. Komt op de offerte en de factuur.</span></label>
         <label class="field full addr-result">Adres<span class="addr-text" data-addr-text></span><textarea name="address" data-address-lookup hidden maxlength="400">${esc(customer.address)}</textarea></label>
       </div>
       <div class="err" id="c-contact-err" role="alert"></div>
@@ -347,12 +349,12 @@
 
   /** Tekent de klantkaart uit state.detail. */
   function renderDetail() {
-    const { customer, quotes, workOrders, invoices, mayPrice, mayDossier, dossierKey, inviteProblem } = state.detail;
+    const { customer, quotes, workOrders, invoices, mayPrice, mayDossier, dossierKey, inviteProblem, defaultPaymentDays } = state.detail;
     document.title = `${customer.displayName} – Klanten – AquaTech Service`;
     $('#d-body').innerHTML = `
       <div class="klant-title"><h1>${esc(customer.displayName)}</h1>${pillsOf(customer)}<span class="spacer"></span>
         ${mayDossier ? `<a class="btn" href="../klantdossier/?klant=${encodeURIComponent(dossierKey)}">Klantdossier</a>` : ''}</div>
-      <div class="card-grid">${contactCard(customer)}${businessCard(customer, mayPrice)}${accessCard(customer, inviteProblem)}</div>
+      <div class="card-grid">${contactCard(customer, defaultPaymentDays)}${businessCard(customer, mayPrice)}${accessCard(customer, inviteProblem)}</div>
       <div class="docs-grid">
         ${documentsCard('Offertes', quotes, (quote) => `<td><a href="../offertes/?id=${encodeURIComponent(quote.id)}">${esc(quote.number)}</a></td><td>${esc(quote.title)}</td><td>${esc(QUOTE_STATUS[quote.status] || quote.status)}</td><td class="num">${eur(quote.total)}</td>`,
           '<th>Nummer</th><th>Titel</th><th>Status</th><th class="num">Totaal</th>', 'Nog geen offertes voor deze klant.')}
@@ -396,7 +398,7 @@
      */
     contact.onsubmit = (event) => {
       event.preventDefault();
-      patchCustomer({ displayName: contact.displayName.value, email: contact.email.value, phone: contact.phone.value, address: contact.address.value }, '#c-contact-err', 'Gegevens opgeslagen');
+      patchCustomer({ displayName: contact.displayName.value, email: contact.email.value, phone: contact.phone.value, address: contact.address.value, paymentDays: contact.paymentDays.value }, '#c-contact-err', 'Gegevens opgeslagen');
     };
     const business = $('#c-business');
     /** Toont de bedrijfsvelden alleen voor een zakelijke klant. */
