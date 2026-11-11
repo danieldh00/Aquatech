@@ -614,7 +614,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   Webshopfouten (1.8.6): `respondShopError(res, error, next)` uit woocommerce.js (`SourceError` = leesbaar, met `cause`; rest → 500).
   Frontend (1.8.9): een terugvalmelding bij een status zonder `message` altijd via `AquatechCommon.statusMessage(status)`, nooit `HTTP ${status}` (test bewaakt dat); een netwerkfout geeft de fetch-hulp in common.js al een leesbare melding.
   Mailfouten (1.8.7): melding altijd via `mailFailure(error)` uit mailer.js (+ `withCause`), nooit `error.message` van nodemailer.
-  Webshop (1.9.0): `MollieError` (leesbaar, met `cause`); bij facturen voor webshopbestellingen alleen een `InvoiceStepError` letterlijk bij de bestelling, andere fouten → log + "interne fout"; een foutuitkomst die als JSON naar de browser kan gaan krijgt de oorzaak niet-opsombaar (`withHiddenCause`).
+  Webshop (1.9.0): `MollieError` (leesbaar, met `cause`); bij facturen voor webshopbestellingen alleen een `InvoiceStepError` letterlijk bij de bestelling, andere fouten → log + "interne fout"; een foutuitkomst die als JSON naar de browser kan gaan krijgt de oorzaak niet-opsombaar (`withHiddenCause` uit error-report.js).
   Een nieuwe leesbare fout met een onderliggende oorzaak: `new Error(melding, { cause: error })` of `new SourceError(…, status, error)`.
 - Health: `GET /api/health` (versie uit `package.json`).
 

@@ -11,6 +11,7 @@
 // krijgt een creditnota voor de teruggestuurde regels bij die factuur.
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
+const { withHiddenCause } = require('../platform/error-report');
 
 const { invoiceFileName } = require('./invoice-pdf');
 
@@ -169,17 +170,6 @@ function readableReason(error, log, where) {
   if (error instanceof InvoiceStepError) return String(error.message).slice(0, 250);
   log.error(`[fout] ${where}:`, error);
   return 'interne fout, de oorzaak staat in het serverlog';
-}
-
-/**
- * Een foutuitkomst met de oorzaak erbij, niet-opsombaar: een route kan hem aan withCause geven (debugmodus), maar
- * hij komt nooit mee als de uitkomst zelf als JSON naar de browser gaat.
- * @param {object} outcome De uitkomst ({ error, status }).
- * @param {Error} error De oorzaak.
- * @returns {object} Dezelfde uitkomst.
- */
-function withHiddenCause(outcome, error) {
-  return Object.defineProperty(outcome, 'cause', { value: error, enumerable: false });
 }
 
 /**
@@ -372,7 +362,8 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     } catch (error) {
       const reason = readableReason(error, log, `Creditnota bij webshopbestelling ${order.number}`);
       orders.updateData(tenantId, order.id, { invoiceError: `Creditnota maken mislukt: ${reason}. Maak hem zelf in Facturen.` });
-      log.warn(`Creditnota bij ${order.number}: ${reason}`);
+      // Een onverwachte fout staat al met aanroepketen in het log (readableReason); een weigering hier kort.
+      if (error instanceof InvoiceStepError) log.warn(`Creditnota bij ${order.number}: ${reason}`);
     }
   }
 

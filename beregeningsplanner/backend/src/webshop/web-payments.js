@@ -9,6 +9,7 @@
 // zodat de klant opnieuw kan betalen; na de bewaartijd uit de instelling
 // shopPayment vervalt hij en komt de voorraad vrij (expireUnpaid, elk uur).
 const { configOf, validPaymentId, MollieError } = require('./mollie');
+const { withHiddenCause } = require('../platform/error-report');
 
 /**
  * Rondt een bedrag af op centen (leeg of ongeldig = 0).
@@ -249,7 +250,7 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
       // Een weigering of storing van Mollie heeft een leesbare melding; een andere fout is een fout in de app.
       const reason = error instanceof MollieError ? String(error.message).slice(0, 200) : 'interne fout, de oorzaak staat in het serverlog';
       if (!(error instanceof MollieError)) log.error(`[fout] Terugbetalen voor ${order.number}:`, error);
-      return Object.defineProperty({ error: `Terugbetalen via Mollie lukte niet: ${reason}`, status: 502 }, 'cause', { value: error, enumerable: false });
+      return withHiddenCause({ error: `Terugbetalen via Mollie lukte niet: ${reason}`, status: 502 }, error);
     }
     const at = new Date().toISOString();
     const out = orders.changePay(tenantId, order.id, (pay) => ((pay.refunds || []).some((entry) => entry.key === key) ? null

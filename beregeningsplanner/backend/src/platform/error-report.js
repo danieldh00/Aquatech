@@ -104,6 +104,17 @@ function withCause(res, error) {
 }
 
 /**
+ * Hangt de oorzaak niet-opsombaar aan een foutuitkomst ({ error, status }): een route kan hem aan withCause geven
+ * (debugmodus), maar hij gaat nooit mee als de uitkomst zelf als JSON naar de browser gaat.
+ * @param {object} outcome De uitkomst.
+ * @param {Error} error De oorzaak.
+ * @returns {object} Dezelfde uitkomst.
+ */
+function withHiddenCause(outcome, error) {
+  return Object.defineProperty(outcome, 'cause', { value: error, enumerable: false });
+}
+
+/**
  * Het pad van het verzoek zoals de browser het aanriep (met /app/ als server.js dat eraf haalde), zonder query.
  * @param {object} req Het verzoek.
  * @returns {string} Het pad.
@@ -254,4 +265,4 @@ function createErrorReport({ debugFor, log = (line, detail) => console.error(lin
   return { attach, handler };
 }
 
-module.exports = { createErrorReport, catchAsync, withCause, describeError, redact, ownFrames };
+module.exports = { createErrorReport, catchAsync, withCause, withHiddenCause, describeError, redact, ownFrames };
