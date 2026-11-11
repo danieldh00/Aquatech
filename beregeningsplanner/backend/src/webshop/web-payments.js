@@ -175,7 +175,8 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
       return { checkoutUrl: created.checkoutUrl };
     } catch (error) {
       // Een storing van Mollie kort in het log; een andere fout (in de app) met de hele aanroepketen.
-      log.warn(`Betaling starten voor ${order.number} mislukt:`, error instanceof MollieError ? error.message : error);
+      // Bij een MollieError ook de onderliggende oorzaak (bijv. de netwerkfout) in het log, nooit naar de klant.
+      log.warn(`Betaling starten voor ${order.number} mislukt:`, error instanceof MollieError ? error.message : error, ...(error instanceof MollieError && error.cause ? [error.cause] : []));
       return { error: 'De betaalpagina is nu niet bereikbaar. Probeer het zo opnieuw.', status: 502 };
     }
   }

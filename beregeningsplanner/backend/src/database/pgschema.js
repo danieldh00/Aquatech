@@ -913,6 +913,10 @@ const PG_MIGRATIONS = [
   CREATE INDEX visma_log_tenant ON visma_log (tenant_id, created_at, id);
   CREATE INDEX visma_log_reference ON visma_log (tenant_id, kind, reference, created_at);
   `,
+  // 53: index voor de opschoonquery van het Visma-logboek (zie db.js).
+  `
+  CREATE INDEX visma_log_last ON visma_log (tenant_id, last_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

@@ -20,7 +20,7 @@ webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als databas
 ### Beheer in het kort
 
 - **Instellingen** (Beheer → Instellingen) staan in de database en werken zonder herstart: AI-sleutel, mail,
-  webshop, Mollie, Visma, seizoensherinneringen enz. Docker-omgevingsvariabelen zijn alleen startwaarden.
+  webshop, Mollie, seizoensherinneringen enz. (Visma staat onder Facturen → Visma). Docker-omgevingsvariabelen zijn alleen startwaarden.
   Geheimen worden versleuteld opgeslagen en nooit volledig getoond.
 - **Testomgeving**: elke organisatie kan een testomgeving maken met eigen gegevens en testdata. Koppelingen naar
   buiten (webshop, Mollie, mail, Visma) gaan daar niet mee.
@@ -148,8 +148,8 @@ TEST_DATABASE_URL=postgres://… npm test         # dezelfde suite tegen Postgre
   `beregeningsplanner/` vraagt een hogere versie in `backend/package.json`, een regel in `CHANGELOG.md` en in
   `frontend/nieuws/releases.js`. Werk dit README bij als een PR features of de installatie wijzigt.
 - Een PR merget pas als de tests (SQLite en PostgreSQL), de versiecontrole en de verplichte controles **Claude code
-  review** en **Claude security review** (`.github/workflows/claude-review.yml`) groen zijn. CodeRabbit reviewt ook,
-  maar adviserend: open bevindingen worden na het mergen een issue en in een opruim-PR opgelost.
+  review** en **Claude security review** (`.github/workflows/claude-review.yml`) groen zijn. CodeRabbit is uitgeschakeld;
+  vóór go-live volgt eenmalig een handmatige deep scan met CodeRabbit.
 - Na het mergen bouwt `release.yml` het image `ghcr.io/danieldh00/aquatech:<versie>`; de server
   (`deploy/apps01/`) rolt het binnen 15 minuten uit, met een back-up vooraf en rollback bij een fout.
 - Werkafspraken (codestijl, queries, beveiliging, mappen) staan in `CLAUDE.md`.

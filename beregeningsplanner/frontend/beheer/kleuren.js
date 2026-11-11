@@ -153,7 +153,7 @@
       const link = document.querySelector('link[href*="shared/theme.css"]');
       if (link) link.href = `../shared/theme.css?t=${Date.now()}`;
       fill();
-      toast(colors ? 'Kleuren opgeslagen' : 'Standaardkleuren teruggezet');
+      toast(colors ? 'Kleuren opgeslagen' : state.data.tenantId === state.data.mainTenantId ? 'Standaardkleuren teruggezet' : 'Eigen thema verwijderd');
     } catch (error) { $('#th-err').textContent = error.message; }
   }
 

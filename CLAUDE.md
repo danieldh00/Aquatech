@@ -45,14 +45,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `beregeningsplanner/` is gewijzigd) → README.md bijwerken (bij features/setup) → `git push -u origin <branch>` → PR naar
   `master` → CI groen (`ci.yml` + `version.yml`) → **Claude-review**
   (`claude-review.yml`: jobs *Claude code review* en *Claude security review*, de
-  verplichte controles; opmerkingen oplossen of met reden beantwoorden). **CodeRabbit**
-  (`.coderabbit.yaml`) reviewt ook maar is adviserend en mag het mergen niet vertragen:
-  onopgeloste bevindingen worden na het mergen een issue met label `coderabbit-bevinding`
-  (`coderabbit-findings.yml`, 1.8.2). Kritiek/beveiliging (label `coderabbit-kritiek`)
-  direct oplossen, de rest bundelen in een opruim-PR na elke bundel of ca. 5 gemergde PR's
-  (Suggested fix letterlijk overnemen, `Closes #…`). Een gemergde PR zonder voltooide CodeRabbit-review krijgt `coderabbit-pending` en wordt via een inhaal-PR (`coderabbit/catchup` → `coderabbit-baseline`, nooit mergen, `coderabbit-catchup.yml`, 1.8.4) alsnog gereviewd. De Claude-reviews draaien op het Claude-abonnement van Daniël (secret `CLAUDE_CODE_OAUTH_TOKEN`, aan te maken met `claude setup-token`), niet op API-tegoed; de securityreview draait via dezelfde `claude-code-action`. **Kosten van de Claude-review** zijn begrensd: de workflow slaat docs/tests-only wijzigingen over, draait de securityreview alleen bij beveiligingsrelevante code en beoordeelt een volgende push alleen op wat nieuw is; het model komt uit de repository-variabelen `CLAUDE_REVIEW_MODEL` (eerste volledige review) en `CLAUDE_REVIEW_MODEL_PUSH` (lichtere review per push). **Overgang:** tot Daniël de ruleset op
-  `master` heeft aangepast (Claude-checks erin, CodeRabbit eruit, goedkeuring 0) geldt de
-  goedkeuring van CodeRabbit nog. Daarna de branch verwijderen. Een volgende taak begint opnieuw vanaf
+  verplichte controles; opmerkingen oplossen of met reden beantwoorden). **CodeRabbit is uitgeschakeld** (besluit Daniël 2026-11-11: config, triggers, inhaalreview en bevindingenissues zijn verwijderd). **Vóór go-live** laat Daniël de code één keer handmatig een deep scan geven met CodeRabbit; bevindingen daarvan lossen we dan op. De Claude-reviews draaien op het Claude-abonnement van Daniël (secret `CLAUDE_CODE_OAUTH_TOKEN`, aan te maken met `claude setup-token`), niet op API-tegoed; de securityreview draait via dezelfde `claude-code-action`. **Kosten van de Claude-review** zijn begrensd: de workflow slaat docs/tests-only wijzigingen over, draait de securityreview alleen bij beveiligingsrelevante code en beoordeelt een volgende push alleen op wat nieuw is; het model komt uit de repository-variabelen `CLAUDE_REVIEW_MODEL` (eerste volledige review) en `CLAUDE_REVIEW_MODEL_PUSH` (lichtere review per push). Na het mergen de branch verwijderen. Een volgende taak begint opnieuw vanaf
   `origin/master`, niet vanaf een oude featurebranch.
 - Loopt `master` voor op je branch (andere sessie heeft gemerged): eerst
   `git merge origin/master` in je branch, conflicten oplossen, en de versie

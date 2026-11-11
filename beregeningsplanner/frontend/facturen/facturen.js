@@ -451,20 +451,30 @@
     $('#vi-controls').querySelectorAll('[data-part]').forEach((checkbox) => { checkbox.checked = settings.parts[checkbox.dataset.part] !== false; });
   }
 
+  /** Wachtrij van de bediening: wijzigingen gaan één voor één naar de server. */
+  let vismaControlsQueue = Promise.resolve();
+
   /**
    * Slaat een wijziging van de bediening op en ververst de stand en het logboek.
-   * @param {object} change paused (boolean) en/of parts (object met booleans)
+   * @param {object|Function} build paused (boolean) en/of parts (object met booleans), of een functie die dat object maakt
+   *   op het moment dat het verzoek aan de beurt is (zodat een wisselknop de actuele stand gebruikt)
    * @returns {Promise<void>}
    */
-  async function saveVismaControls(change) {
-    try {
-      state.visma = await api('visma/controls', { method: 'PUT', body: change });
-      renderVisma();
-      loadVismaLog(true).catch(() => {});
-    } catch (error) {
-      toast(error.message, true);
-      renderVismaControls();
-    }
+  function saveVismaControls(build) {
+    // Na elkaar versturen: een ouder antwoord mag de vinkjes niet terugzetten naar een verouderde stand.
+    const run = vismaControlsQueue.then(async () => {
+      try {
+        const change = typeof build === 'function' ? build() : build;
+        state.visma = await api('visma/controls', { method: 'PUT', body: change });
+        renderVisma();
+        loadVismaLog(true).catch(() => {});
+      } catch (error) {
+        toast(error.message, true);
+        renderVismaControls();
+      }
+    });
+    vismaControlsQueue = run.catch(() => {});
+    return run;
   }
 
   /** Toont de toestemmingen en de onderdelen van de koppeling in gewone taal. */
@@ -652,7 +662,7 @@
      * Bediening: pauzeren of hervatten.
      * @returns {Promise<void>}
      */
-    $('#vi-pause').onclick = () => saveVismaControls({ paused: !state.visma.settings.paused });
+    $('#vi-pause').onclick = () => saveVismaControls(() => ({ paused: !state.visma.settings.paused }));
     /**
      * Bediening: een onderdeel aan of uit.
      * @param {Event} event het wijzigen van een vinkje

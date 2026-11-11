@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.9.6
+
+Opruiming na de CodeRabbit-inhaalreview van #149 t/m #158 (13 bevindingen: 2 major, 11 minor). Eén bevinding (kleurcontrole van knoptekst) is bewust niet overgenomen, zie onder.
+
+- **Visma verbreken** (major): `disconnect` zet de omgeving eerst op *verbreken bezig* (geen nieuwe verzending, geen tokenvernieuwing), wacht op een lopende doorstuurronde en trekt dan pas het token in; de blokkade gaat er altijd af (ook bij een fout).
+- **Visma pauze en onderdelen** (minor): `pushInvoice` controleert de actuele bediening opnieuw vlak vóór het aanmaken van de factuur (ook na `pushDebtor`); een pauze of uitgezet onderdeel is geen fout van de factuur (geen `visma_error`, geen logregel). `paused` in `PUT /api/visma/controls` verandert alleen bij een echte boolean.
+- **Visma-logboek** (minor): `PUT /api/visma/app` schrijft een logregel met alleen de namen van de gewijzigde velden (nooit waarden of het secret), handmatig, met naam. **Migratie 53**: index `(tenant_id, last_at)` voor de bewaartermijn-opschoning (in `MIGRATIONS` en `PG_MIGRATIONS`).
+- **Kleuren** (minor): een account dat alleen in een testomgeving woont, wijzigt het live-thema niet meer (403, `canEdit: false`); een livebeheerder kan het vanuit de testomgeving nog wel. De melding bij *Eigen thema verwijderen* noemt nu dat het eigen thema weg is, niet dat de standaardkleuren zijn teruggezet.
+- **Frontend** (minor): wijzigingen van de Visma-bediening gaan één voor één naar de server (een ouder antwoord zet de vinkjes niet terug); nieuwe CSS in Beheer > Kleuren gebruikt `--at-*`-variabelen (`--at-ok`, `--at-warn`, `--at-preview-bg`, `--at-ink-strong` erbij in brand.css); de knop *Naar het beheer* in de shopkop heeft een donkerder groen (5,1:1 met wit) en wordt navy bij hover.
+- **Mollie** (minor): bij een mislukte betaalstart komt ook de onderliggende oorzaak in het log (niet naar de klant).
+- **README**: Visma staat onder Facturen → Visma, niet onder Beheer → Instellingen.
+- **Niet overgenomen**: de opmerking over het minimale contrast van knoptekst (3:1 voor vette tekst) in de kleurcontrole. Het standaardgroen van de huisstijl haalt zelf maar 3,99:1; de grens verhogen zou de huisstijl afkeuren en bestaande thema's ongeldig maken. Dat is een keuze van Daniël.
+- **CodeRabbit uitgeschakeld** (besluit Daniël): `.coderabbit.yaml`, de workflows voor aanvraag, inhaalreview en bevindingenissues en hun scripts en tests zijn verwijderd. Alleen de Claude-reviews zijn nog verplicht; vóór go-live volgt eenmalig een handmatige deep scan.
+- Tests: pauze/onderdeel tijdens het aanmaken van de klant, niet-booleaanse `paused`, verbreken met vasthoudend intrekken, logregel bij app-wijziging, testaccount en thema; ook tegen PostgreSQL.
+
 ## 1.9.5
 
 Visma-koppeling beheersbaar (Facturen → Visma). Deel 2 van 2 van punt 30; deel 1 (overzicht en logboek) was 1.9.4.
