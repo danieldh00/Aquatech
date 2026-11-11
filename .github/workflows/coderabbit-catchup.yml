@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   catchup:
-    if: github.event_name != 'pull_request_review' || (github.event.pull_request.head.ref == 'coderabbit/catchup' && startsWith(github.event.review.user.login, 'coderabbitai'))
+    if: github.event_name != 'pull_request_review' || (github.event.pull_request.head.ref == 'coderabbit/catchup' && github.event.pull_request.head.repo.full_name == github.repository && github.event.review.user.login == 'coderabbitai[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
