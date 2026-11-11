@@ -640,6 +640,12 @@ reviewproces wijzigt; versie-bump + `CHANGELOG.md` + regel bovenaan `frontend/ni
 - Gebruiker/tenant per verzoek niet opnieuw opvragen (`req.user`,
   `withRequestCache`). Breid `test/queries.test.js` uit voor nieuwe routes.
 
+**Uitlijning en schermcontrole** (wens Daniël 2026-11-11, elke PR die UI raakt):
+- Netjes uitgelijnd als standaard: een consistent raster, kaarten in een rij even hoog, geen lege gaten; formuliervelden
+  (label + invoer) op één basislijn, knoppenrij via `.row.actions`.
+- Vóór de PR de gewijzigde schermen renderen op desktop 1440 px en mobiel 375 px (Playwright), zelf visueel controleren en
+  de screenshots bij de PR zetten.
+
 **Navigatie en laden** (frontend):
 - Links naar een item direct (`?id=…`), nooit via een overzicht; terugknop
   via `origin()` uit `shared/common.js`.
