@@ -10,6 +10,7 @@ const { createMailer, validEmail, mailFailure } = require('../platform/mailer');
 const { withCause } = require('../platform/error-report');
 const { preferencesOf } = require('../platform/store');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
+const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { linkExpired } = require('../platform/public-links');
 
 /**
@@ -688,21 +689,34 @@ function registerQuoteRoutes(app, ctx) {
   /**
    * Het adres dat bij PDOK moet kloppen: dat van de klant op de offerte, behalve bij een afnemer in een ander EU-land waarvan het btw-nummer door VIES geldig is bevonden (zie checkVatShift): dat adres ligt buiten PDOK en wordt vrij getypt.
    * @param {object} req Het verzoek (met req.vatShiftChecked uit checkVatShift).
+   * Een adres met een Nederlandse postcode (vier cijfers en twee letters) wordt altijd gecontroleerd: dat is geen adres buiten Nederland.
    * @returns {string|undefined} Het adres om te controleren, of niets als er niets te controleren valt.
    */
   function addressToVerify(req) {
     const data = req.body && req.body.data;
-    if (req.vatShiftChecked) return undefined;
-    return data && data.customer && data.customer.address;
+    const address = data && data.customer && data.customer.address;
+    if (req.vatShiftChecked && !/\b\d{4}\s?[A-Za-z]{2}\b/.test(String(address || ''))) return undefined;
+    return address;
   }
 
   /**
-   * Controleert "btw verlegd" op een offerte bij VIES en zet het bewijs (uitkomst, tijdstip, consultatienummer, naam) in de gegevens.
-   * Verleggen kan alleen met een geldig btw-nummer uit een ander EU-land dan Nederland; noemt VIES het nummer ongeldig dan wordt niets opgeslagen.
-   * Is VIES niet bereikbaar, dan staat de uitkomst als "onbereikbaar" op de offerte, zodat de gebruiker dat ziet.
-   * @param {object} req Het verzoek (voor de instellingen van de organisatie).
-   * @param {object|undefined} data De ruwe offertegegevens uit de browser (of undefined bij alleen een statuswijziging).
-   * @param {object|null} [stored] De opgeslagen offerte: staat daar al hetzelfde nummer met een geldige uitkomst (of een onbereikbaar van minder dan een minuut geleden), dan wordt dat bewijs hergebruikt en gaat er geen nieuwe vraag naar VIES.
+   * Het bewijs van de controle bij VIES dat op de opgeslagen offerte staat en nog mag worden hergebruikt: hetzelfde nummer met de uitkomst geldig, of onbereikbaar van minder dan een minuut geleden.
+   * @param {object|null} stored De opgeslagen offerte.
+   * @param {string} number Het genormaliseerde btw-nummer van het verzoek.
+   * @returns {{ status: string, checkedAt: string, requestId: string, name: string }|null} Het bewijs, of niets als VIES gevraagd moet worden.
+   */
+  function storedEvidence(stored, number) {
+    const before = stored && stored.data && stored.data.vatShift;
+    const age = before && before.checkedAt ? Date.now() - Date.parse(before.checkedAt) : Infinity;
+    const reusable = before && before.on === true && before.number === number && (before.status === 'geldig' || (before.status === 'onbereikbaar' && age < 60 * 1000));
+    return reusable ? { status: before.status, checkedAt: before.checkedAt, requestId: before.requestId, name: before.name } : null;
+  }
+
+  /**
+   * Controleert "btw verlegd" op een offerte bij VIES (zie storedEvidence voor hergebruik van het bewaarde bewijs).
+   * @param {object} req Het verzoek.
+   * @param {object|undefined} data De ruwe offertegegevens.
+   * @param {object|null} [stored] De opgeslagen offerte.
    * @returns {Promise<{ data: object|undefined }|{ error: string, message: string }>} De gegevens met bewijs, of de fout.
    */
   async function applyVatShift(req, data, stored = null) {
@@ -712,11 +726,8 @@ function registerQuoteRoutes(app, ctx) {
     if (!validVatNumber(number) || number.startsWith('NL')) {
       return { error: 'invalid_vat_number', message: 'Btw verleggen kan alleen met een geldig btw-nummer uit een ander EU-land dan Nederland.' };
     }
-    const before = stored && stored.data && stored.data.vatShift;
-    const age = before && before.checkedAt ? Date.now() - Date.parse(before.checkedAt) : Infinity;
-    if (before && before.on === true && before.number === number && (before.status === 'geldig' || (before.status === 'onbereikbaar' && age < 60 * 1000))) {
-      return { data: { ...data, vatShift: { on: true, number, status: before.status, checkedAt: before.checkedAt, requestId: before.requestId, name: before.name } } };
-    }
+    const evidence = storedEvidence(stored, number);
+    if (evidence) return { data: { ...data, vatShift: { on: true, number, ...evidence } } };
     const requester = normalizeVatNumber(settingsOf(req).get('quoteProfile').vatNumber);
     const result = ctx.vies ? await ctx.vies.check(number, validVatNumber(requester) ? requester : '') : { status: 'onbereikbaar', checkedAt: new Date().toISOString(), requestId: '', name: '' };
     if (result.status === 'ongeldig') {
@@ -724,6 +735,8 @@ function registerQuoteRoutes(app, ctx) {
     }
     return { data: { ...data, vatShift: { on: true, number, status: result.status, checkedAt: result.checkedAt, requestId: result.requestId, name: result.name } } };
   }
+
+  const viesPerUser = createRateLimiter({ windowMs: 60 * 1000, max: 20, keyFn: (req) => `vies:${req.user.tenant_id}|${req.user.id}` });
 
   /**
    * Middleware voor het opslaan van een offerte: controleert "btw verlegd" bij VIES vóór de adrescontrole, zodat het PDOK-adres alleen vervalt bij een nummer dat VIES geldig noemt.
@@ -738,13 +751,27 @@ function registerQuoteRoutes(app, ctx) {
       const data = req.body && req.body.data;
       if (!validData(data)) return next();
       const stored = req.params.id ? quotes.get(req.user, req.params.id) : null;
-      // Een geaccordeerde offerte ligt vast (de opslag geeft 409): daar hoeft VIES niet voor te worden gevraagd.
-      if (stored && stored.acceptance) return next();
-      const shifted = await applyVatShift(req, data, stored);
-      if (shifted.error) return res.status(shifted.error === 'vat_invalid' ? 409 : 400).json({ error: shifted.error, message: shifted.message });
-      req.body.data = shifted.data;
-      req.vatShiftChecked = Boolean(shifted.data.vatShift && shifted.data.vatShift.on === true && shifted.data.vatShift.status === 'geldig');
-      next();
+      // Een offerte die niet van jou is (of niet bestaat) krijgt straks een 404, en een geaccordeerde ligt vast (409): daar hoeft VIES niet voor te worden gevraagd.
+      if (req.params.id && (!stored || stored.acceptance)) return next();
+      /**
+       * Controleert het nummer en gaat door naar de adrescontrole.
+       * @returns {Promise<void>}
+       */
+      const proceed = async () => {
+        try {
+          const shifted = await applyVatShift(req, data, stored);
+          if (shifted.error) return res.status(shifted.error === 'vat_invalid' ? 409 : 400).json({ error: shifted.error, message: shifted.message });
+          req.body.data = shifted.data;
+          req.vatShiftChecked = Boolean(shifted.data.vatShift && shifted.data.vatShift.on === true && shifted.data.vatShift.status === 'geldig');
+          return next();
+        } catch (error) {
+          return next(error);
+        }
+      };
+      const number = data.vatShift && data.vatShift.on === true ? normalizeVatNumber(data.vatShift.number) : '';
+      // Een nieuwe vraag aan VIES telt mee voor de limiet per gebruiker; hergebruik van bewaard bewijs niet.
+      if (number && !storedEvidence(stored, number)) return viesPerUser(req, res, proceed);
+      return proceed();
     } catch (error) {
       next(error);
     }

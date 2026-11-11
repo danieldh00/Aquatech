@@ -617,8 +617,8 @@
     $('#e-vs-on').checked = shift.on === true;
     $('#e-vs-box').hidden = shift.on !== true;
     if (document.activeElement !== $('#e-vs-number')) $('#e-vs-number').value = shift.number || '';
-    // Een afnemer in een ander EU-land heeft een adres buiten PDOK: dat typ je dan zelf.
-    const foreign = shift.on === true && /^[A-Za-z]{2}/.test(shift.number || '') && !/^nl/i.test(shift.number);
+    // Een afnemer in een ander EU-land (btw-nummer door VIES geldig bevonden) heeft een adres buiten PDOK: dat typ je dan zelf.
+    const foreign = shift.on === true && shift.status === 'geldig' && /^[A-Za-z]{2}/.test(shift.number || '') && !/^nl/i.test(shift.number);
     const address = document.querySelector('#edit-view [data-f="customer.address"]');
     if (foreign) address.dataset.addressManual = '1'; else delete address.dataset.addressManual;
     const status = $('#e-vs-status');
