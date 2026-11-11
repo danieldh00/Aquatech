@@ -108,6 +108,8 @@
       // Optie: de klant kiest zelf of die meedoet; telt alleen mee als gekozen.
       optional: Boolean(line.optional),
       selected: Boolean(line.optional && line.selected),
+      // Interne notitie bij de regel (bijv. een twijfelachtige koppeling aan een artikel door de AI-koppeling); de klant ziet hem nooit.
+      note: limitText(line.note, 300).trim(),
     };
   }
 

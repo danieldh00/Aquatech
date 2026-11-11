@@ -49,6 +49,9 @@ table.lines .c-del { width: 32px; }
 table.lines tr.section td { padding-top: 14px; font-weight: 700; color: var(--primary-dark); border-bottom: 2px solid var(--line); }
 table.lines tr.section td .sum { float: right; font-weight: 600; color: var(--text); }
 table.lines tr.add td { border-bottom: 0; padding-bottom: 8px; }
+table.lines .line-note { display: flex; gap: 8px; align-items: center; margin: 4px 0 0; padding: 4px 8px; font-size: 12px; border-radius: 6px;
+  background: color-mix(in srgb, var(--at-warn) 12%, transparent); border-left: 3px solid var(--at-warn); }
+table.lines .line-note .btn { margin-left: auto; }
 table.lines .code { display: block; font-size: 11px; color: var(--muted); padding: 1px 6px 0; }
 .btn.icon { padding: 3px 7px; color: var(--muted); }
 .btn.icon:hover { color: #c62828; }

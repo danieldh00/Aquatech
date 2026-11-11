@@ -929,6 +929,40 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE users ADD COLUMN payment_days INTEGER;
   `,
+  // 57: toestemmingen van de AI-koppeling (zie db.js).
+  `
+  CREATE TABLE oauth_grants (
+    id                    ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id             ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    user_id               ${TEXT_TYPE} NOT NULL,
+    client_id_hash        ${TEXT_TYPE} NOT NULL,
+    client_name           ${TEXT_TYPE} NOT NULL DEFAULT '',
+    redirect_uri          ${TEXT_TYPE} NOT NULL,
+    scope                 ${TEXT_TYPE} NOT NULL DEFAULT '',
+    resource              ${TEXT_TYPE} NOT NULL DEFAULT '',
+    fingerprint           ${TEXT_TYPE} NOT NULL DEFAULT '',
+    code_hash             ${TEXT_TYPE},
+    code_challenge        ${TEXT_TYPE} NOT NULL DEFAULT '',
+    code_expires_at       ${TEXT_TYPE},
+    code_used_at          ${TEXT_TYPE},
+    access_hash           ${TEXT_TYPE},
+    access_expires_at     ${TEXT_TYPE},
+    refresh_hash          ${TEXT_TYPE},
+    refresh_expires_at    ${TEXT_TYPE},
+    previous_refresh_hash ${TEXT_TYPE},
+    rotated_at            ${TEXT_TYPE},
+    created_at            ${TEXT_TYPE} NOT NULL,
+    last_used_at          ${TEXT_TYPE},
+    expires_at            ${TEXT_TYPE} NOT NULL,
+    revoked_at            ${TEXT_TYPE}
+  );
+  CREATE UNIQUE INDEX oauth_grants_code ON oauth_grants (tenant_id, code_hash);
+  CREATE UNIQUE INDEX oauth_grants_access ON oauth_grants (tenant_id, access_hash);
+  CREATE UNIQUE INDEX oauth_grants_refresh ON oauth_grants (tenant_id, refresh_hash);
+  CREATE INDEX oauth_grants_previous ON oauth_grants (tenant_id, previous_refresh_hash);
+  CREATE INDEX oauth_grants_user ON oauth_grants (tenant_id, user_id, created_at);
+  CREATE INDEX oauth_grants_expires ON oauth_grants (tenant_id, expires_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

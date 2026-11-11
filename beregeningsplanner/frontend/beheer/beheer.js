@@ -591,6 +591,8 @@
     accessForm.guestAccess.disabled = code.set;
     accessForm.drawingRequests.checked = view.drawingRequests.value;
     $('#s-debug').debugMode.checked = Boolean(view.debugMode?.value);
+    $('#s-ai-connector').aiConnector.checked = Boolean(view.aiConnector?.value);
+    $('#s-ai-connector-url').textContent = new URL('../mcp', location.href).href;
     const shopForm = $('#s-shop');
     shopForm.storefront.checked = Boolean(view.storefront?.value);
     shopForm.shopPlanner.checked = view.shopPlanner?.value !== false;
@@ -908,6 +910,12 @@
       saveSettings(debugForm, { debugMode: debugForm.debugMode.checked }, debugForm.debugMode.checked ? 'Debugmodus staat aan' : 'Debugmodus staat uit');
     };
     debugForm.addEventListener('submit', (event) => event.preventDefault());
+    const connectorForm = $('#s-ai-connector');
+    /** Zet de AI-koppeling (Claude en ChatGPT, concept-offertes) aan of uit. */
+    connectorForm.aiConnector.onchange = () => {
+      saveSettings(connectorForm, { aiConnector: connectorForm.aiConnector.checked }, connectorForm.aiConnector.checked ? 'AI-koppeling staat aan' : 'AI-koppeling staat uit');
+    };
+    connectorForm.addEventListener('submit', (event) => event.preventDefault());
     const shopForm = $('#s-shop');
     /** Zet de eigen webshop (startpagina /) aan of uit. */
     shopForm.storefront.onchange = () => {

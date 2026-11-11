@@ -195,7 +195,9 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   function forCustomer(quote) {
     const { share, ...rest } = quote;
-    const out = { ...rest, totals: Core.totals(quote.data) };
+    // De interne notitie per regel (zie Core.sanitizeLine) gaat nooit naar de klant.
+    const lines = quote.data.lines.map(({ note, ...line }) => line);
+    const out = { ...rest, data: { ...quote.data, lines }, totals: Core.totals(quote.data) };
     if (quote.data.layout === 'totaal') {
       // Zonder regelprijzen kan de klantpagina het totaal bij een andere
       // optiekeuze niet herberekenen; daarom per sectie en btw-tarief de som
@@ -209,7 +211,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
         fixed.set(key, current);
       }
       out.fixed = [...fixed.values()];
-      out.data = { ...quote.data, lines: quote.data.lines.map((line) => (line.optional ? line
+      out.data = { ...quote.data, lines: lines.map((line) => (line.optional ? line
         : { id: line.id, section: line.section, description: line.description, qty: line.qty, unit: line.unit, optional: false, selected: false })) };
     }
     if (quote.acceptance) {

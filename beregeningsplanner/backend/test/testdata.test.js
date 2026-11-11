@@ -273,6 +273,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
       web_returns: 'retouren horen bij bestellingen van de eigen webshop; een testomgeving heeft geen webshop',
       web_sale_lines: 'verkoopregels voor de margerapportage ontstaan uit bestellingen van de eigen webshop; een testomgeving heeft geen webshop',
       shop_images: 'afbeeldingen van de eigen webshop horen bij de hoofdtenant; een testomgeving heeft geen webshop',
+      oauth_grants: 'ontstaat alleen als een medewerker zelf Claude of ChatGPT koppelt (OAuth); een nep-toestemming zou in Mijn profiel een koppeling tonen die niet werkt',
       visma_log: 'de Visma-koppeling is liveOnly (geen koppelingen in een testomgeving); het logboek vult zich alleen door echt verkeer met Visma',
       account_tokens: 'eenmalige links voor wachtwoord vergeten en e-mail bevestigen ontstaan alleen per mail in de eigen webshop (hoofdtenant), met een korte geldigheid',
     };

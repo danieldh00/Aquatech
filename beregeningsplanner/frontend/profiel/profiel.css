@@ -33,3 +33,10 @@
 .tf-qr svg { display: block; width: 100%; height: auto; }
 .tf-secret-line code { word-break: break-all; }
 .tf-recovery { padding: 12px; border: 1px solid var(--at-green-soft); border-radius: 8px; font-size: 1rem; line-height: 1.6; user-select: all; }
+
+/* AI-koppeling: gekoppelde apps met een knop om in te trekken. */
+.ai-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.ai-list li { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.ai-list li .ai-meta { display: block; font-size: 0.85rem; color: var(--muted); }
+.ai-list li.empty { color: var(--muted); justify-content: flex-start; }
+#ai-url { font-family: ui-monospace, monospace; font-size: 0.85rem; }
