@@ -4,10 +4,11 @@
 
 Webshop: knop naar het beheer.
 
-- In de kop van de shop staat voor een ingelogde medewerker of beheerder (elk account dat geen klant is) een groene knop *Beheer*
+- In de kop van de shop staat voor een ingelogde medewerker of beheerder (een rol van het soort medewerker; een klant of onbekende rol niet) een groene knop *Beheer*
   naar `app/`; op de telefoon als pictogram in de kop en als regel *Naar het beheer* bovenaan het menu. Klanten en bezoekers zien
   hem niet: de server bepaalt het aan de hand van de rol (`viewer.isStaff` in shop-accounts.js), de pagina's krijgen dan
   `Cache-Control: private, no-store`.
+
 ## 1.9.1
 
 Foutmeldingen nalopen, eindcontrole.
