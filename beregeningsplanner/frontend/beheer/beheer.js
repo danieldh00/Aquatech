@@ -648,6 +648,7 @@
     accessForm.guestAccess.checked = view.guestAccess.value;
     accessForm.guestAccess.disabled = code.set;
     accessForm.drawingRequests.checked = view.drawingRequests.value;
+    $('#s-debug').debugMode.checked = Boolean(view.debugMode?.value);
     const shopForm = $('#s-shop');
     shopForm.storefront.checked = Boolean(view.storefront?.value);
     shopForm.shopPlanner.checked = view.shopPlanner?.value !== false;
@@ -959,6 +960,12 @@
     accessForm.drawingRequests.onchange = () => {
       saveSettings(accessForm, { drawingRequests: accessForm.drawingRequests.checked }, accessForm.drawingRequests.checked ? 'Tekening indienen zonder account staat aan' : 'Tekening indienen zonder account staat uit');
     };
+    const debugForm = $('#s-debug');
+    /** Zet de debugmodus (foutdetails voor beheerders) aan of uit. */
+    debugForm.debugMode.onchange = () => {
+      saveSettings(debugForm, { debugMode: debugForm.debugMode.checked }, debugForm.debugMode.checked ? 'Debugmodus staat aan' : 'Debugmodus staat uit');
+    };
+    debugForm.addEventListener('submit', (event) => event.preventDefault());
     const shopForm = $('#s-shop');
     /** Zet de eigen webshop (startpagina /) aan of uit. */
     shopForm.storefront.onchange = () => {

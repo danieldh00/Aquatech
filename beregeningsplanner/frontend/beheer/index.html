@@ -225,6 +225,13 @@
           <div id="b-list" class="muted small"></div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-debug" class="card-form settings">
+          <h3>Foutopsporing</h3>
+          <p class="muted small">Gaat er iets mis, dan krijgt iedereen een korte melding met een foutcode (die staat ook in het serverlog). Met de debugmodus aan zien beheerders van deze omgeving daarnaast een paneel met de details: wat er misging, de databasecode, waar in de software en welk verzoek. Handig om een fout te melden of zelf op te lossen.</p>
+          <label class="chk"><input type="checkbox" name="debugMode"> <span>Debugmodus aan: beheerders zien bij een fout de details</span></label>
+          <p class="muted small">Klanten en medewerkers zonder beheerrechten zien nooit details. Wachtwoorden en sleutels worden altijd uit de details gehaald. Zet de modus weer uit als je klaar bent.</p>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-season" class="card-form settings">
           <h3>Seizoensherinneringen</h3>
           <p class="muted small">Klanten met een installatie (een werkorder) en een e-mailadres krijgen op de gekozen datum één keer per jaar een mail via de mailserver hierboven, en zien de herinnering twee maanden lang in hun portaal met een knop om onderhoud aan te vragen. Klanten kunnen de mails zelf uitzetten in hun portaal.</p>

@@ -112,7 +112,7 @@ jobs:
             smaak of dingen die goed zijn. Schrijf in het Nederlands.
           claude_args: >-
             ${{ steps.scope.outputs.model && format('--model {0}', steps.scope.outputs.model) || '' }}
-            --max-turns 15
+            --max-turns 40
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"
 
   security-review:

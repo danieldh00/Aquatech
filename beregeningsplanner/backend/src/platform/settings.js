@@ -55,6 +55,9 @@ const FIELDS = {
   aiModel: { type: 'enum', values: AiModels.SELECTABLE, default: AiModels.DEFAULT },
   aiEurCentsPerUsd: { type: 'int', default: 86, min: 50, max: 200 },
   modules: { type: 'flags', default: {} },
+  // Debugmodus (Beheer > Instellingen > Foutopsporing): beheerders zien bij een fout de details (soort fout,
+  // databasecode, plek in de code) in plaats van alleen een algemene melding; zie platform/error-report.js.
+  debugMode: { type: 'bool', default: false },
   // Sessies: uitgelogd na zoveel dagen zonder gebruik, en hoe dan ook na de
   // maximale duur (opnieuw inloggen).
   sessionIdleDays: { type: 'int', default: 14, min: 1, max: 90 },

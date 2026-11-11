@@ -12,6 +12,7 @@ const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { registerAddressRoute, normalizePostcode } = require('../platform/address-lookup');
 const { clientKey } = require('../beveiliging/auth');
+const { catchAsync } = require('../platform/error-report');
 const { createStorefrontData } = require('./storefront-data');
 const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
 const { DEFAULT_SITE } = require('./shop-content');
@@ -72,7 +73,8 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
  * @returns {Function} Express-router, te monteren met app.use('/', router) (zie server.js).
  */
 function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, vies = null, onOrder = () => {}, onReturn = () => {} }) {
-  const router = express.Router();
+  // Een async route die een fout gooit gaat naar de foutafhandeling in plaats van te blijven hangen.
+  const router = catchAsync(express.Router());
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: clientKey });
 
   /**
