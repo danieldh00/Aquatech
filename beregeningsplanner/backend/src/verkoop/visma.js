@@ -684,7 +684,7 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
   /**
    * Stand van de koppeling voor het scherm Facturen → Visma.
    * @param {string} tenantId Id van de omgeving.
-   * @returns {object} configured, environment, connected, settings, overview, pending en failed.
+   * @returns {object} configured, environment, connected, settings, overview, pending, held (wachten omdat een onderdeel uit staat) en failed.
    */
   function status(tenantId) {
     const registration = app(tenantId);
@@ -693,9 +693,16 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
     const counts = prepare(`SELECT COUNT(*) AS n, SUM(CASE WHEN visma_error <> '' THEN 1 ELSE 0 END) AS failed FROM invoices
       WHERE tenant_id = ? AND status <> 'concept' AND visma_invoice_id IS NULL${pending.sql}`)
       .get(tenantId, ...pending.args);
+    // Facturen die wachten omdat een onderdeel uit staat: alleen uitrekenen als er iets uit staat.
+    let held = 0;
+    if (Object.values(vismaSettings.parts).some((on) => !on)) {
+      const everything = prepare(`SELECT COUNT(*) AS n FROM invoices WHERE tenant_id = ? AND status <> 'concept' AND visma_invoice_id IS NULL${vismaSettings.since ? ' AND invoice_date >= ?' : ''}`)
+        .get(tenantId, ...(vismaSettings.since ? [vismaSettings.since] : []));
+      held = Math.max(0, (Number(everything && everything.n) || 0) - (Number(counts && counts.n) || 0));
+    }
     return {
       configured: registration.configured, environment: registration.environment, connected: connected(tenantId),
-      settings: vismaSettings, overview: describeConnection(vismaSettings.scopes), pending: Number(counts && counts.n) || 0, failed: Number(counts && counts.failed) || 0,
+      settings: vismaSettings, overview: describeConnection(vismaSettings.scopes), pending: Number(counts && counts.n) || 0, held, failed: Number(counts && counts.failed) || 0,
     };
   }
 

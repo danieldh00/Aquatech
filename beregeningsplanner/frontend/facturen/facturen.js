@@ -537,7 +537,7 @@
       html = `<p><span class="pill st-betaald">Verbonden</span>${settings.paused ? ' <span class="pill overdue">Gepauzeerd</span>' : ''} ${esc(settings.companyName || 'Visma-administratie')}${settings.environment === 'sandbox' ? ' <span class="pill">sandbox</span>' : ''}`
         + `${settings.connectedAt ? ` <span class="muted small">sinds ${esc(when(settings.connectedAt))}${settings.connectedBy ? ` door ${esc(settings.connectedBy)}` : ''}</span>` : ''}</p>`
         + `<p class="muted small">${settings.autoSync ? 'Automatisch doorsturen staat aan' : 'Automatisch doorsturen staat uit; gebruik <b>Nu doorsturen</b> of de knop op een factuur'}${settings.since ? `, facturen vanaf ${esc(day(settings.since))}` : ''}. `
-        + `${visma.pending ? `<b>${esc(visma.pending)}</b> ${visma.pending === 1 ? 'factuur wacht' : 'facturen wachten'}${visma.failed ? `, waarvan <span class="fail">${esc(visma.failed)} met een fout</span> (zie de factuur)` : ''}.` : 'Alles is doorgestuurd.'}</p>`;
+        + `${visma.pending ? `<b>${esc(visma.pending)}</b> ${visma.pending === 1 ? 'factuur wacht' : 'facturen wachten'}${visma.failed ? `, waarvan <span class="fail">${esc(visma.failed)} met een fout</span> (zie de factuur)` : ''}.` : (visma.held ? '' : 'Alles is doorgestuurd.')}${visma.held ? ` <b>${esc(visma.held)}</b> ${visma.held === 1 ? 'factuur wacht' : 'facturen wachten'} omdat een onderdeel uit staat (zie Bediening).` : ''}</p>`;
     }
     $('#vi-status').innerHTML = html;
     $('#vi-connect').hidden = !visma.configured || visma.connected;
