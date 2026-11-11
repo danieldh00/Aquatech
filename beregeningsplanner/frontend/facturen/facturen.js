@@ -406,14 +406,18 @@
     const query = new URLSearchParams({ limit: '50' });
     if (log.onlyErrors) query.set('errors', '1');
     if (!reset && log.next) query.set('before', log.next);
+    // Elk verzoek krijgt een volgnummer: een verouderd antwoord (bijv. van Meer laden na het aanzetten van het filter) wordt weggegooid.
+    const requestId = (log.requestId || 0) + 1;
+    log.requestId = requestId;
     log.loading = true;
     try {
       const page = await api(`visma/log?${query}`);
+      if (requestId !== log.requestId) return;
       log.items = reset ? page.items : log.items.concat(page.items);
       log.next = page.next;
       renderVismaLog();
     } finally {
-      log.loading = false;
+      if (requestId === log.requestId) log.loading = false;
     }
   }
 
