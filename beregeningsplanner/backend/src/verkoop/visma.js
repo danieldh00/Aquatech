@@ -44,9 +44,9 @@ const PARTS = [
   { key: 'options', title: 'Artikelen en betalingstermijnen', direction: 'van', text: 'Alleen lezen, om hier te kunnen kiezen. Er wordt niets van bewaard behalve jouw keuze.' },
   { key: 'company', title: 'Naam van de administratie', direction: 'van', text: 'Alleen lezen, één keer bij het verbinden.' },
 ];
+/** Foutcodes van de bediening (pauze, onderdeel uit, verbreken bezig): dat is geen fout van de factuur en komt niet in zijn foutveld of het logboek. */
+const CONTROL_CODES = ['paused', 'part_off', 'disconnecting'];
 /** De onderdelen die je los aan of uit kunt zetten (visma.parts), met hun naam voor het logboek. */
-/** Foutcodes van de bediening (pauze of onderdeel uit): dat is geen fout van de factuur en komt niet in zijn foutveld of het logboek. */
-const CONTROL_CODES = ['paused', 'part_off'];
 const CONTROL_PARTS = { invoices: 'Verkoopfacturen doorsturen', credits: 'Creditfacturen doorsturen', customers: 'Klanten aanmaken in Visma' };
 const NOT_DONE = 'Aquatech wijzigt of verwijdert niets in Visma, komt niet aan boekingen, inkoop, bank of salaris en leest geen betalingen terug.';
 const DEFAULT_REDIRECT = 'https://aquatech.den-hollander.com/api/visma/callback';
@@ -424,7 +424,7 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
    * @returns {Promise<string>} Het access token.
    */
   async function accessToken(tenantId) {
-    if (disconnecting.has(tenantId)) throw new VismaError('not_connected', 'De verbinding met Visma wordt verbroken.', 409);
+    if (disconnecting.has(tenantId)) throw new VismaError('disconnecting', 'De verbinding met Visma wordt verbroken.', 409);
     const cached = tokens.get(tenantId);
     if (cached && cached.exp > Date.now()) return cached.access;
     const refresh = settingsFor(tenantId).get('vismaRefreshToken');
@@ -652,7 +652,7 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
         out.failed++;
         if (out.errors.length < 5) out.errors.push(error.message);
         // Verbinding of instelling ontbreekt: de rest heeft hetzelfde probleem.
-        if (['not_connected', 'not_configured', 'reconnect', 'token_failed', 'unreachable', 'no_terms', 'forbidden'].includes(error.code)) break;
+        if (['not_connected', 'disconnecting', 'not_configured', 'reconnect', 'token_failed', 'unreachable', 'no_terms', 'forbidden'].includes(error.code)) break;
       }
     }
     return out;

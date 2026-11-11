@@ -651,7 +651,8 @@ test('visma: tijdens het verbreken start er niets nieuws naar Visma en is het in
     await hasStarted;
     const during = await baas.post(`/app/api/visma/invoices/${invoice.id}`, {});
     assert.strictEqual(during.status, 409);
-    assert.strictEqual(during.body.error, 'not_connected');
+    assert.strictEqual(during.body.error, 'disconnecting');
+    assert.ok(!(await baas.get('/app/api/invoices/' + invoice.id)).body.vismaError, 'tijdelijke blokkade is geen fout van de factuur');
     assert.strictEqual((await baas.post('/app/api/visma/sync', {})).body.failed, 1, 'doorsturen tijdens het verbreken mislukt netjes');
     assert.strictEqual(visma.invoices.length, 0, 'niets naar Visma tijdens het verbreken');
     release();
