@@ -57,6 +57,7 @@ const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
 const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
 const { createAiUsageStore } = require('./platform/ai-usage');
+const { createErrorReport, catchAsync, withCause } = require('./platform/error-report');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
 const crypto = require('crypto');
 
@@ -491,9 +492,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   let storefrontRouter = null;
 
   app.disable('x-powered-by');
+  // Een async route die een fout gooit komt bij de foutafhandeling uit in plaats van te blijven hangen.
+  catchAsync(app);
   // Per verzoek een eigen geheugen voor gegevens die binnen één verzoek
   // meermaals nodig zijn (zoals de tenant); zie withRequestCache in store.js.
   app.use((req, res, next) => withRequestCache(() => withScope(() => { bindStream(req); next(); })));
+  // Foutmeldingen met foutcode, en details voor beheerders met de debugmodus aan (platform/error-report.js).
+  const errorReport = createErrorReport({
+    /**
+     * Of dit verzoek foutdetails mag krijgen: debugmodus van de actieve omgeving aan en de gebruiker is beheerder.
+     * @param {object} req Het verzoek.
+     * @returns {boolean} true als details mee mogen.
+     */
+    debugFor: (req) => {
+      const user = req.user !== undefined ? req.user : identify(req);
+      return Boolean(user) && Roles.can(user, 'beheer') && settingsFor(req.tenantId).get('debugMode') === true;
+    },
+  });
+  app.use(errorReport.attach);
   // Alles van de app (dashboard, modules, API, inloggen) staat onder /app/; de
   // hoofdmap is de webshop. Het voorvoegsel gaat hier eraf, zodat de rest van de
   // app ongewijzigd werkt (`req.inApp` onthoudt dat het verzoek van de app is).
@@ -1737,8 +1753,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/api/admin/wan-ip', async (req, res) => {
     try {
       res.json(await wanIp.get({ refresh: req.query.refresh === '1' }));
-    } catch (err) {
-      res.status(502).json({ error: 'unavailable', message: 'Het WAN-IP kon niet worden bepaald. Controleer of de server naar buiten kan, of zet WAN_IP in de Docker-omgeving.' });
+    } catch (error) {
+      withCause(res, error).status(502).json({ error: 'unavailable', message: 'Het WAN-IP kon niet worden bepaald. Controleer of de server naar buiten kan, of zet WAN_IP in de Docker-omgeving.' });
     }
   });
 
@@ -2571,13 +2587,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     sendPage(res, path.join(FRONTEND_DIR, mod || '', 'index.html'), version);
   });
 
-  // eslint-disable-next-line no-unused-vars
-  app.use((err, req, res, next) => {
-    if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'invalid_json', message: 'Ongeldige JSON' });
-    if (err.type === 'entity.too.large') return res.status(413).json({ error: 'too_large', message: 'Bestand te groot.' });
-    console.error(err);
-    res.status(500).json({ error: 'internal_error', message: 'Interne fout' });
-  });
+  app.use(errorReport.handler);
 
   app.locals.settings = settings;
   /**

@@ -186,5 +186,64 @@
     });
   }
 
+  // ---------- Debugmodus ----------
+  // Staat de debugmodus aan (Beheer > Instellingen > Foutopsporing) en ben je beheerder, dan heeft een
+  // foutantwoord van de server de kop X-Aquatech-Debug en een blok `debug`. Dan laden we het debugpaneel
+  // (shared/debug-panel.js) en tonen we de details. Zonder die kop kost dit niets: het antwoord gaat
+  // ongewijzigd door naar de module.
+  const nativeFetch = root.fetch;
+  let debugPanel = null;
+  /**
+   * Laadt het debugpaneel (script en stylesheet) één keer, pas bij de eerste fout met details.
+   * @returns {Promise<object|null>} AquatechDebug, of null als laden mislukt.
+   */
+  function loadDebugPanel() {
+    if (!debugPanel) {
+      debugPanel = new Promise((resolve) => {
+        const style = document.createElement('link');
+        style.rel = 'stylesheet';
+        style.href = fromApp(`shared/debug-panel.css${version}`);
+        document.head.appendChild(style);
+        const panelScript = document.createElement('script');
+        panelScript.src = fromApp(`shared/debug-panel.js${version}`);
+        /**
+         * Paneel geladen: geeft AquatechDebug door.
+         * @returns {void}
+         */
+        panelScript.onload = () => resolve(root.AquatechDebug || null);
+        /**
+         * Laden mislukt: een volgende fout probeert het opnieuw.
+         * @returns {void}
+         */
+        panelScript.onerror = () => { debugPanel = null; resolve(null); };
+        document.head.appendChild(panelScript);
+      });
+    }
+    return debugPanel;
+  }
+  /**
+   * Toont de details van een foutantwoord in het debugpaneel (op een kopie, de module leest het origineel).
+   * @param {Response} response Het foutantwoord met de kop X-Aquatech-Debug.
+   * @returns {void}
+   */
+  function reportDebug(response) {
+    Promise.all([response.clone().json().catch(() => null), loadDebugPanel()]).then(([body, panel]) => {
+      if (body && body.debug && panel) panel.show(body);
+    });
+  }
+  if (typeof nativeFetch === 'function') {
+    /**
+     * fetch met debugmodus: gewoon fetch, maar een foutantwoord met details gaat ook naar het debugpaneel.
+     * @param {...*} args Zelfde argumenten als fetch.
+     * @returns {Promise<Response>} Het antwoord, ongewijzigd.
+     */
+    root.fetch = function fetchWithDebug(...args) {
+      return nativeFetch.apply(this, args).then((response) => {
+        if (response.status >= 400 && response.headers.get('X-Aquatech-Debug') === '1') reportDebug(response);
+        return response;
+      });
+    };
+  }
+
   root.AquatechCommon = { getJson, ownerOf, excel, origin, onReturn, leaving, offline };
 })(window);

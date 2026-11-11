@@ -594,6 +594,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   de server weigert een andere eigenaar (409 `owner_mismatch`, 0.69.0).
   Lokaal bewaarde gegevens (planner-concept, terugval-wachtrij) bewaren hun
   eigenaar en worden alleen aan die gebruiker getoond/verstuurd.
+- **Foutmeldingen + debugmodus** (1.8.1, `platform/error-report.js`): elke 500 krijgt een foutcode (`errorId`, ook in het log
+  `[fout <code>]`). Instelling `debugMode` (per omgeving, Beheer > Instellingen > Foutopsporing): aan + recht `beheer` → foutantwoorden
+  (400+) krijgen `debug` (oorzaak, databasecode, plek in `src/`, aanroepketen; geheimen via `redact` eruit) en kop
+  `X-Aquatech-Debug`; `shared/common.js` toont dan `shared/debug-panel.js`. `catchAsync` op app en webshoprouter: async routes
+  hoeven geen eigen `wrapAsync` meer. **Een eigen foutantwoord na een `catch` bewaart de oorzaak met `withCause(res, error)`**;
+  zet nooit `error.message` van een interne fout rechtstreeks in `message` (alleen bij bewust leesbare fouten, zoals SMTP).
 - Health: `GET /api/health` (versie uit `package.json`).
 
 ## Checklist voor elke nieuwe feature (zonder dat Daniël erom vraagt)

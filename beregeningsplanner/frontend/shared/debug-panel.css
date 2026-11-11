@@ -1,0 +1,41 @@
+/* Debugpaneel (shared/debug-panel.js): foutdetails voor beheerders met de debugmodus aan. */
+.debug-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10000;
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--at-font);
+  font-size: 13px;
+}
+.debug-card {
+  background: #fff;
+  color: var(--at-navy);
+  border: 1px solid var(--at-danger);
+  border-left-width: 5px;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  padding: 10px 12px;
+}
+.debug-card h4 { margin: 0 0 4px; font-size: 13px; color: var(--at-danger); }
+.debug-card .debug-message { margin: 0 0 6px; font-weight: 600; overflow-wrap: anywhere; }
+.debug-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0 0 6px; }
+.debug-card dt { color: var(--at-navy); opacity: 0.7; }
+.debug-card dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.debug-card pre { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+.debug-card .debug-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.debug-card button {
+  font: inherit;
+  border: 1px solid var(--at-navy);
+  background: #fff;
+  color: var(--at-navy);
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.debug-card button.primary { background: var(--at-navy); color: #fff; }

@@ -19,6 +19,7 @@ const { inspectImage, fromBase64, MAX_IMAGE_BYTES, MAX_SIDE } = require('../uitv
 const { publicAddress } = require('../beveiliging/netguard');
 const { createImageCache } = require('../platform/image-cache');
 const { pinnedFetch, readBytesLimited } = require('../beveiliging/pinned-fetch');
+const { withCause } = require('../platform/error-report');
 
 const DOWNLOAD_TIMEOUT_MS = 10000;
 const IMPORT_PAGE_SIZE = 25;
@@ -346,7 +347,7 @@ function registerItemImageRoutes(app, { images, requireRight, requireJson, audit
       audit(req, 'voorraad_afbeeldingen_overgenomen', { imported: out.imported, reused: out.reused, failed: out.failed.length });
       res.json(out);
     } catch (error) {
-      res.status(500).json({ error: 'import_failed', message: 'Afbeeldingen overnemen is mislukt.' });
+      withCause(res, error).status(500).json({ error: 'import_failed', message: 'Afbeeldingen overnemen is mislukt.' });
     }
   });
 }

@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.8.1
+
+Debugmodus (Beheer > Instellingen > Foutopsporing) en foutcodes bij elke onverwachte fout. Eerste deel van het nalopen van de
+foutmeldingen; de modules volgen in de volgende versies.
+
+- Nieuw `platform/error-report.js`: `createErrorReport` (middleware `attach` + laatste `handler`), `catchAsync`, `withCause`,
+  `describeError`, `redact`. Elke 500 krijgt een foutcode (`errorId`, 8 tekens) in het antwoord, de melding en het serverlog
+  (`[fout <code>] METHODE pad gebruiker … omgeving …`).
+- Nieuwe instelling `debugMode` (bool, per omgeving, standaard uit). Aan + gebruiker met recht `beheer`: elk foutantwoord (status
+  400+) als JSON krijgt een blok `debug` (status, foutsoort, verzoek, foutcode, oorzaak met naam/melding/databasecode/detail/
+  constraint/tabel, plek in de code en aanroepketen binnen `src/`) en de kop `X-Aquatech-Debug: 1`. Uit, of geen beheerder: nooit
+  details. Wachtwoorden in URL's, Bearer-tokens, API-sleutels (Anthropic, Mollie, WooCommerce) en `password=`/`token=`-velden gaan
+  er altijd uit.
+- `catchAsync` op de app en de webshoprouter: een async route die een fout gooit gaat naar de foutafhandeling in plaats van te
+  blijven hangen.
+- `withCause(res, error)` bewaart de oorzaak bij een eigen foutantwoord (nu bij WAN-IP, adres opzoeken en afbeeldingen overnemen).
+- Frontend: `shared/common.js` toont bij een antwoord met de debugkop het paneel `shared/debug-panel.js|.css` (pas dan geladen,
+  tekst via textContent, knop Kopiëren). Formulier Foutopsporing in Beheer (groep Systeem).
+- Kapotte JSON en te grote verzoeken hebben een duidelijkere melding.
+- Snelheid: goede antwoorden kosten niets extra (alleen bij status 400+ wordt de instelling gelezen, uit het geheugen); het paneel
+  laadt alleen bij een fout met details.
+- Tests: `test/debug-mode.test.js`.
+
 ## 1.8.0
 
 Multitenancy-schakelaar (Hoofdbeheer > Multitenancy), standaard uit.
