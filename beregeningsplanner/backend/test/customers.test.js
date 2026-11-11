@@ -270,6 +270,13 @@ test('klantkeuze in de offerte: geen klanten van een andere organisatie, en zond
   assert.deepStrictEqual(own.map((customer) => customer.displayName), ['Gedeelde Zoekterm Eigen']);
   const theirs = (await foreign.get('/app/api/quote-customers?q=gedeelde%20zoekterm')).body.items;
   assert.deepStrictEqual(theirs.map((customer) => customer.displayName), ['Gedeelde Zoekterm Vreemd']);
+  // Een klant van de andere organisatie kan niet aan een eigen offerte worden gehangen.
+  const foreignId = theirs[0].id;
+  const quote = await installer.post('/app/api/quotes', { data: {} });
+  assert.strictEqual(quote.status, 201);
+  const linked = await installer.put(`/app/api/quotes/${quote.body.id}`, { data: {}, customerId: foreignId });
+  assert.strictEqual(linked.status, 400);
+  assert.strictEqual(linked.body.error, 'invalid_customer');
   const planner = await as('planner1');
   assert.strictEqual((await planner.get('/app/api/quote-customers?q=gedeelde')).status, 403);
 });

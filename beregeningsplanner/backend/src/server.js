@@ -2021,7 +2021,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const home = homeOf(tid);
       return store.listCustomers(home === tid ? [tid] : [home, tid]);
     },
-    // Klantkeuze in de offerte: een zoekopdracht in plaats van de hele lijst (bij honderden klanten te groot).
+    /**
+     * Zoekt klanten voor de klantkeuze in de offerte (tot 20, alleen actieve klanten), met de gegevens die de offerte invult.
+     * Een zoekopdracht in plaats van de hele lijst, want die is bij honderden klanten te groot.
+     * @param {object} req Het verzoek (bepaalt de organisatie).
+     * @param {string} search De zoektekst.
+     * @returns {object[]} De klanten met id, gebruikersnaam, naam, bedrijf, e-mail, telefoon en adres.
+     */
     searchCustomers: (req, search) => {
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
