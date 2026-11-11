@@ -12,6 +12,7 @@ Opruiming na de CodeRabbit-inhaalreview van #149 t/m #158 (13 bevindingen: 2 maj
 - **Mollie** (minor): bij een mislukte betaalstart komt ook de onderliggende oorzaak in het log (niet naar de klant).
 - **README**: Visma staat onder Facturen → Visma, niet onder Beheer → Instellingen.
 - **Niet overgenomen**: de opmerking over het minimale contrast van knoptekst (3:1 voor vette tekst) in de kleurcontrole. Het standaardgroen van de huisstijl haalt zelf maar 3,99:1; de grens verhogen zou de huisstijl afkeuren en bestaande thema's ongeldig maken. Dat is een keuze van Daniël.
+- **CodeRabbit uitgeschakeld** (besluit Daniël): `.coderabbit.yaml`, de workflows voor aanvraag, inhaalreview en bevindingenissues en hun scripts en tests zijn verwijderd. Alleen de Claude-reviews zijn nog verplicht; vóór go-live volgt eenmalig een handmatige deep scan.
 - Tests: pauze/onderdeel tijdens het aanmaken van de klant, niet-booleaanse `paused`, verbreken met vasthoudend intrekken, logregel bij app-wijziging, testaccount en thema; ook tegen PostgreSQL.
 
 ## 1.9.5

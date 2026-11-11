@@ -148,10 +148,8 @@ TEST_DATABASE_URL=postgres://… npm test         # dezelfde suite tegen Postgre
   `beregeningsplanner/` vraagt een hogere versie in `backend/package.json`, een regel in `CHANGELOG.md` en in
   `frontend/nieuws/releases.js`. Werk dit README bij als een PR features of de installatie wijzigt.
 - Een PR merget pas als de tests (SQLite en PostgreSQL), de versiecontrole en de verplichte controles **Claude code
-  review** en **Claude security review** (`.github/workflows/claude-review.yml`) groen zijn. CodeRabbit reviewt ook,
-  maar adviserend: open bevindingen worden na het mergen een issue en in een opruim-PR opgelost.
-  CodeRabbit reviewt hier niet vanzelf (repo met weinig sterren): `coderabbit-trigger.yml` vraagt bij elke nieuwe PR één keer
-  `@coderabbitai review`, en `coderabbit-catchup.yml` haalt gemiste reviews na het mergen in.
+  review** en **Claude security review** (`.github/workflows/claude-review.yml`) groen zijn. CodeRabbit is uitgeschakeld;
+  vóór go-live volgt eenmalig een handmatige deep scan met CodeRabbit.
 - Na het mergen bouwt `release.yml` het image `ghcr.io/danieldh00/aquatech:<versie>`; de server
   (`deploy/apps01/`) rolt het binnen 15 minuten uit, met een back-up vooraf en rollback bij een fout.
 - Werkafspraken (codestijl, queries, beveiliging, mappen) staan in `CLAUDE.md`.
