@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.8.8
+
+Naloop van de review op 1.8.7 (de fixes kwamen net na de merge).
+
+- `mailFailure`: de herkenning van TLS/certificaat op de tekst geldt alleen bij verbindingsfouten (ETIMEDOUT, ECONNECTION,
+  ESOCKET, EDNS) en bij ETLS. Een weigering door de server (EAUTH, EENVELOPE, EMESSAGE) houdt zijn eigen melding, ook als
+  "TLS" of "SSL" in het antwoord staat.
+- Een fout zonder SMTP-code en zonder antwoord van de server is een fout in de app (bijv. bij het opbouwen van de mail) en heet
+  nu *"Versturen mislukt door een interne fout; de oorzaak staat in het serverlog."* in plaats van een mailserverfout.
+- Webshop- en retourmails loggen de oorzaak van een mislukte verzending (`console.warn`). De vaste melding bij onleesbare
+  mailinstellingen staat één keer in mailer.js (`MAIL_SETUP_FAILED`).
+- Tests: mislukte retourmail geeft een leesbare melding bij de retour; extra gevallen voor `mailFailure`.
+
 ## 1.8.7
 
 Foutmeldingen nalopen, deel 2: e-mail en verkoop.
@@ -8,11 +21,9 @@ Foutmeldingen nalopen, deel 2: e-mail en verkoop.
   controleren (inloggegevens/app-wachtwoord, server en poort, TLS/certificaat, afzender of ontvanger geweigerd, bericht geweigerd),
   met het antwoord van de mailserver erachter (zonder regeleinden, hoogstens 200 tekens). Een onbekende fout geeft geen interne
   melding meer. Gebruikt bij het versturen van offertes, afspraken, facturen, de testmail en de webshopmails (bestelling,
-  verzending, retour). Een fout zonder SMTP-code en zonder antwoord (een fout in de app) heet *"interne fout; de oorzaak staat in
-  het serverlog"*; de webshopmails loggen de oorzaak. De TLS-herkenning op de tekst geldt alleen bij verbindingsfouten.
+  verzending, retour).
 - De mailroutes bewaren de volledige fout met `withCause` (debugmodus: code, commando, antwoord). Een fout bij het lezen van de
   mailinstellingen in de webshopmails komt in het serverlog in plaats van als ruwe melding bij de bestelling.
-  Die vaste melding is `MAIL_SETUP_FAILED` uit mailer.js.
 - `VismaError` krijgt een optionele oorzaak: niet bereikbaar, mislukte aanmelding (`error`/`error_description` van Visma, nooit
   tokens) en een API-fout (methode, pad zonder query, status en het begin van het antwoord). Het foutantwoord van de Visma-routes
   bewaart de oorzaak.
