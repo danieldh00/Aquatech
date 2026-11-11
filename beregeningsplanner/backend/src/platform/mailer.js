@@ -114,4 +114,46 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
   return { configured, send, config };
 }
 
-module.exports = { createMailer, sanitizeMail, validEmail, MAIL_DEFAULTS };
+/**
+ * Het antwoord van de mailserver uit een nodemailer-fout, zonder regeleinden en ingekort (bijv. "535 5.7.3
+ * Authentication unsuccessful"). Bevat geen wachtwoord: de server herhaalt dat niet.
+ * @param {Error & { response?: string }} error De fout.
+ * @returns {string} Het antwoord, of '' als er geen is.
+ */
+const serverReply = (error) => String(error && error.response || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+
+/**
+ * Zet een fout van send() om in een melding waar de gebruiker iets mee kan: wat er misging en waar het meestal aan
+ * ligt. Eigen fouten van send() (not_configured, invalid_to, invalid_host) zijn al leesbaar. Het ruwe antwoord van de
+ * mailserver staat erbij als die er is; de volledige fout gaat met withCause naar de debugmodus.
+ * @param {Error & { code?: string, command?: string, responseCode?: number, response?: string }} error De fout van send().
+ * @returns {string} De melding, beginnend met "Versturen mislukt:".
+ */
+function mailFailure(error) {
+  const code = String(error && error.code || '');
+  const reply = serverReply(error);
+  /**
+   * De melding met het antwoord van de mailserver erachter (als die er is).
+   * @param {string} text Wat er misging en wat te controleren.
+   * @returns {string} De volledige melding.
+   */
+  const withReply = (text) => `Versturen mislukt: ${text}${reply ? ` (mailserver: ${reply})` : ''}`;
+  if (['not_configured', 'invalid_to', 'invalid_host'].includes(code)) return `Versturen mislukt: ${error.message}`;
+  if (code === 'EAUTH') return withReply('de mailserver weigert de inloggegevens. Controleer gebruikersnaam en wachtwoord (bij Microsoft 365 of Gmail vaak een app-wachtwoord) in Beheer → Integraties → E-mail.');
+  // Eerst TLS: een certificaatfout komt van nodemailer vaak als ESOCKET, maar de oplossing is een andere.
+  if (code === 'ETLS' || /certificate|self.signed|TLS|SSL/i.test(String(error && error.message || ''))) {
+    return withReply('de beveiligde verbinding (TLS) met de mailserver lukt niet. Controleer de poort en de instelling SSL/TLS; een ongeldig certificaat wordt niet geaccepteerd.');
+  }
+  if (code === 'ETIMEDOUT' || code === 'ECONNECTION' || code === 'ESOCKET' || code === 'EDNS') {
+    return withReply('de mailserver is niet bereikbaar. Controleer server en poort (587 met STARTTLS of 465 met SSL/TLS) en of de server naar buiten mag verbinden.');
+  }
+  if (code === 'EENVELOPE') {
+    return withReply(error.command === 'MAIL FROM'
+      ? 'de mailserver weigert het afzenderadres. Gebruik een afzender waarvoor deze mailserver mag versturen.'
+      : 'de mailserver weigert het adres van de ontvanger.');
+  }
+  if (code === 'EMESSAGE') return withReply('de mailserver weigert het bericht (bijvoorbeeld te groot of als spam gezien).');
+  return withReply('de mailserver gaf een fout.');
+}
+
+module.exports = { createMailer, sanitizeMail, validEmail, mailFailure, MAIL_DEFAULTS };

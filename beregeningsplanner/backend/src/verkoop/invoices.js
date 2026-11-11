@@ -27,7 +27,8 @@ const { transaction } = require('../database/db');
 const { validEmail } = require('../platform/mailer');
 const { preferencesOf } = require('../platform/store');
 const { invoiceFileName } = require('./invoice-pdf');
-const { SourceError } = require('../webshop/woocommerce');
+const { respondShopError } = require('../webshop/woocommerce');
+const { withCause } = require('../platform/error-report');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { withoutInternal } = require('./quotes');
 
@@ -45,12 +46,6 @@ const EXPORT_LIMIT = 5000;
  * @returns {string} Tijdstip als ISO-tekst.
  */
 const currentTimestamp = () => new Date().toISOString();
-/**
- * Maakt van een async route-afhandeling een gewone: een fout gaat naar de foutafhandeling van Express.
- * @param {Function} handler De async afhandeling (req, res, next).
- * @returns {Function} De route-afhandeling.
- */
-const wrapAsync = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 /**
  * Kopie aan de medewerker zelf (voorkeur mailCopy in Mijn profiel).
  * @param {object} user De ingelogde gebruiker.
@@ -511,7 +506,7 @@ function registerInvoiceRoutes(app, ctx) {
   });
 
   // Webshopbestellingen nu ophalen (anders elke 10 minuten vanzelf).
-  app.post('/api/invoices/shop-orders/sync', requireJson, requireInvoices, syncLimiter, wrapAsync(async (req, res) => {
+  app.post('/api/invoices/shop-orders/sync', requireJson, requireInvoices, syncLimiter, async (req, res, next) => {
     if (!shopOrders) return res.status(404).json({ error: 'not_found', message: 'Niet beschikbaar.' });
     try {
       const out = await shopOrders.run(tenantOf(req), { user: req.user });
@@ -520,10 +515,9 @@ function registerInvoiceRoutes(app, ctx) {
       if (out.imported) audit(req, 'webshopbestellingen_gefactureerd', { count: out.imported });
       res.json({ ...out, status: shopOrders.status(tenantOf(req)) });
     } catch (error) {
-      if (error instanceof SourceError) return res.status(error.status || 502).json({ error: error.code, message: error.message });
-      throw error;
+      respondShopError(res, error, next);
     }
-  }));
+  });
 
   app.get('/api/invoices/:id', requireInvoices, (req, res) => {
     const invoice = invoices.get(tenantOf(req), req.params.id);
@@ -566,7 +560,7 @@ function registerInvoiceRoutes(app, ctx) {
     res.json(out);
   });
 
-  app.post('/api/invoices/:id/finalize', requireJson, requireInvoices, wrapAsync(async (req, res) => {
+  app.post('/api/invoices/:id/finalize', requireJson, requireInvoices, async (req, res) => {
     const out = invoices.finalize(tenantOf(req), req.user, req.params.id, invoicingOf(req), { skipStock: shopStockSynced(req) });
     if (!out) return notFound(res);
     if (out.error) return fail(res, out);
@@ -575,7 +569,7 @@ function registerInvoiceRoutes(app, ctx) {
     const mail = sender ? await sender.autoSend(tenantOf(req), out.invoice.id) : { sent: false };
     if (mail.sent) audit(req, 'factuur_verstuurd', { invoiceId: out.invoice.id, number: out.invoice.number, auto: true });
     res.json({ ...invoices.get(tenantOf(req), out.invoice.id), autoSent: mail.sent });
-  }));
+  });
 
   // De factuur als PDF (dezelfde als de bijlage van de e-mail).
   app.get('/api/invoices/:id/pdf', requireInvoices, (req, res) => {
@@ -598,7 +592,7 @@ function registerInvoiceRoutes(app, ctx) {
   });
 
   // Versturen per e-mail met de PDF als bijlage.
-  app.post('/api/invoices/:id/send', requireJson, requireInvoices, wrapAsync(async (req, res) => {
+  app.post('/api/invoices/:id/send', requireJson, requireInvoices, async (req, res) => {
     if (!sender) return notFound(res);
     const body = req.body || {};
     const to = String(body.to || '').split(/[,;\s]+/).filter(Boolean);
@@ -613,9 +607,9 @@ function registerInvoiceRoutes(app, ctx) {
       if (error.code === 'not_found') return notFound(res);
       const status = { not_final: 409, not_configured: 409, invalid_to: 400, send_failed: 502 }[error.code];
       if (!status) throw error;
-      res.status(status).json({ error: error.code, message: error.message });
+      withCause(res, error.cause || error).status(status).json({ error: error.code, message: error.message });
     }
-  }));
+  });
 
   app.post('/api/invoices/:id/paid', requireJson, requireInvoices, (req, res) => {
     const out = invoices.setPaid(tenantOf(req), req.params.id, req.body && req.body.paid !== false, req.body && req.body.date);

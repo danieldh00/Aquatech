@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.8.7',
+      date: '2026-11-11',
+      title: 'Duidelijkere meldingen als een e-mail niet verstuurd kan worden',
+      items: [
+        { text: 'Lukt het versturen van een offerte, afspraak of factuur niet, dan zie je nu waar het aan ligt, bijvoorbeeld een verkeerd wachtwoord van de mailserver of een poort die niet klopt, met wat je kunt controleren.', for: ['offertes', 'werkorders', 'facturen'] },
+      ],
+    },
+    {
       version: '1.8.6',
       date: '2026-11-11',
       title: 'Duidelijkere meldingen bij de webshopkoppeling',

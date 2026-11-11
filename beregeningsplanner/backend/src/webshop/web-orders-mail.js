@@ -4,7 +4,10 @@
 // bestelling niet tegen maar blijft zichtbaar bij de bestelling (data.mail).
 // Bij Verzonden volgt een mail met de volgcode van DPD (of: klaar om op te
 // halen); komt de volgcode later, dan volgt één mail met die code (data.shipMail).
-const { validEmail } = require('../platform/mailer');
+const { validEmail, mailFailure } = require('../platform/mailer');
+
+// Melding als de mailinstellingen zelf niet te lezen zijn (een interne fout: de oorzaak staat in het serverlog).
+const SETUP_FAILED = 'Versturen mislukt: de mailinstellingen konden niet worden gelezen.';
 const { WITHDRAWAL_DAYS } = require('./legal-pages');
 
 const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
@@ -67,7 +70,8 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
       settings = settingsFor(tenantId);
       mailer = mailerFor(settings);
     } catch (failure) {
-      orders.updateData(tenantId, order.id, { mail: { sent: false, error: String(failure && failure.message || 'Versturen mislukt.').slice(0, 300), at: new Date().toISOString() } });
+      console.error('Mailinstellingen lezen mislukt:', failure);
+      orders.updateData(tenantId, order.id, { mail: { sent: false, error: SETUP_FAILED, at: new Date().toISOString() } });
       return;
     }
     if (!mailer.configured()) { orders.updateData(tenantId, order.id, { mail: { sent: false, error: 'Geen mailserver ingesteld.', at: new Date().toISOString() } }); return; }
@@ -87,7 +91,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
         await mailer.send({ to: profile.email, subject: `Nieuwe webshopbestelling ${order.number}`, text: shopMail.text, html: shopMail.html });
       }
     } catch (failure) {
-      error = String(failure && failure.message || 'Versturen mislukt.').slice(0, 300);
+      error = mailFailure(failure).slice(0, 300);
     }
     orders.updateData(tenantId, order.id, { mail: { sent: !error, error, at: new Date().toISOString() } });
   }
@@ -172,7 +176,8 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
       mailer = mailerFor(settings);
       profile = settings.get('quoteProfile') || {};
     } catch (failure) {
-      record({ sent: false, error: String(failure && failure.message || 'Versturen mislukt.').slice(0, 300) });
+      console.error('Mailinstellingen lezen mislukt:', failure);
+      record({ sent: false, error: SETUP_FAILED });
       return;
     }
     if (!mailer.configured()) { record({ sent: false, error: 'Geen mailserver ingesteld.' }); return; }
@@ -187,7 +192,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
       const subject = pickup ? `Je bestelling ${order.number} staat klaar` : tracking ? `Je bestelling ${order.number} is onderweg (volgcode ${tracking.code})` : `Je bestelling ${order.number} is onderweg`;
       await mailer.send({ to: order.email, subject, text: message.text, html: message.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
     } catch (failure) {
-      error = String(failure && failure.message || 'Versturen mislukt.').slice(0, 300);
+      error = mailFailure(failure).slice(0, 300);
     }
     record({ sent: !error, error });
   }

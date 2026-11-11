@@ -20,6 +20,7 @@
 const crypto = require('crypto');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
+const { withCause } = require('../platform/error-report');
 
 const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 
@@ -40,9 +41,10 @@ class VismaError extends Error {
    * @param {string} code Foutcode, bijv. 'not_connected' of 'reconnect'.
    * @param {string} message Melding voor de gebruiker.
    * @param {number} [status] HTTP-status (standaard 502).
+   * @param {Error} [cause] De onderliggende fout (alleen zichtbaar in de debugmodus).
    */
-  constructor(code, message, status = 502) {
-    super(message);
+  constructor(code, message, status = 502, cause) {
+    super(message, cause ? { cause } : undefined);
     this.code = code;
     this.status = status;
   }
@@ -287,13 +289,14 @@ function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchIm
         headers: { Authorization: `Basic ${Buffer.from(`${registration.clientId}:${registration.secret}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
         body: new URLSearchParams(form).toString(), redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-    } catch {
-      throw new VismaError('unreachable', 'Visma is niet bereikbaar.');
+    } catch (error) {
+      throw new VismaError('unreachable', 'Visma is niet bereikbaar.', 502, error);
     }
     const body = await res.json().catch(() => ({}));
     if (!res.ok || !body.access_token) {
       throw new VismaError(body.error === 'invalid_grant' ? 'reconnect' : 'token_failed',
-        body.error === 'invalid_grant' ? 'De verbinding met Visma is verlopen of ingetrokken: verbind opnieuw.' : 'Visma weigert de aanmelding (controleer client ID, secret en redirect URI).');
+        body.error === 'invalid_grant' ? 'De verbinding met Visma is verlopen of ingetrokken: verbind opnieuw.' : 'Visma weigert de aanmelding (controleer client ID, secret en redirect URI).',
+        502, new Error(`Visma-aanmelding ${res.status}: ${String(body.error || '').slice(0, 80)} ${String(body.error_description || '').slice(0, 300)}`.trim()));
     }
     return body;
   }
@@ -367,8 +370,8 @@ function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchIm
         method, headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
         body: body ? JSON.stringify(body) : undefined, redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-    } catch {
-      throw new VismaError('unreachable', 'Visma is niet bereikbaar.');
+    } catch (error) {
+      throw new VismaError('unreachable', 'Visma is niet bereikbaar.', 502, error);
     }
     if (res.status === 401 && !retried) {
       tokens.delete(tenantId);
@@ -379,7 +382,8 @@ function createVisma({ db, settingsFor, mainTenantId, debtors, invoices, fetchIm
     try { out = text ? JSON.parse(text) : null; } catch { out = null; }
     if (!res.ok) {
       const message = out && (out.Message || out.DeveloperErrorMessage || out.message);
-      throw new VismaError(res.status === 403 ? 'forbidden' : 'api_error', `Visma: ${message ? String(message).slice(0, 300) : `status ${res.status}`}`);
+      throw new VismaError(res.status === 403 ? 'forbidden' : 'api_error', `Visma: ${message ? String(message).slice(0, 300) : `status ${res.status}`}`,
+        502, new Error(`Visma ${method} ${apiPath.split('?')[0]} gaf ${res.status}: ${text.slice(0, 500)}`));
     }
     return out;
   }
@@ -599,7 +603,7 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
    */
   const fail = (res, error) => {
     if (!(error instanceof VismaError)) throw error;
-    res.status(error.status).json({ error: error.code, message: error.message });
+    withCause(res, error).status(error.status).json({ error: error.code, message: error.message });
   };
   /**
    * Maakt van een async route-afhandeling een gewone: een VismaError wordt een antwoord, een andere fout gaat naar Express.
