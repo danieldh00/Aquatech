@@ -242,3 +242,10 @@ dl.kv dd { margin: 0; }
 .th-card { margin: 0 0 10px; padding: 8px 10px; background: var(--at-surface); border-left: 4px solid var(--at-teal); border-radius: 4px; }
 .th-btn { display: inline-block; padding: 7px 16px; border-radius: 999px; background: var(--at-green); color: var(--at-surface); font-weight: 600; font-size: 14px; }
 .th-btn.dark { background: var(--at-green-dark); }
+
+/* Gebruiker toevoegen: de rolomschrijvingen staan ingeklapt onder het formulier. */
+.role-help { margin-top: 14px; font-size: 13px; }
+.role-help summary { cursor: pointer; color: var(--muted); }
+.role-help ul { margin: 8px 0; padding-left: 18px; }
+.role-help li { margin: 4px 0; }
+

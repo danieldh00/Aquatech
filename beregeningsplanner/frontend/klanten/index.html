@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Klanten – AquaTech Service</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="../shared/layout.css">
+  <link rel="stylesheet" href="klanten.css">
+  <script src="../shared/common.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Klanten</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <!-- Lijst -->
+  <main id="list-view" class="dash wide">
+    <section class="intro">
+      <h1>Klanten</h1>
+      <p class="muted">Je klanten op één plek. Een klant kan een inlog hebben (webshop en klantportaal) maar hoeft dat niet: dan staat hij hier gewoon als adresboek voor offertes, werkorders en facturen.</p>
+    </section>
+    <div class="klanten-filters">
+      <input id="k-search" type="search" placeholder="Zoek op naam, bedrijf, e-mail, telefoon of adres" aria-label="Zoeken">
+      <select id="k-group" aria-label="Klantgroep">
+        <option value="">Alle klanten</option>
+        <option value="particulier">Particulier</option>
+        <option value="zakelijk">Zakelijk</option>
+        <option value="groothandel">Groothandel</option>
+        <option value="aanvraag">Aanvraag zakelijk</option>
+      </select>
+      <button id="k-new" class="btn primary" type="button">Nieuwe klant</button>
+      <button id="k-export" class="btn" type="button">Exporteer naar Excel</button>
+    </div>
+    <div class="tablewrap"><table class="grid" id="k-table"></table></div>
+    <div class="pager">
+      <span id="k-count" class="muted small"></span>
+      <span class="spacer"></span>
+      <button id="k-prev" class="btn small" type="button">Vorige</button>
+      <button id="k-next" class="btn small" type="button">Volgende</button>
+    </div>
+  </main>
+
+  <!-- Nieuwe klant -->
+  <main id="new-view" class="dash wide" hidden>
+    <div class="klanten-head"><button id="n-back" class="btn" type="button">← Klanten</button></div>
+    <section class="intro"><h1>Nieuwe klant</h1></section>
+    <form id="n-form" class="card" autocomplete="off">
+      <div class="form-grid">
+        <label class="field">Soort klant
+          <select name="customerGroup"><option value="">Particulier</option><option value="zakelijk">Zakelijk</option></select>
+        </label>
+        <label class="field">Naam
+          <input name="displayName" required maxlength="80" placeholder="Jan de Vries">
+        </label>
+        <label class="field" data-business>Bedrijfsnaam
+          <input name="companyName" maxlength="80">
+        </label>
+        <label class="field" data-business>KvK-nummer
+          <input name="kvkNumber" inputmode="numeric" maxlength="12" placeholder="8 cijfers">
+        </label>
+        <label class="field" data-business>Btw-nummer
+          <input name="vatNumber" maxlength="20" placeholder="NL123456789B01">
+          <span class="hint">Optioneel.</span>
+        </label>
+        <label class="field">E-mailadres
+          <input name="email" type="email" maxlength="200">
+        </label>
+        <label class="field">Telefoon
+          <input name="phone" type="tel" maxlength="25">
+        </label>
+        <label class="field full">Adres
+          <textarea name="address" data-address-lookup rows="2" maxlength="400"></textarea>
+        </label>
+        <label class="field chk full"><input type="checkbox" name="invite"> Meteen een uitnodiging mailen, zodat de klant zelf een wachtwoord kiest</label>
+      </div>
+      <div id="n-err" class="err" role="alert"></div>
+      <div class="form-actions">
+        <button class="btn primary" type="submit">Klant opslaan</button>
+        <button id="n-cancel" class="btn" type="button">Annuleren</button>
+      </div>
+    </form>
+  </main>
+
+  <!-- Eén klant -->
+  <main id="detail-view" class="dash wide" hidden>
+    <div class="klanten-head"><button id="d-back" class="btn" type="button">← Klanten</button></div>
+    <div id="d-body"></div>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="../shared/address-lookup.js"></script>
+  <script src="klanten.js"></script>
+</body>
+</html>

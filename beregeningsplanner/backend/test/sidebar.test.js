@@ -45,7 +45,7 @@ test('beheerder: de groepen staan in de afgesproken volgorde en niets gaat verlo
   const shown = sections.flatMap((section) => idsOf(section.items)).filter(Boolean);
   const expected = idsOf(tools.visible(Roles.rightsOf({ role: 'beheerder' })).filter((module) => module.status === 'actief'));
   assert.deepStrictEqual([...shown].sort(), [...expected].sort());
-  assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'verkoop').items), ['offertes', 'webshop-bestellingen', 'klantdossier', 'facturen']);
+  assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'verkoop').items), ['offertes', 'webshop-bestellingen', 'klanten', 'klantdossier', 'facturen']);
   assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'planner').items), ['beregening', 'plannen', 'planning', 'werkorders', 'meldingen', 'uitbesteden']);
   assert.strictEqual(sections[0].items[0].id, '', 'Overzicht staat bovenaan');
 });
@@ -65,11 +65,11 @@ test('uitgezette modules verdwijnen en lege groepen bestaan niet', () => {
 });
 
 test('geplande modules en onbekende groepen: niets in een lege groep, losse link voor beheer', () => {
-  const planned = { id: 'klanten', navGroup: 'verkoop', title: 'Klanten', icon: 'user', status: 'gepland' };
+  const planned = { id: 'inkooporders', navGroup: 'verkoop', title: 'Inkooporders', icon: 'user', status: 'gepland' };
   const active = MODULES.filter((module) => module.status === 'actief');
   // sidebar.js filtert op status; een geplande module komt dus niet in de groepen.
   const sections = tools.navSections([planned, ...active].filter((module) => module.status === 'actief'));
-  assert.ok(!sections.flatMap((section) => idsOf(section.items)).includes('klanten'));
+  assert.ok(!sections.flatMap((section) => idsOf(section.items)).includes('inkooporders'));
   // Een module met een onbekende groep verdwijnt niet maar staat los vóór Beheer.
   const stray = { id: 'nieuw', navGroup: 'bestaat-niet', title: 'Nieuw', icon: 'box', status: 'actief', href: 'nieuw/' };
   const keys = tools.navSections([...active, stray]).map((section) => section.key);

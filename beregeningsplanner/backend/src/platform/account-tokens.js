@@ -38,9 +38,10 @@ function createAccountTokens(db) {
    * @param {string} userId Id van het account.
    * @param {'wachtwoord'|'e-mail'} purpose Soort link.
    * @param {string} email Het e-mailadres waar de link heen gaat.
+   * @param {{ ttlMs?: number }} [options] ttlMs: eigen geldigheid (bijvoorbeeld zeven dagen voor een uitnodiging).
    * @returns {{ token: string, expiresAt: string }|{ limited: true }} Het token (alleen voor de mail), of limited als er dit uur al te veel zijn verstuurd.
    */
-  function issue(tenantId, userId, purpose, email) {
+  function issue(tenantId, userId, purpose, email, { ttlMs = TTL_MS[purpose] } = {}) {
     return transaction(db, () => {
       const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       const recent = prepare('SELECT COUNT(*) AS n FROM account_tokens WHERE tenant_id = ? AND user_id = ? AND purpose = ? AND created_at > ?')
@@ -49,7 +50,7 @@ function createAccountTokens(db) {
       const now = new Date();
       prepare('UPDATE account_tokens SET used_at = ? WHERE tenant_id = ? AND user_id = ? AND purpose = ? AND used_at IS NULL').run(now.toISOString(), tenantId, userId, purpose);
       const token = crypto.randomBytes(32).toString('base64url');
-      const expiresAt = new Date(now.getTime() + TTL_MS[purpose]).toISOString();
+      const expiresAt = new Date(now.getTime() + ttlMs).toISOString();
       prepare(`INSERT INTO account_tokens (id, tenant_id, user_id, purpose, token_hash, email, expires_at, used_at, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`).run(crypto.randomUUID(), tenantId, userId, purpose, sha256(token), String(email || '').slice(0, 200), expiresAt, now.toISOString());
       return { token, expiresAt };

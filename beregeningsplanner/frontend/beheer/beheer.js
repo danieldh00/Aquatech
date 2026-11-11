@@ -402,8 +402,16 @@
     const select = $('#u-form').role;
     const current = select.value || 'installateur';
     select.innerHTML = roleOptions(current);
-    $('#u-roles').innerHTML = roles.map((role) => `<b>${esc(role.label)}</b>: ${esc(role.description || 'geen omschrijving')}`).join(' ')
-      + ' Rechten per rol pas je aan onder <a href="#roles" data-goto="roles">Rollen</a>.';
+    $('#u-roles').innerHTML = `<ul>${roles.map((role) => `<li><b>${esc(role.label)}</b>: ${esc(role.description || 'geen omschrijving')}</li>`).join('')}</ul>`
+      + '<p>Rechten per rol pas je aan onder <a href="#roles" data-goto="roles">Rollen</a>.</p>';
+    /** Toont de omschrijving van de gekozen rol onder de keuzelijst. */
+    const showRoleHint = () => {
+      const role = roleOf(select.value);
+      const text = role && role.description ? role.description : '';
+      $('#u-role-hint').textContent = text.length > 80 ? `${text.slice(0, 77).trim()}…` : text;
+    };
+    select.onchange = showRoleHint;
+    showRoleHint();
     const rolesLink = $('#u-roles [data-goto]');
     if (rolesLink) {
       /**
@@ -414,29 +422,12 @@
     }
   }
 
-  /**
-   * De cel Klantgroep van een klant: keuze particulier/zakelijk, een open aanvraag met knoppen om goed te keuren of af te wijzen, en de bedrijfsgegevens.
-   * @param {object} user de klant (customerGroup, businessRequest, companyName, kvkNumber, vatNumber, wholesale, wholesaleDiscount)
-   * @returns {string} HTML van de cel
-   */
-  function businessCell(user) {
-    const id = esc(user.id);
-    const select = `<select data-group="${id}" aria-label="Klantgroep"><option value="">Particulier</option><option value="zakelijk"${user.customerGroup === 'zakelijk' ? ' selected' : ''}>Zakelijk</option></select>`;
-    const request = user.businessRequest === 'aangevraagd'
-      ? `<div><span class="pill">Aanvraag zakelijk</span> <button class="btn small" data-biz-approve="${id}">Goedkeuren</button> <button class="btn small" data-biz-reject="${id}">Afwijzen</button></div>` : '';
-    const details = [user.companyName, user.kvkNumber && `KvK ${user.kvkNumber}`, user.vatNumber && `btw ${user.vatNumber}`].filter(Boolean).map(esc).join(' · ');
-    // Een groothandelsklant (alleen zakelijk) krijgt in de webshop het groothandelsvenster, staffelkorting en eventueel een vaste korting.
-    const wholesale = user.customerGroup === 'zakelijk'
-      ? `<div><label title="Toegang tot het groothandelsvenster in de webshop: snelbestellijst, staffelprijzen en bestellen op artikelcode"><input type="checkbox" data-wholesale="${id}"${user.wholesale ? ' checked' : ''}> Groothandel</label>${user.wholesale ? ` <label title="Vaste korting op alle artikelen; bij een staffelkorting geldt de hoogste van de twee">korting <input type="number" class="narrow" min="0" max="50" step="0.5" value="${esc(String(user.wholesaleDiscount || 0))}" data-wholesale-discount="${id}" aria-label="Vaste groothandelskorting in procenten"> %</label>` : ''}</div>` : '';
-    return `${select}${request}${wholesale}${details ? `<div><small>${details}</small></div>` : ''}<button class="btn small" data-biz-edit="${id}">Bedrijfsgegevens</button>`;
-  }
-
   /** Tekent de gebruikerstabel met de knoppen per gebruiker. */
   function renderUsers() {
     const showGuests = $('#u-guests').checked;
     const items = state.users.filter((user) => showGuests || user.kind !== 'gast');
     const table = $('#u-table');
-    table.innerHTML = `<thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Soort</th><th>Rol</th><th class="num">Plannen</th><th class="num">Aanvragen</th><th>Laatst actief</th><th class="num">Sessies</th><th title="Zakelijke klanten zien in de webshop de zakelijke prijs excl. btw en kunnen btw verlegd krijgen">Klantgroep</th><th title="De gebruiker moet bij de volgende aanmelding zelf een nieuw wachtwoord kiezen">Nieuw ww. verplicht</th><th></th></tr></thead><tbody>${items.map((user) => {
+    table.innerHTML = `<thead><tr><th>Naam</th><th>Gebruikersnaam</th><th>Soort</th><th>Rol</th><th class="num">Plannen</th><th class="num">Aanvragen</th><th>Laatst actief</th><th class="num">Sessies</th><th title="De gebruiker moet bij de volgende aanmelding zelf een nieuw wachtwoord kiezen">Nieuw ww. verplicht</th><th></th></tr></thead><tbody>${items.map((user) => {
       const editable = user.kind === 'account';
       return `<tr class="${user.disabled ? 'off' : ''}">
         <td>${esc(user.displayName)}${user.disabled ? ' <span class="pill">uitgeschakeld</span>' : ''}</td>
@@ -447,10 +438,9 @@
         <td class="num">${user.historyCount}</td>
         <td>${esc(when(user.lastSeenAt))}</td>
         <td class="num">${user.sessionCount || 0}</td>
-        <td>${editable && roleOf(user.role) && roleOf(user.role).kind === 'klant' ? businessCell(user) : ''}</td>
         <td>${editable ? `<input type="checkbox" data-mustchange="${esc(user.id)}"${user.mustChangePassword ? ' checked' : ''} aria-label="Wachtwoord wijzigen bij volgende aanmelding">` : ''}</td>
         <td>${user.sessionCount ? `<button class="btn small" data-logout="${esc(user.id)}">Uitloggen</button> ` : ''}${user.twoFactor ? `<button class="btn small" data-totp="${esc(user.id)}" title="Tweestapsverificatie staat aan">2FA uitzetten</button> ` : ''}${editable ? `<button class="btn small" data-pw="${esc(user.id)}">Wachtwoord</button> <button class="btn small" data-toggle="${esc(user.id)}">${user.disabled ? 'Inschakelen' : 'Uitschakelen'}</button>` : ''}
-          ${user.historyCount ? `<button class="btn small" data-hist="${esc(user.id)}">Aanvragen</button>` : ''}
+          ${editable && roleOf(user.role) && roleOf(user.role).kind === 'klant' ? `<a class="btn small" href="../klanten/?id=${encodeURIComponent(user.id)}" title="Klantgroep, bedrijfsgegevens en groothandel staan op de klantkaart">Klantkaart</a> ` : ''}${user.historyCount ? `<button class="btn small" data-hist="${esc(user.id)}">Aanvragen</button>` : ''}
           ${user.kind !== 'systeem' && user.id !== state.meId ? `<button class="btn small danger" data-del="${esc(user.id)}">Verwijderen</button>` : ''}</td>
       </tr>`;
     }).join('')}</tbody>`;
@@ -487,54 +477,6 @@
         if (!password) return;
         const mustChangePassword = confirm('Moet de gebruiker na de eerste aanmelding met dit wachtwoord zelf een nieuw wachtwoord kiezen?\n\nOK = ja (aanbevolen), Annuleren = nee');
         patch(button.dataset.pw, { password, mustChangePassword }, 'Wachtwoord gewijzigd');
-      };
-    });
-    table.querySelectorAll('[data-group]').forEach((select) => {
-      /**
-       * Slaat de klantgroep (particulier of zakelijk) op.
-       * @returns {Promise<void>}
-       */
-      select.onchange = () => patch(select.dataset.group, { customerGroup: select.value }, select.value === 'zakelijk' ? 'Zakelijke klant: zakelijke prijzen excl. btw' : 'Particuliere klant');
-    });
-    table.querySelectorAll('[data-wholesale]').forEach((box) => {
-      /**
-       * Maakt de zakelijke klant groothandelsklant of haalt dat weer weg.
-       * @returns {Promise<void>}
-       */
-      box.onchange = () => patch(box.dataset.wholesale, { wholesale: box.checked }, box.checked ? 'Groothandelsklant: de klant ziet het groothandelsvenster' : 'Geen groothandelsklant meer');
-    });
-    table.querySelectorAll('[data-wholesale-discount]').forEach((input) => {
-      /**
-       * Slaat de vaste groothandelskorting (%) op.
-       * @returns {Promise<void>}
-       */
-      input.onchange = () => patch(input.dataset.wholesaleDiscount, { wholesaleDiscount: Number(input.value) || 0 }, 'Vaste korting opgeslagen');
-    });
-    table.querySelectorAll('[data-biz-approve]').forEach((button) => {
-      /**
-       * Keurt de aanvraag voor een zakelijk account goed.
-       * @returns {Promise<void>}
-       */
-      button.onclick = () => patch(button.dataset.bizApprove, { customerGroup: 'zakelijk' }, 'Zakelijk account goedgekeurd: prijzen excl. btw');
-    });
-    table.querySelectorAll('[data-biz-reject]').forEach((button) => {
-      /**
-       * Wijst de aanvraag voor een zakelijk account af (de klant blijft particulier).
-       * @returns {Promise<void>}
-       */
-      button.onclick = () => patch(button.dataset.bizReject, { customerGroup: '' }, 'Aanvraag afgewezen: de klant blijft particulier');
-    });
-    table.querySelectorAll('[data-biz-edit]').forEach((button) => {
-      const user = state.users.find((candidate) => candidate.id === button.dataset.bizEdit);
-      /** Vraagt bedrijfsnaam, KvK- en btw-nummer en slaat ze op. */
-      button.onclick = () => {
-        const companyName = prompt('Bedrijfsnaam', user.companyName);
-        if (companyName === null) return;
-        const kvkNumber = prompt('KvK-nummer (8 cijfers)', user.kvkNumber);
-        if (kvkNumber === null) return;
-        const vatNumber = prompt('Btw-nummer (optioneel, bijvoorbeeld NL123456789B01)', user.vatNumber);
-        if (vatNumber === null) return;
-        patch(user.id, { companyName, kvkNumber, vatNumber }, 'Bedrijfsgegevens opgeslagen');
       };
     });
     table.querySelectorAll('[data-mustchange]').forEach((checkbox) => {

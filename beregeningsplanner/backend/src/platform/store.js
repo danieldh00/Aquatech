@@ -27,7 +27,7 @@ const familyCache = new Map();
 // verzoek: sessie + gebruiker + tenant).
 const USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'password_hash', 'disabled', 'created_at',
   'last_seen_at', 'platform_admin', 'must_change_password', 'email', 'phone', 'preferences', 'customer_group',
-  'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount', 'email_verified_at'];
+  'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount', 'email_verified_at', 'address'];
 const TENANT_COLUMNS = ['id', 'slug', 'name', 'created_at', 'environment', 'parent_id', 'disabled', 'updated_at'];
 // Nergens SELECT *: een nieuwe (grote) kolom komt zo nooit ongemerkt mee.
 const USER_COLS = USER_COLUMNS.join(', ');
@@ -306,7 +306,7 @@ function createStore(db) {
   // ---------- Gebruikers ----------
   // Wat publicUser nodig heeft (zonder wachtwoord-hash en voorkeuren).
   const PUBLIC_USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'disabled', 'platform_admin',
-    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group', 'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount'].map((column) => `u.${column}`).join(', ');
+    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group', 'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount', 'address'].map((column) => `u.${column}`).join(', ');
 
   /**
    * Een gebruiker zoals de API hem toont (zonder wachtwoord-hash en voorkeuren).
@@ -318,7 +318,7 @@ function createStore(db) {
     return { id: user.id, tenantId: user.tenant_id, username: user.username, displayName: user.display_name, role: user.role, kind: user.kind,
       roleLabel: user.platform_admin ? 'Hoofdbeheerder' : roles.label(user.tenant_id, user.role),
       disabled: Boolean(user.disabled), platformAdmin: Boolean(user.platform_admin), mustChangePassword: Boolean(user.must_change_password), createdAt: user.created_at, lastSeenAt: user.last_seen_at,
-      email: user.email || '', phone: user.phone || '', customerGroup: user.customer_group || '',
+      email: user.email || '', phone: user.phone || '', address: user.address || '', customerGroup: user.customer_group || '',
       companyName: user.company_name || '', kvkNumber: user.kvk_number || '', vatNumber: user.vat_number || '', businessRequest: user.business_request || '',
       wholesale: Boolean(Number(user.wholesale)), wholesaleDiscount: Number(user.wholesale_discount) || 0 };
   }
@@ -472,6 +472,33 @@ function createStore(db) {
   }
 
   /**
+   * Maakt een klant aan zonder inlog (geen wachtwoord): een beheerder of installateur legt een klant vast voor offertes,
+   * werkorders en facturen. De klant kan later worden uitgenodigd om een wachtwoord te kiezen.
+   * @param {string} tenantId De tenant.
+   * @param {{ displayName: string, email?: string, phone?: string, address?: string, business?: object|null }} input Gesaneerde gegevens; met `business` ({ companyName, kvkNumber, vatNumber }) wordt de klant zakelijk.
+   * @returns {{ user: object }|{ error: string }} De klant of een foutmelding.
+   */
+  function createCustomer(tenantId, input) {
+    const displayName = String(input.displayName || '').replace(/\s+/g, ' ').trim();
+    if (!displayName) return { error: 'Vul de naam van de klant in.' };
+    if (displayName.length > 80) return { error: 'Naam is te lang.' };
+    const klantRoles = roles.keysOfKind(tenantId, 'klant');
+    const role = klantRoles.includes('klant') ? 'klant' : klantRoles[0];
+    if (!role) return { error: 'Er is geen rol van het soort klant. Maak die eerst aan onder Rollen.' };
+    const email = String(input.email || '').trim().toLowerCase();
+    const emailName = /^[a-z0-9][a-z0-9._-]{2,39}$/.test(email) ? email : '';
+    let username = emailName;
+    while (!username || usernameTaken(tenantId, username)) username = `klant-${crypto.randomBytes(4).toString('hex')}`;
+    return transaction(db, () => {
+      const user = insertUser(tenantId, { username, displayName, role, kind: 'account' });
+      prepare("UPDATE users SET customer_group = ?, business_request = '' WHERE tenant_id = ? AND id = ?").run(input.business ? 'zakelijk' : '', tenantId, user.id);
+      if (input.business) saveBusinessProfile(tenantId, user.id, input.business);
+      saveContact(tenantId, user.id, { email, phone: input.phone || '', address: input.address || '' });
+      return { user: getUser(user.id) };
+    });
+  }
+
+  /**
    * Zoekt het actieve account met dit e-mailadres in een tenant (alleen eigen accounts, geen gasten).
    * @param {string} tenantId De tenant.
    * @param {string} email Het e-mailadres.
@@ -577,6 +604,21 @@ function createStore(db) {
   }
 
   /**
+   * Bewaart de contactgegevens van een klant (al gesaneerd door de aanroeper). Een ander e-mailadres is niet meer bevestigd.
+   * @param {string} tenantId De tenant.
+   * @param {string} id Id van de gebruiker.
+   * @param {{ email?: string, phone?: string, address?: string }} contact De velden die veranderen.
+   * @returns {void}
+   */
+  function saveContact(tenantId, id, contact) {
+    const current = prepare('SELECT email, phone, address FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+    if (!current) return;
+    const next = { email: current.email || '', phone: current.phone || '', address: current.address || '', ...contact };
+    prepare('UPDATE users SET email = ?, phone = ?, address = ? WHERE tenant_id = ? AND id = ?').run(next.email, next.phone, next.address, tenantId, String(id));
+    if (next.email !== (current.email || '')) prepare('UPDATE users SET email_verified_at = NULL WHERE tenant_id = ? AND id = ?').run(tenantId, String(id));
+  }
+
+  /**
    * Wijzigt een account. De laatste actieve beheerder en hoofdbeheerder blijven
    * dat; een nieuw wachtwoord of uitschakelen logt overal uit.
    * @param {string} tenantId De tenant.
@@ -631,6 +673,7 @@ function createStore(db) {
     if (input.wholesaleDiscount !== undefined) prepare('UPDATE users SET wholesale_discount = ? WHERE tenant_id = ? AND id = ?').run(input.wholesaleDiscount, tenantId, user.id);
     if (input.customerGroup === '') prepare('UPDATE users SET wholesale = 0, wholesale_discount = 0 WHERE tenant_id = ? AND id = ?').run(tenantId, user.id);
     if (input.business !== undefined) saveBusinessProfile(tenantId, user.id, input.business);
+    if (input.contact !== undefined) saveContact(tenantId, user.id, input.contact);
     const newHash = input.password !== undefined ? await hashPassword(input.password) : null;
     if (newHash) prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
     // Nieuw wachtwoord of uitgeschakeld: op alle toestellen uitgelogd.
@@ -1097,9 +1140,9 @@ function createStore(db) {
       clearData(tenantId);
       const users = {};
       for (const account of accounts) {
-        users[account.key] = insertUser(tenantId, { username: account.username, displayName: account.displayName, role: account.role, kind: 'account', passwordHash });
-        prepare('UPDATE users SET email = ?, phone = ?, preferences = ? WHERE id = ?')
-          .run(account.email || '', account.phone || '', JSON.stringify(cleanPreferences(account.preferences)), users[account.key].id);
+        users[account.key] = insertUser(tenantId, { username: account.username, displayName: account.displayName, role: account.role, kind: 'account', passwordHash: account.noLogin ? null : passwordHash });
+        prepare('UPDATE users SET email = ?, phone = ?, address = ?, preferences = ? WHERE tenant_id = ? AND id = ?')
+          .run(account.email || '', account.phone || '', account.address || '', JSON.stringify(cleanPreferences(account.preferences)), tenantId, users[account.key].id);
         Object.assign(users[account.key], { email: account.email || '', phone: account.phone || '' });
       }
       const planIds = {};
@@ -1454,6 +1497,53 @@ function createStore(db) {
     return prepare(`SELECT id, username, display_name FROM users WHERE tenant_id IN (${ids.map(() => '?').join(', ')})
       AND kind = 'account' AND role IN (${keys.map(() => '?').join(', ')}) AND disabled = 0 ORDER BY CASE tenant_id ${order} END, lower(display_name)`)
       .all(...ids, ...keys, ...ids).map((user) => ({ id: user.id, username: user.username, displayName: user.display_name }));
+  }
+
+  /**
+   * Eén pagina met klanten voor de Klanten-pagina: zoeken over naam, bedrijf, e-mail, telefoon, adres en gebruikersnaam,
+   * eventueel op groep, in twee queries (de pagina en het totaal).
+   * @param {string[]} tenantIds De tenants (live-tenant en eventueel de testomgeving).
+   * @param {{ search?: string, group?: string, limit?: number, offset?: number }} [options] group: particulier | zakelijk | groothandel | aanvraag.
+   * @returns {{ items: object[], total: number }} De klanten (met `hasLogin`) en het totaal aantal bij dit filter.
+   */
+  function listCustomerPage(tenantIds, { search = '', group = '', limit = 50, offset = 0 } = {}) {
+    const ids = [...new Set(tenantIds.map(String))];
+    const keys = roles.keysOfKind(ids[0], 'klant');
+    if (!keys.length) return { items: [], total: 0 };
+    const where = ["u.kind = 'account'", `u.role IN (${keys.map(() => '?').join(', ')})`];
+    const args = [...keys];
+    const filters = { particulier: "u.customer_group = ''", zakelijk: "u.customer_group = 'zakelijk'", groothandel: 'u.wholesale = 1', aanvraag: "u.business_request = 'aangevraagd'" };
+    if (filters[group]) where.push(filters[group]);
+    const words = String(search || '').trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5);
+    for (const word of words) {
+      const pattern = `%${word.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+      where.push(`(${['u.display_name', 'u.company_name', 'u.email', 'u.phone', 'u.address', 'u.username'].map((column) => `lower(${column}) LIKE ? ESCAPE '\\'`).join(' OR ')})`);
+      args.push(...Array(6).fill(pattern));
+    }
+    const clause = where.join(' AND ');
+    const tenantPlaceholders = ids.map(() => '?').join(', ');
+    const total = Number(prepare(`SELECT COUNT(*) AS n FROM users u WHERE u.tenant_id IN (${tenantPlaceholders}) AND ${clause}`).get(...ids, ...args).n);
+    const items = prepare(`SELECT ${PUBLIC_USER_COLUMNS}, CASE WHEN u.password_hash IS NULL THEN 0 ELSE 1 END AS has_login
+      FROM users u WHERE u.tenant_id IN (${tenantPlaceholders}) AND ${clause} ORDER BY lower(u.display_name), u.id LIMIT ? OFFSET ?`)
+      .all(...ids, ...args, Math.min(200, Math.max(1, Number(limit) || 50)), Math.max(0, Number(offset) || 0))
+      .map((row) => ({ ...publicUser(row), hasLogin: Boolean(Number(row.has_login)) }));
+    return { items, total };
+  }
+
+  /**
+   * Eén klant met zijn gegevens, binnen de opgegeven tenants.
+   * @param {string[]} tenantIds De tenants waarin de klant mag wonen.
+   * @param {string} id Id van de klant.
+   * @returns {object|null} De klant (met `hasLogin`), of null als het geen klant van deze tenants is.
+   */
+  function getCustomer(tenantIds, id) {
+    const ids = [...new Set(tenantIds.map(String))];
+    const keys = roles.keysOfKind(ids[0], 'klant');
+    if (!keys.length) return null;
+    const row = prepare(`SELECT ${PUBLIC_USER_COLUMNS}, CASE WHEN u.password_hash IS NULL THEN 0 ELSE 1 END AS has_login, u.email_verified_at
+      FROM users u WHERE u.id = ? AND u.tenant_id IN (${ids.map(() => '?').join(', ')}) AND u.kind = 'account' AND u.role IN (${keys.map(() => '?').join(', ')})`)
+      .get(String(id), ...ids, ...keys);
+    return row ? { ...publicUser(row), hasLogin: Boolean(Number(row.has_login)), emailVerified: Boolean(row.email_verified_at) } : null;
   }
 
   // ---------- Historie ----------
@@ -1849,7 +1939,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, familyIds, systemUser, createGuest, createAccount, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, markEmailVerified, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, familyIds, systemUser, createGuest, createAccount, createCustomer, listCustomerPage, getCustomer, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, markEmailVerified, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
     createSession, findSessionWithUser, prefetchSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
     planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing, pendingDrawingChars, purgeStaleDrawings,

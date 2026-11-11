@@ -191,6 +191,8 @@ const ACCOUNTS = [
   // Zakelijke klanten voor de webshop: een goedgekeurde (prijzen excl. btw) en een die nog wacht op goedkeuring.
   { key: 'klant5', suffix: 'klant5', displayName: 'Hoveniersbedrijf Hoekstra (test)', role: 'klant' },
   { key: 'klant6', suffix: 'klant6', displayName: 'Tuincentrum De Linde (test)', role: 'klant' },
+  // Klant zonder inlog (alleen in de klantenlijst, voor offertes en facturen).
+  { key: 'klant7', suffix: 'klant7', displayName: 'Fam. Smit (test, zonder inlog)', role: 'klant', noLogin: true },
 ];
 
 /** Bedrijfsgegevens van de zakelijke testklanten; `request` = de aanvraag staat nog open; `wholesale` = groothandelsklant met een vaste korting in procenten. */
@@ -232,6 +234,7 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
     username: `${prefix}.${account.suffix}`,
     email: `${prefix}.${account.suffix}@voorbeeld.test`,
     phone: `06 0000 ${String(1000 + i * 111).slice(-4)}`,
+    address: CUSTOMERS[account.key] ? CUSTOMERS[account.key].address : account.key === 'klant7' ? 'Tuinstraat 3\n8071 AB Nunspeet' : '',
     preferences: account.key === 'beheerder' ? { startPage: 'planning', mailCopy: true } : account.key === 'planner' ? { startPage: 'planning' } : account.key === 'klant1' ? { startPage: 'portaal' } : {},
   }));
   /**

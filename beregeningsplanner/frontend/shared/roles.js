@@ -42,6 +42,7 @@
     'plannen.goedkeuren': { label: 'Plannen goedkeuren', description: 'Plannen controleren en goedkeuren; een plan van een klant is pas definitief na goedkeuring.', kind: ['medewerker'], needs: ['plannen.alle'] },
     offertes: { label: 'Offertes opstellen', description: 'Offertes maken, bewerken en naar de klant sturen.', kind: ['medewerker'] },
     'offertes.alle': { label: 'Alle offertes', description: 'De offertes van de hele organisatie, niet alleen de eigen.', kind: ['medewerker'], needs: ['offertes'] },
+    klanten: { label: 'Klanten', description: 'De klantenlijst: klanten zoeken, aanmaken, hun gegevens wijzigen en hun offertes, werkorders en facturen zien.', kind: ['medewerker'] },
     werkorders: { label: 'Werkorders en klantdossiers', description: 'Werkorders inzien en bijwerken, foto\'s toevoegen, klantdossiers bekijken en het blok Vandaag.', kind: ['medewerker'] },
     planning: { label: 'Planning', description: 'Werkorders inplannen in de agenda en de afspraaklink naar de klant sturen.', kind: ['medewerker'], needs: ['werkorders'] },
     uitvoerder: { label: 'Uitvoerder', description: 'Kan als uitvoerder aan een werkorder worden toegewezen en staat als kolom in de planning.', kind: ['medewerker'], needs: ['werkorders'] },
@@ -63,13 +64,13 @@
       kind: 'medewerker',
       locked: true,
       description: 'Alles binnen de organisatie: gebruikers, rollen, instellingen, historie, alle plannen, offertes en werkorders, en opdrachten uitbesteden.',
-      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder', 'nieuws', 'voorraad', 'nacalculatie', 'facturen', 'uitbesteden', 'beheer'],
+      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'klanten', 'werkorders', 'planning', 'uitvoerder', 'nieuws', 'voorraad', 'nacalculatie', 'facturen', 'uitbesteden', 'beheer'],
     },
     installateur: {
       label: 'Installateur',
       kind: 'medewerker',
       description: 'Plannen maken en bewerken, offertes opstellen, werkorders uitvoeren en de voorraad bijhouden; geen gebruikers of instellingen.',
-      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'werkorders', 'planning', 'uitvoerder', 'voorraad'],
+      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'klanten', 'werkorders', 'planning', 'uitvoerder', 'voorraad'],
     },
     planner: {
       label: 'Planner',

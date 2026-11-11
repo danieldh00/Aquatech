@@ -13,6 +13,7 @@ webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als databas
 | Werkorders, Planning | Werkorders uit een offerte of melding, agenda, afspraaklink voor de klant, uren en materiaal, foto's, nacalculatie. |
 | Artikelen | Artikelen met varianten en afbeeldingen, voorraad met FIFO-kostprijs, bestelvoorstel, koppeling met WooCommerce. |
 | Webshopbestellingen | Bestellingen, betalingen, terugbetalen, retouren en de margerapportage. |
+| Klanten | Klantenlijst met zoeken en Excel-export, klant aanmaken (adres via postcode, met of zonder inlog, op verzoek een uitnodiging) en een klantkaart met offertes, werkorders en facturen. |
 | Meldingen, Klantportaal, Klantdossier | Storingen en onderhoud melden, opleverdossier en installatiedossier per locatie. |
 | Uitbesteden, Nieuws, Profiel | Werk tussen organisaties, berichten en versielogboek, eigen voorkeuren en tweestapsverificatie. |
 | Beheer, Hoofdbeheer | Instellingen, gebruikers en rollen, back-ups, testomgevingen; platform: organisaties, hoofdbeheerders, multitenancy. Kleuren en de Visma-koppeling zijn per organisatie. |

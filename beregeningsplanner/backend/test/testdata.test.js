@@ -48,7 +48,7 @@ const { createClient, listen } = require('./helpers/http-client');
 
 test('testdata: tuinen met zones, offertes met regels en geldige gebruikersnamen', () => {
   const set = buildTestData({ slug: 'groen-test', profile: { hourlyRate: 55, vatRate: 21, validDays: 30 }, today: new Date('2026-10-18T12:00:00Z') });
-  assert.deepStrictEqual(set.accounts.map((account) => account.role).sort(), ['beheerder', 'installateur', 'installateur', 'klant', 'klant', 'klant', 'klant', 'klant', 'klant', 'planner']);
+  assert.deepStrictEqual(set.accounts.map((account) => account.role).sort(), ['beheerder', 'installateur', 'installateur', 'klant', 'klant', 'klant', 'klant', 'klant', 'klant', 'klant', 'planner']);
   for (const account of set.accounts) assert.match(account.username, /^groen-test\.[a-z0-9]+$/);
   assert.ok(set.plans.length >= 6);
   for (const plan of set.plans) {
@@ -89,7 +89,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     const out = await baas.post(`/app/api/platform/tenants/${env.id}/testdata`);
     assert.strictEqual(out.status, 201);
     const { password, accounts, counts } = out.body;
-    assert.strictEqual(accounts.length, 10);
+    assert.strictEqual(accounts.length, 11);
     assert.ok(counts.plans >= 6 && counts.quotes === 6);
     /**
      * Volledige gebruikersnaam van een testaccount.
@@ -144,7 +144,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.ok((await inst.get('/app/api/plans?all=1')).body.items.filter((plan) => quoted.has(plan.id)).every((plan) => plan.review.status === 'goedgekeurd'));
     assert.strictEqual((await inst.get('/app/api/quotes?all=1')).body.items.length, 6);
     const customers = (await inst.get('/app/api/quote-customers')).body.items;
-    assert.strictEqual(customers.length, 6, 'de testklanten om een offerte aan te koppelen');
+    assert.strictEqual(customers.length, 7, 'de testklanten om een offerte aan te koppelen');
 
     // De testbeheerder beheert alleen de testaccounts, nooit live.
     const bea = createClient(base);
@@ -153,7 +153,7 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     // Plus de gast die zonder account een tekening indiende.
     assert.deepStrictEqual(all.filter((user) => user.kind === 'gast').map((user) => user.displayName), ['Mark Jansen']);
     const users = all.filter((user) => user.kind !== 'gast').map((user) => user.username);
-    assert.strictEqual(users.length, 10);
+    assert.strictEqual(users.length, 11);
     assert.ok(!users.includes('piet'));
     // Rollen gelden voor de hele organisatie: een testaccount kan ze niet wijzigen.
     assert.strictEqual((await bea.get('/app/api/admin/roles')).body.editable, false);
@@ -167,8 +167,8 @@ test('testomgeving vullen: testaccounts per rol, alleen in test, opnieuw vullen 
     assert.deepStrictEqual((await piet.get('/app/api/admin/plans')).body.items, []);
     const list = (await baas.get('/app/api/platform/tenants')).body.items.find((x) => x.id === tenant.id);
     assert.strictEqual(list.userCount, 1);
-    assert.strictEqual(list.environments[0].userCount, 10);
-    assert.strictEqual((await baas.get(`/app/api/platform/tenants/${env.id}/users`)).body.items.length, 10);
+    assert.strictEqual(list.environments[0].userCount, 11);
+    assert.strictEqual((await baas.get(`/app/api/platform/tenants/${env.id}/users`)).body.items.length, 11);
 
     // Opnieuw vullen: zelfde gebruikersnamen, nieuw wachtwoord, oude sessies weg.
     const again = await baas.post(`/app/api/platform/tenants/${env.id}/testdata`);

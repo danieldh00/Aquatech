@@ -917,6 +917,10 @@ const PG_MIGRATIONS = [
   `
   CREATE INDEX visma_log_last ON visma_log (tenant_id, last_at);
   `,
+  // 54: adres van een klant (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN address ${TEXT_TYPE} NOT NULL DEFAULT '';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

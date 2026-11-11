@@ -16,6 +16,7 @@ const { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest } = 
 const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
 const backups = require('./backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody } = require('./verkoop/quotes');
+const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
 const { createMailer } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
 const { createAddressLookup, createAddressGuard, registerAddressRoute } = require('./platform/address-lookup');
@@ -1061,6 +1062,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const FORBIDDEN = {
     beheer: 'Alleen voor beheerders.',
     offertes: 'Alleen voor beheerders en installateurs.',
+    klanten: 'Alleen voor medewerkers met toegang tot de klanten.',
     'offertes.alle': 'Alleen voor beheerders en installateurs.',
     'plannen.alle': 'Alleen voor beheerders en installateurs.',
     werkorders: 'Alleen voor medewerkers met toegang tot werkorders.',
@@ -1990,6 +1992,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   // ---------- Offertes (module Offertes, zie quotes.js) ----------
+  // ---------- Klanten (module Klanten, zie customers.js) ----------
+  registerCustomerRoutes(app, {
+    store, customers: createCustomerStore(database), requireRight, requireJson, audit, addressGuard,
+    can: (user, right) => Roles.can(user, right),
+    // Klanten horen bij de live-tenant; in een testomgeving komen de testklanten daarvan erbij (zoals customersOf).
+    tenantsOf: (req) => {
+      const tenantId = req.tenantId || tenant.id;
+      const home = homeOf(tenantId);
+      return home === tenantId ? [tenantId] : [home, tenantId];
+    },
+    // De uitnodiging gebruikt de wachtwoordlink van de webshop; shopAccounts wordt pas hieronder gemaakt.
+    inviteReady: (customer) => shopAccounts.inviteProblem(customer),
+    invite: (customer) => shopAccounts.invite(customer),
+  });
+
   registerQuoteRoutes(app, {
     quotes: quoteStore, identify, requireUser, requireAdmin, requireRight, requireJson, audit,
     // Een offerte uit een plan alleen als dat plan is goedgekeurd.

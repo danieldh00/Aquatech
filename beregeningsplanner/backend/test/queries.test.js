@@ -137,6 +137,17 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     assert.strictEqual((await client.get('/app/api/admin/ai-usage/requests')).status, 200);
     assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
 
+    // Klanten: de lijst kost een vast aantal queries (de pagina en het totaal), hoeveel klanten er ook zijn; de klantkaart ook.
+    for (let index = 0; index < 30; index += 1) store.createCustomer(store.ensureTenant().id, { displayName: `Klant ${index}`, email: `k${index}@voorbeeld.nl` });
+    probe.reset();
+    const customerPage = (await client.get('/app/api/customers?limit=50')).body;
+    assert.strictEqual(customerPage.items.length, 30);
+    assert.ok(probe.stats.queries <= 4, probe.stats.sql.join('\n'));
+    assert.ok(!probe.stats.sql.some((sql) => /SELECT \*|u\.\*/.test(sql)));
+    probe.reset();
+    assert.strictEqual((await client.get(`/app/api/customers/${customerPage.items[0].id}`)).status, 200);
+    assert.ok(probe.stats.queries <= 6, probe.stats.sql.join('\n'));
+
     // Voorraad: overzicht in één query (stand + reserveringen samen), een
     // artikel in vier (artikel, reserveringen, mutaties, prijshistorie + voorraadlagen samen),
     // ongeacht het aantal artikelen en mutaties.
