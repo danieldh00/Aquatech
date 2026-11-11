@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.10.2
+
+Documenttaal per klant (punt 13 van bundel A): offertes, facturen en de mails daarover in het Nederlands of het Engels. Migratie 58 (`users.document_language`, standaard `nl`).
+
+- **Klantkaart**: veld *Documenttaal* (Nederlands of English), ook bij `POST`/`PATCH /api/customers` (recht `klanten`, audit `documenttaal`). `GET /api/quote-customers` geeft `documentLanguage` mee.
+- **Offerte**: `data.language` (`nl`|`en`, `QuoteCore.sanitize`), keuzelijst *Documenttaal* in de editor; een klantkeuze vult de taal van de klant in. Afdruk/PDF, klantweergave en de openbare offertepagina (statusbalk, akkoordformulier, datums en bedragen in de landnotatie) staan in die taal, evenals het conceptbericht bij het versturen en de bevestigingsmail na het akkoord. De mails aan het bedrijf zelf blijven Nederlands.
+- **Factuur**: `data.language` komt van de offerte (en blijft bij een creditfactuur); de factuur-PDF (tabelkoppen, totalen, datums, bedragen, paginanummers, bestandsnaam) en het mailconcept staan in die taal. Bij een Engels document gebruikt de betaaltekst de Engelse standaardtekst en het mailconcept de Engelse standaardtekst (de ingestelde teksten in Facturen > Instellingen zijn Nederlands).
+- Vertaalteksten staan in `shared/doc-text.js` (`DocText`, gedeeld door browser en server; test bewaakt dat beide talen dezelfde sleutels en invulvelden hebben).
+- Bewust niet: webshopfacturen en facturen zonder offerte blijven Nederlands; het schermbeheer (editor, lijsten) blijft Nederlands.
+- Tests: `document-language.test.js` (vertaaltabel, weergave, akkoord, klantkaart met rechten en organisaties, factuur-PDF en -mail).
+
 ## 1.10.1
 
 AI-koppeling: een concept-offerte maken vanuit Claude of ChatGPT (punt 28). Migratie 57 (`oauth_grants`).
