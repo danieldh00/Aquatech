@@ -12,6 +12,7 @@ Multitenancy-schakelaar (Hoofdbeheer > Multitenancy), standaard uit.
   de module Uitbesteden staat uit in `/api/config`. Testomgevingen van de hoofdtenant werken zoals eerder.
 - Hoofdbeheer: knop Multitenancy (`GET|PUT /api/platform/multitenancy`); het formulier voor nieuwe tenants is verborgen zolang het uit
   staat. Uitzetten terwijl er andere organisaties zijn vraagt `acknowledge: true`; hun gegevens blijven staan.
+- Een tenant buiten de hoofdtenant verwijderen kan alleen als multitenancy aan staat (alles op zo'n tenant geeft 409 `multitenancy_off`).
 - Tests: `test/multitenancy.test.js`; bestaande tests die meerdere organisaties gebruiken draaien met `MULTITENANCY=1`.
 
 ## 1.7.9

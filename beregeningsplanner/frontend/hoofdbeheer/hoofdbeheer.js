@@ -65,7 +65,7 @@
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw Object.assign(new Error(body.message || `HTTP ${res.status}`), { status: res.status });
+    if (!res.ok) throw Object.assign(new Error(body.message || `HTTP ${res.status}`), { status: res.status, code: body.error });
     return body;
   }
 
@@ -243,20 +243,39 @@
       <label class="chk"><input type="checkbox" id="mt-on"${data.enabled ? ' checked' : ''}> Multitenancy aan</label>
       <div class="row"><button class="btn primary" id="mt-save">Opslaan</button></div>
       <div class="err" role="alert" id="mt-err"></div>`);
+    const saveButton = $('#mt-save');
+    const checkbox = $('#mt-on');
     /**
      * Slaat de keuze op; bij organisaties die onbereikbaar worden eerst een bevestiging.
      * @returns {Promise<void>}
      */
-    $('#mt-save').onclick = async () => {
-      const enabled = $('#mt-on').checked;
+    saveButton.onclick = async () => {
+      const enabled = checkbox.checked;
       if (enabled === data.enabled) { closeModal(); return; }
-      if (!enabled && data.otherTenants && !confirm(`${data.otherTenants} andere organisatie(s) worden onbereikbaar. Doorgaan?`)) return;
+      let acknowledge = false;
+      if (!enabled && data.otherTenants) {
+        if (!confirm(`${data.otherTenants} andere organisatie(s) worden onbereikbaar. Doorgaan?`)) return;
+        acknowledge = true;
+      }
+      saveButton.disabled = true;
+      checkbox.disabled = true;
       try {
-        await api('platform/multitenancy', { method: 'PUT', body: { enabled, acknowledge: true } });
+        try {
+          await api('platform/multitenancy', { method: 'PUT', body: acknowledge ? { enabled, acknowledge } : { enabled } });
+        } catch (error) {
+          // Er is intussen een organisatie bijgekomen: de actuele telling opvragen en alsnog om bevestiging vragen.
+          if (error.code !== 'confirm_required') throw error;
+          data = await api('platform/multitenancy');
+          if (!confirm(`${data.otherTenants} andere organisatie(s) worden onbereikbaar. Doorgaan?`)) return;
+          await api('platform/multitenancy', { method: 'PUT', body: { enabled, acknowledge: true } });
+        }
         closeModal();
         toast(enabled ? 'Multitenancy staat aan' : 'Multitenancy staat uit');
         await load();
-      } catch (error) { $('#mt-err').textContent = error.message; }
+      } catch (error) { $('#mt-err').textContent = error.message; } finally {
+        saveButton.disabled = false;
+        checkbox.disabled = false;
+      }
     };
   }
 
