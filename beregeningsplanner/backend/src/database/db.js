@@ -1138,6 +1138,14 @@ const MIGRATIONS = [
   `
   CREATE INDEX visma_log_last ON visma_log (tenant_id, last_at);
   `,
+  // 54: adres van een klant (Klanten): het bij PDOK gecontroleerde adres als één regel, zoals in offertes en facturen.
+  `
+  ALTER TABLE users ADD COLUMN address TEXT NOT NULL DEFAULT '';
+  `,
+  // 55: index voor de facturen op de klantkaart (tenant_id = ? AND customer_id = ? ORDER BY invoice_date).
+  `
+  CREATE INDEX invoices_customer ON invoices (tenant_id, customer_id, invoice_date);
+  `,
 ];
 
 /**

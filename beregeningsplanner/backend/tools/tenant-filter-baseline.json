@@ -195,10 +195,6 @@
     },
     {
       "file": "platform/store.js",
-      "sql": "UPDATE users SET email = ?, phone = ?, preferences = ? WHERE id = ?"
-    },
-    {
-      "file": "platform/store.js",
       "sql": "UPDATE users SET email = ?, phone = ? WHERE id = ?"
     },
     {

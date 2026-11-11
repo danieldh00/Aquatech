@@ -84,6 +84,16 @@
       right: 'beheer',
     },
     {
+      id: 'klanten',
+      navGroup: 'verkoop',
+      title: 'Klanten',
+      description: 'De klantenlijst: zoeken, een klant aanmaken (adres via postcode), gegevens wijzigen en per klant de offertes, werkorders en facturen zien.',
+      href: 'klanten/',
+      icon: 'user',
+      status: 'actief',
+      right: 'klanten',
+    },
+    {
       id: 'klantdossier',
       navGroup: 'verkoop',
       title: 'Klantdossiers',

@@ -7,6 +7,7 @@ const { clientKey } = require('../beveiliging/auth');
 const { sanitizeBusinessProfile, wantsBusiness } = require('./business-profile');
 const { validEmail } = require('../platform/mailer');
 const { passwordProblem } = require('../platform/store');
+const { cleanPublicUrl } = require('./mollie');
 
 /** Mislukte inlogpogingen per gebruiker waarna de gebruiker tijdelijk is geblokkeerd. */
 const LOGIN_MAX_FAILURES = 10;
@@ -146,22 +147,25 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
    * @param {{ id: string, display_name?: string, displayName?: string, email: string }} user Het account.
    * @param {'wachtwoord'|'e-mail'} purpose Soort link.
    * @param {string} link Volledig adres van de pagina; het token komt erachter als #t=…
+   * @param {{ invitation?: boolean }} [options] invitation: uitnodiging van een medewerker (zeven dagen geldig, andere tekst).
    * @returns {Promise<boolean>} true als de mail is verstuurd.
    */
-  async function sendLink(user, purpose, link) {
+  async function sendLink(user, purpose, link, { invitation = false } = {}) {
     // Zonder webadres van de shop (Beheer > Betalen) geen link: die zou anders naar een adres uit het verzoek wijzen (W-07).
     if (!mailReady() || !validEmail(user.email) || !/^https?:\/\//.test(String(link))) return false;
-    const issued = tokens.issue(tenant.id, user.id, purpose, user.email);
+    const issued = tokens.issue(tenant.id, user.id, purpose, user.email, invitation ? { ttlMs: tokens.TTL_MS['e-mail'] } : {});
     if (issued.limited) return false;
     const settings = settingsFor(tenant.id);
     const profile = settings.get('quoteProfile') || {};
     const name = user.display_name || user.displayName || '';
     const url = `${link}#t=${issued.token}`;
-    const lines = purpose === 'wachtwoord'
+    const lines = invitation
+      ? [`Beste ${name},`, `${profile.companyName || 'We'} hebben een klantaccount voor je klaargezet. Kies een wachtwoord via deze link (hij werkt zeven dagen en één keer); daarna kun je inloggen in de webshop en het klantportaal:`, url, 'Verwacht je deze mail niet? Dan kun je hem negeren.']
+      : purpose === 'wachtwoord'
       ? [`Beste ${name},`, 'Je hebt gevraagd om een nieuw wachtwoord voor je account bij de webshop. Kies een nieuw wachtwoord via deze link (hij werkt één uur en één keer):', url, 'Heb je dit niet zelf gevraagd? Dan kun je deze mail negeren; je wachtwoord blijft zoals het is.']
       : [`Beste ${name},`, 'Bevestig je e-mailadres voor je account bij de webshop via deze link (hij werkt zeven dagen):', url, 'Heb je geen account aangemaakt? Dan kun je deze mail negeren.'];
     const body = mailBody(profile, lines);
-    await mailerFor(settings).send({ to: user.email, subject: purpose === 'wachtwoord' ? 'Nieuw wachtwoord kiezen' : 'Bevestig je e-mailadres', text: body.text, html: body.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+    await mailerFor(settings).send({ to: user.email, subject: invitation ? 'Je klantaccount staat klaar' : purpose === 'wachtwoord' ? 'Nieuw wachtwoord kiezen' : 'Bevestig je e-mailadres', text: body.text, html: body.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
     return true;
   }
 
@@ -279,7 +283,39 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
     return { ok: true };
   }
 
-  return { viewer, mustChangePassword, login, register, logout, businessProfile, requestBusiness, mailReady, sendVerification, forgotPassword, resetPassword, verifyEmail };
+  /**
+   * Waarom een klant (nog) niet uitgenodigd kan worden, of een lege tekst als het kan. De uitnodiging is de wachtwoordlink
+   * van de webshop: dat werkt alleen voor klanten van de hoofdtenant, met een ingestelde mailserver en een webadres van de shop.
+   * @param {{ tenantId: string }} customer De klant.
+   * @returns {string} De reden, of een lege tekst.
+   */
+  function inviteProblem(customer) {
+    if (customer.tenantId !== tenant.id) return 'Uitnodigen kan alleen voor klanten van de hoofdorganisatie (niet in een testomgeving).';
+    if (!mailReady()) return 'Stel eerst de mailserver in (Beheer > Instellingen > E-mail).';
+    return inviteBase() ? '' : 'Vul eerst het webadres van de webshop in (Beheer > Webshop > Betalen).';
+  }
+
+  /**
+   * Het webadres van de shop voor links in mails, uit Beheer (nooit uit het verzoek).
+   * @returns {string} Het webadres met slash, of een lege tekst.
+   */
+  function inviteBase() {
+    if (!settingsFor) return '';
+    const payment = settingsFor(tenant.id).get('shopPayment');
+    return cleanPublicUrl(payment && payment.publicUrl);
+  }
+
+  /**
+   * Stuurt een klant een uitnodiging om zelf een wachtwoord te kiezen (zeven dagen geldig).
+   * @param {{ id: string, displayName: string, email: string, tenantId: string }} customer De klant.
+   * @returns {Promise<boolean>} true als de mail is verstuurd.
+   */
+  async function invite(customer) {
+    if (inviteProblem(customer)) return false;
+    return sendLink({ id: customer.id, displayName: customer.displayName, email: customer.email }, 'wachtwoord', `${inviteBase()}wachtwoord-herstellen/`, { invitation: true });
+  }
+
+  return { inviteProblem, invite, viewer, mustChangePassword, login, register, logout, businessProfile, requestBusiness, mailReady, sendVerification, forgotPassword, resetPassword, verifyEmail };
 }
 
 module.exports = { createShopAccounts };

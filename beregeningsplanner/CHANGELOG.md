@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.9.7
+
+Klantenpagina (punt 5) en een opgeruimd formulier Gebruiker toevoegen (punt 25). Eerste PR van bundel A. Migratie 55: index op facturen per klant.
+
+- **Module Klanten** (`frontend/klanten/`, recht `klanten`: standaard beheerder en installateur, daarmee ook aan eigen rollen te geven): lijst met zoeken (naam, bedrijf, e-mail, telefoon, adres, gebruikersnaam; meerdere woorden = en), filter (particulier, zakelijk, groothandel, open aanvraag), 50 per pagina en Excel-export. Een klant is een account met een rol van het soort klant (dezelfde accounts als webshop en portaal); `GET|POST /api/customers`, `GET|PATCH /api/customers/:id`, `POST /api/customers/:id/invite` in `verkoop/customers.js`.
+- **Klant zonder inlog**: `store.createCustomer` maakt een account zonder wachtwoord (niemand kan erop inloggen); gebruikersnaam = het e-mailadres als dat past, anders `klant-<8 hex>`. Het adres (kolom `users.address`, migratie 54, in `MIGRATIONS` én `PG_MIGRATIONS`) wordt met `requireVerifiedAddress` tegen PDOK gecontroleerd, zoals bij offertes en facturen.
+- **Uitnodigen**: de bestaande wachtwoordlink van de webshop, nu met zeven dagen geldigheid (`tokens.issue(…, { ttlMs })`, geen migratie) en een eigen mailtekst. Alleen voor klanten van de hoofdorganisatie met een ingestelde mailserver en webadres van de shop; anders een duidelijke melding (ook in de klantkaart) en de klant wordt wel aangemaakt.
+- **Klantkaart**: gegevens, klantgroep/bedrijfsgegevens/groothandel (wijzigen van klantgroep en groothandel alleen door een beheerder, 403 voor anderen; open aanvraag goedkeuren/afwijzen), toegang, en de offertes, werkorders en facturen van de klant (alleen de soorten waar de aanvrager recht op heeft; elk hoogstens 100, nieuwste eerst), met directe links.
+- **Beheer > Gebruikers**: kolom Klantgroep en de bijbehorende knoppen/prompts weg (verhuisd naar de klantkaart; knop *Klantkaart* bij klanten), formulier Gebruiker toevoegen in vier kolommen met de roluitleg ingeklapt.
+- **Gedeelde indeling** `frontend/shared/layout.css` (`.form-grid`, `.card-grid`, `.card`): labels boven de velden, kaarten in een rij even hoog, knoppen onderaan; vastgelegd als UI-standaard in CLAUDE.md.
+- Testdata: klanten hebben nu een adres en er is een klant zonder inlog.
+- Prestaties: lijst = 2 queries (totaal + pagina, `tenant_id`-filter en bestaande indexen), klantkaart = 4 (klant + offertes + werkorders + facturen, `quotes_customer`/`invoices_wo`-indexen), nooit per klant een query; bewaakt in `queries.test.js`.
+- Tests: `customers.test.js` (aanmaken, zoeken, paginering, rechten 403, andere organisatie 404, medewerker is geen klant, wijzigen, klantkaart, uitnodiging met en zonder mailserver), sidebar, queries; ook tegen PostgreSQL.
+
 ## 1.9.6
 
 Opruiming na de CodeRabbit-inhaalreview van #149 t/m #158 (13 bevindingen: 2 major, 11 minor). Eén bevinding (kleurcontrole van knoptekst) is bewust niet overgenomen, zie onder.

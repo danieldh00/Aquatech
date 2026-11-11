@@ -337,6 +337,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   als `quotes.customer_id` = klant en offerte ≠ concept. Optioneel:
   `ctx.photos.list(tid, woId, { customerOnly })` en `workorders.respond`
   (afspraak bevestigen, `POST .../appointment`).
+- **Klanten** (1.9.7, module `frontend/klanten/`, recht `klanten`: beheerder + installateur, migratie 54 `users.address`, 55 index `invoices_customer`): een klant is een
+  account met een rol van het soort klant (`keysOfKind('klant')`), ook zonder inlog (`store.createCustomer`, `password_hash` NULL, niemand
+  kan erop inloggen). `verkoop/customers.js`: `GET|POST /api/customers` (zoeken `q`, filter `group`, `limit`/`offset`), `GET|PATCH
+  /api/customers/:id` (klantkaart met offertes/werkorders/facturen, elk alleen met het bijbehorende recht), `POST .../invite` (zeven dagen
+  geldige wachtwoordlink van de webshop, `shopAccounts.invite`; alleen hoofdtenant + mail + webadres). Klantgroep en groothandel wijzigt
+  alleen recht `beheer`; adres altijd via `requireVerifiedAddress`. Beheer > Gebruikers heeft die velden niet meer (knop *Klantkaart*).
 - **Foto's + klantdossier** (0.38.0): `backend/src/uitvoering/photos.js` (tabel
   `work_order_photos`, migratie 14; afbeelding + miniatuur via
   `vault.sealBytes` met AAD `<tenant>:foto:<id>:beeld|mini`, als tekst in de
@@ -638,6 +644,12 @@ reviewproces wijzigt; versie-bump + `CHANGELOG.md` + regel bovenaan `frontend/ni
   `tenant_id` vooraan (migratie in `MIGRATIONS` én `PG_MIGRATIONS`).
 - Gebruiker/tenant per verzoek niet opnieuw opvragen (`req.user`,
   `withRequestCache`). Breid `test/queries.test.js` uit voor nieuwe routes.
+
+**Uitlijning van schermen** (wens Daniël 2026-11-11, "dit moet de standaard zijn"): elke PR die een scherm raakt levert nette
+uitlijning op: één raster, kaarten in een rij even hoog zonder lege gaten, formuliervelden op één lijn met het label boven het
+veld en een korte hulptekst. Gebruik de gedeelde klassen in `frontend/shared/layout.css` (`.form-grid` met `.full`/`.span-2`/`.cols-4`,
+`.card-grid` + `.card`, `.form-actions`), geen eigen marges per scherm. Render vóór de PR de gewijzigde schermen op 1440 en 375 px
+(Playwright), controleer de uitlijning met het oog en zet de schermafbeeldingen in de PR en in de projectbestanden.
 
 **Navigatie en laden** (frontend):
 - Links naar een item direct (`?id=…`), nooit via een overzicht; terugknop

@@ -13,6 +13,17 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.9.7',
+      date: '2026-11-11',
+      title: 'Klanten op één plek',
+      items: [
+        { text: 'Nieuwe pagina Klanten (onder Verkoop): zoeken op naam, bedrijf, e-mail, telefoon of adres, filteren op particulier, zakelijk of groothandel, en exporteren naar Excel.', for: ['klanten'] },
+        { text: 'Een klant aanmaken kan nu zonder inlog, met het adres via postcode en huisnummer. Wil je dat de klant zelf kan inloggen, vink dan de uitnodiging aan: de klant krijgt een mail om een wachtwoord te kiezen.', for: ['klanten'] },
+        { text: 'De klantkaart toont de gegevens, de offertes, werkorders en facturen van de klant. Klantgroep, groothandelskorting en het goedkeuren van een zakelijke aanvraag staan daar nu, niet meer in de gebruikerslijst.', for: ['klanten'] },
+        { text: 'Gebruiker toevoegen in Beheer is opgeruimd: vier velden op een rij en de uitleg per rol ingeklapt. De gebruikerslijst is korter geworden.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.9.6',
       date: '2026-11-11',
       title: 'Kleine verbeteringen',

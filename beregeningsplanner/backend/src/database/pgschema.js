@@ -917,6 +917,14 @@ const PG_MIGRATIONS = [
   `
   CREATE INDEX visma_log_last ON visma_log (tenant_id, last_at);
   `,
+  // 54: adres van een klant (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN address ${TEXT_TYPE} NOT NULL DEFAULT '';
+  `,
+  // 55: index voor de facturen op de klantkaart (zie db.js).
+  `
+  CREATE INDEX invoices_customer ON invoices (tenant_id, customer_id, invoice_date);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
