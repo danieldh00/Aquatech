@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.9.2',
+      date: '2026-11-11',
+      title: 'Snel van de webshop naar het beheer',
+      items: [
+        { text: 'Ben je als medewerker of beheerder ingelogd in de webshop? Dan staat er in de kop een knop Beheer die je meteen naar de app brengt.', for: ['werkorders', 'beheer'] },
+      ],
+    },
+    {
       version: '1.9.1',
       date: '2026-11-11',
       title: 'Kleine verbetering in foutmeldingen bij instellingen',
