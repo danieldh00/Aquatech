@@ -290,6 +290,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   E-mail via `mailer.js` (nodemailer, eigen SMTP: `mailServer` + geheim
   `mailPassword`); tests vervangen `mailerFor`.
   afdrukversie (`#print`, print-CSS), geen PDF-bibliotheek.
+- **Klantkeuze in de offerte** (1.9.8, geen migratie): zoekveld bovenaan het blok Klant in `offertes.js` (`searchCustomers`/`pickCustomer`); `GET /api/quote-customers?q=` zoekt op de server (max 20, actief, via `store.listCustomerPage({ activeOnly })`) en geeft naam, bedrijf, e-mail, telefoon en adres; een keuze vult `customer.*` in en zet `customerId`. Een nieuwe plek die een klant kiest gebruikt deze zoekroute, nooit de hele lijst.
 - **Werkorders** (`frontend/werkorders/`, 0.28.0, recht `werkorders`:
   beheerder + installateur): kern `workorder-core.js` (UMD, `fromQuote`,
   `zonesFromPlan`, `sanitize`, `progress`), opslag/routes

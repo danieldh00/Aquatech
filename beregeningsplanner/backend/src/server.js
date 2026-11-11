@@ -2021,6 +2021,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const home = homeOf(tid);
       return store.listCustomers(home === tid ? [tid] : [home, tid]);
     },
+    // Klantkeuze in de offerte: een zoekopdracht in plaats van de hele lijst (bij honderden klanten te groot).
+    searchCustomers: (req, search) => {
+      const tid = req.tenantId || tenant.id;
+      const home = homeOf(tid);
+      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+        .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName,
+          email: customer.email, phone: customer.phone, address: customer.address }));
+    },
   });
 
   // ---------- Werkorders (module Werkorders, zie workorders.js) ----------

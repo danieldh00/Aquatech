@@ -602,7 +602,7 @@ ${href ? `<p style="margin:22px 0"><a href="${escHtml(href)}" style="background:
  * klant ziet alleen de verzonden offertes die aan zijn account hangen en kan
  * die accepteren of afwijzen.
  * @param {object} app De Express-app.
- * @param {object} ctx quotes, tenantOf(req), settingsOf(req), customersOf(req), identify, requireUser, requireAdmin, requireRight, requireJson, audit en optioneel settingsForTenant, themeOf, tenantActive, mailerFor, remoteIp, publicLimiter en planReviewOf.
+ * @param {object} ctx quotes, tenantOf(req), settingsOf(req), customersOf(req), searchCustomers(req, search), identify, requireUser, requireAdmin, requireRight, requireJson, audit en optioneel settingsForTenant, themeOf, tenantActive, mailerFor, remoteIp, publicLimiter en planReviewOf.
  */
 function registerQuoteRoutes(app, ctx) {
   const { quotes, identify, requireAdmin, requireRight, requireJson, settingsOf, customersOf, audit } = ctx;
@@ -685,9 +685,10 @@ function registerQuoteRoutes(app, ctx) {
   });
 
   // Klantaccounts om een offerte aan te koppelen.
+  // Zoekt klanten voor de klantkeuze (tot 20, op naam, bedrijf, e-mail, telefoon of adres), met de gegevens die de offerte invult.
   app.get('/api/quote-customers', requireQuotes, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ items: customersOf(req) });
+    res.json({ items: ctx.searchCustomers(req, String(req.query.q || '').slice(0, 100)) });
   });
 
   // Eigen offertes; beheerders en installateurs zien met ?all=1 die van

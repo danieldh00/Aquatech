@@ -246,3 +246,17 @@ test('uitnodigen: begrensd per medewerker', async () => {
   }
   assert.strictEqual(last, 429);
 });
+
+test('klantkeuze in de offerte: zoekt, begrenst op 20 en laat uitgeschakelde klanten weg', async () => {
+  const { installer, store, main } = await setup();
+  for (let index = 0; index < 22; index += 1) {
+    assert.strictEqual((await installer.post('/app/api/customers', { displayName: `Keuzeklant ${String(index).padStart(2, '0')}`, email: `keuze${index}@voorbeeld.nl` })).status, 201);
+  }
+  const all = (await installer.get('/app/api/quote-customers?q=keuzeklant')).body.items;
+  assert.strictEqual(all.length, 20);
+  const one = (await installer.get('/app/api/quote-customers?q=keuze21@')).body.items;
+  assert.deepStrictEqual(one.map((customer) => customer.displayName), ['Keuzeklant 21']);
+  assert.strictEqual(one[0].email, 'keuze21@voorbeeld.nl');
+  assert.ok(!(await store.updateAccount(main, one[0].id, { disabled: true })).error);
+  assert.deepStrictEqual((await installer.get('/app/api/quote-customers?q=keuze21@')).body.items, []);
+});

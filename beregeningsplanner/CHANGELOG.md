@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.8
+
+Offerte: klantkeuze bovenaan het klantblok met automatisch invullen (punt 4 van bundel A). Geen migratie.
+
+- **Klantkeuze** in de offerte-editor: zoekveld *Klant uit de klantenlijst* (naam, bedrijf, e-mail, telefoon, adres) bovenaan het blok Klant. Een keuze koppelt de offerte aan het klantaccount én vult naam/bedrijf, T.a.v., adres, e-mail en telefoon in; *Ontkoppelen* haalt alleen de koppeling weg. Vervangt de keuzelijst *Klantaccount* onderaan.
+- `GET /api/quote-customers?q=` zoekt nu op de server (hoogstens 20, alleen actieve klanten, met `companyName`, `email`, `phone`, `address`) in plaats van de hele klantenlijst mee te laden: werkt ook bij honderden klanten. `store.listCustomerPage` kreeg `activeOnly`. Toegang blijft recht `offertes`; de koppeling zelf wordt nog steeds tegen de lijst klanten van de organisatie gecontroleerd.
+- Tests: zoeken, velden, begrenzing op 20 en uitgeschakelde klanten (`customers.test.js`, `quotes.test.js`).
+
 ## 1.9.7
 
 Klantenpagina (punt 5) en een opgeruimd formulier Gebruiker toevoegen (punt 25). Eerste PR van bundel A. Migratie 55: index op facturen per klant.
