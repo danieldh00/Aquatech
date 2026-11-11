@@ -246,7 +246,8 @@ test('mislukte mail over de afgeronde retour kan opnieuw worden verstuurd', asyn
   await world.admin.post(`/app/api/admin/web-returns/${record.id}/decision`, { approve: true });
   world.mailFailing.on = true;
   assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/complete`, {})).status, 200);
-  await until(async () => { const found = (await world.admin.get(`/app/api/admin/web-returns/${record.id}`)).body; return found.return?.mail?.sent === false ? found : null; });
+  const failed = await until(async () => { const found = (await world.admin.get(`/app/api/admin/web-returns/${record.id}`)).body; return found.return?.mail?.sent === false ? found : null; });
+  assert.match(failed.return.mail.error, /^Versturen mislukt: de mailserver is niet bereikbaar\./, 'leesbare melding bij de retour');
   assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 502, 'mailserver nog stuk');
   assert.strictEqual((await world.vreemd.post(`/app/api/admin/web-returns/${record.id}/completion-mail`, {})).status, 404, 'andere tenant');
   world.mailFailing.on = false;

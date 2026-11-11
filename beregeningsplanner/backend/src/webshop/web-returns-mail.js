@@ -4,10 +4,7 @@
 // het bericht dat de retour is afgerond. Via de mailserver van de organisatie
 // (mailer.js); een mislukte verzending houdt de retour niet tegen maar blijft
 // zichtbaar bij de retour (data.mail).
-const { validEmail, mailFailure } = require('../platform/mailer');
-
-// Melding als de mailinstellingen zelf niet te lezen zijn (een interne fout: de oorzaak staat in het serverlog).
-const SETUP_FAILED = 'Versturen mislukt: de mailinstellingen konden niet worden gelezen.';
+const { validEmail, mailFailure, MAIL_SETUP_FAILED } = require('../platform/mailer');
 
 /**
  * Maakt de verzender van retourmails.
@@ -51,7 +48,7 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
       profile = settings.get('quoteProfile') || {};
     } catch (failure) {
       console.error('Mailinstellingen lezen mislukt:', failure);
-      log({ sent: false, error: SETUP_FAILED });
+      log({ sent: false, error: MAIL_SETUP_FAILED });
       return;
     }
     if (!mailer.configured()) { log({ sent: false, error: 'Geen mailserver ingesteld.' }); return; }

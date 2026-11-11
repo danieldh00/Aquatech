@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.8
+
+Naloop van de review op 1.8.7 (de fixes kwamen net na de merge).
+
+- `mailFailure`: de herkenning van TLS/certificaat op de tekst geldt alleen bij verbindingsfouten (ETIMEDOUT, ECONNECTION,
+  ESOCKET, EDNS) en bij ETLS. Een weigering door de server (EAUTH, EENVELOPE, EMESSAGE) houdt zijn eigen melding, ook als
+  "TLS" of "SSL" in het antwoord staat.
+- Een fout zonder SMTP-code en zonder antwoord van de server is een fout in de app (bijv. bij het opbouwen van de mail) en heet
+  nu *"Versturen mislukt door een interne fout; de oorzaak staat in het serverlog."* in plaats van een mailserverfout.
+- `mailFailure` logt de oorzaak zelf (`[mail] Versturen mislukt: <code> <melding>`, nooit het wachtwoord), zodat elke aanroeper
+  (offerte, afspraak, factuur, webshop- en retourmail) hem in het serverlog heeft. Een TLS-fout met een eigen code van Node
+  (`SELF_SIGNED_CERT_IN_CHAIN`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE` enz.) krijgt de TLS-melding. De vaste melding bij onleesbare
+  mailinstellingen staat één keer in mailer.js (`MAIL_SETUP_FAILED`).
+- Tests: mislukte retourmail geeft een leesbare melding bij de retour; extra gevallen voor `mailFailure`.
+
 ## 1.8.7
 
 Foutmeldingen nalopen, deel 2: e-mail en verkoop.

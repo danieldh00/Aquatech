@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.8.8',
+      date: '2026-11-11',
+      title: 'Kleine verbeteringen in de meldingen bij e-mail',
+      items: [
+        { text: 'Bij een mislukte e-mail staat nu duidelijker of het aan de mailserver ligt of aan de app.', for: ['offertes', 'werkorders', 'facturen'] },
+      ],
+    },
+    {
       version: '1.8.7',
       date: '2026-11-11',
       title: 'Duidelijkere meldingen als een e-mail niet verstuurd kan worden',

@@ -4,10 +4,7 @@
 // bestelling niet tegen maar blijft zichtbaar bij de bestelling (data.mail).
 // Bij Verzonden volgt een mail met de volgcode van DPD (of: klaar om op te
 // halen); komt de volgcode later, dan volgt één mail met die code (data.shipMail).
-const { validEmail, mailFailure } = require('../platform/mailer');
-
-// Melding als de mailinstellingen zelf niet te lezen zijn (een interne fout: de oorzaak staat in het serverlog).
-const SETUP_FAILED = 'Versturen mislukt: de mailinstellingen konden niet worden gelezen.';
+const { validEmail, mailFailure, MAIL_SETUP_FAILED } = require('../platform/mailer');
 const { WITHDRAWAL_DAYS } = require('./legal-pages');
 
 const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
@@ -71,7 +68,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
       mailer = mailerFor(settings);
     } catch (failure) {
       console.error('Mailinstellingen lezen mislukt:', failure);
-      orders.updateData(tenantId, order.id, { mail: { sent: false, error: SETUP_FAILED, at: new Date().toISOString() } });
+      orders.updateData(tenantId, order.id, { mail: { sent: false, error: MAIL_SETUP_FAILED, at: new Date().toISOString() } });
       return;
     }
     if (!mailer.configured()) { orders.updateData(tenantId, order.id, { mail: { sent: false, error: 'Geen mailserver ingesteld.', at: new Date().toISOString() } }); return; }
@@ -177,7 +174,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
       profile = settings.get('quoteProfile') || {};
     } catch (failure) {
       console.error('Mailinstellingen lezen mislukt:', failure);
-      record({ sent: false, error: SETUP_FAILED });
+      record({ sent: false, error: MAIL_SETUP_FAILED });
       return;
     }
     if (!mailer.configured()) { record({ sent: false, error: 'Geen mailserver ingesteld.' }); return; }
