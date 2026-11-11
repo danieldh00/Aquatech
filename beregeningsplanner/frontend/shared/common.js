@@ -243,8 +243,12 @@
         return response;
       }, (error) => {
         // Geen verbinding (fetch gooit dan een TypeError met een technische tekst als "Failed to fetch"): een
-        // melding in gewone taal, zelfde soort fout. Afbreken (AbortError) blijft zoals het is.
-        if (error && error.name === 'TypeError') throw new TypeError('Geen verbinding met de server. Controleer je internetverbinding en probeer het opnieuw.', { cause: error });
+        // melding in gewone taal, zelfde soort fout. Afbreken (AbortError) blijft zoals het is. fetch gooit ook een
+        // TypeError bij een fout in de eigen code (ongeldige URL of kop); de echte oorzaak staat daarom in de console.
+        if (error && error.name === 'TypeError') {
+          if (root.console && typeof root.console.warn === 'function') root.console.warn('[fetch] Verzoek mislukt:', error);
+          throw new TypeError('Geen verbinding met de server. Controleer je internetverbinding en probeer het opnieuw.', { cause: error });
+        }
         throw error;
       });
     };
