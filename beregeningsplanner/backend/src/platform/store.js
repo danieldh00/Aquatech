@@ -486,9 +486,9 @@ function createStore(db) {
     const role = klantRoles.includes('klant') ? 'klant' : klantRoles[0];
     if (!role) return { error: 'Er is geen rol van het soort klant. Maak die eerst aan onder Rollen.' };
     const email = String(input.email || '').trim().toLowerCase();
-    const emailName = /^[a-z0-9][a-z0-9._-]{2,39}$/.test(email) ? email : '';
-    let username = emailName;
-    while (!username || usernameTaken(tenantId, username)) username = `klant-${crypto.randomBytes(4).toString('hex')}`;
+    if (email && accountIdsByEmail(tenantId, email).length) return { error: 'Er bestaat al een klant met dit e-mailadres.', field: 'email' };
+    let username = `klant-${crypto.randomBytes(4).toString('hex')}`;
+    while (usernameTaken(tenantId, username)) username = `klant-${crypto.randomBytes(4).toString('hex')}`;
     return transaction(db, () => {
       const user = insertUser(tenantId, { username, displayName, role, kind: 'account' });
       prepare("UPDATE users SET customer_group = ?, business_request = '' WHERE tenant_id = ? AND id = ?").run(input.business ? 'zakelijk' : '', tenantId, user.id);

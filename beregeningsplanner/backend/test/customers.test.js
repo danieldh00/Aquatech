@@ -174,6 +174,12 @@ test('uitnodigen: mail met wachtwoordlink van zeven dagen, daarna kan de klant i
   assert.strictEqual(done.status, 200, done.text.slice(0, 300));
   const customer = (await installer.get(`/app/api/customers/${made.body.customer.id}`)).body.customer;
   assert.strictEqual(customer.hasLogin, true);
+  // Een klant met inlog: geen nieuwe uitnodiging en geen adreswijziging door een installateur (accountovername).
+  const again = await installer.post(`/app/api/customers/${customer.id}/invite`, {});
+  assert.strictEqual(again.status, 409);
+  assert.match(again.body.message, /al inloggen/);
+  assert.strictEqual((await installer.patch(`/app/api/customers/${customer.id}`, { email: 'overname@voorbeeld.nl' })).status, 403);
+  assert.strictEqual((await installer.patch(`/app/api/customers/${customer.id}`, { phone: '0612345678' })).status, 200);
   // De link werkt maar één keer.
   assert.strictEqual((await postForm(base, createClient(base), '/wachtwoord-herstellen/', { token, password: PW, password2: PW })).status, 400);
   assert.ok(as);
@@ -213,4 +219,21 @@ test('de lijst is gepagineerd en een klant zonder e-mail krijgt een eigen gebrui
   assert.deepStrictEqual(names, [...names].sort((left, right) => left.localeCompare(right)));
   assert.ok(store.getCustomer([main], firstPage.items[0].id));
   assert.ok(firstPage.items.every((item) => /^klant-[0-9a-f]{8}$/.test(item.username) || item.username === 'klant1'));
+});
+
+test('nieuwe klant: hetzelfde e-mailadres twee keer wordt geweigerd', async () => {
+  const { installer } = await setup();
+  assert.strictEqual((await installer.post('/app/api/customers', { displayName: 'Eerste', email: 'dubbel@voorbeeld.nl' })).status, 201);
+  const second = await installer.post('/app/api/customers', { displayName: 'Tweede', email: 'Dubbel@voorbeeld.nl' });
+  assert.strictEqual(second.status, 400);
+  assert.strictEqual(second.body.field, 'email');
+});
+
+test('uitnodigen: begrensd per medewerker', async () => {
+  const { installer } = await setup();
+  let last = 0;
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    last = (await installer.post('/app/api/customers', { displayName: `Klant ${attempt}`, email: `k${attempt}@voorbeeld.nl`, invite: true })).status;
+  }
+  assert.strictEqual(last, 429);
 });

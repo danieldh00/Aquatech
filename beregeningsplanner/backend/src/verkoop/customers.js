@@ -5,6 +5,8 @@
 // offertes, werkorders en facturen van die klant.
 const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { sanitizeBusinessProfile } = require('../webshop/business-profile');
+const { createRateLimiter } = require('../beveiliging/rate-limit');
+const { clientKey } = require('../beveiliging/auth');
 
 /** Hoeveel regels een klantkaart per soort (offertes, werkorders, facturen) toont. */
 const OVERVIEW_LIMIT = 100;
@@ -109,6 +111,27 @@ function registerCustomerRoutes(app, ctx) {
    */
   const mayPrice = (req) => ctx.can(req.user, 'beheer');
 
+  const invitesPerUser = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `uitnodiging:${req.user?.id || clientKey(req)}` });
+  const invitesPerVisitor = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `uitnodiging-ip:${clientKey(req)}` });
+
+  /**
+   * Begrenst het versturen van uitnodigingsmails per medewerker en per bezoeker, zodat het bedrijfsadres niet als mailmotor te gebruiken is.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {Function} next De volgende stap.
+   * @returns {void}
+   */
+  const limitInvites = (req, res, next) => invitesPerUser(req, res, () => invitesPerVisitor(req, res, next));
+
+  /**
+   * Zoals limitInvites, maar bij het aanmaken van een klant alleen als er ook een uitnodiging wordt gevraagd.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {Function} next De volgende stap.
+   * @returns {void}
+   */
+  const limitInvitesIfAsked = (req, res, next) => (req.body?.invite ? limitInvites(req, res, next) : next());
+
   /**
    * Stuurt de uitnodigingsmail aan een klant en vertaalt de uitkomst naar een korte melding.
    * @param {object} user De klant.
@@ -116,6 +139,7 @@ function registerCustomerRoutes(app, ctx) {
    */
   async function sendInvite(user) {
     if (!user.email) return { sent: false, problem: 'Vul eerst een e-mailadres in.' };
+    if (user.hasLogin) return { sent: false, problem: 'Deze klant kan al inloggen; een nieuw wachtwoord kiest de klant zelf via Wachtwoord vergeten.' };
     const ready = ctx.inviteReady(user);
     if (ready) return { sent: false, problem: ready };
     try {
@@ -132,7 +156,7 @@ function registerCustomerRoutes(app, ctx) {
     res.json({ ...store.listCustomerPage(tenantsOf(req), { search: String(req.query.q || '').slice(0, 100), group: String(req.query.group || ''), limit, offset }), limit, offset });
   });
 
-  app.post('/api/customers', requireJson, requireCustomers, requireVerifiedAddress(addressGuard, (req) => req.body?.address), async (req, res) => {
+  app.post('/api/customers', requireJson, requireCustomers, limitInvitesIfAsked, requireVerifiedAddress(addressGuard, (req) => req.body?.address), async (req, res) => {
     const body = req.body || {};
     const contact = sanitizeContact({ email: body.email, phone: body.phone, address: body.address });
     if (contact.error) return invalid(res, contact);
@@ -146,7 +170,7 @@ function registerCustomerRoutes(app, ctx) {
     }
     const tenantId = req.tenantId;
     const out = store.createCustomer(tenantId, { displayName: body.displayName, ...contact.contact, business });
-    if (out.error) return invalid(res, { error: out.error, field: 'displayName' });
+    if (out.error) return invalid(res, { error: out.error, field: out.field || 'displayName' });
     audit(req, 'klant_aangemaakt', { userId: out.user.id, zakelijk: Boolean(business), uitgenodigd: Boolean(body.invite) }, undefined, tenantId);
     const created = store.getCustomer([tenantId], out.user.id);
     const invite = body.invite ? await sendInvite(created) : null;
@@ -162,7 +186,7 @@ function registerCustomerRoutes(app, ctx) {
     });
     res.json({
       customer, ...documents, dossierKey: `a-${customer.id}`, mayPrice: mayPrice(req), mayDossier: ctx.can(req.user, 'werkorders'),
-      inviteProblem: customer.email ? ctx.inviteReady(customer) : 'Vul eerst een e-mailadres in.',
+      inviteProblem: customer.email ? (customer.hasLogin ? 'Deze klant kan al inloggen.' : ctx.inviteReady(customer)) : 'Vul eerst een e-mailadres in.',
     });
   });
 
@@ -180,6 +204,10 @@ function registerCustomerRoutes(app, ctx) {
     }
     const contact = sanitizeContact({ email: body.email, phone: body.phone, address: body.address });
     if (contact.error) return invalid(res, contact);
+    // Een adres van een klant met inlog is ook de weg naar het wachtwoord: alleen een beheerder wijzigt dat.
+    if (customer.hasLogin && contact.contact.email !== undefined && contact.contact.email !== customer.email && !mayPrice(req)) {
+      return res.status(403).json({ error: 'forbidden', message: 'Alleen een beheerder wijzigt het e-mailadres van een klant die kan inloggen.' });
+    }
     if (Object.keys(contact.contact).length) input.contact = contact.contact;
     if (['companyName', 'kvkNumber', 'vatNumber'].some((field) => body[field] !== undefined)) {
       const checked = sanitizeBusinessProfile({ companyName: customer.companyName, kvkNumber: customer.kvkNumber, vatNumber: customer.vatNumber, ...body });
@@ -200,7 +228,7 @@ function registerCustomerRoutes(app, ctx) {
     res.json({ customer: store.getCustomer([customer.tenantId], customer.id) });
   });
 
-  app.post('/api/customers/:id/invite', requireJson, requireCustomers, async (req, res) => {
+  app.post('/api/customers/:id/invite', requireJson, requireCustomers, limitInvites, async (req, res) => {
     const customer = store.getCustomer(tenantsOf(req), req.params.id);
     if (!customer) return unknown(res);
     if (customer.disabled) return res.status(409).json({ error: 'disabled', message: 'Dit account is uitgeschakeld.' });

@@ -319,10 +319,10 @@
         <dt>Gebruikersnaam</dt><dd>${esc(customer.username)}</dd>
         ${customer.disabled ? '<dt>Status</dt><dd>Uitgeschakeld</dd>' : ''}
       </dl>
-      <p class="muted small">${customer.hasLogin ? 'Met een uitnodiging kiest de klant opnieuw een wachtwoord.' : 'Stuur een uitnodiging per e-mail; de klant kiest zelf een wachtwoord (de link werkt zeven dagen).'}
+      <p class="muted small">${customer.hasLogin ? 'De klant kan al inloggen en wijzigt het wachtwoord zelf via Wachtwoord vergeten.' : 'Stuur een uitnodiging per e-mail; de klant kiest zelf een wachtwoord (de link werkt zeven dagen).'}
         Wachtwoord, uitschakelen en verwijderen doe je in <a href="../beheer/#users">Beheer &gt; Gebruikers</a>.</p>
       <div class="err" id="c-access-err" role="alert"></div>
-      <div class="form-actions"><button type="button" class="btn" data-invite${inviteProblem || customer.disabled ? ' disabled' : ''}>${customer.hasLogin ? 'Opnieuw uitnodigen' : 'Uitnodiging sturen'}</button>
+      <div class="form-actions"><button type="button" class="btn" data-invite${inviteProblem || customer.disabled ? ' disabled' : ''}>Uitnodiging sturen</button>
         ${inviteProblem ? `<span class="muted small">${esc(inviteProblem)}</span>` : ''}</div>
     </section>`;
   }
