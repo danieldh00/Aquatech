@@ -103,7 +103,10 @@ test('beheerder kiest kleuren van de eigen organisatie: standaard, eigen thema, 
     await store.createAccount(main.id, { username: 'anna', displayName: 'Anna', role: 'beheerder', password: PW });
     const anna = createClient(base);
     assert.strictEqual((await anna.login('anna', PW)).status, 200);
-    assert.strictEqual((await anna.get('/app/api/admin/theme')).status, 200, 'bekijken mag');
+    response = await anna.get('/app/api/admin/theme');
+    assert.strictEqual(response.status, 200, 'bekijken mag');
+    assert.strictEqual(response.body.canEdit, false);
+    assert.strictEqual((await baas.get('/app/api/admin/theme')).body.canEdit, true);
     response = await anna.put('/app/api/admin/theme', { colors: { navy: '#000000' } });
     assert.strictEqual(response.status, 403);
     assert.match((await anon.get('/app/shared/theme.css')).text, /--at-navy: #203040;/, 'standaard ongewijzigd');

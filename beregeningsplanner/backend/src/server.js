@@ -2335,13 +2335,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   /**
    * Beschrijft het thema van de organisatie van de aanvrager voor het scherm Kleuren.
    * @param {object} req Het verzoek.
-   * @returns {{ defaults: object, mainTenantId: string, tenantId: string, tenantName: string, theme: object, inherited: object }} Het thema van deze organisatie (`theme`, leeg = geen eigen thema) en het standaardthema (`inherited`) waar zij anders op terugvalt.
+   * @returns {{ defaults: object, mainTenantId: string, tenantId: string, tenantName: string, theme: object, inherited: object, canEdit: boolean }} Of de aanvrager mag wijzigen (`canEdit`), het thema van deze organisatie (`theme`, leeg = geen eigen thema) en het standaardthema (`inherited`) waar zij anders op terugvalt.
    */
   function themeView(req) {
     const homeId = homeOf(req.tenantId);
     const homeRow = store.getTenant(homeId);
     return { defaults: Theme.DEFAULTS, mainTenantId: tenant.id, tenantId: homeId, tenantName: homeRow ? homeRow.name : '',
-      theme: settingsFor(homeId).get('theme'), inherited: settings.get('theme') };
+      theme: settingsFor(homeId).get('theme'), inherited: settings.get('theme'),
+      canEdit: homeId !== tenant.id || !multitenancyOn() || Boolean(req.user.platform_admin) };
   }
 
   app.get('/api/admin/theme', (req, res) => { res.json(themeView(req)); });

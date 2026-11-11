@@ -98,6 +98,13 @@
     $('#th-reset').textContent = isMain ? 'Standaardkleuren terugzetten' : 'Eigen thema verwijderen';
     $('#th-reset').disabled = !own;
     preview();
+    // Het standaardthema voor alle organisaties wijzigt bij meerdere organisaties alleen een hoofdbeheerder.
+    if (!data.canEdit) {
+      $('#th-note').textContent = 'Dit is het standaardthema voor alle organisaties. Alleen een hoofdbeheerder wijzigt het.';
+      for (const input of $('#th-form').querySelectorAll('input, button')) input.disabled = true;
+    } else {
+      for (const input of $('#th-form').querySelectorAll('input')) input.disabled = false;
+    }
   }
 
   /** Bouwt het formulier één keer en koppelt de knoppen. */
