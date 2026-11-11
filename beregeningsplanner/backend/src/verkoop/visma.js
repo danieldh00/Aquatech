@@ -580,7 +580,7 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
     };
   }
 
-  return { authorizeUrl, finishConnect, disconnect, api, options, pushInvoice, sync, run, schedule, runAll, status, app };
+  return { authorizeUrl, finishConnect, disconnect, connected, api, options, pushInvoice, sync, run, schedule, runAll, status, app };
 }
 
 /**
@@ -703,6 +703,13 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
   app.put('/api/visma/app', requireJson, requireInvoices, (req, res) => {
     const body = req.body || {};
     const patch = { vismaApp: sanitizeVismaApp(body) };
+    // Het refresh token en het gecachte access token horen bij de oude app: een andere app of omgeving pas na verbreken.
+    const current = settingsFor(tenantOf(req)).get('vismaApp');
+    const changesApp = patch.vismaApp.clientId !== (current.clientId || '') || patch.vismaApp.environment !== (current.environment || 'sandbox')
+      || (typeof body.clientSecret === 'string' && body.clientSecret.trim() !== '') || body.clearSecret === true;
+    if (changesApp && visma.connected(tenantOf(req))) {
+      return res.status(409).json({ error: 'disconnect_first', message: 'Verbreek eerst de verbinding met Visma voordat je de app-gegevens wijzigt; verbind daarna opnieuw.' });
+    }
     if (typeof body.clientSecret === 'string' && body.clientSecret.trim()) patch.vismaClientSecret = body.clientSecret.trim();
     if (body.clearSecret === true) patch.vismaClientSecret = '';
     try {

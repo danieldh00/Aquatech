@@ -317,6 +317,15 @@ test('visma: rechten en scheiding tussen organisaties', async () => {
     const connectUrl = new URL((await piet.post('/app/api/visma/connect', {})).body.url);
     assert.strictEqual(connectUrl.searchParams.get('client_id'), 'groen-app');
     assert.strictEqual((await baas.get('/app/api/visma/app')).body.app.clientId, 'aquatech-test', 'Aquatech ongewijzigd');
+    // Bij een bestaande verbinding kan de app pas na verbreken worden gewijzigd (de tokens horen bij de oude app).
+    await connect(baas);
+    const blocked = await baas.put('/app/api/visma/app', { clientId: 'andere-app', clientSecret: 'nieuw-geheim-secret' });
+    assert.strictEqual(blocked.status, 409);
+    assert.strictEqual(blocked.body.error, 'disconnect_first');
+    assert.strictEqual((await baas.get('/app/api/visma/app')).body.app.clientId, 'aquatech-test');
+    assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', environment: 'sandbox' })).status, 200, 'zelfde app opslaan mag');
+    assert.strictEqual((await baas.post('/app/api/visma/disconnect', {})).status, 200);
+    assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'andere-app', clientSecret: 'nieuw-geheim-secret' })).status, 200);
     assert.strictEqual((await piet.get('/app/api/visma')).body.environment, 'production');
   } finally {
     server.close();

@@ -12,7 +12,7 @@ Kleuren en Visma-app verhuisd van Hoofdbeheer naar de organisatie zelf.
   thema van een andere organisatie wil wijzigen, opent die organisatie via Hoofdbeheer > Openen. Audit `thema_gewijzigd` staat nu in de eigen organisatie.
 - **Visma per organisatie**: de app-registratie (client ID, omgeving, secret, redirect URI) staat nu per omgeving in Facturen → Visma
   (`GET|PUT /api/visma/app`, recht `facturen`) in plaats van platformbreed in Hoofdbeheer. `vismaApp`/`vismaClientSecret` zijn `internal` + `liveOnly`;
-  `createVisma` gebruikt `app(tenantId)` voor aanmelden, tokens, API-host en status. `/api/platform/visma` is weg.
+  `createVisma` gebruikt `app(tenantId)` voor aanmelden, tokens, API-host en status. `/api/platform/visma` is weg. Bij een bestaande verbinding geeft `PUT /api/visma/app` 409 `disconnect_first` als client ID, omgeving of secret wijzigt (de tokens horen bij de oude app).
 - Hoofdbeheer houdt alleen wat platformbreed is: tenants, hoofdbeheerders en Multitenancy. De knoppen *Kleuren* en *Visma* zijn weg.
 - Geen databasewijziging (bestaande instellingen blijven in de tabel; in ontwikkeling, geen migratie van oude waarden), geen extra queries op warme paden.
 
