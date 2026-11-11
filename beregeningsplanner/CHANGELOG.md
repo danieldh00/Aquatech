@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.8.3
+## 1.8.5
 
 Debugmodus (Beheer > Instellingen > Foutopsporing) en foutcodes bij elke onverwachte fout. Eerste deel van het nalopen van de
 foutmeldingen; de modules volgen in de volgende versies.
@@ -22,6 +22,21 @@ foutmeldingen; de modules volgen in de volgende versies.
 - Snelheid: goede antwoorden kosten niets extra (alleen bij status 400+ wordt de instelling gelezen, uit het geheugen); het paneel
   laadt alleen bij een fout met details.
 - Tests: `test/debug-mode.test.js`.
+
+## 1.8.4
+
+Reserveoptie voor CodeRabbit: een gemergde PR zonder voltooide CodeRabbit-review wordt alsnog gereviewd.
+
+- `.github/workflows/coderabbit-catchup.yml` + `backend/tools/coderabbit-catchup.js`: elke 6 uur (en zodra CodeRabbit klaar is) wordt gekeken
+  welke gemergde PR's na `coderabbit-baseline` geen CodeRabbit-review op hun laatste commit hebben. Die krijgen het label `coderabbit-pending`
+  en samen één inhaal-PR van `coderabbit/catchup` naar de baseline (cumulatieve diff, nooit mergen; master is niet het doel, dus de
+  versiecontrole draait er niet op en een subnummer is niet nodig). Het verzoek `@coderabbitai review` wordt na 6 uur herhaald; na 72 uur zonder
+  review komt er één issue met de vraag de review handmatig te starten.
+- Is de inhaalreview klaar, dan gaan de bevindingen de issueroute in (`coderabbit-findings.js`, nu ook voor een niet-gemergde PR via
+  `allowUnmerged`), verdwijnen de labels, wordt de PR gesloten en schuift de baseline op. De baseline wordt bij de eerste run op de huidige master
+  gezet: eerdere merges gelden als gereviewd.
+- `.coderabbit.yaml`: `coderabbit-baseline` toegevoegd aan `base_branches`.
+- Tests: `test/coderabbit-catchup.test.js`.
 
 ## 1.8.2
 

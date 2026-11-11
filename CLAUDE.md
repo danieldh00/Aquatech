@@ -50,7 +50,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   onopgeloste bevindingen worden na het mergen een issue met label `coderabbit-bevinding`
   (`coderabbit-findings.yml`, 1.8.2). Kritiek/beveiliging (label `coderabbit-kritiek`)
   direct oplossen, de rest bundelen in een opruim-PR na elke bundel of ca. 5 gemergde PR's
-  (Suggested fix letterlijk overnemen, `Closes #…`). **Kosten van de Claude-review** zijn begrensd: de workflow slaat docs/tests-only wijzigingen over, draait de securityreview alleen bij beveiligingsrelevante code en beoordeelt een volgende push alleen op wat nieuw is; het model komt uit de repository-variabelen `CLAUDE_REVIEW_MODEL` (eerste volledige review) en `CLAUDE_REVIEW_MODEL_PUSH` (lichtere review per push). **Overgang:** tot Daniël de ruleset op
+  (Suggested fix letterlijk overnemen, `Closes #…`). Een gemergde PR zonder voltooide CodeRabbit-review krijgt `coderabbit-pending` en wordt via een inhaal-PR (`coderabbit/catchup` → `coderabbit-baseline`, nooit mergen, `coderabbit-catchup.yml`, 1.8.4) alsnog gereviewd. **Kosten van de Claude-review** zijn begrensd: de workflow slaat docs/tests-only wijzigingen over, draait de securityreview alleen bij beveiligingsrelevante code en beoordeelt een volgende push alleen op wat nieuw is; het model komt uit de repository-variabelen `CLAUDE_REVIEW_MODEL` (eerste volledige review) en `CLAUDE_REVIEW_MODEL_PUSH` (lichtere review per push). **Overgang:** tot Daniël de ruleset op
   `master` heeft aangepast (Claude-checks erin, CodeRabbit eruit, goedkeuring 0) geldt de
   goedkeuring van CodeRabbit nog. Daarna de branch verwijderen. Een volgende taak begint opnieuw vanaf
   `origin/master`, niet vanaf een oude featurebranch.
@@ -599,7 +599,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   de server weigert een andere eigenaar (409 `owner_mismatch`, 0.69.0).
   Lokaal bewaarde gegevens (planner-concept, terugval-wachtrij) bewaren hun
   eigenaar en worden alleen aan die gebruiker getoond/verstuurd.
-- **Foutmeldingen + debugmodus** (1.8.3, `platform/error-report.js`): elke 500 krijgt een foutcode (`errorId`, ook in het log
+- **Foutmeldingen + debugmodus** (1.8.5, `platform/error-report.js`): elke 500 krijgt een foutcode (`errorId`, ook in het log
   `[fout <code>]`). Instelling `debugMode` (per omgeving, Beheer > Instellingen > Foutopsporing): aan + recht `beheer` → foutantwoorden
   (400+) krijgen `debug` (oorzaak, databasecode, plek in `src/`, aanroepketen; geheimen via `redact` eruit) en kop
   `X-Aquatech-Debug`; `shared/common.js` toont dan `shared/debug-panel.js`. `catchAsync` op app en webshoprouter: async routes
