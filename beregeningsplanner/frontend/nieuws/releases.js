@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.8.4',
+      date: '2026-11-11',
+      title: 'Controle van wijzigingen door CodeRabbit',
+      items: [],
+    },
+    {
       version: '1.8.2',
       date: '2026-11-11',
       title: 'Controle van wijzigingen door Claude',

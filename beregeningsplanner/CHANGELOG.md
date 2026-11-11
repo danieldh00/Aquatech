@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.4
+
+Reserveoptie voor CodeRabbit: een gemergde PR zonder voltooide CodeRabbit-review wordt alsnog gereviewd.
+
+- `.github/workflows/coderabbit-catchup.yml` + `backend/tools/coderabbit-catchup.js`: elke 6 uur (en zodra CodeRabbit klaar is) wordt gekeken
+  welke gemergde PR's na `coderabbit-baseline` geen CodeRabbit-review op hun laatste commit hebben. Die krijgen het label `coderabbit-pending`
+  en samen één inhaal-PR van `coderabbit/catchup` naar de baseline (cumulatieve diff, nooit mergen; master is niet het doel, dus de
+  versiecontrole draait er niet op en een subnummer is niet nodig). Het verzoek `@coderabbitai review` wordt na 6 uur herhaald; na 72 uur zonder
+  review komt er één issue met de vraag de review handmatig te starten.
+- Is de inhaalreview klaar, dan gaan de bevindingen de issueroute in (`coderabbit-findings.js`, nu ook voor een niet-gemergde PR via
+  `allowUnmerged`), verdwijnen de labels, wordt de PR gesloten en schuift de baseline op. De baseline wordt bij de eerste run op de huidige master
+  gezet: eerdere merges gelden als gereviewd.
+- `.coderabbit.yaml`: `coderabbit-baseline` toegevoegd aan `base_branches`.
+- Tests: `test/coderabbit-catchup.test.js`.
+
 ## 1.8.2
 
 Claude-review als eerste, verplichte controle op elke PR; CodeRabbit adviserend, zijn onopgeloste bevindingen blijven als issue bestaan.

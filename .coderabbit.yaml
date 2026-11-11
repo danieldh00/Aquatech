@@ -18,6 +18,8 @@ reviews:
     drafts: false
     base_branches:
       - master
+      # Inhaalreview van gemergde PR's die CodeRabbit niet op tijd kon reviewen (coderabbit-catchup.yml).
+      - coderabbit-baseline
   path_instructions:
     - path: "**"
       instructions: |
