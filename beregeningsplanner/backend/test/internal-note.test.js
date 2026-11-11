@@ -98,7 +98,7 @@ test('werkorder uit de offerte neemt de notitie over; de klant ziet hem daar nie
   assert.ok(!JSON.stringify(detail.body).includes('Alleen voor de ploeg') && !JSON.stringify(detail.body).includes(NOTE));
 });
 
-test('het akkoordbewijs (contentHash) is te herleiden uit wat de klant zag: zonder interne notities', async () => {
+test('het akkoordbewijs (contentHash) wordt berekend zonder interne notities', async () => {
   const { installer, customer, customerId } = await setup();
   const signature = signaturePng();
   const data = quoteData({ lines: [{ id: 'r1', section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 10, vat: 21, note: 'Prijs navragen' }] });

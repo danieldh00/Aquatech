@@ -188,7 +188,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
 
   /**
    * De offertegegevens zoals de klant ze krijgt: zonder de interne notitie van de offerte (data.internalNote) en van de
-   * regels (line.note). Ook het akkoordbewijs (contentHash) wordt hierover berekend, zodat het na te rekenen is met wat de klant zag.
+   * regels (line.note). Ook het akkoordbewijs (contentHash) wordt hierover berekend, zodat de interne notities er niet in doorwerken (de hash blijft een hash van de volledige offerte, dus ook van de regelprijzen bij de opmaak "totaal per onderdeel").
    * @param {object} data De offertegegevens.
    * @returns {object} De gegevens zonder interne notities.
    */
