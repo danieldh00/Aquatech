@@ -2350,6 +2350,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const targetId = homeOf(req.tenantId);
     const tenantRow = store.getTenant(targetId);
     if (!tenantRow || tenantRow.environment !== 'live') return res.status(404).json({ error: 'not_found', message: 'Organisatie niet gevonden.' });
+    // Het thema van de hoofdtenant is de standaard voor alle andere organisaties: met meer organisaties alleen voor een hoofdbeheerder.
+    if (targetId === tenant.id && multitenancyOn() && !req.user.platform_admin) {
+      return res.status(403).json({ error: 'forbidden', message: 'Het standaardthema voor alle organisaties wijzigt alleen een hoofdbeheerder.' });
+    }
     const raw = req.body?.colors;
     const target = settingsFor(targetId);
     if (raw == null || (typeof raw === 'object' && !Object.keys(raw).length)) {

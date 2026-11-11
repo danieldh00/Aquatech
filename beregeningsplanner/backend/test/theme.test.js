@@ -99,6 +99,15 @@ test('beheerder kiest kleuren van de eigen organisatie: standaard, eigen thema, 
     await store.createAccount(blauw.id, { username: 'kees', displayName: 'Kees', role: 'beheerder', password: PW });
     const env = store.createEnvironment(groen.id, { name: 'Test' }).tenant;
 
+    // Een gewone beheerder van de hoofdtenant (geen hoofdbeheerder) mag het standaardthema niet wijzigen zodra er meer organisaties zijn.
+    await store.createAccount(main.id, { username: 'anna', displayName: 'Anna', role: 'beheerder', password: PW });
+    const anna = createClient(base);
+    assert.strictEqual((await anna.login('anna', PW)).status, 200);
+    assert.strictEqual((await anna.get('/app/api/admin/theme')).status, 200, 'bekijken mag');
+    response = await anna.put('/app/api/admin/theme', { colors: { navy: '#000000' } });
+    assert.strictEqual(response.status, 403);
+    assert.match((await anon.get('/app/shared/theme.css')).text, /--at-navy: #203040;/, 'standaard ongewijzigd');
+
     const piet = createClient(base);
     assert.strictEqual((await piet.login('piet', PW, 'groen')).status, 200);
     response = await piet.get('/app/api/admin/theme');

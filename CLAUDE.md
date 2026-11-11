@@ -356,7 +356,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - **Kleurthema** (0.44.0): `frontend/shared/theme.js` (UMD: `sanitize`,
   `problems` = contrast met wit, `derive`, `vars`, `css`, `apply`). Instelling
   `theme` (`platform: true`, Beheer > Instellingen weigert hem), alleen via
-  `GET|PUT /api/admin/theme` (Beheer > Kleuren, recht `beheer`, 1.9.3: de organisatie komt uit de sessie, nooit uit de invoer; Hoofdbeheer
+  `GET|PUT /api/admin/theme` (Beheer > Kleuren, recht `beheer`, 1.9.3: de organisatie komt uit de sessie, nooit uit de invoer; de hoofdtenant-standaard wijzigt bij multitenancy alleen een hoofdbeheerder; Hoofdbeheer
   heeft alleen nog platformbreed: tenants, hoofdbeheerders, Multitenancy). Hoofdtenant = standaard voor iedereen, live-tenant
   optioneel eigen thema (`themeFor` in server.js, testomgeving volgt
   live-tenant). Server levert `shared/theme.css` (openbaar, na brand.css op

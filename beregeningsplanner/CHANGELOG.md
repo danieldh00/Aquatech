@@ -8,7 +8,7 @@ Kleuren en Visma-app verhuisd van Hoofdbeheer naar de organisatie zelf.
   eigen organisatie, met contrastcontrole en voorbeeld. Het thema van de hoofdtenant blijft de standaard voor organisaties zonder
   eigen thema; een testomgeving volgt zijn live-tenant.
 - API `GET|PUT /api/admin/theme` (recht `beheer`) vervangt `/api/platform/theme`. De organisatie komt uit de sessie (`homeOf(req.tenantId)`),
-  een `tenantId` in de invoer wordt niet gebruikt, dus een beheerder raakt nooit een andere organisatie. Een hoofdbeheerder die het
+  een `tenantId` in de invoer wordt niet gebruikt, dus een beheerder raakt nooit een andere organisatie. Het thema van de hoofdtenant (de standaard voor alle organisaties) wijzigt bij meerdere organisaties alleen een hoofdbeheerder. Een hoofdbeheerder die het
   thema van een andere organisatie wil wijzigen, opent die organisatie via Hoofdbeheer > Openen. Audit `thema_gewijzigd` staat nu in de eigen organisatie.
 - **Visma per organisatie**: de app-registratie (client ID, omgeving, secret, redirect URI) staat nu per omgeving in Facturen → Visma
   (`GET|PUT /api/visma/app`, recht `facturen`) in plaats van platformbreed in Hoofdbeheer. `vismaApp`/`vismaClientSecret` zijn `internal` + `liveOnly`;
