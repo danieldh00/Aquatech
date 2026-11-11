@@ -557,6 +557,15 @@ test('visma: bediening – pauzeren, onderdelen aan/uit, klanten niet aanmaken e
     await baas.put('/app/api/visma/controls', { parts: { customers: false } });
     assert.strictEqual((await baas.get('/app/api/visma/log?limit=100')).body.items.filter((entry) => entry.kind === 'instelling').length, logged);
 
+    // Een andere organisatie kan de bediening van deze niet wijzigen en heeft een eigen stand.
+    await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
+    const piet = await as('piet', 'groen');
+    const before = (await baas.get('/app/api/visma')).body.settings;
+    assert.strictEqual((await piet.put('/app/api/visma/controls', { paused: true, parts: { invoices: false, credits: false, customers: false } })).body.settings.paused, true);
+    const after = (await baas.get('/app/api/visma')).body.settings;
+    assert.deepStrictEqual([after.paused, after.parts], [before.paused, before.parts], 'de stand van de eerste organisatie is niet veranderd');
+    assert.strictEqual((await piet.get('/app/api/visma/log')).body.items.filter((entry) => entry.kind === 'instelling').length, 4, 'en de wijzigingen staan in het logboek van de eigen organisatie');
+
     // Verbreken trekt het refresh token in bij Visma.
     const off = await baas.post('/app/api/visma/disconnect', {});
     assert.strictEqual(off.body.revoked, true);
