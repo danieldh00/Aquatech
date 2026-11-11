@@ -666,8 +666,7 @@
     quote.customerAccount = { id: customer.id, displayName: customer.displayName, username: customer.username };
     state.dirty = true;
     renderAccount(quote);
-    await save({ customerId: customer.id });
-    toast('Gegevens van de klant ingevuld');
+    if (await save({ customerId: customer.id })) toast('Gegevens van de klant ingevuld');
   }
 
   /**
@@ -831,14 +830,14 @@
   /**
    * Slaat de offerte op (wacht op een lopende opslag).
    * @param {object} extra extra velden voor de server, zoals status of customerId
-   * @returns {Promise<void>|undefined} de lopende opslag
+   * @returns {Promise<boolean>} true als de offerte is opgeslagen (of niets te bewaren was)
    */
   async function save(extra = {}) {
     clearTimeout(state.saveTimer);
     const quote = state.quote;
-    if (!quote || locked()) { state.dirty = false; return; }
+    if (!quote || locked()) { state.dirty = false; return false; }
     if (state.saving) await state.saving;
-    if (!state.dirty && !Object.keys(extra).length) return;
+    if (!state.dirty && !Object.keys(extra).length) return true;
     state.dirty = false;
     $('#e-saved').textContent = 'Opslaan…';
     state.saving = (async () => {
@@ -850,17 +849,19 @@
           quote.share = result.share;
           $('#e-saved').textContent = `Opgeslagen ${new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`;
         }
+        return true;
       } catch (error) {
         if (error.code === 'locked') {
           // Inmiddels beantwoord door de klant: de serverversie tonen.
           $('#e-saved').textContent = '';
           toast(error.message, true);
           loadQuote(quote.id);
-          return;
+          return false;
         }
         state.dirty = true;
         $('#e-saved').textContent = 'Niet opgeslagen';
         toast(`Opslaan mislukt: ${error.message}`, true);
+        return false;
       } finally {
         state.saving = null;
       }

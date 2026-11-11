@@ -7,6 +7,7 @@ Offerte: klantkeuze bovenaan het klantblok met automatisch invullen (punt 4 van 
 - **Klantkeuze** in de offerte-editor: zoekveld *Klant uit de klantenlijst* (naam, bedrijf, e-mail, telefoon, adres) bovenaan het blok Klant. Een keuze koppelt de offerte aan het klantaccount én vult naam/bedrijf, T.a.v., adres, e-mail en telefoon in; *Ontkoppelen* haalt alleen de koppeling weg. Vervangt de keuzelijst *Klantaccount* onderaan.
 - `GET /api/quote-customers?q=` zoekt nu op de server (hoogstens 20, alleen actieve klanten, met `companyName`, `email`, `phone`, `address`) in plaats van de hele klantenlijst mee te laden: werkt ook bij honderden klanten. `store.listCustomerPage` kreeg `activeOnly`. Toegang blijft recht `offertes`; de koppeling zelf wordt nog steeds tegen de lijst klanten van de organisatie gecontroleerd.
 - Tests: zoeken, velden, begrenzing op 20 en uitgeschakelde klanten (`customers.test.js`, `quotes.test.js`).
+- **Formulier Nieuwe klant en klantkaart opgeruimd**: het adres is nu gewone tekst (met een korte aanwijzing zolang er geen is) in plaats van een grijs invulveld; velden gegroepeerd (soort/naam/e-mail/telefoon, dan bedrijfsgegevens, dan postcode/huisnr./toev.), KvK en btw verdwijnen echt bij Particulier (`[hidden]` in `layout.css`), het postcodeblok loopt mee met het raster en de hulptekst is korter.
 
 ## 1.9.7
 

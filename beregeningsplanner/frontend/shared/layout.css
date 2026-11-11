@@ -26,6 +26,17 @@
 /* Het rijtje Postcode / Huisnr. / Toev. van shared/address-lookup.js staat boven het adresveld, over de hele breedte. */
 .form-grid > .addr-lookup { grid-column: 1 / -1; }
 
+/* Een verborgen veld blijft verborgen, ook al is de rest van het raster een flexkolom. */
+.form-grid [hidden] { display: none !important; }
+
+/* In een raster lopen Postcode / Huisnr. / Toev. mee met de kolommen en hebben dezelfde labelstijl als de andere velden. */
+.form-grid > .addr-lookup { display: contents; }
+.form-grid > .addr-lookup > label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+.form-grid > .addr-lookup > label > input { width: 100%; box-sizing: border-box; }
+.form-grid > .addr-lookup > .addr-status { grid-column: 1 / -1; order: 0; font-size: 12px; margin: 0; }
+.form-grid .addr-text { color: var(--text); font-size: 14px; line-height: 1.4; min-height: 1.4em; }
+.form-grid .addr-text.empty { color: var(--muted); font-style: italic; }
+
 /* Vier vaste kolommen op een breed scherm (bijv. Gebruiker toevoegen), twee op een tablet, één op een telefoon. */
 .form-grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 1000px) { .form-grid.cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

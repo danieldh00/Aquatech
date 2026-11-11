@@ -203,6 +203,28 @@
     form.querySelectorAll('[data-business]').forEach((field) => { field.hidden = !business; });
   }
 
+  /**
+   * Toont het adres uit het (verborgen) adresveld als gewone tekst, met een korte aanwijzing zolang er nog geen is.
+   * @param {HTMLFormElement} form Het formulier met het adresveld.
+   * @returns {void}
+   */
+  function showAddressText(form) {
+    const text = form.querySelector('[data-addr-text]');
+    const address = form.address.value.trim().split(/\s*\n\s*/).join(', ');
+    text.textContent = address || 'Vul hierboven postcode en huisnummer in';
+    text.classList.toggle('empty', !address);
+  }
+
+  /**
+   * Houdt de adrestekst bij als de postcodezoeker het adres invult of wist.
+   * @param {HTMLFormElement} form Het formulier met het adresveld.
+   * @returns {void}
+   */
+  function watchAddressText(form) {
+    form.address.addEventListener('input', () => showAddressText(form));
+    showAddressText(form);
+  }
+
   /** Maakt het formulier voor een nieuwe klant leeg. */
   function openNew() {
     const form = $('#n-form');
@@ -212,6 +234,7 @@
     form.querySelectorAll('.addr-lookup').forEach((group) => group.remove());
     delete form.address.dataset.addressEnhanced;
     if (window.AddressLookup) window.AddressLookup.enhance(form.address);
+    if (!form.address.dataset.textWatched) { form.address.dataset.textWatched = '1'; watchAddressText(form); } else showAddressText(form);
     show('new');
     form.displayName.focus();
   }
@@ -269,7 +292,7 @@
         <label class="field full">Naam<input name="displayName" required maxlength="80" value="${esc(customer.displayName)}"></label>
         <label class="field">E-mailadres<input name="email" type="email" maxlength="200" value="${esc(customer.email)}"></label>
         <label class="field">Telefoon<input name="phone" type="tel" maxlength="25" value="${esc(customer.phone)}"></label>
-        <label class="field full">Adres<textarea name="address" data-address-lookup rows="2" maxlength="400">${esc(customer.address)}</textarea></label>
+        <label class="field full addr-result">Adres<span class="addr-text" data-addr-text></span><textarea name="address" data-address-lookup hidden maxlength="400">${esc(customer.address)}</textarea></label>
       </div>
       <div class="err" id="c-contact-err" role="alert"></div>
       <div class="form-actions"><button class="btn primary" type="submit">Gegevens opslaan</button></div>
@@ -387,6 +410,7 @@
   function wireDetail() {
     const contact = $('#c-contact');
     if (window.AddressLookup) window.AddressLookup.enhance(contact.address);
+    watchAddressText(contact);
     /**
      * Slaat naam, e-mail, telefoon en adres op.
      * @param {SubmitEvent} event Het verzenden.

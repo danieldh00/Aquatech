@@ -111,7 +111,7 @@
         if (typed.length >= 6 && !postcode) say('Controleer de postcode: die bestaat uit vier cijfers en twee letters, bijvoorbeeld 1234 AB.', 'error');
         else if (problem) {
           // Onvolledige invoer na een eerder adres: de blokkade blijft tot er een nieuwe treffer is, alleen de melding wordt neutraal.
-          statusElement.textContent = 'Vul postcode en huisnummer in; het adres wordt dan automatisch ingevuld.';
+          statusElement.textContent = 'Vul postcode en huisnummer in, het adres volgt vanzelf.';
           statusElement.dataset.kind = '';
         } else say('');
         return;
@@ -238,7 +238,7 @@
       <label>Postcode<input type="text" maxlength="7" autocomplete="off" placeholder="1234 AB" spellcheck="false"></label>
       <label>Huisnr.<input type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="12"></label>
       <label>Toev.<input type="text" maxlength="6" autocomplete="off" placeholder="A"></label>
-      <p class="addr-status" role="status" aria-live="polite">Vul postcode en huisnummer in; het adres wordt dan automatisch ingevuld.</p>`;
+      <p class="addr-status" role="status" aria-live="polite">Vul postcode en huisnummer in, het adres volgt vanzelf.</p>`;
     const [postcodeInput, numberInput, suffixInput] = group.querySelectorAll('input');
     const statusElement = group.querySelector('.addr-status');
     counter += 1;

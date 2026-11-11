@@ -18,6 +18,7 @@
       title: 'Klant kiezen in de offerte',
       items: [
         { text: 'Offerte maken gaat sneller: kies bovenaan een klant uit de klantenlijst en naam, adres, e-mail en telefoon worden meteen ingevuld.', for: ['offertes'] },
+        { text: 'Het formulier voor een nieuwe klant is overzichtelijker: het adres staat als gewone tekst, en bedrijfsgegevens zie je alleen bij een zakelijke klant.', for: ['klanten'] },
       ],
     },
     {
