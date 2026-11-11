@@ -526,6 +526,9 @@ test('API: btw verlegd op een offerte wordt bij VIES gecontroleerd en als bewijs
     const dutch = body({ on: true, number: 'DE123456789' });
     dutch.data.customer = { name: 'X', address: 'Nepstraat 1\n1234 AB Nergens' };
     assert.strictEqual((await piet.post('/app/api/quotes', dutch)).status === 201, false, 'Nederlands adres blijft bij PDOK');
+    // Een vervalste uitkomst zonder nummer slaat de PDOK-controle niet over.
+    const forgedCheck = { data: { title: 'X', lines, customer: { name: 'X', address: 'Nepstraat 1\n1234 AB Nergens' }, vatShift: { on: true, number: '', status: 'geldig' } } };
+    assert.strictEqual((await piet.post('/app/api/quotes', forgedCheck)).status === 201, false, 'vals bewijs zonder nummer omzeilt PDOK niet');
     // Uitzetten wist het bewijs en rekent weer met btw.
     const off = await piet.put(`/app/api/quotes/${ok.body.id}`, body({ on: false, number: 'DE123456789', status: 'geldig' }));
     assert.strictEqual(off.body.data.vatShift.status, '');

@@ -717,7 +717,7 @@ function registerQuoteRoutes(app, ctx) {
    * @param {object} req Het verzoek.
    * @param {object|undefined} data De ruwe offertegegevens.
    * @param {object|null} [stored] De opgeslagen offerte.
-   * @returns {Promise<{ data: object|undefined }|{ error: string, message: string }>} De gegevens met bewijs, of de fout.
+   * @returns {Promise<{ data: object|undefined, checked?: boolean }|{ error: string, message: string }>} De gegevens met bewijs (checked = de server heeft vastgesteld dat VIES het nummer geldig noemt), of de fout.
    */
   async function applyVatShift(req, data, stored = null) {
     const shift = data && data.vatShift;
@@ -727,13 +727,13 @@ function registerQuoteRoutes(app, ctx) {
       return { error: 'invalid_vat_number', message: 'Btw verleggen kan alleen met een geldig btw-nummer uit een ander EU-land dan Nederland.' };
     }
     const evidence = storedEvidence(stored, number);
-    if (evidence) return { data: { ...data, vatShift: { on: true, number, ...evidence } } };
+    if (evidence) return { data: { ...data, vatShift: { on: true, number, ...evidence } }, checked: evidence.status === 'geldig' };
     const requester = normalizeVatNumber(settingsOf(req).get('quoteProfile').vatNumber);
     const result = ctx.vies ? await ctx.vies.check(number, validVatNumber(requester) ? requester : '') : { status: 'onbereikbaar', checkedAt: new Date().toISOString(), requestId: '', name: '' };
     if (result.status === 'ongeldig') {
       return { error: 'vat_invalid', message: `Het btw-nummer ${number} is volgens VIES (de btw-database van de EU) niet geldig, dus de btw kan niet worden verlegd.` };
     }
-    return { data: { ...data, vatShift: { on: true, number, status: result.status, checkedAt: result.checkedAt, requestId: result.requestId, name: result.name } } };
+    return { data: { ...data, vatShift: { on: true, number, status: result.status, checkedAt: result.checkedAt, requestId: result.requestId, name: result.name } }, checked: result.status === 'geldig' };
   }
 
   const viesPerUser = createRateLimiter({ windowMs: 60 * 1000, max: 20, keyFn: (req) => `vies:${req.user.tenant_id}|${req.user.id}` });
@@ -762,7 +762,7 @@ function registerQuoteRoutes(app, ctx) {
           const shifted = await applyVatShift(req, data, stored);
           if (shifted.error) return res.status(shifted.error === 'vat_invalid' ? 409 : 400).json({ error: shifted.error, message: shifted.message });
           req.body.data = shifted.data;
-          req.vatShiftChecked = Boolean(shifted.data.vatShift && shifted.data.vatShift.on === true && shifted.data.vatShift.status === 'geldig');
+          req.vatShiftChecked = shifted.checked === true;
           return next();
         } catch (error) {
           return next(error);
