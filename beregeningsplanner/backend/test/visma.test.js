@@ -540,6 +540,10 @@ test('visma: bediening – pauzeren, onderdelen aan/uit, klanten niet aanmaken e
     assert.strictEqual(noCustomer.status, 409);
     assert.strictEqual(noCustomer.body.error, 'customers_off');
     assert.strictEqual(visma.customers.length, customersBefore);
+    // Het doorsturen in bulk slaat zo'n factuur over (geen herhaalde fouten, geen geblokkeerde batch) en telt hem niet als wachtend.
+    const bulk = await baas.post('/app/api/visma/sync', {});
+    assert.deepStrictEqual([bulk.body.sent, bulk.body.failed], [0, 0]);
+    assert.strictEqual(bulk.body.status.pending, 0);
 
     // Elke wijziging staat in het logboek, met naam.
     const log = (await baas.get('/app/api/visma/log?limit=100')).body.items.filter((entry) => entry.kind === 'instelling');

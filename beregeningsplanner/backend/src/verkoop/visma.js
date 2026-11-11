@@ -587,15 +587,19 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
 
   /**
    * Extra voorwaarden voor facturen die nog moeten: vanaf visma.since en alleen de soorten waarvan het onderdeel aan staat.
+   * Staat klanten aanmaken uit, dan alleen facturen van debiteuren die al aan een Visma-klant gekoppeld zijn: de rest zou
+   * elke keer mislukken en de batch (oudste eerst) voor latere facturen blokkeren.
+   * @param {string} tenantId Id van de omgeving.
    * @param {object} vismaSettings De instelling visma.
    * @returns {{ sql: string, args: Array }} Het stuk SQL (begint met AND) en de parameters.
    */
-  function pendingFilter(vismaSettings) {
+  function pendingFilter(tenantId, vismaSettings) {
     let sql = '';
     const args = [];
     if (vismaSettings.since) { sql += ' AND invoice_date >= ?'; args.push(vismaSettings.since); }
     if (!vismaSettings.parts.credits) sql += " AND kind <> 'credit'";
     if (!vismaSettings.parts.invoices) sql += " AND kind = 'credit'";
+    if (!vismaSettings.parts.customers) { sql += ' AND debtor_id IN (SELECT id FROM debtors WHERE tenant_id = ? AND visma_customer_id IS NOT NULL)'; args.push(tenantId); }
     return { sql, args };
   }
 
@@ -609,7 +613,7 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
     if (!connected(tenantId)) return { skipped: 'not_connected' };
     const vismaSettings = vismaSettingsOf(tenantId);
     if (vismaSettings.paused) return { skipped: 'paused' };
-    const pending = pendingFilter(vismaSettings);
+    const pending = pendingFilter(tenantId, vismaSettings);
     const ids = prepare(`SELECT id FROM invoices WHERE tenant_id = ? AND status <> 'concept' AND visma_invoice_id IS NULL${pending.sql} ORDER BY finalized_at, number LIMIT ${BATCH}`)
       .all(tenantId, ...pending.args).map((row) => row.id);
     const out = { sent: 0, failed: 0, errors: [] };
@@ -685,7 +689,7 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
   function status(tenantId) {
     const registration = app(tenantId);
     const vismaSettings = vismaSettingsOf(tenantId);
-    const pending = pendingFilter(vismaSettings);
+    const pending = pendingFilter(tenantId, vismaSettings);
     const counts = prepare(`SELECT COUNT(*) AS n, SUM(CASE WHEN visma_error <> '' THEN 1 ELSE 0 END) AS failed FROM invoices
       WHERE tenant_id = ? AND status <> 'concept' AND visma_invoice_id IS NULL${pending.sql}`)
       .get(tenantId, ...pending.args);
