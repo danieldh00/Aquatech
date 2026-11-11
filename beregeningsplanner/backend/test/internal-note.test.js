@@ -4,11 +4,13 @@ const test = require('node:test');
 const { after } = test;
 const assert = require('node:assert');
 const path = require('path');
+const crypto = require('crypto');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createClient, createLogin, listen } = require('./helpers/http-client');
 const { createPdokFake } = require('./helpers/pdok-fake');
+const { signaturePng } = require('../src/platform/test-data');
 
 const QuoteCore = require(path.join(__dirname, '..', '..', 'frontend', 'offertes', 'quote-core.js'));
 const WorkOrderCore = require(path.join(__dirname, '..', '..', 'frontend', 'werkorders', 'workorder-core.js'));
@@ -94,4 +96,20 @@ test('werkorder uit de offerte neemt de notitie over; de klant ziet hem daar nie
   const detail = await customer.get(`/app/api/portal/workorders/${workOrder.id}`);
   assert.strictEqual(detail.status, 200);
   assert.ok(!JSON.stringify(detail.body).includes('Alleen voor de ploeg') && !JSON.stringify(detail.body).includes(NOTE));
+});
+
+test('het akkoordbewijs (contentHash) is te herleiden uit wat de klant zag: zonder interne notities', async () => {
+  const { installer, customer, customerId } = await setup();
+  const signature = signaturePng();
+  const data = quoteData({ lines: [{ id: 'r1', section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 10, vat: 21, note: 'Prijs navragen' }] });
+  const quote = (await installer.post('/app/api/quotes', { data, customerId })).body;
+  assert.strictEqual((await installer.put(`/app/api/quotes/${quote.id}`, { status: 'verzonden' })).status, 200);
+  const answer = await customer.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature });
+  assert.strictEqual(answer.status, 200, JSON.stringify(answer.body));
+  const stored = (await installer.get(`/app/api/quotes/${quote.id}`)).body;
+  assert.ok(stored.acceptance.contentHash, 'er is een hash');
+  const { internalNote, ...rest } = stored.data;
+  const customerData = { ...rest, lines: stored.data.lines.map(({ note, ...line }) => line) };
+  const expected = crypto.createHash('sha256').update(JSON.stringify({ number: stored.number, data: customerData, totals: QuoteCore.totals(customerData) })).digest('hex');
+  assert.strictEqual(stored.acceptance.contentHash, expected);
 });

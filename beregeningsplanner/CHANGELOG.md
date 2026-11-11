@@ -7,6 +7,7 @@ Interne notitie per offerte (punt 9 van bundel A). Geen migratie: de notitie sta
 - **Offerte**: blok *Interne notitie* onder de voorwaarden. De notitie staat nooit op het document, de pdf/afdruk, de Excel, de mail of de openbare link en ontbreekt in alles wat de klant van de offerte ziet (`forCustomer` in quotes.js haalt hem weg, ook in het portaal).
 - **Werkorder**: bij *Werkorder maken* wordt de notitie overgenomen in `data.internalNote` (blok *Interne notitie* in de werkorder, aanpasbaar, alleen voor medewerkers). De klant ziet hem niet in het portaal en hij gaat niet mee bij uitbesteden (`handoverOf` neemt alleen genoemde velden over).
 - Een kopie van een offerte neemt de notitie mee; een factuur krijgt hem niet.
+- Het akkoordbewijs (`acceptance.contentHash`) wordt berekend over de gegevens zonder interne notities (offerte en regels), zodat de hash na te rekenen is met wat de klant te zien kreeg (`withoutInternalNotes` in quotes.js, gedeeld met `forCustomer`).
 - Tests: `internal-note.test.js` (kern, opslaan en lezen, portaal, openbare link, werkorder, klantportaal-werkorder).
 
 ## 1.10.2
