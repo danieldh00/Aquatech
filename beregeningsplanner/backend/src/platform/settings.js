@@ -91,22 +91,21 @@ const FIELDS = {
   // Seizoensherinneringen voor klanten (season-reminders.js): aan/uit, adres
   // van het klantportaal voor de knop in de mail, en de herinneringen.
   seasonReminders: { type: 'object', default: {}, sanitize: sanitizeSeasonReminders, liveOnly: true },
-  // Kleurthema (shared/theme.js): alleen door een hoofdbeheerder te kiezen via
-  // Hoofdbeheer (platform: niet via Beheer > Instellingen). In de hoofdtenant
-  // geldt het voor alle organisaties, in een live-tenant als eigen thema.
+  // Kleurthema (shared/theme.js): per organisatie te kiezen in Beheer > Kleuren (eigen
+  // scherm met contrastcontrole, platform: niet via Beheer > Instellingen). In de hoofdtenant
+  // geldt het voor alle organisaties zonder eigen thema, in een live-tenant als eigen thema.
   theme: { type: 'object', default: {}, sanitize: Theme.sanitize, platform: true },
   // Multitenancy (Hoofdbeheer > Multitenancy). Uit (standaard) = één organisatie: alles draait in de hoofdtenant, er
   // is geen tenantbeheer en geen organisatiecode bij het inloggen; de hoofdtenant behoudt zijn testomgevingen.
   // Aan = meer organisaties naast elkaar. De gegevens (tenant_id, RLS) blijven in beide standen gelijk, zodat
   // aanzetten direct werkt. Env MULTITENANCY is alleen de startwaarde.
   multitenancy: { type: 'bool', env: 'MULTITENANCY', default: false, platform: true },
-  // Visma eAccounting (visma.js). De app-registratie (client ID, sandbox of
-  // productie, redirect URI) en het secret gelden voor het hele platform en
-  // staan in de hoofdtenant (Hoofdbeheer). Per omgeving: de keuzes in
-  // Facturen → Visma en het refresh token van de verbonden administratie;
-  // internal = alleen via /api/visma, niet via Beheer > Instellingen.
-  vismaApp: { type: 'object', default: {}, sanitize: sanitizeVismaApp, platform: true, liveOnly: true },
-  vismaClientSecret: { type: 'secret', default: '', min: 8, platform: true },
+  // Visma eAccounting (visma.js), alles per omgeving: de app-registratie (client ID,
+  // sandbox of productie, redirect URI) met het secret, de keuzes in Facturen → Visma
+  // en het refresh token van de verbonden administratie; internal = alleen via
+  // /api/visma, niet via Beheer > Instellingen.
+  vismaApp: { type: 'object', default: {}, sanitize: sanitizeVismaApp, internal: true, liveOnly: true },
+  vismaClientSecret: { type: 'secret', default: '', min: 8, internal: true, liveOnly: true },
   visma: { type: 'object', default: {}, sanitize: sanitizeVisma, internal: true, liveOnly: true },
   vismaRefreshToken: { type: 'secret', default: '', min: 1, max: 4000, internal: true, liveOnly: true },
 };

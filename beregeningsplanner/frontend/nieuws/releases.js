@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.9.3',
+      date: '2026-11-11',
+      title: 'Kleuren en Visma per organisatie',
+      items: [
+        { text: 'De kleuren van de app stel je nu in via Beheer > Kleuren, voor je eigen organisatie. Hoofdbeheer bevat alleen nog wat voor het hele platform geldt.', for: ['beheer'] },
+        { text: 'Elke organisatie vult de app-gegevens van Visma nu zelf in, onder Facturen > Visma, en heeft dus een eigen koppeling.', for: ['facturen'] },
+      ],
+    },
+    {
       version: '1.9.2',
       date: '2026-11-11',
       title: 'Snel van de webshop naar het beheer',

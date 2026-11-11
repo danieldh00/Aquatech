@@ -39,7 +39,7 @@ test('thema-kern: standaard, afleiding, contrast en opschonen', () => {
   assert.ok(Math.abs(Theme.contrast('#000000', '#ffffff') - 21) < 1e-9);
 });
 
-test('hoofdbeheerder kiest kleuren: standaard, per tenant, terugzetten', async () => {
+test('beheerder kiest kleuren van de eigen organisatie: standaard, eigen thema, testomgeving, terugzetten', async () => {
   const db = openDb();
   const store = createStore(db);
   const main = store.ensureTenant();
@@ -51,27 +51,32 @@ test('hoofdbeheerder kiest kleuren: standaard, per tenant, terugzetten', async (
     assert.strictEqual(response.status, 200, 'ook zonder inloggen bereikbaar');
     assert.match(response.type, /text\/css/);
     assert.doesNotMatch(response.text, /--at-navy/, 'standaard: geen overschrijving');
-    assert.strictEqual((await anon.get('/app/api/platform/theme')).status, 401);
+    assert.strictEqual((await anon.get('/app/api/admin/theme')).status, 401);
 
     const baas = createClient(base);
     assert.strictEqual((await baas.login('baas', PW)).status, 200);
-    response = await baas.get('/app/api/platform/theme');
+    response = await baas.get('/app/api/admin/theme');
     assert.strictEqual(response.status, 200);
     assert.deepStrictEqual(response.body.defaults, Theme.DEFAULTS);
-    assert.deepStrictEqual(response.body.global, {});
+    assert.deepStrictEqual(response.body.theme, {});
+    assert.deepStrictEqual(response.body.inherited, {});
+    assert.strictEqual(response.body.tenantId, response.body.mainTenantId, 'de hoofdtenant stelt de standaard in');
+    assert.strictEqual((await baas.get('/app/api/platform/theme')).status, 404, 'het oude Hoofdbeheer-adres bestaat niet meer');
 
     // Ongeldig of te licht: geweigerd.
-    response = await baas.put('/app/api/platform/theme', { colors: { navy: 'blauw' } });
+    response = await baas.put('/app/api/admin/theme', { colors: { navy: 'blauw' } });
     assert.strictEqual(response.status, 400);
     assert.strictEqual(response.body.field, 'navy');
-    response = await baas.put('/app/api/platform/theme', { colors: { green: '#9be7b5' } });
+    response = await baas.put('/app/api/admin/theme', { colors: { green: '#9be7b5' } });
     assert.strictEqual(response.status, 400);
     assert.match(response.body.message, /te licht/);
-    response = await baas.put('/app/api/platform/theme', { colors: { onbekend: '#000000' } });
+    response = await baas.put('/app/api/admin/theme', { colors: { onbekend: '#000000' } });
+    assert.strictEqual(response.status, 400);
+    response = await baas.put('/app/api/admin/theme', { colors: ['#000000'] });
     assert.strictEqual(response.status, 400);
 
-    // Standaardthema voor iedereen.
-    response = await baas.put('/app/api/platform/theme', { colors: { navy: '#203040', green: '#1a6fb0' } });
+    // Standaardthema voor iedereen (de hoofdtenant).
+    response = await baas.put('/app/api/admin/theme', { colors: { navy: '#203040', green: '#1a6fb0' } });
     assert.strictEqual(response.status, 200, JSON.stringify(response.body));
     assert.deepStrictEqual(response.body.theme, { navy: '#203040', green: '#1a6fb0', teal: '#2cb0c0' });
     response = await anon.get('/app/shared/theme.css');
@@ -80,42 +85,80 @@ test('hoofdbeheerder kiest kleuren: standaard, per tenant, terugzetten', async (
     response = await anon.get('/app/login');
     assert.match(response.text, /<style>:root \{[^<]*--at-navy: #203040;/, 'inlogpagina in het thema');
 
-    // Via Beheer > Instellingen kan het niet.
+    // Via Beheer > Instellingen kan het niet; de melding wijst naar Kleuren.
     response = await baas.put('/app/api/admin/settings', { theme: { navy: '#000000' } });
     assert.strictEqual(response.status, 400);
     assert.strictEqual(response.body.field, 'theme');
+    assert.match(response.body.message, /Beheer > Kleuren/);
 
-    // Eigen thema voor een tenant; een andere tenant volgt de standaard.
+    // Elke organisatie kiest zelf; een andere organisatie volgt de standaard.
     const groen = store.createTenant({ name: 'Groen BV', slug: 'groen' }).tenant;
     const blauw = store.createTenant({ name: 'Blauw BV', slug: 'blauw' }).tenant;
     await store.createAccount(groen.id, { username: 'piet', displayName: 'Piet', role: 'beheerder', password: PW });
+    await store.createAccount(groen.id, { username: 'jan', displayName: 'Jan', role: 'installateur', password: PW });
     await store.createAccount(blauw.id, { username: 'kees', displayName: 'Kees', role: 'beheerder', password: PW });
-    response = await baas.put('/app/api/platform/theme', { tenantId: groen.id, colors: { navy: '#0b3d2e', green: '#2e7d32', teal: '#f5a623' } });
-    assert.strictEqual(response.status, 200);
     const env = store.createEnvironment(groen.id, { name: 'Test' }).tenant;
-    assert.strictEqual((await baas.put('/app/api/platform/theme', { tenantId: env.id, colors: { navy: '#000000' } })).status, 404, 'testomgeving volgt de tenant');
+
+    // Een gewone beheerder van de hoofdtenant (geen hoofdbeheerder) mag het standaardthema niet wijzigen zodra er meer organisaties zijn.
+    await store.createAccount(main.id, { username: 'anna', displayName: 'Anna', role: 'beheerder', password: PW });
+    const anna = createClient(base);
+    assert.strictEqual((await anna.login('anna', PW)).status, 200);
+    response = await anna.get('/app/api/admin/theme');
+    assert.strictEqual(response.status, 200, 'bekijken mag');
+    assert.strictEqual(response.body.canEdit, false);
+    assert.strictEqual((await baas.get('/app/api/admin/theme')).body.canEdit, true);
+    response = await anna.put('/app/api/admin/theme', { colors: { navy: '#000000' } });
+    assert.strictEqual(response.status, 403);
+    assert.match((await anon.get('/app/shared/theme.css')).text, /--at-navy: #203040;/, 'standaard ongewijzigd');
 
     const piet = createClient(base);
     assert.strictEqual((await piet.login('piet', PW, 'groen')).status, 200);
+    response = await piet.get('/app/api/admin/theme');
+    assert.strictEqual(response.body.tenantId, groen.id);
+    assert.strictEqual(response.body.tenantName, 'Groen BV');
+    assert.deepStrictEqual(response.body.theme, {}, 'nog geen eigen thema');
+    assert.deepStrictEqual(response.body.inherited, { navy: '#203040', green: '#1a6fb0', teal: '#2cb0c0' }, 'terugval = standaard van de hoofdtenant');
+    response = await piet.put('/app/api/admin/theme', { colors: { navy: '#0b3d2e', green: '#2e7d32', teal: '#f5a623' } });
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.tenantId, groen.id, 'alleen de eigen organisatie wordt gewijzigd');
     assert.match((await piet.get('/app/shared/theme.css')).text, /--at-navy: #0b3d2e;/);
-    assert.strictEqual((await piet.get('/app/api/platform/theme')).status, 403, 'alleen hoofdbeheerders');
+    // Een tenantId in de invoer wordt genegeerd: een beheerder raakt nooit een andere organisatie.
+    response = await piet.put('/app/api/admin/theme', { tenantId: blauw.id, colors: { navy: '#0b3d2e', green: '#2e7d32', teal: '#f5a623' } });
+    assert.strictEqual(response.body.tenantId, groen.id);
     const kees = createClient(base);
     assert.strictEqual((await kees.login('kees', PW, 'blauw')).status, 200);
-    assert.match((await kees.get('/app/shared/theme.css')).text, /--at-navy: #203040;/);
+    assert.match((await kees.get('/app/shared/theme.css')).text, /--at-navy: #203040;/, 'andere organisatie volgt de standaard');
+    assert.deepStrictEqual((await kees.get('/app/api/admin/theme')).body.theme, {});
 
-    response = await baas.get('/app/api/platform/theme');
-    assert.deepStrictEqual(response.body.tenants.find((tenant) => tenant.id === groen.id).theme, { navy: '#0b3d2e', green: '#2e7d32', teal: '#f5a623' });
-    assert.deepStrictEqual(response.body.tenants.find((tenant) => tenant.id === blauw.id).theme, {});
+    // De testomgeving van Groen werkt op het thema van Groen.
+    assert.strictEqual((await piet.post('/app/api/environment', { tenantId: env.id })).status, 200);
+    response = await piet.get('/app/api/admin/theme');
+    assert.strictEqual(response.body.tenantId, groen.id, 'testomgeving → live-tenant');
+    assert.deepStrictEqual(response.body.theme, { navy: '#0b3d2e', green: '#2e7d32', teal: '#f5a623' });
+    assert.match((await piet.get('/app/shared/theme.css')).text, /--at-navy: #0b3d2e;/);
+    assert.strictEqual((await piet.post('/app/api/environment', { tenantId: groen.id })).status, 200);
 
-    // Terugzetten: tenant terug naar de standaard, standaard terug naar de huisstijl.
-    assert.strictEqual((await baas.put('/app/api/platform/theme', { tenantId: groen.id, colors: null })).status, 200);
+    // Zonder recht beheer: geen toegang.
+    const jan = createClient(base);
+    assert.strictEqual((await jan.login('jan', PW, 'groen')).status, 200);
+    assert.strictEqual((await jan.get('/app/api/admin/theme')).status, 403);
+    assert.strictEqual((await jan.put('/app/api/admin/theme', { colors: { navy: '#000000' } })).status, 403);
+    assert.match((await piet.get('/app/shared/theme.css')).text, /--at-navy: #0b3d2e;/, 'ongewijzigd');
+
+    // Auditlog: wie wijzigde wat, in de eigen organisatie.
+    response = await piet.get('/app/api/admin/audit');
+    assert.ok(response.body.items.some((item) => item.action === 'thema_gewijzigd'), JSON.stringify(response.body).slice(0, 300));
+
+    // Terugzetten: organisatie terug naar de standaard, standaard terug naar de huisstijl.
+    response = await piet.put('/app/api/admin/theme', { colors: null });
+    assert.deepStrictEqual(response.body.theme, {});
     assert.match((await piet.get('/app/shared/theme.css')).text, /--at-navy: #203040;/);
-    response = await baas.put('/app/api/platform/theme', { colors: null });
+    response = await baas.put('/app/api/admin/theme', { colors: null });
     assert.deepStrictEqual(response.body.theme, {});
     assert.doesNotMatch((await anon.get('/app/shared/theme.css')).text, /--at-navy/);
     assert.doesNotMatch((await anon.get('/app/login')).text, /<style>:root/);
-    // De huisstijl expliciet kiezen is hetzelfde als terugzetten.
-    response = await baas.put('/app/api/platform/theme', { colors: { ...Theme.DEFAULTS } });
+    // De huisstijl expliciet kiezen in de hoofdtenant is hetzelfde als terugzetten.
+    response = await baas.put('/app/api/admin/theme', { colors: { ...Theme.DEFAULTS } });
     assert.deepStrictEqual(response.body.theme, {});
   } finally {
     server.close();

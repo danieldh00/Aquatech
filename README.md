@@ -15,7 +15,7 @@ webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als databas
 | Webshopbestellingen | Bestellingen, betalingen, terugbetalen, retouren en de margerapportage. |
 | Meldingen, Klantportaal, Klantdossier | Storingen en onderhoud melden, opleverdossier en installatiedossier per locatie. |
 | Uitbesteden, Nieuws, Profiel | Werk tussen organisaties, berichten en versielogboek, eigen voorkeuren en tweestapsverificatie. |
-| Beheer, Hoofdbeheer | Instellingen, gebruikers en rollen, back-ups, testomgevingen; platform: organisaties, thema, multitenancy. |
+| Beheer, Hoofdbeheer | Instellingen, gebruikers en rollen, back-ups, testomgevingen; platform: organisaties, hoofdbeheerders, multitenancy. Kleuren en de Visma-koppeling zijn per organisatie. |
 
 ### Beheer in het kort
 

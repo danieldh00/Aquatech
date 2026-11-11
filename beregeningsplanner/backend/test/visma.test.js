@@ -157,11 +157,13 @@ test('visma: app instellen (hoofdbeheerder), verbinden, doorsturen, token vernie
     const baas = await as('baas');
     // Zonder app-registratie kan verbinden niet.
     assert.strictEqual((await baas.post('/app/api/visma/connect', {})).status, 409);
-    // Alleen een hoofdbeheerder stelt de app in; het secret komt nooit terug.
+    // Elke organisatie stelt haar eigen app in (recht facturen); het secret komt nooit terug.
     const anna = await as('anna');
-    assert.strictEqual((await anna.get('/app/api/platform/visma')).status, 403);
-    assert.strictEqual((await anna.put('/app/api/platform/visma', { clientId: 'x' })).status, 403);
-    const put = await baas.put('/app/api/platform/visma', { clientId: 'aquatech-test', environment: 'sandbox', clientSecret: 'heel-geheim-secret' });
+    const installer = await as('kees');
+    assert.strictEqual((await installer.get('/app/api/visma/app')).status, 403, 'zonder recht facturen');
+    assert.strictEqual((await installer.put('/app/api/visma/app', { clientId: 'x' })).status, 403);
+    assert.strictEqual((await baas.get('/app/api/platform/visma')).status, 404, 'niet meer platformbreed');
+    const put = await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', environment: 'sandbox', clientSecret: 'heel-geheim-secret' });
     assert.strictEqual(put.status, 200, JSON.stringify(put.body));
     assert.strictEqual(put.body.secretSet, true);
     assert.ok(!put.text.includes('heel-geheim'));
@@ -266,7 +268,7 @@ test('visma: automatisch doorsturen alleen als het aan staat, vanaf de gekozen d
   const { app, server, as, visma } = await setup();
   try {
     const baas = await as('baas');
-    await baas.put('/app/api/platform/visma', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
     await connect(baas);
     await baas.put('/app/api/visma/settings', { articles: { 'producten:21': ART.producten }, termsOfPaymentId: TERMS });
     const old = (await baas.post('/app/api/invoices', { data: { date: '2026-01-05', customer: { name: 'Oud' }, lines: [{ description: 'X', qty: 1, price: 1 }] } })).body;
@@ -290,11 +292,11 @@ test('visma: rechten en scheiding tussen organisaties', async () => {
   const { server, as } = await setup();
   try {
     const baas = await as('baas');
-    await baas.put('/app/api/platform/visma', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
     await connect(baas);
     const inv = await finalInvoice(baas, { name: 'Jan' }, [{ description: 'X', qty: 1, price: 1 }]);
     const kees = await as('kees');
-    for (const [method, urlPath] of [['get', '/app/api/visma'], ['get', '/app/api/visma/options'], ['put', '/app/api/visma/settings'], ['post', '/app/api/visma/connect'],
+    for (const [method, urlPath] of [['get', '/app/api/visma'], ['get', '/app/api/visma/app'], ['put', '/app/api/visma/app'], ['get', '/app/api/visma/options'], ['put', '/app/api/visma/settings'], ['post', '/app/api/visma/connect'],
       ['get', '/app/api/visma/callback?code=a&state=b'], ['post', '/app/api/visma/disconnect'], ['post', '/app/api/visma/sync'], ['post', `/app/api/visma/invoices/${inv.id}`]]) {
       assert.strictEqual((await kees[method](urlPath, method === 'get' ? undefined : {})).status, 403, urlPath);
     }
@@ -303,9 +305,28 @@ test('visma: rechten en scheiding tussen organisaties', async () => {
     // Eigen verbinding per organisatie: Groen BV is niet verbonden.
     const st = (await piet.get('/app/api/visma')).body;
     assert.strictEqual(st.connected, false);
-    assert.strictEqual(st.configured, true);
+    assert.strictEqual(st.configured, false, 'de app van Aquatech geldt niet voor Groen BV');
+    assert.strictEqual((await piet.post('/app/api/visma/connect', {})).status, 409);
+    assert.strictEqual((await piet.get('/app/api/visma/app')).body.secretSet, false);
     assert.strictEqual((await piet.post(`/app/api/visma/invoices/${inv.id}`, {})).status, 404);
-    assert.strictEqual((await piet.get('/app/api/platform/visma')).status, 403);
+    // Groen BV heeft een eigen app: een eigen client ID, dat de app van Aquatech niet raakt.
+    const own = await piet.put('/app/api/visma/app', { clientId: 'groen-app', environment: 'production', clientSecret: 'ander-geheim-secret' });
+    assert.strictEqual(own.status, 200, JSON.stringify(own.body));
+    assert.strictEqual(own.body.app.clientId, 'groen-app');
+    assert.ok(!own.text.includes('ander-geheim'));
+    const connectUrl = new URL((await piet.post('/app/api/visma/connect', {})).body.url);
+    assert.strictEqual(connectUrl.searchParams.get('client_id'), 'groen-app');
+    assert.strictEqual((await baas.get('/app/api/visma/app')).body.app.clientId, 'aquatech-test', 'Aquatech ongewijzigd');
+    // Bij een bestaande verbinding kan de app pas na verbreken worden gewijzigd (de tokens horen bij de oude app).
+    await connect(baas);
+    const blocked = await baas.put('/app/api/visma/app', { clientId: 'andere-app', clientSecret: 'nieuw-geheim-secret' });
+    assert.strictEqual(blocked.status, 409);
+    assert.strictEqual(blocked.body.error, 'disconnect_first');
+    assert.strictEqual((await baas.get('/app/api/visma/app')).body.app.clientId, 'aquatech-test');
+    assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', environment: 'sandbox' })).status, 200, 'zelfde app opslaan mag');
+    assert.strictEqual((await baas.post('/app/api/visma/disconnect', {})).status, 200);
+    assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'andere-app', clientSecret: 'nieuw-geheim-secret' })).status, 200);
+    assert.strictEqual((await piet.get('/app/api/visma')).body.environment, 'production');
   } finally {
     server.close();
   }
