@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.9.0',
+      date: '2026-11-11',
+      title: 'Duidelijkere meldingen bij betalen en facturen in de webshop',
+      items: [
+        { text: 'Lukt terugbetalen via Mollie of het maken van een factuur bij een webshopbestelling niet, dan zie je nu of Mollie even niet bereikbaar is of dat het in de app misging, zonder technische tekst.', for: ['facturen', 'beheer'] },
+      ],
+    },
+    {
       version: '1.8.9',
       date: '2026-11-11',
       title: 'Begrijpelijke meldingen als iets niet lukt',

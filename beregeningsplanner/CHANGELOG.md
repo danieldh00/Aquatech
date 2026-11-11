@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.9.0
+
+Foutmeldingen nalopen, deel 4: de webshop.
+
+- Mollie (`MollieError` met `cause`): niet bereikbaar wordt *"Mollie is niet bereikbaar. Probeer het later opnieuw."* (bij een time-out
+  *"Mollie antwoordt niet op tijd."*), zonder de technische tekst van fetch; een weigering zonder tekst noemt de status in plaats van
+  `HTTP <status>`.
+- Terugbetalen: een fout van Mollie staat in de melding, een andere fout (in de app) wordt *"interne fout, de oorzaak staat in het
+  serverlog"* en gaat met aanroepketen naar het log. De route bewaart de oorzaak met `withCause` (debugmodus).
+- Facturen en creditnota's bij webshopbestellingen en retouren: alleen een weigering van de factuuropslag (`InvoiceStepError`, zoals
+  "De factuur heeft geen regels") komt letterlijk bij de bestelling of retour (`invoiceError`/`creditError`); een databasefout of
+  programmeerfout niet meer (geen SQL-tekst in Beheer), wel volledig in het serverlog. De oorzaak hangt niet-opsombaar aan de
+  uitkomst, zodat hij nooit mee gaat in de JSON van de retour.
+- Betaling starten: een fout in de app komt met aanroepketen in het log.
+- Tests: `test/webshop-errors.test.js`.
+
 ## 1.8.9
 
 Foutmeldingen nalopen, deel 3: de frontend.
