@@ -14,12 +14,12 @@
   font-size: 13px;
 }
 .debug-card {
-  background: #fff;
+  background: var(--at-surface);
   color: var(--at-navy);
   border: 1px solid var(--at-danger);
   border-left-width: 5px;
   border-radius: 8px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 24px var(--at-shadow);
   padding: 10px 12px;
 }
 .debug-card h4 { margin: 0 0 4px; font-size: 13px; color: var(--at-danger); }
@@ -32,10 +32,10 @@
 .debug-card button {
   font: inherit;
   border: 1px solid var(--at-navy);
-  background: #fff;
+  background: var(--at-surface);
   color: var(--at-navy);
   border-radius: 6px;
   padding: 3px 10px;
   cursor: pointer;
 }
-.debug-card button.primary { background: var(--at-navy); color: #fff; }
+.debug-card button.primary { background: var(--at-navy); color: var(--at-surface); }

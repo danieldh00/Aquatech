@@ -21,7 +21,7 @@ const PW = 'Tuin-Plan-2026!';
  */
 function miniApp({ debug = false, logs = [] } = {}) {
   const app = catchAsync(express());
-  const report = createErrorReport({ debugFor: () => debug, log: (line, error) => logs.push({ line, error }) });
+  const report = createErrorReport({ debugFor: () => debug, log: (line, detail) => logs.push({ line, detail }) });
   app.use(report.attach);
   app.use(express.json({ limit: '1kb' }));
   app.get('/sync', () => { throw new Error('kapot in sync'); });
@@ -48,6 +48,13 @@ test('foutafhandeling: foutcode in antwoord en log, geen details zonder debugmod
     assert.strictEqual(sync.body.debug, undefined);
     assert.strictEqual(sync.headers.get('x-aquatech-debug'), null);
     assert.ok(logs[0].line.includes(`[fout ${sync.body.errorId}] GET /sync`), 'de foutcode staat in het log');
+    assert.match(logs[0].detail, /kapot in sync/, 'de stacktrace staat in het log');
+
+    // Ook in het serverlog gaan geheimen eruit.
+    await client.get('/geheim');
+    const secretLog = logs[logs.length - 1].detail;
+    assert.ok(!secretLog.includes('Super-Geheim-99') && !secretLog.includes('abcdefghijkl123'), 'geen geheimen in het log');
+    assert.match(secretLog, /postgres:\/\/aquatech:\*\*\*@db\.example/);
 
     // Een async route die faalt blijft niet hangen maar geeft ook een 500.
     const failing = await client.get('/async');
@@ -135,6 +142,8 @@ test('redact, describeError en ownFrames', () => {
   assert.strictEqual(redact('ck_0123456789abcdef0123456789abcdef'), 'ck_***');
   assert.strictEqual(redact('password=hunter2 rest'), 'password=*** rest');
   assert.strictEqual(redact('{"token": "abc123def"}'), '{"token": "***"}');
+  assert.strictEqual(redact('refresh_token=abc'), 'refresh_token=***');
+  assert.strictEqual(redact('client_secret: geheim'), 'client_secret: ***');
   assert.strictEqual(redact('x'.repeat(30), 10), `${'x'.repeat(10)}…`);
   assert.strictEqual(redact(undefined), '');
 

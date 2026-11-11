@@ -30,7 +30,7 @@ const SECRET_PATTERNS = [
   [/\b(live|test)_[A-Za-z0-9]{20,}/g, '$1_***'],
   [/\b(ck|cs)_[a-f0-9]{20,}/gi, '$1_***'],
   // Velden als password=..., secret: "...", token=...
-  [/\b(password|passwd|wachtwoord|secret|token|api[_-]?key|access[_-]?code)(["']?\s*[:=]\s*["']?)[^\s"',;&]+/gi, '$1$2***'],
+  [/([\w-]*(?:password|passwd|wachtwoord|secret|token|api[_-]?key|access[_-]?code))(["']?\s*[:=]\s*["']?)[^\s"',;&]+/gi, '$1$2***'],
 ];
 
 /**
@@ -165,10 +165,10 @@ function catchAsync(target) {
  * Bouwt de foutafhandeling van de app.
  * @param {object} options Opties.
  * @param {(req: object) => boolean} options.debugFor Of dit verzoek details mag krijgen (debugmodus aan + beheerder).
- * @param {(line: string, error: Error) => void} [options.log] Schrijft een fout naar het log (standaard console.error).
+ * @param {(line: string, detail: string) => void} [options.log] Schrijft een fout naar het log (standaard console.error); detail = de stacktrace of melding, zonder geheimen.
  * @returns {{ attach: Function, handler: Function }} Middleware (vroeg plaatsen) en foutafhandelaar (als laatste).
  */
-function createErrorReport({ debugFor, log = (line, error) => console.error(line, error) }) {
+function createErrorReport({ debugFor, log = (line, detail) => console.error(line, detail) }) {
   /**
    * Of dit verzoek details mag zien; een fout bij die controle betekent nee.
    * @param {object} req Het verzoek.
@@ -241,7 +241,7 @@ function createErrorReport({ debugFor, log = (line, error) => console.error(line
     res.locals.errorId = errorId;
     const who = req.user ? ` gebruiker ${req.user.id}` : '';
     const where = req.tenantId ? ` omgeving ${req.tenantId}` : '';
-    log(`[fout ${errorId}] ${req.method} ${requestPath(req)}${who}${where}`, error);
+    log(`[fout ${errorId}] ${req.method} ${requestPath(req)}${who}${where}`, redact(error && error.stack ? error.stack : error, 8000));
     return res.status(500).json({
       error: 'internal_error',
       errorId,
