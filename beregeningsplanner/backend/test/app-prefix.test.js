@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { createClient, listen } = require('./helpers/http-client');
+const { createClient, createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 'a'.repeat(64);
 
@@ -59,6 +59,17 @@ test('/app zonder slash gaat naar /app/, daaronder werkt de app als vanouds', as
     assert.strictEqual((await client.get('/api/health')).body.ok, true, 'de gezondheidscontrole blijft ook op de oude plek');
     const oldApi = await client.get('/api/me');
     assert.strictEqual(oldApi.status, 404, 'de API staat alleen nog onder /app/');
+    assert.deepStrictEqual(oldApi.body, { error: 'not_found', message: 'Deze API-route bestaat niet.' });
+  } finally { server.close(); }
+});
+
+test('onbekende API-route onder /app/ geeft 404 met een leesbare melding', async () => {
+  const { server, base } = await start();
+  try {
+    const baas = await createLogin(base, { password: 'Tuin-Plan-2026!' })('baas');
+    const missing = await baas.get('/app/api/bestaat-niet');
+    assert.strictEqual(missing.status, 404);
+    assert.deepStrictEqual(missing.body, { error: 'not_found', message: 'Deze API-route bestaat niet.' });
   } finally { server.close(); }
 });
 
