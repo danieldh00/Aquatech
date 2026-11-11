@@ -454,12 +454,14 @@ test('offerte uit plan: geen materiaalopslag op regels met een webshopprijs', ()
 test('Kern: btw verlegd telt alles zonder btw, alleen met een btw-nummer', () => {
   const lines = [{ section: 'materiaal', description: 'Sproeier', qty: 4, price: 10, vat: 21 }, { section: 'arbeid', description: 'Montage', qty: 2, price: 50, vat: 9 }];
   assert.strictEqual(Core.totals({ lines }).vatTotal, 17.4);
-  const shifted = Core.totals({ lines, vatShift: { on: true, number: 'DE123456789' } });
+  const shifted = Core.totals({ lines, vatShift: { on: true, number: 'DE123456789', status: 'geldig' } });
   assert.strictEqual(shifted.shifted, true);
   assert.strictEqual(shifted.vatTotal, 0);
   assert.strictEqual(shifted.total, 140);
   assert.deepStrictEqual(shifted.vat, [{ rate: 0, base: 140, amount: 0 }]);
-  assert.strictEqual(Core.totals({ lines, vatShift: { on: true, number: '' } }).shifted, false, 'zonder nummer geen verlegging');
+  assert.strictEqual(Core.totals({ lines, vatShift: { on: true, number: '', status: 'geldig' } }).shifted, false, 'zonder nummer geen verlegging');
+  assert.strictEqual(Core.totals({ lines, vatShift: { on: true, number: 'DE123456789', status: 'onbereikbaar' } }).vatTotal, 17.4, 'zonder geldige VIES-uitkomst blijft de btw');
+  assert.strictEqual(Core.totals({ lines, vatShift: { on: true, number: 'DE123456789' } }).shifted, false, 'nog niet gecontroleerd');
   // Opschonen: het nummer wordt genormaliseerd, bewijs alleen als het aan staat en de uitkomst bekend is.
   const clean = Core.sanitize({ vatShift: { on: true, number: ' de 123.456-789 ', status: 'geldig', requestId: 'X1' } }).vatShift;
   assert.deepStrictEqual(clean, { on: true, number: 'DE123456789', status: 'geldig', checkedAt: '', requestId: 'X1', name: '' });
@@ -530,6 +532,7 @@ test('API: btw verlegd op een offerte wordt bij VIES gecontroleerd en als bewijs
     assert.strictEqual(down.status, 200);
     assert.strictEqual(down.body.data.vatShift.status, 'onbereikbaar');
     assert.strictEqual(down.body.data.vatShift.name, '');
+    assert.strictEqual((await totalsOf(ok.body.id)).vatTotal, 8.4, 'onbereikbaar: de btw wordt niet verlegd');
     // Zonder uitkomst van VIES vervalt de PDOK-controle niet: een niet-PDOK-adres wordt dan geweigerd.
     const bypass = body({ on: true, number: 'ATU12345678' });
     bypass.data.customer = { name: 'X', address: 'Gartenweg 4\n80331 München' };
@@ -540,7 +543,7 @@ test('API: btw verlegd op een offerte wordt bij VIES gecontroleerd en als bewijs
 });
 
 test('Factuur uit een offerte met verlegde btw gaat zonder btw, met vermelding', () => {
-  const quote = { number: 'OF-2026-0001', data: { discountPct: 0, vatShift: { on: true, number: 'DE123456789' }, lines: [{ section: 'materiaal', description: 'Sproeier', qty: 2, unit: 'st', price: 10, vat: 21 }] } };
+  const quote = { number: 'OF-2026-0001', data: { discountPct: 0, vatShift: { on: true, number: 'DE123456789', status: 'geldig' }, lines: [{ section: 'materiaal', description: 'Sproeier', qty: 2, unit: 'st', price: 10, vat: 21 }] } };
   const built = InvoiceCore.fromWorkOrder({ number: 'WO-2026-0001', data: { customer: { name: 'Bakker GmbH' }, title: 'Export' } }, { quote });
   assert.deepStrictEqual(built.data.lines.map((line) => line.vat), [0]);
   assert.match(built.data.notes, /BTW verlegd naar afnemer \(btw-nummer DE123456789\)/);
@@ -548,4 +551,6 @@ test('Factuur uit een offerte met verlegde btw gaat zonder btw, met vermelding',
   const plain = InvoiceCore.fromWorkOrder({ number: 'WO-2026-0002', data: { customer: { name: 'Jansen' } } }, { quote: { number: 'OF-2', data: { lines: [{ section: 'materiaal', description: 'Sproeier', qty: 1, unit: 'st', price: 10, vat: 21 }] } } });
   assert.deepStrictEqual(plain.data.lines.map((line) => line.vat), [21]);
   assert.strictEqual(plain.data.notes, '');
+  const unchecked = InvoiceCore.fromWorkOrder({ number: 'WO-2026-0003', data: { customer: { name: 'Bakker GmbH' } } }, { quote: { number: 'OF-3', data: { vatShift: { on: true, number: 'DE123456789', status: 'onbereikbaar' }, lines: [{ section: 'materiaal', description: 'Sproeier', qty: 1, unit: 'st', price: 10, vat: 21 }] } } });
+  assert.deepStrictEqual(unchecked.data.lines.map((line) => line.vat), [21], 'zonder geldige VIES-uitkomst geen verlegging op de factuur');
 });

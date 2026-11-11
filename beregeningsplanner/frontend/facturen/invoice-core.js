@@ -400,7 +400,7 @@
     }
     const customer = data.customer || {};
     // Btw verlegd op de offerte: ook de factuur gaat zonder btw, met de vermelding voor de Belastingdienst.
-    const shift = quoteData && quoteData.vatShift && quoteData.vatShift.on === true && quoteData.vatShift.number ? quoteData.vatShift : null;
+    const shift = quoteData && quoteData.vatShift && quoteData.vatShift.on === true && quoteData.vatShift.number && quoteData.vatShift.status === 'geldig' ? quoteData.vatShift : null;
     if (shift) for (const line of lines) line.vat = 0;
     return {
       data: sanitize({

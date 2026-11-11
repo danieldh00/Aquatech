@@ -175,11 +175,11 @@
   }
 
   /**
-   * Of de btw op deze offerte (of factuur) is verlegd naar de afnemer: aangevinkt én met een btw-nummer.
+   * Of de btw op deze offerte (of factuur) is verlegd naar de afnemer: aangevinkt, met een btw-nummer dat VIES geldig noemt. Zonder die bevestiging (nog niet gecontroleerd, onbereikbaar) blijft het gewone tarief gelden.
    * @param {object} quote Offertegegevens (vatShift).
    * @returns {boolean} true als de btw is verlegd.
    */
-  const vatShifted = (quote) => Boolean(quote && quote.vatShift && quote.vatShift.on === true && quote.vatShift.number);
+  const vatShifted = (quote) => Boolean(quote && quote.vatShift && quote.vatShift.on === true && quote.vatShift.number && quote.vatShift.status === 'geldig');
 
   /**
    * Bedrag van een regel: aantal × prijs.

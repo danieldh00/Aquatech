@@ -625,8 +625,8 @@
     if (shift.on !== true) { status.textContent = ''; return; }
     if (!shift.number) status.textContent = 'Vul het btw-nummer van de klant in; zonder nummer wordt de btw niet verlegd.';
     else if (shift.status === 'geldig') status.textContent = `Controle bij VIES: geldig${shift.name ? ` (${shift.name})` : ''}, ${new Date(shift.checkedAt).toLocaleDateString('nl-NL')}${shift.requestId ? `, kenmerk ${shift.requestId}` : ''}. Dit staat als bewijs op de offerte.`;
-    else if (shift.status === 'onbereikbaar') status.textContent = 'VIES is nu niet bereikbaar: de controle is nog niet vastgelegd. Sla de offerte later opnieuw op.';
-    else status.textContent = 'Het btw-nummer wordt bij het opslaan gecontroleerd bij VIES.';
+    else if (shift.status === 'onbereikbaar') status.textContent = 'VIES is nu niet bereikbaar: de btw wordt pas verlegd als de controle is gelukt. Sla de offerte later opnieuw op.';
+    else status.textContent = 'Het btw-nummer wordt bij het opslaan gecontroleerd bij VIES; daarna wordt de btw verlegd.';
     if (shift.number) status.textContent += ' De btw-tarieven per regel blijven bewaard, maar tellen niet mee zolang de btw is verlegd.';
   }
 
