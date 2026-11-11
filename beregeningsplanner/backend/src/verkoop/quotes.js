@@ -6,7 +6,8 @@ const { FRONTEND_DIR } = require('../paths');
 const crypto = require('crypto');
 const { transaction, jsonField } = require('../database/db');
 const { createVault } = require('../beveiliging/vault');
-const { createMailer, validEmail } = require('../platform/mailer');
+const { createMailer, validEmail, mailFailure } = require('../platform/mailer');
+const { withCause } = require('../platform/error-report');
 const { preferencesOf } = require('../platform/store');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { linkExpired } = require('../platform/public-links');
@@ -564,12 +565,6 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
 }
 
 /**
- * Maakt van een async route-afhandeling een gewone: een fout gaat naar de foutafhandeling van Express.
- * @param {Function} handler De async afhandeling (req, res, next).
- * @returns {Function} De route-afhandeling.
- */
-const wrapAsync = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
-/**
  * Maakt tekst veilig voor in HTML.
  * @param {*} value De tekst.
  * @returns {string} De tekst met &, <, >, " en ' als entiteit.
@@ -829,7 +824,7 @@ function registerQuoteRoutes(app, ctx) {
   });
 
   // Versturen per e-mail met de link (maakt de link zo nodig aan).
-  app.post('/api/quotes/:id/send', requireJson, requireQuotes, wrapAsync(async (req, res) => {
+  app.post('/api/quotes/:id/send', requireJson, requireQuotes, async (req, res) => {
     const { to, subject, message, url } = req.body || {};
     const list = String(to || '').split(/[,;\s]+/).filter(Boolean);
     if (!list.length || list.length > 5 || !list.every(validEmail)) return res.status(400).json({ error: 'invalid_to', message: 'Vul een of meer geldige e-mailadressen in.' });
@@ -849,13 +844,13 @@ function registerQuoteRoutes(app, ctx) {
         ...mailBody(profile, text.split(/\n{2,}/), { label: 'Offerte bekijken en accorderen', href: quote.share.url }),
       });
     } catch (error) {
-      console.warn(`Offerte ${quote.number} niet verstuurd: ${error.message}`);
-      return res.status(502).json({ error: 'send_failed', message: `Versturen mislukt: ${error.message}` });
+      console.warn(`Offerte ${quote.number} niet verstuurd: ${error.code || ''} ${error.message}`);
+      return withCause(res, error).status(502).json({ error: 'send_failed', message: mailFailure(error) });
     }
     quotes.markSent(quote.id, list.join(', '));
     audit(req, 'offerte_verstuurd', { quoteId: quote.id, number: quote.number, recipients: list.length });
     res.json(quotes.get(req.user, quote.id));
-  }));
+  });
 
   /**
    * Het token van de openbare link. Het komt in een kop mee (niet in de URL van
@@ -923,7 +918,7 @@ function registerQuoteRoutes(app, ctx) {
     res.json(mailView(settings));
   });
 
-  app.post(['/api/quote-mail/test', '/api/admin/mail/test'], requireJson, requireAdmin, wrapAsync(async (req, res) => {
+  app.post(['/api/quote-mail/test', '/api/admin/mail/test'], requireJson, requireAdmin, async (req, res) => {
     const settings = settingsOf(req);
     const to = req.body?.to;
     if (!validEmail(to)) return res.status(400).json({ error: 'invalid_to', message: 'Vul een geldig e-mailadres in.' });
@@ -932,10 +927,10 @@ function registerQuoteRoutes(app, ctx) {
     try {
       await mailer.send({ to, subject: 'Testbericht van de mailinstellingen', ...mailBody(settings.get('quoteProfile'), ['Dit is een testbericht. De mailserver is goed ingesteld.'], null) });
     } catch (error) {
-      return res.status(502).json({ error: 'send_failed', message: `Versturen mislukt: ${error.message}` });
+      return withCause(res, error).status(502).json({ error: 'send_failed', message: mailFailure(error) });
     }
     res.json({ ok: true });
-  }));
+  });
 
   /**
    * Een geaccordeerde offerte is een afspraak met de klant: verwijderen of

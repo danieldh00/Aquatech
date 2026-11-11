@@ -6,7 +6,7 @@
 // factuur (send_error); de factuur zelf blijft gewoon definitief.
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
-const { validEmail } = require('../platform/mailer');
+const { validEmail, mailFailure } = require('../platform/mailer');
 const { invoicePdf, invoiceFileName } = require('./invoice-pdf');
 
 const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
@@ -114,8 +114,9 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
         attachments: [{ filename: invoiceFileName(invoice), content: pdfOf(tenantId, invoice), contentType: 'application/pdf' }],
       });
     } catch (error) {
-      invoices.markSent(tenantId, invoice.id, '', `Versturen mislukt: ${error.message}`);
-      throw Object.assign(new Error(`Versturen mislukt: ${error.message}`), { code: 'send_failed' });
+      const message = mailFailure(error);
+      invoices.markSent(tenantId, invoice.id, '', message);
+      throw Object.assign(new Error(message, { cause: error }), { code: 'send_failed' });
     }
     invoices.markSent(tenantId, invoice.id, to.join(', '));
     return invoices.get(tenantId, invoice.id);

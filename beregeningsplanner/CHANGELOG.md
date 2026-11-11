@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.8.7
+
+Foutmeldingen nalopen, deel 2: e-mail en verkoop.
+
+- Nieuw `mailFailure(error)` in `platform/mailer.js`: zet een fout van de mailserver om in een melding met de oorzaak en wat te
+  controleren (inloggegevens/app-wachtwoord, server en poort, TLS/certificaat, afzender of ontvanger geweigerd, bericht geweigerd),
+  met het antwoord van de mailserver erachter (zonder regeleinden, hoogstens 200 tekens). Een onbekende fout geeft geen interne
+  melding meer. Gebruikt bij het versturen van offertes, afspraken, facturen, de testmail en de webshopmails (bestelling,
+  verzending, retour).
+- De mailroutes bewaren de volledige fout met `withCause` (debugmodus: code, commando, antwoord). Een fout bij het lezen van de
+  mailinstellingen in de webshopmails komt in het serverlog in plaats van als ruwe melding bij de bestelling.
+- `VismaError` krijgt een optionele oorzaak: niet bereikbaar, mislukte aanmelding (`error`/`error_description` van Visma, nooit
+  tokens) en een API-fout (methode, pad zonder query, status en het begin van het antwoord). Het foutantwoord van de Visma-routes
+  bewaart de oorzaak.
+- Webshopbestellingen ophalen (`POST /api/invoices/shop-orders/sync`) gebruikt `respondShopError`.
+- De eigen `wrapAsync`-helpers in quotes.js, invoices.js en workorders.js zijn weg: `catchAsync` (1.8.5) dekt die routes al.
+- Tests: `mailFailure` per soort fout en de testmail via de API, met en zonder debugmodus (`test/mail.test.js`).
+
 ## 1.8.6
 
 Foutmeldingen nalopen, deel 1: artikelen en de webshopkoppeling.

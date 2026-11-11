@@ -4,7 +4,10 @@
 // het bericht dat de retour is afgerond. Via de mailserver van de organisatie
 // (mailer.js); een mislukte verzending houdt de retour niet tegen maar blijft
 // zichtbaar bij de retour (data.mail).
-const { validEmail } = require('../platform/mailer');
+const { validEmail, mailFailure } = require('../platform/mailer');
+
+// Melding als de mailinstellingen zelf niet te lezen zijn (een interne fout: de oorzaak staat in het serverlog).
+const SETUP_FAILED = 'Versturen mislukt: de mailinstellingen konden niet worden gelezen.';
 
 /**
  * Maakt de verzender van retourmails.
@@ -47,7 +50,8 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
       mailer = mailerFor(settings);
       profile = settings.get('quoteProfile') || {};
     } catch (failure) {
-      log({ sent: false, error: String(failure && failure.message || 'Versturen mislukt.').slice(0, 300) });
+      console.error('Mailinstellingen lezen mislukt:', failure);
+      log({ sent: false, error: SETUP_FAILED });
       return;
     }
     if (!mailer.configured()) { log({ sent: false, error: 'Geen mailserver ingesteld.' }); return; }
@@ -61,7 +65,7 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
         await mailer.send({ to: profile.email, subject: content.shop.subject, text: shopMessage.text, html: shopMessage.html });
       }
     } catch (failure) {
-      error = String(failure && failure.message || 'Versturen mislukt.').slice(0, 300);
+      error = mailFailure(failure).slice(0, 300);
     }
     log({ sent: !error, error });
   }

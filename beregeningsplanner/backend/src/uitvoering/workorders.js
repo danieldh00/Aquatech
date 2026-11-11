@@ -12,7 +12,8 @@ const { FRONTEND_DIR } = require('../paths');
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { createVault } = require('../beveiliging/vault');
-const { createMailer, validEmail } = require('../platform/mailer');
+const { createMailer, validEmail, mailFailure } = require('../platform/mailer');
+const { withCause } = require('../platform/error-report');
 const { preferencesOf } = require('../platform/store');
 const { ifBaseOf } = require('../beveiliging/idempotency');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
@@ -581,12 +582,6 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
 }
 
 /**
- * Laat een fout uit een async route-handler doorlopen naar Express.
- * @param {Function} handler De async handler.
- * @returns {Function} Middleware.
- */
-const wrapAsync = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
-/**
  * Een datum voluit, bijv. "dinsdag 3 november 2026".
  * @param {string} iso Datum als JJJJ-MM-DD.
  * @returns {string} De datum in woorden.
@@ -777,7 +772,7 @@ function registerWorkOrderRoutes(app, ctx) {
   });
 
   // Afspraak per e-mail naar de klant, met de link (maakt die zo nodig aan).
-  app.post('/api/workorders/:id/send', requireJson, requireWo, requirePlanning, wrapAsync(async (req, res) => {
+  app.post('/api/workorders/:id/send', requireJson, requireWo, requirePlanning, async (req, res) => {
     const { to, subject, message, url } = req.body || {};
     const list = String(to || '').split(/[,;\s]+/).filter(Boolean);
     if (!list.length || list.length > 5 || !list.every(validEmail)) return res.status(400).json({ error: 'invalid_to', message: 'Vul een of meer geldige e-mailadressen in.' });
@@ -800,13 +795,13 @@ function registerWorkOrderRoutes(app, ctx) {
         ...mailBody(profile, text.split(/\n{2,}/), { label: 'Afspraak bekijken en bevestigen', href: workOrder.share.url }),
       });
     } catch (error) {
-      console.warn(`Afspraak ${workOrder.number} niet verstuurd: ${error.message}`);
-      return res.status(502).json({ error: 'send_failed', message: `Versturen mislukt: ${error.message}` });
+      console.warn(`Afspraak ${workOrder.number} niet verstuurd: ${error.code || ''} ${error.message}`);
+      return withCause(res, error).status(502).json({ error: 'send_failed', message: mailFailure(error) });
     }
     workorders.markSent(workOrder.id, list.join(', '));
     audit(req, 'afspraak_verstuurd', { workOrderId: workOrder.id, number: workOrder.number, recipients: list.length });
     res.json(workorders.get(tenantOf(req), workOrder.id));
-  }));
+  });
 
   /**
    * Het token van de afspraaklink; komt in een kop mee (niet in de URL).
