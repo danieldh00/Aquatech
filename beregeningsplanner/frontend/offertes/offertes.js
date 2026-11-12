@@ -69,19 +69,19 @@
    * @param {object} quote de offerte
    * @returns {boolean} true als hij verlopen is
    */
-  const expired = (quote) => quote.status !== 'akkoord' && quote.status !== 'afgewezen' && quote.validUntil && quote.validUntil < QuoteCore.today();
+  const expired = (quote) => !quote.order && quote.status !== 'akkoord' && quote.status !== 'afgewezen' && quote.validUntil && quote.validUntil < QuoteCore.today();
   /**
    * Geeft de status zoals de gebruiker hem ziet (inclusief 'verlopen').
    * @param {object} quote de offerte
    * @returns {string} statussleutel
    */
-  const statusOf = (quote) => (expired(quote) ? 'verlopen' : quote.status);
+  const statusOf = (quote) => (quote.order ? 'omgezet' : expired(quote) ? 'verlopen' : quote.status);
   /**
    * Geeft het label bij een status.
    * @param {string} status statussleutel
    * @returns {string} label voor op het scherm
    */
-  const statusLabel = (status) => (status === 'verlopen' ? 'Verlopen' : QuoteCore.STATUSES[status] || status);
+  const statusLabel = (status) => (status === 'verlopen' ? 'Verlopen' : status === 'omgezet' ? 'Omgezet' : QuoteCore.STATUSES[status] || status);
 
   const QuoteView = window.QuoteView;
   const state = {
@@ -415,6 +415,7 @@
     $('#e-menu [data-act=openplan]').hidden = !data.planId;
     $('#e-menu [data-act=purge]').hidden = !state.admin;
     renderWorkOrder(quote);
+    renderConvert(quote);
     renderWarnings();
     renderLines();
     renderLock();
@@ -427,7 +428,7 @@
    * Kijkt of de open offerte vastligt na een antwoord van de klant.
    * @returns {boolean} true als er een akkoord of afwijzing is
    */
-  const locked = () => Boolean(state.quote && state.quote.acceptance);
+  const locked = () => Boolean(state.quote && (state.quote.acceptance || state.quote.order));
 
   /**
    * Maakt de tekst over het akkoord of de afwijzing van de klant.
@@ -446,14 +447,57 @@
       De offerte ligt vast; maak via ⋯ een kopie voor een aangepaste offerte.`;
   }
 
+  /**
+   * Maakt de tekst met de link naar de bestelling waarin de offerte is omgezet.
+   * @param {object} quote de offerte
+   * @returns {string} html, leeg als de offerte niet is omgezet
+   */
+  function orderNoticeHtml(quote) {
+    if (!quote.order) return '';
+    return `<p><b>Omgezet naar bestelling</b> <a href="../webshop-bestellingen/?id=${encodeURIComponent(quote.order.id)}">${esc(quote.order.number)}</a>${quote.order.convertedAt ? ` op ${esc(QuoteView.dateTime(quote.order.convertedAt))}` : ''}. De offerte ligt nu vast; maak via ⋯ een kopie om iets te wijzigen.</p>`;
+  }
+
+  /**
+   * Toont de knop Omzetten naar bestelling (alleen voor een beheerder, bij een geaccordeerde offerte) of, na het omzetten,
+   * de knop naar de bestelling.
+   * @param {object} quote de offerte
+   * @returns {void}
+   */
+  function renderConvert(quote) {
+    const button = $('#e-convert');
+    button.hidden = !state.admin || quote.status !== 'akkoord';
+    if (button.hidden) return;
+    button.disabled = false;
+    if (quote.order) {
+      button.textContent = `Bestelling ${quote.order.number}`;
+      /** Opent de bestelling. */
+      button.onclick = () => { location.href = `../webshop-bestellingen/?id=${encodeURIComponent(quote.order.id)}`; };
+      return;
+    }
+    button.textContent = 'Omzetten naar bestelling';
+    /** Zet de offerte om in een bestelling en opent die. */
+    button.onclick = async () => {
+      if (!confirm(`Offerte ${quote.number} omzetten naar een bestelling? De voorraad wordt gereserveerd en de offerte ligt daarna vast.`)) return;
+      button.disabled = true;
+      try {
+        const out = await api(`quotes/${encodeURIComponent(quote.id)}/convert`, { method: 'POST', body: {} });
+        if (out.shortages && out.shortages.length) toast(`Omgezet. Let op, te weinig voorraad voor: ${out.shortages.map((item) => item.name).join(', ')}`, true);
+        quote.order = { id: out.order.id, number: out.order.number, convertedAt: new Date().toISOString() };
+        renderConvert(quote);
+        renderLock();
+        if (!(out.shortages && out.shortages.length)) toast(`Bestelling ${out.order.number} gemaakt`);
+      } catch (error) { button.disabled = false; toast(error.message, true); }
+    };
+  }
+
   /** Toont of de offerte vastligt en zet de invoer dan uit. */
   function renderLock() {
     const quote = state.quote;
     const isLocked = locked();
     const box = $('#e-locked');
     box.hidden = !isLocked;
-    box.className = `notice ok${isLocked && quote.acceptance.answer !== 'akkoord' ? ' rejected' : ''}`;
-    box.innerHTML = isLocked ? acceptanceHtml(quote.acceptance) : '';
+    box.className = `notice ok${isLocked && quote.acceptance && quote.acceptance.answer !== 'akkoord' ? ' rejected' : ''}`;
+    box.innerHTML = isLocked ? `${quote.acceptance ? acceptanceHtml(quote.acceptance) : ''}${orderNoticeHtml(quote)}` : '';
     $('#edit-view').classList.toggle('locked', isLocked);
     document.querySelectorAll('#edit-view .cols input, #edit-view .cols textarea, #edit-view .cols select, #edit-view [data-f], #e-lines input, #e-lines select, #e-lines button, #e-status, #e-cust-clear, #e-cust-new, #e-vs-on, #e-del-same')
       .forEach((field) => { if (field.id !== 'e-number') field.disabled = isLocked; });
@@ -1178,7 +1222,7 @@
      */
     $('#e-status').onchange = async (event) => {
       await save({ status: event.target.value });
-      if (state.quote) renderWorkOrder(state.quote);
+      if (state.quote) { renderWorkOrder(state.quote); renderConvert(state.quote); }
     };
     let customerTimer;
     /** Zoekt na een korte pauze in het typen klanten voor de klantkeuze. */
@@ -1642,7 +1686,7 @@
       // Gast zonder account (nog niets bewaard): standaardwaarden van de server ontbreken.
       state.profile = { companyName: 'AquaTech Service', hourlyRate: 55, hourlyCost: 0, validDays: 30, vatRate: 21, markupPct: 0, callOutFee: 0, intro: '', terms: '' };
     }
-    $('#l-status').innerHTML = '<option value="">Alle statussen</option>' + [...Object.keys(QuoteCore.STATUSES), 'verlopen']
+    $('#l-status').innerHTML = '<option value="">Alle statussen</option>' + [...Object.keys(QuoteCore.STATUSES), 'omgezet', 'verlopen']
       .map((status) => `<option value="${status}">${esc(statusLabel(status))}</option>`).join('');
     $('#e-status').innerHTML = Object.entries(QuoteCore.STATUSES).map(([key, label]) => `<option value="${key}">${esc(label)}</option>`).join('');
     $('#l-all-wrap').hidden = !state.all;

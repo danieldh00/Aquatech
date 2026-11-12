@@ -280,7 +280,7 @@ function buildTestData({ slug, profile = {}, today = new Date() }) {
   // appointment = reactie van de klant op de afspraaklink). Dagen zijn
   // verder "zoveel dagen geleden".
   const quotes = [
-    { planKey: 'devries', owner: 'inst1', customerKey: 'klant1', customer: customers.klant1, status: 'akkoord', at: 34, discountPct: 5,
+    { planKey: 'devries', owner: 'inst1', customerKey: 'klant1', customer: customers.klant1, status: 'akkoord', at: 34, discountPct: 5, toOrder: true,
       options: ['rain', 'service'],
       share: { sent: 33, views: 4, lastView: 31 },
       response: { answer: 'akkoord', name: 'Petra de Vries', at: 31, via: 'account', options: ['rain'] },
@@ -596,21 +596,21 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, imageWidth = 480, imageHeig
  * precies zo is als wanneer iemand het in de app doet): klantlinks, reacties
  * van klanten, werkorders, uren, foto's, meldingen, voorraad, facturen en de
  * webshop. Draait na store.seedEnvironment.
- * @param {object} stores { db, quotes, workorders, shop, settings (van de testomgeving), photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers }.
+ * @param {object} stores { db, quotes, quoteOrders (offerte omzetten naar bestelling), workorders, shop, settings (van de testomgeving), photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers }.
  * @param {object} testSet Uitkomst van buildTestData.
  * @param {{ users: object, quoteIds: string[], tenantId: string }} seeded Uit seedEnvironment.
  * @param {{ shareBase?: string|null }} [options] Adres van openbaar/offerte.html (uit de browser); zonder komen er geen klantlinks.
  * @returns {object} Aantallen per soort aangemaakte gegevens.
  */
 function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders } = stores;
+  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders } = stores;
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
    * @returns {object} De voorbereide opdracht.
    */
   const prepare = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, suppliers: 0, purchaseOrders: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0, businessCustomers: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, suppliers: 0, purchaseOrders: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0, businessCustomers: 0, convertedQuotes: 0 };
   const seededWos = [];
   // Zakelijke webshopklanten: bedrijfsgegevens, en één aanvraag die nog goedgekeurd moet worden.
   for (const [key, business] of Object.entries(BUSINESS_CUSTOMERS)) {
@@ -654,6 +654,12 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
       acceptance.at = testSet.day(response.at);
       prepare('UPDATE quotes SET acceptance = ?, responded_at = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(acceptance), acceptance.at, acceptance.at, id);
       counts.responses++;
+    }
+    // Een geaccordeerde offerte die al in een bestelling is omgezet (Omzetten naar bestelling).
+    if (spec.toOrder && quoteOrders) {
+      const out = quoteOrders.convert(owner, id, () => null);
+      if (out.error) throw new Error(`Testdata: offerte omzetten naar een bestelling mislukt (${out.error})`);
+      counts.convertedQuotes++;
     }
     if (spec.workorder) {
       const workOrderSpec = spec.workorder;

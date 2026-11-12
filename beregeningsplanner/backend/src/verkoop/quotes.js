@@ -173,6 +173,8 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     if (quoteRow.valid_until !== undefined) out.validUntil = quoteRow.valid_until;
     if (quoteRow.owner_name !== undefined) out.owner = { id: quoteRow.owner_id, username: quoteRow.owner_username, displayName: quoteRow.owner_name };
     out.customerId = quoteRow.customer_id || null;
+    // De bestelling waarin de offerte is omgezet (status Omgezet); alleen voor medewerkers, zie forCustomer.
+    if (quoteRow.order_id !== undefined) out.order = quoteRow.order_id ? { id: quoteRow.order_id, number: quoteRow.order_number || '', convertedAt: quoteRow.converted_at || null } : null;
     if (quoteRow.customer_name !== undefined) out.customerAccount = quoteRow.customer_id ? { id: quoteRow.customer_id, displayName: quoteRow.customer_name } : null;
     if (quoteRow.view_count !== undefined) {
       out.viewedAt = quoteRow.viewed_at || null;
@@ -206,7 +208,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    * @returns {object} De offerte voor de klant, zonder linkstand.
    */
   function forCustomer(quote) {
-    const { share, ...rest } = quote;
+    const { share, order, ...rest } = quote;
     // De interne notities (per regel en van de offerte) gaan nooit naar de klant.
     const customerData = withoutInternalNotes(quote.data);
     const lines = customerData.lines;
@@ -244,13 +246,18 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     const args = [tenantId];
     let sql = `SELECT q.id, q.number, q.status, q.title, q.customer, q.plan_id, q.total_excl, q.total_incl, q.created_at, q.updated_at,
         ${jsonField(db, 'q.data', 'validUntil')} AS valid_until, q.owner_id, u.username AS owner_username, u.display_name AS owner_name,
-        q.customer_id, c.display_name AS customer_name, q.view_count, q.viewed_at, q.responded_at
-      FROM quotes q JOIN users u ON u.id = q.owner_id LEFT JOIN users c ON c.id = q.customer_id
+        q.customer_id, c.display_name AS customer_name, q.view_count, q.viewed_at, q.responded_at, q.order_id, q.converted_at, o.number AS order_number
+      FROM quotes q JOIN users u ON u.id = q.owner_id LEFT JOIN users c ON c.id = q.customer_id LEFT JOIN web_orders o ON o.tenant_id = q.tenant_id AND o.id = q.order_id
       WHERE q.tenant_id = ? AND q.deleted_at IS NULL`;
     if (ownerId) { sql += ' AND q.owner_id = ?'; args.push(ownerId); }
     if (customerId) { sql += " AND q.customer_id = ? AND q.status <> 'concept'"; args.push(customerId); }
     if (planId) { sql += ' AND q.plan_id = ?'; args.push(String(planId)); }
-    return prepare(`${sql} ORDER BY q.updated_at DESC`).all(...args).map((quoteRow) => toQuote(quoteRow, false));
+    return prepare(`${sql} ORDER BY q.updated_at DESC`).all(...args).map((quoteRow) => {
+      const quote = toQuote(quoteRow, false);
+      // Een klant ziet niet dat de offerte intern is omgezet in een bestelling.
+      if (customerId) delete quote.order;
+      return quote;
+    });
   }
 
   /**
@@ -271,7 +278,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   function findEditable(user, id) {
     if (!Roles.can(user, 'offertes')) return null;
-    const quoteRow = prepare(`SELECT id, tenant_id, owner_id, status, customer_id, share_hash, CASE WHEN acceptance IS NULL THEN 0 ELSE 1 END AS accepted
+    const quoteRow = prepare(`SELECT id, tenant_id, owner_id, status, customer_id, share_hash, order_id, CASE WHEN acceptance IS NULL THEN 0 ELSE 1 END AS accepted
       FROM quotes WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL`).get(user.tenant_id, String(id));
     return quoteRow && canEdit(user, quoteRow) ? quoteRow : null;
   }
@@ -279,8 +286,8 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   // De volledige rij (met de naam van het klantaccount) in één query.
   const FULL_SQL = `SELECT q.id, q.tenant_id, q.owner_id, q.plan_id, q.number, q.status, q.title, q.customer, q.total_excl, q.total_incl,
       q.data, q.created_at, q.updated_at, q.customer_id, q.share_hash, q.share_token, q.share_url, q.shared_at, q.viewed_at,
-      q.last_viewed_at, q.view_count, q.sent_at, q.sent_to, q.responded_at, q.acceptance, c.display_name AS customer_name
-    FROM quotes q LEFT JOIN users c ON c.id = q.customer_id`;
+      q.last_viewed_at, q.view_count, q.sent_at, q.sent_to, q.responded_at, q.acceptance, q.order_id, q.converted_at, o.number AS order_number, c.display_name AS customer_name
+    FROM quotes q LEFT JOIN users c ON c.id = q.customer_id LEFT JOIN web_orders o ON o.tenant_id = q.tenant_id AND o.id = q.order_id`;
   /**
    * De volledige offerterij (met de naam van het klantaccount).
    * @param {string} id Id van de offerte.
@@ -379,7 +386,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
       if (!quoteRow) return null;
       // Na een vastgelegd akkoord ligt de offerte vast (bewijs van wat er is
       // geaccordeerd); wijzigen kan alleen in een kopie.
-      if (Number(quoteRow.accepted) && (rawData !== undefined || (status !== undefined && status !== quoteRow.status))) return { locked: true };
+      if ((Number(quoteRow.accepted) || quoteRow.order_id) && (rawData !== undefined || (status !== undefined && status !== quoteRow.status))) return { locked: true };
       const data = rawData === undefined ? JSON.parse(prepare('SELECT data FROM quotes WHERE id = ?').get(quoteRow.id).data) : Core.sanitize(rawData);
       const columns = fields(data);
       const newStatus = STATUSES.includes(status) ? status : quoteRow.status;

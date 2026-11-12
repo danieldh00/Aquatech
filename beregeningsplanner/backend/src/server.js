@@ -35,6 +35,7 @@ const { createShopSync } = require('./webshop/shop-sync');
 const { createShopContentStore, registerShopContentRoutes } = require('./webshop/shop-content');
 const { createStorefrontData } = require('./webshop/storefront-data');
 const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
+const { createQuoteOrders, registerQuoteOrderRoutes } = require('./verkoop/quote-orders');
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
 const { createMollie, cleanPublicUrl } = require('./webshop/mollie');
@@ -2397,6 +2398,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   webOrders.onCancelled((tenantId, order, user) => webOrderInvoices.creditCancelled(tenantId, order, user));
   webOrders.onTracking((tenantId, order) => webOrderMail.sendShipment(tenantId, order, { onlyNewTracking: true }));
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
+  // Offerte omzetten naar bestelling (verkoop/quote-orders.js).
+  const quoteOrders = createQuoteOrders(database, { orders: webOrders });
+  registerQuoteOrderRoutes(app, {
+    quoteOrders, requireRight, audit,
+    customerOf: (req, customerId) => {
+      const tid = req.tenantId || tenant.id;
+      const home = homeOf(tid);
+      return store.getCustomer(home === tid ? [tid] : [home, tid], customerId);
+    },
+  });
   webReturns.onRequested((tenantId, record) => webReturnMail.sendRequested(tenantId, record));
   webReturns.onDecided((tenantId, record) => webReturnMail.sendDecision(tenantId, record));
   /**
@@ -2665,7 +2676,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, suppliers: supplierStore, packagings: packagingStore, purchaseOrders: purchaseOrderStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, settings: settingsFor(tenantRow.id) },
+      { db: database, quotes: quoteStore, quoteOrders, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, suppliers: supplierStore, packagings: packagingStore, purchaseOrders: purchaseOrderStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, settings: settingsFor(tenantRow.id) },
       testSet, { users: out.byKey, quoteIds: out.quoteIds, tenantId: tenantRow.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );
