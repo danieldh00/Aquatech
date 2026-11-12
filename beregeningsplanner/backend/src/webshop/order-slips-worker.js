@@ -33,7 +33,7 @@ function usesUnsupportedFilter(buffer) {
     if (UNSUPPORTED_FILTERS.has(name)) return true;
     if (name === 'Filter') {
       // Een verwijzing (8 0 R) naar een filternaam kan in een gecomprimeerde objectstroom staan en is hier niet te zien: weigeren.
-      const rest = text.slice(match.index + match[0].length, match.index + match[0].length + 300).trimStart();
+      const rest = text.slice(match.index + match[0].length, match.index + match[0].length + 300).replace(/\0/g, ' ').trimStart();
       if (rest[0] === '[' ? /\d+\s+\d+\s+R\b/.test(rest.slice(0, rest.indexOf(']') < 0 ? 300 : rest.indexOf(']'))) : /^\d/.test(rest)) return true;
     }
   }
