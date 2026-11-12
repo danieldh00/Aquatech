@@ -1219,7 +1219,7 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
     const body = req.body || {};
     const out = orders.ship(req.tenantId, req.params.id, body.lines === undefined ? null : body.lines, req.user, { trackingCode: String(body.trackingCode || ''), ignoreStock: body.ignoreStock === true });
     if (out.error) return res.status(out.status || 400).json({ error: out.code || 'ship_failed', message: out.error });
-    audit(req, 'webshop_bestelling_verzonden', { number: out.order.number, complete: out.complete, lines: out.shipment.lines.length });
+    audit(req, 'webshop_bestelling_verzonden', { number: out.order.number, complete: out.complete, lines: out.shipment.lines.length, ...(body.ignoreStock === true ? { ignoreStock: true } : {}) });
     res.json({ order: out.order, shipment: out.shipment, complete: out.complete });
   });
 
