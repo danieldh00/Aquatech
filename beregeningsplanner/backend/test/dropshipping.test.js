@@ -103,6 +103,12 @@ test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', as
     const hexed = Buffer.concat([base, Buffer.from(`\n89 0 obj\n<< /Type /ObjStm /Filter [/${name} /FlateDecode] >>\nstream\n00>\nendstream\nendobj\n`)]);
     assert.match((await inspectSlip(hexed)).error, /compressie die niet wordt ondersteund/);
   }
+  // Een naam helemaal met #xx-tekens geschreven is langer dan 40 ruwe tekens.
+  for (const name of ['RunLengthDecode', 'ASCIIHexDecode']) {
+    const escaped = [...name].map((character) => `#${character.charCodeAt(0).toString(16).toUpperCase()}`).join('');
+    const long = Buffer.concat([base, Buffer.from(`\n86 0 obj\n<< /Type /ObjStm /Filter /${escaped} >>\nstream\n00>\nendstream\nendobj\n`)]);
+    assert.match((await inspectSlip(long)).error, /compressie die niet wordt ondersteund/);
+  }
   // Een NUL na de naam is voor pdf-lib witruimte.
   const nul = Buffer.concat([base, Buffer.from('\n87 0 obj\n<< /Type /ObjStm /Filter /RunLengthDecode\0/Length 3 >>\nstream\n00>\nendstream\nendobj\n', 'latin1')]);
   assert.match((await inspectSlip(nul)).error, /compressie die niet wordt ondersteund/);
