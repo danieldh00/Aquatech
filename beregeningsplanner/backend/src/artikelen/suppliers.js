@@ -65,6 +65,10 @@ function sanitizeSupplier(input, { partial = false } = {}) {
   if (!partial || source.phone !== undefined) value.phone = cleanText(source.phone, 40);
   if (!partial || source.address !== undefined) value.address = cleanText(source.address, 300);
   if (!partial || source.notes !== undefined) value.notes = cleanText(source.notes, 2000);
+  if (partial && source.archived !== undefined) {
+    if (typeof source.archived !== 'boolean') return { error: 'Archiveren is ja of nee.', field: 'archived' };
+    value.archived = source.archived;
+  }
   return { value };
 }
 
@@ -212,7 +216,7 @@ function createSupplierStore(db) {
       const merged = {
         name: fields.name ?? row.name, contactName: fields.contactName ?? row.contact_name, email: fields.email ?? row.email,
         phone: fields.phone ?? row.phone, address: fields.address ?? row.address, notes: fields.notes ?? row.notes,
-        archived: input && input.archived !== undefined ? (input.archived ? 1 : 0) : Number(row.archived),
+        archived: fields.archived !== undefined ? (fields.archived ? 1 : 0) : Number(row.archived),
       };
       prepare('UPDATE suppliers SET name = ?, contact_name = ?, email = ?, phone = ?, address = ?, notes = ?, archived = ?, updated_at = ? WHERE tenant_id = ? AND id = ?')
         .run(merged.name, merged.contactName, merged.email, merged.phone, merged.address, merged.notes, merged.archived, currentTimestamp(), tenantId, row.id);

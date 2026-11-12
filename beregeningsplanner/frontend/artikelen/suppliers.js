@@ -100,6 +100,15 @@
   // ---------- Per artikel ----------
 
   /**
+   * Zet Bewaren en de keuzelijst uit zolang de leveranciers van het artikel nog laden.
+   * @param {boolean} busy true tijdens het laden
+   */
+  function setBusy(busy) {
+    $('#d-suppliers button[data-save]').disabled = busy;
+    $('#sup-add-select').disabled = busy;
+  }
+
+  /**
    * Toont het blok Leveranciers bij een artikel (niet bij een hoofdartikel met varianten).
    * @param {object} item Het artikel.
    * @returns {Promise<void>}
@@ -110,6 +119,7 @@
     state.lines = [];
     state.loaded = false;
     $('#d-sup-table').innerHTML = '';
+    setBusy(true);
     section.hidden = Boolean(item.hasVariants);
     $('.err', section).textContent = '';
     if (item.hasVariants) return;
@@ -118,6 +128,7 @@
     state.choices = suppliers.items;
     state.lines = lines.items;
     state.loaded = true;
+    setBusy(false);
     renderLines();
   }
 

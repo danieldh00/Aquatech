@@ -34,6 +34,8 @@ test('leveranciers: invoer opschonen en controleren', () => {
   assert.strictEqual(sanitizeSupplier({ name: ' ' }).field, 'name');
   assert.strictEqual(sanitizeSupplier({ name: 'X', email: 'geen-adres' }).field, 'email');
   assert.deepStrictEqual(sanitizeSupplier({ phone: '1' }, { partial: true }).value, { phone: '1' });
+  assert.strictEqual(sanitizeSupplier({ archived: 'false' }, { partial: true }).field, 'archived');
+  assert.deepStrictEqual(sanitizeSupplier({ archived: false }, { partial: true }).value, { archived: false });
 
   const lines = sanitizeItemSuppliers([{ supplierId: 'a', costPrice: '1.23456', orderQty: '25' }, { supplierId: 'b', preferred: true }, { supplierId: 'c', preferred: true }]).value;
   assert.deepStrictEqual(lines.map((line) => [line.supplierId, line.costPrice, line.orderQty, line.preferred]), [['a', 1.2346, 25, false], ['b', null, 1, true], ['c', null, 1, false]]);
