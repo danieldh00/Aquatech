@@ -153,10 +153,10 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', group = '' } = 
 /**
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
- * @param {{ stock: object }} deps De voorraadopslag (reserveren en afboeken).
+ * @param {{ stock: object, categoryDiscountsOf?: Function }} deps De voorraadopslag (reserveren en afboeken) en categoryDiscountsOf(tenantId) = per artikelcode de categoriekorting (%) voor zakelijke klanten (zonder: geen).
  * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
  */
-function createWebOrderStore(db, { stock }) {
+function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() }) {
   const shippedHooks = [];
   // Haken die na het annuleren van een bestelling draaien.
   const cancelledHooks = [];
@@ -180,6 +180,8 @@ function createWebOrderStore(db, { stock }) {
   function priceCart(tenantId, wanted, { group = '', wholesale = null } = {}) {
     const business = group === 'zakelijk';
     const wholesaleTerms = business && wholesale ? wholesale : null;
+    // Korting per productcategorie, alleen voor zakelijke klanten en alleen voor artikelen zonder eigen zakelijke prijs (zie category-discounts.js).
+    const categoryDiscounts = business ? categoryDiscountsOf(tenantId) : new Map();
     const unique = new Map();
     for (const line of wanted) {
       const code = String(line.code || '').trim().toUpperCase();
@@ -223,14 +225,19 @@ function createWebOrderStore(db, { stock }) {
       const itemName = row.parent_name && label ? `${row.parent_name} (${label})` : row.name;
       const qty = unique.get(cartCode);
       const vatRate = Number(row.vat_rate ?? 21);
-      const itemExcl = business && row.business_price != null ? Number(row.business_price) : Number(row.sale_price);
-      // Een verpakking heeft een eigen prijs; zonder prijs geldt factor × de stukprijs. Groothandelsvoorwaarden gelden alleen voor de basiseenheid.
+      const hasOwnBusinessPrice = business && row.business_price != null;
+      const itemExcl = hasOwnBusinessPrice ? Number(row.business_price) : Number(row.sale_price);
+      const categoryPct = hasOwnBusinessPrice ? 0 : categoryDiscounts.get(row.code) || 0;
+      // Een verpakking heeft een eigen prijs; zonder prijs geldt factor × de stukprijs (met de categoriekorting). Groothandelsvoorwaarden gelden alleen voor de basiseenheid.
       const factor = packaging ? Number(packaging.factor) : 1;
       const packagingPrice = packaging ? (business && packaging.business_price != null ? packaging.business_price : packaging.sale_price) : null;
       const listExcl = packaging ? round2(packagingPrice != null ? Number(packagingPrice) : itemExcl * factor) : itemExcl;
       const terms = { packSize: Number(row.order_pack_size) || 1, orderMinQty: Number(row.order_min_qty) || 1 };
-      const priced = wholesaleTerms && !packaging ? Wholesale.wholesalePrice(listExcl, qty, Wholesale.tiersOf(row.price_tiers), wholesaleTerms.discountPct) : null;
-      const unitExcl = priced ? priced.unitExcl : listExcl;
+      const priced = wholesaleTerms && !packaging ? Wholesale.wholesalePrice(listExcl, qty, Wholesale.tiersOf(row.price_tiers), wholesaleTerms.discountPct, categoryPct) : null;
+      // Zonder groothandelsvoorwaarden geldt de categoriekorting direct; een verpakking met een eigen prijs krijgt geen korting.
+      const packagingDerived = packaging && packagingPrice == null;
+      const appliedCategoryPct = priced ? (priced.source === 'categorie' ? priced.discountPct : 0) : (!packaging || packagingDerived ? categoryPct : 0);
+      const unitExcl = priced ? priced.unitExcl : round2(listExcl * (1 - appliedCategoryPct / 100));
       const unitIncl = round2(unitExcl * (1 + vatRate / 100));
       const lineExcl = round2(unitExcl * qty);
       // Zonder voorraadbeheer (stock_managed = 0) telt alleen of het artikel in de oude webshop op voorraad staat: wel = genoeg, niet = 0.
@@ -244,8 +251,9 @@ function createWebOrderStore(db, { stock }) {
         itemId: row.id, code: cartCode, baseCode: row.code, name: packaging ? `${itemName} – ${packaging.name} (${factor} ${row.unit || 'st'})` : itemName, unit: packaging ? packaging.name : row.unit || 'st', qty, available, availableBase, managed: !unmanaged,
         unitExcl, vatRate, unitIncl, lineTotal: business ? round2(lineExcl * (1 + vatRate / 100)) : round2(unitIncl * qty), enough: available >= qty,
         weightGrams: row.weight_grams == null ? null : Number(row.weight_grams) * factor, unitContent: packaging || row.unit_content == null ? null : Number(row.unit_content), ...(business ? { lineExcl } : {}),
-        ...(packaging ? { stockPer: factor, packaging: { code: packaging.code, name: packaging.name, factor } } : {}),
-        ...(wholesaleTerms ? { listExcl, discountPct: priced ? priced.discountPct : 0, discountSource: priced ? priced.source : 'verpakking', packSize: packaging ? 1 : terms.packSize, minimum: packaging ? 1 : Wholesale.minimumOf(terms), packProblem: packaging ? null : Wholesale.quantityProblem(qty, terms) } : {}),
+        ...(packaging ? { stockPer: factor, itemName, packaging: { code: packaging.code, name: packaging.name, factor } } : {}),
+        ...(!wholesaleTerms && appliedCategoryPct > 0 ? { listExcl, discountPct: appliedCategoryPct, discountSource: 'categorie' } : {}),
+        ...(wholesaleTerms ? { listExcl, discountPct: priced ? priced.discountPct : appliedCategoryPct, discountSource: priced ? priced.source : (appliedCategoryPct > 0 ? 'categorie' : 'verpakking'), packSize: packaging ? 1 : terms.packSize, minimum: packaging ? 1 : Wholesale.minimumOf(terms), packProblem: packaging ? null : Wholesale.quantityProblem(qty, terms) } : {}),
       });
     }
     // Staat hetzelfde artikel in meerdere regels (stuks en een pallet), dan moet de voorraad voor alle regels samen genoeg zijn.
@@ -432,7 +440,7 @@ function createWebOrderStore(db, { stock }) {
       const totals = calculated.totals;
       if (expectedTotal !== null && !(Math.abs(expectedTotal - totals.total) <= 0.005)) return { error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', status: 409 };
       const data = {
-        lines: calculated.lines.map((line) => ({ itemId: line.itemId, code: line.code, ...(line.stockPer ? { baseCode: line.baseCode, stockPer: line.stockPer } : {}), name: line.name, unit: line.unit, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal, ...(line.lineExcl !== undefined ? { lineExcl: line.lineExcl } : {}) })),
+        lines: calculated.lines.map((line) => ({ itemId: line.itemId, code: line.code, ...(line.stockPer ? { baseCode: line.baseCode, stockPer: line.stockPer, itemName: line.itemName } : {}), name: line.name, unit: line.unit, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal, ...(line.lineExcl !== undefined ? { lineExcl: line.lineExcl } : {}) })),
         customer: { name: fields.name, company: fields.company, email: fields.email, phone: fields.phone },
         address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' } : { street: fields.street, postcode: fields.postcode, city: fields.city, country, ...(user.addressUnverified ? { unverified: true } : {}) },
         shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method === 'dpd', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },

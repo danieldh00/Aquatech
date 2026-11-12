@@ -105,7 +105,7 @@ function createWebReturnStore(db, { orders, stock }) {
       for (const line of JSON.parse(row.data).lines) used.set(line.code, (used.get(line.code) || 0) + line.qty);
     }
     return order.lines
-      .map((line) => ({ itemId: line.itemId, code: line.code, name: line.name, unit: line.unit, qty: line.qty - (used.get(line.code) || 0), unitExcl: line.unitExcl, vatRate: line.vatRate, ...(line.stockPer ? { stockPer: line.stockPer, baseCode: line.baseCode } : {}) }))
+      .map((line) => ({ itemId: line.itemId, code: line.code, name: line.name, unit: line.unit, qty: line.qty - (used.get(line.code) || 0), unitExcl: line.unitExcl, vatRate: line.vatRate, ...(line.stockPer ? { stockPer: line.stockPer, baseCode: line.baseCode, itemName: line.itemName } : {}) }))
       .filter((line) => line.qty > 0);
   }
 

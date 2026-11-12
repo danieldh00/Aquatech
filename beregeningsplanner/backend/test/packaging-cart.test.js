@@ -133,3 +133,30 @@ test('zakelijk: pallet tegen de zakelijke prijs, beschikbaar in hele pallets en 
   const withAt = await admin.post('/app/api/stock/items', { code: 'KLINK@PAL', name: 'Fout', onHand: 1, salePrice: 1 });
   assert.strictEqual(withAt.status, 400);
 });
+
+test('factuur en marge met verpakkingen: pallet en stuks op de factuur, rapportage in stuks onder de naam van het artikel', async () => {
+  const { base, admin, itemId, shopper } = await setup();
+  const begin = (await admin.get(`/app/api/stock/items/${itemId}`)).body.layers[0];
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${itemId}/layers/${begin.id}`, { unitCost: 4 })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/invoices/settings', { webOrders: { enabled: true, finalize: false } })).status, 200);
+  const { client } = await shopper({ business: true });
+  await postForm(base, client, '/winkelwagen/', { action: 'add', code: 'KLINK@PAL', qty: '2' });
+  await postForm(base, client, '/winkelwagen/', { action: 'add', code: 'KLINK', qty: '12' });
+  const placed = await postCheckout(base, client, { ...PICKUP, company: COMPANY.companyName, vatNumber: COMPANY.vatNumber });
+  assert.strictEqual(placed.status, 303, placed.text.slice(0, 300));
+  const orderId = (await admin.get('/app/api/admin/web-orders')).body.items[0].id;
+  const shipped = await admin.post(`/app/api/admin/web-orders/${orderId}/status`, { status: 'verzonden' });
+  assert.strictEqual(shipped.status, 200, JSON.stringify(shipped.body));
+  // Factuur: één regel per verpakking, met de naam van de verpakking en de omzetgroep van het artikel.
+  const invoice = (await admin.get(`/app/api/invoices/${shipped.body.invoice.id}`)).body;
+  assert.deepStrictEqual(invoice.data.lines.map((line) => [line.code, line.qty, line.price, line.description]),
+    [['KLINK@PAL', 2, 1200, 'Klinker – Pallet (144 st)'], ['KLINK', 12, 9, 'Klinker']]);
+  assert.strictEqual(shipped.body.invoice.total, 3034.68, '(2 × 1200 + 12 × 9) × 1,21');
+  // Marge: omzet over beide regels, kostprijs over 300 stuks (288 + 12), één regel met de naam van het artikel zelf.
+  const report = (await admin.get('/app/api/admin/webshop-report?lines=1')).body;
+  assert.strictEqual(report.totals.revenue, 2508);
+  assert.strictEqual(report.totals.cost, 1200, '300 × 4');
+  assert.strictEqual(report.totals.margin, 1308);
+  assert.deepStrictEqual(report.items.map((item) => [item.code, item.name, item.qty]), [['KLINK', 'Klinker', 300]]);
+  assert.deepStrictEqual(report.lines.map((line) => [line.name, line.qty]), [['Klinker', 300]], 'de naam van de samengevoegde regel noemt geen verpakking');
+});

@@ -1002,6 +1002,9 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
     shop.replaceProducts(seeded.tenantId, testSet.shop.products, `${today}T07:00:00.000Z`);
     counts.products = testSet.shop.products.length;
   }
+  // Zakelijke kortingen per productcategorie (Beheer > Webshop > Zakelijke kortingen): 5% op heel Beregening en 10% op de druppelslangen.
+  settings.update({ categoryDiscounts: { rules: [{ categorySlug: 'beregening_nieuw', discountPct: 5 }, { categorySlug: 'druppelslang-toebehoren', discountPct: 10 }] } });
+  counts.categoryDiscounts = 2;
   return counts;
 }
 

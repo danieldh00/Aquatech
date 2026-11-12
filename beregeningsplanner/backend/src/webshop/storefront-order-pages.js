@@ -29,6 +29,9 @@ ${totals.byRate.filter((row) => row.rate > 0).map((row) => `<tr class="sub"><td 
 <tr class="total"><th colspan="3" scope="row">${shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num">${escapeHtml(formatPrice(totals.total))}</td></tr>`;
 }
 
+/** Hoe een korting op een winkelwagenregel heet, per bron. */
+const DISCOUNT_LABELS = { staffel: 'staffelkorting', klant: 'groothandelskorting', categorie: 'categoriekorting' };
+
 /**
  * De winkelwagen met aantallen die de klant kan aanpassen.
  * @param {{ lines: object[], missing: string[], totals: object, ok: boolean }} cart De geprijsde winkelwagen (zie web-orders.js, priceCart).
@@ -45,7 +48,7 @@ function cartPage(cart, groups = [], notice = '', fromPlan = null) {
   }
   const rows = cart.lines.map((line) => `<tr${line.enough && !line.packProblem ? '' : ' class="problem"'}>
     <td><strong>${escapeHtml(line.name)}</strong><br><small>Artikelnr.: ${escapeHtml(line.code)}</small>${line.enough ? '' : `<br><small class="stock out">${line.available > 0 ? `Nog maar ${escapeHtml(String(line.available))} beschikbaar` : 'Niet meer op voorraad'}</small>`}${line.packProblem ? `<br><small class="stock out">${escapeHtml(line.packProblem)}</small>` : ''}</td>
-    <td class="num">${escapeHtml(formatPrice(cart.pricesExcl ? line.unitExcl : line.unitIncl))}${line.discountPct > 0 ? `<br><small class="muted">${escapeHtml(String(line.discountPct))}% ${line.discountSource === 'staffel' ? 'staffelkorting' : 'groothandelskorting'}</small>` : ''}</td>
+    <td class="num">${escapeHtml(formatPrice(cart.pricesExcl ? line.unitExcl : line.unitIncl))}${line.discountPct > 0 ? `<br><small class="muted">${escapeHtml(String(line.discountPct))}% ${DISCOUNT_LABELS[line.discountSource] || 'groothandelskorting'}</small>` : ''}</td>
     <td><form class="cart-qty" method="post" action="./"><input type="hidden" name="action" value="set"><input type="hidden" name="code" value="${escapeHtml(line.code)}"><input type="number" name="qty" value="${line.qty}" min="0" max="9999" aria-label="Aantal ${escapeHtml(line.name)}"><button class="button secondary" type="submit">Wijzig</button></form></td>
     <td class="num">${escapeHtml(formatPrice(cart.pricesExcl ? line.lineExcl : line.lineTotal))}</td>
     <td><form method="post" action="./"><input type="hidden" name="action" value="remove"><input type="hidden" name="code" value="${escapeHtml(line.code)}"><button class="button secondary" type="submit" aria-label="Verwijder ${escapeHtml(line.name)}">Verwijder</button></form></td>

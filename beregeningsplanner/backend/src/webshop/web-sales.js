@@ -215,14 +215,14 @@ function createWebSalesStore(db, { stock = null } = {}) {
    * Legt de verkoop van een verzonden bestelling vast.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ id: string, number: string }} order De bestelling.
-   * @param {object[]} lines De regels van de bestelling (itemId, code, name, qty, unitExcl, lineExcl).
+   * @param {object[]} lines De regels van de bestelling (itemId, code, name, qty, unitExcl, lineExcl; bij een verpakking ook itemName = de naam van het artikel zelf, want de rapportage telt in de basiseenheid).
    * @param {Map<string, string>} movementIds Per artikel-id de afboeking.
    * @param {string} soldAt Moment van verzenden.
    * @returns {number} Aantal toegevoegde regels.
    */
   function recordShipment(tenantId, order, lines, movementIds, soldAt) {
     return insertLines(tenantId, mergePerItem(lines.map((line) => ({
-      itemId: line.itemId, code: line.baseCode || line.code, name: line.name, qty: baseQtyOf(line), revenue: revenueOf(line),
+      itemId: line.itemId, code: line.baseCode || line.code, name: line.itemName || line.name, qty: baseQtyOf(line), revenue: revenueOf(line),
     }))).map((line, index) => ({
       id: crypto.createHash('sha256').update(JSON.stringify([tenantId, 'verkoop', order.id, index])).digest('hex'),
       kind: 'verkoop', soldAt, orderId: order.id, reference: order.number, itemId: line.itemId, code: line.code, name: line.name,
@@ -241,7 +241,7 @@ function createWebSalesStore(db, { stock = null } = {}) {
    */
   function recordReturn(tenantId, record, lines, movementIds, soldAt) {
     return insertLines(tenantId, mergePerItem(lines.map((line) => ({
-      itemId: line.itemId, code: line.baseCode || line.code, name: line.name, qty: baseQtyOf(line), revenue: round2(Number(line.unitExcl) * line.qty),
+      itemId: line.itemId, code: line.baseCode || line.code, name: line.itemName || line.name, qty: baseQtyOf(line), revenue: round2(Number(line.unitExcl) * line.qty),
     }))).map((line, index) => ({
       id: crypto.createHash('sha256').update(JSON.stringify([tenantId, 'retour', record.orderId, record.number, index])).digest('hex'),
       kind: 'retour', soldAt, orderId: record.orderId, reference: record.number, itemId: line.itemId, code: line.code, name: line.name,

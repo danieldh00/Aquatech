@@ -56,6 +56,7 @@ const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uit
 const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
 const { registerLabelRoutes } = require('./artikelen/labels');
+const { sanitizeCategoryDiscounts, registerCategoryDiscountRoutes } = require('./webshop/category-discounts');
 const { createSupplierStore, registerSupplierRoutes } = require('./artikelen/suppliers');
 const { createOrderReader: createDefaultOrderReader } = require('./artikelen/order-reader');
 const { registerOrderReadRoute } = require('./artikelen/order-read-route');
@@ -2356,8 +2357,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   const shopContentStore = createShopContentStore(database, { vault });
   // De catalogus van de shop (ook voor Beheer: welke categorieën staan nog niet in de menuboom) met de boom uit Beheer.
-  const storefrontData = createStorefrontData(database, { treeOf: (tenantId, preview) => shopContentStore.publicContent(tenantId, { preview }).tree });
-  const webOrders = createWebOrderStore(database, { stock: stockStore });
+  const storefrontData = createStorefrontData(database, { treeOf: (tenantId, preview) => shopContentStore.publicContent(tenantId, { preview }).tree, discountsOf: (tenantId) => settingsFor(tenantId).get('categoryDiscounts') });
+  /**
+   * De categoriekorting voor zakelijke klanten per artikelcode; die komt uit de catalogus (die houdt de boom en de kortingen bij). Zonder kortingen is geen catalogus nodig.
+   * @param {string} tenantId De omgeving.
+   * @returns {Map<string, number>} Het kortingspercentage per artikelcode.
+   */
+  const categoryDiscountsOf = (tenantId) => (sanitizeCategoryDiscounts(settingsFor(tenantId).get('categoryDiscounts')).rules.length ? storefrontData.catalogOf(tenantId).discountByCode : new Map());
+  const webOrders = createWebOrderStore(database, { stock: stockStore, categoryDiscountsOf });
+  // Kortingen per productcategorie voor zakelijke klanten (Beheer > Webshop > Zakelijke kortingen, zie category-discounts.js).
+  app.use('/api/admin/category-discounts', express.json({ limit: '32kb' }));
+  registerCategoryDiscountRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree, audit, requireJson });
   const webOrderMail = createOrderMailer({ orders: webOrders, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
   const webReturns = createWebReturnStore(database, { orders: webOrders, stock: stockStore });
   const webReturnMail = createReturnMailer({ returns: webReturns, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
