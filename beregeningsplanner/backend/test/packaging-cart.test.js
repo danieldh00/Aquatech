@@ -116,4 +116,11 @@ test('zakelijk: pallet tegen de zakelijke prijs, beschikbaar in hele pallets en 
   assert.strictEqual(order.lines.length, 2);
   const pallet = order.lines.find((line) => line.code === 'KLINK@PAL');
   assert.deepStrictEqual([pallet.qty, pallet.unitExcl, pallet.lineExcl, pallet.stockPer], [2, 1200, 2400, 144]);
+  // Verzenden: stuks en pallet van hetzelfde artikel zijn één afboeking; de rapportage telt de kosten maar één keer.
+  assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${orderId}/status`, { status: 'verzonden' })).status, 200);
+  const report = await admin.get('/app/api/admin/webshop-report?lines=1');
+  assert.strictEqual(report.status, 200, JSON.stringify(report.body).slice(0, 300));
+  const rows = report.body.lines.filter((line) => line.reference === order.number);
+  assert.strictEqual(rows.length, 1, 'één regel per artikel in de rapportage');
+  assert.strictEqual(rows[0].qty, 300, '12 stuks + 2 × 144');
 });
