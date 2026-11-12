@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.12.0',
+      date: '2026-11-12',
+      title: 'Afwijkend afleveradres bij bestellingen en offertes',
+      items: [
+        { text: 'Bij afrekenen in de webshop staat nu "Afleveradres gelijk aan factuuradres" standaard aan. Haal het vinkje weg om een ander afleveradres op te geven; de factuur gaat dan naar het factuuradres en het pakket naar het afleveradres.' },
+        { text: 'In een offerte kun je een afwijkend afleveradres invullen. Het staat op het offertedocument.', for: ['offertes'] },
+      ],
+    },
+    {
       version: '1.11.9',
       date: '2026-11-12',
       title: 'Kortingen per productcategorie voor zakelijke klanten',
