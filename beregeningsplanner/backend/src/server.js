@@ -86,6 +86,8 @@ const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 const InvoiceCore = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 const MODULES = require(path.join(FRONTEND_DIR, 'dashboard', 'modules.js'));
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
+// De hulpfuncties van het moduleregister (isOn, lockedSettings, lockedRoutes) zetten zich bij het laden op globalThis.
+const ModuleTools = globalThis.AquatechModuleTools;
 const LOGIN_PAGE = path.join(PAGES_DIR, 'login.html');
 const SETUP_PAGE = path.join(PAGES_DIR, 'setup.html');
 const PASSWORD_PAGE = path.join(PAGES_DIR, 'password.html');
@@ -351,6 +353,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {boolean} true als multitenancy aan staat.
    */
   const multitenancyOn = () => settings.get('multitenancy');
+  /**
+   * De aan/uit-vlaggen van de modules in een omgeving, zoals ze echt gelden: uitbesteden werkt tussen organisaties en staat
+   * dus uit zonder multitenancy, ook als de beheerder het niet zelf uitzette.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {object} Module-id → false voor modules die uit staan.
+   */
+  const moduleFlagsOf = (tenantId) => {
+    const flags = settingsFor(tenantId).get('modules');
+    return multitenancyOn() ? flags : { ...flags, uitbesteden: false };
+  };
   /**
    * Of een omgeving meedoet. Met multitenancy uit zijn dat de hoofdtenant en zijn testomgevingen; de gegevens van
    * andere organisaties blijven staan maar zijn niet bereikbaar tot multitenancy weer aan gaat.
@@ -670,6 +682,18 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const user = identify(req);
     if (user && String(owner) === `${user.id}@${req.tenantId}`) return next();
     res.status(409).json({ error: 'owner_mismatch', message: 'Deze wijziging is gemaakt door een andere gebruiker of in een andere omgeving.' });
+  });
+
+  // Een module die uit staat: schrijfacties op haar instellingen (etiketsjablonen, prijsfactor, sproeierbibliotheek,
+  // uitbesteden) worden geweigerd; welke adressen dat zijn staat in het moduleregister (`configuration.routes`).
+  app.use('/api', (req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+    const user = identify(req);
+    if (!user) return next();
+    const fullPath = `/api${req.path}`;
+    const locked = ModuleTools.lockedRoutes(moduleFlagsOf(req.tenantId)).some((prefix) => fullPath === prefix || fullPath.startsWith(`${prefix}/`));
+    if (!locked) return next();
+    res.status(409).json({ error: 'module_off', message: 'Deze module staat uit. Zet hem eerst aan in Beheer > Modules aan/uit.' });
   });
 
   // Offline wachtrij (frontend/sw.js): een herhaald verzoek met dezelfde
@@ -1714,6 +1738,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // Wie met de toegangscode is ingelogd, zou zichzelf buitensluiten door die
     // leeg te maken; met een beheerdersaccount kan het wel.
     const resets = Array.isArray(patch.reset) ? patch.reset : [];
+    // Instellingen van een module die uit staat zijn verborgen en worden niet gewijzigd (een patch die de module tegelijk aanzet telt mee).
+    const patchedFlags = patch.modules && typeof patch.modules === 'object' && !Array.isArray(patch.modules)
+      ? Object.fromEntries(Object.entries(patch.modules).map(([id, on]) => [id, Boolean(on)])) : {};
+    const lockedKeys = ModuleTools.lockedSettings({ ...moduleFlagsOf(req.tenantId), ...patchedFlags });
+    const lockedField = [...Object.keys(patch), ...resets].find((key) => lockedKeys.has(key));
+    if (lockedField) return res.status(409).json({ error: 'module_off', field: lockedField, message: 'Deze instelling hoort bij een module die uit staat. Zet de module eerst aan in Beheer > Modules aan/uit.' });
     const platformField = [...Object.keys(patch), ...resets].find((key) => FIELDS[key]?.platform || FIELDS[key]?.internal);
     if (platformField) {
       return res.status(400).json({ error: 'invalid_setting', field: platformField,
@@ -2457,7 +2487,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const shopSettings = settingsFor(tenant.id);
     const shopOn = req.tenantId === tenant.id && Boolean(shopSettings.get('storefront'));
     // Uitbesteden werkt tussen organisaties: zonder multitenancy staat de module uit.
-    const modules = multitenancyOn() ? settingsFor(req.tenantId).get('modules') : { ...settingsFor(req.tenantId).get('modules'), uitbesteden: false };
+    const modules = moduleFlagsOf(req.tenantId);
     res.json({ modules, ai: Boolean(aiAvailable(req.tenantId)), shop: shopOn ? { ordering: shopSettings.get('shopOrdering') === true } : null });
   });
 
@@ -2844,8 +2874,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!startModule || !/^[a-z0-9-]+\/$/.test(startModule.href)) return null;
     const rights = Roles.rightsOf(user);
     if (startModule.right && ![].concat(startModule.right).some((right) => rights.includes(right))) return null;
-    const off = settingsFor(req.tenantId).get('modules') || {};
-    if (startModule.id !== 'beheer' && startModule.id !== 'hoofdbeheer' && off[startModule.id] === false) return null;
+    if (!ModuleTools.isOn(moduleFlagsOf(req.tenantId), startModule.id)) return null;
     return startModule.href;
   }
 
@@ -2960,6 +2989,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // nooit echte klanten van de live-tenant.
   const seasonReminders = createSeasonReminderRunner(seasonReminderStore, {
     settingsFor: (id) => settingsFor(id), mailerFor, userTenantsOf: (id) => [id],
+    // Zonder klantportaal (module uit) is er niets om naar te verwijzen: dan ook geen herinneringen.
+    enabled: (id) => ModuleTools.isOn(moduleFlagsOf(id), 'portaal'),
   });
   /**
    * Seizoensherinneringen in alle actieve omgevingen versturen (elk uur vanuit main).

@@ -38,7 +38,7 @@
   const PAGE = 100;
   const Roles = window.AquatechRoles;
   // Rollen van de organisatie (Beheer > Rollen); tot ze geladen zijn de standaard.
-  const state = { offset: 0, total: 0, users: [], auditOffset: 0, roles: Object.entries(Roles.ROLES).map(([key, role]) => ({ key, ...role })) };
+  const state = { hiddenSections: new Set(), offset: 0, total: 0, users: [], auditOffset: 0, roles: Object.entries(Roles.ROLES).map(([key, role]) => ({ key, ...role })) };
   /**
    * Zoekt een rol van de organisatie.
    * @param {string} key sleutel van de rol
@@ -841,6 +841,7 @@
     try {
       const result = await api('settings', { method: 'PUT', body: patch });
       renderSettings(result.settings);
+      if (patch.modules) await refreshMenu();
       form.querySelectorAll('input[type=password]').forEach((input) => { input.value = ''; });
       toast(result.changed.length ? message : 'Niets gewijzigd');
       return true;
@@ -1371,6 +1372,50 @@
   }
 
   // ---------- Algemeen ----------
+  /**
+   * Haalt op welke modules uit staan (zoals de server ze laat gelden) en onthoudt welke secties van Beheer daarbij horen:
+   * die staan in het moduleregister (`configuration.sections`, dashboard/modules.js) en verdwijnen uit het menu.
+   * @param {boolean} [fresh] true = niet de gedeelde kopie van deze pagina maar opnieuw bij de server vragen.
+   * @returns {Promise<void>}
+   */
+  async function loadModuleFlags(fresh = false) {
+    const config = await window.AquatechCommon.getJson('api/config', { fresh }).catch(() => null);
+    state.hiddenSections = window.AquatechModuleTools.hiddenSections((config && config.modules) || {});
+  }
+
+  /**
+   * Bouwt het zijmenu van Beheer: zonder back-ups voor wie ze niet mag zien en zonder secties van modules die uit staan.
+   * @param {string} startId Sectie waarmee de pagina opent (haar groep staat open).
+   * @returns {void}
+   */
+  function buildMenu(startId) {
+    window.BeheerIndeling.build({
+      startId,
+      /**
+       * Back-ups zijn alleen voor hoofdbeheerders zichtbaar; instellingen van een uitgezette module helemaal niet.
+       * @param {object} section De sectie.
+       * @returns {boolean} true als de sectie in het menu hoort.
+       */
+      allowed: (section) => (section.needs !== 'backups' || state.backups) && !state.hiddenSections.has(section.id),
+      /**
+       * Opent de gekozen sectie als nieuwe stap in de browsergeschiedenis.
+       * @param {string} id Sleutel van de sectie.
+       */
+      onSelect: (id) => showTab(id, true),
+    });
+  }
+
+  /**
+   * Na het opslaan van Modules aan/uit: het menu opnieuw opbouwen, zodat secties van een net uitgezette module weg zijn
+   * (en die van een aangezette terug), met Modules aan/uit zelf als open sectie.
+   * @returns {Promise<void>}
+   */
+  async function refreshMenu() {
+    await loadModuleFlags(true);
+    buildMenu('modules');
+    window.BeheerIndeling.show(window.BeheerIndeling.find('modules'));
+  }
+
   /** Sleutel van de sectie die nu open staat (om opnieuw klikken op dezelfde sectie te herkennen). */
   let activePane = '';
   /**
@@ -1381,7 +1426,7 @@
   function showTab(name, push = false) {
     const wanted = window.BeheerIndeling.find(window.BeheerIndeling.resolve(name));
     if (!wanted) return;
-    const section = wanted.needs === 'backups' && !state.backups ? window.BeheerIndeling.find('history') : wanted;
+    const section = (wanted.needs === 'backups' && !state.backups) || state.hiddenSections.has(wanted.id) ? window.BeheerIndeling.find('history') : wanted;
     // Weggaan bij Webshop-inhoud met niet-opgeslagen menuwijzigingen: eerst vragen, bij annuleren blijft de sectie staan.
     if (activePane === 'shopinhoud' && section.pane !== 'shopinhoud' && window.BeheerWebshopMenu && window.BeheerWebshopMenu.hasChanges()
       && !confirm('Er zijn niet-opgeslagen wijzigingen in het menu. Toch weggaan? Die gaan dan verloren.')) return;
@@ -1429,20 +1474,8 @@
     $('#u-login').innerHTML = me.loginCode
       ? `Gebruikersnamen zijn uniek binnen deze organisatie. Gebruikers loggen in met organisatiecode <b>${esc(me.loginCode)}</b> (of via <a href="${esc(link)}">deze inloglink</a>, die de code al invult).`
       : 'Gebruikersnamen zijn uniek binnen deze organisatie. Gebruikers loggen in met een lege organisatiecode.';
-    window.BeheerIndeling.build({
-      startId: window.BeheerIndeling.resolve(location.hash.slice(1)) || 'history',
-      /**
-       * Back-ups zijn alleen voor hoofdbeheerders zichtbaar.
-       * @param {object} section De sectie.
-       * @returns {boolean} true als de sectie in het menu hoort.
-       */
-      allowed: (section) => section.needs !== 'backups' || state.backups,
-      /**
-       * Opent de gekozen sectie als nieuwe stap in de browsergeschiedenis.
-       * @param {string} id Sleutel van de sectie.
-       */
-      onSelect: (id) => showTab(id, true),
-    });
+    await loadModuleFlags();
+    buildMenu(window.BeheerIndeling.resolve(location.hash.slice(1)) || 'history');
     let searchTimer;
     /** Zoekt kort na het typen opnieuw in de historie. */
     $('#h-search').oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.offset = 0; loadHistory(); }, 250); };
