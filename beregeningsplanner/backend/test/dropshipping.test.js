@@ -78,6 +78,12 @@ test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', as
   // Ook als het filter ver vóór de stream staat (veel opvulling in het woordenboek) wordt de bom herkend.
   const padded = Buffer.concat([base, Buffer.from(`\n98 0 obj\n<< /Type /ObjStm /N 1 /First 5 /Filter /FlateDecode /Pad (${'x'.repeat(4000)}) /Length ${bomb.length} >>\nstream\n`), bomb, Buffer.from('\nendstream\nendobj\n')]);
   assert.match((await inspectSlip(padded)).error, /te groot als hij wordt uitgepakt/);
+  // Een 'endstream' middenin de gecomprimeerde gegevens knipt de scan niet af, en een stream zonder einde wordt geweigerd.
+  const split = zlib.deflateSync(Buffer.concat([Buffer.from('endstream'), Buffer.alloc(200 * 1024 * 1024)]), { level: 9 });
+  const sneaky = Buffer.concat([base, Buffer.from(`\n97 0 obj\n<< /Type /ObjStm /N 1 /First 5 /Filter 12 0 R /Length ${split.length} >>\nstream\n`), split, Buffer.from('\nendstream\nendobj\n')]);
+  assert.match((await inspectSlip(sneaky)).error, /te groot als hij wordt uitgepakt/);
+  const open = Buffer.concat([base, Buffer.from('\n96 0 obj\n<< /Length 100 >>\nstream\n'), bomb]);
+  assert.match((await inspectSlip(open)).error, /te groot als hij wordt uitgepakt/);
   const started = Date.now();
   const result = await inspectSlip(pdf);
   assert.match(result.error, /te groot als hij wordt uitgepakt/);

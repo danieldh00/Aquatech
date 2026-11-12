@@ -18,7 +18,7 @@ const MAX_TOTAL_BYTES = 80 * 1024 * 1024;
 /**
  * Probeert elke stream van de PDF begrensd uit te pakken (zonder op het woordenboek van de stream te vertrouwen, dat is te omzeilen) om een decompressiebom te herkennen vóór pdf-lib de PDF leest.
  * @param {Buffer} buffer De PDF.
- * @returns {boolean} true als alle streams binnen de grenzen blijven (beschadigde streams telt pdf-lib zelf).
+ * @returns {boolean} true als alle streams binnen de grenzen blijven (een stream zonder einde telt als onbruikbaar).
  */
 function streamsWithinLimits(buffer) {
   let total = 0;
@@ -31,10 +31,12 @@ function streamsWithinLimits(buffer) {
     let dataStart = position;
     if (buffer[dataStart] === 0x0d) dataStart += 1;
     if (buffer[dataStart] === 0x0a) dataStart += 1;
+    // Zonder 'endstream' is het bestand niet in orde. Uitpakken loopt tot het einde van de gecomprimeerde gegevens zelf (niet tot de
+    // eerste 'endstream', die ook toevallig in de gegevens kan staan); wat achter dat einde komt, negeert zlib.
     const end = buffer.indexOf('endstream', dataStart, 'latin1');
-    if (end < 0) return true;
+    if (end < 0) return false;
     try {
-      total += zlib.inflateSync(buffer.subarray(dataStart, end), { maxOutputLength: MAX_STREAM_BYTES }).length;
+      total += zlib.inflateSync(buffer.subarray(dataStart), { maxOutputLength: MAX_STREAM_BYTES }).length;
     } catch (failure) {
       if (failure.code === 'ERR_BUFFER_TOO_LARGE') return false;
     }
