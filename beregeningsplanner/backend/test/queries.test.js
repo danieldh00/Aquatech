@@ -272,6 +272,19 @@ test('queries: leveranciers en inkooporders kosten een vast aantal queries, onge
     probe.reset();
     assert.strictEqual((await client.get('/app/api/stock/reorder')).status, 200);
     assert.ok(probe.stats.queries <= 8, probe.stats.sql.join('\n'));
+    // Prijsfactor: het voorbeeld van 12 artikelen in een vast aantal queries; doorvoeren ook niet per artikel opnieuw berekenen.
+    assert.strictEqual((await client.put('/app/api/stock/price-factors', { defaultFactor: 2 })).status, 200);
+    const ids = (await client.get('/app/api/stock')).body.items.map((item) => item.id);
+    for (const id of ids) assert.strictEqual((await client.put(`/app/api/stock/items/${id}`, { priceMode: 'factor' })).status, 200);
+    db.prepare('UPDATE stock_items SET cost_price = 2').run();
+    probe.reset();
+    const factorView = (await client.get('/app/api/stock/price-factors')).body;
+    assert.strictEqual(factorView.preview.length, 12);
+    assert.ok(probe.stats.queries <= 8, probe.stats.sql.join('\n'));
+    probe.reset();
+    const changes = factorView.preview.filter((row) => row.changed).map((row) => ({ id: row.id, newPrice: row.newPrice }));
+    assert.strictEqual((await client.post('/app/api/stock/price-factors/apply', { items: changes })).body.updated, changes.length);
+    assert.ok(probe.stats.queries <= 8 + changes.length * 2, probe.stats.sql.join('\n'));
   } finally {
     server.close();
   }

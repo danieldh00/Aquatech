@@ -53,6 +53,7 @@ const { createStockCosts, parsePrice } = require('./stock-costs');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const Barcode = require(path.join(FRONTEND_DIR, 'shared', 'barcode.js'));
+const PriceFactor = require('./price-factor');
 
 const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 // Mutaties die een beheerder op het artikel zelf doet (de rest hoort bij een werkorder).
@@ -323,6 +324,16 @@ function sanitizeItem(raw, { partial = false } = {}) {
     if (unitContent !== null && (!Number.isFinite(unitContent) || unitContent <= 0 || unitContent > 100000)) return { error: 'Ongeldige inhoud per eenheid (groter dan 0, hoogstens 100.000).', field: 'unitContent' };
     out.unitContent = unitContent === null ? null : Math.round(unitContent * 1000) / 1000;
   }
+  // Prijsbepaling: vaste verkoopprijs of inkoopprijs × factor (price-factor.js); een eigen factor is leeg = die van leverancier, categorie of standaard.
+  if (!partial || input.priceMode !== undefined) {
+    if (input.priceMode !== undefined && input.priceMode !== 'vast' && input.priceMode !== 'factor') return { error: 'Kies een vaste prijs of een prijs volgens factor.', field: 'priceMode' };
+    out.priceMode = input.priceMode === 'factor' ? 'factor' : 'vast';
+  }
+  if (!partial || input.priceFactor !== undefined) {
+    const priceFactor = input.priceFactor === '' || input.priceFactor == null ? null : PriceFactor.cleanFactor(input.priceFactor);
+    if (priceFactor === null && input.priceFactor !== '' && input.priceFactor != null) return { error: `De factor is een getal van ${PriceFactor.MIN_FACTOR} tot en met ${PriceFactor.MAX_FACTOR}.`, field: 'priceFactor' };
+    out.priceFactor = priceFactor;
+  }
   // Omschrijving en specificaties voor de productpagina en de feed (12); los opgeslagen, niet in de overzichten.
   if (!partial || input.description !== undefined) out.description = ItemDetails.sanitizeDescription(input.description);
   if (!partial || input.specifications !== undefined) out.specifications = ItemDetails.sanitizeSpecifications(input.specifications);
@@ -371,13 +382,15 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   const costs = createStockCosts(db);
   // Webshop: na een wijziging van prijs of stand (shop-sync.js meldt zich aan via onDirty()).
   let dirtyHook = onDirty;
+  // Prijsfactor: berekent de verkoopprijs van een artikel in de modus factor (price-factor.js meldt zich aan via setPricer()).
+  let pricer = null;
   /**
    * Webshop: meldt een wijziging van prijs of stand (shop-sync.js meldt zich aan via onDirty()).
    * @param {string} tenantId Id van de omgeving.
    * @returns {void}
    */
   const dirty = (tenantId) => { if (dirtyHook) dirtyHook(tenantId); };
-  const SALE_COLS = 'stock_managed, sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error, order_pack_size, order_min_qty, price_tiers, unit_content, ean';
+  const SALE_COLS = 'stock_managed, sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error, order_pack_size, order_min_qty, price_tiers, unit_content, ean, price_mode, price_factor';
   const VARIANT_COLS = 'parent_id, has_variants, attributes, variant_values, image_id';
   const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}, ${VARIANT_COLS}`;
   const MOVE_COLS = 'm.id, m.item_id, m.kind, m.qty, m.balance, m.work_order_id, m.work_order_number, m.source, m.note, m.user_name, m.created_at';
@@ -400,6 +413,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       value: itemRow.cost_price == null ? null : Math.round(onHand * itemRow.cost_price * 100) / 100,
       low: itemRow.min_qty > 0 && onHand - reservedQty < itemRow.min_qty, notes: itemRow.notes, archived: Boolean(itemRow.archived),
       salePrice: itemRow.sale_price == null ? null : Number(itemRow.sale_price), businessPrice: itemRow.business_price == null ? null : Number(itemRow.business_price), vatRate: Number(itemRow.vat_rate ?? 21), revenueGroup: itemRow.revenue_group || 'producten',
+      margin: PriceFactor.marginPct(itemRow.sale_price, itemRow.cost_price),
+      priceMode: itemRow.price_mode === 'factor' ? 'factor' : 'vast', priceFactor: itemRow.price_factor == null ? null : Number(itemRow.price_factor),
       weightGrams: itemRow.weight_grams == null ? null : Number(itemRow.weight_grams),
       packSize: Number(itemRow.order_pack_size) || 1, orderMinQty: Number(itemRow.order_min_qty) || 1, priceTiers: Wholesale.tiersOf(itemRow.price_tiers),
       unitContent: itemRow.unit_content == null ? null : Number(itemRow.unit_content), ean: itemRow.ean || null,
@@ -482,7 +497,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     if (family) { where += ' AND i.parent_id = ?'; args.push(family); }
     return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
         i.sale_price, i.business_price, i.vat_rate, i.revenue_group, i.weight_grams, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
-        i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.ean, i.parent_id, i.has_variants, i.attributes, i.variant_values, i.image_id,
+        i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.ean, i.price_mode, i.price_factor, i.parent_id, i.has_variants, i.attributes, i.variant_values, i.image_id,
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders, COALESCE(f.orders, 0) AS family_orders
       FROM stock_items i
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ?${reservedFilter} GROUP BY item_id) r ON r.item_id = i.id
@@ -686,10 +701,13 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       rememberUnit(tenantId, fields.unit);
       const id = crypto.randomUUID();
       const timestamp = currentTimestamp();
+      // Modus factor: de prijs volgt uit de inkoopprijs; zonder uitkomst (geen factor of inkoopprijs) blijft de ingevulde prijs staan.
+      const factorPrice = fields.priceMode === 'factor' && pricer ? pricer(tenantId, { costPrice: fields.costPrice, priceFactor: fields.priceFactor ?? null }) : null;
+      if (factorPrice !== null) fields.salePrice = factorPrice;
       prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
-           sale_price, business_price, vat_rate, revenue_group, shop_sync, weight_grams, order_pack_size, order_min_qty, price_tiers, unit_content, ean)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.businessPrice ?? null, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null, fields.packSize ?? 1, fields.orderMinQty ?? 1, JSON.stringify(fields.priceTiers || []), fields.unitContent ?? null, fields.ean || null);
+           sale_price, business_price, vat_rate, revenue_group, shop_sync, weight_grams, order_pack_size, order_min_qty, price_tiers, unit_content, ean, price_mode, price_factor)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.businessPrice ?? null, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null, fields.packSize ?? 1, fields.orderMinQty ?? 1, JSON.stringify(fields.priceTiers || []), fields.unitContent ?? null, fields.ean || null, fields.priceMode || 'vast', fields.priceFactor ?? null);
       if (fields.description || fields.specifications.length) saveDetails(tenantId, id, fields);
       costs.noteFormPrice(tenantId, id, null, fields.costPrice, user);
       const start = Number(raw && raw.onHand);
@@ -727,8 +745,15 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const merged = {
         code: existing.code, name: existing.name, unit: existing.unit, location: existing.location, minQty: existing.min_qty, reorderQty: existing.reorder_qty, costPrice: existing.cost_price, notes: existing.notes,
         salePrice: existing.sale_price, businessPrice: existing.business_price ?? null, vatRate: Number(existing.vat_rate), revenueGroup: existing.revenue_group, shopSync: Boolean(Number(existing.shop_sync)), weightGrams: existing.weight_grams ?? null,
-        packSize: Number(existing.order_pack_size) || 1, orderMinQty: Number(existing.order_min_qty) || 1, priceTiers: Wholesale.tiersOf(existing.price_tiers), unitContent: existing.unit_content ?? null, ...fields,
+        packSize: Number(existing.order_pack_size) || 1, orderMinQty: Number(existing.order_min_qty) || 1, priceTiers: Wholesale.tiersOf(existing.price_tiers), unitContent: existing.unit_content ?? null,
+        priceMode: existing.price_mode === 'factor' ? 'factor' : 'vast', priceFactor: existing.price_factor ?? null, ...fields,
       };
+      // Modus factor: verandert de modus, de eigen factor of de inkoopprijs, dan volgt de verkoopprijs meteen; anders blijft de prijs staan tot de herberekening (Prijsfactor).
+      const factorChanged = merged.priceMode === 'factor' && (existing.price_mode !== 'factor' || (merged.priceFactor ?? null) !== (existing.price_factor ?? null) || (merged.costPrice ?? null) !== (existing.cost_price ?? null));
+      if (factorChanged && pricer && !Number(existing.has_variants)) {
+        const factorPrice = pricer(tenantId, { id: existing.id, costPrice: merged.costPrice, priceFactor: merged.priceFactor });
+        if (factorPrice !== null) merged.salePrice = factorPrice;
+      }
       const mergedTerms = Wholesale.sanitizeTerms(merged);
       if (mergedTerms.error) return { error: mergedTerms.error, field: mergedTerms.field, status: 400 };
       const archived = raw && raw.archived !== undefined ? (raw.archived ? 1 : 0) : existing.archived;
@@ -755,11 +780,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const toShop = !isParent && ((merged.salePrice ?? null) !== (existing.sale_price ?? null) || merged.vatRate !== Number(existing.vat_rate) || (merged.shopSync && !Number(existing.shop_sync)));
       prepare(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, reorder_qty = ?, cost_price = ?, notes = ?, archived = ?, archived_by_parent = 0, updated_at = ?,
            sale_price = ?, business_price = ?, vat_rate = ?, revenue_group = ?, shop_sync = ?, weight_grams = ?,
-           order_pack_size = ?, order_min_qty = ?, price_tiers = ?, unit_content = ?, ean = ?,
+           order_pack_size = ?, order_min_qty = ?, price_tiers = ?, unit_content = ?, ean = ?, price_mode = ?, price_factor = ?,
            shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
          WHERE tenant_id = ? AND id = ?`)
         .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.businessPrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0, merged.weightGrams,
-          merged.packSize, mergedTerms.orderMinQty, JSON.stringify(merged.priceTiers), merged.unitContent ?? null, ean,
+          merged.packSize, mergedTerms.orderMinQty, JSON.stringify(merged.priceTiers), merged.unitContent ?? null, ean, merged.priceMode, merged.priceFactor ?? null,
           toShop && merged.shopSync ? 1 : 0, tenantId, existing.id);
       if (fields.description !== undefined || fields.specifications !== undefined) saveDetails(tenantId, existing.id, fields);
       // Een andere inkoopprijs komt als nieuwe regel in de historie (de oude blijft staan).
@@ -1898,6 +1923,38 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Meldt de prijsfactor aan: een functie die de verkoopprijs van een artikel in de modus factor berekent.
+   * @param {Function} handler Aanroep (tenantId, { id?, costPrice, priceFactor }) die de prijs of null geeft.
+   * @returns {void}
+   */
+  function setPricer(handler) {
+    pricer = handler;
+  }
+
+  /**
+   * Zet nieuwe verkoopprijzen door (herberekening met de prijsfactor), in één transactie. Gekoppelde webshopproducten gaan opnieuw mee.
+   * Hoofdartikelen (met varianten) hebben geen eigen prijs en worden overgeslagen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ id: string, salePrice: number }[]} changes De nieuwe prijzen (excl. btw).
+   * @returns {number} Aantal artikelen waarvan de prijs is gewijzigd.
+   */
+  function setSalePrices(tenantId, changes) {
+    const timestamp = currentTimestamp();
+    let changed = 0;
+    transaction(db, () => {
+      const update = prepare(`UPDATE stock_items SET sale_price = ?, updated_at = ?,
+          shop_dirty = CASE WHEN shop_sync = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
+        WHERE tenant_id = ? AND id = ? AND has_variants = 0 AND archived = 0`);
+      for (const change of changes) {
+        const price = Math.round(Number(change.salePrice) * 100) / 100;
+        if (Number.isFinite(price) && price >= 0 && price <= MAX_QTY) changed += Number(update.run(price, timestamp, tenantId, String(change.id)).changes) || 0;
+      }
+    });
+    if (changed) dirty(tenantId);
+    return changed;
+  }
+
+  /**
    * Meldt de webshopkoppeling aan voor wijzigingen (vervangt onDirty uit de opties).
    * @param {Function} handler Aanroep met het tenant-id.
    * @returns {void}
@@ -1994,7 +2051,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     units, addUnit, removeUnit, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants,
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
-    reorderProposal, reserveOrder, releaseOrder, issueOrder, shortageFor, onDirty: setDirtyHook,
+    reorderProposal, reserveOrder, releaseOrder, issueOrder, shortageFor, onDirty: setDirtyHook, setPricer, setSalePrices,
     addCostPrice, setLayerCost, stockValue: costs.stockValue,
   };
 }

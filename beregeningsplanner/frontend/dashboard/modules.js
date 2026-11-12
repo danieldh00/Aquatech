@@ -148,6 +148,17 @@
       right: 'voorraad',
     },
     {
+      id: 'prijsfactor',
+      navGroup: 'inkoop',
+      partOf: 'voorraad',
+      title: 'Prijsfactor',
+      description: 'Verkoopprijs uit de inkoopprijs maal een factor (standaard, per categorie, leverancier of artikel), met afronding, marge en een voorbeeld voordat de prijzen worden doorgevoerd.',
+      href: 'artikelen/#pricefactor',
+      icon: 'tag',
+      status: 'actief',
+      right: 'voorraad',
+    },
+    {
       id: 'leveranciers',
       navGroup: 'inkoop',
       partOf: 'voorraad',

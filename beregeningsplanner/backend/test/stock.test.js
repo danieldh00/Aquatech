@@ -48,7 +48,7 @@ async function workOrder(client, lines) {
 
 test('voorraad: artikel opschonen en benodigd per code', () => {
   assert.deepStrictEqual(sanitizeItem({ code: ' pe-25 ', name: ' PE-buis ', minQty: '5', costPrice: '0.84937' }).value,
-    { code: 'PE-25', name: 'PE-buis', unit: 'st', location: '', notes: '', minQty: 5, reorderQty: null, costPrice: 0.8494, salePrice: null, vatRate: 21, weightGrams: null, businessPrice: null, revenueGroup: 'producten', shopSync: true, packSize: 1, orderMinQty: 1, priceTiers: [], unitContent: null, description: '', specifications: [], ean: null });
+    { code: 'PE-25', name: 'PE-buis', unit: 'st', location: '', notes: '', minQty: 5, reorderQty: null, costPrice: 0.8494, salePrice: null, vatRate: 21, weightGrams: null, businessPrice: null, revenueGroup: 'producten', shopSync: true, packSize: 1, orderMinQty: 1, priceTiers: [], unitContent: null, description: '', specifications: [], ean: null, priceMode: 'vast', priceFactor: null });
   assert.strictEqual(sanitizeItem({ code: '', name: 'x' }).field, 'code');
   assert.strictEqual(sanitizeItem({ code: 'A B;C', name: 'x' }).field, 'code');
   assert.strictEqual(sanitizeItem({ code: 'A', name: '' }).field, 'name');

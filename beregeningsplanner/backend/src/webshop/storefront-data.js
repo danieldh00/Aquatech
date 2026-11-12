@@ -536,4 +536,4 @@ const GROUP_SLUGS = [...GROUPS.map((group) => group.slug), OTHER_GROUP.slug];
 /** Naam per hoofdcategorie (slug → naam), voor de keuzelijst in Beheer. */
 const GROUP_NAMES = Object.fromEntries([...GROUPS, OTHER_GROUP].map((group) => [group.slug, group.name]));
 
-module.exports = { GROUP_SLUGS, GROUP_NAMES, createStorefrontData, buildCatalog, slugify, categoryNameOf, groupOf, safeImageUrl, imageOf, CACHE_MS };
+module.exports = { GROUP_SLUGS, GROUP_NAMES, createStorefrontData, buildCatalog, slugify, categoryNameOf, categoryNamesOf, groupOf, safeImageUrl, imageOf, CACHE_MS };
