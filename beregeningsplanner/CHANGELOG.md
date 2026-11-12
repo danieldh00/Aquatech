@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.9
+
+Bestelvoorstel per leverancier (punt 17 van bundel F, deel 2). Geen migratie.
+
+- `stock.reorderProposal` gebruikt de voorkeursleverancier van het artikel: de te bestellen hoeveelheid wordt naar boven afgerond op de bestelhoeveelheid, de eigen inkoopprijs van de leverancier gaat voor die van het artikel, en elke regel krijgt leverancier en artikelnummer. Het antwoord heeft ook `suppliers` (aantal regels en bedrag per leverancier, zonder leverancier onderaan). Een gearchiveerde leverancier telt niet mee.
+- Excel van het bestelvoorstel: kolommen Leverancier en Art.nr. leverancier, regels gegroepeerd per leverancier en een tabblad Per leverancier.
+- Tests: `suppliers.test.js` (bestelvoorstel met bestelhoeveelheid, eigen prijs, archiveren) en `stock.test.js`.
+
 ## 1.10.8
 
 Leveranciers (punt 17 van bundel F, deel 1). Migratie 59.

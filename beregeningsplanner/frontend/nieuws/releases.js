@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.10.9',
+      date: '2026-11-12',
+      title: 'Bestelvoorstel per leverancier',
+      items: [
+        { text: 'Het bestelvoorstel in Artikelen rekent nu met je voorkeursleverancier: de hoeveelheid wordt afgerond op de bestelhoeveelheid (bijvoorbeeld hele dozen), de inkoopprijs van de leverancier wordt gebruikt en de Excel is gegroepeerd per leverancier, met een tabblad met het totaal per leverancier.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.10.8',
       date: '2026-11-12',
       title: 'Leveranciers bij artikelen',
