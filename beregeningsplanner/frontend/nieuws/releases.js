@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.13.2',
+      date: '2026-11-12',
+      title: 'Mijn profiel netjes uitgelijnd',
+      items: [
+        { text: 'Op Mijn profiel staan de kaarten en velden nu netjes onder elkaar op één lijn, op computer en telefoon. Kaarten in een rij zijn even hoog en de knoppen staan onderaan.' },
+      ],
+    },
+    {
       version: '1.13.1',
       date: '2026-11-12',
       title: 'Verzendmethode kiezen bij het afrekenen',
