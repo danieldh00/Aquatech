@@ -32,7 +32,7 @@ test('instelling: alleen geldige regels, één per categorie, op categorie gesor
   assert.deepStrictEqual(sanitizeCategoryDiscounts({ rules: 'x' }), { rules: [] });
   const clean = sanitizeCategoryDiscounts({ rules: [
     { categorySlug: 'b', discountPct: '12.345' }, { categorySlug: 'a', discountPct: 10 }, { categorySlug: 'a', discountPct: 15 },
-    { categorySlug: 'c', discountPct: 0 }, { categorySlug: 'd', discountPct: 91 }, { categorySlug: '', discountPct: 5 }, { categorySlug: 'e', discountPct: 'veel' }, null,
+    { categorySlug: 'c', discountPct: 0 }, { categorySlug: 'f', discountPct: 0.004 }, { categorySlug: 'd', discountPct: 91 }, { categorySlug: '', discountPct: 5 }, { categorySlug: 'e', discountPct: 'veel' }, null,
   ] });
   assert.deepStrictEqual(clean.rules, [{ categorySlug: 'a', discountPct: 15 }, { categorySlug: 'b', discountPct: 12.35 }]);
   assert.strictEqual(sanitizeCategoryDiscounts({ rules: [{ categorySlug: 'x', discountPct: 90 }] }).rules.length, 1, '90% mag nog');
@@ -176,6 +176,7 @@ test('beheer: lezen, controleren, opslaan, rechten en tenantgrens', async () => 
     [{ rules: [{ categorySlug: CHILD.slug, discountPct: 0 }] }, 'nul procent'],
     [{ rules: [{ categorySlug: CHILD.slug, discountPct: 91 }] }, 'boven 90'],
     [{ rules: [{ categorySlug: CHILD.slug, discountPct: 'veel' }] }, 'geen getal'],
+    [{ rules: [{ categorySlug: CHILD.slug, discountPct: 0.004 }] }, 'wordt na afronden nul'],
     [{ rules: [{ categorySlug: CHILD.slug, discountPct: 5 }, { categorySlug: CHILD.slug, discountPct: 6 }] }, 'dubbel'],
     [{ regels: [] }, 'verkeerde vorm'],
   ];

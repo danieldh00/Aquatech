@@ -34,9 +34,9 @@ function sanitizeCategoryDiscounts(raw) {
   const bySlug = new Map();
   for (const entry of list.slice(0, MAX_RULES)) {
     const categorySlug = String(entry && entry.categorySlug != null ? entry.categorySlug : '').trim().slice(0, 120);
-    const discountPct = Number(entry && entry.discountPct);
+    const discountPct = roundPct(Number(entry && entry.discountPct));
     if (!categorySlug || !Number.isFinite(discountPct) || discountPct <= 0 || discountPct > MAX_DISCOUNT) continue;
-    bySlug.set(categorySlug, roundPct(discountPct));
+    bySlug.set(categorySlug, discountPct);
   }
   return { rules: [...bySlug].map(([categorySlug, discountPct]) => ({ categorySlug, discountPct })).sort((left, right) => left.categorySlug.localeCompare(right.categorySlug)) };
 }
@@ -56,7 +56,7 @@ function check(raw, knownSlugs) {
     if (!knownSlugs.has(slug)) return 'Een gekozen categorie staat niet (meer) in het menu van de webshop.';
     if (seen.has(slug)) return 'Een categorie komt twee keer voor.';
     seen.add(slug);
-    const discountPct = Number(entry.discountPct);
+    const discountPct = roundPct(Number(entry.discountPct));
     if (!Number.isFinite(discountPct) || discountPct <= 0 || discountPct > MAX_DISCOUNT) return `De korting is een percentage boven 0 tot en met ${MAX_DISCOUNT}.`;
   }
   return '';
