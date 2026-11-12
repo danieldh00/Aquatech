@@ -13,6 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.12.7',
+      date: '2026-11-12',
+      title: 'Geen dubbel e-mailadres meer',
+      items: [
+        { text: 'Een e-mailadres kan maar bij één actief account horen. Ook als je een adres op de klantkaart wijzigt of een uitgeschakeld account weer inschakelt, krijg je een duidelijke melding als een ander account het adres al heeft.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.12.6',
+      date: '2026-11-12',
+      title: 'Prijsvoorstellen bij een nieuwe inkoopprijs',
+      items: [
+        { text: 'Een nieuwe inkoopprijs past de verkoopprijs niet meer vanzelf aan. Bij artikelen met prijs volgens factor komt er een prijsvoorstel (op basis van de ingestelde factor en afronding) onder Inkoop > Prijsfactor. Je keurt het per artikel of voor alles tegelijk goed, of wijst het af. Een afgewezen voorstel komt pas terug als de inkoopprijs verandert. Goedgekeurde prijzen gaan naar de webshop.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.12.5',
       date: '2026-11-12',
       title: 'Pakbonnen en de lijst Te picken',

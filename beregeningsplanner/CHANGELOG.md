@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.12.7
+
+- `store.updateAccount`: het adres wordt getrimd en in kleine letters bewaard; een contact-e-mailadres dat al bij een ander actief account hoort geeft 409 (`field: email`, hoofdletters en spaties genegeerd); `disabled: false` wordt geweigerd als het adres van het account intussen bij een ander actief account staat.
+- `store.createCustomer`: de controle op een dubbel adres staat nu ook binnen de transactie (vangnet).
+- Bestaande controles blijven: Mijn profiel, registratie in de webshop (blijft de duidelijke melding geven, begrensd door de registratielimiet), nieuwe klant en klantkaart. Tests: `duplicate-email.test.js`.
+
+## 1.12.6
+
+- Migratie 68: tabel `price_proposal_rejections` (één afwijzing per artikel: inkoopprijs + voorgestelde prijs), in SQLite en PostgreSQL.
+- `artikelen/price-factor.js`: het voorbeeld is nu de lijst met prijsvoorstellen (`rejected`, `changedCount` = open, `rejectedCount`); `POST /api/stock/price-factors/reject` en `/reopen` (recht `beheer`, audit `prijsvoorstel_afgewezen`/`prijsvoorstel_heropend`); afwijzen en goedkeuren controleren de voorgestelde prijs opnieuw (verouderd = overgeslagen); doorvoeren wist de afwijzing.
+- `stock.update`: een gewijzigde inkoopprijs rekent de verkoopprijs niet meer meteen; alleen een wijziging van modus of eigen factor doet dat. Artikelen met een vaste prijs krijgen geen voorstel.
+- Tabblad Prijsfactor: knoppen Goedkeuren en Afwijzen per regel en voor de selectie, Heropenen bij afgewezen voorstellen.
+
 ## 1.12.5
 
 Nieuw `webshop/packing-slips.js`: `packingSlipsPdf` (eigen PDF-schrijver, één pakbon per bestelling, regels gesorteerd op `stock_items.location`, verpakkingsregels met omrekening naar basiseenheden, opmerking van de klant, Nederlands of Engels volgens `data.language` via `DocText` `packing.*`), `createPackingSlips` (`toPick`, `pdfFor`) en `registerPackingSlipRoutes`: `GET /api/admin/web-orders/to-pick`, `POST /api/admin/web-orders/:id/packing-slip`, `POST /api/admin/web-orders/packing-slips { ids }` (hoogstens 50, geannuleerde bestellingen overgeslagen). Het afdrukken wordt in één transactie vastgelegd (`markPackingSlipsPrinted`) en staat in `data.packingSlip` {printedAt, count}. `web-orders.js`: `listToPick` (status nieuw, online alleen betaald), `getMany` (één query) en `pickable`. Het afleveradres is `data.address` (nooit het factuuradres). Frontend: tabblad *Te picken* (`te-picken.js`) en knop *Pakbon* in `bestellingen.js`. Migratie 67: index `web_orders_status` (tenant_id, status, created_at); `to-pick` geeft `truncated` bij meer dan 200 klare bestellingen.
