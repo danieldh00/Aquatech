@@ -1,8 +1,8 @@
 # Changelog
 
-## 1.11.0
+## 1.11.1
 
-Etiketten met streepjescode (item 20). Migratie 60: kolom `stock_items.ean` met unieke index `(tenant_id, ean)` (alleen gevuld).
+Etiketten met streepjescode (item 20). Migratie 62: kolom `stock_items.ean` met unieke index `(tenant_id, ean)` (alleen gevuld).
 
 - **EAN per artikel**: veld *EAN* in het artikelformulier (nieuw en bewerken). De server maakt de invoer schoon (spaties en streepjes eruit, UPC-A met 12 cijfers wordt EAN-13), accepteert alleen 8 of 13 cijfers met een kloppend controlecijfer en weigert een EAN die al bij een ander artikel van de organisatie hoort (409, met de artikelcode). Niet op een hoofdartikel met varianten (die hebben elk een eigen EAN).
 - **Streepjescodes** in `frontend/shared/barcode.js` (UMD, zonder afhankelijkheden): EAN-13, EAN-8 en Code 128 (set B, en set C voor reeksen cijfers). De uitkomsten zijn nagekeken met een scanner-decoder en staan als vaste waarden in de test.
@@ -11,6 +11,17 @@ Etiketten met streepjescode (item 20). Migratie 60: kolom `stock_items.ean` met 
 - Artikel openen → blok *Etiketten*: sjabloon en aantal kiezen, met een voorbeeld van de streepjescode; de PDF opent in een nieuw tabblad.
 - `createPdf` (verkoop/pdf.js) kent nu een eigen paginaformaat (`pageSize`).
 - Testdata: het artikel Straatzand heeft een EAN.
+
+## 1.11.0
+
+Inkooporders (punt 17 van bundel F, deel 3). Migratie 61.
+
+- **Inkooporders** (tabellen `purchase_orders` en `purchase_order_lines`, `artikelen/purchase-orders.js`, recht `voorraad`): een bestelling bij één leverancier met regels (momentopname van code, naam, eenheid, artikelnummer van de leverancier, aantal, inkoopprijs). Nummer `IO<jaar>-0001` per omgeving. Status concept, besteld, deels ontvangen, ontvangen, geannuleerd; alleen een concept is te wijzigen of weg te gooien, een bestelde order zonder ontvangst is te annuleren, een deels ontvangen order is af te sluiten (wat nog niet is geleverd vervalt). De prijs komt uit de koppeling van de leverancier, anders uit het artikel; een eigen prijs gaat voor.
+- **Ontvangen** boekt per regel de voorraad bij via `stock.book` (soort ontvangst, bron `inkoop:<nummer>`) met de inkoopprijs van de regel, dus de FIFO-lagen volgen. Alles of niets: eerst wordt alles gecontroleerd, dan geboekt. Meer ontvangen dan besteld mag.
+- **Onderweg** (`incomingByItem`): wat nog niet is ontvangen van orders in concept, besteld of deels ontvangen telt mee in het bestelvoorstel (`incoming` per regel), zodat niets dubbel wordt besteld. `POST /api/purchase-orders/from-proposal` maakt per voorkeursleverancier een concept-order uit het bestelvoorstel; een tweede klik maakt niets dubbel.
+- Routes: `GET|POST /api/purchase-orders`, `GET|PUT|DELETE /api/purchase-orders/:id`, `POST .../place|receive|close|cancel`, `GET /api/purchase-orders/incoming`. Een leverancier of artikel op een order wordt bij verwijderen gearchiveerd.
+- Scherm: tabblad Inkooporders in Artikelen (lijst met statusfilter, order maken en wijzigen, bestellen, ontvangst boeken, Excel voor de leverancier, Excel van de lijst met een overzicht per leverancier, order uit het bestelvoorstel).
+- Testdata: drie orders (concept, besteld, deels ontvangen). Tests: `purchase-orders.test.js` en queries (vast aantal queries voor leveranciers en orders).
 
 ## 1.10.9
 

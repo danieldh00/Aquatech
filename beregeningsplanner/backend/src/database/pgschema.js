@@ -997,7 +997,43 @@ const PG_MIGRATIONS = [
   CREATE UNIQUE INDEX item_suppliers_pair ON item_suppliers (tenant_id, item_id, supplier_id);
   CREATE INDEX item_suppliers_supplier ON item_suppliers (tenant_id, supplier_id);
   `,
-  // 60: EAN per artikel (zie db.js).
+  // 61: inkooporders (zie db.js).
+  `
+  CREATE TABLE purchase_orders (
+    id            ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id     ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    number        ${TEXT_TYPE} NOT NULL,
+    supplier_id   ${TEXT_TYPE} NOT NULL ${references('suppliers(id)')},
+    status        ${TEXT_TYPE} NOT NULL DEFAULT 'concept',
+    expected_date ${TEXT_TYPE} NOT NULL DEFAULT '',
+    notes         ${TEXT_TYPE} NOT NULL DEFAULT '',
+    created_by    ${TEXT_TYPE} NOT NULL DEFAULT '',
+    created_at    ${TEXT_TYPE} NOT NULL,
+    updated_at    ${TEXT_TYPE} NOT NULL,
+    ordered_at    ${TEXT_TYPE},
+    closed_at     ${TEXT_TYPE}
+  );
+  CREATE UNIQUE INDEX purchase_orders_number ON purchase_orders (tenant_id, number);
+  CREATE INDEX purchase_orders_status ON purchase_orders (tenant_id, status, created_at);
+  CREATE INDEX purchase_orders_supplier ON purchase_orders (tenant_id, supplier_id);
+  CREATE TABLE purchase_order_lines (
+    id            ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id     ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    order_id      ${TEXT_TYPE} NOT NULL ${references('purchase_orders(id)')},
+    item_id       ${TEXT_TYPE} NOT NULL ${references('stock_items(id)')},
+    position      BIGINT NOT NULL DEFAULT 0,
+    code          ${TEXT_TYPE} NOT NULL,
+    name          ${TEXT_TYPE} NOT NULL,
+    unit          ${TEXT_TYPE} NOT NULL DEFAULT 'st',
+    supplier_sku  ${TEXT_TYPE} NOT NULL DEFAULT '',
+    qty           DOUBLE PRECISION NOT NULL,
+    unit_cost     DOUBLE PRECISION,
+    received_qty  DOUBLE PRECISION NOT NULL DEFAULT 0
+  );
+  CREATE INDEX purchase_order_lines_order ON purchase_order_lines (tenant_id, order_id);
+  CREATE INDEX purchase_order_lines_item ON purchase_order_lines (tenant_id, item_id);
+  `,
+  // 62: EAN per artikel (zie db.js).
   `
   ALTER TABLE stock_items ADD COLUMN ean ${TEXT_TYPE};
   CREATE UNIQUE INDEX stock_items_ean ON stock_items (tenant_id, ean) WHERE ean IS NOT NULL;

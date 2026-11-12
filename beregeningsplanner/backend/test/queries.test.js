@@ -229,6 +229,49 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
   }
 });
 
+test('queries: leveranciers en inkooporders kosten een vast aantal queries, ongeacht het aantal regels', async () => {
+  const db = openDb();
+  const store = createStore(db);
+  await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PASSWORD });
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
+  const client = createClient(base);
+  try {
+    assert.strictEqual((await client.post('/app/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
+    const supplier = (await client.post('/app/api/suppliers', { name: 'Tuintechniek' })).body;
+    const lines = [];
+    for (let index = 0; index < 12; index += 1) {
+      const item = (await client.post('/app/api/stock/items', { code: `Q-${index}`, name: `Artikel ${index}`, minQty: 5, costPrice: 1 })).body;
+      await client.put(`/app/api/stock/items/${item.id}/suppliers`, { suppliers: [{ supplierId: supplier.id, orderQty: 5 }] });
+      lines.push({ itemId: item.id, qty: 10 });
+    }
+    for (let count = 0; count < 3; count += 1) assert.strictEqual((await client.post('/app/api/purchase-orders', { supplierId: supplier.id, lines })).status, 201);
+    const probe = instrument(db);
+    // Leveranciers met aantal artikelen: een telling in één query (plus de sessie).
+    probe.reset();
+    assert.strictEqual((await client.get('/app/api/suppliers')).body.items.length, 1);
+    assert.ok(probe.stats.queries <= 3, probe.stats.sql.join('\n'));
+    // Orderlijst: orders en de som van de regels, niet een query per order.
+    probe.reset();
+    assert.strictEqual((await client.get('/app/api/purchase-orders')).body.items.length, 3);
+    assert.ok(probe.stats.queries <= 3, probe.stats.sql.join('\n'));
+    // Eén order met 12 regels: de order en zijn regels.
+    const id = (await client.get('/app/api/purchase-orders')).body.items[0].id;
+    probe.reset();
+    assert.strictEqual((await client.get(`/app/api/purchase-orders/${id}`)).body.lines.length, 12);
+    assert.ok(probe.stats.queries <= 3, probe.stats.sql.join('\n'));
+    // Onderweg per artikel: één query.
+    probe.reset();
+    assert.strictEqual((await client.get('/app/api/purchase-orders/incoming')).body.items.length, 12);
+    assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
+    // Bestelvoorstel met voorkeursleveranciers en onderweg: een vast aantal, niet per artikel.
+    probe.reset();
+    assert.strictEqual((await client.get('/app/api/stock/reorder')).status, 200);
+    assert.ok(probe.stats.queries <= 8, probe.stats.sql.join('\n'));
+  } finally {
+    server.close();
+  }
+});
+
 // Wens Daniël (2026-10-20): nergens SELECT * of t.*; elke query noemt de
 // kolommen die hij nodig heeft (COUNT(*) mag).
 test('queries: geen SELECT * in de backend', () => {
