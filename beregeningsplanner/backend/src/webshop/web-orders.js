@@ -847,21 +847,22 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
   }
 
   /**
-   * Legt de pakbon van de klant vast bij een dropshippingbestelling (`data.dropshipping.slip`), of haalt hem weg (null).
+   * Legt de pakbon van de klant vast bij een dropshippingbestelling (`data.dropshipping.slip`). Draait mee in de transactie van de aanroeper.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de bestelling.
-   * @param {?{ name: string, pages: number, size: number, uploadedAt: string }} slip De gegevens van de pakbon, of null.
-   * @returns {void}
+   * @param {{ name: string, pages: number, size: number, uploadedAt: string }} slip De gegevens van de pakbon.
+   * @param {{ onlyIfNew?: boolean }} [options] Met onlyIfNew gebeurt er niets als de bestelling niet meer de status nieuw heeft.
+   * @returns {boolean} true als de pakbon is vastgelegd; false als de bestelling ontbreekt, geen dropshipping is of niet meer nieuw is.
    */
-  function setDropshippingSlip(tenantId, id, slip) {
-    transaction(db, () => {
-      const row = readForUpdate(tenantId, id, 'data');
-      if (!row) return;
-      const data = JSON.parse(row.data);
-      if (!data.dropshipping) return;
-      data.dropshipping = { ...data.dropshipping, slip };
-      prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, String(id));
-    });
+  function setDropshippingSlip(tenantId, id, slip, { onlyIfNew = false } = {}) {
+    const row = readForUpdate(tenantId, id, `${COLUMNS}, data`);
+    if (!row) return false;
+    if (onlyIfNew && row.status !== 'nieuw') return false;
+    const data = JSON.parse(row.data);
+    if (!data.dropshipping) return false;
+    data.dropshipping = { ...data.dropshipping, slip };
+    prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, String(id));
+    return true;
   }
 
   /**

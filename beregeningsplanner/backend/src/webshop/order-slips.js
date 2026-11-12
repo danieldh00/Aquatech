@@ -5,7 +5,7 @@
 // onze eigen pakbon in de PDF gezet. De gegevens van de dropshippingbestelling zelf staan in `data.dropshipping`.
 const path = require('path');
 const { Worker } = require('worker_threads');
-const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { PDFDocument, StandardFonts, rgb, degrees } = require('pdf-lib');
 const { transaction } = require('../database/db');
 
 /** Hoogstens zoveel bytes voor een geüploade pakbon. */
@@ -57,12 +57,24 @@ async function assemblePdf(sequence, oursBytes) {
     pages.forEach((page, index) => {
       output.addPage(page);
       if (index === 0) {
-        // Een klein etiket in de bovenste hoek, zodat de picker weet bij welke bestelling deze pakbon hoort.
-        const { height } = page.getSize();
+        // Een klein etiket in de linkerbovenhoek zoals je de pagina ziet (ook bij een gedraaide pagina of een MediaBox met afwijkende hoek).
         const text = part.label.replace(/[^\x20-\x7e]/g, '');
         const width = font.widthOfTextAtSize(text, 8);
-        page.drawRectangle({ x: 14, y: height - 22, width: width + 8, height: 12, color: rgb(1, 1, 1), opacity: 0.9 });
-        page.drawText(text, { x: 18, y: height - 19, size: 8, font, color: rgb(0.1, 0.18, 0.37) });
+        const box = page.getMediaBox();
+        const angle = ((page.getRotation().angle % 360) + 360) % 360;
+        const corner = { 0: [box.x, box.y + box.height], 90: [box.x, box.y], 180: [box.x + box.width, box.y], 270: [box.x + box.width, box.y + box.height] }[angle] || [box.x, box.y + box.height];
+        const radians = (angle * Math.PI) / 180;
+        /**
+         * Zet een punt in de bovenhoek van de zichtbare pagina (rechts en omhoog) om naar paginacoördinaten.
+         * @param {number} right Afstand naar rechts.
+         * @param {number} up Afstand omhoog (negatief = omlaag).
+         * @returns {{ x: number, y: number }} Het punt op de pagina.
+         */
+        const place = (right, up) => ({ x: corner[0] + right * Math.cos(radians) - up * Math.sin(radians), y: corner[1] + right * Math.sin(radians) + up * Math.cos(radians) });
+        const rectAt = place(10, -22);
+        const textAt = place(14, -19);
+        page.drawRectangle({ ...rectAt, width: width + 8, height: 12, rotate: degrees(angle), color: rgb(1, 1, 1), opacity: 0.9 });
+        page.drawText(text, { ...textAt, size: 8, rotate: degrees(angle), font, color: rgb(0.1, 0.18, 0.37) });
       }
     });
   }
@@ -73,7 +85,7 @@ async function assemblePdf(sequence, oursBytes) {
  * Maakt de opslag voor de pakbonnen van klanten.
  * @param {object} db De database.
  * @param {{ vault: object, orders: object }} deps De kluis (sealBytes/openBytes) en de bestellingen (web-orders.js, voor `data.dropshipping`).
- * @returns {{ save: Function, read: Function, readMany: Function, remove: Function }} De functies.
+ * @returns {{ save: Function, read: Function, readMany: Function }} De functies.
  */
 function createOrderSlips(db, { vault, orders }) {
   /**
@@ -85,20 +97,23 @@ function createOrderSlips(db, { vault, orders }) {
   const aadOf = (tenantId, orderId) => `${tenantId}:pakbon:${orderId}`;
 
   /**
-   * Bewaart (of vervangt) de pakbon van een bestelling en legt de gegevens vast in `data.dropshipping.slip`.
+   * Bewaart (of vervangt) de pakbon van een bestelling en legt de gegevens vast in `data.dropshipping.slip`, alles in één transactie.
+   * De bestelling wordt daarin opnieuw gecontroleerd: nog nieuw en van de eigenaar, anders gebeurt er niets.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} orderId Id van de bestelling.
    * @param {{ bytes: Buffer, pages: number, fileName: string }} slip De gecontroleerde PDF (inspectSlip).
-   * @returns {void}
+   * @returns {{ ok?: boolean, error?: string, status?: number }} ok bij succes, anders een melding (409 als de bestelling intussen is verzonden of geannuleerd).
    */
   function save(tenantId, orderId, { bytes, pages, fileName }) {
     const timestamp = new Date().toISOString();
-    transaction(db, () => {
+    return transaction(db, () => {
+      const stored = orders.setDropshippingSlip(tenantId, orderId, { name: fileName, pages, size: bytes.length, uploadedAt: timestamp }, { onlyIfNew: true });
+      if (!stored) return { error: 'Deze bestelling is al in behandeling; de pakbon kan niet meer worden gewijzigd.', status: 409 };
       db.prepare('DELETE FROM web_order_slips WHERE tenant_id = ? AND order_id = ?').run(tenantId, orderId);
       db.prepare('INSERT INTO web_order_slips (tenant_id, order_id, file_name, pages, size, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .run(tenantId, orderId, fileName, pages, bytes.length, vault.sealBytes(bytes, aadOf(tenantId, orderId)), timestamp);
+      return { ok: true };
     });
-    orders.setDropshippingSlip(tenantId, orderId, { name: fileName, pages, size: bytes.length, uploadedAt: timestamp });
   }
 
   /**
@@ -126,18 +141,7 @@ function createOrderSlips(db, { vault, orders }) {
     return map;
   }
 
-  /**
-   * Verwijdert de pakbon van een bestelling (ook uit `data.dropshipping`).
-   * @param {string} tenantId Id van de omgeving.
-   * @param {string} orderId Id van de bestelling.
-   * @returns {void}
-   */
-  function remove(tenantId, orderId) {
-    db.prepare('DELETE FROM web_order_slips WHERE tenant_id = ? AND order_id = ?').run(tenantId, orderId);
-    orders.setDropshippingSlip(tenantId, orderId, null);
-  }
-
-  return { save, read, readMany, remove };
+  return { save, read, readMany };
 }
 
 module.exports = { createOrderSlips, inspectSlip, assemblePdf, MAX_SLIP_BYTES, MAX_SLIP_PAGES };

@@ -2,7 +2,7 @@
 // eigenaar- en omgevingscontrole, de pakbon in Te picken en Alles afdrukken in plaats van de onze, en de kopie van de verzendmail.
 const test = require('node:test');
 const assert = require('node:assert');
-const { PDFDocument, PDFName, PDFString } = require('pdf-lib');
+const { PDFDocument, PDFName, PDFString, degrees } = require('pdf-lib');
 const { inspectSlip, assemblePdf, MAX_SLIP_BYTES } = require('../src/webshop/order-slips');
 const { setup, order, until, mailsWith, PERSON } = require('./helpers/webshop-world');
 
@@ -74,6 +74,10 @@ test('assemblePdf: zet eigen pagina\'s en de pakbon van de klant (met bestelnumm
     { type: 'ours', first: 0, last: 0 }, { type: 'slip', bytes: customer, label: 'WEB-1 - dropshipping' }, { type: 'ours', first: 1, last: 2 },
   ], ours);
   assert.strictEqual(await pageCountOf(merged), 5);
+  const rotated = await PDFDocument.create();
+  for (const angle of [0, 90, 180, 270]) rotated.addPage([595, 842]).setRotation(degrees(angle));
+  const withLabels = await assemblePdf([{ type: 'slip', bytes: Buffer.from(await rotated.save()), label: 'WEB-3 - dropshipping' }], null);
+  assert.strictEqual(await pageCountOf(withLabels), 4, 'ook gedraaide pagina\'s krijgen een etiket');
   const onlyCustomer = await assemblePdf([{ type: 'slip', bytes: customer, label: 'WEB-2 - dropshipping' }], null);
   assert.strictEqual(await pageCountOf(onlyCustomer), 2);
 });

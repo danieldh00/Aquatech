@@ -967,14 +967,24 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             next();
           });
         };
+        /**
+         * Controleert vóór het lezen van de PDF of de upload zin heeft: andere site, niet ingelogd of te veel uploads wordt meteen geweigerd.
+         * @param {object} req Het verzoek.
+         * @param {object} res Het antwoord.
+         * @param {Function} next Volgende stap.
+         * @returns {void}
+         */
+        const slipGate = (req, res, next) => {
+          if (crossSite(req)) return res.status(403).json({ message: 'Verzoek van een andere site geweigerd.' });
+          if (!orderingOn()) return res.status(404).json({ message: 'Bestellen is niet beschikbaar.' });
+          if (!accounts.viewer(req)) return res.status(401).json({ message: 'Log opnieuw in om de pakbon te uploaden.' });
+          if (slipLimited(req, res)) return res.status(429).json({ message: 'Te veel uploads vanaf dit adres. Probeer het later opnieuw.' });
+          next();
+        };
         // De eigen pakbon van een dropshippingbestelling uploaden of vervangen (POST met de PDF als inhoud) (alleen de eigenaar, zolang de bestelling nieuw is).
-        router.post('/bestelling/:id/pakbon', readSlipBody, async (req, res, next) => {
+        router.post('/bestelling/:id/pakbon', slipGate, readSlipBody, async (req, res, next) => {
           try {
-            if (crossSite(req)) return res.status(403).json({ message: 'Verzoek van een andere site geweigerd.' });
-            if (!orderingOn()) return res.status(404).json({ message: 'Bestellen is niet beschikbaar.' });
             const viewer = accounts.viewer(req);
-            if (!viewer) return res.status(401).json({ message: 'Log opnieuw in om de pakbon te uploaden.' });
-            if (slipLimited(req, res)) return res.status(429).json({ message: 'Te veel uploads vanaf dit adres. Probeer het later opnieuw.' });
             res.setHeader('Cache-Control', 'no-store');
             const order = orders.getForUser(tenantId, viewer.id, req.params.id);
             if (!order) return res.status(404).json({ message: 'Bestelling niet gevonden.' });
@@ -983,7 +993,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(415).json({ message: 'Stuur een PDF-bestand (application/pdf).' });
             const checked = await inspectSlip(req.body);
             if (checked.error) return res.status(400).json({ message: checked.error });
-            orderSlips.save(tenantId, order.id, { bytes: checked.bytes, pages: checked.pages, fileName: `Pakbon ${order.number}.pdf` });
+            const saved = orderSlips.save(tenantId, order.id, { bytes: checked.bytes, pages: checked.pages, fileName: `Pakbon ${order.number}.pdf` });
+            if (saved.error) return res.status(saved.status || 409).json({ message: saved.error });
             try { onSlip(req, order, 'geupload'); } catch (failure) { console.error(`Audit van pakbon bij ${order.number} mislukt: ${failure.message}`); }
             res.json({ ok: true, pages: checked.pages });
           } catch (error) { next(error); }
