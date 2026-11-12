@@ -29,6 +29,7 @@ const { validPaymentId, cleanPublicUrl, sanitizePayment } = require('./mollie');
 const Seo = require('./seo');
 const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, convertPlannedQty, MAX_QTY } = require('./storefront-cart');
 const { deliverySameOf } = require('./web-orders');
+const { visibleFor: packagingVisibleFor } = require('../artikelen/packagings');
 const { inspectSlip, MAX_SLIP_BYTES } = require('./order-slips');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
@@ -1137,7 +1138,28 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     if (!product) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
     const chosenCode = typeof req.query.v === 'string' ? req.query.v.slice(0, 80) : (variant ? variant.code : '');
     const details = !data.detailsOf ? new Map() : data.detailsOf(tenantId, [product.code, ...(product.variants || []).map((entry) => entry.code)]);
-    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details));
+    /**
+     * De verpakkingen (doos, pallet) die deze bezoeker bij een artikel mag kiezen, met de prijs per verpakking uit de winkelwagenberekening
+     * (dezelfde regels voor btw, klantgroep en kortingen). Alleen met bestellen aan; een artikel zonder verpakking kost geen prijsberekening.
+     * @param {string} itemCode Artikelcode (bij een hoofdartikel: van de gekozen variant).
+     * @returns {{ packCode: string, cartCode: string, name: string, factor: number, price: number, priceIncl: number, inStock: boolean }[]} De keuzes, kleinste eerst.
+     */
+    const packagingsFor = (itemCode) => {
+      if (!orders || !accounts || !orderingOn() || !data.packagingsOf) return [];
+      const viewer = accounts.viewer(req);
+      const group = viewer && viewer.customerGroup === 'zakelijk' ? 'zakelijk' : '';
+      const wholesale = viewer && viewer.wholesale ? { discountPct: viewer.wholesaleDiscount } : null;
+      const visible = (data.packagingsOf(tenantId, [itemCode]).get(itemCode) || []).filter((packaging) => packagingVisibleFor(packaging.audience, { group, wholesale: Boolean(wholesale) }));
+      if (!visible.length) return [];
+      const priced = orders.priceCart(tenantId, visible.map((packaging) => ({ code: `${itemCode}@${packaging.code}`, qty: 1 })), { group, wholesale });
+      const lineOf = new Map(priced.lines.map((line) => [line.packaging && line.packaging.code.toUpperCase(), line]));
+      return visible.filter((packaging) => lineOf.has(packaging.code.toUpperCase())).map((packaging) => {
+        const line = lineOf.get(packaging.code.toUpperCase());
+        return { packCode: packaging.code, cartCode: line.code, name: packaging.name, factor: packaging.factor, price: priced.pricesExcl ? line.unitExcl : line.unitIncl, priceIncl: line.unitIncl, inStock: line.available >= 1 };
+      });
+    };
+    const packCode = typeof req.query.p === 'string' ? req.query.p.slice(0, 40) : '';
+    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details, { packagingsFor, packCode }));
   });
 
   router.use((req, res) => {

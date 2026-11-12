@@ -1,10 +1,10 @@
-// Keuzelijsten van varianten in de shoplijst: bij een andere uitvoering wisselen
+// Keuzelijsten van varianten op de productkaarten en de productpagina: bij een andere uitvoering wisselen
 // artikelnummer, kenmerken, prijs, voorraad en links direct, zonder de pagina te
 // verversen. Zonder dit script werkt de knop Kies (de pagina laadt opnieuw).
 
 /**
- * Past één variantregel aan op de gekozen uitvoering.
- * @param {HTMLElement} row De regel (data-variant-row).
+ * Past één productkaart aan op de gekozen uitvoering.
+ * @param {HTMLElement} row De kaart (data-variant-row).
  * @returns {void}
  */
 function showChosenVariant(row) {
@@ -23,11 +23,13 @@ function showChosenVariant(row) {
   if (orderCode) {
     orderCode.value = option.dataset.code;
     const inStock = option.dataset.stock === 'in';
-    for (const control of row.querySelectorAll('.variant-order input[name="qty"], .variant-order button')) control.disabled = !inStock;
+    for (const control of row.querySelectorAll('.card-order input[name="qty"], .card-order button')) control.disabled = !inStock;
   }
 }
 
 document.documentElement.classList.add('js-on');
+// Keuzelijsten op de productpagina (variant, verpakking): direct naar de gekozen uitvoering, zonder op Kies te drukken.
+for (const select of document.querySelectorAll('select[data-autosubmit]')) select.addEventListener('change', () => select.form.submit());
 for (const row of document.querySelectorAll('[data-variant-row]')) {
   row.querySelector('[data-variant-select]').addEventListener('change', () => showChosenVariant(row));
 }
