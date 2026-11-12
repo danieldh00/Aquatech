@@ -49,12 +49,13 @@ async function setup() {
 test('blokken: banners, kolommen, citaat en formulier worden gesaneerd', () => {
   const site = normalizeSite({
     banners: { items: [{ image: 'asset:banner-pomp.jpg', title: 'Pompen', button: 'Kijk', link: 'groep/pomp-techniek/' }, { image: 'http://evil/x.png', title: 'Geen afbeelding' }] },
-    columns: { items: [{ title: 'Uitverkoop', group: 'onbekend', codes: 'spr-1, spr-1, <b>, BUIS-25' }, { title: '' }] },
+    columns: { items: [{ title: 'Aanbiedingen', group: 'onbekend', codes: 'spr-1, spr-1, <b>, BUIS-25' }, { title: '' }, { title: 'Uitverkoop', group: 'beregening' }] },
     quote: { text: 'Kwaliteit' },
     business: { form: false },
   });
   assert.deepStrictEqual(site.banners.items, [{ image: 'asset:banner-pomp.jpg', title: 'Pompen', button: 'Kijk', link: 'groep/pomp-techniek/' }]);
-  assert.deepStrictEqual(site.columns.items, [{ title: 'Uitverkoop', group: '', codes: ['SPR-1', 'BUIS-25'] }]);
+  assert.deepStrictEqual(site.columns.items, [{ title: 'Aanbiedingen', group: '', codes: ['SPR-1', 'BUIS-25'] }], 'een opgeslagen uitverkoop-kolom valt weg');
+  assert.deepStrictEqual(DEFAULT_SITE.columns.items.map((column) => column.title), ['Beregening', 'Speciale producten']);
   assert.strictEqual(site.quote.text, 'Kwaliteit');
   assert.strictEqual(site.business.form, false);
   assert.strictEqual(normalizeSite({}).business.form, DEFAULT_SITE.business.form);
@@ -87,7 +88,7 @@ test('startpagina: hero zonder tekst, banners, kolommen, citaat en tabbladen na 
   assert.match(home, /Efficiënt bewateren met een druppelslang/);
   assert.match(home, /banner-druppelslang\.jpg/);
   assert.match(home, /<h2>Speciale producten<\/h2>/);
-  assert.match(home, /<h2>Uitverkoop<\/h2>/);
+  assert.doesNotMatch(home, /Uitverkoop/, 'de uitverkoop-sectie is verwijderd');
   assert.match(home, /Binnenkort meer producten/);
   assert.match(home, /Duurzaamheid door kwaliteit!/);
   assert.match(home, /<h2 class="centered">Populaire producten<\/h2>/, 'zonder verkopen geen tabbladen');

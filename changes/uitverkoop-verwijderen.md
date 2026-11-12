@@ -1,0 +1,12 @@
+---
+titel: Uitverkoop-sectie uit de webshop
+---
+
+## Nieuws
+- De uitverkoop-sectie op de webshop is verwijderd. De standaardkolom Uitverkoop is verdwenen van de startpagina.
+
+## Changelog
+- `webshop/shop-content.js`: de standaardkolom *Uitverkoop* is verwijderd uit `DEFAULT_SITE`; een opgeslagen kolom met die kop wordt bij het saneren overgeslagen (`RETIRED_COLUMN_TITLE`), zodat ook bestaande live inhoud geen uitverkoop-sectie meer toont. Geen migratie nodig.
+- `frontend/beheer/webshop-inhoud.js`: de legenda van het kolommenblok noemt geen uitverkoop meer.
+- De filter op de kop is hoofdlettergevoelig: een kolom die exact `Uitverkoop` heet wordt overgeslagen.
+- Tests (`shop-home.test.js`): sanering van een opgeslagen uitverkoop-kolom en controle dat de startpagina er geen toont.

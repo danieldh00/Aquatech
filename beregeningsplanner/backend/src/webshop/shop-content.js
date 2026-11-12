@@ -36,6 +36,9 @@ const MENU_KEY = 'menu';
 const MAX_TREE_NODES = 600;
 const MAX_TREE_DEPTH = 6;
 
+/** Kop van de uitverkoop-kolom die is verwijderd; oude opgeslagen kolommen met die kop vallen weg. */
+const RETIRED_COLUMN_TITLE = 'Uitverkoop';
+
 /** De kleuren voor de mededelingenbalk (sleutel → naam in Beheer); de shop kent bij elke sleutel een vaste, goed leesbare achtergrond (storefront.css). */
 const NOTICE_COLORS = { purple: 'Paars', navy: 'Donkerblauw', green: 'Groen', teal: 'Turquoise', orange: 'Oranje', red: 'Rood', grey: 'Grijs' };
 
@@ -58,7 +61,6 @@ const DEFAULT_SITE = {
     items: [
       { title: 'Beregening', group: 'beregening', codes: [] },
       { title: 'Speciale producten', group: '', codes: [] },
-      { title: 'Uitverkoop', group: '', codes: [] },
     ],
   },
   benefits: {
@@ -154,6 +156,16 @@ function cleanCodes(value) {
 }
 
 /**
+ * Haalt de verwijderde uitverkoop-kolom uit een opgeslagen lijst, vóór het afkappen op het maximumaantal.
+ * @param {*} input De ingevoerde kolommen.
+ * @returns {*} De lijst zonder de verwijderde kolom (of de invoer zelf als het geen lijst is).
+ */
+function withoutRetiredColumns(input) {
+  if (!Array.isArray(input)) return input;
+  return input.filter((item) => !(item && typeof item === 'object' && cleanText(item.title, 60) === RETIRED_COLUMN_TITLE));
+}
+
+/**
  * Maakt van de ingevoerde blokken een geldige set (ontbrekende velden = de standaard).
  * @param {*} input De ingevoerde blokken.
  * @param {object} [base] Waar ontbrekende velden vandaan komen.
@@ -200,7 +212,7 @@ function normalizeSite(input, base = DEFAULT_SITE) {
     },
     columns: {
       enabled: flag(columns.enabled, base.columns.enabled),
-      items: cleanList(columns.items, base.columns.items, 3, (item) => {
+      items: cleanList(withoutRetiredColumns(columns.items), base.columns.items, 3, (item) => {
         const title = cleanText(item.title, 60);
         return title ? { title, group: GROUP_SLUGS.includes(item.group) ? item.group : '', codes: cleanCodes(item.codes) } : null;
       }),
