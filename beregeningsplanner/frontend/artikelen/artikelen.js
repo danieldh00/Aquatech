@@ -344,9 +344,10 @@
   function showTab(name) {
     state.tab = name;
     document.querySelectorAll('.tab').forEach((button) => button.classList.toggle('active', button.dataset.tab === name));
-    for (const tabName of ['stock', 'reserved', 'moves', 'suppliers', 'media']) $(`#tab-${tabName}`).hidden = tabName !== name;
+    for (const tabName of ['stock', 'reserved', 'moves', 'suppliers', 'orders', 'media']) $(`#tab-${tabName}`).hidden = tabName !== name;
     if (name === 'moves' && !state.moves) loadMoves();
     if (name === 'suppliers') window.ArtikelenSuppliers.load().catch((error) => toast(error.message, true));
+    if (name === 'orders') window.ArtikelenOrders.load().catch((error) => toast(error.message, true));
     if (name === 'media') loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
   }
@@ -1461,6 +1462,7 @@
       onMerged: async (parent) => { state.open.add(parent.id); await load(); await openItem(parent.id, true); },
     });
     window.ArtikelenSuppliers.setup({ api, toast, esc, nl, eur });
+    window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook, save, stamp });
     loadUnits().catch((error) => toast(error.message, true));
     setupShop();
     setupMedia();
@@ -1478,7 +1480,7 @@
       $('#v-list').hidden = false;
       try { await load(); } catch (error) { toast(error.message, true); }
       const hash = location.hash.slice(1);
-      if (['stock', 'reserved', 'moves', 'suppliers', 'media'].includes(hash)) showTab(hash);
+      if (['stock', 'reserved', 'moves', 'suppliers', 'orders', 'media'].includes(hash)) showTab(hash);
       // Vanuit een werkorder: "Op voorraad nemen" met de ontbrekende codes.
       const codes = (params.get('codes') || '').split(',').map((code) => code.trim()).filter((code) => Catalog.articles[code.toUpperCase()]);
       if (codes.length) openImport(codes);

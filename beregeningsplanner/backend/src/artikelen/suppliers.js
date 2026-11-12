@@ -234,7 +234,8 @@ function createSupplierStore(db) {
     return transaction(db, () => {
       const row = findRow(tenantId, id);
       if (!row) return null;
-      const linked = prepare('SELECT EXISTS (SELECT 1 FROM item_suppliers WHERE tenant_id = ? AND supplier_id = ?) AS n').get(tenantId, row.id).n;
+      const linked = prepare(`SELECT (EXISTS (SELECT 1 FROM item_suppliers WHERE tenant_id = ? AND supplier_id = ?)
+        OR EXISTS (SELECT 1 FROM purchase_orders WHERE tenant_id = ? AND supplier_id = ?)) AS n`).get(tenantId, row.id, tenantId, row.id).n;
       if (linked) {
         prepare('UPDATE suppliers SET archived = 1, updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, row.id);
         return { archived: true, name: row.name };

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.10.10
+
+Inkooporders (punt 17 van bundel F, deel 3). Migratie 61.
+
+- **Inkooporders** (tabellen `purchase_orders` en `purchase_order_lines`, `artikelen/purchase-orders.js`, recht `voorraad`): een bestelling bij één leverancier met regels (momentopname van code, naam, eenheid, artikelnummer van de leverancier, aantal, inkoopprijs). Nummer `IO<jaar>-0001` per omgeving. Status concept, besteld, deels ontvangen, ontvangen, geannuleerd; alleen een concept is te wijzigen of weg te gooien, een bestelde order zonder ontvangst is te annuleren, een deels ontvangen order is af te sluiten (wat nog niet is geleverd vervalt). De prijs komt uit de koppeling van de leverancier, anders uit het artikel; een eigen prijs gaat voor.
+- **Ontvangen** boekt per regel de voorraad bij via `stock.book` (soort ontvangst, bron `inkoop:<nummer>`) met de inkoopprijs van de regel, dus de FIFO-lagen volgen. Alles of niets: eerst wordt alles gecontroleerd, dan geboekt. Meer ontvangen dan besteld mag.
+- **Onderweg** (`incomingByItem`): wat nog niet is ontvangen van orders in concept, besteld of deels ontvangen telt mee in het bestelvoorstel (`incoming` per regel), zodat niets dubbel wordt besteld. `POST /api/purchase-orders/from-proposal` maakt per voorkeursleverancier een concept-order uit het bestelvoorstel; een tweede klik maakt niets dubbel.
+- Routes: `GET|POST /api/purchase-orders`, `GET|PUT|DELETE /api/purchase-orders/:id`, `POST .../place|receive|close|cancel`, `GET /api/purchase-orders/incoming`. Een leverancier of artikel op een order wordt bij verwijderen gearchiveerd.
+- Scherm: tabblad Inkooporders in Artikelen (lijst met statusfilter, order maken en wijzigen, bestellen, ontvangst boeken, Excel voor de leverancier, Excel van de lijst met een overzicht per leverancier, order uit het bestelvoorstel).
+- Testdata: drie orders (concept, besteld, deels ontvangen). Tests: `purchase-orders.test.js` en queries (vast aantal queries voor leveranciers en orders).
+
 ## 1.10.9
 
 Bestelvoorstel per leverancier (punt 17 van bundel F, deel 2). Geen migratie.
