@@ -510,6 +510,8 @@ function createStore(db) {
     let username = `klant-${crypto.randomBytes(4).toString('hex')}`;
     while (usernameTaken(tenantId, username)) username = `klant-${crypto.randomBytes(4).toString('hex')}`;
     return transaction(db, () => {
+      // Opnieuw binnen de transactie als vangnet: controle en opslaan horen bij elkaar.
+      if (email && accountIdsByEmail(tenantId, email).length) return { error: 'Er bestaat al een klant met dit e-mailadres.', field: 'email' };
       const user = insertUser(tenantId, { username, displayName, role, kind: 'account' });
       prepare("UPDATE users SET customer_group = ?, business_request = '' WHERE tenant_id = ? AND id = ?").run(input.business ? 'zakelijk' : '', tenantId, user.id);
       if (input.business) saveBusinessProfile(tenantId, user.id, input.business);
@@ -686,6 +688,18 @@ function createStore(db) {
     if (losesPlatform && countPlatformAdmins() <= 1) {
       return { error: 'Dit is de enige actieve hoofdbeheerder. Maak eerst een andere hoofdbeheerder aan.', status: 409 };
     }
+    // Een e-mailadres hoort bij hoogstens één actief account: ook via de klantkaart of het opnieuw inschakelen van een uitgeschakeld account.
+    const contactEmail = input.contact && input.contact.email !== undefined ? String(input.contact.email || '').trim().toLowerCase() : null;
+    // Zelfde betekenis als de schrijfregel hieronder (`input.disabled ? 1 : 0`): elke onwaarde schakelt in.
+    const enables = input.disabled !== undefined && !input.disabled;
+    const disables = input.disabled !== undefined && !enables;
+    const staysDisabled = Boolean(user.disabled) && !enables;
+    if (contactEmail && !staysDisabled && !disables && accountIdsByEmail(tenantId, contactEmail).some((otherId) => otherId !== user.id)) return { error: 'Er is al een account met dit e-mailadres.', field: 'email', status: 409 };
+    if (enables && user.disabled) {
+      const ownEmail = (prepare('SELECT email FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, user.id) || {}).email;
+      const nowEmail = contactEmail !== null ? contactEmail : ownEmail;
+      if (nowEmail && accountIdsByEmail(tenantId, nowEmail).some((otherId) => otherId !== user.id)) return { error: 'Er is al een actief account met het e-mailadres van dit account. Wijzig eerst het e-mailadres.', field: 'email', status: 409 };
+    }
     if (input.displayName !== undefined) prepare('UPDATE users SET display_name = ? WHERE id = ?').run(String(input.displayName).trim() || user.username, user.id);
     if (input.role !== undefined) prepare('UPDATE users SET role = ? WHERE id = ?').run(input.role, user.id);
     if (input.disabled !== undefined) prepare('UPDATE users SET disabled = ? WHERE id = ?').run(input.disabled ? 1 : 0, user.id);
@@ -703,7 +717,8 @@ function createStore(db) {
     if (input.documentLanguage !== undefined) prepare('UPDATE users SET document_language = ? WHERE tenant_id = ? AND id = ?').run(DocText.clean(input.documentLanguage), tenantId, user.id);
     if (input.customerGroup === '') prepare('UPDATE users SET wholesale = 0, wholesale_discount = 0 WHERE tenant_id = ? AND id = ?').run(tenantId, user.id);
     if (input.business !== undefined) saveBusinessProfile(tenantId, user.id, input.business);
-    if (input.contact !== undefined) saveContact(tenantId, user.id, input.contact);
+    // Het adres wordt opgeslagen zoals de controle het zocht: zonder spaties en in kleine letters.
+    if (input.contact !== undefined) saveContact(tenantId, user.id, contactEmail === null ? input.contact : { ...input.contact, email: contactEmail });
     const newHash = input.password !== undefined ? await hashPassword(input.password) : null;
     if (newHash) prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
     // Nieuw wachtwoord of uitgeschakeld: op alle toestellen uitgelogd.
