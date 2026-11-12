@@ -633,6 +633,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (tokens `aqt_<soort>_<tenant>.<geheim>`, alleen SHA-256, rotatie). Instelling `aiConnector` per omgeving; `userForGrant` in
   server.js controleert elk verzoek opnieuw (account, wachtwoord-vingerafdruk, omgeving, koppeling aan, geen klant: alleen intern, wens Daniël). **Een nieuwe tool** krijgt
   een scope in `SCOPES` (met de rechten van de rol), een limiet en audit bij schrijven, en schrijft hoogstens een concept.
+  Leesfuncties (1.10.6, `mcp/mcp-lookups.js`, geen migratie): `klant_details`, `prijs_voor_klant` (`webOrders.priceCart` met de klantgroep; scope is een lijst, alle nodig), `status_opvragen` (per soort het recht van de module, `DOCUMENT_RIGHTS`) en `openstaande_debiteuren` (scope `facturen.lezen`). Een leestool geeft geen interne velden (`note`, `internalNote`, kostprijs) en toont per onderdeel alleen wat de rol mag.
 - Health: `GET /api/health` (versie uit `package.json`).
 
 ## Checklist voor elke nieuwe feature (zonder dat Daniël erom vraagt)

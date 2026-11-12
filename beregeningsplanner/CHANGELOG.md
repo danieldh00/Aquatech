@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.6
+
+AI-koppeling: leesfuncties voor de medewerker (item 31). Geen migratie.
+
+- Nieuwe tools: `klant_details` (klantgroep, groothandelskorting, betaaltermijn met bron, documenttaal, contact; openstaand bedrag alleen met recht `facturen`, recente offertes en werkorders alleen met dat recht), `prijs_voor_klant` (offerteprijs en webshopprijs voor de klant via `priceCart`: zakelijke prijs, staffel- en groothandelskorting, plus beschikbare voorraad), `status_opvragen` (offerte, werkorder, factuur of webshopbestelling op nummer; per soort het recht van de module) en `openstaande_debiteuren` (definitieve, onbetaalde facturen per klant, met bedrag over de vervaldatum; max. 60× per uur per gebruiker).
+- Nieuwe toestemmingen `status.lezen` en `facturen.lezen`; een tool kan nu meer toestemmingen tegelijk vragen (`prijs_voor_klant`: artikelen én klanten lezen). Bestaande koppelingen krijgen de nieuwe toestemmingen pas na opnieuw koppelen.
+- Opvragingen in `mcp/mcp-lookups.js`: alleen de nodige kolommen, altijd met `tenant_id`, op de unieke index `(tenant_id, number)`.
+- Test: een medewerker die klant wordt terwijl het toestemmingsscherm openstaat, kan daarna niet meer toestaan (403).
+- Handleiding in Beheer en Mijn profiel met voorbeeldvragen; DOCS.md noemt de nieuwe tools en de groene status *Markeer als gecontroleerd*.
+
 ## 1.10.5
 
 Concept-offerte: duidelijker controleren van regels waar de AI over twijfelt. Geen migratie.

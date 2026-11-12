@@ -954,10 +954,16 @@ Met de AI-koppeling maakt een medewerker vanuit Claude of ChatGPT (ook de app op
 | `maak_klant` | particuliere klant aanmaken, adres via postcode en huisnummer (PDOK) | `klanten` |
 | `zoek_artikelen` | artikelen met code, eenheid, prijs en btw | `offertes`, `voorraad` of `werkorders` |
 | `maak_concept_offerte` | concept-offerte met regels; prijzen altijd uit AquaTech, twijfel als notitie per regel | `offertes` |
+| `klant_details` | klantkaart: klantgroep, groothandelskorting, betaaltermijn, documenttaal, contact; openstaand bedrag alleen met `facturen`, recente offertes/werkorders alleen met dat recht | `klanten` |
+| `prijs_voor_klant` | offerteprijs en webshopprijs voor deze klant (zakelijke prijs, staffel- en groothandelskorting) plus voorraad; vraagt ook toestemming *klanten.lezen* | `offertes` |
+| `status_opvragen` | status van een offerte, werkorder, factuur of webshopbestelling op nummer, met link | per soort: `offertes`, `werkorders`, `facturen`, `beheer` |
+| `openstaande_debiteuren` | definitieve, onbetaalde facturen per klant, grootste bedrag eerst, met het bedrag over de vervaldatum (max. 60× per uur) | `facturen` |
 
 De AI kan niets versturen, accorderen of wijzigen. Regels met een notitie (twijfel, onbekende code,
-afwijkende prijs, geen verkoopprijs) zijn geel gemarkeerd in de offerte-editor; *Gecontroleerd* haalt de
-notitie weg. Klanten zien die notities nooit.
+afwijkende prijs, geen verkoopprijs) zijn geel gemarkeerd in de offerte-editor; *Markeer als gecontroleerd* zet ze op
+groen (de notitie blijft voor de medewerker zichtbaar). Klanten zien die notities nooit. De leesfuncties (sinds 1.10.6)
+vragen de toestemmingen *status.lezen* en *facturen.lezen*: een koppeling van vóór 1.10.6 heeft die niet; opnieuw koppelen
+in Claude of ChatGPT geeft ze.
 
 **Beveiliging**: OAuth 2.1 met PKCE (S256) en dynamische registratie; redirects alleen naar claude.ai,
 claude.com, chatgpt.com, chat.openai.com of loopback. Codes en tokens alleen als SHA-256 in `oauth_grants`;

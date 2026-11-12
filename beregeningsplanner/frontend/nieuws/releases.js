@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.10.6',
+      date: '2026-11-12',
+      title: 'Vragen stellen aan AquaTech via Claude of ChatGPT',
+      items: [
+        { text: 'Via de AI-koppeling kun je nu ook vragen stellen: de klantkaart met betaaltermijn en openstaand bedrag, wat een klant betaalt voor een artikel, de status van een offerte, werkorder, factuur of bestelling op nummer en wie er nog moet betalen. De AI ziet alleen wat jouw rol mag zien. Had je al gekoppeld? Koppel dan opnieuw om deze vragen toe te staan.', for: ['offertes'] },
+      ],
+    },
+    {
       version: '1.10.5',
       date: '2026-11-11',
       title: 'Duidelijker controleren van AI-regels',

@@ -1,5 +1,6 @@
 // AI-koppeling (mcp/): OAuth 2.1 (ontdekken, registreren, toestemming met PKCE, tokens, vernieuwen, intrekken) en de
-// MCP-server met de tools zoek_klant, maak_klant, zoek_artikelen en maak_concept_offerte. Ook de beveiliging: alleen
+// MCP-server met de tools zoek_klant, maak_klant, zoek_artikelen, maak_concept_offerte en de leesfuncties (klant_details,
+// prijs_voor_klant, status_opvragen, openstaande_debiteuren). Ook de beveiliging: alleen
 // bekende AI-apps, geen hergebruik van codes, rechten van de rol, scheiding tussen organisaties, uitzetten en intrekken.
 const test = require('node:test');
 const { after } = test;
@@ -11,6 +12,7 @@ const { createStore } = require('../src/platform/store');
 const { createLogin, createClient, listen, postForm } = require('./helpers/http-client');
 const { createPdokFake } = require('./helpers/pdok-fake');
 const { searchArticles, findArticle } = require('../src/mcp/mcp-tools');
+const { daysLate, numberCandidates } = require('../src/mcp/mcp-lookups');
 const { allowedRedirect, parseScope } = require('../src/mcp/oauth-server');
 const { pkceMatches, parseToken } = require('../src/mcp/oauth-grants');
 
@@ -204,13 +206,13 @@ test('de hele weg: toestaan, tools gebruiken en een concept-offerte met notities
   assert.match(page.headers.get('x-frame-options'), /DENY/);
 
   const connection = await connect(base, admin);
-  assert.strictEqual(connection.scope, 'klanten.lezen klanten.aanmaken artikelen.lezen offertes.concept');
+  assert.strictEqual(connection.scope, 'klanten.lezen klanten.aanmaken artikelen.lezen offertes.concept status.lezen facturen.lezen');
   const init = await mcp(base, connection.accessToken, { method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
   assert.strictEqual(init.body.result.protocolVersion, '2025-06-18');
   assert.ok(init.body.result.capabilities.tools);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'notifications/initialized', id: undefined })).status, 202);
   const tools = (await mcp(base, connection.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name);
-  assert.deepStrictEqual(tools, ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'maak_concept_offerte']);
+  assert.deepStrictEqual(tools, ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'openstaande_debiteuren', 'maak_concept_offerte']);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'bestaat/niet' })).body.error.code, -32601);
 
   const articles = await callTool(base, connection.accessToken, 'zoek_artikelen', { zoekterm: 'sproeier pop-up' });
@@ -291,6 +293,83 @@ test('de interne notitie per regel gaat nooit naar de klant', async () => {
   const cleared = await admin.put(`/app/api/quotes/${id}`, { data: { ...quote.data, lines: quote.data.lines.map((line) => ({ ...line, note: '', noteChecked: true })) } });
   assert.strictEqual(cleared.body.data.lines[0].note, '');
   assert.strictEqual(cleared.body.data.lines[0].noteChecked, false);
+});
+
+test('leesfuncties: klantkaart, prijs voor een zakelijke klant, status op nummer en openstaande debiteuren', async () => {
+  const { base, db, main, admin, installer } = await setup();
+  const connection = await connect(base, admin);
+  const created = (await callTool(base, connection.accessToken, 'maak_klant', { naam: 'Groen Hoveniers' })).structuredContent;
+  db.prepare("UPDATE users SET customer_group = 'zakelijk', company_name = 'Groen BV', wholesale = 1, wholesale_discount = 10, payment_days = 14 WHERE tenant_id = ? AND id = ?").run(main, created.id);
+  db.prepare("UPDATE stock_items SET business_price = 10 WHERE tenant_id = ? AND code = 'SPR-POP-10'").run(main);
+
+  // Prijs: offerteprijs uit de voorraad, webshopprijs met zakelijke prijs min 10% groothandelskorting.
+  const priced = (await callTool(base, connection.accessToken, 'prijs_voor_klant', { klantId: created.id, artikelen: [{ artikelcode: 'spr-pop-10', aantal: 2 }, { artikelcode: 'BESTAAT-NIET' }] })).structuredContent;
+  assert.strictEqual(priced.klantgroep, 'zakelijk');
+  assert.strictEqual(priced.groothandel, true);
+  const sprinkler = priced.artikelen[0];
+  assert.strictEqual(sprinkler.offerteprijsExclBtw, 12.5);
+  assert.strictEqual(sprinkler.webshop.prijsExclBtw, 9);
+  assert.strictEqual(sprinkler.webshop.kortingProcent, 10);
+  assert.strictEqual(sprinkler.beschikbaar, 40);
+  assert.deepStrictEqual(priced.artikelen[1], { artikelcode: 'BESTAAT-NIET', gevonden: false });
+  assert.strictEqual((await callTool(base, connection.accessToken, 'prijs_voor_klant', { klantId: 'onbekend', artikelen: [{ artikelcode: 'PE-25' }] })).isError, true);
+
+  // Een definitieve, onbetaalde factuur over de vervaldatum voor deze klant.
+  const invoice = (await admin.post('/app/api/invoices', { data: { customer: { name: 'Groen BV' }, lines: [{ description: 'Onderhoud', qty: 1, price: 100, vat: 21 }] } })).body;
+  const finalized = await admin.post(`/app/api/invoices/${invoice.id}/finalize`, {});
+  assert.strictEqual(finalized.status, 200, JSON.stringify(finalized.body));
+  db.prepare("UPDATE invoices SET customer_id = ?, due_date = '2020-01-01' WHERE tenant_id = ? AND id = ?").run(created.id, main, invoice.id);
+  const paidInvoice = (await admin.post('/app/api/invoices', { data: { customer: { name: 'Betaalt Netjes' }, lines: [{ description: 'Sproeier', qty: 1, price: 50, vat: 21 }] } })).body;
+  await admin.post(`/app/api/invoices/${paidInvoice.id}/finalize`, {});
+  assert.strictEqual((await admin.post(`/app/api/invoices/${paidInvoice.id}/paid`, { paid: true })).status, 200);
+
+  // Klantkaart: klantgroep, eigen betaaltermijn, korting en het openstaande bedrag.
+  const card = (await callTool(base, connection.accessToken, 'klant_details', { klantId: created.id })).structuredContent;
+  assert.strictEqual(card.klantgroep, 'zakelijk');
+  assert.strictEqual(card.betaaltermijnDagen, 14);
+  assert.strictEqual(card.betaaltermijnBron, 'eigen afspraak');
+  assert.deepStrictEqual(card.groothandel, { korting: 10 });
+  assert.strictEqual(card.openstaand.openstaand, 121);
+  assert.strictEqual(card.openstaand.teLaat, 121);
+  assert.ok(card.openstaand.facturen[0].dagenTeLaat > 0);
+  assert.match(card.link, new RegExp(`/app/klanten/\\?id=${created.id}$`));
+
+  // Openstaande debiteuren: alleen de onbetaalde factuur, ook bij alleen te laat.
+  const debtors = (await callTool(base, connection.accessToken, 'openstaande_debiteuren', { alleenTeLaat: true })).structuredContent;
+  assert.strictEqual(debtors.aantalDebiteuren, 1);
+  assert.strictEqual(debtors.debiteuren[0].klantId, created.id);
+  assert.strictEqual(debtors.totaalOpenstaand, 121);
+  assert.strictEqual(debtors.totaalTeLaat, 121);
+  assert.ok(!JSON.stringify(debtors).includes('Betaalt Netjes'));
+
+  // Status op nummer (ook in kleine letters), met een link naar het document.
+  const quote = (await callTool(base, connection.accessToken, 'maak_concept_offerte', { klantId: created.id, regels: [{ artikelcode: 'PE-25', aantal: 10 }] })).structuredContent;
+  const quoteStatus = (await callTool(base, connection.accessToken, 'status_opvragen', { soort: 'offerte', nummer: quote.nummer.toLowerCase() })).structuredContent;
+  assert.strictEqual(quoteStatus.status, 'concept');
+  assert.strictEqual(quoteStatus.nummer, quote.nummer);
+  assert.ok(quoteStatus.link.endsWith(`/app/offertes/?id=${quote.offerteId}`));
+  assert.strictEqual(quoteStatus.id, undefined);
+  const invoiceStatus = (await callTool(base, connection.accessToken, 'status_opvragen', { soort: 'factuur', nummer: finalized.body.number })).structuredContent;
+  assert.strictEqual(invoiceStatus.status, 'definitief');
+  assert.ok(invoiceStatus.dagenTeLaat > 0);
+  assert.strictEqual((await callTool(base, connection.accessToken, 'status_opvragen', { soort: 'werkorder', nummer: 'WO-2099-9999' })).isError, true);
+  assert.strictEqual((await callTool(base, connection.accessToken, 'status_opvragen', { soort: 'bestelling', nummer: 'WEB-2099-0001' })).isError, true);
+
+  // Installateur: geen facturen en geen webshopbestellingen in de app, dus ook niet via de AI; de klantkaart zonder openstaand bedrag.
+  const viaInstaller = await connect(base, installer);
+  assert.strictEqual((await callTool(base, viaInstaller.accessToken, 'openstaande_debiteuren', {})).isError, true);
+  const forbidden = await callTool(base, viaInstaller.accessToken, 'status_opvragen', { soort: 'factuur', nummer: finalized.body.number });
+  assert.strictEqual(forbidden.isError, true);
+  assert.ok(!JSON.stringify(forbidden).includes('definitief'));
+  assert.strictEqual((await callTool(base, viaInstaller.accessToken, 'status_opvragen', { soort: 'bestelling', nummer: 'WEB-2099-0001' })).isError, true);
+  const installerCard = (await callTool(base, viaInstaller.accessToken, 'klant_details', { klantId: created.id })).structuredContent;
+  assert.strictEqual(installerCard.openstaand, undefined);
+  assert.strictEqual(installerCard.recenteOffertes[0].nummer, quote.nummer);
+  assert.strictEqual((await callTool(base, viaInstaller.accessToken, 'status_opvragen', { soort: 'offerte', nummer: quote.nummer })).structuredContent.status, 'concept');
+
+  // Een smalle toestemming: alleen artikelen lezen geeft geen klantprijzen (daar hoort klanten.lezen bij).
+  const narrow = await connect(base, admin, { scope: 'artikelen.lezen' });
+  assert.strictEqual((await callTool(base, narrow.accessToken, 'prijs_voor_klant', { klantId: created.id, artikelen: [{ artikelcode: 'PE-25' }] })).isError, true);
 });
 
 test('code, PKCE en terugkeeradres worden streng gecontroleerd; een code werkt één keer', async () => {
@@ -381,6 +460,15 @@ test('rechten: een klant kan niet koppelen en een smalle scope geeft minder tool
   const forCustomer = await customer.get('/app/api/account/connections');
   assert.strictEqual(forCustomer.status, 403);
   assert.strictEqual(forCustomer.body.error, 'internal_only');
+  // Wordt een medewerker klant terwijl het toestemmingsscherm openstaat, dan weigert ook het toestaan.
+  const installer = await as('monteur');
+  const page = await installer.get(authorizeUrl({ client_id: clientId, code_challenge: pkcePair().challenge }));
+  assert.strictEqual(page.status, 200);
+  const installerId = (await installer.get('/app/api/me')).body.user.id;
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${installerId}`, { role: 'klant' })).status, 200);
+  const late = await postForm(base, installer, '/app/oauth/authorize', { ...consentFields(page.text), decision: 'allow' });
+  assert.strictEqual(late.status, 403);
+  assert.ok(!late.location);
   const narrow = await connect(base, admin, { scope: 'artikelen.lezen' });
   assert.strictEqual(narrow.scope, 'artikelen.lezen');
   assert.deepStrictEqual((await mcp(base, narrow.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name), ['zoek_artikelen']);
@@ -402,11 +490,12 @@ test('rechten volgen de rol op dit moment: een andere rol beperkt de AI direct t
    * @returns {Promise<string[]>} De namen.
    */
   const toolNames = async () => (await mcp(base, connection.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name);
-  assert.deepStrictEqual(await toolNames(), ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'maak_concept_offerte']);
+  // Installateur: geen facturen, dus geen openstaande debiteuren.
+  assert.deepStrictEqual(await toolNames(), ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'maak_concept_offerte']);
   const userId = (await installer.get('/app/api/me')).body.user.id;
   // Planner: geen offertes en geen klanten in de app, dus ook niet via de AI (hetzelfde token).
   assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'planner' })).status, 200);
-  assert.deepStrictEqual(await toolNames(), ['zoek_artikelen']);
+  assert.deepStrictEqual(await toolNames(), ['zoek_artikelen', 'status_opvragen']);
   for (const [name, args] of [['zoek_klant', { zoekterm: 'Klant' }], ['maak_klant', { naam: 'Nieuw' }], ['maak_concept_offerte', { regels: [{ omschrijving: 'x', aantal: 1 }] }]]) {
     assert.strictEqual((await callTool(base, connection.accessToken, name, args)).isError, true, name);
   }
@@ -434,13 +523,21 @@ test('organisaties zijn gescheiden: een andere organisatie ziet geen klanten en 
   assert.strictEqual((await callTool(base, connection.accessToken, 'zoek_artikelen', { zoekterm: 'PE' })).structuredContent.aantal, 0);
   const foreign = await callTool(base, connection.accessToken, 'maak_concept_offerte', { klantId: ownCustomer.id, regels: [{ omschrijving: 'x', aantal: 1 }] });
   assert.strictEqual(foreign.isError, true);
+  // Ook de leesfuncties zien niets van de andere organisatie: geen klantkaart, geen prijs, geen status en geen debiteuren.
+  const mainAdmin = await as('baas');
+  const mainConnection = await connect(base, mainAdmin);
+  const mainQuote = (await callTool(base, mainConnection.accessToken, 'maak_concept_offerte', { klantId: ownCustomer.id, regels: [{ artikelcode: 'PE-25', aantal: 1 }] })).structuredContent;
+  assert.strictEqual((await callTool(base, connection.accessToken, 'klant_details', { klantId: ownCustomer.id })).isError, true);
+  assert.strictEqual((await callTool(base, connection.accessToken, 'prijs_voor_klant', { klantId: ownCustomer.id, artikelen: [{ artikelcode: 'PE-25' }] })).isError, true);
+  assert.strictEqual((await callTool(base, connection.accessToken, 'status_opvragen', { soort: 'offerte', nummer: mainQuote.nummer })).isError, true);
+  assert.strictEqual((await callTool(base, connection.accessToken, 'openstaande_debiteuren', {})).structuredContent.aantalDebiteuren, 0);
   // Een token van de ene organisatie met de omgeving van een andere erin geplakt werkt niet.
   const swapped = connection.accessToken.replace(/^aqt_at_[^.]+/, `aqt_at_${main}`);
   assert.strictEqual((await mcp(base, swapped, { method: 'ping' })).status, 401);
   // De koppeling van de andere organisatie is voor een beheerder hier onzichtbaar en niet in te trekken (404).
   const admin = await as('baas');
   const foreignGrant = (await outsider.get('/app/api/account/connections')).body.items[0].id;
-  assert.strictEqual((await admin.get('/app/api/account/connections')).body.items.length, 0);
+  assert.ok(!(await admin.get('/app/api/account/connections')).body.items.some((item) => item.id === foreignGrant));
   assert.strictEqual((await admin.del(`/app/api/account/connections/${foreignGrant}`)).status, 404);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'ping' })).status, 200);
 });
@@ -508,7 +605,12 @@ test('hulpfuncties: terugkeeradressen, scopes, PKCE, tokens en het zoeken van ar
   assert.ok(allowedRedirect('http://localhost:6274/oauth/callback'));
   assert.strictEqual(allowedRedirect('https://claude.ai/cb#x'), null);
   assert.strictEqual(allowedRedirect('https://notclaude.ai/cb'), null);
-  assert.deepStrictEqual(parseScope(''), ['klanten.lezen', 'klanten.aanmaken', 'artikelen.lezen', 'offertes.concept']);
+  assert.strictEqual(daysLate('2026-01-01', '2026-01-11'), 10);
+  assert.strictEqual(daysLate('2026-02-01', '2026-01-11'), 0);
+  assert.strictEqual(daysLate('', '2026-01-11'), 0);
+  assert.deepStrictEqual(numberCandidates(' of-2026-0001 '), ['of-2026-0001', 'OF-2026-0001']);
+  assert.deepStrictEqual(numberCandidates('\u0000'), []);
+  assert.deepStrictEqual(parseScope(''), ['klanten.lezen', 'klanten.aanmaken', 'artikelen.lezen', 'offertes.concept', 'status.lezen', 'facturen.lezen']);
   assert.strictEqual(parseScope('offertes.concept admin'), null);
   const verifier = 'a'.repeat(43);
   assert.ok(pkceMatches(verifier, crypto.createHash('sha256').update(verifier).digest('base64url')));
