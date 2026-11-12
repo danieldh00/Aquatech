@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.12.5',
+      date: '2026-11-12',
+      title: 'Pakbonnen en de lijst Te picken',
+      items: [
+        { text: 'Nieuw tabblad *Te picken* bij Webshopbestellingen: alle nieuwe bestellingen die klaarstaan, met één knop om alle pakbonnen in één PDF af te drukken.', for: ['beheer'] },
+        { text: 'Elke webshopbestelling heeft een pakbon (PDF, zonder prijzen, met het afleveradres en de artikelen op volgorde van magazijnlocatie). Knop *Pakbon* in het detail van de bestelling.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.12.4',
       date: '2026-11-12',
       title: 'AI-koppeling vraagt terug bij onduidelijkheid',
