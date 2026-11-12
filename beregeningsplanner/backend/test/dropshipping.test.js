@@ -107,7 +107,7 @@ test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', as
   const nul = Buffer.concat([base, Buffer.from('\n87 0 obj\n<< /Type /ObjStm /Filter /RunLengthDecode\0/Length 3 >>\nstream\n00>\nendstream\nendobj\n', 'latin1')]);
   assert.match((await inspectSlip(nul)).error, /compressie die niet wordt ondersteund/);
   // Een verwijzing naar een filternaam (die in een objectstroom kan staan) wordt geweigerd, direct of in een rij.
-  for (const filter of ['8 0 R', '[/FlateDecode 8 0 R]', '[ 8 0 R ]', '\0 8 0 R', '\0[ 8 0 R ]', '\0[/FlateDecode\0 8 0 R]']) {
+  for (const filter of ['8 0 R', '[/FlateDecode 8 0 R]', '[ 8 0 R ]', '\0 8 0 R', '\0[ 8 0 R ]', '\0[/FlateDecode\0 8 0 R]', `${' '.repeat(400)}8 0 R`, `${'\n'.repeat(400)}[ 8 0 R ]`, '%c\n8 0 R', `%${'x'.repeat(500)}\n8 0 R`]) {
     const indirect = Buffer.concat([base, Buffer.from(`\n88 0 obj\n<< /Type /ObjStm /Filter ${filter} >>\nstream\n00>\nendstream\nendobj\n`, 'latin1')]);
     assert.match((await inspectSlip(indirect)).error, /compressie die niet wordt ondersteund/);
   }

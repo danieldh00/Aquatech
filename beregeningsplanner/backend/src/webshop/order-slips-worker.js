@@ -22,6 +22,35 @@ const UNSUPPORTED_FILTERS = new Set(['ASCIIHexDecode', 'ASCII85Decode', 'RunLeng
 const MAX_LAYERS = 4;
 
 /**
+ * Controleert of de waarde van een /Filter direct in de tekst staat: één naam, of een rij van alleen namen (witruimte en commentaar
+ * ertussen, zoals pdf-lib die overslaat, zijn toegestaan). Een verwijzing (8 0 R) kan naar een naam in een gecomprimeerde objectstroom wijzen en is hier niet te zien.
+ * @param {string} text De PDF als tekst.
+ * @param {number} index De plek direct na /Filter.
+ * @returns {boolean} true als de waarde alleen uit directe namen bestaat.
+ */
+function filterIsDirect(text, index) {
+  const skip = /(?:[\s\0]+|%[^\r\n]*)*/y;
+  const name = /\/[^\s\0\/\[\]<>()%{}]*/y;
+  /**
+   * Gaat voorbij witruimte en commentaar.
+   * @param {number} from Beginplek.
+   * @returns {number} De plek van het eerste teken daarna.
+   */
+  const next = (from) => { skip.lastIndex = from; skip.test(text); return skip.lastIndex; };
+  let position = next(index);
+  if (text[position] === '/') return true;
+  if (text[position] !== '[') return false;
+  position = next(position + 1);
+  for (let count = 0; count < 50; count++) {
+    if (text[position] === ']') return true;
+    name.lastIndex = position;
+    if (text[position] !== '/' || !name.test(text)) return false;
+    position = next(name.lastIndex);
+  }
+  return false;
+}
+
+/**
  * Zoekt in de ruwe PDF naar namen van filters die niet te begrenzen zijn (ook geschreven met #xx-tekens, zoals /ASCII#48exDecode).
  * @param {Buffer} buffer De PDF.
  * @returns {boolean} true als zo'n filter wordt genoemd.
@@ -31,11 +60,7 @@ function usesUnsupportedFilter(buffer) {
   for (const match of text.matchAll(/\/[^\s\0\/\[\]<>()%{}]{1,40}/g)) {
     const name = match[0].slice(1).replace(/#([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
     if (UNSUPPORTED_FILTERS.has(name)) return true;
-    if (name === 'Filter') {
-      // Een verwijzing (8 0 R) naar een filternaam kan in een gecomprimeerde objectstroom staan en is hier niet te zien: weigeren.
-      const rest = text.slice(match.index + match[0].length, match.index + match[0].length + 300).replace(/\0/g, ' ').trimStart();
-      if (rest[0] === '[' ? /\d+\s+\d+\s+R\b/.test(rest.slice(0, rest.indexOf(']') < 0 ? 300 : rest.indexOf(']'))) : /^\d/.test(rest)) return true;
-    }
+    if (name === 'Filter' && !filterIsDirect(text, match.index + match[0].length)) return true;
   }
   return false;
 }
