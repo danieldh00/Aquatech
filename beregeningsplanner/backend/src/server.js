@@ -55,6 +55,7 @@ const { createOutsourcingStore, registerOutsourcingRoutes } = require('./uitvoer
 const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uitvoering/season-reminders');
 const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
+const { createSupplierStore, registerSupplierRoutes } = require('./artikelen/suppliers');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
 const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
@@ -576,6 +577,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Afbeelding bij een artikel (base64, verkleind in de browser): vóór de 256 kB hieronder.
   app.use(/^\/api\/stock\/items\/[^/]+\/image$/, express.json({ limit: '8mb' }));
   app.use('/api/stock', express.json({ limit: '256kb' }));
+  app.use('/api/suppliers', express.json({ limit: '32kb' }));
   app.use('/api/invoices', express.json({ limit: '1mb' }));
   app.use('/api/debtors', express.json({ limit: '16kb' }));
   app.use('/api/visma', express.json({ limit: '32kb' }));
@@ -1943,6 +1945,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const sprinklerStore = createSprinklerStore(database);
   const stockStore = createStockStore(database);
   const itemImageStore = createItemImageStore(database, { vault, fetchImpl: imageFetch });
+  const supplierStore = createSupplierStore(database);
   // Prijs en voorraad in twee richtingen met de webshop (shop-sync.js); na een
   // wijziging gaan de gewijzigde artikelen enkele seconden later mee.
   const shopSync = createShopSync({ db: database, shop: shopStore, stock: stockStore, settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch });
@@ -2230,6 +2233,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       audit,
     }),
   });
+
+  // Leveranciers en welke leverancier welk artikel levert (zie suppliers.js).
+  registerSupplierRoutes(app, { suppliers: supplierStore, requireRight, requireJson, audit });
 
   // Afbeeldingen bij artikelen: uploaden, verwijderen en overnemen uit de oude webshop (zie item-images.js).
   registerItemImageRoutes(app, { images: itemImageStore, requireRight, requireJson, audit,
@@ -2613,7 +2619,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, settings: settingsFor(tenantRow.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, suppliers: supplierStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, settings: settingsFor(tenantRow.id) },
       testSet, { users: out.byKey, quoteIds: out.quoteIds, tenantId: tenantRow.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );
