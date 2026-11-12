@@ -285,6 +285,8 @@
   async function readDocument(file) {
     const button = $('#b-po-read');
     if (file.size > 8 * 1024 * 1024) { context.toast('Het bestand is groter dan 8 MB.', true); return; }
+    // Een geopend formulier met regels wordt vervangen: alleen dan vragen, want anders gaat er niets verloren.
+    if (!$('#order-form').hidden && state.lines.length && !window.confirm('Het geopende formulier wordt vervangen door het ingelezen document. Wat niet is bewaard gaat verloren. Doorgaan?')) return;
     button.disabled = true;
     const label = button.textContent;
     button.textContent = 'Bezig met lezen…';
@@ -322,6 +324,11 @@
   async function receiveNow() {
     const body = { ...bodyOf(), receiveNow: true };
     if (!body.lines.length) { $('#order-form .err').textContent = 'Er staan geen regels op de order.'; return; }
+    // Een prijs die niet op het document stond raden we niet: de ontvangst zou er een kostprijs aan overhouden.
+    if (state.imported && body.lines.some((line) => line.unitCost === '' || line.unitCost == null)) {
+      $('#order-form .err').textContent = 'Vul bij elke regel de inkoopprijs in voordat je inboekt (op het document stond bij sommige regels geen prijs). Of bewaar eerst als concept.';
+      return;
+    }
     await run('Order aangemaakt en ingeboekt, de voorraad is bijgewerkt', () => context.api('purchase-orders', { method: 'POST', body }));
   }
 
