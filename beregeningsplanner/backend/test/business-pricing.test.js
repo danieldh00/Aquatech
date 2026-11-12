@@ -31,6 +31,8 @@ test('btw-nummer: formaat, landvoorvoegsel en verleggen', () => {
   assert.ok(Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'BE', vatNumber: 'BE0123456789', approvedVatNumber: 'BE0123456789' }));
   assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'BE', vatNumber: 'BE0123456789' }), 'zonder goedgekeurd nummer op het account niet (W-01)');
   assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'BE', vatNumber: 'BE0123456789', approvedVatNumber: 'BE0999999999' }), 'ander nummer dan op het account');
+  for (const method of ['pallet', 'eigen']) assert.ok(Vat.vatShifted({ group: 'zakelijk', method, country: 'BE', vatNumber: 'BE0123456789', approvedVatNumber: 'BE0123456789' }), `bezorging met ${method} naar een EU-land verlegt ook`);
+  assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'ophalen', country: 'BE', vatNumber: 'BE0123456789', approvedVatNumber: 'BE0123456789' }), 'afhalen verlegt nooit');
   assert.ok(Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'GR', vatNumber: 'EL123456789', approvedVatNumber: 'EL123456789' }), 'Griekenland gebruikt EL');
   assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'EL', vatNumber: 'EL123456789' }), 'EL is geen bestemmingscode');
   assert.ok(!Vat.vatShifted({ group: 'zakelijk', method: 'dpd', country: 'NL', vatNumber: 'NL123456789B01' }), 'Nederland: gewoon btw');

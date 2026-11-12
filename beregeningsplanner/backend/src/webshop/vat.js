@@ -49,7 +49,7 @@ function vatNumberFits(vatNumber, country) {
  * @returns {boolean} true als verleggen met dit nummer zou kunnen.
  */
 function vatShiftPossible({ group, method, country, vatNumber }) {
-  if (group !== 'zakelijk' || method !== 'dpd' || country === 'NL' || country === 'EL') return false;
+  if (group !== 'zakelijk' || method === 'ophalen' || country === 'NL' || country === 'EL') return false;
   return validVatNumber(vatNumber) && vatNumberFits(vatNumber, country);
 }
 

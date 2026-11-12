@@ -16,10 +16,15 @@ function setText(selector, text) {
 
 /**
  * Werkt het overzicht en het verwachte totaal bij voor de gekozen verzendmethode.
- * @param {HTMLInputElement} radio Het gekozen keuzerondje met de berekende gegevens.
+ * @param {HTMLOptionElement} radio De gekozen verzendmethode (optie van de keuzelijst) met de berekende gegevens.
  * @returns {void}
  */
 function showChosenShipping(radio) {
+  const shipNote = document.querySelector('[data-ship-note]');
+  if (shipNote) {
+    shipNote.textContent = radio.dataset.methodNote || '';
+    shipNote.hidden = !radio.dataset.methodNote;
+  }
   if (!radio.dataset.total) return;
   const shippingRow = document.querySelector('[data-ship-row]');
   if (shippingRow) shippingRow.hidden = false;
@@ -45,7 +50,7 @@ async function refreshTotals(form) {
   const sequence = ++refreshSequence;
   const body = new URLSearchParams({ action: 'update' });
   for (const name of ['country', 'shippingMethod', 'vatNumber']) {
-    const field = name === 'shippingMethod' ? form.querySelector('input[name="shippingMethod"]:checked') : form.querySelector(`[name="${name}"]`);
+    const field = form.querySelector(`[name="${name}"]`);
     if (field) body.set(name, field.value);
   }
   try {
@@ -58,16 +63,16 @@ async function refreshTotals(form) {
     const newTotal = updated.querySelector('[data-expected-total]');
     if (!newOptions || !newSummary || !newTotal) return;
     // Koos de klant intussen een andere verzendmethode, dan blijft die keuze staan (ook al kwam het antwoord voor de eerdere keuze).
-    const chosenNow = form.querySelector('input[name="shippingMethod"]:checked');
+    const chosenNow = form.querySelector('select[name="shippingMethod"]');
+    const chosenValue = chosenNow ? chosenNow.value : '';
     form.querySelector('[data-shipping-options]').innerHTML = newOptions.innerHTML;
     document.querySelector('.checkout-summary').innerHTML = newSummary.innerHTML;
     form.querySelector('[data-expected-total]').value = newTotal.value;
-    if (chosenNow) {
-      const sameChoice = [...form.querySelectorAll('input[name="shippingMethod"]')].find((radio) => radio.value === chosenNow.value && !radio.disabled);
-      if (sameChoice && !sameChoice.checked) {
-        sameChoice.checked = true;
-        showChosenShipping(sameChoice);
-      }
+    const list = form.querySelector('select[name="shippingMethod"]');
+    if (chosenValue && list) {
+      const sameChoice = [...list.options].find((option) => option.value === chosenValue && !option.disabled);
+      if (sameChoice && list.value !== chosenValue) list.value = chosenValue;
+      if (sameChoice) showChosenShipping(list.selectedOptions[0]);
     }
   } catch (error) {
     // Geen verbinding: de pagina blijft staan en bij het bestellen controleert de server het totaal alsnog.
@@ -94,7 +99,7 @@ if (checkoutForm) {
   checkoutForm.querySelector('.update-totals').hidden = true;
   checkoutForm.addEventListener('change', (event) => {
     const field = event.target;
-    if (field.name === 'shippingMethod') showChosenShipping(field);
+    if (field.name === 'shippingMethod') showChosenShipping(field.selectedOptions[0]);
     if (field.name === 'country' || field.name === 'vatNumber') scheduleRefresh(checkoutForm);
   });
   // Wordt er besteld terwijl de berekening nog loopt, dan eerst afwachten zodat het getoonde totaal klopt.
@@ -196,7 +201,7 @@ function setUpAddresses(form) {
    * Of de klant voor ophalen koos (dan is geen adres nodig).
    * @returns {boolean} true bij ophalen.
    */
-  const pickup = () => form.querySelector('input[name="shippingMethod"]:checked')?.value === 'ophalen';
+  const pickup = () => form.querySelector('[name="shippingMethod"]')?.value === 'ophalen';
   /**
    * Het land van aflevering (zonder keuzelijst is dat Nederland).
    * @returns {string} Landcode.
@@ -252,7 +257,7 @@ function setUpDropshipping(form) {
    * @returns {void}
    */
   const sync = () => {
-    const pickup = form.querySelector('input[name="shippingMethod"]:checked')?.value === 'ophalen';
+    const pickup = form.querySelector('[name="shippingMethod"]')?.value === 'ophalen';
     section.hidden = pickup;
     if (pickup) box.checked = false;
     fields.hidden = !box.checked;

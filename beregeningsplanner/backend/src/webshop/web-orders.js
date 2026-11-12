@@ -172,7 +172,7 @@ function dropshippingOf(input, method) {
 /**
  * Controleert de gegevens die de klant bij het afrekenen invult.
  * @param {object} raw De invoer (name, company, email, phone, street, postcode, city, note en bij een afwijkend afleveradres deliveryStreet, deliveryPostcode, deliveryCity).
- * @param {{ method?: string, country?: string, billingCountry?: string, group?: string }} [choice] De gekozen verzendmethode (ophalen of dpd), het land van aflevering (bij ophalen is een adres niet nodig), het land van het factuuradres (standaard hetzelfde) en de klantgroep (zakelijk: bedrijfsnaam verplicht en een eventueel btw-nummer wordt gecontroleerd).
+ * @param {{ method?: string, country?: string, billingCountry?: string, group?: string }} [choice] De gekozen verzendmethode (afhalen, DPD, pallet of eigen transport), het land van aflevering (bij ophalen is een adres niet nodig), het land van het factuuradres (standaard hetzelfde) en de klantgroep (zakelijk: bedrijfsnaam verplicht en een eventueel btw-nummer wordt gecontroleerd).
  * @returns {{ value?: object, error?: string, field?: string }} De opgeschoonde gegevens (met `deliverySame` en bij afwijkend de `delivery*`-velden) of een foutmelding.
  */
 function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', billingCountry = country, group = '' } = {}) {
@@ -422,7 +422,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    * @param {object} cart De geprijsde winkelwagen (priceCart).
    * @param {object} config De verzendinstelling (shipping.js, sanitizeShipping).
    * @param {string} country Het gekozen land (landcode).
-   * @returns {{ weightGrams: number, countries: object[], options: object[] }} Gewicht, bezorgbare landen en de opties (ophalen, dpd).
+   * @returns {{ weightGrams: number, countries: object[], options: object[] }} Gewicht, bezorgbare landen en de opties (bezorgmethodes die aan staan en afhalen).
    */
   function shippingQuote(cart, config, country) {
     const weightGrams = Shipping.weightOf(cart.lines, config);
@@ -468,11 +468,11 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     const input = rawFields && typeof rawFields === 'object' ? rawFields : {};
     const method = String(input.shippingMethod || '');
     const country = method === 'ophalen' ? 'NL' : String(input.country || 'NL').toUpperCase();
-    if (!['ophalen', 'dpd'].includes(method)) return { error: 'Kies een verzendmethode.', field: 'shippingMethod', status: 400 };
+    if (!Shipping.METHODS.includes(method)) return { error: 'Kies een verzendmethode.', field: 'shippingMethod', status: 400 };
     const group = user.group === 'zakelijk' ? 'zakelijk' : '';
     // Het land van het factuuradres is dat van de aflevering, tenzij het afleveradres afwijkt: dan kiest de klant het zelf (standaard Nederland).
     const billingCountry = deliverySameOf(input) ? country : String(input.billingCountry || 'NL').toUpperCase();
-    if (method === 'dpd' && billingCountry !== country && !Shipping.countriesOf(shippingConfig).some((entry) => entry.code === billingCountry)) return { error: 'Kies een land voor het factuuradres.', field: 'billingCountry', status: 400 };
+    if (method !== 'ophalen' && billingCountry !== country && !Shipping.countriesOf(shippingConfig).some((entry) => entry.code === billingCountry)) return { error: 'Kies een land voor het factuuradres.', field: 'billingCountry', status: 400 };
     const checked = sanitizeCheckout(input, { method, country, billingCountry, group });
     if (checked.error) return { error: checked.error, field: checked.field, status: 400 };
     const dropshipping = dropshippingOf(input, method);
@@ -510,7 +510,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
             : { street: fields.deliveryStreet, postcode: fields.deliveryPostcode, city: fields.deliveryCity, country, ...(user.deliveryUnverified ? { unverified: true } : {}) },
         ...(method === 'ophalen' ? {} : { billingAddress: { street: fields.street, postcode: fields.postcode, city: fields.city, country: billingCountry, ...(user.addressUnverified ? { unverified: true } : {}) } }),
         deliverySame: method === 'ophalen' ? true : fields.deliverySame,
-        shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method === 'dpd', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
+        shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method !== 'ophalen', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
         customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted, ...(calculated.shifted && user.vies ? { vies: user.vies } : {}) } : null,
         note: fields.note, totals, payment: online ? 'online' : 'op rekening', consent: { terms: true, at: timestamp },
         ...(dropshipping.value ? { dropshipping: dropshipping.value } : {}),

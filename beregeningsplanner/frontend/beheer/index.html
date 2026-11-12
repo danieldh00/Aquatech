@@ -321,16 +321,16 @@
         </form>
         <form id="s-shipping" class="card-form settings">
           <h3>Verzending</h3>
-          <p class="muted small">Wat klanten bij het afrekenen kunnen kiezen. Alle bedragen zijn incl. btw (21%). Alleen voor de hoofdtenant.</p>
-          <label class="chk"><input type="checkbox" name="pickupEnabled"> <span>Ophalen aanbieden (gratis)</span></label>
-          <label>Naam van de ophaaloptie<input name="pickupLabel" maxlength="60" placeholder="Ophalen"></label>
-          <label>Toelichting bij ophalen (adres, openingstijden)<input name="pickupNote" maxlength="300"></label>
-          <label class="chk"><input type="checkbox" name="dpdEnabled"> <span>Bezorging door DPD aanbieden</span></label>
-          <label>Gewicht per artikel zonder ingevuld gewicht (gram)<input name="defaultWeightGrams" type="number" min="0" max="100000" step="1"></label>
-          <h4>Tarieven per land</h4>
-          <p class="muted small">Eén regel per land: landcode, naam, gratis vanaf (leeg of 0 = nooit) en de weegklassen als <i>t/m gram=prijs</i>, gescheiden door een puntkomma (bijvoorbeeld <code>2000=6,95; 5000=8,95</code>). Zwaarder dan de hoogste klasse = niet te bezorgen. Het gewicht per artikel vul je in bij <i>Artikelen</i>.</p>
-          <div id="s-shipping-zones"></div>
-          <p><button type="button" class="btn" id="s-shipping-add">Land toevoegen</button> <button class="btn primary" type="submit">Verzending opslaan</button></p>
+          <p class="muted small">Wat klanten bij het afrekenen in de keuzelijst Verzendmethode zien. Alle bedragen zijn incl. btw (21%) en komen als verzendregel op de bestelling. Afhalen in Nunspeet is gratis en staat nooit vooraf gekozen. Alleen voor de hoofdtenant.</p>
+          <div class="form-grid">
+            <label class="field chk"><input type="checkbox" name="pickupEnabled"> <span>Afhalen aanbieden (gratis)</span></label>
+            <label class="field">Naam van de afhaaloptie<input name="pickupLabel" maxlength="60" placeholder="Afhalen in Nunspeet"></label>
+            <label class="field span-2">Toelichting bij afhalen (adres, openingstijden)<input name="pickupNote" maxlength="300"></label>
+            <label class="field">Gewicht per artikel zonder ingevuld gewicht (gram)<input name="defaultWeightGrams" type="number" min="0" max="100000" step="1"></label>
+          </div>
+          <p class="muted small">Per bezorgmethode één regel per land: landcode, naam, gratis vanaf (leeg of 0 = nooit) en de weegklassen als <i>t/m gram=prijs</i>, gescheiden door een puntkomma (bijvoorbeeld <code>2000=6,95; 5000=8,95</code>). Zwaarder dan de hoogste klasse = niet te bezorgen met die methode. Het gewicht per artikel vul je in bij <i>Artikelen</i>.</p>
+          <div id="s-shipping-carriers"></div>
+          <div class="form-actions"><button class="btn primary" type="submit">Verzending opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
         <form id="s-payment" class="card-form settings">
