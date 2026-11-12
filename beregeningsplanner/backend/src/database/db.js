@@ -1300,6 +1300,21 @@ const MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN price_factor REAL;
   CREATE INDEX stock_items_price_mode ON stock_items (tenant_id, price_mode);
   `,
+  // 66: prijsvoorstellen (artikelen/price-factor.js): een nieuwe inkoopprijs geeft een voorstel voor een nieuwe verkoopprijs dat
+  // een beheerder goedkeurt of afwijst. Een afgewezen voorstel wordt hier onthouden (inkoopprijs + voorgestelde prijs, één per
+  // artikel) en komt pas terug als een van beide verandert.
+  `
+  CREATE TABLE price_proposal_rejections (
+    id             TEXT PRIMARY KEY,
+    tenant_id      TEXT NOT NULL REFERENCES tenants(id),
+    item_id        TEXT NOT NULL REFERENCES stock_items(id),
+    cost_price     REAL NOT NULL,
+    proposed_price REAL NOT NULL,
+    rejected_by    TEXT,
+    rejected_at    TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX price_proposal_rejections_item ON price_proposal_rejections (tenant_id, item_id);
+  `,
 ];
 
 /**

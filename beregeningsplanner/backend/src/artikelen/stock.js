@@ -748,8 +748,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         packSize: Number(existing.order_pack_size) || 1, orderMinQty: Number(existing.order_min_qty) || 1, priceTiers: Wholesale.tiersOf(existing.price_tiers), unitContent: existing.unit_content ?? null,
         priceMode: existing.price_mode === 'factor' ? 'factor' : 'vast', priceFactor: existing.price_factor ?? null, ...fields,
       };
-      // Modus factor: verandert de modus, de eigen factor of de inkoopprijs, dan volgt de verkoopprijs meteen; anders blijft de prijs staan tot de herberekening (Prijsfactor).
-      const factorChanged = merged.priceMode === 'factor' && (existing.price_mode !== 'factor' || (merged.priceFactor ?? null) !== (existing.price_factor ?? null) || (merged.costPrice ?? null) !== (existing.cost_price ?? null));
+      // Modus factor: verandert de modus of de eigen factor (een bewuste keuze bij dit artikel), dan volgt de verkoopprijs meteen. Een nieuwe
+      // inkoopprijs wijzigt de verkoopprijs nooit vanzelf: die wordt een prijsvoorstel dat een beheerder goedkeurt (Prijsfactor).
+      const factorChanged = merged.priceMode === 'factor' && (existing.price_mode !== 'factor' || (merged.priceFactor ?? null) !== (existing.price_factor ?? null));
       if (factorChanged && pricer && !Number(existing.has_variants)) {
         const factorPrice = pricer(tenantId, { id: existing.id, costPrice: merged.costPrice, priceFactor: merged.priceFactor });
         if (factorPrice !== null) merged.salePrice = factorPrice;
@@ -861,6 +862,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     costs.removeItem(tenantId, row.id);
     prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM item_packagings WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
+    prepare('DELETE FROM price_proposal_rejections WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM stock_items WHERE tenant_id = ? AND id = ?').run(tenantId, row.id);
     return false;
   }
