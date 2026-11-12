@@ -300,7 +300,8 @@
       const items = new Map(context.getItems().map((item) => [item.id, item]));
       for (const row of result.lines) {
         const item = row.match && row.match.itemId ? items.get(row.match.itemId) : null;
-        if (item && row.match.sure && addImported(row, item)) continue;
+        // Alleen wat op nummer, code of exacte omschrijving klopt komt vanzelf op de order; een gok op gelijkenis bevestigt de gebruiker zelf (Koppelen).
+        if (item && row.match.sure && row.match.matchedBy !== 'gelijkenis' && addImported(row, item)) continue;
         state.unmatched.push({ ...row, suggestions: row.match && row.match.itemId ? [{ code: row.match.itemCode }] : (row.match ? row.match.suggestions : []) });
       }
       renderLines();
