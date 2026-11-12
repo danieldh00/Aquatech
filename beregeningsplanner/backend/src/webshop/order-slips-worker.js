@@ -17,7 +17,7 @@ const MAX_TOTAL_BYTES = 80 * 1024 * 1024;
 /** Hoogstens zoveel streams worden gecontroleerd (een gewone pakbon heeft er tientallen); meer is verdacht en houdt het werk begrensd. */
 const MAX_STREAMS = 500;
 /** Filters die pdf-lib naast Flate uitvoert en die deze controle niet kan begrenzen: PDF's die ze noemen worden geweigerd. */
-const UNSUPPORTED_FILTERS = new Set(['ASCIIHexDecode', 'ASCII85Decode', 'RunLengthDecode', 'LZWDecode', 'AHx', 'A85', 'RL', 'LZW']);
+const UNSUPPORTED_FILTERS = new Set(['ASCIIHexDecode', 'ASCII85Decode', 'RunLengthDecode', 'LZWDecode']);
 /** Een filterketen (Flate van Flate) wordt hoogstens zoveel lagen diep uitgepakt; dieper is verdacht. */
 const MAX_LAYERS = 4;
 
@@ -31,6 +31,11 @@ function usesUnsupportedFilter(buffer) {
   for (const match of text.matchAll(/\/[^\s\/\[\]<>()%{}]{1,40}/g)) {
     const name = match[0].slice(1).replace(/#([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
     if (UNSUPPORTED_FILTERS.has(name)) return true;
+    if (name === 'Filter') {
+      // Een verwijzing (8 0 R) naar een filternaam kan in een gecomprimeerde objectstroom staan en is hier niet te zien: weigeren.
+      const rest = text.slice(match.index + match[0].length, match.index + match[0].length + 300).trimStart();
+      if (rest[0] === '[' ? /\d+\s+\d+\s+R\b/.test(rest.slice(0, rest.indexOf(']') < 0 ? 300 : rest.indexOf(']'))) : /^\d/.test(rest)) return true;
+    }
   }
   return false;
 }

@@ -80,7 +80,7 @@ test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', as
   assert.match((await inspectSlip(padded)).error, /te groot als hij wordt uitgepakt/);
   // Een 'endstream' middenin de gecomprimeerde gegevens knipt de scan niet af, en een stream zonder einde wordt geweigerd.
   const split = zlib.deflateSync(Buffer.concat([Buffer.from('endstream'), Buffer.alloc(200 * 1024 * 1024)]), { level: 9 });
-  const sneaky = Buffer.concat([base, Buffer.from(`\n97 0 obj\n<< /Type /ObjStm /N 1 /First 5 /Filter 12 0 R /Length ${split.length} >>\nstream\n`), split, Buffer.from('\nendstream\nendobj\n')]);
+  const sneaky = Buffer.concat([base, Buffer.from(`\n97 0 obj\n<< /Type /ObjStm /N 1 /First 5 /Filter /FlateDecode /Length ${split.length} >>\nstream\n`), split, Buffer.from('\nendstream\nendobj\n')]);
   assert.match((await inspectSlip(sneaky)).error, /te groot als hij wordt uitgepakt/);
   // Een bom die binnen de ruwe gegevens van een andere stream staat (pdf-lib leest hem via de xref) wordt ook gevonden.
   const hidden = Buffer.concat([Buffer.from('\n94 0 obj\n<< /Length 10 >>\nstream\nxxxx\n93 0 obj\n<< /Type /ObjStm /Filter /FlateDecode >>\nstream\n'), bomb, Buffer.from('\nendstream\nendobj\n')]);
@@ -103,6 +103,13 @@ test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', as
     const hexed = Buffer.concat([base, Buffer.from(`\n89 0 obj\n<< /Type /ObjStm /Filter [/${name} /FlateDecode] >>\nstream\n00>\nendstream\nendobj\n`)]);
     assert.match((await inspectSlip(hexed)).error, /compressie die niet wordt ondersteund/);
   }
+  // Een verwijzing naar een filternaam (die in een objectstroom kan staan) wordt geweigerd, direct of in een rij.
+  for (const filter of ['8 0 R', '[/FlateDecode 8 0 R]', '[ 8 0 R ]']) {
+    const indirect = Buffer.concat([base, Buffer.from(`\n88 0 obj\n<< /Type /ObjStm /Filter ${filter} >>\nstream\n00>\nendstream\nendobj\n`)]);
+    assert.match((await inspectSlip(indirect)).error, /compressie die niet wordt ondersteund/);
+  }
+  // Gewone namen die toevallig lijken op een afkorting van een filter (/RL gs) zijn geen probleem.
+  assert.ok((await inspectSlip(Buffer.concat([await makePdf(1), Buffer.from('\n% /RL gs /A85 /LZW\n')]))).bytes);
   // Een onredelijk aantal streams wordt geweigerd.
   const many = Buffer.concat([base, Buffer.from('\nstream\nabc\nendstream'.repeat(600))]);
   assert.match((await inspectSlip(many)).error, /te groot als hij wordt uitgepakt/);
