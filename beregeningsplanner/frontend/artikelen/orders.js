@@ -224,9 +224,21 @@
     if (!state.unmatched.length) return;
     $('#po-unmatched-note').textContent = `${state.unmatched.length} regel${state.unmatched.length === 1 ? '' : 's'} uit het document ${state.unmatched.length === 1 ? 'is' : 'zijn'} nog niet gekoppeld en ${state.unmatched.length === 1 ? 'komt' : 'komen'} niet op de order. Kies een artikelcode of laat de regel weg.`;
     $('#po-unmatched-table').innerHTML = `<thead><tr><th>Art.nr.</th><th>Omschrijving</th><th class="num">Aantal</th><th>Artikelcode</th><th></th></tr></thead><tbody>${state.unmatched.map((row, index) => `<tr data-un="${index}">
-      <td>${esc(row.supplierSku)}</td><td class="wrap">${esc(row.description)}${row.suggestions.length ? `<br><span class="muted">Misschien: ${row.suggestions.map((hint) => esc(hint.code)).join(', ')}</span>` : ''}</td><td class="num">${nl(row.qty)} ${esc(row.unit)}</td>
+      <td>${esc(row.supplierSku)}</td><td class="wrap">${esc(row.description)}${row.unitNote ? `<br><span class="err">${esc(row.unitNote)} Controleer het aantal en de prijs.</span>` : ''}${row.suggestions.length ? `<br><span class="muted">Misschien: ${row.suggestions.map((hint) => esc(hint.code)).join(', ')}</span>` : ''}</td><td class="num">${nl(row.qty)} ${esc(row.unit)}</td>
       <td><input data-field="code" list="po-add-codes" value="${esc(row.suggestions[0] ? row.suggestions[0].code : '')}" autocomplete="off" aria-label="Artikelcode"></td>
       <td class="num"><button class="btn small" type="button" data-link="${index}">Koppelen</button> <button class="btn small danger" type="button" data-skip="${index}">Weglaten</button></td></tr>`).join('')}</tbody>`;
+  }
+
+  /**
+   * Geeft een melding als de eenheid op het document afwijkt van die van het artikel.
+   * @param {object} row De gelezen regel.
+   * @param {object} item Het artikel.
+   * @returns {string} De melding, of leeg als de eenheid klopt of ontbreekt.
+   */
+  function unitMismatch(row, item) {
+    const documentUnit = String(row.unit || '').trim().toLowerCase();
+    if (!documentUnit || documentUnit === String(item.unit || '').trim().toLowerCase()) return '';
+    return `Eenheid op het document (${row.unit}) wijkt af van het artikel (${item.unit}).`;
   }
 
   /**
@@ -303,8 +315,9 @@
       for (const row of result.lines) {
         const item = row.match && row.match.itemId ? items.get(row.match.itemId) : null;
         // Alleen wat op nummer, code of exacte omschrijving klopt komt vanzelf op de order; een gok op gelijkenis bevestigt de gebruiker zelf (Koppelen).
-        if (item && row.match.sure && addImported(row, item)) continue;
-        state.unmatched.push({ ...row, suggestions: row.match && row.match.itemId ? [{ code: row.match.itemCode }] : (row.match ? row.match.suggestions : []) });
+        const mismatch = item ? unitMismatch(row, item) : '';
+        if (item && row.match.sure && !mismatch && addImported(row, item)) continue;
+        state.unmatched.push({ ...row, unitNote: mismatch, suggestions: row.match && row.match.itemId ? [{ code: row.match.itemCode }] : (row.match ? row.match.suggestions : []) });
       }
       renderLines();
       const names = result.supplier ? '' : ` Leverancier "${result.supplierName || 'onbekend'}" is niet herkend: kies hem hierboven.`;
