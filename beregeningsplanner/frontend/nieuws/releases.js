@@ -13,11 +13,19 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.11.2',
+      version: '1.11.3',
       date: '2026-11-12',
       title: 'Leveranciersdocument inlezen',
       items: [
         { text: 'In Inkooporders kun je een PDF of foto van een offerte, orderbevestiging, pakbon of factuur laten inlezen. De regels worden aan je artikelen gekoppeld; jij controleert alles en bewaart het als concept, of boekt het meteen in de voorraad. De artikelnummers van de leverancier worden onthouden, zodat de volgende keer meer regels vanzelf goed staan.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.11.2',
+      date: '2026-11-12',
+      title: 'Verpakkingen per artikel',
+      items: [
+        { text: 'Bij een artikel kun je nu verpakkingen instellen, bijvoorbeeld een doos of een pallet van 144 stuks, met een eigen prijs, een eigen EAN en de klantgroep die ze ziet. De voorraad blijft in stuks staan. In de winkel verschijnen ze in de volgende versie.', for: ['voorraad'] },
       ],
     },
     {

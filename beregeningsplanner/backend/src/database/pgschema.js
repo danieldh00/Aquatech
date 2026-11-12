@@ -1038,7 +1038,26 @@ const PG_MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN ean ${TEXT_TYPE};
   CREATE UNIQUE INDEX stock_items_ean ON stock_items (tenant_id, ean) WHERE ean IS NOT NULL;
   `,
-  // 63: inkooporders: document van de leverancier (zie db.js).
+  // 63: verpakkingseenheden per artikel (zie db.js).
+  `
+  CREATE TABLE item_packagings (
+    id             ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id      ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    item_id        ${TEXT_TYPE} NOT NULL ${references('stock_items(id)')},
+    code           ${TEXT_TYPE} NOT NULL,
+    name           ${TEXT_TYPE} NOT NULL,
+    factor         BIGINT NOT NULL,
+    sale_price     DOUBLE PRECISION,
+    business_price DOUBLE PRECISION,
+    ean            ${TEXT_TYPE},
+    audience       ${TEXT_TYPE} NOT NULL DEFAULT 'iedereen',
+    active         BIGINT NOT NULL DEFAULT 1,
+    created_at     ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX item_packagings_code ON item_packagings (tenant_id, item_id, code);
+  CREATE UNIQUE INDEX item_packagings_ean ON item_packagings (tenant_id, ean) WHERE ean IS NOT NULL;
+  `,
+  // 64: inkooporders: document van de leverancier (zie db.js).
   `
   ALTER TABLE purchase_orders ADD COLUMN supplier_reference ${TEXT_TYPE} NOT NULL DEFAULT '';
   `,

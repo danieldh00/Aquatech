@@ -665,6 +665,7 @@
     renderVariants();
     renderCosts();
     window.ArtikelenSuppliers.showItem(item).catch((error) => toast(error.message, true));
+    window.ArtikelenPackagings.showItem(item).catch((error) => toast(error.message, true));
     $('#d-res').innerHTML = item.reservations.length ? `<thead><tr><th>Werkorder</th><th>Status</th><th>Gepland</th><th class="num">Gereserveerd</th></tr></thead>
       <tbody>${item.reservations.map((reservation) => `<tr><td class="wrap">${woLink(reservation.workOrder)}<span class="sub">${esc(reservation.workOrder.title)}</span></td>
         <td><span class="pill wo-${esc(reservation.workOrder.status)}">${esc((WorkOrderCore && WorkOrderCore.STATUSES[reservation.workOrder.status]) || reservation.workOrder.status)}</span></td>
@@ -1465,6 +1466,7 @@
       onMerged: async (parent) => { state.open.add(parent.id); await load(); await openItem(parent.id, true); },
     });
     window.ArtikelenSuppliers.setup({ api, toast, esc, nl, eur });
+    window.ArtikelenPackagings.setup({ api, toast, esc });
     window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook, save, stamp });
     loadUnits().catch((error) => toast(error.message, true));
     setupShop();

@@ -1,15 +1,24 @@
 # Changelog
 
-## 1.11.2
+## 1.11.3
 
-Leveranciersdocument inlezen en direct inboeken (punt 17 van bundel F, deel 4). Migratie 63.
+Leveranciersdocument inlezen en direct inboeken (punt 17 van bundel F, deel 4). Migratie 64.
 
 - **Inlezen** (`POST /api/purchase-orders/read`, `artikelen/order-read-route.js`, `order-reader.js`, recht `voorraad`): een PDF of foto (JPEG, PNG, WebP, max. 8 MB) van een offerte, orderbevestiging, pakbon of factuur gaat naar de AI van de omgeving (eigen sleutel, `aiEnabled`, dagmaximum `aiDailyLimit`, uurlimiet per bezoeker) en komt terug als leverancier, documentnummer, datum en regels. De route schrijft niets. Verbruik staat in Beheer > AI-kosten onder `inkoop_inlezen`.
 - **Koppelen** (`order-matching.js`, zuivere functies): leverancier op naam; regels op artikelnummer van de leverancier, artikelcode, exacte omschrijving en daarna gelijkenis (alleen een voorstel).
-- **Inboeken**: `POST /api/purchase-orders` met `receiveNow: true` maakt de order en boekt alles meteen in (alles of niets, via `receiveRows`). Veld `supplierReference` (migratie 63, referentie van de leverancier) en per regel `supplierSku`; met `rememberSkus: true` worden de artikelnummers bij de artikelen onthouden (`suppliers.rememberSku`).
+- **Inboeken**: `POST /api/purchase-orders` met `receiveNow: true` maakt de order en boekt alles meteen in (alles of niets, via `receiveRows`). Veld `supplierReference` (migratie 64, referentie van de leverancier) en per regel `supplierSku`; met `rememberSkus: true` worden de artikelnummers bij de artikelen onthouden (`suppliers.rememberSku`).
 - `translateApiError` uit `plan-analyzer.js` wordt hergebruikt voor de foutmeldingen van de AI-dienst.
 - Scherm: knop Inlezen uit document in Inkooporders; gekoppelde regels staan op de order, de rest is te koppelen of weg te laten; knoppen Bewaren (concept) en Bewaren en inboeken.
 - Tests: `order-reading.test.js` en `purchase-orders.test.js`.
+
+## 1.11.2
+
+Verpakkingseenheden per artikel (punt 1, deel A: opslag en artikelscherm; de winkel volgt in deel B). Migratie 63: tabel `item_packagings`.
+
+- **Verpakkingen** (`artikelen/packagings.js`, recht `voorraad`): naast de basiseenheid kan een artikel in een doos of pallet worden verkocht. Een verpakking heeft een korte code (bijvoorbeeld `PAL`, uniek per artikel), een naam, het aantal basiseenheden (`factor`, heel getal vanaf 2), een eigen prijs en zakelijke prijs (excl. btw; leeg = aantal × de prijs van het artikel), een eigen EAN en een doelgroep (*iedereen*, *zakelijk*, *groothandel*; `visibleFor`). De voorraad blijft in de basiseenheid. Hoogstens tien per artikel.
+- `GET|PUT /api/stock/items/:id/packagings` (de lijst wordt in zijn geheel vervangen, alles of niets). De EAN is uniek binnen de organisatie over artikelen én verpakkingen heen (409 met de artikelcode); een hoofdartikel heeft geen verpakkingen (ze verdwijnen zodra een artikel een hoofdartikel wordt of wordt verwijderd). Audit `artikel_verpakkingen_gewijzigd`.
+- Artikel openen → blok *Verpakkingen*.
+- Testdata: Straatzand heeft een pallet (zakelijk) en een duo-pak.
 
 ## 1.11.1
 

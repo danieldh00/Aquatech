@@ -641,7 +641,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   function eanTaken(tenantId, id, ean) {
     if (!ean) return null;
     const other = prepare('SELECT code FROM stock_items WHERE tenant_id = ? AND ean = ? AND id <> ?').get(tenantId, ean, id || '');
-    return other ? { error: `Deze EAN hoort al bij artikel ${other.code}.`, field: 'ean', status: 409 } : null;
+    if (other) return { error: `Deze EAN hoort al bij artikel ${other.code}.`, field: 'ean', status: 409 };
+    const packaging = prepare('SELECT i.code AS code FROM item_packagings p JOIN stock_items i ON i.tenant_id = p.tenant_id AND i.id = p.item_id WHERE p.tenant_id = ? AND p.ean = ?').get(tenantId, ean);
+    return packaging ? { error: `Deze EAN hoort al bij een verpakking van artikel ${packaging.code}.`, field: 'ean', status: 409 } : null;
   }
 
   /**
@@ -833,6 +835,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     }
     costs.removeItem(tenantId, row.id);
     prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
+    prepare('DELETE FROM item_packagings WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM stock_items WHERE tenant_id = ? AND id = ?').run(tenantId, row.id);
     return false;
   }
@@ -946,6 +949,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
           shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL AND shop_sync = 1 THEN 1 ELSE shop_dirty END
         WHERE tenant_id = ? AND id = ?`).run(JSON.stringify(attributes), timestamp, created.length ? 1 : 0, tenantId, existing.id);
       prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
+      prepare('DELETE FROM item_packagings WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
       if (created.length) resyncOpen(tenantId, created, { nested: true });
       return { created, restored, removed, linked: Boolean(existing.shop_product_id && Number(existing.shop_sync)) };
     });
@@ -1339,6 +1343,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const attributes = JSON.stringify(shopAttributesOf(product));
     prepare('UPDATE stock_items SET has_variants = 1, ean = NULL, attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(attributes, currentTimestamp(), tenantId, item.id);
     prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
+    prepare('DELETE FROM item_packagings WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
     item.has_variants = 1;
     item.attributes = attributes;
     return true;
