@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.12.8',
+      date: '2026-11-12',
+      title: 'Klant zonder KvK-nummer en buitenlandse klant',
+      items: [
+        { text: 'Een zakelijke klant kan nu zonder KvK-nummer worden aangemaakt, bijvoorbeeld een buitenlands bedrijf.', for: ['klanten'] },
+        { text: 'Bij een btw-nummer uit een ander EU-land dat bij VIES geldig is, typ je het adres van de klant zelf in.', for: ['klanten'] },
+      ],
+    },
+    {
       version: '1.12.7',
       date: '2026-11-12',
       title: 'Geen dubbel e-mailadres meer',

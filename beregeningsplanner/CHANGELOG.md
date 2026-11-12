@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.8
+
+- `sanitizeBusinessProfile(input, { kvkRequired })`: de klantenmodule (`POST|PATCH /api/customers`) vraagt geen KvK-nummer meer; een ingevuld nummer moet nog steeds uit 8 cijfers bestaan. De webshopregistratie en Beheer > Gebruikers houden het KvK-nummer verplicht.
+- Klantadres vrij te typen als het btw-nummer (uit het verzoek, anders van de klant) een geldig nummer van een ander land is en VIES het geldig noemt (`checkForeignVat`, max. 20 nieuwe vragen per minuut per gebruiker). Onbereikbaar, ongeldig of een Nederlandse postcode: de PDOK-controle blijft gelden.
+- Klantenscherm zet het adresveld op vrij typen bij een buitenlands btw-nummer.
+
 ## 1.12.7
 
 - `store.updateAccount`: het adres wordt getrimd en in kleine letters bewaard; een contact-e-mailadres dat al bij een ander actief account hoort geeft 409 (`field: email`, hoofdletters en spaties genegeerd); `disabled: false` wordt geweigerd als het adres van het account intussen bij een ander actief account staat.
