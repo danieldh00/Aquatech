@@ -180,10 +180,10 @@ function permanentFailure(error) {
 /**
  * Maakt de verzendronde voor alle omgevingen.
  * @param {object} reminders De opslag uit createSeasonReminderStore.
- * @param {{ settingsFor: Function, mailerFor: Function, userTenantsOf: Function }} options Instellingen en mailer per omgeving, en waar de klanten van een omgeving wonen.
+ * @param {{ settingsFor: Function, mailerFor: Function, userTenantsOf: Function, enabled?: Function }} options Instellingen en mailer per omgeving, waar de klanten van een omgeving wonen, en of de omgeving herinneringen mag versturen (standaard altijd).
  * @returns {{ runAll: Function, runEnvironment: Function }} De verzendfuncties.
  */
-function createSeasonReminderRunner(reminders, { settingsFor, mailerFor, userTenantsOf }) {
+function createSeasonReminderRunner(reminders, { settingsFor, mailerFor, userTenantsOf, enabled = () => true }) {
   let running = false;
 
   /**
@@ -194,6 +194,7 @@ function createSeasonReminderRunner(reminders, { settingsFor, mailerFor, userTen
    */
   async function runEnvironment(tenantId, today = new Date()) {
     const result = { sent: 0, skipped: 0, failed: 0 };
+    if (!enabled(tenantId)) return result;
     const settings = settingsFor(tenantId);
     const config = settings.get('seasonReminders');
     if (!config.enabled) return result;

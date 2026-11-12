@@ -21,6 +21,12 @@
 // bij een andere module: uitgezet als die uit staat en niet apart in Beheer > Modules. Toekomstige pagina's (klanten, inkooporders, leveranciers,
 // backorders, te picken, ...) krijgen hun plek door één regel met de juiste
 // `navGroup`; zolang `status` niet 'actief' is verschijnt er niets in de zijbalk.
+// `configuration` zegt wat bij de module hoort aan instellingen: `sections` (id's uit
+// beheer/indeling.js, verborgen in Beheer als de module uit staat), `settings`
+// (sleutels uit settings.js die de server dan niet meer wijzigt) en `routes` (API-adressen
+// waarvan de server dan alle schrijfacties weigert met 409 `module_off`; lezen blijft
+// werken). Een nieuwe module met eigen instellingen vult alleen dit veld; Beheer en de
+// server volgen vanzelf (zie `isOn`, `hiddenSections`, `lockedSettings`, `lockedRoutes`).
 // De API controleert de rechten ook zelf. Beheerders en hoofdbeheerders zien de
 // modules in een vaste zijbalk (shared/sidebar.js) in plaats van als tegels; een
 // nieuwe module verschijnt daar vanzelf.
@@ -52,6 +58,7 @@
       icon: 'user',
       status: 'actief',
       right: 'portaal',
+      configuration: { sections: ['season'], settings: ['seasonReminders'] },
     },
     {
       id: 'nieuws',
@@ -124,6 +131,7 @@
       icon: 'box',
       status: 'actief',
       right: 'voorraad',
+      configuration: { sections: ['labels'], settings: ['labelTemplates', 'priceFactors'], routes: ['/api/stock/label-templates', '/api/stock/labels', '/api/stock/price-factors'] },
     },
     {
       id: 'bestelvoorstel',
@@ -190,6 +198,7 @@
       icon: 'sprinkler',
       status: 'actief',
       right: 'plannen',
+      configuration: { sections: ['sproeiers'], routes: ['/api/sprinkler-library'] },
     },
     {
       id: 'plannen',
@@ -241,6 +250,7 @@
       icon: 'handshake',
       status: 'actief',
       right: 'uitbesteden',
+      configuration: { sections: ['outsourcing'], settings: ['outsourcing'], routes: ['/api/outsourcing'] },
     },
     {
       id: 'beheer',
@@ -310,8 +320,7 @@
     const has = (wanted) => [].concat(wanted).some((right) => (rights || []).includes(right));
     return MODULES
       .filter((module) => !module.right || has(module.right))
-      .filter((module) => !module.partOf || !disabled || disabled[module.partOf] !== false)
-      .filter((module) => module.id === 'beheer' || module.id === 'hoofdbeheer' || !disabled || disabled[module.id] !== false)
+      .filter((module) => isOn(disabled, module.id))
       .map((module) => (module.alt && has(module.alt.right) && !has(module.alt.unless) ? { ...module, ...module.alt } : module));
   }
 
@@ -337,6 +346,49 @@
     return sections.filter((section) => section.items.length);
   }
 
+
+  /**
+   * Staat deze module aan? Een onderdeel (`partOf`) volgt zijn hoofdmodule; Beheer en Hoofdbeheer staan altijd aan.
+   * @param {object} [flags] De instelling `modules` (id → false = uit; wat ontbreekt staat aan).
+   * @param {string} id Id van de module.
+   * @returns {boolean} true als de module aan staat.
+   */
+  function isOn(flags, id) {
+    if (id === 'beheer' || id === 'hoofdbeheer') return true;
+    const own = MODULES.find((module) => module.id === id);
+    const off = flags || {};
+    if (own && own.partOf && off[own.partOf] === false) return false;
+    return off[id] !== false;
+  }
+
+  /**
+   * De modules die uit staan en een `configuration` hebben.
+   * @param {object} [flags] De instelling `modules`.
+   * @returns {object[]} De configuratie-blokken van modules die uit staan.
+   */
+  const offConfigurations = (flags) => MODULES.filter((module) => module.configuration && !isOn(flags, module.id)).map((module) => module.configuration);
+
+  /**
+   * Id's van de Beheer-secties die bij uitgezette modules horen (Beheer verbergt ze).
+   * @param {object} [flags] De instelling `modules`.
+   * @returns {Set<string>} Sectie-id's uit beheer/indeling.js.
+   */
+  const hiddenSections = (flags) => new Set(offConfigurations(flags).flatMap((configuration) => configuration.sections || []));
+
+  /**
+   * Sleutels van instellingen die bij uitgezette modules horen (de server weigert een wijziging).
+   * @param {object} [flags] De instelling `modules`.
+   * @returns {Set<string>} Sleutels uit settings.js.
+   */
+  const lockedSettings = (flags) => new Set(offConfigurations(flags).flatMap((configuration) => configuration.settings || []));
+
+  /**
+   * API-adressen die bij uitgezette modules horen (de server weigert daar schrijfacties).
+   * @param {object} [flags] De instelling `modules`.
+   * @returns {string[]} Adressen, zonder slash aan het eind.
+   */
+  const lockedRoutes = (flags) => offConfigurations(flags).flatMap((configuration) => configuration.routes || []);
+
   root.AquatechModules = MODULES;
   /**
    * Aantal nieuwe items bij Nieuws (api/me `news`) als bolletje; de pagina Nieuws
@@ -346,6 +398,7 @@
    */
   const newsBadge = (count) => (count > 0 ? `<span class="news-count" data-news-count title="Nieuw sinds je vorige bezoek">${count > 9 ? '9+' : count}</span>` : '');
 
-  root.AquatechModuleTools = { ICONS, NAV_GROUPS, icon, visible, usesSidebar, navSections, newsBadge };
-  if (typeof module !== 'undefined' && module.exports) module.exports = MODULES;
+  root.AquatechModuleTools = { ICONS, NAV_GROUPS, icon, visible, usesSidebar, navSections, newsBadge, isOn, hiddenSections, lockedSettings, lockedRoutes };
+  // Voor de server: de hulpfuncties hangen als `tools` aan de geëxporteerde lijst (niet-opsombaar, de lijst blijft een gewone array).
+  if (typeof module !== 'undefined' && module.exports) module.exports = Object.defineProperty(MODULES, 'tools', { value: root.AquatechModuleTools });
 })(typeof window !== 'undefined' ? window : globalThis);

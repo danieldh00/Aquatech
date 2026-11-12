@@ -100,6 +100,10 @@ Ingelogd wordt een plan op de server bewaard (met historie); zonder server wordt
    `status: 'actief'` met `href: '<id>/'`.
 3. Klaar: de server serveert elke map met een `index.html` als module (ook
    `<id>` zonder slash en diepe paden). Tests controleren de verwijzingen.
+4. Heeft de module eigen instellingen in Beheer of eigen instellings-API's? Vul dan `configuration` in
+   `modules.js` in (`sections`, `settings`, `routes`). Staat de module uit (Beheer > Modules aan/uit), dan
+   verdwijnen die secties uit Beheer en weigert de server wijzigingen daarvan (409 `module_off`). Bewaarde waarden
+   blijven staan.
 
 ## Structuur
 
