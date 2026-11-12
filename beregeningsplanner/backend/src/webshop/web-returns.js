@@ -37,6 +37,17 @@ const currentTimestamp = () => new Date().toISOString();
 const clean = (value, max) => Array.from(String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f]+/g, ' ').trim()).slice(0, max).join('');
 
 /**
+ * De terugboekingen van een retour: per artikel één regel in de basiseenheid (een regel in dozen of pallets telt de factor mee).
+ * @param {{ itemId: string, qty: number, stockPer?: number }[]} lines De teruggestuurde regels.
+ * @returns {{ itemId: string, qty: number }[]} Per artikel het totale aantal basiseenheden.
+ */
+function restockLinesOf(lines) {
+  const totals = new Map();
+  for (const line of lines) totals.set(line.itemId, (totals.get(line.itemId) || 0) + Number(line.qty) * (Number(line.stockPer) > 1 ? Number(line.stockPer) : 1));
+  return [...totals].map(([itemId, qty]) => ({ itemId, qty }));
+}
+
+/**
  * Maakt de opslag voor retouren van webshopbestellingen.
  * @param {object} db De database.
  * @param {{ orders: object, stock: object }} deps De bestelopslag en de voorraadopslag (artikelen terugboeken).
@@ -331,9 +342,10 @@ function createWebReturnStore(db, { orders, stock }) {
       data.restock = Boolean(restock);
       if (!restock) return;
       const known = new Set(prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND id IN (${data.lines.map(() => '?').join(', ')})`).all(tenantId, ...data.lines.map((line) => line.itemId)).map((item) => item.id));
-      for (const line of data.lines) {
+      // Eén terugboeking per artikel (stuks en een pallet van hetzelfde artikel samen), zoals de afboeking bij het verzenden.
+      for (const line of restockLinesOf(data.lines)) {
         // De retour komt terug tegen de kostprijs waartegen hij met de bestelling is afgeboekt (FIFO).
-        if (known.has(line.itemId)) stock.book(tenantId, line.itemId, line.qty * (Number(line.stockPer) > 1 ? Number(line.stockPer) : 1), { kind: 'retour', source: `retour:${row.number}`, note: `Retour ${row.number}`, user, costBasis: { source: `bestelling:${data.orderNumber}` } });
+        if (known.has(line.itemId)) stock.book(tenantId, line.itemId, line.qty, { kind: 'retour', source: `retour:${row.number}`, note: `Retour ${row.number}`, user, costBasis: { source: `bestelling:${data.orderNumber}` } });
       }
     });
     return out;
@@ -440,4 +452,4 @@ function registerWebReturnRoutes(app, { returns, requireJson, audit, credits = n
   }));
 }
 
-module.exports = { createWebReturnStore, registerWebReturnRoutes, STATUSES, TRANSITIONS, REASONS, RETURN_DAYS };
+module.exports = { restockLinesOf, createWebReturnStore, registerWebReturnRoutes, STATUSES, TRANSITIONS, REASONS, RETURN_DAYS };

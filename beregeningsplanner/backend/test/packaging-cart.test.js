@@ -7,6 +7,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { stockQtyOf, splitCartCode } = require('../src/webshop/web-orders');
+const { restockLinesOf } = require('../src/webshop/web-returns');
 const { createLogin, createClient, listen, postForm, postCheckout } = require('./helpers/http-client');
 
 const SECRET = 'd'.repeat(64);
@@ -70,6 +71,11 @@ test('hulpfuncties: code splitsen en voorraadaantal in de basiseenheid', () => {
   assert.deepStrictEqual(splitCartCode('KLINK'), { baseCode: 'KLINK', packCode: '' });
   assert.strictEqual(stockQtyOf({ qty: 2, stockPer: 144 }), 288);
   assert.strictEqual(stockQtyOf({ qty: 5 }), 5);
+});
+
+test('retour: stuks en pallet van hetzelfde artikel worden één terugboeking in stuks', () => {
+  assert.deepStrictEqual(restockLinesOf([{ itemId: 'a', qty: 12 }, { itemId: 'a', qty: 1, stockPer: 144 }, { itemId: 'b', qty: 2, stockPer: 10 }]),
+    [{ itemId: 'a', qty: 156 }, { itemId: 'b', qty: 20 }]);
 });
 
 test('particulier: doos met eigen prijs, pallet is niet te koop; voorraad gaat in stuks', async () => {
