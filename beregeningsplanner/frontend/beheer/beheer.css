@@ -259,3 +259,9 @@ dl.kv dd { margin: 0; }
 .card-form.settings .label-template .row > label.grow { flex: 2 1 260px; }
 .card-form.settings .label-template .row > label.chk { flex: 0 0 auto; }
 .label-template [data-remove-label] { margin-left: auto; }
+
+/* Zakelijke kortingen: per regel een categorie, een percentage en een knop, op één lijn; op een smal scherm onder elkaar. */
+.kd-rule { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; gap: 12px; align-items: end; margin-bottom: 12px; }
+.kd-rule label { display: flex; flex-direction: column; gap: 4px; margin: 0; font-size: 13px; color: var(--muted); min-width: 0; }
+.kd-rule select, .kd-rule input { width: 100%; box-sizing: border-box; min-width: 0; }
+@media (max-width: 640px) { .kd-rule { grid-template-columns: minmax(0, 1fr) auto; } .kd-rule label:first-child { grid-column: 1 / -1; } }

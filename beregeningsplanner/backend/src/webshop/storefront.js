@@ -201,9 +201,10 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   const imageLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 1200, keyFn: (req) => `foto:${clientKey(req)}` });
   router.use((req, res, next) => (req.path.startsWith('/artikelfoto/') ? imageLimiter : limiter)(req, res, next));
   // De catalogus alvast ophalen via de pool (data.warm), zodat een pagina met een koude cache de hoofdthread niet
-  // stilzet. Niet voor bestanden en afbeeldingen, en niet bij een voorbeeld (dat wordt niet onthouden).
+  // stilzet. Ook bij een POST (winkelwagen, afrekenen): die rekent de prijzen met de kortingen uit de catalogus. Niet voor
+  // bestanden en afbeeldingen, en niet bij een voorbeeld (dat wordt niet onthouden).
   router.use((req, res, next) => {
-    if (!data.warm || (req.method !== 'GET' && req.method !== 'HEAD') || /^\/(assets|media|artikelfoto)\//.test(req.path) || isPreview(req)) return next();
+    if (!data.warm || !['GET', 'HEAD', 'POST'].includes(req.method) || /^\/(assets|media|artikelfoto)\//.test(req.path) || isPreview(req)) return next();
     data.warm(tenantId).then(() => next(), () => next());
     return undefined;
   });

@@ -131,19 +131,24 @@ function tierDiscount(tiers, qty) {
 
 /**
  * De stukprijs excl. btw voor een groothandelsklant: de basisprijs min de grootste
- * van de staffelkorting voor dit aantal en de vaste korting van de klant. De kortingen
- * tellen dus niet op elkaar op.
+ * van de staffelkorting voor dit aantal, de vaste korting van de klant en de korting van
+ * de productcategorie. De kortingen tellen dus niet op elkaar op; bij een gelijke korting
+ * gaat de staffel voor de klant en de klant voor de categorie.
  * @param {number} baseExcl De zakelijke prijs per stuk excl. btw.
  * @param {number} qty Het aantal.
  * @param {{ minQty: number, discountPct: number }[]} tiers De staffels van het artikel.
  * @param {number} customerDiscount De vaste korting (%) van de klant.
- * @returns {{ unitExcl: number, discountPct: number, source: string }} De stukprijs, de toegepaste korting en waar die vandaan komt ('staffel', 'klant' of '').
+ * @param {number} [categoryDiscount] De korting (%) van de productcategorie (0 = geen).
+ * @returns {{ unitExcl: number, discountPct: number, source: string }} De stukprijs, de toegepaste korting en waar die vandaan komt ('staffel', 'klant', 'categorie' of '').
  */
-function wholesalePrice(baseExcl, qty, tiers, customerDiscount) {
+function wholesalePrice(baseExcl, qty, tiers, customerDiscount, categoryDiscount = 0) {
   const fromTier = tierDiscount(tiers, qty);
   const fromCustomer = Math.max(0, Number(customerDiscount) || 0);
-  const discountPct = Math.max(fromTier, fromCustomer);
-  return { unitExcl: discountPct > 0 ? round2(baseExcl * (1 - discountPct / 100)) : round2(baseExcl), discountPct, source: discountPct <= 0 ? '' : fromTier >= fromCustomer ? 'staffel' : 'klant' };
+  const fromCategory = Math.max(0, Number(categoryDiscount) || 0);
+  const discountPct = Math.max(fromTier, fromCustomer, fromCategory);
+  let source = '';
+  if (discountPct > 0) source = fromTier === discountPct ? 'staffel' : fromCustomer === discountPct ? 'klant' : 'categorie';
+  return { unitExcl: discountPct > 0 ? round2(baseExcl * (1 - discountPct / 100)) : round2(baseExcl), discountPct, source };
 }
 
 /** Eerste regel van een geplakte lijst die een kopregel is ("Artikelcode;Aantal") en dus wordt overgeslagen. */

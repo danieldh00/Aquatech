@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const { decodeHtmlEntities } = require('./html-entities');
 const Wholesale = require('./wholesale');
 const { DEFAULT_TREE, placeIn } = require('./category-tree');
+const { resolverFor } = require('./category-discounts');
 const ItemDetails = require('../artikelen/item-details');
 
 /** Hoe lang (ms) een opgebouwde catalogus per omgeving wordt hergebruikt. */
@@ -254,9 +255,11 @@ function attributeNamesOf(attributesJson) {
  * @param {object[]} rows Rijen met id, code, name, unit, on_hand, updated_at, sale_price, business_price, vat_rate, categories en image (en optioneel order_pack_size, order_min_qty en price_tiers: de groothandelsvoorwaarden); bij varianten parent_id en variant_values, bij hoofdartikelen has_variants=1 en attributes.
  * @param {Map<string, number>} [soldByCode] Het verkochte aantal per artikelcode (webshopverkopen), voor de meest verkochte producten.
  * @param {object[]} [tree] De categorieboom (standaard die van Aquatechshop.nl); producten waarvan een categorienaam in de boom staat komen in de diepste passende categorie.
+ * @param {{ rules?: object[] }} [discountConfig] De instelling categoryDiscounts: korting per categorie voor zakelijke klanten. Een artikel met een eigen zakelijke prijs krijgt geen categoriekorting; `priceBusiness` is de prijs na korting, `priceBusinessList` die ervoor en `categoryDiscountPct` de korting.
  * @returns {{ products: object[], variantProducts: object[], categories: object[], groups: object[], featured: object[], bestsellers: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image; bij een hoofdartikel met varianten ook `variants` [{ slug, code, label, meta, priceIncl, inStock, image }] en `attributeName`, met de laagste prijs en op voorraad als een variant dat is) en categories (alle categorieën plat: slug, name, count = producten inclusief subcategorieën, ownCount, groupSlug, parentSlug, depth, intro, image, hidden en children = de subcategorieën als objecten) op naam gesorteerd; variantProducts = de varianten als gewoon product (met parentSlug en parentName); groups = hoofdcategorieën met hun bovenste categorieën (slug, name, categories, count, intro, image); featured = uitgelichte producten; bestsellers = de meest verkochte producten met foto (leeg zonder verkopen).
  */
-function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE) {
+function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discountConfig = {}) {
+  const categoryDiscountOf = resolverFor(tree, discountConfig);
   /**
    * Sorteert op naam, bij gelijke namen op artikelcode.
    * @param {object} left Het eerste product of de eerste rij.
@@ -327,10 +330,26 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE) {
       ...placementOf(row.categories), priceExcl, vatRate,
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
       priceBusiness, priceBusinessIncl: Math.round(priceBusiness * (1 + vatRate / 100) * 100) / 100,
+      explicitBusinessPrice: row.business_price != null,
       inStock: stockOf(row), image: imageOf(row), updatedAt: String(row.updated_at || '').slice(0, 10),
       // Groothandelsvoorwaarden (alleen gebruikt op de groothandelspagina's): verpakkingseenheid, minimale afname en staffels.
       packSize: Number(row.order_pack_size) || 1, minimum: Wholesale.minimumOf({ packSize: row.order_pack_size, orderMinQty: row.order_min_qty }), tiers: Wholesale.tiersOf(row.price_tiers),
     };
+  };
+  /**
+   * Past de categoriekorting voor zakelijke klanten toe op een product of variant (na het bepalen van de categorie):
+   * zet `priceBusinessList` (de prijs ervoor), `categoryDiscountPct` en verlaagt `priceBusiness`. Een artikel met een
+   * eigen zakelijke prijs blijft ongemoeid.
+   * @param {object} product Het product (met treeSlug, priceBusiness en explicitBusinessPrice).
+   * @returns {void}
+   */
+  const applyCategoryDiscount = (product) => {
+    const pct = product.explicitBusinessPrice ? 0 : categoryDiscountOf(product.treeSlug);
+    product.priceBusinessList = product.priceBusiness;
+    product.categoryDiscountPct = pct;
+    if (pct <= 0) return;
+    product.priceBusiness = Math.round(product.priceBusiness * (1 - pct / 100) * 100) / 100;
+    product.priceBusinessIncl = Math.round(product.priceBusiness * (1 + product.vatRate / 100) * 100) / 100;
   };
   const standalone = [];
   const variantsOfParent = new Map();
@@ -338,7 +357,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE) {
   for (const row of itemRows) {
     const product = toProduct(row);
     const parent = row.parent_id ? parentRows.get(row.parent_id) : null;
-    if (!parent) { standalone.push(product); continue; }
+    if (!parent) { applyCategoryDiscount(product); standalone.push(product); continue; }
     product.values = variantValuesOf(row.variant_values);
     product.parentName = decodeHtmlEntities(parent.name);
     variantProducts.push(product);
@@ -349,9 +368,11 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE) {
     const parent = parentRows.get(parentId);
     variants.sort((left, right) => Object.values(left.values).join(' ').localeCompare(Object.values(right.values).join(' '), 'nl', { numeric: true }) || compareByName(left, right));
     const attributeNames = attributeNamesOf(parent.attributes);
+    const placement = parent.categories ? placementOf(parent.categories) : { categoryKey: variants[0].categoryKey, categoryName: variants[0].categoryName, groupSlug: variants[0].groupSlug, treeSlug: variants[0].treeSlug };
+    // Een variant ligt in de categorie van zijn hoofdartikel: pas daarmee de categoriekorting toe, vóór de laagste prijs wordt bepaald.
+    for (const variant of variants) { variant.treeSlug = placement.treeSlug; applyCategoryDiscount(variant); }
     const cheapest = variants.reduce((lowest, variant) => (variant.priceIncl < lowest.priceIncl ? variant : lowest), variants[0]);
     const cheapestBusiness = variants.reduce((lowest, variant) => (variant.priceBusiness < lowest.priceBusiness ? variant : lowest), variants[0]);
-    const placement = parent.categories ? placementOf(parent.categories) : { categoryKey: variants[0].categoryKey, categoryName: variants[0].categoryName, groupSlug: variants[0].groupSlug, treeSlug: variants[0].treeSlug };
     const group = {
       slug: uniqueSlug(parent.name, parent.code), code: String(parent.code), name: decodeHtmlEntities(parent.name), unit: String(parent.unit || variants[0].unit),
       ...placement,
@@ -382,7 +403,9 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE) {
   const soldOf = (product) => (product.variants ? product.variants.reduce((total, variant) => total + (soldByCode.get(variant.code) || 0), 0) : soldByCode.get(product.code) || 0);
   const bestsellers = products.filter((product) => product.image && soldOf(product) > 0)
     .sort((left, right) => soldOf(right) - soldOf(left) || compareByName(left, right)).slice(0, FEATURED_COUNT);
-  return { products, variantProducts, categories: categoryList, groups, featured: pickFeatured(products), bestsellers };
+  // Per artikelcode de categoriekorting voor zakelijke klanten (voor de winkelwagen, zie web-orders.js priceCart).
+  const discountByCode = new Map([...standalone, ...variantProducts].filter((product) => product.categoryDiscountPct > 0).map((product) => [product.code, product.categoryDiscountPct]));
+  return { products, variantProducts, categories: categoryList, groups, featured: pickFeatured(products), bestsellers, discountByCode };
 }
 
 // De catalogus van een omgeving (parameters: tenant, tenant): niet-gearchiveerde artikelen met verkoopprijs die naar de
@@ -407,10 +430,10 @@ const soldSince = () => new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOStrin
  * Maakt de gegevenslaag van de webshop, met een korte cache per omgeving
  * (de pagina's zijn openbaar: niet bij elk bezoek een databasequery).
  * @param {object} db De database.
- * @param {{ treeOf?: Function }} [options] treeOf(tenantId, preview) = de categorieboom van een omgeving (uit Beheer; zonder de standaardboom).
+ * @param {{ treeOf?: Function, discountsOf?: Function }} [options] treeOf(tenantId, preview) = de categorieboom van een omgeving (uit Beheer; zonder de standaardboom); discountsOf(tenantId) = de instelling categoryDiscounts (korting per categorie voor zakelijke klanten).
  * @returns {{ catalogOf: Function, warm: Function, detailsOf: Function, clearCache: Function }} catalogOf(tenantId, { preview }), warm(tenantId), detailsOf en clearCache().
  */
-function createStorefrontData(db, { treeOf = () => DEFAULT_TREE } = {}) {
+function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = () => ({}) } = {}) {
   const cache = new Map();
   // Omschrijvingen per productpagina (en de hele feed) met dezelfde bewaartijd als de catalogus, zodat een
   // productpagina met een warme cache geen query kost (1 uit de audit van 1.7.3). Begrensd in aantal.
@@ -430,13 +453,15 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE } = {}) {
      */
     catalogOf(tenantId, { preview = false } = {}) {
       const tree = treeOf(tenantId, preview);
+      const discounts = discountsOf(tenantId);
+      const discountKey = JSON.stringify(discounts);
       const cached = !preview && cache.get(tenantId);
-      // Een andere boom (na publiceren) geeft een nieuwe catalogus, ook binnen de cachetijd.
-      if (cached && cached.until > Date.now() && cached.tree === tree) return cached.catalog;
+      // Een andere boom (na publiceren) of andere kortingen geven een nieuwe catalogus, ook binnen de cachetijd.
+      if (cached && cached.until > Date.now() && cached.tree === tree && cached.discountKey === discountKey) return cached.catalog;
       const rows = db.prepare(CATALOG_SQL).all(tenantId, tenantId);
       const sold = db.prepare(SOLD_SQL).all(tenantId, soldSince());
-      const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])), tree);
-      if (!preview) cache.set(tenantId, { catalog, tree, until: Date.now() + CACHE_MS });
+      const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])), tree, discounts);
+      if (!preview) cache.set(tenantId, { catalog, tree, discountKey, until: Date.now() + CACHE_MS });
       return catalog;
     },
     /**
@@ -449,16 +474,18 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE } = {}) {
     warm(tenantId) {
       if (!db.async) return Promise.resolve();
       const tree = treeOf(tenantId, false);
+      const discounts = discountsOf(tenantId);
+      const discountKey = JSON.stringify(discounts);
       const cached = cache.get(tenantId);
-      if (cached && cached.until > Date.now() && cached.tree === tree) return Promise.resolve();
+      if (cached && cached.until > Date.now() && cached.tree === tree && cached.discountKey === discountKey) return Promise.resolve();
       const running = warming.get(tenantId);
       if (running) return running;
       const started = generation;
       const job = Promise.all([db.async.all(CATALOG_SQL, tenantId, tenantId), db.async.all(SOLD_SQL, tenantId, soldSince())])
         .then(([rows, sold]) => {
           if (started !== generation) return;
-          const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])), tree);
-          cache.set(tenantId, { catalog, tree, until: Date.now() + CACHE_MS });
+          const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])), tree, discounts);
+          cache.set(tenantId, { catalog, tree, discountKey, until: Date.now() + CACHE_MS });
         })
         .finally(() => warming.delete(tenantId));
       warming.set(tenantId, job);

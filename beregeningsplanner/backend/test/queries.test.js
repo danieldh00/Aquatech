@@ -313,6 +313,13 @@ test('webshop: met een warme cache kost een shop-pagina geen query, ook de produ
     counter.reset();
     for (const url of ['/', '/product/sproeier-pro-spr-1/', '/zoeken/?q=spr', '/categorie/overig/']) await visitor.get(url);
     assert.strictEqual(counter.stats.queries, 0, counter.stats.sql.join('\n'));
+    // Met categoriekortingen blijft een warme shop-pagina ook zonder query.
+    const saved = await admin.put('/app/api/admin/category-discounts', { rules: [{ categorySlug: 'druppelslang-toebehoren', discountPct: 10 }] });
+    assert.strictEqual(saved.status, 200);
+    for (const url of ['/', '/product/sproeier-pro-spr-1/']) assert.strictEqual((await visitor.get(url)).status, 200);
+    counter.reset();
+    for (const url of ['/', '/product/sproeier-pro-spr-1/', '/zoeken/?q=spr']) await visitor.get(url);
+    assert.strictEqual(counter.stats.queries, 0, counter.stats.sql.join('\n'));
   } finally {
     server.close();
   }

@@ -44,14 +44,14 @@ function termsText(product) {
 
 /**
  * De prijskolom van een regel: de prijs excl. btw bij de kleinste afname en de staffels eronder.
- * @param {object} product Het artikel (priceBusiness, minimum, tiers, unit).
+ * @param {object} product Het artikel (priceBusinessList = de zakelijke prijs vóór de categoriekorting, categoryDiscountPct, minimum, tiers, unit).
  * @param {number} customerDiscount De vaste korting (%) van de klant.
  * @returns {string} HTML van de cel.
  */
 function priceCell(product, customerDiscount) {
-  const first = Wholesale.wholesalePrice(product.priceBusiness, product.minimum, product.tiers, customerDiscount);
+  const first = Wholesale.wholesalePrice(product.priceBusinessList, product.minimum, product.tiers, customerDiscount, product.categoryDiscountPct);
   const tiers = product.tiers.filter((tier) => tier.minQty > product.minimum).map((tier) => {
-    const priced = Wholesale.wholesalePrice(product.priceBusiness, tier.minQty, product.tiers, customerDiscount);
+    const priced = Wholesale.wholesalePrice(product.priceBusinessList, tier.minQty, product.tiers, customerDiscount, product.categoryDiscountPct);
     return `<small class="tier">vanaf ${tier.minQty}: ${escapeHtml(formatPrice(priced.unitExcl))}</small>`;
   }).join('');
   return `<strong>${escapeHtml(formatPrice(first.unitExcl))}</strong> <small class="muted">per ${escapeHtml(product.unit)}</small>${tiers}`;

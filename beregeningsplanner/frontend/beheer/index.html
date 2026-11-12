@@ -403,6 +403,19 @@
           <div id="w-status" class="muted">Laden…</div>
         </div>
       </section>
+      <section id="tab-shopkortingen" class="tabpane" hidden>
+        <p class="muted small">Geef zakelijke klanten een korting op een hele productcategorie. De korting geldt voor de prijzen in de webshop, de winkelwagen en de bestelling, en dus ook voor de factuur die daaruit volgt. Een subcategorie met een eigen korting gaat voor haar hoofdcategorie. Een artikel met een eigen zakelijke prijs (en een verpakking met een eigen prijs) houdt die prijs: de categoriekorting rekent alleen over de verkoopprijs. Bij een groothandelsklant telt de hoogste van staffelkorting, klantkorting en categoriekorting; ze worden niet opgeteld.</p>
+        <form id="kd-form" class="card-form settings" novalidate>
+          <h3>Kortingen per categorie</h3>
+          <div id="kd-list"></div>
+          <p class="muted small" id="kd-empty" hidden>Nog geen kortingen.</p>
+          <div class="row actions">
+            <button class="btn" type="button" id="kd-add">Categorie toevoegen</button>
+            <button class="btn primary" type="submit">Kortingen opslaan</button>
+          </div>
+          <div id="kd-err" class="err" role="alert"></div>
+        </form>
+      </section>
       <section id="tab-shopinhoud" class="tabpane" hidden>
         <div id="sc-root" class="sc"><p class="muted">Laden…</p></div>
       </section>
@@ -509,6 +522,7 @@
   <script src="webshop.js"></script>
   <script src="webshop-menu.js"></script>
   <script src="webshop-inhoud.js"></script>
+  <script src="kortingen.js"></script>
   <script src="sproeiers.js"></script>
   <script src="rollen.js"></script>
   <script src="aikosten.js"></script>

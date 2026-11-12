@@ -1393,6 +1393,7 @@
     if (section.pane === 'webshop') { loadSettings(section.id); window.BeheerWebshop.load(); }
     // Opnieuw klikken op de al geopende sectie laadt niets opnieuw, zodat niet-opgeslagen menuwijzigingen blijven staan.
     if (section.pane === 'shopinhoud' && activePane !== 'shopinhoud') window.BeheerWebshopInhoud.load();
+    if (section.pane === 'shopkortingen') window.BeheerKortingen.load();
     if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
     if (section.pane === 'kleuren') window.BeheerKleuren.load();
@@ -1463,6 +1464,7 @@
     initMail();
     window.BeheerWebshop.init({ toast });
     window.BeheerWebshopInhoud.init({ toast });
+    window.BeheerKortingen.init({ toast });
     window.BeheerSproeiers.init({ toast });
     window.BeheerRollen.init({ toast, onChange: setRoles });
     window.BeheerAiKosten.init({ toast });
