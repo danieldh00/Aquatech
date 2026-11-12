@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.11.5',
+      date: '2026-11-12',
+      title: 'Webshop-inhoud laadt weer',
+      items: [
+        { text: 'Beheer → Webshop → Webshop-inhoud gaf een foutmelding bij het laden. Dat is opgelost: ontbrekende blokken van de startpagina worden aangevuld met de standaard.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.11.4',
       date: '2026-11-12',
       title: 'Leveranciersdocument inlezen',

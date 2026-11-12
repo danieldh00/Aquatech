@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.5
+
+Fix: Beheer > Webshop > Webshop-inhoud gaf *Kan de webshop-inhoud niet laden: Cannot read properties of undefined (reading 'items')*. Een opgeslagen versie van de startpagina zonder een van de blokken (banners, kolommen, voordelen of merken) werd ongewijzigd naar het scherm gestuurd, dat `site.<blok>.items` verwacht. `view()` in `webshop/shop-content.js` loopt concept en gepubliceerde versie nu door `normalizeSite` (ontbrekende blokken = de standaard, zoals de shop zelf al deed). Regressietest in `shop-content.test.js`. Geen migratie.
+
 ## 1.11.4
 
 Leveranciersdocument inlezen en direct inboeken (punt 17 van bundel F, deel 4). Migratie 64.
