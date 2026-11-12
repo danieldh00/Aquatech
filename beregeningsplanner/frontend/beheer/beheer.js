@@ -899,12 +899,16 @@
    */
   const parseDecimal = (text) => (String(text).trim() === '' ? NaN : Number(String(text).trim().replace(',', '.')));
 
+  /** De bezorgmethodes van de webshop met hun titel in het verzendformulier (zelfde sleutels als shipping.js). */
+  const SHIPPING_CARRIERS = [['dpd', 'DPD'], ['pallet', 'Pallet'], ['eigen', 'Eigen transport']];
+
   /**
-   * Tekent een regel (land) in het verzendformulier.
+   * Tekent een regel (land) in het verzendformulier bij een bezorgmethode.
+   * @param {HTMLElement} zones De lijst met landen van die methode.
    * @param {{ country: string, name: string, freeFrom: number, tiers: { upToGrams: number, price: number }[] }} zone Het land met zijn tarieven.
    * @returns {void}
    */
-  function addShippingZone(zone) {
+  function addShippingZone(zones, zone) {
     const row = document.createElement('div');
     row.className = 'ship-zone';
     row.innerHTML = `<input data-f="country" maxlength="2" size="3" placeholder="NL" aria-label="Landcode" value="${esc(zone.country)}">
@@ -917,12 +921,42 @@
      * @returns {void}
      */
     row.querySelector('[data-remove]').onclick = () => row.remove();
-    $('#s-shipping-zones').appendChild(row);
+    zones.appendChild(row);
+  }
+
+  /**
+   * Tekent het blok van één bezorgmethode: aan/uit, de naam bij het afrekenen en de tarieven per land.
+   * @param {string} key De methode (dpd, pallet of eigen).
+   * @param {string} title De titel van het blok.
+   * @param {{ enabled: boolean, label: string, zones: object[] }} carrier De opgeslagen instelling van de methode.
+   * @returns {HTMLElement} Het blok (fieldset).
+   */
+  function shippingCarrierBlock(key, title, carrier) {
+    const block = document.createElement('fieldset');
+    block.className = 'ship-carrier';
+    block.dataset.carrier = key;
+    block.innerHTML = `<legend>${esc(title)}</legend>
+      <div class="form-grid">
+        <label class="field chk"><input type="checkbox" data-c="enabled"> <span>${esc(title)} aanbieden</span></label>
+        <label class="field">Naam bij het afrekenen<input data-c="label" maxlength="60"></label>
+      </div>
+      <div data-zones></div>
+      <p><button type="button" class="btn" data-add-zone>Land toevoegen</button></p>`;
+    block.querySelector('[data-c="enabled"]').checked = carrier.enabled;
+    block.querySelector('[data-c="label"]').value = carrier.label;
+    const zones = block.querySelector('[data-zones]');
+    for (const zone of carrier.zones) addShippingZone(zones, zone);
+    /**
+     * Voegt een leeg land toe aan de tarieven van deze methode.
+     * @returns {void}
+     */
+    block.querySelector('[data-add-zone]').onclick = () => addShippingZone(zones, { country: '', name: '', freeFrom: 0, tiers: [] });
+    return block;
   }
 
   /**
    * Vult het verzendformulier met de opgeslagen instelling.
-   * @param {object} config De instelling shopShipping (ophalen en dpd).
+   * @param {object} config De instelling shopShipping (afhalen, defaultWeightGrams en per bezorgmethode aan/uit, naam en landen).
    * @returns {void}
    */
   function renderShipping(config) {
@@ -931,19 +965,19 @@
     form.pickupEnabled.checked = config.pickup.enabled;
     form.pickupLabel.value = config.pickup.label;
     form.pickupNote.value = config.pickup.note;
-    form.dpdEnabled.checked = config.dpd.enabled;
-    form.defaultWeightGrams.value = config.dpd.defaultWeightGrams;
-    $('#s-shipping-zones').innerHTML = '';
-    for (const zone of config.dpd.zones) addShippingZone(zone);
+    form.defaultWeightGrams.value = config.defaultWeightGrams;
+    const container = $('#s-shipping-carriers');
+    container.innerHTML = '';
+    for (const [key, title] of SHIPPING_CARRIERS) container.appendChild(shippingCarrierBlock(key, title, config[key]));
   }
 
   /**
-   * Leest de verzendinstelling uit het formulier.
-   * @returns {{ pickup: object, dpd: object }} De instelling; een weegklasse die niet te lezen is geeft een fout.
+   * Leest de tarieven per land van één bezorgmethode uit het formulier.
+   * @param {HTMLElement} block Het blok van de methode.
+   * @returns {{ country: string, name: string, freeFrom: number, tiers: object[] }[]} De landen; een weegklasse die niet te lezen is geeft een fout.
    */
-  function readShipping() {
-    const form = $('#s-shipping');
-    const zones = [...$('#s-shipping-zones').children].map((row) => {
+  function readShippingZones(block) {
+    return [...block.querySelector('[data-zones]').children].map((row) => {
       /**
        * Leest een veld van dit land.
        * @param {string} name Naam van het veld (data-f).
@@ -960,10 +994,23 @@
       if (!Number.isFinite(freeFrom)) throw new Error('Gratis vanaf moet een bedrag zijn.');
       return { country: field('country').trim().toUpperCase(), name: field('name').trim(), freeFrom, tiers };
     });
-    return {
+  }
+
+  /**
+   * Leest de verzendinstelling uit het formulier.
+   * @returns {object} De instelling (afhalen, standaardgewicht en per bezorgmethode aan/uit, naam en landen); een weegklasse die niet te lezen is geeft een fout.
+   */
+  function readShipping() {
+    const form = $('#s-shipping');
+    const config = {
       pickup: { enabled: form.pickupEnabled.checked, label: form.pickupLabel.value, note: form.pickupNote.value },
-      dpd: { enabled: form.dpdEnabled.checked, defaultWeightGrams: Number(form.defaultWeightGrams.value || 0), zones },
+      defaultWeightGrams: Number(form.defaultWeightGrams.value || 0),
     };
+    for (const [key] of SHIPPING_CARRIERS) {
+      const block = form.querySelector(`[data-carrier="${key}"]`);
+      config[key] = { enabled: block.querySelector('[data-c="enabled"]').checked, label: block.querySelector('[data-c="label"]').value, zones: readShippingZones(block) };
+    }
+    return config;
   }
 
   /** Koppelt de formulieren en knoppen van Instellingen. */
@@ -1053,11 +1100,6 @@
       saveSettings(paymentForm, patch, 'Betalen opgeslagen');
     };
     const shippingForm = $('#s-shipping');
-    /**
-     * Voegt een leeg land toe aan de verzendtarieven.
-     * @returns {void}
-     */
-    $('#s-shipping-add').onclick = () => addShippingZone({ country: '', name: '', freeFrom: 0, tiers: [] });
     /**
      * Slaat de verzendinstelling op.
      * @param {SubmitEvent} event het verzenden

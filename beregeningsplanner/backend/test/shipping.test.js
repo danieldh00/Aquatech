@@ -42,7 +42,7 @@ test('optionsFor: tarief per gewicht, gratis vanaf, te zwaar en onbekend land', 
    * @returns {object} De DPD-optie.
    */
   const dpd = (basket) => Shipping.optionsFor(config, basket).find((option) => option.method === 'dpd');
-  assert.strictEqual(Shipping.optionsFor(config, { country: 'NL', weightGrams: 100, subtotal: 10 })[0].method, 'ophalen');
+  assert.deepStrictEqual(Shipping.optionsFor(config, { country: 'NL', weightGrams: 100, subtotal: 10 }).map((option) => option.method), ['dpd', 'ophalen'], 'afhalen staat achteraan');
   assert.strictEqual(dpd({ country: 'NL', weightGrams: 1500, subtotal: 10 }).price, 6.95);
   assert.strictEqual(dpd({ country: 'NL', weightGrams: 2001, subtotal: 10 }).price, 8.95);
   assert.strictEqual(dpd({ country: 'NL', weightGrams: 2001, subtotal: 150 }).free, true);
@@ -65,9 +65,10 @@ test('weightOf, validPostcode en trackingOf', () => {
 
 /**
  * Hoofdtenant met beheerder, webshop met bestellen aan en artikelen met gewicht.
+ * @param {?object} [shipping] De verzendinstelling; zonder de standaardinstelling van deze tests (afhalen en DPD in Nederland en België).
  * @returns {Promise<object>} base, admin, vreemd en shopper().
  */
-async function setup() {
+async function setup(shipping = null) {
   const db = openDb();
   const store = createStore(db);
   const main = store.ensureTenant().id;
@@ -77,7 +78,7 @@ async function setup() {
   const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, mailerFor: () => ({ configured: () => false, send: async () => {} }) }));
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  const saved = await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
+  const saved = await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: shipping || {
     pickup: { enabled: true, label: 'Ophalen in Nunspeet', note: 'Ma-vr 8-17 uur' },
     dpd: { enabled: true, defaultWeightGrams: 1000, zones: [
       { country: 'NL', name: 'Nederland', freeFrom: 100, tiers: [{ upToGrams: 2000, price: 6.95 }, { upToGrams: 10000, price: 11.95 }] },
@@ -215,4 +216,141 @@ test('verzendinstelling: alleen de hoofdtenant en het gewicht van een artikel', 
   assert.strictEqual((await admin.put(`/app/api/stock/items/${item.id}`, { weightGrams: -5 })).status, 400);
   const own = await vreemd.put('/app/api/admin/settings', { shopShipping: { pickup: { enabled: false }, dpd: { enabled: false } } });
   assert.notStrictEqual(own.status, 200, 'een andere organisatie mag de webshopverzending niet instellen');
+});
+
+test('sanitizeShipping: pallet en eigen transport staan uit, afhalen heet standaard Afhalen in Nunspeet', () => {
+  const defaults = Shipping.sanitizeShipping({});
+  assert.strictEqual(defaults.pickup.label, 'Afhalen in Nunspeet');
+  assert.deepStrictEqual([defaults.dpd.enabled, defaults.pallet.enabled, defaults.eigen.enabled], [true, false, false]);
+  // Alleen afhalen ingevuld: DPD blijft aan (zoals altijd), pallet en eigen transport alleen als ze expres aan gaan.
+  const partial = Shipping.sanitizeShipping({ pickup: { enabled: true, label: '  ' }, pallet: { enabled: true, label: ' Pallet Nunspeet ', zones: [{ country: 'nl', freeFrom: 0, tiers: [{ upToGrams: 500000, price: 95 }] }] }, eigen: { enabled: 'ja' } });
+  assert.strictEqual(partial.pickup.label, 'Afhalen in Nunspeet');
+  assert.strictEqual(partial.dpd.enabled, true);
+  assert.strictEqual(partial.pallet.label, 'Pallet Nunspeet');
+  assert.deepStrictEqual(partial.pallet.zones, [{ country: 'NL', name: 'Nederland', freeFrom: 0, tiers: [{ upToGrams: 500000, price: 95 }] }]);
+  assert.strictEqual(partial.eigen.enabled, false, 'alleen echt true zet een methode aan');
+  // Het standaardgewicht staat op het hoogste niveau en valt terug op de oude plek bij DPD.
+  assert.strictEqual(Shipping.sanitizeShipping({ defaultWeightGrams: 250, pickup: {} }).defaultWeightGrams, 250);
+  assert.strictEqual(Shipping.sanitizeShipping({ dpd: { defaultWeightGrams: 300 } }).defaultWeightGrams, 300);
+  assert.strictEqual(Shipping.sanitizeShipping({ pickup: {}, defaultWeightGrams: -4 }).defaultWeightGrams, 1000);
+});
+
+test('optionsFor, countriesOf en defaultMethod met meer bezorgmethodes', () => {
+  const config = Shipping.sanitizeShipping({
+    pickup: { enabled: true },
+    dpd: { enabled: true, zones: [{ country: 'NL', freeFrom: 150, tiers: [{ upToGrams: 5000, price: 8 }] }] },
+    pallet: { enabled: true, zones: [{ country: 'NL', tiers: [{ upToGrams: 500000, price: 95 }] }, { country: 'DE', tiers: [{ upToGrams: 500000, price: 140 }] }] },
+    eigen: { enabled: true, label: 'Eigen transport Veluwe', zones: [{ country: 'NL', freeFrom: 500, tiers: [{ upToGrams: 100000, price: 45 }] }] },
+  });
+  assert.deepStrictEqual(Shipping.countriesOf(config).map((country) => country.code), ['NL', 'DE'], 'elk land één keer, ook als meer methodes er komen');
+  const nl = Shipping.optionsFor(config, { country: 'NL', weightGrams: 20000, subtotal: 600 });
+  assert.deepStrictEqual(nl.map((option) => option.method), ['dpd', 'pallet', 'eigen', 'ophalen'], 'afhalen staat achteraan');
+  const byMethod = Object.fromEntries(nl.map((option) => [option.method, option]));
+  assert.strictEqual(byMethod.dpd.available, false);
+  assert.match(byMethod.dpd.reason, /te zwaar/);
+  assert.deepStrictEqual([byMethod.pallet.price, byMethod.pallet.free], [95, false]);
+  assert.deepStrictEqual([byMethod.eigen.price, byMethod.eigen.free, byMethod.eigen.label], [0, true, 'Eigen transport Veluwe'], 'gratis vanaf geldt per methode');
+  assert.deepStrictEqual([byMethod.ophalen.price, byMethod.ophalen.available], [0, true]);
+  const de = Shipping.optionsFor(config, { country: 'DE', weightGrams: 1000, subtotal: 10 });
+  assert.deepStrictEqual(de.filter((option) => option.available).map((option) => option.method), ['pallet', 'ophalen']);
+  // Afhalen is nooit de voorkeur zolang er een bezorgmethode kan; wat de klant al koos blijft staan.
+  assert.strictEqual(Shipping.defaultMethod(nl), 'pallet', 'DPD kan niet, dus de volgende bezorgmethode');
+  assert.strictEqual(Shipping.defaultMethod(nl, 'ophalen'), 'ophalen');
+  assert.strictEqual(Shipping.defaultMethod(nl, 'dpd'), 'pallet', 'een gevraagde methode die niet kan wordt genegeerd');
+  assert.strictEqual(Shipping.defaultMethod(nl, 'onzin'), 'pallet');
+  assert.strictEqual(Shipping.defaultMethod([{ method: 'ophalen', available: true }]), 'ophalen', 'alleen afhalen mogelijk');
+  assert.strictEqual(Shipping.defaultMethod([{ method: 'dpd', available: false }]), '');
+  assert.strictEqual(Shipping.defaultMethod([]), '');
+});
+
+test('afrekenen: keuzelijst met verzendmethodes, afhalen niet vooraf gekozen', async () => {
+  const { base, shopper } = await setup({
+    pickup: { enabled: true, note: 'Ma-vr 8-17 uur' },
+    dpd: { enabled: true, zones: [{ country: 'NL', freeFrom: 0, tiers: [{ upToGrams: 5000, price: 8 }] }] },
+    pallet: { enabled: true, zones: [{ country: 'NL', freeFrom: 0, tiers: [{ upToGrams: 500000, price: 95 }] }] },
+    eigen: { enabled: true, zones: [{ country: 'NL', freeFrom: 0, tiers: [{ upToGrams: 500000, price: 45 }] }] },
+  });
+  const customer = await shopper();
+  await addToCart(base, customer, 'LICHT', 2);
+  const page = await customer.get('/afrekenen/');
+  const select = /<select name="shippingMethod" required>([\s\S]*?)<\/select>/.exec(page.text);
+  assert.ok(select, 'een keuzelijst in plaats van keuzerondjes');
+  assert.doesNotMatch(page.text, /type="radio" name="shippingMethod"/);
+  const values = [...select[1].matchAll(/<option value="([a-z]+)"([^>]*)>([^<]*)</g)];
+  assert.deepStrictEqual(values.map((match) => match[1]), ['dpd', 'pallet', 'eigen', 'ophalen']);
+  assert.deepStrictEqual(values.filter((match) => /\bselected\b/.test(match[2])).map((match) => match[1]), ['dpd'], 'afhalen is niet vooraf gekozen');
+  assert.match(values[3][3], /Afhalen in Nunspeet – Gratis/);
+  assert.match(values[1][3], /Bezorging per pallet – € 95,00/);
+  assert.match(values[2][3], /Eigen transport – € 45,00/);
+  assert.match(page.text, /data-method-note="Ma-vr 8-17 uur"/, 'de toelichting van afhalen staat bij die optie');
+  // Een eerdere keuze van de klant blijft staan, ook afhalen.
+  const keeps = await postForm(base, customer, '/afrekenen/', { action: 'update', country: 'NL', shippingMethod: 'ophalen' });
+  assert.match(keeps.text, /<option value="ophalen" selected/);
+  const eigen = await postForm(base, customer, '/afrekenen/', { action: 'update', country: 'NL', shippingMethod: 'eigen' });
+  assert.match(eigen.text, /<option value="eigen" selected/);
+  assert.match(eigen.text, /data-total="\d+(\.\d+)?"/);
+  // Een onbekende of niet beschikbare methode geeft de eerste bezorgmethode, nooit afhalen.
+  const unknown = await postForm(base, customer, '/afrekenen/', { action: 'update', country: 'NL', shippingMethod: 'post' });
+  assert.match(unknown.text, /<option value="dpd" selected/);
+  const script = await customer.get('/assets/afrekenen.js');
+  assert.doesNotMatch(script.text, /input\[name="shippingMethod"\]/, 'het script leest de keuzelijst, niet de keuzerondjes');
+});
+
+test('afrekenen: alleen afhalen mogelijk geeft afhalen als enige keuze', async () => {
+  const { base, shopper } = await setup({ pickup: { enabled: true }, dpd: { enabled: false } });
+  const customer = await shopper();
+  await addToCart(base, customer, 'LICHT', 1);
+  const page = await customer.get('/afrekenen/');
+  assert.match(page.text, /<option value="ophalen" selected/);
+  assert.doesNotMatch(page.text, /<option value="dpd"/);
+});
+
+test('bestellen met pallet en eigen transport: tarief, verzendregel, adres verplicht en geen volgcode', async () => {
+  const { base, admin, shopper } = await setup({
+    pickup: { enabled: true },
+    dpd: { enabled: true, zones: [{ country: 'NL', freeFrom: 0, tiers: [{ upToGrams: 2000, price: 6.95 }] }] },
+    pallet: { enabled: true, label: 'Pallet', zones: [{ country: 'NL', freeFrom: 1000, tiers: [{ upToGrams: 20000, price: 95 }, { upToGrams: 500000, price: 120 }] }, { country: 'DE', freeFrom: 0, tiers: [{ upToGrams: 500000, price: 140 }] }] },
+    eigen: { enabled: true, label: 'Eigen transport', zones: [{ country: 'NL', freeFrom: 0, tiers: [{ upToGrams: 100000, price: 45 }] }] },
+  });
+  const customer = await shopper();
+  // Pallet: 5 × 12 kg = 60 kg valt in de zwaardere klasse (€ 120 incl. btw); DPD kan niet meer.
+  await addToCart(base, customer, 'ZWAAR', 5);
+  const refused = await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'dpd', country: 'NL', action: 'place' });
+  assert.strictEqual(refused.status, 400);
+  assert.match(refused.text, /te zwaar/);
+  const pallet = await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'pallet', country: 'NL', action: 'place' });
+  assert.strictEqual(pallet.status, 303, pallet.text);
+  const palletOrder = (await admin.get('/app/api/admin/web-orders')).body.items[0];
+  const palletDetail = (await admin.get(`/app/api/admin/web-orders/${palletOrder.id}`)).body.order;
+  assert.deepStrictEqual([palletDetail.shipping.method, palletDetail.shipping.label, palletDetail.shipping.price, palletDetail.shipping.free, palletDetail.shipping.weightGrams], ['pallet', 'Pallet', 120, false, 60000]);
+  assert.strictEqual(palletDetail.total, 5 * 20 * 1.21 + 120, 'artikelen incl. btw plus de verzendregel');
+  assert.strictEqual(palletDetail.address.street, 'Tuinstraat 1', 'bij pallet is een afleveradres nodig');
+  assert.strictEqual(palletDetail.shipping.tracking, null);
+  // Eigen transport zonder straat: het adres is verplicht, afhalen niet.
+  await addToCart(base, customer, 'LICHT', 1);
+  const noAddress = await postCheckout(base, customer, { name: 'Piet Tuin', email: 'piet@voorbeeld.nl', shippingMethod: 'eigen', country: 'NL', action: 'place' });
+  assert.strictEqual(noAddress.status, 400);
+  const eigen = await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'eigen', country: 'NL', action: 'place' });
+  assert.strictEqual(eigen.status, 303, eigen.text);
+  const eigenOrder = (await admin.get('/app/api/admin/web-orders')).body.items.find((order) => order.id !== palletOrder.id);
+  const eigenDetail = (await admin.get(`/app/api/admin/web-orders/${eigenOrder.id}`)).body.order;
+  assert.deepStrictEqual([eigenDetail.shipping.method, eigenDetail.shipping.price], ['eigen', 45]);
+  assert.strictEqual(eigenDetail.total, 12.1 + 45);
+  // Een volgcode hoort alleen bij DPD.
+  await admin.post(`/app/api/admin/web-orders/${eigenOrder.id}/status`, { status: 'verzonden' });
+  assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${eigenOrder.id}/tracking`, { trackingCode: '015012345678' })).status, 409);
+  // Een land met alleen pallet staat in de landenlijst; een methode zonder tarief voor het land kan niet.
+  await addToCart(base, customer, 'LICHT', 1);
+  const german = await customer.get('/afrekenen/');
+  assert.match(german.text, /<option value="DE"/);
+  const noRate = await postCheckout(base, customer, { ...FIELDS, postcode: '10115', shippingMethod: 'eigen', country: 'DE', action: 'place' });
+  assert.strictEqual(noRate.status, 400);
+  assert.match(noRate.text, /niet mogelijk/);
+  const abroad = await postCheckout(base, customer, { ...FIELDS, postcode: '10115', shippingMethod: 'pallet', country: 'DE', action: 'place' });
+  assert.strictEqual(abroad.status, 303, abroad.text);
+  // Het factuuradres in een ander land mag alleen een land zijn waarnaar bezorgd wordt, ook bij pallet.
+  await addToCart(base, customer, 'LICHT', 1);
+  const strangeBilling = await postCheckout(base, customer, { ...FIELDS, shippingMethod: 'pallet', country: 'NL', deliveryForm: '1', billingCountry: 'FR', deliveryStreet: 'Tuinstraat 1', deliveryPostcode: '8071 AB', deliveryCity: 'Nunspeet', action: 'place' });
+  assert.strictEqual(strangeBilling.status, 400);
+  assert.match(strangeBilling.text, /land voor het factuuradres/);
 });

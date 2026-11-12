@@ -205,6 +205,9 @@ dl.kv dd { margin: 0; }
 
 .ship-zone { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .ship-zone input[data-f="tiers"] { flex: 1 1 260px; }
+.ship-carrier { border: 1px solid var(--line); border-radius: var(--radius); margin: 0 0 14px; padding: 10px 14px 4px; min-width: 0; }
+.ship-carrier legend { padding: 0 6px; font-weight: 600; color: var(--at-navy); }
+.ship-carrier .form-grid { margin-bottom: 10px; }
 
 /* Webshopbestellingen en -retouren: artikelnaam en artikelnummer onder elkaar, tekstvak en knoppen in dezelfde stijl als de rest van Beheer. */
 #wo-detail table .sub, #wr-detail table .sub { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }

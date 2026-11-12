@@ -694,7 +694,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const quote = orders.shippingQuote(cart, config, country);
         const asking = String(input.shippingMethod || '');
         const available = quote.options.filter((option) => option.available);
-        const method = available.some((option) => option.method === asking) ? asking : available.length ? available[0].method : '';
+        const method = Shipping.defaultMethod(quote.options, asking);
         const chosen = available.find((option) => option.method === method);
         const group = cart.pricesExcl ? 'zakelijk' : '';
         const vatNumber = Vat.normalizeVatNumber(input.vatNumber);
@@ -756,7 +756,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           let placed = body;
           let addressUnverified = false;
           let deliveryUnverified = false;
-          if (addressGuard && String(body.shippingMethod || '') === 'dpd') {
+          if (addressGuard && Shipping.CARRIERS.includes(String(body.shippingMethod || ''))) {
             const deliveryCountry = String(body.country || 'NL').toUpperCase();
             const same = deliverySameOf(body);
             const parts = [{ delivery: false, country: same ? deliveryCountry : String(body.billingCountry || 'NL').toUpperCase() }];
