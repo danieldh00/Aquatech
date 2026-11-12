@@ -178,7 +178,7 @@
        */
       slipButton.onclick = async () => {
         slipButton.disabled = true;
-        try { await window.BeheerTePicken.downloadPdf(`/${encodeURIComponent(order.id)}/packing-slip`); } catch (error) { toast(error.message, true); }
+        try { await window.BeheerTePicken.downloadPdf(`/${encodeURIComponent(order.id)}/packing-slip`, { method: 'POST', body: {} }); } catch (error) { toast(error.message, true); }
         slipButton.disabled = false;
       };
     }

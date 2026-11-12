@@ -122,7 +122,7 @@ test('Te picken, pakbon per bestelling en alles in één PDF', async () => {
   assert.strictEqual(third.pickup, true);
   assert.match(first.address, /Tuinstraat 1/);
 
-  const single = await admin.get(`/app/api/admin/web-orders/${first.id}/packing-slip`);
+  const single = await admin.post(`/app/api/admin/web-orders/${first.id}/packing-slip`, {});
   assert.strictEqual(single.status, 200);
   assert.match(single.type, /application\/pdf/);
   assert.match(single.headers.get('content-disposition'), /Pakbon WEB-\d{4}-0001\.pdf/);
@@ -151,9 +151,9 @@ test('Te picken: verzonden en geannuleerde bestellingen staan er niet bij', asyn
   assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${cancel.id}/status`, { status: 'geannuleerd' })).status, 200);
   const items = (await admin.get('/app/api/admin/web-orders/to-pick')).body.items;
   assert.deepStrictEqual(items.map((item) => item.id), [keep.id]);
-  const cancelled = await admin.get(`/app/api/admin/web-orders/${cancel.id}/packing-slip`);
+  const cancelled = await admin.post(`/app/api/admin/web-orders/${cancel.id}/packing-slip`, {});
   assert.strictEqual(cancelled.status, 404, 'van een geannuleerde bestelling geen pakbon');
-  const shipped = await admin.get(`/app/api/admin/web-orders/${ship.id}/packing-slip`);
+  const shipped = await admin.post(`/app/api/admin/web-orders/${ship.id}/packing-slip`, {});
   assert.strictEqual(shipped.status, 200, 'een verzonden bestelling kan opnieuw worden afgedrukt');
 });
 
@@ -165,18 +165,21 @@ test('pakbonnen: ongeldige invoer, andere organisatie en ontbrekend recht', asyn
   assert.strictEqual((await admin.post('/app/api/admin/web-orders/packing-slips', {})).status, 400);
   assert.strictEqual((await admin.post('/app/api/admin/web-orders/packing-slips', { ids: Array.from({ length: MAX_SLIPS + 1 }, (_, i) => `id-${i}`) })).status, 400);
   assert.strictEqual((await admin.post('/app/api/admin/web-orders/packing-slips', { ids: ['bestaat-niet'] })).status, 404);
-  assert.strictEqual((await admin.get('/app/api/admin/web-orders/bestaat-niet/packing-slip')).status, 404);
+  assert.strictEqual((await admin.post('/app/api/admin/web-orders/bestaat-niet/packing-slip', {})).status, 404);
   // Een andere organisatie ziet de bestelling niet: 404, en haar lijst is leeg.
-  assert.strictEqual((await vreemd.get(`/app/api/admin/web-orders/${item.id}/packing-slip`)).status, 404);
+  assert.strictEqual((await vreemd.post(`/app/api/admin/web-orders/${item.id}/packing-slip`, {})).status, 404);
   assert.strictEqual((await vreemd.post('/app/api/admin/web-orders/packing-slips', { ids: [item.id] })).status, 404);
   assert.deepStrictEqual((await vreemd.get('/app/api/admin/web-orders/to-pick')).body.items, []);
   // Een klant en een bezoeker hebben geen toegang.
   const customer = await shopper();
   for (const client of [customer, createClient(base)]) {
     assert.ok([401, 403].includes((await client.get('/app/api/admin/web-orders/to-pick')).status));
-    assert.ok([401, 403].includes((await client.get(`/app/api/admin/web-orders/${item.id}/packing-slip`)).status));
+    assert.ok([401, 403].includes((await client.post(`/app/api/admin/web-orders/${item.id}/packing-slip`, {})).status));
     assert.ok([401, 403].includes((await client.post('/app/api/admin/web-orders/packing-slips', { ids: [item.id] })).status));
   }
   // Niets is vastgelegd door de afgewezen verzoeken.
+  assert.strictEqual((await admin.get('/app/api/admin/web-orders/to-pick')).body.items[0].printedAt, null);
+  // Een GET schrijft niets: de pakbon van één bestelling is alleen via POST te maken.
+  assert.notStrictEqual((await admin.get(`/app/api/admin/web-orders/${item.id}/packing-slip`)).status, 200);
   assert.strictEqual((await admin.get('/app/api/admin/web-orders/to-pick')).body.items[0].printedAt, null);
 });

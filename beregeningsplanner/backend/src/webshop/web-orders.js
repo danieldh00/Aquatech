@@ -194,7 +194,7 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', billingCountry 
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
  * @param {{ stock: object, categoryDiscountsOf?: Function }} deps De voorraadopslag (reserveren en afboeken) en categoryDiscountsOf(tenantId) = per artikelcode de categoriekorting (%) voor zakelijke klanten (zonder: geen).
- * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, listToPick: Function, getMany: Function, pickable: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
+ * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, listToPick: Function, getMany: Function, pickable: Function, markPackingSlipsPrinted: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
  */
 function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() }) {
   const shippedHooks = [];
@@ -661,6 +661,27 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
   }
 
   /**
+   * Legt vast dat de pakbonnen van de bestellingen zijn afgedrukt (`data.packingSlip`: moment, wie en hoe vaak), alles of niets in één transactie.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string[]} ids Ids van de bestellingen (onbekende of van een andere omgeving worden overgeslagen).
+   * @param {string} printedBy Naam van wie afdrukte.
+   * @returns {void}
+   */
+  function markPackingSlipsPrinted(tenantId, ids, printedBy) {
+    const wanted = Array.from(new Set(ids.map(String)));
+    if (!wanted.length) return;
+    const timestamp = currentTimestamp();
+    transaction(db, () => {
+      const rows = prepare(`SELECT id, data FROM web_orders WHERE tenant_id = ? AND id IN (${wanted.map(() => '?').join(', ')})${isPg(db) ? ' FOR UPDATE' : ''}`).all(tenantId, ...wanted);
+      for (const row of rows) {
+        const data = JSON.parse(row.data);
+        data.packingSlip = { printedAt: timestamp, printedBy: clean(printedBy, 120), count: (Number(data.packingSlip && data.packingSlip.count) || 0) + 1 };
+        prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, row.id);
+      }
+    });
+  }
+
+  /**
    * Zet een bestelling op een nieuwe status. Verzonden boekt de artikelen af
    * van de voorraad, Geannuleerd laat de reservering vervallen.
    * @param {string} tenantId Id van de omgeving.
@@ -874,7 +895,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     return { released };
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, onShipped, onCancelled, onTracking };
+  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, onShipped, onCancelled, onTracking };
 }
 
 /**

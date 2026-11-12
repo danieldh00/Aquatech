@@ -284,13 +284,7 @@ function createPackingSlips(db, { orders, settingsFor, colorsOf = () => ({}) }) 
     if (!found.length) return { error: 'Geen bestelling gevonden om een pakbon van te maken.', status: 404 };
     const settings = settingsFor(tenantId);
     const pdf = packingSlipsPdf(found, { profile: settings.get('quoteProfile'), colors: colorsOf(tenantId), locations: locationsOf(tenantId, found) });
-    if (markPrinted) {
-      const timestamp = new Date().toISOString();
-      for (const order of found) {
-        const previous = order.packingSlip || {};
-        orders.updateData(tenantId, order.id, { packingSlip: { printedAt: timestamp, printedBy: user ? user.display_name || user.displayName || '' : '', count: (Number(previous.count) || 0) + 1 } });
-      }
-    }
+    if (markPrinted) orders.markPackingSlipsPrinted(tenantId, found.map((order) => order.id), user ? user.display_name || user.displayName || '' : '');
     return { pdf, fileName: slipFileName(found), orders: found };
   }
 
@@ -320,8 +314,8 @@ function registerPackingSlipRoutes(app, { slips, audit, requireJson }) {
     res.json({ items: slips.toPick(req.tenantId) });
   });
 
-  // Eén pakbon (opnieuw afdrukken telt ook).
-  app.get('/api/admin/web-orders/:id/packing-slip', (req, res) => {
+  // Eén pakbon (opnieuw afdrukken telt ook). Een POST, want het afdrukken wordt vastgelegd.
+  app.post('/api/admin/web-orders/:id/packing-slip', requireJson, (req, res) => {
     const out = slips.pdfFor(req.tenantId, [req.params.id], { user: req.user });
     if (out.error) return res.status(out.status || 400).json({ error: 'packing_slip_failed', message: out.error });
     audit(req, 'webshop_pakbon', { number: out.orders[0].number });
