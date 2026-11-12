@@ -32,9 +32,10 @@
         <h1>Webshopbestellingen</h1>
         <p class="muted">Bestellingen, retouren en de rapportage van de eigen webshop (startpagina /).</p>
       </section>
-      <nav class="tabs" role="tablist" aria-label="Bestellingen, te picken, retouren en rapportage">
+      <nav class="tabs" role="tablist" aria-label="Bestellingen, te picken, backorders, retouren en rapportage">
         <button class="tab active" data-tab="bestellingen" role="tab" id="t-bestellingen" aria-selected="true" aria-controls="tab-bestellingen">Bestellingen</button>
         <button class="tab" data-tab="te-picken" role="tab" id="t-te-picken" tabindex="-1" aria-selected="false" aria-controls="tab-te-picken">Te picken</button>
+        <button class="tab" data-tab="backorders" role="tab" id="t-backorders" tabindex="-1" aria-selected="false" aria-controls="tab-backorders">Backorders</button>
         <button class="tab" data-tab="retouren" role="tab" id="t-retouren" tabindex="-1" aria-selected="false" aria-controls="tab-retouren">Retouren</button>
         <button class="tab" data-tab="rapportage" role="tab" id="t-rapportage" tabindex="-1" aria-selected="false" aria-controls="tab-rapportage">Rapportage</button>
       </nav>
@@ -58,6 +59,14 @@
         <p class="muted small">Nieuwe bestellingen die klaarstaan om te picken (online betaalde alleen als ze betaald zijn), oudste eerst. <i>Afdrukken</i> maakt één PDF met een pakbon per bestelling, met de artikelen gesorteerd op magazijnlocatie. Daarna zet je de bestelling op <i>Verzonden</i>.</p>
         <p id="tp-waiting" class="muted small" hidden></p>
         <div class="tablewrap"><table class="grid" id="tp-table"></table></div>
+      </section>
+      <section id="tab-backorders" class="tabpane" role="tabpanel" aria-labelledby="t-backorders" hidden>
+        <div class="filters">
+          <button id="bo-export" class="btn primary" disabled>Exporteer naar Excel</button>
+          <span id="bo-count" class="muted small"></span>
+        </div>
+        <p class="muted small">Open bestellingen met artikelen die nog niet (allemaal) leverbaar zijn. De voorraad gaat eerst naar de oudste bestelling. De verwachte datum komt uit de bestelde inkooporders. Zodra er voorraad binnenkomt, staat de bestelling in Te picken met een nieuwe pakbon.</p>
+        <div class="tablewrap"><table class="grid" id="bo-table"></table></div>
       </section>
       <section id="tab-retouren" class="tabpane" role="tabpanel" aria-labelledby="t-retouren" hidden>
         <div class="filters">
@@ -128,6 +137,7 @@
   <script src="../dashboard/account.js"></script>
   <script src="bestellingen.js"></script>
   <script src="te-picken.js"></script>
+  <script src="backorders.js"></script>
   <script src="retouren.js"></script>
   <script src="rapportage.js"></script>
   <script src="webshop-bestellingen.js"></script>

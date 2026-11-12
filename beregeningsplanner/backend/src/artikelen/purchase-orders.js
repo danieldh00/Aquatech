@@ -574,11 +574,11 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
 /**
  * Hangt de routes voor inkooporders aan de app (recht voorraad).
  * @param {object} app De Express-app.
- * @param {{ purchaseOrders: object, requireRight: Function, requireJson: Function, audit: Function }} ctx De opslag en hulpfuncties van de server.
+ * @param {{ purchaseOrders: object, requireRight: Function, requireJson: Function, audit: Function, afterReceive?: Function }} ctx De opslag en hulpfuncties van de server; afterReceive(tenantId, itemIds) draait na een ontvangst (backorders die nu leverbaar zijn).
  * @returns {void}
  */
 function registerPurchaseOrderRoutes(app, ctx) {
-  const { purchaseOrders, requireRight, requireJson, audit } = ctx;
+  const { purchaseOrders, requireRight, requireJson, audit, afterReceive = () => {} } = ctx;
   const requireStock = requireRight('voorraad');
   /**
    * De actieve omgeving van het verzoek.
@@ -627,6 +627,7 @@ function registerPurchaseOrderRoutes(app, ctx) {
     const out = receiveNow ? purchaseOrders.createReceived(tenantOf(req), req.user, req.body) : purchaseOrders.create(tenantOf(req), req.user, req.body);
     respond(res, out, () => {
       audit(req, receiveNow ? 'inkooporder_ingeboekt' : 'inkooporder_aangemaakt', { number: out.order.number });
+      if (receiveNow) afterReceive(tenantOf(req), out.order.lines.map((line) => line.itemId));
       res.status(201).json(out.order);
     });
   });
@@ -651,6 +652,7 @@ function registerPurchaseOrderRoutes(app, ctx) {
     const out = purchaseOrders.receive(tenantOf(req), req.params.id, req.user, req.body && req.body.lines);
     respond(res, out, () => {
       audit(req, 'inkooporder_ontvangen', { number: out.order.number, status: out.order.status });
+      afterReceive(tenantOf(req), out.order.lines.map((line) => line.itemId));
       res.json(out.order);
     });
   });

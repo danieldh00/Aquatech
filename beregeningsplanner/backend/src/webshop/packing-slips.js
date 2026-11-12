@@ -49,18 +49,34 @@ function quantityText(quantity, language) {
 }
 
 /**
+ * Of de pakbon backorderkolommen krijgt (besteld, eerder geleverd, nu, backorder): er is al eerder geleverd of er blijft iets achter.
+ * @param {object} order De bestelling, met `fulfilment` (web-orders.js withFulfilment).
+ * @returns {boolean} true als er een deellevering of backorder is.
+ */
+function hasBackorderColumns(order) {
+  return Boolean(order.fulfilment) && order.fulfilment.lines.some((entry) => entry.shipped > 0 || entry.backorder > 0);
+}
+
+/**
  * De regels van de pakbon: per orderregel naam, code, aantal en magazijnlocatie, gesorteerd op locatie (zonder locatie onderaan), dan naam.
  * Een regel in een verpakking toont erbij hoeveel basiseenheden dat zijn.
  * @param {object} order De bestelling (lines).
  * @param {Map<string, string>} locations De magazijnlocatie per artikel-id.
- * @returns {{ name: string, code: string, qty: number, unit: string, location: string, baseQty: number|null }[]} De regels.
+ * @returns {{ name: string, code: string, qty: number, unit: string, location: string, baseQty: number|null, ordered?: number, shipped?: number, backorder?: number, expected?: string }[]} De regels (met `fulfilment` van de bestelling ook besteld, eerder geleverd, backorder en verwachte datum).
  */
 function slipLines(order, locations) {
-  const lines = (order.lines || []).map((line) => ({
-    name: String(line.name || line.code || '-'), code: String(line.code || ''), qty: Number(line.qty) || 0, unit: String(line.unit || ''),
-    location: String((line.itemId && locations.get(String(line.itemId))) || ''),
-    baseQty: line.stockPer ? Math.round((Number(line.qty) || 0) * Number(line.stockPer) * 100) / 100 : null,
-  }));
+  const plan = hasBackorderColumns(order) ? order.fulfilment.lines : null;
+  const lines = (order.lines || []).map((line, index) => {
+    const status = plan ? plan[index] : null;
+    // Met backorderkolommen is `qty` wat nu wordt geleverd; zonder is het het bestelde aantal (alles gaat mee).
+    const qty = status ? status.ready : Number(line.qty) || 0;
+    return {
+      name: String(line.name || line.code || '-'), code: String(line.code || ''), qty, unit: String(line.unit || ''),
+      location: String((line.itemId && locations.get(String(line.itemId))) || ''),
+      baseQty: line.stockPer ? Math.round(qty * Number(line.stockPer) * 100) / 100 : null,
+      ...(status ? { ordered: status.ordered, shipped: status.shipped, backorder: status.backorder, expected: status.expected } : {}),
+    };
+  });
   return lines.sort((left, right) => (left.location && !right.location ? -1 : !left.location && right.location ? 1
     : left.location.localeCompare(right.location, 'nl', { numeric: true }) || left.name.localeCompare(right.name, 'nl')));
 }
@@ -187,31 +203,58 @@ function packingSlipsPdfWithRanges(orders, { profile = {}, colors = {}, logo = n
     top += 30;
 
     // ---------- Regels ----------
+    const extended = hasBackorderColumns(order);
     const col = { location: leftEdge + 4, article: leftEdge + 74, qty: rightEdge - 62, unit: rightEdge - 54 };
-    const articleWidth = col.qty - col.article - 34;
+    // Met backorder: vier getallenkolommen (besteld, eerder, nu, backorder) in plaats van aantal en eenheid.
+    const numbers = { ordered: rightEdge - 150, shipped: rightEdge - 100, now: rightEdge - 50, backorder: rightEdge };
+    const articleWidth = extended ? numbers.ordered - col.article - 58 : col.qty - col.article - 34;
     /** Tekent de kop van de regeltabel. */
     const tableHead = () => {
       pdf.rect(leftEdge, top, rightEdge - leftEdge, 18, { fill: palette.greenSoft });
       const headStyle = { size: 8.5, bold: true, color: palette.navy };
       pdf.text(translate('packing.location'), col.location, top + 5, headStyle);
       pdf.text(translate('packing.article'), col.article, top + 5, headStyle);
-      pdf.text(translate('packing.qty'), col.qty, top + 5, { ...headStyle, align: 'right' });
-      pdf.text(translate('packing.unit'), col.unit, top + 5, headStyle);
+      if (extended) {
+        pdf.text(translate('packing.ordered'), numbers.ordered, top + 5, { ...headStyle, align: 'right' });
+        pdf.text(translate('packing.delivered'), numbers.shipped, top + 5, { ...headStyle, align: 'right' });
+        pdf.text(translate('packing.now'), numbers.now, top + 5, { ...headStyle, align: 'right' });
+        pdf.text(translate('packing.backorder'), numbers.backorder, top + 5, { ...headStyle, align: 'right' });
+      } else {
+        pdf.text(translate('packing.qty'), col.qty, top + 5, { ...headStyle, align: 'right' });
+        pdf.text(translate('packing.unit'), col.unit, top + 5, headStyle);
+      }
       top += 22;
     };
     tableHead();
     for (const line of slipLines(order, locations)) {
       const article = wrap(line.name, articleWidth, 9);
-      const detail = [line.code, line.baseQty !== null ? translate('packing.baseQty', { qty: quantityText(line.baseQty, language) }) : ''].filter(Boolean).join(' · ');
+      const detail = [line.code, extended ? line.unit : '', line.baseQty !== null ? translate('packing.baseQty', { qty: quantityText(line.baseQty, language) }) : '',
+        extended && line.backorder > 0 && line.expected ? translate('packing.expectedOn', { date: dayOf(line.expected, language) }) : ''].filter(Boolean).join(' · ');
       const rowHeight = article.length * 11.5 + (detail ? 10.5 : 0) + 5;
       if (top + rowHeight > bottom) { header(false); tableHead(); }
       pdf.text(line.location, col.location, top, { size: 9, bold: true });
       article.forEach((entry, i) => pdf.text(entry, col.article, top + i * 11.5, { size: 9 }));
       if (detail) pdf.text(detail, col.article, top + article.length * 11.5, { size: 7.5, color: palette.muted });
-      pdf.text(quantityText(line.qty, language), col.qty, top, { size: 9, bold: true, align: 'right' });
-      pdf.text(line.unit, col.unit, top, { size: 9 });
+      if (extended) {
+        pdf.text(quantityText(line.ordered, language), numbers.ordered, top, { size: 9, align: 'right' });
+        pdf.text(quantityText(line.shipped, language), numbers.shipped, top, { size: 9, align: 'right', color: palette.muted });
+        pdf.text(quantityText(line.qty, language), numbers.now, top, { size: 9, bold: true, align: 'right' });
+        pdf.text(quantityText(line.backorder, language), numbers.backorder, top, { size: 9, bold: line.backorder > 0, align: 'right', color: line.backorder > 0 ? palette.navy : palette.muted });
+      } else {
+        pdf.text(quantityText(line.qty, language), col.qty, top, { size: 9, bold: true, align: 'right' });
+        pdf.text(line.unit, col.unit, top, { size: 9 });
+      }
       top += rowHeight;
       pdf.line(leftEdge, top - 3, rightEdge, top - 3, { color: palette.line, width: 0.4 });
+    }
+
+    if (extended && order.fulfilment.lines.some((entry) => entry.backorder > 0)) {
+      top += 8;
+      if (top + 28 > bottom) header(false);
+      for (const noteLine of wrap(translate('packing.backorderNote'), rightEdge - leftEdge, 9)) {
+        pdf.text(noteLine, leftEdge, top, { size: 9, color: palette.muted });
+        top += 12;
+      }
     }
 
     // ---------- Opmerking van de klant ----------
@@ -272,14 +315,15 @@ function createPackingSlips(db, { orders, slips, settingsFor, colorsOf = () => (
   /**
    * De bestellingen die gepickt moeten worden, met per bestelling het aantal regels en stuks.
    * @param {string} tenantId Id van de omgeving.
-   * @returns {{ items: object[], waitingForSlip: object[], truncated: boolean }} Per bestelling: id, nummer, klant, datum, verzendmethode, aantal regels, aantal stuks, opmerking, of het dropshipping is en of de pakbon al is afgedrukt; en de dropshippingbestellingen die nog op de pakbon van de klant wachten.
+   * @returns {{ items: object[], waitingForSlip: object[], waitingForStock: object[], truncated: boolean }} Per bestelling: id, nummer, klant, datum, verzendmethode, aantal regels, aantal stuks, opmerking, of het dropshipping is en of de pakbon al is afgedrukt; en de dropshippingbestellingen die nog op de pakbon van de klant wachten.
    */
   function toPick(tenantId) {
-    const { items, truncated, waitingForSlip } = orders.listToPick(tenantId);
-    return { truncated, waitingForSlip, items: items.map((order) => ({
+    const { items, truncated, waitingForSlip, waitingForStock } = orders.listToPick(tenantId);
+    return { truncated, waitingForSlip, waitingForStock, items: items.map((order) => ({
       id: order.id, number: order.number, customerName: order.customerName, createdAt: order.createdAt,
       shippingLabel: order.shipping ? order.shipping.label : '', pickup: !!(order.shipping && order.shipping.method === 'ophalen'),
-      lineCount: order.lines.length, pieces: order.lines.reduce((sum, line) => sum + (Number(line.qty) || 0), 0),
+      lineCount: order.fulfilment.lines.filter((entry) => entry.ready > 0).length, pieces: order.fulfilment.lines.reduce((sum, entry) => sum + entry.ready, 0),
+      partial: order.fulfilment.backorder, backorderReadyAt: order.backorderReadyAt || null, hadShipments: order.shipments.length > 0,
       note: order.note || '', dropshipping: !!order.dropshipping, printedAt: order.packingSlip ? order.packingSlip.printedAt : null, address: addressLines(order).join(', '),
     })) };
   }
@@ -295,11 +339,14 @@ function createPackingSlips(db, { orders, slips, settingsFor, colorsOf = () => (
   async function pdfFor(tenantId, ids, { markPrinted = true } = {}) {
     if (!Array.isArray(ids) || !ids.length) return { error: 'Kies minstens één bestelling.', status: 400 };
     if (ids.length > MAX_SLIPS) return { error: `Hoogstens ${MAX_SLIPS} pakbonnen tegelijk.`, status: 400 };
-    const found = orders.getMany(tenantId, ids).filter((order) => order.status !== 'geannuleerd');
+    const found = orders.withFulfilment(tenantId, orders.getMany(tenantId, ids).filter((order) => order.status !== 'geannuleerd'));
     if (!found.length) return { error: 'Geen bestelling gevonden om een pakbon van te maken.', status: 404 };
     // Een nieuwe online bestelling die nog niet betaald is wordt niet gepickt: geen pakbon tot de betaling binnen is.
     const unpaid = found.filter((order) => order.status === 'nieuw' && order.payment === 'online' && !(order.pay && order.pay.status === 'betaald'));
     if (unpaid.length) return { error: `Nog niet betaald, dus nog geen pakbon: ${unpaid.map((order) => order.number).join(', ')}.`, status: 409 };
+    // Een open bestelling waar nu niets van leverbaar is (of niet alles, zonder deellevering) heeft nog geen pakbon: eerst voorraad.
+    const waiting = found.filter((order) => order.status === 'nieuw' && order.fulfilment && !order.fulfilment.canShip);
+    if (waiting.length) return { error: `Wacht op voorraad, dus nog geen pakbon: ${waiting.map((order) => order.number).join(', ')}.`, status: 409 };
     const dropshipped = found.filter((order) => order.dropshipping);
     const customerSlips = slips.readMany(tenantId, dropshipped.map((order) => order.id));
     const missing = dropshipped.filter((order) => !customerSlips.has(order.id));

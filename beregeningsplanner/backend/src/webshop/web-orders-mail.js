@@ -7,6 +7,16 @@
 const { validEmail, mailFailure, MAIL_SETUP_FAILED } = require('../platform/mailer');
 const { WITHDRAWAL_DAYS } = require('./legal-pages');
 
+/**
+ * Een ISO-datum als dd-mm-jjjj voor in een mail.
+ * @param {string} iso De datum (alleen het datumdeel telt).
+ * @returns {string} Bijv. "5-3-2026", of de invoer als die geen datum is.
+ */
+function expectedText(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  return match ? `${Number(match[3])}-${Number(match[2])}-${match[1]}` : String(iso || '');
+}
+
 const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
 
 /**
@@ -161,10 +171,10 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
    * een mail als de klant deze code nog niet kreeg.
    * @param {string} tenantId Id van de omgeving.
    * @param {object} order De verzonden bestelling (met shipping en shipMail).
-   * @param {{ onlyNewTracking?: boolean }} [options] Zie boven.
+   * @param {{ onlyNewTracking?: boolean, shipment?: object }} [options] Zie boven; met `shipment` gaat het om een deellevering: de mail noemt wat nu onderweg is en wat nog op backorder staat (met de verwachte datum).
    * @returns {Promise<void>}
    */
-  async function sendShipment(tenantId, order, { onlyNewTracking = false } = {}) {
+  async function sendShipment(tenantId, order, { onlyNewTracking = false, shipment = null } = {}) {
     const shipping = order.shipping || {};
     const pickup = shipping.method === 'ophalen';
     const tracking = !pickup && shipping.tracking ? shipping.tracking : null;
@@ -187,15 +197,29 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
       return;
     }
     if (!mailer.configured()) { record({ sent: false, error: 'Geen mailserver ingesteld.' }); return; }
-    const intro = pickup
+    // Bij een deellevering alleen de regels van deze zending; bij de laatste zending van een bestelling in delen ook alleen de laatste.
+    const lastShipment = shipment || (Array.isArray(order.shipments) && order.shipments.length > 1 ? order.shipments[order.shipments.length - 1] : null);
+    const shippedText = lastShipment
+      ? lastShipment.lines.map((entry) => order.lines[entry.index] && `${entry.qty} × ${order.lines[entry.index].name} (${order.lines[entry.index].code})`).filter(Boolean).join('\n')
+      : linesText(order);
+    const backorderLines = shipment && order.fulfilment ? order.fulfilment.lines.filter((entry) => entry.backorder > 0 && order.lines[entry.index]) : [];
+    const backorderText = backorderLines.map((entry) => `${entry.backorder} × ${order.lines[entry.index].name} (${order.lines[entry.index].code})${entry.expected ? `, verwacht ${expectedText(entry.expected)}` : ''}`).join('\n');
+    const intro = shipment
+      ? (pickup
+        ? `Een deel van je bestelling ${order.number} staat klaar om op te halen.${profile.address ? `\n\nOphaaladres:\n${profile.address}` : ''}`
+        : tracking
+          ? `Een deel van je bestelling ${order.number} is onderweg. Volg het pakket met de code ${tracking.code}: ${tracking.url}`
+          : `Een deel van je bestelling ${order.number} is onderweg met DPD.`)
+      : pickup
       ? `Je bestelling ${order.number} staat klaar om op te halen.${profile.address ? `\n\nOphaaladres:\n${profile.address}` : ''}`
       : tracking
         ? `Je bestelling ${order.number} is onderweg. Volg je pakket met de code ${tracking.code}: ${tracking.url}`
         : `Je bestelling ${order.number} is onderweg met DPD. Zodra we de volgcode hebben, sturen we hem je toe.`;
     let error = '';
     try {
-      const message = mailBody(profile, [`Beste ${order.customer.name},`, ...intro.split(/\n{2,}/), `Bestelling ${order.number}\n\n${linesText(order)}`]);
-      const subject = pickup ? `Je bestelling ${order.number} staat klaar` : tracking ? `Je bestelling ${order.number} is onderweg (volgcode ${tracking.code})` : `Je bestelling ${order.number} is onderweg`;
+      const message = mailBody(profile, [`Beste ${order.customer.name},`, ...intro.split(/\n{2,}/), `Bestelling ${order.number}\n\n${shippedText}`,
+        ...(backorderText ? [`Nog niet geleverd (backorder):\n${backorderText}`, 'Zodra de rest binnen is, sturen we het je na. Je ontvangt dan opnieuw bericht.'] : [])]);
+      const subject = shipment ? `Een deel van je bestelling ${order.number} is ${pickup ? 'klaar' : 'onderweg'}` : pickup ? `Je bestelling ${order.number} staat klaar` : tracking ? `Je bestelling ${order.number} is onderweg (volgcode ${tracking.code})` : `Je bestelling ${order.number} is onderweg`;
       await mailer.send({ to: order.email, subject, text: message.text, html: message.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
       // Dropshipping: het adres voor het afleverbewijs krijgt een eigen, vast bericht (alleen bestelnummer en volgcode, nooit tekst van de klant),
       // want dat adres is niet geverifieerd en mag de shop-afzender niet als doorgeefluik gebruiken.

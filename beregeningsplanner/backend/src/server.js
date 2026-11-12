@@ -2317,7 +2317,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerOrderReadRoute(app, { stock: stockStore, suppliers: supplierStore, requireRight, audit, settingsFor, aiTenantOf, currentOrderReader, dailyFor, limiter: analyzeLimiter, aiUsage });
   // Verpakkingseenheden per artikel (zie packagings.js).
   registerPackagingRoutes(app, { packagings: packagingStore, requireRight, requireJson, audit });
-  registerPurchaseOrderRoutes(app, { purchaseOrders: purchaseOrderStore, requireRight, requireJson, audit });
+  registerPurchaseOrderRoutes(app, {
+    purchaseOrders: purchaseOrderStore, requireRight, requireJson, audit,
+    // Een ontvangst kan een backorder leverbaar maken: zulke bestellingen krijgen een markering en staan weer in Te picken.
+    afterReceive: (tenantId, itemIds) => { try { webOrders.markBackorderReady(tenantId, itemIds); } catch (error) { console.warn(`Backorders na ontvangst: ${error.message}`); } },
+  });
 
   // Afbeeldingen bij artikelen: uploaden, verwijderen en overnemen uit de oude webshop (zie item-images.js).
   registerItemImageRoutes(app, { images: itemImageStore, requireRight, requireJson, audit,
@@ -2439,6 +2443,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.locals.webOrdersRelease = () => webOrders.releaseExpired(tenant.id);
   webOrders.onShipped((tenantId, order, user) => webOrderInvoices.onShipped(tenantId, order, user));
   webOrders.onShipped((tenantId, order) => webOrderMail.sendShipment(tenantId, order));
+  webOrders.onPartialShipped((tenantId, order, shipment) => webOrderMail.sendShipment(tenantId, order, { shipment }));
   webOrders.onCancelled((tenantId, order, user) => webOrderInvoices.creditCancelled(tenantId, order, user));
   webOrders.onTracking((tenantId, order) => webOrderMail.sendShipment(tenantId, order, { onlyNewTracking: true }));
   // Pakbonnen en de lijst Te picken (webshop/packing-slips.js); vóór de routes met /:id.

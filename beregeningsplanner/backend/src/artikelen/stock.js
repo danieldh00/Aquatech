@@ -1650,6 +1650,23 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Boekt een deel van een webshopbestelling af (deellevering): de verzonden artikelen gaan van de voorraad (bron 'bestelling:<nummer>')
+   * en de reservering krimpt tot wat nog geleverd moet worden. Moet binnen de transactie van de aanroeper lopen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ id: string, number: string }} order De bestelling.
+   * @param {{ itemId: string, qty: number }[]} shipped Per artikel het verzonden aantal (basiseenheid).
+   * @param {{ itemId: string, qty: number }[]} remaining Per artikel wat nog te leveren is (basiseenheid); leeg = geen reservering meer.
+   * @param {object|null} user Wie de bestelling verzendt.
+   * @param {{ keepReservation?: boolean }} [options] Met keepReservation false (vrijgegeven reservering) komt er geen nieuwe reservering.
+   * @returns {void}
+   */
+  function issueOrderPart(tenantId, order, shipped, remaining, user, { keepReservation = true } = {}) {
+    for (const line of shipped) book(tenantId, line.itemId, -line.qty, { kind: 'afboeking', source: `bestelling:${order.number}`, note: `Webshopbestelling ${order.number} (deellevering)`, user });
+    releaseOrder(tenantId, order.id);
+    if (keepReservation && remaining.length) reserveOrder(tenantId, order.id, remaining);
+  }
+
+  /**
    * Legt een nieuwe inkoopprijs vast met een datum (geldig vanaf); de oude blijft in de historie.
    * @param {string} tenantId Id van de omgeving.
    * @param {object} user Wie het doet.
@@ -2053,7 +2070,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     units, addUnit, removeUnit, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants,
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
-    reorderProposal, reserveOrder, releaseOrder, issueOrder, shortageFor, onDirty: setDirtyHook, setPricer, setSalePrices,
+    reorderProposal, reserveOrder, releaseOrder, issueOrder, issueOrderPart, shortageFor, onDirty: setDirtyHook, setPricer, setSalePrices,
     addCostPrice, setLayerCost, stockValue: costs.stockValue,
   };
 }

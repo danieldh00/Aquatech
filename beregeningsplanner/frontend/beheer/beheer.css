@@ -210,7 +210,9 @@ dl.kv dd { margin: 0; }
 .ship-carrier .form-grid { margin-bottom: 10px; }
 
 /* Webshopbestellingen en -retouren: artikelnaam en artikelnummer onder elkaar, tekstvak en knoppen in dezelfde stijl als de rest van Beheer. */
-#wo-detail table .sub, #wr-detail table .sub { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+#wo-detail table .sub, #wr-detail table .sub, #bo-table .sub { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+#wo-detail .qty-now { width: 5.5rem; text-align: right; }
+#wo-detail .partial { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 #wr-detail textarea { font: inherit; font-family: var(--at-font); padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); width: 100%; box-sizing: border-box; resize: vertical; }
 .card-form .row.actions { margin-top: 12px; align-items: center; }
 .narrow { width: 5em; }
