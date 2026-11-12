@@ -230,7 +230,7 @@ test('de hele weg: toestaan, tools gebruiken en een concept-offerte met notities
   assert.deepStrictEqual(found.structuredContent.klanten.map((item) => item.id), [customer.structuredContent.id]);
 
   const made = await callTool(base, connection.accessToken, 'maak_concept_offerte', {
-    klantId: customer.structuredContent.id, titel: 'Beregening achtertuin',
+    klantId: customer.structuredContent.id, titel: 'Beregening achtertuin', ookMetOpenPunten: true,
     regels: [
       { artikelcode: 'spr-pop-10', aantal: 8, prijsExclBtw: 9 },
       { artikelcode: 'PE-25', aantal: 40, twijfel: true, notitie: 'Klant zei "zo\'n 40 meter"' },
@@ -264,6 +264,43 @@ test('de hele weg: toestaan, tools gebruiken en een concept-offerte met notities
   const rows = Array.isArray(actions) ? actions : actions.items;
   assert.ok(rows.some((row) => row.action === 'offerte_concept_via_ai'), 'auditregel ontbreekt');
   assert.ok(rows.some((row) => row.action === 'ai_koppeling_toegestaan'));
+});
+
+test('de koppeling vraagt terug bij onduidelijkheid in plaats van te raden', async () => {
+  const { base, admin, store, main } = await setup();
+  const connection = await connect(base, admin);
+  const token = connection.accessToken;
+  const init = await mcp(base, token, { method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+  assert.match(init.body.result.instructions, /TERUGVRAGEN: raad nooit/);
+  // Meerdere treffers of geen: keuzeNodig met een vraag voor de gebruiker; één duidelijke treffer niet.
+  await callTool(base, token, 'maak_klant', { naam: 'Jan Bakker' });
+  await callTool(base, token, 'maak_klant', { naam: 'Jan Bosman' });
+  const several = (await callTool(base, token, 'zoek_klant', { zoekterm: 'jan' })).structuredContent;
+  assert.strictEqual(several.keuzeNodig, true);
+  assert.match(several.vraag, /2 mogelijke treffers/);
+  const one = (await callTool(base, token, 'zoek_klant', { zoekterm: 'bakker' })).structuredContent;
+  assert.strictEqual(one.keuzeNodig, undefined);
+  const none = (await callTool(base, token, 'zoek_klant', { zoekterm: 'bestaatniet' })).structuredContent;
+  assert.strictEqual(none.keuzeNodig, true);
+  assert.match(none.vraag, /Maak niet zelf een klant aan/);
+  assert.strictEqual((await callTool(base, token, 'zoek_artikelen', { zoekterm: 'PE-25' })).structuredContent.keuzeNodig, undefined);
+  assert.strictEqual((await callTool(base, token, 'zoek_artikelen', { zoekterm: 'nietbestaand' })).structuredContent.keuzeNodig, true);
+  assert.strictEqual((await callTool(base, token, 'zoek_artikelen', { zoekterm: 'sproeier beregeningscomputer' })).structuredContent.keuzeNodig, true);
+
+  // Open punten: niets aangemaakt, de vragen komen terug; met ookMetOpenPunten gaat hij wel door.
+  const before = (await admin.get('/app/api/quotes')).body.length;
+  const asked = await callTool(base, token, 'maak_concept_offerte', { regels: [{ artikelcode: 'VERZONNEN-1', aantal: 1 }, { omschrijving: 'Iets', aantal: 2 }] });
+  assert.strictEqual(asked.isError, false);
+  assert.strictEqual(asked.structuredContent.status, 'terugvragen');
+  assert.strictEqual(asked.structuredContent.aangemaakt, false);
+  assert.deepStrictEqual(asked.structuredContent.vragen.map((question) => question.onderwerp || question.regel), ['klant', 1, 2]);
+  assert.strictEqual((await admin.get('/app/api/quotes')).body.length, before);
+  const forced = await callTool(base, token, 'maak_concept_offerte', { klant: { naam: 'Los Persoon' }, ookMetOpenPunten: true, regels: [{ artikelcode: 'VERZONNEN-1', aantal: 1 }] });
+  assert.strictEqual(forced.structuredContent.status, 'concept');
+  // Een duidelijke aanvraag gaat gewoon door, zonder vragen.
+  const klant = store.listCustomers([main]).find((customer) => customer.username === 'klant1');
+  const clear = await callTool(base, token, 'maak_concept_offerte', { klantId: klant.id, regels: [{ artikelcode: 'PE-25', aantal: 10 }] });
+  assert.strictEqual(clear.structuredContent.status, 'concept');
 });
 
 test('de interne notitie per regel gaat nooit naar de klant', async () => {

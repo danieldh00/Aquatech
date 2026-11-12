@@ -8,6 +8,8 @@
 // - prijs_voor_klant: wat een klant voor artikelen betaalt (offerteprijs en webshopprijs met zakelijke prijs/korting) en de voorraad.
 // - status_opvragen: de status van een offerte, werkorder, factuur of webshopbestelling op nummer.
 // - openstaande_debiteuren: wie nog moet betalen (definitieve, onbetaalde facturen), grootste bedrag eerst.
+// Onduidelijk? De tools raden niet: zoeken met meerdere treffers geeft keuzeNodig, en maak_concept_offerte maakt niets aan zolang er
+//   open punten zijn (status 'terugvragen'); de AI-app vraagt dat aan de gebruiker. Alleen met ookMetOpenPunten=true gaat hij door.
 // Elke tool vraagt een recht uit de toestemming (scope) én het recht van de rol van de gebruiker op dit moment.
 // Versturen, wijzigen of verwijderen kan de AI niet: daar is geen tool voor.
 const { createRateLimiter } = require('../beveiliging/rate-limit');
@@ -65,6 +67,19 @@ const resultOf = (data) => ({ content: [{ type: 'text', text: JSON.stringify(dat
  * @returns {object} De MCP-uitkomst.
  */
 const errorOf = (message, extra = {}) => ({ content: [{ type: 'text', text: JSON.stringify({ fout: message, ...extra }) }], structuredContent: { fout: message, ...extra }, isError: true });
+
+/**
+ * Een aanwijzing voor de AI als een zoekopdracht niet tot één duidelijk resultaat leidt: meer dan één treffer of geen enkele.
+ * @param {number} count Het aantal treffers.
+ * @param {string} noun Wat er gezocht werd (klant of artikel).
+ * @param {string} ifNone Wat de AI bij geen treffer moet doen.
+ * @returns {object} { keuzeNodig, vraag } of een leeg object als er precies één treffer is.
+ */
+function choiceHint(count, noun, ifNone) {
+  if (count === 1) return {};
+  if (count === 0) return { keuzeNodig: true, vraag: `Geen ${noun} gevonden. ${ifNone}` };
+  return { keuzeNodig: true, vraag: `Er zijn ${count} mogelijke treffers. Vraag de gebruiker welke bedoeld wordt; kies niet zelf.` };
+}
 
 /**
  * Zoekt in een lijst artikelen (met varianten) op woorden in code en naam. Eerst artikelen waar alle woorden in staan;
@@ -191,7 +206,8 @@ function createMcpTools(ctx) {
           id: customer.id, naam: customer.displayName, bedrijf: customer.companyName || '', email: customer.email || '', telefoon: customer.phone || '',
           adres: String(customer.address || '').split(/\s*\n\s*/).join(', '),
         }));
-        return resultOf({ klanten: items, aantal: items.length });
+        return resultOf({ klanten: items, aantal: items.length, ...choiceHint(items.length, 'klant',
+          'Vraag de gebruiker om een andere schrijfwijze of een straat/postcode, en of hij een nieuwe klant wil laten aanmaken. Maak niet zelf een klant aan.') });
       },
     },
     maak_klant: {
@@ -279,7 +295,9 @@ function createMcpTools(ctx) {
         if (!search) return errorOf('Geef een zoekterm.');
         const limit = Math.min(25, Math.max(1, Number.parseInt(args.maxResultaten, 10) || 10));
         const found = searchArticles(articlesOf(req.tenantId), search, limit);
+        const exact = found.items.length === 1 || (found.items.length > 1 && fold(found.items[0].code) === fold(search));
         return resultOf({ artikelen: found.items.map(articleView), aantal: found.items.length,
+          ...(exact ? {} : choiceHint(found.items.length, 'artikel', 'Vraag de gebruiker welk artikel hij bedoelt, of laat hem iets anders omschrijven. Verzin geen artikelcode.')),
           ...(found.items.length && !found.allWords ? { let_op: 'Geen artikel met alle zoekwoorden; dit zijn de beste gedeeltelijke treffers. Twijfel je, zet dan twijfel=true bij de regel.' } : {}) });
       },
     },
@@ -444,7 +462,9 @@ function createMcpTools(ctx) {
       definition: {
         title: 'Concept-offerte maken',
         description: 'Maakt een offerte als CONCEPT in AquaTech (niet versturen; de medewerker controleert hem). Prijzen, btw en eenheden van artikelen komen uit AquaTech. '
-          + 'Geef bij twijfel twijfel=true en een notitie per regel; die is intern en de klant ziet hem nooit.',
+          + 'Is iets onduidelijk (klant, artikel, variant, prijs), dan maakt deze tool niets aan maar geeft status "terugvragen" met vragen: stel die aan de gebruiker, '
+          + 'pas de invoer aan en roep opnieuw aan. Alleen als de gebruiker bewust met open punten door wil: ookMetOpenPunten=true. '
+          + 'Twijfel=true met een notitie per regel is voor wat de gebruiker zelf onzeker liet; de notitie is intern en de klant ziet hem nooit.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -454,6 +474,7 @@ function createMcpTools(ctx) {
               properties: { naam: { type: 'string', maxLength: 200 }, email: { type: 'string', maxLength: 200 }, telefoon: { type: 'string', maxLength: 40 } },
               additionalProperties: false,
             },
+            ookMetOpenPunten: { type: 'boolean', description: 'Alleen true nadat de gebruiker de vragen uit een eerder antwoord (status "terugvragen") heeft beantwoord of bewust wil doorgaan met open punten.' },
             titel: { type: 'string', maxLength: 200, description: 'Bijv. "Beregening achtertuin".' },
             inleiding: { type: 'string', maxLength: 2000, description: 'Korte inleiding voor de klant (optioneel; anders de standaardtekst).' },
             regels: {
@@ -503,6 +524,8 @@ function createMcpTools(ctx) {
         const articles = articlesOf(req.tenantId);
         const lines = [];
         const problems = [];
+        const questions = [];
+        if (!customerId && !customer.name) questions.push({ onderwerp: 'klant', vraag: 'Voor welke klant is de offerte? Zoek hem met zoek_klant of maak hem aan met maak_klant.' });
         for (const [index, raw] of rawLines.entries()) {
           if (!raw || typeof raw !== 'object') return errorOf(`Regel ${index + 1} is ongeldig.`);
           const qty = Number(raw.aantal);
@@ -518,25 +541,35 @@ function createMcpTools(ctx) {
           if (match) {
             const article = match.article;
             const hasVariants = Array.isArray(article.variants) && article.variants.length > 0;
-            if (hasVariants) notes.push('Kies de maat (variant)');
-            if (article.salePrice == null) notes.push('Geen verkoopprijs bekend: prijs invullen');
+            if (hasVariants) { notes.push('Kies de maat (variant)'); questions.push({ regel: index + 1, vraag: `${article.code} heeft varianten: welke maat/kleur wil de klant? Gebruik de code van de variant.` }); }
+            if (article.salePrice == null) { notes.push('Geen verkoopprijs bekend: prijs invullen'); if (!hasVariants) questions.push({ regel: index + 1, vraag: `${article.code} heeft geen verkoopprijs in AquaTech. Welke prijs excl. btw geldt?` }); }
             line = { section: section || 'materiaal', code: article.code, description: article.name || (match.parent ? `${match.parent.name} ${Object.values(article.values || {}).join(' ')}`.trim() : article.code),
               qty, unit: article.unit || 'st', price: article.salePrice == null ? 0 : article.salePrice, vat: article.vatRate == null ? profile.vatRate : article.vatRate };
-            if (raw.prijsExclBtw !== undefined && round2(raw.prijsExclBtw) !== round2(line.price)) notes.push(`Genoemde prijs € ${round2(raw.prijsExclBtw).toFixed(2)} wijkt af van de artikelprijs`);
+            if (raw.prijsExclBtw !== undefined && round2(raw.prijsExclBtw) !== round2(line.price)) {
+              notes.push(`Genoemde prijs € ${round2(raw.prijsExclBtw).toFixed(2)} wijkt af van de artikelprijs`);
+              questions.push({ regel: index + 1, vraag: `De genoemde prijs € ${round2(raw.prijsExclBtw).toFixed(2)} wijkt af van de artikelprijs € ${round2(line.price).toFixed(2)} van ${article.code}. Welke geldt?` });
+            }
           } else {
             const description = cleanText(raw.omschrijving, 500);
             if (!description && !code) return errorOf(`Regel ${index + 1}: geef een artikelcode of een omschrijving.`);
-            if (code) notes.push(`Artikelcode ${code} niet gevonden`);
+            if (code) { notes.push(`Artikelcode ${code} niet gevonden`); questions.push({ regel: index + 1, vraag: `Artikelcode ${code} bestaat niet. Zoek het juiste artikel met zoek_artikelen en vraag de gebruiker welk artikel bedoeld is.` }); }
             const unit = cleanText(raw.eenheid, 12) || (section === 'arbeid' ? 'uur' : 'st');
             const labor = section === 'arbeid' || /^u(ur|ren)?$/i.test(unit);
             const given = Number(raw.prijsExclBtw);
             const price = raw.prijsExclBtw !== undefined && Number.isFinite(given) && given >= 0 ? round2(given) : labor ? Number(profile.hourlyRate) || 0 : 0;
-            if (!labor && raw.prijsExclBtw === undefined) notes.push('Prijs nog invullen');
+            if (!labor && raw.prijsExclBtw === undefined) {
+              notes.push('Prijs nog invullen');
+              if (!code) questions.push({ regel: index + 1, vraag: `"${(description || code).slice(0, 60)}" heeft geen artikel en geen prijs. Welk artikel uit zoek_artikelen is het, of welke prijs excl. btw geldt?` });
+            }
             line = { section: section || (labor ? 'arbeid' : 'overig'), code: '', description: description || code, qty, unit, price, vat: profile.vatRate };
           }
           line.note = notes.join(' · ').slice(0, 300);
           if (line.note) problems.push({ regel: index + 1, omschrijving: line.description, notitie: line.note });
           lines.push(line);
+        }
+        if (questions.length && args.ookMetOpenPunten !== true) {
+          return resultOf({ status: 'terugvragen', aangemaakt: false, vragen: questions,
+            melding: 'Er is nog niets aangemaakt. Leg de vragen voor aan de gebruiker, pas de invoer aan en roep opnieuw aan (of zet ookMetOpenPunten=true als de gebruiker bewust met open punten door wil).' });
         }
         if (!withinLimit(quotesPerHour, req) || !withinLimit(quotesPerDay, req)) return errorOf('Te veel offertes via de AI-koppeling in korte tijd. Probeer het later opnieuw.');
         const title = cleanText(args.titel, 200) || (customer.name ? `Beregening ${customer.name}` : 'Beregening');
