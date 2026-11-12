@@ -8,6 +8,7 @@
 // - Breed scherm: vast links, in te klappen tot een smalle iconenbalk
 //   (per browser onthouden). Pagina's met <body data-nav-compact> (de
 //   planner) beginnen ingeklapt.
+// - Een module met een #-adres (artikelen/#orders) is een tabblad van een andere pagina; de zijbalk markeert het open tabblad.
 // - Modules staan in genestelde, inklapbare groepen (Verkoop, Artikelen,
 //   Planner & werk, Beheer, ...; indeling in NAV_GROUPS en `navGroup` in
 //   dashboard/modules.js). De groep met de huidige pagina staat open, de rest
@@ -54,6 +55,7 @@
   const body = document.body;
   let nav = null;
   let lastSignature = '';
+  let lastData = null;
 
   /**
    * Leest welke groepen de gebruiker zelf heeft opengeklapt (per browser onthouden).
@@ -73,17 +75,23 @@
   }
 
   /**
-   * Huidige module: de langste module-URL waar dit pad mee begint.
+   * Huidige module: de langste module-URL waar dit pad mee begint. Modules die
+   * naar een tabblad van een andere pagina wijzen (`artikelen/#orders`) tellen
+   * alleen mee als dat #-adres open staat; de module zonder #-adres is de terugval.
    * @param {object[]} items Modules met id en href.
    * @returns {string|null} Het id van de huidige module.
    */
   function currentId(items) {
     const here = location.pathname;
     let best = null;
-    let bestLength = -1;
+    let bestScore = -1;
     for (const module of items) {
-      const path = new URL(module.href, location.href).pathname;
-      if ((here === path || here.startsWith(path)) && path.length > bestLength) { best = module.id; bestLength = path.length; }
+      const url = new URL(module.href, location.href);
+      const path = url.pathname;
+      if (!(here === path || here.startsWith(path))) continue;
+      if (url.hash && url.hash !== location.hash) continue;
+      const score = path.length * 2 + (url.hash ? 1 : 0);
+      if (score > bestScore) { best = module.id; bestScore = score; }
     }
     return best;
   }
@@ -96,9 +104,11 @@
    */
   function render(data) {
     // Dezelfde stand als de vorige keer (cache en server zijn meestal gelijk): niet opnieuw tekenen.
-    const signature = JSON.stringify(data);
+    // Het #-adres hoort erbij: een tabblad van een module is een eigen zijbalkregel.
+    const signature = JSON.stringify(data) + location.hash;
     if (nav && signature === lastSignature) return;
     lastSignature = signature;
+    lastData = data;
     // Alleen modules die er al zijn; geplande modules staan in Beheer >
     // Modules en komen pas in de zijbalk als ze klaar zijn.
     const items = [{ id: '', navGroup: 'top', title: 'Overzicht', icon: 'home', status: 'actief', href: base || './' }]
@@ -271,6 +281,7 @@
     document.querySelectorAll('.at-nav-backdrop, .at-nav-toggle').forEach((element) => element.remove());
     nav = null;
     lastSignature = '';
+    lastData = null;
     body.classList.remove('has-nav', 'nav-compact', 'nav-open');
   }
 
@@ -302,5 +313,13 @@
     }
   });
 
-  root.AquatechNav = { open: () => setOpen(true), close: () => setOpen(false) };
+  root.AquatechNav = {
+    /** Opent de lade (smal scherm). */
+    open: () => { setOpen(true); },
+    /** Sluit de lade. */
+    close: () => { setOpen(false); },
+    /** Tekent de markering opnieuw, bijvoorbeeld nadat een pagina van tabblad (#-adres) is gewisseld. */
+    refresh: () => { if (lastData) render(lastData); },
+  };
+  root.addEventListener('hashchange', () => { if (lastData) render(lastData); });
 })(window);

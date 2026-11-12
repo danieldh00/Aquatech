@@ -41,8 +41,8 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   git fetch origin master
   git checkout -B claude/<naam> origin/master
   ```
-- Werkwijze per taak: wijzigen → `npm test` → versie-bump + changelog (als
-  `beregeningsplanner/` is gewijzigd) → README.md bijwerken (bij features/setup) → `git push -u origin <branch>` → PR naar
+- Werkwijze per taak: wijzigen → `npm test` → releasenotes-bestand `changes/<naam>.md` (als
+  `beregeningsplanner/` is gewijzigd; **geen** versie-bump, geen CHANGELOG/releases.js) → README.md bijwerken (bij features/setup) → `git push -u origin <branch>` → PR naar
   `master` → CI groen (`ci.yml` + `version.yml`) → **Claude-review**
   (`claude-review.yml`: jobs *Claude code review* en *Claude security review*, de
   verplichte controles; opmerkingen oplossen of met reden beantwoorden). **CodeRabbit is uitgeschakeld** (besluit Daniël 2026-11-11: config, triggers, inhaalreview en bevindingenissues zijn verwijderd). **Vóór go-live** laat Daniël de code één keer handmatig een deep scan geven met CodeRabbit; bevindingen daarvan lossen we dan op. De Claude-reviews draaien op het Claude-abonnement van Daniël (secret `CLAUDE_CODE_OAUTH_TOKEN`, aan te maken met `claude setup-token`), niet op API-tegoed; de securityreview draait via dezelfde `claude-code-action`. **Kosten van de Claude-review** zijn begrensd: de workflow slaat docs/tests-only wijzigingen over, draait de securityreview alleen bij beveiligingsrelevante code en beoordeelt een volgende push alleen op wat nieuw is; het model komt uit de repository-variabelen `CLAUDE_REVIEW_MODEL` (eerste volledige review) en `CLAUDE_REVIEW_MODEL_PUSH` (lichtere review per push). Na het mergen de branch verwijderen. Een volgende taak begint opnieuw vanaf
@@ -50,10 +50,16 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - Loopt `master` voor op je branch (andere sessie heeft gemerged): eerst
   `git merge origin/master` in je branch, conflicten oplossen, en de versie
   zo nodig opnieuw verhogen (moet hoger zijn dan die op `master`).
-- Elke wijziging in `beregeningsplanner/` op `master` vereist een
-  **versie-bump** in `beregeningsplanner/backend/package.json` + entry in
-  `CHANGELOG.md`. `scripts/check_version.py` (workflow `version.yml`, op PR's
-  naar en pushes op `master`) bewaakt dat.
+- **Versie en releasenotes zijn automatisch** : een PR verandert `version` in
+  `beregeningsplanner/backend/package.json`, `CHANGELOG.md` en `frontend/nieuws/releases.js` **niet**. Elke PR die
+  `beregeningsplanner/` wijzigt voegt één bestand `changes/<korte-naam>.md` toe (formaat en voorbeeld: `changes/README.md`:
+  `titel:`, `## Nieuws` met punten en optioneel `[rechten]`, `## Changelog`). Na de merge geeft `release.yml` (job *prepare*,
+  `backend/tools/release-notes.js`) elk bestand het volgende versienummer (patch + 1, na x.y.9 de volgende minor, `bump: minor`
+  in de kop kan; major alleen op Daniëls woord), werkt de drie bestanden bij, verwijdert het fragment en commit naar master
+  met `[skip ci]`. De PR-check `version-must-increase` (`version.yml`) faalt bij een eigen versie-/releases.js-/CHANGELOG-wijziging
+  of een ontbrekend fragment; alleen docs/CI zonder effect: label `geen-releasenotes`. Het versienummer in een PR staat dus
+  altijd op het oude; tests die de versie nodig hebben lezen `package.json`. Voor de push naar de beschermde master is
+  het secret `RELEASE_PUSH_TOKEN` nodig (beheerder-PAT) met Repository admin als bypass in de ruleset.
   Wijzigingen buiten `beregeningsplanner/` (zoals deze `CLAUDE.md`) hebben
   geen bump nodig.
 
@@ -62,10 +68,10 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - Publieke URL **https://aquatech.den-hollander.com** via Cloudflare-tunnel
   `apps01` naar de Docker-server (Proxmox-VM `apps01`, `/opt/apps/aquatech`,
   zie `deploy/apps01/README.md`).
-- **CI/CD**: `release.yml` bouwt bij een versie-bump op `master` na tests en
+- **CI/CD**: `release.yml` bouwt bij een nieuwe versie op `master` (automatisch na een merge met fragment) na tests en
   smoketest het image `ghcr.io/danieldh00/aquatech:<versie>` + `:latest`; de
   server rolt dat binnen 15 min uit (`deploy/apps01/update.sh`, met rollback).
-  Zonder versie-bump geen nieuw image en dus geen uitrol.
+  Zonder fragment geen nieuwe versie, geen nieuw image en dus geen uitrol.
 - **Eerste start**: zolang er geen actieve beheerder met een eigen account is
   (`store.countAdmins`), krijgt elke niet-ingelogde bezoeker
   `backend/src/paginas/setup.html` (POST `/api/setup`; met een toegangscode is die
@@ -416,11 +422,12 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (*Bestellen tot*, leeg = 2× minimum), `GET /api/stock/reorder`
   (`stock.reorderProposal`), Excel in de browser.
 - **Leveranciers** (1.10.8, migratie 59, `artikelen/suppliers.js`, tabblad Leveranciers + blok per artikel in `frontend/artikelen/suppliers.js`): `suppliers` (naam uniek per organisatie zonder hoofdletters, archiveren i.p.v. verwijderen zodra een artikel eraan hangt) en `item_suppliers` (artikelnummer leverancier, `cost_price` leeg = prijs van het artikel, `order_qty` = bestellen in veelvouden, hoogstens één `preferred`). `GET|POST|PATCH|DELETE /api/suppliers`, `GET|PUT /api/stock/items/:id/suppliers` (recht `voorraad`); een hoofdartikel heeft er geen, `stock.removeRow`/`setVariants` wissen de koppelingen. Bestelvoorstel per leverancier (1.10.9, geen migratie): `stock.reorderProposal(tenantId, { preferred })` met `suppliers.preferredByItem` rondt op `order_qty` af, gebruikt de leveranciersprijs en geeft `suppliers` (groepen) terug; Excel groepeert per leverancier. 
+- **Inkoop in de zijbalk** (1.11.6, geen migratie): groep `inkoop` in modules.js met Bestelvoorstel, Inkooporders, Leveranciers en Mutaties als modules met `partOf: 'voorraad'` en een #-adres als `href` (`artikelen/#orders`); `currentId` in sidebar.js markeert het open tabblad, `showTab` roept `AquatechNav.refresh()` aan. Een nieuwe inkoopregel = één module-regel + een tabblad in `artikelen/` (`TABS`, `data-purchasing`). Bestelvoorstel is een tabblad (`loadReorder`).
 - **Inkooporders** (1.11.0, migratie 61, `artikelen/purchase-orders.js`, tabblad Inkooporders in `frontend/artikelen/orders.js`): `purchase_orders` (nummer `IO<jaar>-0001`, status concept|besteld|deels_ontvangen|ontvangen|geannuleerd) en `purchase_order_lines` (momentopname van code/naam/eenheid/artikelnummer leverancier, `qty`, `unit_cost`, `received_qty`). `receive` controleert eerst alles en boekt dan via `stock.book` (soort ontvangst, bron `inkoop:<nummer>`, `unitCost` van de regel → FIFO-laag); **een opslagfunctie die een fout teruggeeft in plaats van gooit, mag binnen `transaction` niets half geschreven hebben** (valideer eerst). `incomingByItem` (concept + besteld + deels ontvangen) gaat als `incoming` in `stock.reorderProposal`, zodat niets dubbel wordt besteld (ook bron voor het verwachte aantal bij backorders, punt 15). `fromProposal` maakt per voorkeursleverancier een concept (binnen een transactie via `insertOrder`, want `transaction` nest niet). Leverancier en artikel met orders worden gearchiveerd i.p.v. verwijderd. **Inlezen** (1.11.4, migratie 64 `purchase_orders.supplier_reference`): `POST /api/purchase-orders/read` (`order-read-route.js`, lezer `order-reader.js` met `createApp({ createOrderReader })` voor tests, koppeling `order-matching.js`) leest PDF/foto met de AI van de omgeving (zelfde limieten als plan herkennen, feature `inkoop_inlezen`) en schrijft niets; `POST /api/purchase-orders` met `receiveNow` maakt en boekt alles in (alles of niets, `createReceived`), `rememberSkus` bewaart leveranciersnummers (`suppliers.rememberSku`).
 - **Artikelen samenvoegen tot variabel artikel** (1.5.8, `backend/src/artikelen/variant-suggestions.js` + `stock.mergeSuggestions|mergeIntoVariants`, `frontend/artikelen/merge.js`): geen migratie. `GET /api/stock/merge-suggestions` (groepen op naam minus maat/kleur, zelfde eenheid/btw/omzetgroep) en `POST /api/stock/merge { ids, code, name, attributeName, values }` zetten losse artikelen onder een nieuw hoofdartikel; id, code, voorraad, prijzen, boekingen en reserveringen blijven (verwijzingen elders gaan op code). Een apart webshopproduct-koppeling vervalt (daarna *In webshop zetten*). Terugdraaien kan niet automatisch.
 - **EAN en etiketten** (1.11.1, migratie 62 `stock_items.ean`, unieke index `(tenant_id, ean)` waar gevuld): `frontend/shared/barcode.js` (UMD: `cleanEan`, `encodeEan`, `encodeCode128`, `forItem`, `bars`; ook door de server geladen), `artikelen/labels.js` (`sanitizeLabelTemplates` = instelling `labelTemplates`, `buildLabelPdf`, routes `GET /api/stock/label-templates` en `POST /api/stock/labels`, recht `voorraad`). PDF via `createPdf({ pageSize })`, één etiket per pagina, geen ZPL. Strepen min. 0,19 mm (`MIN_MODULE_MM`), anders een melding. Frontend: blok *Etiketten* in `artikelen/labels.js`, editor in Beheer (`#s-labels`, `renderLabelTemplates` in beheer.js). **Een nieuwe plek die etiketten afdrukt gebruikt `ItemLabels.print(items, sjabloon)`; streepjescodes altijd via `Barcode`, nooit een eigen codering.**
 - **Verpakkingen** (1.11.2, migratie 63, `artikelen/packagings.js`, blok in `frontend/artikelen/packagings.js`): `item_packagings` (code uniek per artikel, `factor` ≥ 2 basiseenheden, `sale_price`/`business_price` leeg = factor × stukprijs, eigen `ean`, `audience` iedereen|zakelijk|groothandel via `visibleFor`). Voorraad blijft in de basiseenheid. `GET|PUT /api/stock/items/:id/packagings` (lijst wordt vervangen; EAN uniek over artikelen én verpakkingen: `eanTaken` in stock.js controleert beide). Deel B (1.11.5, `webshop/web-orders.js`): winkelwagencode `CODE@PAL` (`splitCartCode`), `priceCart` geeft een regel met `code` = wagencode, `baseCode`, `stockPer` (= factor), aantal en prijs per verpakking en beschikbaarheid `floor(voorraad / factor)`; voorraad in de basiseenheid via `stockQtyOf`/`stockLinesOf` (reserveren, afboeken, retour-terugboeking, `web-sales`). Een nieuwe plek die bestelregels naar voorraad vertaalt gebruikt `stockQtyOf`. De keuze van een verpakking op de productpagina volgt bij punt 33. **Nieuwe code die een artikel verwijdert of hoofdartikel maakt wist ook `item_packagings`.**
-- **Kortingen per productcategorie voor zakelijke klanten** (1.11.6, geen migratie): instelling `categoryDiscounts` {rules [{categorySlug, discountPct}]} (`internal`, alleen via `GET|PUT /api/admin/category-discounts`, `webshop/category-discounts.js`, Beheer > Webshop > Zakelijke kortingen in `beheer/kortingen.js`); slugs zijn die van het gepubliceerde webshopmenu. **Rangorde**: diepste categorie met een korting wint (`resolverFor`); een eigen zakelijke prijs van het artikel en een verpakking met eigen prijs gaan voor (geen categoriekorting); verpakking zonder prijs = factor × gekorte stukprijs; groothandel = hoogste van staffel/klant/categorie (`wholesalePrice(…, categoryDiscount)`, bron `categorie`), nooit opgeteld; particulier nooit. `buildCatalog(rows, sold, tree, config)` zet `priceBusiness` (na korting), `priceBusinessList`, `categoryDiscountPct` en `discountByCode`; de catalogcache onthoudt de kortingen (`discountKey`). `priceCart` haalt de kortingen via de injectie `categoryDiscountsOf` (server.js, alleen een catalogus als er regels zijn). Offertes gebruiken geen zakelijke prijzen. **Een nieuwe plek die een zakelijke prijs toont of berekent gebruikt `priceBusiness`/`priceCart`, nooit `business_price` of `sale_price` rechtstreeks; een groothandelsprijs rekent over `priceBusinessList` met `categoryDiscountPct`.** Orderregels van een verpakking dragen `itemName` (artikelnaam voor de rapportage in de basiseenheid).
+- **Kortingen per productcategorie voor zakelijke klanten** (geen migratie): instelling `categoryDiscounts` {rules [{categorySlug, discountPct}]} (`internal`, alleen via `GET|PUT /api/admin/category-discounts`, `webshop/category-discounts.js`, Beheer > Webshop > Zakelijke kortingen in `beheer/kortingen.js`); slugs zijn die van het gepubliceerde webshopmenu. **Rangorde**: diepste categorie met een korting wint (`resolverFor`); een eigen zakelijke prijs van het artikel en een verpakking met eigen prijs gaan voor (geen categoriekorting); verpakking zonder prijs = factor × gekorte stukprijs; groothandel = hoogste van staffel/klant/categorie (`wholesalePrice(…, categoryDiscount)`, bron `categorie`), nooit opgeteld; particulier nooit. `buildCatalog(rows, sold, tree, config)` zet `priceBusiness` (na korting), `priceBusinessList`, `categoryDiscountPct` en `discountByCode`; de catalogcache onthoudt de kortingen (`discountKey`). `priceCart` haalt de kortingen via de injectie `categoryDiscountsOf` (server.js, alleen een catalogus als er regels zijn). Offertes gebruiken geen zakelijke prijzen. **Een nieuwe plek die een zakelijke prijs toont of berekent gebruikt `priceBusiness`/`priceCart`, nooit `business_price` of `sale_price` rechtstreeks; een groothandelsprijs rekent over `priceBusinessList` met `categoryDiscountPct`.** Orderregels van een verpakking dragen `itemName` (artikelnaam voor de rapportage in de basiseenheid).
 - **Artikelafbeeldingen** (1.5.7, `backend/src/artikelen/item-images.js`, migratie 41): tabel
   `item_images` (versleuteld via `vault.sealBytes`, `content_hash` = gedeelde foto's,
   `source_url`) + `stock_items.image_id`; één afbeelding per artikel, upload via
@@ -604,7 +611,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `news`, migratie 19, `backend/src/platform/news.js`, recht `nieuws` = plaatsen,
   doelgroep `medewerkers`|`iedereen`, optioneel mail naar collega's) en het
   versielogboek in gewone taal `frontend/nieuws/releases.js` (punten met
-  `for: [rechten]`). **Bij elke versie-bump een regel bovenaan releases.js**
+  `for: [rechten]`). **Het Nieuws-deel van het fragment in `changes/` komt bij de release bovenaan releases.js**
   (test eist dat). `api/me` geeft `news` (aantal nieuw, cache 30 s);
   gezien-stand in voorkeuren `newsSeenAt`/`seenRelease` (`POST /api/news/seen`).
 - **Offline/PWA** (0.58.0): `frontend/sw.js` (geregistreerd door
@@ -649,7 +656,7 @@ standaard voor alle nieuwe code. Controleer ze zelf vóór de PR en noem in
 de PR-beschrijving kort hoe eraan voldaan is.
 
 **Documentatie**: `README.md` (root) bijwerken als de PR features, modules, instellingen, installatie of het
-reviewproces wijzigt; versie-bump + `CHANGELOG.md` + regel bovenaan `frontend/nieuws/releases.js` bij elke wijziging in
+reviewproces wijzigt; een fragment `changes/<naam>.md` (notes voor CHANGELOG en Nieuws) bij elke wijziging in
 `beregeningsplanner/`.
 
 **Queries** (productie = Supabase over het netwerk, elke query is een rondgang):

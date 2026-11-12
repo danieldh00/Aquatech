@@ -612,7 +612,7 @@
     outsourcingForm.send.checked = outsourcing.send;
     outsourcingForm.receive.checked = outsourcing.receive;
     outsourcingForm.region.value = outsourcing.region || '';
-    const visibleModules = (window.AquatechModules || []).filter((module) => module.id !== 'beheer' && module.id !== 'hoofdbeheer');
+    const visibleModules = (window.AquatechModules || []).filter((module) => module.id !== 'beheer' && module.id !== 'hoofdbeheer' && !module.partOf);
     $('#s-module-list').innerHTML = visibleModules.map((module) => `
       <label class="chk"><input type="checkbox" data-module="${esc(module.id)}"${module.status === 'gepland' ? ' disabled' : view.modules.value[module.id] === false ? '' : ' checked'}>
         ${esc(module.title)}${module.status === 'gepland' ? ' <span class="muted small">(binnenkort: aan te zetten zodra de module klaar is)</span>' : ''}</label>`).join('');

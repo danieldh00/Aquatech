@@ -13,11 +13,25 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.11.8',
+      date: '2026-11-12',
+      title: 'Versie en releasenotes worden automatisch bijgewerkt',
+      items: [],
+    },
+    {
+      version: '1.11.7',
+      date: '2026-11-12',
+      title: 'Webshop-inhoud laadt weer',
+      items: [
+        { text: 'Beheer → Webshop → Webshop-inhoud gaf een foutmelding bij het laden. Dat is opgelost: ontbrekende blokken van de startpagina worden aangevuld met de standaard.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.11.6',
       date: '2026-11-12',
-      title: 'Kortingen per productcategorie voor zakelijke klanten',
+      title: 'Inkoop in de zijbalk',
       items: [
-        { text: 'Onder Beheer > Webshop > Zakelijke kortingen geef je zakelijke klanten een korting op een hele productcategorie. De prijzen in de webshop, de winkelwagen, de bestelling en de factuur volgen. Een artikel met een eigen zakelijke prijs houdt die prijs; bij groothandelsklanten telt de hoogste korting.', for: ['beheer'] },
+        { text: 'In de zijbalk staat nu een eigen kopje Inkoop met Bestelvoorstel, Inkooporders, Leveranciers en Mutaties. Het Bestelvoorstel is een scherm geworden waarop je ziet wat er besteld moet worden, met een knop voor concept-orders en voor Excel.', for: ['voorraad'] },
       ],
     },
     {

@@ -1,16 +1,27 @@
 # Changelog
 
+## 1.11.8
+
+Versienummer, changelog en releasenotes worden niet meer per PR aangepast, zodat PR's elkaar daar niet meer in de weg zitten. Geen migratie.
+
+- **Fragment per PR**: `changes/<naam>.md` met titel, punten voor Nieuws (met rechten) en een changelogtekst (zie `changes/README.md`).
+- **Na de merge** (`release.yml`, job *Versie en notes*): `tools/release-notes.js` geeft elk fragment het volgende versienummer (patch + 1, na x.y.9 de volgende minor; `bump: minor` kan), werkt `package.json`, `CHANGELOG.md` en `releases.js` bij, verwijdert de fragmenten en commit naar master met `[skip ci]`. Daarna testen en bouwen van het image zoals voorheen. Gelijktijdige merges: de runs wachten op elkaar (`concurrency`) en een mislukte push wordt opnieuw geprobeerd op de nieuwste master.
+- **Controle in PR's** (`version.yml`, check `version-must-increase`): faalt als een PR het versienummer, `CHANGELOG.md` of `releases.js` zelf wijzigt of als een fragment ontbreekt (uitzondering: label `geen-releasenotes`).
+- Tests: `release-notes.test.js`.
+
+## 1.11.7
+
+Fix: Beheer > Webshop > Webshop-inhoud gaf *Kan de webshop-inhoud niet laden: Cannot read properties of undefined (reading 'items')*. Een opgeslagen versie van de startpagina zonder een van de blokken (banners, kolommen, voordelen of merken) werd ongewijzigd naar het scherm gestuurd, dat `site.<blok>.items` verwacht. `view()` in `webshop/shop-content.js` loopt concept en gepubliceerde versie nu door `normalizeSite` (ontbrekende blokken = de standaard, zoals de shop zelf al deed). Regressietest in `shop-content.test.js`. Geen migratie.
+
 ## 1.11.6
 
-Kortingen per productcategorie voor zakelijke klanten (punt 2) en twee restpunten van de verpakkingen (punt 1). Geen migratie.
+Inkoop als eigen kopje in de zijbalk. Geen migratie.
 
-- **Instelling** `categoryDiscounts` { rules: [{ categorySlug, discountPct }] } (`webshop/category-discounts.js`, `internal`: alleen via de beheerroute), één regel per categorie van het webshopmenu, 0,01 tot 90%. `GET|PUT /api/admin/category-discounts` (recht `beheer`, audit `categoriekortingen_gewijzigd`); de server controleert elke categorie tegen het gepubliceerde menu. Scherm: Beheer > Webshop > Zakelijke kortingen (`beheer/kortingen.js`).
-- **Rangorde**: de diepste categorie met een korting wint (`resolverFor`; een subcategorie gaat voor haar hoofdcategorie). Een artikel met een eigen zakelijke prijs (`business_price`) en een verpakking met een eigen prijs houden die prijs; een verpakking zonder prijs (factor × stukprijs) krijgt de korting. Bij een groothandelsklant telt de hoogste van staffel-, klant- en categoriekorting (`wholesalePrice(…, categoryDiscount)`, bron `categorie`), nooit opgeteld. Particulieren krijgen nooit een categoriekorting.
-- **Catalogus** (`buildCatalog`): `priceBusiness` is de prijs na korting, `priceBusinessList` die ervoor, `categoryDiscountPct` de korting en `discountByCode` de kortingen per artikelcode; de catalogus onthoudt de kortingen bij zijn cache (nieuwe kortingen gelden dus direct). Varianten volgen de categorie van hun hoofdartikel.
-- **Winkelwagen en bestelling** (`priceCart`): krijgt de kortingen per artikelcode uit de catalogus (alleen opgevraagd als de organisatie kortingen heeft); de regel meldt `listExcl`, `discountPct` en `discountSource: 'categorie'`, de winkelwagenpagina toont *x% categoriekorting*. De bestelling, factuur en rapportage gebruiken de kortingsprijs. Offertes gebruiken geen zakelijke prijzen en blijven ongewijzigd.
-- **Testdata**: de testomgeving krijgt twee categoriekortingen.
-- **Punt 1, restpunten**: de rapportageregel van een artikel dat als verpakking is verkocht noemt het artikel zelf (`itemName` op de orderregel), niet de verpakking; extra test voor factuur en marge met pallet en stuks (`packaging-cart.test.js`).
-- Tests: `category-discounts.test.js`.
+- **Zijbalk**: nieuwe groep *Inkoop* (`navGroup: 'inkoop'`) met Bestelvoorstel, Inkooporders, Leveranciers en Mutaties. Het zijn tabbladen van Artikelen: de modules wijzen met een #-adres (`artikelen/#orders`) naar het tabblad; `currentId` in `shared/sidebar.js` markeert het open tabblad (de module zonder #-adres is de terugval) en tekent opnieuw bij `hashchange` en `AquatechNav.refresh()` (aangeroepen door `showTab`).
+- `partOf: 'voorraad'` in `modules.js`: de vier regels volgen de module Artikelen (uit = ook weg) en staan niet apart in Beheer > Modules. Voor rollen zonder zijbalk zijn het extra tegels.
+- **Bestelvoorstel** is nu een tabblad op het scherm (per leverancier, met onderweg en bedrag) met knoppen *Concept-orders maken* (stond bij Inkooporders) en *Excel-export* (stond in het Voorraad-overzicht).
+- Met de zijbalk zijn de tabbladen Mutaties, Bestelvoorstel, Leveranciers en Inkooporders in Artikelen verborgen (`data-purchasing`); zonder zijbalk blijven ze.
+- Test: de href-controle in `server.test.js` staat een #-adres toe; nieuwe tests voor de groep en de markering.
 
 ## 1.11.5
 

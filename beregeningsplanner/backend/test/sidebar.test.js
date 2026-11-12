@@ -41,13 +41,27 @@ test('elke actieve module heeft een bekende navGroup en een titel', () => {
 test('beheerder: de groepen staan in de afgesproken volgorde en niets gaat verloren', () => {
   const sections = sectionsFor({ role: 'beheerder' });
   const keys = sections.map((section) => section.key);
-  assert.deepStrictEqual(keys, ['top', 'verkoop', 'artikelen', 'planner', 'beheer']);
+  assert.deepStrictEqual(keys, ['top', 'verkoop', 'artikelen', 'inkoop', 'planner', 'beheer']);
   const shown = sections.flatMap((section) => idsOf(section.items)).filter(Boolean);
   const expected = idsOf(tools.visible(Roles.rightsOf({ role: 'beheerder' })).filter((module) => module.status === 'actief'));
   assert.deepStrictEqual([...shown].sort(), [...expected].sort());
   assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'verkoop').items), ['offertes', 'webshop-bestellingen', 'klanten', 'klantdossier', 'facturen']);
   assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'planner').items), ['beregening', 'plannen', 'planning', 'werkorders', 'meldingen', 'uitbesteden']);
   assert.strictEqual(sections[0].items[0].id, '', 'Overzicht staat bovenaan');
+});
+
+test('Inkoop: tabbladen van Artikelen met een #-adres, volgen de module Artikelen', () => {
+  const sections = sectionsFor({ role: 'beheerder' });
+  const purchasing = sections.find((section) => section.key === 'inkoop').items;
+  assert.deepStrictEqual(idsOf(purchasing), ['bestelvoorstel', 'inkooporders', 'leveranciers', 'mutaties']);
+  const tabs = ['reorder', 'orders', 'suppliers', 'moves'];
+  purchasing.forEach((module, index) => assert.strictEqual(module.href, `artikelen/#${tabs[index]}`));
+  const html = require('node:fs').readFileSync(path.join(FRONTEND_DIR, 'artikelen', 'index.html'), 'utf8');
+  for (const tab of tabs) assert.match(html, new RegExp(`data-tab="${tab}"`), `tabblad ${tab} ontbreekt in Artikelen`);
+  // Artikelen uit = de inkoopregels ook weg, en ze staan niet apart in Beheer > Modules (partOf).
+  const off = sectionsFor({ role: 'beheerder' }, { voorraad: false });
+  assert.ok(!off.some((section) => section.key === 'inkoop' || section.key === 'artikelen'));
+  assert.ok(purchasing.every((module) => MODULES.find((entry) => entry.id === module.id).partOf === 'voorraad'));
 });
 
 test('hoofdbeheerder: Hoofdbeheer staat in de voetregel', () => {
@@ -65,11 +79,11 @@ test('uitgezette modules verdwijnen en lege groepen bestaan niet', () => {
 });
 
 test('geplande modules en onbekende groepen: niets in een lege groep, losse link voor beheer', () => {
-  const planned = { id: 'inkooporders', navGroup: 'verkoop', title: 'Inkooporders', icon: 'user', status: 'gepland' };
+  const planned = { id: 'backorders', navGroup: 'verkoop', title: 'Backorders', icon: 'user', status: 'gepland' };
   const active = MODULES.filter((module) => module.status === 'actief');
   // sidebar.js filtert op status; een geplande module komt dus niet in de groepen.
   const sections = tools.navSections([planned, ...active].filter((module) => module.status === 'actief'));
-  assert.ok(!sections.flatMap((section) => idsOf(section.items)).includes('inkooporders'));
+  assert.ok(!sections.flatMap((section) => idsOf(section.items)).includes('backorders'));
   // Een module met een onbekende groep verdwijnt niet maar staat los vóór Beheer.
   const stray = { id: 'nieuw', navGroup: 'bestaat-niet', title: 'Nieuw', icon: 'box', status: 'actief', href: 'nieuw/' };
   const keys = tools.navSections([...active, stray]).map((section) => section.key);
@@ -77,10 +91,10 @@ test('geplande modules en onbekende groepen: niets in een lege groep, losse link
   // Toekomstige plekken: een nieuwe module in magazijn/inkoop komt in de eigen groep, op de vaste plek.
   const future = [
     { id: 'tepicken', navGroup: 'magazijn', title: 'Te picken', icon: 'box', status: 'actief', href: 'tepicken/' },
-    { id: 'inkooporders', navGroup: 'inkoop', title: 'Inkooporders', icon: 'truck', status: 'actief', href: 'inkooporders/' },
+    { id: 'retouren', navGroup: 'inkoop', title: 'Retouren', icon: 'truck', status: 'actief', href: 'retouren/' },
   ];
   const order = tools.navSections([...active, ...future]).map((section) => section.key);
-  assert.ok(order.indexOf('verkoop') < order.indexOf('magazijn') && order.indexOf('magazijn') < order.indexOf('inkoop') && order.indexOf('inkoop') < order.indexOf('artikelen'));
+  assert.ok(order.indexOf('verkoop') < order.indexOf('magazijn') && order.indexOf('magazijn') < order.indexOf('artikelen') && order.indexOf('artikelen') < order.indexOf('inkoop'));
 });
 
 test('navTitle verkort alleen de titel in de zijbalk', () => {

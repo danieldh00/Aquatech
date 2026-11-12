@@ -2,7 +2,10 @@ name: Release
 
 # Bouwt bij elke nieuwe app-versie op master een image en zet die in GHCR:
 #   ghcr.io/danieldh00/aquatech:<versie>  en  :latest
-# Volgorde: tests -> bouwen -> smoketest -> pushen. Faalt een stap, dan komt er
+# Volgorde: versie en notes -> tests -> bouwen -> smoketest -> pushen.
+# Versie en notes: PR's brengen alleen een bestand changes/<naam>.md mee; de eerste job geeft dat het
+# volgende versienummer, werkt package.json, CHANGELOG.md en releases.js bij en commit dat naar master
+# (met [skip ci], zodat er geen tweede run ontstaat). Zie changes/README.md. Faalt een stap, dan komt er
 # geen nieuw image en rolt de server (deploy/apps01/update.sh) niets uit.
 
 on:
@@ -10,6 +13,7 @@ on:
     branches: [master]
     paths:
       - "beregeningsplanner/**"
+      - "changes/**"
       - ".github/workflows/release.yml"
   workflow_dispatch:
 
@@ -24,8 +28,56 @@ env:
   IMAGE: ghcr.io/danieldh00/aquatech
 
 jobs:
+  # Verwerkt de bestanden in changes/ tot een nieuwe versie op master. Geen bestanden = niets te doen.
+  # Rechten: master is beschermd (PR verplicht, geen bypass). Zet daarom een token in het secret
+  # RELEASE_PUSH_TOKEN van een beheerder met schrijfrechten op de repository, en zet de rol *Repository admin*
+  # als bypass in de ruleset van master (Settings > Rules > Rulesets). Zonder dat secret valt deze job
+  # terug op GITHUB_TOKEN, en de push wordt dan door de ruleset geweigerd.
+  prepare:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      ref: ${{ steps.bump.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PUSH_TOKEN || github.token }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Versie en releasenotes bijwerken
+        id: bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            git fetch origin master
+            git reset --hard origin/master
+            node beregeningsplanner/backend/tools/release-notes.js
+            if git diff --quiet HEAD; then
+              echo "Niets te bumpen."
+              break
+            fi
+            version=$(jq -r .version beregeningsplanner/backend/package.json)
+            git add -A changes beregeningsplanner/backend/package.json beregeningsplanner/CHANGELOG.md beregeningsplanner/frontend/nieuws/releases.js
+            git commit -m "Release $version [skip ci]"
+            if git push origin HEAD:master; then
+              break
+            fi
+            echo "Push mislukt (poging $attempt); opnieuw op de nieuwste master."
+            [ "$attempt" = 5 ] && exit 1
+            sleep $((attempt * 5))
+          done
+          echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   # Productie draait op Supabase: dezelfde tests ook tegen PostgreSQL.
   test:
+    needs: prepare
     runs-on: ubuntu-latest
     # Twee testruns (SQLite + PostgreSQL) duren samen ~14 min; 15 was te krap en
     # annuleerde de release (1.9.6, 1.10.0) zonder image.
@@ -44,6 +96,8 @@ jobs:
         working-directory: beregeningsplanner/backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -57,7 +111,7 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
 
   publish:
-    needs: test
+    needs: [prepare, test]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -65,6 +119,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
 
       - name: Versie bepalen
         id: version

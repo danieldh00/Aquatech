@@ -720,9 +720,16 @@ function registerShopContentRoutes(app, { content, requireJson, audit, mainTenan
    */
   function view(req) {
     const stored = content.state(req.tenantId);
+    // Een oudere of onvolledig opgeslagen versie (bijv. zonder banners of kolommen) wordt aangevuld met de standaard, zoals de shop zelf doet.
+    /**
+     * Vult een opgeslagen versie van de startpagina aan met de standaard.
+     * @param {object|null} data De opgeslagen versie.
+     * @returns {object|null} De complete versie, of null als er geen is.
+     */
+    const completeSite = (data) => (data ? normalizeSite(data) : null);
     return {
       available: true, storefront: Boolean(settingsOf(req).get('storefront')),
-      site: { ...stored.site, isDefault: !stored.site.published },
+      site: { ...stored.site, draft: completeSite(stored.site.draft), published: completeSite(stored.site.published), isDefault: !stored.site.published },
       menu: { ...stored.menu, isDefault: !stored.menu.published }, unplaced: unplacedOf(req.tenantId),
       pages: stored.pages, images: content.listImages(req.tenantId),
       noticeColors: NOTICE_COLORS,

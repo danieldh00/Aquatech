@@ -109,7 +109,8 @@ jobs:
             - queries: geen SELECT *, geen N+1, indexen met tenant_id vooraan, geen zware queries op een warme pad;
             - frontend: relatieve URL's, geen CDN's, --at-*-kleurvariabelen, getJson voor api/me en api/config;
             - tests: nieuwe routes hebben een test voor andere tenant (404) en ontbrekend recht (403);
-            - versie-bump, CHANGELOG.md en een regel bovenaan releases.js als beregeningsplanner/ is gewijzigd;
+            - een bestand changes/<naam>.md met de releasenotes als beregeningsplanner/ is gewijzigd (versienummer, CHANGELOG.md en
+              releases.js worden na het mergen automatisch bijgewerkt en horen niet in de PR);
             - codestijl: duidelijke namen en een commentaarblok per functie in het Nederlands.
             De software is nog in ontwikkeling: meld geen problemen met gegevens van vóór een migratie.
 

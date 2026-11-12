@@ -207,6 +207,7 @@
     try {
       const result = await context.api('purchase-orders/from-proposal', { method: 'POST' });
       await load();
+      if (context.afterProposal) context.afterProposal();
       const skipped = result.skipped ? ` ${result.skipped} artikel${result.skipped === 1 ? '' : 'en'} zonder voorkeursleverancier blijven buiten beeld.` : '';
       context.toast(result.orders.length ? `${result.orders.length} concept-order${result.orders.length === 1 ? '' : 's'} gemaakt.${skipped}` : `Niets te bestellen.${skipped}`);
     } catch (error) {
