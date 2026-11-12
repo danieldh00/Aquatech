@@ -259,15 +259,16 @@ function createPackingSlips(db, { orders, settingsFor, colorsOf = () => ({}) }) 
   /**
    * De bestellingen die gepickt moeten worden, met per bestelling het aantal regels en stuks.
    * @param {string} tenantId Id van de omgeving.
-   * @returns {object[]} Per bestelling: id, nummer, klant, datum, verzendmethode, aantal regels, aantal stuks, opmerking en of de pakbon al is afgedrukt.
+   * @returns {{ items: object[], truncated: boolean }} Per bestelling: id, nummer, klant, datum, verzendmethode, aantal regels, aantal stuks, opmerking en of de pakbon al is afgedrukt.
    */
   function toPick(tenantId) {
-    return orders.listToPick(tenantId).map((order) => ({
+    const { items, truncated } = orders.listToPick(tenantId);
+    return { truncated, items: items.map((order) => ({
       id: order.id, number: order.number, customerName: order.customerName, createdAt: order.createdAt,
       shippingLabel: order.shipping ? order.shipping.label : '', pickup: !!(order.shipping && order.shipping.method === 'ophalen'),
       lineCount: order.lines.length, pieces: order.lines.reduce((sum, line) => sum + (Number(line.qty) || 0), 0),
       note: order.note || '', printedAt: order.packingSlip ? order.packingSlip.printedAt : null, address: addressLines(order).join(', '),
-    }));
+    })) };
   }
 
   /**
@@ -311,7 +312,7 @@ function registerPackingSlipRoutes(app, { slips, audit, requireJson }) {
 
   // Vóór /:id in web-orders.js: de lijst met te picken bestellingen.
   app.get('/api/admin/web-orders/to-pick', (req, res) => {
-    res.json({ items: slips.toPick(req.tenantId) });
+    res.json(slips.toPick(req.tenantId));
   });
 
   // Eén pakbon (opnieuw afdrukken telt ook). Een POST, want het afdrukken wordt vastgelegd.

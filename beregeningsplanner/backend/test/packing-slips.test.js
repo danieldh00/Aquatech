@@ -208,3 +208,32 @@ test('Te picken: een online bestelling staat er pas bij als hij betaald is (filt
   setOnline(open.id, 'betaald');
   assert.strictEqual((await admin.get('/app/api/admin/web-orders/to-pick')).body.items.length, 2);
 });
+
+test('Te picken: meer dan 200 onbetaalde online bestellingen verdringen een betaalde niet; bij meer dan 200 klare bestellingen meldt de lijst dat hij is afgekapt', async () => {
+  const { db, admin, order } = await setup();
+  await order(['SPR-1']);
+  const original = db.prepare('SELECT * FROM web_orders').get();
+  /**
+   * Maakt kopieën van de bestelling met een betaalstatus (online) en een oudere datum, zodat ze vóór de echte bestelling komen.
+   * @param {string} prefix Voorvoegsel voor id en nummer.
+   * @param {string} status De betaalstatus.
+   * @param {number} count Het aantal kopieën.
+   * @returns {void}
+   */
+  const clone = (prefix, status, count) => {
+    const data = JSON.stringify({ ...JSON.parse(original.data), payment: 'online', pay: { status } });
+    for (let i = 0; i < count; i++) {
+      db.prepare('INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(`${prefix}-${i}`, original.tenant_id, `${prefix.toUpperCase()}-${i}`, original.user_id, 'nieuw', original.customer_name, original.email, original.total, data, '2020-01-01T00:00:00.000Z', original.updated_at);
+    }
+  };
+  clone('open', 'open', 230);
+  const first = (await admin.get('/app/api/admin/web-orders/to-pick')).body;
+  assert.deepStrictEqual(first.items.map((item) => item.id), [original.id], 'alleen de bestelling die klaarstaat');
+  assert.strictEqual(first.truncated, false);
+  clone('paid', 'betaald', 230);
+  const second = (await admin.get('/app/api/admin/web-orders/to-pick')).body;
+  assert.strictEqual(second.items.length, 200);
+  assert.strictEqual(second.truncated, true);
+  assert.ok(second.items.every((item) => item.number.startsWith('PAID-')), 'de oudste eerst');
+});

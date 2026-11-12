@@ -22,7 +22,7 @@
   const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : '–');
   /** Hoogstens zoveel pakbonnen in één PDF (gelijk aan de server). */
   const MAX_SLIPS = 50;
-  const state = { items: [], selected: new Set() };
+  const state = { items: [], selected: new Set(), truncated: false };
   /** Toont een melding; wordt door init vervangen door die van Beheer. */
   let toast = () => {};
 
@@ -61,7 +61,7 @@
     const count = state.selected.size;
     $('#tp-print').disabled = count === 0;
     $('#tp-print').textContent = count && count === state.items.length ? `Alles afdrukken (${count})` : `Afdrukken (${count})`;
-    $('#tp-count').textContent = state.items.length ? `${state.items.length} te picken · ${count} gekozen` : '';
+    $('#tp-count').textContent = state.items.length ? `${state.items.length} te picken · ${count} gekozen${state.truncated ? ` · alleen de oudste ${state.items.length} worden getoond; druk deze af en ververs daarna` : ''}` : '';
     const all = $('#tp-all');
     if (all) all.checked = count > 0 && count === state.items.length;
   }
@@ -78,6 +78,7 @@
       if (!res.ok) throw new Error(body.message || AquatechCommon.statusMessage(res.status));
       const known = new Set(state.items.map((item) => item.id));
       state.items = body.items;
+      state.truncated = !!body.truncated;
       const ids = new Set(state.items.map((item) => item.id));
       // Nieuwe bestellingen worden gekozen; een eerdere keuze blijft staan zolang de bestelling er nog is.
       const next = new Set();
