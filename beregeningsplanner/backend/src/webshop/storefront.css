@@ -196,7 +196,7 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .category-tile span { color: var(--at-muted); font-size: 0.85rem; }
 .category-tile:hover, .product-card:hover { border-color: var(--at-shop-green); }
 
-.product-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 8px; text-decoration: none; color: inherit; }
+.product-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 8px; color: inherit; min-width: 0; }
 .product-image { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: var(--at-white); overflow: hidden; }
 .product-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .no-image { width: 60%; height: 60%; border-radius: 8px; background: var(--at-shop-green-soft); }
@@ -315,27 +315,25 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .cms-page a { color: var(--at-shop-green-dark); text-decoration: underline; }
 @media (max-width: 520px) { .cms-page { padding: 16px; } }
 
-/* Hoofdartikelen met varianten: een regel met keuzelijst (zoals een groothandel). */
-.variant-row { grid-column: 1 / -1; display: grid; grid-template-columns: 96px minmax(0, 1fr) minmax(220px, 280px) minmax(200px, 240px); gap: 8px 20px; align-items: center; padding: 14px 16px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 12px; }
-.variant-row .product-image { width: 96px; height: 96px; aspect-ratio: auto; }
-.variant-row .product-name { display: block; min-height: 0; color: var(--at-shop-navy); text-decoration: none; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset; }
-.variant-row .product-name:hover { text-decoration: underline; }
-.variant-meta { margin: 4px 0 0; color: var(--at-muted); font-size: 0.9rem; }
-.variant-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.variant-pick label { display: flex; flex-direction: column; gap: 2px; flex: 1 1 140px; font-size: 0.75rem; color: var(--at-muted); }
-.variant-pick select { font: inherit; font-size: 1rem; color: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; background: var(--at-white); }
+/* Productkaart: hoofdartikelen met varianten hebben een keuzelijst, alle kaarten een aantal en winkelwagenknop. */
+.product-card .product-name { text-decoration: none; }
+.product-card .product-name:hover { text-decoration: underline; }
+.product-card .variant-meta { margin: 0; font-size: 0.8rem; overflow-wrap: anywhere; }
+.product-card .product-price { margin: 0; font-weight: 400; }
+.product-card .product-price strong { font-size: 1.1rem; }
+.product-card .product-price small { font-size: 0.8rem; color: var(--at-muted); }
+.variant-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.variant-pick label { display: flex; flex-direction: column; gap: 2px; flex: 1 1 100%; min-width: 0; font-size: 0.75rem; color: var(--at-muted); }
+.variant-pick select { width: 100%; min-width: 0; font: inherit; font-size: 1rem; color: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; background: var(--at-white); }
 .variant-count { font-size: 0.8rem; color: var(--at-muted); }
 .js-on .variant-go { display: none; }
-.variant-buy { display: flex; flex-direction: column; gap: 4px; }
-.variant-price { margin: 0; font-size: 1.1rem; }
-.variant-price small { font-size: 0.8rem; font-weight: 400; color: var(--at-muted); }
-.variant-order { display: flex; gap: 8px; align-items: stretch; }
-.variant-order input { width: 64px; font: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; }
-.variant-order .button { flex: 1; padding: 8px 12px; }
+.card-order { display: flex; gap: 8px; align-items: stretch; }
+.card-order input { width: 64px; flex: none; font: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; }
+.card-order .button { flex: 1; min-width: 0; padding: 8px 12px; }
 .product-info .variant-pick { margin: 8px 0 12px; flex-direction: column; align-items: stretch; }
 .product-info .variant-pick label { flex: none; }
 .product-info .variant-pick .button { align-self: flex-start; }
-@media (max-width: 860px) { .variant-row { grid-template-columns: 80px minmax(0, 1fr); } .variant-row .product-image { width: 80px; height: 80px; } .variant-pick, .variant-buy { grid-column: 1 / -1; } }
+@media (max-width: 520px) { .card-order { flex-direction: column; } .card-order input { width: 100%; } }
 
 /* Keuze tussen alle producten en alleen wat op voorraad is. */
 .stock-filter { margin: 0 0 12px; color: var(--at-muted); font-size: 0.95rem; }

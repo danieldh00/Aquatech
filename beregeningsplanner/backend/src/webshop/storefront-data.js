@@ -431,13 +431,15 @@ const soldSince = () => new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOStrin
  * (de pagina's zijn openbaar: niet bij elk bezoek een databasequery).
  * @param {object} db De database.
  * @param {{ treeOf?: Function, discountsOf?: Function }} [options] treeOf(tenantId, preview) = de categorieboom van een omgeving (uit Beheer; zonder de standaardboom); discountsOf(tenantId) = de instelling categoryDiscounts (korting per categorie voor zakelijke klanten).
- * @returns {{ catalogOf: Function, warm: Function, detailsOf: Function, clearCache: Function }} catalogOf(tenantId, { preview }), warm(tenantId), detailsOf en clearCache().
+ * @returns {{ catalogOf: Function, warm: Function, detailsOf: Function, packagingsOf: Function, clearCache: Function }} catalogOf(tenantId, { preview }), warm(tenantId), detailsOf, packagingsOf en clearCache().
  */
 function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = () => ({}) } = {}) {
   const cache = new Map();
   // Omschrijvingen per productpagina (en de hele feed) met dezelfde bewaartijd als de catalogus, zodat een
   // productpagina met een warme cache geen query kost (1 uit de audit van 1.7.3). Begrensd in aantal.
   const detailsCache = new Map();
+  // Verpakkingen per productpagina (zelfde bewaartijd en begrenzing).
+  const packagingCache = new Map();
   // Lopende opvragingen van warm per omgeving (één tegelijk).
   const warming = new Map();
   // Telt elke clearCache: een opvraging die begon vóór het wissen, vult de cache daarna niet met oude gegevens.
@@ -510,10 +512,32 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
       return details;
     },
     /**
+     * De actieve verpakkingen (doos, pallet) van artikelen, voor de keuze op de productpagina. Eén query per
+     * productpagina, daarna uit het geheugen. Welke verpakking een bezoeker mag zien bepaalt de aanroeper (doelgroep).
+     * @param {string} tenantId De omgeving.
+     * @param {string[]} codes Artikelcodes (het artikel of zijn varianten).
+     * @returns {Map<string, { code: string, name: string, factor: number, audience: string }[]>} Per artikelcode de verpakkingen, kleinste eerst (artikelen zonder verpakking ontbreken).
+     */
+    packagingsOf(tenantId, codes) {
+      const wanted = [...new Set(codes.map(String))].slice(0, 500);
+      if (!wanted.length) return new Map();
+      const cacheKey = `${tenantId}|${wanted.join('|')}`;
+      const hit = packagingCache.get(cacheKey);
+      if (hit && hit.until > Date.now()) return hit.packagings;
+      const rows = db.prepare(`SELECT i.code AS item_code, p.code, p.name, p.factor, p.audience FROM item_packagings p
+        JOIN stock_items i ON i.tenant_id = p.tenant_id AND i.id = p.item_id
+        WHERE p.tenant_id = ? AND p.active = 1 AND i.archived = 0 AND i.code IN (${wanted.map(() => '?').join(',')}) ORDER BY p.factor, p.code`).all(tenantId, ...wanted);
+      const packagings = new Map();
+      for (const row of rows) packagings.set(row.item_code, [...(packagings.get(row.item_code) || []), { code: row.code, name: row.name, factor: Number(row.factor), audience: row.audience }]);
+      if (packagingCache.size >= DETAILS_CACHE_MAX) packagingCache.delete(packagingCache.keys().next().value);
+      packagingCache.set(cacheKey, { packagings, until: Date.now() + CACHE_MS });
+      return packagings;
+    },
+    /**
      * Wist de cache (tests).
      * @returns {void}
      */
-    clearCache() { generation++; cache.clear(); detailsCache.clear(); },
+    clearCache() { generation++; cache.clear(); detailsCache.clear(); packagingCache.clear(); },
   };
 
   /**

@@ -141,7 +141,7 @@ test('beheerder keurt goed: zakelijke klant ziet overal excl. btw met de regel i
   assert.match(product.text, /alle prijzen zijn exclusief btw/);
   assert.match(product.headers.get('cache-control') || '', /private/);
   const search = await applicant.client.get('/zoeken/?q=zakelijk');
-  assert.match(search.text, /€\s8,00 <small class="price-vat">excl\. btw<\/small> <small class="price-incl">\(incl\. btw €\s9,68\)/);
+  assert.match(search.text, /€\s8,00<\/strong> <small>excl\. btw<br><small class="price-incl" data-variant-incl>incl\. btw €\s9,68<\/small>/);
   const account = await applicant.client.get('/account/');
   assert.match(account.text, /Zakelijk account/);
   assert.match(account.text, /KvK 12345678/);
