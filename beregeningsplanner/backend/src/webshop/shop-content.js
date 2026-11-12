@@ -37,7 +37,10 @@ const MAX_TREE_NODES = 600;
 const MAX_TREE_DEPTH = 6;
 
 /** De kleuren voor de mededelingenbalk (sleutel → naam in Beheer); de shop kent bij elke sleutel een vaste, goed leesbare achtergrond (storefront.css). */
-const NOTICE_COLORS = { purple: 'Paars', navy: 'Donkerblauw', green: 'Groen', teal: 'Turquoise', orange: 'Oranje', red: 'Rood', grey: 'Grijs' };
+/** Kop van de uitverkoop-kolom die is verwijderd; oude opgeslagen kolommen met die kop vallen weg. */
+const RETIRED_COLUMN_TITLE = 'Uitverkoop';
+
+const NOTICE_COLORS ={ purple: 'Paars', navy: 'Donkerblauw', green: 'Groen', teal: 'Turquoise', orange: 'Oranje', red: 'Rood', grey: 'Grijs' };
 
 /** Standaardinhoud: precies wat de shop toonde voordat deze te bewerken was. */
 const DEFAULT_SITE = {
@@ -58,7 +61,6 @@ const DEFAULT_SITE = {
     items: [
       { title: 'Beregening', group: 'beregening', codes: [] },
       { title: 'Speciale producten', group: '', codes: [] },
-      { title: 'Uitverkoop', group: '', codes: [] },
     ],
   },
   benefits: {
@@ -202,6 +204,8 @@ function normalizeSite(input, base = DEFAULT_SITE) {
       enabled: flag(columns.enabled, base.columns.enabled),
       items: cleanList(columns.items, base.columns.items, 3, (item) => {
         const title = cleanText(item.title, 60);
+        // De uitverkoop-sectie is verwijderd: een kolom met die kop uit eerder opgeslagen inhoud wordt overgeslagen.
+        if (title === RETIRED_COLUMN_TITLE) return null;
         return title ? { title, group: GROUP_SLUGS.includes(item.group) ? item.group : '', codes: cleanCodes(item.codes) } : null;
       }),
     },

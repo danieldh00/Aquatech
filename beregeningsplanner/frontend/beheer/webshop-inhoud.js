@@ -217,7 +217,7 @@
         <div data-list="banners.items">${banners}</div>
         <button type="button" class="btn small" data-add="banners"${site.banners.items.length >= 4 ? ' disabled' : ''}>Banner toevoegen</button>
       </fieldset>
-      <fieldset class="sc-block"><legend>Kolommen met producten (Beregening, Speciale producten, Uitverkoop)</legend>
+      <fieldset class="sc-block"><legend>Kolommen met producten (bijv. Beregening, Speciale producten)</legend>
         ${checkField('Toon dit blok', 'columns.enabled', site.columns.enabled)}
         <div data-list="columns.items">${columns}</div>
         <button type="button" class="btn small" data-add="columns"${site.columns.items.length >= 3 ? ' disabled' : ''}>Kolom toevoegen</button>
