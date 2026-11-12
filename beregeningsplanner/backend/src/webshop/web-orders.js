@@ -665,13 +665,12 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
   }
 
   /**
-   * Legt vast dat de pakbonnen van de bestellingen zijn afgedrukt (`data.packingSlip`: moment, wie en hoe vaak), alles of niets in één transactie.
+   * Legt vast dat de pakbonnen van de bestellingen zijn afgedrukt (`data.packingSlip`: moment en hoe vaak; de naam van wie afdrukte staat in het auditlogboek, niet hier, want de bestelling gaat ook naar de klant), alles of niets in één transactie.
    * @param {string} tenantId Id van de omgeving.
    * @param {string[]} ids Ids van de bestellingen (onbekende of van een andere omgeving worden overgeslagen).
-   * @param {string} printedBy Naam van wie afdrukte.
    * @returns {void}
    */
-  function markPackingSlipsPrinted(tenantId, ids, printedBy) {
+  function markPackingSlipsPrinted(tenantId, ids) {
     const wanted = Array.from(new Set(ids.map(String)));
     if (!wanted.length) return;
     const timestamp = currentTimestamp();
@@ -679,7 +678,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       const rows = prepare(`SELECT id, data FROM web_orders WHERE tenant_id = ? AND id IN (${wanted.map(() => '?').join(', ')})${isPg(db) ? ' FOR UPDATE' : ''}`).all(tenantId, ...wanted);
       for (const row of rows) {
         const data = JSON.parse(row.data);
-        data.packingSlip = { printedAt: timestamp, printedBy: clean(printedBy, 120), count: (Number(data.packingSlip && data.packingSlip.count) || 0) + 1 };
+        data.packingSlip = { printedAt: timestamp, count: (Number(data.packingSlip && data.packingSlip.count) || 0) + 1 };
         prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, row.id);
       }
     });

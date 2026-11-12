@@ -139,6 +139,7 @@ test('Te picken, pakbon per bestelling en alles in één PDF', async () => {
   assert.match(all.headers.get('content-disposition'), /Pakbonnen \d{4}-\d{2}-\d{2}\.pdf/);
   const detail = await admin.get(`/app/api/admin/web-orders/${first.id}`);
   assert.strictEqual(detail.body.order.packingSlip.count, 2, 'twee keer afgedrukt');
+  assert.strictEqual(JSON.stringify(detail.body.order.packingSlip).includes('printedBy'), false, 'geen medewerkersnaam bij de bestelling (die gaat ook naar de klant)');
 });
 
 test('Te picken: verzonden en geannuleerde bestellingen staan er niet bij', async () => {

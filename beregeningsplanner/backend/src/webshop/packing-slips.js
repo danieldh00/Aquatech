@@ -275,10 +275,10 @@ function createPackingSlips(db, { orders, settingsFor, colorsOf = () => ({}) }) 
    * Maakt één PDF met de pakbonnen van de gevraagde bestellingen en legt vast dat ze zijn afgedrukt.
    * @param {string} tenantId Id van de omgeving.
    * @param {string[]} ids Ids van de bestellingen (hoogstens MAX_SLIPS).
-   * @param {{ markPrinted?: boolean, user?: object|null }} [options] Of het afdrukken wordt vastgelegd en door wie.
+   * @param {{ markPrinted?: boolean }} [options] Of het afdrukken wordt vastgelegd.
    * @returns {{ pdf?: Buffer, fileName?: string, orders?: object[], error?: string, status?: number }} De PDF of een foutmelding.
    */
-  function pdfFor(tenantId, ids, { markPrinted = true, user = null } = {}) {
+  function pdfFor(tenantId, ids, { markPrinted = true } = {}) {
     if (!Array.isArray(ids) || !ids.length) return { error: 'Kies minstens één bestelling.', status: 400 };
     if (ids.length > MAX_SLIPS) return { error: `Hoogstens ${MAX_SLIPS} pakbonnen tegelijk.`, status: 400 };
     const found = orders.getMany(tenantId, ids).filter((order) => order.status !== 'geannuleerd');
@@ -288,7 +288,7 @@ function createPackingSlips(db, { orders, settingsFor, colorsOf = () => ({}) }) 
     if (unpaid.length) return { error: `Nog niet betaald, dus nog geen pakbon: ${unpaid.map((order) => order.number).join(', ')}.`, status: 409 };
     const settings = settingsFor(tenantId);
     const pdf = packingSlipsPdf(found, { profile: settings.get('quoteProfile'), colors: colorsOf(tenantId), locations: locationsOf(tenantId, found) });
-    if (markPrinted) orders.markPackingSlipsPrinted(tenantId, found.map((order) => order.id), user ? user.display_name || user.displayName || '' : '');
+    if (markPrinted) orders.markPackingSlipsPrinted(tenantId, found.map((order) => order.id));
     return { pdf, fileName: slipFileName(found), orders: found };
   }
 
@@ -320,7 +320,7 @@ function registerPackingSlipRoutes(app, { slips, audit, requireJson }) {
 
   // Eén pakbon (opnieuw afdrukken telt ook). Een POST, want het afdrukken wordt vastgelegd.
   app.post('/api/admin/web-orders/:id/packing-slip', requireJson, (req, res) => {
-    const out = slips.pdfFor(req.tenantId, [req.params.id], { user: req.user });
+    const out = slips.pdfFor(req.tenantId, [req.params.id]);
     if (out.error) return res.status(out.status || 400).json({ error: 'packing_slip_failed', message: out.error });
     audit(req, 'webshop_pakbon', { number: out.orders[0].number });
     sendPdf(res, out);
@@ -329,7 +329,7 @@ function registerPackingSlipRoutes(app, { slips, audit, requireJson }) {
   // Meerdere pakbonnen in één PDF (Alles afdrukken).
   app.post('/api/admin/web-orders/packing-slips', requireJson, (req, res) => {
     const ids = req.body && Array.isArray(req.body.ids) ? req.body.ids.filter((id) => typeof id === 'string').slice(0, 500) : [];
-    const out = slips.pdfFor(req.tenantId, ids, { user: req.user });
+    const out = slips.pdfFor(req.tenantId, ids);
     if (out.error) return res.status(out.status || 400).json({ error: 'packing_slip_failed', message: out.error });
     audit(req, 'webshop_pakbonnen', { count: out.orders.length });
     sendPdf(res, out);
