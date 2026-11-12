@@ -3,7 +3,7 @@ titel: Uitverkoop-sectie uit de webshop
 ---
 
 ## Nieuws
-- De uitverkoop-sectie op de webshop is verwijderd. De startpagina toont alleen nog de kolommen Beregening en Speciale producten.
+- De uitverkoop-sectie op de webshop is verwijderd. De standaardkolom Uitverkoop is verdwenen van de startpagina.
 
 ## Changelog
 - `webshop/shop-content.js`: de standaardkolom *Uitverkoop* is verwijderd uit `DEFAULT_SITE`; een opgeslagen kolom met die kop wordt bij het saneren overgeslagen (`RETIRED_COLUMN_TITLE`), zodat ook bestaande live inhoud geen uitverkoop-sectie meer toont. Geen migratie nodig.
