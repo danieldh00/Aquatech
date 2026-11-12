@@ -92,6 +92,10 @@ test('leveranciers: aanmaken, wijzigen, koppelen aan een artikel, archiveren en 
     assert.deepStrictEqual((await kees.get('/app/api/suppliers')).body.items.map((supplier) => supplier.name), ['Import BV']);
     assert.strictEqual((await kees.get('/app/api/suppliers?archived=1')).body.items.length, 2);
     assert.strictEqual((await kees.get(`/app/api/stock/items/${itemB.id}/suppliers`)).body.items[0].supplierArchived, true);
+    // Een gearchiveerde leverancier komt niet nieuw bij een artikel; een bestaande koppeling mag blijven.
+    const itemC = (await kees.post('/app/api/stock/items', { code: 'SUP-C', name: 'Artikel C' })).body;
+    assert.strictEqual((await kees.put(`/app/api/stock/items/${itemC.id}/suppliers`, { suppliers: [{ supplierId: created.body.id }] })).status, 409);
+    assert.strictEqual((await kees.put(`/app/api/stock/items/${itemB.id}/suppliers`, { suppliers: [{ supplierId: created.body.id, supplierSku: 'blijft' }] })).status, 200);
     assert.strictEqual((await kees.patch(`/app/api/suppliers/${created.body.id}`, { archived: false })).body.archived, false);
 
     // Een artikel verwijderen (zonder mutaties) haalt zijn koppelingen weg; een leverancier zonder koppelingen gaat echt weg.

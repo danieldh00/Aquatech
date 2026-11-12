@@ -274,9 +274,12 @@ function createSupplierStore(db) {
       if (Number(item.has_variants) && checked.value.length) return { error: 'Een hoofdartikel heeft geen eigen leverancier; stel die in bij de varianten.', field: 'suppliers', status: 409 };
       if (checked.value.length) {
         const ids = checked.value.map((entry) => entry.supplierId);
-        const known = prepare(`SELECT id FROM suppliers WHERE tenant_id = ? AND id IN (${ids.map(() => '?').join(', ')})`).all(tenantId, ...ids).map((row) => row.id);
-        const unknown = ids.find((id) => !known.includes(id));
+        const known = prepare(`SELECT id, archived FROM suppliers WHERE tenant_id = ? AND id IN (${ids.map(() => '?').join(', ')})`).all(tenantId, ...ids);
+        const unknown = ids.find((id) => !known.some((row) => row.id === id));
         if (unknown) return { error: 'Deze leverancier bestaat niet.', field: 'supplierId', status: 404 };
+        // Een gearchiveerde leverancier mag niet nieuw bij een artikel; bestaande koppelingen blijven staan.
+        const already = new Set(prepare('SELECT supplier_id FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').all(tenantId, item.id).map((row) => row.supplier_id));
+        if (known.some((row) => Number(row.archived) && !already.has(row.id))) return { error: 'Deze leverancier is gearchiveerd; zet hem eerst terug uit het archief.', field: 'supplierId', status: 409 };
       }
       prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
       const timestamp = currentTimestamp();
