@@ -117,6 +117,17 @@ test('EAN per artikel: opslaan, ongeldig, uniek per omgeving en niet op een hoof
   const duplicate = await admin.put(`/app/api/stock/items/${second.id}`, { ean: '8712345678906' });
   assert.strictEqual(duplicate.status, 409);
   assert.match(duplicate.body.message, /SPR-1/);
+  // Een geweigerde EAN laat de andere wijzigingen ook niet staan (niets half opgeslagen).
+  const mixed = await admin.put(`/app/api/stock/items/${second.id}`, { name: 'Nieuwe naam', salePrice: 99, ean: '8712345678906' });
+  assert.strictEqual(mixed.status, 409);
+  const unchanged = (await admin.get(`/app/api/stock/items/${second.id}`)).body;
+  assert.strictEqual(unchanged.name, 'Sproeier 2');
+  assert.strictEqual(unchanged.salePrice, null);
+  // Een nieuw artikel met een EAN die al bestaat wordt helemaal niet aangemaakt; daarna lukt het zonder EAN met dezelfde code.
+  const refused = await admin.post('/app/api/stock/items', { code: 'SPR-3', name: 'Sproeier 3', unit: 'st', ean: '8712345678906' });
+  assert.strictEqual(refused.status, 409);
+  assert.strictEqual(refused.body.field, 'ean');
+  assert.strictEqual((await admin.post('/app/api/stock/items', { code: 'SPR-3', name: 'Sproeier 3', unit: 'st' })).status, 201);
   // Een andere organisatie mag dezelfde EAN gebruiken.
   assert.strictEqual((await outsider.post('/app/api/stock/items', { code: 'X-1', name: 'Zelfde', unit: 'st', ean: '8712345678906' })).status, 201);
   // Wissen en een EAN-8.
@@ -165,5 +176,6 @@ test('etiketten afdrukken: PDF, sjabloon uit Beheer, rechten, andere organisatie
   const parent = (await admin.post('/app/api/stock/items', { code: 'HOOFD', name: 'Hoofd', unit: 'st' })).body;
   assert.strictEqual((await admin.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Maat', values: ['S', 'M'] }] })).status, 200);
   assert.strictEqual((await installer.post('/app/api/stock/labels', { items: [{ id: parent.id, qty: 1 }] })).body.error, 'has_variants');
-  assert.strictEqual((await admin.put(`/app/api/stock/items/${parent.id}`, { ean: '96385074' })).status, 400);
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${parent.id}`, { name: 'Hoofd nieuw', ean: '96385074' })).status, 400);
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${parent.id}`)).body.name, 'Hoofd');
 });
