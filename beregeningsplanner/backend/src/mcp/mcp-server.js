@@ -18,6 +18,8 @@ const INSTRUCTIONS = [
   '2) Zoek per onderdeel het artikel met zoek_artikelen en gebruik de artikelcode; prijzen komen altijd uit AquaTech.',
   '3) Maak de offerte met maak_concept_offerte. Twijfel je over een artikel of aantal, zet dan twijfel=true en leg in notitie uit waarom.',
   'Arbeid als regel met soort "arbeid" en eenheid "uur" (het uurtarief vult AquaTech in). Verzin geen artikelcodes of prijzen.',
+  'TERUGVRAGEN: raad nooit. Is iets onduidelijk of ontbreekt er iets (welke klant bij meerdere treffers, welk artikel of welke maat, een aantal, afmetingen, een prijs), stel dan eerst een korte vraag aan de gebruiker en wacht op het antwoord. '
+    + 'Tools die keuzeNodig=true of status "terugvragen" teruggeven hebben niets aangemaakt: leg de vraag voor, pas de invoer aan en probeer opnieuw. Vraag ook om bevestiging voordat je een nieuwe klant aanmaakt.',
   'De offerte blijft een concept: de medewerker controleert en verstuurt hem zelf in AquaTech. Geef aan het eind de link naar de offerte.',
 ].join(' ');
 

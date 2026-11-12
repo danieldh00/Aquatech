@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.12.3',
+      date: '2026-11-12',
+      title: 'Menubalk van de webshop altijd op één regel',
+      items: [
+        { text: 'De menubalk van de webshop (met Groothandel erbij) blijft op één regel; op smallere schermen worden ruimte en letter iets kleiner.' },
+      ],
+    },
+    {
       version: '1.12.2',
       date: '2026-11-12',
       title: 'Offerte omzetten naar een bestelling',
