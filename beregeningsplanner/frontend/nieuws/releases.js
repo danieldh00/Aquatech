@@ -13,11 +13,19 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.11.3',
+      version: '1.11.4',
       date: '2026-11-12',
       title: 'Leveranciersdocument inlezen',
       items: [
         { text: 'In Inkooporders kun je een PDF of foto van een offerte, orderbevestiging, pakbon of factuur laten inlezen. De regels worden aan je artikelen gekoppeld; jij controleert alles en bewaart het als concept, of boekt het meteen in de voorraad. De artikelnummers van de leverancier worden onthouden, zodat de volgende keer meer regels vanzelf goed staan.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.11.3',
+      date: '2026-11-12',
+      title: 'AI-koppeling op de juiste plek in Beheer',
+      items: [
+        { text: 'De instelling AI-koppeling (Claude en ChatGPT) stond per ongeluk onder Artikelen: etiketten. Je vindt hem nu onder Beheer → Koppelingen → AI-koppeling (MCP).', for: ['beheer'] },
       ],
     },
     {

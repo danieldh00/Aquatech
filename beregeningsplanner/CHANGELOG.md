@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.11.3
+## 1.11.4
 
 Leveranciersdocument inlezen en direct inboeken (punt 17 van bundel F, deel 4). Migratie 64.
 
@@ -10,6 +10,10 @@ Leveranciersdocument inlezen en direct inboeken (punt 17 van bundel F, deel 4). 
 - `translateApiError` uit `plan-analyzer.js` wordt hergebruikt voor de foutmeldingen van de AI-dienst.
 - Scherm: knop Inlezen uit document in Inkooporders; gekoppelde regels staan op de order, de rest is te koppelen of weg te laten; knoppen Bewaren (concept) en Bewaren en inboeken.
 - Tests: `order-reading.test.js` en `purchase-orders.test.js`.
+
+## 1.11.3
+
+Fix: het formulier *AI-koppeling (Claude en ChatGPT)* stond in Beheer onder *Artikelen: etiketten*. Het formulier stond niet in de lijst `SETTINGS_FORMS` van `beheer/indeling.js`, dus het werd bij elke sectie van Instellingen getoond. Het heeft nu een eigen sectie *AI-koppeling (MCP)* onder Koppelingen; bij Etiketten staan alleen nog de etiketsjablonen. Geen migratie.
 
 ## 1.11.2
 
