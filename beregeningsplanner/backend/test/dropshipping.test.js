@@ -82,6 +82,12 @@ test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', as
   const split = zlib.deflateSync(Buffer.concat([Buffer.from('endstream'), Buffer.alloc(200 * 1024 * 1024)]), { level: 9 });
   const sneaky = Buffer.concat([base, Buffer.from(`\n97 0 obj\n<< /Type /ObjStm /N 1 /First 5 /Filter 12 0 R /Length ${split.length} >>\nstream\n`), split, Buffer.from('\nendstream\nendobj\n')]);
   assert.match((await inspectSlip(sneaky)).error, /te groot als hij wordt uitgepakt/);
+  // Een bom die binnen de ruwe gegevens van een andere stream staat (pdf-lib leest hem via de xref) wordt ook gevonden.
+  const hidden = Buffer.concat([Buffer.from('\n94 0 obj\n<< /Length 10 >>\nstream\nxxxx\n93 0 obj\n<< /Type /ObjStm /Filter /FlateDecode >>\nstream\n'), bomb, Buffer.from('\nendstream\nendobj\n')]);
+  assert.match((await inspectSlip(Buffer.concat([base, hidden]))).error, /te groot als hij wordt uitgepakt/);
+  // Een onredelijk aantal streams wordt geweigerd.
+  const many = Buffer.concat([base, Buffer.from('\nstream\nabc\nendstream'.repeat(300))]);
+  assert.match((await inspectSlip(many)).error, /te groot als hij wordt uitgepakt/);
   const open = Buffer.concat([base, Buffer.from('\n96 0 obj\n<< /Length 100 >>\nstream\n'), bomb]);
   assert.match((await inspectSlip(open)).error, /te groot als hij wordt uitgepakt/);
   const started = Date.now();

@@ -14,6 +14,8 @@ const MAX_PAGE_POINTS = 3400;
 /** Hoogstens zoveel bytes mag één stream uitgepakt zijn, en alle streams samen (een kleine PDF kan anders vele honderden MB worden). */
 const MAX_STREAM_BYTES = 40 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 80 * 1024 * 1024;
+/** Hoogstens zoveel streams worden gecontroleerd (een gewone pakbon heeft er tientallen); meer is verdacht en houdt het werk begrensd. */
+const MAX_STREAMS = 200;
 
 /**
  * Probeert elke stream van de PDF begrensd uit te pakken (zonder op het woordenboek van de stream te vertrouwen, dat is te omzeilen) om een decompressiebom te herkennen vóór pdf-lib de PDF leest.
@@ -23,11 +25,14 @@ const MAX_TOTAL_BYTES = 80 * 1024 * 1024;
 function streamsWithinLimits(buffer) {
   let total = 0;
   let position = 0;
+  let streams = 0;
   for (;;) {
     const start = buffer.indexOf('stream', position, 'latin1');
     if (start < 0) return true;
     position = start + 6;
     if (buffer.subarray(Math.max(0, start - 3), start).toString('latin1') === 'end') continue;
+    streams += 1;
+    if (streams > MAX_STREAMS) return false;
     let dataStart = position;
     if (buffer[dataStart] === 0x0d) dataStart += 1;
     if (buffer[dataStart] === 0x0a) dataStart += 1;
@@ -41,7 +46,9 @@ function streamsWithinLimits(buffer) {
       if (failure.code === 'ERR_BUFFER_TOO_LARGE') return false;
     }
     if (total > MAX_TOTAL_BYTES) return false;
-    position = end;
+    // Verder zoeken vanaf het begin van de gegevens, niet vanaf 'endstream': een stream die binnen de gegevens van een andere
+    // staat wordt door pdf-lib via de xref toch gelezen en moet dus ook worden gecontroleerd.
+    position = dataStart;
   }
 }
 
