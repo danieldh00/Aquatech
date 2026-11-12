@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.11.8',
+      date: '2026-11-12',
+      title: 'Versie en releasenotes worden automatisch bijgewerkt',
+      items: [],
+    },
+    {
       version: '1.11.7',
       date: '2026-11-12',
       title: 'Webshop-inhoud laadt weer',

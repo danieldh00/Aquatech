@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.8
+
+Versienummer, changelog en releasenotes worden niet meer per PR aangepast, zodat PR's elkaar daar niet meer in de weg zitten. Geen migratie.
+
+- **Fragment per PR**: `changes/<naam>.md` met titel, punten voor Nieuws (met rechten) en een changelogtekst (zie `changes/README.md`).
+- **Na de merge** (`release.yml`, job *Versie en notes*): `tools/release-notes.js` geeft elk fragment het volgende versienummer (patch + 1, na x.y.9 de volgende minor; `bump: minor` kan), werkt `package.json`, `CHANGELOG.md` en `releases.js` bij, verwijdert de fragmenten en commit naar master met `[skip ci]`. Daarna testen en bouwen van het image zoals voorheen. Gelijktijdige merges: de runs wachten op elkaar (`concurrency`) en een mislukte push wordt opnieuw geprobeerd op de nieuwste master.
+- **Controle in PR's** (`version.yml`, check `version-must-increase`): faalt als een PR het versienummer, `CHANGELOG.md` of `releases.js` zelf wijzigt of als een fragment ontbreekt (uitzondering: label `geen-releasenotes`).
+- Tests: `release-notes.test.js`.
+
 ## 1.11.7
 
 Fix: Beheer > Webshop > Webshop-inhoud gaf *Kan de webshop-inhoud niet laden: Cannot read properties of undefined (reading 'items')*. Een opgeslagen versie van de startpagina zonder een van de blokken (banners, kolommen, voordelen of merken) werd ongewijzigd naar het scherm gestuurd, dat `site.<blok>.items` verwacht. `view()` in `webshop/shop-content.js` loopt concept en gepubliceerde versie nu door `normalizeSite` (ontbrekende blokken = de standaard, zoals de shop zelf al deed). Regressietest in `shop-content.test.js`. Geen migratie.
