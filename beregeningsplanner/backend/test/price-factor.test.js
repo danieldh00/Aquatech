@@ -287,7 +287,7 @@ test('prijsvoorstel: nieuwe inkoopprijs geeft een voorstel dat je goedkeurt of a
   assert.deepStrictEqual([view.changedCount, view.rejectedCount], [1, 1]);
   assert.strictEqual(view.preview[0].code, 'B', 'open voorstellen staan bovenaan');
   assert.strictEqual(view.preview.find((row) => row.code === 'A').rejected, true);
-  // Afwijzen twee keer geeft één rij; goedkeuren van een afgewezen voorstel kan alleen na heropenen niet nodig: het blijft doorvoerbaar via de API.
+  // Twee keer afwijzen geeft één rij.
   await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 12 }] });
   assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS n FROM price_proposal_rejections WHERE tenant_id = ?').get(main).n), 1);
   // Een nieuwe inkoopprijs maakt het voorstel weer open.
@@ -299,6 +299,9 @@ test('prijsvoorstel: nieuwe inkoopprijs geeft een voorstel dat je goedkeurt of a
   assert.strictEqual((await admin.post('/app/api/stock/price-factors/reopen', { ids: [first.id] })).body.reopened, 1);
   assert.strictEqual((await admin.get('/app/api/stock/price-factors')).body.rejectedCount, 0);
   await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 16 }] });
+  // Een afgewezen voorstel kan niet meer worden goedgekeurd (ook niet vanuit een verouderd tabblad); eerst heropenen.
+  assert.deepStrictEqual((await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: first.id, newPrice: 16 }] })).body, { updated: 0, skipped: 1 });
+  await admin.post('/app/api/stock/price-factors/reopen', { ids: [first.id] });
   assert.deepStrictEqual((await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: first.id, newPrice: 16 }, { id: second.id, newPrice: 14 }] })).body, { updated: 2, skipped: 0 });
   assert.strictEqual((await admin.get(`/app/api/stock/items/${first.id}`)).body.salePrice, 16);
   assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS n FROM price_proposal_rejections WHERE tenant_id = ?').get(main).n), 0);

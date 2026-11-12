@@ -296,7 +296,8 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
 
   /**
    * Zet de nieuwe prijzen door voor de gevraagde artikelen. De prijzen worden opnieuw berekend; een artikel waarvan de
-   * uitkomst intussen anders is dan in het voorbeeld (instelling of inkoopprijs veranderde) wordt overgeslagen.
+   * uitkomst intussen anders is dan in het voorbeeld (instelling of inkoopprijs veranderde) of die is afgewezen, wordt overgeslagen:
+   * een afwijzing maak je alleen ongedaan met reopen.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ id: string, newPrice: number }[]} requested Wat het voorbeeld toonde.
    * @returns {{ updated: number, skipped: number }} Aantal doorgevoerd en overgeslagen.
@@ -307,7 +308,7 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
     let skipped = 0;
     for (const entry of requested) {
       const row = current.get(String(entry && entry.id));
-      if (!row || !row.changed || !(Math.abs(Number(entry.newPrice) - row.newPrice) < 0.005)) { skipped += 1; continue; }
+      if (!row || !row.changed || row.rejected || !(Math.abs(Number(entry.newPrice) - row.newPrice) < 0.005)) { skipped += 1; continue; }
       changes.push({ id: row.id, salePrice: row.newPrice });
     }
     if (changes.length) {
