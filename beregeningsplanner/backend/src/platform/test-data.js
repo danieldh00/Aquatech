@@ -596,14 +596,14 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, imageWidth = 480, imageHeig
  * precies zo is als wanneer iemand het in de app doet): klantlinks, reacties
  * van klanten, werkorders, uren, foto's, meldingen, voorraad, facturen en de
  * webshop. Draait na store.seedEnvironment.
- * @param {object} stores { db, quotes, workorders, shop, settings (van de testomgeving), photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, purchaseOrders, itemImages, requests, invoices, sprinklers }.
+ * @param {object} stores { db, quotes, workorders, shop, settings (van de testomgeving), photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers }.
  * @param {object} testSet Uitkomst van buildTestData.
  * @param {{ users: object, quoteIds: string[], tenantId: string }} seeded Uit seedEnvironment.
  * @param {{ shareBase?: string|null }} [options] Adres van openbaar/offerte.html (uit de browser); zonder komen er geen klantlinks.
  * @returns {object} Aantallen per soort aangemaakte gegevens.
  */
 function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders } = stores;
+  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders } = stores;
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -865,6 +865,11 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
     if (first) {
       stock.move(tenantId, admin, first.id, { kind: 'telling', qty: Math.ceil((need.get(first.code) || 1) * 1.5) + 1, note: 'Kwartaaltelling' });
       stock.move(tenantId, admin, first.id, { kind: 'correctie', qty: -1, note: 'Beschadigd bij het laden' });
+    }
+    // Verpakkingseenheden: een doos voor iedereen en een pallet voor zakelijke klanten (voorraad blijft in zakken).
+    if (packagings) {
+      const sandItem = items.find((item) => item.code === 'EIGEN-ZAND') || stock.list(tenantId).find((item) => item.code === 'EIGEN-ZAND');
+      if (sandItem) packagings.setForItem(tenantId, sandItem.id, [{ code: 'PAL', name: 'Pallet', factor: 40, businessPrice: 1400, audience: 'zakelijk' }, { code: 'DUO', name: 'Duo-pak', factor: 2 }]);
     }
     // Twee leveranciers; de artikelen verdelen zich erover (om en om de voorkeur, elk derde artikel bij beide).
     if (suppliers) {

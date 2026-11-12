@@ -383,6 +383,16 @@
         </div>
         <div class="err" role="alert"></div>
       </section>
+      <section class="card-form" id="d-packagings" hidden>
+        <h3>Verpakkingen</h3>
+        <p class="muted small">Verkoop dit artikel ook per doos of pallet. De voorraad blijft in de basiseenheid staan; laat de prijs leeg om aantal × de stukprijs te gebruiken. Met een eigen EAN scan je de doos of pallet apart.</p>
+        <div class="tablewrap"><table class="grid" id="d-pk-table"></table></div>
+        <div class="row actions">
+          <button class="btn" type="button" id="pk-add">Verpakking toevoegen</button>
+          <button class="btn primary" type="button" data-save>Bewaren</button>
+        </div>
+        <div class="err" role="alert"></div>
+      </section>
       <section class="card-form" id="d-image">
         <h3>Afbeelding</h3>
         <div class="row image-row">
@@ -445,6 +455,7 @@
   <script src="labels.js"></script>
   <script src="merge.js"></script>
   <script src="suppliers.js"></script>
+  <script src="packagings.js"></script>
   <script src="orders.js"></script>
   <script src="artikelen.js"></script>
 </body>

@@ -1267,6 +1267,27 @@ const MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN ean TEXT;
   CREATE UNIQUE INDEX stock_items_ean ON stock_items (tenant_id, ean) WHERE ean IS NOT NULL;
   `,
+  // 63: verpakkingseenheden per artikel (artikelen/packagings.js, punt 1): item_packagings = een grotere verkoopeenheid
+  // (doos, pallet) van een artikel met `factor` basiseenheden, eigen code, prijs, zakelijke prijs en EAN, en de
+  // doelgroep (iedereen | zakelijk | groothandel). De voorraad blijft in de basiseenheid.
+  `
+  CREATE TABLE item_packagings (
+    id             TEXT PRIMARY KEY,
+    tenant_id      TEXT NOT NULL REFERENCES tenants(id),
+    item_id        TEXT NOT NULL REFERENCES stock_items(id),
+    code           TEXT NOT NULL,
+    name           TEXT NOT NULL,
+    factor         INTEGER NOT NULL,
+    sale_price     REAL,
+    business_price REAL,
+    ean            TEXT,
+    audience       TEXT NOT NULL DEFAULT 'iedereen',
+    active         INTEGER NOT NULL DEFAULT 1,
+    created_at     TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX item_packagings_code ON item_packagings (tenant_id, item_id, code);
+  CREATE UNIQUE INDEX item_packagings_ean ON item_packagings (tenant_id, ean) WHERE ean IS NOT NULL;
+  `,
 ];
 
 /**

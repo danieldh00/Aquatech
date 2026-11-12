@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.11.2',
+      date: '2026-11-12',
+      title: 'Verpakkingen per artikel',
+      items: [
+        { text: 'Bij een artikel kun je nu verpakkingen instellen, bijvoorbeeld een doos of een pallet van 144 stuks, met een eigen prijs, een eigen EAN en de klantgroep die ze ziet. De voorraad blijft in stuks staan. In de winkel verschijnen ze in de volgende versie.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.11.1',
       date: '2026-11-12',
       title: 'Etiketten met streepjescode',

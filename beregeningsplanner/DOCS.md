@@ -568,6 +568,12 @@ van de werkorder. Daardoor is alles vanzelf gekoppeld.
   of excl. btw, standaardsjabloon) in Beheer → Instellingen → *Artikelen:
   etiketten*. Grenzen: 500 etiketten en 200 artikelen per keer, 120 PDF's per
   uur per gebruiker; elke afdruk staat in het auditlog.
+- **Verpakkingen** (1.11.2): bij een artikel kun je een grotere verkoopeenheid
+  instellen (doos, pallet): code (bijvoorbeeld PAL), naam, aantal basiseenheden
+  (vanaf 2), eigen prijs en zakelijke prijs (leeg = aantal × stukprijs), eigen
+  EAN en wie de verpakking ziet (iedereen, zakelijk, groothandel). De voorraad
+  blijft in de basiseenheid. Hoogstens tien per artikel; een hoofdartikel met
+  varianten heeft er geen.
 
 ## Eigen webshop (opzet)
 
