@@ -103,6 +103,11 @@
       config = await templates();
     } catch (error) {
       // Zonder sjablonen kan er niets worden afgedrukt; het formulier mag de pagina dan niet opnieuw laden.
+      /**
+       * Voorkomt dat het formulier de pagina opnieuw laadt.
+       * @param {SubmitEvent} event Het verzendmoment.
+       * @returns {void}
+       */
       form.onsubmit = (event) => event.preventDefault();
       errorBox.textContent = error.message;
       return;
