@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.11.5
+
+Verpakkingseenheden per artikel, deel B: winkelwagen en bestelling (punt 1). Geen migratie.
+
+- **Winkelwagen**: een verpakking staat in de wagen als `CODE@PAL` (cookie en formulieren ongewijzigd). `priceCart` zoekt de verpakking op (één query voor de hele wagen), rekent de eigen prijs (zakelijk: zakelijke prijs; leeg = factor × stukprijs), toont de regel als "Klinker – Pallet (144 st)" met eenheid *Pallet* en laat een verpakking die uit staat of voor deze klantcategorie verborgen is (`visibleFor`) als "niet meer te koop" zien. Groothandelsvoorwaarden gelden alleen voor de basiseenheid.
+- **Beschikbaarheid** = hele verpakkingen (`floor(voorraad / factor)`); staan stuks en een pallet van hetzelfde artikel samen in de wagen, dan moet de voorraad voor alles samen genoeg zijn.
+- **Bestelling**: de orderregel houdt aantal verpakkingen en prijs per verpakking (`stockPer` = factor, `baseCode`); reserveren, controleren en afboeken gaan in de basiseenheid, per artikel samengevoegd (`stockLinesOf`). Retour: terugboeken in de basiseenheid; margerapportage telt de basiseenheid; de rapportage voegt regels van hetzelfde artikel samen (één afboeking, kosten één keer); de factuurregel krijgt aantal en prijs per verpakking en de omzetgroep van het artikel. Nog niet: keuze van een verpakking op de productpagina (volgt met de kaartenaanpassing van punt 33).
+
 ## 1.11.4
 
 Leveranciersdocument inlezen en direct inboeken (punt 17 van bundel F, deel 4). Migratie 64.

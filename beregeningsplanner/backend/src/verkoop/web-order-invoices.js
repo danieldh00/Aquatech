@@ -42,7 +42,7 @@ function fromWebOrder(order, articles, settings) {
   const company = String(customer.company || '').trim();
   const shifted = Boolean(order.vat && order.vat.shifted);
   const lines = order.lines.map((line) => {
-    const article = articles[String(line.code || '').toUpperCase()] || null;
+    const article = articles[String(line.baseCode || line.code || '').toUpperCase()] || null;
     return {
       code: line.code, description: line.name, qty: line.qty, unit: line.unit || (article && article.unit) || 'st', price: line.unitExcl, vat: shifted ? 0 : line.vatRate,
       group: article && article.revenueGroup ? article.revenueGroup : 'producten',
@@ -258,7 +258,7 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     }
     if (!settings.webOrders.enabled) return { error: 'Facturen voor webshopbestellingen staan uit (Facturen → Instellingen).', status: 409 };
     try {
-      const articles = stock ? stock.saleInfo(tenantId, order.lines.map((line) => line.code).filter(Boolean)) : {};
+      const articles = stock ? stock.saleInfo(tenantId, order.lines.map((line) => line.baseCode || line.code).filter(Boolean)) : {};
       const data = fromWebOrder(order, articles, settings);
       const debtor = debtors ? debtors.ensure(tenantId, data.customer, { customerId: order.userId, source: 'webshop', start: settings.debtorStart }) : null;
       const created = invoices.create(tenantId, user, data, settings, { shopOrderId: invoiceKey(order.id), customerId: order.userId, debtorId: debtor ? debtor.id : null });
