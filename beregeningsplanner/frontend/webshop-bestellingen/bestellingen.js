@@ -120,7 +120,7 @@
       ${trackingForm}
       ${invoiceLine}
       <p class="muted small">Betaling: ${paymentText(order)} · ${mail}${shipMail ? ` · ${shipMail}` : ''}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})${step.note ? `: ${esc(step.note)}` : ''}`).join(' → ')}${reservationText(order)}</p>
-      <p>${buttons}${canRefund ? ' <button class="btn primary" id="wo-refund">Terugbetalen via Mollie</button>' : ''} <button class="btn" id="wo-close">Sluiten</button></p>`;
+      <p>${buttons}${canRefund ? ' <button class="btn primary" id="wo-refund">Terugbetalen via Mollie</button>' : ''} ${order.status !== 'geannuleerd' ? '<button class="btn" id="wo-slip">Pakbon</button> ' : ''}<button class="btn" id="wo-close">Sluiten</button></p>`;
     box.hidden = false;
     /** Sluit het detail. */
     $('#wo-close').onclick = () => { box.hidden = true; state.openId = null; };
@@ -168,6 +168,18 @@
           toast('Volgcode opgeslagen');
           open(order.id);
         } catch (error) { toast(error.message, true); saveTracking.disabled = false; }
+      };
+    }
+    const slipButton = $('#wo-slip');
+    if (slipButton) {
+      /**
+       * Downloadt de pakbon van deze bestelling als PDF.
+       * @returns {Promise<void>}
+       */
+      slipButton.onclick = async () => {
+        slipButton.disabled = true;
+        try { await window.BeheerTePicken.downloadPdf(`/${encodeURIComponent(order.id)}/packing-slip`); } catch (error) { toast(error.message, true); }
+        slipButton.disabled = false;
       };
     }
     for (const button of box.querySelectorAll('[data-status]')) {

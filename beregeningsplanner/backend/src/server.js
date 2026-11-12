@@ -35,6 +35,7 @@ const { createShopSync } = require('./webshop/shop-sync');
 const { createShopContentStore, registerShopContentRoutes } = require('./webshop/shop-content');
 const { createStorefrontData } = require('./webshop/storefront-data');
 const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
+const { createPackingSlips, registerPackingSlipRoutes } = require('./webshop/packing-slips');
 const { createQuoteOrders, registerQuoteOrderRoutes } = require('./verkoop/quote-orders');
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
@@ -581,7 +582,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/plans', express.json({ limit: '12mb' }));
   // Een offerte met veel regels en lange teksten past niet in 16 kB.
   // Status van een webshopbestelling wijzigen (web-orders.js): alleen { status }.
-  app.use('/api/admin/web-orders', express.json({ limit: '4kb' }));
+  app.use('/api/admin/web-orders', express.json({ limit: '32kb' }));
   app.use('/api/quotes', express.json({ limit: '1mb' }));
   // Tekening indienen zonder inloggen (drawings.js): plan met achtergrond.
   app.use('/api/public/drawing', express.json({ limit: '8mb' }));
@@ -2401,6 +2402,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   webOrders.onShipped((tenantId, order) => webOrderMail.sendShipment(tenantId, order));
   webOrders.onCancelled((tenantId, order, user) => webOrderInvoices.creditCancelled(tenantId, order, user));
   webOrders.onTracking((tenantId, order) => webOrderMail.sendShipment(tenantId, order, { onlyNewTracking: true }));
+  // Pakbonnen en de lijst Te picken (webshop/packing-slips.js); vóór de routes met /:id.
+  const packingSlips = createPackingSlips(database, {
+    orders: webOrders, settingsFor: (id) => settingsFor(id),
+    colorsOf: (id) => {
+      const cssVars = Theme.vars(themeFor(id));
+      return { navy: cssVars['--at-navy'], green: cssVars['--at-green'], greenSoft: cssVars['--at-green-soft'], teal: cssVars['--at-teal'] };
+    },
+  });
+  registerPackingSlipRoutes(app, { slips: packingSlips, audit, requireJson });
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
   // Offerte omzetten naar bestelling (verkoop/quote-orders.js).
   const quoteOrders = createQuoteOrders(database, { orders: webOrders });
