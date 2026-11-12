@@ -91,7 +91,7 @@ test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', as
     assert.match((await inspectSlip(spaced)).error, /te groot als hij wordt uitgepakt/);
   }
   // Een onredelijk aantal streams wordt geweigerd.
-  const many = Buffer.concat([base, Buffer.from('\nstream\nabc\nendstream'.repeat(300))]);
+  const many = Buffer.concat([base, Buffer.from('\nstream\nabc\nendstream'.repeat(600))]);
   assert.match((await inspectSlip(many)).error, /te groot als hij wordt uitgepakt/);
   const open = Buffer.concat([base, Buffer.from('\n96 0 obj\n<< /Length 100 >>\nstream\n'), bomb]);
   assert.match((await inspectSlip(open)).error, /te groot als hij wordt uitgepakt/);

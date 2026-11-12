@@ -15,7 +15,7 @@ const MAX_PAGE_POINTS = 3400;
 const MAX_STREAM_BYTES = 40 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 80 * 1024 * 1024;
 /** Hoogstens zoveel streams worden gecontroleerd (een gewone pakbon heeft er tientallen); meer is verdacht en houdt het werk begrensd. */
-const MAX_STREAMS = 200;
+const MAX_STREAMS = 500;
 
 /**
  * Probeert elke stream van de PDF begrensd uit te pakken (zonder op het woordenboek van de stream te vertrouwen, dat is te omzeilen) om een decompressiebom te herkennen vóór pdf-lib de PDF leest.
