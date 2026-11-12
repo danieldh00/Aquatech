@@ -126,6 +126,11 @@ test('server: schrijfacties op de adressen van een uitgezette module geven 409, 
     assert.strictEqual(response.status, 409, `${method} ${url}`);
     assert.strictEqual(response.body.error, 'module_off', `${method} ${url}`);
   }
+  // Hoofdletters en een slash aan het eind omzeilen de blokkade niet (Express routeert zonder hoofdlettergevoeligheid).
+  for (const [method, url, body] of [['put', '/app/api/Sprinkler-Library', { bodies: [] }], ['del', '/app/api/SPRINKLER-LIBRARY/'], ['put', '/app/api/Stock/price-factors', { defaultFactor: 2 }]]) {
+    const response = await adminA[method](url, body);
+    assert.strictEqual(response.status, 409, `${method} ${url}`);
+  }
   // Weer aan: de routes werken weer (hier alleen: geen 409 meer).
   await adminA.put('/app/api/admin/settings', { modules: { voorraad: true, beregening: true } });
   assert.notStrictEqual((await adminA.post('/app/api/stock/labels', { items: [] })).status, 409);

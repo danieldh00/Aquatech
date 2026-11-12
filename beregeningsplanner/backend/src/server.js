@@ -690,7 +690,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
     const user = identify(req);
     if (!user) return next();
-    const fullPath = `/api${req.path}`;
+    // Express routeert zonder hoofdlettergevoeligheid: ook /api/Sprinkler-Library moet vergrendeld zijn.
+    const fullPath = `/api${req.path}`.toLowerCase();
     const locked = ModuleTools.lockedRoutes(moduleFlagsOf(req.tenantId)).some((prefix) => fullPath === prefix || fullPath.startsWith(`${prefix}/`));
     if (!locked) return next();
     res.status(409).json({ error: 'module_off', message: 'Deze module staat uit. Zet hem eerst aan in Beheer > Modules aan/uit.' });
