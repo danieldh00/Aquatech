@@ -58,7 +58,7 @@ function matchSupplier(name, suppliers) {
   if (exact.length === 1) return exact[0];
   const partial = suppliers.filter((supplier) => {
     const own = normalize(supplier.name);
-    return own.length >= 4 && (wanted.includes(own) || own.includes(wanted));
+    return own.length >= 4 && wanted.length >= 4 && (wanted.includes(own) || own.includes(wanted));
   });
   return partial.length === 1 ? partial[0] : null;
 }
@@ -91,7 +91,8 @@ function matchLines(lines, items, skuToItem) {
       if (named) { item = named; matchedBy = 'omschrijving'; }
     }
     const lineWords = wordsOf(line.description);
-    const ranked = candidates
+    // Suggesties alleen voor een regel die nog geen artikel heeft.
+    const ranked = item ? [] : candidates
       .map((entry) => ({ candidate: entry.item, score: overlap(lineWords, entry.words) }))
       .filter((entry) => entry.score >= MIN_SIMILARITY)
       .sort((left, right) => right.score - left.score)

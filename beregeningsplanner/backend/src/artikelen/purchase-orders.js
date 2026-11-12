@@ -304,7 +304,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @returns {void}
    */
   function rememberSkus(tenantId, supplierId, rows) {
-    for (const row of rows) if (row.supplierSku) suppliers.rememberSku(tenantId, supplierId, row.itemId, row.supplierSku);
+    suppliers.rememberSkus(tenantId, supplierId, rows);
   }
 
   /**

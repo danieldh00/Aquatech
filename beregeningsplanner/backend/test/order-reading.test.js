@@ -61,6 +61,13 @@ test('inlezen: koppelen van leverancier en regels', () => {
   assert.deepStrictEqual(result.map((entry) => [entry.itemId, entry.matchedBy]), [['p', 'leveranciersnummer'], ['k', 'omschrijving'], [null, null]]);
 });
 
+test('inlezen: korte leveranciersnaam kiest niemand en gekoppelde regels krijgen geen voorstellen', () => {
+  assert.strictEqual(matchSupplier('BV', [{ id: 'a', name: 'Tuintechniek BV' }]), null);
+  const items = [{ id: 'p', code: 'PIJP', name: 'Pijp 25 mm' }, { id: 'q', code: 'PIJP2', name: 'Pijp 25 mm lang' }];
+  const [linked] = matchLines([{ supplierSku: 'PIJP', description: 'Pijp 25 mm' }], items, new Map());
+  assert.deepStrictEqual([linked.itemId, linked.suggestions.length], ['p', 0]);
+});
+
 test('inlezen: gelezen document opschonen', () => {
   const out = validate({ supplierName: ' X ', documentDate: 'gisteren', documentType: 'raar', lines: [{ description: 'a', qty: 0 }, { description: 'b', qty: '3', unitPrice: -1 }, { qty: 2 }] });
   assert.deepStrictEqual([out.supplierName, out.documentDate, out.documentType, out.lines.length, out.lines[0].qty], ['X', '', 'overig', 1, 3]);
@@ -84,7 +91,11 @@ test('inlezen: route koppelt aan artikelen, schrijft niets en kent limieten en r
     assert.strictEqual((await baas.post('/app/api/purchase-orders/read', {})).status, 400);
     // Type PDF maar andere inhoud: geweigerd vóór de betaalde AI-aanroep.
     assert.strictEqual((await baas.post('/app/api/purchase-orders/read', { file: `data:application/pdf;base64,${Buffer.from('<html>').toString('base64')}` })).status, 400);
-    assert.strictEqual(calls.count, 1);
+    // Een leverancier die niet bij deze organisatie hoort (ook die van een andere) wordt nooit gekozen.
+    const foreign = await baas.post('/app/api/purchase-orders/read', { file: FILE, supplierId: '00000000-0000-4000-8000-000000000000' });
+    assert.strictEqual(foreign.status, 200);
+    assert.strictEqual(foreign.body.supplier, null);
+    assert.strictEqual(calls.count, 2);
     const klant = await as('klant');
     assert.strictEqual((await klant.post('/app/api/purchase-orders/read', { file: FILE })).status, 403);
     const usage = await baas.get('/app/api/admin/ai-usage');
@@ -115,5 +126,10 @@ test('inboeken: order direct ontvangen, alles of niets, en leveranciersnummers o
     assert.strictEqual((await baas.get(`/app/api/stock/items/${valve.id}`)).body.onHand, 4);
     const links = await baas.get(`/app/api/stock/items/${valve.id}/suppliers`);
     assert.strictEqual(links.body.items[0].supplierSku, 'X-1');
+    assert.strictEqual(links.body.items[0].preferred, true);
+    // Een bestaande koppeling met nummer blijft ongemoeid; een leeg nummer wordt wel gevuld.
+    const again = await baas.post('/app/api/purchase-orders', { supplierId: supplier.id, rememberSkus: true, lines: [{ itemId: valve.id, qty: 1, supplierSku: 'ANDERS' }] });
+    assert.strictEqual(again.status, 201);
+    assert.strictEqual((await baas.get(`/app/api/stock/items/${valve.id}/suppliers`)).body.items[0].supplierSku, 'X-1');
   } finally { server.close(); }
 });
