@@ -4,7 +4,7 @@
 // /api/stock/items/:id/suppliers (recht 'voorraad').
 (function () {
   const context = { api: null, toast: null, esc: null, nl: null, eur: null };
-  const state = { suppliers: [], editing: null, item: null, lines: [] };
+  const state = { suppliers: [], choices: [], editing: null, item: null, lines: [] };
 
   /**
    * Zoekt het eerste element dat bij de selector past.
@@ -111,7 +111,7 @@
     if (item.hasVariants) return;
     const [lines, suppliers] = await Promise.all([context.api(`stock/items/${encodeURIComponent(item.id)}/suppliers`), context.api('suppliers')]);
     if (!state.item || state.item.id !== item.id) return;
-    state.suppliers = suppliers.items;
+    state.choices = suppliers.items;
     state.lines = lines.items;
     renderLines();
   }
@@ -131,7 +131,7 @@
         <td class="num"><button class="btn small danger" type="button" data-drop="${index}">Weghalen</button></td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="muted">Nog geen leverancier bij dit artikel.</td></tr></tbody>';
     const used = new Set(state.lines.map((line) => line.supplierId));
-    const free = state.suppliers.filter((supplier) => !used.has(supplier.id));
+    const free = state.choices.filter((supplier) => !used.has(supplier.id));
     $('#sup-add-select').innerHTML = `<option value="">Kies een leverancier…</option>${free.map((supplier) => `<option value="${esc(supplier.id)}">${esc(supplier.name)}</option>`).join('')}`;
     $('#d-suppliers .row').hidden = archivedItem;
   }
@@ -208,7 +208,7 @@
     /** Zet de gekozen leverancier als nieuwe regel bij het artikel (pas bewaard met Bewaren). */
     $('#sup-add-select').onchange = () => {
       const id = $('#sup-add-select').value;
-      const supplier = state.suppliers.find((candidate) => candidate.id === id);
+      const supplier = state.choices.find((candidate) => candidate.id === id);
       if (!supplier) return;
       readLines();
       state.lines.push({ supplierId: supplier.id, supplierName: supplier.name, supplierArchived: supplier.archived, supplierSku: '', costPrice: '', orderQty: 1, preferred: !state.lines.length });
