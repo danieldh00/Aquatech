@@ -9,9 +9,10 @@
   /**
    * Zoekt het eerste element dat bij de selector past.
    * @param {string} selector CSS-selector
+   * @param {ParentNode} scope waarbinnen gezocht wordt (standaard het document)
    * @returns {Element|null} het gevonden element
    */
-  const $ = (selector) => document.querySelector(selector);
+  const $ = (selector, scope = document) => scope.querySelector(selector);
 
   /**
    * Laadt de leveranciers (met de gearchiveerde als dat is aangevinkt) en tekent de lijst.
