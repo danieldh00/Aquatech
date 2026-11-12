@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.12.7',
+      date: '2026-11-12',
+      title: 'Geen dubbel e-mailadres meer',
+      items: [
+        { text: 'Een e-mailadres kan maar bij één actief account horen. Ook als je een adres op de klantkaart wijzigt of een uitgeschakeld account weer inschakelt, krijg je een duidelijke melding als een ander account het adres al heeft.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.12.6',
       date: '2026-11-12',
       title: 'Prijsvoorstellen bij een nieuwe inkoopprijs',

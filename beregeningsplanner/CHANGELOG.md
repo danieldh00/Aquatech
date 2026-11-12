@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.7
+
+- `store.updateAccount`: het adres wordt getrimd en in kleine letters bewaard; een contact-e-mailadres dat al bij een ander actief account hoort geeft 409 (`field: email`, hoofdletters en spaties genegeerd); `disabled: false` wordt geweigerd als het adres van het account intussen bij een ander actief account staat.
+- `store.createCustomer`: de controle op een dubbel adres staat nu ook binnen de transactie (vangnet).
+- Bestaande controles blijven: Mijn profiel, registratie in de webshop (blijft de duidelijke melding geven, begrensd door de registratielimiet), nieuwe klant en klantkaart. Tests: `duplicate-email.test.js`.
+
 ## 1.12.6
 
 - Migratie 68: tabel `price_proposal_rejections` (één afwijzing per artikel: inkoopprijs + voorgestelde prijs), in SQLite en PostgreSQL.
