@@ -236,7 +236,9 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       const priced = wholesaleTerms && !packaging ? Wholesale.wholesalePrice(listExcl, qty, Wholesale.tiersOf(row.price_tiers), wholesaleTerms.discountPct, categoryPct) : null;
       // Zonder groothandelsvoorwaarden geldt de categoriekorting direct; een verpakking met een eigen prijs krijgt geen korting.
       const packagingDerived = packaging && packagingPrice == null;
-      const appliedCategoryPct = priced ? (priced.source === 'categorie' ? priced.discountPct : 0) : (!packaging || packagingDerived ? categoryPct : 0);
+      // Een afgeleide verpakking (zonder eigen prijs) van een groothandelsklant krijgt de hoogste van klant- en categoriekorting (geen staffel: die geldt per stuk).
+      const packagingPct = packagingDerived ? Math.max(categoryPct, wholesaleTerms ? Math.max(0, Number(wholesaleTerms.discountPct) || 0) : 0) : 0;
+      const appliedCategoryPct = priced ? (priced.source === 'categorie' ? priced.discountPct : 0) : (packaging ? packagingPct : categoryPct);
       const unitExcl = priced ? priced.unitExcl : round2(listExcl * (1 - appliedCategoryPct / 100));
       const unitIncl = round2(unitExcl * (1 + vatRate / 100));
       const lineExcl = round2(unitExcl * qty);
@@ -253,7 +255,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
         weightGrams: row.weight_grams == null ? null : Number(row.weight_grams) * factor, unitContent: packaging || row.unit_content == null ? null : Number(row.unit_content), ...(business ? { lineExcl } : {}),
         ...(packaging ? { stockPer: factor, itemName, packaging: { code: packaging.code, name: packaging.name, factor } } : {}),
         ...(!wholesaleTerms && appliedCategoryPct > 0 ? { listExcl, discountPct: appliedCategoryPct, discountSource: 'categorie' } : {}),
-        ...(wholesaleTerms ? { listExcl, discountPct: priced ? priced.discountPct : appliedCategoryPct, discountSource: priced ? priced.source : (appliedCategoryPct > 0 ? 'categorie' : 'verpakking'), packSize: packaging ? 1 : terms.packSize, minimum: packaging ? 1 : Wholesale.minimumOf(terms), packProblem: packaging ? null : Wholesale.quantityProblem(qty, terms) } : {}),
+        ...(wholesaleTerms ? { listExcl, discountPct: priced ? priced.discountPct : appliedCategoryPct, discountSource: priced ? priced.source : (appliedCategoryPct > 0 ? (appliedCategoryPct > categoryPct ? 'klant' : 'categorie') : 'verpakking'), packSize: packaging ? 1 : terms.packSize, minimum: packaging ? 1 : Wholesale.minimumOf(terms), packProblem: packaging ? null : Wholesale.quantityProblem(qty, terms) } : {}),
       });
     }
     // Staat hetzelfde artikel in meerdere regels (stuks en een pallet), dan moet de voorraad voor alle regels samen genoeg zijn.

@@ -251,6 +251,12 @@ test('groothandelsklant: de hoogste korting telt, ze worden niet opgeteld', asyn
   const placed = await orderLines(world, big, { DRIP1: 2, LOS: 1 });
   assert.strictEqual(placed.lines.DRIP1.unitExcl, 6, '40% van de klant wint van 25%, niet 65%');
   assert.strictEqual(placed.lines.LOS.unitExcl, 6);
+  // Een afgeleide verpakking (doos zonder eigen prijs) krijgt ook hier de hoogste korting; een pallet met eigen prijs geen enkele.
+  const packs = await orderLines(world, big, { 'PACK@DOOS': 1, 'PACK@PAL': 1 });
+  assert.strictEqual(packs.lines['PACK@DOOS'].unitExcl, 60, '10 × 10 met 40% van de klant (niet 25%)');
+  assert.strictEqual(packs.lines['PACK@PAL'].unitExcl, 700, 'eigen prijs: geen korting');
+  const mid = await world.shopper({ business: true, wholesaleDiscount: 5 });
+  assert.strictEqual((await orderLines(world, mid, { 'PACK@DOOS': 1 })).lines['PACK@DOOS'].unitExcl, 75, '25% van de categorie wint van 5%');
 });
 
 test('factuur: de kortingsprijs staat op de factuur van de bestelling', async () => {
