@@ -690,9 +690,12 @@ function createStore(db) {
     }
     // Een e-mailadres hoort bij hoogstens één actief account: ook via de klantkaart of het opnieuw inschakelen van een uitgeschakeld account.
     const contactEmail = input.contact && input.contact.email !== undefined ? String(input.contact.email || '').trim().toLowerCase() : null;
-    const staysDisabled = Boolean(user.disabled) && !(input.disabled === false || input.disabled === 0);
-    if (contactEmail && !staysDisabled && input.disabled !== true && accountIdsByEmail(tenantId, contactEmail).some((otherId) => otherId !== user.id)) return { error: 'Er is al een account met dit e-mailadres.', field: 'email', status: 409 };
-    if (input.disabled === false || input.disabled === 0) {
+    // Zelfde betekenis als de schrijfregel hieronder (`input.disabled ? 1 : 0`): elke onwaarde schakelt in.
+    const enables = input.disabled !== undefined && !input.disabled;
+    const disables = input.disabled !== undefined && !enables;
+    const staysDisabled = Boolean(user.disabled) && !enables;
+    if (contactEmail && !staysDisabled && !disables && accountIdsByEmail(tenantId, contactEmail).some((otherId) => otherId !== user.id)) return { error: 'Er is al een account met dit e-mailadres.', field: 'email', status: 409 };
+    if (enables && user.disabled) {
       const ownEmail = (prepare('SELECT email FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, user.id) || {}).email;
       const nowEmail = contactEmail !== null ? contactEmail : ownEmail;
       if (nowEmail && accountIdsByEmail(tenantId, nowEmail).some((otherId) => otherId !== user.id)) return { error: 'Er is al een actief account met het e-mailadres van dit account. Wijzig eerst het e-mailadres.', field: 'email', status: 409 };

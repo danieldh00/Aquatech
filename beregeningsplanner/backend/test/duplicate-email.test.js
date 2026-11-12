@@ -41,6 +41,8 @@ test('e-mailadres: een uitgeschakeld account kan niet worden ingeschakeld naast 
   assert.ok(fresh.user);
   const enable = await store.updateAccount(main, old.id, { disabled: false });
   assert.strictEqual(enable.status, 409);
+  // Elke onwaarde schakelt in en wordt dus ook gecontroleerd.
+  for (const falsy of [null, '', 0]) assert.strictEqual((await store.updateAccount(main, old.id, { disabled: falsy })).status, 409, `disabled: ${JSON.stringify(falsy)}`);
   assert.match(enable.error, /e-mailadres/);
   assert.strictEqual(Number(store.getUser(old.id).disabled), 1);
   // Een uitgeschakeld account mag wel een adres krijgen dat een actief account heeft (het telt pas bij inschakelen).
