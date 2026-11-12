@@ -75,19 +75,21 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
    * @param {string} tenantId De omgeving.
    * @param {string} kind offerte, werkorder, factuur of bestelling.
    * @param {string} number Het nummer.
+   * @param {{ withWorkOrders?: boolean }} [options] Bij een offerte ook de werkorders (alleen als de gebruiker werkorders mag zien).
    * @returns {object|null} De status (id en de velden voor de AI), of null als hij er niet is.
    */
-  function documentStatus(tenantId, kind, number) {
+  function documentStatus(tenantId, kind, number, { withWorkOrders = false } = {}) {
     const candidates = numberCandidates(number);
     if (!candidates.length) return null;
     if (kind === 'offerte') {
       const row = prepare(`SELECT id, number, status, title, customer, total_excl, total_incl, sent_at, viewed_at, responded_at, ${jsonField(db, 'data', 'validUntil')} AS valid_until
         FROM quotes WHERE tenant_id = ? AND number IN (${marks(candidates)}) AND deleted_at IS NULL`).get(tenantId, ...candidates);
       if (!row) return null;
-      const workOrders = prepare(`SELECT number, status FROM work_orders WHERE tenant_id = ? AND quote_id = ? AND deleted_at IS NULL ORDER BY created_at, id LIMIT 5`).all(tenantId, row.id);
+      const workOrders = withWorkOrders
+        ? prepare(`SELECT number, status FROM work_orders WHERE tenant_id = ? AND quote_id = ? AND deleted_at IS NULL ORDER BY created_at, id LIMIT 5`).all(tenantId, row.id) : null;
       return { id: row.id, nummer: row.number, status: row.status, titel: row.title, klant: row.customer, totaalExclBtw: amountOf(row.total_excl), totaalInclBtw: amountOf(row.total_incl),
         geldigTot: row.valid_until || null, verstuurdOp: row.sent_at || null, bekekenOp: row.viewed_at || null, gereageerdOp: row.responded_at || null,
-        werkorders: workOrders.map((order) => ({ nummer: order.number, status: order.status })) };
+        ...(workOrders ? { werkorders: workOrders.map((order) => ({ nummer: order.number, status: order.status })) } : {}) };
     }
     if (kind === 'werkorder') {
       const row = prepare(`SELECT id, number, status, title, customer, planned_date FROM work_orders
@@ -147,20 +149,21 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
   }
 
   /**
-   * Wat een klant nog moet betalen (definitieve, onbetaalde facturen in deze omgeving).
+   * Wat een klant nog moet betalen (definitieve, onbetaalde facturen in deze omgeving). De database telt alles op; de
+   * tien oudste facturen komen mee als voorbeeld.
    * @param {string} tenantId De omgeving.
    * @param {string} customerId Id van de klant.
    * @returns {{ openstaand: number, teLaat: number, aantalFacturen: number, facturen: object[] }} Het saldo.
    */
   function customerBalance(tenantId, customerId) {
     const day = today();
+    const sums = prepare(`SELECT COUNT(*) AS invoice_count, SUM(total) AS open_total, SUM(CASE WHEN kind = 'factuur' AND due_date < ? THEN total ELSE 0 END) AS late_total
+      FROM invoices WHERE tenant_id = ? AND customer_id = ? AND status = 'definitief'`).get(day, tenantId, String(customerId));
     const rows = prepare(`SELECT number, status, kind, customer_name, invoice_date, due_date, total FROM invoices
-      WHERE tenant_id = ? AND customer_id = ? AND status = 'definitief' ORDER BY invoice_date, id LIMIT 200`).all(tenantId, String(customerId));
-    const views = rows.map((row) => invoiceView(row, day));
+      WHERE tenant_id = ? AND customer_id = ? AND status = 'definitief' ORDER BY invoice_date, id LIMIT 10`).all(tenantId, String(customerId));
     return {
-      openstaand: amountOf(views.reduce((sum, view) => sum + view.bedragInclBtw, 0)),
-      teLaat: amountOf(views.filter((view) => view.dagenTeLaat > 0).reduce((sum, view) => sum + view.bedragInclBtw, 0)),
-      aantalFacturen: views.length, facturen: views.slice(0, 10),
+      openstaand: amountOf(sums && sums.open_total), teLaat: amountOf(sums && sums.late_total),
+      aantalFacturen: Number(sums && sums.invoice_count) || 0, facturen: rows.map((row) => invoiceView(row, day)),
     };
   }
 

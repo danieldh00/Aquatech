@@ -296,7 +296,7 @@ test('de interne notitie per regel gaat nooit naar de klant', async () => {
 });
 
 test('leesfuncties: klantkaart, prijs voor een zakelijke klant, status op nummer en openstaande debiteuren', async () => {
-  const { base, db, main, admin, installer } = await setup();
+  const { base, db, main, admin, installer, as } = await setup();
   const connection = await connect(base, admin);
   const created = (await callTool(base, connection.accessToken, 'maak_klant', { naam: 'Groen Hoveniers' })).structuredContent;
   db.prepare("UPDATE users SET customer_group = 'zakelijk', company_name = 'Groen BV', wholesale = 1, wholesale_discount = 10, payment_days = 14 WHERE tenant_id = ? AND id = ?").run(main, created.id);
@@ -366,6 +366,20 @@ test('leesfuncties: klantkaart, prijs voor een zakelijke klant, status op nummer
   assert.strictEqual(quoteStatus.nummer, quote.nummer);
   assert.ok(quoteStatus.link.endsWith(`/app/offertes/?id=${quote.offerteId}`));
   assert.strictEqual(quoteStatus.id, undefined);
+  // Werkorders bij de offerte alleen voor wie werkorders mag zien: een eigen rol met alleen offertes ziet ze niet.
+  const adminId = (await admin.get('/app/api/me')).body.user.id;
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO work_orders (id, tenant_id, owner_id, quote_id, number, status, title, data, created_at, updated_at) VALUES (?, ?, ?, ?, 'WO-TEST-0001', 'gepland', 'Aanleg', '{}', ?, ?)")
+    .run(crypto.randomUUID(), main, adminId, quote.offerteId, now, now);
+  assert.deepStrictEqual((await callTool(base, connection.accessToken, 'status_opvragen', { soort: 'offerte', nummer: quote.nummer })).structuredContent.werkorders, [{ nummer: 'WO-TEST-0001', status: 'gepland' }]);
+  assert.strictEqual((await admin.post('/app/api/admin/roles', { label: 'Verkoper', rights: ['offertes'] })).status, 201);
+  assert.strictEqual((await admin.post('/app/api/admin/users', { username: 'verkoper', displayName: 'Verkoper', role: 'verkoper', password: PW, mustChangePassword: false })).status, 201);
+  const seller = await connect(base, await as('verkoper'));
+  const sellerView = (await callTool(base, seller.accessToken, 'status_opvragen', { soort: 'offerte', nummer: quote.nummer })).structuredContent;
+  assert.strictEqual(sellerView.status, 'concept');
+  assert.strictEqual(sellerView.werkorders, undefined);
+  assert.ok(!JSON.stringify(sellerView).includes('WO-TEST-0001'));
+  assert.strictEqual((await callTool(base, seller.accessToken, 'status_opvragen', { soort: 'werkorder', nummer: 'WO-TEST-0001' })).isError, true);
   const invoiceStatus = (await callTool(base, connection.accessToken, 'status_opvragen', { soort: 'factuur', nummer: finalized.body.number })).structuredContent;
   assert.strictEqual(invoiceStatus.status, 'definitief');
   assert.ok(invoiceStatus.dagenTeLaat > 0);

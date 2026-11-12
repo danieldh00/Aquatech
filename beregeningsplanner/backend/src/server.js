@@ -2225,7 +2225,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         const group = customer.customerGroup === 'zakelijk' ? 'zakelijk' : '';
         return webOrders.priceCart(req.tenantId, wanted, { group, wholesale: group && customer.wholesale ? { discountPct: customer.wholesaleDiscount } : null });
       },
-      documentStatus: (req, kind, number) => mcpLookups.documentStatus(req.tenantId, kind, number),
+      documentStatus: (req, kind, number, options) => mcpLookups.documentStatus(req.tenantId, kind, number, options),
       openInvoices: (req, options) => mcpLookups.openInvoices(req.tenantId, options),
       audit,
     }),

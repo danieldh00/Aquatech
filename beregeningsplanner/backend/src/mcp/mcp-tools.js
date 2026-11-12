@@ -131,7 +131,7 @@ function findArticle(articles, code) {
  * @param {object} ctx { can(user, recht), searchCustomers(req, zoektekst), getCustomer(req, id), createCustomer(req, invoer),
  *   lookupAddress(invoer), verifyAddress(tekst), articleChoices(tenantId), quoteProfile(req), createDraft(req, data, customerId), quoteUrl(req, id),
  *   appUrl(req, pad), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
- *   documentStatus(req, soort, nummer), openInvoices(req, opties), audit(req, actie, detail) }.
+ *   documentStatus(req, soort, nummer, opties), openInvoices(req, opties), audit(req, actie, detail) }.
  * @returns {{ list: Function, has: Function, call: Function }} De tools.
  */
 function createMcpTools(ctx) {
@@ -403,7 +403,7 @@ function createMcpTools(ctx) {
         const kind = DOCUMENT_KINDS.includes(args.soort) ? args.soort : '';
         if (!kind) return errorOf(`Kies de soort: ${DOCUMENT_KINDS.join(', ')}.`);
         if (!ctx.can(req.user, DOCUMENT_RIGHTS[kind])) return errorOf(`Je mag in AquaTech geen ${DOCUMENT_PLURALS[kind]} bekijken.`);
-        const found = ctx.documentStatus(req, kind, args.nummer);
+        const found = ctx.documentStatus(req, kind, args.nummer, { withWorkOrders: ctx.can(req.user, 'werkorders') });
         if (!found) return errorOf(`Geen ${kind} met dit nummer gevonden in deze omgeving.`);
         const { id, ...shown } = found;
         return resultOf({ soort: kind, ...shown, link: ctx.appUrl(req, kind === 'bestelling' ? `${DOCUMENT_PAGES[kind]}/` : `${DOCUMENT_PAGES[kind]}/?id=${encodeURIComponent(id)}`) });
