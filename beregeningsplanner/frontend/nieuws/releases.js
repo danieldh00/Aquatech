@@ -13,6 +13,23 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.13.1',
+      date: '2026-11-12',
+      title: 'Verzendmethode kiezen bij het afrekenen',
+      items: [
+        { text: 'Bij het afrekenen in de webshop kies je de verzendmethode in een keuzelijst: bezorging door DPD, per pallet, met eigen transport, of Afhalen in Nunspeet (gratis). Afhalen staat nooit vooraf gekozen. De kosten staan als verzendregel op de bestelling.' },
+        { text: 'In Beheer > Instellingen > Verzending zet je per methode aan of uit, geef je hem een eigen naam en stel je de tarieven per land en gewicht in, met gratis vanaf een bedrag. Pallet en eigen transport staan standaard uit.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.13.0',
+      date: '2026-11-12',
+      title: 'Instellingen van uitgezette modules verborgen',
+      items: [
+        { text: 'Zet je een module uit bij Beheer > Modules aan/uit, dan verdwijnen de bijbehorende instellingen uit Beheer (etiketten bij Artikelen, sproeierbibliotheek bij de planner, Uitbesteden, Seizoensherinneringen). Je bewaarde instellingen blijven staan en komen terug zodra je de module weer aanzet.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.12.9',
       date: '2026-11-12',
       title: 'Dropshipping met de eigen pakbon van de klant',
