@@ -20,7 +20,7 @@ const MAX_STREAMS = 500;
 const MAX_LAYERS = 4;
 
 /**
- * Pakt gegevens laag voor laag uit zolang het resultaat zelf weer met een zlib-kop begint (pdf-lib past een filterketen als
+ * Pakt gegevens laag voor laag uit zolang het resultaat zelf weer uit te pakken is (elke geldige zlib-kop telt, ook met een kleiner venster) (pdf-lib past een filterketen als
  * [/FlateDecode /FlateDecode] achter elkaar toe), en telt alle uitgepakte lagen mee.
  * @param {Buffer} data De gecomprimeerde gegevens.
  * @returns {number|null} Het totaal aantal uitgepakte bytes, 0 als het geen zlib-gegevens zijn, of null als een grens wordt overschreden.
@@ -28,18 +28,16 @@ const MAX_LAYERS = 4;
 function inflateLayers(data) {
   let sum = 0;
   let current = data;
-  for (let layer = 0; layer < MAX_LAYERS + 1; layer++) {
+  for (let layer = 0; layer <= MAX_LAYERS; layer++) {
     let output;
     try {
       output = zlib.inflateSync(current, { maxOutputLength: MAX_STREAM_BYTES });
     } catch (failure) {
+      // Geen (geldige) zlib-gegevens meer: de keten is hier klaar. Een te grote uitvoer weigert de PDF.
       return failure.code === 'ERR_BUFFER_TOO_LARGE' ? null : sum;
     }
     sum += output.length;
     if (sum > MAX_STREAM_BYTES) return null;
-    const looksCompressed = output.length > 2 && output[0] === 0x78 && ((output[0] << 8) | output[1]) % 31 === 0;
-    if (!looksCompressed) return sum;
-    if (layer === MAX_LAYERS) return null;
     current = output;
   }
   return null;

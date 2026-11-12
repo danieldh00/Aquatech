@@ -94,6 +94,10 @@ test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', as
   const chained = zlib.deflateSync(zlib.deflateSync(Buffer.alloc(200 * 1024 * 1024), { level: 9 }), { level: 9 });
   const chain = Buffer.concat([base, Buffer.from('\n91 0 obj\n<< /Type /ObjStm /Filter [/FlateDecode /FlateDecode] >>\nstream\n'), chained, Buffer.from('\nendstream\nendobj\n')]);
   assert.match((await inspectSlip(chain)).error, /te groot als hij wordt uitgepakt/);
+  // Ook als de binnenste laag een zlib-kop met een kleiner venster heeft (0x58 in plaats van 0x78).
+  const smallWindow = zlib.deflateSync(zlib.deflateSync(Buffer.alloc(200 * 1024 * 1024), { level: 9, windowBits: 13 }), { level: 9 });
+  const chain2 = Buffer.concat([base, Buffer.from('\n90 0 obj\n<< /Type /ObjStm /Filter [/FlateDecode /FlateDecode] >>\nstream\n'), smallWindow, Buffer.from('\nendstream\nendobj\n')]);
+  assert.match((await inspectSlip(chain2)).error, /te groot als hij wordt uitgepakt/);
   // Een onredelijk aantal streams wordt geweigerd.
   const many = Buffer.concat([base, Buffer.from('\nstream\nabc\nendstream'.repeat(600))]);
   assert.match((await inspectSlip(many)).error, /te groot als hij wordt uitgepakt/);
