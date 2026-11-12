@@ -30,6 +30,7 @@ const { createImpersonationStore, createImpersonation } = require('./beveiliging
 const { createTwoFactor, registerTwoFactorRoutes } = require('./beveiliging/two-factor');
 const { createStorefront } = require('./webshop/storefront');
 const { createVies } = require('./webshop/vies');
+const { normalizeVatNumber, validVatNumber } = require('./webshop/vat');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
 const { createShopSync } = require('./webshop/shop-sync');
 const { createShopContentStore, registerShopContentRoutes } = require('./webshop/shop-content');
@@ -2041,6 +2042,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // ---------- Klanten (module Klanten, zie customers.js) ----------
   registerCustomerRoutes(app, {
     store, customers: createCustomerStore(database), requireRight, requireJson, audit, addressGuard,
+    // VIES wordt hieronder gemaakt; de verwijzing wordt pas bij een verzoek gebruikt.
+    checkVat: (req, vatNumber) => {
+      const requester = normalizeVatNumber(settingsFor(req.tenantId || tenant.id).get('quoteProfile').vatNumber);
+      return vies.check(vatNumber, validVatNumber(requester) ? requester : '');
+    },
     can: (user, right) => Roles.can(user, right),
     // De standaard betaaltermijn (factuurinstellingen) voor klanten zonder eigen termijn.
     defaultPaymentDays: (req) => InvoiceCore.sanitizeSettings(settingsFor(req.tenantId || tenant.id).get('invoicing')).paymentDays,

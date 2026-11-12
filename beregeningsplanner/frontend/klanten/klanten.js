@@ -203,12 +203,26 @@
     form.querySelectorAll('[data-business]').forEach((field) => { field.hidden = !business; });
   }
 
+  /**
+   * Zet het adresveld op vrij typen bij een btw-nummer uit een ander land dan Nederland (het adres ligt dan buiten PDOK); de server controleert het nummer bij VIES.
+   * @param {HTMLTextAreaElement} addressField Het adresveld.
+   * @param {string} vatNumber Het ingevulde btw-nummer.
+   * @returns {void}
+   */
+  function syncManualAddress(addressField, vatNumber) {
+    const number = String(vatNumber || '').replace(/[\s.\-]/g, '').toUpperCase();
+    if (/^[A-Z]{2}/.test(number) && !number.startsWith('NL')) addressField.dataset.addressManual = '1';
+    else delete addressField.dataset.addressManual;
+  }
+
   /** Maakt het formulier voor een nieuwe klant leeg. */
   function openNew() {
     const form = $('#n-form');
     form.reset();
     $('#n-err').textContent = '';
     syncBusinessFields(form);
+    syncManualAddress(form.address, '');
+    if (!form.vatNumber.dataset.manualWatched) { form.vatNumber.dataset.manualWatched = '1'; form.vatNumber.addEventListener('input', () => syncManualAddress(form.address, form.vatNumber.value)); }
     form.querySelectorAll('.addr-lookup').forEach((group) => group.remove());
     delete form.address.dataset.addressEnhanced;
     if (window.AddressLookup) window.AddressLookup.enhance(form.address);
@@ -301,7 +315,7 @@
       <div class="form-grid">
         ${group}
         <label class="field full" data-business>Bedrijfsnaam<input name="companyName" maxlength="80" value="${esc(customer.companyName)}"></label>
-        <label class="field" data-business>KvK-nummer<input name="kvkNumber" inputmode="numeric" maxlength="12" value="${esc(customer.kvkNumber)}"></label>
+        <label class="field" data-business>KvK-nummer<input name="kvkNumber" inputmode="numeric" maxlength="12" value="${esc(customer.kvkNumber)}"><span class="hint">Leeg laten bij een buitenlands bedrijf.</span></label>
         <label class="field" data-business>Btw-nummer<input name="vatNumber" maxlength="20" value="${esc(customer.vatNumber)}"><span class="hint">Optioneel.</span></label>
         ${wholesale}
       </div>
@@ -390,6 +404,11 @@
   /** Koppelt de formulieren en knoppen van de klantkaart. */
   function wireDetail() {
     const contact = $('#c-contact');
+    const businessForm = $('#c-business');
+    if (businessForm && businessForm.vatNumber) {
+      syncManualAddress(contact.address, businessForm.vatNumber.value);
+      businessForm.vatNumber.addEventListener('input', () => syncManualAddress(contact.address, businessForm.vatNumber.value));
+    }
     if (window.AddressLookup) window.AddressLookup.enhance(contact.address);
     window.AddressLookup.mirror(contact.address, contact.querySelector('[data-addr-text]'));
     /**

@@ -12,17 +12,20 @@ const KVK_PATTERN = /^\d{8}$/;
 
 /**
  * Controleert en normaliseert de bedrijfsgegevens uit een formulier of verzoek.
- * Bedrijfsnaam en KvK-nummer zijn verplicht, het btw-nummer is optioneel maar
- * moet kloppen als het is ingevuld.
+ * De bedrijfsnaam is verplicht. Het KvK-nummer is verplicht, tenzij `kvkRequired`
+ * uit staat (een klant die een medewerker aanmaakt kan ook een buitenlands bedrijf
+ * zijn); is het dan ingevuld, dan moet het wel kloppen. Het btw-nummer is optioneel
+ * maar moet kloppen als het is ingevuld.
  * @param {{ companyName?: *, kvkNumber?: *, vatNumber?: * }} input De ingevulde velden.
+ * @param {{ kvkRequired?: boolean }} [options] kvkRequired (standaard true): of een KvK-nummer verplicht is.
  * @returns {{ profile: { companyName: string, kvkNumber: string, vatNumber: string } }|{ error: string, field: string }} De gesaneerde gegevens of een foutmelding met het veld.
  */
-function sanitizeBusinessProfile(input = {}) {
+function sanitizeBusinessProfile(input = {}, { kvkRequired = true } = {}) {
   const companyName = String(input.companyName ?? '').replace(/\s+/g, ' ').trim();
   if (!companyName) return { error: 'Vul de bedrijfsnaam in.', field: 'companyName' };
   if (companyName.length > MAX_COMPANY_NAME) return { error: `De bedrijfsnaam mag maximaal ${MAX_COMPANY_NAME} tekens hebben.`, field: 'companyName' };
   const kvkNumber = String(input.kvkNumber ?? '').replace(/[\s.\-]/g, '');
-  if (!KVK_PATTERN.test(kvkNumber)) return { error: 'Vul een geldig KvK-nummer in (8 cijfers).', field: 'kvkNumber' };
+  if ((kvkNumber || kvkRequired) && !KVK_PATTERN.test(kvkNumber)) return { error: 'Vul een geldig KvK-nummer in (8 cijfers).', field: 'kvkNumber' };
   const vatNumber = Vat.normalizeVatNumber(input.vatNumber);
   if (vatNumber && !Vat.validVatNumber(vatNumber)) return { error: 'Vul een geldig btw-nummer in, bijvoorbeeld NL123456789B01, of laat het leeg.', field: 'vatNumber' };
   return { profile: { companyName, kvkNumber, vatNumber } };

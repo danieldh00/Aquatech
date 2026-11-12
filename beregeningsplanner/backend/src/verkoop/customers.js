@@ -7,6 +7,7 @@ const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { sanitizeBusinessProfile } = require('../webshop/business-profile');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { clientKey } = require('../beveiliging/auth');
+const { normalizeVatNumber, validVatNumber } = require('../webshop/vat');
 
 /** Hoeveel regels een klantkaart per soort (offertes, werkorders, facturen) toont. */
 const OVERVIEW_LIMIT = 100;
@@ -84,7 +85,7 @@ function createCustomerStore(db) {
 /**
  * Registreert de routes van de klantenlijst.
  * @param {object} app De Express-app.
- * @param {object} ctx { store, customers (createCustomerStore), requireRight, requireJson, audit, addressGuard, tenantsOf(req) (de omgevingen met klanten), defaultPaymentDays(req) (standaard betaaltermijn in dagen), inviteReady(), invite(user) (async, stuurt de uitnodigingsmail) en can(user, recht) }.
+ * @param {object} ctx { store, customers (createCustomerStore), requireRight, requireJson, audit, addressGuard, checkVat(req, vatNumber) (async, VIES), tenantsOf(req) (de omgevingen met klanten), defaultPaymentDays(req) (standaard betaaltermijn in dagen), inviteReady(), invite(user) (async, stuurt de uitnodigingsmail) en can(user, recht) }.
  * @returns {void}
  */
 function registerCustomerRoutes(app, ctx) {
@@ -150,13 +151,60 @@ function registerCustomerRoutes(app, ctx) {
     }
   }
 
+  const viesPerUser = createRateLimiter({ windowMs: 60 * 1000, max: 20, keyFn: (req) => `vies-klant:${req.user.tenant_id}|${req.user.id}` });
+
+  /**
+   * Het btw-nummer waarmee het verzoek een klant buiten Nederland aanduidt: dat uit het verzoek, anders (bij wijzigen) dat van de klant.
+   * @param {object} req Het verzoek.
+   * @returns {string} Het genormaliseerde nummer, of '' als het geen geldig nummer van een ander land is.
+   */
+  function foreignVatOf(req) {
+    const body = req.body || {};
+    const stored = req.params.id ? (store.getCustomer(tenantsOf(req), req.params.id) || {}).vatNumber : '';
+    const number = normalizeVatNumber(body.vatNumber !== undefined ? body.vatNumber : stored);
+    return validVatNumber(number) && !number.startsWith('NL') ? number : '';
+  }
+
+  /**
+   * Middleware: controleert bij een vrij getypt adres het btw-nummer van de klant bij VIES (max. 20 nieuwe vragen per minuut per gebruiker).
+   * Zet req.foreignVatChecked alleen als VIES het nummer van een ander EU-land geldig noemt; onbereikbaar of ongeldig laat de PDOK-controle gelden.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord.
+   * @param {Function} next De volgende stap.
+   * @returns {void}
+   */
+  function checkForeignVat(req, res, next) {
+    const address = req.body && req.body.address;
+    const number = typeof address === 'string' && address.trim() && ctx.checkVat ? foreignVatOf(req) : '';
+    if (!number) return next();
+    viesPerUser(req, res, async () => {
+      try {
+        req.foreignVatChecked = (await ctx.checkVat(req, number)).status === 'geldig';
+        next();
+      } catch (error) {
+        next(error);
+      }
+    });
+  }
+
+  /**
+   * Het adres dat bij PDOK moet kloppen: bij een klant met een door VIES geldig bevonden btw-nummer uit een ander EU-land is het adres vrij te typen, tenzij het een Nederlandse postcode bevat.
+   * @param {object} req Het verzoek (met req.foreignVatChecked).
+   * @returns {string|undefined} Het adres om te controleren.
+   */
+  function addressToVerify(req) {
+    const address = req.body && req.body.address;
+    if (req.foreignVatChecked && !/\b\d{4}\s?[A-Za-z]{2}\b/.test(String(address || ''))) return undefined;
+    return address;
+  }
+
   app.get('/api/customers', requireCustomers, (req, res) => {
     const limit = Math.min(200, Math.max(1, Number.parseInt(req.query.limit, 10) || PAGE_SIZE));
     const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
     res.json({ ...store.listCustomerPage(tenantsOf(req), { search: String(req.query.q || '').slice(0, 100), group: String(req.query.group || ''), limit, offset }), limit, offset });
   });
 
-  app.post('/api/customers', requireJson, requireCustomers, limitInvitesIfAsked, requireVerifiedAddress(addressGuard, (req) => req.body?.address), async (req, res) => {
+  app.post('/api/customers', requireJson, requireCustomers, limitInvitesIfAsked, checkForeignVat, requireVerifiedAddress(addressGuard, addressToVerify), async (req, res) => {
     const body = req.body || {};
     const contact = sanitizeContact({ email: body.email, phone: body.phone, address: body.address });
     if (contact.error) return invalid(res, contact);
@@ -164,7 +212,7 @@ function registerCustomerRoutes(app, ctx) {
     // Zakelijke prijzen (excl. btw) worden niet door een installateur toegekend, net als bij het wijzigen.
     if (body.customerGroup === 'zakelijk' && !mayPrice(req)) return res.status(403).json({ error: 'forbidden', message: 'Alleen een beheerder maakt een zakelijke klant.' });
     if (body.customerGroup === 'zakelijk') {
-      const checked = sanitizeBusinessProfile(body);
+      const checked = sanitizeBusinessProfile(body, { kvkRequired: false });
       if (checked.error) return invalid(res, checked);
       business = checked.profile;
     } else if (body.customerGroup !== undefined && body.customerGroup !== '') {
@@ -192,7 +240,7 @@ function registerCustomerRoutes(app, ctx) {
     });
   });
 
-  app.patch('/api/customers/:id', requireJson, requireCustomers, requireVerifiedAddress(addressGuard, (req) => req.body?.address,
+  app.patch('/api/customers/:id', requireJson, requireCustomers, checkForeignVat, requireVerifiedAddress(addressGuard, addressToVerify,
     (req) => () => (store.getCustomer(tenantsOf(req), req.params.id) || {}).address), async (req, res) => {
     const body = req.body || {};
     const customer = store.getCustomer(tenantsOf(req), req.params.id);
@@ -215,7 +263,7 @@ function registerCustomerRoutes(app, ctx) {
     }
     if (Object.keys(contact.contact).length) input.contact = contact.contact;
     if (['companyName', 'kvkNumber', 'vatNumber'].some((field) => body[field] !== undefined)) {
-      const checked = sanitizeBusinessProfile({ companyName: customer.companyName, kvkNumber: customer.kvkNumber, vatNumber: customer.vatNumber, ...body });
+      const checked = sanitizeBusinessProfile({ companyName: customer.companyName, kvkNumber: customer.kvkNumber, vatNumber: customer.vatNumber, ...body }, { kvkRequired: false });
       if (checked.error) return invalid(res, checked);
       input.business = checked.profile;
     }
