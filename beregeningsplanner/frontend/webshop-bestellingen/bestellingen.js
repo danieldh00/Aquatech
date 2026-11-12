@@ -120,7 +120,7 @@
       ${trackingForm}
       ${invoiceLine}
       <p class="muted small">Betaling: ${paymentText(order)} · ${mail}${shipMail ? ` · ${shipMail}` : ''}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})${step.note ? `: ${esc(step.note)}` : ''}`).join(' → ')}${reservationText(order)}</p>
-      <p>${buttons}${canRefund ? ' <button class="btn primary" id="wo-refund">Terugbetalen via Mollie</button>' : ''} ${order.status !== 'geannuleerd' ? '<button class="btn" id="wo-slip">Pakbon</button> ' : ''}<button class="btn" id="wo-close">Sluiten</button></p>`;
+      <p>${buttons}${canRefund ? ' <button class="btn primary" id="wo-refund">Terugbetalen via Mollie</button>' : ''} ${order.status !== 'geannuleerd' && !(order.status === 'nieuw' && unpaid) ? '<button class="btn" id="wo-slip">Pakbon</button> ' : ''}<button class="btn" id="wo-close">Sluiten</button></p>`;
     box.hidden = false;
     /** Sluit het detail. */
     $('#wo-close').onclick = () => { box.hidden = true; state.openId = null; };
