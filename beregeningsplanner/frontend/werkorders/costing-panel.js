@@ -63,6 +63,16 @@
     return 'Geschatte opbrengst (geen offerte en nog niet gefactureerd)';
   };
 
+  /**
+   * Omschrijving van de kortingsregel: percentage (bij een percentage) en bijschrift.
+   * @param {object} costing De nacalculatie.
+   * @param {string|number} percentText Het percentage zoals het getoond wordt.
+   * @returns {string} Bijvoorbeeld "Korting 5% – seizoensactie".
+   */
+  function discountLabelOf(costing, percentText) {
+    return `Korting${costing.discountAmount ? '' : ` ${percentText}%`}${costing.discountNote ? ` – ${costing.discountNote}` : ''}`;
+  }
+
   /** Tekent de samenvatting, de materiaalregels en de waarschuwingen. */
   function render() {
     const container = $('#nc-body');
@@ -70,7 +80,7 @@
     if (!container || !costing) return;
     const { labour, budget, actual, cost } = costing;
     $('#nc-summary').textContent = `Marge ${formatEuro(costing.margin)}${costing.marginPct == null ? '' : ` (${formatNumber(costing.marginPct)}%)`}`;
-    const discountRow = costing.discountPct ? `<tr><td>Korting ${esc(formatNumber(costing.discountPct))}%</td><td class="num">−${esc(formatEuro(budget.discount))}</td><td class="num">−${esc(formatEuro(actual.discount))}</td>${diffCell(budget.discount - actual.discount, formatEuro, true)}</tr>` : '';
+    const discountRow = costing.hasDiscount ? `<tr><td>${esc(discountLabelOf(costing, formatNumber(costing.discountPct)))}</td><td class="num">−${esc(formatEuro(budget.discount))}</td><td class="num">−${esc(formatEuro(actual.discount))}</td>${diffCell(budget.discount - actual.discount, formatEuro, true)}</tr>` : '';
     const materialRows = costing.materials.map((material) => `<tr${material.extra ? ' class="nc-extra"' : ''}>
       <td>${material.code ? `<span class="code">${esc(material.code)}</span> ` : ''}${esc(material.description)}${material.extra ? ' <span class="pill">Extra</span>' : ''}</td>
       <td class="num">${esc(formatNumber(material.plannedQty))} ${esc(material.unit)}</td>
@@ -188,7 +198,7 @@
       addRow(`Arbeid (uurtarief ${labour.hourlyRate})`, budget.labour, actual.labour);
       addRow('Materiaal', budget.materials, actual.materials);
       if (budget.other) addRow('Overig', budget.other, actual.other);
-      if (costing.discountPct) addRow(`Korting ${costing.discountPct}%`, -budget.discount, -actual.discount);
+      if (costing.hasDiscount) addRow(discountLabelOf(costing, costing.discountPct), -budget.discount, -actual.discount);
       addRow('Waarde (excl. btw)', budget.net, actual.net).font = { bold: true };
       summary.addRow({});
       /**

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.6
+
+Kortingsregel op offerte en factuur (punt 14 van bundel A). Geen migratie: de velden staan in de offerte- en factuurgegevens.
+
+- **Korting op het geheel** kan nu een percentage of een vast bedrag (excl. btw) zijn, met een bijschrift (max. 120 tekens) dat op het document naast het kortingsbedrag staat (`discountType`, `discountPct`, `discountAmount`, `discountNote`). Een vast bedrag wordt nooit hoger dan het subtotaal en wordt naar rato over de btw-tarieven verdeeld, net als een percentage.
+- Offerte-editor en factuurscherm: keuze *percentage* of *vast bedrag* met het bijbehorende veld en het bijschrift. Het bijschrift staat op de offerte (document, klantpagina, Excel), de factuur (scherm, pdf) en in de nacalculatie.
+- De factuur uit een werkorder neemt de korting van de offerte over; een creditfactuur draait het bedrag mee (negatief). Visma krijgt de korting per regel als fractie van het subtotaal.
+- Nacalculatie: een vast bedrag geldt in zijn geheel (begroot en werkelijk), een percentage schaalt met het werkelijke subtotaal.
+- Tests: `discount-line.test.js` (kern, afkappen, opschonen, creditfactuur, overname, nacalculatie, Visma, API en klantpagina).
+
 ## 1.10.5
 
 Concept-offerte: duidelijker controleren van regels waar de AI over twijfelt. Geen migratie.

@@ -214,7 +214,9 @@ function customerBody(debtor, termsOfPaymentId) {
 function invoiceBody(invoice, customerId, vismaSettings, invoicing, creditedInvoiceId = null) {
   const details = invoice.data;
   const address = splitAddress(details.customer.address);
-  const discount = Number(details.discountPct) || 0;
+  // Per regel een kortingsfractie: bij een vast bedrag het deel van het subtotaal dat het kortingsbedrag is.
+  const invoiceTotals = Core.totals(details, invoicing);
+  const discountFraction = Core.discountOf(details, invoiceTotals.subtotal).fraction;
   const rows = [];
   const missing = new Set();
   rows.push({ LineNumber: 0, IsTextRow: true, Text: `${invoice.kind === 'credit' ? 'Creditfactuur' : 'Factuur'} ${invoice.number}${details.reference ? ` – ${details.reference}` : ''}`.slice(0, 250) });
@@ -225,7 +227,7 @@ function invoiceBody(invoice, customerId, vismaSettings, invoicing, creditedInvo
     rows.push({
       LineNumber: rows.length, ArticleId: articleId, IsTextRow: false,
       Text: `${line.description || ''}${line.code ? ` (${line.code})` : ''}`.slice(0, 250),
-      UnitPrice: line.price, Quantity: line.qty, DiscountPercentage: discount ? Math.round(discount * 100) / 10000 : 0,
+      UnitPrice: line.price, Quantity: line.qty, DiscountPercentage: discountFraction ? Math.round(discountFraction * 1000000) / 1000000 : 0,
     });
   }
   if (missing.size) return { error: `Kies in Facturen → Visma een artikel voor: ${[...missing].join(', ')}.` };

@@ -172,7 +172,17 @@
       </div>
       <div id="e-lines"></div>
       <div class="totals-wrap">
-        <label class="inline">Korting %<input data-f="discountPct" type="number" min="0" max="100" step="0.5" class="narrow"></label>
+        <div class="form-grid discount-box">
+          <label class="field">Korting
+            <select data-f="discountType">
+              <option value="pct">percentage (%)</option>
+              <option value="amount">vast bedrag (excl. btw)</option>
+            </select>
+          </label>
+          <label class="field" id="e-discount-pct">Percentage<input data-f="discountPct" type="number" min="0" max="100" step="0.5"></label>
+          <label class="field" id="e-discount-amount" hidden>Bedrag (€)<input data-f="discountAmount" type="number" min="0" step="0.01"></label>
+          <label class="field full">Bijschrift bij de korting<input data-f="discountNote" maxlength="120" placeholder="bijv. seizoensactie"><span class="muted small">Staat op de offerte, naast het kortingsbedrag.</span></label>
+        </div>
         <table id="e-totals" class="totals"></table>
       </div>
     </section>
