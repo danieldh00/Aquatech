@@ -556,6 +556,18 @@ van de werkorder. Daardoor is alles vanzelf gekoppeld.
   het bedrag op inkoopprijs en een totaal.
 - **Excel-export**: de voorraadlijst (met een tabblad Gereserveerd) en de
   mutaties over een gekozen periode.
+- **EAN en etiketten** (1.11.1): per artikel een EAN (8 of 13 cijfers met
+  kloppend controlecijfer, uniek binnen de organisatie; een UPC-A van 12
+  cijfers wordt EAN-13). Blok *Etiketten* op het artikel: sjabloon en aantal
+  kiezen, de app maakt een PDF met één etiket per pagina op precies het
+  formaat van het sjabloon. Druk die af via het afdrukvenster op de
+  labelprinter (bijvoorbeeld Zebra; kies het etiketformaat en schaal 100%),
+  er is geen ZPL of eigen stuurprogramma nodig. De streepjescode is de EAN
+  (EAN-13/EAN-8), zonder EAN de artikelcode als Code 128 (tot 40 gewone
+  tekens). Sjablonen (hoogstens tien, 15-150 mm, wat erop staat, prijs incl.
+  of excl. btw, standaardsjabloon) in Beheer → Instellingen → *Artikelen:
+  etiketten*. Grenzen: 500 etiketten en 200 artikelen per keer, 120 PDF's per
+  uur per gebruiker; elke afdruk staat in het auditlog.
 
 ## Eigen webshop (opzet)
 

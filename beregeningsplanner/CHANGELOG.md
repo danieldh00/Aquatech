@@ -1,15 +1,27 @@
 # Changelog
 
-## 1.11.1
+## 1.11.2
 
-Leveranciersdocument inlezen en direct inboeken (punt 17 van bundel F, deel 4). Migratie 62.
+Leveranciersdocument inlezen en direct inboeken (punt 17 van bundel F, deel 4). Migratie 63.
 
 - **Inlezen** (`POST /api/purchase-orders/read`, `artikelen/order-read-route.js`, `order-reader.js`, recht `voorraad`): een PDF of foto (JPEG, PNG, WebP, max. 8 MB) van een offerte, orderbevestiging, pakbon of factuur gaat naar de AI van de omgeving (eigen sleutel, `aiEnabled`, dagmaximum `aiDailyLimit`, uurlimiet per bezoeker) en komt terug als leverancier, documentnummer, datum en regels. De route schrijft niets. Verbruik staat in Beheer > AI-kosten onder `inkoop_inlezen`.
 - **Koppelen** (`order-matching.js`, zuivere functies): leverancier op naam; regels op artikelnummer van de leverancier, artikelcode, exacte omschrijving en daarna gelijkenis (alleen een voorstel).
-- **Inboeken**: `POST /api/purchase-orders` met `receiveNow: true` maakt de order en boekt alles meteen in (alles of niets, via `receiveRows`). Veld `supplierReference` (migratie 62, referentie van de leverancier) en per regel `supplierSku`; met `rememberSkus: true` worden de artikelnummers bij de artikelen onthouden (`suppliers.rememberSku`).
+- **Inboeken**: `POST /api/purchase-orders` met `receiveNow: true` maakt de order en boekt alles meteen in (alles of niets, via `receiveRows`). Veld `supplierReference` (migratie 63, referentie van de leverancier) en per regel `supplierSku`; met `rememberSkus: true` worden de artikelnummers bij de artikelen onthouden (`suppliers.rememberSku`).
 - `translateApiError` uit `plan-analyzer.js` wordt hergebruikt voor de foutmeldingen van de AI-dienst.
 - Scherm: knop Inlezen uit document in Inkooporders; gekoppelde regels staan op de order, de rest is te koppelen of weg te laten; knoppen Bewaren (concept) en Bewaren en inboeken.
 - Tests: `order-reading.test.js` en `purchase-orders.test.js`.
+
+## 1.11.1
+
+Etiketten met streepjescode (item 20). Migratie 62: kolom `stock_items.ean` met unieke index `(tenant_id, ean)` (alleen gevuld).
+
+- **EAN per artikel**: veld *EAN* in het artikelformulier (nieuw en bewerken). De server maakt de invoer schoon (spaties en streepjes eruit, UPC-A met 12 cijfers wordt EAN-13), accepteert alleen 8 of 13 cijfers met een kloppend controlecijfer en weigert een EAN die al bij een ander artikel van de organisatie hoort (409, met de artikelcode). Niet op een hoofdartikel met varianten (die hebben elk een eigen EAN).
+- **Streepjescodes** in `frontend/shared/barcode.js` (UMD, zonder afhankelijkheden): EAN-13, EAN-8 en Code 128 (set B, en set C voor reeksen cijfers). De uitkomsten zijn nagekeken met een scanner-decoder en staan als vaste waarden in de test.
+- **Etiketten-PDF** (`artikelen/labels.js`): `POST /api/stock/labels` {template, items:[{id, qty}]} maakt een PDF met één etiket per pagina op precies het formaat van het sjabloon, zodat een labelprinter (Zebra) via het gewone afdrukvenster print (geen ZPL). Op het etiket: omschrijving, artikelcode, prijs (incl. of excl. btw) en de streepjescode: de EAN, zonder EAN de artikelcode als Code 128 (of per sjabloon *alleen EAN* / *altijd de artikelcode*). Strepen nooit smaller dan 0,19 mm; past de code niet, dan een duidelijke melding. Recht `voorraad`, hoogstens 500 etiketten en 200 artikelen per keer, 120 PDF's per uur per gebruiker, audit `etiketten_afgedrukt`.
+- **Sjablonen** in Beheer → Instellingen → *Artikelen: etiketten* (instelling `labelTemplates`, per omgeving, hoogstens tien): naam, breedte en hoogte (15-150 mm), soort streepjescode, welke gegevens erop staan en het standaardsjabloon. Standaard: Zebra 57 × 32 mm en 102 × 51 mm. `GET /api/stock/label-templates` (recht `voorraad`).
+- Artikel openen → blok *Etiketten*: sjabloon en aantal kiezen, met een voorbeeld van de streepjescode; de PDF opent in een nieuw tabblad.
+- `createPdf` (verkoop/pdf.js) kent nu een eigen paginaformaat (`pageSize`).
+- Testdata: het artikel Straatzand heeft een EAN.
 
 ## 1.11.0
 

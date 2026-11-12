@@ -214,10 +214,12 @@ function pngImage(buffer) {
 
 /**
  * Maakt een PDF-document: pagina's toevoegen, tekenen, en met toBuffer() de PDF.
- * @param {{ title?: string, author?: string }} [info] Titel en auteur in de documenteigenschappen.
- * @returns {object} addPage, setPage, text, rect, line, image, toBuffer, pageCount en A4.
+ * @param {{ title?: string, author?: string, pageSize?: { width: number, height: number } }} [info] Titel en auteur in de
+ *   documenteigenschappen; pageSize = paginaformaat in punten (standaard A4, bijv. een etiket).
+ * @returns {object} addPage, setPage, text, rect, line, image, toBuffer, pageCount, A4 en size.
  */
-function createPdf({ title = '', author = '' } = {}) {
+function createPdf({ title = '', author = '', pageSize = null } = {}) {
+  const pageBox = pageSize && pageSize.width > 0 && pageSize.height > 0 ? { width: pageSize.width, height: pageSize.height } : A4;
   const pages = [];
   const images = [];
   let page = null;
@@ -236,7 +238,7 @@ function createPdf({ title = '', author = '' } = {}) {
    * @param {number} top Afstand vanaf de bovenkant in punten.
    * @returns {number} De y-coördinaat in de PDF.
    */
-  const y = (top) => A4.height - top;
+  const y = (top) => pageBox.height - top;
 
   /**
    * Schrijft een regel tekst.
@@ -330,7 +332,7 @@ function createPdf({ title = '', author = '' } = {}) {
     const kids = [];
     for (const pageEntry of pages) {
       const content = add({ dict: '<< /Filter /FlateDecode', data: zlib.deflateSync(Buffer.from(pageEntry.ops.join('\n'), 'latin1')) });
-      kids.push(add(`<< /Type /Page /Parent ${pagesObj} 0 R /MediaBox [0 0 ${pdfNumber(A4.width)} ${pdfNumber(A4.height)}] /Contents ${content} 0 R `
+      kids.push(add(`<< /Type /Page /Parent ${pagesObj} 0 R /MediaBox [0 0 ${pdfNumber(pageBox.width)} ${pdfNumber(pageBox.height)}] /Contents ${content} 0 R `
         + `/Resources << /Font << /F1 ${fontRegular} 0 R /F2 ${fontBold} 0 R >>${imageRefs.length ? ` /XObject << ${imageRefs.join(' ')} >>` : ''} >> >>`));
     }
     objs[catalog - 1] = `<< /Type /Catalog /Pages ${pagesObj} 0 R >>`;
@@ -361,7 +363,7 @@ function createPdf({ title = '', author = '' } = {}) {
     page = pages[index];
   }
 
-  return { addPage, setPage, text, rect, line, image, toBuffer, get pageCount() { return pages.length; }, A4 };
+  return { addPage, setPage, text, rect, line, image, toBuffer, get pageCount() { return pages.length; }, A4, size: pageBox };
 }
 
 module.exports = { createPdf, textWidth, wrap, encode, pngImage, A4 };

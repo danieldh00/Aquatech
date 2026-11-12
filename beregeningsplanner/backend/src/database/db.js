@@ -1262,7 +1262,12 @@ const MIGRATIONS = [
   CREATE INDEX purchase_order_lines_order ON purchase_order_lines (tenant_id, order_id);
   CREATE INDEX purchase_order_lines_item ON purchase_order_lines (tenant_id, item_id);
   `,
-  // 62: inkooporders: het nummer van het document van de leverancier (offerte, orderbevestiging, pakbon of factuur),
+  // 62: EAN (streepjescode van de fabrikant) per artikel, voor etiketten en later scannen; uniek per omgeving.
+  `
+  ALTER TABLE stock_items ADD COLUMN ean TEXT;
+  CREATE UNIQUE INDEX stock_items_ean ON stock_items (tenant_id, ean) WHERE ean IS NOT NULL;
+  `,
+  // 63: inkooporders: het nummer van het document van de leverancier (offerte, orderbevestiging, pakbon of factuur),
   // meestal gelezen uit de PDF (artikelen/order-reader.js).
   `
   ALTER TABLE purchase_orders ADD COLUMN supplier_reference TEXT NOT NULL DEFAULT '';

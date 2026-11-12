@@ -159,6 +159,11 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.strictEqual((await client.get(`/app/api/stock/items/${stock[0].id}`)).status, 200);
     assert.strictEqual(probe.stats.queries, 5, probe.stats.sql.join('\n'));
+    // Etiketten: de sjablonen komen uit de instellingen, de artikelen uit één query ongeacht het aantal.
+    probe.reset();
+    const labelRequest = await client.post('/app/api/stock/labels', { items: stock.map((item) => ({ id: item.id, qty: 2 })) });
+    assert.strictEqual(labelRequest.status, 200, labelRequest.text.slice(0, 200));
+    assert.strictEqual(probe.stats.sql.filter((statement) => /^SELECT i\.id, i\.code/.test(statement)).length, 1, probe.stats.sql.join('\n'));
     // Werkregistratie: vaste aantallen queries, ongeacht het aantal regels
     // (sessie + werkorder + uren + materiaal; urenstaat: sessie + uren + materiaal).
     const lines = [{ id: 'a', section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 10 }];
