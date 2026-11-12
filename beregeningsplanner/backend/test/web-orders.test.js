@@ -455,3 +455,24 @@ test('afleveradres: bij ophalen is geen adres nodig; sanitizeCheckout en een oud
   const badCountry = sanitizeCheckout({ ...base, deliveryForm: '1', deliveryStreet: 'Rue 1', deliveryPostcode: 'x', deliveryCity: 'Brussel' }, { country: 'BE', billingCountry: 'NL' });
   assert.strictEqual(badCountry.field, 'deliveryPostcode');
 });
+
+test('afleveradres: factuuradres in Nederland (PDOK) met een afleveradres in België (zelf getypt); een ander factuurland moet bij de bezorgbare landen horen', async () => {
+  const { base, admin, shopper } = await setup();
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { shopShipping: { pickup: { enabled: true }, dpd: { enabled: true, defaultWeightGrams: 1000, zones: [
+    { country: 'NL', tiers: [{ upToGrams: 2000, price: 6.95 }] }, { country: 'BE', tiers: [{ upToGrams: 5000, price: 14.5 }] },
+  ] } } })).status, 200);
+  const customer = await shopper();
+  await addToCart(base, customer, 'SPR-1', 1);
+  const fields = { ...CHECKOUT, street: 'Tuinstraat 1', deliveryForm: '1', country: 'BE', billingCountry: 'NL', deliveryStreet: 'Rue de la Loi 16', deliveryPostcode: '1000', deliveryCity: 'Brussel' };
+  const refused = await postCheckout(base, customer, { ...fields, billingCountry: 'XX' });
+  assert.strictEqual(refused.status, 400);
+  assert.match(refused.text, /land voor het factuuradres/);
+  assert.strictEqual((await postCheckout(base, customer, fields)).status, 303);
+  const [item] = (await admin.get('/app/api/admin/web-orders')).body.items;
+  const order = (await admin.get(`/app/api/admin/web-orders/${item.id}`)).body.order;
+  assert.strictEqual(order.deliverySame, false);
+  assert.strictEqual(order.address.country, 'BE');
+  assert.strictEqual(order.address.street, 'Rue de la Loi 16');
+  assert.strictEqual(order.billingAddress.country, 'NL');
+  assert.strictEqual(order.billingAddress.postcode, '8071 AB', 'het Nederlandse factuuradres is bij PDOK gecontroleerd');
+});
