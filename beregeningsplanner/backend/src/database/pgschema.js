@@ -1033,6 +1033,10 @@ const PG_MIGRATIONS = [
   CREATE INDEX purchase_order_lines_order ON purchase_order_lines (tenant_id, order_id);
   CREATE INDEX purchase_order_lines_item ON purchase_order_lines (tenant_id, item_id);
   `,
+  // 62: inkooporders: document van de leverancier (zie db.js).
+  `
+  ALTER TABLE purchase_orders ADD COLUMN supplier_reference ${TEXT_TYPE} NOT NULL DEFAULT '';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

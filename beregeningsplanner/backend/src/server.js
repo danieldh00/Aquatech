@@ -56,6 +56,8 @@ const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uit
 const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
 const { createSupplierStore, registerSupplierRoutes } = require('./artikelen/suppliers');
+const { createOrderReader: createDefaultOrderReader } = require('./artikelen/order-reader');
+const { registerOrderReadRoute } = require('./artikelen/order-read-route');
 const { createPurchaseOrderStore, registerPurchaseOrderRoutes } = require('./artikelen/purchase-orders');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
@@ -304,7 +306,7 @@ function staticHeaders(version) {
  * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, wanIp = createWanIp(), loginDelayMs = 1000 }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, wanIp = createWanIp(), loginDelayMs = 1000 }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -487,6 +489,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
     return cached;
   }
+  const orderReaders = new Map();
+  /**
+   * De AI-lezer voor leveranciersdocumenten van een omgeving (per model en sleutel onthouden).
+   * @param {string} [tenantId] Id van de omgeving.
+   * @returns {object} De lezer (order-reader.js).
+   */
+  function currentOrderReader(tenantId = tenant.id) {
+    const aiSettings = settingsFor(aiTenantOf(tenantId));
+    const key = aiSettings.get('anthropicApiKey');
+    const model = aiSettings.get('aiModel');
+    const cacheKey = `${model}|${key}`;
+    let cached = orderReaders.get(cacheKey);
+    if (!cached) {
+      cached = createOrderReader({ apiKey: key, model });
+      orderReaders.set(cacheKey, cached);
+    }
+    return cached;
+  }
   // Verbruik en kosten van elk AI-verzoek (Beheer > AI-kosten).
   const aiUsage = createAiUsageStore(database);
   // Vaste AI-uitkomst per tekening en geleerde kleuren (zie recognitions.js).
@@ -579,6 +599,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use(/^\/api\/stock\/items\/[^/]+\/image$/, express.json({ limit: '8mb' }));
   app.use('/api/stock', express.json({ limit: '256kb' }));
   app.use('/api/suppliers', express.json({ limit: '32kb' }));
+  // Leveranciersdocument inlezen (order-read-route.js): PDF of foto als base64, vóór de 256 kB hieronder.
+  app.use('/api/purchase-orders/read', express.json({ limit: '12mb' }));
   app.use('/api/purchase-orders', express.json({ limit: '256kb' }));
   app.use('/api/invoices', express.json({ limit: '1mb' }));
   app.use('/api/debtors', express.json({ limit: '16kb' }));
@@ -2239,6 +2261,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Leveranciers en welke leverancier welk artikel levert (zie suppliers.js).
   registerSupplierRoutes(app, { suppliers: supplierStore, requireRight, requireJson, audit });
+  registerOrderReadRoute(app, { stock: stockStore, suppliers: supplierStore, requireRight, audit, settingsFor, aiTenantOf, currentOrderReader, dailyFor, limiter: analyzeLimiter, aiUsage });
   registerPurchaseOrderRoutes(app, { purchaseOrders: purchaseOrderStore, requireRight, requireJson, audit });
 
   // Afbeeldingen bij artikelen: uploaden, verwijderen en overnemen uit de oude webshop (zie item-images.js).

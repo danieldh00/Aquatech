@@ -193,6 +193,25 @@ class AnalyzeError extends Error {
 }
 
 /**
+ * Vertaalt een fout van de AI-dienst naar een begrijpelijke melding.
+ * @param {Error} error De fout.
+ * @param {Function} log Schrijft een waarschuwing weg.
+ * @returns {Error} Een AnalyzeError, of de oorspronkelijke fout als die niet van de AI-dienst komt.
+ */
+function translateApiError(error, log) {
+  if (error instanceof Anthropic.APIError) log(`AI-dienst gaf een fout: ${describe(error)}`);
+  if (error instanceof Anthropic.AuthenticationError) return new AnalyzeError('auth', 'De API-sleutel wordt geweigerd. Controleer de API-sleutel bij Instellingen.');
+  if (error instanceof Anthropic.PermissionDeniedError) return new AnalyzeError('permission', `Deze API-sleutel heeft geen toegang: ${apiMessage(error)}`);
+  if (error instanceof Anthropic.NotFoundError) return new AnalyzeError('not_found', `Model niet beschikbaar voor deze API-sleutel: ${apiMessage(error)}`);
+  if (error instanceof Anthropic.RateLimitError) return new AnalyzeError('rate_limited', 'De AI-dienst is even overbelast of het tegoed is op. Probeer het later opnieuw.', 429);
+  if (isNoCredit(error)) return new AnalyzeError('no_credit', 'Het API-tegoed bij Anthropic is op. Koop tegoed via console.anthropic.com → Plans & Billing; daarna werkt automatisch herkennen meteen weer.', 402);
+  if (error instanceof Anthropic.BadRequestError) return new AnalyzeError('bad_request', `De AI-dienst weigert het verzoek: ${apiMessage(error)}`);
+  if (error instanceof Anthropic.APIError) return new AnalyzeError('api_error', `Fout bij de AI-dienst (${error.status ?? 'verbinding'}): ${apiMessage(error)}`);
+  return error;
+}
+
+
+/**
  * Maakt de herkenner voor tuinplannen met de AI-dienst.
  * @param {object} options apiKey, client (voor tests), model en log (functie voor waarschuwingen).
  * @returns {{ available: boolean, model: string, analyze: Function, check: Function }} De herkenner.
@@ -208,17 +227,7 @@ function createPlanAnalyzer({ apiKey, client, model = MODEL, log = (msg) => cons
    * @param {Error} error De fout.
    * @returns {Error} Een AnalyzeError, of de oorspronkelijke fout als die niet van de AI-dienst komt.
    */
-  function toAnalyzeError(error) {
-    if (error instanceof Anthropic.APIError) log(`AI-dienst gaf een fout: ${describe(error)}`);
-    if (error instanceof Anthropic.AuthenticationError) return new AnalyzeError('auth', 'De API-sleutel wordt geweigerd. Controleer de API-sleutel bij Instellingen.');
-    if (error instanceof Anthropic.PermissionDeniedError) return new AnalyzeError('permission', `Deze API-sleutel heeft geen toegang: ${apiMessage(error)}`);
-    if (error instanceof Anthropic.NotFoundError) return new AnalyzeError('not_found', `Model niet beschikbaar voor deze API-sleutel: ${apiMessage(error)}`);
-    if (error instanceof Anthropic.RateLimitError) return new AnalyzeError('rate_limited', 'De AI-dienst is even overbelast of het tegoed is op. Probeer het later opnieuw.', 429);
-    if (isNoCredit(error)) return new AnalyzeError('no_credit', 'Het API-tegoed bij Anthropic is op. Koop tegoed via console.anthropic.com → Plans & Billing; daarna werkt automatisch herkennen meteen weer.', 402);
-    if (error instanceof Anthropic.BadRequestError) return new AnalyzeError('bad_request', `De AI-dienst weigert het verzoek: ${apiMessage(error)}`);
-    if (error instanceof Anthropic.APIError) return new AnalyzeError('api_error', `Fout bij de AI-dienst (${error.status ?? 'verbinding'}): ${apiMessage(error)}`);
-    return error;
-  }
+  const toAnalyzeError = (error) => translateApiError(error, log);
 
   /**
    * Leest een tuinplan: één aanroep met de afbeelding, met server-side fallback
@@ -306,4 +315,4 @@ function createPlanAnalyzer({ apiKey, client, model = MODEL, log = (msg) => cons
   return { available: Boolean(anthropic), model: modelId, analyze, check };
 }
 
-module.exports = { createPlanAnalyzer, validate, AnalyzeError, SCHEMA, MODEL, PROMPT_VERSION };
+module.exports = { createPlanAnalyzer, translateApiError, validate, AnalyzeError, SCHEMA, MODEL, PROMPT_VERSION };

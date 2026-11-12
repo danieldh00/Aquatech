@@ -92,9 +92,9 @@ function sanitizeOrder(input) {
       if (!Number.isFinite(unitCost) || unitCost < 0 || unitCost > MAX_COST_PRICE) return { error: 'De inkoopprijs is niet geldig.', field: 'unitCost' };
       unitCost = round4(unitCost);
     }
-    lines.push({ itemId, qty: round3(qty), unitCost });
+    lines.push({ itemId, qty: round3(qty), unitCost, supplierSku: cleanText(entry.supplierSku, 80) });
   }
-  return { value: { supplierId, expectedDate, notes: cleanText(source.notes, 2000), lines } };
+  return { value: { supplierId, expectedDate, notes: cleanText(source.notes, 2000), supplierReference: cleanText(source.supplierReference, 60), rememberSkus: source.rememberSkus === true, lines } };
 }
 
 /**
@@ -127,7 +127,7 @@ function totalOf(lines) {
  * Maakt de opslag voor inkooporders.
  * @param {object} db De database.
  * @param {{ stock: object, suppliers: object }} parts De voorraadopslag (book, reorderProposal) en de leveranciersopslag (preferredByItem).
- * @returns {object} list, get, create, update, place, receive, close, cancel, remove, incomingByItem, fromProposal.
+ * @returns {object} list, get, create, createReceived, update, place, receive, close, cancel, remove, incomingByItem, fromProposal.
  */
 function createPurchaseOrderStore(db, { stock, suppliers }) {
   /**
@@ -136,7 +136,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @returns {object} De voorbereide query.
    */
   const prepare = (sql) => db.prepare(sql);
-  const ORDER_COLS = 'o.id, o.number, o.supplier_id, o.status, o.expected_date, o.notes, o.created_by, o.created_at, o.updated_at, o.ordered_at, o.closed_at, s.name AS supplier_name';
+  const ORDER_COLS = 'o.id, o.number, o.supplier_id, o.status, o.expected_date, o.notes, o.supplier_reference, o.created_by, o.created_at, o.updated_at, o.ordered_at, o.closed_at, s.name AS supplier_name';
   const LINE_COLS = 'id, item_id, code, name, unit, supplier_sku, qty, unit_cost, received_qty';
 
   /**
@@ -146,7 +146,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    */
   const orderOf = (row) => ({
     id: row.id, number: row.number, supplierId: row.supplier_id, supplierName: row.supplier_name, status: row.status,
-    expectedDate: row.expected_date, notes: row.notes, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
+    expectedDate: row.expected_date, notes: row.notes, supplierReference: row.supplier_reference, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
     orderedAt: row.ordered_at || null, closedAt: row.closed_at || null,
   });
 
@@ -221,7 +221,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
       const link = linkByItem.get(item.id);
       let unitCost = line.unitCost;
       if (unitCost == null) unitCost = link && link.cost_price != null ? Number(link.cost_price) : item.cost_price == null ? null : Number(item.cost_price);
-      rows.push({ itemId: item.id, code: item.code, name: item.name, unit: item.unit, supplierSku: link ? link.supplier_sku : '', qty: line.qty, unitCost });
+      rows.push({ itemId: item.id, code: item.code, name: item.name, unit: item.unit, supplierSku: line.supplierSku || (link ? link.supplier_sku : ''), qty: line.qty, unitCost });
     }
     return { rows, supplier };
   }
@@ -284,6 +284,18 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
   }
 
   /**
+   * Onthoudt de artikelnummers van de leverancier bij de artikelen (binnen de transactie van de aanroeper),
+   * zodat een volgend document van deze leverancier die regels meteen herkent.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} supplierId Id van de leverancier.
+   * @param {Array<{ itemId: string, supplierSku: string }>} rows De regels van de order.
+   * @returns {void}
+   */
+  function rememberSkus(tenantId, supplierId, rows) {
+    for (const row of rows) if (row.supplierSku) suppliers.rememberSku(tenantId, supplierId, row.itemId, row.supplierSku);
+  }
+
+  /**
    * Schrijft een nieuwe order met regels (binnen een transactie van de aanroeper).
    * @param {string} tenantId Id van de omgeving.
    * @param {object} user Wie hem maakt.
@@ -295,10 +307,11 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
     if (prepared.error) return prepared;
     const id = crypto.randomUUID();
     const now = currentTimestamp();
-    prepare(`INSERT INTO purchase_orders (id, tenant_id, number, supplier_id, status, expected_date, notes, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'concept', ?, ?, ?, ?, ?)`)
-      .run(id, tenantId, nextNumber(tenantId), prepared.supplier.id, value.expectedDate, value.notes, cleanText(user && (user.display_name || user.displayName), 120), now, now);
+    prepare(`INSERT INTO purchase_orders (id, tenant_id, number, supplier_id, status, expected_date, notes, supplier_reference, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'concept', ?, ?, ?, ?, ?, ?)`)
+      .run(id, tenantId, nextNumber(tenantId), prepared.supplier.id, value.expectedDate, value.notes, value.supplierReference, cleanText(user && (user.display_name || user.displayName), 120), now, now);
     writeLines(tenantId, id, prepared.rows);
+    if (value.rememberSkus) rememberSkus(tenantId, prepared.supplier.id, prepared.rows);
     return { order: fullOrder(findRow(tenantId, id), tenantId) };
   }
 
@@ -331,9 +344,10 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
       if (row.status !== 'concept') return { error: 'Alleen een concept is te wijzigen.', status: 409 };
       const prepared = prepareLines(tenantId, checked.value, { allowArchivedSupplierId: row.supplier_id });
       if (prepared.error) return prepared;
-      prepare('UPDATE purchase_orders SET supplier_id = ?, expected_date = ?, notes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?')
-        .run(prepared.supplier.id, checked.value.expectedDate, checked.value.notes, currentTimestamp(), tenantId, row.id);
+      prepare('UPDATE purchase_orders SET supplier_id = ?, expected_date = ?, notes = ?, supplier_reference = ?, updated_at = ? WHERE tenant_id = ? AND id = ?')
+        .run(prepared.supplier.id, checked.value.expectedDate, checked.value.notes, checked.value.supplierReference, currentTimestamp(), tenantId, row.id);
       writeLines(tenantId, row.id, prepared.rows);
+      if (checked.value.rememberSkus) rememberSkus(tenantId, prepared.supplier.id, prepared.rows);
       return { order: fullOrder(findRow(tenantId, row.id), tenantId) };
     });
   }
@@ -358,8 +372,49 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
   }
 
   /**
-   * Boekt een ontvangst: per opgegeven regel gaat de voorraad omhoog met de inkoopprijs van de regel.
-   * Alles of niets: bij een fout wordt niets geboekt.
+   * Boekt een ontvangst voor een bestelde order, binnen de transactie van de aanroeper: per opgegeven
+   * regel gaat de voorraad omhoog met de inkoopprijs van de regel. Eerst wordt alles gecontroleerd, dan
+   * pas geboekt, zodat een fout niets half achterlaat.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} row De orderrij (status besteld of deels ontvangen).
+   * @param {object} user Wie ontvangt.
+   * @param {Array<{ lineId: string, qty: number }>} entries De ontvangen aantallen per regel.
+   * @returns {{ order?: object, error?: string, field?: string, status?: number }} De order, of een fout.
+   */
+  function receiveRows(tenantId, row, user, entries) {
+    if (!Array.isArray(entries) || !entries.length) return { error: 'Geef op wat er is ontvangen.', field: 'lines' };
+    if (entries.length > MAX_LINES) return { error: 'Te veel regels.', field: 'lines' };
+    const lines = prepare(`SELECT ${LINE_COLS} FROM purchase_order_lines WHERE tenant_id = ? AND order_id = ?`).all(tenantId, row.id);
+    const lineById = new Map(lines.map((line) => [line.id, line]));
+    const seen = new Set();
+    const checked = [];
+    for (const entry of entries) {
+      const lineId = cleanText(entry && entry.lineId, 60);
+      const line = lineById.get(lineId);
+      if (!line) return { error: 'Een regel hoort niet bij deze order.', field: 'lineId', status: 404 };
+      if (seen.has(lineId)) return { error: 'Een regel staat dubbel.', field: 'lineId' };
+      seen.add(lineId);
+      const qty = Number(entry.qty);
+      if (!Number.isFinite(qty) || qty <= 0 || qty > MAX_QTY) return { error: 'Het ontvangen aantal moet groter zijn dan 0.', field: 'qty' };
+      checked.push({ line, qty: round3(qty) });
+    }
+    const now = currentTimestamp();
+    for (const { line, qty } of checked) {
+      stock.book(tenantId, line.item_id, qty, {
+        kind: 'ontvangst', source: `inkoop:${row.number}`, note: `Inkooporder ${row.number}`, user, at: now,
+        unitCost: line.unit_cost == null ? undefined : Number(line.unit_cost),
+      });
+      prepare('UPDATE purchase_order_lines SET received_qty = received_qty + ? WHERE tenant_id = ? AND id = ?').run(qty, tenantId, line.id);
+    }
+    const after = linesOf(tenantId, row.id);
+    const complete = after.every((line) => line.receivedQty >= line.qty);
+    prepare('UPDATE purchase_orders SET status = ?, closed_at = ?, updated_at = ? WHERE tenant_id = ? AND id = ?')
+      .run(complete ? 'ontvangen' : 'deels_ontvangen', complete ? now : null, now, tenantId, row.id);
+    return { order: fullOrder(findRow(tenantId, row.id), tenantId), number: row.number };
+  }
+
+  /**
+   * Boekt een ontvangst op een bestelde order (alles of niets).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de order.
    * @param {object} user Wie ontvangt.
@@ -367,40 +422,32 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @returns {{ order?: object, error?: string, field?: string, status?: number }} De order, of een fout.
    */
   function receive(tenantId, id, user, entries) {
-    if (!Array.isArray(entries) || !entries.length) return { error: 'Geef op wat er is ontvangen.', field: 'lines' };
-    if (entries.length > MAX_LINES) return { error: 'Te veel regels.', field: 'lines' };
     return transaction(db, () => {
       const row = findRow(tenantId, id);
       if (!row) return { error: 'not_found', status: 404 };
       if (row.status !== 'besteld' && row.status !== 'deels_ontvangen') return { error: 'Alleen een bestelde order is te ontvangen.', status: 409 };
-      const lines = prepare(`SELECT ${LINE_COLS} FROM purchase_order_lines WHERE tenant_id = ? AND order_id = ?`).all(tenantId, row.id);
-      const lineById = new Map(lines.map((line) => [line.id, line]));
-      // Eerst alles controleren, dan pas boeken: een fout mag niets half achterlaten.
-      const seen = new Set();
-      const checked = [];
-      for (const entry of entries) {
-        const lineId = cleanText(entry && entry.lineId, 60);
-        const line = lineById.get(lineId);
-        if (!line) return { error: 'Een regel hoort niet bij deze order.', field: 'lineId', status: 404 };
-        if (seen.has(lineId)) return { error: 'Een regel staat dubbel.', field: 'lineId' };
-        seen.add(lineId);
-        const qty = Number(entry.qty);
-        if (!Number.isFinite(qty) || qty <= 0 || qty > MAX_QTY) return { error: 'Het ontvangen aantal moet groter zijn dan 0.', field: 'qty' };
-        checked.push({ line, qty: round3(qty) });
-      }
+      return receiveRows(tenantId, row, user, entries);
+    });
+  }
+
+  /**
+   * Maakt een order en boekt hem meteen helemaal in (voor een pakbon of factuur van goederen die er al zijn).
+   * Alles of niets: bij een fout wordt ook de order niet gemaakt.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} user Wie het doet.
+   * @param {object} raw De invoer (zoals bij maken).
+   * @returns {{ order?: object, error?: string, field?: string, status?: number }} De ontvangen order, of een fout.
+   */
+  function createReceived(tenantId, user, raw) {
+    const checked = sanitizeOrder(raw);
+    if (checked.error) return checked;
+    return transaction(db, () => {
+      const made = insertOrder(tenantId, user, checked.value);
+      if (made.error) return made;
+      if (!made.order.lines.length) return { error: 'Een order zonder regels is niet in te boeken.', field: 'lines', status: 409 };
       const now = currentTimestamp();
-      for (const { line, qty } of checked) {
-        stock.book(tenantId, line.item_id, qty, {
-          kind: 'ontvangst', source: `inkoop:${row.number}`, note: `Inkooporder ${row.number}`, user, at: now,
-          unitCost: line.unit_cost == null ? undefined : Number(line.unit_cost),
-        });
-        prepare('UPDATE purchase_order_lines SET received_qty = received_qty + ? WHERE tenant_id = ? AND id = ?').run(qty, tenantId, line.id);
-      }
-      const after = linesOf(tenantId, row.id);
-      const complete = after.every((line) => line.receivedQty >= line.qty);
-      prepare('UPDATE purchase_orders SET status = ?, closed_at = ?, updated_at = ? WHERE tenant_id = ? AND id = ?')
-        .run(complete ? 'ontvangen' : 'deels_ontvangen', complete ? now : null, now, tenantId, row.id);
-      return { order: fullOrder(findRow(tenantId, row.id), tenantId), number: row.number };
+      prepare("UPDATE purchase_orders SET status = 'besteld', ordered_at = ?, updated_at = ? WHERE tenant_id = ? AND id = ?").run(now, now, tenantId, made.order.id);
+      return receiveRows(tenantId, findRow(tenantId, made.order.id), user, made.order.lines.map((line) => ({ lineId: line.id, qty: line.qty })));
     });
   }
 
@@ -491,7 +538,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
       }
       const orders = [];
       for (const [supplierId, lines] of bySupplier) {
-        const out = insertOrder(tenantId, user, { supplierId, expectedDate: '', notes: '', lines });
+        const out = insertOrder(tenantId, user, { supplierId, expectedDate: '', notes: '', supplierReference: '', rememberSkus: false, lines });
         if (out.error) throw Object.assign(new Error(out.error), { status: out.status || 400 });
         orders.push({ ...out.order, lines: undefined });
       }
@@ -499,7 +546,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
     });
   }
 
-  return { list, get, create, update, place, receive, close, cancel, remove, incomingByItem, fromProposal };
+  return { list, get, create, createReceived, update, place, receive, close, cancel, remove, incomingByItem, fromProposal };
 }
 
 /**
@@ -554,9 +601,10 @@ function registerPurchaseOrderRoutes(app, ctx) {
   });
 
   app.post('/api/purchase-orders', requireJson, requireStock, (req, res) => {
-    const out = purchaseOrders.create(tenantOf(req), req.user, req.body);
+    const receiveNow = Boolean(req.body && req.body.receiveNow === true);
+    const out = receiveNow ? purchaseOrders.createReceived(tenantOf(req), req.user, req.body) : purchaseOrders.create(tenantOf(req), req.user, req.body);
     respond(res, out, () => {
-      audit(req, 'inkooporder_aangemaakt', { number: out.order.number });
+      audit(req, receiveNow ? 'inkooporder_ingeboekt' : 'inkooporder_aangemaakt', { number: out.order.number });
       res.status(201).json(out.order);
     });
   });

@@ -202,6 +202,8 @@
           </label>
           <span class="spacer"></span>
           <button class="btn" id="b-po-excel" type="button" title="Excel met de getoonde orders en een overzicht per leverancier">Excel</button>
+          <button class="btn" id="b-po-read" type="button" title="Leest een PDF of foto van een offerte, orderbevestiging, pakbon of factuur van een leverancier met AI">Inlezen uit document</button>
+          <input id="po-read-file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" hidden>
           <button class="btn" id="b-po-proposal" type="button" title="Maakt per voorkeursleverancier een concept-order van wat onder de minimumvoorraad zit">Uit bestelvoorstel</button>
           <button class="btn primary" id="b-po-new" type="button">+ Inkooporder</button>
         </div>
@@ -210,9 +212,15 @@
           <div class="form-grid">
             <label class="field span-2">Leverancier<select name="supplierId" required></select></label>
             <label class="field">Verwachte leverdatum<input name="expectedDate" type="date"></label>
+            <label class="field">Referentie leverancier<input name="supplierReference" maxlength="60" placeholder="Bijv. ordernummer"></label>
             <label class="field full">Notitie<textarea name="notes" rows="2" maxlength="2000"></textarea></label>
           </div>
           <div class="tablewrap"><table class="grid" id="po-lines"></table></div>
+          <div id="po-unmatched" hidden>
+            <p class="muted" id="po-unmatched-note"></p>
+            <div class="tablewrap"><table class="grid" id="po-unmatched-table"></table></div>
+          </div>
+          <label class="check" id="po-remember-row" hidden><input type="checkbox" name="rememberSkus" checked> Onthoud de artikelnummers van de leverancier bij de artikelen</label>
           <div class="row actions" id="po-add-row">
             <input id="po-add-code" list="po-add-codes" placeholder="Artikelcode toevoegen…" autocomplete="off" aria-label="Artikelcode">
             <datalist id="po-add-codes"></datalist>
@@ -221,6 +229,7 @@
           </div>
           <div class="row actions">
             <button class="btn primary" type="submit" data-act="save">Bewaren</button>
+            <button class="btn primary" type="button" data-act="receivenow" title="Maakt de order en boekt alles meteen in de voorraad">Bewaren en inboeken</button>
             <button class="btn primary" type="button" data-act="place">Bestellen</button>
             <button class="btn primary" type="button" data-act="receive">Ontvangst boeken</button>
             <button class="btn" type="button" data-act="excel">Excel voor de leverancier</button>

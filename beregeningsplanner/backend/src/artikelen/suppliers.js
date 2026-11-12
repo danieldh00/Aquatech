@@ -297,6 +297,43 @@ function createSupplierStore(db) {
   }
 
   /**
+   * Onthoudt het artikelnummer van een leverancier bij een artikel, binnen de transactie van de aanroeper.
+   * Bestaat de koppeling al, dan blijft wat er staat (alleen een leeg nummer wordt gevuld); anders komt er een
+   * koppeling bij (de voorkeur als het artikel nog geen leverancier had). Een hoofdartikel krijgt niets.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} supplierId Id van de leverancier.
+   * @param {string} itemId Id van het artikel.
+   * @param {string} sku Het artikelnummer van de leverancier.
+   * @returns {void}
+   */
+  function rememberSku(tenantId, supplierId, itemId, sku) {
+    const cleanSku = cleanText(sku, 80);
+    if (!cleanSku) return;
+    const item = prepare('SELECT has_variants FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemId);
+    if (!item || Number(item.has_variants)) return;
+    const link = prepare('SELECT id, supplier_sku FROM item_suppliers WHERE tenant_id = ? AND item_id = ? AND supplier_id = ?').get(tenantId, itemId, supplierId);
+    if (link) {
+      if (!link.supplier_sku) prepare('UPDATE item_suppliers SET supplier_sku = ? WHERE tenant_id = ? AND id = ?').run(cleanSku, tenantId, link.id);
+      return;
+    }
+    const others = prepare('SELECT COUNT(*) AS n FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').get(tenantId, itemId).n;
+    if (Number(others) >= MAX_SUPPLIERS_PER_ITEM) return;
+    prepare(`INSERT INTO item_suppliers (id, tenant_id, item_id, supplier_id, supplier_sku, cost_price, order_qty, preferred, created_at)
+      VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?)`).run(crypto.randomUUID(), tenantId, itemId, supplierId, cleanSku, Number(others) ? 0 : 1, currentTimestamp());
+  }
+
+  /**
+   * De artikelnummers van een leverancier, om gelezen documentregels te herkennen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} supplierId Id van de leverancier.
+   * @returns {Array<{ itemId: string, supplierSku: string }>} Artikel-id en artikelnummer van de leverancier (alleen gevulde nummers).
+   */
+  function skusOf(tenantId, supplierId) {
+    return prepare("SELECT item_id, supplier_sku FROM item_suppliers WHERE tenant_id = ? AND supplier_id = ? AND supplier_sku <> ''").all(tenantId, supplierId)
+      .map((row) => ({ itemId: row.item_id, supplierSku: row.supplier_sku }));
+  }
+
+  /**
    * De voorkeursleverancier van elk artikel dat er een heeft (voor het bestelvoorstel per leverancier).
    * @param {string} tenantId Id van de omgeving.
    * @returns {Map<string, object>} Artikel-id naar { supplierId, supplierName, supplierSku, costPrice, orderQty }.
@@ -311,7 +348,7 @@ function createSupplierStore(db) {
     }]));
   }
 
-  return { list, get, create, update, remove, forItem, setForItem, preferredByItem };
+  return { list, get, create, update, remove, forItem, setForItem, preferredByItem, rememberSku, skusOf };
 }
 
 /**
