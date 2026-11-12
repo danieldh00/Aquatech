@@ -414,7 +414,8 @@ function createMcpTools(ctx) {
       definition: {
         title: 'Openstaande debiteuren',
         description: 'Wie er nog moet betalen: definitieve, onbetaalde facturen per klant, grootste bedrag eerst, met het bedrag over de vervaldatum. '
-          + 'Bedragen incl. btw; creditnota\'s tellen negatief mee.',
+          + 'Bedragen incl. btw; creditnota\'s tellen negatief mee. totaalOpenstaand, totaalTeLaat, aantalDebiteuren en aantalTeLaat gelden altijd voor alle debiteuren; '
+          + 'per debiteur komen hoogstens tien facturen mee (facturenGetoond tegenover aantalFacturen).',
         inputSchema: {
           type: 'object',
           properties: {

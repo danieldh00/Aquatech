@@ -3,8 +3,8 @@
 // bepaalt mcp-tools.js met de rechten van de rol.
 const { jsonField, isPg } = require('../database/db');
 
-/** Hoeveel losse facturen hoogstens worden opgehaald voor de getoonde debiteuren (de totalen telt de database altijd volledig). */
-const DETAIL_LIMIT = 2000;
+/** Hoeveel facturen per getoonde debiteur meekomen (de totalen telt de database altijd volledig). */
+const INVOICES_PER_DEBTOR = 10;
 /** Per debiteur groeperen: op klant, anders op debiteur, anders op naam (zoals een losse factuur zonder klant). */
 const GROUP_KEY = "(CASE WHEN customer_id IS NOT NULL THEN 'k:' || customer_id WHEN debtor_id IS NOT NULL THEN 'd:' || debtor_id ELSE 'n:' || lower(customer_name) END)";
 /** De soorten documenten die de AI op nummer kan opvragen. */
@@ -119,32 +119,41 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
    * telt per debiteur op (alle facturen tellen mee); alleen van de getoonde debiteuren komen de facturen zelf mee.
    * @param {string} tenantId De omgeving.
    * @param {{ onlyLate?: boolean, limit?: number }} [options] Alleen debiteuren met een factuur over de vervaldatum; hoeveel debiteuren.
-   * @returns {{ debiteuren: object[], aantalDebiteuren: number, totaalOpenstaand: number, totaalTeLaat: number }} Het overzicht.
+   * @returns {{ debiteuren: object[], aantalGetoond: number, aantalGevonden: number, aantalDebiteuren: number, aantalTeLaat: number, totaalOpenstaand: number, totaalTeLaat: number }} Het overzicht: de getoonde debiteuren (met hoogstens tien facturen), hoeveel er aan het filter voldoen, en de aantallen en totalen over alle debiteuren.
    */
   function openInvoices(tenantId, { onlyLate = false, limit = 20 } = {}) {
     const day = today();
-    const groups = prepare(`SELECT ${GROUP_KEY} AS group_key, MAX(customer_id) AS customer_id, MAX(customer_name) AS customer_name, COUNT(*) AS invoice_count,
+    const all = prepare(`SELECT ${GROUP_KEY} AS group_key, MAX(customer_id) AS customer_id, MAX(customer_name) AS customer_name, COUNT(*) AS invoice_count,
         SUM(total) AS open_total, SUM(CASE WHEN kind = 'factuur' AND due_date < ? THEN total ELSE 0 END) AS late_total,
         MIN(CASE WHEN kind = 'factuur' THEN due_date END) AS oldest_due
       FROM invoices WHERE tenant_id = ? AND status = 'definitief' GROUP BY ${GROUP_KEY}`).all(day, tenantId)
       .map((row) => ({ key: row.group_key, naam: row.customer_name || '', klantId: row.customer_id || null, openstaand: amountOf(row.open_total), teLaat: amountOf(row.late_total),
         aantalFacturen: Number(row.invoice_count) || 0, oudsteVervaldatum: row.oldest_due || null }))
-      .filter((group) => Math.abs(group.openstaand) >= 0.005 && (!onlyLate || group.teLaat > 0));
+      .filter((group) => Math.abs(group.openstaand) >= 0.005);
+    const late = all.filter((group) => group.teLaat > 0);
+    const groups = onlyLate ? late : all;
     groups.sort((left, right) => right.openstaand - left.openstaand || left.naam.localeCompare(right.naam));
     const shown = groups.slice(0, limit);
     const invoicesByGroup = new Map(shown.map((group) => [group.key, []]));
     if (shown.length) {
+      // Per debiteur de tien oudste facturen, in één query (ROW_NUMBER werkt in SQLite en PostgreSQL).
       const keys = shown.map((group) => group.key);
-      const rows = prepare(`SELECT ${GROUP_KEY} AS group_key, number, status, kind, customer_name, invoice_date, due_date, total FROM invoices
-        WHERE tenant_id = ? AND status = 'definitief' AND ${GROUP_KEY} IN (${marks(keys)}) ORDER BY invoice_date, id LIMIT ${DETAIL_LIMIT}`).all(tenantId, ...keys);
+      const rows = prepare(`SELECT group_key, number, status, kind, customer_name, invoice_date, due_date, total FROM (
+          SELECT ${GROUP_KEY} AS group_key, number, status, kind, customer_name, invoice_date, due_date, total,
+            ROW_NUMBER() OVER (PARTITION BY ${GROUP_KEY} ORDER BY invoice_date, id) AS position
+          FROM invoices WHERE tenant_id = ? AND status = 'definitief' AND ${GROUP_KEY} IN (${marks(keys)})) ranked
+        WHERE position <= ${INVOICES_PER_DEBTOR} ORDER BY group_key, position`).all(tenantId, ...keys);
       for (const row of rows) {
         const list = invoicesByGroup.get(row.group_key);
-        if (list && list.length < 10) list.push(invoiceView(row, day));
+        if (list) list.push(invoiceView(row, day));
       }
     }
     return {
-      debiteuren: shown.map(({ key, ...group }) => ({ ...group, facturen: invoicesByGroup.get(key) })), aantalDebiteuren: groups.length,
-      totaalOpenstaand: amountOf(groups.reduce((sum, group) => sum + group.openstaand, 0)), totaalTeLaat: amountOf(groups.reduce((sum, group) => sum + group.teLaat, 0)),
+      debiteuren: shown.map(({ key, ...group }) => ({ ...group, facturen: invoicesByGroup.get(key), facturenGetoond: invoicesByGroup.get(key).length })),
+      aantalGetoond: shown.length, aantalGevonden: groups.length,
+      // De totalen gelden altijd voor alle debiteuren, ook met alleenTeLaat.
+      aantalDebiteuren: all.length, aantalTeLaat: late.length,
+      totaalOpenstaand: amountOf(all.reduce((sum, group) => sum + group.openstaand, 0)), totaalTeLaat: amountOf(all.reduce((sum, group) => sum + group.teLaat, 0)),
     };
   }
 

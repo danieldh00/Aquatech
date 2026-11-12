@@ -351,13 +351,29 @@ test('leesfuncties: klantkaart, prijs voor een zakelijke klant, status op nummer
   assert.strictEqual(everyone.debiteuren[0].oudsteVervaldatum, '2020-01-01');
   assert.strictEqual(everyone.debiteuren[0].facturen.length, 2);
   assert.strictEqual(everyone.debiteuren[1].naam, 'Balieklant');
+  assert.strictEqual(everyone.debiteuren[0].facturenGetoond, 2);
+  assert.ok(!JSON.stringify(everyone).includes('Betaalt Netjes'));
   assert.strictEqual((await callTool(base, connection.accessToken, 'openstaande_debiteuren', { maxResultaten: 1 })).structuredContent.debiteuren.length, 1);
   const debtors = (await callTool(base, connection.accessToken, 'openstaande_debiteuren', { alleenTeLaat: true })).structuredContent;
-  assert.strictEqual(debtors.aantalDebiteuren, 1);
+  assert.strictEqual(debtors.aantalGevonden, 1);
+  assert.strictEqual(debtors.debiteuren.length, 1);
   assert.strictEqual(debtors.debiteuren[0].klantId, created.id);
-  assert.strictEqual(debtors.totaalOpenstaand, 242);
+  // De totalen gelden ook met het filter voor alle debiteuren.
+  assert.strictEqual(debtors.aantalDebiteuren, 2);
+  assert.strictEqual(debtors.aantalTeLaat, 1);
+  assert.strictEqual(debtors.totaalOpenstaand, 254.1);
   assert.strictEqual(debtors.totaalTeLaat, 121);
-  assert.ok(!JSON.stringify(everyone).includes('Betaalt Netjes'));
+  // Veel facturen bij één debiteur: het bedrag telt alles, de lijst toont de tien oudste.
+  const stamp = new Date().toISOString();
+  for (let i = 0; i < 12; i += 1) {
+    db.prepare(`INSERT INTO invoices (id, tenant_id, number, status, kind, customer_name, invoice_date, due_date, subtotal, vat_total, total, data, created_at, updated_at)
+      VALUES (?, ?, ?, 'definitief', 'factuur', 'Veel BV', ?, '2099-01-01', 10, 0, 10, '{}', ?, ?)`).run(crypto.randomUUID(), main, `VEEL-${i}`, `2026-01-${String(i + 10)}`, stamp, stamp);
+  }
+  const many = (await callTool(base, connection.accessToken, 'openstaande_debiteuren', {})).structuredContent.debiteuren.find((debtor) => debtor.naam === 'Veel BV');
+  assert.strictEqual(many.aantalFacturen, 12);
+  assert.strictEqual(many.openstaand, 120);
+  assert.strictEqual(many.facturenGetoond, 10);
+  assert.deepStrictEqual(many.facturen.map((invoice) => invoice.nummer), Array.from({ length: 10 }, (_, i) => `VEEL-${i}`));
 
   // Status op nummer (ook in kleine letters), met een link naar het document.
   const quote = (await callTool(base, connection.accessToken, 'maak_concept_offerte', { klantId: created.id, regels: [{ artikelcode: 'PE-25', aantal: 10 }] })).structuredContent;
