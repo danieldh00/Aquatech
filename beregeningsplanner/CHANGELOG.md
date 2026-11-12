@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.12.1
+
+- Migratie 65: `stock_items.price_mode` (`vast`|`factor`) en `price_factor` (eigen factor, leeg = erven), index `(tenant_id, price_mode)`; in `MIGRATIONS` en `PG_MIGRATIONS`.
+- Instelling `priceFactors` (`internal`, `{ defaultFactor, rounding: { mode, direction }, categories, suppliers }`), alleen via `GET|PUT /api/stock/price-factors` (lezen recht `voorraad`, opslaan recht `beheer`; categorieën gecontroleerd tegen het webshopmenu, leveranciers tegen de eigen omgeving).
+- `artikelen/price-factor.js`: `roundPrice` (rekent in hele centen), `resolveFactor` (artikel > voorkeursleverancier > diepste categorie met factor > standaard), `marginPct`, `createPriceFactorStore` (voorbeeld in één query per omgeving, geen N+1) en de routes.
+- `POST /api/stock/price-factors/apply` (recht `beheer`): rekent opnieuw en voert alleen de artikelen door waarvan de nieuwe prijs nog gelijk is aan het voorbeeld; de rest wordt overgeslagen. `stock.setSalePrices` zet `shop_dirty` voor gekoppelde webshopproducten en start de sync. Audit `prijsfactor_gewijzigd` en `prijsfactor_doorgevoerd`.
+- Opslaan van een artikel in de modus factor rekent de prijs meteen als modus, eigen factor of inkoopprijs veranderen; een andere naam of locatie laat de prijs staan. Een nieuwe inkoopprijs via een ontvangst wijzigt de verkoopprijs niet vanzelf: het artikel staat dan als afwijkend in het voorbeeld.
+- Artikel-API: `priceMode`, `priceFactor` en `margin` (% van de verkoopprijs). Testdata: standaardfactor en vijf artikelen in de modus factor.
+
 ## 1.12.0
 
 Afleveradres naast factuuradres, zonder migratie (JSON in `web_orders.data` en `quotes.data`).

@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.12.1',
+      date: '2026-11-12',
+      title: 'Prijsfactor op de inkoopprijs',
+      items: [
+        { text: 'Nieuw tabblad Prijsfactor onder Inkoop: de verkoopprijs wordt de inkoopprijs maal een factor. Je stelt een standaardfactor in, en eventueel een eigen factor per categorie, per leverancier of per artikel. Het artikel zelf gaat voor de leverancier, de leverancier voor de categorie en de categorie voor de standaard.', for: ['voorraad'] },
+        { text: 'Bij een artikel kies je Prijsbepaling: een vaste verkoopprijs (zoals altijd) of inkoopprijs maal factor. De marge staat nu in de artikellijst en in het artikelformulier.', for: ['voorraad'] },
+        { text: 'Prijzen afronden op de cent, 5 of 10 cent, 50 cent, hele euro\'s of eindigend op ,95 of ,99 (naar het dichtstbijzijnde of naar boven). Een voorbeeld toont per artikel de huidige en nieuwe prijs en de marge; pas na Doorvoeren veranderen de prijzen en gaan ze naar de webshop. Het voorbeeld kun je naar Excel exporteren.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.12.0',
       date: '2026-11-12',
       title: 'Afwijkend afleveradres bij bestellingen en offertes',
