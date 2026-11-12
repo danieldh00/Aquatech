@@ -15,6 +15,13 @@ const { setup, order, until, mailsWith, PERSON } = require('./helpers/webshop-wo
 async function makePdf(pageCount, { script = false, size = [595, 842] } = {}) {
   const doc = await PDFDocument.create();
   for (let index = 0; index < pageCount; index++) doc.addPage(size);
+  if (script) {
+    // Een linkannotatie met een actie en een paginaactie, zoals een kwaadwillende klant ze zou meesturen.
+    const page = doc.getPage(0);
+    const link = doc.context.register(doc.context.obj({ Type: 'Annot', Subtype: 'Link', Rect: [0, 0, 100, 100], A: { S: 'URI', URI: PDFString.of('https://phishing.example/') } }));
+    page.node.set(PDFName.of('Annots'), doc.context.obj([link]));
+    page.node.set(PDFName.of('AA'), doc.context.obj({ O: { S: 'JavaScript', JS: PDFString.of('app.alert(2)') } }));
+  }
   if (script) doc.catalog.set(PDFName.of('OpenAction'), doc.context.obj({ S: 'JavaScript', JS: PDFString.of('app.alert(1)') }));
   return Buffer.from(await doc.save());
 }
@@ -49,7 +56,8 @@ const DROP = { dropshipping: 'ja', dropshipProofEmail: 'Bewijs@Reseller.example'
 test('inspectSlip: neemt een gewone PDF aan, bouwt hem opnieuw op zonder scripts en weigert de rest', async () => {
   const good = await inspectSlip(await makePdf(2, { script: true }));
   assert.ok(good.bytes && good.pages === 2, JSON.stringify(good.error));
-  assert.ok(!good.bytes.toString('latin1').includes('JavaScript'), 'het script van de klant is eruit');
+  const text = good.bytes.toString('latin1');
+  for (const forbidden of ['JavaScript', 'phishing', '/Annots', '/AA ']) assert.ok(!text.includes(forbidden), `${forbidden} is eruit`);
   assert.strictEqual(await pageCountOf(good.bytes), 2);
   assert.match((await inspectSlip(Buffer.from('dit is geen pdf, maar wel genoeg tekst om niet leeg te zijn, echt waar, nog meer tekst'))).error, /geen PDF/);
   assert.match((await inspectSlip(Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.from('rommel '.repeat(30))]))).error, /niet worden gelezen/);

@@ -1,8 +1,10 @@
 // Dropshipping (punt 8): de eigen pakbon (PDF) die een klant bij een dropshippingbestelling uploadt. De PDF wordt bij het
 // uploaden gecontroleerd (echte PDF, niet beveiligd, hoogstens 2 MB en 10 pagina's) en opnieuw opgebouwd uit de pagina's
-// (scripts, bijlagen en formulieren van de klant komen er zo niet in), versleuteld bewaard per bestelling (tabel
+// (annotaties, paginaacties en metadata van de klant worden weggehaald; de controle draait in een werkthread, order-slips-worker.js), versleuteld bewaard per bestelling (tabel
 // web_order_slips, vault.sealBytes met de omgeving en bestelling als AAD) en bij Te picken / Alles afdrukken in plaats van
 // onze eigen pakbon in de PDF gezet. De gegevens van de dropshippingbestelling zelf staan in `data.dropshipping`.
+const path = require('path');
+const { Worker } = require('worker_threads');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const { transaction } = require('../database/db');
 
@@ -10,43 +12,26 @@ const { transaction } = require('../database/db');
 const MAX_SLIP_BYTES = 2 * 1024 * 1024;
 /** Hoogstens zoveel pagina's in een geüploade pakbon. */
 const MAX_SLIP_PAGES = 10;
-/** Een pagina is minstens zo groot en hoogstens zo groot (in punten, 72 per inch): een A0-vel is 2384 × 3370. */
-const MIN_PAGE_POINTS = 100;
-const MAX_PAGE_POINTS = 3400;
+/** De controle van een upload mag hoogstens zo lang duren (milliseconden). */
+const WORKER_TIMEOUT_MS = 8000;
 
 /**
- * Controleert een geüploade pakbon en bouwt hem opnieuw op uit de pagina's.
+ * Controleert een geüploade pakbon in een aparte werkthread met begrensd geheugen en een tijdslimiet (een PDF met gecomprimeerde
+ * objectstromen kan veel groter uitpakken dan hij is, en pdf-lib leest synchroon: zo blijft de server er niet door hangen).
  * @param {Buffer} buffer De ontvangen bytes.
  * @returns {Promise<{ bytes?: Buffer, pages?: number, error?: string }>} De schone PDF en het aantal pagina's, of een melding in gewone taal.
  */
-async function inspectSlip(buffer) {
-  if (!Buffer.isBuffer(buffer) || buffer.length < 64) return { error: 'Het bestand is leeg.' };
-  if (buffer.length > MAX_SLIP_BYTES) return { error: `De pakbon is te groot (hoogstens ${MAX_SLIP_BYTES / 1024 / 1024} MB).` };
-  if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') return { error: 'Dit is geen PDF-bestand.' };
-  let source;
-  let count;
-  try {
-    source = await PDFDocument.load(buffer, { updateMetadata: false });
-    count = source.getPageCount();
-  } catch {
-    return { error: 'Deze PDF kan niet worden gelezen. Beveiligde (met wachtwoord) en beschadigde PDF\'s worden niet geaccepteerd.' };
-  }
-  if (count < 1) return { error: 'De PDF heeft geen pagina\'s.' };
-  if (count > MAX_SLIP_PAGES) return { error: `De pakbon heeft te veel pagina's (hoogstens ${MAX_SLIP_PAGES}).` };
-  for (const page of source.getPages()) {
-    const { width, height } = page.getSize();
-    if (!(width >= MIN_PAGE_POINTS && height >= MIN_PAGE_POINTS && width <= MAX_PAGE_POINTS && height <= MAX_PAGE_POINTS)) return { error: 'De paginagrootte van de PDF is niet bruikbaar.' };
-  }
-  try {
-    const clean = await PDFDocument.create();
-    const copied = await clean.copyPages(source, source.getPageIndices());
-    for (const page of copied) clean.addPage(page);
-    const bytes = Buffer.from(await clean.save());
-    if (bytes.length > MAX_SLIP_BYTES) return { error: `De pakbon is te groot (hoogstens ${MAX_SLIP_BYTES / 1024 / 1024} MB).` };
-    return { bytes, pages: count };
-  } catch {
-    return { error: 'Deze PDF kan niet worden verwerkt.' };
-  }
+function inspectSlip(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 64) return Promise.resolve({ error: 'Het bestand is leeg.' });
+  if (buffer.length > MAX_SLIP_BYTES) return Promise.resolve({ error: `De pakbon is te groot (hoogstens ${MAX_SLIP_BYTES / 1024 / 1024} MB).` });
+  if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') return Promise.resolve({ error: 'Dit is geen PDF-bestand.' });
+  return new Promise((resolve) => {
+    const unusable = { error: 'Deze PDF kan niet worden verwerkt.' };
+    const worker = new Worker(path.join(__dirname, 'order-slips-worker.js'), { workerData: buffer, resourceLimits: { maxOldGenerationSizeMb: 192 } });
+    const timer = setTimeout(() => { worker.terminate(); resolve(unusable); }, WORKER_TIMEOUT_MS);
+    worker.once('message', (result) => { clearTimeout(timer); resolve(result && result.bytes ? { bytes: Buffer.from(result.bytes), pages: result.pages } : { error: String((result && result.error) || unusable.error) }); });
+    worker.once('error', () => { clearTimeout(timer); resolve(unusable); });
+  });
 }
 
 /**
