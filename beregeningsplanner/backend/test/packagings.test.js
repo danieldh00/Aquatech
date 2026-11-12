@@ -45,6 +45,8 @@ test('controles op een verpakking', () => {
   assert.strictEqual(sanitizePackagings([{ ...PALLET, ean: '8712345678907' }]).field, 'ean');
   assert.strictEqual(sanitizePackagings([PALLET, { ...PALLET, code: 'DOOS', factor: 12 }]).field, 'ean', 'dezelfde EAN twee keer');
   assert.strictEqual(sanitizePackagings(Array.from({ length: 11 }, (_, i) => ({ ...PALLET, code: `P${i}`, ean: '' }))).field, 'packagings');
+  assert.strictEqual(sanitizePackagings([{ ...PALLET, salePrice: '   ', businessPrice: null }]).value[0].salePrice, null, 'spaties zijn een lege prijs, geen 0 euro');
+  assert.strictEqual(sanitizePackagings([{ ...PALLET, salePrice: 0 }]).value[0].salePrice, 0, 'een echte 0 blijft 0');
   const ok = sanitizePackagings([{ ...PALLET, audience: 'onzin', salePrice: '99,5' }]).value[0];
   assert.deepStrictEqual([ok.code, ok.audience, ok.salePrice, ok.businessPrice, ok.active], ['PAL', 'iedereen', 99.5, 1200, true]);
 });

@@ -42,8 +42,9 @@ const cleanText = (value, maxLength) => String(value ?? '').replace(/[\u0000-\u0
  * @returns {{ value?: (number|null), error?: boolean }} De prijs op twee decimalen, null als hij leeg is, of een fout.
  */
 function priceOf(value) {
-  if (value === null || value === undefined || value === '') return { value: null };
-  const number = Number(String(value).replace(',', '.'));
+  const text = String(value ?? '').trim();
+  if (text === '') return { value: null };
+  const number = Number(text.replace(',', '.'));
   if (!Number.isFinite(number) || number < 0 || number > MAX_PRICE) return { error: true };
   return { value: Math.round(number * 100) / 100 };
 }
