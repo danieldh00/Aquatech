@@ -4,7 +4,7 @@
 // /api/stock/items/:id/suppliers (recht 'voorraad').
 (function () {
   const context = { api: null, toast: null, esc: null, nl: null, eur: null };
-  const state = { suppliers: [], choices: [], editing: null, item: null, lines: [] };
+  const state = { suppliers: [], choices: [], editing: null, item: null, lines: [], loaded: false };
 
   /**
    * Zoekt het eerste element dat bij de selector past.
@@ -107,6 +107,9 @@
   async function showItem(item) {
     const section = $('#d-suppliers');
     state.item = item;
+    state.lines = [];
+    state.loaded = false;
+    $('#d-sup-table').innerHTML = '';
     section.hidden = Boolean(item.hasVariants);
     $('.err', section).textContent = '';
     if (item.hasVariants) return;
@@ -114,6 +117,7 @@
     if (!state.item || state.item.id !== item.id) return;
     state.choices = suppliers.items;
     state.lines = lines.items;
+    state.loaded = true;
     renderLines();
   }
 
@@ -153,6 +157,7 @@
    * @returns {Promise<void>}
    */
   async function saveLines() {
+    if (!state.loaded) return;
     const errorBox = $('#d-suppliers .err');
     errorBox.textContent = '';
     readLines();
