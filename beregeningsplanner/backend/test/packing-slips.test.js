@@ -20,7 +20,7 @@ const CHECKOUT = { name: 'Piet Tuin', company: '', email: 'piet@voorbeeld.nl', p
 
 /**
  * Hoofdtenant met beheerder, de webshop met bestellen aan en artikelen op verschillende magazijnlocaties.
- * @returns {Promise<object>} base, admin, vreemd (beheerder van een andere organisatie), shopper() en order(codes) dat een bestelling plaatst.
+ * @returns {Promise<object>} base, db, admin, vreemd (beheerder van een andere organisatie), shopper() en order(codes) dat een bestelling plaatst.
  */
 async function setup() {
   const db = openDb();
@@ -66,7 +66,7 @@ async function setup() {
     assert.strictEqual((await postCheckout(base, customer, { ...CHECKOUT, ...fields })).status, 303);
   };
   const vreemd = await createLogin(base, { password: PW })('vreemd', 'ander');
-  return { base, admin, vreemd, shopper, order };
+  return { base, db, admin, vreemd, shopper, order };
 }
 
 test('slipLines sorteert op magazijnlocatie, zonder locatie onderaan, en rekent verpakkingen om', () => {
@@ -182,4 +182,29 @@ test('pakbonnen: ongeldige invoer, andere organisatie en ontbrekend recht', asyn
   // Een GET schrijft niets: de pakbon van één bestelling is alleen via POST te maken.
   assert.notStrictEqual((await admin.get(`/app/api/admin/web-orders/${item.id}/packing-slip`)).status, 200);
   assert.strictEqual((await admin.get('/app/api/admin/web-orders/to-pick')).body.items[0].printedAt, null);
+});
+
+test('Te picken: een online bestelling staat er pas bij als hij betaald is (filter in SQL)', async () => {
+  const { db, admin, order } = await setup();
+  await order(['SPR-1']);
+  await order(['LOS']);
+  const [open, paid] = (await admin.get('/app/api/admin/web-orders/to-pick')).body.items;
+  /**
+   * Zet een bestelling op online betalen met een betaalstatus.
+   * @param {string} id Id van de bestelling.
+   * @param {string} status De betaalstatus.
+   * @returns {void}
+   */
+  const setOnline = (id, status) => {
+    const row = db.prepare('SELECT data FROM web_orders WHERE id = ?').get(id);
+    const data = JSON.parse(row.data);
+    data.payment = 'online';
+    data.pay = { status };
+    db.prepare('UPDATE web_orders SET data = ? WHERE id = ?').run(JSON.stringify(data), id);
+  };
+  setOnline(open.id, 'open');
+  setOnline(paid.id, 'betaald');
+  assert.deepStrictEqual((await admin.get('/app/api/admin/web-orders/to-pick')).body.items.map((item) => item.id), [paid.id]);
+  setOnline(open.id, 'betaald');
+  assert.strictEqual((await admin.get('/app/api/admin/web-orders/to-pick')).body.items.length, 2);
 });

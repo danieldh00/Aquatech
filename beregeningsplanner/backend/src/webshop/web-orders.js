@@ -642,8 +642,11 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    * @returns {object[]} De bestellingen met regels, adres en verzending.
    */
   function listToPick(tenantId, limit = PAGE_LIMIT) {
-    const rows = prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' ORDER BY created_at ASC, number ASC LIMIT ?`).all(tenantId, EXPORT_LIMIT);
-    return rows.map(shapeFull).filter(pickable).slice(0, limit);
+    // Online bestellingen alleen als ze betaald zijn: in SQL, zodat onbetaalde de lijst niet vullen of de limiet opeten.
+    const payment = isPg(db) ? "((data)::jsonb ->> 'payment')" : "json_extract(data, '$.payment')";
+    const payStatus = isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')";
+    const rows = prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND (COALESCE(${payment}, 'op rekening') <> 'online' OR ${payStatus} = 'betaald') ORDER BY created_at ASC, number ASC LIMIT ?`).all(tenantId, Math.min(limit, EXPORT_LIMIT));
+    return rows.map(shapeFull).filter(pickable);
   }
 
   /**

@@ -582,7 +582,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/plans', express.json({ limit: '12mb' }));
   // Een offerte met veel regels en lange teksten past niet in 16 kB.
   // Status van een webshopbestelling wijzigen (web-orders.js): alleen { status }.
-  app.use('/api/admin/web-orders', express.json({ limit: '32kb' }));
+  app.use('/api/admin/web-orders/packing-slips', express.json({ limit: '16kb' }));
+  app.use('/api/admin/web-orders', express.json({ limit: '4kb' }));
   app.use('/api/quotes', express.json({ limit: '1mb' }));
   // Tekening indienen zonder inloggen (drawings.js): plan met achtergrond.
   app.use('/api/public/drawing', express.json({ limit: '8mb' }));
