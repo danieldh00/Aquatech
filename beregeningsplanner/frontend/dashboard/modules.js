@@ -399,5 +399,6 @@
   const newsBadge = (count) => (count > 0 ? `<span class="news-count" data-news-count title="Nieuw sinds je vorige bezoek">${count > 9 ? '9+' : count}</span>` : '');
 
   root.AquatechModuleTools = { ICONS, NAV_GROUPS, icon, visible, usesSidebar, navSections, newsBadge, isOn, hiddenSections, lockedSettings, lockedRoutes };
-  if (typeof module !== 'undefined' && module.exports) module.exports = MODULES;
+  // Voor de server: de hulpfuncties hangen als `tools` aan de geëxporteerde lijst (niet-opsombaar, de lijst blijft een gewone array).
+  if (typeof module !== 'undefined' && module.exports) module.exports = Object.defineProperty(MODULES, 'tools', { value: root.AquatechModuleTools });
 })(typeof window !== 'undefined' ? window : globalThis);

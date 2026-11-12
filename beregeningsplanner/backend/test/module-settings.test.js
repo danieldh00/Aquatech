@@ -14,7 +14,7 @@ const { FRONTEND_DIR } = require('../src/paths');
 const { createLogin, listen } = require('./helpers/http-client');
 
 const MODULES = require(path.join(FRONTEND_DIR, 'dashboard', 'modules.js'));
-const Tools = globalThis.AquatechModuleTools;
+const Tools = MODULES.tools;
 const SECRET = 'm'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 const servers = [];
@@ -36,6 +36,12 @@ async function setup() {
   const as = createLogin(base, { password: PW });
   return { base, adminA: await as('baas'), adminB: await as('vreemd', 'ander') };
 }
+
+test('export: de server krijgt de hulpfuncties via de lijst zelf, zonder browseromgeving', () => {
+  assert.ok(Array.isArray(MODULES));
+  assert.strictEqual(typeof MODULES.tools.isOn, 'function');
+  assert.ok(!Object.keys(MODULES).includes('tools'), 'niet-opsombaar');
+});
 
 test('hulpfuncties: onderdelen volgen hun hoofdmodule, beheer staat altijd aan', () => {
   assert.strictEqual(Tools.isOn({}, 'voorraad'), true);

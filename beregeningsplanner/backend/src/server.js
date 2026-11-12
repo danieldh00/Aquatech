@@ -86,8 +86,8 @@ const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 const InvoiceCore = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 const MODULES = require(path.join(FRONTEND_DIR, 'dashboard', 'modules.js'));
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
-// De hulpfuncties van het moduleregister (isOn, lockedSettings, lockedRoutes) zetten zich bij het laden op globalThis.
-const ModuleTools = globalThis.AquatechModuleTools;
+// De hulpfuncties van het moduleregister (isOn, lockedSettings, lockedRoutes).
+const ModuleTools = MODULES.tools;
 const LOGIN_PAGE = path.join(PAGES_DIR, 'login.html');
 const SETUP_PAGE = path.join(PAGES_DIR, 'setup.html');
 const PASSWORD_PAGE = path.join(PAGES_DIR, 'password.html');
