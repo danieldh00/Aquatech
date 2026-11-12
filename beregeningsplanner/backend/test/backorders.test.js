@@ -299,3 +299,15 @@ test('plan: het aantal queries hangt niet af van het aantal bestellingen of rege
   assert.ok(single <= 4, `hoogstens vier queries per groep van 200 artikelen (${single})`);
   assert.strictEqual(plan.size, 25);
 });
+
+test('een tekort door een telverschil wordt onthouden en na een ontvangst gemarkeerd, zonder eerdere deellevering', async () => {
+  const world = await setup();
+  const { admin, db } = world;
+  const id = await orderTen(world);
+  assert.strictEqual((await admin.get(`/app/api/admin/web-orders/${id}`)).body.order.backorderSince, null, 'nog geen tekort');
+  setStock(db, 4);
+  await admin.get('/app/api/admin/web-orders/to-pick');
+  assert.ok((await admin.get(`/app/api/admin/web-orders/${id}`)).body.order.backorderSince, 'het tekort is onthouden bij het bekijken van Te picken');
+  await receive(world, 6);
+  assert.ok((await admin.get(`/app/api/admin/web-orders/${id}`)).body.order.backorderReadyAt, 'na de ontvangst gemarkeerd als klaar');
+});
