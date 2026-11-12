@@ -65,6 +65,7 @@ const { createOAuthGrants } = require('./mcp/oauth-grants');
 const { registerOAuthRoutes } = require('./mcp/oauth-server');
 const { registerMcpRoutes } = require('./mcp/mcp-server');
 const { createMcpTools } = require('./mcp/mcp-tools');
+const { createMcpLookups } = require('./mcp/mcp-lookups');
 const { sanitizeContact } = require('./verkoop/customers');
 const crypto = require('crypto');
 
@@ -2145,6 +2146,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       sendAuthPage(res, needsSetup() ? SETUP_PAGE : LOGIN_PAGE);
     },
   });
+  const mcpLookups = createMcpLookups(database);
+  const mcpCustomers = createCustomerStore(database);
   registerMcpRoutes(app, {
     grants: oauthGrants, userForGrant, connectorOn, familyOf: familyOfUser, originOf: oauth.originOf, resourceOf: oauth.resourceOf, version,
     tools: createMcpTools({
@@ -2200,6 +2203,30 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         return quoteStore.create(req.user, { ...data, date, validUntil: QuoteCore.addDays(date, profile.validDays || 30) }, { status: 'concept', prefix: profile.numberPrefix, customerId });
       },
       quoteUrl: (req, id) => `${oauth.originOf(req)}/app/offertes/?id=${encodeURIComponent(id)}`,
+      appUrl: (req, page) => `${oauth.originOf(req)}/app/${page}`,
+      /**
+       * De offertes en werkorders van een klant in de actieve omgeving (zoals de klantkaart).
+       * @param {object} req Het verzoek.
+       * @param {string} customerId Id van de klant.
+       * @param {{ quotes: boolean, workOrders: boolean, invoices: boolean }} wanted Welke soorten.
+       * @returns {object} De regels per soort (null = niet gevraagd).
+       */
+      customerOverview: (req, customerId, wanted) => mcpCustomers.overview(req.tenantId, customerId, wanted),
+      defaultPaymentDays: (req) => InvoiceCore.sanitizeSettings(settingsFor(req.tenantId).get('invoicing')).paymentDays,
+      customerBalance: (req, customerId) => mcpLookups.customerBalance(req.tenantId, customerId),
+      /**
+       * Prijst artikelen zoals de webshop dat voor deze klant doet (zakelijke prijs, staffel- en groothandelskorting).
+       * @param {object} req Het verzoek.
+       * @param {{ code: string, qty: number }[]} wanted De artikelen en aantallen.
+       * @param {object} customer De klant (store.getCustomer).
+       * @returns {object} De uitkomst van priceCart.
+       */
+      priceCart: (req, wanted, customer) => {
+        const group = customer.customerGroup === 'zakelijk' ? 'zakelijk' : '';
+        return webOrders.priceCart(req.tenantId, wanted, { group, wholesale: group && customer.wholesale ? { discountPct: customer.wholesaleDiscount } : null });
+      },
+      documentStatus: (req, kind, number, options) => mcpLookups.documentStatus(req.tenantId, kind, number, options),
+      openInvoices: (req, options) => mcpLookups.openInvoices(req.tenantId, options),
       audit,
     }),
   });

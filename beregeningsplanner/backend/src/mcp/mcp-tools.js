@@ -4,14 +4,29 @@
 // - zoek_artikelen: artikelen met verkoopprijs (excl. btw) en voorraad zoeken.
 // - maak_concept_offerte: een offerte als CONCEPT aanmaken. Prijzen, btw en eenheden komen altijd uit AquaTech, nooit van
 //   de AI; twijfel of een onbekend artikel komt als interne notitie bij de regel (de klant ziet die nooit).
+// - klant_details: de klantkaart (klantgroep, betaaltermijn, openstaand bedrag, recente offertes en werkorders).
+// - prijs_voor_klant: wat een klant voor artikelen betaalt (offerteprijs en webshopprijs met zakelijke prijs/korting) en de voorraad.
+// - status_opvragen: de status van een offerte, werkorder, factuur of webshopbestelling op nummer.
+// - openstaande_debiteuren: wie nog moet betalen (definitieve, onbetaalde facturen), grootste bedrag eerst.
 // Elke tool vraagt een recht uit de toestemming (scope) én het recht van de rol van de gebruiker op dit moment.
 // Versturen, wijzigen of verwijderen kan de AI niet: daar is geen tool voor.
 const { createRateLimiter } = require('../beveiliging/rate-limit');
+const { DOCUMENT_KINDS } = require('./mcp-lookups');
 
 /** Hoeveel klanten zoek_klant hoogstens teruggeeft. */
 const CUSTOMER_RESULTS = 10;
 /** Hoeveel regels een concept-offerte via de AI hoogstens heeft. */
 const MAX_LINES = 100;
+/** Hoeveel artikelen prijs_voor_klant in één keer prijst. */
+const MAX_PRICE_CODES = 25;
+/** Het recht dat de app vraagt om een soort document te zien (zelfde als de modules). */
+const DOCUMENT_RIGHTS = { offerte: 'offertes', werkorder: 'werkorders', factuur: 'facturen', bestelling: 'beheer' };
+/** Het meervoud van een soort document, voor de meldingen. */
+const DOCUMENT_PLURALS = { offerte: 'offertes', werkorder: 'werkorders', factuur: 'facturen', bestelling: 'webshopbestellingen' };
+/** Waar een soort document in de app staat (bestellingen hebben geen eigen adres per bestelling). */
+const DOCUMENT_PAGES = { offerte: 'offertes', werkorder: 'werkorders', factuur: 'facturen', bestelling: 'webshop-bestellingen' };
+/** Melding als de leesfuncties (klant_details, prijs_voor_klant, status_opvragen) hun limiet per uur bereiken. */
+const READS_LIMITED = 'Te veel opvragingen dit uur via de AI-koppeling. Probeer het later opnieuw of kijk in AquaTech.';
 /** Hoelang de artikellijst per omgeving wordt onthouden (prijzen kunnen dus zo lang achterlopen). */
 const ARTICLE_CACHE_MS = 30 * 1000;
 
@@ -114,7 +129,9 @@ function findArticle(articles, code) {
 /**
  * Maakt de tools van de MCP-server.
  * @param {object} ctx { can(user, recht), searchCustomers(req, zoektekst), getCustomer(req, id), createCustomer(req, invoer),
- *   lookupAddress(invoer), verifyAddress(tekst), articleChoices(tenantId), quoteProfile(req), createDraft(req, data, customerId), quoteUrl(req, id), audit(req, actie, detail) }.
+ *   lookupAddress(invoer), verifyAddress(tekst), articleChoices(tenantId), quoteProfile(req), createDraft(req, data, customerId), quoteUrl(req, id),
+ *   appUrl(req, pad), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
+ *   documentStatus(req, soort, nummer, opties), openInvoices(req, opties), audit(req, actie, detail) }.
  * @returns {{ list: Function, has: Function, call: Function }} De tools.
  */
 function createMcpTools(ctx) {
@@ -122,6 +139,9 @@ function createMcpTools(ctx) {
   const quotesPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `mcp-offerte:${req.tenantId}|${req.user.id}` });
   const quotesPerDay = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 150, keyFn: (req) => `mcp-offerte-dag:${req.tenantId}|${req.user.id}` });
   const customersPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `mcp-klant:${req.tenantId}|${req.user.id}` });
+  // Leesfuncties samen: genoeg voor een drukke werkdag, maar geen onbeperkt aflopen van nummers of klant-id's.
+  const readsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => `mcp-lezen:${req.tenantId}|${req.user.id}` });
+  const debtorListsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `mcp-debiteuren:${req.tenantId}|${req.user.id}` });
 
   /**
    * De artikellijst van een omgeving (30 s onthouden: de AI zoekt vaak een paar keer achter elkaar).
@@ -263,6 +283,162 @@ function createMcpTools(ctx) {
           ...(found.items.length && !found.allWords ? { let_op: 'Geen artikel met alle zoekwoorden; dit zijn de beste gedeeltelijke treffers. Twijfel je, zet dan twijfel=true bij de regel.' } : {}) });
       },
     },
+    klant_details: {
+      scope: 'klanten.lezen', rights: ['klanten'],
+      definition: {
+        title: 'Klantkaart bekijken',
+        description: 'Geeft de klantkaart van één klant (id uit zoek_klant): klantgroep (particulier/zakelijk), groothandelskorting, betaaltermijn, documenttaal, '
+          + 'contactgegevens en, als de gebruiker dat in AquaTech mag zien, het openstaande bedrag en de recente offertes en werkorders.',
+        inputSchema: { type: 'object', properties: { klantId: { type: 'string', minLength: 1, maxLength: 64 } }, required: ['klantId'], additionalProperties: false },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      /**
+       * Geeft de klantkaart.
+       * @param {object} args { klantId }.
+       * @param {object} req Het verzoek.
+       * @returns {object} De uitkomst.
+       */
+      run: (args, req) => {
+        if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
+        const customer = ctx.getCustomer(req, cleanText(args.klantId, 64));
+        if (!customer) return errorOf('Deze klant bestaat niet. Zoek opnieuw met zoek_klant.');
+        const business = customer.customerGroup === 'zakelijk';
+        const standardDays = ctx.defaultPaymentDays(req);
+        const mayInvoices = ctx.can(req.user, 'facturen');
+        const overview = ctx.customerOverview(req, customer.id, { quotes: ctx.can(req.user, 'offertes'), workOrders: ctx.can(req.user, 'werkorders'), invoices: false });
+        return resultOf({
+          id: customer.id, naam: customer.displayName, bedrijf: customer.companyName || '', actief: !customer.disabled,
+          klantgroep: business ? 'zakelijk' : 'particulier',
+          ...(business ? { kvkNummer: customer.kvkNumber || '', btwNummer: customer.vatNumber || '',
+            groothandel: customer.wholesale ? { korting: customer.wholesaleDiscount } : null } : {}),
+          betaaltermijnDagen: customer.paymentDays == null ? standardDays : customer.paymentDays,
+          betaaltermijnBron: customer.paymentDays == null ? 'standaard' : 'eigen afspraak',
+          documenttaal: customer.documentLanguage === 'en' ? 'Engels' : 'Nederlands',
+          email: customer.email || '', telefoon: customer.phone || '', adres: String(customer.address || '').split(/\s*\n\s*/).join(', '),
+          ...(mayInvoices ? { openstaand: ctx.customerBalance(req, customer.id) } : {}),
+          ...(overview.quotes ? { recenteOffertes: overview.quotes.slice(0, 5).map((quote) => ({ nummer: quote.number, status: quote.status, titel: quote.title, totaalInclBtw: quote.total })) } : {}),
+          ...(overview.workOrders ? { recenteWerkorders: overview.workOrders.slice(0, 5).map((order) => ({ nummer: order.number, status: order.status, titel: order.title, geplandOp: order.plannedDate })) } : {}),
+          link: ctx.appUrl(req, `klanten/?id=${encodeURIComponent(customer.id)}`),
+        });
+      },
+    },
+    prijs_voor_klant: {
+      scope: ['artikelen.lezen', 'klanten.lezen'], rights: ['offertes'],
+      definition: {
+        title: 'Prijs voor een klant',
+        description: 'Wat een klant betaalt voor één of meer artikelen (codes uit zoek_artikelen), met de beschikbare voorraad. Geeft de offerteprijs '
+          + '(die maak_concept_offerte gebruikt) en de webshopprijs voor deze klant: zakelijke prijs, staffel- en groothandelskorting tellen daar mee.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            klantId: { type: 'string', minLength: 1, maxLength: 64, description: 'Id uit zoek_klant.' },
+            artikelen: {
+              type: 'array', minItems: 1, maxItems: MAX_PRICE_CODES,
+              items: { type: 'object', properties: { artikelcode: { type: 'string', minLength: 1, maxLength: 40 }, aantal: { type: 'integer', minimum: 1, maximum: 9999, default: 1 } },
+                required: ['artikelcode'], additionalProperties: false },
+            },
+          },
+          required: ['klantId', 'artikelen'], additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      /**
+       * Prijst de artikelen voor de klant.
+       * @param {object} args { klantId, artikelen }.
+       * @param {object} req Het verzoek.
+       * @returns {object} De uitkomst.
+       */
+      run: (args, req) => {
+        if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
+        const customer = ctx.getCustomer(req, cleanText(args.klantId, 64));
+        if (!customer) return errorOf('Deze klant bestaat niet. Zoek opnieuw met zoek_klant.');
+        const wanted = (Array.isArray(args.artikelen) ? args.artikelen : []).slice(0, MAX_PRICE_CODES)
+          .map((entry) => ({ code: cleanText(entry && entry.artikelcode, 40), qty: Math.min(9999, Math.max(1, Number.parseInt(entry && entry.aantal, 10) || 1)) }))
+          .filter((entry) => entry.code);
+        if (!wanted.length) return errorOf('Geef minstens één artikelcode.');
+        const business = customer.customerGroup === 'zakelijk';
+        const cart = ctx.priceCart(req, wanted, customer);
+        const shopLines = new Map(cart.lines.map((line) => [fold(line.code), line]));
+        const articles = articlesOf(req.tenantId);
+        const items = wanted.map((entry) => {
+          const match = findArticle(articles, entry.code);
+          if (!match) return { artikelcode: entry.code, gevonden: false };
+          const article = match.article;
+          if (Array.isArray(article.variants) && article.variants.length) {
+            return { artikelcode: article.code, naam: article.name, gevonden: true, let_op: 'Dit artikel heeft varianten: vraag de prijs per variantcode.' };
+          }
+          const shop = shopLines.get(fold(article.code));
+          return {
+            artikelcode: article.code, naam: article.name || (match.parent ? match.parent.name : article.code), gevonden: true, aantal: entry.qty, eenheid: article.unit || 'st',
+            offerteprijsExclBtw: article.salePrice == null ? null : article.salePrice, btw: article.vatRate == null ? null : article.vatRate, beschikbaar: article.available,
+            webshop: shop ? { prijsExclBtw: shop.unitExcl, prijsInclBtw: shop.unitIncl, ...(shop.discountPct ? { kortingProcent: shop.discountPct, kortingVia: shop.discountSource } : {}),
+              ...(shop.packProblem ? { let_op: shop.packProblem } : {}) } : null,
+          };
+        });
+        return resultOf({ klant: customer.displayName, klantgroep: business ? 'zakelijk' : 'particulier', groothandel: Boolean(business && customer.wholesale), artikelen: items,
+          uitleg: 'offerteprijsExclBtw = de prijs in een offerte. webshop = wat de klant in de webshop betaalt (null als het artikel niet in de webshop staat).' });
+      },
+    },
+    status_opvragen: {
+      scope: 'status.lezen', rights: Object.values(DOCUMENT_RIGHTS),
+      definition: {
+        title: 'Status opvragen',
+        description: 'De status van een offerte (bijv. OF-2026-0012), werkorder (WO-2026-0003), factuur of webshopbestelling (WEB-2026-0040) op nummer. '
+          + 'Alleen de soorten die de gebruiker in AquaTech mag zien.',
+        inputSchema: {
+          type: 'object',
+          properties: { soort: { type: 'string', enum: DOCUMENT_KINDS }, nummer: { type: 'string', minLength: 1, maxLength: 40 } },
+          required: ['soort', 'nummer'], additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      /**
+       * Zoekt het document op.
+       * @param {object} args { soort, nummer }.
+       * @param {object} req Het verzoek.
+       * @returns {object} De uitkomst.
+       */
+      run: (args, req) => {
+        if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
+        const kind = DOCUMENT_KINDS.includes(args.soort) ? args.soort : '';
+        if (!kind) return errorOf(`Kies de soort: ${DOCUMENT_KINDS.join(', ')}.`);
+        if (!ctx.can(req.user, DOCUMENT_RIGHTS[kind])) return errorOf(`Je mag in AquaTech geen ${DOCUMENT_PLURALS[kind]} bekijken.`);
+        const found = ctx.documentStatus(req, kind, args.nummer, { withWorkOrders: ctx.can(req.user, 'werkorders') });
+        if (!found) return errorOf(`Geen ${kind} met dit nummer gevonden in deze omgeving.`);
+        const { id, ...shown } = found;
+        return resultOf({ soort: kind, ...shown, link: ctx.appUrl(req, kind === 'bestelling' ? `${DOCUMENT_PAGES[kind]}/` : `${DOCUMENT_PAGES[kind]}/?id=${encodeURIComponent(id)}`) });
+      },
+    },
+    openstaande_debiteuren: {
+      scope: 'facturen.lezen', rights: ['facturen'],
+      definition: {
+        title: 'Openstaande debiteuren',
+        description: 'Wie er nog moet betalen: definitieve, onbetaalde facturen per klant, grootste bedrag eerst, met het bedrag over de vervaldatum. '
+          + 'Bedragen incl. btw; creditnota\'s tellen negatief mee. totaalOpenstaand, totaalTeLaat, aantalDebiteuren en aantalTeLaat gelden altijd voor alle debiteuren; '
+          + 'per debiteur komen hoogstens tien facturen mee (facturenGetoond tegenover aantalFacturen).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            alleenTeLaat: { type: 'boolean', description: 'true = alleen klanten met een factuur over de vervaldatum.' },
+            maxResultaten: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+          },
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      /**
+       * Geeft het overzicht van openstaande facturen.
+       * @param {object} args { alleenTeLaat, maxResultaten }.
+       * @param {object} req Het verzoek.
+       * @returns {object} De uitkomst.
+       */
+      run: (args, req) => {
+        if (!withinLimit(debtorListsPerHour, req)) return errorOf('Te vaak opgevraagd dit uur. Probeer het later opnieuw of kijk in AquaTech bij Facturen.');
+        const limit = Math.min(50, Math.max(1, Number.parseInt(args.maxResultaten, 10) || 20));
+        const out = ctx.openInvoices(req, { onlyLate: args.alleenTeLaat === true, limit });
+        return resultOf({ ...out, link: ctx.appUrl(req, 'facturen/') });
+      },
+    },
     maak_concept_offerte: {
       scope: 'offertes.concept', rights: ['offertes'],
       definition: {
@@ -378,12 +554,12 @@ function createMcpTools(ctx) {
   };
 
   /**
-   * Of de gebruiker van dit verzoek een tool mag gebruiken: het recht uit de toestemming én het recht van zijn rol.
-   * @param {object} tool De tool.
+   * Of de gebruiker van dit verzoek een tool mag gebruiken: elk recht uit de toestemming dat de tool vraagt én het recht van zijn rol.
+   * @param {object} tool De tool (scope is één recht of een lijst die allemaal nodig zijn).
    * @param {object} req Het verzoek.
    * @returns {boolean} true als het mag.
    */
-  const allowed = (tool, req) => req.mcpScopes.has(tool.scope) && tool.rights.some((right) => ctx.can(req.user, right));
+  const allowed = (tool, req) => [].concat(tool.scope).every((scope) => req.mcpScopes.has(scope)) && tool.rights.some((right) => ctx.can(req.user, right));
 
   return {
     /**
