@@ -21,6 +21,10 @@ const MIN_MODULE_MM = 0.19;
 const MAX_MODULE_MM = 0.5;
 /** Witruimte links en rechts van de code, in modules (EAN vraagt er minstens 7 à 11). */
 const QUIET_MODULES = 10;
+/** Marge rondom de tekst op een etiket, in punten (2 mm). */
+const LABEL_MARGIN = 2 * POINTS_PER_MM;
+/** Laagste streepjescode die een scanner nog betrouwbaar leest, in punten (ongeveer 3 mm). */
+const MIN_BAR_HEIGHT_PT = 8;
 /** Standaardsjablonen: gangbare rollen voor een Zebra-printer. */
 const DEFAULT_TEMPLATES = [
   { key: 'zebra-57x32', name: 'Zebra 57 × 32 mm', widthMm: 57, heightMm: 32, barcode: 'auto', showName: true, showCode: true, showPrice: true, price: 'incl' },
@@ -84,6 +88,38 @@ function sanitizeLabelTemplates(raw) {
 const euro = (amount) => `€ ${amount.toFixed(2).replace('.', ',')}`;
 
 /**
+ * Rekent de indeling van één etiket uit: lettergroottes, de regels naam, de prijs en hoeveel hoogte de streepjescode overhoudt.
+ * @param {object} template Het sjabloon.
+ * @param {object} item Het artikel (code, name, salePrice, vatRate).
+ * @returns {object} nameSize, smallSize, nameLines, price, textBottom (onderkant van de tekst in punten), barTop, barHeight en digitsSize.
+ */
+function layoutLabel(template, item) {
+  const width = template.widthMm * POINTS_PER_MM;
+  const height = template.heightMm * POINTS_PER_MM;
+  const inner = width - 2 * LABEL_MARGIN;
+  // Lettergrootte groeit mee met het etiket, maar blijft leesbaar op een klein etiket.
+  const nameSize = Math.min(11, Math.max(6.5, height / 11));
+  const smallSize = Math.max(6, nameSize - 1.5);
+  let top = LABEL_MARGIN;
+  let nameLines = [];
+  if (template.showName && item.name) {
+    nameLines = wrap(item.name, inner, nameSize, true).slice(0, 2);
+    top += nameLines.length * nameSize * 1.15 + 0.5;
+  }
+  const price = template.showPrice && item.salePrice != null
+    ? (template.price === 'excl' ? `${euro(item.salePrice)} excl. btw` : euro(Math.round(item.salePrice * (1 + (item.vatRate ?? 21) / 100) * 100) / 100))
+    : '';
+  const hasLine = Boolean((template.showCode && item.code) || price);
+  const lineTop = top;
+  if (hasLine) top += (smallSize + 1) * 1.2;
+  // De streepjescode vult de rest; de cijfers staan eronder.
+  const digitsSize = Math.max(6, Math.min(8, height / 14));
+  const barTop = top + 1;
+  const barHeight = height - LABEL_MARGIN - digitsSize * 1.1 - barTop;
+  return { nameSize, smallSize, nameLines, price, lineTop, barTop, barHeight, digitsSize };
+}
+
+/**
  * Tekent één etiket op de huidige pagina: naam (hoogstens twee regels), code en prijs, en de streepjescode met de cijfers eronder.
  * @param {object} pdf Het document (createPdf).
  * @param {object} template Het sjabloon.
@@ -93,36 +129,20 @@ const euro = (amount) => `€ ${amount.toFixed(2).replace('.', ',')}`;
  */
 function drawLabel(pdf, template, item, code) {
   const width = template.widthMm * POINTS_PER_MM;
-  const height = template.heightMm * POINTS_PER_MM;
-  const margin = 2 * POINTS_PER_MM;
-  const inner = width - 2 * margin;
-  // Lettergrootte groeit mee met het etiket, maar blijft leesbaar op een klein etiket.
-  const nameSize = Math.min(11, Math.max(6.5, height / 11));
-  const smallSize = Math.max(6, nameSize - 1.5);
-  let top = margin;
-  if (template.showName && item.name) {
-    const lines = wrap(item.name, inner, nameSize, true).slice(0, 2);
-    for (const line of lines) { pdf.text(line, margin, top, { size: nameSize, bold: true, color: '#000000' }); top += nameSize * 1.15; }
-    top += 0.5;
+  const inner = width - 2 * LABEL_MARGIN;
+  const layout = layoutLabel(template, item);
+  let top = LABEL_MARGIN;
+  for (const line of layout.nameLines) { pdf.text(line, LABEL_MARGIN, top, { size: layout.nameSize, bold: true, color: '#000000' }); top += layout.nameSize * 1.15; }
+  if ((template.showCode && item.code) || layout.price) {
+    if (template.showCode && item.code) pdf.text(item.code, LABEL_MARGIN, layout.lineTop, { size: layout.smallSize, color: '#000000' });
+    if (layout.price) pdf.text(layout.price, width - LABEL_MARGIN, layout.lineTop, { size: layout.smallSize + 1, bold: true, color: '#000000', align: 'right' });
   }
-  const price = template.showPrice && item.salePrice != null
-    ? (template.price === 'excl' ? `${euro(item.salePrice)} excl. btw` : euro(Math.round(item.salePrice * (1 + (item.vatRate ?? 21) / 100) * 100) / 100))
-    : '';
-  if ((template.showCode && item.code) || price) {
-    if (template.showCode && item.code) pdf.text(item.code, margin, top, { size: smallSize, color: '#000000' });
-    if (price) pdf.text(price, width - margin, top, { size: smallSize + 1, bold: true, color: '#000000', align: 'right' });
-    top += (smallSize + 1) * 1.2;
-  }
-  // De streepjescode vult de rest; de cijfers staan eronder.
-  const digitsSize = Math.max(6, Math.min(8, height / 14));
-  const barTop = top + 1;
-  const barHeight = Math.max(6, height - margin - digitsSize * 1.1 - barTop);
   const modules = code.modules.length + 2 * QUIET_MODULES;
   const moduleWidth = Math.min(MAX_MODULE_MM * POINTS_PER_MM, inner / modules);
   const codeWidth = moduleWidth * code.modules.length;
   const left = (width - codeWidth) / 2;
-  for (const bar of Barcode.bars(code.modules)) pdf.rect(left + bar.start * moduleWidth, barTop, bar.width * moduleWidth, barHeight, { fill: '#000000' });
-  pdf.text(code.text, width / 2, barTop + barHeight + 0.5, { size: digitsSize, color: '#000000', align: 'center' });
+  for (const bar of Barcode.bars(code.modules)) pdf.rect(left + bar.start * moduleWidth, layout.barTop, bar.width * moduleWidth, layout.barHeight, { fill: '#000000' });
+  pdf.text(code.text, width / 2, layout.barTop + layout.barHeight + 0.5, { size: layout.digitsSize, color: '#000000', align: 'center' });
 }
 
 /**
@@ -146,6 +166,7 @@ function buildLabelPdf(template, entries) {
     const code = Barcode.forItem(item, template.barcode);
     if (!code) { problems.push(`${item.code}: ${template.barcode === 'ean' ? 'geen geldige EAN' : 'code niet te coderen'}`); continue; }
     if (!fitsLabel(template, code)) { problems.push(`${item.code}: de code is te lang voor een etiket van ${template.widthMm} mm breed`); continue; }
+    if (layoutLabel(template, item).barHeight < MIN_BAR_HEIGHT_PT) { problems.push(`${item.code}: het etiket van ${template.heightMm} mm hoog is te laag voor de tekst en de streepjescode; kies een hoger etiket of laat de omschrijving of prijs weg`); continue; }
     prepared.push({ item, qty, code });
   }
   if (problems.length) return { error: `Niet af te drukken: ${problems.slice(0, 5).join('; ')}${problems.length > 5 ? ` (en ${problems.length - 5} meer)` : ''}.`, codes: problems };

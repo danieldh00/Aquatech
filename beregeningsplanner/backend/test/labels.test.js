@@ -101,6 +101,9 @@ test('sjablonen: standaard, opschonen en een PDF op etiketformaat', () => {
   const narrow = { ...template, widthMm: 20 };
   const refused = buildLabelPdf(narrow, [{ item: { ...item, ean: null, code: 'ABCDEFGHIJKLMNOPQRST' }, qty: 1 }]);
   assert.match(refused.error, /te lang voor een etiket van 20 mm/);
+  // Een te laag etiket voor naam, prijs en streepjescode wordt geweigerd in plaats van een afgekapt etiket.
+  assert.match(buildLabelPdf({ ...template, heightMm: 15 }, [{ item, qty: 1 }]).error, /te laag/);
+  assert.ok(buildLabelPdf({ ...template, heightMm: 15, showName: false, showPrice: false }, [{ item, qty: 1 }]).pdf, 'zonder naam en prijs past een laag etiket wel');
   assert.match(buildLabelPdf({ ...template, barcode: 'ean' }, [{ item: { ...item, ean: null }, qty: 1 }]).error, /geen geldige EAN/);
 });
 
