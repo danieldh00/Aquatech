@@ -1090,6 +1090,19 @@ const PG_MIGRATIONS = [
   );
   CREATE UNIQUE INDEX price_proposal_rejections_item ON price_proposal_rejections (tenant_id, item_id);
   `,
+  // 69: eigen pakbon bij dropshipping (zie db.js).
+  `
+  CREATE TABLE web_order_slips (
+    tenant_id  ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    order_id   ${TEXT_TYPE} NOT NULL ${references('web_orders(id)')},
+    file_name  ${TEXT_TYPE} NOT NULL,
+    pages      BIGINT NOT NULL,
+    size       BIGINT NOT NULL,
+    data       ${TEXT_TYPE} NOT NULL,
+    created_at ${TEXT_TYPE} NOT NULL,
+    PRIMARY KEY (tenant_id, order_id)
+  );
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

@@ -15,6 +15,7 @@
     "@anthropic-ai/sdk": "^0.135.0",
     "express": "^4.21.2",
     "nodemailer": "^10.1.6",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.23.1"
   },
   "engines": {

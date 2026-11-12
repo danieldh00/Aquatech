@@ -155,6 +155,21 @@ function addressProblem(address, country, delivery = false) {
 }
 
 /**
+ * Leest de dropshippingkeuze van het afrekenformulier: de klant laat de bestelling rechtstreeks bij zijn eigen klant bezorgen
+ * (met zijn eigen pakbon, die hij na het bestellen uploadt) en geeft het e-mailadres dat het afleverbewijs krijgt.
+ * @param {object} input De formuliervelden (dropshipping = 'ja', dropshipProofEmail).
+ * @param {string} method De gekozen verzendmethode (bij ophalen kan het niet).
+ * @returns {{ value?: ?{ proofEmail: string, slip: null }, error?: string, field?: string }} Leeg (`value` null) als de klant het niet vroeg, de gegevens voor `data.dropshipping`, of een foutmelding.
+ */
+function dropshippingOf(input, method) {
+  if (String(input.dropshipping || '') !== 'ja') return { value: null };
+  if (method === 'ophalen') return { error: 'Dropshipping kan alleen met bezorgen; kies een andere verzendmethode of schakel dropshipping uit.', field: 'dropshipping' };
+  const proofEmail = clean(input.dropshipProofEmail, 200).toLowerCase();
+  if (!validEmail(proofEmail)) return { error: 'Vul het e-mailadres in waar het afleverbewijs naartoe moet.', field: 'dropshipProofEmail' };
+  return { value: { proofEmail, slip: null } };
+}
+
+/**
  * Controleert de gegevens die de klant bij het afrekenen invult.
  * @param {object} raw De invoer (name, company, email, phone, street, postcode, city, note en bij een afwijkend afleveradres deliveryStreet, deliveryPostcode, deliveryCity).
  * @param {{ method?: string, country?: string, billingCountry?: string, group?: string }} [choice] De gekozen verzendmethode (ophalen of dpd), het land van aflevering (bij ophalen is een adres niet nodig), het land van het factuuradres (standaard hetzelfde) en de klantgroep (zakelijk: bedrijfsnaam verplicht en een eventueel btw-nummer wordt gecontroleerd).
@@ -353,7 +368,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null, quote: data.quote || null, paymentDays: data.paymentDays === undefined ? null : data.paymentDays, language: data.language === 'en' ? 'en' : 'nl', packingSlip: data.packingSlip || null };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null, quote: data.quote || null, paymentDays: data.paymentDays === undefined ? null : data.paymentDays, language: data.language === 'en' ? 'en' : 'nl', packingSlip: data.packingSlip || null, dropshipping: data.dropshipping || null };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -460,6 +475,8 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     if (method === 'dpd' && billingCountry !== country && !Shipping.countriesOf(shippingConfig).some((entry) => entry.code === billingCountry)) return { error: 'Kies een land voor het factuuradres.', field: 'billingCountry', status: 400 };
     const checked = sanitizeCheckout(input, { method, country, billingCountry, group });
     if (checked.error) return { error: checked.error, field: checked.field, status: 400 };
+    const dropshipping = dropshippingOf(input, method);
+    if (dropshipping.error) return { error: dropshipping.error, field: dropshipping.field, status: 400 };
     if (input.terms !== 'ja') return { error: 'Ga akkoord met de algemene voorwaarden om te bestellen.', field: 'terms', status: 400 };
     const asked = String(input.paymentMethod || '');
     const paymentMethod = paymentOptions.length === 1 && !asked ? paymentOptions[0] : asked;
@@ -496,6 +513,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
         shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method === 'dpd', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
         customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted, ...(calculated.shifted && user.vies ? { vies: user.vies } : {}) } : null,
         note: fields.note, totals, payment: online ? 'online' : 'op rekening', consent: { terms: true, at: timestamp },
+        ...(dropshipping.value ? { dropshipping: dropshipping.value } : {}),
         ...(online ? { pay: { provider: 'mollie', status: 'open', id: null, ids: [], checkoutUrl: '', createdAt: timestamp, paidAt: null } } : {}),
         ...(reservedUntil ? { reservedUntil } : {}),
         history: [{ at: timestamp, status: 'nieuw', by: fields.name }],
@@ -629,17 +647,18 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
   }
 
   /**
-   * Of een bestelling klaar is om te picken: status Nieuw en, bij online betalen, al betaald.
-   * @param {object} order De bestelling (status, payment, pay).
+   * Of een bestelling klaar is om te picken: status Nieuw, bij online betalen al betaald en bij dropshipping met de pakbon van de klant erbij.
+   * @param {object} order De bestelling (status, payment, pay, dropshipping).
    * @returns {boolean} True als hij nu gepickt en verzonden kan worden.
    */
-  const pickable = (order) => order.status === 'nieuw' && (order.payment !== 'online' || !!(order.pay && order.pay.status === 'betaald'));
+  const pickable = (order) => order.status === 'nieuw' && (order.payment !== 'online' || !!(order.pay && order.pay.status === 'betaald'))
+    && !(order.dropshipping && !order.dropshipping.slip);
 
   /**
    * De bestellingen die gepickt moeten worden (Te picken): status Nieuw, bij online betalen alleen de betaalde, oudste eerst.
    * @param {string} tenantId Id van de omgeving.
    * @param {number} [limit] Hoogstens zoveel bestellingen (standaard 200).
-   * @returns {{ items: object[], truncated: boolean }} De bestellingen met regels, adres en verzending, en of er meer waren dan `limit` (dan ontbreken de nieuwste).
+   * @returns {{ items: object[], waitingForSlip: { id: string, number: string }[], truncated: boolean }} De bestellingen met regels, adres en verzending, de dropshippingbestellingen die nog op de pakbon van de klant wachten, en of er meer waren dan `limit` (dan ontbreken de nieuwste).
    */
   function listToPick(tenantId, limit = PAGE_LIMIT) {
     // Online bestellingen alleen als ze betaald zijn: in SQL, zodat onbetaalde de lijst niet vullen of de limiet opeten.
@@ -647,7 +666,10 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     const payStatus = isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')";
     const rows = prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND (COALESCE(${payment}, 'op rekening') <> 'online' OR ${payStatus} = 'betaald') ORDER BY created_at ASC, number ASC LIMIT ?`).all(tenantId, Math.min(limit, EXPORT_LIMIT) + 1);
     const size = Math.min(limit, EXPORT_LIMIT);
-    return { items: rows.slice(0, size).map(shapeFull).filter(pickable), truncated: rows.length > size };
+    const shaped = rows.slice(0, size).map(shapeFull);
+    // Dropshipping zonder pakbon van de klant staat niet in de lijst, maar wordt wel gemeld (anders lijkt de bestelling zoek).
+    const waitingForSlip = shaped.filter((order) => order.status === 'nieuw' && order.dropshipping && !order.dropshipping.slip).map((order) => ({ id: order.id, number: order.number }));
+    return { items: shaped.filter(pickable), waitingForSlip, truncated: rows.length > size };
   }
 
   /**
@@ -825,6 +847,26 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
   }
 
   /**
+   * Legt de pakbon van de klant vast bij een dropshippingbestelling (`data.dropshipping.slip`). Draait mee in de transactie van de aanroeper.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {{ name: string, pages: number, size: number, uploadedAt: string }} slip De gegevens van de pakbon.
+   * @param {{ onlyIfNew?: boolean }} [options] Met onlyIfNew gebeurt er niets als de bestelling niet meer nieuw is of de pakbon al is afgedrukt.
+   * @returns {boolean} true als de pakbon is vastgelegd; false als de bestelling ontbreekt, geen dropshipping is of niet meer nieuw is.
+   */
+  function setDropshippingSlip(tenantId, id, slip, { onlyIfNew = false } = {}) {
+    const row = readForUpdate(tenantId, id, `${COLUMNS}, data`);
+    if (!row) return false;
+    const data = JSON.parse(row.data);
+    // Na het afdrukken ligt de pakbon al in de doos: dan niet meer vervangen.
+    if (onlyIfNew && (row.status !== 'nieuw' || data.packingSlip)) return false;
+    if (!data.dropshipping) return false;
+    data.dropshipping = { ...data.dropshipping, slip };
+    prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, String(id));
+    return true;
+  }
+
+  /**
    * Past de betaalgegevens (`data.pay`) van een online bestelling aan in één transactie.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de bestelling.
@@ -898,7 +940,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     return { released };
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, onShipped, onCancelled, onTracking };
+  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking };
 }
 
 /**

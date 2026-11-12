@@ -22,7 +22,7 @@
   const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : '–');
   /** Hoogstens zoveel pakbonnen in één PDF (gelijk aan de server). */
   const MAX_SLIPS = 50;
-  const state = { items: [], selected: new Set(), truncated: false };
+  const state = { items: [], selected: new Set(), truncated: false, waiting: [] };
   /** Toont een melding; wordt door init vervangen door die van Beheer. */
   let toast = () => {};
 
@@ -64,6 +64,9 @@
     $('#tp-count').textContent = state.items.length ? `${state.items.length} te picken · ${count} gekozen${state.truncated ? ` · alleen de oudste ${state.items.length} worden getoond; druk deze af en ververs daarna` : ''}` : '';
     const all = $('#tp-all');
     if (all) all.checked = count > 0 && count === state.items.length;
+    const waiting = $('#tp-waiting');
+    waiting.hidden = !state.waiting.length;
+    waiting.textContent = state.waiting.length ? `Wacht op de pakbon van de klant (dropshipping): ${state.waiting.map((entry) => entry.number).join(', ')}. Ze staan pas in de lijst als de pakbon is geüpload.` : '';
   }
 
   /**
@@ -78,6 +81,7 @@
       if (!res.ok) throw new Error(body.message || AquatechCommon.statusMessage(res.status));
       const known = new Set(state.items.map((item) => item.id));
       state.items = body.items;
+      state.waiting = body.waitingForSlip || [];
       state.truncated = !!body.truncated;
       const ids = new Set(state.items.map((item) => item.id));
       // Nieuwe bestellingen worden gekozen; een eerdere keuze blijft staan zolang de bestelling er nog is.
@@ -86,7 +90,7 @@
       state.selected = new Set(Array.from(next).filter((id) => ids.has(id)));
       table.innerHTML = !state.items.length ? '<tr><td class="empty">Niets te picken: er zijn geen nieuwe bestellingen die klaarstaan.</td></tr>'
         : `<thead><tr><th><input type="checkbox" id="tp-all" aria-label="Alles kiezen"></th><th>Nummer</th><th>Besteld</th><th>Klant</th><th>Aflevering</th><th class="num">Regels</th><th class="num">Stuks</th><th>Pakbon</th></tr></thead><tbody>${state.items.map((item) => `
-          <tr data-id="${esc(item.id)}"><td><input type="checkbox" data-pick aria-label="Kies ${esc(item.number)}"${state.selected.has(item.id) ? ' checked' : ''}></td><td><a href="?id=${encodeURIComponent(item.id)}#bestellingen">${esc(item.number)}</a>${item.note ? ' <span class="pill analyse" title="Er staat een opmerking van de klant op de pakbon.">Opmerking</span>' : ''}</td><td>${esc(when(item.createdAt))}</td><td>${esc(item.customerName)}</td><td>${item.pickup ? 'Ophalen' : esc(item.shippingLabel)}${!item.pickup && item.address ? `<br><span class="muted small">${esc(item.address)}</span>` : ''}</td><td class="num">${item.lineCount}</td><td class="num">${esc(String(Math.round(item.pieces * 100) / 100))}</td><td>${item.printedAt ? `<span class="muted small">afgedrukt ${esc(when(item.printedAt))}</span>` : '<span class="pill nieuw">nog niet</span>'}</td></tr>`).join('')}</tbody>`;
+          <tr data-id="${esc(item.id)}"><td><input type="checkbox" data-pick aria-label="Kies ${esc(item.number)}"${state.selected.has(item.id) ? ' checked' : ''}></td><td><a href="?id=${encodeURIComponent(item.id)}#bestellingen">${esc(item.number)}</a>${item.dropshipping ? ' <span class="pill verzonden" title="Bij deze bestelling hoort de eigen pakbon van de klant.">Dropshipping</span>' : ''}${item.note ? ' <span class="pill analyse" title="Er staat een opmerking van de klant op de pakbon.">Opmerking</span>' : ''}</td><td>${esc(when(item.createdAt))}</td><td>${esc(item.customerName)}</td><td>${item.pickup ? 'Ophalen' : esc(item.shippingLabel)}${!item.pickup && item.address ? `<br><span class="muted small">${esc(item.address)}</span>` : ''}</td><td class="num">${item.lineCount}</td><td class="num">${esc(String(Math.round(item.pieces * 100) / 100))}</td><td>${item.printedAt ? `<span class="muted small">afgedrukt ${esc(when(item.printedAt))}</span>` : '<span class="pill nieuw">nog niet</span>'}</td></tr>`).join('')}</tbody>`;
       for (const box of table.querySelectorAll('[data-pick]')) {
         /**
          * Kiest of ontkiest de bestelling in deze regel (hoogstens MAX_SLIPS tegelijk).
@@ -114,6 +118,7 @@
       renderSelection();
     } catch (error) {
       state.items = [];
+      state.waiting = [];
       state.selected = new Set();
       table.innerHTML = `<tr><td class="empty">Kan de lijst niet laden (${esc(error.message)}).</td></tr>`;
       renderSelection();

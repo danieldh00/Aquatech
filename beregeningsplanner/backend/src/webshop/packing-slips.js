@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { createPdf, wrap } = require('../verkoop/pdf');
+const { assemblePdf } = require('./order-slips');
 
 const DocText = require(path.join(FRONTEND_DIR, 'shared', 'doc-text.js'));
 
@@ -92,7 +93,17 @@ function slipFileName(orders) {
  * @param {{ profile?: object, colors?: object, logo?: Buffer|null, locations?: Map<string, string> }} [options] Bedrijfsprofiel, kleuren van het thema, logo (PNG) en de magazijnlocatie per artikel-id.
  * @returns {Buffer} De PDF.
  */
-function packingSlipsPdf(orders, { profile = {}, colors = {}, logo = null, locations = new Map() } = {}) {
+function packingSlipsPdf(orders, options = {}) {
+  return packingSlipsPdfWithRanges(orders, options).buffer;
+}
+
+/**
+ * Zoals packingSlipsPdf, maar met erbij welke pagina's bij welke bestelling horen (om er pakbonnen van klanten tussen te kunnen zetten).
+ * @param {object[]} orders De bestellingen (shapeFull van web-orders).
+ * @param {{ profile?: object, colors?: object, logo?: Buffer|null, locations?: Map<string, string> }} [options] Bedrijfsprofiel, kleuren van het thema, logo (PNG) en de magazijnlocatie per artikel-id.
+ * @returns {{ buffer: Buffer, ranges: { orderId: string, first: number, last: number }[] }} De PDF en per bestelling de eerste en laatste pagina (vanaf 0).
+ */
+function packingSlipsPdfWithRanges(orders, { profile = {}, colors = {}, logo = null, locations = new Map() } = {}) {
   const company = profile || {};
   const palette = { navy: '#172f5e', green: '#19924f', greenSoft: '#e6f4ec', teal: '#2cb0c0', text: '#1d2733', muted: '#6b7785', line: '#d0d6de', ...colors };
   const pdf = createPdf({ title: DocText.text('nl', 'packing.title'), author: company.companyName || '' });
@@ -218,8 +229,10 @@ function packingSlipsPdf(orders, { profile = {}, colors = {}, logo = null, locat
   }
 
   // Voetregel en paginanummer per pakbon (telt alleen de pagina's van die bestelling).
+  const ranges = [];
   slipStarts.forEach((slip, index) => {
     const lastPage = (index + 1 < slipStarts.length ? slipStarts[index + 1].firstPage : pdf.pageCount) - 1;
+    ranges.push({ orderId: slip.order.id, first: slip.firstPage, last: lastPage });
     const count = lastPage - slip.firstPage + 1;
     const foot = [company.companyName, company.kvk ? `KvK ${company.kvk}` : ''].filter(Boolean).join(' · ');
     for (let page = slip.firstPage; page <= lastPage; page++) {
@@ -229,16 +242,16 @@ function packingSlipsPdf(orders, { profile = {}, colors = {}, logo = null, locat
       if (count > 1) pdf.text(DocText.text(slip.language, 'packing.page', { page: page - slip.firstPage + 1, count }), rightEdge, pageHeight - 38, { size: 7.5, color: palette.muted, align: 'right' });
     }
   });
-  return pdf.toBuffer();
+  return { buffer: pdf.toBuffer(), ranges };
 }
 
 /**
  * Maakt de opslag en de routes voor pakbonnen.
  * @param {object} db De database.
- * @param {{ orders: object, settingsFor: Function, colorsOf?: Function }} deps De bestellingen (web-orders.js), settingsFor(tenantId) en colorsOf(tenantId) = kleuren van het thema.
+ * @param {{ orders: object, slips: object, settingsFor: Function, colorsOf?: Function }} deps De bestellingen (web-orders.js), de pakbonnen van klanten bij dropshipping (order-slips.js), settingsFor(tenantId) en colorsOf(tenantId) = kleuren van het thema.
  * @returns {{ toPick: Function, pdfFor: Function }} De functies.
  */
-function createPackingSlips(db, { orders, settingsFor, colorsOf = () => ({}) }) {
+function createPackingSlips(db, { orders, slips, settingsFor, colorsOf = () => ({}) }) {
   /**
    * De magazijnlocatie per artikel voor de regels van de bestellingen (één query).
    * @param {string} tenantId Id van de omgeving.
@@ -259,35 +272,49 @@ function createPackingSlips(db, { orders, settingsFor, colorsOf = () => ({}) }) 
   /**
    * De bestellingen die gepickt moeten worden, met per bestelling het aantal regels en stuks.
    * @param {string} tenantId Id van de omgeving.
-   * @returns {{ items: object[], truncated: boolean }} Per bestelling: id, nummer, klant, datum, verzendmethode, aantal regels, aantal stuks, opmerking en of de pakbon al is afgedrukt.
+   * @returns {{ items: object[], waitingForSlip: object[], truncated: boolean }} Per bestelling: id, nummer, klant, datum, verzendmethode, aantal regels, aantal stuks, opmerking, of het dropshipping is en of de pakbon al is afgedrukt; en de dropshippingbestellingen die nog op de pakbon van de klant wachten.
    */
   function toPick(tenantId) {
-    const { items, truncated } = orders.listToPick(tenantId);
-    return { truncated, items: items.map((order) => ({
+    const { items, truncated, waitingForSlip } = orders.listToPick(tenantId);
+    return { truncated, waitingForSlip, items: items.map((order) => ({
       id: order.id, number: order.number, customerName: order.customerName, createdAt: order.createdAt,
       shippingLabel: order.shipping ? order.shipping.label : '', pickup: !!(order.shipping && order.shipping.method === 'ophalen'),
       lineCount: order.lines.length, pieces: order.lines.reduce((sum, line) => sum + (Number(line.qty) || 0), 0),
-      note: order.note || '', printedAt: order.packingSlip ? order.packingSlip.printedAt : null, address: addressLines(order).join(', '),
+      note: order.note || '', dropshipping: !!order.dropshipping, printedAt: order.packingSlip ? order.packingSlip.printedAt : null, address: addressLines(order).join(', '),
     })) };
   }
 
   /**
-   * Maakt één PDF met de pakbonnen van de gevraagde bestellingen en legt vast dat ze zijn afgedrukt.
+   * Maakt één PDF met de pakbonnen van de gevraagde bestellingen en legt vast dat ze zijn afgedrukt. Bij een dropshippingbestelling
+   * staat in plaats van onze pakbon de pakbon van de klant in de PDF (met het bestelnummer erop).
    * @param {string} tenantId Id van de omgeving.
    * @param {string[]} ids Ids van de bestellingen (hoogstens MAX_SLIPS).
    * @param {{ markPrinted?: boolean }} [options] Of het afdrukken wordt vastgelegd.
-   * @returns {{ pdf?: Buffer, fileName?: string, orders?: object[], error?: string, status?: number }} De PDF of een foutmelding.
+   * @returns {Promise<{ pdf?: Buffer, fileName?: string, orders?: object[], error?: string, status?: number }>} De PDF of een foutmelding.
    */
-  function pdfFor(tenantId, ids, { markPrinted = true } = {}) {
+  async function pdfFor(tenantId, ids, { markPrinted = true } = {}) {
     if (!Array.isArray(ids) || !ids.length) return { error: 'Kies minstens één bestelling.', status: 400 };
     if (ids.length > MAX_SLIPS) return { error: `Hoogstens ${MAX_SLIPS} pakbonnen tegelijk.`, status: 400 };
     const found = orders.getMany(tenantId, ids).filter((order) => order.status !== 'geannuleerd');
     if (!found.length) return { error: 'Geen bestelling gevonden om een pakbon van te maken.', status: 404 };
     // Een nieuwe online bestelling die nog niet betaald is wordt niet gepickt: geen pakbon tot de betaling binnen is.
-    const unpaid = found.filter((order) => order.status === 'nieuw' && !orders.pickable(order));
+    const unpaid = found.filter((order) => order.status === 'nieuw' && order.payment === 'online' && !(order.pay && order.pay.status === 'betaald'));
     if (unpaid.length) return { error: `Nog niet betaald, dus nog geen pakbon: ${unpaid.map((order) => order.number).join(', ')}.`, status: 409 };
+    const dropshipped = found.filter((order) => order.dropshipping);
+    const customerSlips = slips.readMany(tenantId, dropshipped.map((order) => order.id));
+    const missing = dropshipped.filter((order) => !customerSlips.has(order.id));
+    if (missing.length) return { error: `De klant heeft nog geen pakbon geüpload voor dropshipping: ${missing.map((order) => order.number).join(', ')}.`, status: 409 };
     const settings = settingsFor(tenantId);
-    const pdf = packingSlipsPdf(found, { profile: settings.get('quoteProfile'), colors: colorsOf(tenantId), locations: locationsOf(tenantId, found) });
+    const ours = found.filter((order) => !order.dropshipping);
+    const own = ours.length ? packingSlipsPdfWithRanges(ours, { profile: settings.get('quoteProfile'), colors: colorsOf(tenantId), locations: locationsOf(tenantId, ours) }) : null;
+    let pdf = own ? own.buffer : null;
+    if (dropshipped.length) {
+      const rangeOf = new Map((own ? own.ranges : []).map((range) => [range.orderId, range]));
+      const sequence = found.map((order) => (order.dropshipping
+        ? { type: 'slip', bytes: customerSlips.get(order.id).bytes, label: `${order.number} - dropshipping` }
+        : { type: 'ours', first: rangeOf.get(order.id).first, last: rangeOf.get(order.id).last }));
+      pdf = await assemblePdf(sequence, own ? own.buffer : null);
+    }
     if (markPrinted) orders.markPackingSlipsPrinted(tenantId, found.map((order) => order.id));
     return { pdf, fileName: slipFileName(found), orders: found };
   }
@@ -298,7 +325,7 @@ function createPackingSlips(db, { orders, settingsFor, colorsOf = () => ({}) }) 
 /**
  * Registreert de routes voor pakbonnen onder /api/admin/web-orders (het recht beheer wordt al door /api/admin afgedwongen).
  * @param {object} app De Express-app.
- * @param {{ slips: object, audit: Function, requireJson: Function }} deps De pakbonopslag, het auditlogboek en de JSON-controle.
+ * @param {{ slips: object, audit: Function, requireJson: Function }} deps De pakbonnen (createPackingSlips), het auditlogboek en de JSON-controle.
  * @returns {void}
  */
 function registerPackingSlipRoutes(app, { slips, audit, requireJson }) {
@@ -319,17 +346,17 @@ function registerPackingSlipRoutes(app, { slips, audit, requireJson }) {
   });
 
   // Eén pakbon (opnieuw afdrukken telt ook). Een POST, want het afdrukken wordt vastgelegd.
-  app.post('/api/admin/web-orders/:id/packing-slip', requireJson, (req, res) => {
-    const out = slips.pdfFor(req.tenantId, [req.params.id]);
+  app.post('/api/admin/web-orders/:id/packing-slip', requireJson, async (req, res) => {
+    const out = await slips.pdfFor(req.tenantId, [req.params.id]);
     if (out.error) return res.status(out.status || 400).json({ error: 'packing_slip_failed', message: out.error });
     audit(req, 'webshop_pakbon', { number: out.orders[0].number });
     sendPdf(res, out);
   });
 
   // Meerdere pakbonnen in één PDF (Alles afdrukken).
-  app.post('/api/admin/web-orders/packing-slips', requireJson, (req, res) => {
+  app.post('/api/admin/web-orders/packing-slips', requireJson, async (req, res) => {
     const ids = req.body && Array.isArray(req.body.ids) ? req.body.ids.filter((id) => typeof id === 'string').slice(0, 500) : [];
-    const out = slips.pdfFor(req.tenantId, ids);
+    const out = await slips.pdfFor(req.tenantId, ids);
     if (out.error) return res.status(out.status || 400).json({ error: 'packing_slip_failed', message: out.error });
     audit(req, 'webshop_pakbonnen', { count: out.orders.length });
     sendPdf(res, out);

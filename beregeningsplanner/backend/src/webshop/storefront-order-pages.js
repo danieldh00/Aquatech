@@ -202,6 +202,20 @@ ${checkoutField({ name: name('city'), label: 'Woonplaats', value: value[name('ci
 }
 
 /**
+ * Het blok Dropshipping op het afrekenformulier: de klant laat de bestelling rechtstreeks bij zijn eigen klant bezorgen en geeft
+ * het e-mailadres voor het afleverbewijs. De eigen pakbon uploadt hij na het bestellen op de pagina van de bestelling.
+ * @param {{ dropshipping?: string, dropshipProofEmail?: string }} value De eerder ingevulde waarden.
+ * @returns {string} HTML van het blok.
+ */
+function dropshipChoice(value) {
+  const on = value.dropshipping === 'ja';
+  return `<div class="dropship-block" data-dropship-section>
+<label class="terms-check"><input type="checkbox" name="dropshipping" value="ja" data-dropship${on ? ' checked' : ''}><span>Dropshipping: bezorg deze bestelling rechtstreeks bij mijn eigen klant, met mijn eigen pakbon</span></label>
+<label class="form-field" data-dropship-fields><span>E-mailadres voor het afleverbewijs</span><input name="dropshipProofEmail" type="email" value="${escapeHtml(value.dropshipProofEmail || '')}" autocomplete="off" maxlength="200"><small>Vul bij het afleveradres het adres van je klant in. Na het bestellen upload je op de pagina van de bestelling je eigen pakbon (PDF); die gaat dan in de doos in plaats van de onze.</small></label>
+</div>`;
+}
+
+/**
  * De pagina Afrekenen: gegevens van de klant, de verzendmethode, het afleveradres en een overzicht van de bestelling.
  * @param {{ cart: object, quote: object, country: string, method: string, summary?: object|null, values?: object, error?: string, viewer: { displayName: string, email: string }, paymentOptions?: string[] }} state De geprijsde winkelwagen, de verzendopties, het gekozen land en de gekozen methode, de uitgerekende totalen (web-orders.js, orderTotals), eerder ingevulde waarden, een foutmelding, de ingelogde klant en de betaalwijzen die hij mag kiezen (online en/of rekening).
  * @param {object[]} groups Alle hoofdcategorieën.
@@ -244,6 +258,7 @@ ${addressBlock({ delivery: false, value, countries: quote.countries, country: va
 ${addressBlock({ delivery: true, value })}
 </div>
 <label class="form-field"><span>Opmerking (optioneel)</span><textarea name="note" rows="3" maxlength="500">${escapeHtml(value.note || '')}</textarea></label>
+${dropshipChoice(value)}
 ${paymentChoice(paymentOptions, value.paymentMethod)}
 <label class="terms-check"><input type="checkbox" name="terms" value="ja" required${value.terms === 'ja' ? ' checked' : ''}><span>Ik ga akkoord met de <a href="${ROOT}pagina/algemene-voorwaarden/" target="_blank" rel="noopener">algemene voorwaarden</a> en heb de <a href="${ROOT}pagina/privacyverklaring/" target="_blank" rel="noopener">privacyverklaring</a> gelezen. Als consument heb je <a href="${ROOT}pagina/herroepingsrecht/" target="_blank" rel="noopener">herroepingsrecht</a>.</span></label>
 <button class="button" type="submit" name="action" value="place">${paymentOptions.length === 1 && paymentOptions[0] === 'online' ? 'Bestellen en betalen' : 'Bestelling plaatsen'}</button>
@@ -342,11 +357,32 @@ function orderPage(order, groups = [], { thanks = false, invoice = null, returns
 <div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Prijs${business ? ' excl. btw' : ''}</th><th class="num">Aantal</th><th class="num">Totaal${business ? ' excl. btw' : ''}</th></tr></thead>
 <tbody>${rows}</tbody><tfoot>${shippingRow(order.shipping, business)}${totalRows(order.totals, business, Boolean(order.vat && order.vat.shifted))}</tfoot></table></div>
 ${vatNote}${deliveryBlock(order)}
-${payBlock}<p>Status: <strong>${escapeHtml(order.statusLabel)}</strong></p>
+${dropshipBlock(order, thanks)}${payBlock}<p>Status: <strong>${escapeHtml(order.statusLabel)}</strong></p>
 ${invoiceBlock}${history}
 ${returnsHtml}
 <p><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a> <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a></p></section>`;
-  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups, refresh: autoPay && waiting && !payError ? 'betalen/' : '' });
+  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups, script: order.dropshipping && order.status === 'nieuw' && !order.packingSlip ? 'pakbon.js' : '', refresh: autoPay && waiting && !payError ? 'betalen/' : '' });
+}
+
+/**
+ * Het blok Dropshipping op de pagina van een bestelling: het adres voor het afleverbewijs en de eigen pakbon van de klant, met
+ * zolang de bestelling nieuw is een formulier om hem te uploaden of te vervangen (script pakbon.js).
+ * @param {{ dropshipping: ?{ proofEmail: string, slip: ?{ name: string, pages: number } }, status: string }} order De bestelling.
+ * @param {boolean} thanks Of de klant de bestelling zojuist plaatste (dan staat de oproep om de pakbon te uploaden extra prominent).
+ * @returns {string} HTML van het blok, of leeg als de bestelling geen dropshipping is.
+ */
+function dropshipBlock(order, thanks) {
+  const drop = order.dropshipping;
+  if (!drop) return '';
+  const slip = drop.slip;
+  const open = order.status === 'nieuw' && !order.packingSlip;
+  const state = slip
+    ? `<p>Je pakbon: <strong>${escapeHtml(slip.name)}</strong> (${slip.pages} ${slip.pages === 1 ? 'pagina' : 'pagina\'s'}) · <a href="pakbon.pdf">bekijken</a></p>`
+    : `<p class="${thanks ? 'form-error' : 'note'}" role="status"><strong>Upload je pakbon.</strong> ${open ? 'We kunnen de bestelling pas inpakken als we je eigen pakbon hebben.' : 'Er is geen pakbon geüpload.'}</p>`;
+  const upload = open
+    ? `<div class="slip-upload" data-slip-upload><label class="form-field"><span>${slip ? 'Andere pakbon uploaden (PDF, hoogstens 2 MB)' : 'Pakbon uploaden (PDF, hoogstens 2 MB)'}</span><input type="file" accept="application/pdf,.pdf" data-slip-file></label><button class="button" type="button" data-slip-send>${slip ? 'Pakbon vervangen' : 'Pakbon uploaden'}</button><p class="note" data-slip-message role="status" hidden></p></div>`
+    : '';
+  return `<div class="dropship-info"><p><strong>Dropshipping</strong><br>Het afleverbewijs gaat naar ${escapeHtml(drop.proofEmail)}.</p>${state}${upload}</div>`;
 }
 
 /**
