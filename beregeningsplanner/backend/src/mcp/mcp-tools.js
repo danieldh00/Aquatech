@@ -297,7 +297,9 @@ function createMcpTools(ctx) {
         const found = searchArticles(articlesOf(req.tenantId), search, limit);
         const exact = found.allWords && (found.items.length === 1 || (found.items.length > 1 && fold(found.items[0].code) === fold(search)));
         return resultOf({ artikelen: found.items.map(articleView), aantal: found.items.length,
-          ...(exact ? {} : choiceHint(found.items.length, 'artikel', 'Vraag de gebruiker welk artikel hij bedoelt, of laat hem iets anders omschrijven. Verzin geen artikelcode.')),
+          ...(exact ? {} : found.items.length && !found.allWords
+            ? { keuzeNodig: true, vraag: 'Geen artikel met alle zoekwoorden. Vraag de gebruiker welk artikel bedoeld is; kies niet zelf.' }
+            : choiceHint(found.items.length, 'artikel', 'Vraag de gebruiker welk artikel hij bedoelt, of laat hem iets anders omschrijven. Verzin geen artikelcode.')),
           ...(found.items.length && !found.allWords ? { let_op: 'Geen artikel met alle zoekwoorden; dit zijn de beste gedeeltelijke treffers. Twijfel je, zet dan twijfel=true bij de regel.' } : {}) });
       },
     },

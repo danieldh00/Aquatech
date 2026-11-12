@@ -286,6 +286,10 @@ test('de koppeling vraagt terug bij onduidelijkheid in plaats van te raden', asy
   assert.strictEqual((await callTool(base, token, 'zoek_artikelen', { zoekterm: 'PE-25' })).structuredContent.keuzeNodig, undefined);
   assert.strictEqual((await callTool(base, token, 'zoek_artikelen', { zoekterm: 'nietbestaand' })).structuredContent.keuzeNodig, true);
   assert.strictEqual((await callTool(base, token, 'zoek_artikelen', { zoekterm: 'sproeier beregeningscomputer' })).structuredContent.keuzeNodig, true);
+  // Precies één gedeeltelijke treffer (alleen het woord "zones" past, "xyz" niet) is ook geen duidelijke keuze.
+  const partial = (await callTool(base, token, 'zoek_artikelen', { zoekterm: 'beregeningscomputer xyz' })).structuredContent;
+  assert.strictEqual(partial.aantal, 1);
+  assert.strictEqual(partial.keuzeNodig, true);
 
   // Open punten: niets aangemaakt, de vragen komen terug; met ookMetOpenPunten gaat hij wel door.
   const before = (await admin.get('/app/api/quotes')).body.length;
