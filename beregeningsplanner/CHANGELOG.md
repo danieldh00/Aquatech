@@ -1,14 +1,25 @@
 # Changelog
 
-## 1.10.6
+## 1.10.7
 
 AI-koppeling: leesfuncties voor de medewerker (item 31). Geen migratie.
 
 - Nieuwe tools: `klant_details` (klantgroep, groothandelskorting, betaaltermijn met bron, documenttaal, contact; openstaand bedrag alleen met recht `facturen`, recente offertes en werkorders alleen met dat recht), `prijs_voor_klant` (offerteprijs en webshopprijs voor de klant via `priceCart`: zakelijke prijs, staffel- en groothandelskorting, plus beschikbare voorraad), `status_opvragen` (offerte, werkorder, factuur of webshopbestelling op nummer; per soort het recht van de module) en `openstaande_debiteuren` (definitieve, onbetaalde facturen per klant, met bedrag over de vervaldatum; max. 60× per uur per gebruiker).
+- Limieten: `klant_details`, `prijs_voor_klant` en `status_opvragen` samen 300 per uur per gebruiker (over al zijn koppelingen), `openstaande_debiteuren` 60 per uur.
 - Nieuwe toestemmingen `status.lezen` en `facturen.lezen`; een tool kan nu meer toestemmingen tegelijk vragen (`prijs_voor_klant`: artikelen én klanten lezen). Bestaande koppelingen krijgen de nieuwe toestemmingen pas na opnieuw koppelen.
 - Opvragingen in `mcp/mcp-lookups.js`: alleen de nodige kolommen, altijd met `tenant_id`, op de unieke index `(tenant_id, number)`.
 - Test: een medewerker die klant wordt terwijl het toestemmingsscherm openstaat, kan daarna niet meer toestaan (403).
 - Handleiding in Beheer en Mijn profiel met voorbeeldvragen; DOCS.md noemt de nieuwe tools en de groene status *Markeer als gecontroleerd*.
+
+## 1.10.6
+
+Kortingsregel op offerte en factuur (punt 14 van bundel A). Geen migratie: de velden staan in de offerte- en factuurgegevens.
+
+- **Korting op het geheel** kan nu een percentage of een vast bedrag (excl. btw) zijn, met een bijschrift (max. 120 tekens) dat op het document naast het kortingsbedrag staat (`discountType`, `discountPct`, `discountAmount`, `discountNote`). Een vast bedrag wordt nooit hoger dan het subtotaal en wordt naar rato over de btw-tarieven verdeeld, net als een percentage.
+- Offerte-editor en factuurscherm: keuze *percentage* of *vast bedrag* met het bijbehorende veld en het bijschrift. Het bijschrift staat op de offerte (document, klantpagina, Excel), de factuur (scherm, pdf) en in de nacalculatie.
+- De factuur uit een werkorder neemt de korting van de offerte over; een creditfactuur draait het bedrag mee (negatief). Visma krijgt de korting per regel als fractie van het subtotaal.
+- Nacalculatie: een vast bedrag geldt in zijn geheel (begroot en werkelijk), een percentage schaalt met het werkelijke subtotaal.
+- Tests: `discount-line.test.js` (kern, afkappen, opschonen, creditfactuur, overname, nacalculatie, Visma, API en klantpagina).
 
 ## 1.10.5
 

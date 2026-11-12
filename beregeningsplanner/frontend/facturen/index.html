@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="../shared/brand.css">
   <link rel="stylesheet" href="../shared/theme.css">
   <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../shared/layout.css">
   <link rel="stylesheet" href="../dashboard/dashboard.css">
   <link rel="stylesheet" href="../beheer/beheer.css">
   <link rel="stylesheet" href="../plannen/plannen.css">
@@ -277,7 +278,14 @@
           <label>Omschrijving / referentie<input name="reference" maxlength="120"></label>
           <label>Tekst boven de regels<textarea name="intro" rows="2" maxlength="2000"></textarea></label>
           <label>Opmerking onder de factuur<textarea name="notes" rows="2" maxlength="2000"></textarea></label>
-          <label>Korting (%)<input name="discountPct" type="number" min="0" max="100" step="0.01"></label>
+          <div class="form-grid">
+            <label class="field">Korting
+              <select name="discountType"><option value="pct">percentage (%)</option><option value="amount">vast bedrag (excl. btw)</option></select>
+            </label>
+            <label class="field" id="m-discount-pct">Percentage<input name="discountPct" type="number" min="0" max="100" step="0.01"></label>
+            <label class="field" id="m-discount-amount" hidden>Bedrag (€)<input name="discountAmount" type="number" min="0" step="0.01"></label>
+            <label class="field full">Bijschrift bij de korting<input name="discountNote" maxlength="120" placeholder="bijv. seizoensactie"><span class="muted small">Staat op de factuur, naast het kortingsbedrag.</span></label>
+          </div>
         </form>
       </div>
       <section class="card-form">

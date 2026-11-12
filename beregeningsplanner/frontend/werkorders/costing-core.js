@@ -84,8 +84,11 @@
     let plannedHourAmount = 0;
     let plannedOther = 0;
     let discountPct = 0;
+    // Een vast kortingsbedrag op de offerte geldt in zijn geheel, zowel voor de begroting als werkelijk.
+    const discountAmount = quoteData && quoteData.discountType === 'amount' ? Math.max(0, Number(quoteData.discountAmount) || 0) : 0;
+    const discountNote = quoteData ? String(quoteData.discountNote || '') : '';
     if (quoteData) {
-      discountPct = Math.min(100, Math.max(0, Number(quoteData.discountPct) || 0));
+      discountPct = discountAmount ? 0 : Math.min(100, Math.max(0, Number(quoteData.discountPct) || 0));
       for (const line of (quoteData.lines || []).filter(included)) {
         const amount = round2((Number(line.qty) || 0) * (Number(line.price) || 0));
         if (line.section === 'arbeid') {
@@ -155,8 +158,8 @@
     const actualLabour = round2(actualHours * labourRate + fixedLabour);
     // Overige posten (voorrijkosten e.d.) worden niet geboekt: werkelijk = begroot.
     const actualSubtotal = round2(actualLabour + actualMaterials + plannedOther);
-    const budgetDiscount = round2(budgetSubtotal * discountPct / 100);
-    const actualDiscount = round2(actualSubtotal * discountPct / 100);
+    const budgetDiscount = discountAmount ? round2(Math.min(discountAmount, budgetSubtotal)) : round2(budgetSubtotal * discountPct / 100);
+    const actualDiscount = discountAmount ? round2(Math.min(discountAmount, actualSubtotal)) : round2(actualSubtotal * discountPct / 100);
     const budget = { labour: round2(plannedLabour), materials: budgetMaterials, other: round2(plannedOther), subtotal: budgetSubtotal, discount: budgetDiscount, net: round2(budgetSubtotal - budgetDiscount) };
     const actual = { labour: actualLabour, materials: actualMaterials, other: round2(plannedOther), subtotal: actualSubtotal, discount: actualDiscount, net: round2(actualSubtotal - actualDiscount) };
 
@@ -189,7 +192,7 @@
         hourlyRate: labourRate, hourlyCost, plannedAmount: budget.labour, actualAmount: actualLabour, cost: labourCost,
       },
       materials: materialRows,
-      discountPct,
+      discountPct, discountAmount, discountNote, hasDiscount: Boolean(discountPct || discountAmount),
       budget, actual, cost, invoiced, revenue: round2(revenue), revenueSource,
       margin, marginPct: revenue > 0 ? round2((margin / revenue) * 100) : null,
       warnings,

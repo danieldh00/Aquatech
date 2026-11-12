@@ -959,10 +959,12 @@ Met de AI-koppeling maakt een medewerker vanuit Claude of ChatGPT (ook de app op
 | `status_opvragen` | status van een offerte, werkorder, factuur of webshopbestelling op nummer, met link | per soort: `offertes`, `werkorders`, `facturen`, `beheer` |
 | `openstaande_debiteuren` | definitieve, onbetaalde facturen per klant, grootste bedrag eerst, met het bedrag over de vervaldatum (max. 60× per uur) | `facturen` |
 
+De leesfuncties `klant_details`, `prijs_voor_klant` en `status_opvragen` hebben samen een limiet van 300 per uur per gebruiker.
+
 De AI kan niets versturen, accorderen of wijzigen. Regels met een notitie (twijfel, onbekende code,
 afwijkende prijs, geen verkoopprijs) zijn geel gemarkeerd in de offerte-editor; *Markeer als gecontroleerd* zet ze op
-groen (de notitie blijft voor de medewerker zichtbaar). Klanten zien die notities nooit. De leesfuncties (sinds 1.10.6)
-vragen de toestemmingen *status.lezen* en *facturen.lezen*: een koppeling van vóór 1.10.6 heeft die niet; opnieuw koppelen
+groen (de notitie blijft voor de medewerker zichtbaar). Klanten zien die notities nooit. De leesfuncties (sinds 1.10.7)
+vragen de toestemmingen *status.lezen* en *facturen.lezen*: een koppeling van vóór 1.10.7 heeft die niet; opnieuw koppelen
 in Claude of ChatGPT geeft ze.
 
 **Beveiliging**: OAuth 2.1 met PKCE (S256) en dynamische registratie; redirects alleen naar claude.ai,

@@ -204,7 +204,7 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
   // ---------- Totalen ----------
   const rows = [
     [translate('invoice.subtotal'), money(totals.subtotal)],
-    ...(totals.discount ? [[`${translate('invoice.discount')} ${qtyText(totals.discountPct, lang)}%`, `- ${money(totals.discount)}`]] : []),
+    ...(totals.discount ? [[Core.discountCaption(totals, translate('invoice.discount'), qtyText(totals.discountPct, lang)), `- ${money(totals.discount)}`]] : []),
     ...totals.vat.map((vatGroup) => [translate('invoice.vatOver', { rate: vatGroup.rate, base: money(vatGroup.base) }), money(vatGroup.amount)]),
   ];
   if (top + rows.length * 14 + 30 > BOTTOM) header(false);

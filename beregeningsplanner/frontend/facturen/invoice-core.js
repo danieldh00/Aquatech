@@ -244,7 +244,11 @@
       },
       intro: limitText(fields.intro, 2000),
       notes: limitText(fields.notes, 2000),
-      discountPct: round2(clampNumber(fields.discountPct, 0, 100)),
+      // Korting op het geheel: een percentage óf een vast bedrag (excl. btw), met een bijschrift.
+      discountType: fields.discountType === 'amount' ? 'amount' : 'pct',
+      discountPct: fields.discountType === 'amount' ? 0 : round2(clampNumber(fields.discountPct, 0, 100)),
+      discountAmount: fields.discountType === 'amount' ? round2(clampNumber(fields.discountAmount, 0, 10000000)) : 0,
+      discountNote: limitText(fields.discountNote, 120),
       workOrderNumber: limitText(fields.workOrderNumber, 40),
       quoteNumber: limitText(fields.quoteNumber, 40),
       creditOfNumber: limitText(fields.creditOfNumber, 40),
@@ -260,37 +264,68 @@
   const lineTotal = (line) => round2((Number(line.qty) || 0) * (Number(line.price) || 0));
 
   /**
+   * Korting op het geheel: het bedrag in euro's (excl. btw) en welk deel van het subtotaal dat is.
+   * Een vast bedrag wordt nooit hoger dan het subtotaal en volgt het teken ervan (bij een creditfactuur negatief).
+   * @param {object} source Gegevens met discountType, discountPct en discountAmount.
+   * @param {number} subtotal Het subtotaal in euro's.
+   * @returns {{ type: string, discount: number, fraction: number }} Het type, het kortingsbedrag en de fractie van het subtotaal.
+   */
+  function discountOf(source, subtotal) {
+    if (source && source.discountType === 'amount') {
+      const amount = Math.min(Math.max(Number(source.discountAmount) || 0, 0), Math.abs(subtotal));
+      const discount = round2(subtotal < 0 ? -amount : amount);
+      return { type: 'amount', discount, fraction: subtotal ? discount / subtotal : 0 };
+    }
+    const fraction = clampNumber(source && source.discountPct, 0, 100) / 100;
+    return { type: 'pct', discount: round2(subtotal * fraction), fraction };
+  }
+
+  /**
+   * Omschrijving van de kortingsregel: het woord, het percentage (alleen bij een percentage) en het bijschrift.
+   * @param {object} totals De uitkomst van totals().
+   * @param {string} word Het woord voor korting in de taal van het document.
+   * @param {string} percentText Het percentage zoals het getoond wordt (bijv. "5").
+   * @returns {string} Bijvoorbeeld "Korting 5% – seizoensactie" of "Korting – klant sinds 2015".
+   */
+  function discountCaption(totals, word, percentText) {
+    const percent = totals.discountType === 'amount' ? '' : ` ${percentText}%`;
+    return `${word}${percent}${totals.discountNote ? ` – ${totals.discountNote}` : ''}`;
+  }
+
+  /**
    * Totalen: subtotaal, korting (naar rato), btw per tarief, eindbedrag en
    * de omzet per categorie (excl. btw, na korting; voor de boekhouding).
-   * @param {object} invoice Factuurgegevens (lines, discountPct).
+   * @param {object} invoice Factuurgegevens (lines, discountType, discountPct, discountAmount).
    * @param {object} [settings] Factuurinstellingen (voor de categorieën).
-   * @returns {object} { subtotal, discountPct, discount, net, vat, vatTotal, total, categories }.
+   * @returns {object} { subtotal, discountType, discountPct, discountAmount, discountNote, discount, net, vat, vatTotal, total, categories }.
    */
   function totals(invoice, settings = null) {
     const lines = (invoice && invoice.lines) || [];
-    const discountFraction = clampNumber(invoice && invoice.discountPct, 0, 100) / 100;
     let subtotal = 0;
+    for (const line of lines) subtotal += lineTotal(line);
+    subtotal = round2(subtotal);
+    const { type, discount, fraction } = discountOf(invoice, subtotal);
     const bases = new Map();
     const categoryTotals = new Map();
     for (const line of lines) {
       const amount = lineTotal(line);
-      subtotal += amount;
       const rate = Number(line.vat) || 0;
-      bases.set(rate, (bases.get(rate) || 0) + amount * (1 - discountFraction));
+      bases.set(rate, (bases.get(rate) || 0) + amount * (1 - fraction));
       const category = categoryOf(line, settings);
       const entry = categoryTotals.get(category.key) || { ...category, base: 0 };
-      entry.base += amount * (1 - discountFraction);
+      entry.base += amount * (1 - fraction);
       categoryTotals.set(category.key, entry);
     }
-    subtotal = round2(subtotal);
-    const discount = round2(subtotal * discountFraction);
     const net = round2(subtotal - discount);
     const vat = [...bases.entries()].sort((left, right) => right[0] - left[0])
       .map(([rate, base]) => ({ rate, base: round2(base), amount: round2((base * rate) / 100) }));
     const vatTotal = round2(vat.reduce((sum, entry) => sum + entry.amount, 0));
     const categories = [...categoryTotals.values()].map((category) => ({ ...category, base: round2(category.base), vatAmount: round2((category.base * category.rate) / 100) }))
       .sort((left, right) => left.key.localeCompare(right.key));
-    return { subtotal, discountPct: round2(discountFraction * 100), discount, net, vat, vatTotal, total: round2(net + vatTotal), categories };
+    return {
+      subtotal, discountType: type, discountPct: round2(fraction * 100), discountAmount: type === 'amount' ? Math.abs(discount) : 0,
+      discountNote: String((invoice && invoice.discountNote) || ''), discount, net, vat, vatTotal, total: round2(net + vatTotal), categories,
+    };
   }
 
   /**
@@ -415,7 +450,10 @@
         reference: data.title || '',
         notes: shift ? `BTW verlegd naar afnemer${shift.number ? ` (btw-nummer ${shift.number})` : ''}; intracommunautaire levering.` : '',
         customer: { name: customer.name, contact: customer.contact, address: customer.address, email: customer.email, phone: customer.phone, vatNumber: shift ? shift.number : '' },
+        discountType: quoteData ? quoteData.discountType : 'pct',
         discountPct: quoteData ? quoteData.discountPct : 0,
+        discountAmount: quoteData ? quoteData.discountAmount : 0,
+        discountNote: quoteData ? quoteData.discountNote : '',
         // De betaaltermijn die op de offerte stond (de termijn van de klant), voor de vervaldatum.
         paymentDays: quoteData ? quoteData.paymentDays : null,
         language: quoteData ? quoteData.language : 'nl',
@@ -454,7 +492,7 @@
   const api = {
     STATUSES, KINDS, GROUPS, VAT_RATES, RATE_NAMES, SECTION_GROUP, MAX_LINES,
     today, addDays, isDate, round2, catKey, sanitizeSettings, categoryOf, sanitizeLine, sanitize, lineTotal, totals,
-    paymentText, creditOf, fromWorkOrder, exportRows, sanitizeShopOrders, fillText, SHOP_STATUSES, DEFAULT_SUBJECT, DEFAULT_MAIL,
+    paymentText, discountOf, discountCaption, creditOf, fromWorkOrder, exportRows, sanitizeShopOrders, fillText, SHOP_STATUSES, DEFAULT_SUBJECT, DEFAULT_MAIL,
   };
   root.InvoiceCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
