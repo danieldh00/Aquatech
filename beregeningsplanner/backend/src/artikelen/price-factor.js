@@ -343,18 +343,24 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
   function reject(tenantId, requested, userId) {
     const current = new Map(rowsOf(tenantId).map((row) => [row.id, row]));
     const timestamp = new Date().toISOString();
-    let rejected = 0;
+    const accepted = new Map();
     let skipped = 0;
+    for (const entry of requested) {
+      const row = current.get(String(entry && entry.id));
+      if (!row || !row.changed || row.costPrice === null || !(Math.abs(Number(entry.newPrice) - row.newPrice) < 0.005)) { skipped += 1; continue; }
+      accepted.set(row.id, row);
+    }
+    const rows = [...accepted.values()];
+    // Eerst alle oude afwijzingen in blokken wissen, dan in blokken van 500 in één statement vastleggen (geen rondgang per artikel).
     transaction(db, () => {
-      for (const entry of requested) {
-        const row = current.get(String(entry && entry.id));
-        if (!row || !row.changed || row.costPrice === null || !(Math.abs(Number(entry.newPrice) - row.newPrice) < 0.005)) { skipped += 1; continue; }
-        forget(tenantId, [row.id]);
-        db.prepare('INSERT INTO price_proposal_rejections (id, tenant_id, item_id, cost_price, proposed_price, rejected_by, rejected_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(crypto.randomUUID(), tenantId, row.id, row.costPrice, row.newPrice, userId || null, timestamp);
-        rejected += 1;
+      forget(tenantId, rows.map((row) => row.id));
+      for (let start = 0; start < rows.length; start += 500) {
+        const chunk = rows.slice(start, start + 500);
+        db.prepare(`INSERT INTO price_proposal_rejections (id, tenant_id, item_id, cost_price, proposed_price, rejected_by, rejected_at) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')}`)
+          .run(...chunk.flatMap((row) => [crypto.randomUUID(), tenantId, row.id, row.costPrice, row.newPrice, userId || null, timestamp]));
       }
     });
+    const rejected = rows.length;
     return { rejected, skipped };
   }
 
