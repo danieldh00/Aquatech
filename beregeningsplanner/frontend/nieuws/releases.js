@@ -13,7 +13,7 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.10.10',
+      version: '1.11.0',
       date: '2026-11-12',
       title: 'Inkooporders',
       items: [

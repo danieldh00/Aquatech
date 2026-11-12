@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.10.10
+## 1.11.0
 
 Inkooporders (punt 17 van bundel F, deel 3). Migratie 61.
 
