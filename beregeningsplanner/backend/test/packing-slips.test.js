@@ -204,6 +204,11 @@ test('Te picken: een online bestelling staat er pas bij als hij betaald is (filt
   };
   setOnline(open.id, 'open');
   setOnline(paid.id, 'betaald');
+  const refused = await admin.post(`/app/api/admin/web-orders/${open.id}/packing-slip`, {});
+  assert.strictEqual(refused.status, 409, 'een onbetaalde online bestelling krijgt geen pakbon');
+  assert.match(refused.body.message, /Nog niet betaald/);
+  assert.strictEqual((await admin.post('/app/api/admin/web-orders/packing-slips', { ids: [open.id, paid.id] })).status, 409);
+  assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${paid.id}/packing-slip`, {})).status, 200);
   assert.deepStrictEqual((await admin.get('/app/api/admin/web-orders/to-pick')).body.items.map((item) => item.id), [paid.id]);
   setOnline(open.id, 'betaald');
   assert.strictEqual((await admin.get('/app/api/admin/web-orders/to-pick')).body.items.length, 2);

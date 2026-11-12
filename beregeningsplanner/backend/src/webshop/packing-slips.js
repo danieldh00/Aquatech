@@ -283,6 +283,9 @@ function createPackingSlips(db, { orders, settingsFor, colorsOf = () => ({}) }) 
     if (ids.length > MAX_SLIPS) return { error: `Hoogstens ${MAX_SLIPS} pakbonnen tegelijk.`, status: 400 };
     const found = orders.getMany(tenantId, ids).filter((order) => order.status !== 'geannuleerd');
     if (!found.length) return { error: 'Geen bestelling gevonden om een pakbon van te maken.', status: 404 };
+    // Een nieuwe online bestelling die nog niet betaald is wordt niet gepickt: geen pakbon tot de betaling binnen is.
+    const unpaid = found.filter((order) => order.status === 'nieuw' && !orders.pickable(order));
+    if (unpaid.length) return { error: `Nog niet betaald, dus nog geen pakbon: ${unpaid.map((order) => order.number).join(', ')}.`, status: 409 };
     const settings = settingsFor(tenantId);
     const pdf = packingSlipsPdf(found, { profile: settings.get('quoteProfile'), colors: colorsOf(tenantId), locations: locationsOf(tenantId, found) });
     if (markPrinted) orders.markPackingSlipsPrinted(tenantId, found.map((order) => order.id), user ? user.display_name || user.displayName || '' : '');
