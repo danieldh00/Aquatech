@@ -325,8 +325,8 @@
     const body = { ...bodyOf(), receiveNow: true };
     if (!body.lines.length) { $('#order-form .err').textContent = 'Er staan geen regels op de order.'; return; }
     // Een prijs die niet op het document stond raden we niet: de ontvangst zou er een kostprijs aan overhouden.
-    if (state.imported && body.lines.some((line) => line.unitCost === '' || line.unitCost == null)) {
-      $('#order-form .err').textContent = 'Vul bij elke regel de inkoopprijs in voordat je inboekt (op het document stond bij sommige regels geen prijs). Of bewaar eerst als concept.';
+    if (body.lines.some((line) => line.unitCost === '' || line.unitCost == null)) {
+      $('#order-form .err').textContent = 'Vul bij elke regel de inkoopprijs in voordat je inboekt (staat er geen prijs op het document, dan kun je het ook eerst als concept bewaren).';
       return;
     }
     await run('Order aangemaakt en ingeboekt, de voorraad is bijgewerkt', () => context.api('purchase-orders', { method: 'POST', body }));

@@ -453,6 +453,8 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
   function createReceived(tenantId, user, raw) {
     const checked = sanitizeOrder(raw);
     if (checked.error) return checked;
+    // Direct inboeken legt de kostprijs vast: een prijs die niemand heeft ingevuld of gezien wordt niet geraden.
+    if (checked.value.lines.some((line) => line.unitCost == null)) return { error: 'Vul bij elke regel de inkoopprijs in om direct in te boeken.', field: 'unitCost', status: 400 };
     // Een teruggegeven fout rolt de transactie niet terug: daarom wordt hij binnen gegooid (alles terug) en buiten weer teruggegeven.
     try {
       return transaction(db, () => {
