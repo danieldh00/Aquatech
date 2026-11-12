@@ -510,6 +510,8 @@ function createStore(db) {
     let username = `klant-${crypto.randomBytes(4).toString('hex')}`;
     while (usernameTaken(tenantId, username)) username = `klant-${crypto.randomBytes(4).toString('hex')}`;
     return transaction(db, () => {
+      // Opnieuw binnen de transactie: twee gelijktijdige aanmaken met hetzelfde adres leveren hoogstens één klant op.
+      if (email && accountIdsByEmail(tenantId, email).length) return { error: 'Er bestaat al een klant met dit e-mailadres.', field: 'email' };
       const user = insertUser(tenantId, { username, displayName, role, kind: 'account' });
       prepare("UPDATE users SET customer_group = ?, business_request = '' WHERE tenant_id = ? AND id = ?").run(input.business ? 'zakelijk' : '', tenantId, user.id);
       if (input.business) saveBusinessProfile(tenantId, user.id, input.business);
@@ -685,6 +687,14 @@ function createStore(db) {
     const losesPlatform = user.platform_admin && !user.disabled && (losesAdmin || input.disabled || input.platformAdmin === false);
     if (losesPlatform && countPlatformAdmins() <= 1) {
       return { error: 'Dit is de enige actieve hoofdbeheerder. Maak eerst een andere hoofdbeheerder aan.', status: 409 };
+    }
+    // Een e-mailadres hoort bij hoogstens één actief account: ook via de klantkaart of het opnieuw inschakelen van een uitgeschakeld account.
+    const contactEmail = input.contact && input.contact.email !== undefined ? String(input.contact.email || '').trim().toLowerCase() : null;
+    if (contactEmail && accountIdsByEmail(tenantId, contactEmail).some((otherId) => otherId !== user.id)) return { error: 'Er is al een account met dit e-mailadres.', field: 'email', status: 409 };
+    if (input.disabled === false || input.disabled === 0) {
+      const ownEmail = (prepare('SELECT email FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, user.id) || {}).email;
+      const nowEmail = contactEmail !== null ? contactEmail : ownEmail;
+      if (nowEmail && accountIdsByEmail(tenantId, nowEmail).some((otherId) => otherId !== user.id)) return { error: 'Er is al een actief account met het e-mailadres van dit account. Wijzig eerst het e-mailadres.', field: 'email', status: 409 };
     }
     if (input.displayName !== undefined) prepare('UPDATE users SET display_name = ? WHERE id = ?').run(String(input.displayName).trim() || user.username, user.id);
     if (input.role !== undefined) prepare('UPDATE users SET role = ? WHERE id = ?').run(input.role, user.id);
