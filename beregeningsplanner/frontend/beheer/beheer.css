@@ -254,3 +254,8 @@ dl.kv dd { margin: 0; }
 .ai-guide ol { margin: 4px 0 10px; padding-left: 20px; }
 .ai-guide li { margin: 0 0 4px; }
 .ai-guide p { margin: 8px 0 4px; }
+
+/* Etiketsjablonen: naam breder, vinkjes compact op één regel. */
+.card-form.settings .label-template .row > label.grow { flex: 2 1 260px; }
+.card-form.settings .label-template .row > label.chk { flex: 0 0 auto; }
+.label-template [data-remove-label] { margin-left: auto; }

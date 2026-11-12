@@ -967,6 +967,11 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE users ADD COLUMN document_language ${TEXT_TYPE} NOT NULL DEFAULT 'nl';
   `,
+  // 59: EAN per artikel (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN ean ${TEXT_TYPE};
+  CREATE UNIQUE INDEX stock_items_ean ON stock_items (tenant_id, ean) WHERE ean IS NOT NULL;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

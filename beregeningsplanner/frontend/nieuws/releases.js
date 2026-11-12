@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.10.9',
+      date: '2026-11-12',
+      title: 'Etiketten met streepjescode',
+      items: [
+        { text: 'Bij een artikel kun je nu de EAN (de streepjescode van de fabrikant) invullen en etiketten afdrukken: open het artikel, kies bij Etiketten het sjabloon en het aantal en druk de PDF af op je labelprinter (bijvoorbeeld Zebra). Zonder EAN krijgt het etiket de artikelcode als streepjescode.', for: ['voorraad'] },
+        { text: 'De etiketformaten en wat erop staat (omschrijving, artikelcode, prijs) stel je in bij Beheer → Instellingen → Artikelen: etiketten.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.10.7',
       date: '2026-11-12',
       title: 'Vragen stellen aan AquaTech via Claude of ChatGPT',

@@ -843,7 +843,7 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
     const short = codes[0];
     const imported = stock.importCatalog(tenantId, admin, codes.filter((code) => code !== skip));
     if (imported.error) throw new Error(`Testdata: voorraad mislukt (${imported.error})`);
-    const own = stock.create(tenantId, admin, { code: 'EIGEN-ZAND', name: 'Straatzand (big bag, eigen inkoop)', unit: 'zak', location: 'Buitenterrein', minQty: 2, costPrice: 42.5, onHand: 5 }, { resync: false });
+    const own = stock.create(tenantId, admin, { code: 'EIGEN-ZAND', name: 'Straatzand (big bag, eigen inkoop)', unit: 'zak', location: 'Buitenterrein', minQty: 2, costPrice: 42.5, onHand: 5, ean: '8712345678906' }, { resync: false });
     if (own.error) throw new Error(`Testdata: voorraadartikel mislukt (${own.error})`);
     // Eigen eenheid naast de standaardeenheden (de lijst is voor het eerst gevuld bij het artikel hierboven).
     stock.addUnit(tenantId, 'big bag');

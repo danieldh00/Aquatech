@@ -513,7 +513,7 @@
           code: formElement.code.value, name: formElement.name.value, unit: formElement.unit.value, location: formElement.location.value,
           onHand: num(formElement.onHand.value), minQty: num(formElement.minQty.value), reorderQty: num(formElement.reorderQty.value), costPrice: num(formElement.costPrice.value),
           salePrice: num(formElement.salePrice.value), vatRate: Number(formElement.vatRate.value), weightGrams: num(formElement.weightGrams.value), businessPrice: num(formElement.businessPrice.value), revenueGroup: formElement.revenueGroup.value, shopSync: formElement.shopSync.checked,
-          packSize: num(formElement.packSize.value), orderMinQty: num(formElement.orderMinQty.value), priceTiers: parseTiers(formElement.priceTiers.value), unitContent: num(formElement.unitContent.value),
+          packSize: num(formElement.packSize.value), orderMinQty: num(formElement.orderMinQty.value), priceTiers: parseTiers(formElement.priceTiers.value), unitContent: num(formElement.unitContent.value), ean: formElement.ean.value,
         } });
         formElement.hidden = true;
         toast(`${item.code} toegevoegd`);
@@ -639,6 +639,7 @@
     formElement.shopSync.checked = item.shopSync;
     formElement.packSize.value = item.packSize > 1 ? item.packSize : '';
     formElement.unitContent.value = item.unitContent == null ? '' : item.unitContent;
+    formElement.ean.value = item.ean || '';
     formElement.orderMinQty.value = item.orderMinQty > 1 ? item.orderMinQty : '';
     formElement.priceTiers.value = tiersText(item.priceTiers);
     renderDetails(formElement, item);
@@ -651,6 +652,8 @@
     $('#d-restore').hidden = !item.archived;
     $('#move-form').hidden = item.archived || item.hasVariants;
     $('#d-parent-note').hidden = !item.hasVariants;
+    $('#d-labels').hidden = item.hasVariants || item.archived;
+    if (!$('#d-labels').hidden) window.ItemLabels.attach($('#labels-form'), $('#l-preview'), $('#l-err'), () => state.item);
     $('#d-publish').hidden = Boolean(item.shop.productId || !item.shopSync || item.parentId || item.archived);
     $('#d-res-card').hidden = item.hasVariants;
     $('#d-moves-card').hidden = item.hasVariants;
@@ -1032,7 +1035,7 @@
           code: editForm.code.value, name: editForm.name.value, unit: editForm.unit.value, location: editForm.location.value, notes: editForm.notes.value,
           minQty: num(editForm.minQty.value), reorderQty: num(editForm.reorderQty.value), costPrice: num(editForm.costPrice.value),
           salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), weightGrams: num(editForm.weightGrams.value), businessPrice: num(editForm.businessPrice.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
-          packSize: num(editForm.packSize.value), orderMinQty: num(editForm.orderMinQty.value), priceTiers: parseTiers(editForm.priceTiers.value), unitContent: num(editForm.unitContent.value),
+          packSize: num(editForm.packSize.value), orderMinQty: num(editForm.orderMinQty.value), priceTiers: parseTiers(editForm.priceTiers.value), unitContent: num(editForm.unitContent.value), ean: editForm.ean.value,
           description: editForm.description.value, specifications: editForm.specifications.value,
         } }) };
         toast('Opgeslagen');

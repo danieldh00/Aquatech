@@ -55,6 +55,7 @@ const { createOutsourcingStore, registerOutsourcingRoutes } = require('./uitvoer
 const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uitvoering/season-reminders');
 const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
+const { registerLabelRoutes } = require('./artikelen/labels');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
 const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
@@ -2230,6 +2231,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       audit,
     }),
   });
+
+  // Etiketten met streepjescode: sjablonen en een PDF op het etiketformaat (zie labels.js).
+  registerLabelRoutes(app, { db: database, requireRight, audit, settingsOf: (req) => settingsFor(req.tenantId),
+    limiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `etiketten:${req.tenantId}|${req.user ? req.user.id : ''}` }) });
 
   // Afbeeldingen bij artikelen: uploaden, verwijderen en overnemen uit de oude webshop (zie item-images.js).
   registerItemImageRoutes(app, { images: itemImageStore, requireRight, requireJson, audit,

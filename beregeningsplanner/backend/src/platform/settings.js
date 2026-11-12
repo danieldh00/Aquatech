@@ -9,6 +9,7 @@ const { sanitizeOutsourcing } = require('../uitvoering/outsourcing');
 const { sanitizeInvoicing } = require('../verkoop/invoices');
 const { sanitizeSeasonReminders } = require('../uitvoering/season-reminders');
 const { sanitizeVisma, sanitizeVismaApp } = require('../verkoop/visma');
+const { sanitizeLabelTemplates } = require('../artikelen/labels');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
@@ -94,6 +95,8 @@ const FIELDS = {
   // Seizoensherinneringen voor klanten (season-reminders.js): aan/uit, adres
   // van het klantportaal voor de knop in de mail, en de herinneringen.
   seasonReminders: { type: 'object', default: {}, sanitize: sanitizeSeasonReminders, liveOnly: true },
+  // Sjablonen voor etiketten met streepjescode (Artikelen > Etiket afdrukken; artikelen/labels.js), per omgeving.
+  labelTemplates: { type: 'object', default: {}, sanitize: sanitizeLabelTemplates },
   // Kleurthema (shared/theme.js): per organisatie te kiezen in Beheer > Kleuren (eigen
   // scherm met contrastcontrole, platform: niet via Beheer > Instellingen). In de hoofdtenant
   // geldt het voor alle organisaties zonder eigen thema, in een live-tenant als eigen thema.
