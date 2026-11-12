@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.11.9',
+      date: '2026-11-12',
+      title: 'Kortingen per productcategorie voor zakelijke klanten',
+      items: [
+        { text: 'Onder Beheer > Webshop > Zakelijke kortingen geef je zakelijke klanten een korting op een hele productcategorie. De prijzen in de webshop, de winkelwagen, de bestelling en de factuur volgen. Een artikel met een eigen zakelijke prijs houdt die prijs; bij groothandelsklanten telt de hoogste korting.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.11.8',
       date: '2026-11-12',
       title: 'Versie en releasenotes worden automatisch bijgewerkt',
