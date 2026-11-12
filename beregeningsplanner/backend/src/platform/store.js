@@ -510,7 +510,7 @@ function createStore(db) {
     let username = `klant-${crypto.randomBytes(4).toString('hex')}`;
     while (usernameTaken(tenantId, username)) username = `klant-${crypto.randomBytes(4).toString('hex')}`;
     return transaction(db, () => {
-      // Opnieuw binnen de transactie: twee gelijktijdige aanmaken met hetzelfde adres leveren hoogstens één klant op.
+      // Opnieuw binnen de transactie als vangnet: controle en opslaan horen bij elkaar.
       if (email && accountIdsByEmail(tenantId, email).length) return { error: 'Er bestaat al een klant met dit e-mailadres.', field: 'email' };
       const user = insertUser(tenantId, { username, displayName, role, kind: 'account' });
       prepare("UPDATE users SET customer_group = ?, business_request = '' WHERE tenant_id = ? AND id = ?").run(input.business ? 'zakelijk' : '', tenantId, user.id);
@@ -717,7 +717,8 @@ function createStore(db) {
     if (input.documentLanguage !== undefined) prepare('UPDATE users SET document_language = ? WHERE tenant_id = ? AND id = ?').run(DocText.clean(input.documentLanguage), tenantId, user.id);
     if (input.customerGroup === '') prepare('UPDATE users SET wholesale = 0, wholesale_discount = 0 WHERE tenant_id = ? AND id = ?').run(tenantId, user.id);
     if (input.business !== undefined) saveBusinessProfile(tenantId, user.id, input.business);
-    if (input.contact !== undefined) saveContact(tenantId, user.id, input.contact);
+    // Het adres wordt opgeslagen zoals de controle het zocht: zonder spaties en in kleine letters.
+    if (input.contact !== undefined) saveContact(tenantId, user.id, contactEmail === null ? input.contact : { ...input.contact, email: contactEmail });
     const newHash = input.password !== undefined ? await hashPassword(input.password) : null;
     if (newHash) prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
     // Nieuw wachtwoord of uitgeschakeld: op alle toestellen uitgelogd.

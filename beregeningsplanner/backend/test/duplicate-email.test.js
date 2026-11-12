@@ -29,7 +29,9 @@ test('e-mailadres: wijzigen naar het adres van een ander actief account wordt ge
   assert.strictEqual(store.getUser(second.id).email, 'anders@voorbeeld.nl');
   // Het eigen adres opnieuw opslaan mag, een vrij adres ook.
   assert.ok((await store.updateAccount(main, first.id, { contact: { email: 'dubbel@voorbeeld.nl', phone: '0612345678' } })).user);
-  assert.ok((await store.updateAccount(main, second.id, { contact: { email: 'vrij@voorbeeld.nl' } })).user);
+  // Het adres wordt genormaliseerd opgeslagen, zodat de controle het terugvindt.
+  assert.ok((await store.updateAccount(main, second.id, { contact: { email: ' Vrij@Voorbeeld.nl ' } })).user);
+  assert.strictEqual(store.getUser(second.id).email, 'vrij@voorbeeld.nl');
 });
 
 test('e-mailadres: een uitgeschakeld account kan niet worden ingeschakeld naast een actief account met hetzelfde adres', async () => {
@@ -51,7 +53,7 @@ test('e-mailadres: een uitgeschakeld account kan niet worden ingeschakeld naast 
   assert.ok((await store.updateAccount(main, old.id, { disabled: false, contact: { email: 'oud@voorbeeld.nl' } })).user);
 });
 
-test('e-mailadres: twee klanten met hetzelfde adres kort na elkaar aanmaken geeft er één', async () => {
+test('e-mailadres: twee klanten met hetzelfde adres na elkaar aanmaken geeft er één', async () => {
   const { store, main } = await setup();
   const results = [store.createCustomer(main, { displayName: 'A', email: 'race@voorbeeld.nl' }), store.createCustomer(main, { displayName: 'B', email: 'RACE@voorbeeld.nl' })];
   assert.strictEqual(results.filter((result) => result.user).length, 1);
