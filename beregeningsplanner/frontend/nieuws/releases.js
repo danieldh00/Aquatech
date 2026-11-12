@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.12.9',
+      date: '2026-11-12',
+      title: 'Dropshipping met de eigen pakbon van de klant',
+      items: [
+        { text: 'Klanten van de webshop kunnen een bestelling als dropshipping plaatsen: we bezorgen rechtstreeks bij hun eigen klant. Ze geven een e-mailadres op voor het afleverbewijs en uploaden na het bestellen hun eigen pakbon (PDF) op de pagina van de bestelling.' },
+        { text: 'Bij een dropshippingbestelling komt de pakbon van de klant in *Te picken* en *Alles afdrukken* in plaats van onze eigen pakbon (met het bestelnummer erop). Zonder geüploade pakbon staat de bestelling niet in de lijst, maar wel in een melding erboven.', for: ['beheer'] },
+        { text: 'De verzendmail met de volgcode gaat bij dropshipping ook naar het e-mailadres voor het afleverbewijs.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.12.8',
       date: '2026-11-12',
       title: 'Klant zonder KvK-nummer en buitenlandse klant',
