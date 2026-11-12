@@ -290,7 +290,7 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
     let skipped = 0;
     for (const entry of requested) {
       const row = current.get(String(entry && entry.id));
-      if (!row || !row.changed || Math.abs(Number(entry.newPrice) - row.newPrice) >= 0.005) { skipped += 1; continue; }
+      if (!row || !row.changed || !(Math.abs(Number(entry.newPrice) - row.newPrice) < 0.005)) { skipped += 1; continue; }
       changes.push({ id: row.id, salePrice: row.newPrice });
     }
     if (changes.length) stock.setSalePrices(tenantId, changes);

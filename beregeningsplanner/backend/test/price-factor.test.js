@@ -139,6 +139,8 @@ test('prijsfactor: instellen, rechten en scheiding tussen organisaties', async (
   assert.deepStrictEqual(foreign.body.suppliers, []);
   assert.strictEqual((await vreemd.put('/app/api/stock/price-factors', { suppliers: [{ supplierId: supplier.id, factor: 2 }] })).status, 400);
   assert.strictEqual((await admin.post('/app/api/stock/price-factors/apply', {})).status, 400);
+  // Een ontbrekende of niet-numerieke prijs bewijst niets en wordt overgeslagen, nooit doorgevoerd.
+  assert.deepStrictEqual((await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: 'x' }, { id: 'y', newPrice: 'abc' }, { id: 'z', newPrice: null }] })).body, { updated: 0, skipped: 3 });
 });
 
 test('prijsfactor: prijs bij opslaan, voorbeeld en doorvoeren met alle niveaus', async () => {
@@ -199,6 +201,8 @@ test('prijsfactor: prijs bij opslaan, voorbeeld en doorvoeren met alle niveaus',
   // Doorvoeren: kies er twee; een verouderde prijs (instelling intussen anders) wordt overgeslagen, niet toegepast.
   const apply = await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: viaCategory.id, newPrice: 19.95 }, { id: viaSupplier.id, newPrice: 11.11 }, { id: fixed.id, newPrice: 1 }, { id: 'bestaat-niet', newPrice: 1 }] });
   assert.deepStrictEqual(apply.body, { updated: 1, skipped: 3 });
+  const noPrice = await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: viaSupplier.id }, { id: viaSupplier.id, newPrice: 'abc' }] });
+  assert.deepStrictEqual(noPrice.body, { updated: 0, skipped: 2 });
   assert.strictEqual((await admin.get(`/app/api/stock/items/${viaCategory.id}`)).body.salePrice, 19.95);
   assert.strictEqual((await admin.get(`/app/api/stock/items/${viaSupplier.id}`)).body.salePrice, 17.95, 'verouderde prijs uit het voorbeeld is niet toegepast');
   assert.strictEqual((await admin.get(`/app/api/stock/items/${fixed.id}`)).body.salePrice, 99, 'een vast artikel verandert nooit');
