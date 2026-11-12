@@ -75,6 +75,9 @@ test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', as
   const bomb = zlib.deflateSync(Buffer.alloc(200 * 1024 * 1024), { level: 9 });
   assert.ok(bomb.length < MAX_SLIP_BYTES, 'de bom zelf is klein genoeg om te uploaden');
   const pdf = Buffer.concat([base, Buffer.from(`\n99 0 obj\n<< /Type /ObjStm /N 1 /First 5 /Filter /FlateDecode /Length ${bomb.length} >>\nstream\n`), bomb, Buffer.from('\nendstream\nendobj\n')]);
+  // Ook als het filter ver vóór de stream staat (veel opvulling in het woordenboek) wordt de bom herkend.
+  const padded = Buffer.concat([base, Buffer.from(`\n98 0 obj\n<< /Type /ObjStm /N 1 /First 5 /Filter /FlateDecode /Pad (${'x'.repeat(4000)}) /Length ${bomb.length} >>\nstream\n`), bomb, Buffer.from('\nendstream\nendobj\n')]);
+  assert.match((await inspectSlip(padded)).error, /te groot als hij wordt uitgepakt/);
   const started = Date.now();
   const result = await inspectSlip(pdf);
   assert.match(result.error, /te groot als hij wordt uitgepakt/);

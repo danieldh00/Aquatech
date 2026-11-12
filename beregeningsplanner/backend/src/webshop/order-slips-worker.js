@@ -16,7 +16,7 @@ const MAX_STREAM_BYTES = 40 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 80 * 1024 * 1024;
 
 /**
- * Pakt elke gecomprimeerde stream van de PDF begrensd uit om een decompressiebom te herkennen vóór pdf-lib de PDF leest.
+ * Probeert elke stream van de PDF begrensd uit te pakken (zonder op het woordenboek van de stream te vertrouwen, dat is te omzeilen) om een decompressiebom te herkennen vóór pdf-lib de PDF leest.
  * @param {Buffer} buffer De PDF.
  * @returns {boolean} true als alle streams binnen de grenzen blijven (beschadigde streams telt pdf-lib zelf).
  */
@@ -28,9 +28,6 @@ function streamsWithinLimits(buffer) {
     if (start < 0) return true;
     position = start + 6;
     if (buffer.subarray(Math.max(0, start - 3), start).toString('latin1') === 'end') continue;
-    const dictionary = buffer.subarray(Math.max(0, start - 1500), start).toString('latin1');
-    const dictionaryStart = dictionary.lastIndexOf('obj');
-    if (!/FlateDecode|\/Fl\b/.test(dictionary.slice(Math.max(0, dictionaryStart)))) continue;
     let dataStart = position;
     if (buffer[dataStart] === 0x0d) dataStart += 1;
     if (buffer[dataStart] === 0x0a) dataStart += 1;
