@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.2
+
+Verpakkingseenheden per artikel (punt 1, deel A: opslag en artikelscherm; de winkel volgt in deel B). Migratie 63: tabel `item_packagings`.
+
+- **Verpakkingen** (`artikelen/packagings.js`, recht `voorraad`): naast de basiseenheid kan een artikel in een doos of pallet worden verkocht. Een verpakking heeft een korte code (bijvoorbeeld `PAL`, uniek per artikel), een naam, het aantal basiseenheden (`factor`, heel getal vanaf 2), een eigen prijs en zakelijke prijs (excl. btw; leeg = aantal × de prijs van het artikel), een eigen EAN en een doelgroep (*iedereen*, *zakelijk*, *groothandel*; `visibleFor`). De voorraad blijft in de basiseenheid. Hoogstens tien per artikel.
+- `GET|PUT /api/stock/items/:id/packagings` (de lijst wordt in zijn geheel vervangen, alles of niets). De EAN is uniek binnen de organisatie over artikelen én verpakkingen heen (409 met de artikelcode); een hoofdartikel heeft geen verpakkingen (ze verdwijnen zodra een artikel een hoofdartikel wordt of wordt verwijderd). Audit `artikel_verpakkingen_gewijzigd`.
+- Artikel openen → blok *Verpakkingen*.
+- Testdata: Straatzand heeft een pallet (zakelijk) en een duo-pak.
+
 ## 1.11.1
 
 Etiketten met streepjescode (item 20). Migratie 62: kolom `stock_items.ean` met unieke index `(tenant_id, ean)` (alleen gevuld).

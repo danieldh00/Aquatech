@@ -57,6 +57,7 @@ const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
 const { registerLabelRoutes } = require('./artikelen/labels');
 const { createSupplierStore, registerSupplierRoutes } = require('./artikelen/suppliers');
+const { createPackagingStore, registerPackagingRoutes } = require('./artikelen/packagings');
 const { createPurchaseOrderStore, registerPurchaseOrderRoutes } = require('./artikelen/purchase-orders');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
@@ -1949,6 +1950,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const stockStore = createStockStore(database);
   const itemImageStore = createItemImageStore(database, { vault, fetchImpl: imageFetch });
   const supplierStore = createSupplierStore(database);
+  const packagingStore = createPackagingStore(database);
   const purchaseOrderStore = createPurchaseOrderStore(database, { stock: stockStore, suppliers: supplierStore });
   // Prijs en voorraad in twee richtingen met de webshop (shop-sync.js); na een
   // wijziging gaan de gewijzigde artikelen enkele seconden later mee.
@@ -2244,6 +2246,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Leveranciers en welke leverancier welk artikel levert (zie suppliers.js).
   registerSupplierRoutes(app, { suppliers: supplierStore, requireRight, requireJson, audit });
+  // Verpakkingseenheden per artikel (zie packagings.js).
+  registerPackagingRoutes(app, { packagings: packagingStore, requireRight, requireJson, audit });
   registerPurchaseOrderRoutes(app, { purchaseOrders: purchaseOrderStore, requireRight, requireJson, audit });
 
   // Afbeeldingen bij artikelen: uploaden, verwijderen en overnemen uit de oude webshop (zie item-images.js).
@@ -2628,7 +2632,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, suppliers: supplierStore, purchaseOrders: purchaseOrderStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, settings: settingsFor(tenantRow.id) },
+      { db: database, quotes: quoteStore, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, suppliers: supplierStore, packagings: packagingStore, purchaseOrders: purchaseOrderStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, settings: settingsFor(tenantRow.id) },
       testSet, { users: out.byKey, quoteIds: out.quoteIds, tenantId: tenantRow.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );
