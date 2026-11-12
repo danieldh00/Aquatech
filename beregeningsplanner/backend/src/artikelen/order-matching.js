@@ -29,8 +29,16 @@ const wordsOf = (value) => new Set(normalize(value).split(' ').filter(Boolean));
  * @returns {number} De gelijkenis.
  */
 function similarity(left, right) {
-  const leftWords = wordsOf(left);
-  const rightWords = wordsOf(right);
+  return overlap(wordsOf(left), wordsOf(right));
+}
+
+/**
+ * Gelijkenis van twee woordensets (gedeelde woorden gedeeld door alle woorden).
+ * @param {Set<string>} leftWords De ene set.
+ * @param {Set<string>} rightWords De andere set.
+ * @returns {number} De gelijkenis (0 tot 1).
+ */
+function overlap(leftWords, rightWords) {
   if (!leftWords.size || !rightWords.size) return 0;
   let shared = 0;
   for (const word of leftWords) if (rightWords.has(word)) shared += 1;
@@ -70,6 +78,8 @@ function matchLines(lines, items, skuToItem) {
     const key = normalize(item.name);
     if (key) itemsByName.set(key, itemsByName.has(key) ? null : item);
   }
+  // Woordenset per artikel één keer, niet per regel opnieuw.
+  const candidates = items.map((item) => ({ item, words: wordsOf(item.name) }));
   return lines.map((line) => {
     const skuKey = normalize(line.supplierSku);
     let item = null;
@@ -80,8 +90,9 @@ function matchLines(lines, items, skuToItem) {
       const named = itemsByName.get(normalize(line.description));
       if (named) { item = named; matchedBy = 'omschrijving'; }
     }
-    const ranked = items
-      .map((candidate) => ({ candidate, score: similarity(line.description, `${candidate.name}`) }))
+    const lineWords = wordsOf(line.description);
+    const ranked = candidates
+      .map((entry) => ({ candidate: entry.item, score: overlap(lineWords, entry.words) }))
       .filter((entry) => entry.score >= MIN_SIMILARITY)
       .sort((left, right) => right.score - left.score)
       .slice(0, SUGGESTIONS);

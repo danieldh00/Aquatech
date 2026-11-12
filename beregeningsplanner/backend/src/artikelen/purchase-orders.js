@@ -123,6 +123,18 @@ function totalOf(lines) {
   return total;
 }
 
+/** Een fout uit het direct inboeken van een order, gegooid om de transactie terug te draaien. */
+class ReceiveFailed extends Error {
+  /**
+   * Onthoudt de uitkomst die de aanroeper terugkrijgt.
+   * @param {{ error: string, field?: string, status?: number }} outcome De foutuitkomst om terug te geven.
+   */
+  constructor(outcome) {
+    super(outcome.error);
+    this.outcome = outcome;
+  }
+}
+
 /**
  * Maakt de opslag voor inkooporders.
  * @param {object} db De database.
@@ -441,14 +453,22 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
   function createReceived(tenantId, user, raw) {
     const checked = sanitizeOrder(raw);
     if (checked.error) return checked;
-    return transaction(db, () => {
-      const made = insertOrder(tenantId, user, checked.value);
-      if (made.error) return made;
-      if (!made.order.lines.length) return { error: 'Een order zonder regels is niet in te boeken.', field: 'lines', status: 409 };
-      const now = currentTimestamp();
-      prepare("UPDATE purchase_orders SET status = 'besteld', ordered_at = ?, updated_at = ? WHERE tenant_id = ? AND id = ?").run(now, now, tenantId, made.order.id);
-      return receiveRows(tenantId, findRow(tenantId, made.order.id), user, made.order.lines.map((line) => ({ lineId: line.id, qty: line.qty })));
-    });
+    // Een teruggegeven fout rolt de transactie niet terug: daarom wordt hij binnen gegooid (alles terug) en buiten weer teruggegeven.
+    try {
+      return transaction(db, () => {
+        const made = insertOrder(tenantId, user, checked.value);
+        if (made.error) throw new ReceiveFailed(made);
+        if (!made.order.lines.length) throw new ReceiveFailed({ error: 'Een order zonder regels is niet in te boeken.', field: 'lines', status: 409 });
+        const now = currentTimestamp();
+        prepare("UPDATE purchase_orders SET status = 'besteld', ordered_at = ?, updated_at = ? WHERE tenant_id = ? AND id = ?").run(now, now, tenantId, made.order.id);
+        const received = receiveRows(tenantId, findRow(tenantId, made.order.id), user, made.order.lines.map((line) => ({ lineId: line.id, qty: line.qty })));
+        if (received.error) throw new ReceiveFailed(received);
+        return received;
+      });
+    } catch (error) {
+      if (error instanceof ReceiveFailed) return error.outcome;
+      throw error;
+    }
   }
 
   /**

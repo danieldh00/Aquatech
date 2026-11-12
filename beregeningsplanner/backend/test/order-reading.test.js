@@ -101,6 +101,10 @@ test('inboeken: order direct ontvangen, alles of niets, en leveranciersnummers o
     assert.ok(bad.status >= 400 && bad.status < 500, JSON.stringify(bad.body));
     assert.strictEqual((await baas.get('/app/api/purchase-orders')).body.items.length, 0);
     assert.strictEqual((await baas.get(`/app/api/stock/items/${valve.id}`)).body.onHand, 0);
+    // Zonder regels mislukt het inboeken pas nadat de order is geschreven: die moet dan weer weg zijn.
+    const empty = await baas.post('/app/api/purchase-orders', { supplierId: supplier.id, receiveNow: true, lines: [] });
+    assert.strictEqual(empty.status, 409, JSON.stringify(empty.body));
+    assert.strictEqual((await baas.get('/app/api/purchase-orders?status=')).body.items.length, 0);
     const ok = await baas.post('/app/api/purchase-orders', { supplierId: supplier.id, receiveNow: true, rememberSkus: true, supplierReference: 'OB-77',
       lines: [{ itemId: valve.id, qty: 4, unitCost: 9, supplierSku: 'X-1' }, { itemId: pipe.id, qty: 50, unitCost: 1.4, supplierSku: 'TT-PIJP' }] });
     assert.strictEqual(ok.status, 201, JSON.stringify(ok.body));
