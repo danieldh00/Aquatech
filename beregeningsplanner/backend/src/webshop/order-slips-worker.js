@@ -28,7 +28,7 @@ const MAX_LAYERS = 4;
  */
 function usesUnsupportedFilter(buffer) {
   const text = buffer.toString('latin1');
-  for (const match of text.matchAll(/\/[^\s\/\[\]<>()%{}]{1,40}/g)) {
+  for (const match of text.matchAll(/\/[^\s\0\/\[\]<>()%{}]{1,40}/g)) {
     const name = match[0].slice(1).replace(/#([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
     if (UNSUPPORTED_FILTERS.has(name)) return true;
     if (name === 'Filter') {
