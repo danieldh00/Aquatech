@@ -39,7 +39,7 @@ async function setup(document) {
     async read() { calls.count += 1; return { ...validate(document), model: 'test-model', usage: { input_tokens: 100, output_tokens: 50 } }; },
   });
   const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, anthropicApiKey: 'sk-ant-test-test-test-test', createOrderReader }));
-  return { server, calls, as: createLogin(base, { password: PW }) };
+  return { server, calls, store, db, as: createLogin(base, { password: PW }) };
 }
 
 const DOCUMENT = {
@@ -74,7 +74,7 @@ test('inlezen: gelezen document opschonen', () => {
 });
 
 test('inlezen: route koppelt aan artikelen, schrijft niets en kent limieten en rechten', async () => {
-  const { server, calls, as } = await setup(DOCUMENT);
+  const { server, calls, store, db, as } = await setup(DOCUMENT);
   try {
     const baas = await as('baas');
     const supplier = (await baas.post('/app/api/suppliers', { name: 'Tuintechniek' })).body;
@@ -92,9 +92,13 @@ test('inlezen: route koppelt aan artikelen, schrijft niets en kent limieten en r
     // Type PDF maar andere inhoud: geweigerd vóór de betaalde AI-aanroep.
     assert.strictEqual((await baas.post('/app/api/purchase-orders/read', { file: `data:application/pdf;base64,${Buffer.from('<html>').toString('base64')}` })).status, 400);
     // Een leverancier die niet bij deze organisatie hoort (ook die van een andere) wordt nooit gekozen.
-    const foreign = await baas.post('/app/api/purchase-orders/read', { file: FILE, supplierId: '00000000-0000-4000-8000-000000000000' });
+    const other = store.createTenant({ name: 'Groen BV', slug: 'groen' }).tenant;
+    db.prepare("INSERT INTO suppliers (id, tenant_id, name, contact_name, email, phone, address, notes, archived, created_at, updated_at) VALUES ('vreemde-leverancier', ?, 'Tuintechniek', '', '', '', '', '', 0, '2026-01-01', '2026-01-01')").run(other.id);
+    const foreign = await baas.post('/app/api/purchase-orders/read', { file: FILE, supplierId: 'vreemde-leverancier' });
     assert.strictEqual(foreign.status, 200);
     assert.strictEqual(foreign.body.supplier, null);
+    // Het formulier mag de leverancier van een andere organisatie ook niet gebruiken.
+    assert.strictEqual((await baas.post('/app/api/purchase-orders', { supplierId: 'vreemde-leverancier', lines: [] })).status, 404);
     assert.strictEqual(calls.count, 2);
     const klant = await as('klant');
     assert.strictEqual((await klant.post('/app/api/purchase-orders/read', { file: FILE })).status, 403);

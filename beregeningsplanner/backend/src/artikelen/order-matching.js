@@ -4,7 +4,6 @@
 
 const SUGGESTIONS = 3;
 const MIN_SIMILARITY = 0.5;
-const SURE_SIMILARITY = 0.8;
 
 /**
  * Maakt tekst vergelijkbaar: kleine letters, alleen letters en cijfers, enkele spaties.
@@ -64,6 +63,25 @@ function matchSupplier(name, suppliers) {
 }
 
 /**
+ * De artikelen die het best op de woorden lijken (gelijkenis vanaf de ondergrens), hoogste eerst.
+ * @param {Set<string>} lineWords De woorden van de omschrijving op het document.
+ * @param {Array<{ item: object, words: Set<string> }>} candidates De artikelen met hun woordenset.
+ * @returns {Array<{ candidate: object, score: number }>} Hoogstens SUGGESTIONS artikelen met hun score.
+ */
+function bestMatches(lineWords, candidates) {
+  const best = [];
+  for (const entry of candidates) {
+    const score = overlap(lineWords, entry.words);
+    if (score < MIN_SIMILARITY) continue;
+    if (best.length === SUGGESTIONS && score <= best[best.length - 1].score) continue;
+    best.push({ candidate: entry.item, score });
+    best.sort((left, right) => right.score - left.score);
+    if (best.length > SUGGESTIONS) best.pop();
+  }
+  return best;
+}
+
+/**
  * Koppelt gelezen regels aan artikelen.
  * @param {Array<{ supplierSku: string, description: string }>} lines De gelezen regels.
  * @param {Array<{ id: string, code: string, name: string }>} items De artikelen om uit te kiezen (geen hoofdartikelen of gearchiveerde).
@@ -90,17 +108,12 @@ function matchLines(lines, items, skuToItem) {
       const named = itemsByName.get(normalize(line.description));
       if (named) { item = named; matchedBy = 'omschrijving'; }
     }
-    const lineWords = wordsOf(line.description);
-    // Suggesties alleen voor een regel die nog geen artikel heeft.
-    const ranked = item ? [] : candidates
-      .map((entry) => ({ candidate: entry.item, score: overlap(lineWords, entry.words) }))
-      .filter((entry) => entry.score >= MIN_SIMILARITY)
-      .sort((left, right) => right.score - left.score)
-      .slice(0, SUGGESTIONS);
+    // Suggesties alleen voor een regel die nog geen artikel heeft; een lus houdt de beste drie bij (geen volledige sortering).
+    const ranked = item ? [] : bestMatches(wordsOf(line.description), candidates);
     if (!item && ranked.length) { item = ranked[0].candidate; matchedBy = 'gelijkenis'; }
-    const sure = Boolean(item) && matchedBy !== 'gelijkenis';
+    // Zeker is alleen wat op nummer, code of exacte omschrijving klopt; een gok op gelijkenis nooit.
     return {
-      itemId: item ? item.id : null, itemCode: item ? item.code : '', itemName: item ? item.name : '', matchedBy, sure: sure || (matchedBy === 'gelijkenis' && ranked[0].score >= SURE_SIMILARITY && (!ranked[1] || ranked[0].score - ranked[1].score >= 0.2)),
+      itemId: item ? item.id : null, itemCode: item ? item.code : '', itemName: item ? item.name : '', matchedBy, sure: Boolean(item) && matchedBy !== 'gelijkenis',
       suggestions: ranked.map((entry) => ({ itemId: entry.candidate.id, code: entry.candidate.code, name: entry.candidate.name })),
     };
   });
