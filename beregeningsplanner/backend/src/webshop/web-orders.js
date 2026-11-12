@@ -187,7 +187,8 @@ function createWebOrderStore(db, { stock }) {
       if (code && qty >= 1) unique.set(code, Math.min(MAX_QTY, (unique.get(code) || 0) + qty));
     }
     const codes = [...unique.keys()].slice(0, MAX_LINES);
-    const baseCodes = [...new Set(codes.map((code) => splitCartCode(code).baseCode))];
+    // Een artikelcode die zelf een @ bevat blijft werken: de volledige code gaat voor, anders wordt gesplitst in artikel en verpakking.
+    const baseCodes = [...new Set(codes.flatMap((code) => [code, splitCartCode(code).baseCode]))];
     const rows = baseCodes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, p.name AS parent_name,
         (SELECT sp.in_stock FROM shop_products sp WHERE sp.tenant_id = i.tenant_id AND sp.id = i.shop_product_id) AS shop_in_stock,
         COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
@@ -197,14 +198,20 @@ function createWebOrderStore(db, { stock }) {
         AND i.code IN (${baseCodes.map(() => '?').join(', ')})`).all(tenantId, ...baseCodes) : [];
     const byCode = new Map(rows.map((row) => [row.code, row]));
     // Verpakkingen (doos, pallet) van de artikelen waarvoor een verpakking is gevraagd: één query voor de hele wagen.
-    const packagedIds = [...new Set(codes.filter((code) => splitCartCode(code).packCode).map((code) => byCode.get(splitCartCode(code).baseCode)).filter(Boolean).map((row) => row.id))];
+    /**
+     * Zoekt de artikelcode en verpakking bij een wagencode.
+     * @param {string} cartCode De code in de wagen.
+     * @returns {{ baseCode: string, packCode: string }} Artikelcode en verpakkingscode.
+     */
+    const resolve = (cartCode) => (byCode.has(cartCode) ? { baseCode: cartCode, packCode: '' } : splitCartCode(cartCode));
+    const packagedIds = [...new Set(codes.filter((code) => resolve(code).packCode).map((code) => byCode.get(resolve(code).baseCode)).filter(Boolean).map((row) => row.id))];
     const packagingRows = packagedIds.length ? prepare(`SELECT item_id, code, name, factor, sale_price, business_price, audience FROM item_packagings
       WHERE tenant_id = ? AND active = 1 AND item_id IN (${packagedIds.map(() => '?').join(', ')})`).all(tenantId, ...packagedIds) : [];
     const packagingOf = new Map(packagingRows.map((row) => [`${row.item_id}|${row.code}`, row]));
     const lines = [];
     const missing = [];
     for (const cartCode of codes) {
-      const { baseCode, packCode } = splitCartCode(cartCode);
+      const { baseCode, packCode } = resolve(cartCode);
       const row = byCode.get(baseCode);
       if (!row) { missing.push(cartCode); continue; }
       const packaging = packCode ? packagingOf.get(`${row.id}|${packCode}`) : null;
