@@ -24,6 +24,22 @@
    */
   const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
   /**
+   * De interne notitie bij een regel (bijvoorbeeld waar de AI over twijfelt), met een duidelijke knop om hem als
+   * gecontroleerd te markeren. Na het markeren blijft de notitie zichtbaar met een groene status en een knop om dat
+   * ongedaan te maken. De klant ziet dit nooit.
+   * @param {object} line De offerteregel.
+   * @returns {string} HTML, of een lege tekst zonder notitie.
+   */
+  const lineNote = (line) => {
+    if (!line.note) return '';
+    if (line.noteChecked) {
+      return `<span class="line-note checked" title="Interne notitie: de klant ziet dit niet"><span class="line-note-text"><strong class="line-note-status">✓ Gecontroleerd</strong> · ${esc(line.note)}</span>`
+        + `<button type="button" class="btn small" data-note-check="uit">Ongedaan maken</button></span>`;
+    }
+    return `<span class="line-note" title="Interne notitie: de klant ziet dit niet"><span class="line-note-text">${esc(line.note)}</span>`
+      + `<button type="button" class="btn small note-check" data-note-check="aan">✓ Markeer als gecontroleerd</button></span>`;
+  };
+  /**
    * Formatteert een bedrag in euro's.
    * @param {number} value het bedrag
    * @returns {string} bijv. '€ 12,50'
@@ -887,7 +903,7 @@
     const choose = parent ? '<button class="btn small primary ap-variant" data-pick-variant title="Dit artikel heeft varianten: kies de maat">Kies maat</button>'
       : variantOf ? '<button class="btn small ghost ap-variant" data-pick-variant title="Een andere variant van dit artikel kiezen">Andere maat</button>' : '';
     return `<tr class="line${line.optional ? ` opt${line.selected ? '' : ' off'}` : ''}" data-line="${esc(line.id)}">
-      <td class="c-desc"><input data-l="description" value="${esc(line.description)}" maxlength="500" placeholder="Omschrijving">${line.code ? `<span class="code">${esc(line.code)}</span>` : ''}${choose}${line.note ? `<span class="line-note" title="Interne notitie: de klant ziet dit niet">${esc(line.note)} <button class="btn ghost small" data-note-clear title="Notitie weghalen (gecontroleerd)">Gecontroleerd</button></span>` : ''}</td>
+      <td class="c-desc"><input data-l="description" value="${esc(line.description)}" maxlength="500" placeholder="Omschrijving">${line.code ? `<span class="code">${esc(line.code)}</span>` : ''}${choose}${lineNote(line)}</td>
       <td class="c-qty"><input data-l="qty" class="num" type="number" step="any" value="${line.qty}" aria-label="Aantal"></td>
       <td class="c-unit"><input data-l="unit" value="${esc(line.unit)}" maxlength="12" aria-label="Eenheid"></td>
       <td class="c-price"><input data-l="price" class="num" type="number" step="0.01" value="${Number(line.price).toFixed(2)}" aria-label="Prijs per eenheid"></td>
@@ -1111,11 +1127,14 @@
         });
         return undefined;
       }
-      const noteButton = event.target.closest('[data-note-clear]');
+      const noteButton = event.target.closest('[data-note-check]');
       if (noteButton && quote) {
         const id = noteButton.closest('[data-line]').dataset.line;
         const line = quote.data.lines.find((candidate) => candidate.id === id);
-        if (line) line.note = '';
+        if (line) {
+          line.noteChecked = noteButton.dataset.noteCheck === 'aan';
+          toast(line.noteChecked ? 'Regel gemarkeerd als gecontroleerd' : 'Markering gecontroleerd weggehaald');
+        }
         renderLines();
         return changed();
       }

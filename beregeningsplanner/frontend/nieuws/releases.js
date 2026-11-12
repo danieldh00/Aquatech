@@ -13,11 +13,19 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.10.5',
-      date: '2026-11-11',
+      version: '1.10.6',
+      date: '2026-11-12',
       title: 'Korting als bedrag, met bijschrift',
       items: [
         { text: 'Bij een offerte en een factuur kun je de korting nu als vast bedrag (excl. btw) geven in plaats van een percentage, en er een bijschrift bij zetten (bijvoorbeeld "seizoensactie"). Het bijschrift staat naast de korting op het document.', for: ['offertes', 'facturen'] },
+      ],
+    },
+    {
+      version: '1.10.5',
+      date: '2026-11-11',
+      title: 'Duidelijker controleren van AI-regels',
+      items: [
+        { text: 'Bij een regel waar de AI over twijfelt klik je op "Markeer als gecontroleerd". De regel krijgt dan een groene status Gecontroleerd en de notitie blijft voor jou zichtbaar; met Ongedaan maken zet je hem terug. De klant ziet dit nooit.', for: ['offertes'] },
       ],
     },
     {

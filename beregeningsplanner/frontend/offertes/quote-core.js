@@ -93,7 +93,7 @@
   /**
    * Maakt van willekeurige invoer een geldige offerteregel.
    * @param {object} line De regel.
-   * @returns {object} { id, section, code, description, qty, unit, price, vat, optional, selected }.
+   * @returns {object} { id, section, code, description, qty, unit, price, vat, optional, selected, note, noteChecked }.
    */
   function sanitizeLine(line) {
     line = line && typeof line === 'object' ? line : {};
@@ -111,6 +111,8 @@
       selected: Boolean(line.optional && line.selected),
       // Interne notitie bij de regel (bijv. een twijfelachtige koppeling aan een artikel door de AI-koppeling); de klant ziet hem nooit.
       note: limitText(line.note, 300).trim(),
+      // Een medewerker heeft de notitie bekeken en de regel goedgekeurd (alleen zinvol met een notitie; ook nooit naar de klant).
+      noteChecked: Boolean(line.noteChecked && limitText(line.note, 300).trim()),
     };
   }
 

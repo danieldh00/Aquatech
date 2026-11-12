@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.10.5
+## 1.10.6
 
 Kortingsregel op offerte en factuur (punt 14 van bundel A). Geen migratie: de velden staan in de offerte- en factuurgegevens.
 
@@ -9,6 +9,14 @@ Kortingsregel op offerte en factuur (punt 14 van bundel A). Geen migratie: de ve
 - De factuur uit een werkorder neemt de korting van de offerte over; een creditfactuur draait het bedrag mee (negatief). Visma krijgt de korting per regel als fractie van het subtotaal.
 - Nacalculatie: een vast bedrag geldt in zijn geheel (begroot en werkelijk), een percentage schaalt met het werkelijke subtotaal.
 - Tests: `discount-line.test.js` (kern, afkappen, opschonen, creditfactuur, overname, nacalculatie, Visma, API en klantpagina).
+
+## 1.10.5
+
+Concept-offerte: duidelijker controleren van regels waar de AI over twijfelt. Geen migratie.
+
+- De knop bij een twijfelnotitie heet nu *✓ Markeer als gecontroleerd* en ziet eruit als een echte knop (groene rand). Na het klikken blijft de notitie staan met een groene status *✓ Gecontroleerd* en een knop *Ongedaan maken*; een melding bevestigt de actie. Voorheen verdween de notitie zonder spoor.
+- Regel krijgt `noteChecked` (`QuoteCore.sanitizeLine`, alleen met een notitie). `forCustomer` laat `note` en `noteChecked` weg: de klant ziet geen van beide.
+- Op een smal scherm staat de knop onder de notitie.
 
 ## 1.10.4
 

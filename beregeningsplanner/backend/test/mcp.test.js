@@ -280,9 +280,17 @@ test('de interne notitie per regel gaat nooit naar de klant', async () => {
   const quote = (await admin.get(`/app/api/quotes/${id}`)).body;
   assert.strictEqual((await admin.put(`/app/api/quotes/${id}`, { data: { ...quote.data, layout: 'totaal' } })).status, 200);
   assert.ok(!(await (await as('klant1')).get(`/app/api/quotes/${id}`)).text.includes('geheim voor intern'));
-  // Gecontroleerd in de editor: de notitie kan weg (lege notitie blijft leeg).
-  const cleared = await admin.put(`/app/api/quotes/${id}`, { data: { ...quote.data, lines: quote.data.lines.map((line) => ({ ...line, note: '' })) } });
+  // Markeer als gecontroleerd: de notitie blijft voor intern staan met de status; de klant ziet geen van beide.
+  const checked = await admin.put(`/app/api/quotes/${id}`, { data: { ...quote.data, lines: quote.data.lines.map((line) => ({ ...line, noteChecked: true })) } });
+  assert.strictEqual(checked.body.data.lines[0].noteChecked, true);
+  assert.ok(checked.body.data.lines[0].note.includes('geheim voor intern'));
+  const seenChecked = await (await as('klant1')).get(`/app/api/quotes/${id}`);
+  assert.strictEqual(seenChecked.body.data.lines[0].noteChecked, undefined);
+  assert.ok(!seenChecked.text.includes('geheim voor intern'));
+  // Zonder notitie bestaat er niets te controleren.
+  const cleared = await admin.put(`/app/api/quotes/${id}`, { data: { ...quote.data, lines: quote.data.lines.map((line) => ({ ...line, note: '', noteChecked: true })) } });
   assert.strictEqual(cleared.body.data.lines[0].note, '');
+  assert.strictEqual(cleared.body.data.lines[0].noteChecked, false);
 });
 
 test('code, PKCE en terugkeeradres worden streng gecontroleerd; een code werkt één keer', async () => {

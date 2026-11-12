@@ -109,7 +109,7 @@ test('het akkoordbewijs (contentHash) wordt berekend zonder interne notities', a
   const stored = (await installer.get(`/app/api/quotes/${quote.id}`)).body;
   assert.ok(stored.acceptance.contentHash, 'er is een hash');
   const { internalNote, ...rest } = stored.data;
-  const customerData = { ...rest, lines: stored.data.lines.map(({ note, ...line }) => line) };
+  const customerData = { ...rest, lines: stored.data.lines.map(({ note, noteChecked, ...line }) => line) };
   const expected = crypto.createHash('sha256').update(JSON.stringify({ number: stored.number, data: customerData, totals: QuoteCore.totals(customerData) })).digest('hex');
   assert.strictEqual(stored.acceptance.contentHash, expected);
 });
