@@ -154,15 +154,19 @@ const baseQtyOf = (line) => Number(line.qty) * (Number(line.stockPer) > 1 ? Numb
 /**
  * Voegt regels van hetzelfde artikel samen (stuks en een pallet): de voorraadmutatie is één afboeking per artikel, dus de kosten mogen maar één keer meetellen.
  * @param {{ itemId: string, code: string, name: string, qty: number, revenue: number }[]} lines De regels (aantal in de basiseenheid).
- * @returns {{ itemId: string, code: string, name: string, qty: number, revenue: number }[]} Eén regel per artikel, in volgorde van het eerste voorkomen.
+ * @returns {{ itemId: string, code: string, name: string, qty: number, revenue: number }[]} Eén regel per artikel (regels zonder artikel blijven los), in volgorde van het eerste voorkomen.
  */
 function mergePerItem(lines) {
-  const merged = new Map();
+  const out = [];
+  const byItem = new Map();
   for (const line of lines) {
-    const known = merged.get(line.itemId);
-    if (known) { known.qty += line.qty; known.revenue = round2(known.revenue + line.revenue); } else merged.set(line.itemId, { ...line });
+    const known = line.itemId ? byItem.get(line.itemId) : null;
+    if (known) { known.qty += line.qty; known.revenue = round2(known.revenue + line.revenue); continue; }
+    const entry = { ...line };
+    if (line.itemId) byItem.set(line.itemId, entry);
+    out.push(entry);
   }
-  return [...merged.values()];
+  return out;
 }
 
 /**
