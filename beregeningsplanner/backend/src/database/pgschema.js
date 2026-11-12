@@ -1077,6 +1077,19 @@ const PG_MIGRATIONS = [
   `
   CREATE INDEX web_orders_status ON web_orders (tenant_id, status, created_at);
   `,
+  // 68: eigen pakbon bij dropshipping (zie db.js).
+  `
+  CREATE TABLE web_order_slips (
+    tenant_id  ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    order_id   ${TEXT_TYPE} NOT NULL ${references('web_orders(id)')},
+    file_name  ${TEXT_TYPE} NOT NULL,
+    pages      BIGINT NOT NULL,
+    size       BIGINT NOT NULL,
+    data       ${TEXT_TYPE} NOT NULL,
+    created_at ${TEXT_TYPE} NOT NULL,
+    PRIMARY KEY (tenant_id, order_id)
+  );
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

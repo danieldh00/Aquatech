@@ -1,0 +1,11 @@
+---
+titel: Dropshipping met de eigen pakbon van de klant
+---
+
+## Nieuws
+- Klanten van de webshop kunnen een bestelling als dropshipping plaatsen: we bezorgen rechtstreeks bij hun eigen klant. Ze geven een e-mailadres op voor het afleverbewijs en uploaden na het bestellen hun eigen pakbon (PDF) op de pagina van de bestelling.
+- [beheer] Bij een dropshippingbestelling komt de pakbon van de klant in *Te picken* en *Alles afdrukken* in plaats van onze eigen pakbon (met het bestelnummer erop). Zonder geüploade pakbon staat de bestelling niet in de lijst, maar wel in een melding erboven.
+- [beheer] De verzendmail met de volgcode gaat bij dropshipping ook naar het e-mailadres voor het afleverbewijs.
+
+## Changelog
+Migratie 68: tabel `web_order_slips` (`tenant_id`, `order_id`, `file_name`, `pages`, `size`, `data`; sleutel `(tenant_id, order_id)`, ook in `PG_MIGRATIONS`). Nieuw `webshop/order-slips.js`: `inspectSlip` (alleen een echte, niet beveiligde PDF van hoogstens 2 MB en 10 pagina's, paginagrootte begrensd; de PDF wordt met `pdf-lib` opnieuw opgebouwd uit de pagina's zodat scripts, bijlagen en formulieren van de klant eruit zijn), `createOrderSlips` (`save`/`read`/`readMany`/`remove`, versleuteld met `vault.sealBytes`, AAD `<tenant>:pakbon:<bestelling>`) en `assemblePdf` (zet eigen pagina's en pakbonnen van klanten in de volgorde van de bestellingen, met een etiket met het bestelnummer op de eerste pagina van de klantpakbon). Nieuwe afhankelijkheid `pdf-lib` (pure JavaScript). Afrekenen: velden `dropshipping=ja` en `dropshipProofEmail` (`dropshippingOf` in web-orders.js; niet bij ophalen), bewaard in `data.dropshipping` {proofEmail, slip}. Klantroutes: `POST /bestelling/:id/pakbon` (PDF als inhoud, `application/pdf`, alleen de eigenaar, alleen zolang de bestelling nieuw is, 30 per uur per bezoeker, `Sec-Fetch-Site`-controle, audit `webshop_pakbon_geupload`) en `GET /bestelling/:id/pakbon.pdf`; script `pakbon.js`. `pickable` eist bij dropshipping de geüploade pakbon; `to-pick` geeft `waitingForSlip` en `dropshipping` per bestelling; `pdfFor` is async en voegt de pakbonnen samen. Verzendmail: kopie naar `proofEmail`. Het afleverbewijs zelf (DPD) volgt met de DPD-koppeling.

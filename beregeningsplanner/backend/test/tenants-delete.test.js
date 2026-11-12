@@ -178,7 +178,7 @@ test('testomgeving met bestellingen, meldingen en andere latere tabellen is te v
 
     // Een rij in elke tabel met tenant_id die het wissen vroeger miste, met een verwijzing naar een testgebruiker.
     const seeded = seedLateTables(db, env.id, users[0].id);
-    assert.deepStrictEqual(seeded, ['roles', 'service_requests', 'stock_merges', 'stock_units', 'web_orders', 'web_returns']);
+    assert.deepStrictEqual(seeded, ['roles', 'service_requests', 'stock_merges', 'stock_units', 'web_orders', 'web_order_slips', 'web_returns']);
 
     const reset = await baas.post(`/app/api/platform/tenants/${env.id}/reset`);
     assert.strictEqual(reset.status, 200, JSON.stringify(reset.body));
@@ -261,6 +261,7 @@ function seedLateTables(db, tenantId, userId) {
     stock_merges: { id: `sm-${suffix}`, tenant_id: tenantId, parent_id: `p-${suffix}`, parent_code: 'P', parent_name: 'Hoofdartikel', snapshot: '{}', created_by: userId, created_at: 1 },
     stock_units: { id: `su-${suffix}`, tenant_id: tenantId, name: 'doos', created_at: 1 },
     web_orders: { id: `wo-${suffix}`, tenant_id: tenantId, number: `W-${suffix}`, user_id: userId, status: 'nieuw', customer_name: 'Klant', email: 'klant@example.nl', total: 100, data: '{}', created_at: 1, updated_at: 1 },
+    web_order_slips: { tenant_id: tenantId, order_id: `wo-${suffix}`, file_name: 'Pakbon.pdf', pages: 1, size: 10, data: 'f1:x:y:z', created_at: 1 },
     web_returns: { id: `wr-${suffix}`, tenant_id: tenantId, order_id: `wo-${suffix}`, user_id: userId, number: `R-${suffix}`, status: 'nieuw', data: '{}', created_at: 1, updated_at: 1 },
   };
   for (const [table, values] of Object.entries(rows)) {

@@ -1,0 +1,179 @@
+// Dropshipping met de eigen pakbon van de klant (webshop/order-slips.js): keuze bij het afrekenen, uploaden en controleren van de PDF,
+// eigenaar- en omgevingscontrole, de pakbon in Te picken en Alles afdrukken in plaats van de onze, en de kopie van de verzendmail.
+const test = require('node:test');
+const assert = require('node:assert');
+const { PDFDocument, PDFName, PDFString } = require('pdf-lib');
+const { inspectSlip, assemblePdf, MAX_SLIP_BYTES } = require('../src/webshop/order-slips');
+const { setup, order, until, mailsWith, PERSON } = require('./helpers/webshop-world');
+
+/**
+ * Maakt een PDF met het gevraagde aantal pagina's.
+ * @param {number} pageCount Aantal pagina's.
+ * @param {{ script?: boolean, size?: [number, number] }} [options] script: met een script dat bij openen draait; size: paginagrootte in punten.
+ * @returns {Promise<Buffer>} De PDF.
+ */
+async function makePdf(pageCount, { script = false, size = [595, 842] } = {}) {
+  const doc = await PDFDocument.create();
+  for (let index = 0; index < pageCount; index++) doc.addPage(size);
+  if (script) doc.catalog.set(PDFName.of('OpenAction'), doc.context.obj({ S: 'JavaScript', JS: PDFString.of('app.alert(1)') }));
+  return Buffer.from(await doc.save());
+}
+
+/**
+ * Aantal pagina's van een PDF.
+ * @param {Buffer} bytes De PDF.
+ * @returns {Promise<number>} Het aantal.
+ */
+async function pageCountOf(bytes) {
+  return (await PDFDocument.load(bytes)).getPageCount();
+}
+
+/**
+ * Stuurt een PDF als bestandsinhoud naar het uploadadres van een bestelling.
+ * @param {object} world De testwereld.
+ * @param {object} shopper De klant.
+ * @param {string} orderId Id van de bestelling.
+ * @param {Buffer} body De bytes.
+ * @param {{ type?: string, method?: string }} [options] Het inhoudstype en de methode.
+ * @returns {Promise<{ status: number, body: object }>} Statuscode en JSON.
+ */
+async function putSlip(world, shopper, orderId, body, { type = 'application/pdf', method = 'POST' } = {}) {
+  const cookie = [...shopper.client.jar].map(([name, value]) => `${name}=${value}`).join('; ');
+  const response = await fetch(`${world.base}/bestelling/${orderId}/pakbon`, { method, headers: { 'content-type': type, cookie }, body });
+  return { status: response.status, body: await response.json().catch(() => ({})) };
+}
+
+/** Afrekenvelden voor een dropshippingbestelling. */
+const DROP = { dropshipping: 'ja', dropshipProofEmail: 'Bewijs@Reseller.example' };
+
+test('inspectSlip: neemt een gewone PDF aan, bouwt hem opnieuw op zonder scripts en weigert de rest', async () => {
+  const good = await inspectSlip(await makePdf(2, { script: true }));
+  assert.ok(good.bytes && good.pages === 2, JSON.stringify(good.error));
+  assert.ok(!good.bytes.toString('latin1').includes('JavaScript'), 'het script van de klant is eruit');
+  assert.strictEqual(await pageCountOf(good.bytes), 2);
+  assert.match((await inspectSlip(Buffer.from('dit is geen pdf, maar wel genoeg tekst om niet leeg te zijn, echt waar, nog meer tekst'))).error, /geen PDF/);
+  assert.match((await inspectSlip(Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.from('rommel '.repeat(30))]))).error, /niet worden gelezen/);
+  assert.match((await inspectSlip(Buffer.alloc(0))).error, /leeg/);
+  assert.match((await inspectSlip(Buffer.alloc(MAX_SLIP_BYTES + 1, 1))).error, /te groot/);
+  assert.match((await inspectSlip(await makePdf(11))).error, /te veel pagina/);
+  assert.match((await inspectSlip(await makePdf(1, { size: [20000, 20000] }))).error, /paginagrootte/);
+});
+
+test('assemblePdf: zet eigen pagina\'s en de pakbon van de klant (met bestelnummer) in volgorde', async () => {
+  const ours = await makePdf(3);
+  const customer = await makePdf(2);
+  const merged = await assemblePdf([
+    { type: 'ours', first: 0, last: 0 }, { type: 'slip', bytes: customer, label: 'WEB-1 - dropshipping' }, { type: 'ours', first: 1, last: 2 },
+  ], ours);
+  assert.strictEqual(await pageCountOf(merged), 5);
+  const onlyCustomer = await assemblePdf([{ type: 'slip', bytes: customer, label: 'WEB-2 - dropshipping' }], null);
+  assert.strictEqual(await pageCountOf(onlyCustomer), 2);
+});
+
+test('afrekenen: dropshipping vraagt een geldig e-mailadres voor het afleverbewijs en kan niet bij ophalen', async () => {
+  const world = await setup();
+  const [shopper] = world.shoppers;
+  const { postForm, postCheckout } = require('./helpers/http-client');
+  await postForm(world.base, shopper.client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
+  const form = await shopper.client.request('GET', '/afrekenen/');
+  assert.match(form.text, /name="dropshipping"/);
+  assert.match(form.text, /name="dropshipProofEmail"/);
+  const noMail = await postCheckout(world.base, shopper.client, { ...PERSON, dropshipping: 'ja', dropshipProofEmail: 'geen-adres' });
+  assert.strictEqual(noMail.status, 400);
+  assert.match(noMail.text, /afleverbewijs naartoe moet/);
+  const pickup = await postCheckout(world.base, shopper.client, { ...PERSON, ...DROP, shippingMethod: 'ophalen' });
+  assert.strictEqual(pickup.status, 400);
+  assert.match(pickup.text, /Dropshipping kan alleen met bezorgen/);
+  assert.strictEqual((await world.admin.get('/app/api/admin/web-orders')).body.items.length, 0, 'er is niets besteld');
+});
+
+test('dropshipping: uploaden, eigenaarcontrole, Te picken en Alles afdrukken met de pakbon van de klant', async () => {
+  const world = await setup();
+  const [owner, stranger] = world.shoppers;
+  const dropId = await order(world, owner, DROP);
+  const normalId = await order(world, stranger, {});
+  const detail = (await world.admin.get(`/app/api/admin/web-orders/${dropId}`)).body.order;
+  assert.deepStrictEqual(detail.dropshipping, { proofEmail: 'bewijs@reseller.example', slip: null });
+
+  // Zonder pakbon van de klant staat de bestelling niet in Te picken (wel gemeld) en is geen pakbon te maken.
+  let pick = (await world.admin.get('/app/api/admin/web-orders/to-pick')).body;
+  assert.deepStrictEqual(pick.items.map((item) => item.id), [normalId]);
+  assert.deepStrictEqual(pick.waitingForSlip.map((entry) => entry.id), [dropId]);
+  const blocked = await world.admin.post(`/app/api/admin/web-orders/${dropId}/packing-slip`, {});
+  assert.strictEqual(blocked.status, 409);
+  assert.match(blocked.body.message, /nog geen pakbon geüpload/);
+  const page = await owner.client.request('GET', `/bestelling/${dropId}/`);
+  assert.match(page.text, /Upload je pakbon/);
+  assert.match(page.text, /bewijs@reseller\.example/);
+  assert.match(page.text, /pakbon\.js/);
+
+  // Alleen de eigenaar mag uploaden en alleen een echte PDF.
+  const pdf = await makePdf(2);
+  assert.strictEqual((await putSlip(world, stranger, dropId, pdf)).status, 404, 'andermans bestelling');
+  assert.strictEqual((await putSlip(world, owner, normalId, pdf)).status, 404, 'bestelling van een ander');
+  assert.strictEqual((await putSlip(world, stranger, normalId, pdf)).status, 409, 'geen dropshippingbestelling');
+  assert.strictEqual((await putSlip(world, owner, dropId, pdf, { type: 'text/plain' })).status, 415, 'alleen application/pdf');
+  assert.strictEqual((await putSlip(world, owner, dropId, Buffer.from('%PDF-1.4 ' + 'x'.repeat(100)))).status, 400);
+  const tooBig = await putSlip(world, owner, dropId, Buffer.alloc(MAX_SLIP_BYTES + 10, 1));
+  assert.strictEqual(tooBig.status, 413);
+  const anonymous = await fetch(`${world.base}/bestelling/${dropId}/pakbon`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: pdf });
+  assert.strictEqual(anonymous.status, 401);
+  const crossSite = await fetch(`${world.base}/bestelling/${dropId}/pakbon`, { method: 'POST', headers: { 'content-type': 'application/pdf', 'sec-fetch-site': 'cross-site', cookie: [...owner.client.jar].map(([name, value]) => `${name}=${value}`).join('; ') }, body: pdf });
+  assert.strictEqual(crossSite.status, 403);
+  assert.strictEqual((await world.admin.get(`/app/api/admin/web-orders/${dropId}`)).body.order.dropshipping.slip, null, 'niets is opgeslagen');
+
+  const stored = await putSlip(world, owner, dropId, await makePdf(2, { script: true }));
+  assert.strictEqual(stored.status, 200, JSON.stringify(stored.body));
+  assert.strictEqual(stored.body.pages, 2);
+  const row = world.db.prepare('SELECT data, pages, size FROM web_order_slips WHERE order_id = ?').get(dropId);
+  assert.ok(row.data.startsWith('f1:') && !row.data.includes('%PDF'), 'versleuteld opgeslagen');
+  assert.strictEqual(Number(row.pages), 2);
+  const withSlip = (await world.admin.get(`/app/api/admin/web-orders/${dropId}`)).body.order.dropshipping.slip;
+  assert.strictEqual(withSlip.pages, 2);
+  assert.match(withSlip.name, /^Pakbon WEB-/);
+
+  // Vervangen kan (één pakbon per bestelling).
+  assert.strictEqual((await putSlip(world, owner, dropId, await makePdf(1))).status, 200);
+  assert.strictEqual(Number(world.db.prepare('SELECT COUNT(*) AS n FROM web_order_slips').get().n), 1);
+  assert.strictEqual((await putSlip(world, owner, dropId, await makePdf(2))).status, 200);
+
+  // Bekijken: alleen de eigenaar.
+  const mine = await owner.client.request('GET', `/bestelling/${dropId}/pakbon.pdf`);
+  assert.strictEqual(mine.status, 200);
+  assert.match(mine.type, /application\/pdf/);
+  assert.strictEqual(await pageCountOf(mine.raw), 2);
+  assert.strictEqual((await stranger.client.request('GET', `/bestelling/${dropId}/pakbon.pdf`)).status, 404);
+  assert.strictEqual((await world.vreemd.get(`/app/api/admin/web-orders/${dropId}`)).status, 404, 'andere organisatie ziet de bestelling niet');
+
+  // Nu staat hij in Te picken en gaat de pakbon van de klant in de PDF; onze eigen pakbon alleen voor de gewone bestelling.
+  pick = (await world.admin.get('/app/api/admin/web-orders/to-pick')).body;
+  assert.deepStrictEqual(pick.waitingForSlip, []);
+  assert.strictEqual(pick.items.length, 2);
+  assert.strictEqual(pick.items.find((item) => item.id === dropId).dropshipping, true);
+  assert.strictEqual(pick.items.find((item) => item.id === normalId).dropshipping, false);
+  const all = await world.admin.post('/app/api/admin/web-orders/packing-slips', { ids: pick.items.map((item) => item.id) });
+  assert.strictEqual(all.status, 200);
+  assert.strictEqual(await pageCountOf(all.raw), 1 + 2, 'één eigen pagina plus de twee van de klant');
+  const single = await world.admin.post(`/app/api/admin/web-orders/${dropId}/packing-slip`, {});
+  assert.strictEqual(single.status, 200);
+  assert.strictEqual(await pageCountOf(single.raw), 2, 'alleen de pakbon van de klant');
+  assert.ok(!single.raw.toString('latin1').includes('JavaScript'));
+  const printed = (await world.admin.get('/app/api/admin/web-orders/to-pick')).body.items.find((item) => item.id === dropId);
+  assert.ok(printed.printedAt, 'het afdrukken is vastgelegd');
+
+  // Na verzenden is de pakbon vast, en de verzendmail gaat ook naar het adres voor het afleverbewijs.
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${dropId}/status`, { status: 'verzonden' })).status, 200);
+  assert.strictEqual((await putSlip(world, owner, dropId, pdf)).status, 409);
+  const shipment = await until(() => mailsWith(world.sent, /onderweg/)[0]);
+  assert.deepStrictEqual(shipment.to, ['k1@voorbeeld.nl', 'bewijs@reseller.example']);
+  assert.strictEqual((await world.admin.get('/app/api/admin/web-orders/to-pick')).body.items.length, 1);
+});
+
+test('een dropshippingbestelling zonder pakbon blijft geblokkeerd voor het afdrukken van een groep', async () => {
+  const world = await setup();
+  const [owner] = world.shoppers;
+  const dropId = await order(world, owner, DROP);
+  const out = await world.admin.post('/app/api/admin/web-orders/packing-slips', { ids: [dropId] });
+  assert.strictEqual(out.status, 409);
+  assert.match(out.body.message, /nog geen pakbon geüpload/);
+});

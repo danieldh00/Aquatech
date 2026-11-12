@@ -236,6 +236,13 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .foot-legal + .foot-note { margin-top: 10px; border-top: 0; padding-top: 0; }
 .terms-check { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0; font-size: 0.9rem; }
 .terms-check input { margin-top: 3px; }
+.dropship-block { margin: 14px 0; }
+.dropship-block .terms-check { margin-bottom: 8px; }
+.dropship-block .form-field[hidden] { display: none; }
+.dropship-info { margin: 16px 0; padding: 12px 14px; border: 1px solid var(--at-shop-line, #d0d6de); border-radius: 8px; }
+.dropship-info p { margin: 0 0 8px; }
+.slip-upload { display: grid; gap: 8px; justify-items: start; margin-top: 8px; }
+.slip-upload .form-field { margin: 0; }
 .price-vat, .price-incl { font-size: 0.8rem; font-weight: 400; color: var(--at-muted); }
 .business-fields { display: grid; gap: 12px; padding: 12px 14px; border: 1px solid var(--at-line); border-radius: 8px; }
 .business-fields legend { padding: 0 6px; font-weight: 600; }

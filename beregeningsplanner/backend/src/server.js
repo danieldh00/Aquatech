@@ -36,6 +36,7 @@ const { createShopContentStore, registerShopContentRoutes } = require('./webshop
 const { createStorefrontData } = require('./webshop/storefront-data');
 const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
 const { createPackingSlips, registerPackingSlipRoutes } = require('./webshop/packing-slips');
+const { createOrderSlips } = require('./webshop/order-slips');
 const { createQuoteOrders, registerQuoteOrderRoutes } = require('./verkoop/quote-orders');
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
@@ -2404,8 +2405,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   webOrders.onCancelled((tenantId, order, user) => webOrderInvoices.creditCancelled(tenantId, order, user));
   webOrders.onTracking((tenantId, order) => webOrderMail.sendShipment(tenantId, order, { onlyNewTracking: true }));
   // Pakbonnen en de lijst Te picken (webshop/packing-slips.js); vóór de routes met /:id.
+  const orderSlips = createOrderSlips(database, { vault, orders: webOrders });
   const packingSlips = createPackingSlips(database, {
-    orders: webOrders, settingsFor: (id) => settingsFor(id),
+    orders: webOrders, slips: orderSlips, settingsFor: (id) => settingsFor(id),
     colorsOf: (id) => {
       const cssVars = Theme.vars(themeFor(id));
       return { navy: cssVars['--at-navy'], green: cssVars['--at-green'], greenSoft: cssVars['--at-green-soft'], teal: cssVars['--at-teal'] };
@@ -2788,10 +2790,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
-    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, returns: webReturns, payments: webPayments,
+    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, payments: webPayments,
     vies,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
+    onSlip: (req, order, action) => audit(req, `webshop_pakbon_${action}`, { number: order.number }, order.userId, tenant.id),
     // Een beheerder van de hoofdorganisatie bekijkt het concept met ?voorbeeld=1.
     previewAllowed: (req) => {
       const user = identify(req);

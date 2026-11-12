@@ -234,3 +234,33 @@ function setUpAddresses(form) {
 }
 
 if (checkoutForm) setUpAddresses(checkoutForm);
+
+/**
+ * Dropshipping op het afrekenformulier: het veld voor het e-mailadres van het afleverbewijs staat er alleen als het vinkje aan staat,
+ * en het hele blok verdwijnt bij ophalen (dat kan niet met dropshipping).
+ * @param {HTMLFormElement} form Het afrekenformulier.
+ * @returns {void}
+ */
+function setUpDropshipping(form) {
+  const section = form.querySelector('[data-dropship-section]');
+  const box = form.querySelector('[data-dropship]');
+  const fields = form.querySelector('[data-dropship-fields]');
+  if (!section || !box || !fields) return;
+  const proofInput = fields.querySelector('input');
+  /**
+   * Past het blok aan op de keuze: verbergt het bij ophalen (en zet het vinkje dan uit) en toont het e-mailveld alleen bij een vinkje.
+   * @returns {void}
+   */
+  const sync = () => {
+    const pickup = form.querySelector('input[name="shippingMethod"]:checked')?.value === 'ophalen';
+    section.hidden = pickup;
+    if (pickup) box.checked = false;
+    fields.hidden = !box.checked;
+    proofInput.required = box.checked;
+  };
+  sync();
+  box.addEventListener('change', sync);
+  form.addEventListener('change', (event) => { if (event.target.name === 'shippingMethod') sync(); });
+}
+
+if (checkoutForm) setUpDropshipping(checkoutForm);

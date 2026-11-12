@@ -29,6 +29,7 @@ const { validPaymentId, cleanPublicUrl, sanitizePayment } = require('./mollie');
 const Seo = require('./seo');
 const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, convertPlannedQty, MAX_QTY } = require('./storefront-cart');
 const { deliverySameOf } = require('./web-orders');
+const { inspectSlip, MAX_SLIP_BYTES } = require('./order-slips');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
 const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
@@ -48,6 +49,7 @@ const ASSETS = {
   'varianten.js': { file: path.join(__dirname, 'storefront-variants.js'), type: 'text/javascript; charset=utf-8' },
   'adres.js': { file: path.join(SHARED_DIR, 'address-lookup.js'), type: 'text/javascript; charset=utf-8' },
   'afrekenen.js': { file: path.join(__dirname, 'storefront-checkout.js'), type: 'text/javascript; charset=utf-8' },
+  'pakbon.js': { file: path.join(__dirname, 'storefront-slip.js'), type: 'text/javascript; charset=utf-8' },
   'groothandel.js': { file: path.join(__dirname, 'storefront-wholesale.js'), type: 'text/javascript; charset=utf-8' },
   'account-link.js': { file: path.join(__dirname, 'storefront-account-link.js'), type: 'text/javascript; charset=utf-8' },
   'favicon.png': { file: path.join(SHARED_DIR, 'icons', 'favicon-48.png'), type: 'image/png' },
@@ -61,7 +63,7 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
 /** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner, wachtwoord vergeten en herstellen, e-mail bevestigen). */
 const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakelijk|account\/bevestigen|wachtwoord-vergeten|wachtwoord-herstellen|e-mail-bevestigen)\/?$/;
 /** Paden waar de winkelwagen, het groothandelsvenster, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
-const ORDER_POSTS = /^\/(winkelwagen(?:\/planner)?|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/retour(\/[^/]+\/intrekken)?)\/?$/;
+const ORDER_POSTS = /^\/(winkelwagen(?:\/planner)?|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/(?:retour(?:\/[^/]+\/intrekken)?|pakbon))\/?$/;
 /** Pad van het aanvraagformulier voor een zakelijk account op de startpagina. */
 const REQUEST_POST = /^\/zakelijk-aanvraag\/?$/;
 /** Aantal bestellingen per pagina in de bestelhistorie van een klant. */
@@ -70,10 +72,10 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, vies?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie) returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), vies = de controle van btw-nummers bij VIES (vies.js; zonder wordt verlegd zonder die controle), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog).
+ * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, vies?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie), orderSlips = de pakbonnen van klanten bij dropshipping (order-slips.js; zonder geen uploaden), returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), vies = de controle van btw-nummers bij VIES (vies.js; zonder wordt verlegd zonder die controle), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog) en onSlip(req, order, action) = aanroep na het uploaden of verwijderen van een pakbon (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/', router) (zie server.js).
  */
-function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, returns = null, payments = null, vies = null, onOrder = () => {}, onReturn = () => {} }) {
+function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, orderSlips = null, returns = null, payments = null, vies = null, onOrder = () => {}, onReturn = () => {}, onSlip = () => {} }) {
   // Een async route die een fout gooit gaat naar de foutafhandeling in plaats van te blijven hangen.
   const router = catchAsync(express.Router());
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: clientKey });
@@ -937,6 +939,66 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             if (out.error) return res.status(out.status || 400).type('text').send(out.error);
             res.redirect(303, '../../');
           } catch (error) { next(error); }
+        });
+      }
+      if (orderSlips) {
+        const slipLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `pakbon:${clientKey(req)}` });
+        /**
+         * Past de uploadlimiet toe zonder eigen antwoord.
+         * @param {object} req Het verzoek.
+         * @param {object} res Het antwoord.
+         * @returns {boolean} true als het verzoek geweigerd moet worden.
+         */
+        const slipLimited = (req, res) => {
+          let refused = false;
+          slipLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
+          return refused;
+        };
+        /**
+         * Leest de PDF uit het verzoek (type application/pdf, hoogstens 2 MB); bij een fout een JSON-melding.
+         * @param {object} req Het verzoek.
+         * @param {object} res Het antwoord.
+         * @param {Function} next Volgende stap als de PDF is gelezen.
+         * @returns {void}
+         */
+        const readSlipBody = (req, res, next) => {
+          express.raw({ type: 'application/pdf', limit: MAX_SLIP_BYTES })(req, res, (failure) => {
+            if (failure) return res.status(failure.status === 413 ? 413 : 400).json({ message: failure.status === 413 ? 'De pakbon is te groot (hoogstens 2 MB).' : 'De pakbon kon niet worden gelezen.' });
+            next();
+          });
+        };
+        // De eigen pakbon van een dropshippingbestelling uploaden of vervangen (POST met de PDF als inhoud) (alleen de eigenaar, zolang de bestelling nieuw is).
+        router.post('/bestelling/:id/pakbon', readSlipBody, async (req, res, next) => {
+          try {
+            if (crossSite(req)) return res.status(403).json({ message: 'Verzoek van een andere site geweigerd.' });
+            if (!orderingOn()) return res.status(404).json({ message: 'Bestellen is niet beschikbaar.' });
+            const viewer = accounts.viewer(req);
+            if (!viewer) return res.status(401).json({ message: 'Log opnieuw in om de pakbon te uploaden.' });
+            if (slipLimited(req, res)) return res.status(429).json({ message: 'Te veel uploads vanaf dit adres. Probeer het later opnieuw.' });
+            res.setHeader('Cache-Control', 'no-store');
+            const order = orders.getForUser(tenantId, viewer.id, req.params.id);
+            if (!order) return res.status(404).json({ message: 'Bestelling niet gevonden.' });
+            if (!order.dropshipping) return res.status(409).json({ message: 'Dit is geen dropshippingbestelling.' });
+            if (order.status !== 'nieuw') return res.status(409).json({ message: 'Deze bestelling is al in behandeling; de pakbon kan niet meer worden gewijzigd.' });
+            if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(415).json({ message: 'Stuur een PDF-bestand (application/pdf).' });
+            const checked = await inspectSlip(req.body);
+            if (checked.error) return res.status(400).json({ message: checked.error });
+            orderSlips.save(tenantId, order.id, { bytes: checked.bytes, pages: checked.pages, fileName: `Pakbon ${order.number}.pdf` });
+            try { onSlip(req, order, 'geupload'); } catch (failure) { console.error(`Audit van pakbon bij ${order.number} mislukt: ${failure.message}`); }
+            res.json({ ok: true, pages: checked.pages });
+          } catch (error) { next(error); }
+        });
+        // De eigen geüploade pakbon bekijken.
+        router.get('/bestelling/:id/pakbon.pdf', (req, res) => {
+          if (!orderingOn()) return orderingOff(req, res);
+          res.setHeader('Cache-Control', 'private, no-store');
+          const viewer = accounts.viewer(req);
+          if (!viewer) return res.redirect(302, '../../inloggen/');
+          const order = orders.getForUser(tenantId, viewer.id, req.params.id);
+          const slip = order && order.dropshipping ? orderSlips.read(tenantId, order.id) : null;
+          if (!slip) return res.status(404).type('text').send('Geen pakbon gevonden.');
+          res.setHeader('Content-Disposition', `inline; filename="${slip.fileName.replace(/[^A-Za-z0-9._ -]/g, '_')}"`);
+          res.type('application/pdf').send(slip.bytes);
         });
       }
       // De factuur van een eigen bestelling als PDF (alleen als hij definitief is).

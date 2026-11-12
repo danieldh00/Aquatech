@@ -1311,6 +1311,20 @@ const MIGRATIONS = [
   `
   CREATE INDEX web_orders_status ON web_orders (tenant_id, status, created_at);
   `,
+  // 68: dropshipping (webshop/order-slips.js, punt 8): de eigen pakbon (PDF) die de klant bij een dropshippingbestelling uploadt,
+  // versleuteld (vault.sealBytes) per bestelling; hoogstens één per bestelling (vervangen kan zolang de bestelling nieuw is).
+  `
+  CREATE TABLE web_order_slips (
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    order_id   TEXT NOT NULL REFERENCES web_orders(id),
+    file_name  TEXT NOT NULL,
+    pages      INTEGER NOT NULL,
+    size       INTEGER NOT NULL,
+    data       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, order_id)
+  );
+  `,
 ];
 
 /**
