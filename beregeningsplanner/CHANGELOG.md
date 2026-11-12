@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.3
+
+Fix: het formulier *AI-koppeling (Claude en ChatGPT)* stond in Beheer onder *Artikelen: etiketten*. Het formulier stond niet in de lijst `SETTINGS_FORMS` van `beheer/indeling.js`, dus het werd bij elke sectie van Instellingen getoond. Het heeft nu een eigen sectie *AI-koppeling (MCP)* onder Koppelingen; bij Etiketten staan alleen nog de etiketsjablonen. Geen migratie.
+
 ## 1.11.2
 
 Verpakkingseenheden per artikel (punt 1, deel A: opslag en artikelscherm; de winkel volgt in deel B). Migratie 63: tabel `item_packagings`.

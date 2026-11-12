@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.11.3',
+      date: '2026-11-12',
+      title: 'AI-koppeling op de juiste plek in Beheer',
+      items: [
+        { text: 'De instelling AI-koppeling (Claude en ChatGPT) stond per ongeluk onder Artikelen: etiketten. Je vindt hem nu onder Beheer → Koppelingen → AI-koppeling (MCP).', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.11.2',
       date: '2026-11-12',
       title: 'Verpakkingen per artikel',
