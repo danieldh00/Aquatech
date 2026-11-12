@@ -1806,20 +1806,33 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * Bestelvoorstel: niet-gearchiveerde artikelen waarvan beschikbaar (stand −
    * gereserveerd) onder het minimum ligt (ook een tekort bij minimum 0), met het aantal om aan te vullen tot
    * "bestellen tot" (leeg of lager dan het minimum = 2× minimum), naar boven
-   * afgerond op hele eenheden.
+   * afgerond op hele eenheden. Heeft het artikel een voorkeursleverancier, dan wordt het aantal naar boven
+   * afgerond op een veelvoud van zijn bestelhoeveelheid (de verpakking), geldt de inkoopprijs van die
+   * leverancier (als die is ingevuld) en staan leverancier en artikelnummer bij de regel.
    * @param {string} tenantId Id van de omgeving.
-   * @returns {{ items: object[], total: number|null }} De regels (artikel plus orderQty, target en amount) en het totaal op inkoopprijs.
+   * @param {{ preferred?: Map<string, object> }} [options] preferred = voorkeursleverancier per artikel-id (suppliers.preferredByItem).
+   * @returns {{ items: object[], total: number|null, suppliers: object[] }} De regels (artikel plus orderQty, target, amount, supplierId, supplierName en supplierSku), het totaal en per leverancier het aantal regels en het bedrag (zonder leverancier als laatste).
    */
-  function reorderProposal(tenantId) {
+  function reorderProposal(tenantId, { preferred = new Map() } = {}) {
     let total = null;
+    const groups = new Map();
     const items = list(tenantId).filter((item) => !item.hasVariants && item.available < item.minQty).map((item) => {
       const target = item.reorderQty != null && item.reorderQty >= item.minQty ? item.reorderQty : round3(item.minQty * 2);
-      const orderQty = Math.ceil(round3(target - item.available));
-      const amount = item.costPrice == null ? null : Math.round(orderQty * item.costPrice * 100) / 100;
+      const supplier = preferred.get(item.id) || null;
+      const pack = supplier && supplier.orderQty > 0 ? supplier.orderQty : 1;
+      const orderQty = round3(Math.ceil(round3(round3(target - item.available) / pack)) * pack);
+      const unitCost = supplier && supplier.costPrice != null ? supplier.costPrice : item.costPrice;
+      const amount = unitCost == null ? null : Math.round(orderQty * unitCost * 100) / 100;
       if (amount != null) total = Math.round(((total || 0) + amount) * 100) / 100;
-      return { ...item, target, orderQty, amount };
+      const key = supplier ? supplier.supplierId : '';
+      const group = groups.get(key) || { supplierId: supplier ? supplier.supplierId : null, supplierName: supplier ? supplier.supplierName : '', count: 0, total: null };
+      group.count += 1;
+      if (amount != null) group.total = Math.round(((group.total || 0) + amount) * 100) / 100;
+      groups.set(key, group);
+      return { ...item, costPrice: unitCost, target, orderQty, amount, supplierId: supplier ? supplier.supplierId : null, supplierName: supplier ? supplier.supplierName : '', supplierSku: supplier ? supplier.supplierSku : '' };
     });
-    return { items, total };
+    const suppliers = [...groups.values()].sort((left, right) => (left.supplierId ? 0 : 1) - (right.supplierId ? 0 : 1) || left.supplierName.localeCompare(right.supplierName, 'nl'));
+    return { items, total, suppliers };
   }
 
   /**
@@ -2005,7 +2018,7 @@ function registerStockRoutes(app, ctx) {
   // Bestelvoorstel: wat onder het minimum zit en hoeveel er bij moet (de Excel maakt de browser).
   app.get('/api/stock/reorder', requireStock, (req, res) => {
     noStore(res);
-    res.json(stock.reorderProposal(tenantOf(req)));
+    res.json(stock.reorderProposal(tenantOf(req), { preferred: ctx.suppliers ? ctx.suppliers.preferredByItem(tenantOf(req)) : new Map() }));
   });
 
   app.get('/api/stock/movements', requireStock, (req, res) => {

@@ -153,3 +153,46 @@ test('leveranciers: hoofdartikel zonder eigen leverancier, rechten en andere org
     server.close();
   }
 });
+
+test('leveranciers: bestelvoorstel per leverancier met bestelhoeveelheid en eigen inkoopprijs', async () => {
+  const { server, as } = await setup();
+  try {
+    const kees = await as('kees');
+    const tuin = (await kees.post('/app/api/suppliers', { name: 'Tuintechniek' })).body;
+    const import_ = (await kees.post('/app/api/suppliers', { name: 'Import BV' })).body;
+    /**
+     * Maakt een voorraadartikel aan voor het bestelvoorstel.
+     * @param {string} code De artikelcode (ook de omschrijving).
+     * @param {object} fields De overige velden (minQty, onHand, costPrice).
+     * @returns {Promise<object>} Het aangemaakte artikel.
+     */
+    const make = async (code, fields) => (await kees.post('/app/api/stock/items', { code, name: code, ...fields })).body;
+    // Tekort 17 (bestellen tot = 2× minimum): bestelhoeveelheid 25 geeft 25 stuks, tegen de prijs van de leverancier (1,5 i.p.v. 2).
+    const pipe = await make('PIJP', { minQty: 10, onHand: 3, costPrice: 2 });
+    // Tekort 9 met bestelhoeveelheid 1: blijft 9, prijs van het artikel.
+    const valve = await make('KLEP', { minQty: 5, onHand: 1, costPrice: 10 });
+    // Zonder leverancier.
+    await make('LOS', { minQty: 2, onHand: 0, costPrice: 3 });
+    // Een tweede (niet-voorkeurs)leverancier telt niet mee.
+    await kees.put(`/app/api/stock/items/${pipe.id}/suppliers`, { suppliers: [
+      { supplierId: import_.id, supplierSku: 'IM-1', orderQty: 1 },
+      { supplierId: tuin.id, supplierSku: 'TT-PIJP', costPrice: 1.5, orderQty: 25, preferred: true }] });
+    await kees.put(`/app/api/stock/items/${valve.id}/suppliers`, { suppliers: [{ supplierId: import_.id, supplierSku: 'IM-KLEP' }] });
+
+    const proposal = (await kees.get('/app/api/stock/reorder')).body;
+    const byCode = Object.fromEntries(proposal.items.map((item) => [item.code, item]));
+    assert.deepStrictEqual([byCode.PIJP.orderQty, byCode.PIJP.costPrice, byCode.PIJP.amount, byCode.PIJP.supplierName, byCode.PIJP.supplierSku], [25, 1.5, 37.5, 'Tuintechniek', 'TT-PIJP']);
+    assert.deepStrictEqual([byCode.KLEP.orderQty, byCode.KLEP.amount, byCode.KLEP.supplierName], [9, 90, 'Import BV']);
+    assert.deepStrictEqual([byCode.LOS.orderQty, byCode.LOS.supplierId, byCode.LOS.supplierSku], [4, null, '']);
+    // Per leverancier op naam, zonder leverancier als laatste.
+    assert.deepStrictEqual(proposal.suppliers.map((group) => [group.supplierName, group.count, group.total]), [['Import BV', 1, 90], ['Tuintechniek', 1, 37.5], ['', 1, 12]]);
+    assert.strictEqual(proposal.total, 139.5);
+
+    // Een gearchiveerde voorkeursleverancier telt niet meer als leverancier van het voorstel.
+    await kees.del(`/app/api/suppliers/${tuin.id}`);
+    const after = (await kees.get('/app/api/stock/reorder')).body.items.find((item) => item.code === 'PIJP');
+    assert.deepStrictEqual([after.supplierId, after.orderQty, after.costPrice], [null, 17, 2]);
+  } finally {
+    server.close();
+  }
+});
