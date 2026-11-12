@@ -318,7 +318,11 @@ function createWebOrderStore(db, { stock }) {
    */
   function lockItems(tenantId, wanted) {
     if (!isPg(db)) return;
-    const codes = [...new Set(wanted.map((line) => splitCartCode(String(line.code || '').trim().toUpperCase()).baseCode).filter(Boolean))].sort().slice(0, MAX_LINES);
+    // Dezelfde codes als priceCart: de volledige wagencode én de artikelcode (een oude artikelcode kan zelf een @ bevatten).
+    const codes = [...new Set(wanted.flatMap((line) => {
+      const code = String(line.code || '').trim().toUpperCase();
+      return [code, splitCartCode(code).baseCode];
+    }).filter(Boolean))].sort().slice(0, MAX_LINES * 2);
     if (!codes.length) return;
     prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND code IN (${codes.map(() => '?').join(', ')}) ORDER BY id FOR UPDATE`).all(tenantId, ...codes);
   }
