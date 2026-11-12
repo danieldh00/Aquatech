@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.13.3',
+      date: '2026-11-12',
+      title: 'Uitverkoop-sectie uit de webshop',
+      items: [
+        { text: 'De uitverkoop-sectie op de webshop is verwijderd. De standaardkolom Uitverkoop is verdwenen van de startpagina.' },
+      ],
+    },
+    {
       version: '1.13.2',
       date: '2026-11-12',
       title: 'Mijn profiel netjes uitgelijnd',

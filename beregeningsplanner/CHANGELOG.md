@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.13.3
+
+- `webshop/shop-content.js`: de standaardkolom *Uitverkoop* is verwijderd uit `DEFAULT_SITE`; een opgeslagen kolom met die kop wordt bij het saneren overgeslagen (`RETIRED_COLUMN_TITLE`), zodat ook bestaande live inhoud geen uitverkoop-sectie meer toont. Geen migratie nodig.
+- `frontend/beheer/webshop-inhoud.js`: de legenda van het kolommenblok noemt geen uitverkoop meer.
+- De filter op de kop is hoofdlettergevoelig: een kolom die exact `Uitverkoop` heet wordt overgeslagen.
+- Tests (`shop-home.test.js`): sanering van een opgeslagen uitverkoop-kolom en controle dat de startpagina er geen toont.
+
 ## 1.13.2
 
 - `profiel/index.html` en `profiel.css`: gedeelde klassen uit `shared/layout.css` (`.form-grid`, `.field`, `.form-actions`) i.p.v. eigen marges; kaarten zijn flexkolommen met één tussenruimte, rijen even hoog (`align-items: stretch`), AI-koppeling over de volle breedte; het losse `.form-foot` en de `grid-row: span 2` van de persoonlijke gegevens zijn vervallen.
