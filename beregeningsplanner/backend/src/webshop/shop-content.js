@@ -36,11 +36,11 @@ const MENU_KEY = 'menu';
 const MAX_TREE_NODES = 600;
 const MAX_TREE_DEPTH = 6;
 
-/** De kleuren voor de mededelingenbalk (sleutel → naam in Beheer); de shop kent bij elke sleutel een vaste, goed leesbare achtergrond (storefront.css). */
 /** Kop van de uitverkoop-kolom die is verwijderd; oude opgeslagen kolommen met die kop vallen weg. */
 const RETIRED_COLUMN_TITLE = 'Uitverkoop';
 
-const NOTICE_COLORS ={ purple: 'Paars', navy: 'Donkerblauw', green: 'Groen', teal: 'Turquoise', orange: 'Oranje', red: 'Rood', grey: 'Grijs' };
+/** De kleuren voor de mededelingenbalk (sleutel → naam in Beheer); de shop kent bij elke sleutel een vaste, goed leesbare achtergrond (storefront.css). */
+const NOTICE_COLORS = { purple: 'Paars', navy: 'Donkerblauw', green: 'Groen', teal: 'Turquoise', orange: 'Oranje', red: 'Rood', grey: 'Grijs' };
 
 /** Standaardinhoud: precies wat de shop toonde voordat deze te bewerken was. */
 const DEFAULT_SITE = {
