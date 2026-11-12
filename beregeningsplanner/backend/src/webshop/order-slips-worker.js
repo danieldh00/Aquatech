@@ -16,8 +16,24 @@ const MAX_STREAM_BYTES = 40 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 80 * 1024 * 1024;
 /** Hoogstens zoveel streams worden gecontroleerd (een gewone pakbon heeft er tientallen); meer is verdacht en houdt het werk begrensd. */
 const MAX_STREAMS = 500;
+/** Filters die pdf-lib naast Flate uitvoert en die deze controle niet kan begrenzen: PDF's die ze noemen worden geweigerd. */
+const UNSUPPORTED_FILTERS = new Set(['ASCIIHexDecode', 'ASCII85Decode', 'RunLengthDecode', 'LZWDecode', 'AHx', 'A85', 'RL', 'LZW']);
 /** Een filterketen (Flate van Flate) wordt hoogstens zoveel lagen diep uitgepakt; dieper is verdacht. */
 const MAX_LAYERS = 4;
+
+/**
+ * Zoekt in de ruwe PDF naar namen van filters die niet te begrenzen zijn (ook geschreven met #xx-tekens, zoals /ASCII#48exDecode).
+ * @param {Buffer} buffer De PDF.
+ * @returns {boolean} true als zo'n filter wordt genoemd.
+ */
+function usesUnsupportedFilter(buffer) {
+  const text = buffer.toString('latin1');
+  for (const match of text.matchAll(/\/[^\s\/\[\]<>()%{}]{1,40}/g)) {
+    const name = match[0].slice(1).replace(/#([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    if (UNSUPPORTED_FILTERS.has(name)) return true;
+  }
+  return false;
+}
 
 /**
  * Pakt gegevens laag voor laag uit zolang het resultaat zelf weer uit te pakken is (elke geldige zlib-kop telt, ook met een kleiner venster) (pdf-lib past een filterketen als
@@ -83,6 +99,7 @@ function streamsWithinLimits(buffer) {
  * @returns {Promise<{ bytes?: Buffer, pages?: number, error?: string }>} De schone PDF en het aantal pagina's, of een melding in gewone taal.
  */
 async function checkSlip(buffer) {
+  if (usesUnsupportedFilter(buffer)) return { error: 'Deze PDF gebruikt een compressie die niet wordt ondersteund. Sla de pakbon opnieuw op als gewone PDF.' };
   if (!streamsWithinLimits(buffer)) return { error: 'Deze PDF wordt te groot als hij wordt uitgepakt en is daarom niet toegestaan.' };
   let source;
   let count;

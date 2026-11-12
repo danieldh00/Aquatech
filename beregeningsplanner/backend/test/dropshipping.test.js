@@ -98,6 +98,11 @@ test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', as
   const smallWindow = zlib.deflateSync(zlib.deflateSync(Buffer.alloc(200 * 1024 * 1024), { level: 9, windowBits: 13 }), { level: 9 });
   const chain2 = Buffer.concat([base, Buffer.from('\n90 0 obj\n<< /Type /ObjStm /Filter [/FlateDecode /FlateDecode] >>\nstream\n'), smallWindow, Buffer.from('\nendstream\nendobj\n')]);
   assert.match((await inspectSlip(chain2)).error, /te groot als hij wordt uitgepakt/);
+  // Filters die niet te begrenzen zijn worden geweigerd, ook als de naam met #xx is geschreven.
+  for (const name of ['ASCIIHexDecode', 'RunLengthDecode', 'ASCII#48exDecode']) {
+    const hexed = Buffer.concat([base, Buffer.from(`\n89 0 obj\n<< /Type /ObjStm /Filter [/${name} /FlateDecode] >>\nstream\n00>\nendstream\nendobj\n`)]);
+    assert.match((await inspectSlip(hexed)).error, /compressie die niet wordt ondersteund/);
+  }
   // Een onredelijk aantal streams wordt geweigerd.
   const many = Buffer.concat([base, Buffer.from('\nstream\nabc\nendstream'.repeat(600))]);
   assert.match((await inspectSlip(many)).error, /te groot als hij wordt uitgepakt/);
