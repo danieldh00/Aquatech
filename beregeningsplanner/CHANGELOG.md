@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.11.5
+
+Inkoop als eigen kopje in de zijbalk. Geen migratie.
+
+- **Zijbalk**: nieuwe groep *Inkoop* (`navGroup: 'inkoop'`) met Bestelvoorstel, Inkooporders, Leveranciers en Mutaties. Het zijn tabbladen van Artikelen: de modules wijzen met een #-adres (`artikelen/#orders`) naar het tabblad; `currentId` in `shared/sidebar.js` markeert het open tabblad (de module zonder #-adres is de terugval) en tekent opnieuw bij `hashchange` en `AquatechNav.refresh()` (aangeroepen door `showTab`).
+- `partOf: 'voorraad'` in `modules.js`: de vier regels volgen de module Artikelen (uit = ook weg) en staan niet apart in Beheer > Modules. Voor rollen zonder zijbalk zijn het extra tegels.
+- **Bestelvoorstel** is nu een tabblad op het scherm (per leverancier, met onderweg en bedrag) met knoppen *Concept-orders maken* (stond bij Inkooporders) en *Excel-export* (stond in het Voorraad-overzicht).
+- Met de zijbalk zijn de tabbladen Mutaties, Bestelvoorstel, Leveranciers en Inkooporders in Artikelen verborgen (`data-purchasing`); zonder zijbalk blijven ze.
+- Test: de href-controle in `server.test.js` staat een #-adres toe; nieuwe tests voor de groep en de markering.
+
 ## 1.11.4
 
 Leveranciersdocument inlezen en direct inboeken (punt 17 van bundel F, deel 4). Migratie 64.
