@@ -283,3 +283,16 @@ test('de webshop-inhoud heeft geen SELECT * en staat in de standaard-assets', ()
     assert.ok(fs.existsSync(path.join(__dirname, '..', 'src', 'webshop', 'assets', reference.replace(/^asset:/, ''))), `${reference} ontbreekt`);
   }
 });
+
+test('Beheer krijgt ook van een onvolledig opgeslagen versie alle blokken met lijsten (regressie: items van undefined)', async () => {
+  const { admin, db } = await setup();
+  const tenantId = db.prepare('SELECT id FROM tenants ORDER BY created_at LIMIT 1').get().id;
+  const partial = JSON.stringify({ hero: { title: 'Oud' } });
+  db.prepare('INSERT INTO shop_content (id, tenant_id, key, draft, published, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run('oud-site', tenantId, 'site', partial, partial, new Date().toISOString());
+  const { body } = await admin.get('/app/api/admin/shop-content');
+  for (const version of [body.site.draft, body.site.published]) {
+    assert.strictEqual(version.hero.title, 'Oud');
+    for (const name of ['banners', 'columns', 'benefits', 'brands']) assert.ok(Array.isArray(version[name].items), `${name}.items ontbreekt`);
+  }
+});
