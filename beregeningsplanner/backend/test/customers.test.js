@@ -8,6 +8,7 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createLogin, createClient, listen, postForm } = require('./helpers/http-client');
 const { createPdokFake, KNOWN_ADDRESS } = require('./helpers/pdok-fake');
+const { createViesFake } = require('./helpers/vies-fake');
 
 const SECRET = 'c'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -19,7 +20,7 @@ after(() => { for (const server of servers) server.close(); });
  * @param {{ mail?: boolean }} [options] mail: false = geen mailserver ingesteld.
  * @returns {Promise<object>} base, db, store, main, as (login), sent (verstuurde mails), admin en installer.
  */
-async function setup({ mail = true } = {}) {
+async function setup({ mail = true, vies = createViesFake({ valid: ['DE123456789'] }) } = {}) {
   const db = openDb();
   const store = createStore(db);
   const main = store.ensureTenant().id;
@@ -35,7 +36,7 @@ async function setup({ mail = true } = {}) {
    * @returns {{ configured: Function, send: Function }} De mailfuncties.
    */
   const mailerFor = () => ({ configured: () => mail, send: async (message) => { sent.push(message); } });
-  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, mailerFor, addressFetch: createPdokFake().fetchImpl, loginDelayMs: 0 }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, mailerFor, addressFetch: createPdokFake().fetchImpl, viesFetch: vies.fetchImpl, loginDelayMs: 0 }));
   servers.push(server);
   const as = createLogin(base, { password: PW });
   const admin = await as('baas');
@@ -279,4 +280,48 @@ test('klantkeuze in de offerte: geen klanten van een andere organisatie, en zond
   assert.strictEqual(linked.body.error, 'invalid_customer');
   const planner = await as('planner1');
   assert.strictEqual((await planner.get('/app/api/quote-customers?q=gedeelde')).status, 403);
+});
+
+test('klant zonder KvK-nummer: zakelijk mag, een ongeldig KvK-nummer niet', async () => {
+  const { admin } = await setup();
+  const made = await admin.post('/app/api/customers', { displayName: 'Hans', customerGroup: 'zakelijk', companyName: 'Hans GmbH' });
+  assert.strictEqual(made.status, 201, JSON.stringify(made.body));
+  assert.strictEqual(made.body.customer.companyName, 'Hans GmbH');
+  assert.strictEqual(made.body.customer.kvkNumber, '');
+  assert.strictEqual((await admin.post('/app/api/customers', { displayName: 'Fout', customerGroup: 'zakelijk', companyName: 'X', kvkNumber: '12' })).body.field, 'kvkNumber');
+  assert.strictEqual((await admin.post('/app/api/customers', { displayName: 'Fout', customerGroup: 'zakelijk', kvkNumber: '' })).body.field, 'companyName');
+  // Wijzigen: KvK-nummer weghalen kan ook.
+  const id = (await admin.post('/app/api/customers', { displayName: 'Els', customerGroup: 'zakelijk', companyName: 'Els BV', kvkNumber: '12345678' })).body.customer.id;
+  const cleared = await admin.patch(`/app/api/customers/${id}`, { kvkNumber: '' });
+  assert.strictEqual(cleared.status, 200, JSON.stringify(cleared.body));
+  assert.strictEqual(cleared.body.customer.kvkNumber, '');
+});
+
+test('buitenlandse klant: vrij adres alleen met een door VIES geldig bevonden btw-nummer uit een ander land', async () => {
+  const { admin, installer } = await setup();
+  const foreign = 'Hauptstraße 5, 10115 Berlin, Duitsland';
+  const base = { displayName: 'Hans', customerGroup: 'zakelijk', companyName: 'Hans GmbH', address: foreign };
+  const noVat = await admin.post('/app/api/customers', base);
+  assert.strictEqual(noVat.status, 400, 'zonder btw-nummer geldt PDOK');
+  assert.strictEqual(noVat.body.field, 'address');
+  assert.strictEqual((await admin.post('/app/api/customers', { ...base, vatNumber: 'DE999999999' })).status, 400, 'VIES noemt het nummer ongeldig');
+  assert.strictEqual((await admin.post('/app/api/customers', { ...base, vatNumber: 'NL123456789B01' })).status, 400, 'een Nederlands nummer geeft geen vrij adres');
+  assert.strictEqual((await admin.post('/app/api/customers', { ...base, address: 'Dorpsstraat 1, 1234 AB Dorp', vatNumber: 'DE123456789' })).status, 400, 'een Nederlandse postcode wordt altijd gecontroleerd');
+  const made = await admin.post('/app/api/customers', { ...base, vatNumber: 'DE123456789' });
+  assert.strictEqual(made.status, 201, JSON.stringify(made.body));
+  assert.strictEqual(made.body.customer.address, foreign);
+  // Wijzigen met het opgeslagen btw-nummer: een installateur kan het adres aanpassen.
+  const changed = await installer.patch(`/app/api/customers/${made.body.customer.id}`, { address: 'Berliner Allee 9, 10115 Berlin, Duitsland' });
+  assert.strictEqual(changed.status, 200, JSON.stringify(changed.body));
+});
+
+test('buitenlandse klant: VIES onbereikbaar laat de adrescontrole gelden; een andere organisatie geeft 404', async () => {
+  const { admin, as } = await setup({ vies: createViesFake({ valid: ['DE123456789'], down: true }) });
+  const out = await admin.post('/app/api/customers', { displayName: 'Hans', customerGroup: 'zakelijk', companyName: 'Hans GmbH', vatNumber: 'DE123456789', address: 'Hauptstraße 5, Berlin' });
+  assert.strictEqual(out.status, 400);
+  const id = (await admin.post('/app/api/customers', { displayName: 'Zonder' })).body.customer.id;
+  const other = await as('vreemd', 'ander');
+  assert.strictEqual((await other.patch(`/app/api/customers/${id}`, { phone: '0612345678' })).status, 404);
+  const planner = await as('planner1');
+  assert.strictEqual((await planner.post('/app/api/customers', { displayName: 'X' })).status, 403);
 });
