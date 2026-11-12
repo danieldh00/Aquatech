@@ -59,6 +59,7 @@ const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/i
 const { registerLabelRoutes } = require('./artikelen/labels');
 const { sanitizeCategoryDiscounts, registerCategoryDiscountRoutes } = require('./webshop/category-discounts');
 const { createSupplierStore, registerSupplierRoutes } = require('./artikelen/suppliers');
+const { createPriceFactorStore, registerPriceFactorRoutes } = require('./artikelen/price-factor');
 const { createOrderReader: createDefaultOrderReader } = require('./artikelen/order-reader');
 const { registerOrderReadRoute } = require('./artikelen/order-read-route');
 const { createPackagingStore, registerPackagingRoutes } = require('./artikelen/packagings');
@@ -2270,6 +2271,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Leveranciers en welke leverancier welk artikel levert (zie suppliers.js).
   registerSupplierRoutes(app, { suppliers: supplierStore, requireRight, requireJson, audit });
+  const priceFactorStore = createPriceFactorStore(database, { stock: stockStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree });
+  stockStore.setPricer((tenantId, item) => priceFactorStore.priceFor(tenantId, item));
+  registerPriceFactorRoutes(app, { priceFactors: priceFactorStore, suppliers: supplierStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree, requireRight, requireJson, audit });
   registerOrderReadRoute(app, { stock: stockStore, suppliers: supplierStore, requireRight, audit, settingsFor, aiTenantOf, currentOrderReader, dailyFor, limiter: analyzeLimiter, aiUsage });
   // Verpakkingseenheden per artikel (zie packagings.js).
   registerPackagingRoutes(app, { packagings: packagingStore, requireRight, requireJson, audit });

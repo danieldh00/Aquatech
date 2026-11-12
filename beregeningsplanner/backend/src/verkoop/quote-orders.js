@@ -1,6 +1,6 @@
 // Offerte omzetten naar bestelling (punt 7): een geaccordeerde offerte wordt een bestelling (web_orders, status nieuw) met de
 // regels, prijzen, korting, btw-verlegging, betaaltermijn, documenttaal, klant en het afleveradres van de offerte. De offerte
-// krijgt daarbij `order_id` (migratie 65); daarmee staat ze als Omgezet in de lijst en kan ze maar één keer worden omgezet.
+// krijgt daarbij `order_id` (migratie 66); daarmee staat ze als Omgezet in de lijst en kan ze maar één keer worden omgezet.
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { transaction, isPg } = require('../database/db');

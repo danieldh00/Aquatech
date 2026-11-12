@@ -1061,7 +1061,13 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE purchase_orders ADD COLUMN supplier_reference ${TEXT_TYPE} NOT NULL DEFAULT '';
   `,
-  // 65: offerte omgezet naar bestelling (zie db.js).
+  // 65: prijsfactor per artikel (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN price_mode ${TEXT_TYPE} NOT NULL DEFAULT 'vast';
+  ALTER TABLE stock_items ADD COLUMN price_factor DOUBLE PRECISION;
+  CREATE INDEX stock_items_price_mode ON stock_items (tenant_id, price_mode);
+  `,
+  // 66: offerte omgezet naar bestelling (zie db.js).
   `
   ALTER TABLE quotes ADD COLUMN order_id ${TEXT_TYPE};
   ALTER TABLE quotes ADD COLUMN converted_at ${TEXT_TYPE};

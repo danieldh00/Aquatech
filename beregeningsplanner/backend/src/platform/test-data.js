@@ -1011,6 +1011,10 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
   // Zakelijke kortingen per productcategorie (Beheer > Webshop > Zakelijke kortingen): 5% op heel Beregening en 10% op de druppelslangen.
   settings.update({ categoryDiscounts: { rules: [{ categorySlug: 'beregening_nieuw', discountPct: 5 }, { categorySlug: 'druppelslang-toebehoren', discountPct: 10 }] } });
   counts.categoryDiscounts = 2;
+  // Prijsfactor (Artikelen > Prijsfactor): standaard 1,8 met afronding op ,95; vijf artikelen met inkoop- en verkoopprijs rekenen met de factor.
+  settings.update({ priceFactors: { defaultFactor: 1.8, rounding: { mode: 'x.95', direction: 'dichtstbij' }, categories: [{ categorySlug: 'druppelslang-toebehoren', factor: 2 }], suppliers: [] } });
+  prepare(`UPDATE stock_items SET price_mode = 'factor' WHERE tenant_id = ? AND id IN (SELECT id FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 0 AND cost_price IS NOT NULL AND sale_price IS NOT NULL ORDER BY code LIMIT 5)`).run(seeded.tenantId, seeded.tenantId);
+  counts.priceFactor = Number(prepare("SELECT COUNT(*) AS n FROM stock_items WHERE tenant_id = ? AND price_mode = 'factor'").get(seeded.tenantId).n);
   return counts;
 }
 

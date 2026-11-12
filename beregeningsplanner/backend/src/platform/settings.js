@@ -11,6 +11,7 @@ const { sanitizeSeasonReminders } = require('../uitvoering/season-reminders');
 const { sanitizeVisma, sanitizeVismaApp } = require('../verkoop/visma');
 const { sanitizeLabelTemplates } = require('../artikelen/labels');
 const { sanitizeCategoryDiscounts } = require('../webshop/category-discounts');
+const { sanitizePriceFactors } = require('../artikelen/price-factor');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
@@ -100,6 +101,8 @@ const FIELDS = {
   labelTemplates: { type: 'object', default: {}, sanitize: sanitizeLabelTemplates },
   // Kortingen per productcategorie voor zakelijke klanten (webshop/category-discounts.js); alleen via Beheer > Webshop > Zakelijke kortingen.
   categoryDiscounts: { type: 'object', default: {}, sanitize: sanitizeCategoryDiscounts, internal: true },
+  // Prijsfactor op de inkoopprijs (Artikelen > Prijsfactor; alleen via /api/stock/price-factors).
+  priceFactors: { type: 'object', default: {}, sanitize: sanitizePriceFactors, internal: true },
   // Kleurthema (shared/theme.js): per organisatie te kiezen in Beheer > Kleuren (eigen
   // scherm met contrastcontrole, platform: niet via Beheer > Instellingen). In de hoofdtenant
   // geldt het voor alle organisaties zonder eigen thema, in een live-tenant als eigen thema.

@@ -1293,7 +1293,14 @@ const MIGRATIONS = [
   `
   ALTER TABLE purchase_orders ADD COLUMN supplier_reference TEXT NOT NULL DEFAULT '';
   `,
-  // 65: offerte omgezet naar bestelling (verkoop/quote-orders.js, punt 7): order_id = de bestelling (web_orders) waarin de
+  // 65: prijsfactor (artikelen/price-factor.js, punt 19): price_mode = 'vast' (de verkoopprijs staat vast) of 'factor'
+  // (inkoopprijs × factor); price_factor = de eigen factor van het artikel (leeg = die van leverancier, categorie of standaard).
+  `
+  ALTER TABLE stock_items ADD COLUMN price_mode TEXT NOT NULL DEFAULT 'vast';
+  ALTER TABLE stock_items ADD COLUMN price_factor REAL;
+  CREATE INDEX stock_items_price_mode ON stock_items (tenant_id, price_mode);
+  `,
+  // 66: offerte omgezet naar bestelling (verkoop/quote-orders.js, punt 7): order_id = de bestelling (web_orders) waarin de
   // offerte is omgezet (leeg = niet omgezet), converted_at = wanneer. Zonder verwijzing (FK): de bestelling blijft ook zonder offerte bestaan.
   `
   ALTER TABLE quotes ADD COLUMN order_id TEXT;
