@@ -32,6 +32,7 @@
     { title: 'Koppelingen', sections: [
       { id: 'mail', label: 'E-mail', pane: 'settings', form: 's-mail', words: 'smtp exchange office 365 connector afzender wan ip offertes versturen' },
       { id: 'ai', label: 'AI-herkenning', pane: 'settings', form: 's-ai', words: 'anthropic claude api sleutel model limiet koers dag uur' },
+      { id: 'ai-connector', label: 'AI-koppeling (MCP)', pane: 'settings', form: 's-ai-connector', words: 'mcp claude chatgpt connector offerte concept koppelen oauth handleiding spraak' },
     ] },
     { title: 'Toegang & beveiliging', sections: [
       { id: 'access', label: 'Inloggen en bezoekers', pane: 'settings', form: 's-access', words: 'gasten toegangscode tekening indienen openbaar' },
@@ -49,7 +50,7 @@
   const ALIASES = { settings: 'modules' };
 
   /** Alle formulieren van het tabblad Instellingen: er is er telkens één zichtbaar. */
-  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-labels', 's-mail', 's-ai', 's-access', 's-security', 's-backup', 's-debug'];
+  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-labels', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-security', 's-backup', 's-debug'];
 
   const OPEN_KEY = 'aquatech_beheer_groups';
 
