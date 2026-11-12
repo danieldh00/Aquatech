@@ -106,7 +106,7 @@ Ingelogd wordt een plan op de server bewaard (met historie); zonder server wordt
 ```
 docker-compose.yml, .env.example     de server als Docker-container (poort 3300)
 deploy/apps01/                       uitrol op de server (update.sh, compose.yml)
-scripts/check_version.py             CI: versie moet omhoog bij een wijziging in de app
+changes/                             releasenotes per PR (worden bij de release versie + changelog)
 beregeningsplanner/                  de app
   Dockerfile, CHANGELOG.md, DOCS.md
   backend/
@@ -153,11 +153,11 @@ TEST_DATABASE_URL=postgres://… npm test         # dezelfde suite tegen Postgre
 ```
 
 - `master` is productie. Elke wijziging gaat via een eigen branch en een pull request; een wijziging in
-  `beregeningsplanner/` vraagt een hogere versie in `backend/package.json`, een regel in `CHANGELOG.md` en in
-  `frontend/nieuws/releases.js`. Werk dit README bij als een PR features of de installatie wijzigt.
-- Een PR merget pas als de tests (SQLite en PostgreSQL), de versiecontrole en de verplichte controles **Claude code
+  `beregeningsplanner/` vraagt een bestand `changes/<naam>.md` met releasenotes (zie `changes/README.md`); het
+  versienummer, `CHANGELOG.md` en `frontend/nieuws/releases.js` worden na het mergen automatisch bijgewerkt. Werk dit README bij als een PR features of de installatie wijzigt.
+- Een PR merget pas als de tests (SQLite en PostgreSQL), de releasenotes-controle en de verplichte controles **Claude code
   review** en **Claude security review** (`.github/workflows/claude-review.yml`) groen zijn. CodeRabbit is uitgeschakeld;
   vóór go-live volgt eenmalig een handmatige deep scan met CodeRabbit.
-- Na het mergen bouwt `release.yml` het image `ghcr.io/danieldh00/aquatech:<versie>`; de server
+- Na het mergen verhoogt `release.yml` de versie (+1 patch) en bouwt het image `ghcr.io/danieldh00/aquatech:<versie>`; de server
   (`deploy/apps01/`) rolt het binnen 15 minuten uit, met een back-up vooraf en rollback bij een fout.
 - Werkafspraken (codestijl, queries, beveiliging, mappen) staan in `CLAUDE.md`.

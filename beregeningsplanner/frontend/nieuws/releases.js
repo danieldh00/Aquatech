@@ -2,8 +2,9 @@
 // technische details staan in CHANGELOG.md). Gedeeld door de server (require,
 // voor de melding "nieuw sinds je vorige bezoek") en de pagina Nieuws.
 //
-// Bij elke versie-bump een regel bovenaan toevoegen (test/news.test.js
-// controleert dat de versie uit package.json erin staat). Alleen wat een
+// De regels komen automatisch bovenaan bij de release, uit het deel "## Nieuws"
+// van het bestand changes/<naam>.md (test/news.test.js controleert dat de versie
+// uit package.json erin staat). Alleen wat een
 // gebruiker merkt; een versie zonder zichtbare wijziging krijgt
 // `items: []` en wordt dan niet getoond.
 //

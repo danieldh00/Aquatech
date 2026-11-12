@@ -41,8 +41,8 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   git fetch origin master
   git checkout -B claude/<naam> origin/master
   ```
-- Werkwijze per taak: wijzigen → `npm test` → versie-bump + changelog (als
-  `beregeningsplanner/` is gewijzigd) → README.md bijwerken (bij features/setup) → `git push -u origin <branch>` → PR naar
+- Werkwijze per taak: wijzigen → `npm test` → releasenotes-bestand `changes/<naam>.md` (als
+  `beregeningsplanner/` is gewijzigd; **geen** versie-bump, geen CHANGELOG/releases.js) → README.md bijwerken (bij features/setup) → `git push -u origin <branch>` → PR naar
   `master` → CI groen (`ci.yml` + `version.yml`) → **Claude-review**
   (`claude-review.yml`: jobs *Claude code review* en *Claude security review*, de
   verplichte controles; opmerkingen oplossen of met reden beantwoorden). **CodeRabbit is uitgeschakeld** (besluit Daniël 2026-11-11: config, triggers, inhaalreview en bevindingenissues zijn verwijderd). **Vóór go-live** laat Daniël de code één keer handmatig een deep scan geven met CodeRabbit; bevindingen daarvan lossen we dan op. De Claude-reviews draaien op het Claude-abonnement van Daniël (secret `CLAUDE_CODE_OAUTH_TOKEN`, aan te maken met `claude setup-token`), niet op API-tegoed; de securityreview draait via dezelfde `claude-code-action`. **Kosten van de Claude-review** zijn begrensd: de workflow slaat docs/tests-only wijzigingen over, draait de securityreview alleen bij beveiligingsrelevante code en beoordeelt een volgende push alleen op wat nieuw is; het model komt uit de repository-variabelen `CLAUDE_REVIEW_MODEL` (eerste volledige review) en `CLAUDE_REVIEW_MODEL_PUSH` (lichtere review per push). Na het mergen de branch verwijderen. Een volgende taak begint opnieuw vanaf
@@ -50,10 +50,16 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - Loopt `master` voor op je branch (andere sessie heeft gemerged): eerst
   `git merge origin/master` in je branch, conflicten oplossen, en de versie
   zo nodig opnieuw verhogen (moet hoger zijn dan die op `master`).
-- Elke wijziging in `beregeningsplanner/` op `master` vereist een
-  **versie-bump** in `beregeningsplanner/backend/package.json` + entry in
-  `CHANGELOG.md`. `scripts/check_version.py` (workflow `version.yml`, op PR's
-  naar en pushes op `master`) bewaakt dat.
+- **Versie en releasenotes zijn automatisch** : een PR verandert `version` in
+  `beregeningsplanner/backend/package.json`, `CHANGELOG.md` en `frontend/nieuws/releases.js` **niet**. Elke PR die
+  `beregeningsplanner/` wijzigt voegt één bestand `changes/<korte-naam>.md` toe (formaat en voorbeeld: `changes/README.md`:
+  `titel:`, `## Nieuws` met punten en optioneel `[rechten]`, `## Changelog`). Na de merge geeft `release.yml` (job *prepare*,
+  `backend/tools/release-notes.js`) elk bestand het volgende versienummer (patch + 1, na x.y.9 de volgende minor, `bump: minor`
+  in de kop kan; major alleen op Daniëls woord), werkt de drie bestanden bij, verwijdert het fragment en commit naar master
+  met `[skip ci]`. De PR-check `version-must-increase` (`version.yml`) faalt bij een eigen versie-/releases.js-/CHANGELOG-wijziging
+  of een ontbrekend fragment; alleen docs/CI zonder effect: label `geen-releasenotes`. Het versienummer in een PR staat dus
+  altijd op het oude; tests die de versie nodig hebben lezen `package.json`. Voor de push naar de beschermde master is
+  het secret `RELEASE_PUSH_TOKEN` nodig (beheerder-PAT) met Repository admin als bypass in de ruleset.
   Wijzigingen buiten `beregeningsplanner/` (zoals deze `CLAUDE.md`) hebben
   geen bump nodig.
 
@@ -62,10 +68,10 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
 - Publieke URL **https://aquatech.den-hollander.com** via Cloudflare-tunnel
   `apps01` naar de Docker-server (Proxmox-VM `apps01`, `/opt/apps/aquatech`,
   zie `deploy/apps01/README.md`).
-- **CI/CD**: `release.yml` bouwt bij een versie-bump op `master` na tests en
+- **CI/CD**: `release.yml` bouwt bij een nieuwe versie op `master` (automatisch na een merge met fragment) na tests en
   smoketest het image `ghcr.io/danieldh00/aquatech:<versie>` + `:latest`; de
   server rolt dat binnen 15 min uit (`deploy/apps01/update.sh`, met rollback).
-  Zonder versie-bump geen nieuw image en dus geen uitrol.
+  Zonder fragment geen nieuwe versie, geen nieuw image en dus geen uitrol.
 - **Eerste start**: zolang er geen actieve beheerder met een eigen account is
   (`store.countAdmins`), krijgt elke niet-ingelogde bezoeker
   `backend/src/paginas/setup.html` (POST `/api/setup`; met een toegangscode is die
@@ -604,7 +610,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `news`, migratie 19, `backend/src/platform/news.js`, recht `nieuws` = plaatsen,
   doelgroep `medewerkers`|`iedereen`, optioneel mail naar collega's) en het
   versielogboek in gewone taal `frontend/nieuws/releases.js` (punten met
-  `for: [rechten]`). **Bij elke versie-bump een regel bovenaan releases.js**
+  `for: [rechten]`). **Het Nieuws-deel van het fragment in `changes/` komt bij de release bovenaan releases.js**
   (test eist dat). `api/me` geeft `news` (aantal nieuw, cache 30 s);
   gezien-stand in voorkeuren `newsSeenAt`/`seenRelease` (`POST /api/news/seen`).
 - **Offline/PWA** (0.58.0): `frontend/sw.js` (geregistreerd door
@@ -649,7 +655,7 @@ standaard voor alle nieuwe code. Controleer ze zelf vóór de PR en noem in
 de PR-beschrijving kort hoe eraan voldaan is.
 
 **Documentatie**: `README.md` (root) bijwerken als de PR features, modules, instellingen, installatie of het
-reviewproces wijzigt; versie-bump + `CHANGELOG.md` + regel bovenaan `frontend/nieuws/releases.js` bij elke wijziging in
+reviewproces wijzigt; een fragment `changes/<naam>.md` (notes voor CHANGELOG en Nieuws) bij elke wijziging in
 `beregeningsplanner/`.
 
 **Queries** (productie = Supabase over het netwerk, elke query is een rondgang):
