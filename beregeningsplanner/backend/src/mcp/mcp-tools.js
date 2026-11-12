@@ -25,6 +25,8 @@ const DOCUMENT_RIGHTS = { offerte: 'offertes', werkorder: 'werkorders', factuur:
 const DOCUMENT_PLURALS = { offerte: 'offertes', werkorder: 'werkorders', factuur: 'facturen', bestelling: 'webshopbestellingen' };
 /** Waar een soort document in de app staat (bestellingen hebben geen eigen adres per bestelling). */
 const DOCUMENT_PAGES = { offerte: 'offertes', werkorder: 'werkorders', factuur: 'facturen', bestelling: 'webshop-bestellingen' };
+/** Melding als de leesfuncties (klant_details, prijs_voor_klant, status_opvragen) hun limiet per uur bereiken. */
+const READS_LIMITED = 'Te veel opvragingen dit uur via de AI-koppeling. Probeer het later opnieuw of kijk in AquaTech.';
 /** Hoelang de artikellijst per omgeving wordt onthouden (prijzen kunnen dus zo lang achterlopen). */
 const ARTICLE_CACHE_MS = 30 * 1000;
 
@@ -137,6 +139,8 @@ function createMcpTools(ctx) {
   const quotesPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `mcp-offerte:${req.tenantId}|${req.user.id}` });
   const quotesPerDay = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 150, keyFn: (req) => `mcp-offerte-dag:${req.tenantId}|${req.user.id}` });
   const customersPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `mcp-klant:${req.tenantId}|${req.user.id}` });
+  // Leesfuncties samen: genoeg voor een drukke werkdag, maar geen onbeperkt aflopen van nummers of klant-id's.
+  const readsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => `mcp-lezen:${req.tenantId}|${req.user.id}` });
   const debtorListsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `mcp-debiteuren:${req.tenantId}|${req.user.id}` });
 
   /**
@@ -295,6 +299,7 @@ function createMcpTools(ctx) {
        * @returns {object} De uitkomst.
        */
       run: (args, req) => {
+        if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
         const customer = ctx.getCustomer(req, cleanText(args.klantId, 64));
         if (!customer) return errorOf('Deze klant bestaat niet. Zoek opnieuw met zoek_klant.');
         const business = customer.customerGroup === 'zakelijk';
@@ -344,6 +349,7 @@ function createMcpTools(ctx) {
        * @returns {object} De uitkomst.
        */
       run: (args, req) => {
+        if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
         const customer = ctx.getCustomer(req, cleanText(args.klantId, 64));
         if (!customer) return errorOf('Deze klant bestaat niet. Zoek opnieuw met zoek_klant.');
         const wanted = (Array.isArray(args.artikelen) ? args.artikelen : []).slice(0, MAX_PRICE_CODES)
@@ -393,6 +399,7 @@ function createMcpTools(ctx) {
        * @returns {object} De uitkomst.
        */
       run: (args, req) => {
+        if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
         const kind = DOCUMENT_KINDS.includes(args.soort) ? args.soort : '';
         if (!kind) return errorOf(`Kies de soort: ${DOCUMENT_KINDS.join(', ')}.`);
         if (!ctx.can(req.user, DOCUMENT_RIGHTS[kind])) return errorOf(`Je mag in AquaTech geen ${DOCUMENT_PLURALS[kind]} bekijken.`);

@@ -367,6 +367,20 @@ test('leesfuncties: klantkaart, prijs voor een zakelijke klant, status op nummer
   assert.strictEqual(installerCard.recenteOffertes[0].nummer, quote.nummer);
   assert.strictEqual((await callTool(base, viaInstaller.accessToken, 'status_opvragen', { soort: 'offerte', nummer: quote.nummer })).structuredContent.status, 'concept');
 
+  // De leesfuncties hebben samen een limiet per gebruiker per uur (300, over al zijn koppelingen); daarna een leesbare fout.
+  // Drie koppelingen, omdat elke koppeling los ook 120 verzoeken per minuut mag.
+  const tokens = [viaInstaller.accessToken, (await connect(base, installer)).accessToken, (await connect(base, installer)).accessToken];
+  let used = 4; // al gedaan hierboven met viaInstaller: drie keer status_opvragen en één klantkaart (debiteuren telt apart)
+  while (used < 300) {
+    const next = tokens[Math.floor(used / 100)];
+    const answer = await callTool(base, next, 'status_opvragen', { soort: 'werkorder', nummer: `WO-2099-${used}` });
+    assert.doesNotMatch(answer.structuredContent.fout, /Te veel/, `opvraging ${used + 1}`);
+    used += 1;
+  }
+  const limited = await callTool(base, tokens[2], 'klant_details', { klantId: created.id });
+  assert.strictEqual(limited.isError, true);
+  assert.match(limited.structuredContent.fout, /Te veel opvragingen/);
+
   // Een smalle toestemming: alleen artikelen lezen geeft geen klantprijzen (daar hoort klanten.lezen bij).
   const narrow = await connect(base, admin, { scope: 'artikelen.lezen' });
   assert.strictEqual((await callTool(base, narrow.accessToken, 'prijs_voor_klant', { klantId: created.id, artikelen: [{ artikelcode: 'PE-25' }] })).isError, true);
