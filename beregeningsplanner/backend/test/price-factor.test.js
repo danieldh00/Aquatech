@@ -278,6 +278,11 @@ test('prijsvoorstel: nieuwe inkoopprijs geeft een voorstel dat je goedkeurt of a
   assert.strictEqual((await staff.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 12 }] })).status, 403);
   assert.strictEqual((await staff.post('/app/api/stock/price-factors/reopen', { ids: [first.id] })).status, 403);
   assert.deepStrictEqual((await vreemd.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 12 }] })).body, { rejected: 0, skipped: 1 });
+  // Een andere organisatie kan een afwijzing niet heropenen (de rij blijft staan).
+  await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 12 }] });
+  assert.strictEqual((await vreemd.post('/app/api/stock/price-factors/reopen', { ids: [first.id] })).status, 200);
+  assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS n FROM price_proposal_rejections WHERE tenant_id = ?').get(main).n), 1);
+  await admin.post('/app/api/stock/price-factors/reopen', { ids: [first.id] });
   assert.strictEqual((await admin.post('/app/api/stock/price-factors/reject', {})).status, 400);
   assert.strictEqual((await admin.post('/app/api/stock/price-factors/reopen', {})).status, 400);
   // Afwijzen: alleen als het voorstel klopt; een verouderde prijs en een vast artikel worden overgeslagen.

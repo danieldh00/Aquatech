@@ -325,8 +325,11 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
    * @returns {void}
    */
   function forget(tenantId, itemIds) {
-    const remove = db.prepare('DELETE FROM price_proposal_rejections WHERE tenant_id = ? AND item_id = ?');
-    for (const itemId of itemIds) remove.run(tenantId, itemId);
+    // Per blok van 500 in één statement: geen rondgang per artikel (en geen transactie nodig, want setSalePrices nest niet).
+    for (let start = 0; start < itemIds.length; start += 500) {
+      const chunk = itemIds.slice(start, start + 500);
+      db.prepare(`DELETE FROM price_proposal_rejections WHERE tenant_id = ? AND item_id IN (${chunk.map(() => '?').join(',')})`).run(tenantId, ...chunk);
+    }
   }
 
   /**
