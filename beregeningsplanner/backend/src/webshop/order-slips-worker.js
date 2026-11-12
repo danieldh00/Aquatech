@@ -16,6 +16,34 @@ const MAX_STREAM_BYTES = 40 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 80 * 1024 * 1024;
 /** Hoogstens zoveel streams worden gecontroleerd (een gewone pakbon heeft er tientallen); meer is verdacht en houdt het werk begrensd. */
 const MAX_STREAMS = 500;
+/** Een filterketen (Flate van Flate) wordt hoogstens zoveel lagen diep uitgepakt; dieper is verdacht. */
+const MAX_LAYERS = 4;
+
+/**
+ * Pakt gegevens laag voor laag uit zolang het resultaat zelf weer met een zlib-kop begint (pdf-lib past een filterketen als
+ * [/FlateDecode /FlateDecode] achter elkaar toe), en telt alle uitgepakte lagen mee.
+ * @param {Buffer} data De gecomprimeerde gegevens.
+ * @returns {number|null} Het totaal aantal uitgepakte bytes, 0 als het geen zlib-gegevens zijn, of null als een grens wordt overschreden.
+ */
+function inflateLayers(data) {
+  let sum = 0;
+  let current = data;
+  for (let layer = 0; layer < MAX_LAYERS + 1; layer++) {
+    let output;
+    try {
+      output = zlib.inflateSync(current, { maxOutputLength: MAX_STREAM_BYTES });
+    } catch (failure) {
+      return failure.code === 'ERR_BUFFER_TOO_LARGE' ? null : sum;
+    }
+    sum += output.length;
+    if (sum > MAX_STREAM_BYTES) return null;
+    const looksCompressed = output.length > 2 && output[0] === 0x78 && ((output[0] << 8) | output[1]) % 31 === 0;
+    if (!looksCompressed) return sum;
+    if (layer === MAX_LAYERS) return null;
+    current = output;
+  }
+  return null;
+}
 
 /**
  * Probeert elke stream van de PDF begrensd uit te pakken (zonder op het woordenboek van de stream te vertrouwen, dat is te omzeilen) om een decompressiebom te herkennen vóór pdf-lib de PDF leest.
@@ -38,11 +66,11 @@ function streamsWithinLimits(buffer) {
     if (buffer.indexOf('endstream', position, 'latin1') < 0) return false;
     // pdf-lib accepteert na 'stream' ook spaties vóór de regeleinde; daarom wordt vanaf de eerste paar posities geprobeerd.
     for (let offset = 0; offset <= 4; offset++) {
-      try {
-        total += zlib.inflateSync(buffer.subarray(position + offset), { maxOutputLength: MAX_STREAM_BYTES }).length;
+      const unpacked = inflateLayers(buffer.subarray(position + offset));
+      if (unpacked === null) return false;
+      if (unpacked > 0) {
+        total += unpacked;
         break;
-      } catch (failure) {
-        if (failure.code === 'ERR_BUFFER_TOO_LARGE') return false;
       }
     }
     if (total > MAX_TOTAL_BYTES) return false;
