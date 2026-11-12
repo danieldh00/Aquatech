@@ -194,7 +194,7 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', billingCountry 
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
  * @param {{ stock: object, categoryDiscountsOf?: Function }} deps De voorraadopslag (reserveren en afboeken) en categoryDiscountsOf(tenantId) = per artikelcode de categoriekorting (%) voor zakelijke klanten (zonder: geen).
- * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
+ * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, listToPick: Function, getMany: Function, pickable: Function, markPackingSlipsPrinted: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
  */
 function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() }) {
   const shippedHooks = [];
@@ -353,7 +353,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null, quote: data.quote || null, paymentDays: data.paymentDays === undefined ? null : data.paymentDays, language: data.language === 'en' ? 'en' : 'nl' };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null, quote: data.quote || null, paymentDays: data.paymentDays === undefined ? null : data.paymentDays, language: data.language === 'en' ? 'en' : 'nl', packingSlip: data.packingSlip || null };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -629,6 +629,62 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
   }
 
   /**
+   * Of een bestelling klaar is om te picken: status Nieuw en, bij online betalen, al betaald.
+   * @param {object} order De bestelling (status, payment, pay).
+   * @returns {boolean} True als hij nu gepickt en verzonden kan worden.
+   */
+  const pickable = (order) => order.status === 'nieuw' && (order.payment !== 'online' || !!(order.pay && order.pay.status === 'betaald'));
+
+  /**
+   * De bestellingen die gepickt moeten worden (Te picken): status Nieuw, bij online betalen alleen de betaalde, oudste eerst.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {number} [limit] Hoogstens zoveel bestellingen (standaard 200).
+   * @returns {{ items: object[], truncated: boolean }} De bestellingen met regels, adres en verzending, en of er meer waren dan `limit` (dan ontbreken de nieuwste).
+   */
+  function listToPick(tenantId, limit = PAGE_LIMIT) {
+    // Online bestellingen alleen als ze betaald zijn: in SQL, zodat onbetaalde de lijst niet vullen of de limiet opeten.
+    const payment = isPg(db) ? "((data)::jsonb ->> 'payment')" : "json_extract(data, '$.payment')";
+    const payStatus = isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')";
+    const rows = prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND (COALESCE(${payment}, 'op rekening') <> 'online' OR ${payStatus} = 'betaald') ORDER BY created_at ASC, number ASC LIMIT ?`).all(tenantId, Math.min(limit, EXPORT_LIMIT) + 1);
+    const size = Math.min(limit, EXPORT_LIMIT);
+    return { items: rows.slice(0, size).map(shapeFull).filter(pickable), truncated: rows.length > size };
+  }
+
+  /**
+   * Meerdere bestellingen in één query (voor de pakbonnen), in de volgorde van de ids; onbekende ids (of van een andere omgeving) ontbreken.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string[]} ids De ids.
+   * @returns {object[]} De bestellingen met regels, adres en verzending.
+   */
+  function getMany(tenantId, ids) {
+    const wanted = Array.from(new Set(ids.map(String)));
+    if (!wanted.length) return [];
+    const rows = prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND id IN (${wanted.map(() => '?').join(', ')})`).all(tenantId, ...wanted);
+    const byId = new Map(rows.map((row) => [row.id, shapeFull(row)]));
+    return wanted.map((id) => byId.get(id)).filter(Boolean);
+  }
+
+  /**
+   * Legt vast dat de pakbonnen van de bestellingen zijn afgedrukt (`data.packingSlip`: moment en hoe vaak; de naam van wie afdrukte staat in het auditlogboek, niet hier, want de bestelling gaat ook naar de klant), alles of niets in één transactie.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string[]} ids Ids van de bestellingen (onbekende of van een andere omgeving worden overgeslagen).
+   * @returns {void}
+   */
+  function markPackingSlipsPrinted(tenantId, ids) {
+    const wanted = Array.from(new Set(ids.map(String)));
+    if (!wanted.length) return;
+    const timestamp = currentTimestamp();
+    transaction(db, () => {
+      const rows = prepare(`SELECT id, data FROM web_orders WHERE tenant_id = ? AND id IN (${wanted.map(() => '?').join(', ')})${isPg(db) ? ' FOR UPDATE' : ''}`).all(tenantId, ...wanted);
+      for (const row of rows) {
+        const data = JSON.parse(row.data);
+        data.packingSlip = { printedAt: timestamp, count: (Number(data.packingSlip && data.packingSlip.count) || 0) + 1 };
+        prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, row.id);
+      }
+    });
+  }
+
+  /**
    * Zet een bestelling op een nieuwe status. Verzonden boekt de artikelen af
    * van de voorraad, Geannuleerd laat de reservering vervallen.
    * @param {string} tenantId Id van de omgeving.
@@ -842,7 +898,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     return { released };
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, onShipped, onCancelled, onTracking };
+  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, onShipped, onCancelled, onTracking };
 }
 
 /**

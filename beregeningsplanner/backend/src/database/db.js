@@ -1307,7 +1307,11 @@ const MIGRATIONS = [
   ALTER TABLE quotes ADD COLUMN converted_at TEXT;
   CREATE UNIQUE INDEX quotes_order ON quotes (tenant_id, order_id) WHERE order_id IS NOT NULL;
   `,
-  // 67: prijsvoorstellen (artikelen/price-factor.js): een nieuwe inkoopprijs geeft een voorstel voor een nieuwe verkoopprijs dat
+  // 67: Te picken (webshop/packing-slips.js): bestellingen per status, oudste eerst, zonder de hele verzonden historie af te lopen.
+  `
+  CREATE INDEX web_orders_status ON web_orders (tenant_id, status, created_at);
+  `,
+  // 68: prijsvoorstellen (artikelen/price-factor.js): een nieuwe inkoopprijs geeft een voorstel voor een nieuwe verkoopprijs dat
   // een beheerder goedkeurt of afwijst. Een afgewezen voorstel wordt hier onthouden (inkoopprijs + voorgestelde prijs, één per
   // artikel) en komt pas terug als een van beide verandert.
   `

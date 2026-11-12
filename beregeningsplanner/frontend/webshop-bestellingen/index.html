@@ -32,8 +32,9 @@
         <h1>Webshopbestellingen</h1>
         <p class="muted">Bestellingen, retouren en de rapportage van de eigen webshop (startpagina /).</p>
       </section>
-      <nav class="tabs" role="tablist" aria-label="Bestellingen, retouren en rapportage">
+      <nav class="tabs" role="tablist" aria-label="Bestellingen, te picken, retouren en rapportage">
         <button class="tab active" data-tab="bestellingen" role="tab" id="t-bestellingen" aria-selected="true" aria-controls="tab-bestellingen">Bestellingen</button>
+        <button class="tab" data-tab="te-picken" role="tab" id="t-te-picken" tabindex="-1" aria-selected="false" aria-controls="tab-te-picken">Te picken</button>
         <button class="tab" data-tab="retouren" role="tab" id="t-retouren" tabindex="-1" aria-selected="false" aria-controls="tab-retouren">Retouren</button>
         <button class="tab" data-tab="rapportage" role="tab" id="t-rapportage" tabindex="-1" aria-selected="false" aria-controls="tab-rapportage">Rapportage</button>
       </nav>
@@ -48,6 +49,14 @@
         <div class="tablewrap"><table class="grid" id="wo-table"></table></div>
         <div class="pager"><button id="wo-prev" class="btn small">Vorige</button> <span id="wo-info" class="muted small"></span> <button id="wo-next" class="btn small">Volgende</button></div>
         <div id="wo-detail" class="card-form settings" hidden></div>
+      </section>
+      <section id="tab-te-picken" class="tabpane" role="tabpanel" aria-labelledby="t-te-picken" hidden>
+        <div class="filters">
+          <button id="tp-print" class="btn primary" disabled>Afdrukken (0)</button>
+          <span id="tp-count" class="muted small"></span>
+        </div>
+        <p class="muted small">Nieuwe bestellingen die klaarstaan om te picken (online betaalde alleen als ze betaald zijn), oudste eerst. <i>Afdrukken</i> maakt één PDF met een pakbon per bestelling, met de artikelen gesorteerd op magazijnlocatie. Daarna zet je de bestelling op <i>Verzonden</i>.</p>
+        <div class="tablewrap"><table class="grid" id="tp-table"></table></div>
       </section>
       <section id="tab-retouren" class="tabpane" role="tabpanel" aria-labelledby="t-retouren" hidden>
         <div class="filters">
@@ -117,6 +126,7 @@
   <script src="../shared/sidebar.js"></script>
   <script src="../dashboard/account.js"></script>
   <script src="bestellingen.js"></script>
+  <script src="te-picken.js"></script>
   <script src="retouren.js"></script>
   <script src="rapportage.js"></script>
   <script src="webshop-bestellingen.js"></script>
