@@ -579,6 +579,17 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   }
 
   /**
+   * Of de offerte is omgezet naar een bestelling (die verwijst ernaar, dus gewoon verwijderen mag niet).
+   * @param {string} tenantId Id van de tenant.
+   * @param {string} id Id van de offerte.
+   * @returns {boolean} True als de offerte een bestelling heeft.
+   */
+  function isConverted(tenantId, id) {
+    const quoteRow = prepare('SELECT order_id FROM quotes WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+    return Boolean(quoteRow && quoteRow.order_id);
+  }
+
+  /**
    * Wist een offerte definitief (AVG-verzoek), ook een al verwijderde.
    * @param {string} tenantId Id van de tenant.
    * @param {string} id Id van de offerte.
@@ -588,7 +599,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     return prepare('DELETE FROM quotes WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
   }
 
-  return { list, get, create, update, respond, decide, share, unshare, markSent, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, nextNumber };
+  return { list, get, create, update, respond, decide, share, unshare, markSent, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, isConverted, nextNumber };
 }
 
 /**
@@ -1115,6 +1126,7 @@ function registerQuoteRoutes(app, ctx) {
   };
 
   app.delete('/api/quotes/:id', requireQuotes, (req, res) => {
+    if (quotes.isConverted(req.user.tenant_id, req.params.id)) return res.status(409).json({ error: 'converted', message: 'Deze offerte is omgezet naar een bestelling en kan niet worden verwijderd. Wissen (AVG) kan via Beheer, met bevestiging.' });
     if (acceptedGuard(req, res, req.user.tenant_id)) return;
     if (!quotes.remove(req.user, req.params.id)) return notFound(res);
     audit(req, 'offerte_verwijderd', { quoteId: req.params.id });

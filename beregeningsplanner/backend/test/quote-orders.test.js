@@ -136,6 +136,9 @@ test('omzetten: bestelling met regels, korting, adressen, termijn en taal; offer
   assert.strictEqual(locked.status, 409);
   assert.strictEqual(locked.body.error, 'locked');
   assert.strictEqual((await admin.put(`/app/api/quotes/${quote.id}`, { data: quote.data })).status, 409);
+  const removed = await admin.del(`/app/api/quotes/${quote.id}`, { confirm: quote.number });
+  assert.deepStrictEqual([removed.status, removed.body.error], [409, 'converted'], 'een omgezette offerte wordt niet verwijderd');
+  assert.strictEqual((await admin.del(`/app/api/admin/quotes/${quote.id}`)).status, 409, 'wissen vraagt de bevestiging met het offertenummer');
 
   // De factuur bij de bestelling krijgt de termijn en taal van de offerte.
   const invoice = fromWebOrder(detail, {}, InvoiceCore.sanitizeSettings({}));
