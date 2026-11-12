@@ -16,6 +16,7 @@ const { withCause } = require('../platform/error-report');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
 const Wholesale = require('./wholesale');
+const { createFulfilment, remainingOf } = require('./fulfilment');
 const { visibleFor: packagingVisibleFor } = require('../artikelen/packagings');
 
 /** Statussen van een bestelling met hun weergavenaam. */
@@ -213,6 +214,9 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', billingCountry 
  */
 function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() }) {
   const shippedHooks = [];
+  // Haken die na een deellevering draaien (er blijft nog iets op backorder).
+  const partialHooks = [];
+  const fulfilment = createFulfilment(db);
   // Haken die na het annuleren van een bestelling draaien.
   const cancelledHooks = [];
   const trackingHooks = [];
@@ -368,7 +372,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null, quote: data.quote || null, paymentDays: data.paymentDays === undefined ? null : data.paymentDays, language: data.language === 'en' ? 'en' : 'nl', packingSlip: data.packingSlip || null, dropshipping: data.dropshipping || null };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null, quote: data.quote || null, paymentDays: data.paymentDays === undefined ? null : data.paymentDays, language: data.language === 'en' ? 'en' : 'nl', packingSlip: data.packingSlip || null, dropshipping: data.dropshipping || null, allowPartial: data.allowPartial !== false, shipments: data.shipments || [], backorderSince: data.backorderSince || null, backorderReadyAt: data.backorderReadyAt || null };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -567,7 +571,12 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     if (isPg(db)) prepare('SELECT pg_advisory_xact_lock(hashtext(?)) AS locked').get(`web-orders:${tenantId}:${timestamp.slice(0, 4)}`);
     const number = nextNumber(tenantId, timestamp.slice(0, 4));
     const lines = resolveQuoteLines(tenantId, spec.lines);
+    const reserved = stockLinesOf(lines.filter((line) => line.itemId));
+    // Het tekort vóór het reserveren: de eigen reservering telt niet mee, en een tekort betekent dat de bestelling (deels) op backorder komt.
+    if (reserved.length) lockItemIds(tenantId, lines);
+    const shortages = reserved.length ? stock.shortageFor(tenantId, reserved, `order:${id}`) : [];
     const data = {
+      ...(shortages.length ? { backorderSince: timestamp } : {}),
       lines, customer: spec.customer, address: spec.address, ...(spec.billingAddress ? { billingAddress: spec.billingAddress } : {}), deliverySame: spec.deliverySame,
       shipping: null, customerGroup: spec.customerGroup, vat: spec.vat, note: '', totals: spec.totals, payment: 'op rekening',
       ...(spec.paymentDays !== null && spec.paymentDays !== undefined ? { paymentDays: spec.paymentDays } : {}), language: spec.language === 'en' ? 'en' : 'nl',
@@ -576,12 +585,8 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)
       VALUES (?, ?, ?, ?, 'nieuw', ?, ?, ?, ?, ?, ?)`)
       .run(id, tenantId, number, spec.userId || null, spec.customer.company || spec.customer.name || spec.quote.number, spec.customer.email || '', spec.totals.total, JSON.stringify(data), timestamp, timestamp);
-    const reserved = stockLinesOf(lines.filter((line) => line.itemId));
-    if (reserved.length) {
-      lockItemIds(tenantId, lines);
-      stock.reserveOrder(tenantId, id, reserved);
-    }
-    return { order: get(tenantId, id), shortages: reserved.length ? stock.shortageFor(tenantId, reserved, `order:${id}`) : [] };
+    if (reserved.length) stock.reserveOrder(tenantId, id, reserved);
+    return { order: get(tenantId, id), shortages };
   }
 
   /**
@@ -658,7 +663,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    * De bestellingen die gepickt moeten worden (Te picken): status Nieuw, bij online betalen alleen de betaalde, oudste eerst.
    * @param {string} tenantId Id van de omgeving.
    * @param {number} [limit] Hoogstens zoveel bestellingen (standaard 200).
-   * @returns {{ items: object[], waitingForSlip: { id: string, number: string }[], truncated: boolean }} De bestellingen met regels, adres en verzending, de dropshippingbestellingen die nog op de pakbon van de klant wachten, en of er meer waren dan `limit` (dan ontbreken de nieuwste).
+   * @returns {{ items: object[], waitingForSlip: { id: string, number: string }[], waitingForStock: { id: string, number: string }[], truncated: boolean }} De bestellingen met regels, adres, verzending en leverstatus (`fulfilment`), de dropshippingbestellingen die nog op de pakbon van de klant wachten, de bestellingen die op voorraad wachten, en of er meer waren dan `limit` (dan ontbreken de nieuwste).
    */
   function listToPick(tenantId, limit = PAGE_LIMIT) {
     // Online bestellingen alleen als ze betaald zijn: in SQL, zodat onbetaalde de lijst niet vullen of de limiet opeten.
@@ -669,7 +674,13 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     const shaped = rows.slice(0, size).map(shapeFull);
     // Dropshipping zonder pakbon van de klant staat niet in de lijst, maar wordt wel gemeld (anders lijkt de bestelling zoek).
     const waitingForSlip = shaped.filter((order) => order.status === 'nieuw' && order.dropshipping && !order.dropshipping.slip).map((order) => ({ id: order.id, number: order.number }));
-    return { items: shaped.filter(pickable), waitingForSlip, truncated: rows.length > size };
+    // Alleen wat er nu uit het magazijn gehaald kan worden: bij een tekort wacht de bestelling (of gaat een deel mee als deellevering is toegestaan).
+    const candidates = shaped.filter(pickable);
+    const plans = fulfilment.plan(tenantId, candidates);
+    rememberBackorders(tenantId, candidates.map((order) => ({ ...order, fulfilment: plans.get(order.id) })));
+    const items = candidates.filter((order) => plans.get(order.id).canShip).map((order) => ({ ...order, fulfilment: plans.get(order.id) }));
+    const waitingForStock = candidates.filter((order) => !plans.get(order.id).canShip).map((order) => ({ id: order.id, number: order.number }));
+    return { items, waitingForSlip, waitingForStock, truncated: rows.length > size };
   }
 
   /**
@@ -732,6 +743,214 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
   }
 
   /**
+   * Voegt de leverstatus (`fulfilment`: per regel besteld, geleverd, nu leverbaar en backorder met de verwachte datum) toe aan open bestellingen.
+   * Andere bestellingen krijgen geen leverstatus.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object[]} list De bestellingen (shapeFull).
+   * @returns {object[]} Dezelfde bestellingen met `fulfilment` (alleen bij status Nieuw).
+   */
+  function withFulfilment(tenantId, list) {
+    const open = list.filter((order) => order.status === 'nieuw');
+    const plans = open.length ? fulfilment.plan(tenantId, open) : new Map();
+    return list.map((order) => (plans.has(order.id) ? { ...order, fulfilment: plans.get(order.id) } : order));
+  }
+
+  /**
+   * Eén bestelling met regels en leverstatus (voor het detail in Beheer).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @returns {object|null} De bestelling, of null.
+   */
+  function getDetailed(tenantId, id) {
+    const order = get(tenantId, id);
+    return order ? withFulfilment(tenantId, [order])[0] : null;
+  }
+
+  /**
+   * Controleert de gevraagde delen van een zending tegen de leverstatus.
+   * @param {object} order De bestelling (shapeFull).
+   * @param {{ lines: object[] }} plan De leverstatus van de bestelling (fulfilment.plan).
+   * @param {*} parts Lijst { index, qty }, of null voor alles wat nu leverbaar is.
+   * @param {boolean} ignoreStock Of ook meer dan de nu leverbare hoeveelheid mag (er ligt fysiek meer dan de voorraadstand zegt).
+   * @returns {{ wanted?: { index: number, qty: number }[], error?: string }} De geldige delen, of een foutmelding.
+   */
+  function checkParts(order, plan, parts, ignoreStock) {
+    if (parts === null || parts === undefined) {
+      return { wanted: plan.lines.filter((entry) => entry.ready > 0).map((entry) => ({ index: entry.index, qty: entry.ready })) };
+    }
+    if (!Array.isArray(parts) || parts.length > MAX_LINES) return { error: 'Geef de te verzenden regels op.' };
+    const seen = new Set();
+    const wanted = [];
+    for (const part of parts) {
+      const index = part && Number(part.index);
+      const qty = part && Number(part.qty);
+      if (!Number.isInteger(index) || index < 0 || index >= order.lines.length || seen.has(index) || !Number.isFinite(qty) || qty < 0) return { error: 'Ongeldige regel of ongeldig aantal.' };
+      seen.add(index);
+      const entry = plan.lines[index];
+      const line = order.lines[index];
+      if (qty > entry.remaining + 0.0005) return { error: `Van ${line.name} moet nog ${entry.remaining} geleverd worden, niet ${qty}.` };
+      if (Number(line.stockPer) > 1 && !Number.isInteger(qty)) return { error: `${line.name} wordt in hele ${line.unit || 'verpakkingen'} geleverd.` };
+      if (qty > entry.ready + 0.0005 && !ignoreStock) return { error: `Van ${line.name} is nu maar ${entry.ready} leverbaar.` };
+      if (qty > 0) wanted.push({ index, qty: Math.round(qty * 1000) / 1000 });
+    }
+    return { wanted };
+  }
+
+  /**
+   * Verzendt (een deel van) een bestelling: de gekozen regels gaan van de voorraad, de rest blijft op backorder. Zijn alle regels geleverd,
+   * dan wordt de bestelling Verzonden (factuur en verzendmail volgen); anders blijft hij Nieuw en volgt een mail over de deellevering.
+   * Alles of niets in één transactie.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {{ index: number, qty: number }[]|null} parts De regels en aantallen (in de eenheid van de orderregel); null = alles wat nu leverbaar is. Een minder gepickt aantal laat het verschil op backorder staan.
+   * @param {object|null} user Wie verzendt.
+   * @param {{ trackingCode?: string, ignoreStock?: boolean }} [options] De volgcode van DPD (leeg mag) en of meer dan de nu leverbare hoeveelheid mag.
+   * @returns {{ order?: object, shipment?: object, complete?: boolean, error?: string, code?: string, status?: number }} De bijgewerkte bestelling, de zending en of alles geleverd is, of een foutmelding.
+   */
+  function ship(tenantId, id, parts, user, { trackingCode = '', ignoreStock = false } = {}) {
+    const tracking = String(trackingCode || '').trim() ? Shipping.trackingOf(trackingCode) : null;
+    if (String(trackingCode || '').trim() && !tracking) return { error: 'Ongeldige volgcode (6 tot 40 letters, cijfers of streepjes).', status: 400 };
+    const out = transaction(db, () => {
+      const row = readForUpdate(tenantId, id, `${COLUMNS}, data`);
+      if (!row) return { error: 'Bestelling niet gevonden.', status: 404 };
+      if (row.status !== 'nieuw') return { error: `Een bestelling met status ${STATUSES[row.status]} kan niet meer verzonden worden.`, status: 409 };
+      const data = JSON.parse(row.data);
+      if (data.payment === 'online' && !(data.pay && data.pay.status === 'betaald')) return { error: 'Deze bestelling is nog niet betaald: verzenden kan pas na de betaling.', status: 409 };
+      // Rijsloten op id: tot het einde van de transactie kan niemand deze voorraad reserveren of afboeken.
+      lockItemIds(tenantId, data.lines);
+      const order = shapeFull(row);
+      const plan = fulfilment.plan(tenantId, [order]).get(order.id);
+      const checked = checkParts(order, plan, parts, ignoreStock);
+      if (checked.error) return { error: checked.error, status: 400 };
+      if (!checked.wanted.length) return { error: 'Er is niets om te verzenden: er is nu niets leverbaar.', code: 'nothing_to_ship', status: 409 };
+      const shippedNow = new Map(checked.wanted.map((entry) => [entry.index, entry.qty]));
+      const afterLines = data.lines.map((line, index) => ({ ...line, shippedQty: Math.round(((Number(line.shippedQty) || 0) + (shippedNow.get(index) || 0)) * 1000) / 1000 }));
+      const rest = afterLines.map((line) => ({ ...line, qty: remainingOf(line) })).filter((line) => line.qty > 0);
+      const complete = rest.length === 0;
+      if (!complete && data.allowPartial === false) return { error: 'Deellevering is niet toegestaan voor deze bestelling: verzend alle regels in één keer, of sta deellevering toe.', code: 'partial_not_allowed', status: 409 };
+      const timestamp = currentTimestamp();
+      const by = user ? user.display_name || user.displayName || '' : '';
+      const sentLines = checked.wanted.map((entry) => ({ ...data.lines[entry.index], qty: entry.qty })).filter((line) => line.itemId);
+      stock.issueOrderPart(tenantId, { id: row.id, number: row.number }, stockLinesOf(sentLines), stockLinesOf(rest.filter((line) => line.itemId)), user, { keepReservation: !data.reservationReleasedAt });
+      data.lines = afterLines;
+      const shipment = { id: crypto.randomUUID(), at: timestamp, by, lines: checked.wanted, ...(tracking && data.shipping && data.shipping.method === 'dpd' ? { tracking: tracking.code } : {}) };
+      data.shipments = [...(Array.isArray(data.shipments) ? data.shipments : []), shipment];
+      if (tracking && data.shipping && data.shipping.method === 'dpd') data.shipping.tracking = tracking;
+      delete data.backorderReadyAt;
+      if (complete) delete data.backorderSince; else data.backorderSince = data.backorderSince || timestamp;
+      data.history.push({ at: timestamp, status: complete ? 'verzonden' : 'nieuw', by, ...(complete ? {} : { note: 'Deellevering verzonden; de rest staat op backorder' }) });
+      prepare('UPDATE web_orders SET status = ?, data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(complete ? 'verzonden' : 'nieuw', JSON.stringify(data), timestamp, tenantId, row.id);
+      return { shipment, complete };
+    });
+    if (out.error) return out;
+    const order = getDetailed(tenantId, id);
+    const hooks = out.complete ? shippedHooks : partialHooks;
+    for (const hook of hooks) {
+      try { Promise.resolve(out.complete ? hook(tenantId, order, user) : hook(tenantId, order, out.shipment, user)).catch((error) => console.warn(`Na verzenden: ${error.message}`)); } catch (error) { console.warn(`Na verzenden: ${error.message}`); }
+    }
+    return { order, shipment: out.shipment, complete: out.complete };
+  }
+
+  /**
+   * Zet Deellevering toestaan aan of uit voor een open bestelling.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {boolean} allow Of een deel mag worden verzonden terwijl de rest op backorder staat.
+   * @returns {{ order?: object, error?: string, status?: number }} De bijgewerkte bestelling of een foutmelding.
+   */
+  function setAllowPartial(tenantId, id, allow) {
+    return transaction(db, () => {
+      const row = readForUpdate(tenantId, id, `${COLUMNS}, data`);
+      if (!row) return { error: 'Bestelling niet gevonden.', status: 404 };
+      if (row.status !== 'nieuw') return { error: 'Alleen bij een nieuwe bestelling kan deellevering nog worden aangepast.', status: 409 };
+      const data = JSON.parse(row.data);
+      data.allowPartial = Boolean(allow);
+      prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, row.id);
+      return { order: getDetailed(tenantId, row.id) };
+    });
+  }
+
+  /**
+   * Onthoudt (`backorderSince`) welke open bestellingen nu een backorder hebben, ook als die door een telverschil is ontstaan,
+   * zodat een latere ontvangst ze kan markeren. Schrijft alleen voor bestellingen waar het nog niet staat.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ id: string, backorderSince: ?string, fulfilment: { backorder: boolean } }[]} list De bestellingen met leverstatus.
+   * @returns {void}
+   */
+  function rememberBackorders(tenantId, list) {
+    const timestamp = currentTimestamp();
+    for (const order of list.filter((entry) => entry.fulfilment && entry.fulfilment.backorder && !entry.backorderSince)) {
+      transaction(db, () => {
+        const row = readForUpdate(tenantId, order.id, 'status, data');
+        if (!row || row.status !== 'nieuw') return;
+        const data = JSON.parse(row.data);
+        if (data.backorderSince) return;
+        data.backorderSince = timestamp;
+        prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, order.id);
+      });
+    }
+  }
+
+  /**
+   * Alle open bestellingen met een backorder (een regel die niet volledig leverbaar is, of waarvan al een deel is verzonden), oudste eerst.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ items: object[], truncated: boolean }} De bestellingen met leverstatus (online bestellingen alleen als ze betaald zijn) en of er meer waren dan de limiet.
+   */
+  function listBackorders(tenantId) {
+    const payment = isPg(db) ? "((data)::jsonb ->> 'payment')" : "json_extract(data, '$.payment')";
+    const payStatus = isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')";
+    const rows = prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND (COALESCE(${payment}, 'op rekening') <> 'online' OR ${payStatus} = 'betaald') ORDER BY created_at ASC, number ASC LIMIT ?`).all(tenantId, EXPORT_LIMIT + 1);
+    const shaped = rows.slice(0, EXPORT_LIMIT).map(shapeFull);
+    const plans = fulfilment.plan(tenantId, shaped);
+    const withPlan = shaped.map((order) => ({ ...order, fulfilment: plans.get(order.id) }));
+    rememberBackorders(tenantId, withPlan);
+    return { items: withPlan.filter((order) => order.fulfilment.backorder), truncated: rows.length > EXPORT_LIMIT };
+  }
+
+  /**
+   * Na een voorraadontvangst: markeert open bestellingen met een backorder waarvan nu (een deel van) de achterstand leverbaar is
+   * (`backorderReadyAt`), zodat ze in Te picken verschijnen met een nieuwe pakbon. Eén bestelling die al klaarstond wordt niet opnieuw gemarkeerd.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string[]} itemIds De artikelen waarvan de voorraad is gestegen.
+   * @returns {object[]} De bestellingen die nu voor het eerst klaarstaan (met leverstatus).
+   */
+  function markBackorderReady(tenantId, itemIds) {
+    const ids = [...new Set((itemIds || []).map(String).filter(Boolean))];
+    if (!ids.length) return [];
+    const orderIds = new Set();
+    for (let start = 0; start < ids.length; start += 200) {
+      const chunk = ids.slice(start, start + 200);
+      for (const row of prepare(`SELECT DISTINCT work_order_id FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${chunk.map(() => '?').join(', ')}) AND work_order_id LIKE 'order:%'`).all(tenantId, ...chunk)) orderIds.add(String(row.work_order_id).slice(6));
+    }
+    if (!orderIds.size) return [];
+    const candidates = getMany(tenantId, [...orderIds].slice(0, EXPORT_LIMIT)).filter((order) => order.status === 'nieuw' && order.backorderSince && !order.backorderReadyAt && pickable(order));
+    if (!candidates.length) return [];
+    const plans = fulfilment.plan(tenantId, candidates);
+    const ready = candidates.filter((order) => plans.get(order.id).canShip);
+    const timestamp = currentTimestamp();
+    const marked = [];
+    for (const order of ready) {
+      transaction(db, () => {
+        const row = readForUpdate(tenantId, order.id, 'status, data');
+        if (!row || row.status !== 'nieuw') return;
+        const data = JSON.parse(row.data);
+        if (data.backorderReadyAt) return;
+        data.backorderReadyAt = timestamp;
+        prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, order.id);
+        marked.push({ ...order, backorderReadyAt: timestamp, fulfilment: plans.get(order.id) });
+      });
+    }
+    return marked;
+  }
+
+  /**
+   * Registreert een haak die na elke deellevering wordt aangeroepen (nadat de wijziging is vastgelegd).
+   * @param {Function} hook Functie (tenantId, order, shipment, user); mag een belofte geven, fouten worden alleen gelogd.
+   * @returns {void}
+   */
+  const onPartialShipped = (hook) => { partialHooks.push(hook); };
+
+  /**
    * Registreert een haak die na elke bestelling die wordt geannuleerd wordt aangeroepen (nadat de wijziging is vastgelegd).
    * @param {Function} hook Functie (tenantId, order, user); mag een belofte geven, fouten worden alleen gelogd.
    * @returns {void}
@@ -772,14 +991,24 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       const data = JSON.parse(row.data);
       if (status === 'verzonden' && data.payment === 'online' && !(data.pay && data.pay.status === 'betaald')) return { error: 'Deze bestelling is nog niet betaald: verzenden kan pas na de betaling.', status: 409 };
       // Een vrijgegeven reservering (8): de voorraad kan intussen voor een ander gereserveerd zijn; alleen verzenden wat vrij is.
+      if (status === 'geannuleerd' && Array.isArray(data.shipments) && data.shipments.length) return { error: 'Er is al (een deel van) deze bestelling verzonden: annuleren kan niet meer. Maak voor het verzonden deel een retour.', status: 409 };
+      // Wat nog niet geleverd is (bij een eerdere deellevering minder dan de hele bestelling).
+      const remainingLines = data.lines.map((line) => ({ ...line, qty: remainingOf(line) })).filter((line) => line.qty > 0);
       if (status === 'verzonden' && data.reservationReleasedAt) {
         // Rijsloten op id (zoals bij het plaatsen, maar ongevoelig voor een gewijzigde code): tot het einde van de transactie kan niemand deze voorraad reserveren.
         lockItemIds(tenantId, data.lines);
-        const short = stock.shortageFor(tenantId, stockLinesOf(data.lines), `order:${row.id}`);
+        const short = stock.shortageFor(tenantId, stockLinesOf(remainingLines), `order:${row.id}`);
         if (short.length) return { error: `De reservering van deze bestelling was vervallen en er is niet genoeg vrije voorraad meer voor: ${short.map((item) => item.name).join(', ')}.`, status: 409 };
       }
       const timestamp = currentTimestamp();
-      if (status === 'verzonden') stock.issueOrder(tenantId, { id: row.id, number: row.number }, stockLinesOf(data.lines), user);
+      if (status === 'verzonden') {
+        stock.issueOrder(tenantId, { id: row.id, number: row.number }, stockLinesOf(remainingLines), user);
+        const shipment = { id: crypto.randomUUID(), at: timestamp, by: user ? user.display_name || user.displayName || '' : '', lines: data.lines.map((line, index) => ({ index, qty: remainingOf(line) })).filter((entry) => entry.qty > 0) };
+        data.lines.forEach((line) => { line.shippedQty = line.qty; });
+        data.shipments = [...(Array.isArray(data.shipments) ? data.shipments : []), shipment];
+        delete data.backorderSince;
+        delete data.backorderReadyAt;
+      }
       if (status === 'geannuleerd') stock.releaseOrder(tenantId, row.id);
       // Een al online betaalde bestelling die wordt geannuleerd moet worden terugbetaald: zichtbaar in Beheer.
       if (status === 'geannuleerd' && data.payment === 'online' && data.pay && data.pay.status === 'betaald') data.pay.refundNeeded = true;
@@ -940,7 +1169,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     return { released };
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking };
+  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
 }
 
 /**
@@ -965,8 +1194,13 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
     res.json({ ...out, statuses: STATUSES });
   });
 
+  // Vóór /:id: het overzicht van backorders.
+  app.get('/api/admin/web-orders/backorders', (req, res) => {
+    res.json(orders.listBackorders(req.tenantId));
+  });
+
   app.get('/api/admin/web-orders/:id', (req, res) => {
-    const order = orders.get(req.tenantId, req.params.id);
+    const order = orders.getDetailed(req.tenantId, req.params.id);
     if (!order) return res.status(404).json({ error: 'not_found', message: 'Bestelling niet gevonden.' });
     res.json({ order, invoice: invoices ? invoices.invoiceFor(req.tenantId, order.id) : null });
   });
@@ -979,6 +1213,22 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
     await invoices.mailIfFinalized(req.tenantId, out);
     res.json({ invoice: out.invoice, created: out.created });
   }));
+
+  // Een deel of alles verzenden; wat niet wordt meegestuurd blijft op backorder.
+  app.post('/api/admin/web-orders/:id/ship', requireJson, (req, res) => {
+    const body = req.body || {};
+    const out = orders.ship(req.tenantId, req.params.id, body.lines === undefined ? null : body.lines, req.user, { trackingCode: String(body.trackingCode || ''), ignoreStock: body.ignoreStock === true });
+    if (out.error) return res.status(out.status || 400).json({ error: out.code || 'ship_failed', message: out.error });
+    audit(req, 'webshop_bestelling_verzonden', { number: out.order.number, complete: out.complete, lines: out.shipment.lines.length, ...(body.ignoreStock === true ? { ignoreStock: true } : {}) });
+    res.json({ order: out.order, shipment: out.shipment, complete: out.complete });
+  });
+
+  app.post('/api/admin/web-orders/:id/allow-partial', requireJson, (req, res) => {
+    const out = orders.setAllowPartial(req.tenantId, req.params.id, req.body && req.body.allow === true);
+    if (out.error) return res.status(out.status || 400).json({ error: 'invalid_state', message: out.error });
+    audit(req, 'webshop_bestelling_deellevering', { number: out.order.number, allow: out.order.allowPartial });
+    res.json({ order: out.order });
+  });
 
   app.post('/api/admin/web-orders/:id/status', requireJson, (req, res) => {
     const out = orders.setStatus(req.tenantId, req.params.id, String(req.body?.status || ''), req.user, { trackingCode: String(req.body?.trackingCode || '') });

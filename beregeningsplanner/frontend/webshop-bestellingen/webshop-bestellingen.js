@@ -1,5 +1,5 @@
 // Webshopbestellingen (Verkoop): de bestellingen, retouren en de rapportage van de eigen
-// webshop op één pagina met drie tabbladen. De tabellen en het detail komen uit
+// webshop op één pagina met vijf tabbladen. De tabellen en het detail komen uit
 // bestellingen.js, te-picken.js, retouren.js en rapportage.js; dit bestand regelt de
 // rechtencontrole, de tabbladen en de melding onderin.
 (function () {
@@ -12,9 +12,9 @@
    */
   const $ = (selector) => document.querySelector(selector);
   /** Waar het tabblad staat in de adresbalk (#retouren, #rapportage). */
-  const TABS = ['bestellingen', 'te-picken', 'retouren', 'rapportage'];
+  const TABS = ['bestellingen', 'te-picken', 'backorders', 'retouren', 'rapportage'];
   /** De code achter elk tabblad. */
-  const PANES = { bestellingen: () => window.BeheerBestellingen, 'te-picken': () => window.BeheerTePicken, retouren: () => window.BeheerRetouren, rapportage: () => window.BeheerRapportage };
+  const PANES = { bestellingen: () => window.BeheerBestellingen, 'te-picken': () => window.BeheerTePicken, backorders: () => window.BeheerBackorders, retouren: () => window.BeheerRetouren, rapportage: () => window.BeheerRapportage };
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -64,6 +64,7 @@
     $('#app').hidden = false;
     window.BeheerBestellingen.init({ toast });
     window.BeheerTePicken.init({ toast });
+    window.BeheerBackorders.init({ toast });
     window.BeheerRetouren.init({ toast });
     window.BeheerRapportage.init({ toast });
     for (const button of document.querySelectorAll('.tab')) button.addEventListener('click', () => showTab(button.dataset.tab));

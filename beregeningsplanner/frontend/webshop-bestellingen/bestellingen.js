@@ -92,10 +92,22 @@
    */
   function renderDetail(order, invoice = null) {
     const box = $('#wo-detail');
-    const lines = order.lines.map((line) => `<tr><td>${esc(line.name)}<span class="sub">${esc(line.code)}</span></td><td class="num">${line.qty}</td><td class="num">${euro(line.unitIncl)}</td><td class="num">${euro(line.lineTotal)}</td></tr>`).join('');
+    // Bij een deellevering of tekort: per regel besteld, geleverd, leverbaar en backorder, met een veld voor wat nu wordt verzonden.
+    const plan = order.fulfilment && (order.fulfilment.backorder || order.shipments.length) ? order.fulfilment : null;
+    const lines = order.lines.map((line, index) => {
+      const status = plan ? plan.lines[index] : null;
+      const extra = status ? `<td class="num">${status.shipped}</td><td class="num">${status.ready}</td><td class="num">${status.backorder > 0 ? `<b>${status.backorder}</b>${status.expected ? `<span class="sub">verwacht ${esc(status.expected.slice(0, 10))}</span>` : ''}` : '0'}</td><td class="num">${status.remaining > 0 ? `<input type="number" class="qty-now" data-line="${index}" min="0" max="${status.remaining}" step="${Number(line.stockPer) > 1 ? 1 : 'any'}" value="${status.ready}" aria-label="Nu verzenden: ${esc(line.name)}">` : '–'}</td>` : '';
+      return `<tr><td>${esc(line.name)}<span class="sub">${esc(line.code)}</span></td><td class="num">${line.qty}</td>${extra}<td class="num">${euro(line.unitIncl)}</td><td class="num">${euro(line.lineTotal)}</td></tr>`;
+    }).join('');
+    const extraHead = plan ? '<th class="num">Geleverd</th><th class="num">Leverbaar</th><th class="num">Backorder</th><th class="num">Nu verzenden</th>' : '';
+    const extraCols = plan ? 4 : 0;
+    const partialBox = order.status === 'nieuw' && order.fulfilment ? `<p class="partial"><label><input type="checkbox" id="wo-partial"${order.allowPartial ? ' checked' : ''}> Deellevering toestaan</label> <span class="muted small">${order.allowPartial ? 'Wat op voorraad is kan alvast mee; de rest staat op backorder.' : 'De bestelling wordt pas verzonden als alles leverbaar is.'}</span>${order.backorderReadyAt ? ` <span class="pill verzonden">Backorder klaar sinds ${esc(when(order.backorderReadyAt))}</span>` : ''}</p>` : '';
+    const shipmentsText = order.shipments.length > 1 || (order.shipments.length === 1 && order.status === 'nieuw')
+      ? `<p class="muted small">Zendingen: ${order.shipments.map((shipment) => `${esc(when(shipment.at))} (${shipment.lines.map((entry) => `${entry.qty} × ${esc(order.lines[entry.index] ? order.lines[entry.index].name : '')}`).join(', ')}${shipment.tracking ? `, volgcode ${esc(shipment.tracking)}` : ''})`).join(' → ')}</p>` : '';
     const vat = order.totals.byRate.map((row) => `<tr><td colspan="3">Waarvan ${row.rate}% btw over ${euro(row.excl)}</td><td class="num">${euro(row.vat)}</td></tr>`).join('');
     const unpaid = order.payment === 'online' && !(order.pay && order.pay.status === 'betaald');
-    const buttons = (NEXT[order.status] || []).filter(([status]) => !(status === 'verzonden' && unpaid)).map(([status, label]) => `<button class="btn ${status === 'geannuleerd' ? 'danger' : 'primary'}" data-status="${status}">${label}</button>`).join(' ');
+    const shipPart = plan && order.fulfilment.canShip && !unpaid ? '<button class="btn primary" id="wo-ship-part">Verzend gekozen aantallen</button> ' : '';
+    const buttons = shipPart + (NEXT[order.status] || []).filter(([status]) => !(status === 'verzonden' && unpaid) && !(status === 'geannuleerd' && order.shipments.length)).map(([status, label]) => `<button class="btn ${status === 'geannuleerd' ? 'danger' : status === 'verzonden' && plan ? '' : 'primary'}" data-status="${status}">${status === 'verzonden' && plan ? 'Markeer rest als verzonden' : label}</button>`).join(' ');
     // Een geannuleerde, online betaalde bestelling kan in één keer via Mollie worden terugbetaald (W-05).
     const canRefund = order.status === 'geannuleerd' && order.payment === 'online' && order.pay && order.pay.status === 'betaald' && !(order.pay.refunds || []).some((entry) => entry.key === 'annulering');
     const shipping = order.shipping;
@@ -116,8 +128,9 @@
       ${order.quote ? `<p>Uit offerte <a href="../offertes/?id=${encodeURIComponent(order.quote.id)}">${esc(order.quote.number)}</a>${order.paymentDays !== null && order.paymentDays !== undefined ? ` · betaaltermijn ${esc(String(order.paymentDays))} dagen` : ''}${order.language === 'en' ? ' · documenten in het Engels' : ''}</p>` : ''}
       ${order.note ? `<p><b>Opmerking:</b> ${esc(order.note)}</p>` : ''}
       ${order.dropshipping ? `<p><b>Dropshipping:</b> afleverbewijs naar ${esc(order.dropshipping.proofEmail)} · ${order.dropshipping.slip ? `pakbon van de klant ontvangen (${order.dropshipping.slip.pages} p.)` : '<span class="pill nieuw">pakbon van de klant ontbreekt</span>'}</p>` : ''}
-      <div class="tablewrap"><table class="grid"><thead><tr><th>Artikel</th><th class="num">Aantal</th><th class="num">Prijs</th><th class="num">Totaal</th></tr></thead><tbody>${lines}${shippingRow}${vat}
-        <tr><th colspan="3">${order.vat && order.vat.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num"><b>${euro(order.totals.total)}</b></td></tr></tbody></table></div>
+      <div class="tablewrap"><table class="grid"><thead><tr><th>Artikel</th><th class="num">Besteld</th>${extraHead}<th class="num">Prijs</th><th class="num">Totaal</th></tr></thead><tbody>${lines}${shippingRow.replace('colspan="3"', `colspan="${3 + extraCols}"`)}${vat.replace(/colspan="3"/g, `colspan="${3 + extraCols}"`)}
+        <tr><th colspan="${3 + extraCols}">${order.vat && order.vat.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num"><b>${euro(order.totals.total)}</b></td></tr></tbody></table></div>
+      ${partialBox}${shipmentsText}
       ${trackingForm}
       ${invoiceLine}
       <p class="muted small">Betaling: ${paymentText(order)} · ${mail}${shipMail ? ` · ${shipMail}` : ''}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})${step.note ? `: ${esc(step.note)}` : ''}`).join(' → ')}${reservationText(order)}</p>
@@ -125,6 +138,39 @@
     box.hidden = false;
     /** Sluit het detail. */
     $('#wo-close').onclick = () => { box.hidden = true; state.openId = null; };
+    const partialToggle = $('#wo-partial');
+    if (partialToggle) {
+      /**
+       * Zet Deellevering toestaan aan of uit en tekent het detail opnieuw.
+       * @returns {Promise<void>}
+       */
+      partialToggle.onchange = async () => {
+        partialToggle.disabled = true;
+        try {
+          const out = await api(`/${encodeURIComponent(order.id)}/allow-partial`, { method: 'POST', body: { allow: partialToggle.checked } });
+          renderDetail(out.order, invoice);
+          load();
+        } catch (error) { toast(error.message, true); partialToggle.checked = !partialToggle.checked; partialToggle.disabled = false; }
+      };
+    }
+    const shipPartButton = $('#wo-ship-part');
+    if (shipPartButton) {
+      /**
+       * Verzendt de ingevulde aantallen; wat minder is dan besteld blijft op backorder.
+       * @returns {Promise<void>}
+       */
+      shipPartButton.onclick = async () => {
+        const chosen = Array.from(box.querySelectorAll('.qty-now')).map((input) => ({ index: Number(input.dataset.line), qty: Number(input.value) || 0 }));
+        shipPartButton.disabled = true;
+        try {
+          const trackingInput = $('#wo-tracking');
+          const out = await api(`/${encodeURIComponent(order.id)}/ship`, { method: 'POST', body: { lines: chosen, trackingCode: trackingInput ? trackingInput.value : '' } });
+          toast(out.complete ? `Bestelling ${out.order.number} is helemaal verzonden` : `Deellevering van ${out.order.number} verzonden; de rest staat op backorder`);
+          open(order.id);
+          load();
+        } catch (error) { toast(error.message, true); shipPartButton.disabled = false; }
+      };
+    }
     const makeInvoice = $('#wo-invoice');
     if (makeInvoice) {
       /**

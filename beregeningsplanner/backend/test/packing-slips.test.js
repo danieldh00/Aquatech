@@ -218,6 +218,8 @@ test('Te picken: een online bestelling staat er pas bij als hij betaald is (filt
 test('Te picken: meer dan 200 onbetaalde online bestellingen verdringen een betaalde niet; bij meer dan 200 klare bestellingen meldt de lijst dat hij is afgekapt', async () => {
   const { db, admin, order } = await setup();
   await order(['SPR-1']);
+  // De kopieën hieronder hebben geen eigen reservering; ruime voorraad zodat alleen de afkapping van de lijst wordt getest.
+  db.prepare('UPDATE stock_items SET on_hand = 100000').run();
   const original = db.prepare('SELECT * FROM web_orders').get();
   /**
    * Maakt kopieën van de bestelling met een betaalstatus (online) en een oudere datum, zodat ze vóór de echte bestelling komen.
