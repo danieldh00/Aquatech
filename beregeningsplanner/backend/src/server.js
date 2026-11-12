@@ -55,6 +55,7 @@ const { createOutsourcingStore, registerOutsourcingRoutes } = require('./uitvoer
 const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uitvoering/season-reminders');
 const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
+const { registerLabelRoutes } = require('./artikelen/labels');
 const { createSupplierStore, registerSupplierRoutes } = require('./artikelen/suppliers');
 const { createPurchaseOrderStore, registerPurchaseOrderRoutes } = require('./artikelen/purchase-orders');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
@@ -2236,6 +2237,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       audit,
     }),
   });
+
+  // Etiketten met streepjescode: sjablonen en een PDF op het etiketformaat (zie labels.js).
+  registerLabelRoutes(app, { db: database, requireRight, audit, settingsOf: (req) => settingsFor(req.tenantId),
+    limiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `etiketten:${req.tenantId}|${req.user ? req.user.id : ''}` }) });
 
   // Leveranciers en welke leverancier welk artikel levert (zie suppliers.js).
   registerSupplierRoutes(app, { suppliers: supplierStore, requireRight, requireJson, audit });

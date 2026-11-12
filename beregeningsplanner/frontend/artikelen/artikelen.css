@@ -71,7 +71,7 @@ table.grid .toggle:hover { color: var(--at-teal); }
 /* Mediabibliotheek: raster met alle afbeeldingen. */
 .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-top: 4px; }
 .media-card { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.media-card a { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: #fff; }
+.media-card a { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: #fff; /* bewust vast wit, geen thema-kleur: een streepjescode moet altijd zwart op wit gescand worden */ }
 .media-card img { width: 100%; height: 100%; object-fit: contain; }
 .media-card figcaption { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; font-size: 13px; }
 .media-card figcaption b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -92,3 +92,8 @@ table.grid .toggle:hover { color: var(--at-teal); }
 .layer-cost { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; }
 .layer-cost input { width: 90px; }
 #move-form [hidden], #d-costs[hidden], #d-costs [hidden] { display: none !important; }
+
+/* Etiketten: voorbeeld van de streepjescode onder het formulier. */
+.label-preview { margin-top: 10px; }
+.label-preview .label-code { width: 220px; max-width: 100%; height: 56px; border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 4px; box-sizing: border-box; }
+.label-preview .label-code svg { display: block; width: 100%; height: 100%; }

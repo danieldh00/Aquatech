@@ -50,6 +50,9 @@ const { suggestGroups, MAX_GROUP_SIZE } = require('./variant-suggestions');
 const Wholesale = require('../webshop/wholesale');
 const ItemDetails = require('./item-details');
 const { createStockCosts, parsePrice } = require('./stock-costs');
+const path = require('path');
+const { FRONTEND_DIR } = require('../paths');
+const Barcode = require(path.join(FRONTEND_DIR, 'shared', 'barcode.js'));
 
 const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 // Mutaties die een beheerder op het artikel zelf doet (de rest hoort bij een werkorder).
@@ -307,6 +310,13 @@ function sanitizeItem(raw, { partial = false } = {}) {
     if (!partial || input.packSize !== undefined) out.packSize = terms.packSize;
     if (!partial || input.orderMinQty !== undefined) out.orderMinQty = terms.orderMinQty;
   }
+  // EAN van de fabrikant (8 of 13 cijfers met een kloppend controlecijfer, UPC-A wordt EAN-13); leeg = geen.
+  if (!partial || input.ean !== undefined) {
+    const given = String(input.ean == null ? '' : input.ean).trim();
+    const ean = given ? Barcode.cleanEan(given) : null;
+    if (given && !ean) return { error: 'Ongeldige EAN: 8 of 13 cijfers met een kloppend controlecijfer.', field: 'ean' };
+    out.ean = ean;
+  }
   // Inhoud per verkoopeenheid in de eenheid van de planner (bijv. 50 voor een rol van 50 m); leeg = geen omrekening.
   if (!partial || input.unitContent !== undefined) {
     const unitContent = input.unitContent === '' || input.unitContent == null ? null : Number(input.unitContent);
@@ -367,7 +377,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {void}
    */
   const dirty = (tenantId) => { if (dirtyHook) dirtyHook(tenantId); };
-  const SALE_COLS = 'stock_managed, sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error, order_pack_size, order_min_qty, price_tiers, unit_content';
+  const SALE_COLS = 'stock_managed, sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error, order_pack_size, order_min_qty, price_tiers, unit_content, ean';
   const VARIANT_COLS = 'parent_id, has_variants, attributes, variant_values, image_id';
   const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}, ${VARIANT_COLS}`;
   const MOVE_COLS = 'm.id, m.item_id, m.kind, m.qty, m.balance, m.work_order_id, m.work_order_number, m.source, m.note, m.user_name, m.created_at';
@@ -392,7 +402,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       salePrice: itemRow.sale_price == null ? null : Number(itemRow.sale_price), businessPrice: itemRow.business_price == null ? null : Number(itemRow.business_price), vatRate: Number(itemRow.vat_rate ?? 21), revenueGroup: itemRow.revenue_group || 'producten',
       weightGrams: itemRow.weight_grams == null ? null : Number(itemRow.weight_grams),
       packSize: Number(itemRow.order_pack_size) || 1, orderMinQty: Number(itemRow.order_min_qty) || 1, priceTiers: Wholesale.tiersOf(itemRow.price_tiers),
-      unitContent: itemRow.unit_content == null ? null : Number(itemRow.unit_content),
+      unitContent: itemRow.unit_content == null ? null : Number(itemRow.unit_content), ean: itemRow.ean || null,
       stockManaged: itemRow.stock_managed === undefined ? true : Boolean(Number(itemRow.stock_managed)),
       shopSync: itemRow.shop_sync === undefined ? true : Boolean(Number(itemRow.shop_sync)),
       shop: { productId: itemRow.shop_product_id || null, pending: Boolean(Number(itemRow.shop_dirty)), syncedAt: itemRow.shop_synced_at || null, error: itemRow.shop_error || '' },
@@ -472,7 +482,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     if (family) { where += ' AND i.parent_id = ?'; args.push(family); }
     return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
         i.sale_price, i.business_price, i.vat_rate, i.revenue_group, i.weight_grams, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
-        i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.parent_id, i.has_variants, i.attributes, i.variant_values, i.image_id,
+        i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.ean, i.parent_id, i.has_variants, i.attributes, i.variant_values, i.image_id,
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders, COALESCE(f.orders, 0) AS family_orders
       FROM stock_items i
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ?${reservedFilter} GROUP BY item_id) r ON r.item_id = i.id
@@ -621,6 +631,41 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Controleert of een EAN nog vrij is binnen de organisatie (vóór het opslaan, zodat er bij een fout niets half
+   * wordt bewaard; een transactie terugdraaien gebeurt alleen bij een throw).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string|null} id Id van het artikel zelf (null bij een nieuw artikel).
+   * @param {string|null} ean De opgeschoonde EAN (leeg = wissen, altijd goed).
+   * @returns {object|null} { error, field, status } als de EAN al bij een ander artikel hoort, anders null.
+   */
+  function eanTaken(tenantId, id, ean) {
+    if (!ean) return null;
+    const other = prepare('SELECT code FROM stock_items WHERE tenant_id = ? AND ean = ? AND id <> ?').get(tenantId, ean, id || '');
+    return other ? { error: `Deze EAN hoort al bij artikel ${other.code}.`, field: 'ean', status: 409 } : null;
+  }
+
+  /**
+   * Of een databasefout de unieke index op de EAN is (twee gelijktijdige aanvragen met dezelfde EAN).
+   * @param {Error} error De fout.
+   * @returns {boolean} true bij een dubbele EAN.
+   */
+  const isEanConflict = (error) => /stock_items_ean|stock_items\.ean/.test(String(error && error.message));
+
+  /**
+   * Voert een opslagactie uit en vertaalt een botsing op de unieke EAN-index naar dezelfde 409 als de controle vooraf.
+   * @param {() => object} action De actie (een transactie).
+   * @returns {object} De uitkomst van de actie, of { error, field, status } bij een dubbele EAN.
+   */
+  function withEanGuard(action) {
+    try {
+      return action();
+    } catch (error) {
+      if (isEanConflict(error)) return { error: 'Deze EAN hoort al bij een ander artikel.', field: 'ean', status: 409 };
+      throw error;
+    }
+  }
+
+  /**
    * Nieuw voorraadartikel (met eventueel een beginvoorraad in raw.onHand).
    * @param {string} tenantId Id van de omgeving.
    * @param {object} user Wie het aanmaakt.
@@ -632,21 +677,23 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const checked = sanitizeItem(raw);
     if (checked.error) return checked;
     const fields = checked.value;
-    const out = transaction(db, () => {
+    const out = withEanGuard(() => transaction(db, () => {
       if (findCode(tenantId, fields.code)) return { error: 'Er is al een voorraadartikel met deze code.', field: 'code', status: 409 };
+      const eanProblem = eanTaken(tenantId, null, fields.ean);
+      if (eanProblem) return eanProblem;
       rememberUnit(tenantId, fields.unit);
       const id = crypto.randomUUID();
       const timestamp = currentTimestamp();
       prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
-           sale_price, business_price, vat_rate, revenue_group, shop_sync, weight_grams, order_pack_size, order_min_qty, price_tiers, unit_content)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.businessPrice ?? null, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null, fields.packSize ?? 1, fields.orderMinQty ?? 1, JSON.stringify(fields.priceTiers || []), fields.unitContent ?? null);
+           sale_price, business_price, vat_rate, revenue_group, shop_sync, weight_grams, order_pack_size, order_min_qty, price_tiers, unit_content, ean)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.businessPrice ?? null, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null, fields.packSize ?? 1, fields.orderMinQty ?? 1, JSON.stringify(fields.priceTiers || []), fields.unitContent ?? null, fields.ean || null);
       if (fields.description || fields.specifications.length) saveDetails(tenantId, id, fields);
       costs.noteFormPrice(tenantId, id, null, fields.costPrice, user);
       const start = Number(raw && raw.onHand);
       if (Number.isFinite(start) && start > 0 && start <= MAX_QTY) book(tenantId, id, start, { kind: 'ontvangst', note: 'Beginvoorraad', user });
       return { id };
-    });
+    }));
     if (out.error) return out;
     // Open werkorders met deze code reserveren meteen.
     if (resync) resyncOpen(tenantId, [fields.code]);
@@ -665,7 +712,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const checked = sanitizeItem(raw, { partial: true });
     if (checked.error) return checked;
     const fields = checked.value;
-    const out = transaction(db, () => {
+    const out = withEanGuard(() => transaction(db, () => {
       const existing = findItem(tenantId, id);
       if (!existing) return { error: 'not_found', status: 404 };
       if (fields.code && fields.code !== existing.code) {
@@ -675,7 +722,6 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
           .get(tenantId, existing.id, tenantId, existing.id).n;
         if (used) return { error: 'De code van een artikel dat al op werkorders is gereserveerd of afgeboekt, kan niet meer veranderen.', field: 'code', status: 409 };
       }
-      if (fields.unit) rememberUnit(tenantId, fields.unit);
       const merged = {
         code: existing.code, name: existing.name, unit: existing.unit, location: existing.location, minQty: existing.min_qty, reorderQty: existing.reorder_qty, costPrice: existing.cost_price, notes: existing.notes,
         salePrice: existing.sale_price, businessPrice: existing.business_price ?? null, vatRate: Number(existing.vat_rate), revenueGroup: existing.revenue_group, shopSync: Boolean(Number(existing.shop_sync)), weightGrams: existing.weight_grams ?? null,
@@ -694,16 +740,24 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         const parentRow = prepare('SELECT archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, existing.parent_id);
         if (parentRow && parentRow.archived) return { error: 'Zet eerst het hoofdartikel terug uit het archief.', status: 409 };
       }
+      // EAN eerst controleren: na de UPDATE hieronder zou een fout de andere wijzigingen toch laten staan.
+      const ean = fields.ean !== undefined ? (fields.ean || null) : (existing.ean || null);
+      if (ean !== (existing.ean || null)) {
+        if (ean && isParent) return { error: 'Een hoofdartikel met varianten heeft geen eigen EAN; geef elke variant een EAN.', field: 'ean', status: 400 };
+        const eanProblem = eanTaken(tenantId, existing.id, ean);
+        if (eanProblem) return eanProblem;
+      }
+      if (fields.unit) rememberUnit(tenantId, fields.unit);
       // Andere prijs of btw (of weer meesturen): opnieuw naar de webshop. Een
       // hoofdartikel heeft in de webshop geen eigen prijs of voorraad.
       const toShop = !isParent && ((merged.salePrice ?? null) !== (existing.sale_price ?? null) || merged.vatRate !== Number(existing.vat_rate) || (merged.shopSync && !Number(existing.shop_sync)));
       prepare(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, reorder_qty = ?, cost_price = ?, notes = ?, archived = ?, archived_by_parent = 0, updated_at = ?,
            sale_price = ?, business_price = ?, vat_rate = ?, revenue_group = ?, shop_sync = ?, weight_grams = ?,
-           order_pack_size = ?, order_min_qty = ?, price_tiers = ?, unit_content = ?,
+           order_pack_size = ?, order_min_qty = ?, price_tiers = ?, unit_content = ?, ean = ?,
            shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
          WHERE tenant_id = ? AND id = ?`)
         .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.businessPrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0, merged.weightGrams,
-          merged.packSize, mergedTerms.orderMinQty, JSON.stringify(merged.priceTiers), merged.unitContent ?? null,
+          merged.packSize, mergedTerms.orderMinQty, JSON.stringify(merged.priceTiers), merged.unitContent ?? null, ean,
           toShop && merged.shopSync ? 1 : 0, tenantId, existing.id);
       if (fields.description !== undefined || fields.specifications !== undefined) saveDetails(tenantId, existing.id, fields);
       // Een andere inkoopprijs komt als nieuwe regel in de historie (de oude blijft staan).
@@ -712,7 +766,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       let variantsToShop = false;
       if (isParent) variantsToShop = followParent(tenantId, existing, merged, archived);
       return { item: get(tenantId, existing.id), toShop: toShop || variantsToShop };
-    });
+    }));
     if (out.toShop) dirty(tenantId);
     return out;
   }
@@ -888,7 +942,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         created.push(code);
       }
       // Een gekoppeld hoofdartikel: de nieuwe varianten komen bij de volgende ronde in de webshop.
-      prepare(`UPDATE stock_items SET has_variants = 1, attributes = ?, updated_at = ?,
+      prepare(`UPDATE stock_items SET has_variants = 1, ean = NULL, attributes = ?, updated_at = ?,
           shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL AND shop_sync = 1 THEN 1 ELSE shop_dirty END
         WHERE tenant_id = ? AND id = ?`).run(JSON.stringify(attributes), timestamp, created.length ? 1 : 0, tenantId, existing.id);
       prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
@@ -1283,7 +1337,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       return false;
     }
     const attributes = JSON.stringify(shopAttributesOf(product));
-    prepare('UPDATE stock_items SET has_variants = 1, attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(attributes, currentTimestamp(), tenantId, item.id);
+    prepare('UPDATE stock_items SET has_variants = 1, ean = NULL, attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(attributes, currentTimestamp(), tenantId, item.id);
     prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
     item.has_variants = 1;
     item.attributes = attributes;

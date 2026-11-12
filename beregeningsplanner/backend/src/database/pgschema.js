@@ -1033,6 +1033,11 @@ const PG_MIGRATIONS = [
   CREATE INDEX purchase_order_lines_order ON purchase_order_lines (tenant_id, order_id);
   CREATE INDEX purchase_order_lines_item ON purchase_order_lines (tenant_id, item_id);
   `,
+  // 62: EAN per artikel (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN ean ${TEXT_TYPE};
+  CREATE UNIQUE INDEX stock_items_ean ON stock_items (tenant_id, ean) WHERE ean IS NOT NULL;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

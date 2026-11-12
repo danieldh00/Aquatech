@@ -79,6 +79,7 @@
             <label>Artikelcode<input name="code" maxlength="40" list="catalog-codes" required autocomplete="off" placeholder="Bijv. PE-25"></label>
             <label class="grow">Omschrijving<input name="name" maxlength="200" required></label>
             <label>Eenheid<select name="unit" data-units></select></label>
+            <label title="Het artikelnummer van de fabrikant (8 of 13 cijfers, staat onder de streepjescode op de verpakking). Leeg = het etiket krijgt de artikelcode als streepjescode.">EAN<input name="ean" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="8 of 13 cijfers"></label>
           </div>
           <div class="row">
             <label>Locatie<input name="location" maxlength="60" placeholder="Bijv. magazijn A3, bus 1"></label>
@@ -314,6 +315,7 @@
             <label>Artikelcode<input name="code" maxlength="40" required></label>
             <label class="grow">Omschrijving<input name="name" maxlength="200" required></label>
             <label>Eenheid<select name="unit" data-units></select></label>
+            <label title="Het artikelnummer van de fabrikant (8 of 13 cijfers, staat onder de streepjescode op de verpakking). Leeg = het etiket krijgt de artikelcode als streepjescode.">EAN<input name="ean" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="8 of 13 cijfers"></label>
           </div>
           <div class="row">
             <label>Locatie<input name="location" maxlength="60"></label>
@@ -391,6 +393,17 @@
         <p class="muted small" id="d-image-note">Wordt getoond in de webshop. JPEG, PNG of WebP; grote afbeeldingen worden verkleind.</p>
         <div class="err" role="alert"></div>
       </section>
+      <section class="card-form" id="d-labels">
+        <h3>Etiketten</h3>
+        <p class="muted small" id="l-hint">Druk de PDF af op een labelprinter (bijvoorbeeld Zebra) via het afdrukvenster: kies daar het etiketformaat en schaal 100%. Sjablonen beheer je in Beheer → Instellingen → Etiketten.</p>
+        <form id="labels-form" class="row" novalidate>
+          <label class="grow">Sjabloon<select name="template"></select></label>
+          <label>Aantal<input name="qty" type="number" min="1" max="500" step="1" value="1" inputmode="numeric" required></label>
+          <button class="btn primary" type="submit">Etiketten maken (PDF)</button>
+        </form>
+        <div class="label-preview" id="l-preview"></div>
+        <div class="err" role="alert" id="l-err"></div>
+      </section>
       <section class="card-form" id="d-variants" hidden>
         <h3>Varianten</h3>
         <p class="muted small" id="v-hint"></p>
@@ -428,6 +441,8 @@
   <script src="../beregening/js/catalog.js"></script>
   <script src="../werkorders/workorder-core.js"></script>
   <script src="item-images.js"></script>
+  <script src="../shared/barcode.js"></script>
+  <script src="labels.js"></script>
   <script src="merge.js"></script>
   <script src="suppliers.js"></script>
   <script src="orders.js"></script>
