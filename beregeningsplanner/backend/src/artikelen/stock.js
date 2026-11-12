@@ -941,7 +941,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         created.push(code);
       }
       // Een gekoppeld hoofdartikel: de nieuwe varianten komen bij de volgende ronde in de webshop.
-      prepare(`UPDATE stock_items SET has_variants = 1, attributes = ?, updated_at = ?,
+      prepare(`UPDATE stock_items SET has_variants = 1, ean = NULL, attributes = ?, updated_at = ?,
           shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL AND shop_sync = 1 THEN 1 ELSE shop_dirty END
         WHERE tenant_id = ? AND id = ?`).run(JSON.stringify(attributes), timestamp, created.length ? 1 : 0, tenantId, existing.id);
       prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
@@ -1336,7 +1336,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       return false;
     }
     const attributes = JSON.stringify(shopAttributesOf(product));
-    prepare('UPDATE stock_items SET has_variants = 1, attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(attributes, currentTimestamp(), tenantId, item.id);
+    prepare('UPDATE stock_items SET has_variants = 1, ean = NULL, attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(attributes, currentTimestamp(), tenantId, item.id);
     prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
     item.has_variants = 1;
     item.attributes = attributes;

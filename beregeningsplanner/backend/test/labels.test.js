@@ -177,5 +177,13 @@ test('etiketten afdrukken: PDF, sjabloon uit Beheer, rechten, andere organisatie
   assert.strictEqual((await admin.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Maat', values: ['S', 'M'] }] })).status, 200);
   assert.strictEqual((await installer.post('/app/api/stock/labels', { items: [{ id: parent.id, qty: 1 }] })).body.error, 'has_variants');
   assert.strictEqual((await admin.put(`/app/api/stock/items/${parent.id}`, { name: 'Hoofd nieuw', ean: '96385074' })).status, 400);
+  // Een artikel met EAN dat een hoofdartikel wordt verliest zijn EAN, zodat een variant die EAN kan krijgen.
+  const wasSimple = (await admin.post('/app/api/stock/items', { code: 'LOS-1', name: 'Los artikel', unit: 'st', ean: '4006381333931' })).body;
+  assert.strictEqual(wasSimple.ean, '4006381333931');
+  const split = await admin.put(`/app/api/stock/items/${wasSimple.id}/variants`, { attributes: [{ name: 'Maat', values: ['S', 'M'] }] });
+  assert.strictEqual(split.status, 200, JSON.stringify(split.body));
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${wasSimple.id}`)).body.ean, null);
+  const variants = (await admin.get(`/app/api/stock/items/${wasSimple.id}`)).body.variants;
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${variants[0].id}`, { ean: '4006381333931' })).status, 200);
   assert.strictEqual((await admin.get(`/app/api/stock/items/${parent.id}`)).body.name, 'Hoofd');
 });
