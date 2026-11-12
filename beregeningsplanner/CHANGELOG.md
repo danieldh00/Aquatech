@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.3
+
+Webshop `storefront.css`: `.nav-bar` wikkelt niet meer (`flex-wrap: nowrap`, items `white-space: nowrap`), en onder 1180 px en 980 px worden padding, lettergrootte en de minimumbreedte van *Product zoeken* kleiner. Onder 800 px blijft het mobiele menu.
+
 ## 1.12.2
 
 - Nieuw `verkoop/quote-orders.js`: `POST /api/quotes/:id/convert` (recht `offertes` én `beheer`) maakt in één transactie een `web_orders`-bestelling (`createFromQuote` in web-orders.js) en koppelt hem aan de offerte met `quotes.order_id`/`converted_at` (migratie 66, unieke index per organisatie); twee gelijktijdige verzoeken geven één bestelling (409 `already_converted`).
