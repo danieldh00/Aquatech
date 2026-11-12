@@ -123,4 +123,7 @@ test('zakelijk: pallet tegen de zakelijke prijs, beschikbaar in hele pallets en 
   const rows = report.body.lines.filter((line) => line.reference === order.number);
   assert.strictEqual(rows.length, 1, 'één regel per artikel in de rapportage');
   assert.strictEqual(rows[0].qty, 300, '12 stuks + 2 × 144');
+  // Een @ in een artikelcode is niet toegestaan, zodat een code nooit voor een verpakking kan worden aangezien.
+  const withAt = await admin.post('/app/api/stock/items', { code: 'KLINK@PAL', name: 'Fout', onHand: 1, salePrice: 1 });
+  assert.strictEqual(withAt.status, 400);
 });
