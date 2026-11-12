@@ -1311,7 +1311,22 @@ const MIGRATIONS = [
   `
   CREATE INDEX web_orders_status ON web_orders (tenant_id, status, created_at);
   `,
-  // 68: dropshipping (webshop/order-slips.js, punt 8): de eigen pakbon (PDF) die de klant bij een dropshippingbestelling uploadt,
+  // 68: prijsvoorstellen (artikelen/price-factor.js): een nieuwe inkoopprijs geeft een voorstel voor een nieuwe verkoopprijs dat
+  // een beheerder goedkeurt of afwijst. Een afgewezen voorstel wordt hier onthouden (inkoopprijs + voorgestelde prijs, één per
+  // artikel) en komt pas terug als een van beide verandert.
+  `
+  CREATE TABLE price_proposal_rejections (
+    id             TEXT PRIMARY KEY,
+    tenant_id      TEXT NOT NULL REFERENCES tenants(id),
+    item_id        TEXT NOT NULL REFERENCES stock_items(id),
+    cost_price     REAL NOT NULL,
+    proposed_price REAL NOT NULL,
+    rejected_by    TEXT,
+    rejected_at    TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX price_proposal_rejections_item ON price_proposal_rejections (tenant_id, item_id);
+  `,
+  // 69: dropshipping (webshop/order-slips.js, punt 8): de eigen pakbon (PDF) die de klant bij een dropshippingbestelling uploadt,
   // versleuteld (vault.sealBytes) per bestelling; hoogstens één per bestelling (vervangen kan zolang de bestelling nieuw is).
   `
   CREATE TABLE web_order_slips (

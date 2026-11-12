@@ -1077,7 +1077,20 @@ const PG_MIGRATIONS = [
   `
   CREATE INDEX web_orders_status ON web_orders (tenant_id, status, created_at);
   `,
-  // 68: eigen pakbon bij dropshipping (zie db.js).
+  // 68: afgewezen prijsvoorstellen (zie db.js).
+  `
+  CREATE TABLE price_proposal_rejections (
+    id             ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id      ${TEXT_TYPE} NOT NULL REFERENCES tenants(id),
+    item_id        ${TEXT_TYPE} NOT NULL REFERENCES stock_items(id),
+    cost_price     DOUBLE PRECISION NOT NULL,
+    proposed_price DOUBLE PRECISION NOT NULL,
+    rejected_by    ${TEXT_TYPE},
+    rejected_at    ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX price_proposal_rejections_item ON price_proposal_rejections (tenant_id, item_id);
+  `,
+  // 69: eigen pakbon bij dropshipping (zie db.js).
   `
   CREATE TABLE web_order_slips (
     tenant_id  ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
