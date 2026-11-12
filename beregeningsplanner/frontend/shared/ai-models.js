@@ -31,6 +31,7 @@
   // Waarvoor de app AI gebruikt (kolom feature in ai_usage).
   const FEATURES = {
     plan_analyse: 'Plan herkennen',
+    inkoop_inlezen: 'Inkoopdocument inlezen',
   };
 
   /**

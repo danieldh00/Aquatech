@@ -13,11 +13,19 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.11.4',
+      version: '1.11.5',
       date: '2026-11-12',
       title: 'Dozen en pallets in de winkelwagen',
       items: [
         { text: 'Artikelen met een verpakking (doos, pallet) kunnen als verpakking in de winkelwagen en bestelling staan, met eigen prijs. De voorraad wordt in stuks afgeboekt.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.11.4',
+      date: '2026-11-12',
+      title: 'Leveranciersdocument inlezen',
+      items: [
+        { text: 'In Inkooporders kun je een PDF of foto van een offerte, orderbevestiging, pakbon of factuur laten inlezen. De regels worden aan je artikelen gekoppeld; jij controleert alles en bewaart het als concept, of boekt het meteen in de voorraad. De artikelnummers van de leverancier worden onthouden, zodat de volgende keer meer regels vanzelf goed staan.', for: ['voorraad'] },
       ],
     },
     {
