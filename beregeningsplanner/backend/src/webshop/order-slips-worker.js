@@ -33,22 +33,21 @@ function streamsWithinLimits(buffer) {
     if (buffer.subarray(Math.max(0, start - 3), start).toString('latin1') === 'end') continue;
     streams += 1;
     if (streams > MAX_STREAMS) return false;
-    let dataStart = position;
-    if (buffer[dataStart] === 0x0d) dataStart += 1;
-    if (buffer[dataStart] === 0x0a) dataStart += 1;
     // Zonder 'endstream' is het bestand niet in orde. Uitpakken loopt tot het einde van de gecomprimeerde gegevens zelf (niet tot de
     // eerste 'endstream', die ook toevallig in de gegevens kan staan); wat achter dat einde komt, negeert zlib.
-    const end = buffer.indexOf('endstream', dataStart, 'latin1');
-    if (end < 0) return false;
-    try {
-      total += zlib.inflateSync(buffer.subarray(dataStart), { maxOutputLength: MAX_STREAM_BYTES }).length;
-    } catch (failure) {
-      if (failure.code === 'ERR_BUFFER_TOO_LARGE') return false;
+    if (buffer.indexOf('endstream', position, 'latin1') < 0) return false;
+    // pdf-lib accepteert na 'stream' ook spaties vóór de regeleinde; daarom wordt vanaf de eerste paar posities geprobeerd.
+    for (let offset = 0; offset <= 4; offset++) {
+      try {
+        total += zlib.inflateSync(buffer.subarray(position + offset), { maxOutputLength: MAX_STREAM_BYTES }).length;
+        break;
+      } catch (failure) {
+        if (failure.code === 'ERR_BUFFER_TOO_LARGE') return false;
+      }
     }
     if (total > MAX_TOTAL_BYTES) return false;
-    // Verder zoeken vanaf het begin van de gegevens, niet vanaf 'endstream': een stream die binnen de gegevens van een andere
-    // staat wordt door pdf-lib via de xref toch gelezen en moet dus ook worden gecontroleerd.
-    position = dataStart;
+    // Het zoeken gaat verder direct na het trefwoord, niet na 'endstream': een stream die binnen de gegevens van een andere staat
+    // wordt door pdf-lib via de xref toch gelezen en moet dus ook worden gecontroleerd.
   }
 }
 

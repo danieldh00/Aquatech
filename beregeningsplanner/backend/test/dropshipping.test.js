@@ -85,6 +85,11 @@ test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', as
   // Een bom die binnen de ruwe gegevens van een andere stream staat (pdf-lib leest hem via de xref) wordt ook gevonden.
   const hidden = Buffer.concat([Buffer.from('\n94 0 obj\n<< /Length 10 >>\nstream\nxxxx\n93 0 obj\n<< /Type /ObjStm /Filter /FlateDecode >>\nstream\n'), bomb, Buffer.from('\nendstream\nendobj\n')]);
   assert.match((await inspectSlip(Buffer.concat([base, hidden]))).error, /te groot als hij wordt uitgepakt/);
+  // Spaties tussen 'stream' en het regeleinde (pdf-lib leest dat ook) ontsnappen niet aan de controle.
+  for (const gap of [' \r\n', ' \n', '  \r\n']) {
+    const spaced = Buffer.concat([base, Buffer.from(`\n92 0 obj\n<< /Type /ObjStm /Filter /FlateDecode >>\nstream${gap}`), bomb, Buffer.from('\nendstream\nendobj\n')]);
+    assert.match((await inspectSlip(spaced)).error, /te groot als hij wordt uitgepakt/);
+  }
   // Een onredelijk aantal streams wordt geweigerd.
   const many = Buffer.concat([base, Buffer.from('\nstream\nabc\nendstream'.repeat(300))]);
   assert.match((await inspectSlip(many)).error, /te groot als hij wordt uitgepakt/);
