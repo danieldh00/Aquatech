@@ -351,12 +351,12 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
       accepted.set(row.id, row);
     }
     const rows = [...accepted.values()];
-    // Eerst alle oude afwijzingen in blokken wissen, dan in blokken van 500 in één statement vastleggen (geen rondgang per artikel).
+    // In blokken van 500 in één statement vastleggen (geen rondgang per artikel); ON CONFLICT vangt twee gelijktijdige afwijzingen van hetzelfde artikel op.
     transaction(db, () => {
-      forget(tenantId, rows.map((row) => row.id));
       for (let start = 0; start < rows.length; start += 500) {
         const chunk = rows.slice(start, start + 500);
-        db.prepare(`INSERT INTO price_proposal_rejections (id, tenant_id, item_id, cost_price, proposed_price, rejected_by, rejected_at) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')}`)
+        db.prepare(`INSERT INTO price_proposal_rejections (id, tenant_id, item_id, cost_price, proposed_price, rejected_by, rejected_at) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')}
+          ON CONFLICT (tenant_id, item_id) DO UPDATE SET cost_price = excluded.cost_price, proposed_price = excluded.proposed_price, rejected_by = excluded.rejected_by, rejected_at = excluded.rejected_at`)
           .run(...chunk.flatMap((row) => [crypto.randomUUID(), tenantId, row.id, row.costPrice, row.newPrice, userId || null, timestamp]));
       }
     });
