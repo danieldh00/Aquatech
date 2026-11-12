@@ -344,8 +344,9 @@
   function showTab(name) {
     state.tab = name;
     document.querySelectorAll('.tab').forEach((button) => button.classList.toggle('active', button.dataset.tab === name));
-    for (const tabName of ['stock', 'reserved', 'moves', 'media']) $(`#tab-${tabName}`).hidden = tabName !== name;
+    for (const tabName of ['stock', 'reserved', 'moves', 'suppliers', 'media']) $(`#tab-${tabName}`).hidden = tabName !== name;
     if (name === 'moves' && !state.moves) loadMoves();
+    if (name === 'suppliers') window.ArtikelenSuppliers.load().catch((error) => toast(error.message, true));
     if (name === 'media') loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
   }
@@ -659,6 +660,7 @@
     variantOf.innerHTML = item.parent ? `Variant van <a href="./?id=${encodeURIComponent(item.parent.id)}" data-open="${esc(item.parent.id)}">${esc(item.parent.code)} ${esc(item.parent.name)}</a>${valuesText(item) ? ` · ${esc(valuesText(item))}` : ''}` : '';
     renderVariants();
     renderCosts();
+    window.ArtikelenSuppliers.showItem(item).catch((error) => toast(error.message, true));
     $('#d-res').innerHTML = item.reservations.length ? `<thead><tr><th>Werkorder</th><th>Status</th><th>Gepland</th><th class="num">Gereserveerd</th></tr></thead>
       <tbody>${item.reservations.map((reservation) => `<tr><td class="wrap">${woLink(reservation.workOrder)}<span class="sub">${esc(reservation.workOrder.title)}</span></td>
         <td><span class="pill wo-${esc(reservation.workOrder.status)}">${esc((WorkOrderCore && WorkOrderCore.STATUSES[reservation.workOrder.status]) || reservation.workOrder.status)}</span></td>
@@ -1445,6 +1447,7 @@
        */
       onMerged: async (parent) => { state.open.add(parent.id); await load(); await openItem(parent.id, true); },
     });
+    window.ArtikelenSuppliers.setup({ api, toast, esc, nl, eur });
     loadUnits().catch((error) => toast(error.message, true));
     setupShop();
     setupMedia();
@@ -1462,7 +1465,7 @@
       $('#v-list').hidden = false;
       try { await load(); } catch (error) { toast(error.message, true); }
       const hash = location.hash.slice(1);
-      if (['stock', 'reserved', 'moves', 'media'].includes(hash)) showTab(hash);
+      if (['stock', 'reserved', 'moves', 'suppliers', 'media'].includes(hash)) showTab(hash);
       // Vanuit een werkorder: "Op voorraad nemen" met de ontbrekende codes.
       const codes = (params.get('codes') || '').split(',').map((code) => code.trim()).filter((code) => Catalog.articles[code.toUpperCase()]);
       if (codes.length) openImport(codes);

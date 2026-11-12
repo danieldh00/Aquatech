@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.10.7',
+      date: '2026-11-12',
+      title: 'Leveranciers bij artikelen',
+      items: [
+        { text: 'In Artikelen staat nu een tabblad Leveranciers. Per artikel kun je zetten wie het levert, met het artikelnummer van de leverancier, een eigen inkoopprijs, de bestelhoeveelheid (bijvoorbeeld per doos van 25) en je voorkeursleverancier.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.10.6',
       date: '2026-11-12',
       title: 'Korting als bedrag, met bijschrift',

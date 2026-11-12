@@ -1190,6 +1190,39 @@ const MIGRATIONS = [
   `
   ALTER TABLE users ADD COLUMN document_language TEXT NOT NULL DEFAULT 'nl';
   `,
+  // 59: leveranciers (artikelen/suppliers.js, punt 17 inkooporders): suppliers = de leverancier (naam uniek per
+  // omgeving, zonder hoofdletters), item_suppliers = welke leverancier(s) een artikel levert, met het artikelnummer
+  // van de leverancier, een eigen inkoopprijs (leeg = die van het artikel), de bestelhoeveelheid (verpakking:
+  // bestellen in veelvouden) en welke leverancier de voorkeur heeft.
+  `
+  CREATE TABLE suppliers (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    name         TEXT NOT NULL,
+    contact_name TEXT NOT NULL DEFAULT '',
+    email        TEXT NOT NULL DEFAULT '',
+    phone        TEXT NOT NULL DEFAULT '',
+    address      TEXT NOT NULL DEFAULT '',
+    notes        TEXT NOT NULL DEFAULT '',
+    archived     INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX suppliers_tenant_name_ci ON suppliers (tenant_id, LOWER(name));
+  CREATE TABLE item_suppliers (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    item_id      TEXT NOT NULL REFERENCES stock_items(id),
+    supplier_id  TEXT NOT NULL REFERENCES suppliers(id),
+    supplier_sku TEXT NOT NULL DEFAULT '',
+    cost_price   REAL,
+    order_qty    REAL NOT NULL DEFAULT 1,
+    preferred    INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX item_suppliers_pair ON item_suppliers (tenant_id, item_id, supplier_id);
+  CREATE INDEX item_suppliers_supplier ON item_suppliers (tenant_id, supplier_id);
+  `,
 ];
 
 /**

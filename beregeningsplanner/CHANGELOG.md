@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.10.7
+
+Leveranciers (punt 17 van bundel F, deel 1). Migratie 59.
+
+- **Leveranciers** (tabel `suppliers`, naam uniek per organisatie zonder hoofdletters, contactgegevens, archiveren) in Artikelen > Leveranciers (`/api/suppliers`, recht `voorraad`). Een leverancier die artikelen levert wordt bij verwijderen gearchiveerd, anders echt verwijderd.
+- **Leveranciers per artikel** (tabel `item_suppliers`): artikelnummer van de leverancier, eigen inkoopprijs (leeg = die van het artikel), bestelhoeveelheid (bestellen in veelvouden) en één voorkeursleverancier (`GET|PUT /api/stock/items/:id/suppliers`). Een hoofdartikel heeft geen eigen leverancier; de koppelingen verdwijnen met het artikel.
+- Testdata: twee leveranciers met koppelingen aan de testartikelen.
+- Tests: `suppliers.test.js` (invoer, routes, archiveren, hoofdartikel, rechten, andere organisatie).
+- Vervolg: bestelvoorstel per leverancier, inkooporders met PDF-inlezen en inboeken.
 ## 1.10.6
 
 Kortingsregel op offerte en factuur (punt 14 van bundel A). Geen migratie: de velden staan in de offerte- en factuurgegevens.
