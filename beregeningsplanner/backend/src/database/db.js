@@ -1288,6 +1288,11 @@ const MIGRATIONS = [
   CREATE UNIQUE INDEX item_packagings_code ON item_packagings (tenant_id, item_id, code);
   CREATE UNIQUE INDEX item_packagings_ean ON item_packagings (tenant_id, ean) WHERE ean IS NOT NULL;
   `,
+  // 64: inkooporders: het nummer van het document van de leverancier (offerte, orderbevestiging, pakbon of factuur),
+  // meestal gelezen uit de PDF (artikelen/order-reader.js).
+  `
+  ALTER TABLE purchase_orders ADD COLUMN supplier_reference TEXT NOT NULL DEFAULT '';
+  `,
 ];
 
 /**

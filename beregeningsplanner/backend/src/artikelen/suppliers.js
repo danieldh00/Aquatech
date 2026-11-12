@@ -297,6 +297,58 @@ function createSupplierStore(db) {
   }
 
   /**
+   * Onthoudt de artikelnummers van een leverancier bij hun artikelen, binnen de transactie van de aanroeper.
+   * Bestaat een koppeling al, dan blijft wat er staat (alleen een leeg nummer wordt gevuld); anders komt er een
+   * koppeling bij (de voorkeur als het artikel nog geen leverancier had). Een hoofdartikel krijgt niets.
+   * Twee leesquery's voor alle regels samen, daarna alleen schrijven wat nieuw is.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} supplierId Id van de leverancier.
+   * @param {Array<{ itemId: string, supplierSku: string }>} entries Artikel en artikelnummer van de leverancier.
+   * @returns {void}
+   */
+  function rememberSkus(tenantId, supplierId, entries) {
+    const wanted = new Map();
+    for (const entry of entries) {
+      const cleanSku = cleanText(entry.supplierSku, 80);
+      if (cleanSku && entry.itemId && !wanted.has(entry.itemId)) wanted.set(entry.itemId, cleanSku);
+    }
+    if (!wanted.size) return;
+    const ids = [...wanted.keys()];
+    const marks = ids.map(() => '?').join(', ');
+    const variantParents = new Set(prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND has_variants = 1 AND id IN (${marks})`).all(tenantId, ...ids).map((row) => row.id));
+    const known = new Set(prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND id IN (${marks})`).all(tenantId, ...ids).map((row) => row.id));
+    const links = prepare(`SELECT id, item_id, supplier_id, supplier_sku FROM item_suppliers WHERE tenant_id = ? AND item_id IN (${marks})`).all(tenantId, ...ids);
+    const linksOf = new Map();
+    for (const link of links) {
+      if (!linksOf.has(link.item_id)) linksOf.set(link.item_id, []);
+      linksOf.get(link.item_id).push(link);
+    }
+    for (const [itemId, cleanSku] of wanted) {
+      if (!known.has(itemId) || variantParents.has(itemId)) continue;
+      const existing = linksOf.get(itemId) || [];
+      const own = existing.find((link) => link.supplier_id === supplierId);
+      if (own) {
+        if (!own.supplier_sku) prepare('UPDATE item_suppliers SET supplier_sku = ? WHERE tenant_id = ? AND id = ?').run(cleanSku, tenantId, own.id);
+        continue;
+      }
+      if (existing.length >= MAX_SUPPLIERS_PER_ITEM) continue;
+      prepare(`INSERT INTO item_suppliers (id, tenant_id, item_id, supplier_id, supplier_sku, cost_price, order_qty, preferred, created_at)
+        VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?)`).run(crypto.randomUUID(), tenantId, itemId, supplierId, cleanSku, existing.length ? 0 : 1, currentTimestamp());
+    }
+  }
+
+  /**
+   * De artikelnummers van een leverancier, om gelezen documentregels te herkennen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} supplierId Id van de leverancier.
+   * @returns {Array<{ itemId: string, supplierSku: string }>} Artikel-id en artikelnummer van de leverancier (alleen gevulde nummers).
+   */
+  function skusOf(tenantId, supplierId) {
+    return prepare("SELECT item_id, supplier_sku FROM item_suppliers WHERE tenant_id = ? AND supplier_id = ? AND supplier_sku <> ''").all(tenantId, supplierId)
+      .map((row) => ({ itemId: row.item_id, supplierSku: row.supplier_sku }));
+  }
+
+  /**
    * De voorkeursleverancier van elk artikel dat er een heeft (voor het bestelvoorstel per leverancier).
    * @param {string} tenantId Id van de omgeving.
    * @returns {Map<string, object>} Artikel-id naar { supplierId, supplierName, supplierSku, costPrice, orderQty }.
@@ -311,7 +363,7 @@ function createSupplierStore(db) {
     }]));
   }
 
-  return { list, get, create, update, remove, forItem, setForItem, preferredByItem };
+  return { list, get, create, update, remove, forItem, setForItem, preferredByItem, rememberSkus, skusOf };
 }
 
 /**

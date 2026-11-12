@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.11.4
+
+Leveranciersdocument inlezen en direct inboeken (punt 17 van bundel F, deel 4). Migratie 64.
+
+- **Inlezen** (`POST /api/purchase-orders/read`, `artikelen/order-read-route.js`, `order-reader.js`, recht `voorraad`): een PDF of foto (JPEG, PNG, WebP, max. 8 MB) van een offerte, orderbevestiging, pakbon of factuur gaat naar de AI van de omgeving (eigen sleutel, `aiEnabled`, dagmaximum `aiDailyLimit`, uurlimiet per bezoeker) en komt terug als leverancier, documentnummer, datum en regels. De route schrijft niets. Verbruik staat in Beheer > AI-kosten onder `inkoop_inlezen`.
+- **Koppelen** (`order-matching.js`, zuivere functies): leverancier op naam; regels op artikelnummer van de leverancier, artikelcode, exacte omschrijving en daarna gelijkenis (alleen een voorstel).
+- **Inboeken**: `POST /api/purchase-orders` met `receiveNow: true` maakt de order en boekt alles meteen in (alles of niets, via `receiveRows`). Veld `supplierReference` (migratie 64, referentie van de leverancier) en per regel `supplierSku`; met `rememberSkus: true` worden de artikelnummers bij de artikelen onthouden (`suppliers.rememberSku`).
+- `translateApiError` uit `plan-analyzer.js` wordt hergebruikt voor de foutmeldingen van de AI-dienst.
+- Scherm: knop Inlezen uit document in Inkooporders; gekoppelde regels staan op de order, de rest is te koppelen of weg te laten; knoppen Bewaren (concept) en Bewaren en inboeken.
+- Tests: `order-reading.test.js` en `purchase-orders.test.js`.
+
 ## 1.11.3
 
 Fix: het formulier *AI-koppeling (Claude en ChatGPT)* stond in Beheer onder *Artikelen: etiketten*. Het formulier stond niet in de lijst `SETTINGS_FORMS` van `beheer/indeling.js`, dus het werd bij elke sectie van Instellingen getoond. Het heeft nu een eigen sectie *AI-koppeling (MCP)* onder Koppelingen; bij Etiketten staan alleen nog de etiketsjablonen. Geen migratie.

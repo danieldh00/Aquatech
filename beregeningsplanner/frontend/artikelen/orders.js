@@ -4,7 +4,7 @@
 // Praat met /api/purchase-orders (recht 'voorraad'); de server rekent en controleert alles.
 (function () {
   const context = { api: null, toast: null, esc: null, nl: null, eur: null, getItems: null, workbook: null, save: null, stamp: null };
-  const state = { orders: [], suppliers: [], order: null, lines: [] };
+  const state = { orders: [], suppliers: [], order: null, lines: [], unmatched: [], imported: false };
   const STATUS_LABELS = { concept: 'Concept', besteld: 'Besteld', deels_ontvangen: 'Deels ontvangen', ontvangen: 'Ontvangen', geannuleerd: 'Geannuleerd' };
 
   /**
@@ -58,7 +58,10 @@
     const form = $('#order-form');
     state.order = order;
     state.lines = order ? order.lines.map((line) => ({ ...line })) : [];
+    state.unmatched = [];
+    state.imported = false;
     form.reset();
+    form.supplierReference.value = order ? order.supplierReference || '' : '';
     $('h3', form).textContent = order ? `Inkooporder ${order.number} (${STATUS_LABELS[order.status] || order.status})` : 'Nieuwe inkooporder';
     const choices = state.suppliers.filter((supplier) => !supplier.archived || (order && supplier.id === order.supplierId));
     form.supplierId.innerHTML = `<option value="">Kies een leverancier…</option>${choices.map((supplier) => `<option value="${context.esc(supplier.id)}">${context.esc(supplier.name)}</option>`).join('')}`;
@@ -81,9 +84,14 @@
     form.supplierId.disabled = !editable;
     form.expectedDate.disabled = !editable;
     form.notes.disabled = !editable;
+    form.supplierReference.disabled = !editable;
+    $('#po-remember-row').hidden = !(editable && state.imported);
+    $('[data-act=receivenow]', form).hidden = !(editable && !state.order);
+    renderUnmatched();
     $('#po-add-row').hidden = !editable;
-    const show = { save: editable, place: editable && Boolean(state.order), receive: receiving, excel: Boolean(state.order), close: status === 'deels_ontvangen', cancel: status === 'concept' ? false : status === 'besteld', remove: editable && Boolean(state.order) };
+    const show = { save: editable, receivenow: editable && !state.order, place: editable && Boolean(state.order), receive: receiving, excel: Boolean(state.order), close: status === 'deels_ontvangen', cancel: status === 'concept' ? false : status === 'besteld', remove: editable && Boolean(state.order) };
     for (const [action, visible] of Object.entries(show)) $(`[data-act=${action}]`, form).hidden = !visible;
+    $('#po-add-row').hidden = !editable;
     const head = receiving || !editable
       ? '<th>Code</th><th>Omschrijving</th><th>Art.nr. leverancier</th><th class="num">Besteld</th><th class="num">Ontvangen</th><th class="num">Nog open</th><th class="num">Prijs</th>' + (receiving ? '<th class="num">Nu ontvangen</th>' : '')
       : '<th>Code</th><th>Omschrijving</th><th>Art.nr. leverancier</th><th class="num">Aantal</th><th class="num">Inkoopprijs (€)</th><th></th>';
@@ -120,8 +128,9 @@
     const form = $('#order-form');
     readLines();
     return {
-      supplierId: form.supplierId.value, expectedDate: form.expectedDate.value, notes: form.notes.value,
-      lines: state.lines.map((line) => ({ itemId: line.itemId, qty: line.qty, unitCost: line.unitCost })),
+      supplierId: form.supplierId.value, expectedDate: form.expectedDate.value, notes: form.notes.value, supplierReference: form.supplierReference.value,
+      rememberSkus: state.imported && form.rememberSkus.checked,
+      lines: state.lines.map((line) => ({ itemId: line.itemId, qty: line.qty, unitCost: line.unitCost, supplierSku: line.supplierSku || '' })),
     };
   }
 
@@ -205,6 +214,135 @@
     } finally {
       button.disabled = false;
     }
+  }
+
+  /** Tekent de regels uit het document die nog niet aan een artikel zijn gekoppeld. */
+  function renderUnmatched() {
+    const { esc, nl } = context;
+    const box = $('#po-unmatched');
+    box.hidden = !state.unmatched.length;
+    if (!state.unmatched.length) return;
+    $('#po-unmatched-note').textContent = `${state.unmatched.length} regel${state.unmatched.length === 1 ? '' : 's'} uit het document ${state.unmatched.length === 1 ? 'is' : 'zijn'} nog niet gekoppeld en ${state.unmatched.length === 1 ? 'komt' : 'komen'} niet op de order. Kies een artikelcode of laat de regel weg.`;
+    $('#po-unmatched-table').innerHTML = `<thead><tr><th>Art.nr.</th><th>Omschrijving</th><th class="num">Aantal</th><th>Artikelcode</th><th></th></tr></thead><tbody>${state.unmatched.map((row, index) => `<tr data-un="${index}">
+      <td>${esc(row.supplierSku)}</td><td class="wrap">${esc(row.description)}${row.unitNote ? `<br><span class="err">${esc(row.unitNote)} Controleer het aantal en de prijs.</span>` : ''}${row.suggestions.length ? `<br><span class="muted">Misschien: ${row.suggestions.map((hint) => esc(hint.code)).join(', ')}</span>` : ''}</td><td class="num">${nl(row.qty)} ${esc(row.unit)}</td>
+      <td><input data-field="code" list="po-add-codes" value="${esc(row.suggestions[0] ? row.suggestions[0].code : '')}" autocomplete="off" aria-label="Artikelcode"></td>
+      <td class="num"><button class="btn small" type="button" data-link="${index}">Koppelen</button> <button class="btn small danger" type="button" data-skip="${index}">Weglaten</button></td></tr>`).join('')}</tbody>`;
+  }
+
+  /**
+   * Geeft een melding als de eenheid op het document afwijkt van die van het artikel.
+   * @param {object} row De gelezen regel.
+   * @param {object} item Het artikel.
+   * @returns {string} De melding, of leeg als de eenheid klopt of ontbreekt.
+   */
+  function unitMismatch(row, item) {
+    const documentUnit = String(row.unit || '').trim().toLowerCase();
+    if (!documentUnit || documentUnit === String(item.unit || '').trim().toLowerCase()) return '';
+    return `Eenheid op het document (${row.unit}) wijkt af van het artikel (${item.unit}).`;
+  }
+
+  /**
+   * Zet een gelezen regel op de order als het artikel er nog niet op staat.
+   * @param {object} row De gelezen regel (qty, unitPrice, supplierSku).
+   * @param {object} item Het artikel.
+   * @returns {boolean} false als het artikel al op de order staat.
+   */
+  function addImported(row, item) {
+    if (state.lines.some((line) => line.itemId === item.id)) return false;
+    state.lines.push({ itemId: item.id, code: item.code, name: item.name, unit: item.unit, supplierSku: row.supplierSku, qty: row.qty, unitCost: row.unitPrice == null ? '' : row.unitPrice });
+    return true;
+  }
+
+  /**
+   * Koppelt een niet-gekoppelde regel aan de ingevulde artikelcode of laat hem weg.
+   * @param {MouseEvent} event de klik
+   */
+  function resolveUnmatched(event) {
+    const link = event.target.closest('[data-link]');
+    const skip = event.target.closest('[data-skip]');
+    if (!link && !skip) return;
+    readLines();
+    const index = Number((link || skip).dataset.link ?? (link || skip).dataset.skip);
+    const errorBox = $('#order-form .err');
+    errorBox.textContent = '';
+    if (link) {
+      const code = $(`tr[data-un="${index}"] [data-field=code]`).value.trim().toLowerCase();
+      const item = context.getItems().find((candidate) => candidate.code.toLowerCase() === code && !candidate.hasVariants && !candidate.archived);
+      if (!item) { errorBox.textContent = 'Kies een bestaande artikelcode (geen hoofdartikel).'; return; }
+      if (!addImported(state.unmatched[index], item)) { errorBox.textContent = 'Dit artikel staat al op de order.'; return; }
+    }
+    state.unmatched.splice(index, 1);
+    renderLines();
+  }
+
+  /**
+   * Leest een bestand als data-URL (base64).
+   * @param {File} file Het bestand.
+   * @returns {Promise<string>} De data-URL.
+   */
+  function fileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener('load', () => resolve(reader.result));
+      reader.addEventListener('error', () => reject(new Error('Het bestand kon niet worden gelezen.')));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /**
+   * Leest het gekozen bestand met AI en opent de uitkomst als nieuwe order om te controleren.
+   * @param {File} file De PDF of foto.
+   * @returns {Promise<void>}
+   */
+  async function readDocument(file) {
+    const button = $('#b-po-read');
+    if (file.size > 8 * 1024 * 1024) { context.toast('Het bestand is groter dan 8 MB.', true); return; }
+    // Een geopend formulier met regels wordt vervangen: alleen dan vragen, want anders gaat er niets verloren.
+    if (!$('#order-form').hidden && state.lines.length && !window.confirm('Het geopende formulier wordt vervangen door het ingelezen document. Wat niet is bewaard gaat verloren. Doorgaan?')) return;
+    button.disabled = true;
+    const label = button.textContent;
+    button.textContent = 'Bezig met lezen…';
+    try {
+      const dataUrl = await fileAsDataUrl(file);
+      const result = await context.api('purchase-orders/read', { method: 'POST', body: { file: dataUrl } });
+      await openForm(null);
+      const form = $('#order-form');
+      state.imported = true;
+      form.supplierId.value = result.supplier ? result.supplier.id : '';
+      form.supplierReference.value = result.documentNumber || '';
+      form.notes.value = [result.documentType !== 'overig' ? `Ingelezen ${result.documentType}${result.documentDate ? ` van ${result.documentDate}` : ''}` : '', result.notes].filter(Boolean).join('. ');
+      const items = new Map(context.getItems().map((item) => [item.id, item]));
+      for (const row of result.lines) {
+        const item = row.match && row.match.itemId ? items.get(row.match.itemId) : null;
+        // Alleen wat op nummer, code of exacte omschrijving klopt komt vanzelf op de order; een gok op gelijkenis bevestigt de gebruiker zelf (Koppelen).
+        const mismatch = item ? unitMismatch(row, item) : '';
+        if (item && row.match.sure && !mismatch && addImported(row, item)) continue;
+        state.unmatched.push({ ...row, unitNote: mismatch, suggestions: row.match && row.match.itemId ? [{ code: row.match.itemCode }] : (row.match ? row.match.suggestions : []) });
+      }
+      renderLines();
+      const names = result.supplier ? '' : ` Leverancier "${result.supplierName || 'onbekend'}" is niet herkend: kies hem hierboven.`;
+      $('#order-form .err').textContent = `${state.lines.length} van ${result.lines.length} regels gekoppeld.${names} Controleer alles voor je bewaart.`;
+    } catch (error) {
+      context.toast(error.message, true);
+    } finally {
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
+
+  /**
+   * Maakt de order en boekt hem meteen in (de goederen zijn al binnen, bijvoorbeeld bij een pakbon).
+   * @returns {Promise<void>}
+   */
+  async function receiveNow() {
+    const body = { ...bodyOf(), receiveNow: true };
+    if (!body.lines.length) { $('#order-form .err').textContent = 'Er staan geen regels op de order.'; return; }
+    // Een prijs die niet op het document stond raden we niet: de ontvangst zou er een kostprijs aan overhouden.
+    if (body.lines.some((line) => line.unitCost === '' || line.unitCost == null)) {
+      $('#order-form .err').textContent = 'Vul bij elke regel de inkoopprijs in voordat je inboekt (staat er geen prijs op het document, dan kun je het ook eerst als concept bewaren).';
+      return;
+    }
+    await run('Order aangemaakt en ingeboekt, de voorraad is bijgewerkt', () => context.api('purchase-orders', { method: 'POST', body }));
   }
 
   /**
@@ -325,6 +463,18 @@
     /** Laadt de lijst opnieuw met het gekozen filter. */
     $('#po-status').onchange = () => { load().catch((error) => context.toast(error.message, true)); };
     form.onsubmit = submitForm;
+    /** Opent de bestandskeuze voor het inlezen. */
+    $('#b-po-read').onclick = () => { $('#po-read-file').click(); };
+    /**
+     * Leest het gekozen bestand.
+     * @param {Event} event de keuze
+     */
+    $('#po-read-file').onchange = (event) => {
+      const file = event.target.files[0];
+      event.target.value = '';
+      if (file) readDocument(file);
+    };
+    $('#po-unmatched-table').onclick = resolveUnmatched;
     /**
      * Opent de order waarop is geklikt (de lijst heeft geen regels, dus de volledige order wordt opgehaald).
      * @param {MouseEvent} event de klik
@@ -361,7 +511,7 @@
       $('#po-add-qty').value = '';
       renderLines();
     };
-    const actions = { place, receive, excel: exportOrder, close: closeOrder, cancel: cancelOrder, remove: removeOrder, hide: hideForm };
+    const actions = { receivenow: receiveNow, place, receive, excel: exportOrder, close: closeOrder, cancel: cancelOrder, remove: removeOrder, hide: hideForm };
     /**
      * Voert de actie van de aangeklikte knop uit.
      * @param {MouseEvent} event de klik

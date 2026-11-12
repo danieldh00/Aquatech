@@ -1057,6 +1057,10 @@ const PG_MIGRATIONS = [
   CREATE UNIQUE INDEX item_packagings_code ON item_packagings (tenant_id, item_id, code);
   CREATE UNIQUE INDEX item_packagings_ean ON item_packagings (tenant_id, ean) WHERE ean IS NOT NULL;
   `,
+  // 64: inkooporders: document van de leverancier (zie db.js).
+  `
+  ALTER TABLE purchase_orders ADD COLUMN supplier_reference ${TEXT_TYPE} NOT NULL DEFAULT '';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
