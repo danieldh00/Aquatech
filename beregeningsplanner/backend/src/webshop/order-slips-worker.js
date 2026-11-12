@@ -1,6 +1,7 @@
 // Werkthread voor de controle van een geüploade pakbon (order-slips.js, inspectSlip): leest de PDF met pdf-lib, bouwt hem opnieuw op
 // zonder annotaties, paginaacties en metadata en geeft de schone bytes terug. Draait apart zodat een zware PDF de server niet blokkeert.
 const { parentPort, workerData } = require('worker_threads');
+const zlib = require('zlib');
 const { PDFDocument, PDFName } = require('pdf-lib');
 
 /** Hoogstens zoveel bytes voor een geüploade pakbon. */
@@ -10,6 +11,40 @@ const MAX_SLIP_PAGES = 10;
 /** Een pagina is minstens zo groot en hoogstens zo groot (in punten, 72 per inch): een A0-vel is 2384 × 3370. */
 const MIN_PAGE_POINTS = 100;
 const MAX_PAGE_POINTS = 3400;
+/** Hoogstens zoveel bytes mag één stream uitgepakt zijn, en alle streams samen (een kleine PDF kan anders vele honderden MB worden). */
+const MAX_STREAM_BYTES = 40 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 80 * 1024 * 1024;
+
+/**
+ * Pakt elke gecomprimeerde stream van de PDF begrensd uit om een decompressiebom te herkennen vóór pdf-lib de PDF leest.
+ * @param {Buffer} buffer De PDF.
+ * @returns {boolean} true als alle streams binnen de grenzen blijven (beschadigde streams telt pdf-lib zelf).
+ */
+function streamsWithinLimits(buffer) {
+  let total = 0;
+  let position = 0;
+  for (;;) {
+    const start = buffer.indexOf('stream', position, 'latin1');
+    if (start < 0) return true;
+    position = start + 6;
+    if (buffer.subarray(Math.max(0, start - 3), start).toString('latin1') === 'end') continue;
+    const dictionary = buffer.subarray(Math.max(0, start - 1500), start).toString('latin1');
+    const dictionaryStart = dictionary.lastIndexOf('obj');
+    if (!/FlateDecode|\/Fl\b/.test(dictionary.slice(Math.max(0, dictionaryStart)))) continue;
+    let dataStart = position;
+    if (buffer[dataStart] === 0x0d) dataStart += 1;
+    if (buffer[dataStart] === 0x0a) dataStart += 1;
+    const end = buffer.indexOf('endstream', dataStart, 'latin1');
+    if (end < 0) return true;
+    try {
+      total += zlib.inflateSync(buffer.subarray(dataStart, end), { maxOutputLength: MAX_STREAM_BYTES }).length;
+    } catch (failure) {
+      if (failure.code === 'ERR_BUFFER_TOO_LARGE') return false;
+    }
+    if (total > MAX_TOTAL_BYTES) return false;
+    position = end;
+  }
+}
 
 /**
  * Controleert een geüploade pakbon en bouwt hem opnieuw op uit de pagina's (zonder annotaties, paginaacties en metadata).
@@ -17,6 +52,7 @@ const MAX_PAGE_POINTS = 3400;
  * @returns {Promise<{ bytes?: Buffer, pages?: number, error?: string }>} De schone PDF en het aantal pagina's, of een melding in gewone taal.
  */
 async function checkSlip(buffer) {
+  if (!streamsWithinLimits(buffer)) return { error: 'Deze PDF wordt te groot als hij wordt uitgepakt en is daarom niet toegestaan.' };
   let source;
   let count;
   try {

@@ -67,6 +67,20 @@ test('inspectSlip: neemt een gewone PDF aan, bouwt hem opnieuw op zonder scripts
   assert.match((await inspectSlip(await makePdf(1, { size: [20000, 20000] }))).error, /paginagrootte/);
 });
 
+test('inspectSlip: weigert een decompressiebom snel en zonder veel geheugen', async () => {
+  const zlib = require('zlib');
+  const doc = await PDFDocument.create();
+  doc.addPage([595, 842]);
+  const base = Buffer.from(await doc.save());
+  const bomb = zlib.deflateSync(Buffer.alloc(200 * 1024 * 1024), { level: 9 });
+  assert.ok(bomb.length < MAX_SLIP_BYTES, 'de bom zelf is klein genoeg om te uploaden');
+  const pdf = Buffer.concat([base, Buffer.from(`\n99 0 obj\n<< /Type /ObjStm /N 1 /First 5 /Filter /FlateDecode /Length ${bomb.length} >>\nstream\n`), bomb, Buffer.from('\nendstream\nendobj\n')]);
+  const started = Date.now();
+  const result = await inspectSlip(pdf);
+  assert.match(result.error, /te groot als hij wordt uitgepakt/);
+  assert.ok(Date.now() - started < 3000, 'binnen enkele seconden geweigerd');
+});
+
 test('assemblePdf: zet eigen pagina\'s en de pakbon van de klant (met bestelnummer) in volgorde', async () => {
   const ours = await makePdf(3);
   const customer = await makePdf(2);
