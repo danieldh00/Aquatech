@@ -245,7 +245,7 @@ test('voorraad: rechten en scheiding tussen organisaties', async () => {
     assert.strictEqual(made.status, 201, JSON.stringify(made.body));
     const piet = await as('piet', 'groen');
     assert.deepStrictEqual((await piet.get('/app/api/stock')).body.items, []);
-    assert.deepStrictEqual((await piet.get('/app/api/stock/reorder')).body, { items: [], total: null });
+    assert.deepStrictEqual((await piet.get('/app/api/stock/reorder')).body, { items: [], total: null, suppliers: [] });
     assert.strictEqual((await piet.get(`/app/api/stock/items/${item.id}`)).status, 404);
     assert.strictEqual((await piet.put(`/app/api/stock/items/${item.id}`, { name: 'Gekaapt' })).status, 404);
     assert.strictEqual((await piet.post(`/app/api/stock/items/${item.id}/movements`, { kind: 'ontvangst', qty: 1 })).status, 404);
@@ -281,6 +281,8 @@ test('voorraad: bestelvoorstel vult aan tot Bestellen tot (leeg = 2× minimum), 
     assert.deepStrictEqual(proposal.items.map((item) => [item.code, item.available, item.target, item.orderQty, item.amount]),
       [['BOX-STD', -2, 0, 2, null], ['PE-25', 3, 10, 7, 5.95], ['VAL-24V', 1, 20.5, 20, null]]);
     assert.strictEqual(proposal.total, 5.95);
+    // Zonder leverancier: een groep zonder naam.
+    assert.deepStrictEqual(proposal.suppliers, [{ supplierId: null, supplierName: '', count: 3, total: 5.95 }]);
     // Bestellen tot leegmaken: terug naar 2× minimum.
     const valve = proposal.items[2];
     assert.strictEqual((await kees.put(`/app/api/stock/items/${valve.id}`, { reorderQty: '' })).body.reorderQty, null);

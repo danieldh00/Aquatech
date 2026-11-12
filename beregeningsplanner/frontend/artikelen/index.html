@@ -39,6 +39,7 @@
         <button class="tab active" data-tab="stock" role="tab">Voorraad</button>
         <button class="tab" data-tab="reserved" role="tab">Gereserveerd <span id="t-reserved" class="count"></span></button>
         <button class="tab" data-tab="moves" role="tab">Mutaties</button>
+        <button class="tab" data-tab="suppliers" role="tab">Leveranciers</button>
         <button class="tab" data-tab="media" role="tab">Afbeeldingen</button>
       </nav>
 
@@ -186,6 +187,33 @@
         <div class="tablewrap"><table class="grid" id="r-table"></table></div>
       </section>
 
+      <section id="tab-suppliers" class="tabpane" hidden>
+        <div class="filters">
+          <label class="chk"><input type="checkbox" id="sup-archived"> Ook gearchiveerd</label>
+          <span class="spacer"></span>
+          <button class="btn primary" id="b-sup-new" type="button">+ Leverancier</button>
+        </div>
+        <form id="supplier-form" class="card-form" hidden novalidate>
+          <h3>Nieuwe leverancier</h3>
+          <div class="form-grid">
+            <label class="field span-2">Naam<input name="name" maxlength="120" required autocomplete="off"></label>
+            <label class="field">Contactpersoon<input name="contactName" maxlength="120" autocomplete="off"></label>
+            <label class="field">E-mail<input name="email" type="email" maxlength="200" autocomplete="off"></label>
+            <label class="field">Telefoon<input name="phone" maxlength="40" autocomplete="off"></label>
+            <label class="field span-2">Adres<input name="address" maxlength="300" autocomplete="off"></label>
+            <label class="field full">Notities<textarea name="notes" rows="2" maxlength="2000"></textarea></label>
+          </div>
+          <div class="row actions">
+            <button class="btn primary" type="submit">Bewaren</button>
+            <button class="btn" type="button" data-cancel>Sluiten</button>
+            <button class="btn danger" type="button" id="sup-remove" hidden title="Een leverancier die nog artikelen levert wordt gearchiveerd">Verwijderen</button>
+            <button class="btn" type="button" id="sup-restore" hidden>Terugzetten uit archief</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
+        <div class="tablewrap"><table class="grid" id="sup-table"></table></div>
+      </section>
+
       <section id="tab-media" class="tabpane" hidden>
         <div class="filters">
           <input id="m-search" type="search" placeholder="Zoek op artikelcode, omschrijving of bestandsnaam">
@@ -297,6 +325,16 @@
           </div>
         </div>
       </section>
+      <section class="card-form" id="d-suppliers" hidden>
+        <h3>Leveranciers</h3>
+        <p class="muted small">Wie levert dit artikel? De voorkeursleverancier gebruikt het bestelvoorstel. De bestelhoeveelheid is de verpakking: er wordt in veelvouden daarvan besteld. Laat de inkoopprijs leeg om die van het artikel te gebruiken.</p>
+        <div class="tablewrap"><table class="grid" id="d-sup-table"></table></div>
+        <div class="row">
+          <label>Leverancier toevoegen<select id="sup-add-select"></select></label>
+          <button class="btn primary" type="button" data-save>Bewaren</button>
+        </div>
+        <div class="err" role="alert"></div>
+      </section>
       <section class="card-form" id="d-image">
         <h3>Afbeelding</h3>
         <div class="row image-row">
@@ -358,6 +396,7 @@
   <script src="../shared/barcode.js"></script>
   <script src="labels.js"></script>
   <script src="merge.js"></script>
+  <script src="suppliers.js"></script>
   <script src="artikelen.js"></script>
 </body>
 </html>

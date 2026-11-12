@@ -13,12 +13,28 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.10.9',
+      version: '1.11.0',
       date: '2026-11-12',
       title: 'Etiketten met streepjescode',
       items: [
         { text: 'Bij een artikel kun je nu de EAN (de streepjescode van de fabrikant) invullen en etiketten afdrukken: open het artikel, kies bij Etiketten het sjabloon en het aantal en druk de PDF af op je labelprinter (bijvoorbeeld Zebra). Zonder EAN krijgt het etiket de artikelcode als streepjescode.', for: ['voorraad'] },
         { text: 'De etiketformaten en wat erop staat (omschrijving, artikelcode, prijs) stel je in bij Beheer → Instellingen → Artikelen: etiketten.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.10.9',
+      date: '2026-11-12',
+      title: 'Bestelvoorstel per leverancier',
+      items: [
+        { text: 'Het bestelvoorstel in Artikelen rekent nu met je voorkeursleverancier: de hoeveelheid wordt afgerond op de bestelhoeveelheid (bijvoorbeeld hele dozen), de inkoopprijs van de leverancier wordt gebruikt en de Excel is gegroepeerd per leverancier, met een tabblad met het totaal per leverancier.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.10.8',
+      date: '2026-11-12',
+      title: 'Leveranciers bij artikelen',
+      items: [
+        { text: 'In Artikelen staat nu een tabblad Leveranciers. Per artikel kun je zetten wie het levert, met het artikelnummer van de leverancier, een eigen inkoopprijs, de bestelhoeveelheid (bijvoorbeeld per doos van 25) en je voorkeursleverancier.', for: ['voorraad'] },
       ],
     },
     {

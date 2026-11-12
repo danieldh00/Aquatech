@@ -967,7 +967,37 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE users ADD COLUMN document_language ${TEXT_TYPE} NOT NULL DEFAULT 'nl';
   `,
-  // 59: EAN per artikel (zie db.js).
+  // 59: leveranciers (zie db.js).
+  `
+  CREATE TABLE suppliers (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    name         ${TEXT_TYPE} NOT NULL,
+    contact_name ${TEXT_TYPE} NOT NULL DEFAULT '',
+    email        ${TEXT_TYPE} NOT NULL DEFAULT '',
+    phone        ${TEXT_TYPE} NOT NULL DEFAULT '',
+    address      ${TEXT_TYPE} NOT NULL DEFAULT '',
+    notes        ${TEXT_TYPE} NOT NULL DEFAULT '',
+    archived     BIGINT NOT NULL DEFAULT 0,
+    created_at   ${TEXT_TYPE} NOT NULL,
+    updated_at   ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX suppliers_tenant_name_ci ON suppliers (tenant_id, LOWER(name));
+  CREATE TABLE item_suppliers (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    item_id      ${TEXT_TYPE} NOT NULL ${references('stock_items(id)')},
+    supplier_id  ${TEXT_TYPE} NOT NULL ${references('suppliers(id)')},
+    supplier_sku ${TEXT_TYPE} NOT NULL DEFAULT '',
+    cost_price   DOUBLE PRECISION,
+    order_qty    DOUBLE PRECISION NOT NULL DEFAULT 1,
+    preferred    BIGINT NOT NULL DEFAULT 0,
+    created_at   ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX item_suppliers_pair ON item_suppliers (tenant_id, item_id, supplier_id);
+  CREATE INDEX item_suppliers_supplier ON item_suppliers (tenant_id, supplier_id);
+  `,
+  // 60: EAN per artikel (zie db.js).
   `
   ALTER TABLE stock_items ADD COLUMN ean ${TEXT_TYPE};
   CREATE UNIQUE INDEX stock_items_ean ON stock_items (tenant_id, ean) WHERE ean IS NOT NULL;

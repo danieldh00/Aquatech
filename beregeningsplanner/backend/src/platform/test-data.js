@@ -596,21 +596,21 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, imageWidth = 480, imageHeig
  * precies zo is als wanneer iemand het in de app doet): klantlinks, reacties
  * van klanten, werkorders, uren, foto's, meldingen, voorraad, facturen en de
  * webshop. Draait na store.seedEnvironment.
- * @param {object} stores { db, quotes, workorders, shop, settings (van de testomgeving), photos, worklog, outsourcing, news, aiUsage, recognitions, stock, itemImages, requests, invoices, sprinklers }.
+ * @param {object} stores { db, quotes, workorders, shop, settings (van de testomgeving), photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, itemImages, requests, invoices, sprinklers }.
  * @param {object} testSet Uitkomst van buildTestData.
  * @param {{ users: object, quoteIds: string[], tenantId: string }} seeded Uit seedEnvironment.
  * @param {{ shareBase?: string|null }} [options] Adres van openbaar/offerte.html (uit de browser); zonder komen er geen klantlinks.
  * @returns {object} Aantallen per soort aangemaakte gegevens.
  */
 function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
-  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, itemImages, requests, invoices, sprinklers, seasonReminders } = stores;
+  const { db, quotes, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, itemImages, requests, invoices, sprinklers, seasonReminders } = stores;
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
    * @returns {object} De voorbereide opdracht.
    */
   const prepare = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0, businessCustomers: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, suppliers: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0, businessCustomers: 0 };
   const seededWos = [];
   // Zakelijke webshopklanten: bedrijfsgegevens, en één aanvraag die nog goedgekeurd moet worden.
   for (const [key, business] of Object.entries(BUSINESS_CUSTOMERS)) {
@@ -865,6 +865,17 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
     if (first) {
       stock.move(tenantId, admin, first.id, { kind: 'telling', qty: Math.ceil((need.get(first.code) || 1) * 1.5) + 1, note: 'Kwartaaltelling' });
       stock.move(tenantId, admin, first.id, { kind: 'correctie', qty: -1, note: 'Beschadigd bij het laden' });
+    }
+    // Twee leveranciers; de artikelen verdelen zich erover (om en om de voorkeur, elk derde artikel bij beide).
+    if (suppliers) {
+      const wholesaler = suppliers.create(tenantId, { name: 'Tuintechniek Groothandel', contactName: 'Inkoop', email: 'inkoop@tuintechniek.example', phone: '0341 000 111', address: 'Industrieweg 1, 8071 AA Nunspeet' }).supplier;
+      const importer = suppliers.create(tenantId, { name: 'Irrigatie Import BV', contactName: 'Verkoopbinnendienst', email: 'orders@irrigatie-import.example' }).supplier;
+      items.forEach((item, itemIndex) => {
+        const lines = [{ supplierId: itemIndex % 2 ? importer.id : wholesaler.id, supplierSku: `LEV-${item.code}`, orderQty: itemIndex % 5 === 0 ? 10 : 1, preferred: true }];
+        if (itemIndex % 3 === 0) lines.push({ supplierId: itemIndex % 2 ? wholesaler.id : importer.id, supplierSku: `ALT-${item.code}` });
+        suppliers.setForItem(tenantId, item.id, lines);
+      });
+      counts.suppliers = suppliers.list(tenantId).length;
     }
     // Artikel met varianten: een hoofdartikel met het kenmerk Lengte, elke
     // lengte een eigen code, prijs en voorraad.

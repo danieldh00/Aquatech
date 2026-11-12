@@ -1,8 +1,8 @@
 # Changelog
 
-## 1.10.9
+## 1.11.0
 
-Etiketten met streepjescode (item 20). Migratie 59: kolom `stock_items.ean` met unieke index `(tenant_id, ean)` (alleen gevuld).
+Etiketten met streepjescode (item 20). Migratie 60: kolom `stock_items.ean` met unieke index `(tenant_id, ean)` (alleen gevuld).
 
 - **EAN per artikel**: veld *EAN* in het artikelformulier (nieuw en bewerken). De server maakt de invoer schoon (spaties en streepjes eruit, UPC-A met 12 cijfers wordt EAN-13), accepteert alleen 8 of 13 cijfers met een kloppend controlecijfer en weigert een EAN die al bij een ander artikel van de organisatie hoort (409, met de artikelcode). Niet op een hoofdartikel met varianten (die hebben elk een eigen EAN).
 - **Streepjescodes** in `frontend/shared/barcode.js` (UMD, zonder afhankelijkheden): EAN-13, EAN-8 en Code 128 (set B, en set C voor reeksen cijfers). De uitkomsten zijn nagekeken met een scanner-decoder en staan als vaste waarden in de test.
@@ -11,6 +11,24 @@ Etiketten met streepjescode (item 20). Migratie 59: kolom `stock_items.ean` met 
 - Artikel openen → blok *Etiketten*: sjabloon en aantal kiezen, met een voorbeeld van de streepjescode; de PDF opent in een nieuw tabblad.
 - `createPdf` (verkoop/pdf.js) kent nu een eigen paginaformaat (`pageSize`).
 - Testdata: het artikel Straatzand heeft een EAN.
+
+## 1.10.9
+
+Bestelvoorstel per leverancier (punt 17 van bundel F, deel 2). Geen migratie.
+
+- `stock.reorderProposal` gebruikt de voorkeursleverancier van het artikel: de te bestellen hoeveelheid wordt naar boven afgerond op de bestelhoeveelheid, de eigen inkoopprijs van de leverancier gaat voor die van het artikel, en elke regel krijgt leverancier en artikelnummer. Het antwoord heeft ook `suppliers` (aantal regels en bedrag per leverancier, zonder leverancier onderaan). Een gearchiveerde leverancier telt niet mee.
+- Excel van het bestelvoorstel: kolommen Leverancier en Art.nr. leverancier, regels gegroepeerd per leverancier en een tabblad Per leverancier.
+- Tests: `suppliers.test.js` (bestelvoorstel met bestelhoeveelheid, eigen prijs, archiveren) en `stock.test.js`.
+
+## 1.10.8
+
+Leveranciers (punt 17 van bundel F, deel 1). Migratie 59.
+
+- **Leveranciers** (tabel `suppliers`, naam uniek per organisatie zonder hoofdletters, contactgegevens, archiveren) in Artikelen > Leveranciers (`/api/suppliers`, recht `voorraad`). Een leverancier die artikelen levert wordt bij verwijderen gearchiveerd, anders echt verwijderd.
+- **Leveranciers per artikel** (tabel `item_suppliers`): artikelnummer van de leverancier, eigen inkoopprijs (leeg = die van het artikel), bestelhoeveelheid (bestellen in veelvouden) en één voorkeursleverancier (`GET|PUT /api/stock/items/:id/suppliers`). Een hoofdartikel heeft geen eigen leverancier; de koppelingen verdwijnen met het artikel.
+- Testdata: twee leveranciers met koppelingen aan de testartikelen.
+- Tests: `suppliers.test.js` (invoer, routes, archiveren, hoofdartikel, rechten, andere organisatie).
+- Vervolg: bestelvoorstel per leverancier, inkooporders met PDF-inlezen en inboeken.
 
 ## 1.10.7
 
