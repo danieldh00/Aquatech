@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.12.4',
+      date: '2026-11-12',
+      title: 'AI-koppeling vraagt terug bij onduidelijkheid',
+      items: [
+        { text: 'De AI-koppeling raadt niet meer: bij meerdere klanten of artikelen, een onbekende artikelcode, een ontbrekende prijs, maat of klant vraagt de AI het eerst aan jou voordat er een concept-offerte komt.', for: ['offertes'] },
+      ],
+    },
+    {
       version: '1.12.3',
       date: '2026-11-12',
       title: 'Menubalk van de webshop altijd op één regel',

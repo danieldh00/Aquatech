@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.4
+
+- MCP: de serverinstructies bevatten een terugvraagregel. `zoek_klant` en `zoek_artikelen` geven `keuzeNodig` + `vraag` bij meer dan één of geen treffer (een exacte artikelcode of één volledige treffer niet; een gedeeltelijke treffer wel).
+- `maak_concept_offerte` maakt niets aan zolang er open punten zijn (klant ontbreekt, onbekende artikelcode, variant niet gekozen, geen prijs, afwijkende genoemde prijs) en geeft `status: 'terugvragen'` met `vragen`; met `ookMetOpenPunten: true` gaat hij toch door (de notities blijven zoals voorheen). Geen extra gegevens en geen nieuwe query: alleen de bestaande, per omgeving gefilterde zoekresultaten.
+- Elicitation is niet gebruikt: de server is stateless (geen stroom naar de app), dus terugvragen loopt via het toolresultaat.
+
 ## 1.12.3
 
 Webshop `storefront.css`: `.nav-bar` wikkelt niet meer (`flex-wrap: nowrap`, items `white-space: nowrap`), en onder 1180 px en 980 px worden padding, lettergrootte en de minimumbreedte van *Product zoeken* kleiner. Onder 800 px blijft het mobiele menu.
