@@ -107,27 +107,33 @@ if (checkoutForm) {
 }
 
 /**
- * Koppelt postcode en huisnummer aan het opzoeken van straat en woonplaats (adres.js). Voor Nederland zijn straat en
- * woonplaats alleen-lezen (ze komen uit PDOK en de server controleert ze nog eens) en wordt er niet besteld zolang er
- * geen adres is gevonden; voor andere landen vult de klant ze zelf in.
+ * Koppelt postcode en huisnummer van één adresblok aan het opzoeken van straat en woonplaats (adres.js). Voor Nederland zijn straat
+ * en woonplaats alleen-lezen (ze komen uit PDOK en de server controleert ze nog eens); voor andere landen vult de klant ze zelf in.
+ * @param {HTMLElement} block Het adresblok (factuuradres of afleveradres) met postcode, straat, woonplaats en het vinkje voor een adres dat niet gevonden wordt.
  * @param {HTMLFormElement} form Het afrekenformulier.
- * @returns {void}
+ * @param {{ prefix: string, countryOf: Function, isUsed: Function }} options `prefix` is het voorvoegsel van de veldnamen ('' of 'delivery'); `countryOf` geeft het land van dit adres; `isUsed` zegt of dit adres nu meetelt (het afleveradres telt niet mee als het gelijk is aan het factuuradres).
+ * @returns {{ validate: Function, refresh: Function }|null} `validate()` geeft true als het adres klopt (anders staat er een melding), `refresh()` past alleen-lezen aan na een andere landkeuze; null als dit blok niet te koppelen is.
  */
-function setUpAddressLookup(form) {
-  const row = form.querySelector('[data-address-row]');
-  const postcodeInput = form.querySelector('input[name="postcode"]');
-  if (!row || !postcodeInput || !window.AddressLookup) return;
+function setUpAddressBlock(block, form, { prefix, countryOf, isUsed }) {
+  /**
+   * De veldnaam met het voorvoegsel van dit adresblok.
+   * @param {string} name Basisnaam (street, postcode, city).
+   * @returns {string} De veldnaam in het formulier.
+   */
+  const fieldName = (name) => (prefix ? `${prefix}${name[0].toUpperCase()}${name.slice(1)}` : name);
+  const row = block.querySelector('[data-address-row]');
+  const postcodeInput = block.querySelector(`input[name="${fieldName('postcode')}"]`);
+  if (!row || !postcodeInput || !window.AddressLookup) return null;
   row.hidden = false;
-  const countryField = form.querySelector('[name="country"]');
-  const streetInput = form.querySelector('input[name="street"]');
-  const cityInput = form.querySelector('input[name="city"]');
+  const streetInput = block.querySelector(`input[name="${fieldName('street')}"]`);
+  const cityInput = block.querySelector(`input[name="${fieldName('city')}"]`);
   const statusElement = row.querySelector('[data-address-status]');
-  const manualCheckbox = form.querySelector('[data-address-manual]');
+  const manualCheckbox = block.querySelector('[data-address-manual]');
   /**
    * Of straat en woonplaats nu uit de opzoeking komen (Nederland, zonder handmatige invoer) en dus niet met de hand te wijzigen zijn.
    * @returns {boolean} true bij Nederland zonder handmatige invoer.
    */
-  const isDutch = () => (!countryField || countryField.value === 'NL') && !(manualCheckbox && manualCheckbox.checked);
+  const isDutch = () => countryOf() === 'NL' && !(manualCheckbox && manualCheckbox.checked);
   /**
    * Zet straat en woonplaats alleen-lezen voor Nederland en bewerkbaar voor andere landen.
    * @returns {void}
@@ -137,7 +143,6 @@ function setUpAddressLookup(form) {
     cityInput.readOnly = isDutch();
   };
   syncReadOnly();
-  if (countryField) countryField.addEventListener('change', syncReadOnly);
   // Adres niet gevonden of PDOK onbereikbaar: de klant vult het zelf in, de server bewaart het als 'niet gecontroleerd' (W-11).
   if (manualCheckbox) manualCheckbox.addEventListener('change', syncReadOnly);
   const lookup = window.AddressLookup.attach({
@@ -158,17 +163,74 @@ function setUpAddressLookup(form) {
       cityInput.value = '';
     },
   });
-  // Bestellen kan pas als er een adres is gevonden (Nederland); de server controleert het adres daarna nog eens.
-  form.addEventListener('submit', (event) => {
-    if (event.submitter?.value === 'update' || !isDutch()) return;
-    const pickup = form.querySelector('input[name="shippingMethod"]:checked')?.value === 'ophalen';
-    if (pickup || (streetInput.value && cityInput.value && !lookup.hasProblem())) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
+  /**
+   * Controleert dit adres voor het bestellen (Nederland: er moet een adres gevonden zijn) en zet anders een melding en de focus.
+   * @returns {boolean} true als het adres klopt of niet meetelt.
+   */
+  const validate = () => {
+    if (!isUsed() || !isDutch()) return true;
+    if (streetInput.value && cityInput.value && !lookup.hasProblem()) return true;
     statusElement.textContent = streetInput.value && cityInput.value ? statusElement.textContent : 'Vul je postcode en huisnummer in; het adres wordt dan automatisch ingevuld.';
     statusElement.dataset.kind = 'error';
     postcodeInput.focus();
+    return false;
+  };
+  return { validate, refresh: syncReadOnly };
+}
+
+/**
+ * Zet het factuuradres en het afleveradres op: het vinkje "Afleveradres gelijk aan factuuradres" (standaard aan) laat het tweede
+ * blok verdwijnen, en bij een afwijkend afleveradres kiest de klant ook het land van het factuuradres. Bestellen kan pas als de
+ * Nederlandse adressen die meetellen zijn gevonden; de server controleert ze daarna nog eens.
+ * @param {HTMLFormElement} form Het afrekenformulier.
+ * @returns {void}
+ */
+function setUpAddresses(form) {
+  const billingBlock = form.querySelector('[data-address-block="billing"]');
+  const deliveryBlock = form.querySelector('[data-address-block="delivery"]');
+  const sameBox = form.querySelector('[data-delivery-same]');
+  if (!billingBlock || !deliveryBlock || !sameBox) return;
+  const countryField = form.querySelector('[name="country"]');
+  const billingCountryField = form.querySelector('[name="billingCountry"]');
+  /**
+   * Of de klant voor ophalen koos (dan is geen adres nodig).
+   * @returns {boolean} true bij ophalen.
+   */
+  const pickup = () => form.querySelector('input[name="shippingMethod"]:checked')?.value === 'ophalen';
+  /**
+   * Het land van aflevering (zonder keuzelijst is dat Nederland).
+   * @returns {string} Landcode.
+   */
+  const deliveryCountry = () => (countryField ? countryField.value : 'NL');
+  /**
+   * Het land van het factuuradres: gelijk aan dat van de aflevering, of de aparte keuze bij een afwijkend afleveradres.
+   * @returns {string} Landcode.
+   */
+  const billingCountry = () => (sameBox.checked || !billingCountryField ? deliveryCountry() : billingCountryField.value);
+  const billing = setUpAddressBlock(billingBlock, form, { prefix: '', countryOf: billingCountry, isUsed: () => !pickup() });
+  const delivery = setUpAddressBlock(deliveryBlock, form, { prefix: 'delivery', countryOf: deliveryCountry, isUsed: () => !pickup() && !sameBox.checked });
+  /**
+   * Past de pagina aan op het vinkje: toont of verbergt het afleveradres en de landkeuze van het factuuradres.
+   * @returns {void}
+   */
+  const sync = () => {
+    deliveryBlock.hidden = sameBox.checked;
+    const countryRow = form.querySelector('[data-billing-country]');
+    if (countryRow) countryRow.hidden = sameBox.checked;
+    if (billing) billing.refresh();
+    if (delivery) delivery.refresh();
+  };
+  sync();
+  sameBox.addEventListener('change', sync);
+  for (const field of [countryField, billingCountryField]) if (field) field.addEventListener('change', sync);
+  // Bestellen kan pas als de adressen die meetellen zijn gevonden (Nederland).
+  form.addEventListener('submit', (event) => {
+    if (event.submitter?.value === 'update') return;
+    const valid = [billing, delivery].every((part) => !part || part.validate());
+    if (valid) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
   }, true);
 }
 
-if (checkoutForm) setUpAddressLookup(checkoutForm);
+if (checkoutForm) setUpAddresses(checkoutForm);

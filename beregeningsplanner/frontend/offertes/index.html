@@ -126,6 +126,8 @@
         <label>Naam / bedrijf<input data-f="customer.name" maxlength="200"></label>
         <label>T.a.v.<input data-f="customer.contact" maxlength="200"></label>
         <label>Adres<textarea data-address-lookup data-f="customer.address" rows="3" maxlength="400"></textarea></label>
+        <label class="chk"><input type="checkbox" id="e-del-same" checked> Afleveradres gelijk aan adres</label>
+        <label id="e-del-box" hidden>Afleveradres<textarea data-address-lookup data-f="delivery.address" rows="3" maxlength="400"></textarea></label>
         <div class="row2">
           <label>E-mail<input data-f="customer.email" type="email" maxlength="200"></label>
           <label>Telefoon<input data-f="customer.phone" maxlength="40"></label>

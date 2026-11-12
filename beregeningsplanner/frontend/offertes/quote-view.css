@@ -21,6 +21,7 @@ body.view-doc .print-doc { display: block; max-width: 820px; margin: 0 auto 40px
 .print-doc .p-head .p-company b { font-size: 10pt; }
 .print-doc .p-meta { display: flex; justify-content: space-between; gap: 24px; margin: 22px 0 18px; }
 .print-doc .p-to { white-space: pre-line; }
+.print-doc .p-to .p-delivery { margin-top: 10px; }
 .print-doc .p-to .lbl, .print-doc .p-info .lbl { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7785; }
 .print-doc .p-info table { border-collapse: collapse; }
 .print-doc .p-info td { padding: 1px 0 1px 14px; }

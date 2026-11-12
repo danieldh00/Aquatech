@@ -3,6 +3,7 @@
 // scripts; alle adressen zijn relatief aan de pagina (/<pagina>/).
 
 const { layout, escapeHtml, formatPrice } = require('./storefront-pages');
+const { deliverySameOf } = require('./web-orders');
 
 /** Relatief pad van deze pagina's naar de shop-startpagina. */
 const ROOT = '../';
@@ -178,6 +179,29 @@ function paymentChoice(options, chosen = '') {
 }
 
 /**
+ * Eén adresblok op de pagina Afrekenen: postcode met opzoeken, straat, woonplaats en het vinkje voor een adres dat niet gevonden wordt.
+ * @param {{ delivery: boolean, value: object, countries?: object[], country?: string, deliverySame?: boolean }} options `delivery` kiest de veldnamen van het afleveradres (voorvoegsel `delivery`) in plaats van die van het factuuradres; `value` zijn de eerder ingevulde waarden; met `countries` (meer dan één) en `country` komt er een landkeuze bij (alleen het factuuradres, naam `billingCountry`; verborgen zolang het afleveradres gelijk is).
+ * @returns {string} HTML van het blok.
+ */
+function addressBlock({ delivery, value, countries = [], country = 'NL', deliverySame = true }) {
+  /**
+   * De veldnaam van dit adresblok (voorvoegsel `delivery` voor het afleveradres).
+   * @param {string} field Basisnaam (street, postcode, city).
+   * @returns {string} De veldnaam in het formulier.
+   */
+  const name = (field) => (delivery ? `delivery${field[0].toUpperCase()}${field.slice(1)}` : field);
+  const scope = delivery ? 'shipping ' : 'billing ';
+  const countryField = !delivery && countries.length > 1
+    ? `<label class="form-field" data-billing-country${deliverySame ? ' hidden' : ''}><span>Land van het factuuradres</span><select name="billingCountry">${countries.map((entry) => `<option value="${escapeHtml(entry.code)}"${entry.code === country ? ' selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label>`
+    : '';
+  return `${countryField}${checkoutField({ name: name('postcode'), label: 'Postcode', value: value[name('postcode')] || '', autocomplete: `${scope}postal-code`, required: false })}
+${addressLookupRow()}
+${checkoutField({ name: name('street'), label: 'Straat en huisnummer', value: value[name('street')] || '', autocomplete: `${scope}street-address`, required: false })}
+${checkoutField({ name: name('city'), label: 'Woonplaats', value: value[name('city')] || '', autocomplete: `${scope}address-level2`, required: false })}
+<label class="terms-check"><input type="checkbox" name="${delivery ? 'deliveryAddressManual' : 'addressManual'}" value="ja" data-address-manual${value[delivery ? 'deliveryAddressManual' : 'addressManual'] === 'ja' ? ' checked' : ''}><span>${delivery ? 'Dit adres wordt niet gevonden' : 'Mijn adres wordt niet gevonden'} (bijvoorbeeld nieuwbouw) of het opzoeken werkt nu niet: ik vul straat en woonplaats zelf in. We controleren het adres dan zelf voordat we verzenden.</span></label>`;
+}
+
+/**
  * De pagina Afrekenen: gegevens van de klant, de verzendmethode, het afleveradres en een overzicht van de bestelling.
  * @param {{ cart: object, quote: object, country: string, method: string, summary?: object|null, values?: object, error?: string, viewer: { displayName: string, email: string }, paymentOptions?: string[] }} state De geprijsde winkelwagen, de verzendopties, het gekozen land en de gekozen methode, de uitgerekende totalen (web-orders.js, orderTotals), eerder ingevulde waarden, een foutmelding, de ingelogde klant en de betaalwijzen die hij mag kiezen (online en/of rekening).
  * @param {object[]} groups Alle hoofdcategorieën.
@@ -188,6 +212,7 @@ function checkoutPage({ cart, quote, country, method, summary = null, summaries 
   const value = { name: viewer.displayName, email: viewer.email, company: profile.companyName || '', vatNumber: profile.vatNumber || '', ...values };
   const chosen = quote.options.find((option) => option.method === method && option.available);
   const business = Boolean(cart.pricesExcl);
+  const deliverySame = deliverySameOf(values);
   const items = (summary ? summary.lines : cart.lines).map((line) => `<li><span>${line.qty} × ${escapeHtml(line.name)}</span><span>${escapeHtml(formatPrice(business ? line.lineExcl : line.lineTotal))}</span></li>`).join('');
   const shippingShown = summary ? (business ? summary.shipping.priceExcl : summary.shipping.price) : 0;
   const shippingRow = `<li data-ship-row${chosen ? '' : ' hidden'}><span data-ship-label>${chosen ? escapeHtml(shippingCaption(chosen.label, chosen.price > 0, business)) : ''}</span><span data-ship-price>${chosen ? (chosen.price > 0 ? escapeHtml(formatPrice(shippingShown)) : 'Gratis') : ''}</span></li>`;
@@ -207,13 +232,17 @@ ${business ? checkoutField({ name: 'vatNumber', label: 'Btw-nummer (optioneel, b
 ${viewer.email ? `<label class="form-field"><span>E-mailadres</span><input name="email" type="email" value="${escapeHtml(viewer.email)}" autocomplete="email" readonly><small>De bevestiging gaat naar het e-mailadres van je account; wijzigen kan in <a href="../app/profiel/">Mijn profiel</a>.</small></label>` : checkoutField({ name: 'email', label: 'E-mailadres', value: value.email || '', autocomplete: 'email', type: 'email' })}
 ${checkoutField({ name: 'phone', label: 'Telefoon (optioneel)', value: value.phone || '', autocomplete: 'tel', required: false, type: 'tel' })}
 ${shippingChoice(quote, country, method, summaries, business)}
-<h2>Afleveradres</h2>
+<h2>Factuuradres</h2>
 <p class="note">Bij ophalen is een adres niet nodig.</p>
-${checkoutField({ name: 'postcode', label: 'Postcode', value: value.postcode || '', autocomplete: 'postal-code', required: false })}
-${addressLookupRow()}
-${checkoutField({ name: 'street', label: 'Straat en huisnummer', value: value.street || '', autocomplete: 'street-address', required: false })}
-${checkoutField({ name: 'city', label: 'Woonplaats', value: value.city || '', autocomplete: 'address-level2', required: false })}
-<label class="terms-check"><input type="checkbox" name="addressManual" value="ja" data-address-manual${value.addressManual === 'ja' ? ' checked' : ''}><span>Mijn adres wordt niet gevonden (bijvoorbeeld nieuwbouw) of het opzoeken werkt nu niet: ik vul straat en woonplaats zelf in. We controleren het adres dan zelf voordat we verzenden.</span></label>
+<div class="address-block" data-address-block="billing">
+${addressBlock({ delivery: false, value, countries: quote.countries, country: value.billingCountry || 'NL', deliverySame })}
+</div>
+<input type="hidden" name="deliveryForm" value="1">
+<label class="terms-check" data-delivery-same-row><input type="checkbox" name="deliverySame" value="ja" data-delivery-same${deliverySame ? ' checked' : ''}><span>Afleveradres gelijk aan factuuradres</span></label>
+<div class="address-block delivery-fields" data-address-block="delivery"${deliverySame ? ' hidden' : ''}>
+<h2>Afleveradres</h2>
+${addressBlock({ delivery: true, value })}
+</div>
 <label class="form-field"><span>Opmerking (optioneel)</span><textarea name="note" rows="3" maxlength="500">${escapeHtml(value.note || '')}</textarea></label>
 ${paymentChoice(paymentOptions, value.paymentMethod)}
 <label class="terms-check"><input type="checkbox" name="terms" value="ja" required${value.terms === 'ja' ? ' checked' : ''}><span>Ik ga akkoord met de <a href="${ROOT}pagina/algemene-voorwaarden/" target="_blank" rel="noopener">algemene voorwaarden</a> en heb de <a href="${ROOT}pagina/privacyverklaring/" target="_blank" rel="noopener">privacyverklaring</a> gelezen. Als consument heb je <a href="${ROOT}pagina/herroepingsrecht/" target="_blank" rel="noopener">herroepingsrecht</a>.</span></label>
@@ -264,14 +293,16 @@ function shippingRow(shipping, excl = false) {
 
 /**
  * Hoe de bestelling bij de klant komt: het afleveradres of ophalen, met bij DPD de volglink.
- * @param {{ customer: object, address: object, shipping: object|null }} order De bestelling.
+ * @param {{ customer: object, address: object, billingAddress?: ?object, deliverySame?: boolean, shipping: object|null }} order De bestelling (met het factuuradres erbij als het afleveradres afwijkt).
  * @returns {string} HTML van het blok Aflevering.
  */
 function deliveryBlock(order) {
   if (order.shipping && order.shipping.method === 'ophalen') return `<p><strong>Ophalen</strong><br>Je haalt deze bestelling zelf op. We laten je weten wanneer hij klaarstaat.</p>`;
   const address = [order.customer.company, order.customer.name, order.address.street, `${order.address.postcode} ${order.address.city}`].filter(Boolean).map(escapeHtml).join('<br>');
   const tracking = order.shipping && order.shipping.tracking ? `<p>Volg je pakket: <a href="${escapeHtml(order.shipping.tracking.url)}" rel="noopener" target="_blank">${escapeHtml(order.shipping.tracking.code)}</a></p>` : '';
-  return `<p><strong>Afleveradres</strong><br>${address}</p>${tracking}`;
+  const billing = order.deliverySame === false && order.billingAddress && order.billingAddress.street
+    ? `<p><strong>Factuuradres</strong><br>${[order.customer.company, order.customer.name, order.billingAddress.street, `${order.billingAddress.postcode} ${order.billingAddress.city}`].filter(Boolean).map(escapeHtml).join('<br>')}</p>` : '';
+  return `<p><strong>Afleveradres</strong><br>${address}</p>${billing}${tracking}`;
 }
 
 /**

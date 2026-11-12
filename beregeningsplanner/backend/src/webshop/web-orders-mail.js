@@ -40,6 +40,15 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
    */
   const addressText = (order) => [order.customer.company, order.customer.name, order.address.street, `${order.address.postcode} ${order.address.city}`].filter(Boolean).join('\n');
   /**
+   * Het factuuradres als tekst, alleen als het afleveradres afwijkt.
+   * @param {object} order De bestelling.
+   * @returns {string} Een alinea met het factuuradres, of leeg.
+   */
+  const billingText = (order) => {
+    const billing = order.deliverySame === false ? order.billingAddress : null;
+    return billing && billing.street ? `\n\nFactuuradres:\n${[order.customer.company, order.customer.name, billing.street, `${billing.postcode} ${billing.city}`].filter(Boolean).join('\n')}` : '';
+  };
+  /**
    * De verzending als tekst: de methode met kosten, en het adres of de ophaalmelding.
    * @param {object} order De bestelling.
    * @returns {string} Tekst voor in de mail.
@@ -50,7 +59,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     const shifted = Boolean(order.vat && order.vat.shifted);
     const businessExclusive = order.customerGroup === 'zakelijk' && !shifted;
     const priceText = shipping && shipping.price > 0 ? `${EUR.format(businessExclusive && shipping.priceExcl !== undefined ? shipping.priceExcl : shipping.price)}${businessExclusive ? ' excl. btw' : shifted ? ' (btw verlegd)' : ''}` : 'gratis';
-    return `${shipping ? `Verzending: ${shipping.label} (${priceText})\n\n` : ''}Afleveradres:\n${addressText(order)}`;
+    return `${shipping ? `Verzending: ${shipping.label} (${priceText})\n\n` : ''}Afleveradres:\n${addressText(order)}${billingText(order)}`;
   };
 
   /**

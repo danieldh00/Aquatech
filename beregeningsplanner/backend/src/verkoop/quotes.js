@@ -718,6 +718,20 @@ function registerQuoteRoutes(app, ctx) {
   }
 
   /**
+   * Het afwijkende afleveradres van de offerte dat bij PDOK moet kloppen, met dezelfde uitzondering voor een afnemer in een ander EU-land als het adres van de klant (zie addressToVerify).
+   * @param {object} req Het verzoek (met req.vatShiftChecked uit checkVatShift).
+   * @returns {string|undefined} Het afleveradres om te controleren, of niets als het gelijk is aan het adres van de klant of niet te controleren valt.
+   */
+  function deliveryToVerify(req) {
+    const data = req.body && req.body.data;
+    const delivery = data && data.delivery;
+    if (!delivery || delivery.same !== false) return undefined;
+    const address = delivery.address;
+    if (req.vatShiftChecked && !/\b\d{4}\s?[A-Za-z]{2}\b/.test(String(address || ''))) return undefined;
+    return address;
+  }
+
+  /**
    * Het bewijs van de controle bij VIES dat op de opgeslagen offerte staat en nog mag worden hergebruikt: hetzelfde nummer met de uitkomst geldig, of onbereikbaar van minder dan een minuut geleden.
    * @param {object|null} stored De opgeslagen offerte.
    * @param {string} number Het genormaliseerde btw-nummer van het verzoek.
@@ -840,7 +854,7 @@ function registerQuoteRoutes(app, ctx) {
    */
   const withPaymentDays = (req, data) => (Core.sanitizePaymentDays(data.paymentDays) !== null ? data : { ...data, paymentDays: defaultPaymentDays(req) });
 
-  app.post('/api/quotes', requireJson, requireQuotes, checkVatShift, requireVerifiedAddress(ctx.addressGuard, addressToVerify), (req, res) => {
+  app.post('/api/quotes', requireJson, requireQuotes, checkVatShift, requireVerifiedAddress(ctx.addressGuard, addressToVerify), requireVerifiedAddress(ctx.addressGuard, deliveryToVerify), (req, res) => {
     const body = req.body || {};
     if (!validData(body.data) || !validStatus(body.status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
     const data = withPaymentDays(req, body.data);
@@ -855,7 +869,7 @@ function registerQuoteRoutes(app, ctx) {
     res.status(201).json(quotes.create(req.user, data, { status, prefix, customerId: customerChoice.value }));
   });
 
-  app.put('/api/quotes/:id', requireJson, requireQuotes, checkVatShift, requireVerifiedAddress(ctx.addressGuard, addressToVerify, (req) => () => quotes.get(req.user, req.params.id)?.data?.customer?.address), (req, res) => {
+  app.put('/api/quotes/:id', requireJson, requireQuotes, checkVatShift, requireVerifiedAddress(ctx.addressGuard, addressToVerify, (req) => () => quotes.get(req.user, req.params.id)?.data?.customer?.address), requireVerifiedAddress(ctx.addressGuard, deliveryToVerify, (req) => () => quotes.get(req.user, req.params.id)?.data?.delivery?.address), (req, res) => {
     const body = req.body || {};
     if ((body.data !== undefined && !validData(body.data)) || !validStatus(body.status)) return res.status(400).json({ error: 'invalid_quote', message: 'Ongeldige offerte.' });
     const data = body.data === undefined ? undefined : withPaymentDays(req, body.data);

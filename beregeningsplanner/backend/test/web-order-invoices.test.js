@@ -176,3 +176,19 @@ test('creditnota bij retour volgt de factuurregels, ook als een artikel over twe
   // Een artikel dat niet op de factuur staat geeft geen regel; meer dan gefactureerd wordt niet gecrediteerd.
   assert.deepStrictEqual(creditLinesFor(lines, [{ code: 'WEG', qty: 1 }, { code: 'KLEP', qty: 5 }]).map((line) => [line.code, line.qty]), [['KLEP', -1]]);
 });
+
+test('factuur van een bestelling met afwijkend afleveradres: factuuradres op de factuur, afleveradres in de opmerkingen (oudere bestellingen houden hun adres)', () => {
+  const { fromWebOrder } = require('../src/verkoop/web-order-invoices');
+  const Core = require('../../frontend/facturen/invoice-core');
+  const settings = Core.sanitizeSettings({});
+  const lines = [{ code: 'A', name: 'Artikel', qty: 1, unitExcl: 10, vatRate: 21 }];
+  const base = { number: 'W-2', customer: { name: 'Klant', email: 'k@example.nl' }, lines, totals: { total: 12.1, byRate: [{ rate: 21, excl: 10, vat: 2.1, incl: 12.1 }] } };
+  const different = fromWebOrder({ ...base, deliverySame: false, address: { street: 'Tuinstraat 2', postcode: '8071 AB', city: 'Nunspeet', country: 'NL' }, billingAddress: { street: 'Kantoorlaan 3', postcode: '1011 AA', city: 'Amsterdam', country: 'NL' } }, {}, settings);
+  assert.match(different.customer.address, /Kantoorlaan 3/);
+  assert.doesNotMatch(different.customer.address, /Tuinstraat/);
+  assert.match(different.notes, /Afleveradres: Tuinstraat 2, 8071 AB Nunspeet/);
+  const same = fromWebOrder({ ...base, deliverySame: true, address: { street: 'Tuinstraat 1', postcode: '8071 AB', city: 'Nunspeet' }, billingAddress: { street: 'Tuinstraat 1', postcode: '8071 AB', city: 'Nunspeet' } }, {}, settings);
+  assert.doesNotMatch(same.notes, /Afleveradres/);
+  const old = fromWebOrder({ ...base, address: { street: 'Tuinstraat 1', postcode: '8071 AB', city: 'Nunspeet' } }, {}, settings);
+  assert.match(old.customer.address, /Tuinstraat 1/);
+});
