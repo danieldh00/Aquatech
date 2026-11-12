@@ -107,4 +107,9 @@ test('een hoofdartikel heeft geen verpakkingen en verwijderen ruimt ze op', asyn
   const plain = (await admin.post('/app/api/stock/items', { code: 'LOSSE', name: 'Los', unit: 'st' })).body;
   await admin.put(`/app/api/stock/items/${plain.id}/packagings`, { packagings: [{ code: 'DOOS', name: 'Doos', factor: 5 }] });
   assert.strictEqual((await admin.del(`/app/api/stock/items/${plain.id}`)).status, 200);
+  // Een gearchiveerd artikel (heeft voorraadbeweging) weigert wijzigingen op de server.
+  const moved = (await admin.post('/app/api/stock/items', { code: 'OUD', name: 'Oud', unit: 'st', onHand: 5 })).body;
+  await admin.del(`/app/api/stock/items/${moved.id}`);
+  const archived = await admin.put(`/app/api/stock/items/${moved.id}/packagings`, { packagings: [{ code: 'DOOS', name: 'Doos', factor: 5 }] });
+  assert.strictEqual(archived.status, 409, JSON.stringify(archived.body));
 });

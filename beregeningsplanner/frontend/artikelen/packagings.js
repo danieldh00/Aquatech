@@ -35,7 +35,14 @@
     section.hidden = Boolean(item.hasVariants);
     $('.err', section).textContent = '';
     if (item.hasVariants) return;
-    const result = await context.api(`stock/items/${encodeURIComponent(item.id)}/packagings`);
+    let result;
+    try {
+      result = await context.api(`stock/items/${encodeURIComponent(item.id)}/packagings`);
+    } catch (error) {
+      // Bewaren blijft uit: er is niets geladen om te bewaren.
+      if (state.item && state.item.id === item.id) $('.err', section).textContent = error.message;
+      return;
+    }
     if (!state.item || state.item.id !== item.id) return;
     state.lines = result.items;
     state.loaded = true;
