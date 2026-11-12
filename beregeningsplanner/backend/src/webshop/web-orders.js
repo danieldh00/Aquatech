@@ -677,6 +677,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     // Alleen wat er nu uit het magazijn gehaald kan worden: bij een tekort wacht de bestelling (of gaat een deel mee als deellevering is toegestaan).
     const candidates = shaped.filter(pickable);
     const plans = fulfilment.plan(tenantId, candidates);
+    rememberBackorders(tenantId, candidates.map((order) => ({ ...order, fulfilment: plans.get(order.id) })));
     const items = candidates.filter((order) => plans.get(order.id).canShip).map((order) => ({ ...order, fulfilment: plans.get(order.id) }));
     const waitingForStock = candidates.filter((order) => !plans.get(order.id).canShip).map((order) => ({ id: order.id, number: order.number }));
     return { items, waitingForSlip, waitingForStock, truncated: rows.length > size };
@@ -870,6 +871,27 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
   }
 
   /**
+   * Onthoudt (`backorderSince`) welke open bestellingen nu een backorder hebben, ook als die door een telverschil is ontstaan,
+   * zodat een latere ontvangst ze kan markeren. Schrijft alleen voor bestellingen waar het nog niet staat.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ id: string, backorderSince: ?string, fulfilment: { backorder: boolean } }[]} list De bestellingen met leverstatus.
+   * @returns {void}
+   */
+  function rememberBackorders(tenantId, list) {
+    const timestamp = currentTimestamp();
+    for (const order of list.filter((entry) => entry.fulfilment && entry.fulfilment.backorder && !entry.backorderSince)) {
+      transaction(db, () => {
+        const row = readForUpdate(tenantId, order.id, 'status, data');
+        if (!row || row.status !== 'nieuw') return;
+        const data = JSON.parse(row.data);
+        if (data.backorderSince) return;
+        data.backorderSince = timestamp;
+        prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, order.id);
+      });
+    }
+  }
+
+  /**
    * Alle open bestellingen met een backorder (een regel die niet volledig leverbaar is, of waarvan al een deel is verzonden), oudste eerst.
    * @param {string} tenantId Id van de omgeving.
    * @returns {{ items: object[], truncated: boolean }} De bestellingen met leverstatus (online bestellingen alleen als ze betaald zijn) en of er meer waren dan de limiet.
@@ -880,7 +902,9 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     const rows = prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND (COALESCE(${payment}, 'op rekening') <> 'online' OR ${payStatus} = 'betaald') ORDER BY created_at ASC, number ASC LIMIT ?`).all(tenantId, EXPORT_LIMIT + 1);
     const shaped = rows.slice(0, EXPORT_LIMIT).map(shapeFull);
     const plans = fulfilment.plan(tenantId, shaped);
-    return { items: shaped.map((order) => ({ ...order, fulfilment: plans.get(order.id) })).filter((order) => order.fulfilment.backorder), truncated: rows.length > EXPORT_LIMIT };
+    const withPlan = shaped.map((order) => ({ ...order, fulfilment: plans.get(order.id) }));
+    rememberBackorders(tenantId, withPlan);
+    return { items: withPlan.filter((order) => order.fulfilment.backorder), truncated: rows.length > EXPORT_LIMIT };
   }
 
   /**
