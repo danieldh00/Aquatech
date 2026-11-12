@@ -38,9 +38,10 @@
       <nav class="tabs" role="tablist">
         <button class="tab active" data-tab="stock" role="tab">Voorraad</button>
         <button class="tab" data-tab="reserved" role="tab">Gereserveerd <span id="t-reserved" class="count"></span></button>
-        <button class="tab" data-tab="moves" role="tab">Mutaties</button>
-        <button class="tab" data-tab="suppliers" role="tab">Leveranciers</button>
-        <button class="tab" data-tab="orders" role="tab">Inkooporders</button>
+        <button class="tab" data-tab="moves" data-purchasing role="tab">Mutaties</button>
+        <button class="tab" data-tab="reorder" data-purchasing role="tab">Bestelvoorstel</button>
+        <button class="tab" data-tab="suppliers" data-purchasing role="tab">Leveranciers</button>
+        <button class="tab" data-tab="orders" data-purchasing role="tab">Inkooporders</button>
         <button class="tab" data-tab="media" role="tab">Afbeeldingen</button>
       </nav>
 
@@ -55,7 +56,6 @@
           <button class="btn" id="b-shop" title="Neemt alle producten uit de webshop over; artikelen die niet in de webshop staan worden gearchiveerd">Alles uit webshop</button>
           <button class="btn" id="b-images" title="Neemt de afbeeldingen van de webshopproducten over in dit systeem, zodat ze hier staan en niet meer van de oude webshop komen">Afbeeldingen uit webshop</button>
           <button class="btn" id="b-merge" title="Losse artikelen die eigenlijk maten of kleuren van één product zijn omzetten naar één variabel artikel">Samenvoegen tot variabel artikel</button>
-          <button class="btn" id="b-reorder" title="Excel met wat er onder de minimumvoorraad zit en hoeveel je moet bestellen">Bestelvoorstel</button>
           <button class="btn" id="b-units" title="Eenheden (st, m, rol, …) aanmaken of verwijderen">Eenheden</button>
           <button class="btn" id="b-export">Excel-export</button>
         </div>
@@ -205,7 +205,6 @@
           <button class="btn" id="b-po-excel" type="button" title="Excel met de getoonde orders en een overzicht per leverancier">Excel</button>
           <button class="btn" id="b-po-read" type="button" title="Leest een PDF of foto van een offerte, orderbevestiging, pakbon of factuur van een leverancier met AI">Inlezen uit document</button>
           <input id="po-read-file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" hidden>
-          <button class="btn" id="b-po-proposal" type="button" title="Maakt per voorkeursleverancier een concept-order van wat onder de minimumvoorraad zit">Uit bestelvoorstel</button>
           <button class="btn primary" id="b-po-new" type="button">+ Inkooporder</button>
         </div>
         <form id="order-form" class="card-form" hidden novalidate>
@@ -280,6 +279,16 @@
         </div>
         <div id="m-grid" class="media-grid"></div>
         <div class="tablewrap"><table class="grid" id="m-missing-table" hidden></table></div>
+      </section>
+
+      <section id="tab-reorder" class="tabpane" hidden>
+        <div class="filters">
+          <p class="muted" id="rv-note">Artikelen onder de minimumvoorraad, per voorkeursleverancier, aangevuld tot Bestellen tot. Wat al onderweg is (concept, besteld of deels ontvangen) telt mee.</p>
+          <span class="spacer"></span>
+          <button class="btn" id="b-po-proposal" type="button" title="Maakt per voorkeursleverancier een concept-order van wat onder de minimumvoorraad zit">Concept-orders maken</button>
+          <button class="btn" id="b-reorder" type="button" title="Excel met wat er onder de minimumvoorraad zit en hoeveel je moet bestellen">Excel-export</button>
+        </div>
+        <div class="tablewrap"><table class="grid" id="rv-table"></table></div>
       </section>
 
       <section id="tab-moves" class="tabpane" hidden>

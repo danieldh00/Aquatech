@@ -145,6 +145,31 @@ function periodOf(query) {
 }
 
 /**
+ * Het aantal in de basiseenheid van het artikel: een regel in dozen of pallets telt de factor mee (voorraad en kostprijs staan in de basiseenheid).
+ * @param {{ qty: number, stockPer?: number }} line De regel.
+ * @returns {number} Het aantal basiseenheden.
+ */
+const baseQtyOf = (line) => Number(line.qty) * (Number(line.stockPer) > 1 ? Number(line.stockPer) : 1);
+
+/**
+ * Voegt regels van hetzelfde artikel samen (stuks en een pallet): de voorraadmutatie is één afboeking per artikel, dus de kosten mogen maar één keer meetellen.
+ * @param {{ itemId: string, code: string, name: string, qty: number, revenue: number }[]} lines De regels (aantal in de basiseenheid).
+ * @returns {{ itemId: string, code: string, name: string, qty: number, revenue: number }[]} Eén regel per artikel (regels zonder artikel blijven los), in volgorde van het eerste voorkomen.
+ */
+function mergePerItem(lines) {
+  const out = [];
+  const byItem = new Map();
+  for (const line of lines) {
+    const known = line.itemId ? byItem.get(line.itemId) : null;
+    if (known) { known.qty += line.qty; known.revenue = round2(known.revenue + line.revenue); continue; }
+    const entry = { ...line };
+    if (line.itemId) byItem.set(line.itemId, entry);
+    out.push(entry);
+  }
+  return out;
+}
+
+/**
  * Omzet excl. btw van een regel van een bestelling.
  * @param {{ qty: number, unitExcl: number, lineExcl?: number }} line De regel.
  * @param {number} [qty] Aantal (bij een retour het teruggestuurde aantal).
@@ -196,10 +221,12 @@ function createWebSalesStore(db, { stock = null } = {}) {
    * @returns {number} Aantal toegevoegde regels.
    */
   function recordShipment(tenantId, order, lines, movementIds, soldAt) {
-    return insertLines(tenantId, lines.map((line, index) => ({
+    return insertLines(tenantId, mergePerItem(lines.map((line) => ({
+      itemId: line.itemId, code: line.baseCode || line.code, name: line.name, qty: baseQtyOf(line), revenue: revenueOf(line),
+    }))).map((line, index) => ({
       id: crypto.createHash('sha256').update(JSON.stringify([tenantId, 'verkoop', order.id, index])).digest('hex'),
       kind: 'verkoop', soldAt, orderId: order.id, reference: order.number, itemId: line.itemId, code: line.code, name: line.name,
-      qty: line.qty, revenue: revenueOf(line), movementId: movementIds.get(line.itemId) || null,
+      qty: line.qty, revenue: line.revenue, movementId: movementIds.get(line.itemId) || null,
     })));
   }
 
@@ -213,10 +240,12 @@ function createWebSalesStore(db, { stock = null } = {}) {
    * @returns {number} Aantal toegevoegde regels.
    */
   function recordReturn(tenantId, record, lines, movementIds, soldAt) {
-    return insertLines(tenantId, lines.map((line, index) => ({
+    return insertLines(tenantId, mergePerItem(lines.map((line) => ({
+      itemId: line.itemId, code: line.baseCode || line.code, name: line.name, qty: baseQtyOf(line), revenue: round2(Number(line.unitExcl) * line.qty),
+    }))).map((line, index) => ({
       id: crypto.createHash('sha256').update(JSON.stringify([tenantId, 'retour', record.orderId, record.number, index])).digest('hex'),
       kind: 'retour', soldAt, orderId: record.orderId, reference: record.number, itemId: line.itemId, code: line.code, name: line.name,
-      qty: -line.qty, revenue: -round2(Number(line.unitExcl) * line.qty), movementId: movementIds.get(line.itemId) || null,
+      qty: -line.qty, revenue: -line.revenue, movementId: movementIds.get(line.itemId) || null,
     })));
   }
 

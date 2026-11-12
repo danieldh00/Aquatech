@@ -1,8 +1,26 @@
 # Changelog
 
-## 1.11.5
+## 1.11.7
 
 Fix: Beheer > Webshop > Webshop-inhoud gaf *Kan de webshop-inhoud niet laden: Cannot read properties of undefined (reading 'items')*. Een opgeslagen versie van de startpagina zonder een van de blokken (banners, kolommen, voordelen of merken) werd ongewijzigd naar het scherm gestuurd, dat `site.<blok>.items` verwacht. `view()` in `webshop/shop-content.js` loopt concept en gepubliceerde versie nu door `normalizeSite` (ontbrekende blokken = de standaard, zoals de shop zelf al deed). Regressietest in `shop-content.test.js`. Geen migratie.
+
+## 1.11.6
+
+Inkoop als eigen kopje in de zijbalk. Geen migratie.
+
+- **Zijbalk**: nieuwe groep *Inkoop* (`navGroup: 'inkoop'`) met Bestelvoorstel, Inkooporders, Leveranciers en Mutaties. Het zijn tabbladen van Artikelen: de modules wijzen met een #-adres (`artikelen/#orders`) naar het tabblad; `currentId` in `shared/sidebar.js` markeert het open tabblad (de module zonder #-adres is de terugval) en tekent opnieuw bij `hashchange` en `AquatechNav.refresh()` (aangeroepen door `showTab`).
+- `partOf: 'voorraad'` in `modules.js`: de vier regels volgen de module Artikelen (uit = ook weg) en staan niet apart in Beheer > Modules. Voor rollen zonder zijbalk zijn het extra tegels.
+- **Bestelvoorstel** is nu een tabblad op het scherm (per leverancier, met onderweg en bedrag) met knoppen *Concept-orders maken* (stond bij Inkooporders) en *Excel-export* (stond in het Voorraad-overzicht).
+- Met de zijbalk zijn de tabbladen Mutaties, Bestelvoorstel, Leveranciers en Inkooporders in Artikelen verborgen (`data-purchasing`); zonder zijbalk blijven ze.
+- Test: de href-controle in `server.test.js` staat een #-adres toe; nieuwe tests voor de groep en de markering.
+
+## 1.11.5
+
+Verpakkingseenheden per artikel, deel B: winkelwagen en bestelling (punt 1). Geen migratie.
+
+- **Winkelwagen**: een verpakking staat in de wagen als `CODE@PAL` (cookie en formulieren ongewijzigd). `priceCart` zoekt de verpakking op (één query voor de hele wagen), rekent de eigen prijs (zakelijk: zakelijke prijs; leeg = factor × stukprijs), toont de regel als "Klinker – Pallet (144 st)" met eenheid *Pallet* en laat een verpakking die uit staat of voor deze klantcategorie verborgen is (`visibleFor`) als "niet meer te koop" zien. Groothandelsvoorwaarden gelden alleen voor de basiseenheid.
+- **Beschikbaarheid** = hele verpakkingen (`floor(voorraad / factor)`); staan stuks en een pallet van hetzelfde artikel samen in de wagen, dan moet de voorraad voor alles samen genoeg zijn.
+- **Bestelling**: de orderregel houdt aantal verpakkingen en prijs per verpakking (`stockPer` = factor, `baseCode`); reserveren, controleren en afboeken gaan in de basiseenheid, per artikel samengevoegd (`stockLinesOf`). Retour: terugboeken in de basiseenheid; margerapportage telt de basiseenheid; de rapportage voegt regels van hetzelfde artikel samen (één afboeking, kosten één keer); de factuurregel krijgt aantal en prijs per verpakking en de omzetgroep van het artikel. Nog niet: keuze van een verpakking op de productpagina (volgt met de kaartenaanpassing van punt 33).
 
 ## 1.11.4
 

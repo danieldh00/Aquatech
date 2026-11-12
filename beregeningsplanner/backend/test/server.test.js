@@ -191,8 +191,8 @@ test('dashboard: actieve modules wijzen relatief naar een bestaande module', () 
     assert.ok(['actief', 'gepland'].includes(module.status), module.id);
     if (module.status !== 'actief') continue;
     // De sleutel blijft stabiel (instelling `modules`); de map mag anders heten, zoals voorraad -> artikelen.
-    assert.match(module.href, /^[a-z0-9][a-z0-9-]*\/$/, `${module.id}: href relatief en met slash`);
-    assert.ok(fs.existsSync(path.join(FRONTEND_DIR, module.href, 'index.html')), `${module.href}index.html ontbreekt`);
+    assert.match(module.href, /^[a-z0-9][a-z0-9-]*\/(#[a-z]+)?$/, `${module.id}: href relatief en met slash`);
+    assert.ok(fs.existsSync(path.join(FRONTEND_DIR, module.href.split('#')[0], 'index.html')), `${module.href}index.html ontbreekt`);
   }
   assert.ok(modules.some((module) => module.id === 'beregening' && module.status === 'actief'));
 });

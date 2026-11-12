@@ -97,3 +97,6 @@ table.grid .toggle:hover { color: var(--at-teal); }
 .label-preview { margin-top: 10px; }
 .label-preview .label-code { width: 220px; max-width: 100%; height: 56px; border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 4px; box-sizing: border-box; }
 .label-preview .label-code svg { display: block; width: 100%; height: 100%; }
+
+/* Met de zijbalk staan Mutaties, Bestelvoorstel, Leveranciers en Inkooporders onder Inkoop; de tabbladen zijn dan dubbel. */
+body.has-nav .tab[data-purchasing] { display: none; }
