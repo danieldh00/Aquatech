@@ -111,8 +111,9 @@
       : needsInvoice ? `<p>${order.invoiceError ? `Er is nog geen factuur: ${esc(order.invoiceError)} ` : 'Er is nog geen factuur. '}<button class="btn" id="wo-invoice">Factuur maken</button></p>` : '';
     box.innerHTML = `<h3>${esc(order.number)} <span class="pill ${esc(order.status)}">${esc(order.statusLabel)}</span></h3>
       <p>${esc(order.customer.company ? `${order.customer.company} – ` : '')}${esc(order.customer.name)} · <a href="mailto:${esc(mailtoAddress(order.email))}">${esc(order.email)}</a>${order.customer.phone ? ` · ${esc(order.customer.phone)}` : ''}<br>
-      ${shipping && shipping.method === 'ophalen' ? 'Wordt opgehaald' : `${esc(order.address.street)}, ${esc(order.address.postcode)} ${esc(order.address.city)}${order.address.country && order.address.country !== 'NL' ? ` (${esc(order.address.country)})` : ''}${order.address.unverified ? ' <span class="pill analyse" title="De klant vond zijn adres niet bij het opzoeken op postcode (of het opzoeken werkte niet) en heeft het zelf ingevuld.">Adres niet gecontroleerd</span>' : ''}`}${shipping && shipping.method !== 'ophalen' && order.deliverySame === false ? ' <span class="muted small">(afleveradres)</span>' : ''}${billingLine}</p>
+      ${shipping && shipping.method === 'ophalen' ? 'Wordt opgehaald' : `${esc(order.address.street)}, ${esc(order.address.postcode)} ${esc(order.address.city)}${order.address.country && order.address.country !== 'NL' ? ` (${esc(order.address.country)})` : ''}${order.address.unverified ? ' <span class="pill analyse" title="De klant vond zijn adres niet bij het opzoeken op postcode (of het opzoeken werkte niet) en heeft het zelf ingevuld.">Adres niet gecontroleerd</span>' : ''}`}${(!shipping || shipping.method !== 'ophalen') && order.deliverySame === false ? ' <span class="muted small">(afleveradres)</span>' : ''}${billingLine}</p>
       ${order.customerGroup === 'zakelijk' ? `<p><b>Zakelijke klant</b>${order.vat && order.vat.number ? ` · btw-nummer ${esc(order.vat.number)}` : ''}${order.vat && order.vat.shifted ? ' · <b>btw verlegd</b> (factureren zonder btw)' : ''}${order.vat && order.vat.vies ? ` · VIES ${esc(order.vat.vies.status)} op ${esc(String(order.vat.vies.checkedAt || '').slice(0, 10))}${order.vat.vies.requestId ? ` (consultatienummer ${esc(order.vat.vies.requestId)})` : ''}` : ''}. Bedragen hieronder zijn incl. btw, behalve bij verlegging.</p>` : ''}
+      ${order.quote ? `<p>Uit offerte <a href="../offertes/?id=${encodeURIComponent(order.quote.id)}">${esc(order.quote.number)}</a>${order.paymentDays !== null && order.paymentDays !== undefined ? ` · betaaltermijn ${esc(String(order.paymentDays))} dagen` : ''}${order.language === 'en' ? ' · documenten in het Engels' : ''}</p>` : ''}
       ${order.note ? `<p><b>Opmerking:</b> ${esc(order.note)}</p>` : ''}
       <div class="tablewrap"><table class="grid"><thead><tr><th>Artikel</th><th class="num">Aantal</th><th class="num">Prijs</th><th class="num">Totaal</th></tr></thead><tbody>${lines}${shippingRow}${vat}
         <tr><th colspan="3">${order.vat && order.vat.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num"><b>${euro(order.totals.total)}</b></td></tr></tbody></table></div>
@@ -325,6 +326,9 @@
     /** Volgende pagina. */
     $('#wo-next').onclick = () => { state.offset += PAGE; load(); };
     $('#wo-export').onclick = exportExcel;
+    // Een link naar één bestelling (bijvoorbeeld vanuit een omgezette offerte) opent direct het detail.
+    const directId = new URLSearchParams(location.search).get('id');
+    if (directId) open(directId);
   }
 
   window.BeheerBestellingen = { init, load };

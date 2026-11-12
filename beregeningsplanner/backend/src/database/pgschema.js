@@ -1067,6 +1067,12 @@ const PG_MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN price_factor DOUBLE PRECISION;
   CREATE INDEX stock_items_price_mode ON stock_items (tenant_id, price_mode);
   `,
+  // 66: offerte omgezet naar bestelling (zie db.js).
+  `
+  ALTER TABLE quotes ADD COLUMN order_id ${TEXT_TYPE};
+  ALTER TABLE quotes ADD COLUMN converted_at ${TEXT_TYPE};
+  CREATE UNIQUE INDEX quotes_order ON quotes (tenant_id, order_id) WHERE order_id IS NOT NULL;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

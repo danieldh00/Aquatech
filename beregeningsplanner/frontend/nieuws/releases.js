@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.12.2',
+      date: '2026-11-12',
+      title: 'Offerte omzetten naar een bestelling',
+      items: [
+        { text: 'Een geaccordeerde offerte zet u met één knop om in een bestelling: *Omzetten naar bestelling*. De regels, de korting, btw verlegd, de betaaltermijn, de documenttaal, de klant en het afleveradres van de offerte gaan mee. De offerte staat daarna als *Omgezet* in de lijst, met een link naar de bestelling (en andersom), en ligt vast.', for: ['beheer'] },
+        { text: 'De factuur van zo\'n bestelling houdt de betaaltermijn en de taal van de offerte aan.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.12.1',
       date: '2026-11-12',
       title: 'Prijsfactor op de inkoopprijs',
