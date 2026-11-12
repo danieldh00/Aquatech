@@ -88,6 +88,11 @@ test('prijsfactor: instelling opschonen en streng controleren', () => {
   assert.match(PriceFactor.check({ defaultFactor: 0 }, slugs, suppliers), /factor/);
   assert.match(PriceFactor.check({ defaultFactor: 'abc' }, slugs, suppliers), /factor/);
   assert.match(PriceFactor.check({ rounding: { mode: 'x', direction: 'omhoog' } }, slugs, suppliers), /afronding/);
+  for (const mode of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    assert.match(PriceFactor.check({ rounding: { mode, direction: 'omhoog' } }, slugs, suppliers), /afronding/, mode);
+    assert.strictEqual(PriceFactor.sanitizePriceFactors({ rounding: { mode } }).rounding.mode, 'cent');
+    assert.strictEqual(PriceFactor.roundPrice(12.344, { mode, direction: 'dichtstbij' }), 12.34);
+  }
   assert.match(PriceFactor.check({ categories: [{ categorySlug: 'weg', factor: 2 }] }, slugs, suppliers), /categorie/);
   assert.match(PriceFactor.check({ suppliers: [{ supplierId: 'weg', factor: 2 }] }, slugs, suppliers), /leverancier/);
   assert.match(PriceFactor.check({ categories: [{ categorySlug: 'a', factor: 2 }, { categorySlug: 'a', factor: 3 }] }, slugs, suppliers), /twee keer/);

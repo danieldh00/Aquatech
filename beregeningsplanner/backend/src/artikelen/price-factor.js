@@ -26,6 +26,13 @@ const ROUNDING_MODES = {
   'x.99': { label: 'Eindigend op ,99', ending: 99 },
 };
 const DIRECTIONS = ['dichtstbij', 'omhoog'];
+
+/**
+ * Is dit een bestaande afrondingsregel? Een eigen-sleutelcontrole, zodat namen als 'constructor' of '__proto__' niet doorgaan.
+ * @param {*} mode De naam van de regel.
+ * @returns {boolean} true bij een bekende regel.
+ */
+const hasRoundingMode = (mode) => typeof mode === 'string' && Object.prototype.hasOwnProperty.call(ROUNDING_MODES, mode);
 const DEFAULT_ROUNDING = { mode: 'cent', direction: 'dichtstbij' };
 
 /**
@@ -47,7 +54,7 @@ function cleanFactor(value) {
 function sanitizePriceFactors(raw) {
   const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const rounding = input.rounding && typeof input.rounding === 'object' ? input.rounding : {};
-  const mode = ROUNDING_MODES[rounding.mode] ? rounding.mode : DEFAULT_ROUNDING.mode;
+  const mode = hasRoundingMode(rounding.mode) ? rounding.mode : DEFAULT_ROUNDING.mode;
   const direction = DIRECTIONS.includes(rounding.direction) ? rounding.direction : DEFAULT_ROUNDING.direction;
   /**
    * Maakt een lijst met één factor per sleutel.
@@ -78,7 +85,7 @@ function check(raw, knownSlugs, knownSuppliers) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return 'Ongeldige instelling.';
   const range = `Een factor is een getal van ${MIN_FACTOR} tot en met ${MAX_FACTOR}.`;
   if (raw.defaultFactor !== '' && raw.defaultFactor != null && cleanFactor(raw.defaultFactor) === null) return range;
-  if (raw.rounding && (!ROUNDING_MODES[raw.rounding.mode] || !DIRECTIONS.includes(raw.rounding.direction))) return 'Kies een geldige afrondingsregel.';
+  if (raw.rounding && (!hasRoundingMode(raw.rounding.mode) || !DIRECTIONS.includes(raw.rounding.direction))) return 'Kies een geldige afrondingsregel.';
   for (const [list, key, known, unknown] of [
     [raw.categories, 'categorySlug', knownSlugs, 'Een gekozen categorie staat niet (meer) in het menu van de webshop.'],
     [raw.suppliers, 'supplierId', knownSuppliers, 'Een gekozen leverancier bestaat niet (meer).'],
@@ -104,7 +111,7 @@ function check(raw, knownSlugs, knownSuppliers) {
  * @returns {number} De afgeronde prijs in euro's; nooit lager dan de kleinste stap (een prijs boven 0 wordt niet 0).
  */
 function roundPrice(price, rounding = DEFAULT_ROUNDING) {
-  const rule = ROUNDING_MODES[rounding.mode] || ROUNDING_MODES.cent;
+  const rule = hasRoundingMode(rounding.mode) ? ROUNDING_MODES[rounding.mode] : ROUNDING_MODES.cent;
   const up = rounding.direction === 'omhoog';
   // Rekenen in hele centen voorkomt drijvendekommafouten (1,15 × 100 = 114,99999…).
   const cents = Math.round(Number(price) * 100 + 1e-7);
