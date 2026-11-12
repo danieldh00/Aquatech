@@ -82,6 +82,8 @@ test('inlezen: route koppelt aan artikelen, schrijft niets en kent limieten en r
     assert.strictEqual((await baas.get('/app/api/purchase-orders')).body.items.length, 0);
     assert.strictEqual((await baas.post('/app/api/purchase-orders/read', { file: 'data:text/html;base64,AAAA' })).status, 400);
     assert.strictEqual((await baas.post('/app/api/purchase-orders/read', {})).status, 400);
+    // Type PDF maar andere inhoud: geweigerd vóór de betaalde AI-aanroep.
+    assert.strictEqual((await baas.post('/app/api/purchase-orders/read', { file: `data:application/pdf;base64,${Buffer.from('<html>').toString('base64')}` })).status, 400);
     assert.strictEqual(calls.count, 1);
     const klant = await as('klant');
     assert.strictEqual((await klant.post('/app/api/purchase-orders/read', { file: FILE })).status, 403);

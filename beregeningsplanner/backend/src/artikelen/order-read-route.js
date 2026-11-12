@@ -8,6 +8,20 @@ const MAX_BYTES = 8 * 1024 * 1024;
 const FILE_PATTERN = /^data:(application\/pdf|image\/jpeg|image\/png|image\/webp);base64,([A-Za-z0-9+/=]+)$/;
 
 /**
+ * Controleert op de inhoud (de eerste bytes) of het bestand echt is wat de kop zegt.
+ * @param {string} mediaType Het type uit de data-URL.
+ * @param {string} base64 De inhoud.
+ * @returns {boolean} true als de bytes bij het type passen.
+ */
+function contentMatches(mediaType, base64) {
+  const head = Buffer.from(base64.slice(0, 32), 'base64');
+  if (mediaType === 'application/pdf') return head.subarray(0, 5).toString('latin1') === '%PDF-';
+  if (mediaType === 'image/png') return head.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  if (mediaType === 'image/jpeg') return head[0] === 0xff && head[1] === 0xd8;
+  return head.subarray(0, 4).toString('latin1') === 'RIFF' && head.subarray(8, 12).toString('latin1') === 'WEBP';
+}
+
+/**
  * Hangt `POST /api/purchase-orders/read` aan de app.
  * @param {object} app De Express-app.
  * @param {object} ctx De opslag en hulpfuncties: stock, suppliers, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentOrderReader, dailyFor, limiter, aiUsage, tenantIdOf.
@@ -19,6 +33,7 @@ function registerOrderReadRoute(app, ctx) {
     const tenantId = req.tenantId || req.user.tenant_id;
     const match = FILE_PATTERN.exec(String((req.body && req.body.file) || ''));
     if (!match) return res.status(400).json({ error: 'invalid_file', message: 'Kies een PDF of een foto (JPEG, PNG of WebP).' });
+    if (!contentMatches(match[1], match[2])) return res.status(400).json({ error: 'invalid_file', message: 'De inhoud van het bestand past niet bij het type. Kies een echte PDF of foto.' });
     if (Math.floor(match[2].length * 3 / 4) > MAX_BYTES) return res.status(400).json({ error: 'file_too_large', message: 'Het bestand is groter dan 8 MB.' });
     const settings = settingsFor(tenantId);
     if (!settings.get('aiEnabled')) {
