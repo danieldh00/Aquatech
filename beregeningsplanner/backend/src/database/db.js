@@ -1307,6 +1307,10 @@ const MIGRATIONS = [
   ALTER TABLE quotes ADD COLUMN converted_at TEXT;
   CREATE UNIQUE INDEX quotes_order ON quotes (tenant_id, order_id) WHERE order_id IS NOT NULL;
   `,
+  // 67: Te picken (webshop/packing-slips.js): bestellingen per status, oudste eerst, zonder de hele verzonden historie af te lopen.
+  `
+  CREATE INDEX web_orders_status ON web_orders (tenant_id, status, created_at);
+  `,
 ];
 
 /**

@@ -1073,6 +1073,10 @@ const PG_MIGRATIONS = [
   ALTER TABLE quotes ADD COLUMN converted_at ${TEXT_TYPE};
   CREATE UNIQUE INDEX quotes_order ON quotes (tenant_id, order_id) WHERE order_id IS NOT NULL;
   `,
+  // 67: Te picken per status (zie db.js).
+  `
+  CREATE INDEX web_orders_status ON web_orders (tenant_id, status, created_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
