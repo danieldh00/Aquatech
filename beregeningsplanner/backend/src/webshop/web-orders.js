@@ -353,7 +353,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null, quote: data.quote || null, paymentDays: data.paymentDays === undefined ? null : data.paymentDays, language: data.language === 'en' ? 'en' : 'nl' };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -506,6 +506,64 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       stock.reserveOrder(tenantId, id, stockLinesOf(cart.lines));
       return { order: shapeFull(prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND id = ?`).get(tenantId, id)) };
     });
+  }
+
+  /**
+   * Zoekt bij offerteregels het voorraadartikel (en de verpakking) op de code en vult itemId, baseCode, stockPer en itemName in.
+   * Een regel zonder code, met een onbekende code, een hoofdartikel (met varianten), een negatief aantal of een onbekende verpakking is
+   * een vrije regel (itemId leeg): die telt mee in het bedrag maar raakt de voorraad niet. Twee queries voor alle regels.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object[]} lines De regels (code, name, unit, qty, unitExcl, vatRate, unitIncl, lineExcl, lineTotal).
+   * @returns {object[]} De bestelregels.
+   */
+  function resolveQuoteLines(tenantId, lines) {
+    const parts = lines.map((line) => splitCartCode(String(line.code || '').trim().toUpperCase()));
+    const codes = [...new Set(parts.map((part) => part.baseCode).filter(Boolean))];
+    const items = codes.length ? prepare(`SELECT id, code, name, unit FROM stock_items WHERE tenant_id = ? AND has_variants = 0 AND archived = 0 AND UPPER(code) IN (${codes.map(() => '?').join(', ')})`).all(tenantId, ...codes) : [];
+    const itemOf = new Map(items.map((item) => [String(item.code).toUpperCase(), item]));
+    const packagedIds = [...new Set(parts.filter((part) => part.packCode && itemOf.has(part.baseCode)).map((part) => itemOf.get(part.baseCode).id))];
+    const packagings = packagedIds.length ? prepare(`SELECT item_id, code, name, factor FROM item_packagings WHERE tenant_id = ? AND active = 1 AND item_id IN (${packagedIds.map(() => '?').join(', ')})`).all(tenantId, ...packagedIds) : [];
+    const packagingOf = new Map(packagings.map((row) => [`${row.item_id}|${String(row.code).toUpperCase()}`, row]));
+    return lines.map((line, index) => {
+      const { baseCode, packCode } = parts[index];
+      const item = itemOf.get(baseCode);
+      const packaging = item && packCode ? packagingOf.get(`${item.id}|${packCode}`) : null;
+      const usable = item && line.qty > 0 && (!packCode || packaging);
+      const base = { code: String(line.code || '').trim(), name: line.name, unit: line.unit || (item && !packaging ? item.unit : '') || 'st', qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal, lineExcl: line.lineExcl };
+      if (!usable) return { ...base, itemId: '' };
+      return { ...base, itemId: item.id, ...(packaging ? { baseCode: item.code, stockPer: Number(packaging.factor), itemName: item.name } : {}) };
+    });
+  }
+
+  /**
+   * Maakt een bestelling van een geaccordeerde offerte, tegen de prijzen en voorwaarden van de offerte (niet de webshopprijzen).
+   * Artikelen met een bekende code reserveren voorraad (ook als die tekortschiet: de offerte is afgesproken); vrije regels niet.
+   * Draait NIET in een eigen transactie: de aanroeper (quote-orders.js) legt de koppeling met de offerte in dezelfde transactie vast.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ userId: ?string, customer: object, address: object, billingAddress: ?object, deliverySame: boolean, lines: object[], totals: object, customerGroup: string, vat: ?object, paymentDays: ?number, language: string, quote: { id: string, number: string }, by: string }} spec De gegevens uit de offerte.
+   * @returns {{ order: object, shortages: object[] }} De bestelling en de artikelen waarvan de vrije voorraad tekortschiet.
+   */
+  function createFromQuote(tenantId, spec) {
+    const timestamp = currentTimestamp();
+    const id = crypto.randomUUID();
+    if (isPg(db)) prepare('SELECT pg_advisory_xact_lock(hashtext(?)) AS locked').get(`web-orders:${tenantId}:${timestamp.slice(0, 4)}`);
+    const number = nextNumber(tenantId, timestamp.slice(0, 4));
+    const lines = resolveQuoteLines(tenantId, spec.lines);
+    const data = {
+      lines, customer: spec.customer, address: spec.address, ...(spec.billingAddress ? { billingAddress: spec.billingAddress } : {}), deliverySame: spec.deliverySame,
+      shipping: null, customerGroup: spec.customerGroup, vat: spec.vat, note: '', totals: spec.totals, payment: 'op rekening',
+      ...(spec.paymentDays !== null && spec.paymentDays !== undefined ? { paymentDays: spec.paymentDays } : {}), language: spec.language === 'en' ? 'en' : 'nl',
+      quote: spec.quote, history: [{ at: timestamp, status: 'nieuw', by: spec.by }],
+    };
+    prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'nieuw', ?, ?, ?, ?, ?, ?)`)
+      .run(id, tenantId, number, spec.userId || null, spec.customer.company || spec.customer.name || spec.quote.number, spec.customer.email || '', spec.totals.total, JSON.stringify(data), timestamp, timestamp);
+    const reserved = stockLinesOf(lines.filter((line) => line.itemId));
+    if (reserved.length) {
+      lockItemIds(tenantId, lines);
+      stock.reserveOrder(tenantId, id, reserved);
+    }
+    return { order: get(tenantId, id), shortages: reserved.length ? stock.shortageFor(tenantId, reserved, `order:${id}`) : [] };
   }
 
   /**
@@ -784,7 +842,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     return { released };
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, onShipped, onCancelled, onTracking };
+  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, onShipped, onCancelled, onTracking };
 }
 
 /**
