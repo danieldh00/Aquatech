@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.11.0',
+      date: '2026-11-12',
+      title: 'Inkooporders',
+      items: [
+        { text: 'In Artikelen staat nu een tabblad Inkooporders. Je maakt een bestelling bij een leverancier (ook met één klik uit het bestelvoorstel), zet hem op besteld en boekt de ontvangst per regel: de voorraad en de inkoopprijs worden meteen bijgewerkt. Wat nog onderweg is telt mee in het bestelvoorstel, zodat je niets dubbel bestelt.', for: ['voorraad'] },
+        { text: 'Per order is er een Excel voor de leverancier, en de lijst heeft een Excel met een overzicht per leverancier.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.10.9',
       date: '2026-11-12',
       title: 'Bestelvoorstel per leverancier',

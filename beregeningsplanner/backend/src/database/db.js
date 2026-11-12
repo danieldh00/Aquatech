@@ -1223,6 +1223,45 @@ const MIGRATIONS = [
   CREATE UNIQUE INDEX item_suppliers_pair ON item_suppliers (tenant_id, item_id, supplier_id);
   CREATE INDEX item_suppliers_supplier ON item_suppliers (tenant_id, supplier_id);
   `,
+  // 61: inkooporders (artikelen/purchase-orders.js, punt 17): purchase_orders = een bestelling bij een leverancier
+  // (concept, besteld, deels_ontvangen, ontvangen, geannuleerd; nummer IO<jaar>-0001 per omgeving) en
+  // purchase_order_lines = de regels met een momentopname van code, naam en eenheid, het artikelnummer van de
+  // leverancier, de inkoopprijs en het al ontvangen aantal. Een ontvangst boekt de voorraad via stock.book.
+  `
+  CREATE TABLE purchase_orders (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenants(id),
+    number        TEXT NOT NULL,
+    supplier_id   TEXT NOT NULL REFERENCES suppliers(id),
+    status        TEXT NOT NULL DEFAULT 'concept',
+    expected_date TEXT NOT NULL DEFAULT '',
+    notes         TEXT NOT NULL DEFAULT '',
+    created_by    TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    ordered_at    TEXT,
+    closed_at     TEXT
+  );
+  CREATE UNIQUE INDEX purchase_orders_number ON purchase_orders (tenant_id, number);
+  CREATE INDEX purchase_orders_status ON purchase_orders (tenant_id, status, created_at);
+  CREATE INDEX purchase_orders_supplier ON purchase_orders (tenant_id, supplier_id);
+  CREATE TABLE purchase_order_lines (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenants(id),
+    order_id      TEXT NOT NULL REFERENCES purchase_orders(id),
+    item_id       TEXT NOT NULL REFERENCES stock_items(id),
+    position      INTEGER NOT NULL DEFAULT 0,
+    code          TEXT NOT NULL,
+    name          TEXT NOT NULL,
+    unit          TEXT NOT NULL DEFAULT 'st',
+    supplier_sku  TEXT NOT NULL DEFAULT '',
+    qty           REAL NOT NULL,
+    unit_cost     REAL,
+    received_qty  REAL NOT NULL DEFAULT 0
+  );
+  CREATE INDEX purchase_order_lines_order ON purchase_order_lines (tenant_id, order_id);
+  CREATE INDEX purchase_order_lines_item ON purchase_order_lines (tenant_id, item_id);
+  `,
 ];
 
 /**
