@@ -196,9 +196,15 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     try {
       const message = mailBody(profile, [`Beste ${order.customer.name},`, ...intro.split(/\n{2,}/), `Bestelling ${order.number}\n\n${linesText(order)}`]);
       const subject = pickup ? `Je bestelling ${order.number} staat klaar` : tracking ? `Je bestelling ${order.number} is onderweg (volgcode ${tracking.code})` : `Je bestelling ${order.number} is onderweg`;
-      // Bij dropshipping gaat dezelfde mail (met de volgcode) ook naar het adres voor het afleverbewijs.
-      const proofEmail = order.dropshipping && validEmail(order.dropshipping.proofEmail) && order.dropshipping.proofEmail !== order.email ? order.dropshipping.proofEmail : '';
-      await mailer.send({ to: proofEmail ? [order.email, proofEmail] : order.email, subject, text: message.text, html: message.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+      await mailer.send({ to: order.email, subject, text: message.text, html: message.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+      // Dropshipping: het adres voor het afleverbewijs krijgt een eigen, vast bericht (alleen bestelnummer en volgcode, nooit tekst van de klant),
+      // want dat adres is niet geverifieerd en mag de shop-afzender niet als doorgeefluik gebruiken.
+      const proofEmail = !pickup && order.dropshipping && validEmail(order.dropshipping.proofEmail) && order.dropshipping.proofEmail !== order.email ? order.dropshipping.proofEmail : '';
+      if (proofEmail) {
+        const proofLines = [`Bestelling ${order.number} is onderweg naar de ontvanger.`, tracking ? `Volg het pakket met de code ${tracking.code}: ${tracking.url}` : 'Zodra we de volgcode hebben, sturen we hem toe.'];
+        const proof = mailBody(profile, proofLines);
+        await mailer.send({ to: proofEmail, subject: tracking ? `Bestelling ${order.number} is onderweg (volgcode ${tracking.code})` : `Bestelling ${order.number} is onderweg`, text: proof.text, html: proof.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+      }
     } catch (failure) {
       error = mailFailure(failure).slice(0, 300);
     }

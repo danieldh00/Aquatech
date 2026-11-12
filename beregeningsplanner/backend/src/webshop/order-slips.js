@@ -102,13 +102,13 @@ function createOrderSlips(db, { vault, orders }) {
    * @param {string} tenantId Id van de omgeving.
    * @param {string} orderId Id van de bestelling.
    * @param {{ bytes: Buffer, pages: number, fileName: string }} slip De gecontroleerde PDF (inspectSlip).
-   * @returns {{ ok?: boolean, error?: string, status?: number }} ok bij succes, anders een melding (409 als de bestelling intussen is verzonden of geannuleerd).
+   * @returns {{ ok?: boolean, error?: string, status?: number }} ok bij succes, anders een melding (409 als de bestelling intussen is verzonden, geannuleerd of de pakbon al afgedrukt is).
    */
   function save(tenantId, orderId, { bytes, pages, fileName }) {
     const timestamp = new Date().toISOString();
     return transaction(db, () => {
       const stored = orders.setDropshippingSlip(tenantId, orderId, { name: fileName, pages, size: bytes.length, uploadedAt: timestamp }, { onlyIfNew: true });
-      if (!stored) return { error: 'Deze bestelling is al in behandeling; de pakbon kan niet meer worden gewijzigd.', status: 409 };
+      if (!stored) return { error: 'Deze bestelling is al in behandeling of de pakbon is al afgedrukt; de pakbon kan niet meer worden gewijzigd.', status: 409 };
       db.prepare('DELETE FROM web_order_slips WHERE tenant_id = ? AND order_id = ?').run(tenantId, orderId);
       db.prepare('INSERT INTO web_order_slips (tenant_id, order_id, file_name, pages, size, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .run(tenantId, orderId, fileName, pages, bytes.length, vault.sealBytes(bytes, aadOf(tenantId, orderId)), timestamp);

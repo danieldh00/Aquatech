@@ -989,7 +989,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             const order = orders.getForUser(tenantId, viewer.id, req.params.id);
             if (!order) return res.status(404).json({ message: 'Bestelling niet gevonden.' });
             if (!order.dropshipping) return res.status(409).json({ message: 'Dit is geen dropshippingbestelling.' });
-            if (order.status !== 'nieuw') return res.status(409).json({ message: 'Deze bestelling is al in behandeling; de pakbon kan niet meer worden gewijzigd.' });
+            if (order.status !== 'nieuw' || order.packingSlip) return res.status(409).json({ message: 'Deze bestelling is al in behandeling of de pakbon is al afgedrukt; de pakbon kan niet meer worden gewijzigd.' });
             if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(415).json({ message: 'Stuur een PDF-bestand (application/pdf).' });
             const checked = await inspectSlip(req.body);
             if (checked.error) return res.status(400).json({ message: checked.error });

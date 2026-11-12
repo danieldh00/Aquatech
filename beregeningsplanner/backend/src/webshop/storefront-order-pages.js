@@ -361,7 +361,7 @@ ${dropshipBlock(order, thanks)}${payBlock}<p>Status: <strong>${escapeHtml(order.
 ${invoiceBlock}${history}
 ${returnsHtml}
 <p><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a> <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a></p></section>`;
-  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups, script: order.dropshipping && order.status === 'nieuw' ? 'pakbon.js' : '', refresh: autoPay && waiting && !payError ? 'betalen/' : '' });
+  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups, script: order.dropshipping && order.status === 'nieuw' && !order.packingSlip ? 'pakbon.js' : '', refresh: autoPay && waiting && !payError ? 'betalen/' : '' });
 }
 
 /**
@@ -375,7 +375,7 @@ function dropshipBlock(order, thanks) {
   const drop = order.dropshipping;
   if (!drop) return '';
   const slip = drop.slip;
-  const open = order.status === 'nieuw';
+  const open = order.status === 'nieuw' && !order.packingSlip;
   const state = slip
     ? `<p>Je pakbon: <strong>${escapeHtml(slip.name)}</strong> (${slip.pages} ${slip.pages === 1 ? 'pagina' : 'pagina\'s'}) · <a href="pakbon.pdf">bekijken</a></p>`
     : `<p class="${thanks ? 'form-error' : 'note'}" role="status"><strong>Upload je pakbon.</strong> ${open ? 'We kunnen de bestelling pas inpakken als we je eigen pakbon hebben.' : 'Er is geen pakbon geüpload.'}</p>`;

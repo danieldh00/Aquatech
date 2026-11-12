@@ -187,11 +187,19 @@ test('dropshipping: uploaden, eigenaarcontrole, Te picken en Alles afdrukken met
   const printed = (await world.admin.get('/app/api/admin/web-orders/to-pick')).body.items.find((item) => item.id === dropId);
   assert.ok(printed.printedAt, 'het afdrukken is vastgelegd');
 
+  // Na het afdrukken kan de klant de pakbon niet meer vervangen (het papier ligt al in de doos).
+  const afterPrint = await putSlip(world, owner, dropId, pdf);
+  assert.strictEqual(afterPrint.status, 409);
+  assert.match(afterPrint.body.message, /afgedrukt/);
+
   // Na verzenden is de pakbon vast, en de verzendmail gaat ook naar het adres voor het afleverbewijs.
   assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${dropId}/status`, { status: 'verzonden' })).status, 200);
   assert.strictEqual((await putSlip(world, owner, dropId, pdf)).status, 409);
   const shipment = await until(() => mailsWith(world.sent, /onderweg/)[0]);
-  assert.deepStrictEqual(shipment.to, ['k1@voorbeeld.nl', 'bewijs@reseller.example']);
+  assert.strictEqual(shipment.to, 'k1@voorbeeld.nl');
+  const proofMail = await until(() => world.sent.find((message) => message.to === 'bewijs@reseller.example'));
+  assert.ok(!proofMail.text.includes('Klant 1'), 'geen tekst van de klant in de mail aan het afleverbewijs-adres');
+  assert.match(proofMail.text, /Bestelling WEB-\d{4}-\d+ is onderweg/);
   assert.strictEqual((await world.admin.get('/app/api/admin/web-orders/to-pick')).body.items.length, 1);
 });
 
