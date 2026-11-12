@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="../dashboard/dashboard.css">
   <link rel="stylesheet" href="../shared/sidebar.css">
   <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="../shared/layout.css">
   <link rel="stylesheet" href="profiel.css">
   <script src="../shared/common.js"></script>
 </head>
@@ -35,20 +36,22 @@
     <div id="p-content" class="profile-grid" hidden>
       <form id="f-details" class="pcard" novalidate>
         <h2>Persoonlijke gegevens</h2>
-        <label class="field"><span class="label">Naam</span>
+        <div class="form-grid">
+        <label class="field full"><span class="label">Naam</span>
           <input id="d-name" type="text" autocomplete="name" maxlength="80" required></label>
-        <label class="field"><span class="label">E-mailadres</span>
+        <label class="field full"><span class="label">E-mailadres</span>
           <input id="d-email" type="email" autocomplete="email" maxlength="200" placeholder="naam@voorbeeld.nl"></label>
-        <label class="field"><span class="label">Telefoonnummer</span>
+        <label class="field full"><span class="label">Telefoonnummer</span>
           <input id="d-phone" type="tel" autocomplete="tel" maxlength="25" placeholder="06 12345678"></label>
-        <dl class="kv">
+        <dl class="kv full">
           <dt>Gebruikersnaam</dt><dd id="d-username"></dd>
           <dt id="d-org-label" hidden>Organisatiecode</dt><dd id="d-org" hidden></dd>
           <dt>Rol</dt><dd id="d-role"></dd>
           <dt>Account sinds</dt><dd id="d-created"></dd>
           <dt id="d-version-label" hidden>Versie van de app</dt><dd id="d-version" hidden></dd>
         </dl>
-        <div class="form-foot">
+        </div>
+        <div class="form-actions">
           <button class="btn primary" type="submit">Gegevens opslaan</button>
           <span class="form-msg" role="status"></span>
         </div>
@@ -56,12 +59,14 @@
 
       <form id="f-prefs" class="pcard" novalidate>
         <h2>Voorkeuren</h2>
-        <label class="field"><span class="label">Startpagina</span>
+        <div class="form-grid">
+        <label class="field full"><span class="label">Startpagina</span>
           <select id="pr-start"></select>
           <span class="hint">Waar de app opent als je hem start of na het inloggen.</span></label>
-        <label class="chk" id="pr-mail-wrap" hidden><input type="checkbox" id="pr-mail"> Stuur mij een kopie van offertes en afspraken die ik per e-mail verstuur</label>
-        <p class="hint" id="pr-mail-hint" hidden>Vul eerst je e-mailadres in bij Persoonlijke gegevens.</p>
-        <div class="form-foot">
+        <label class="field chk full" id="pr-mail-wrap" hidden><input type="checkbox" id="pr-mail"> Stuur mij een kopie van offertes en afspraken die ik per e-mail verstuur</label>
+        <p class="hint full" id="pr-mail-hint" hidden>Vul eerst je e-mailadres in bij Persoonlijke gegevens.</p>
+        </div>
+        <div class="form-actions">
           <button class="btn primary" type="submit">Voorkeuren opslaan</button>
           <span class="form-msg" role="status"></span>
         </div>
@@ -70,14 +75,16 @@
       <form id="f-password" class="pcard" novalidate>
         <h2>Wachtwoord</h2>
         <p class="hint">Minimaal 12 tekens. Na het wijzigen word je op je andere toestellen uitgelogd.</p>
+        <div class="form-grid">
         <input type="text" id="pw-user" autocomplete="username" hidden>
-        <label class="field"><span class="label">Huidig wachtwoord</span>
+        <label class="field full"><span class="label">Huidig wachtwoord</span>
           <input id="pw-cur" type="password" autocomplete="current-password" maxlength="1024"></label>
-        <label class="field"><span class="label">Nieuw wachtwoord</span>
+        <label class="field full"><span class="label">Nieuw wachtwoord</span>
           <input id="pw-new1" type="password" autocomplete="new-password" minlength="12" maxlength="128"></label>
-        <label class="field"><span class="label">Nieuw wachtwoord herhalen</span>
+        <label class="field full"><span class="label">Nieuw wachtwoord herhalen</span>
           <input id="pw-new2" type="password" autocomplete="new-password" maxlength="128"></label>
-        <div class="form-foot">
+        </div>
+        <div class="form-actions">
           <button class="btn primary" type="submit">Wachtwoord wijzigen</button>
           <span class="form-msg" role="status"></span>
         </div>
@@ -87,15 +94,15 @@
         <h2>Tweestapsverificatie <span id="tf-status" class="tf-badge">Uit</span></h2>
         <div id="tf-off">
           <p class="hint">Bij het inloggen vraagt de app dan naast je wachtwoord om een code uit een authenticator-app op je telefoon (bijvoorbeeld Microsoft Authenticator, Google Authenticator of 1Password).</p>
-          <div class="form-foot"><button class="btn primary" type="button" id="tf-start">Aanzetten</button></div>
+          <div class="form-actions"><button class="btn primary" type="button" id="tf-start">Aanzetten</button></div>
         </div>
         <form id="tf-setup" hidden novalidate>
           <p class="hint">Scan de QR-code met je authenticator-app, of tik op de link op je telefoon. Lukt dat niet, typ dan de sleutel over.</p>
           <div id="tf-qr" class="tf-qr"></div>
           <p class="tf-secret-line">Sleutel: <code id="tf-secret"></code> · <a id="tf-link" href="#">Openen in de app</a></p>
-          <label class="field"><span class="label">Code uit de app</span>
+          <label class="field full"><span class="label">Code uit de app</span>
             <input id="tf-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456"></label>
-          <div class="form-foot">
+          <div class="form-actions">
             <button class="btn primary" type="submit" id="tf-confirm">Bevestigen</button>
             <button class="btn" type="button" id="tf-cancel">Annuleren</button>
           </div>
@@ -103,16 +110,16 @@
         <div id="tf-codes" hidden>
           <p class="hint">Bewaar deze herstelcodes op een veilige plek. Elke code werkt één keer, voor als je je telefoon kwijt bent. Je ziet ze alleen nu.</p>
           <pre id="tf-recovery" class="tf-recovery"></pre>
-          <div class="form-foot"><button class="btn primary" type="button" id="tf-done">Ik heb ze bewaard</button></div>
+          <div class="form-actions"><button class="btn primary" type="button" id="tf-done">Ik heb ze bewaard</button></div>
         </div>
         <form id="tf-on" hidden novalidate>
           <p class="hint" id="tf-left"></p>
           <p class="hint">Uitzetten kan met je wachtwoord en een code uit de app (of een herstelcode). Telefoon en herstelcodes kwijt? Vraag een beheerder om het uit te zetten.</p>
-          <label class="field"><span class="label">Wachtwoord</span>
+          <label class="field full"><span class="label">Wachtwoord</span>
             <input id="tf-off-password" type="password" autocomplete="current-password" maxlength="1024"></label>
-          <label class="field"><span class="label">Code uit de app of herstelcode</span>
+          <label class="field full"><span class="label">Code uit de app of herstelcode</span>
             <input id="tf-off-code" autocomplete="one-time-code" maxlength="20"></label>
-          <div class="form-foot"><button class="btn" type="submit">Uitzetten</button></div>
+          <div class="form-actions"><button class="btn" type="submit">Uitzetten</button></div>
         </form>
         <span id="tf-msg" class="form-msg" role="status"></span>
       </div>
@@ -121,10 +128,10 @@
         <h2>AI-koppeling (Claude of ChatGPT)</h2>
         <p class="hint">Spreek na een klantgesprek in de Claude- of ChatGPT-app een samenvatting in; de AI zet de offerte dan als concept klaar in AquaTech. Jij controleert en verstuurt hem zelf.</p>
         <div id="ai-setup" hidden>
-          <label class="field"><span class="label">Adres van de koppeling</span>
+          <label class="field full"><span class="label">Adres van de koppeling</span>
             <input id="ai-url" type="text" readonly></label>
           <p class="hint">Voeg dit adres toe als eigen connector in Claude of ChatGPT; de stappen staan in de handleiding hieronder.</p>
-          <div class="form-foot"><button class="btn" type="button" id="ai-copy">Adres kopiëren</button></div>
+          <div class="form-actions"><button class="btn" type="button" id="ai-copy">Adres kopiëren</button></div>
           <details class="ai-guide">
             <summary>Handleiding: koppelen in Claude of ChatGPT</summary>
             <p><strong>Claude</strong> (claude.ai of de app, met een betaald abonnement):</p>
