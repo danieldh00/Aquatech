@@ -24,6 +24,8 @@ const SCOPES = {
   'klanten.aanmaken': { label: 'Nieuwe klanten aanmaken (particulier, adres via de postcode)', rights: ['klanten'] },
   'artikelen.lezen': { label: 'Artikelen en verkoopprijzen opzoeken', rights: ['offertes', 'voorraad', 'werkorders'] },
   'offertes.concept': { label: 'Concept-offertes aanmaken (nooit versturen, wijzigen of verwijderen)', rights: ['offertes'] },
+  'status.lezen': { label: 'De status van offertes, werkorders, facturen en bestellingen opvragen (wat jouw rol mag zien)', rights: ['offertes', 'werkorders', 'facturen', 'beheer'] },
+  'facturen.lezen': { label: 'Openstaande facturen en wat klanten nog moeten betalen bekijken', rights: ['facturen'] },
 };
 /** Bekende AI-apps: alleen naar deze hosts (via https) mag een autorisatiecode worden teruggestuurd. */
 const KNOWN_APPS = { 'claude.ai': 'Claude', 'claude.com': 'Claude', 'chatgpt.com': 'ChatGPT', 'chat.openai.com': 'ChatGPT' };

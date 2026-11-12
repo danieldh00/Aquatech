@@ -13,11 +13,19 @@
 (function (root) {
   const RELEASES = [
     {
-      version: '1.10.7',
+      version: '1.10.8',
       date: '2026-11-12',
       title: 'Leveranciers bij artikelen',
       items: [
         { text: 'In Artikelen staat nu een tabblad Leveranciers. Per artikel kun je zetten wie het levert, met het artikelnummer van de leverancier, een eigen inkoopprijs, de bestelhoeveelheid (bijvoorbeeld per doos van 25) en je voorkeursleverancier.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.10.7',
+      date: '2026-11-12',
+      title: 'Vragen stellen aan AquaTech via Claude of ChatGPT',
+      items: [
+        { text: 'Via de AI-koppeling kun je nu ook vragen stellen: de klantkaart met betaaltermijn en openstaand bedrag, wat een klant betaalt voor een artikel, de status van een offerte, werkorder, factuur of bestelling op nummer en wie er nog moet betalen. De AI ziet alleen wat jouw rol mag zien. Had je al gekoppeld? Koppel dan opnieuw om deze vragen toe te staan.', for: ['offertes'] },
       ],
     },
     {
