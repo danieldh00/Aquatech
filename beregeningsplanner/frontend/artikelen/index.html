@@ -42,6 +42,7 @@
         <button class="tab" data-tab="reorder" data-purchasing role="tab">Bestelvoorstel</button>
         <button class="tab" data-tab="suppliers" data-purchasing role="tab">Leveranciers</button>
         <button class="tab" data-tab="orders" data-purchasing role="tab">Inkooporders</button>
+        <button class="tab" data-tab="pricefactor" data-purchasing role="tab">Prijsfactor</button>
         <button class="tab" data-tab="media" role="tab">Afbeeldingen</button>
       </nav>
 
@@ -95,6 +96,11 @@
             <label>Gewicht (gram)<input name="weightGrams" type="number" min="0" max="1000000" step="1" placeholder="standaard"></label>
             <label>Omzetgroep<select name="revenueGroup"><option value="producten">Producten</option><option value="arbeid">Arbeid</option><option value="overig">Overig</option></select></label>
             <label class="chk"><input type="checkbox" name="shopSync" checked> Naar de webshop</label>
+          </div>
+          <div class="row pricing-row">
+            <label title="Vaste verkoopprijs: je vult de prijs zelf in. Inkoopprijs × factor: de prijs volgt uit de inkoopprijs (zie tabblad Prijsfactor).">Prijsbepaling<select name="priceMode"><option value="vast">Vaste verkoopprijs</option><option value="factor">Inkoopprijs × factor</option></select></label>
+            <label title="Leeg = de factor van de voorkeursleverancier, de categorie of de standaardfactor (tabblad Prijsfactor)">Eigen factor<input name="priceFactor" type="number" min="0.1" max="50" step="0.01" inputmode="decimal" placeholder="volgens instelling"></label>
+            <output class="margin-hint muted small" data-margin></output>
           </div>
           <div class="row">
             <label title="Groothandel: een klant bestelt alleen per dit aantal (leeg = 1)">Verpakkingseenheid<input name="packSize" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="1"></label>
@@ -270,6 +276,36 @@
         <div class="tablewrap"><table class="grid" id="sup-table"></table></div>
       </section>
 
+      <section id="tab-pricefactor" class="tabpane" hidden>
+        <form id="pf-form" class="card-form" novalidate>
+          <h3>Prijsfactor</h3>
+          <p class="muted small">Verkoopprijs (excl. btw) = inkoopprijs × factor, afgerond. De factor van het artikel gaat voor die van de voorkeursleverancier, daarna de categorie van de webshop (de diepste met een factor) en als laatste de standaardfactor. Alleen artikelen met Prijsbepaling <i>Inkoopprijs × factor</i> doen mee. Zakelijke kortingen rekenen over de uitkomst.</p>
+          <div class="form-grid">
+            <label class="field">Standaardfactor<input name="defaultFactor" type="number" min="0.1" max="50" step="0.01" inputmode="decimal" placeholder="bijv. 1,8"><span class="hint">Leeg = geen standaard: artikelen zonder eigen factor krijgen dan geen prijs.</span></label>
+            <label class="field">Afronding<select name="roundingMode"></select><span class="hint">Op de prijs excl. btw.</span></label>
+            <label class="field">Richting<select name="roundingDirection"></select></label>
+          </div>
+          <div class="form-grid pf-lists">
+            <div class="field"><b>Factor per categorie</b><div id="pf-categories"></div><button class="btn small" id="pf-add-category" type="button">+ Categorie</button></div>
+            <div class="field"><b>Factor per leverancier</b><div id="pf-suppliers"></div><button class="btn small" id="pf-add-supplier" type="button">+ Leverancier</button></div>
+          </div>
+          <div class="row actions">
+            <button class="btn primary" type="submit">Opslaan</button>
+            <span class="muted small">Opslaan wijzigt nog geen prijzen: dat doe je hieronder met Doorvoeren.</span>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
+        <div class="filters">
+          <span id="pf-count" class="muted"></span>
+          <span class="spacer"></span>
+          <label class="chk"><input type="checkbox" id="pf-only" checked> Alleen afwijkende</label>
+          <label class="chk"><input type="checkbox" id="pf-all"> Alles kiezen</label>
+          <button class="btn" id="pf-export" type="button">Excel-export</button>
+          <button class="btn primary" id="pf-apply" type="button">Doorvoeren</button>
+        </div>
+        <div class="tablewrap"><table class="grid" id="pf-table"></table></div>
+      </section>
+
       <section id="tab-media" class="tabpane" hidden>
         <div class="filters">
           <input id="m-search" type="search" placeholder="Zoek op artikelcode, omschrijving of bestandsnaam">
@@ -348,6 +384,11 @@
             <label>Gewicht (gram)<input name="weightGrams" type="number" min="0" max="1000000" step="1" placeholder="standaard"></label>
             <label>Omzetgroep<select name="revenueGroup"><option value="producten">Producten</option><option value="arbeid">Arbeid</option><option value="overig">Overig</option></select></label>
             <label class="chk"><input type="checkbox" name="shopSync"> Naar de webshop</label>
+          </div>
+          <div class="row pricing-row">
+            <label title="Vaste verkoopprijs: je vult de prijs zelf in. Inkoopprijs × factor: de prijs volgt uit de inkoopprijs (zie tabblad Prijsfactor).">Prijsbepaling<select name="priceMode"><option value="vast">Vaste verkoopprijs</option><option value="factor">Inkoopprijs × factor</option></select></label>
+            <label title="Leeg = de factor van de voorkeursleverancier, de categorie of de standaardfactor (tabblad Prijsfactor)">Eigen factor<input name="priceFactor" type="number" min="0.1" max="50" step="0.01" inputmode="decimal" placeholder="volgens instelling"></label>
+            <output class="margin-hint muted small" data-margin></output>
           </div>
           <div class="row">
             <label title="Groothandel: een klant bestelt alleen per dit aantal (leeg = 1)">Verpakkingseenheid<input name="packSize" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="1"></label>
@@ -475,6 +516,7 @@
   <script src="suppliers.js"></script>
   <script src="packagings.js"></script>
   <script src="orders.js"></script>
+  <script src="price-factor.js"></script>
   <script src="artikelen.js"></script>
 </body>
 </html>

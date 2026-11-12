@@ -1293,6 +1293,13 @@ const MIGRATIONS = [
   `
   ALTER TABLE purchase_orders ADD COLUMN supplier_reference TEXT NOT NULL DEFAULT '';
   `,
+  // 65: prijsfactor (artikelen/price-factor.js, punt 19): price_mode = 'vast' (de verkoopprijs staat vast) of 'factor'
+  // (inkoopprijs × factor); price_factor = de eigen factor van het artikel (leeg = die van leverancier, categorie of standaard).
+  `
+  ALTER TABLE stock_items ADD COLUMN price_mode TEXT NOT NULL DEFAULT 'vast';
+  ALTER TABLE stock_items ADD COLUMN price_factor REAL;
+  CREATE INDEX stock_items_price_mode ON stock_items (tenant_id, price_mode);
+  `,
 ];
 
 /**

@@ -1061,6 +1061,12 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE purchase_orders ADD COLUMN supplier_reference ${TEXT_TYPE} NOT NULL DEFAULT '';
   `,
+  // 65: prijsfactor per artikel (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN price_mode ${TEXT_TYPE} NOT NULL DEFAULT 'vast';
+  ALTER TABLE stock_items ADD COLUMN price_factor DOUBLE PRECISION;
+  CREATE INDEX stock_items_price_mode ON stock_items (tenant_id, price_mode);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

@@ -53,8 +53,8 @@ test('beheerder: de groepen staan in de afgesproken volgorde en niets gaat verlo
 test('Inkoop: tabbladen van Artikelen met een #-adres, volgen de module Artikelen', () => {
   const sections = sectionsFor({ role: 'beheerder' });
   const purchasing = sections.find((section) => section.key === 'inkoop').items;
-  assert.deepStrictEqual(idsOf(purchasing), ['bestelvoorstel', 'inkooporders', 'leveranciers', 'mutaties']);
-  const tabs = ['reorder', 'orders', 'suppliers', 'moves'];
+  assert.deepStrictEqual(idsOf(purchasing), ['bestelvoorstel', 'inkooporders', 'prijsfactor', 'leveranciers', 'mutaties']);
+  const tabs = ['reorder', 'orders', 'pricefactor', 'suppliers', 'moves'];
   purchasing.forEach((module, index) => assert.strictEqual(module.href, `artikelen/#${tabs[index]}`));
   const html = require('node:fs').readFileSync(path.join(FRONTEND_DIR, 'artikelen', 'index.html'), 'utf8');
   for (const tab of tabs) assert.match(html, new RegExp(`data-tab="${tab}"`), `tabblad ${tab} ontbreekt in Artikelen`);

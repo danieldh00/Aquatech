@@ -62,6 +62,22 @@
    */
   const day = (iso) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
   /**
+   * Past het prijsblok van een artikelformulier aan: de eigen factor telt alleen bij Inkoopprijs × factor, en de marge
+   * (verkoopprijs min inkoopprijs, als percentage van de verkoopprijs) volgt de ingevulde prijzen.
+   * @param {HTMLFormElement} form Het formulier voor een nieuw of bestaand artikel.
+   * @returns {void}
+   */
+  function syncPricing(form) {
+    const byFactor = form.priceMode.value === 'factor';
+    form.priceFactor.disabled = !byFactor;
+    form.salePrice.title = byFactor ? 'Wordt berekend uit de inkoopprijs zodra je de inkoopprijs of de factor wijzigt en opslaat. Zonder factor of inkoopprijs blijft deze prijs staan.' : '';
+    const cost = num(form.costPrice.value);
+    const sale = num(form.salePrice.value);
+    const hint = form.querySelector('[data-margin]');
+    hint.textContent = cost != null && sale ? `Marge nu: ${nl(Math.round(((sale - cost) / sale) * 1000) / 10)}% (op ${eur(sale)} excl. btw)` : '';
+  }
+
+  /**
    * Leest een getal uit een invoerveld (komma of punt).
    * @param {string} value de invoer
    * @returns {number|null} het getal, of null bij lege invoer
@@ -252,7 +268,7 @@
       return;
     }
     const rows = stockRows();
-    table.innerHTML = `<thead><tr><th>Artikel</th><th>Locatie</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Verkoopprijs</th><th>Webshop</th><th class="num">Waarde</th></tr></thead>
+    table.innerHTML = `<thead><tr><th>Artikel</th><th>Locatie</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Verkoopprijs</th><th class="num">Marge</th><th>Webshop</th><th class="num">Waarde</th></tr></thead>
       <tbody>${rows.map(({ item, variant, open, count }) => `<tr data-id="${esc(item.id)}" class="${item.low ? 'low' : ''}${item.archived ? ' arch' : ''}${variant ? ' variant' : ''}${item.hasVariants ? ' parent' : ''}">
         <td class="wrap">${item.hasVariants ? `<button class="toggle" data-toggle="${esc(item.id)}" aria-expanded="${open ? 'true' : 'false'}" title="${open ? 'Varianten verbergen' : 'Varianten tonen'}">${open ? '▾' : '▸'}</button>` : ''}<b class="code">${esc(item.code)}</b>${item.hasVariants ? ` <span class="pill">${count} variant${count === 1 ? '' : 'en'}</span>` : ''}${item.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(variant && valuesText(item) ? valuesText(item) : item.name)}</span></td>
         <td>${esc(item.location)}</td>
@@ -260,10 +276,11 @@
         <td class="num">${item.reserved ? `${esc(nl(item.reserved))}<span class="sub">${item.orders} werkorder${item.orders === 1 ? '' : 's'}</span>` : ''}</td>
         <td class="num avail">${esc(nl(item.available))}${item.low ? ' <span class="pill low">Bijbestellen</span>' : ''}</td>
         <td class="num">${item.minQty && !item.hasVariants ? esc(nl(item.minQty)) : ''}</td>
-        <td class="num">${item.hasVariants ? '' : `${esc(eur(item.salePrice))}${item.salePrice != null && item.vatRate !== 21 ? `<span class="sub">${item.vatRate}% btw</span>` : ''}`}</td>
+        <td class="num">${item.hasVariants ? '' : `${esc(eur(item.salePrice))}${item.salePrice != null && item.vatRate !== 21 ? `<span class="sub">${item.vatRate}% btw</span>` : ''}${item.priceMode === 'factor' ? '<span class="sub">× factor</span>' : ''}`}</td>
+        <td class="num${item.margin != null && item.margin < 0 ? ' neg' : ''}">${item.hasVariants || item.margin == null ? '' : `${esc(nl(item.margin))}%`}</td>
         <td>${shopPill(item)}</td>
         <td class="num">${esc(eur(item.value))}</td>
-      </tr>`).join('') || '<tr><td colspan="9" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
+      </tr>`).join('') || '<tr><td colspan="10" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
     table.querySelectorAll('tr[data-id]').forEach((row) => {
       /**
        * Opent het artikel, of klapt bij het pijltje de varianten uit of in.
@@ -338,7 +355,7 @@
   }
 
   /** De tabbladen, ook als #-adres (de zijbalk onder Inkoop wijst naar moves, reorder, suppliers en orders). */
-  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'media'];
+  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'media'];
 
   /**
    * Tekent het bestelvoorstel op het scherm: per leverancier de artikelen die onder het minimum zitten.
@@ -366,6 +383,7 @@
     if (name === 'reorder') loadReorder().catch((error) => toast(error.message, true));
     if (name === 'suppliers') window.ArtikelenSuppliers.load().catch((error) => toast(error.message, true));
     if (name === 'orders') window.ArtikelenOrders.load().catch((error) => toast(error.message, true));
+    if (name === 'pricefactor') window.ArtikelenPriceFactor.load().catch((error) => toast(error.message, true));
     if (name === 'media') loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
     if (window.AquatechNav) window.AquatechNav.refresh();
@@ -535,6 +553,7 @@
           onHand: num(formElement.onHand.value), minQty: num(formElement.minQty.value), reorderQty: num(formElement.reorderQty.value), costPrice: num(formElement.costPrice.value),
           salePrice: num(formElement.salePrice.value), vatRate: Number(formElement.vatRate.value), weightGrams: num(formElement.weightGrams.value), businessPrice: num(formElement.businessPrice.value), revenueGroup: formElement.revenueGroup.value, shopSync: formElement.shopSync.checked,
           packSize: num(formElement.packSize.value), orderMinQty: num(formElement.orderMinQty.value), priceTiers: parseTiers(formElement.priceTiers.value), unitContent: num(formElement.unitContent.value), ean: formElement.ean.value,
+          priceMode: formElement.priceMode.value, priceFactor: num(formElement.priceFactor.value),
         } });
         formElement.hidden = true;
         toast(`${item.code} toegevoegd`);
@@ -661,6 +680,9 @@
     formElement.packSize.value = item.packSize > 1 ? item.packSize : '';
     formElement.unitContent.value = item.unitContent == null ? '' : item.unitContent;
     formElement.ean.value = item.ean || '';
+    formElement.priceMode.value = item.priceMode;
+    formElement.priceFactor.value = item.priceFactor == null ? '' : item.priceFactor;
+    syncPricing(formElement);
     formElement.orderMinQty.value = item.orderMinQty > 1 ? item.orderMinQty : '';
     formElement.priceTiers.value = tiersText(item.priceTiers);
     renderDetails(formElement, item);
@@ -1059,6 +1081,7 @@
           minQty: num(editForm.minQty.value), reorderQty: num(editForm.reorderQty.value), costPrice: num(editForm.costPrice.value),
           salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), weightGrams: num(editForm.weightGrams.value), businessPrice: num(editForm.businessPrice.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
           packSize: num(editForm.packSize.value), orderMinQty: num(editForm.orderMinQty.value), priceTiers: parseTiers(editForm.priceTiers.value), unitContent: num(editForm.unitContent.value), ean: editForm.ean.value,
+          priceMode: editForm.priceMode.value, priceFactor: num(editForm.priceFactor.value),
           description: editForm.description.value, specifications: editForm.specifications.value,
         } }) };
         toast('Opgeslagen');
@@ -1488,6 +1511,13 @@
     });
     window.ArtikelenSuppliers.setup({ api, toast, esc, nl, eur });
     window.ArtikelenPackagings.setup({ api, toast, esc });
+    for (const formId of ['#new-form', '#edit-form']) {
+      const pricingForm = $(formId);
+      pricingForm.addEventListener('input', () => syncPricing(pricingForm));
+      pricingForm.addEventListener('change', () => syncPricing(pricingForm));
+      pricingForm.addEventListener('reset', () => setTimeout(() => syncPricing(pricingForm)));
+    }
+    window.ArtikelenPriceFactor.setup({ api, toast, esc, nl, eur, workbook, save, stamp });
     window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook, save, stamp, afterProposal: () => loadReorder().catch((error) => toast(error.message, true)) });
     loadUnits().catch((error) => toast(error.message, true));
     setupShop();
