@@ -145,6 +145,13 @@ function periodOf(query) {
 }
 
 /**
+ * Het aantal in de basiseenheid van het artikel: een regel in dozen of pallets telt de factor mee (voorraad en kostprijs staan in de basiseenheid).
+ * @param {{ qty: number, stockPer?: number }} line De regel.
+ * @returns {number} Het aantal basiseenheden.
+ */
+const baseQtyOf = (line) => Number(line.qty) * (Number(line.stockPer) > 1 ? Number(line.stockPer) : 1);
+
+/**
  * Omzet excl. btw van een regel van een bestelling.
  * @param {{ qty: number, unitExcl: number, lineExcl?: number }} line De regel.
  * @param {number} [qty] Aantal (bij een retour het teruggestuurde aantal).
@@ -199,7 +206,7 @@ function createWebSalesStore(db, { stock = null } = {}) {
     return insertLines(tenantId, lines.map((line, index) => ({
       id: crypto.createHash('sha256').update(JSON.stringify([tenantId, 'verkoop', order.id, index])).digest('hex'),
       kind: 'verkoop', soldAt, orderId: order.id, reference: order.number, itemId: line.itemId, code: line.code, name: line.name,
-      qty: line.qty, revenue: revenueOf(line), movementId: movementIds.get(line.itemId) || null,
+      qty: baseQtyOf(line), revenue: revenueOf(line), movementId: movementIds.get(line.itemId) || null,
     })));
   }
 
@@ -216,7 +223,7 @@ function createWebSalesStore(db, { stock = null } = {}) {
     return insertLines(tenantId, lines.map((line, index) => ({
       id: crypto.createHash('sha256').update(JSON.stringify([tenantId, 'retour', record.orderId, record.number, index])).digest('hex'),
       kind: 'retour', soldAt, orderId: record.orderId, reference: record.number, itemId: line.itemId, code: line.code, name: line.name,
-      qty: -line.qty, revenue: -round2(Number(line.unitExcl) * line.qty), movementId: movementIds.get(line.itemId) || null,
+      qty: -baseQtyOf(line), revenue: -round2(Number(line.unitExcl) * line.qty), movementId: movementIds.get(line.itemId) || null,
     })));
   }
 

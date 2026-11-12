@@ -16,6 +16,7 @@ const { withCause } = require('../platform/error-report');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
 const Wholesale = require('./wholesale');
+const { visibleFor: packagingVisibleFor } = require('../artikelen/packagings');
 
 /** Statussen van een bestelling met hun weergavenaam. */
 const STATUSES = { nieuw: 'Nieuw', verzonden: 'Verzonden', afgerond: 'Afgerond', geannuleerd: 'Geannuleerd' };
@@ -91,6 +92,37 @@ function totalsOf(lines) {
 }
 
 /**
+ * Splitst een winkelwagencode in de artikelcode en de code van de verpakking (CODE@PAL).
+ * @param {string} cartCode De code in de winkelwagen, in hoofdletters.
+ * @returns {{ baseCode: string, packCode: string }} De artikelcode en de verpakkingscode (leeg voor de basiseenheid).
+ */
+function splitCartCode(cartCode) {
+  const text = String(cartCode || '');
+  const at = text.indexOf('@');
+  return at === -1 ? { baseCode: text, packCode: '' } : { baseCode: text.slice(0, at), packCode: text.slice(at + 1) };
+}
+
+/**
+ * Het aantal basiseenheden dat een bestelregel van de voorraad vraagt (een regel in dozen of pallets telt de factor mee).
+ * @param {{ qty: number, stockPer?: number }} line De regel.
+ * @returns {number} Het aantal in de basiseenheid.
+ */
+function stockQtyOf(line) {
+  return Number(line.qty) * (Number(line.stockPer) > 1 ? Number(line.stockPer) : 1);
+}
+
+/**
+ * De voorraadmutaties van een bestelling: per artikel één regel in de basiseenheid (stuks en een pallet van hetzelfde artikel tellen samen).
+ * @param {{ itemId: string, qty: number, stockPer?: number }[]} lines De bestelregels.
+ * @returns {{ itemId: string, qty: number }[]} Per artikel het totale aantal basiseenheden.
+ */
+function stockLinesOf(lines) {
+  const totals = new Map();
+  for (const line of lines) totals.set(line.itemId, (totals.get(line.itemId) || 0) + stockQtyOf(line));
+  return [...totals].map(([itemId, qty]) => ({ itemId, qty }));
+}
+
+/**
  * Controleert de gegevens die de klant bij het afrekenen invult.
  * @param {object} raw De invoer (name, company, email, phone, street, postcode, city, note).
  * @param {{ method?: string, country?: string, group?: string }} [choice] De gekozen verzendmethode (ophalen of dpd), het land (bij ophalen is een adres niet nodig) en de klantgroep (zakelijk: bedrijfsnaam verplicht en een eventueel btw-nummer wordt gecontroleerd).
@@ -155,40 +187,67 @@ function createWebOrderStore(db, { stock }) {
       if (code && qty >= 1) unique.set(code, Math.min(MAX_QTY, (unique.get(code) || 0) + qty));
     }
     const codes = [...unique.keys()].slice(0, MAX_LINES);
-    const rows = codes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, p.name AS parent_name,
+    const baseCodes = [...new Set(codes.map((code) => splitCartCode(code).baseCode))];
+    const rows = baseCodes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, p.name AS parent_name,
         (SELECT sp.in_stock FROM shop_products sp WHERE sp.tenant_id = i.tenant_id AND sp.id = i.shop_product_id) AS shop_in_stock,
         COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
       FROM stock_items i
       LEFT JOIN stock_items p ON p.tenant_id = i.tenant_id AND p.id = i.parent_id
       WHERE i.tenant_id = ? AND i.archived = 0 AND i.has_variants = 0 AND i.shop_sync = 1 AND i.sale_price IS NOT NULL
-        AND i.code IN (${codes.map(() => '?').join(', ')})`).all(tenantId, ...codes) : [];
+        AND i.code IN (${baseCodes.map(() => '?').join(', ')})`).all(tenantId, ...baseCodes) : [];
     const byCode = new Map(rows.map((row) => [row.code, row]));
+    // Verpakkingen (doos, pallet) van de artikelen waarvoor een verpakking is gevraagd: één query voor de hele wagen.
+    const packagedIds = [...new Set(codes.filter((code) => splitCartCode(code).packCode).map((code) => byCode.get(splitCartCode(code).baseCode)).filter(Boolean).map((row) => row.id))];
+    const packagingRows = packagedIds.length ? prepare(`SELECT item_id, code, name, factor, sale_price, business_price, audience FROM item_packagings
+      WHERE tenant_id = ? AND active = 1 AND item_id IN (${packagedIds.map(() => '?').join(', ')})`).all(tenantId, ...packagedIds) : [];
+    const packagingOf = new Map(packagingRows.map((row) => [`${row.item_id}|${row.code}`, row]));
     const lines = [];
     const missing = [];
-    for (const code of codes) {
-      const row = byCode.get(code);
-      if (!row) { missing.push(code); continue; }
+    for (const cartCode of codes) {
+      const { baseCode, packCode } = splitCartCode(cartCode);
+      const row = byCode.get(baseCode);
+      if (!row) { missing.push(cartCode); continue; }
+      const packaging = packCode ? packagingOf.get(`${row.id}|${packCode}`) : null;
+      // Een onbekende, uitgezette of voor deze klant verborgen verpakking is niet meer te koop.
+      if (packCode && (!packaging || !packagingVisibleFor(packaging.audience, { group, wholesale: Boolean(wholesaleTerms) }))) { missing.push(cartCode); continue; }
       let values = {};
       try { values = JSON.parse(row.variant_values || '{}') || {}; } catch { values = {}; }
       const label = Object.values(values).join(' / ');
-      const qty = unique.get(code);
+      const itemName = row.parent_name && label ? `${row.parent_name} (${label})` : row.name;
+      const qty = unique.get(cartCode);
       const vatRate = Number(row.vat_rate ?? 21);
-      const listExcl = business && row.business_price != null ? Number(row.business_price) : Number(row.sale_price);
+      const itemExcl = business && row.business_price != null ? Number(row.business_price) : Number(row.sale_price);
+      // Een verpakking heeft een eigen prijs; zonder prijs geldt factor × de stukprijs. Groothandelsvoorwaarden gelden alleen voor de basiseenheid.
+      const factor = packaging ? Number(packaging.factor) : 1;
+      const packagingPrice = packaging ? (business && packaging.business_price != null ? packaging.business_price : packaging.sale_price) : null;
+      const listExcl = packaging ? round2(packagingPrice != null ? Number(packagingPrice) : itemExcl * factor) : itemExcl;
       const terms = { packSize: Number(row.order_pack_size) || 1, orderMinQty: Number(row.order_min_qty) || 1 };
-      const priced = wholesaleTerms ? Wholesale.wholesalePrice(listExcl, qty, Wholesale.tiersOf(row.price_tiers), wholesaleTerms.discountPct) : null;
+      const priced = wholesaleTerms && !packaging ? Wholesale.wholesalePrice(listExcl, qty, Wholesale.tiersOf(row.price_tiers), wholesaleTerms.discountPct) : null;
       const unitExcl = priced ? priced.unitExcl : listExcl;
       const unitIncl = round2(unitExcl * (1 + vatRate / 100));
       const lineExcl = round2(unitExcl * qty);
       // Zonder voorraadbeheer (stock_managed = 0) telt alleen of het artikel in de oude webshop op voorraad staat: wel = genoeg, niet = 0.
-      const available = Number(row.stock_managed) === 0
-        ? (row.shop_in_stock != null && !Number(row.shop_in_stock) ? 0 : qty)
+      const unmanaged = Number(row.stock_managed) === 0;
+      const availableBase = unmanaged
+        ? (row.shop_in_stock != null && !Number(row.shop_in_stock) ? 0 : qty * factor)
         : Math.round((Number(row.on_hand) - Number(row.reserved)) * 1000) / 1000;
+      // Beschikbaar in de eenheid van de regel: bij een verpakking het aantal hele dozen of pallets.
+      const available = packaging ? Math.floor(availableBase / factor) : availableBase;
       lines.push({
-        itemId: row.id, code: row.code, name: row.parent_name && label ? `${row.parent_name} (${label})` : row.name, unit: row.unit || 'st', qty, available,
+        itemId: row.id, code: cartCode, baseCode: row.code, name: packaging ? `${itemName} – ${packaging.name} (${factor} ${row.unit || 'st'})` : itemName, unit: packaging ? packaging.name : row.unit || 'st', qty, available, availableBase, managed: !unmanaged,
         unitExcl, vatRate, unitIncl, lineTotal: business ? round2(lineExcl * (1 + vatRate / 100)) : round2(unitIncl * qty), enough: available >= qty,
-        weightGrams: row.weight_grams == null ? null : Number(row.weight_grams), unitContent: row.unit_content == null ? null : Number(row.unit_content), ...(business ? { lineExcl } : {}),
-        ...(wholesaleTerms ? { listExcl, discountPct: priced.discountPct, discountSource: priced.source, packSize: terms.packSize, minimum: Wholesale.minimumOf(terms), packProblem: Wholesale.quantityProblem(qty, terms) } : {}),
+        weightGrams: row.weight_grams == null ? null : Number(row.weight_grams) * factor, unitContent: packaging || row.unit_content == null ? null : Number(row.unit_content), ...(business ? { lineExcl } : {}),
+        ...(packaging ? { stockPer: factor, packaging: { code: packaging.code, name: packaging.name, factor } } : {}),
+        ...(wholesaleTerms ? { listExcl, discountPct: priced ? priced.discountPct : 0, discountSource: priced ? priced.source : 'verpakking', packSize: packaging ? 1 : terms.packSize, minimum: packaging ? 1 : Wholesale.minimumOf(terms), packProblem: packaging ? null : Wholesale.quantityProblem(qty, terms) } : {}),
       });
+    }
+    // Staat hetzelfde artikel in meerdere regels (stuks en een pallet), dan moet de voorraad voor alle regels samen genoeg zijn.
+    const demandOf = new Map();
+    for (const line of lines) demandOf.set(line.itemId, (demandOf.get(line.itemId) || 0) + stockQtyOf(line));
+    for (const line of lines) {
+      if (line.managed && line.enough && demandOf.get(line.itemId) > stockQtyOf(line)) line.enough = line.availableBase >= demandOf.get(line.itemId);
+      delete line.availableBase;
+      delete line.managed;
     }
     return { lines, missing, totals: totalsOf(lines), ok: lines.length > 0 && !missing.length && lines.every((line) => line.enough && !line.packProblem), pricesExcl: business };
   }
@@ -252,7 +311,7 @@ function createWebOrderStore(db, { stock }) {
    */
   function lockItems(tenantId, wanted) {
     if (!isPg(db)) return;
-    const codes = [...new Set(wanted.map((line) => String(line.code || '').trim().toUpperCase()).filter(Boolean))].sort().slice(0, MAX_LINES);
+    const codes = [...new Set(wanted.map((line) => splitCartCode(String(line.code || '').trim().toUpperCase()).baseCode).filter(Boolean))].sort().slice(0, MAX_LINES);
     if (!codes.length) return;
     prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND code IN (${codes.map(() => '?').join(', ')}) ORDER BY id FOR UPDATE`).all(tenantId, ...codes);
   }
@@ -362,7 +421,7 @@ function createWebOrderStore(db, { stock }) {
       const totals = calculated.totals;
       if (expectedTotal !== null && !(Math.abs(expectedTotal - totals.total) <= 0.005)) return { error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', status: 409 };
       const data = {
-        lines: calculated.lines.map((line) => ({ itemId: line.itemId, code: line.code, name: line.name, unit: line.unit, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal, ...(line.lineExcl !== undefined ? { lineExcl: line.lineExcl } : {}) })),
+        lines: calculated.lines.map((line) => ({ itemId: line.itemId, code: line.code, ...(line.stockPer ? { baseCode: line.baseCode, stockPer: line.stockPer } : {}), name: line.name, unit: line.unit, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal, ...(line.lineExcl !== undefined ? { lineExcl: line.lineExcl } : {}) })),
         customer: { name: fields.name, company: fields.company, email: fields.email, phone: fields.phone },
         address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' } : { street: fields.street, postcode: fields.postcode, city: fields.city, country, ...(user.addressUnverified ? { unverified: true } : {}) },
         shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method === 'dpd', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
@@ -375,7 +434,7 @@ function createWebOrderStore(db, { stock }) {
       prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)
         VALUES (?, ?, ?, ?, 'nieuw', ?, ?, ?, ?, ?, ?)`)
         .run(id, tenantId, number, user.id, fields.company || fields.name, fields.email, totals.total, JSON.stringify(data), timestamp, timestamp);
-      stock.reserveOrder(tenantId, id, cart.lines.map((line) => ({ itemId: line.itemId, qty: line.qty })));
+      stock.reserveOrder(tenantId, id, stockLinesOf(cart.lines));
       return { order: shapeFull(prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND id = ?`).get(tenantId, id)) };
     });
   }
@@ -511,11 +570,11 @@ function createWebOrderStore(db, { stock }) {
       if (status === 'verzonden' && data.reservationReleasedAt) {
         // Rijsloten op id (zoals bij het plaatsen, maar ongevoelig voor een gewijzigde code): tot het einde van de transactie kan niemand deze voorraad reserveren.
         lockItemIds(tenantId, data.lines);
-        const short = stock.shortageFor(tenantId, data.lines.map((line) => ({ itemId: line.itemId, qty: line.qty })), `order:${row.id}`);
+        const short = stock.shortageFor(tenantId, stockLinesOf(data.lines), `order:${row.id}`);
         if (short.length) return { error: `De reservering van deze bestelling was vervallen en er is niet genoeg vrije voorraad meer voor: ${short.map((item) => item.name).join(', ')}.`, status: 409 };
       }
       const timestamp = currentTimestamp();
-      if (status === 'verzonden') stock.issueOrder(tenantId, { id: row.id, number: row.number }, data.lines.map((line) => ({ itemId: line.itemId, qty: line.qty })), user);
+      if (status === 'verzonden') stock.issueOrder(tenantId, { id: row.id, number: row.number }, stockLinesOf(data.lines), user);
       if (status === 'geannuleerd') stock.releaseOrder(tenantId, row.id);
       // Een al online betaalde bestelling die wordt geannuleerd moet worden terugbetaald: zichtbaar in Beheer.
       if (status === 'geannuleerd' && data.payment === 'online' && data.pay && data.pay.status === 'betaald') data.pay.refundNeeded = true;
@@ -734,4 +793,4 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
   });
 }
 
-module.exports = { createWebOrderStore, registerWebOrderRoutes, sanitizeCheckout, totalsOf, STATUSES, TRANSITIONS, MAX_QTY, MAX_LINES };
+module.exports = { createWebOrderStore, registerWebOrderRoutes, sanitizeCheckout, totalsOf, STATUSES, TRANSITIONS, MAX_QTY, MAX_LINES, stockQtyOf, splitCartCode };

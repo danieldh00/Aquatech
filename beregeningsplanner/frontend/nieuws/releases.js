@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.11.4',
+      date: '2026-11-12',
+      title: 'Dozen en pallets in de winkelwagen',
+      items: [
+        { text: 'Artikelen met een verpakking (doos, pallet) kunnen als verpakking in de winkelwagen en bestelling staan, met eigen prijs. De voorraad wordt in stuks afgeboekt.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.11.3',
       date: '2026-11-12',
       title: 'AI-koppeling op de juiste plek in Beheer',
