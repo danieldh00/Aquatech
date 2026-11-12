@@ -979,6 +979,8 @@ Met de AI-koppeling maakt een medewerker vanuit Claude of ChatGPT (ook de app op
 
 De leesfuncties `klant_details`, `prijs_voor_klant` en `status_opvragen` hebben samen een limiet van 300 per uur per gebruiker.
 
+Terugvragen: de AI raadt niet. `zoek_klant`/`zoek_artikelen` geven `keuzeNodig` + `vraag` bij meer dan één of geen treffer; `maak_concept_offerte` maakt niets aan zolang er open punten zijn (klant, onbekende code, variant, prijs) en geeft `status: terugvragen` met `vragen`, tenzij `ookMetOpenPunten: true`.
+
 De AI kan niets versturen, accorderen of wijzigen. Regels met een notitie (twijfel, onbekende code,
 afwijkende prijs, geen verkoopprijs) zijn geel gemarkeerd in de offerte-editor; *Markeer als gecontroleerd* zet ze op
 groen (de notitie blijft voor de medewerker zichtbaar). Klanten zien die notities nooit. De leesfuncties (sinds 1.10.7)

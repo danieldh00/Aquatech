@@ -62,7 +62,9 @@ function fromWebOrder(order, articles, settings) {
   ].filter(Boolean).join('\n');
   const data = Core.sanitize({
     date: Core.today(),
-    reference: `Webshopbestelling ${order.number}`,
+    reference: order.quote ? `Bestelling ${order.number} (offerte ${order.quote.number})` : `Webshopbestelling ${order.number}`,
+    // Een bestelling uit een offerte houdt de betaaltermijn en de documenttaal van die offerte; webshopbestellingen de standaard.
+    ...(order.quote ? { paymentDays: order.paymentDays, language: order.language } : {}),
     customer: {
       name: company || customer.name, contact: company ? customer.name : '',
       address: [address.street, [address.postcode, address.city].filter(Boolean).join('  '), country].filter(Boolean).join('\n'),

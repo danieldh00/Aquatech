@@ -1300,7 +1300,14 @@ const MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN price_factor REAL;
   CREATE INDEX stock_items_price_mode ON stock_items (tenant_id, price_mode);
   `,
-  // 66: prijsvoorstellen (artikelen/price-factor.js): een nieuwe inkoopprijs geeft een voorstel voor een nieuwe verkoopprijs dat
+  // 66: offerte omgezet naar bestelling (verkoop/quote-orders.js, punt 7): order_id = de bestelling (web_orders) waarin de
+  // offerte is omgezet (leeg = niet omgezet), converted_at = wanneer. Zonder verwijzing (FK): de bestelling blijft ook zonder offerte bestaan.
+  `
+  ALTER TABLE quotes ADD COLUMN order_id TEXT;
+  ALTER TABLE quotes ADD COLUMN converted_at TEXT;
+  CREATE UNIQUE INDEX quotes_order ON quotes (tenant_id, order_id) WHERE order_id IS NOT NULL;
+  `,
+  // 67: prijsvoorstellen (artikelen/price-factor.js): een nieuwe inkoopprijs geeft een voorstel voor een nieuwe verkoopprijs dat
   // een beheerder goedkeurt of afwijst. Een afgewezen voorstel wordt hier onthouden (inkoopprijs + voorgestelde prijs, één per
   // artikel) en komt pas terug als een van beide verandert.
   `
