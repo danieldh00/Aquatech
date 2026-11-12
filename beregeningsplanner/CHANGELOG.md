@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.14.0
+
+Backorders en deelleveringen voor webshopbestellingen (geen migratie, alles in `web_orders.data`).
+
+- `webshop/fulfilment.js`: berekende leverstatus per regel (besteld, geleverd, leverbaar, backorder, verwachte datum uit inkoop); de voorraad gaat eerst-besteld-eerst-geleverd over open bestellingen.
+- `webOrders.ship` en `POST /api/admin/web-orders/:id/ship`: (deels) verzenden met aantallen per regel (ook bedoeld voor de orderpick-app), `POST .../allow-partial`, `GET .../backorders`.
+- `stock.issueOrderPart`: afboeken van een deel en de reservering laten krimpen. Factuur en verzendmail volgen bij de laatste zending; annuleren kan niet meer na een deellevering.
+- Te picken toont alleen wat nu kan (`waitingForStock` voor de rest); de pakbon heeft kolommen besteld, eerder geleverd, nu en backorder.
+- Na een ontvangst op een inkooporder markeert `markBackorderReady` bestellingen die weer kunnen (`backorderReadyAt`).
+- Tests: `test/backorders.test.js`.
+
 ## 1.13.3
 
 - `webshop/shop-content.js`: de standaardkolom *Uitverkoop* is verwijderd uit `DEFAULT_SITE`; een opgeslagen kolom met die kop wordt bij het saneren overgeslagen (`RETIRED_COLUMN_TITLE`), zodat ook bestaande live inhoud geen uitverkoop-sectie meer toont. Geen migratie nodig.
