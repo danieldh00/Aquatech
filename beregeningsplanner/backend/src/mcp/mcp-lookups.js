@@ -3,8 +3,10 @@
 // bepaalt mcp-tools.js met de rechten van de rol.
 const { jsonField, isPg } = require('../database/db');
 
-/** Hoeveel openstaande facturen hoogstens worden opgehaald (de rest telt niet mee; de AI krijgt dan een waarschuwing). */
-const OPEN_INVOICE_LIMIT = 2000;
+/** Hoeveel losse facturen hoogstens worden opgehaald voor de getoonde debiteuren (de totalen telt de database altijd volledig). */
+const DETAIL_LIMIT = 2000;
+/** Per debiteur groeperen: op klant, anders op debiteur, anders op naam (zoals een losse factuur zonder klant). */
+const GROUP_KEY = "(CASE WHEN customer_id IS NOT NULL THEN 'k:' || customer_id WHEN debtor_id IS NOT NULL THEN 'd:' || debtor_id ELSE 'n:' || lower(customer_name) END)";
 /** De soorten documenten die de AI op nummer kan opvragen. */
 const DOCUMENT_KINDS = ['offerte', 'werkorder', 'factuur', 'bestelling'];
 
@@ -111,33 +113,36 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
   }
 
   /**
-   * De openstaande facturen (definitief, nog niet betaald) van een omgeving per debiteur, grootste bedrag eerst.
+   * De openstaande facturen (definitief, nog niet betaald) van een omgeving per debiteur, grootste bedrag eerst. De database
+   * telt per debiteur op (alle facturen tellen mee); alleen van de getoonde debiteuren komen de facturen zelf mee.
    * @param {string} tenantId De omgeving.
    * @param {{ onlyLate?: boolean, limit?: number }} [options] Alleen debiteuren met een factuur over de vervaldatum; hoeveel debiteuren.
-   * @returns {{ debiteuren: object[], aantalDebiteuren: number, totaalOpenstaand: number, totaalTeLaat: number, onvolledig: boolean }} Het overzicht.
+   * @returns {{ debiteuren: object[], aantalDebiteuren: number, totaalOpenstaand: number, totaalTeLaat: number }} Het overzicht.
    */
   function openInvoices(tenantId, { onlyLate = false, limit = 20 } = {}) {
     const day = today();
-    const rows = prepare(`SELECT number, status, kind, customer_id, debtor_id, customer_name, invoice_date, due_date, total FROM invoices
-      WHERE tenant_id = ? AND status = 'definitief' ORDER BY invoice_date, id LIMIT ${OPEN_INVOICE_LIMIT + 1}`).all(tenantId);
-    const incomplete = rows.length > OPEN_INVOICE_LIMIT;
-    const groups = new Map();
-    for (const row of rows.slice(0, OPEN_INVOICE_LIMIT)) {
-      const key = row.customer_id ? `k:${row.customer_id}` : row.debtor_id ? `d:${row.debtor_id}` : `n:${String(row.customer_name || '').toLowerCase()}`;
-      if (!groups.has(key)) groups.set(key, { naam: row.customer_name || '', klantId: row.customer_id || null, openstaand: 0, teLaat: 0, aantalFacturen: 0, oudsteVervaldatum: null, facturen: [] });
-      const group = groups.get(key);
-      const view = invoiceView(row, day);
-      group.openstaand = amountOf(group.openstaand + view.bedragInclBtw);
-      if (view.dagenTeLaat > 0) group.teLaat = amountOf(group.teLaat + view.bedragInclBtw);
-      group.aantalFacturen += 1;
-      if (row.kind === 'factuur' && row.due_date && (!group.oudsteVervaldatum || row.due_date < group.oudsteVervaldatum)) group.oudsteVervaldatum = row.due_date;
-      if (group.facturen.length < 10) group.facturen.push(view);
+    const groups = prepare(`SELECT ${GROUP_KEY} AS group_key, MAX(customer_id) AS customer_id, MAX(customer_name) AS customer_name, COUNT(*) AS invoice_count,
+        SUM(total) AS open_total, SUM(CASE WHEN kind = 'factuur' AND due_date < ? THEN total ELSE 0 END) AS late_total,
+        MIN(CASE WHEN kind = 'factuur' THEN due_date END) AS oldest_due
+      FROM invoices WHERE tenant_id = ? AND status = 'definitief' GROUP BY ${GROUP_KEY}`).all(day, tenantId)
+      .map((row) => ({ key: row.group_key, naam: row.customer_name || '', klantId: row.customer_id || null, openstaand: amountOf(row.open_total), teLaat: amountOf(row.late_total),
+        aantalFacturen: Number(row.invoice_count) || 0, oudsteVervaldatum: row.oldest_due || null }))
+      .filter((group) => Math.abs(group.openstaand) >= 0.005 && (!onlyLate || group.teLaat > 0));
+    groups.sort((left, right) => right.openstaand - left.openstaand || left.naam.localeCompare(right.naam));
+    const shown = groups.slice(0, limit);
+    const invoicesByGroup = new Map(shown.map((group) => [group.key, []]));
+    if (shown.length) {
+      const keys = shown.map((group) => group.key);
+      const rows = prepare(`SELECT ${GROUP_KEY} AS group_key, number, status, kind, customer_name, invoice_date, due_date, total FROM invoices
+        WHERE tenant_id = ? AND status = 'definitief' AND ${GROUP_KEY} IN (${marks(keys)}) ORDER BY invoice_date, id LIMIT ${DETAIL_LIMIT}`).all(tenantId, ...keys);
+      for (const row of rows) {
+        const list = invoicesByGroup.get(row.group_key);
+        if (list && list.length < 10) list.push(invoiceView(row, day));
+      }
     }
-    const all = [...groups.values()].filter((group) => Math.abs(group.openstaand) >= 0.005 && (!onlyLate || group.teLaat > 0));
-    all.sort((left, right) => right.openstaand - left.openstaand || left.naam.localeCompare(right.naam));
     return {
-      debiteuren: all.slice(0, limit), aantalDebiteuren: all.length,
-      totaalOpenstaand: amountOf(all.reduce((sum, group) => sum + group.openstaand, 0)), totaalTeLaat: amountOf(all.reduce((sum, group) => sum + group.teLaat, 0)), onvolledig: incomplete,
+      debiteuren: shown.map(({ key, ...group }) => ({ ...group, facturen: invoicesByGroup.get(key) })), aantalDebiteuren: groups.length,
+      totaalOpenstaand: amountOf(groups.reduce((sum, group) => sum + group.openstaand, 0)), totaalTeLaat: amountOf(groups.reduce((sum, group) => sum + group.teLaat, 0)),
     };
   }
 

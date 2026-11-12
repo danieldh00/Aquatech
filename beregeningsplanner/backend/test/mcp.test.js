@@ -334,13 +334,30 @@ test('leesfuncties: klantkaart, prijs voor een zakelijke klant, status op nummer
   assert.ok(card.openstaand.facturen[0].dagenTeLaat > 0);
   assert.match(card.link, new RegExp(`/app/klanten/\\?id=${created.id}$`));
 
-  // Openstaande debiteuren: alleen de onbetaalde factuur, ook bij alleen te laat.
+  // Openstaande debiteuren: de database telt per debiteur op; betaalde facturen tellen niet mee.
+  const second = (await admin.post('/app/api/invoices', { data: { customer: { name: 'Groen BV' }, lines: [{ description: 'Uitbreiding', qty: 1, price: 100, vat: 21 }] } })).body;
+  await admin.post(`/app/api/invoices/${second.id}/finalize`, {});
+  db.prepare("UPDATE invoices SET customer_id = ?, due_date = '2099-01-01' WHERE tenant_id = ? AND id = ?").run(created.id, main, second.id);
+  const loose = (await admin.post('/app/api/invoices', { data: { customer: { name: 'Balieklant' } , lines: [{ description: 'Zand', qty: 1, price: 10, vat: 21 }] } })).body;
+  await admin.post(`/app/api/invoices/${loose.id}/finalize`, {});
+  db.prepare("UPDATE invoices SET due_date = '2099-01-01' WHERE tenant_id = ? AND id = ?").run(main, loose.id);
+  const everyone = (await callTool(base, connection.accessToken, 'openstaande_debiteuren', {})).structuredContent;
+  assert.strictEqual(everyone.aantalDebiteuren, 2);
+  assert.strictEqual(everyone.totaalOpenstaand, 254.1);
+  assert.strictEqual(everyone.debiteuren[0].klantId, created.id);
+  assert.strictEqual(everyone.debiteuren[0].aantalFacturen, 2);
+  assert.strictEqual(everyone.debiteuren[0].openstaand, 242);
+  assert.strictEqual(everyone.debiteuren[0].teLaat, 121);
+  assert.strictEqual(everyone.debiteuren[0].oudsteVervaldatum, '2020-01-01');
+  assert.strictEqual(everyone.debiteuren[0].facturen.length, 2);
+  assert.strictEqual(everyone.debiteuren[1].naam, 'Balieklant');
+  assert.strictEqual((await callTool(base, connection.accessToken, 'openstaande_debiteuren', { maxResultaten: 1 })).structuredContent.debiteuren.length, 1);
   const debtors = (await callTool(base, connection.accessToken, 'openstaande_debiteuren', { alleenTeLaat: true })).structuredContent;
   assert.strictEqual(debtors.aantalDebiteuren, 1);
   assert.strictEqual(debtors.debiteuren[0].klantId, created.id);
-  assert.strictEqual(debtors.totaalOpenstaand, 121);
+  assert.strictEqual(debtors.totaalOpenstaand, 242);
   assert.strictEqual(debtors.totaalTeLaat, 121);
-  assert.ok(!JSON.stringify(debtors).includes('Betaalt Netjes'));
+  assert.ok(!JSON.stringify(everyone).includes('Betaalt Netjes'));
 
   // Status op nummer (ook in kleine letters), met een link naar het document.
   const quote = (await callTool(base, connection.accessToken, 'maak_concept_offerte', { klantId: created.id, regels: [{ artikelcode: 'PE-25', aantal: 10 }] })).structuredContent;

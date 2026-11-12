@@ -435,8 +435,7 @@ function createMcpTools(ctx) {
         if (!withinLimit(debtorListsPerHour, req)) return errorOf('Te vaak opgevraagd dit uur. Probeer het later opnieuw of kijk in AquaTech bij Facturen.');
         const limit = Math.min(50, Math.max(1, Number.parseInt(args.maxResultaten, 10) || 20));
         const out = ctx.openInvoices(req, { onlyLate: args.alleenTeLaat === true, limit });
-        return resultOf({ ...out, ...(out.onvolledig ? { let_op: 'Er zijn meer dan 2000 openstaande facturen; alleen de oudste 2000 tellen mee.' } : {}),
-          link: ctx.appUrl(req, 'facturen/') });
+        return resultOf({ ...out, link: ctx.appUrl(req, 'facturen/') });
       },
     },
     maak_concept_offerte: {
