@@ -124,6 +124,8 @@
   function sanitize(data) {
     const fields = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
     const customer = fields.customer && typeof fields.customer === 'object' ? fields.customer : {};
+    const delivery = fields.delivery && typeof fields.delivery === 'object' ? fields.delivery : {};
+    const deliveryAddress = limitText(delivery.address, 400);
     const summary = fields.planSummary && typeof fields.planSummary === 'object' ? fields.planSummary : null;
     const date = isDate(fields.date) ? fields.date : today();
     return {
@@ -138,6 +140,8 @@
         email: limitText(customer.email, 200),
         phone: limitText(customer.phone, 40),
       },
+      // Afleveradres: standaard gelijk aan het adres van de klant (same); een afwijkend adres zonder tekst telt als gelijk.
+      delivery: delivery.same === false && deliveryAddress.trim() ? { same: false, address: deliveryAddress } : { same: true, address: '' },
       intro: limitText(fields.intro, 4000),
       terms: limitText(fields.terms, 6000),
       // Interne notitie: alleen voor medewerkers, nooit op het document, in de mail of voor de klant.

@@ -123,16 +123,49 @@ function stockLinesOf(lines) {
 }
 
 /**
- * Controleert de gegevens die de klant bij het afrekenen invult.
- * @param {object} raw De invoer (name, company, email, phone, street, postcode, city, note).
- * @param {{ method?: string, country?: string, group?: string }} [choice] De gekozen verzendmethode (ophalen of dpd), het land (bij ophalen is een adres niet nodig) en de klantgroep (zakelijk: bedrijfsnaam verplicht en een eventueel btw-nummer wordt gecontroleerd).
- * @returns {{ value?: object, error?: string, field?: string }} De opgeschoonde gegevens of een foutmelding.
+ * Of het afleveradres gelijk is aan het factuuradres. Het afrekenformulier stuurt `deliveryForm=1` mee (zodat een niet-aangevinkt
+ * vakje te onderscheiden is van een oudere aanroep zonder dit veld); alleen dan telt een ontbrekend `deliverySame=ja` als "afwijkend".
+ * @param {object} input De invoer van het afrekenformulier.
+ * @returns {boolean} true als het afleveradres gelijk is aan het factuuradres (standaard).
  */
-function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', group = '' } = {}) {
+function deliverySameOf(input) {
+  const fields = input && typeof input === 'object' ? input : {};
+  return !(String(fields.deliveryForm || '') === '1' && String(fields.deliverySame || '') !== 'ja');
+}
+
+/**
+ * Controleert één adres (straat, postcode, woonplaats) op volledigheid.
+ * @param {{ street: string, postcode: string, city: string }} address Het opgeschoonde adres; de postcode wordt voor Nederland netjes gezet.
+ * @param {string} country Het land (landcode) waarvoor de postcode moet kloppen.
+ * @param {boolean} [delivery] true voor het afleveradres (andere veldnamen en meldingen dan het factuuradres).
+ * @returns {{ error: string, field: string }|null} De eerste fout, of null.
+ */
+function addressProblem(address, country, delivery = false) {
+  /**
+   * De veldnaam bij dit adres (voorvoegsel `delivery` voor het afleveradres).
+   * @param {string} name Basisnaam (street, postcode, city).
+   * @returns {string} De veldnaam.
+   */
+  const field = (name) => (delivery ? `delivery${name[0].toUpperCase()}${name.slice(1)}` : name);
+  if (address.street.length < 3) return { error: delivery ? 'Vul de straat en het huisnummer van het afleveradres in.' : 'Vul je straat en huisnummer in.', field: field('street') };
+  if (!Shipping.validPostcode(country, address.postcode)) return { error: country === 'NL' ? `Vul ${delivery ? 'bij het afleveradres ' : ''}een geldige postcode in, bijvoorbeeld 8071 AB.` : `Vul ${delivery ? 'bij het afleveradres ' : ''}een geldige postcode in.`, field: field('postcode') };
+  if (address.city.length < 2) return { error: delivery ? 'Vul de woonplaats van het afleveradres in.' : 'Vul je woonplaats in.', field: field('city') };
+  if (country === 'NL') address.postcode = address.postcode.replace(/^([0-9]{4})\s?([A-Z]{2})$/, '$1 $2');
+  return null;
+}
+
+/**
+ * Controleert de gegevens die de klant bij het afrekenen invult.
+ * @param {object} raw De invoer (name, company, email, phone, street, postcode, city, note en bij een afwijkend afleveradres deliveryStreet, deliveryPostcode, deliveryCity).
+ * @param {{ method?: string, country?: string, billingCountry?: string, group?: string }} [choice] De gekozen verzendmethode (ophalen of dpd), het land van aflevering (bij ophalen is een adres niet nodig), het land van het factuuradres (standaard hetzelfde) en de klantgroep (zakelijk: bedrijfsnaam verplicht en een eventueel btw-nummer wordt gecontroleerd).
+ * @returns {{ value?: object, error?: string, field?: string }} De opgeschoonde gegevens (met `deliverySame` en bij afwijkend de `delivery*`-velden) of een foutmelding.
+ */
+function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', billingCountry = country, group = '' } = {}) {
   const input = raw && typeof raw === 'object' ? raw : {};
   const value = {
     name: clean(input.name, 80), company: clean(input.company, 80), email: clean(input.email, 200).toLowerCase(), phone: clean(input.phone, 30),
     street: clean(input.street, 120), postcode: clean(input.postcode, 10).toUpperCase(), city: clean(input.city, 60),
+    deliverySame: deliverySameOf(input),
     note: Array.from(String(input.note == null ? '' : input.note).replace(/\r/g, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f]+/g, ' ').trim()).slice(0, 500).join(''),
     vatNumber: group === 'zakelijk' ? Vat.normalizeVatNumber(input.vatNumber) : '',
   };
@@ -143,10 +176,17 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', group = '' } = 
     if (value.vatNumber && !Vat.validVatNumber(value.vatNumber)) return { error: 'Vul een geldig btw-nummer in, bijvoorbeeld NL123456789B01, of laat het leeg.', field: 'vatNumber' };
   }
   if (method === 'ophalen') return { value };
-  if (value.street.length < 3) return { error: 'Vul je straat en huisnummer in.', field: 'street' };
-  if (!Shipping.validPostcode(country, value.postcode)) return { error: country === 'NL' ? 'Vul een geldige postcode in, bijvoorbeeld 8071 AB.' : 'Vul een geldige postcode in.', field: 'postcode' };
-  if (value.city.length < 2) return { error: 'Vul je woonplaats in.', field: 'city' };
-  if (country === 'NL') value.postcode = value.postcode.replace(/^([0-9]{4})\s?([A-Z]{2})$/, '$1 $2');
+  const billingProblem = addressProblem(value, value.deliverySame ? country : billingCountry);
+  if (billingProblem) return billingProblem;
+  if (!value.deliverySame) {
+    value.deliveryStreet = clean(input.deliveryStreet, 120);
+    value.deliveryPostcode = clean(input.deliveryPostcode, 10).toUpperCase();
+    value.deliveryCity = clean(input.deliveryCity, 60);
+    const delivery = { street: value.deliveryStreet, postcode: value.deliveryPostcode, city: value.deliveryCity };
+    const deliveryProblem = addressProblem(delivery, country, true);
+    if (deliveryProblem) return deliveryProblem;
+    value.deliveryPostcode = delivery.postcode;
+  }
   return { value };
 }
 
@@ -303,7 +343,7 @@ function createWebOrderStore(db, { stock }) {
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -390,7 +430,7 @@ function createWebOrderStore(db, { stock }) {
    * opnieuw, legt de bestelling vast en reserveert de voorraad, alles in één
    * transactie.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ id: string, group?: string, wholesale?: ?{ discountPct: number }, vatNumber?: string, vies?: object, addressUnverified?: boolean }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg), bij een groothandelsklant zijn vaste korting, het goedgekeurde btw-nummer van het account en de uitkomst van de VIES-controle (vies.js) als bewijs bij verlegging, en of het bezorgadres met de hand is ingevuld zonder PDOK-controle.
+   * @param {{ id: string, group?: string, wholesale?: ?{ discountPct: number }, vatNumber?: string, vies?: object, addressUnverified?: boolean, deliveryUnverified?: boolean }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg), bij een groothandelsklant zijn vaste korting, het goedgekeurde btw-nummer van het account en de uitkomst van de VIES-controle (vies.js) als bewijs bij verlegging, en of het factuuradres (addressUnverified) en het afwijkende afleveradres (deliveryUnverified) met de hand zijn ingevuld zonder PDOK-controle.
    * @param {object} rawFields De gegevens van het afrekenformulier (zie sanitizeCheckout, plus shippingMethod en country).
    * @param {{ code: string, qty: number }[]} wanted De winkelwagen.
    * @param {object} [shippingConfig] De verzendinstelling (shipping.js); standaard de startwaarden.
@@ -405,7 +445,10 @@ function createWebOrderStore(db, { stock }) {
     const country = method === 'ophalen' ? 'NL' : String(input.country || 'NL').toUpperCase();
     if (!['ophalen', 'dpd'].includes(method)) return { error: 'Kies een verzendmethode.', field: 'shippingMethod', status: 400 };
     const group = user.group === 'zakelijk' ? 'zakelijk' : '';
-    const checked = sanitizeCheckout(input, { method, country, group });
+    // Het land van het factuuradres is dat van de aflevering, tenzij het afleveradres afwijkt: dan kiest de klant het zelf (standaard Nederland).
+    const billingCountry = deliverySameOf(input) ? country : String(input.billingCountry || 'NL').toUpperCase();
+    if (method === 'dpd' && billingCountry !== country && !Shipping.countriesOf(shippingConfig).some((entry) => entry.code === billingCountry)) return { error: 'Kies een land voor het factuuradres.', field: 'billingCountry', status: 400 };
+    const checked = sanitizeCheckout(input, { method, country, billingCountry, group });
     if (checked.error) return { error: checked.error, field: checked.field, status: 400 };
     if (input.terms !== 'ja') return { error: 'Ga akkoord met de algemene voorwaarden om te bestellen.', field: 'terms', status: 400 };
     const asked = String(input.paymentMethod || '');
@@ -434,7 +477,12 @@ function createWebOrderStore(db, { stock }) {
       const data = {
         lines: calculated.lines.map((line) => ({ itemId: line.itemId, code: line.code, ...(line.stockPer ? { baseCode: line.baseCode, stockPer: line.stockPer } : {}), name: line.name, unit: line.unit, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal, ...(line.lineExcl !== undefined ? { lineExcl: line.lineExcl } : {}) })),
         customer: { name: fields.name, company: fields.company, email: fields.email, phone: fields.phone },
-        address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' } : { street: fields.street, postcode: fields.postcode, city: fields.city, country, ...(user.addressUnverified ? { unverified: true } : {}) },
+        // `address` is het afleveradres (voor verzenden en de pakbon), `billingAddress` het factuuradres; bij ophalen is geen van beide nodig.
+        address: method === 'ophalen' ? { street: '', postcode: '', city: '', country: '' }
+          : fields.deliverySame ? { street: fields.street, postcode: fields.postcode, city: fields.city, country, ...(user.addressUnverified ? { unverified: true } : {}) }
+            : { street: fields.deliveryStreet, postcode: fields.deliveryPostcode, city: fields.deliveryCity, country, ...(user.deliveryUnverified ? { unverified: true } : {}) },
+        ...(method === 'ophalen' ? {} : { billingAddress: { street: fields.street, postcode: fields.postcode, city: fields.city, country: billingCountry, ...(user.addressUnverified ? { unverified: true } : {}) } }),
+        deliverySame: method === 'ophalen' ? true : fields.deliverySame,
         shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method === 'dpd', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
         customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted, ...(calculated.shifted && user.vies ? { vies: user.vies } : {}) } : null,
         note: fields.note, totals, payment: online ? 'online' : 'op rekening', consent: { terms: true, at: timestamp },
@@ -804,4 +852,4 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
   });
 }
 
-module.exports = { createWebOrderStore, registerWebOrderRoutes, sanitizeCheckout, totalsOf, STATUSES, TRANSITIONS, MAX_QTY, MAX_LINES, stockQtyOf, splitCartCode };
+module.exports = { createWebOrderStore, registerWebOrderRoutes, sanitizeCheckout, deliverySameOf, totalsOf, STATUSES, TRANSITIONS, MAX_QTY, MAX_LINES, stockQtyOf, splitCartCode };

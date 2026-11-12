@@ -91,6 +91,9 @@
     const logo = options.logo || '../shared/logo-white.png';
     const companyLines = [companyProfile.address, [companyProfile.phone, companyProfile.email].filter(Boolean).join(' · '), companyProfile.website].filter(Boolean).join('\n');
     const recipient = [customer.name, customer.contact ? `${translate('quote.attn')} ${customer.contact}` : '', customer.address].filter(Boolean).join('\n');
+    // Een afwijkend afleveradres staat onder de ontvanger (het adres van de klant is het factuuradres).
+    const deliveryBlock = data.delivery && data.delivery.same === false && data.delivery.address
+      ? `<div class="lbl p-delivery">${esc(translate('quote.deliveryTo'))}</div>${esc(data.delivery.address)}` : '';
     const showPrices = data.layout !== 'totaal';
     const interactive = options.interactive;
     /**
@@ -150,7 +153,7 @@
         <div class="p-company"><b>${esc(companyProfile.companyName)}</b>\n${esc(companyLines)}</div>
       </header>
       <div class="p-meta">
-        <div class="p-to"><div class="lbl">${esc(translate('quote.for'))}</div>${esc(recipient || translate('quote.noRecipient'))}</div>
+        <div class="p-to"><div class="lbl">${esc(translate('quote.for'))}</div>${esc(recipient || translate('quote.noRecipient'))}${deliveryBlock}</div>
         <div class="p-info"><table>
           <tr><td>${esc(translate('quote.number'))}</td><td><b>${esc(quote.number)}</b></td></tr>
           <tr><td>${esc(translate('quote.date'))}</td><td>${esc(date(data.date, lang))}</td></tr>

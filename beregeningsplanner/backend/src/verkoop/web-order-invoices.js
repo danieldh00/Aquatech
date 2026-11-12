@@ -38,7 +38,9 @@ const MAX_ROUNDING = 0.1;
  */
 function fromWebOrder(order, articles, settings) {
   const customer = order.customer || {};
-  const address = order.address || {};
+  // Het factuuradres staat op de factuur; een afwijkend afleveradres komt in de opmerkingen. Oudere bestellingen hebben alleen `address`.
+  const address = order.billingAddress || order.address || {};
+  const delivery = order.deliverySame === false ? order.address || {} : null;
   const company = String(customer.company || '').trim();
   const shifted = Boolean(order.vat && order.vat.shifted);
   const lines = order.lines.map((line) => {
@@ -55,6 +57,7 @@ function fromWebOrder(order, articles, settings) {
   const country = address.country && address.country !== 'NL' ? address.country : '';
   const notes = [
     shifted ? `BTW verlegd naar afnemer${order.vat.number ? ` (btw-nummer ${order.vat.number})` : ''}; levering naar een ander EU-land.` : '',
+    delivery && delivery.street ? `Afleveradres: ${[delivery.street, [delivery.postcode, delivery.city].filter(Boolean).join(' '), delivery.country && delivery.country !== 'NL' ? delivery.country : ''].filter(Boolean).join(', ')}` : '',
     order.note ? `Opmerking bij de bestelling: ${order.note}` : '',
   ].filter(Boolean).join('\n');
   const data = Core.sanitize({

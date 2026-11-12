@@ -359,6 +359,9 @@ form.inline { display: inline-block; margin-right: 8px; }
 /* Afrekenen: huisnummer en toevoeging naast elkaar onder de postcode (alleen met script). */
 .address-lookup { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .address-lookup[hidden] { display: none; }
+.address-block[hidden], [data-billing-country][hidden] { display: none; }
+/* Zonder script kan het vinkje niets openen: dan blijft het afleveradres zichtbaar. */
+html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country][hidden] { display: block; }
 .address-lookup .address-status { grid-column: 1 / -1; margin: 0 0 8px; font-size: 0.9rem; min-height: 1.2em; color: var(--at-muted); }
 .address-lookup .address-status[data-kind="ok"] { color: var(--at-green-dark); }
 .address-lookup .address-status[data-kind="error"] { color: var(--at-danger); }

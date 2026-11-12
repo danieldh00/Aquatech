@@ -28,6 +28,7 @@ const Vat = require('./vat');
 const { validPaymentId, cleanPublicUrl, sanitizePayment } = require('./mollie');
 const Seo = require('./seo');
 const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, convertPlannedQty, MAX_QTY } = require('./storefront-cart');
+const { deliverySameOf } = require('./web-orders');
 
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
 const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
@@ -746,20 +747,38 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (attemptsLimited(req, res)) return res.status(429).type('text').send('Te veel bestelpogingen vanaf dit adres. Probeer het later opnieuw.');
         if (ordersLimited(viewer)) return res.status(429).type('text').send('Je hebt het afgelopen uur al veel bestellingen geplaatst. Probeer het later opnieuw of neem contact met ons op.');
         try {
-          // Een Nederlands bezorgadres komt uit postcode + huisnummer (PDOK): straat en woonplaats uit de browser worden niet vertrouwd,
-          // behalve als de klant aangeeft dat zijn adres niet gevonden wordt (dan 'niet gecontroleerd').
+          // Een Nederlands adres komt uit postcode + huisnummer (PDOK): straat en woonplaats uit de browser worden niet vertrouwd,
+          // behalve als de klant aangeeft dat zijn adres niet gevonden wordt (dan 'niet gecontroleerd'). Dat geldt voor het factuuradres
+          // en, als het afleveradres afwijkt, ook voor dat adres (velden met voorvoegsel `delivery`).
           let placed = body;
           let addressUnverified = false;
-          if (addressGuard && String(body.shippingMethod || '') === 'dpd' && String(body.country || 'NL').toUpperCase() === 'NL') {
-            const resolved = await addressGuard.resolveParts({ street: String(body.street || '').trim(), postcode: String(body.postcode || '').trim() });
-            // Niet gevonden of PDOK onbereikbaar, en de klant vult het adres bewust zelf in: bestellen mag, met de markering 'niet gecontroleerd' voor de medewerker (W-11).
-            const manual = !resolved.ok && body.addressManual === 'ja' && String(body.street || '').trim().length >= 3 && String(body.city || '').trim().length >= 2 && Boolean(normalizePostcode(body.postcode));
-            if (manual) addressUnverified = true;
-            else if (!resolved.ok) {
-              res.setHeader('Cache-Control', 'no-store');
-              const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
-              return sendWithGroups(req, res, resolved.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: `${resolved.message} Wordt je adres niet gevonden (bijvoorbeeld nieuwbouw)? Vink dan onder het adres aan dat je het zelf invult.`, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
-            } else placed = { ...body, street: resolved.street, postcode: resolved.postcode, city: resolved.city };
+          let deliveryUnverified = false;
+          if (addressGuard && String(body.shippingMethod || '') === 'dpd') {
+            const deliveryCountry = String(body.country || 'NL').toUpperCase();
+            const same = deliverySameOf(body);
+            const parts = [{ delivery: false, country: same ? deliveryCountry : String(body.billingCountry || 'NL').toUpperCase() }];
+            if (!same) parts.push({ delivery: true, country: deliveryCountry });
+            for (const part of parts) {
+              if (part.country !== 'NL') continue;
+              /**
+               * De veldnaam van dit adres in het formulier (voorvoegsel `delivery` voor het afleveradres).
+               * @param {string} name Basisnaam (street, postcode, city).
+               * @returns {string} De veldnaam.
+               */
+              const key = (name) => (part.delivery ? `delivery${name[0].toUpperCase()}${name.slice(1)}` : name);
+              const manualKey = part.delivery ? 'deliveryAddressManual' : 'addressManual';
+              const resolved = await addressGuard.resolveParts({ street: String(body[key('street')] || '').trim(), postcode: String(body[key('postcode')] || '').trim() });
+              // Niet gevonden of PDOK onbereikbaar, en de klant vult het adres bewust zelf in: bestellen mag, met de markering 'niet gecontroleerd' voor de medewerker (W-11).
+              const manual = !resolved.ok && body[manualKey] === 'ja' && String(body[key('street')] || '').trim().length >= 3 && String(body[key('city')] || '').trim().length >= 2 && Boolean(normalizePostcode(body[key('postcode')]));
+              if (manual) {
+                if (part.delivery) deliveryUnverified = true; else addressUnverified = true;
+              } else if (!resolved.ok) {
+                res.setHeader('Cache-Control', 'no-store');
+                const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
+                const which = part.delivery ? 'het afleveradres' : 'je adres';
+                return sendWithGroups(req, res, resolved.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: `${resolved.message} Wordt ${which} niet gevonden (bijvoorbeeld nieuwbouw)? Vink dan onder het adres aan dat je het zelf invult.`, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
+              } else placed = { ...placed, [key('street')]: resolved.street, [key('postcode')]: resolved.postcode, [key('city')]: resolved.city };
+            }
           }
           // De bevestiging gaat naar het e-mailadres van het account, niet naar een vrij ingevuld adres (W-08).
           if (viewer.email) placed = { ...placed, email: viewer.email };
@@ -778,7 +797,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
               }
             }
           }
-          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer), vatNumber: approvedVatNumber, vies: viesResult, addressUnverified }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer), sanitizePayment(settingsFor(tenantId).get('shopPayment')));
+          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer), vatNumber: approvedVatNumber, vies: viesResult, addressUnverified, deliveryUnverified }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer), sanitizePayment(settingsFor(tenantId).get('shopPayment')));
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
             const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));

@@ -407,6 +407,7 @@
     const data = quote.data;
     renderDiscountFields(data);
     renderVatShift(quote);
+    renderDelivery(quote);
     $('#e-plan').innerHTML = data.planId
       ? `Opgebouwd uit plan <a href="../beregening/?plan=${encodeURIComponent(data.planId)}">${esc(data.planTitle || 'beregeningsplan')}</a>${data.planSummary ? ` · ${data.planSummary.sprinklers} sproeiers, ${data.planSummary.zones} zones, ${nl(data.planSummary.lawnM2, 0)} m² gazon` : ''}`
       : 'Niet gekoppeld aan een plan.';
@@ -454,7 +455,7 @@
     box.className = `notice ok${isLocked && quote.acceptance.answer !== 'akkoord' ? ' rejected' : ''}`;
     box.innerHTML = isLocked ? acceptanceHtml(quote.acceptance) : '';
     $('#edit-view').classList.toggle('locked', isLocked);
-    document.querySelectorAll('#edit-view .cols input, #edit-view .cols textarea, #edit-view .cols select, #edit-view [data-f], #e-lines input, #e-lines select, #e-lines button, #e-status, #e-cust-clear, #e-cust-new, #e-vs-on')
+    document.querySelectorAll('#edit-view .cols input, #edit-view .cols textarea, #edit-view .cols select, #edit-view [data-f], #e-lines input, #e-lines select, #e-lines button, #e-status, #e-cust-clear, #e-cust-new, #e-vs-on, #e-del-same')
       .forEach((field) => { if (field.id !== 'e-number') field.disabled = isLocked; });
   }
 
@@ -644,8 +645,9 @@
     if (document.activeElement !== $('#e-vs-number')) $('#e-vs-number').value = shift.number || '';
     // Een afnemer in een ander EU-land (btw-nummer door VIES geldig bevonden) heeft een adres buiten PDOK: dat typ je dan zelf.
     const foreign = shift.on === true && shift.status === 'geldig' && /^[A-Za-z]{2}/.test(shift.number || '') && !/^nl/i.test(shift.number);
-    const address = document.querySelector('#edit-view [data-f="customer.address"]');
-    if (foreign) address.dataset.addressManual = '1'; else delete address.dataset.addressManual;
+    for (const address of document.querySelectorAll('#edit-view [data-f="customer.address"], #edit-view [data-f="delivery.address"]')) {
+      if (foreign) address.dataset.addressManual = '1'; else delete address.dataset.addressManual;
+    }
     const status = $('#e-vs-status');
     if (shift.on !== true) { status.textContent = ''; return; }
     if (!shift.number) status.textContent = 'Vul het btw-nummer van de klant in; zonder nummer wordt de btw niet verlegd.';
@@ -653,6 +655,29 @@
     else if (shift.status === 'onbereikbaar') status.textContent = 'VIES is nu niet bereikbaar: de btw wordt pas verlegd als de controle is gelukt. Sla de offerte later opnieuw op.';
     else status.textContent = 'Het btw-nummer wordt bij het opslaan gecontroleerd bij VIES; daarna wordt de btw verlegd.';
     if (shift.number) status.textContent += ' De btw-tarieven per regel blijven bewaard, maar tellen niet mee zolang de btw is verlegd.';
+  }
+
+  /**
+   * Toont het vinkje "Afleveradres gelijk aan adres" en het tweede adresveld alleen als het afleveradres afwijkt.
+   * @param {object} quote De offerte in de editor.
+   * @returns {void}
+   */
+  function renderDelivery(quote) {
+    const same = !quote.data.delivery || quote.data.delivery.same !== false;
+    $('#e-del-same').checked = same;
+    $('#e-del-box').hidden = same;
+  }
+
+  /** Zet het vinkje "Afleveradres gelijk aan adres" om: bij afwijkend verschijnt het tweede adresveld, bij gelijk wordt het leeggemaakt. */
+  function toggleDelivery() {
+    const quote = state.quote;
+    if (!quote || locked()) return;
+    const same = $('#e-del-same').checked;
+    quote.data.delivery = same ? { same: true, address: '' } : { same: false, address: (quote.data.delivery && quote.data.delivery.address) || '' };
+    $('#e-del-box').querySelector('textarea').value = quote.data.delivery.address;
+    renderDelivery(quote);
+    if (!same) $('#e-del-box').querySelector('textarea').focus();
+    changed();
   }
 
   /** Zet het vinkje "Btw verlegd" om: de totalen passen zich meteen aan en de offerte wordt bewaard. */
@@ -1196,6 +1221,7 @@
     $('#e-newcust').onsubmit = saveNewCustomer;
     $('#e-newcust').customerGroup.onchange = syncNewCustomerBusiness;
     $('#e-vs-on').onchange = toggleVatShift;
+    $('#e-del-same').onchange = toggleDelivery;
     /**
      * Ontkoppelt de klant van de offerte; de ingevulde gegevens blijven staan.
      * @returns {Promise<void>}
@@ -1377,7 +1403,7 @@
       sheet.addRow([]);
       const info = [
         ['Offerte', quote.number], ['Datum', data.date ? new Date(`${data.date}T12:00:00`) : ''], ['Geldig tot', data.validUntil ? new Date(`${data.validUntil}T12:00:00`) : ''],
-        ['Klant', data.customer.name], ['T.a.v.', data.customer.contact], ['Adres', data.customer.address.replace(/\n/g, ', ')],
+        ['Klant', data.customer.name], ['T.a.v.', data.customer.contact], ['Adres', data.customer.address.replace(/\n/g, ', ')], ['Afleveradres', data.delivery && data.delivery.same === false ? data.delivery.address.replace(/\n/g, ', ') : ''],
         ['E-mail', data.customer.email], ['Telefoon', data.customer.phone], ['Uw referentie', data.reference], ['Omschrijving', data.title],
         ['Status', statusLabel(statusOf({ ...quote, validUntil: data.validUntil }))],
       ].filter(([, value]) => value !== '');

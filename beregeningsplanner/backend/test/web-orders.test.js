@@ -387,3 +387,71 @@ test('met 0 dagen blijft een bestelling op rekening gereserveerd tot verzenden o
   assert.deepStrictEqual(app.locals.webOrdersRelease(), { released: 0 });
   assert.strictEqual((await stockOf(admin, 'SPR-1')).reserved, 1);
 });
+
+test('afleveradres: standaard gelijk aan het factuuradres; een afwijkend adres wordt apart opgeslagen en gecontroleerd', async () => {
+  const { base, admin, sent, shopper } = await setup();
+  const customer = await shopper();
+  // De pagina toont het vinkje standaard aan en verbergt het tweede adres.
+  await addToCart(base, customer, 'SPR-1', 1);
+  const page = await customer.get('/afrekenen/');
+  assert.match(page.text, /name="deliverySame" value="ja" data-delivery-same checked/);
+  assert.match(page.text, /data-address-block="delivery" hidden/);
+  assert.match(page.text, /name="deliveryForm" value="1"/);
+
+  // Gelijk (vinkje aan): beide adressen zijn hetzelfde.
+  assert.strictEqual((await postCheckout(base, customer, { ...CHECKOUT, deliveryForm: '1', deliverySame: 'ja' })).status, 303);
+  const [first] = (await admin.get('/app/api/admin/web-orders')).body.items;
+  const same = (await admin.get(`/app/api/admin/web-orders/${first.id}`)).body.order;
+  assert.strictEqual(same.deliverySame, true);
+  assert.strictEqual(same.address.street, 'Tuinstraat 1');
+  assert.deepStrictEqual({ street: same.billingAddress.street, postcode: same.billingAddress.postcode, city: same.billingAddress.city, country: same.billingAddress.country }, { street: 'Tuinstraat 1', postcode: '8071 AB', city: 'Nunspeet', country: 'NL' });
+
+  // Afwijkend: vinkje uit, eigen velden voor het afleveradres.
+  await addToCart(base, customer, 'SPR-1', 1);
+  const different = { ...CHECKOUT, street: 'Tuinstraat 3', deliveryForm: '1', deliveryStreet: 'Tuinstraat 2', deliveryPostcode: '8071ab', deliveryCity: 'Nunspeet' };
+  assert.strictEqual((await postCheckout(base, customer, { ...different, deliveryStreet: '' })).status, 400, 'afleveradres is verplicht als het afwijkt');
+  const missing = await postCheckout(base, customer, { ...different, deliveryPostcode: '' });
+  assert.strictEqual(missing.status, 400);
+  assert.match(missing.text, /postcode in/);
+  const unknown = await postCheckout(base, customer, { ...different, deliveryStreet: 'Onbekendlaan 9', deliveryPostcode: '8071 ZZ' });
+  assert.strictEqual(unknown.status, 400);
+  assert.match(unknown.text, /afleveradres niet gevonden/);
+  const mailsBefore = sent.length;
+  assert.strictEqual((await postCheckout(base, customer, different)).status, 303);
+  const placed = (await admin.get('/app/api/admin/web-orders')).body.items.find((order) => order.id !== first.id);
+  const detail = (await admin.get(`/app/api/admin/web-orders/${placed.id}`)).body.order;
+  assert.strictEqual(detail.deliverySame, false);
+  assert.strictEqual(detail.address.street, 'Tuinstraat 2', 'afleveradres = verzendadres');
+  assert.strictEqual(detail.billingAddress.street, 'Tuinstraat 3');
+  assert.strictEqual(detail.address.unverified, undefined);
+  const confirmation = sent.slice(mailsBefore).map((message) => message.text).find((text) => /Afleveradres/.test(text));
+  assert.match(confirmation, /Afleveradres:[\s\S]*Tuinstraat 2[\s\S]*Factuuradres:[\s\S]*Tuinstraat 3/);
+  const orderPage = await customer.get(`/bestelling/${placed.id}/`);
+  assert.match(orderPage.text, /<strong>Afleveradres<\/strong><br>[^]*Tuinstraat 2/);
+  assert.match(orderPage.text, /<strong>Factuuradres<\/strong><br>[^]*Tuinstraat 3/);
+});
+
+test('afleveradres: een niet gevonden afleveradres kan met "zelf invullen" en krijgt alleen zelf de markering niet gecontroleerd', async () => {
+  const { base, admin, shopper } = await setup();
+  const customer = await shopper();
+  await addToCart(base, customer, 'SPR-1', 1);
+  const fields = { ...CHECKOUT, deliveryForm: '1', deliveryStreet: 'Nieuwbouwlaan 7', deliveryPostcode: '8071 ZZ', deliveryCity: 'Nunspeet', deliveryAddressManual: 'ja' };
+  assert.strictEqual((await postCheckout(base, customer, fields)).status, 303);
+  const [item] = (await admin.get('/app/api/admin/web-orders')).body.items;
+  const order = (await admin.get(`/app/api/admin/web-orders/${item.id}`)).body.order;
+  assert.strictEqual(order.address.street, 'Nieuwbouwlaan 7');
+  assert.strictEqual(order.address.unverified, true);
+  assert.strictEqual(order.billingAddress.unverified, undefined, 'het factuuradres is wel gevonden');
+});
+
+test('afleveradres: bij ophalen is geen adres nodig; sanitizeCheckout en een oudere aanroep zonder veld gelden als gelijk', () => {
+  const base = { name: 'Piet', email: 'piet@voorbeeld.nl', street: 'Tuinstraat 1', postcode: '8071 AB', city: 'Nunspeet' };
+  assert.strictEqual(sanitizeCheckout(base).value.deliverySame, true, 'zonder deliveryForm: gelijk');
+  assert.strictEqual(sanitizeCheckout({ ...base, deliveryForm: '1' }).error, 'Vul de straat en het huisnummer van het afleveradres in.');
+  assert.strictEqual(sanitizeCheckout({ ...base, deliveryForm: '1', deliverySame: 'ja' }).value.deliverySame, true);
+  assert.strictEqual(sanitizeCheckout({ name: 'Piet', email: 'piet@voorbeeld.nl', deliveryForm: '1' }, { method: 'ophalen' }).value.deliverySame, false, 'bij ophalen wordt niets gevraagd');
+  const foreign = sanitizeCheckout({ ...base, postcode: '1000', deliveryForm: '1', deliveryStreet: 'Rue 1', deliveryPostcode: '1000', deliveryCity: 'Brussel' }, { country: 'BE', billingCountry: 'BE' });
+  assert.strictEqual(foreign.value.deliveryStreet, 'Rue 1');
+  const badCountry = sanitizeCheckout({ ...base, deliveryForm: '1', deliveryStreet: 'Rue 1', deliveryPostcode: 'x', deliveryCity: 'Brussel' }, { country: 'BE', billingCountry: 'NL' });
+  assert.strictEqual(badCountry.field, 'deliveryPostcode');
+});
