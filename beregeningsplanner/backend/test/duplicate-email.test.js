@@ -43,11 +43,13 @@ test('e-mailadres: een uitgeschakeld account kan niet worden ingeschakeld naast 
   assert.strictEqual(enable.status, 409);
   assert.match(enable.error, /e-mailadres/);
   assert.strictEqual(Number(store.getUser(old.id).disabled), 1);
+  // Een uitgeschakeld account mag wel een adres krijgen dat een actief account heeft (het telt pas bij inschakelen).
+  assert.ok((await store.updateAccount(main, old.id, { contact: { email: 'zelfde@voorbeeld.nl' } })).user);
   // Met een ander adres tegelijk lukt het wel.
   assert.ok((await store.updateAccount(main, old.id, { disabled: false, contact: { email: 'oud@voorbeeld.nl' } })).user);
 });
 
-test('e-mailadres: twee klanten met hetzelfde adres tegelijk aanmaken geeft er één', async () => {
+test('e-mailadres: twee klanten met hetzelfde adres kort na elkaar aanmaken geeft er één', async () => {
   const { store, main } = await setup();
   const results = [store.createCustomer(main, { displayName: 'A', email: 'race@voorbeeld.nl' }), store.createCustomer(main, { displayName: 'B', email: 'RACE@voorbeeld.nl' })];
   assert.strictEqual(results.filter((result) => result.user).length, 1);

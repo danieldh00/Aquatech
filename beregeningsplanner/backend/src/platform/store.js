@@ -690,7 +690,8 @@ function createStore(db) {
     }
     // Een e-mailadres hoort bij hoogstens één actief account: ook via de klantkaart of het opnieuw inschakelen van een uitgeschakeld account.
     const contactEmail = input.contact && input.contact.email !== undefined ? String(input.contact.email || '').trim().toLowerCase() : null;
-    if (contactEmail && accountIdsByEmail(tenantId, contactEmail).some((otherId) => otherId !== user.id)) return { error: 'Er is al een account met dit e-mailadres.', field: 'email', status: 409 };
+    const staysDisabled = Boolean(user.disabled) && !(input.disabled === false || input.disabled === 0);
+    if (contactEmail && !staysDisabled && input.disabled !== true && accountIdsByEmail(tenantId, contactEmail).some((otherId) => otherId !== user.id)) return { error: 'Er is al een account met dit e-mailadres.', field: 'email', status: 409 };
     if (input.disabled === false || input.disabled === 0) {
       const ownEmail = (prepare('SELECT email FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, user.id) || {}).email;
       const nowEmail = contactEmail !== null ? contactEmail : ownEmail;
