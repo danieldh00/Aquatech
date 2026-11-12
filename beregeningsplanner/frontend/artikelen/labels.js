@@ -99,7 +99,14 @@
   async function attach(form, preview, errorBox, currentItem) {
     errorBox.textContent = '';
     let config;
-    try { config = await templates(); } catch (error) { errorBox.textContent = error.message; return; }
+    try {
+      config = await templates();
+    } catch (error) {
+      // Zonder sjablonen kan er niets worden afgedrukt; het formulier mag de pagina dan niet opnieuw laden.
+      form.onsubmit = (event) => event.preventDefault();
+      errorBox.textContent = error.message;
+      return;
+    }
     const chosen = form.template.value || config.defaultKey;
     form.template.innerHTML = config.templates.map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.name)} (${template.widthMm} × ${template.heightMm} mm)</option>`).join('');
     form.template.value = config.templates.some((template) => template.key === chosen) ? chosen : config.defaultKey;

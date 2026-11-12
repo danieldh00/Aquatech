@@ -722,7 +722,6 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
           .get(tenantId, existing.id, tenantId, existing.id).n;
         if (used) return { error: 'De code van een artikel dat al op werkorders is gereserveerd of afgeboekt, kan niet meer veranderen.', field: 'code', status: 409 };
       }
-      if (fields.unit) rememberUnit(tenantId, fields.unit);
       const merged = {
         code: existing.code, name: existing.name, unit: existing.unit, location: existing.location, minQty: existing.min_qty, reorderQty: existing.reorder_qty, costPrice: existing.cost_price, notes: existing.notes,
         salePrice: existing.sale_price, businessPrice: existing.business_price ?? null, vatRate: Number(existing.vat_rate), revenueGroup: existing.revenue_group, shopSync: Boolean(Number(existing.shop_sync)), weightGrams: existing.weight_grams ?? null,
@@ -748,6 +747,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         const eanProblem = eanTaken(tenantId, existing.id, ean);
         if (eanProblem) return eanProblem;
       }
+      if (fields.unit) rememberUnit(tenantId, fields.unit);
       // Andere prijs of btw (of weer meesturen): opnieuw naar de webshop. Een
       // hoofdartikel heeft in de webshop geen eigen prijs of voorraad.
       const toShop = !isParent && ((merged.salePrice ?? null) !== (existing.sale_price ?? null) || merged.vatRate !== Number(existing.vat_rate) || (merged.shopSync && !Number(existing.shop_sync)));
