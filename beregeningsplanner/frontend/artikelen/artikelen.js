@@ -337,19 +337,38 @@
       </tr>`).join('')}</tbody>` : '<tbody><tr><td class="empty">Geen mutaties in deze periode.</td></tr></tbody>';
   }
 
+  /** De tabbladen, ook als #-adres (de zijbalk onder Inkoop wijst naar moves, reorder, suppliers en orders). */
+  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'media'];
+
   /**
-   * Toont een tabblad (voorraad, gereserveerd of mutaties) en zet het in de URL.
-   * @param {string} name 'stock', 'reserved' of 'moves'
+   * Tekent het bestelvoorstel op het scherm: per leverancier de artikelen die onder het minimum zitten.
+   * @returns {Promise<void>}
+   */
+  async function loadReorder() {
+    const proposal = await api('stock/reorder');
+    $('#rv-table').innerHTML = proposal.items.length
+      ? `<thead><tr><th>Leverancier</th><th>Code</th><th>Omschrijving</th><th class="num">Beschikbaar</th><th class="num">Onderweg</th><th class="num">Minimum</th><th class="num">Te bestellen</th><th class="num">Bedrag</th></tr></thead><tbody>${proposal.items.map((item) => `<tr>
+        <td>${esc(item.supplierName || 'Zonder leverancier')}</td><td>${esc(item.code)}</td><td class="wrap">${esc(item.name)}</td>
+        <td class="num">${esc(nl(item.available))} ${esc(item.unit)}</td><td class="num">${item.incoming ? esc(nl(item.incoming)) : ''}</td><td class="num">${esc(nl(item.minQty))}</td>
+        <td class="num"><b>${esc(nl(item.orderQty))}</b> ${esc(item.unit)}</td><td class="num">${item.amount == null ? '' : esc(eur(item.amount))}</td></tr>`).join('')}</tbody>`
+      : '<tbody><tr><td class="empty">Niets te bestellen: alle artikelen zitten op of boven de minimumvoorraad.</td></tr></tbody>';
+  }
+
+  /**
+   * Toont een tabblad en zet het in de URL (de zijbalk volgt het mee).
+   * @param {string} name Een van TABS.
    */
   function showTab(name) {
     state.tab = name;
     document.querySelectorAll('.tab').forEach((button) => button.classList.toggle('active', button.dataset.tab === name));
-    for (const tabName of ['stock', 'reserved', 'moves', 'suppliers', 'orders', 'media']) $(`#tab-${tabName}`).hidden = tabName !== name;
+    for (const tabName of TABS) $(`#tab-${tabName}`).hidden = tabName !== name;
     if (name === 'moves' && !state.moves) loadMoves();
+    if (name === 'reorder') loadReorder().catch((error) => toast(error.message, true));
     if (name === 'suppliers') window.ArtikelenSuppliers.load().catch((error) => toast(error.message, true));
     if (name === 'orders') window.ArtikelenOrders.load().catch((error) => toast(error.message, true));
     if (name === 'media') loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
+    if (window.AquatechNav) window.AquatechNav.refresh();
   }
 
   /**
@@ -1407,6 +1426,8 @@
       /** Toont dit tabblad. */
       button.onclick = () => { showTab(button.dataset.tab); };
     });
+    /** Volgt een ander #-adres (terugknop) met het bijbehorende tabblad. */
+    window.addEventListener('hashchange', () => { const hash = location.hash.slice(1); if (TABS.includes(hash) && hash !== state.tab) showTab(hash); });
     $('#f-search').oninput = renderStock;
     $('#f-low').onchange = renderStock;
     /**
@@ -1467,7 +1488,7 @@
     });
     window.ArtikelenSuppliers.setup({ api, toast, esc, nl, eur });
     window.ArtikelenPackagings.setup({ api, toast, esc });
-    window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook, save, stamp });
+    window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook, save, stamp, afterProposal: () => loadReorder().catch((error) => toast(error.message, true)) });
     loadUnits().catch((error) => toast(error.message, true));
     setupShop();
     setupMedia();
@@ -1485,7 +1506,7 @@
       $('#v-list').hidden = false;
       try { await load(); } catch (error) { toast(error.message, true); }
       const hash = location.hash.slice(1);
-      if (['stock', 'reserved', 'moves', 'suppliers', 'orders', 'media'].includes(hash)) showTab(hash);
+      if (TABS.includes(hash)) showTab(hash);
       // Vanuit een werkorder: "Op voorraad nemen" met de ontbrekende codes.
       const codes = (params.get('codes') || '').split(',').map((code) => code.trim()).filter((code) => Catalog.articles[code.toUpperCase()]);
       if (codes.length) openImport(codes);

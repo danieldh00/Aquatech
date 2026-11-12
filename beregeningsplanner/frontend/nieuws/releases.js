@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.11.6',
+      date: '2026-11-12',
+      title: 'Inkoop in de zijbalk',
+      items: [
+        { text: 'In de zijbalk staat nu een eigen kopje Inkoop met Bestelvoorstel, Inkooporders, Leveranciers en Mutaties. Het Bestelvoorstel is een scherm geworden waarop je ziet wat er besteld moet worden, met een knop voor concept-orders en voor Excel.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.11.5',
       date: '2026-11-12',
       title: 'Dozen en pallets in de winkelwagen',

@@ -16,7 +16,9 @@
 // NAV_GROUPS hieronder (de volgorde van de groepen en van de modules in een
 // groep volgt de lijst; een groep met één module is gewoon een link, een groep
 // zonder zichtbare modules bestaat niet). `navTitle` is een kortere titel voor
-// de zijbalk. Toekomstige pagina's (klanten, inkooporders, leveranciers,
+// de zijbalk. Een `href` mag eindigen op een #-adres naar een tabblad van een andere module
+// (`artikelen/#orders`); de zijbalk markeert dan het tabblad dat open staat. `partOf` hoort
+// bij een andere module: uitgezet als die uit staat en niet apart in Beheer > Modules. Toekomstige pagina's (klanten, inkooporders, leveranciers,
 // backorders, te picken, ...) krijgen hun plek door één regel met de juiste
 // `navGroup`; zolang `status` niet 'actief' is verschijnt er niets in de zijbalk.
 // De API controleert de rechten ook zelf. Beheerders en hoofdbeheerders zien de
@@ -31,8 +33,8 @@
     { key: 'top', title: '', icon: 'home' },
     { key: 'verkoop', title: 'Verkoop', icon: 'tag' },
     { key: 'magazijn', title: 'Magazijn', icon: 'box' },
-    { key: 'inkoop', title: 'Inkoop', icon: 'truck' },
     { key: 'artikelen', title: 'Artikelen', icon: 'box' },
+    { key: 'inkoop', title: 'Inkoop', icon: 'truck' },
     { key: 'planner', title: 'Planner & werk', icon: 'sprinkler' },
     { key: 'webshop', title: 'Webshop', icon: 'cart' },
     { key: 'rapportage', title: 'Rapportage', icon: 'chart' },
@@ -120,6 +122,51 @@
       description: 'Artikelen op voorraad met stand, locatie en minimumvoorraad. Werkorders reserveren hun materialen en boeken ze af bij verbruik of oplevering; ontvangsten, tellingen en correcties, met Excel-export.',
       href: 'artikelen/',
       icon: 'box',
+      status: 'actief',
+      right: 'voorraad',
+    },
+    {
+      id: 'bestelvoorstel',
+      navGroup: 'inkoop',
+      partOf: 'voorraad',
+      title: 'Bestelvoorstel',
+      description: 'Wat er onder de minimumvoorraad zit, per voorkeursleverancier en aangevuld tot Bestellen tot, met concept-orders en Excel.',
+      href: 'artikelen/#reorder',
+      icon: 'clipboard',
+      status: 'actief',
+      right: 'voorraad',
+    },
+    {
+      id: 'inkooporders',
+      navGroup: 'inkoop',
+      partOf: 'voorraad',
+      title: 'Inkooporders',
+      description: 'Bestellingen bij leveranciers: een order maken, uit een leveranciersdocument inlezen en de ontvangst inboeken in de voorraad.',
+      href: 'artikelen/#orders',
+      icon: 'truck',
+      status: 'actief',
+      right: 'voorraad',
+    },
+    {
+      id: 'leveranciers',
+      navGroup: 'inkoop',
+      partOf: 'voorraad',
+      title: 'Leveranciers',
+      description: 'Leveranciers met artikelnummer, inkoopprijs en bestelhoeveelheid per artikel en een voorkeursleverancier.',
+      href: 'artikelen/#suppliers',
+      icon: 'handshake',
+      status: 'actief',
+      right: 'voorraad',
+    },
+    {
+      id: 'mutaties',
+      navGroup: 'inkoop',
+      partOf: 'voorraad',
+      title: 'Voorraadmutaties',
+      navTitle: 'Mutaties',
+      description: 'Het logboek van alle voorraadboekingen: ontvangsten, verbruik, tellingen en correcties, met Excel-export.',
+      href: 'artikelen/#moves',
+      icon: 'table',
       status: 'actief',
       right: 'voorraad',
     },
@@ -252,6 +299,7 @@
     const has = (wanted) => [].concat(wanted).some((right) => (rights || []).includes(right));
     return MODULES
       .filter((module) => !module.right || has(module.right))
+      .filter((module) => !module.partOf || !disabled || disabled[module.partOf] !== false)
       .filter((module) => module.id === 'beheer' || module.id === 'hoofdbeheer' || !disabled || disabled[module.id] !== false)
       .map((module) => (module.alt && has(module.alt.right) && !has(module.alt.unless) ? { ...module, ...module.alt } : module));
   }
