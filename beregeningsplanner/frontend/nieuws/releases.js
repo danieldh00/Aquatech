@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.14.1',
+      date: '2026-11-12',
+      title: 'Winkelwagenknop op alle artikelkaarten en verpakking kiezen',
+      items: [
+        { text: 'In de webshop kun je nu bij elk artikel in het overzicht meteen het aantal invullen en op In winkelwagen drukken.' },
+        { text: 'Artikelen met uitvoeringen (zoals maten) staan als gewone kaart in het overzicht, met een keuzelijst voor de uitvoering op de kaart zelf.' },
+        { text: 'Op de productpagina kies je de verpakking (per stuk, doos of pallet); prijs en winkelwagen volgen je keuze.' },
+      ],
+    },
+    {
       version: '1.14.0',
       date: '2026-11-12',
       title: 'Backorders en deelleveringen',

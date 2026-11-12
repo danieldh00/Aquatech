@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.14.1
+
+- Webshop: `productCard` (storefront-pages.js) is voor elk artikel een `<article>` met foto- en naamlink, bij een hoofdartikel met varianten een keuzelijst (`data-variant-row`, gedeeld script `varianten.js`, ook op de startpagina) en een prijs-/voorraadregel met `orderForm` (`card-order`). De paginabrede `variant-row` en `listItem` zijn vervallen; `winkel.css` heeft kaartstijlen (op ≤ 520 px staan aantal en knop onder elkaar).
+- Productpagina: verpakkingskeuze (`?p=`, met behoud van `?v=`) uit `data.packagingsOf` (nieuw, gecachet per productpagina, `item_packagings`); zichtbaarheid per klantgroep via `visibleFor`, prijs en beschikbaarheid uit `priceCart` (`CODE@VERPAKKING`). Keuzelijsten op de productpagina versturen zelf (`data-autosubmit`), de knop Kies is de terugval zonder script.
+- Tests: `test/product-cards.test.js`.
+
 ## 1.14.0
 
 Backorders en deelleveringen voor webshopbestellingen (geen migratie, alles in `web_orders.data`).
