@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.14.8',
+      date: '2026-11-13',
+      title: 'Back-ups automatisch naar Google Drive',
+      items: [
+        { text: 'Beheer > Back-ups naar Google Drive: elke nieuwe back-up wordt automatisch (versleuteld) naar je eigen Google Drive gekopieerd. Je verbindt eenmalig met Google, kiest de mapnaam en hoeveel back-ups er blijven staan, en ziet daar ook de bestanden op Drive en een logboek. Gaat er iets mis, dan zie je een waarschuwing.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.14.7',
       date: '2026-11-13',
       title: 'Database naar een eigen PostgreSQL naast de app',
