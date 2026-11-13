@@ -150,6 +150,22 @@ const pathOf = (points) => `M${points.map((point) => `${point.x.toFixed(1)},${po
 const colorOf = (rgb, shift = 0) => `rgb(${rgb.map((value) => Math.max(0, Math.min(255, Math.round(value + shift)))).join(',')})`;
 
 /**
+ * Laadt Playwright: eerst uit de eigen modules, anders uit de globale (zo staat het in de cloud-sandbox).
+ * @returns {object} de Playwright-module
+ */
+function loadPlaywright() {
+  try {
+    return require('playwright');
+  } catch (_) {
+    try {
+      return require(path.join(require('child_process').execSync('npm root -g').toString().trim(), 'playwright'));
+    } catch (error) {
+      throw new Error('Playwright niet gevonden: installeer het globaal (npm i -g playwright) of draai dit script in een omgeving waar het beschikbaar is.', { cause: error });
+    }
+  }
+}
+
+/**
  * Bouwt één tuinplan: een SVG-tekening en de waarheid (vlakken, elementen, schaal).
  * @param {number} seed Startwaarde van de toevalsreeks.
  * @param {{ style?: string }} [options] style: "digitaal" (scherp) of "scan" (licht verloop, ruis, onscherp).
@@ -202,7 +218,16 @@ function buildPlan(seed, options = {}) {
    */
   const inHardscape = (point, margin = 0) => hardscape.some(({ points }) => point.x > points[0].x - margin && point.x < points[1].x + margin && point.y > points[0].y - margin && point.y < points[2].y + margin);
   const hardscapeInside = hardscape.every(({ points }) => points.every(insideGarden));
-  if (!hardscapeInside) hardscape.splice(2);
+  if (!hardscapeInside) {
+    hardscape.splice(2); // oprit vervalt; woning en terras schuiven naar het midden van de tuin tot ze binnen de omtrek liggen
+    const middle = centerOf(garden);
+    for (let step = 0; step < 40 && !hardscape.every(({ points }) => points.every(insideGarden)); step++) {
+      for (const { points } of hardscape) {
+        for (const point of points) { point.x += (middle.x - point.x) * 0.03; point.y += (middle.y - point.y) * 0.03; }
+      }
+    }
+    if (!hardscape.every(({ points }) => points.every(insideGarden))) hardscape.splice(0);
+  }
 
   // gazon: organische vorm in de tuin; huis en terras liggen er later bovenop
   const gardenCenter = centerOf(garden);
@@ -328,7 +353,7 @@ function buildPlan(seed, options = {}) {
  * @returns {Promise<string[]>} De namen (zonder extensie).
  */
 async function writePlans(directory, count, firstSeed) {
-  const { chromium } = require('playwright');
+  const { chromium } = loadPlaywright();
   fs.mkdirSync(directory, { recursive: true });
   const browser = await chromium.launch();
   const names = [];

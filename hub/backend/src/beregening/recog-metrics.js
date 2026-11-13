@@ -5,7 +5,7 @@
 
 /** Vlaksoorten, in dezelfde volgorde als de AI-uitvoer (plan-analyzer.js). */
 const AREA_TYPES = ['lawn', 'bed', 'hedge', 'planter', 'wet', 'dry'];
-/** Bij overlap wint het vlak dat later in deze lijst staat (terras en water liggen "boven" het gazon). Een vlak met een eigen `layer` (getal) gaat daarvoor: een hogere laag ligt boven een lagere. */
+/** Bij overlap wint het vlak dat later in deze lijst staat (terras en water liggen "boven" het gazon). Een vlak met een eigen `layer` (getal) gaat daarvoor: een hogere laag ligt boven een lagere. Meng binnen één lijst geen vlakken met en zonder `layer`: de volgorde tussen die twee is dan niet zinvol. */
 const DRAW_ORDER = ['lawn', 'bed', 'hedge', 'planter', 'wet', 'dry'];
 /** Wat de beregening ermee doet: gazon = sproeiers, beplanting = druppel, verharding en water = geen beregening. Bed en haag verwarren maakt voor het ontwerp geen verschil. */
 const FUNCTION_OF = { lawn: 'sprinkler', bed: 'drip', hedge: 'drip', planter: 'drip', wet: 'none', dry: 'none' };
