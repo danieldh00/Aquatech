@@ -160,8 +160,11 @@
     let waiting = readStored('queued') || [];
     if (waiting.length && window.AquatechOffline) {
       // Een pick die niet meer wacht (verstuurd, weggegooid of door de server afgewezen) hoort niet langer verborgen te zijn: de bestelling staat dan weer in de lijst met wat de server nu zegt.
+      const startedAt = Date.now();
       const pending = new Set((await window.AquatechOffline.list()).filter((item) => item.state === 'pending').map((item) => item.id));
-      const kept = waiting.filter((entry) => pending.has(entry.queueId));
+      // Opnieuw lezen na het wachten: intussen kan er een pick bij gekomen zijn (ook in een ander tabblad).
+      waiting = readStored('queued') || [];
+      const kept = waiting.filter((entry) => pending.has(entry.queueId) || entry.at >= startedAt);
       if (kept.length !== waiting.length) { waiting = kept; writeStored('queued', kept.length ? kept : null); }
     }
     // Een bestelling die offline is afgemeld maar nog niet verstuurd is, hoort niet nog eens in de lijst.
@@ -452,7 +455,7 @@
       writeStored('progress', null);
       if (result.queued) {
         const pieces = Core.pickBody(order, state.states).lines.reduce((sum, entry) => sum + (Number(entry.qty) || 0), 0);
-        writeStored('queued', [...(readStored('queued') || []), { orderId: order.id, number: order.number, queueId: result.id, pieces }]);
+        writeStored('queued', [...(readStored('queued') || []), { orderId: order.id, number: order.number, queueId: result.id, pieces, at: Date.now() }]);
         showQueued(order, pieces);
         return;
       }
