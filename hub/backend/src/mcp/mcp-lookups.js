@@ -43,7 +43,7 @@ function numberCandidates(value) {
  * Maakt de leesfuncties.
  * @param {object} db De database.
  * @param {{ today?: Function }} [options] today() geeft de datum van vandaag (JJJJ-MM-DD; tests).
- * @returns {{ documentStatus: Function, openInvoices: Function, customerBalance: Function }} De functies.
+ * @returns {{ documentStatus: Function, openInvoices: Function, customerBalance: Function, workOrderByNumber: Function }} De functies.
  */
 function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 10) } = {}) {
   /**
@@ -115,6 +115,20 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
   }
 
   /**
+   * Een werkorder op nummer (om er uren of materiaal op te boeken).
+   * @param {string} tenantId De omgeving.
+   * @param {string} number Het nummer (bijv. WO-2026-0003).
+   * @returns {{ id: string, number: string, status: string, title: string, customer: string }|null} De werkorder, of null.
+   */
+  function workOrderByNumber(tenantId, number) {
+    const candidates = numberCandidates(number);
+    if (!candidates.length) return null;
+    const row = prepare(`SELECT id, number, status, title, customer FROM work_orders
+      WHERE tenant_id = ? AND number IN (${marks(candidates)}) AND deleted_at IS NULL`).get(tenantId, ...candidates);
+    return row ? { id: row.id, number: row.number, status: row.status, title: row.title || '', customer: row.customer || '' } : null;
+  }
+
+  /**
    * De openstaande facturen (definitief, nog niet betaald) van een omgeving per debiteur, grootste bedrag eerst. De database
    * telt per debiteur op (alle facturen tellen mee); alleen van de getoonde debiteuren komen de facturen zelf mee.
    * @param {string} tenantId De omgeving.
@@ -176,7 +190,7 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
     };
   }
 
-  return { documentStatus, openInvoices, customerBalance };
+  return { documentStatus, openInvoices, customerBalance, workOrderByNumber };
 }
 
 module.exports = { createMcpLookups, DOCUMENT_KINDS, daysLate, numberCandidates };

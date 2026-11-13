@@ -25,6 +25,7 @@ const SCOPES = {
   'artikelen.lezen': { label: 'Artikelen en verkoopprijzen opzoeken', rights: ['offertes', 'voorraad', 'werkorders'] },
   'offertes.concept': { label: 'Concept-offertes aanmaken (nooit versturen, wijzigen of verwijderen)', rights: ['offertes'] },
   'werkorders.concept': { label: 'Concept-werkorders aanmaken (status Nieuw, niet ingepland; nooit wijzigen of verwijderen)', rights: ['werkorders'] },
+  'werkregistratie.boeken': { label: 'Uren en materiaal boeken op werkorders (alleen op je eigen naam; wijzigen of verwijderen doe je in AquaTech)', rights: ['werkorders'] },
   'status.lezen': { label: 'De status van offertes, werkorders, facturen en bestellingen opvragen (wat jouw rol mag zien)', rights: ['offertes', 'werkorders', 'facturen', 'beheer'] },
   'facturen.lezen': { label: 'Openstaande facturen en wat klanten nog moeten betalen bekijken', rights: ['facturen'] },
 };
