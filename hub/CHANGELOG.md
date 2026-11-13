@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.1
+
+Oorzaak van de lege ruimte: de klasse `.cart` van de winkelwagenpagina (marge 24px, max-breedte) viel ook op de winkelwagenknop in de kop; nu `.shop-main .cart`. Mobiele webshopkop (`storefront.css`, ≤ 800 px): kleiner logo en iconen, knoppen met minder opvulling, winkelwagenteller over het icoon, kleinere mededelingenbalk, zodat de kop niet meer over twee rijen met een lege ruimte valt.
+
 ## 1.15.0
 
 - Nieuw `platform/backup-restore-lines.js`: regelweergave (gelijk, gewijzigd, ontbreekt, nieuw sinds de back-up) en `applyLines` in één transactie; offerteregels op `id` (totalen via `QuoteCore.totals`), bestelregels op `code` (totalen via `totalsOf` inclusief verzendregel, reservering opnieuw gelegd, tekort aan voorraad of totalen die niet bij de regels passen = geweigerd, regel in de geschiedenis).

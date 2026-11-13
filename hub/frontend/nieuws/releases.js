@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.15.1',
+      date: '2026-11-13',
+      title: 'Compactere webshopkop op mobiel',
+      items: [
+        { text: 'Op de telefoon staan logo, klantenservice, beheer, account en winkelwagen van de webshop nu op één rij met de zoekbalk er direct onder; de mededelingenbalk is kleiner.' },
+      ],
+    },
+    {
       version: '1.15.0',
       date: '2026-11-13',
       title: 'Orderregels afzonderlijk terugzetten uit een back-up',
