@@ -210,7 +210,7 @@ function createOrderpick(db, { orders, slips, labels }) {
       try {
         const set = orders.setTracking(tenantId, id, made.trackingCode, { onlyIfEmpty: true });
         // Bij een bestelling die nog niet is verzonden (deelzending) kan dit niet: de volgcode staat bij de zending en gaat bij de laatste zending mee.
-        if (set && set.error) console.warn(`Volgcode van zending ${shipment.id} nog niet bij de bestelling gezet: ${set.error}`);
+        if (set && set.error) console.info(`Volgcode van zending ${shipment.id} nog niet bij de bestelling gezet: ${set.error}`);
       } catch (error) {
         console.warn(`Volgcode ${made.trackingCode} van zending ${shipment.id} niet bij de bestelling gezet: ${error.message}`);
       }
