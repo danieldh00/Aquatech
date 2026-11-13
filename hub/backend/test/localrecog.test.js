@@ -10,6 +10,7 @@ const sandbox = { window: {}, console };
 vm.createContext(sandbox);
 for (const file of ['geometry.js', 'sprinklerlib.js', 'catalog.js', 'autotrace.js', 'planimport.js', 'concept.js', 'localrecog.js']) vm.runInContext(fs.readFileSync(path.join(FRONT, file), 'utf8'), sandbox);
 const LocalRecognizer = sandbox.window.LocalRecognizer;
+const { insidePolygon } = require('../src/beregening/recog-metrics');
 
 test('maten lezen: eenheden en notaties', () => {
   assert.strictEqual(LocalRecognizer.parseLength('12,00', 'm'), 12);
@@ -345,4 +346,36 @@ test('leren: kleur die de vaste regels niet als gazon zien, wordt na een voorbee
   // onbekende versie of te weinig bewijs: vaste regels
   const old = isolatedWindow.LocalRecognizer.areasFromPixels(data, width, height, 1, { learned: { ...samples, v: 0 } });
   assert.ok(!old.areas.some((area) => area.type === 'lawn'));
+});
+
+test('wit omsloten huis en egaal bruin terras gelden als verharding, geen beplanting', () => {
+  const width = 400, height = 300;
+  const data = new Uint8ClampedArray(width * height * 4);
+  /**
+   * Vult een rechthoek met een kleur.
+   * @param {number[]} box [x0, y0, x1, y1] in pixels
+   * @param {number[]} color [rood, groen, blauw]
+   */
+  const fill = (box, color) => {
+    for (let y = box[1]; y < box[3]; y++) for (let x = box[0]; x < box[2]; x++) data.set([...color, 255], (y * width + x) * 4);
+  };
+  fill([0, 0, width, height], [255, 255, 255]);
+  fill([40, 40, 360, 260], [150, 200, 90]); // gazon
+  fill([60, 60, 180, 140], [255, 255, 255]); // huis: wit met donkere omtrek
+  for (let x = 60; x < 180; x++) for (const y of [60, 61, 138, 139]) data.set([20, 20, 20, 255], (y * width + x) * 4);
+  for (let y = 60; y < 140; y++) for (const x of [60, 61, 178, 179]) data.set([20, 20, 20, 255], (y * width + x) * 4);
+  fill([220, 160, 340, 240], [170, 100, 70]); // egaal baksteenrood terras
+  const result = LocalRecognizer.areasFromPixels(data, width, height, 1);
+  /**
+   * Zegt of een punt in een gevonden vlak van een soort ligt.
+   * @param {string} type vlaksoort
+   * @param {number} x horizontale positie
+   * @param {number} y verticale positie
+   * @returns {boolean} true als een vlak van die soort het punt bevat
+   */
+  const covered = (type, x, y) => result.areas.some((area) => area.type === type && insidePolygon(x, y, area.points));
+  assert.ok(covered('lawn', 300, 100), 'gazon gevonden');
+  assert.ok(covered('dry', 120, 100), 'wit huis = verharding');
+  assert.ok(covered('dry', 280, 200), 'egaal terras = verharding');
+  assert.ok(!covered('bed', 280, 200) || covered('dry', 280, 200), 'terras niet als beplanting');
 });
