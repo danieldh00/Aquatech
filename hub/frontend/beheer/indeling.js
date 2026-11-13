@@ -42,6 +42,7 @@
     ] },
     { title: 'Systeem', sections: [
       { id: 'backup', label: 'Back-ups', pane: 'settings', form: 's-backup', words: 'kopie database herstellen versleuteld', needs: 'backups' },
+      { id: 'restore', label: 'Terugzetten uit back-up', pane: 'settings', form: 's-restore', words: 'herstellen terugzetten verwijderd offerte bestelling orderregel klant artikel per record', needs: 'backups' },
       { id: 'backup-drive', label: 'Back-ups naar Google Drive', pane: 'settings', form: 's-backup-drive', words: 'google drive kopie buiten server offsite cloud upload oauth', needs: 'backups' },
       { id: 'aikosten', label: 'AI-kosten', pane: 'aikosten', words: 'verbruik tokens kosten export per gebruiker' },
       { id: 'debug', label: 'Foutopsporing', pane: 'settings', form: 's-debug', words: 'debug debugmodus foutmelding fout foutcode details' },
@@ -53,7 +54,7 @@
   const ALIASES = { settings: 'modules' };
 
   /** Alle formulieren van het tabblad Instellingen: er is er telkens één zichtbaar. */
-  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-labels', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-security', 's-backup', 's-backup-drive', 's-debug'];
+  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-labels', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-security', 's-backup', 's-backup-drive', 's-restore', 's-debug'];
 
   const OPEN_KEY = 'aquatech_beheer_groups';
 

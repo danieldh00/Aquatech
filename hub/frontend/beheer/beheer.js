@@ -691,6 +691,7 @@
     const pending = state.pending || (state.pending = {});
     if (sectionId === 'backup' && state.backups) loadBackups();
     if (sectionId === 'backup-drive' && state.backups) window.BeheerDrive.load();
+    if (sectionId === 'restore' && state.backups) window.BeheerRestore.load();
     if (sectionId === 'mail' && !state.mailLoaded && !pending.mail) {
       pending.mail = loadMail().then((loaded) => { state.mailLoaded = loaded; }).finally(() => { pending.mail = null; });
     }

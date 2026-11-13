@@ -273,6 +273,26 @@
           </details>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-restore" class="card-form settings" novalidate>
+          <h3>Terugzetten uit een back-up</h3>
+          <p class="muted small">Zet een verwijderd of verkeerd gewijzigd record terug zonder de rest van de database aan te raken. Je kiest een back-up en een soort record, ziet eerst precies wat er zou veranderen en kiest per veld wat terug mag. Een verwijderd record komt terug met zijn onderliggende rijen (uren, verpakkingen, enzovoort). Wachtwoorden, 2FA en de voorraadstand worden nooit teruggezet; bestellingen en inkooporders komen alleen terug als ze verwijderd zijn. Vlak voor het terugzetten maakt de app zelf een nieuwe back-up. Het terugzetten werkt op de omgeving waarin je nu zit.</p>
+          <div class="form-grid">
+            <label>Back-up <select id="r-backup"></select></label>
+            <label>Soort <select id="r-kind"></select></label>
+            <label class="full">Zoeken (nummer, naam, klant) <input id="r-query" autocomplete="off"></label>
+          </div>
+          <div class="form-actions"><button type="button" class="btn primary" id="r-search">Zoeken in de back-up</button></div>
+          <div id="r-list" class="muted small"></div>
+          <div id="r-preview"></div>
+          <div id="r-confirm" hidden>
+            <div class="form-grid">
+              <label class="full">Je wachtwoord ter bevestiging <input id="r-password" type="password" autocomplete="current-password"></label>
+            </div>
+            <div class="form-actions"><button type="button" class="btn danger" id="r-apply">Terugzetten</button></div>
+          </div>
+          <div id="r-result" class="muted small" role="status"></div>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-debug" class="card-form settings">
           <h3>Foutopsporing</h3>
           <p class="muted small">Gaat er iets mis, dan krijgt iedereen een korte melding met een foutcode (die staat ook in het serverlog). Met de debugmodus aan zien beheerders van deze omgeving daarnaast een paneel met de details: wat er misging, de databasecode, waar in de software en welk verzoek. Handig om een fout te melden of zelf op te lossen.</p>
@@ -610,6 +630,7 @@
   <script src="kleuren.js"></script>
   <script src="updates.js"></script>
   <script src="drive-backup.js"></script>
+  <script src="backup-restore.js"></script>
   <script src="beheer.js"></script>
 </body>
 </html>

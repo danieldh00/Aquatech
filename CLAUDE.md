@@ -120,6 +120,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   15 min wachten (handmatig *Nu uploaden* meteen), 401 = één keer vers token, daarna `needsReconnect`. Google-app-gegevens wijzigen kan
   pas na verbreken. Tests: `createApp({ googleFetch })` + `test/helpers/google-fake.js` (echte HTTP-server). **Een nieuwe externe opslag
   voor back-ups volgt dit patroon (instelling in de app, status + logboek, nooit tokens in de uitvoer).**
+  **Terugzetten uit back-up** (1.14.x, geen migratie, `platform/backup-restore.js` + `backup-restore-routes.js`, Beheer > Systeem > *Terugzetten uit back-up* in `beheer/backup-restore.js`): back-up alleen-lezen openen (`openBackup`), per record of per veld (`column` of `column.key`) terugzetten binnen `req.tenantId`; register `ENTITIES` bepaalt tabel, kinderen, overschrijfbeleid (`columns`|`never`, `lockedWhen`) en wat nooit terugkomt. Voorbeeld → wachtwoord → veiligheidsback-up (`runBackup`) → één transactie, audit `backup_teruggezet`. **Een nieuw soort record = één regel in `ENTITIES`; nooit rechtstreeks SQL buiten dat register. Volledig terugzetten blijft `pve/db-local.sh restore`.**
   CSP in server.js: inline scripts alleen in login/setup.html (op hash);
   nieuwe inline scripts elders werken niet. Proces zakt van root naar uid 1000
   (`dropPrivileges`, `RUN_AS_ROOT=1` slaat over). Test-wachtwoorden moeten
