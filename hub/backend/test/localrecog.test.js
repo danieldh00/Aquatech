@@ -377,5 +377,19 @@ test('wit omsloten huis en egaal bruin terras gelden als verharding, geen beplan
   assert.ok(covered('lawn', 300, 100), 'gazon gevonden');
   assert.ok(covered('dry', 120, 100), 'wit huis = verharding');
   assert.ok(covered('dry', 280, 200), 'egaal terras = verharding');
-  assert.ok(!covered('bed', 280, 200) || covered('dry', 280, 200), 'terras niet als beplanting');
+  assert.ok(!covered('bed', 280, 200), 'terras niet als beplanting');
+});
+
+test('gevlekt warm vlak (getekende planten) blijft beplanting', () => {
+  const width = 400, height = 300;
+  const data = new Uint8ClampedArray(width * height * 4).fill(255);
+  for (let y = 40; y < 260; y++) {
+    for (let x = 40; x < 360; x++) {
+      const spotted = ((x >> 2) + (y >> 2)) % 2 === 0;
+      data.set(spotted ? [230, 110, 90, 255] : [120, 50, 30, 255], (y * width + x) * 4);
+    }
+  }
+  const result = LocalRecognizer.areasFromPixels(data, width, height, 1);
+  const inside = result.areas.some((area) => area.type === 'bed' && insidePolygon(200, 150, area.points));
+  assert.ok(inside, `beplanting: ${result.areas.map((area) => area.type)}`);
 });
