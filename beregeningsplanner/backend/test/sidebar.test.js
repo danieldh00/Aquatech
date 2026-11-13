@@ -41,12 +41,13 @@ test('elke actieve module heeft een bekende navGroup en een titel', () => {
 test('beheerder: de groepen staan in de afgesproken volgorde en niets gaat verloren', () => {
   const sections = sectionsFor({ role: 'beheerder' });
   const keys = sections.map((section) => section.key);
-  assert.deepStrictEqual(keys, ['top', 'verkoop', 'artikelen', 'inkoop', 'planner', 'beheer']);
+  assert.deepStrictEqual(keys, ['top', 'verkoop', 'magazijn', 'artikelen', 'inkoop', 'planner', 'beheer']);
   const shown = sections.flatMap((section) => idsOf(section.items)).filter(Boolean);
   const expected = idsOf(tools.visible(Roles.rightsOf({ role: 'beheerder' })).filter((module) => module.status === 'actief'));
   assert.deepStrictEqual([...shown].sort(), [...expected].sort());
   assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'verkoop').items), ['offertes', 'webshop-bestellingen', 'klanten', 'klantdossier', 'facturen']);
   assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'planner').items), ['beregening', 'plannen', 'planning', 'werkorders', 'meldingen', 'uitbesteden']);
+  assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'magazijn').items), ['orderpick']);
   assert.strictEqual(sections[0].items[0].id, '', 'Overzicht staat bovenaan');
 });
 

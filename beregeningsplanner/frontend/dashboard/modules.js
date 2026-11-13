@@ -93,6 +93,16 @@
       right: 'beheer',
     },
     {
+      id: 'orderpick',
+      navGroup: 'magazijn',
+      title: 'Orderpick',
+      description: 'Bestellingen picken in het magazijn: de regels op volgorde van locatie, scannen met scanner of camera, aantal bevestigen, "niet aanwezig" melden en de order afmelden met pakbon en verzendlabel.',
+      href: 'orderpick/',
+      icon: 'box',
+      status: 'actief',
+      right: 'orderpick',
+    },
+    {
       id: 'klanten',
       navGroup: 'verkoop',
       title: 'Klanten',
