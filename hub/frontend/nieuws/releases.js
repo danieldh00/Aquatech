@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.15.0',
+      date: '2026-11-13',
+      title: 'Orderregels afzonderlijk terugzetten uit een back-up',
+      items: [
+        { text: 'Beheer > Terugzetten uit back-up: bij een offerte of webshopbestelling kun je nu ook losse regels terugzetten (een verwijderde of gewijzigde regel), zonder de rest van het record aan te raken. Het totaal wordt opnieuw berekend en bij een bestelling volgt de voorraadreservering. Een bestelling die al in behandeling is (verzonden, deels geleverd of online betaald) en een geaccordeerde offerte blijven met rust.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.14.9',
       date: '2026-11-13',
       title: 'Terugzetten uit een back-up (deels of per record)',
