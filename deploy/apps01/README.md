@@ -10,6 +10,11 @@ Productie draait op de VM `apps01` (Debian 13, Docker) in `/opt/apps/aquatech`:
 | `data/` | `/data` van de container (sessiesleutel, back-ups; `aquatech.db` alleen nog als SQLite-terugval) |
 | `secrets/master-key` | hoofdsleutel (uid 1000, mode 400; kopie in wachtwoordkluis) |
 | `secrets/database-url` | verbindings-URL van Supabase met wachtwoord (uid 1000, mode 400) |
+| `compose.localdb.yml` | alleen met eigen PostgreSQL: de database-container naast de app (`.env`: `COMPOSE_FILE=compose.yml:compose.localdb.yml`) |
+| `pgdata/` | alleen met eigen PostgreSQL: de databasebestanden (root/uid 999) |
+| `secrets/database-url-local` | alleen met eigen PostgreSQL: verbindings-URL van de app naar de eigen database (uid 1000, mode 400) |
+| `secrets/postgres-password` | alleen met eigen PostgreSQL: wachtwoord van de databasebeheerder (root, mode 400; de app gebruikt dit niet) |
+| `pg-backup.sh`, `backups/postgres/` | alleen met eigen PostgreSQL: dagelijkse versleutelde back-ups (zie hieronder) |
 | `pre-update/` | alleen bij SQLite: databasekopie per update (laatste 5) |
 | `update/status/` | root, in de container alleen-lezen: `status.json`, `run.json`, `releases.json`, `maintenance.json` (zie `update.sh`) |
 | `update/request/` | uid 1000, mode 700: hier zet de app `request.json` (Nu updaten) en `policy.json` (automatisch aan/uit) |
@@ -59,9 +64,88 @@ Een specifieke versie terugzetten: `AQUATECH_TAG=<versie>` in `.env`,
 `sudo docker compose up -d aquatech`, en `<nieuwere versie>` in
 `.failed-version` zetten zodat de timer die niet direct weer uitrolt.
 
+## Eigen PostgreSQL (in plaats van Supabase)
+
+De database draait als container `aquatech-postgres` naast de app (PostgreSQL 17, volume `pgdata/`, alleen bereikbaar
+via het interne Docker-netwerk, geen gepubliceerde poort). Reden: Supabase telt het dataverkeer naar de app (egress;
+gratis plan 5 GB), en de database ernaast kost niets en is sneller. De app merkt geen verschil: dezelfde PostgreSQL,
+hetzelfde schema `aquatech`, dezelfde RLS per organisatie (rol `aquatech_app`). De app gebruikt van Supabase alleen de
+database (geen auth, storage of realtime).
+
+**Alles wordt bediend vanaf de Proxmox-host** met één script dat de bestanden naar de server kopieert en daar uitvoert
+(LXC via `pct exec`, VM via ssh; de server wordt op naam `apps01` gezocht met `pct list`/`qm list`). Er gaan geen
+wachtwoorden over de verbinding: de Supabase-URL staat al in `secrets/database-url`, de nieuwe wachtwoorden worden op de
+server aangemaakt.
+
+```sh
+# Op de Proxmox-host (als root):
+curl -fsSL https://raw.githubusercontent.com/danieldh00/Aquatech/master/deploy/apps01/pve/db-local.sh -o /tmp/db-local.sh
+bash /tmp/db-local.sh migrate          # Supabase -> eigen PostgreSQL
+bash /tmp/db-local.sh status           # waar draait de database, back-ups
+bash /tmp/db-local.sh backup           # nu een back-up maken
+bash /tmp/db-local.sh restore <bestand>   # een back-up terugzetten
+bash /tmp/db-local.sh rollback         # terug naar Supabase (met de nieuwe gegevens)
+```
+
+Andere naam of id: `APPS01_NAME`, `APPS01_CTID` (LXC), `APPS01_VMID` (VM) of `APPS01_SSH=root@<ip>`; verder `POSTGRES_TAG`
+(standaard 17), `SKIP_HASH=1` (alleen aantallen controleren), `YES=1` (geen bevestigingsvraag), `SRC_DIR` (map
+`deploy/apps01` van een lokale checkout in plaats van GitHub).
+
+**Wat `migrate` doet** (de app is ca. 2-10 minuten uit, afhankelijk van de omvang):
+
+1. Installeert `compose.localdb.yml`, `pg-backup.sh` en `aquatech-pg-backup.{service,timer}`, maakt de wachtwoorden en
+   start de container (de app blijft intussen gewoon op Supabase draaien).
+2. Test de verbinding met Supabase (TLS met controle), controleert de PostgreSQL-versie en maakt een back-up met de app.
+3. Zet de onderhoudsmodus aan en stopt de app: vanaf nu wordt er niets meer naar Supabase geschreven.
+4. `pg_dump` van schema `aquatech` uit Supabase → `pg_restore` in de eigen database, alles of niets
+   (één transactie). Supabase wordt alleen gelezen.
+5. Controleert per tabel het aantal rijen én een controlegetal over de inhoud, plus het aantal policies, indexen en tabellen
+   met RLS, aan beide kanten. Bij een verschil stopt het.
+6. Bewaart een versleutelde laatste momentopname van Supabase (`backups/postgres/supabase-laatste-*.dump.enc`).
+7. Zet `COMPOSE_FILE` in `.env` (kopie: `.env.voor-localdb-<datum>`), start de app en controleert: healthy, PostgreSQL,
+   RLS actief, de app is echt met de eigen database verbonden.
+8. Zet de back-uptimer aan en maakt meteen de eerste back-up.
+
+Gaat in stap 1-7 iets mis, dan zet het script zelf alles terug en start de app weer op Supabase (er is dan niets naar
+Supabase geschreven, dus zonder verlies). Wordt de verbinding van de host verbroken, dan loopt het script op de server
+door (`systemd-run`); de stand zie je met `status` of `journalctl -u 'aquatech-localdb-*'`.
+
+`update.sh` (de update-timer en *Nu updaten*) blijft werken: het leest `.env` en maakt de back-up vóór een update ook met
+`backup.js create`. Alleen de app wordt vervangen, de database-container blijft draaien.
+
+**Back-ups**: elke nacht 02:30 (`aquatech-pg-backup.timer`, `Persistent` = inhalen na een uitgevallen server) maakt
+`pg-backup.sh` een `pg_dump` van schema `aquatech`, versleuteld met AES-256 (PBKDF2) met `secrets/master-key` als
+wachtwoord, in `backups/postgres/aquatech-<datum>-<tijd>.dump.enc` (map alleen voor root). Elke back-up wordt direct
+gecontroleerd (ontsleutelen + inhoudsopgave lezen). Bewaartermijn: dagelijks 14 dagen, de back-ups van zondag 8 weken, de
+nieuwste 3 altijd (`KEEP_DAILY_DAYS`, `KEEP_WEEKLY_DAYS`). Plus de back-up van de app zelf in `data/backups`.
+**Kopieer `backups/postgres/` ook buiten de server** (bijv. naar de Proxmox-host of een NAS; een back-up op dezelfde schijf
+beschermt niet tegen een kapotte schijf) en bewaar `secrets/master-key` in de wachtwoordkluis: zonder die sleutel zijn de
+back-ups niet te openen. Voorbeeld vanaf de host: `rsync -a root@apps01:/opt/apps/aquatech/backups/postgres/ /var/backups/aquatech/`.
+
+**Terugdraaien naar Supabase** (`db-local.sh rollback`): maakt eerst een back-up, stopt de app, kopieert de eigen database
+naar Supabase (vervangt daar schema `aquatech`, alles of niets, met dezelfde controle per tabel), haalt `COMPOSE_FILE` uit
+`.env` en start de app weer op Supabase. Met `rollback --no-copy` alleen de instelling (dan staan de gegevens van na de
+overstap alleen in de eigen database). Supabase moet daarvoor nog bestaan: pauzeer of verwijder dat project dus pas na een
+paar weken. Handmatig zonder script: `COMPOSE_FILE` uit `.env` halen en `docker compose up -d aquatech`
+(`secrets/database-url` is nooit aangepast).
+
+**Opnieuw migreren** na een `rollback`: de eigen database bevat dan al tabellen; het script weigert dat uit voorzorg en
+noemt de regel waarmee je bewust opnieuw begint.
+
+**Wachtwoord van de app-rol wijzigen**: `migrate` maakt het eenmalig aan (willekeurig, 64 tekens, alleen in
+`secrets/database-url-local`). Nieuw wachtwoord: `ALTER ROLE aquatech PASSWORD '…'` in de container
+(`docker exec -it aquatech-postgres psql -U postgres -d aquatech`), dezelfde waarde in `secrets/database-url-local`, en
+`docker compose up -d --force-recreate aquatech`.
+
+**Nieuwe hoofdversie van PostgreSQL**: niet automatisch (de image staat op `postgres:17`). Dump met `backup`, zet
+`POSTGRES_TAG` in `.env`, verplaats `pgdata/`, start een lege container en `restore` de back-up.
+
+**Op de nieuwe webserver**: kopieer `/opt/apps/aquatech` (of zet een back-up terug met `restore`) en draai `db-local.sh status`
+om te controleren; er is niets aan het adres van Supabase of de host gebonden.
+
 ## Supabase (PostgreSQL)
 
-Productie draait sinds 2026-10-20 op Supabase (schema `aquatech`, Session
+Productie draaide sinds 2026-10-20 op Supabase (schema `aquatech`, Session
 pooler). `compose.yml` hierboven heeft `DATABASE_URL_FILE` daarom aan.
 
 Overstap (al gedaan; voor een nieuwe server): vanaf de Proxmox-host, of zonder

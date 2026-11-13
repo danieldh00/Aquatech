@@ -1,0 +1,75 @@
+# Aanvulling op compose.yml: de database draait als eigen PostgreSQL-container naast de app
+# (in plaats van Supabase). Staat op de server in /opt/apps/aquatech/compose.localdb.yml en wordt
+# actief door in .env te zetten:  COMPOSE_FILE=compose.yml:compose.localdb.yml
+# (doet `db-local.sh migrate` vanaf de Proxmox-host; terugdraaien = die regel weghalen, zie README.md).
+#
+# - Alleen de app bereikt de database, via het interne Docker-netwerk (host `postgres`); er is geen poort
+#   gepubliceerd. De rol `aquatech` is geen superuser (wel CREATEROLE, de app maakt `aquatech_app` zelf aan).
+# - De Supabase-URL blijft ongemoeid in secrets/database-url (terugvaloptie); de app krijgt via dit bestand
+#   in plaats daarvan secrets/database-url-local.
+# - Dagelijkse back-ups: pg-backup.sh via aquatech-pg-backup.timer.
+services:
+  postgres:
+    # Hoofdversie vastzetten (nieuwe hoofdversie = bewuste dump/restore, geen automatische sprong).
+    image: postgres:${POSTGRES_TAG:-17}
+    container_name: aquatech-postgres
+    restart: unless-stopped
+    shm_size: 256mb
+    stop_grace_period: 60s
+    environment:
+      - POSTGRES_DB=aquatech
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres-password
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --auth-host=scram-sha-256 --data-checksums
+      - TZ=${TZ:-Europe/Amsterdam}
+    # Afgestemd op apps01 (6 GB, 2 vCPU, SSD); de app gebruikt hoogstens PG_POOL_SIZE (5) + 1 verbindingen.
+    command:
+      - postgres
+      - -c
+      - max_connections=60
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - wal_compression=on
+      - -c
+      - log_min_duration_statement=1000
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    secrets:
+      - postgres-password
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aquatech"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+
+  aquatech:
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+secrets:
+  # Vervangt het bestand van compose.yml: de app verbindt met de eigen database.
+  database-url:
+    file: ./secrets/database-url-local
+  postgres-password:
+    file: ./secrets/postgres-password
