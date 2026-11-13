@@ -32,5 +32,13 @@ test('mcp-downloads: alleen de eigen gebruiker, verloopt, begrenst per gebruiker
   const tokens = Array.from({ length: 12 }, () => store.put('t1', 'u1', 'b', Buffer.from('x')).token);
   assert.strictEqual(store.get(tokens[0], 't1', 'u1'), null, 'de oudste gaat weg na tien');
   assert.ok(store.get(tokens[11], 't1', 'u1'));
-  assert.strictEqual(store.put('t1', 'u9', 'groot', Buffer.alloc(51 * 1024 * 1024)), null);
+  assert.strictEqual(store.put('t1', 'u9', 'groot', Buffer.alloc(6 * 1024 * 1024)), null, 'een rapport boven 5 MB wordt geweigerd');
+  // Eén gebruiker houdt hoogstens 10 MB: de oudste gaat weg, de rapporten van een ander blijven.
+  const other = store.put('t1', 'u2', 'x', Buffer.from('x'));
+  const first = store.put('t1', 'u3', 'a', Buffer.alloc(4 * 1024 * 1024));
+  const second = store.put('t1', 'u3', 'b', Buffer.alloc(4 * 1024 * 1024));
+  const third = store.put('t1', 'u3', 'c', Buffer.alloc(4 * 1024 * 1024));
+  assert.strictEqual(store.get(first.token, 't1', 'u3'), null);
+  assert.ok(store.get(second.token, 't1', 'u3') && store.get(third.token, 't1', 'u3'));
+  assert.ok(store.get(other.token, 't1', 'u2'));
 });

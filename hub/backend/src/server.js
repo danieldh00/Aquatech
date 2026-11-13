@@ -2482,7 +2482,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
        * @returns {{ hours: object[], materials: object[] }} De regels.
        */
       periodLog: (req, range) => workLogStore.period(req.tenantId, range),
-      openInvoiceRows: (req) => mcpLookups.openInvoiceRows(req.tenantId),
+      openInvoiceRows: (req, limit) => mcpLookups.openInvoiceRows(req.tenantId, limit),
       /**
        * Zet een Excel-rapport klaar voor download door deze gebruiker (15 minuten, alleen ingelogd).
        * @param {object} req Het verzoek.

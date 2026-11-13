@@ -9,6 +9,10 @@ const crypto = require('crypto');
 const TTL_MS = 15 * 60 * 1000;
 /** Hoeveel rapporten één gebruiker tegelijk klaar heeft staan. */
 const MAX_PER_USER = 10;
+/** Hoeveel bytes één rapport hoogstens is. */
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+/** Hoeveel bytes de rapporten van één gebruiker samen hoogstens innemen (één gebruiker vult de gedeelde ruimte nooit). */
+const MAX_USER_BYTES = 10 * 1024 * 1024;
 /** Hoeveel bytes alle rapporten samen hoogstens innemen. */
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 /** De inhoudstype van een .xlsx-bestand. */
@@ -58,8 +62,14 @@ function createDownloadStore({ now = () => Date.now(), ttlMs = TTL_MS } = {}) {
    */
   function put(tenantId, userId, fileName, buffer) {
     sweep();
+    if (buffer.length > MAX_FILE_BYTES) return null;
     const own = [...entries.entries()].filter(([, entry]) => entry.tenantId === tenantId && entry.userId === userId);
-    while (own.length >= MAX_PER_USER) entries.delete(own.shift()[0]);
+    let ownBytes = own.reduce((sum, [, entry]) => sum + entry.buffer.length, 0);
+    while (own.length && (own.length >= MAX_PER_USER || ownBytes + buffer.length > MAX_USER_BYTES)) {
+      const [oldToken, oldEntry] = own.shift();
+      ownBytes -= oldEntry.buffer.length;
+      entries.delete(oldToken);
+    }
     if (totalBytes() + buffer.length > MAX_TOTAL_BYTES) return null;
     const token = crypto.randomBytes(32).toString('base64url');
     const entry = { tenantId, userId, fileName: safeFileName(fileName), buffer, expiresAt: now() + ttlMs };
