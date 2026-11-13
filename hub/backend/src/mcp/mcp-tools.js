@@ -522,6 +522,8 @@ function createMcpTools(ctx) {
         let customer = { name: '', contact: '', address: '', email: '', phone: '' };
         const wantedId = cleanText(args.klantId, 64);
         if (wantedId) {
+          // De klantkaart (adres, e-mail, telefoon) is voor medewerkers met het recht klanten; anderen geven de klant als tekst op.
+          if (!ctx.can(req.user, 'klanten')) return errorOf('Je mag in AquaTech geen klantgegevens opzoeken. Geef de klant als tekst op (klant.naam) in plaats van klantId.');
           const account = ctx.getCustomer(req, wantedId);
           if (!account || account.disabled) return errorOf('Deze klant bestaat niet (meer). Zoek opnieuw met zoek_klant.');
           customer = { name: account.companyName || account.displayName, contact: account.companyName ? account.displayName : '', address: account.address || '', email: account.email || '', phone: account.phone || '' };

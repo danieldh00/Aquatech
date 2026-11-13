@@ -783,9 +783,19 @@ test('maak_concept_werkorder: nieuwe werkorder zonder offerte, vraagt terug bij 
   assert.strictEqual(forced.structuredContent.materiaalregels, 0);
   const forcedOrder = (await admin.get(`/app/api/workorders/${forced.structuredContent.werkorderId}`)).body;
   assert.match(forcedOrder.data.internalNote, /VERZONNEN-9/);
-  // Een andere organisatie ziet de werkorder niet; de installateur met toestemming mag er ook een maken.
+  // Een planner (recht werkorders, niet klanten) mag geen klantkaart overnemen via klantId, wel de klant als tekst opgeven.
   const viaInstaller = await connect(base, installer);
   assert.ok((await mcp(base, viaInstaller.accessToken, { method: 'tools/list' })).body.result.tools.some((tool) => tool.name === 'maak_concept_werkorder'));
+  const plannerId = (await installer.get('/app/api/me')).body.user.id;
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${plannerId}`, { role: 'planner' })).status, 200);
+  const asPlanner = viaInstaller;
+  const byId = await callTool(base, asPlanner.accessToken, 'maak_concept_werkorder', { klantId: customer.id, titel: 'Via id' });
+  assert.strictEqual(byId.isError, true);
+  assert.match(byId.structuredContent.fout, /klantgegevens/);
+  const byName = await callTool(base, asPlanner.accessToken, 'maak_concept_werkorder', { klant: { naam: 'Los Persoon' }, titel: 'Via naam' });
+  assert.strictEqual(byName.isError, false, JSON.stringify(byName));
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${plannerId}`, { role: 'installateur' })).status, 200);
+  // Een andere organisatie ziet de werkorder niet; de installateur met toestemming mag er ook een maken.
   const foreign = await createLogin(base, { password: PW, clientOptions: { followRedirects: false } })('vreemd', 'ander');
   assert.strictEqual((await foreign.get(`/app/api/workorders/${result.werkorderId}`)).status, 404);
   // Zonder de scope is de tool er niet.
