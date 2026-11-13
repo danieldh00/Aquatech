@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.14.6',
+      date: '2026-11-13',
+      title: 'De app heet nu AquaTech Hub',
+      items: [
+        { text: 'De app heet nu **AquaTech Hub**: de naam staat in het tabblad van je browser en bij het installeren op je telefoon. De Beregeningsplanner blijft een onderdeel (module) van de Hub; de webshop blijft AquaTech Shop.' },
+      ],
+    },
+    {
       version: '1.14.5',
       date: '2026-11-13',
       title: 'Orderpick werkt ook zonder verbinding',
