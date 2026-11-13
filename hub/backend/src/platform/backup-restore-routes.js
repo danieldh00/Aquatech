@@ -144,9 +144,8 @@ function registerBackupRestoreRoutes(app, { backupDir, vault, database, store, a
       if (!(await confirmIdentity(req, res))) return undefined;
       const target = { kind: String(req.body?.kind || ''), id: String(req.body?.id || ''), keys: Array.isArray(req.body?.keys) ? req.body.keys.map(String).slice(0, 100) : [] };
       const out = await withBackup(req, req.body?.backup, async (opened) => {
-        // Eerst controleren of dit kan (schrijft niets), dan pas de veiligheidsback-up en het terugzetten.
-        const view = lineRestore.linesView(opened, target);
-        if (view.blocked) throw Object.assign(new Error(view.blocked), { status: 409 });
+        // Eerst alle controles zonder te schrijven; pas daarna de veiligheidsback-up en het echte terugzetten.
+        lineRestore.applyLines(opened, target, lineDeps(), { dryRun: true });
         const safety = await runBackup(req);
         return { ...lineRestore.applyLines(opened, target, lineDeps()), safetyBackup: safety.name };
       });

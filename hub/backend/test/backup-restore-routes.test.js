@@ -127,3 +127,15 @@ test('een onbekende soort (ook een naam uit het prototype) geeft 400, geen inter
     }
   } finally { world.cleanup(); }
 });
+
+test('een geweigerde terugzetting maakt geen veiligheidsback-up', async () => {
+  const world = await start();
+  try {
+    const made = await world.baas.post(BASE);
+    world.db.prepare("UPDATE quotes SET status = 'verzonden' WHERE id = 'qa'").run();
+    const before = fs.readdirSync(world.dir).length;
+    const done = await world.baas.post(`${BASE}/restore/lines/apply`, { backup: made.body.name, kind: 'quote', id: 'qa', keys: ['l1'], password: PW });
+    assert.strictEqual(done.status, 409);
+    assert.strictEqual(fs.readdirSync(world.dir).length, before);
+  } finally { world.cleanup(); }
+});

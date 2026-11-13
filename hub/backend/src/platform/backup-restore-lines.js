@@ -140,9 +140,10 @@ function shippingLineOf(data) {
  * @param {object} scene { backup, current, context }.
  * @param {{ kind: string, id: string, keys: string[] }} target Het record en de sleutels van de regels die terug moeten.
  * @param {{ QuoteCore: object, totalsOf: Function, stockLinesOf: Function, stock: object }} deps De rekenkern van offertes, de totalen en de voorraad van de bestelling.
+ * @param {{ dryRun?: boolean }} [options] dryRun: voer alle controles uit maar schrijf niets (de route doet dat vóór de veiligheidsback-up).
  * @returns {{ id: string, label: string, status: string, message: string, restored: number }} De uitkomst.
  */
-function applyLines(scene, { kind, id, keys }, deps) {
+function applyLines(scene, { kind, id, keys }, deps, { dryRun = false } = {}) {
   const { current, context } = scene;
   const view = linesView(scene, { kind, id });
   if (view.blocked) throw Object.assign(new Error(view.blocked), { status: 409 });
@@ -165,6 +166,7 @@ function applyLines(scene, { kind, id, keys }, deps) {
     if (kind === 'quote') {
       const data = { ...nowData, lines };
       const totals = deps.QuoteCore.totals(data);
+      if (dryRun) return { id: String(id), label: view.label, status: 'voorbeeld', message: '', restored: chosen.length };
       current.prepare('UPDATE quotes SET total_excl = ?, total_incl = ?, data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?')
         .run(totals.net, totals.total, JSON.stringify(data), timestamp, context.tenantId, String(id));
       return { id: String(id), label: view.label, status: 'bijgewerkt', message: `${chosen.length} regel${chosen.length === 1 ? '' : 's'} teruggezet; nieuw totaal € ${totals.total.toFixed(2)} incl. btw.`, restored: chosen.length };
@@ -186,6 +188,7 @@ function applyLines(scene, { kind, id, keys }, deps) {
       if (short.length) throw Object.assign(new Error(`Te weinig voorraad voor: ${short.map((item) => item.name).join(', ')}. Er is niets teruggezet.`), { status: 409 });
     }
     const totals = deps.totalsOf([...lines, ...extra]);
+    if (dryRun) return { id: String(id), label: view.label, status: 'voorbeeld', message: '', restored: chosen.length };
     const data = { ...nowData, lines, totals, history: [...(nowData.history || []), { at: timestamp, status: now.status, by: 'Terugzetten uit back-up', note: `${chosen.length} regel(s) teruggezet` }] };
     current.prepare('UPDATE web_orders SET total = ?, data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(totals.total, JSON.stringify(data), timestamp, context.tenantId, String(id));
     if (!nowData.reservationReleasedAt) {
