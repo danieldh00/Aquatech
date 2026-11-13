@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.14.3',
+      date: '2026-11-13',
+      title: 'Updates installeren vanuit Beheer',
+      items: [
+        { text: 'Nieuw in Beheer > Systeem > Updates: je ziet welke versie draait en welke klaarstaat, met wat er nieuw is. Met *Nu updaten* (en je wachtwoord ter bevestiging) installeert de server de nieuwe versie meteen. *Automatisch bijwerken* kun je daar ook uitzetten.', for: ['beheer'] },
+        { text: 'Tijdens een update staat de site ongeveer een minuut in onderhoudsmodus: bovenin staat een melding, bekijken kan en opslaan even niet. Start de nieuwe versie niet goed, dan gaat de server vanzelf terug naar de vorige versie.' },
+      ],
+    },
+    {
       version: '1.14.2',
       date: '2026-11-13',
       title: 'Nieuwe rol Picker voor het magazijn',
