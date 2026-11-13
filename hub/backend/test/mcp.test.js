@@ -806,7 +806,7 @@ test('maak_concept_werkorder: nieuwe werkorder zonder offerte, vraagt terug bij 
 });
 
 test('boek_uren en boek_materiaal: alleen op eigen naam, vraagt terug, voorraad en afgeronde werkorders volgen de app', async () => {
-  const { base, admin, installer } = await setup();
+  const { base, admin, installer, as } = await setup();
   const boss = await connect(base, admin);
   const worker = await connect(base, installer);
   const customer = (await callTool(base, boss.accessToken, 'maak_klant', { naam: 'Piet Boeker', postcode: '8071 AB', huisnummer: '1' })).structuredContent;
@@ -846,6 +846,16 @@ test('boek_uren en boek_materiaal: alleen op eigen naam, vraagt terug, voorraad 
   assert.strictEqual((await callTool(base, worker.accessToken, 'boek_materiaal', { werkorderNummer: order.nummer, artikelcode: 'PE-25', aantal: 12 })).structuredContent.status, 'terugvragen');
   assert.strictEqual(await stockOf('PE-25'), before - 12);
   assert.strictEqual((await callTool(base, worker.accessToken, 'boek_materiaal', { werkorderNummer: order.nummer, artikelcode: 'PE-25', aantal: -3 })).isError, true);
+  // Een andere organisatie (ook met de koppeling aan) kent dit werkordernummer niet en boekt dus niets.
+  const outsider = await as('vreemd', 'ander');
+  assert.strictEqual((await outsider.put('/app/api/admin/settings', { aiConnector: true })).status, 200);
+  const foreign = await connect(base, outsider);
+  const foreignHours = await callTool(base, foreign.accessToken, 'boek_uren', { werkorderNummer: order.nummer, uren: 1 });
+  assert.strictEqual(foreignHours.isError, true);
+  assert.match(foreignHours.structuredContent.fout, /Geen werkorder/);
+  const foreignMaterial = await callTool(base, foreign.accessToken, 'boek_materiaal', { werkorderNummer: order.nummer, artikelcode: 'PE-25', aantal: 1 });
+  assert.strictEqual(foreignMaterial.isError, true);
+  assert.strictEqual((await installer.get(`/app/api/workorders/${order.werkorderId}/worklog`)).body.hours.length, 3);
   // Zonder de scope is de tool er niet (een andere organisatie komt niet bij deze nummers: findWorkOrder filtert op de omgeving).
   const narrow = await connect(base, admin, { scope: 'klanten.lezen' });
   assert.match((await callTool(base, narrow.accessToken, 'boek_uren', { werkorderNummer: order.nummer, uren: 1 })).structuredContent.fout, /toestemming/);

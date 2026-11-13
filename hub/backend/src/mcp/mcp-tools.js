@@ -606,7 +606,7 @@ function createMcpTools(ctx) {
         if (!withinLimit(bookingsPerHour, req)) return errorOf('Te veel boekingen dit uur via de AI-koppeling. Probeer het later opnieuw of boek in AquaTech.');
         const out = ctx.bookMaterial(req, order.order.id, input);
         if (out.error) return errorOf(out.message);
-        ctx.audit(req, 'materiaal_geboekt', { workOrderId: order.order.id, number: order.order.number, entryId: out.entry.id, code: out.entry.code, qty: out.entry.qty, via: 'ai-koppeling' });
+        ctx.audit(req, 'materiaal_geboekt', { workOrderId: order.order.id, number: order.order.number, entryId: out.entry.id, code: out.entry.code, qty: out.entry.qty, forUserId: req.user.id, via: 'ai-koppeling' });
         return resultOf({
           geboekt: true, werkorder: order.order.number, artikelcode: out.entry.code, omschrijving: out.entry.description, aantal: out.entry.qty, eenheid: out.entry.unit, datum: out.entry.usedOn,
           boekingId: out.entry.id, link: ctx.appUrl(req, `werkorders/?id=${encodeURIComponent(order.order.id)}`),
