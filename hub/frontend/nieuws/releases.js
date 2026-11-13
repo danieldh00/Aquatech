@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.15.6',
+      date: '2026-11-13',
+      title: 'Vijvers en huizen aan de tuinrand beter herkend zonder AI',
+      items: [
+        { text: 'Plannen lezen zonder AI herkent een lichtblauwe vijver nu als water en een huis dat tegen de rand van de tuin staat als bebouwing.' },
+      ],
+    },
+    {
       version: '1.15.5',
       date: '2026-11-13',
       title: 'Betere herkenning van huis en terras zonder AI',

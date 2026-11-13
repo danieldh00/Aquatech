@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.6
+
+`localrecog.js`: kleur met tint vanaf 194,5° (lichtblauw) is water in plaats van haag; `paintEnclosedWhite` scheidt het witte huis van het papier via de donkere omtrek (`INK_LUMA`) en eist dat minstens 30% van de omtrek aan gekleurde vlakken grenst. Meting met de plangenerator: 10 bekende plannen functie 86% → 91%; 12 onbekende plannen (seed 101+) functie 90% → 91% (de eerste reeks is dus gedeeltelijk afgesteld, de tweede is de eerlijke maat). Tests in `localrecog.test.js`.
+
 ## 1.15.5
 
 `localrecog.js`: `paintEnclosedWhite` zet een compact, rondom door kleur omsloten wit vak (≥ 1,5% van het beeld, niet aan de rand) op verharding; in `classMap` wordt een warme beplantingskleur zonder textuur (`TEX_FLAT`) verharding. Gemeten met de plangenerator op 10 verzonnen plannen (`npm run recog-bench`): functionele nauwkeurigheid 76% → 86%, juist benoemd 40% → 50%, gazon-overlap gelijk (87%). Test in `localrecog.test.js`. Geen wijziging van de leerbak (`FEATURE_VERSION` blijft).
