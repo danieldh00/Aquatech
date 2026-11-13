@@ -48,7 +48,7 @@ webserver in Docker (poort 3300) met PostgreSQL (een eigen container naast de ap
   rolt zelf niets uit: het updatescript op de server pakt de aanvraag op (zie `deploy/apps01/README.md`, eenmalig
   inrichten met `setup-app-update.sh`).
 - **Beveiliging**: sessies alleen als hash, wachtwoorden met scrypt, tweestapsverificatie (TOTP), versleutelde
-  back-ups (dagelijks, ook vóór elke update), auditlog. Zie *Beveiliging en privacy* in `hub/DOCS.md`.
+  back-ups (dagelijks, ook vóór elke update, optioneel automatisch naar Google Drive vanuit Beheer), auditlog. Zie *Beveiliging en privacy* in `hub/DOCS.md`.
 
 ## Beregeningsplanner
 

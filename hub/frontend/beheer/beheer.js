@@ -641,10 +641,11 @@
     const list = $('#b-list');
     try {
       const { enabled, items } = await api('backups');
+      const driveNames = await api('backups/drive').then((drive) => new Set(drive.items.filter((item) => item.onDrive).map((item) => item.name))).catch(() => new Set());
       $('#b-now').disabled = !enabled;
       list.innerHTML = !enabled ? 'Back-ups zijn op deze server niet beschikbaar.'
         : !items.length ? 'Nog geen back-ups.'
-          : `<ul class="timeline">${items.map((backup) => `<li><a href="../api/admin/backups/${encodeURIComponent(backup.name)}" download>${esc(backup.name)}</a> · ${esc(when(backup.createdAt))} · ${esc(size(backup.size))}
+          : `<ul class="timeline">${items.map((backup) => `<li><a href="../api/admin/backups/${encodeURIComponent(backup.name)}" download>${esc(backup.name)}</a> · ${esc(when(backup.createdAt))} · ${esc(size(backup.size))}${driveNames.has(backup.name) ? ' · op Drive' : ''}
             <button class="btn small danger" data-backup-del="${esc(backup.name)}">Verwijderen</button></li>`).join('')}</ul>`;
       list.querySelectorAll('[data-backup-del]').forEach((button) => {
         /**
@@ -689,6 +690,7 @@
   async function loadSettings(sectionId) {
     const pending = state.pending || (state.pending = {});
     if (sectionId === 'backup' && state.backups) loadBackups();
+    if (sectionId === 'backup-drive' && state.backups) window.BeheerDrive.load();
     if (sectionId === 'mail' && !state.mailLoaded && !pending.mail) {
       pending.mail = loadMail().then((loaded) => { state.mailLoaded = loaded; }).finally(() => { pending.mail = null; });
     }

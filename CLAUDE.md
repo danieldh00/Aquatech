@@ -111,6 +111,15 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   ook via `node src/backup.js create` (update.sh doet dat vóór elke update),
   `/data/backups` of `BACKUP_DIR`, dagelijks via `app.locals.backupIfDue`,
   `backupKeepDays`; `store.purgePlan` wist plan + historie-inhoud (AVG).
+  **Back-ups naar Google Drive** (1.14.8, geen migratie, `platform/drive-backup.js`, Beheer > Systeem > *Back-ups naar Google Drive* in
+  `beheer/drive-backup.js`; wens Daniël 2026-11-13: instelbaar en inzichtelijk in de app, geen hostscripts): OAuth2 (`drive.file`,
+  offline, `prompt=consent`) met een eigen Google-app per installatie (`backupDrive` + geheimen `backupDriveClientSecret`/
+  `backupDriveRefreshToken`, status in `backupDriveState`; allemaal `internal` + `liveOnly`, alleen via `/api/admin/backups/drive*`,
+  hoofdbeheerders). `runBackup` en het uurlijkse onderhoud (`app.locals.driveBackupSync`) roepen `sync()` aan: alleen de nieuwste
+  `keepCount` lokale back-ups, resumable upload als stroom, opruimen op bestandsnaam (niet uploadtijd), één ronde tegelijk, na een fout
+  15 min wachten (handmatig *Nu uploaden* meteen), 401 = één keer vers token, daarna `needsReconnect`. Google-app-gegevens wijzigen kan
+  pas na verbreken. Tests: `createApp({ googleFetch })` + `test/helpers/google-fake.js` (echte HTTP-server). **Een nieuwe externe opslag
+  voor back-ups volgt dit patroon (instelling in de app, status + logboek, nooit tokens in de uitvoer).**
   CSP in server.js: inline scripts alleen in login/setup.html (op hash);
   nieuwe inline scripts elders werken niet. Proces zakt van root naar uid 1000
   (`dropPrivileges`, `RUN_AS_ROOT=1` slaat over). Test-wachtwoorden moeten
