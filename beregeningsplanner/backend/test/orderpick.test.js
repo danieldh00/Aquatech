@@ -78,12 +78,13 @@ test('de rol Picker heeft alleen het recht orderpick; andere rollen en klanten k
 test('lijst en detail: geen prijzen of adres, regels op locatie, scancodes van artikel en verpakking', async () => {
   const world = await pickWorld();
   const { picker } = world;
-  const id = await placeOrder(world, [['BUS', '3'], ['PIJP', '2'], ['BUS@DOOS', '1']]);
+  const id = await placeOrder(world, [['BUS', '3'], ['PIJP', '2'], ['BUS@DOOS', '1']], { note: 'Opmerking-met-telefoon 0612345678' });
   const list = (await picker.get('/app/api/orderpick/orders')).body;
   assert.strictEqual(list.items.length, 1);
   const entry = list.items[0];
   assert.deepStrictEqual([entry.id, entry.lineCount, entry.pieces, entry.pickup], [id, 3, 6, true]);
-  assert.ok(!('customerName' in entry) && !('address' in entry) && !('totals' in entry));
+  assert.ok(!('customerName' in entry) && !('address' in entry) && !('totals' in entry) && !('note' in entry));
+  assert.ok(!JSON.stringify(list).includes('Opmerking-met-telefoon'), 'de vrije opmerking van de klant blijft weg');
 
   const detail = (await picker.get(`/app/api/orderpick/orders/${id}`)).body.order;
   assert.deepStrictEqual(detail.lines.map((line) => [line.code, line.location]), [['PIJP', 'A-2'], ['BUS', 'B-10'], ['BUS@DOOS', 'B-10']]);
@@ -93,7 +94,7 @@ test('lijst en detail: geen prijzen of adres, regels op locatie, scancodes van a
   assert.strictEqual(byCode['BUS@DOOS'].packaging.factor, 10);
   assert.deepStrictEqual(byCode.PIJP.scanCodes, ['PIJP']);
   const text = JSON.stringify(detail);
-  for (const secret of ['unitExcl', 'lineTotal', 'Tuinstraat', 'els@bakker', 'Els Bakker', 'totals']) assert.ok(!text.includes(secret), `${secret} hoort niet in het detail`);
+  for (const secret of ['Opmerking-met-telefoon', 'unitExcl', 'lineTotal', 'Tuinstraat', 'els@bakker', 'Els Bakker', 'totals']) assert.ok(!text.includes(secret), `${secret} hoort niet in het detail`);
   assert.strictEqual(detail.shipmentCount, 0);
   assert.deepStrictEqual(detail.label, { required: false, available: false, carrier: '' });
 });

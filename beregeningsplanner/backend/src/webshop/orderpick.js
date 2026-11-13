@@ -55,7 +55,7 @@ function createOrderpick(db, { orders, slips, labels }) {
   /**
    * De bestellingen die nu gepickt kunnen worden (oudste eerst), zonder prijzen, adres of klantnaam.
    * @param {string} tenantId Id van de omgeving.
-   * @returns {{ items: object[], waitingForStock: number, truncated: boolean }} Per bestelling: id, nummer, datum, verzendmethode, aantal regels en stuks, of het een deellevering of dropshipping is en de opmerking van de klant.
+   * @returns {{ items: object[], waitingForStock: number, truncated: boolean }} Per bestelling: id, nummer, datum, verzendmethode, aantal regels en stuks, en of het een deellevering of dropshipping is (de vrije opmerking van de klant blijft bewust weg: daar staan vaak persoonsgegevens in).
    */
   function list(tenantId) {
     const { items, truncated, waitingForStock } = orders.listToPick(tenantId);
@@ -65,7 +65,7 @@ function createOrderpick(db, { orders, slips, labels }) {
         id: order.id, number: order.number, createdAt: order.createdAt, shippingLabel: order.shipping ? order.shipping.label : '',
         pickup: Boolean(order.shipping && order.shipping.method === 'ophalen'), dropshipping: Boolean(order.dropshipping),
         lineCount: order.fulfilment.lines.filter((entry) => entry.ready > 0).length, pieces: order.fulfilment.lines.reduce((sum, entry) => sum + entry.ready, 0),
-        partial: order.fulfilment.backorder, hadShipments: order.shipments.length > 0, note: order.note || '',
+        partial: order.fulfilment.backorder, hadShipments: order.shipments.length > 0
       })),
     };
   }
@@ -101,7 +101,7 @@ function createOrderpick(db, { orders, slips, labels }) {
     return {
       order: {
         id: order.id, number: order.number, createdAt: order.createdAt, shippingLabel: order.shipping ? order.shipping.label : '',
-        pickup: Boolean(order.shipping && order.shipping.method === 'ophalen'), dropshipping: Boolean(order.dropshipping), note: order.note || '',
+        pickup: Boolean(order.shipping && order.shipping.method === 'ophalen'), dropshipping: Boolean(order.dropshipping),
         allowPartial: order.allowPartial, shipmentCount: order.shipments.length, lines, label: labels.statusFor(tenantId, order),
       },
     };
