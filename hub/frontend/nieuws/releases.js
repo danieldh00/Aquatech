@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.16.2',
+      date: '2026-11-14',
+      title: 'Uren en materiaal boeken via de AI-koppeling',
+      items: [
+        { text: 'Via Claude of ChatGPT kun je nu uren en verbruikt materiaal op een werkorder boeken, op je eigen naam. Bij twijfel of een dubbele boeking vraagt de AI eerst terug. In AquaTech kun je de regels gewoon wijzigen of verwijderen. Je moet de AI-koppeling opnieuw koppelen om dit te kunnen gebruiken.', for: ['werkorders'] },
+      ],
+    },
+    {
       version: '1.16.1',
       date: '2026-11-14',
       title: 'Concept-werkorder via de AI-koppeling',

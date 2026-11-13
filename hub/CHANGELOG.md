@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.2
+
+- MCP-tools `boek_uren` en `boek_materiaal` met nieuwe scope `werkregistratie.boeken` (recht `werkorders`): boeken via `workLogStore.addHours/addMaterial` op naam van de gebruiker zelf, werkorder op nummer (`mcpLookups.workOrderByNumber`, per omgeving). Afgeronde of geannuleerde werkorder alleen met recht `planning`; een gelijke boeking binnen 10 minuten geeft `terugvragen`; onbekend artikel of variant geeft `terugvragen`; datum niet verder dan morgen (zoals in de app). Limiet 60 boekingen per uur per gebruiker, audit met `via: 'ai-koppeling'`.
+
 ## 1.16.1
 
 - MCP-tool `maak_concept_werkorder` met nieuwe scope `werkorders.concept` (recht `werkorders`): werkorder zonder offerte via `workorders.createReceived`, status `open`, klant en adres uit de klantkaart, stappen met uren en materiaal (reserveert voorraad via `onWorkOrderChange`). Onbekend artikel, variant of ontbrekende klant geeft status `terugvragen` zonder iets aan te maken (`ookMetOpenPunten` gaat bewust door; de open punten komen in de interne notitie). Limieten 20 per uur en 100 per dag per gebruiker, audit `werkorder_concept_via_ai`.
