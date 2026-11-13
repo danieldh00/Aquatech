@@ -1,6 +1,6 @@
 // Bewaking (Beheer > Systeem > Bewaking): voert controles uit (platform: server, database, schijf, back-ups, update;
 // per omgeving: koppelingen als Drive, mail, Mollie, Visma, webshop), houdt per controle hoogstens één open incident bij
-// (tabel monitor_incidents, migratie 71) en meldt een nieuw incident, een herinnering, een zwaardere ernst en het herstel
+// (tabel monitor_incidents, migratie 72) en meldt een nieuw incident, een herinnering, een zwaardere ernst en het herstel
 // per mail en webhook (monitoring-notify.js). Na elke volledige ronde gaat er een heartbeat naar een externe dienst, die
 // alarm slaat als de app zelf onbereikbaar is.
 //
@@ -424,7 +424,7 @@ function createMonitor({
    * @param {{ force?: boolean, tenantId?: string, includePlatform?: boolean }} [options] force = alles nu, ook binnen de starttijd en buiten het interval; tenantId = alleen de controles van die omgeving (Nu controleren in Beheer), met includePlatform ook de platformcontroles; dan geen heartbeat.
    * @returns {Promise<{ ran: number, opened: number, resolved: number, grace?: boolean }>} Aantal uitgevoerde controles, nieuwe en opgeloste incidenten.
    */
-  function runAll({ force = false, tenantId = '', includePlatform = false } = {}) {
+  function runRound({ force = false, tenantId = '', includePlatform = false } = {}) {
     return asSystem(async () => {
       const summary = { ran: 0, opened: 0, resolved: 0 };
       const full = !tenantId;
@@ -471,6 +471,21 @@ function createMonitor({
       if (full) await heartbeat();
       return summary;
     });
+  }
+
+  /** Staart van de laatste ronde: een volgende ronde wacht erop, zodat twee rondes nooit door elkaar lopen. */
+  let lastRound = Promise.resolve();
+
+  /**
+   * Voert een ronde uit nadat een eventuele lopende ronde klaar is (de 5-minutentaak en Nu controleren kunnen
+   * tegelijk komen). Een gewone ronde die erna aan de beurt is, ziet dan dat de controles net gelopen hebben.
+   * @param {object} [options] Zie runRound.
+   * @returns {Promise<object>} Zie runRound.
+   */
+  function runAll(options = {}) {
+    const next = lastRound.catch(() => {}).then(() => runRound(options));
+    lastRound = next;
+    return next;
   }
 
   /**

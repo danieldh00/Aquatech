@@ -254,3 +254,18 @@ test('checkStates toont onbekend, ok en open per scope', async () => {
   assert.deepStrictEqual(byKey, { a: 'ok', b: 'open' });
   assert.strictEqual(monitor.checkStates(MAIN, 'platform').length, 0);
 });
+
+test('gelijktijdige rondes lopen na elkaar: één incident en één melding', async () => {
+  const { monitor, mails } = setup();
+  let runs = 0;
+  monitor.register({
+    key: 'x', scope: 'platform', title: 'X', intervalMinutes: 5,
+    run: async () => { runs++; await new Promise((resolve) => setTimeout(resolve, 20)); return { ok: false, severity: 'fout', message: 'kapot' }; },
+  });
+  const [first, second] = await Promise.all([monitor.runAll({}), monitor.runAll({})]);
+  assert.strictEqual(runs, 1, 'de tweede gewone ronde ziet dat de controle net gelopen heeft');
+  assert.strictEqual(first.opened + second.opened, 1);
+  await Promise.all([monitor.runAll({ force: true }), monitor.runAll({ force: true })]);
+  assert.strictEqual(monitor.list(MAIN, { state: 'open' }).length, 1);
+  assert.strictEqual(mails.length, 1);
+});
