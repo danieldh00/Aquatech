@@ -2,7 +2,7 @@
 
 AquaTech Hub is een modulair, ERP-achtig pakket voor beregeningsbedrijven, met een eigen webshop. Na het inloggen
 kom je op een dashboard met een tegel per module (beheerders krijgen een zijbalk). Alles draait als één
-webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als database.
+webserver in Docker (poort 3300) met PostgreSQL (een eigen container naast de app, of Supabase) of SQLite als database.
 
 | Onderdeel | Wat het doet |
 |---|---|

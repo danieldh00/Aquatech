@@ -887,7 +887,13 @@ docker compose up -d --build        # http://<server>:3300
 
 ## Database: Supabase (PostgreSQL)
 
-De productieserver draait op Supabase (PostgreSQL), via `DATABASE_URL_FILE`
+> **Eigen PostgreSQL**: de productieserver kan in plaats van Supabase een eigen PostgreSQL-container naast de app
+> gebruiken (geen egress-limiet, geen netwerkvertraging). Overstappen, back-ups en terugdraaien: zie
+> `deploy/apps01/README.md` > *Eigen PostgreSQL*. De app merkt geen verschil: de verbinding is dezelfde `DATABASE_URL_FILE`
+> (voor de eigen database `postgresql://aquatech:…@postgres:5432/aquatech?sslmode=disable`; `sslmode=disable` mag alleen op het
+> interne Docker-netwerk), de rol `aquatech` is geen superuser maar mag `aquatech_app` aannemen voor de tenant-RLS.
+
+De productieserver draaide op Supabase (PostgreSQL), via `DATABASE_URL_FILE`
 (een Docker-secret met de URL) of `DATABASE_URL`. Zonder die instelling
 gebruikt de app het SQLite-bestand `/data/aquatech.db`: handig voor lokaal
 ontwikkelen, de tests en als noodterugval. Beide databases hebben hetzelfde

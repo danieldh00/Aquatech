@@ -1,0 +1,10 @@
+# Dagelijkse back-up van de eigen PostgreSQL (pg-backup.sh), gestart door aquatech-pg-backup.timer.
+[Unit]
+Description=Aquatech: versleutelde back-up van de PostgreSQL-database
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/apps/aquatech/pg-backup.sh
+TimeoutStartSec=30min

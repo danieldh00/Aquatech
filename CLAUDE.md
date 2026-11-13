@@ -159,8 +159,11 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (`frontend/beheer/`, `role: 'beheerder'` in modules.js) toont historie,
   plannen en gebruikers. De API is ook onder `<module>/api/...` bereikbaar
   (modules gebruiken relatieve `api/...`).
-- **Productie draait op Supabase** (sinds 2026-10-20, schema `aquatech`,
-  Session pooler, secret `secrets/database-url` op apps01). Elke feature moet
+- **Productie draaide op Supabase** (2026-10-20 tot de overstap naar een eigen PostgreSQL-container naast de app, i.v.m. de egress-limiet
+  van het gratis plan; `deploy/apps01/compose.localdb.yml`, `localdb/local-db.sh`, bediening vanaf de Proxmox-host met `pve/db-local.sh`:
+  `migrate`, `rollback`, `status`, `backup`, `restore`; dagelijkse versleutelde `pg_dump` via `aquatech-pg-backup.timer`; **elk script dat
+  Daniël draait, draait vanaf de Proxmox-host**; Supabase-gegevens: schema `aquatech`,
+  Session pooler, secret `secrets/database-url` op apps01, blijft als terugvaloptie staan). Elke feature moet
   op PostgreSQL werken: CI (`test-postgres`) en `release.yml` draaien de hele
   suite ook tegen PostgreSQL. SQLite blijft de terugval zonder URL (lokaal,
   tests, noodgeval) en het formaat van de back-ups. Opslag in de database

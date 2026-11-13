@@ -1,0 +1,11 @@
+# Elke nacht om 02:30 een back-up van de database (en een inhaalslag als de server dan uit stond).
+[Unit]
+Description=Aquatech: dagelijkse database-back-up
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
