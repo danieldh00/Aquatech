@@ -195,7 +195,7 @@ lijntekeningen, schetsen en luchtfoto's.
 Hiervoor is een API-sleutel van Anthropic nodig:
 
 - Maak een sleutel aan op https://console.anthropic.com en vul hem in onder
-  **Beheer → Integraties → AI-herkenning** (met **Sleutel testen** controleer je hem
+  **Beheer → Koppelingen → AI-herkenning** (met **Sleutel testen** controleer je hem
   zonder kosten). Hij werkt meteen, zonder herstart.
 - Elke analyse kost een paar dubbeltjes aan API-tegoed. Het maximum per dag
   (standaard 30, hele app) en per uur per IP-adres (standaard 10) stel je in
@@ -963,7 +963,7 @@ naar een leeg schema; zet daarna `DATABASE_SCHEMA` op dat schema.
 ## Meetcorpus planherkenning
 
 Doel: de planner moet uiteindelijk zonder AI een plan uit een tekening maken. Om de lokale herkenning te meten en te
-verbeteren is een verzameling tekeningen met het eindplan nodig. Zet daarvoor in Beheer → Integraties → AI-herkenning
+verbeteren is een verzameling tekeningen met het eindplan nodig. Zet daarvoor in Beheer → Koppelingen → AI-herkenning
 *Tekeningen bewaren om de herkenning te verbeteren* aan (standaard uit, per organisatie). Daarna bewaart de app bij elk
 door een medewerker goedgekeurd plan de tekening (PNG, zonder metadata, versleuteld met de bestandssleutel) en het eindplan
 (vlakken, elementen, schaal in pixels van die tekening) bij de regel van dat plan in `plan_recognitions`. Het verdwijnt

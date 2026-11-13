@@ -2138,7 +2138,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/plan/corpus', requireAppAccess, corpusLimiter, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const tid = req.tenantId || tenant.id;
-    if (!settingsFor(tid).get('planCorpus')) return res.status(409).json({ error: 'disabled', message: 'Het meetcorpus staat uit (Beheer → Integraties → AI-herkenning).' });
+    if (!settingsFor(tid).get('planCorpus')) return res.status(409).json({ error: 'disabled', message: 'Het meetcorpus staat uit (Beheer → Koppelingen → AI-herkenning).' });
     const user = identify(req);
     if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
     if (!Roles.can(user, 'plannen.goedkeuren')) return res.status(403).json({ error: 'forbidden', message: 'Geen toegang.' });

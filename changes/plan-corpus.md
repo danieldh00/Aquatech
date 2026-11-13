@@ -3,7 +3,7 @@ titel: Tekeningen bewaren om de herkenning te verbeteren
 ---
 
 ## Nieuws
-- [beheer] Nieuwe instelling *Tekeningen bewaren om de herkenning te verbeteren* (Beheer → Integraties → AI-herkenning, standaard uit). Bij een goedgekeurd plan bewaart de app dan de tekening (versleuteld) en het eindplan, zodat de planner zonder AI steeds beter plannen kan lezen.
+- [beheer] Nieuwe instelling *Tekeningen bewaren om de herkenning te verbeteren* (Beheer → Koppelingen → AI-herkenning, standaard uit). Bij een goedgekeurd plan bewaart de app dan de tekening (versleuteld) en het eindplan, zodat de planner zonder AI steeds beter plannen kan lezen.
 
 ## Changelog
 - Migratie 70 (`MIGRATIONS` en `PG_MIGRATIONS`): kolommen `corpus_image`, `corpus_width`, `corpus_height`, `corpus_final` op `plan_recognitions`. Geen nieuwe tabel; een bestaande regel van een goedgekeurd plan (`source = 'plan'`) krijgt de tekening en het eindplan.
