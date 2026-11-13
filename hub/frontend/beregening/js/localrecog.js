@@ -16,6 +16,7 @@
   const WORK_MAX = 1000; // werkresolutie voor de kleuranalyse
   const NONE = 0, LAWN = 1, HEDGE = 2, BED = 3, DRY = 4, WET = 5;
   const TEX_PLANTS = 0.07; // textuur (zie normalizedColors) waarboven groen als beplanting telt
+  const INK_LUMA = 140; // helderheid (0–255) waaronder een pixel inkt is: de omtrek van een huis, geen papier
   const TEX_FLAT = 0.03; // textuur waaronder een warme kleur een egaal vlak is (terras, klinkers, vlonder) en geen beplanting
   const CLASS_TYPE = { [LAWN]: 'lawn', [HEDGE]: 'hedge', [BED]: 'bed', [DRY]: 'dry', [WET]: 'wet' };
 
@@ -58,9 +59,9 @@
       if (chroma < 0.12) return value > 0.88 ? NONE : DRY; // grijsgroen: grind, vervaagde lijnen
       return value > 0.58 ? LAWN : HEDGE; // licht/middengroen = gras, donkergroen = haag/heesters
     }
-    if (hue >= 140 && hue < 195) return chroma < 0.1 ? DRY : HEDGE; // blauwgroen = heesters, coniferen
+    if (hue >= 140 && hue < 195) return chroma < 0.1 ? DRY : hue >= 194.5 ? WET : HEDGE; // blauwgroen = heesters, coniferen; vanaf 194,5° (lichtblauw) = water
     if (hue >= 50 && hue < 65) return saturation > 0.35 ? LAWN : DRY; // geelgroen gras / kaki, geel = terras of vlonder
-    if (hue >= 195 && hue < 260) return WET; // water
+    if (hue >= 194.5 && hue < 260) return WET; // water
     if (hue >= 260 && hue < 345) return BED; // bloemen
     return saturation < 0.3 && value > 0.7 ? DRY : BED; // licht beige/zand/baksteen = verharding, (grijs)bruin/oranje/rood = beplanting
   }
@@ -805,20 +806,26 @@
   }
 
   /**
-   * Een wit, rondom door kleur omsloten vak dat niet aan de rand ligt (huis of schuur met alleen een omtrek) is
-   * bebouwing: zet het op DRY. Alleen compacte vakken van minstens 1,5% van het beeld, zodat dunne lijnen,
-   * tekst en het papier buiten de tuin met rust blijven.
+   * Een wit vak met een donkere omtrek (huis of schuur zonder kleur) is bebouwing: zet het op DRY. Het vak moet
+   * compact zijn (minstens 1,5% van het beeld), niet aan de beeldrand liggen en voor het grootste deel van zijn
+   * omtrek aan gekleurde vlakken grenzen. De omtrek zelf scheidt het vak van het papier, ook als het huis tegen
+   * de rand van de tuin staat; dunne lijnen, tekst en het papier buiten de tuin blijven met rust.
    * @param {Uint8Array} classes vlaksoort per pixel (wordt aangepast)
+   * @param {Uint8ClampedArray} data RGBA-pixels (voor de omtrek)
    * @param {number} width breedte in pixels
    * @param {number} height hoogte in pixels
    */
-  function paintEnclosedWhite(classes, width, height) {
+  function paintEnclosedWhite(classes, data, width, height) {
     const total = width * height;
+    const ink = new Uint8Array(total);
     let blank = new Uint8Array(total);
-    for (let index = 0; index < total; index++) if (classes[index] === NONE) blank[index] = 1;
+    for (let index = 0; index < total; index++) {
+      ink[index] = data[index * 4] * 0.299 + data[index * 4 + 1] * 0.587 + data[index * 4 + 2] * 0.114 < INK_LUMA ? 1 : 0;
+      if (classes[index] === NONE && !ink[index]) blank[index] = 1;
+    }
     blank = morph(blank, width, height, 1, false); // dunne lijnen en tekst laten los van het papier
     const margin = Math.max(3, Math.round(Math.max(width, height) * 0.01));
-    const ringWidth = Math.max(2, Math.round(Math.max(width, height) * 0.015));
+    const ringWidth = Math.max(3, Math.round(Math.max(width, height) * 0.015));
     for (const comp of components(blank, width, height, Math.round(0.015 * total))) {
       if (comp.x0 <= margin || comp.y0 <= margin || comp.x1 >= width - 1 - margin || comp.y1 >= height - 1 - margin) continue;
       const box = (comp.x1 - comp.x0 + 1) * (comp.y1 - comp.y0 + 1);
@@ -827,12 +834,15 @@
       for (const index of comp.pix) inside[index] = 1;
       const grown = morph(inside, width, height, ringWidth, true);
       let ring = 0, colored = 0;
-      for (let index = 0; index < total; index++) {
-        if (!grown[index] || inside[index]) continue;
-        ring++;
-        if (classes[index] !== NONE) colored++;
+      for (let y = Math.max(0, comp.y0 - ringWidth - 1); y <= Math.min(height - 1, comp.y1 + ringWidth + 1); y++) {
+        for (let x = Math.max(0, comp.x0 - ringWidth - 1); x <= Math.min(width - 1, comp.x1 + ringWidth + 1); x++) {
+          const index = y * width + x;
+          if (!grown[index] || inside[index] || ink[index]) continue;
+          ring++;
+          if (classes[index] !== NONE) colored++;
+        }
       }
-      if (ring && colored >= 0.6 * ring) for (const index of comp.pix) classes[index] = DRY;
+      if (ring && colored >= 0.3 * ring) for (const index of comp.pix) classes[index] = DRY;
     }
   }
 
@@ -848,7 +858,7 @@
   function areasFromPixels(data, width, height, factor = 1, opts = {}) {
     const colorMap = classMap(data, width, height, opts.learned);
     const classes = modeFilter(modeFilter(colorMap.cls, width, height), width, height);
-    paintEnclosedWhite(classes, width, height);
+    paintEnclosedWhite(classes, data, width, height);
 
     const radius = Math.max(1, Math.round(Math.max(width, height) / 350)); // dichtmaken van lijnen en tekst
     const minPx = Math.max(60, Math.round(width * height * 0.0012));

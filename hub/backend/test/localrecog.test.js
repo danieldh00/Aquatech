@@ -41,7 +41,7 @@ test('kleur naar vlaksoort', () => {
   for (const color of ['#2e7d32', '#1b5e20']) assert.strictEqual(type(color), 2, color);
   for (const color of ['#a1887f', '#8d6e63', '#f48fb1', '#ce93d8']) assert.strictEqual(type(color), 3, color);
   for (const color of ['#9e9e9e', '#bdbdbd', '#e8dcc2']) assert.strictEqual(type(color), 4, color);
-  for (const color of ['#4fc3f7', '#1e88e5']) assert.strictEqual(type(color), 5, color);
+  for (const color of ['#4fc3f7', '#1e88e5', '#96c0ce']) assert.strictEqual(type(color), 5, color);
   for (const color of ['#ffffff', '#000000', '#222222']) assert.strictEqual(type(color), 0, color);
 });
 
@@ -392,4 +392,22 @@ test('gevlekt warm vlak (getekende planten) blijft beplanting', () => {
   const result = LocalRecognizer.areasFromPixels(data, width, height, 1);
   const inside = result.areas.some((area) => area.type === 'bed' && insidePolygon(200, 150, area.points));
   assert.ok(inside, `beplanting: ${result.areas.map((area) => area.type)}`);
+});
+
+test('wit huis dat tegen de rand van de tuin staat blijft verharding', () => {
+  const width = 400, height = 300;
+  const data = new Uint8ClampedArray(width * height * 4).fill(255);
+  /**
+   * Vult een rechthoek met een kleur.
+   * @param {number[]} box [x0, y0, x1, y1] in pixels
+   * @param {number[]} color [rood, groen, blauw]
+   */
+  const fill = (box, color) => {
+    for (let y = box[1]; y < box[3]; y++) for (let x = box[0]; x < box[2]; x++) data.set([...color, 255], (y * width + x) * 4);
+  };
+  fill([40, 40, 360, 200], [150, 200, 90]); // gazon
+  fill([100, 110, 260, 215], [20, 20, 20]); // huis met omtrek, steekt onderaan uit de tuin
+  fill([104, 114, 256, 211], [255, 255, 255]);
+  const result = LocalRecognizer.areasFromPixels(data, width, height, 1);
+  assert.ok(result.areas.some((area) => area.type === 'dry' && insidePolygon(180, 160, area.points)), 'huis = verharding');
 });
