@@ -8,6 +8,7 @@
 // - prijs_voor_klant: wat een klant voor artikelen betaalt (offerteprijs en webshopprijs met zakelijke prijs/korting) en de voorraad.
 // - status_opvragen: de status van een offerte, werkorder, factuur of webshopbestelling op nummer.
 // - openstaande_debiteuren: wie nog moet betalen (definitieve, onbetaalde facturen), grootste bedrag eerst.
+// - maak_concept_werkorder: een werkorder zonder offerte als NIEUW (open, niet ingepland, geen uitvoerder) aanmaken, met stappen en materiaal.
 // Onduidelijk? De tools raden niet: zoeken met meerdere treffers geeft keuzeNodig, en maak_concept_offerte maakt niets aan zolang er
 //   open punten zijn (status 'terugvragen'); de AI-app vraagt dat aan de gebruiker. Alleen met ookMetOpenPunten=true gaat hij door.
 // Elke tool vraagt een recht uit de toestemming (scope) én het recht van de rol van de gebruiker op dit moment.
@@ -19,6 +20,8 @@ const { DOCUMENT_KINDS } = require('./mcp-lookups');
 const CUSTOMER_RESULTS = 10;
 /** Hoeveel regels een concept-offerte via de AI hoogstens heeft. */
 const MAX_LINES = 100;
+/** Hoeveel stappen en materiaalregels een werkorder via de AI hoogstens krijgt. */
+const MAX_ORDER_ITEMS = 50;
 /** Hoeveel artikelen prijs_voor_klant in één keer prijst. */
 const MAX_PRICE_CODES = 25;
 /** Het recht dat de app vraagt om een soort document te zien (zelfde als de modules). */
@@ -148,7 +151,7 @@ function findArticle(articles, code) {
  * Maakt de tools van de MCP-server.
  * @param {object} ctx { can(user, recht), searchCustomers(req, zoektekst), getCustomer(req, id), createCustomer(req, invoer),
  *   lookupAddress(invoer), verifyAddress(tekst), articleChoices(tenantId), quoteProfile(req), createDraft(req, data, customerId), quoteUrl(req, id),
- *   appUrl(req, pad), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
+ *   appUrl(req, pad), createWorkOrder(req, data), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
  *   documentStatus(req, soort, nummer, opties), openInvoices(req, opties), audit(req, actie, detail) }.
  * @returns {{ list: Function, has: Function, call: Function }} De tools.
  */
@@ -156,6 +159,8 @@ function createMcpTools(ctx) {
   const articleCache = new Map();
   const quotesPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `mcp-offerte:${req.tenantId}|${req.user.id}` });
   const quotesPerDay = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 150, keyFn: (req) => `mcp-offerte-dag:${req.tenantId}|${req.user.id}` });
+  const workOrdersPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => `mcp-werkorder:${req.tenantId}|${req.user.id}` });
+  const workOrdersPerDay = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 100, keyFn: (req) => `mcp-werkorder-dag:${req.tenantId}|${req.user.id}` });
   const customersPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `mcp-klant:${req.tenantId}|${req.user.id}` });
   // Leesfuncties samen: genoeg voor een drukke werkdag, maar geen onbeperkt aflopen van nummers of klant-id's.
   const readsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => `mcp-lezen:${req.tenantId}|${req.user.id}` });
@@ -460,6 +465,117 @@ function createMcpTools(ctx) {
         const limit = Math.min(50, Math.max(1, Number.parseInt(args.maxResultaten, 10) || 20));
         const out = ctx.openInvoices(req, { onlyLate: args.alleenTeLaat === true, limit });
         return resultOf({ ...out, link: ctx.appUrl(req, 'facturen/') });
+      },
+    },
+    maak_concept_werkorder: {
+      scope: 'werkorders.concept', rights: ['werkorders'],
+      definition: {
+        title: 'Concept-werkorder maken',
+        description: 'Maakt een werkorder zonder offerte aan met status Nieuw: niet ingepland en zonder uitvoerder (de planner plant hem in AquaTech). '
+          + 'Voor een klus die niet uit een offerte komt, bijvoorbeeld onderhoud of een reparatie. Is iets onduidelijk (klant, artikel, variant), dan maakt deze tool niets aan '
+          + 'maar geeft status "terugvragen" met vragen: stel die aan de gebruiker, pas de invoer aan en roep opnieuw aan. Alleen als de gebruiker bewust met open punten door wil: ookMetOpenPunten=true. '
+          + 'Artikelen op de werkorder reserveren voorraad; de medewerker kan alles in AquaTech aanpassen.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            klantId: { type: 'string', maxLength: 64, description: 'Id uit zoek_klant of maak_klant (aanbevolen: dan staan naam en werkadres goed).' },
+            klant: {
+              type: 'object', description: 'Alleen als er geen klantId is: de klantgegevens uit het gesprek (zonder adres).',
+              properties: { naam: { type: 'string', maxLength: 200 }, email: { type: 'string', maxLength: 200 }, telefoon: { type: 'string', maxLength: 40 } },
+              additionalProperties: false,
+            },
+            titel: { type: 'string', minLength: 1, maxLength: 200, description: 'Bijv. "Winterklaar maken beregening".' },
+            instructies: { type: 'string', maxLength: 4000, description: 'Wat er moet gebeuren en wat de monteur moet weten.' },
+            stappen: {
+              type: 'array', maxItems: MAX_ORDER_ITEMS, description: 'De uit te voeren stappen met geplande uren.',
+              items: { type: 'object', properties: { titel: { type: 'string', minLength: 1, maxLength: 300 }, uren: { type: 'number', minimum: 0, maximum: 1000 } }, required: ['titel'], additionalProperties: false },
+            },
+            materiaal: {
+              type: 'array', maxItems: MAX_ORDER_ITEMS, description: 'Het benodigde materiaal (wordt gereserveerd in de voorraad).',
+              items: {
+                type: 'object',
+                properties: {
+                  artikelcode: { type: 'string', minLength: 1, maxLength: 40, description: 'Code uit zoek_artikelen (bij een artikel met varianten de code van de variant).' },
+                  aantal: { type: 'number', exclusiveMinimum: 0, maximum: 100000 },
+                },
+                required: ['artikelcode', 'aantal'], additionalProperties: false,
+              },
+            },
+            ookMetOpenPunten: { type: 'boolean', description: 'Alleen true nadat de gebruiker de vragen uit een eerder antwoord (status "terugvragen") heeft beantwoord of bewust met open punten door wil.' },
+          },
+          required: ['titel'], additionalProperties: false,
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      },
+      /**
+       * Maakt de concept-werkorder.
+       * @param {object} args De invoer.
+       * @param {object} req Het verzoek.
+       * @returns {object} De uitkomst.
+       */
+      run: (args, req) => {
+        const title = cleanText(args.titel, 200).replace(/\s+/g, ' ');
+        if (!title) return errorOf('Geef een titel voor de werkorder.');
+        const rawSteps = Array.isArray(args.stappen) ? args.stappen : [];
+        const rawMaterials = Array.isArray(args.materiaal) ? args.materiaal : [];
+        if (rawSteps.length > MAX_ORDER_ITEMS || rawMaterials.length > MAX_ORDER_ITEMS) return errorOf(`Hoogstens ${MAX_ORDER_ITEMS} stappen en ${MAX_ORDER_ITEMS} materiaalregels.`);
+        let customer = { name: '', contact: '', address: '', email: '', phone: '' };
+        const wantedId = cleanText(args.klantId, 64);
+        if (wantedId) {
+          const account = ctx.getCustomer(req, wantedId);
+          if (!account || account.disabled) return errorOf('Deze klant bestaat niet (meer). Zoek opnieuw met zoek_klant.');
+          customer = { name: account.companyName || account.displayName, contact: account.companyName ? account.displayName : '', address: account.address || '', email: account.email || '', phone: account.phone || '' };
+        } else if (args.klant && typeof args.klant === 'object') {
+          customer = { ...customer, name: cleanText(args.klant.naam, 200), email: cleanText(args.klant.email, 200), phone: cleanText(args.klant.telefoon, 40) };
+        }
+        const questions = [];
+        if (!customer.name) questions.push({ onderwerp: 'klant', vraag: 'Voor welke klant is de werkorder? Zoek hem met zoek_klant of maak hem aan met maak_klant.' });
+        const steps = [];
+        for (const [index, raw] of rawSteps.entries()) {
+          const stepTitle = cleanText(raw && raw.titel, 300);
+          const hours = Number(raw && raw.uren);
+          if (!stepTitle) return errorOf(`Stap ${index + 1}: geef een titel.`);
+          if (raw.uren !== undefined && (!Number.isFinite(hours) || hours < 0 || hours > 1000)) return errorOf(`Stap ${index + 1}: geef een geldig aantal uren.`);
+          steps.push({ phase: 'uitvoering', title: stepTitle, hours: raw.uren === undefined ? 0 : hours });
+        }
+        const articles = articlesOf(req.tenantId);
+        const materials = [];
+        const notes = [];
+        for (const [index, raw] of rawMaterials.entries()) {
+          const code = cleanText(raw && raw.artikelcode, 40);
+          const qty = Number(raw && raw.aantal);
+          if (!code) return errorOf(`Materiaalregel ${index + 1}: geef een artikelcode.`);
+          if (!Number.isFinite(qty) || qty <= 0 || qty > 100000) return errorOf(`Materiaalregel ${index + 1}: geef een aantal groter dan nul.`);
+          const match = findArticle(articles, code);
+          if (!match) {
+            questions.push({ regel: index + 1, vraag: `Artikelcode ${code} bestaat niet. Zoek het juiste artikel met zoek_artikelen en vraag de gebruiker welk artikel bedoeld is.` });
+            notes.push(`Materiaal ${code} (${qty}) niet gevonden: niet op de werkorder gezet`);
+            continue;
+          }
+          const article = match.article;
+          if (Array.isArray(article.variants) && article.variants.length) {
+            questions.push({ regel: index + 1, vraag: `${article.code} heeft varianten: welke maat/kleur is nodig? Gebruik de code van de variant.` });
+            notes.push(`Materiaal ${article.code} (${qty}) heeft een maat/variant nodig: niet op de werkorder gezet`);
+            continue;
+          }
+          materials.push({ code: article.code, description: article.name || (match.parent ? `${match.parent.name} ${Object.values(article.values || {}).join(' ')}`.trim() : article.code), qty, unit: article.unit || 'st' });
+        }
+        if (questions.length && args.ookMetOpenPunten !== true) {
+          // Een terugvraag telt mee in de leeslimiet, zodat een AI die steeds terugvraagt niet onbeperkt doorgaat.
+          if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
+          return resultOf({ status: 'terugvragen', aangemaakt: false, vragen: questions,
+            melding: 'Er is nog niets aangemaakt. Leg de vragen voor aan de gebruiker, pas de invoer aan en roep opnieuw aan (of zet ookMetOpenPunten=true als de gebruiker bewust met open punten door wil).' });
+        }
+        if (!withinLimit(workOrdersPerHour, req) || !withinLimit(workOrdersPerDay, req)) return errorOf('Te veel werkorders via de AI-koppeling in korte tijd. Probeer het later opnieuw.');
+        const internalNote = ['Aangemaakt via de AI-koppeling: controleer stappen en materiaal.', ...(!customer.name ? ['Geen klant gekoppeld.'] : []), ...notes].join('\n');
+        const workOrder = ctx.createWorkOrder(req, { title, customer, instructions: cleanText(args.instructies, 4000), steps, materials, internalNote });
+        ctx.audit(req, 'werkorder_concept_via_ai', { workOrderId: workOrder.id, number: workOrder.number, stappen: steps.length, materiaal: materials.length, openPunten: questions.length });
+        return resultOf({
+          werkorderId: workOrder.id, nummer: workOrder.number, status: workOrder.status, link: ctx.appUrl(req, `werkorders/?id=${encodeURIComponent(workOrder.id)}`),
+          stappen: steps.length, materiaalregels: materials.length, ...(notes.length ? { aandachtspunten: notes } : {}),
+          ...(customer.name ? {} : { let_op: 'Geen klant op de werkorder.' }),
+          melding: 'De werkorder staat klaar met status Nieuw (niet ingepland, geen uitvoerder). Controleer hem in AquaTech en plan hem daar in.',
+        });
       },
     },
     maak_concept_offerte: {

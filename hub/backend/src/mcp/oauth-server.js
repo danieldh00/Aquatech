@@ -24,6 +24,7 @@ const SCOPES = {
   'klanten.aanmaken': { label: 'Nieuwe klanten aanmaken (particulier, adres via de postcode)', rights: ['klanten'] },
   'artikelen.lezen': { label: 'Artikelen en verkoopprijzen opzoeken', rights: ['offertes', 'voorraad', 'werkorders'] },
   'offertes.concept': { label: 'Concept-offertes aanmaken (nooit versturen, wijzigen of verwijderen)', rights: ['offertes'] },
+  'werkorders.concept': { label: 'Concept-werkorders aanmaken (status Nieuw, niet ingepland; nooit wijzigen of verwijderen)', rights: ['werkorders'] },
   'status.lezen': { label: 'De status van offertes, werkorders, facturen en bestellingen opvragen (wat jouw rol mag zien)', rights: ['offertes', 'werkorders', 'facturen', 'beheer'] },
   'facturen.lezen': { label: 'Openstaande facturen en wat klanten nog moeten betalen bekijken', rights: ['facturen'] },
 };
