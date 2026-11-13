@@ -3,9 +3,9 @@
 // opslag: alleen beslissingen, zodat ze zonder browser te testen zijn.
 //
 // Hoe het werkt (zie ook sw.js):
-// - Lezen: een vaste lijst API-adressen (werkorders, startscherm, api/me)
-//   komt eerst van de server en anders uit de cache van de ingelogde
-//   medewerker. Alleen met het recht 'werkorders' en een eigen account.
+// - Lezen: een vaste lijst API-adressen (werkorders, startscherm, api/me,
+//   orderpick) komt eerst van de server en anders uit de cache van de ingelogde
+//   medewerker. Alleen met het recht 'werkorders' of 'orderpick' en een eigen account.
 // - Schrijven: een verzoek met de kop `X-Aquatech-Offline: 1` gaat bij geen
 //   verbinding (of een onbereikbare server) in een wachtrij en wordt later
 //   verstuurd, met een `Idempotency-Key` zodat een herhaling nooit dubbel telt.
@@ -54,6 +54,9 @@
     /^api\/workorders\/[A-Za-z0-9-]{1,64}\/photos\/[A-Za-z0-9-]{1,64}\?thumb=1$/,
     /^api\/workorder-staff$/,
     /^api\/quote-profile$/,
+    // Orderpick: de lijst en de regels van een bestelling (zonder prijzen en adressen), zodat een picker in een hal zonder bereik door kan.
+    /^api\/orderpick\/orders$/,
+    /^api\/orderpick\/orders\/[A-Za-z0-9-]{1,64}$/,
   ];
   /**
    * Geeft aan of een adres offline beschikbaar mag zijn.
@@ -70,6 +73,8 @@
     { methods: ['PUT', 'PATCH'], pattern: new RegExp(`^api/workorders/${ID}$`) },
     { methods: ['POST'], pattern: new RegExp(`^api/workorders/${ID}/(photos|hours|materials)$`) },
     { methods: ['PATCH'], pattern: new RegExp(`^api/workorders/${ID}/photos/${ID}$`) },
+    // Een gepickte bestelling afmelden zonder verbinding; pakbon en label volgen online.
+    { methods: ['POST'], pattern: new RegExp(`^api/orderpick/orders/${ID}/pick$`) },
   ];
   /**
    * Geeft aan of een wijziging in de offline wachtrij mag.
@@ -98,13 +103,13 @@
   }
 
   /**
-   * Mag deze gebruiker offline werken? Alleen eigen accounts met werkorders, niet tijdens impersonatie.
+   * Mag deze gebruiker offline werken? Alleen eigen accounts met werkorders of orderpick, niet tijdens impersonatie.
    * @param {object} me Antwoord van api/me.
    * @returns {boolean} true als offline werken mag.
    */
   function offlineAllowed(me) {
     return Boolean(ownerOf(me) && me.user.kind === 'account' && !me.impersonation
-      && Array.isArray(me.rights) && me.rights.includes('werkorders'));
+      && Array.isArray(me.rights) && (me.rights.includes('werkorders') || me.rights.includes('orderpick')));
   }
 
   // Een onbereikbare server (Cloudflare, tijdens een update) is hetzelfde als

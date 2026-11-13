@@ -22,11 +22,12 @@ const HEADERS = Core.HEADERS;
 
 test('offline-core: alleen werkordergegevens komen in de cache', () => {
   for (const ok of ['api/me', 'api/config', 'api/my-day', 'api/my-day?date=2026-10-21&all=1', 'api/workorders', 'api/workorders/abc-123',
-    'api/workorders/abc-123/photos', 'api/workorders/abc-123/worklog', 'api/workorders/abc/photos/def?thumb=1', 'api/workorder-staff', 'api/quote-profile']) {
+    'api/workorders/abc-123/photos', 'api/workorders/abc-123/worklog', 'api/workorders/abc/photos/def?thumb=1', 'api/workorder-staff', 'api/quote-profile', 'api/orderpick/orders', 'api/orderpick/orders/abc-123']) {
     assert.ok(Core.cacheable(ok), ok);
   }
   for (const no of ['api/quotes', 'api/quotes/1', 'api/admin/users', 'api/portal', 'api/workorders/abc/photos/def', 'api/plans', 'api/workorders?quote=1',
-    'api/workorders/../admin/users', 'api/dossiers', 'api/platform/tenants', 'api/me/x']) {
+    'api/workorders/../admin/users', 'api/dossiers', 'api/platform/tenants', 'api/me/x',
+    'api/orderpick/orders?x=1', 'api/orderpick/orders/abc/packing-slip', 'api/orderpick/orders/abc/pick', 'api/orderpick/orders/../../admin/users']) {
     assert.ok(!Core.cacheable(no), no);
   }
 });
@@ -41,10 +42,22 @@ test('offline-core: offline werken alleen voor een eigen account met werkorders,
   assert.strictEqual(Core.ownerOf(me()), 'u1@t2', 'actieve omgeving telt mee');
   assert.ok(Core.offlineAllowed(me()));
   assert.ok(!Core.offlineAllowed(me({ rights: ['portaal'] })), 'klant');
+  assert.ok(Core.offlineAllowed(me({ rights: ['orderpick'] })), 'picker');
   assert.ok(!Core.offlineAllowed(me({ impersonation: { by: 'X' } })), 'impersonatie');
   assert.ok(!Core.offlineAllowed(me({ user: { id: 'g', kind: 'gast' } })), 'gast');
   assert.strictEqual(Core.ownerOf({ user: null }), null);
   assert.ok(!Core.offlineAllowed(null));
+});
+
+test('offline-core: alleen het afmelden van een pick mag in de wachtrij, pakbon en label niet', () => {
+  assert.ok(Core.queueable('api/orderpick/orders/abc-123/pick', 'POST'));
+  assert.ok(!Core.queueable('api/orderpick/orders/abc-123/pick', 'GET'));
+  assert.ok(!Core.queueable('api/orderpick/orders/abc-123/shipments/s1/label', 'POST'), 'label online');
+  assert.ok(!Core.queueable('api/orderpick/orders/abc-123/shipments/s1/packing-slip', 'POST'));
+  assert.ok(!Core.queueable('api/orderpick/orders/a/b/pick', 'POST'));
+  assert.strictEqual(Core.classify(409, { error: 'changed' }), 'failed', 'een gewijzigde bestelling blijft in het paneel staan');
+  const sw = fs.readFileSync(path.join(FRONT, 'sw.js'), 'utf8');
+  assert.match(sw, /PRECACHE_PAGES = \[[^\]]*'orderpick\/'/);
 });
 
 test('offline-core: antwoorden uit de wachtrij beoordelen', () => {
@@ -171,7 +184,7 @@ test('app: pagina\'s laden de offline-onderdelen, common.js registreert de servi
   const common = fs.readFileSync(path.join(FRONT, 'shared', 'common.js'), 'utf8');
   assert.match(common, /serviceWorker\.register\(fromApp\(`sw\.js\$\{version\}`\)\)/);
   assert.match(common, /rel: 'manifest'/);
-  for (const page of ['index.html', 'werkorders/index.html']) {
+  for (const page of ['index.html', 'werkorders/index.html', 'orderpick/index.html']) {
     const html = fs.readFileSync(path.join(FRONT, page), 'utf8');
     const core = html.indexOf('shared/offline-core.js');
     const off = html.indexOf('shared/offline.js');

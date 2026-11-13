@@ -24,7 +24,7 @@ const DATA = 'aquatech-data';
 const ROOT = new URL('./', self.location.href).pathname;
 // Pagina's die een installateur offline nodig heeft; hun scripts en
 // stylesheets komen mee (uit de HTML gelezen).
-const PRECACHE_PAGES = ['', 'werkorders/'];
+const PRECACHE_PAGES = ['', 'werkorders/', 'orderpick/'];
 // Grote bibliotheken (OCR, pdf.js, Excel) horen niet in de offline cache.
 const NO_CACHE = /(^|\/)vendor\/|\.(traineddata(\.gz)?|wasm|map)$/i;
 const STATIC = /\.(css|js|png|jpe?g|svg|webp|ico|woff2?|json)$/i;
