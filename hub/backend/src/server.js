@@ -1823,7 +1823,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }));
 
   // Terugzetten uit een back-up (volledig of per record/veld): platform/backup-restore.js.
-  registerBackupRestoreRoutes(app, { backupDir, vault, database, store, audit, runBackup, requireJson });
+  registerBackupRestoreRoutes(app, { backupDir, vault, database, store, audit, runBackup, requireJson, loginGuard, twoFactor });
 
   app.get('/api/admin/backups/:name', (req, res) => {
     const name = req.params.name;

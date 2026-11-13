@@ -10,10 +10,10 @@ const BASE = '/api/admin/backups/restore';
 /**
  * Koppelt de routes voor terugzetten aan de app.
  * @param {object} app De Express-app.
- * @param {{ backupDir: ?string, vault: object, database: object, store: object, audit: Function, runBackup: Function, requireJson: Function }} deps De back-upmap, de kluis, de actieve database, de store, het auditlog, de back-upfunctie en de JSON-controle.
+ * @param {{ backupDir: ?string, vault: object, database: object, store: object, audit: Function, runBackup: Function, requireJson: Function, loginGuard: object, twoFactor: object }} deps De back-upmap, de kluis, de actieve database, de store, het auditlog, de back-upfunctie, de JSON-controle, de inlogbewaking en de tweestapscontrole.
  * @returns {void}
  */
-function registerBackupRestoreRoutes(app, { backupDir, vault, database, store, audit, runBackup, requireJson }) {
+function registerBackupRestoreRoutes(app, { backupDir, vault, database, store, audit, runBackup, requireJson, loginGuard, twoFactor }) {
   const openLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 30, keyFn: (req) => `restore-open:${req.user ? req.user.id : ''}` });
   const applyLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, keyFn: (req) => `restore-apply:${req.user ? req.user.id : ''}` });
   let applying = false;
@@ -73,12 +73,29 @@ function registerBackupRestoreRoutes(app, { backupDir, vault, database, store, a
     if (applying) return res.status(409).json({ error: 'busy', message: 'Er wordt al een terugzetting uitgevoerd.' });
     applying = true;
     try {
+      // Wachtwoord (en bij tweestapsverificatie de code) tellen mee in dezelfde bewaking als inloggen: oplopende vertraging en blokkade.
+      const guardKey = `terugzetten:${req.user.id}`;
+      const totpKey = `totp:${req.user.id}`;
+      if (loginGuard.blocked(req, guardKey, 10, 10) || loginGuard.blocked(req, totpKey, 10, 10)) {
+        return res.status(429).json({ error: 'locked', message: 'Te veel verkeerde pogingen. Probeer het over een kwartier opnieuw.' });
+      }
+      await loginGuard.wait(req, guardKey);
       const account = store.getUser(req.user.id);
       const password = String(req.body?.password ?? '').slice(0, 200);
       if (!account || !account.password_hash || !(await verifyPassword(password, account.password_hash))) {
+        loginGuard.fail(req, guardKey);
         audit(req, 'backup_terugzetten_wachtwoord_fout', {});
         return res.status(401).json({ error: 'wrong_password', message: 'Je wachtwoord klopt niet.' });
       }
+      const second = twoFactor.check(account, String(req.body?.totp ?? '').slice(0, 40));
+      if (!second.ok) {
+        if (second.missing) return res.status(401).json({ error: 'totp_required', message: 'Vul de code uit je authenticator-app in.' });
+        loginGuard.fail(req, totpKey);
+        audit(req, 'backup_terugzetten_wachtwoord_fout', { via: 'tweestaps' });
+        return res.status(401).json({ error: 'totp_wrong', message: 'De code klopt niet. Gebruik de nieuwste code uit de app of een herstelcode.' });
+      }
+      loginGuard.clear(req, guardKey);
+      if (second.required) loginGuard.clear(req, totpKey);
       const kind = String(req.body.kind || '');
       const items = (Array.isArray(req.body.items) ? req.body.items : []).slice(0, restore.MAX_IDS).map((item) => ({ id: String(item?.id || ''), fields: Array.isArray(item?.fields) ? item.fields.map(String).slice(0, 200) : [] }));
       // Eerst controleren dat de back-up te openen is, dan een verse back-up als vangnet, pas daarna schrijven.

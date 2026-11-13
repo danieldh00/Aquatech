@@ -267,14 +267,17 @@ function diffOf(entity, columns, backupRow, currentRow) {
  * @param {string} table De tabel.
  * @param {object} row De rij uit de back-up.
  * @param {string} tenantId De omgeving.
+ * @param {Map<string, boolean>} [seen] Eerder opgezochte ouders (voorkomt een query per kindrij).
  * @returns {string} Een tekst met wat ontbreekt, of leeg als alles er is.
  */
-function missingParent(current, table, row, tenantId) {
+function missingParent(current, table, row, tenantId, seen = new Map()) {
   for (const foreignKey of foreignKeys(current, table)) {
     if (foreignKey.from === 'tenant_id' || foreignKey.table === 'tenants') continue;
     const target = plain(row[foreignKey.from]);
     if (target === null || target === '') continue;
-    const found = current.prepare(`SELECT 1 AS ok FROM ${foreignKey.table} WHERE tenant_id = ? AND id = ?`).get(tenantId, target);
+    const memo = `${foreignKey.table}:${target}`;
+    if (!seen.has(memo)) seen.set(memo, Boolean(current.prepare(`SELECT 1 AS ok FROM ${foreignKey.table} WHERE tenant_id = ? AND id = ?`).get(tenantId, target)));
+    const found = seen.get(memo);
     if (!found) return `verwijst naar een ${foreignKey.table}-record (${target}) dat niet meer bestaat; zet dat eerst terug`;
   }
   return '';
@@ -325,6 +328,30 @@ function preview({ backup, current, context, kind, id }) {
 const keyColumns = (db, table) => tableColumns(db, table).filter((column) => column.pk).map((column) => column.name);
 
 /**
+ * Sleutel van een kindrij als tekst, om in een verzameling op te zoeken.
+ * @param {object} row De rij.
+ * @param {string[]} keys De sleutelkolommen.
+ * @returns {string} De sleutel.
+ */
+function rowKeyText(row, keys) {
+  return JSON.stringify(keys.map((key) => plain(row[key])));
+}
+
+/**
+ * Haalt in één query de sleutels op van de kindrijen die nu al bij dit record horen (geen query per rij).
+ * @param {object} current De actieve database.
+ * @param {{ table: string, column: string }} child De kindtabel en de kolom die naar het hoofdrecord verwijst.
+ * @param {string} tenantId De omgeving.
+ * @param {string} id Het hoofdrecord.
+ * @returns {Set<string>} De sleutels (zie rowKeyText).
+ */
+function existingChildKeys(current, child, tenantId, id) {
+  const keys = keyColumns(current, child.table).filter((column) => column !== 'tenant_id');
+  const rows = current.prepare(`SELECT ${keys.join(', ')} FROM ${child.table} WHERE tenant_id = ? AND ${child.column} = ?`).all(tenantId, String(id));
+  return new Set(rows.map((row) => rowKeyText(row, keys)));
+}
+
+/**
  * Per onderliggende tabel hoeveel rijen in de back-up staan en hoeveel daarvan nu ontbreken.
  * @param {object} backup De back-up.
  * @param {object} current De actieve database.
@@ -336,12 +363,9 @@ const keyColumns = (db, table) => tableColumns(db, table).filter((column) => col
 function childCounts(backup, current, entity, id, tenantId) {
   return (entity.children || []).map((child) => {
     const rows = backup.prepare(`${selectOf(backup, child.table)} WHERE tenant_id = ? AND ${child.column} = ?`).all(tenantId, String(id));
+    const have = existingChildKeys(current, child, tenantId, id);
     const keys = keyColumns(current, child.table).filter((column) => column !== 'tenant_id');
-    let missing = 0;
-    for (const row of rows) {
-      const found = current.prepare(`SELECT 1 AS ok FROM ${child.table} WHERE tenant_id = ? AND ${keys.map((key) => `${key} = ?`).join(' AND ')}`).get(tenantId, ...keys.map((key) => plain(row[key])));
-      if (!found) missing += 1;
-    }
+    const missing = rows.filter((row) => !have.has(rowKeyText(row, keys))).length;
     return { table: child.table, inBackup: rows.length, missing };
   });
 }
@@ -423,10 +447,16 @@ function applyRestore({ backup, current, context, kind, items }) {
         let restored = 0;
         for (const child of entity.children || []) {
           const keys = keyColumns(current, child.table).filter((column) => column !== 'tenant_id');
+          const have = existingChildKeys(current, child, context.tenantId, id);
+          const parents = new Map();
           for (const row of backup.prepare(`${selectOf(backup, child.table)} WHERE tenant_id = ? AND ${child.column} = ?`).all(context.tenantId, id)) {
-            const exists = current.prepare(`SELECT 1 AS ok FROM ${child.table} WHERE tenant_id = ? AND ${keys.map((key) => `${key} = ?`).join(' AND ')}`).get(context.tenantId, ...keys.map((key) => plain(row[key])));
-            if (exists || missingParent(current, child.table, row, context.tenantId)) continue;
-            insertRow(current, backup, entity, child.table, row, context.tenantId);
+            if (have.has(rowKeyText(row, keys)) || missingParent(current, child.table, row, context.tenantId, parents)) continue;
+            try {
+              insertRow(current, backup, entity, child.table, row, context.tenantId);
+            } catch (error) {
+              // Een uniek nummer of code is intussen aan iets anders vergeven: alles terugdraaien, met een leesbare melding.
+              throw Object.assign(new Error(`${plan.label}: een onderliggende rij (${child.table}) botst met een bestaande. Er is niets teruggezet.`, { cause: error }), { status: 409 });
+            }
             restored += 1;
           }
         }

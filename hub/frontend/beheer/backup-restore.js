@@ -139,8 +139,9 @@
     button.disabled = true;
     say('Back-up maken en terugzetten…');
     try {
-      const out = await call('/apply', { method: 'POST', body: { backup: byId('r-backup').value, kind, items, password: byId('r-password').value } });
+      const out = await call('/apply', { method: 'POST', body: { backup: byId('r-backup').value, kind, items, password: byId('r-password').value, totp: byId('r-totp').value } });
       byId('r-password').value = '';
+      byId('r-totp').value = '';
       byId('r-preview').innerHTML = `<ul class="timeline">${out.results.map((result) => `<li>${esc(result.label || result.id)} · ${esc(STATUS_TEXT[result.status] || result.status)} · ${esc(result.message)}</li>`).join('')}</ul>`;
       byId('r-confirm').hidden = true;
       say(`Klaar. Vooraf is een back-up gemaakt (${out.safetyBackup}).`);
