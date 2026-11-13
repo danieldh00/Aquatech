@@ -81,7 +81,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   versie moet gelijk zijn aan `:latest`), de app saneert de statusbestanden. Wie: `canUpdate` in server.js (eigen
   account in de live hoofdtenant met `beheer`, bij multitenancy alleen `platform_admin`), wachtwoord opnieuw, 5 per
   kwartier, audit `update_*`. **Onderhoudsmodus**: zolang `maintenance.json` bestaat (max. 30 min) geeft
-  `maintenanceGuard` 503 `maintenance` op schrijfverzoeken (behalve uitloggen en de Mollie-webhook), kop
+  `maintenanceGuard` 503 `maintenance` op schrijfverzoeken (behalve in- en uitloggen en de Mollie-webhook), kop
   `X-Aquatech-Maintenance` (balk via `shared/common.js`), achtergrondtaken in `main` slaan over, `/api/health` meldt
   `maintenance`. Tests: `system-update.test.js`, `update-script.test.js` (nep-docker). Inrichten op de server:
   `deploy/apps01/setup-app-update.sh`.

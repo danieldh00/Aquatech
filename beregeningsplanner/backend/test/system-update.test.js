@@ -195,6 +195,10 @@ test('createSystemUpdate: een vastgelopen uitrol (bezig) telt na een half uur al
   // Zonder begintijd telt bezig ook niet als lopend.
   hostWrites(statusDir, { 'run.json': { state: 'bezig', step: 'ophalen', version: next } });
   assert.strictEqual(update.view().status.state, 'mislukt');
+  assert.strictEqual(update.finishedRun().state, 'mislukt');
+  clock += 60 * 1000;
+  update.view();
+  assert.strictEqual(update.finishedRun(), null, 'vaste eindtijd: niet bij elke vraag opnieuw in het auditlog');
 });
 
 /**

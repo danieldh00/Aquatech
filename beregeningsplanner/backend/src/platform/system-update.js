@@ -166,7 +166,8 @@ function createSystemUpdate({ statusDir = '', requestDir = '', currentVersion, n
     // anders zou elke nieuwe aanvraag voor altijd op "er loopt al een update" stuiten.
     const started = status.startedAt ? Date.parse(status.startedAt) : NaN;
     if (status.state === 'bezig' && !(now() - started < MAINTENANCE_MAX_MS)) {
-      const finishedAt = new Date((Number.isFinite(started) ? started : now() - MAINTENANCE_MAX_MS) + MAINTENANCE_MAX_MS).toISOString();
+      // Zonder geldige begintijd een vaste eindtijd: zo blijft de sleutel van finishedRun gelijk (geen auditvloed).
+      const finishedAt = Number.isFinite(started) ? new Date(started + MAINTENANCE_MAX_MS).toISOString() : '1970-01-01T00:00:00.000Z';
       return { ...status, state: 'mislukt', step: 'klaar', finishedAt, message: 'De update is onderbroken. Controleer de server.' };
     }
     return status;
