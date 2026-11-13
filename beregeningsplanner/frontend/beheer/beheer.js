@@ -1434,11 +1434,11 @@
     window.BeheerIndeling.build({
       startId,
       /**
-       * Back-ups zijn alleen voor hoofdbeheerders zichtbaar; instellingen van een uitgezette module helemaal niet.
+       * Back-ups zijn alleen voor hoofdbeheerders zichtbaar, Updates alleen voor wie mag bijwerken; instellingen van een uitgezette module helemaal niet.
        * @param {object} section De sectie.
        * @returns {boolean} true als de sectie in het menu hoort.
        */
-      allowed: (section) => (section.needs !== 'backups' || state.backups) && !state.hiddenSections.has(section.id),
+      allowed: (section) => (section.needs !== 'backups' || state.backups) && (section.needs !== 'updates' || state.updates) && !state.hiddenSections.has(section.id),
       /**
        * Opent de gekozen sectie als nieuwe stap in de browsergeschiedenis.
        * @param {string} id Sleutel van de sectie.
@@ -1468,7 +1468,7 @@
   function showTab(name, push = false) {
     const wanted = window.BeheerIndeling.find(window.BeheerIndeling.resolve(name));
     if (!wanted) return;
-    const section = (wanted.needs === 'backups' && !state.backups) || state.hiddenSections.has(wanted.id) ? window.BeheerIndeling.find('history') : wanted;
+    const section = (wanted.needs === 'backups' && !state.backups) || (wanted.needs === 'updates' && !state.updates) || state.hiddenSections.has(wanted.id) ? window.BeheerIndeling.find('history') : wanted;
     // Weggaan bij Webshop-inhoud met niet-opgeslagen menuwijzigingen: eerst vragen, bij annuleren blijft de sectie staan.
     if (activePane === 'shopinhoud' && section.pane !== 'shopinhoud' && window.BeheerWebshopMenu && window.BeheerWebshopMenu.hasChanges()
       && !confirm('Er zijn niet-opgeslagen wijzigingen in het menu. Toch weggaan? Die gaan dan verloren.')) return;
@@ -1484,6 +1484,7 @@
     if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
     if (section.pane === 'kleuren') window.BeheerKleuren.load();
+    if (section.pane === 'updates') window.BeheerUpdates.load(); else window.BeheerUpdates.stop();
     if (section.pane === 'audit') loadAudit();
     activePane = section.pane;
     if (location.hash === `#${section.id}`) return;
@@ -1510,6 +1511,7 @@
     $('#app').hidden = false;
     // Back-ups bevatten de hele database (alle tenants): alleen voor hoofdbeheerders.
     state.backups = Boolean(me.platformAdmin || (me.via === 'code' && me.tenant && me.tenant.slug === 'default'));
+    state.updates = Boolean(me.systemUpdate);
     $('#s-backup').hidden = !state.backups;
     // Gebruikersnamen zijn uniek per organisatie; inloggen gaat met de organisatiecode.
     const link = `../login${me.loginCode ? `?org=${encodeURIComponent(me.loginCode)}` : ''}`;

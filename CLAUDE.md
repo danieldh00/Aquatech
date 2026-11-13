@@ -72,6 +72,19 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   smoketest het image `ghcr.io/danieldh00/aquatech:<versie>` + `:latest`; de
   server rolt dat binnen 15 min uit (`deploy/apps01/update.sh`, met rollback).
   Zonder fragment geen nieuwe versie, geen nieuw image en dus geen uitrol.
+- **Updaten vanuit de app** (`platform/system-update.js` + `system-update-routes.js`, Beheer > Systeem > Updates
+  `beheer/updates.js`, geen migratie): de app rolt niets zelf uit (geen Docker-socket/root). Hostscript
+  `deploy/apps01/update.sh` schrijft `update/status/` (in de container `:ro`, env `UPDATE_STATUS_DIR`: `status.json`,
+  `run.json`, `releases.json` uit het nieuwe image via `tools/release-info.js`, `maintenance.json`); de app schrijft
+  alleen `update/request/` (`UPDATE_REQUEST_DIR`: `request.json` = Nu updaten, `policy.json` = automatisch aan/uit,
+  `audited.json`). `aquatech-update.path` start het script meteen. Het script vertrouwt de aanvraag niet (geen symlinks,
+  versie moet gelijk zijn aan `:latest`), de app saneert de statusbestanden. Wie: `canUpdate` in server.js (eigen
+  account in de live hoofdtenant met `beheer`, bij multitenancy alleen `platform_admin`), wachtwoord opnieuw, 5 per
+  kwartier, audit `update_*`. **Onderhoudsmodus**: zolang `maintenance.json` bestaat (max. 30 min) geeft
+  `maintenanceGuard` 503 `maintenance` op schrijfverzoeken (behalve in- en uitloggen en de Mollie-webhook), kop
+  `X-Aquatech-Maintenance` (balk via `shared/common.js`), achtergrondtaken in `main` slaan over, `/api/health` meldt
+  `maintenance`. Tests: `system-update.test.js`, `update-script.test.js` (nep-docker). Inrichten op de server:
+  `deploy/apps01/setup-app-update.sh`.
 - **Eerste start**: zolang er geen actieve beheerder met een eigen account is
   (`store.countAdmins`), krijgt elke niet-ingelogde bezoeker
   `backend/src/paginas/setup.html` (POST `/api/setup`; met een toegangscode is die

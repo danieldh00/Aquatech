@@ -1,0 +1,11 @@
+# Aquatech bijwerken (update.sh). Gestart door aquatech-update.timer (elke 15 minuten) en
+# aquatech-update.path (meteen na "Nu updaten" in Beheer > Systeem > Updates).
+[Unit]
+Description=Aquatech bijwerken naar de nieuwste versie uit GHCR
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/apps/aquatech/update.sh
+TimeoutStartSec=20min

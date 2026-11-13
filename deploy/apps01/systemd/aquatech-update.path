@@ -1,0 +1,11 @@
+# Start de update meteen zodra de app een aanvraag neerzet (knop "Nu updaten").
+# update.sh haalt request.json altijd weg; zolang hij er staat start systemd de service opnieuw.
+[Unit]
+Description=Aquatech: update starten op aanvraag vanuit de app
+
+[Path]
+PathExists=/opt/apps/aquatech/update/request/request.json
+Unit=aquatech-update.service
+
+[Install]
+WantedBy=multi-user.target
