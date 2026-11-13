@@ -231,6 +231,28 @@
       if (body && body.debug && panel) panel.show(body);
     });
   }
+  // ---------- Onderhoudsmodus ----------
+  // Tijdens een systeemupdate (backend/src/platform/system-update.js) heeft elk antwoord de kop
+  // X-Aquatech-Maintenance: dan staat bovenin een balk dat opslaan even niet kan.
+  let maintenanceBar = null;
+  /**
+   * Toont de balk van de onderhoudsmodus (één keer per pagina); verdwijnt zodra een antwoord zonder de kop komt.
+   * @param {boolean} active true = onderhoudsmodus aan.
+   * @returns {void}
+   */
+  function showMaintenance(active) {
+    if (!root.document || !root.document.body) return;
+    if (!active) {
+      if (maintenanceBar) { maintenanceBar.remove(); maintenanceBar = null; }
+      return;
+    }
+    if (maintenanceBar) return;
+    maintenanceBar = root.document.createElement('div');
+    maintenanceBar.className = 'maintenance-bar';
+    maintenanceBar.setAttribute('role', 'status');
+    maintenanceBar.textContent = 'Er wordt een update geïnstalleerd. Bekijken kan, opslaan even niet. Over een minuut werkt alles weer.';
+    root.document.body.appendChild(maintenanceBar);
+  }
   if (typeof nativeFetch === 'function') {
     /**
      * fetch met debugmodus: gewoon fetch, maar een foutantwoord met details gaat ook naar het debugpaneel.
@@ -240,6 +262,9 @@
     root.fetch = function fetchWithDebug(...args) {
       return nativeFetch.apply(this, args).then((response) => {
         if (response.status >= 400 && response.headers.get('X-Aquatech-Debug') === '1') reportDebug(response);
+        // Een serverfout zonder de kop (bijv. de proxy terwijl de container herstart) haalt de balk niet weg.
+        const maintenance = Boolean(response.headers && response.headers.get('X-Aquatech-Maintenance') === '1');
+        if (maintenance || response.status < 500) showMaintenance(maintenance);
         return response;
       }, (error) => {
         // Geen verbinding (fetch gooit dan een TypeError met een technische tekst als "Failed to fetch"): een

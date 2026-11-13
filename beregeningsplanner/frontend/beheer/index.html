@@ -459,6 +459,51 @@
           <div id="th-err" class="err" role="alert"></div>
         </form>
       </section>
+      <section id="tab-updates" class="tabpane" hidden>
+        <p class="muted small">Installeer een nieuwe versie van de software wanneer het jou uitkomt. Tijdens de update staat de site ongeveer een minuut in onderhoudsmodus: bekijken kan, opslaan even niet. Start de nieuwe versie niet goed, dan gaat de server vanzelf terug naar de huidige versie.</p>
+        <div id="up-none" class="card" hidden>
+          <h3>Niet ingericht</h3>
+          <p class="muted small">Updaten vanuit de app is op deze server nog niet ingericht. De server werkt zichzelf wel elk kwartier bij. Inrichten: zie deploy/apps01/README.md (setup-app-update.sh).</p>
+        </div>
+        <div id="up-main" hidden>
+          <div class="card-grid">
+            <section class="card" aria-labelledby="up-version-title">
+              <h3 id="up-version-title">Versie</h3>
+              <dl class="up-facts">
+                <dt>Draait nu</dt><dd id="up-running">–</dd>
+                <dt>Beschikbaar</dt><dd id="up-available">–</dd>
+                <dt>Laatst gecontroleerd</dt><dd id="up-checked">–</dd>
+              </dl>
+              <p class="muted small" id="up-state" role="status" aria-live="polite"></p>
+              <form id="up-form" class="form-grid" novalidate hidden>
+                <label class="field full">Bevestig met je wachtwoord
+                  <input type="password" id="up-password" autocomplete="current-password" required maxlength="200">
+                  <span class="hint">Zo kan niemand anders met jouw open sessie het systeem bijwerken.</span>
+                </label>
+                <div class="form-actions full">
+                  <button class="btn primary" type="submit" id="up-start">Nu updaten</button>
+                </div>
+              </form>
+              <div class="form-actions" id="up-pending-actions" hidden>
+                <button class="btn" type="button" id="up-cancel">Aanvraag intrekken</button>
+              </div>
+              <div id="up-err" class="err" role="alert"></div>
+            </section>
+            <section class="card" aria-labelledby="up-auto-title">
+              <h3 id="up-auto-title">Automatisch bijwerken</h3>
+              <div class="form-grid">
+                <label class="field chk full"><input type="checkbox" id="up-auto"> Nieuwe versies vanzelf installeren</label>
+                <p class="hint full muted small">Aan: de server installeert een nieuwe versie zelf binnen een kwartier. Uit: alleen als je hier op Nu updaten drukt.</p>
+              </div>
+              <div id="up-auto-err" class="err" role="alert"></div>
+            </section>
+          </div>
+          <section class="card" aria-labelledby="up-notes-title">
+            <h3 id="up-notes-title">Wat is er nieuw</h3>
+            <div id="up-notes"><p class="muted small">Geen nieuwe versie.</p></div>
+          </section>
+        </div>
+      </section>
       <section id="tab-aikosten" class="tabpane" hidden>
         <div class="filters">
           <select id="ai-range" aria-label="Periode">
@@ -527,6 +572,7 @@
   <script src="rollen.js"></script>
   <script src="aikosten.js"></script>
   <script src="kleuren.js"></script>
+  <script src="updates.js"></script>
   <script src="beheer.js"></script>
 </body>
 </html>

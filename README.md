@@ -16,7 +16,7 @@ webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als databas
 | Klanten | Klantenlijst met zoeken en Excel-export, klant aanmaken (adres via postcode, met of zonder inlog, op verzoek een uitnodiging) en een klantkaart met offertes, werkorders en facturen. Een e-mailadres hoort bij hoogstens één actief account. Een zakelijke klant hoeft geen KvK-nummer te hebben; bij een door VIES geldig bevonden btw-nummer uit een ander EU-land is het adres vrij te typen. |
 | Meldingen, Klantportaal, Klantdossier | Storingen en onderhoud melden, opleverdossier en installatiedossier per locatie. |
 | Uitbesteden, Nieuws, Profiel | Werk tussen organisaties, berichten en versielogboek, eigen voorkeuren en tweestapsverificatie. |
-| Beheer, Hoofdbeheer | Instellingen, gebruikers en rollen, back-ups, testomgevingen; platform: organisaties, hoofdbeheerders, multitenancy. Kleuren en de Visma-koppeling zijn per organisatie. |
+| Beheer, Hoofdbeheer | Instellingen, gebruikers en rollen, back-ups, updates installeren vanuit de app, testomgevingen; platform: organisaties, hoofdbeheerders, multitenancy. Kleuren en de Visma-koppeling zijn per organisatie. |
 
 ### Beheer in het kort
 
@@ -39,6 +39,13 @@ webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als databas
   van een offerte, werkorder, factuur of bestelling op nummer en wie nog moet betalen, telkens alleen wat de rol mag zien. Alleen voor medewerkers (klanten kunnen niet koppelen); elke medewerker koppelt zijn eigen account met de
   rechten van zijn rol. Een stap-voor-stap handleiding voor Claude en ChatGPT staat bij de instelling en in Mijn profiel,
   waar ook de gekoppelde apps staan en in te trekken zijn.
+- **Updates** (Beheer → Systeem → Updates, alleen de beheerder van de hoofdorganisatie; met multitenancy alleen een
+  hoofdbeheerder): toont de draaiende en de beschikbare versie met wat er nieuw is. *Nu updaten* (met je wachtwoord ter
+  bevestiging) laat de server de nieuwe versie meteen installeren; *Automatisch bijwerken* (standaard aan) installeert
+  een nieuwe versie zelf binnen een kwartier. Tijdens de update staat de site ongeveer een minuut in onderhoudsmodus
+  (bekijken kan, opslaan niet); start de nieuwe versie niet goed, dan gaat de server terug naar de vorige. De app
+  rolt zelf niets uit: het updatescript op de server pakt de aanvraag op (zie `deploy/apps01/README.md`, eenmalig
+  inrichten met `setup-app-update.sh`).
 - **Beveiliging**: sessies alleen als hash, wachtwoorden met scrypt, tweestapsverificatie (TOTP), versleutelde
   back-ups (dagelijks, ook vóór elke update), auditlog. Zie *Beveiliging en privacy* in `beregeningsplanner/DOCS.md`.
 
@@ -163,5 +170,6 @@ TEST_DATABASE_URL=postgres://… npm test         # dezelfde suite tegen Postgre
   review** en **Claude security review** (`.github/workflows/claude-review.yml`) groen zijn. CodeRabbit is uitgeschakeld;
   vóór go-live volgt eenmalig een handmatige deep scan met CodeRabbit.
 - Na het mergen verhoogt `release.yml` de versie (+1 patch) en bouwt het image `ghcr.io/danieldh00/aquatech:<versie>`; de server
-  (`deploy/apps01/`) rolt het binnen 15 minuten uit, met een back-up vooraf en rollback bij een fout.
+  (`deploy/apps01/`) rolt het binnen 15 minuten uit (of meteen met *Nu updaten* in Beheer; automatisch bijwerken kan
+  daar uit), met onderhoudsmodus, een back-up vooraf en rollback bij een fout.
 - Werkafspraken (codestijl, queries, beveiliging, mappen) staan in `CLAUDE.md`.

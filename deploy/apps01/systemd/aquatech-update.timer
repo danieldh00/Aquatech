@@ -1,0 +1,11 @@
+# Elke 15 minuten kijken of er een nieuwe versie is (en die installeren als automatisch bijwerken aan staat).
+[Unit]
+Description=Aquatech elke 15 minuten op updates controleren
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

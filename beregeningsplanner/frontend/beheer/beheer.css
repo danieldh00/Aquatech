@@ -270,3 +270,11 @@ dl.kv dd { margin: 0; }
 .kd-rule label { display: flex; flex-direction: column; gap: 4px; margin: 0; font-size: 13px; color: var(--muted); min-width: 0; }
 .kd-rule select, .kd-rule input { width: 100%; box-sizing: border-box; min-width: 0; }
 @media (max-width: 640px) { .kd-rule { grid-template-columns: minmax(0, 1fr) auto; } .kd-rule label:first-child { grid-column: 1 / -1; } }
+
+/* Beheer > Systeem > Updates (updates.js) */
+.up-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 12px; font-size: 14px; }
+.up-facts dt { color: var(--muted); }
+.up-facts dd { margin: 0; font-weight: 600; }
+.up-release h4 { margin: 12px 0 4px; font-size: 14px; }
+.up-release:first-child h4 { margin-top: 0; }
+.up-release ul { margin: 0; padding-left: 20px; font-size: 14px; }

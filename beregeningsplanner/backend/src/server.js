@@ -72,6 +72,8 @@ const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/
 const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
 const { createAiUsageStore } = require('./platform/ai-usage');
 const { createErrorReport, catchAsync, withCause } = require('./platform/error-report');
+const { createSystemUpdate } = require('./platform/system-update');
+const { registerSystemUpdateRoutes, maintenanceGuard } = require('./platform/system-update-routes');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
 const { createOAuthGrants } = require('./mcp/oauth-grants');
 const { registerOAuthRoutes } = require('./mcp/oauth-server');
@@ -353,6 +355,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {boolean} true als multitenancy aan staat.
    */
   const multitenancyOn = () => settings.get('multitenancy');
+  // Koppeling met het updatescript op de host (deploy/apps01/update.sh): zonder de twee mappen niet ingericht.
+  const systemUpdate = createSystemUpdate({ statusDir: env.UPDATE_STATUS_DIR || '', requestDir: env.UPDATE_REQUEST_DIR || '', currentVersion: version });
   /**
    * De aan/uit-vlaggen van de modules in een omgeving, zoals ze echt gelden: uitbesteden werkt tussen organisaties en staat
    * dus uit zonder multitenancy, ook als de beheerder het niet zelf uitzette.
@@ -643,6 +647,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (req.url.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
     next();
   });
+  // Onderhoudsmodus tijdens een systeemupdate (zie platform/system-update.js): schrijfverzoeken wachten even.
+  app.use(maintenanceGuard(systemUpdate));
 
   // Buiten /app: de webshop, de oude adressen (doorverwijzing) en de gezondheidscontrole.
   app.use((req, res, next) => {
@@ -812,7 +818,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   app.get('/api/health', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ ok: true, version });
+    res.json({ ok: true, version, maintenance: systemUpdate.maintenance().active });
   });
 
   app.get('/api/auth/status', (req, res) => {
@@ -1301,6 +1307,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       preferences: user?.kind === 'account' && !user.impersonation ? preferencesOf(user) : null,
       tenant: active,
       platformAdmin: Boolean(user?.platform_admin),
+      // Mag het systeem bijwerken vanuit Beheer > Updates (zie canUpdate).
+      systemUpdate: Boolean(user) && canUpdate(req),
       // Of meer organisaties naast elkaar draaien; zo niet, dan verbergt de frontend het tenant-specifieke deel.
       multitenancy: multitenancyOn(),
       // Organisatiecode waarmee de gebruikers van deze organisatie inloggen
@@ -1648,6 +1656,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     audit(req, 'plan_gewist', { planId: req.params.id, historyRows: out.history });
     res.json({ ok: true, ...out });
   });
+
+  // ---------- Beheer: systeemupdate (zie platform/system-update.js en deploy/apps01/update.sh) ----------
+  /**
+   * Mag dit verzoek het systeem bijwerken? Alleen een eigen account (geen toegangscode, geen impersonatie) in de live
+   * hoofdtenant, met beheerrechten; draaien er meer organisaties (multitenancy), dan alleen een hoofdbeheerder.
+   * @param {object} req Het verzoek.
+   * @returns {boolean} true als het mag.
+   */
+  const canUpdate = (req) => {
+    const user = req.user !== undefined ? req.user : identify(req);
+    if (!user || user.kind !== 'account' || user.impersonation || user.impersonator) return false;
+    if (req.tenantId !== tenant.id || (user.home_tenant_id || user.tenant_id) !== tenant.id) return false;
+    return Boolean(user.platform_admin) || (!multitenancyOn() && Roles.can(user, 'beheer'));
+  };
+  app.locals.systemUpdate = systemUpdate;
+  app.locals.recordSystemUpdate = registerSystemUpdateRoutes(app, { systemUpdate, store, audit, mainTenantId: tenant.id, canUpdate }).recordFinished;
 
   // ---------- Beheer: back-ups ----------
   // Alleen versleutelde bestanden; downloaden is dus veilig voor een kopie
@@ -3046,6 +3070,8 @@ if (require.main === module) {
    * @returns {void}
    */
   const runMaintenance = () => {
+    // Tijdens een systeemupdate niets op de achtergrond; de volgende ronde (na de update) haalt het in.
+    if (app.locals.systemUpdate.maintenance().active) return;
     try {
       const removed = app.locals.maintenance();
       const total = Object.values(removed).reduce((sum, count) => sum + count, 0);
@@ -3072,12 +3098,17 @@ if (require.main === module) {
   runMaintenance();
   setInterval(runMaintenance, 60 * 60 * 1000).unref();
   // Eerst prijs en voorraad, daarna de bestellingen (dan is de verkoop al afgeboekt).
-  setInterval(() => app.locals.shopSyncAll()
+  try {
+    app.locals.recordSystemUpdate();
+  } catch (error) {
+    console.error('Afgeronde systeemupdate vastleggen mislukt:', error.message);
+  }
+  setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : app.locals.shopSyncAll()
     .catch((err) => console.error('Webshopsynchronisatie mislukt:', err.message))
     .then(() => app.locals.shopOrdersAll())
     .catch((err) => console.error('Webshopbestellingen ophalen mislukt:', err.message))
     .then(() => app.locals.vismaAll())
-    .catch((err) => console.error('Doorsturen naar Visma mislukt:', err.message)), 10 * 60 * 1000).unref();
+    .catch((err) => console.error('Doorsturen naar Visma mislukt:', err.message))), 10 * 60 * 1000).unref();
   if (!settings.get('anthropicApiKey')) console.log('Geen API-sleutel ingesteld: automatisch herkennen met AI staat uit (tekenen, lokale herkenning en de toverstaf werken wel).');
 
   const server = app.listen(port, () => {

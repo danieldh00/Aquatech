@@ -44,6 +44,7 @@
       { id: 'backup', label: 'Back-ups', pane: 'settings', form: 's-backup', words: 'kopie database herstellen versleuteld', needs: 'backups' },
       { id: 'aikosten', label: 'AI-kosten', pane: 'aikosten', words: 'verbruik tokens kosten export per gebruiker' },
       { id: 'debug', label: 'Foutopsporing', pane: 'settings', form: 's-debug', words: 'debug debugmodus foutmelding fout foutcode details' },
+      { id: 'updates', label: 'Updates', pane: 'updates', words: 'update versie bijwerken nieuwe versie releasenotes onderhoudsmodus installeren', needs: 'updates' },
     ] },
   ];
 
