@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.15.2
+
+- `backend/src/beregening/recog-metrics.js`: zuivere meetfuncties (rasteroverlap per vlaksoort, nauwkeurigheid, gazonverhouding, schaalfout, elementafstand) om de lokale herkenning met een referentie (AI-uitkomst of goedgekeurd plan) te vergelijken.
+- `backend/tools/recog-bench.js` (`npm run recog-bench [map] [--json]`): draait de lokale vlakherkenning over `naam.png` + `naam.json` in een map en toont per tekening de afwijking. Geen netwerk, geen AI. Eerste referentie: het voorbeeldplan in `test/fixtures`.
+- Eerste stap van het plan om de planner zonder AI te laten werken; de volgende stappen verbeteren de herkenning steeds aan de hand van deze meetlat.
+
 ## 1.15.1
 
 Oorzaak van de lege ruimte: de klasse `.cart` van de winkelwagenpagina (marge 24px, max-breedte) viel ook op de winkelwagenknop in de kop; nu `.shop-main .cart`. Mobiele webshopkop (`storefront.css`, ≤ 800 px): kleiner logo en iconen, knoppen met minder opvulling, winkelwagenteller over het icoon, kleinere mededelingenbalk, zodat de kop niet meer over twee rijen met een lege ruimte valt.

@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.15.2',
+      date: '2026-11-13',
+      title: 'Meetlat voor de planherkenning zonder AI',
+      items: [],
+    },
+    {
       version: '1.15.1',
       date: '2026-11-13',
       title: 'Compactere webshopkop op mobiel',
