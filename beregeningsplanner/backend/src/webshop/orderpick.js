@@ -32,6 +32,10 @@ function byLocation(left, right) {
 function createOrderpick(db, { orders, slips, labels }) {
   /** Zendingen waarvan nu een label wordt gemaakt. */
   const labelsBusy = new Set();
+  /** Zojuist gemaakte labels die niet konden worden vastgelegd (sleutel `tenant:bestelling:zending`), een uur bewaard: een nieuwe tik geeft ze terug in plaats van een tweede label te bestellen. */
+  const unrecordedLabels = new Map();
+  const UNRECORDED_TTL_MS = 60 * 60 * 1000;
+  const RECORD_ATTEMPTS = 3;
 
   /**
    * Leest de locatie, EAN en code van de artikelen en de EAN van hun verpakkingen (twee queries per 200 artikelen).
@@ -181,19 +185,37 @@ function createOrderpick(db, { orders, slips, labels }) {
     if (!order) return { error: 'Bestelling niet gevonden.', status: 404 };
     const shipment = order.shipments.find((entry) => entry.id === String(shipmentId || ''));
     if (!shipment) return { error: 'Zending niet gevonden.', status: 404 };
-    if (shipment.label) return { error: `Voor deze zending is al een label gemaakt${shipment.label.trackingCode ? ` (volgcode ${shipment.label.trackingCode})` : ''}. Een tweede label zou een tweede pakket betekenen.`, code: 'label_exists', status: 409 };
-    const made = await labels.create(tenantId, order, shipment);
-    if (made.error) return made;
-    // Meteen vastleggen, zodat een tweede tik of scherm nooit een tweede label maakt.
-    // Lukt het vastleggen niet, dan krijgt de picker het label toch (het bestaat al bij de vervoerder); de volgcode staat dan in het log.
-    try {
-      const recorded = orders.recordShipmentLabel(tenantId, id, shipment.id, made.trackingCode);
-      if (recorded.error || recorded.existing) console.warn(`Label van zending ${shipment.id} niet vastgelegd (${recorded.error || 'er was al een label'}); volgcode ${made.trackingCode || '-'}`);
-    } catch (error) {
-      console.warn(`Label van zending ${shipment.id} niet vastgelegd: ${error.message}; volgcode ${made.trackingCode || '-'}`);
+    const cacheKey = `${tenantId}:${id}:${shipment.id}`;
+    const cachedAt = unrecordedLabels.get(cacheKey);
+    if (cachedAt && Date.now() - cachedAt.at > UNRECORDED_TTL_MS) unrecordedLabels.delete(cacheKey);
+    let made = unrecordedLabels.has(cacheKey) ? unrecordedLabels.get(cacheKey).made : null;
+    if (!made) {
+      if (shipment.label) return { error: `Voor deze zending is al een label gemaakt${shipment.label.trackingCode ? ` (volgcode ${shipment.label.trackingCode})` : ''}. Een tweede label zou een tweede pakket betekenen.`, code: 'label_exists', status: 409 };
+      made = await labels.create(tenantId, order, shipment);
+      if (made.error) return made;
     }
+    // Meteen vastleggen (een paar pogingen), zodat een tweede tik of scherm nooit een tweede label maakt.
+    // Lukt het niet, dan bewaren we het label kort in het geheugen en krijgt de picker het toch; de volgcode staat ook in het log.
+    let recordedOk = false;
+    for (let attempt = 0; attempt < RECORD_ATTEMPTS && !recordedOk; attempt += 1) {
+      try {
+        const recorded = orders.recordShipmentLabel(tenantId, id, shipment.id, made.trackingCode);
+        recordedOk = !recorded.error;
+        if (recorded.existing) recordedOk = true;
+      } catch (error) {
+        console.warn(`Label van zending ${shipment.id} niet vastgelegd (poging ${attempt + 1}): ${error.message}; volgcode ${made.trackingCode || '-'}`);
+      }
+    }
+    if (recordedOk) unrecordedLabels.delete(cacheKey);
+    else unrecordedLabels.set(cacheKey, { made, at: Date.now() });
     // Een volgcode gaat alleen bij de bestelling als die er nog geen heeft (de klant krijgt dan de mail met track & trace); een ongeldige code stopt het label niet.
-    if (made.trackingCode) orders.setTracking(tenantId, id, made.trackingCode, { onlyIfEmpty: true });
+    if (made.trackingCode) {
+      try {
+        orders.setTracking(tenantId, id, made.trackingCode, { onlyIfEmpty: true });
+      } catch (error) {
+        console.warn(`Volgcode ${made.trackingCode} van zending ${shipment.id} niet bij de bestelling gezet: ${error.message}`);
+      }
+    }
     return { pdf: made.pdf, fileName: `Label ${order.number}.pdf`.replace(/[^\w .()-]/g, ''), order };
   }
 

@@ -287,3 +287,38 @@ test('label: gelijktijdige aanvragen voor een zending (label_busy) en twee zendi
   assert.strictEqual(order.shipping.tracking.code, 'DPD000001', 'de eerste volgcode blijft staan');
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM web_orders').get().n, 1);
 });
+
+test('label: lukt het vastleggen niet, dan geeft een nieuwe tik hetzelfde label terug en belt de vervoerder niet opnieuw', async () => {
+  let calls = 0;
+  const provider = { configured: () => true, create: async () => { calls += 1; return { pdf: Buffer.from('%PDF-label'), trackingCode: 'DPD777' }; } };
+  const world = await pickWorld({ appOptions: { shippingLabelProviders: { dpd: provider } } });
+  const { picker, db } = world;
+  const id = await placeOrder(world, [['BUS', '2']], { shippingMethod: 'dpd' });
+  const done = await picker.post(`/app/api/orderpick/orders/${id}/pick`, { lines: [{ index: 0, qty: 2 }], shipmentCount: 0 });
+  const url = `/app/api/orderpick/orders/${id}/shipments/${done.body.shipment.id}/label`;
+  // Het vastleggen van het label faalt (bijvoorbeeld een time-out): alle UPDATE's op de bestelling gooien.
+  const realPrepare = db.prepare.bind(db);
+  let failing = true;
+  db.prepare = (sql, ...rest) => {
+    if (failing && /^\s*UPDATE web_orders SET data/i.test(sql)) throw new Error('time-out');
+    return realPrepare(sql, ...rest);
+  };
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const first = await picker.post(url, {});
+    assert.strictEqual(first.status, 200);
+    const again = await picker.post(url, {});
+    assert.strictEqual(again.status, 200, 'het label uit het geheugen, geen label_exists en geen tweede label');
+    assert.strictEqual(again.raw.toString('latin1'), '%PDF-label');
+    assert.strictEqual(calls, 1, 'de vervoerder is maar één keer gebeld');
+    // Daarna herstelt de database: de volgende tik legt het label alsnog vast en daarna geldt label_exists.
+    failing = false;
+    assert.strictEqual((await picker.post(url, {})).status, 200);
+    assert.strictEqual((await picker.post(url, {})).body.error, 'label_exists');
+    assert.strictEqual(calls, 1);
+  } finally {
+    console.warn = warn;
+    db.prepare = realPrepare;
+  }
+});
