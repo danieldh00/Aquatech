@@ -159,8 +159,8 @@
     const out = await api('orders');
     let waiting = readStored('queued') || [];
     if (waiting.length && window.AquatechOffline) {
-      // Een pick die niet meer in de wachtrij staat is verstuurd of weggegooid terwijl deze pagina dicht was: niet langer verbergen.
-      const pending = new Set((await window.AquatechOffline.list()).map((item) => item.id));
+      // Een pick die niet meer wacht (verstuurd, weggegooid of door de server afgewezen) hoort niet langer verborgen te zijn: de bestelling staat dan weer in de lijst met wat de server nu zegt.
+      const pending = new Set((await window.AquatechOffline.list()).filter((item) => item.state === 'pending').map((item) => item.id));
       const kept = waiting.filter((entry) => pending.has(entry.queueId));
       if (kept.length !== waiting.length) { waiting = kept; writeStored('queued', kept.length ? kept : null); }
     }
