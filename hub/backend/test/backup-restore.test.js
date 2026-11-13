@@ -106,6 +106,20 @@ test('een verwijderd record komt terug met zijn onderliggende rijen; opnieuw ter
   } finally { scene.cleanup(); }
 });
 
+test('status en nummer gaan nooit per veld terug (de vergrendeling is niet te omzeilen)', async () => {
+  const scene = await world();
+  try {
+    await withBackup(scene, ({ backup, current, context }) => {
+      scene.db.prepare("UPDATE quotes SET status = 'verzonden', number = 'O2026-0099' WHERE id = 'q1'").run();
+      const plan = restore.preview({ backup, current, context, kind: 'quote', id: 'q1' });
+      assert.ok(!plan.fields.includes('status') && !plan.fields.includes('number'), 'niet aangeboden');
+      const out = restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: 'q1', fields: ['status', 'number'] }] });
+      assert.strictEqual(out.results[0].status, 'overgeslagen');
+      assert.deepStrictEqual({ ...scene.db.prepare("SELECT status, number FROM quotes WHERE id = 'q1'").get() }, { status: 'verzonden', number: 'O2026-0099' });
+    });
+  } finally { scene.cleanup(); }
+});
+
 test('een gewijzigd record: alleen de gekozen velden gaan terug, ook één sleutel uit data', async () => {
   const scene = await world();
   try {
