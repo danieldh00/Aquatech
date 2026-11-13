@@ -322,3 +322,16 @@ test('label: lukt het vastleggen niet, dan geeft een nieuwe tik hetzelfde label 
     db.prepare = realPrepare;
   }
 });
+
+test('label van een deelzending: de volgcode gaat bij de laatste zending naar de bestelling', async () => {
+  const provider = { configured: () => true, create: async () => ({ pdf: Buffer.from('%PDF-label'), trackingCode: 'DPD555123' }) };
+  const world = await pickWorld({ appOptions: { shippingLabelProviders: { dpd: provider } } });
+  const { picker, admin } = world;
+  const id = await placeOrder(world, [['BUS', '4']], { shippingMethod: 'dpd' });
+  const first = await picker.post(`/app/api/orderpick/orders/${id}/pick`, { lines: [{ index: 0, qty: 2 }], shipmentCount: 0 });
+  assert.strictEqual((await picker.post(`/app/api/orderpick/orders/${id}/shipments/${first.body.shipment.id}/label`, {})).status, 200);
+  assert.ok(!(await admin.get(`/app/api/admin/web-orders/${id}`)).body.order.shipping.tracking, 'bestelling nog nieuw: nog geen volgcode');
+  const second = await picker.post(`/app/api/orderpick/orders/${id}/pick`, { lines: [{ index: 0, qty: 2 }], shipmentCount: 1 });
+  assert.strictEqual(second.body.complete, true);
+  assert.strictEqual((await admin.get(`/app/api/admin/web-orders/${id}`)).body.order.shipping.tracking.code, 'DPD555123');
+});

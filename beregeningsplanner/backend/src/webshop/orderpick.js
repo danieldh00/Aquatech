@@ -32,9 +32,8 @@ function byLocation(left, right) {
 function createOrderpick(db, { orders, slips, labels }) {
   /** Zendingen waarvan nu een label wordt gemaakt. */
   const labelsBusy = new Set();
-  /** Zojuist gemaakte labels die niet konden worden vastgelegd (sleutel `tenant:bestelling:zending`), een uur bewaard: een nieuwe tik geeft ze terug in plaats van een tweede label te bestellen. */
+  /** Zojuist gemaakte labels die niet konden worden vastgelegd (sleutel `tenant:bestelling:zending`), bewaard tot het vastleggen lukt (ze verlopen niet: een tweede label is een tweede, betaald pakket; na een herstart van de server is de registratie weg, de volgcode staat dan in het log). Een nieuwe tik geeft ze terug in plaats van een tweede label te bestellen. */
   const unrecordedLabels = new Map();
-  const UNRECORDED_TTL_MS = 60 * 60 * 1000;
   const RECORD_ATTEMPTS = 3;
 
   /**
@@ -186,8 +185,6 @@ function createOrderpick(db, { orders, slips, labels }) {
     const shipment = order.shipments.find((entry) => entry.id === String(shipmentId || ''));
     if (!shipment) return { error: 'Zending niet gevonden.', status: 404 };
     const cacheKey = `${tenantId}:${id}:${shipment.id}`;
-    const cachedAt = unrecordedLabels.get(cacheKey);
-    if (cachedAt && Date.now() - cachedAt.at > UNRECORDED_TTL_MS) unrecordedLabels.delete(cacheKey);
     let made = unrecordedLabels.has(cacheKey) ? unrecordedLabels.get(cacheKey).made : null;
     if (!made) {
       if (shipment.label) return { error: `Voor deze zending is al een label gemaakt${shipment.label.trackingCode ? ` (volgcode ${shipment.label.trackingCode})` : ''}. Een tweede label zou een tweede pakket betekenen.`, code: 'label_exists', status: 409 };
@@ -207,11 +204,13 @@ function createOrderpick(db, { orders, slips, labels }) {
       }
     }
     if (recordedOk) unrecordedLabels.delete(cacheKey);
-    else unrecordedLabels.set(cacheKey, { made, at: Date.now() });
+    else unrecordedLabels.set(cacheKey, { made });
     // Een volgcode gaat alleen bij de bestelling als die er nog geen heeft (de klant krijgt dan de mail met track & trace); een ongeldige code stopt het label niet.
     if (made.trackingCode) {
       try {
-        orders.setTracking(tenantId, id, made.trackingCode, { onlyIfEmpty: true });
+        const set = orders.setTracking(tenantId, id, made.trackingCode, { onlyIfEmpty: true });
+        // Bij een bestelling die nog niet is verzonden (deelzending) kan dit niet: de volgcode staat bij de zending en gaat bij de laatste zending mee.
+        if (set && set.error) console.warn(`Volgcode van zending ${shipment.id} nog niet bij de bestelling gezet: ${set.error}`);
       } catch (error) {
         console.warn(`Volgcode ${made.trackingCode} van zending ${shipment.id} niet bij de bestelling gezet: ${error.message}`);
       }

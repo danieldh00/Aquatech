@@ -837,6 +837,11 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       const shipment = { id: crypto.randomUUID(), at: timestamp, by, lines: checked.wanted, ...(tracking && data.shipping && data.shipping.method === 'dpd' ? { tracking: tracking.code } : {}) };
       data.shipments = [...(Array.isArray(data.shipments) ? data.shipments : []), shipment];
       if (tracking && data.shipping && data.shipping.method === 'dpd') data.shipping.tracking = tracking;
+      if (complete && !tracking && data.shipping && data.shipping.method === 'dpd' && !data.shipping.tracking) {
+        // De laatste zending sluit de bestelling af: een volgcode van een eerder gemaakt label (orderpick) gaat dan bij de bestelling, voor de verzendmail.
+        const labelled = data.shipments.map((entry) => (entry.label ? Shipping.trackingOf(entry.label.trackingCode) : null)).find(Boolean);
+        if (labelled) data.shipping.tracking = labelled;
+      }
       delete data.backorderReadyAt;
       if (complete) delete data.backorderSince; else data.backorderSince = data.backorderSince || timestamp;
       data.history.push({ at: timestamp, status: complete ? 'verzonden' : 'nieuw', by, ...(complete ? {} : { note: 'Deellevering verzonden; de rest staat op backorder' }) });
