@@ -328,6 +328,8 @@ function createDriveBackup({ settings, backupDir, listBackups, fetchImpl = fetch
    * @returns {Promise<{ revoked: boolean }>} Of Google de toestemming heeft ingetrokken.
    */
   async function disconnect() {
+    // Een lopende ronde eerst laten eindigen: anders schrijft die na het verbreken nog stand van het oude account terug.
+    if (running) await running.catch(() => {});
     const refresh = settings.get('backupDriveRefreshToken');
     let revoked = false;
     if (refresh) {

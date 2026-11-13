@@ -225,3 +225,20 @@ test('terugkeer van Google: onbekende of herhaalde state, geweigerd en een ontbr
     assert.match((await tweede.get(`${BASE}/drive/callback?code=goede-code&state=${other}`)).location, /reden=invalid_state/);
   } finally { await world.cleanup(); }
 });
+
+test('verbreken wacht op een lopende upload en laat geen stand van het oude account achter', async () => {
+  const world = await start();
+  try {
+    await connect(world);
+    addBackup(world.dir, '20261130-030000', Buffer.alloc(1000, 1));
+    const syncing = world.baas.post(`${BASE}/drive/sync`);
+    await until(async () => (await world.baas.get(`${BASE}/drive`)).body.running);
+    const gone = (await world.baas.post(`${BASE}/drive/disconnect`)).body;
+    await syncing;
+    assert.strictEqual(gone.connected, false);
+    assert.deepStrictEqual(gone.items.filter((item) => item.onDrive), []);
+    const status = (await world.baas.get(`${BASE}/drive`)).body;
+    assert.strictEqual(status.folderId, '');
+    assert.strictEqual(status.needsReconnect, false);
+  } finally { await world.cleanup(); }
+});
