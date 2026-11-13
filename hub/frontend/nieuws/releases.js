@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.15.7',
+      date: '2026-11-13',
+      title: 'Automatische bestelvoorstellen',
+      items: [
+        { text: 'Zakt een artikel onder de minimumvoorraad, dan zet AquaTech elk uur per voorkeursleverancier een concept-inkooporder klaar. Je ziet ze onder Inkoop > Bestelvoorstel, met een label Voorstel bij de Inkooporders. Er wordt nooit iets besteld zonder jouw goedkeuring: goedkeuren, aanpassen of per artikel op "Niet bestellen" zetten.' },
+        { text: 'Wat al onderweg is en wat op backorder staat telt mee, zodat niets dubbel wordt besteld. Uitzetten kan in Beheer > Modules > Artikelen: bestelvoorstellen.' },
+      ],
+    },
+    {
       version: '1.15.6',
       date: '2026-11-13',
       title: 'Vijvers en huizen aan de tuinrand beter herkend zonder AI',

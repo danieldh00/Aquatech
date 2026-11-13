@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.7
+
+`purchase_orders.origin` (`handmatig`|`voorstel`) en tabel `purchase_proposal_dismissals` (migratie in `MIGRATIONS` en `PG_MIGRATIONS`). `purchaseOrders.autoPropose` houdt per voorkeursleverancier één concept met origin `voorstel` bij (één transactie, idempotent, geen nummerverspilling); een aangepast voorstel wordt `handmatig` en telt als onderweg (`incomingByItem` met `excludeProposals`). Routes `/api/purchase-orders/proposals[/refresh|approve|dismiss|restore]`. Instelling `purchaseProposals` {enabled} (standaard aan, per omgeving, geen liveOnly), uurlijkse taak `app.locals.purchaseProposalsAll` in `runMaintenance` en kort na het opstarten; de voorstel-routes horen bij `configuration` van de module Artikelen. Tests: `purchase-proposals*.test.js`, `proposals-core.test.js`, `module-settings.test.js`.
+
 ## 1.15.6
 
 `localrecog.js`: kleur met tint vanaf 194,5° (lichtblauw) is water in plaats van haag; `paintEnclosedWhite` scheidt het witte huis van het papier via de donkere omtrek (`INK_LUMA`) en eist dat minstens 30% van de omtrek aan gekleurde vlakken grenst. Meting met de plangenerator: 10 bekende plannen functie 86% → 91%; 12 onbekende plannen (seed 101+) functie 90% → 91% (de eerste reeks is dus gedeeltelijk afgesteld, de tweede is de eerlijke maat). Tests in `localrecog.test.js`.
