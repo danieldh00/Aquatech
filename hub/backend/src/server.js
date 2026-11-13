@@ -2473,6 +2473,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       quoteUrl: (req, id) => `${oauth.originOf(req)}/app/offertes/?id=${encodeURIComponent(id)}`,
       appUrl: (req, page) => `${oauth.originOf(req)}/app/${page}`,
       /**
+       * Maakt een werkorder zonder offerte (status Nieuw, niet ingepland, geen uitvoerder) en reserveert het materiaal.
+       * @param {object} req Het verzoek.
+       * @param {object} data De werkorderdata (titel, klant, instructies, stappen, materiaal, interne notitie).
+       * @returns {object} De werkorder.
+       */
+      createWorkOrder: (req, data) => {
+        const workOrder = workOrderStore.createReceived({ id: req.user.id, tenant_id: req.tenantId }, data);
+        try { stockStore.onWorkOrderChange(req.tenantId, workOrder.id, req.user); } catch (error) { console.warn(`Voorraad bij werkorder ${workOrder.id} niet bijgewerkt: ${error.message}`); }
+        return workOrder;
+      },
+      /**
        * De offertes en werkorders van een klant in de actieve omgeving (zoals de klantkaart).
        * @param {object} req Het verzoek.
        * @param {string} customerId Id van de klant.
