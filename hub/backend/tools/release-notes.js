@@ -186,13 +186,14 @@ function checkFragments(directory = CHANGES_DIR) {
 
 /**
  * Beoordeelt de wijzigingen van een pull request (zie .github/workflows/version.yml).
- * @param {{files: {status: string, name: string}[], versionLineChanged: boolean, labels: string[]}} change Wat de PR wijzigt.
+ * @param {{files: {status: string, name: string, similarity?: number}[], versionLineChanged: boolean, labels: string[]}} change Wat de PR wijzigt.
  * @returns {string[]} Foutmeldingen (leeg als de PR in orde is).
  */
 function evaluatePullRequest(change) {
   const problems = [];
   const forbidden = ['hub/CHANGELOG.md', 'hub/frontend/nieuws/releases.js'];
   for (const file of change.files) {
+    if (file.status === 'R' && file.similarity === 100) continue; // alleen verplaatst, inhoud ongewijzigd
     if (forbidden.includes(file.name)) problems.push(`${file.name} wordt na het mergen automatisch bijgewerkt; haal deze wijziging uit de PR en zet de notes in changes/<naam>.md.`);
   }
   if (change.versionLineChanged) problems.push('Het versienummer in hub/backend/package.json wordt na het mergen automatisch verhoogd; haal die wijziging uit de PR.');
@@ -218,10 +219,18 @@ function checkPullRequest(baseRef) {
   const git = (...args) => execFileSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8' });
   const files = git('diff', '--name-status', `${baseRef}...HEAD`).split('\n').filter(Boolean).map((line) => {
     const [status, ...rest] = line.split('\t');
-    return { status: status[0], name: rest[rest.length - 1] };
+    return { status: status[0], name: rest[rest.length - 1], oldName: rest[0], similarity: Number(status.slice(1)) || 0 };
   });
-  const diff = git('diff', '-U0', `${baseRef}...HEAD`, '--', 'hub/backend/package.json');
-  const versionLineChanged = diff.split('\n').some((line) => /^[+-]\s*"version":/.test(line));
+  // Het versienummer vergelijken we met het bestand op de oude plek, zodat een verplaatste map niet als wijziging telt.
+  const packageEntry = files.find((file) => file.name === 'hub/backend/package.json');
+  /**
+   * Leest het versienummer uit package.json op een bepaald punt in git.
+   * @param {string} ref Git-verwijzing.
+   * @param {string} filePath Pad van package.json bij die verwijzing.
+   * @returns {(string|null)} Het versienummer, of null als het bestand daar niet bestaat.
+   */
+  const versionOf = (ref, filePath) => { try { return JSON.parse(git('show', `${ref}:${filePath}`)).version; } catch (error) { return null; } };
+  const versionLineChanged = Boolean(packageEntry) && versionOf(baseRef, packageEntry.oldName) !== versionOf('HEAD', packageEntry.name);
   const labels = JSON.parse(process.env.PR_LABELS || '[]');
   return [...evaluatePullRequest({ files, versionLineChanged, labels }), ...checkFragments()];
 }

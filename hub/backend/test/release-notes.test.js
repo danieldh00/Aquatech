@@ -88,6 +88,17 @@ test('applyFragments laat alles ongemoeid bij een kapot bestand', () => {
   fs.rmSync(root, { recursive: true });
 });
 
+test('evaluatePullRequest: een verplaatste map zonder inhoudswijziging telt niet als verboden wijziging', () => {
+  const moved = [
+    { status: 'R', similarity: 100, name: 'hub/CHANGELOG.md' },
+    { status: 'R', similarity: 100, name: 'hub/frontend/nieuws/releases.js' },
+    { status: 'A', name: 'changes/hernoemen.md' },
+  ];
+  assert.deepStrictEqual(tool.evaluatePullRequest({ files: moved, versionLineChanged: false, labels: [] }), []);
+  const edited = [{ status: 'R', similarity: 98, name: 'hub/CHANGELOG.md' }, { status: 'A', name: 'changes/hernoemen.md' }];
+  assert.strictEqual(tool.evaluatePullRequest({ files: edited, versionLineChanged: false, labels: [] }).length, 1);
+});
+
 test('evaluatePullRequest: fragment verplicht, versie en releases.js verboden, label als uitzondering', () => {
   const app = { status: 'M', name: 'hub/backend/src/server.js' };
   const fragment = { status: 'A', name: 'changes/iets.md' };
