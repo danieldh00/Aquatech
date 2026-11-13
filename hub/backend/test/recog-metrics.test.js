@@ -84,3 +84,31 @@ test('testbank draait op het voorbeeldplan en vindt het gazon', () => {
   assert.ok(row.lawnIou > 0.45, `gazon-overlap ${row.lawnIou}`);
   assert.strictEqual(result.summary.lawnFound, result.summary.drawings);
 });
+
+test('een vlak met eigen laag ligt boven een lager vlak, ook als de soort lager in de volgorde staat', () => {
+  /**
+   * Een vierkant met de linkerbovenhoek op de oorsprong.
+   * @param {number} size zijde in pixels
+   * @returns {object[]} de vier hoekpunten
+   */
+  const square = (size) => [{ x: 0, y: 0 }, { x: size, y: 0 }, { x: size, y: size }, { x: 0, y: size }];
+  const reference = [{ type: 'bed', layer: 5, points: square(100) }, { type: 'dry', layer: 1, points: square(100) }];
+  const comparison = Metrics.compareAreas(reference, [{ type: 'bed', points: square(100) }], 100, 100);
+  assert.strictEqual(comparison.accuracy, 1);
+});
+
+test('functionele nauwkeurigheid rekent bed en haag als dezelfde beregening', () => {
+  const square = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }];
+  const comparison = Metrics.compareAreas([{ type: 'bed', points: square }], [{ type: 'hedge', points: square }], 100, 100);
+  assert.strictEqual(comparison.accuracy, 0);
+  assert.strictEqual(comparison.functionalAccuracy, 1);
+});
+
+test('plangenerator is deterministisch en levert een waarheid met een gazon', () => {
+  const { buildPlan } = require('../tools/plan-generator');
+  const first = buildPlan(7, { style: 'digitaal' });
+  assert.strictEqual(first.svg, buildPlan(7, { style: 'digitaal' }).svg);
+  assert.notStrictEqual(first.svg, buildPlan(8, { style: 'digitaal' }).svg);
+  assert.ok(first.truth.areas.some((area) => area.type === 'lawn'));
+  for (const area of first.truth.areas) assert.ok(area.points.length >= 3);
+});
