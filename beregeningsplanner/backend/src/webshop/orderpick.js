@@ -185,7 +185,13 @@ function createOrderpick(db, { orders, slips, labels }) {
     const made = await labels.create(tenantId, order, shipment);
     if (made.error) return made;
     // Meteen vastleggen, zodat een tweede tik of scherm nooit een tweede label maakt.
-    orders.recordShipmentLabel(tenantId, id, shipment.id, made.trackingCode);
+    // Lukt het vastleggen niet, dan krijgt de picker het label toch (het bestaat al bij de vervoerder); de volgcode staat dan in het log.
+    try {
+      const recorded = orders.recordShipmentLabel(tenantId, id, shipment.id, made.trackingCode);
+      if (recorded.error || recorded.existing) console.warn(`Label van zending ${shipment.id} niet vastgelegd (${recorded.error || 'er was al een label'}); volgcode ${made.trackingCode || '-'}`);
+    } catch (error) {
+      console.warn(`Label van zending ${shipment.id} niet vastgelegd: ${error.message}; volgcode ${made.trackingCode || '-'}`);
+    }
     // Een volgcode gaat alleen bij de bestelling als die er nog geen heeft (de klant krijgt dan de mail met track & trace); een ongeldige code stopt het label niet.
     if (made.trackingCode) orders.setTracking(tenantId, id, made.trackingCode, { onlyIfEmpty: true });
     return { pdf: made.pdf, fileName: `Label ${order.number}.pdf`.replace(/[^\w .()-]/g, ''), order };
