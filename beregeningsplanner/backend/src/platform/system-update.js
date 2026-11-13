@@ -161,7 +161,15 @@ function createSystemUpdate({ statusDir = '', requestDir = '', currentVersion, n
    * @returns {object} Zie sanitizeStatus.
    */
   function hostStatus() {
-    return sanitizeStatus({ ...(readJsonFile(statusDir, 'status.json') || {}), ...(readJsonFile(statusDir, 'run.json') || {}) });
+    const status = sanitizeStatus({ ...(readJsonFile(statusDir, 'status.json') || {}), ...(readJsonFile(statusDir, 'run.json') || {}) });
+    // Hard gestopt script (stroomuitval, reboot): run.json blijft op bezig staan. Na het maximum telt dat als onderbroken,
+    // anders zou elke nieuwe aanvraag voor altijd op "er loopt al een update" stuiten.
+    const started = status.startedAt ? Date.parse(status.startedAt) : NaN;
+    if (status.state === 'bezig' && !(now() - started < MAINTENANCE_MAX_MS)) {
+      const finishedAt = new Date((Number.isFinite(started) ? started : now() - MAINTENANCE_MAX_MS) + MAINTENANCE_MAX_MS).toISOString();
+      return { ...status, state: 'mislukt', step: 'klaar', finishedAt, message: 'De update is onderbroken. Controleer de server.' };
+    }
+    return status;
   }
 
   /**

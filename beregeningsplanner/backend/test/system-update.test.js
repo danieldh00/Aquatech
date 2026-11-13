@@ -143,7 +143,7 @@ test('createSystemUpdate: aanvraag, intrekken, automatisch en afgeronde uitrol',
   assert.strictEqual(update.cancel(), false);
   assert.strictEqual(update.view().pending, null);
 
-  hostWrites(statusDir, { 'run.json': { state: 'bezig', step: 'back-up', version: next } });
+  hostWrites(statusDir, { 'run.json': { state: 'bezig', step: 'back-up', version: next, startedAt: new Date().toISOString() } });
   assert.strictEqual(update.request({ version: next }).error, 'busy');
 
   update.setAuto(false);
@@ -174,6 +174,27 @@ test('createSystemUpdate: onderhoudsmodus met cache en een maximum van een half 
   hostWrites(statusDir, { 'maintenance.json': { since: 'gisteren' } });
   clock += 2500;
   assert.strictEqual(update.maintenance().active, false, 'zonder geldig tijdstip niet');
+});
+
+test('createSystemUpdate: een vastgelopen uitrol (bezig) telt na een half uur als onderbroken', () => {
+  const { statusDir, requestDir } = makeDirs();
+  let clock = Date.parse('2026-11-13T10:00:00Z');
+  const update = createSystemUpdate({ statusDir, requestDir, currentVersion: RUNNING, now: () => clock });
+  const next = nextVersion();
+  hostWrites(statusDir, {
+    'status.json': { current: RUNNING, available: next },
+    'run.json': { state: 'bezig', step: 'herstarten', version: next, startedAt: new Date(clock).toISOString() },
+  });
+  assert.strictEqual(update.request({ version: next }).error, 'busy');
+  clock += MAINTENANCE_MAX_MS + 1000;
+  const view = update.view();
+  assert.strictEqual(view.status.state, 'mislukt');
+  assert.match(view.status.message, /onderbroken/);
+  assert.ok(update.request({ version: next }).request, 'daarna kan een nieuwe aanvraag');
+  assert.strictEqual(update.finishedRun().state, 'mislukt', 'en de onderbreking komt in het auditlog');
+  // Zonder begintijd telt bezig ook niet als lopend.
+  hostWrites(statusDir, { 'run.json': { state: 'bezig', step: 'ophalen', version: next } });
+  assert.strictEqual(update.view().status.state, 'mislukt');
 });
 
 /**
@@ -304,7 +325,7 @@ test('API: niet ingericht op deze server', async () => {
   }
 });
 
-test('onderhoudsmodus: lezen werkt, schrijven 503, uitloggen en health blijven werken', async () => {
+test('onderhoudsmodus: lezen werkt, schrijven 503, in- en uitloggen en health blijven werken', async () => {
   const { server, base, as, statusDir } = await setup();
   try {
     const bert = await as('bert');
@@ -323,7 +344,7 @@ test('onderhoudsmodus: lezen werkt, schrijven 503, uitloggen en health blijven w
     assert.strictEqual(write.body.error, 'maintenance');
     assert.strictEqual(write.headers.get('retry-after'), '60');
     const login = await createClient(base).login('kees', PW);
-    assert.strictEqual(login.status, 503, 'inloggen schrijft een sessie: even niet');
+    assert.strictEqual(login.status, 200, 'inloggen blijft werken (de beheerder volgt de voortgang)');
     const shopForm = await fetch(`${base}/winkelwagen/toevoegen`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'code=X' });
     assert.strictEqual(shopForm.status, 503);
     assert.match(shopForm.headers.get('content-type'), /html/);
