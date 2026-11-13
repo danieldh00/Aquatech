@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.14.2
+
+Orderpick deel 1: rol en API (geen migratie).
+
+- Recht `orderpick` en standaardrol `picker` (`frontend/shared/roles.js`); de beheerder heeft het recht ook. Testdata krijgt een pickeraccount.
+- `webshop/orderpick.js`: `GET /api/orderpick/orders` en `/orders/:id` (regels op magazijnlocatie met `scanCodes` van artikel of verpakking), `POST …/pick` (via `webOrders.ship`, nieuw `expectedShipments` tegen dubbel afmelden), `POST …/shipments/:id/packing-slip` en `…/label`.
+- Pakbon per zending: `packingSlips.pdfFor(…, { shipmentId })` met `orderForShipment` (besteld, eerder, nu en backorder van die zending).
+- `webshop/shipping-labels.js`: haak voor het DPD-label (`createApp({ shippingLabelProviders })`); zonder koppeling een nette melding.
+- Tests: `test/orderpick.test.js`.
+
 ## 1.14.1
 
 - Webshop: `productCard` (storefront-pages.js) is voor elk artikel een `<article>` met foto- en naamlink, bij een hoofdartikel met varianten een keuzelijst (`data-variant-row`, gedeeld script `varianten.js`, ook op de startpagina) en een prijs-/voorraadregel met `orderForm` (`card-order`). De paginabrede `variant-row` en `listItem` zijn vervallen; `winkel.css` heeft kaartstijlen (op ≤ 520 px staan aantal en knop onder elkaar).

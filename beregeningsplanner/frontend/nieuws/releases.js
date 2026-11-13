@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.14.2',
+      date: '2026-11-13',
+      title: 'Nieuwe rol Picker voor het magazijn',
+      items: [
+        { text: 'Nieuwe rol *Picker* voor medewerkers in het magazijn: die mogen alleen bestellingen picken (de orderpick-app volgt) en zien geen prijzen, adressen of instellingen.', for: ['beheer'] },
+        { text: 'Een bestelling die in het magazijn wordt gepickt gaat met de echt gepickte aantallen weg; wat er niet is blijft op backorder staan. De pakbon van die zending toont wat er nu meegaat en wat nog volgt.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.14.1',
       date: '2026-11-12',
       title: 'Winkelwagenknop op alle artikelkaarten en verpakking kiezen',
