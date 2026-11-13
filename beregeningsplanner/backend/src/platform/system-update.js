@@ -157,6 +157,18 @@ function createSystemUpdate({ statusDir = '', requestDir = '', currentVersion, n
   let maintenanceCache = { at: 0, value: { active: false } };
 
   /**
+   * Wijzigingstijd van run.json (verandert pas als de host het bestand herschrijft).
+   * @returns {string|null} Tijdstip als ISO-tekst, of null zonder bestand.
+   */
+  function runFileTime() {
+    try {
+      return fs.lstatSync(path.join(statusDir, 'run.json')).mtime.toISOString();
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
    * Leest status.json (controle) en run.json (laatste uitrol) van de host en saneert ze samen.
    * @returns {object} Zie sanitizeStatus.
    */
@@ -166,8 +178,9 @@ function createSystemUpdate({ statusDir = '', requestDir = '', currentVersion, n
     // anders zou elke nieuwe aanvraag voor altijd op "er loopt al een update" stuiten.
     const started = status.startedAt ? Date.parse(status.startedAt) : NaN;
     if (status.state === 'bezig' && !(now() - started < MAINTENANCE_MAX_MS)) {
-      // Zonder geldige begintijd een vaste eindtijd: zo blijft de sleutel van finishedRun gelijk (geen auditvloed).
-      const finishedAt = Number.isFinite(started) ? new Date(started + MAINTENANCE_MAX_MS).toISOString() : '1970-01-01T00:00:00.000Z';
+      // Zonder geldige begintijd de wijzigingstijd van run.json: stabiel (de sleutel van finishedRun blijft gelijk, geen
+      // auditvloed) en een echte tijd voor het scherm.
+      const finishedAt = Number.isFinite(started) ? new Date(started + MAINTENANCE_MAX_MS).toISOString() : runFileTime();
       return { ...status, state: 'mislukt', step: 'klaar', finishedAt, message: 'De update is onderbroken. Controleer de server.' };
     }
     return status;

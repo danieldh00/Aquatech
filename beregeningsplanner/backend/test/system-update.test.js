@@ -199,6 +199,7 @@ test('createSystemUpdate: een vastgelopen uitrol (bezig) telt na een half uur al
   clock += 60 * 1000;
   update.view();
   assert.strictEqual(update.finishedRun(), null, 'vaste eindtijd: niet bij elke vraag opnieuw in het auditlog');
+  assert.ok(!update.view().status.finishedAt.startsWith('1970'), 'een echte tijd (wijzigingstijd van run.json) voor het scherm');
 });
 
 /**
