@@ -1052,6 +1052,15 @@ docker compose start aquatech
 Een wis-opdracht (definitief wissen) staat nog in de back-ups tot die na de
 bewaartermijn verdwijnen; vermeld dat in de privacyverklaring.
 
+**Terugzetten uit een back-up** (Beheer > Systeem > *Terugzetten uit back-up*, alleen hoofdbeheerders). Kies een back-up (lokaal), het
+soort gegeven (offerte, werkorder, factuur, bestelling, inkooporder, artikel, leverancier, klant, tuinplan), zoek en open een record.
+Het voorbeeld toont per veld wat er nu staat en wat er in de back-up stond; vink aan wat terug moet (ook een onderdeel van een JSON-veld,
+zoals `data.lines`). Een record dat sindsdien is verwijderd komt volledig terug, met zijn onderliggende regels. Niet overschreven worden
+definitieve facturen, bestellingen, inkooporders en geaccepteerde offertes; nooit teruggezet worden organisatie, wachtwoorden, 2FA,
+deellinks, voorraadstand en webshopsynchronisatie. Vóór het schrijven maakt de app een nieuwe back-up en je bevestigt met je wachtwoord.
+Alles terugzetten (de hele database) blijft een beheeractie op de server (`pve/db-local.sh restore`). Losse orderregels terugzetten
+volgt later.
+
 **Back-ups naar Google Drive** (Beheer > Systeem > *Back-ups naar Google Drive*, alleen hoofdbeheerders). De app kopieert elke
 nieuwe back-up, zoals hij op de server staat (dus versleuteld), naar een map in je eigen Google Drive. Alles staat in de app,
 dus het werkt ook na een verhuizing naar een andere server; er is geen script op de host nodig.

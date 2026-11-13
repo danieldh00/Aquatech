@@ -76,6 +76,7 @@ const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = requir
 const { createAiUsageStore } = require('./platform/ai-usage');
 const { createErrorReport, catchAsync, withCause } = require('./platform/error-report');
 const { createSystemUpdate } = require('./platform/system-update');
+const { registerBackupRestoreRoutes } = require('./platform/backup-restore-routes');
 const { registerSystemUpdateRoutes, maintenanceGuard } = require('./platform/system-update-routes');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
 const { createOAuthGrants } = require('./mcp/oauth-grants');
@@ -1820,6 +1821,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!driveBackup.connected()) return res.status(409).json({ error: 'not_connected', message: 'Er is geen verbinding met Google Drive.' });
     res.json({ ...(await driveBackup.test()), status: driveBackup.status() });
   }));
+
+  // Terugzetten uit een back-up (volledig of per record/veld): platform/backup-restore.js.
+  registerBackupRestoreRoutes(app, { backupDir, vault, database, store, audit, runBackup, requireJson, loginGuard, twoFactor });
 
   app.get('/api/admin/backups/:name', (req, res) => {
     const name = req.params.name;
