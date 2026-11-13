@@ -89,7 +89,7 @@ function sanitizeFinalPlan(raw, width, height) {
 /**
  * Maakt de opslag voor AI-herkenningen en geleerde kleuren.
  * @param {object} db De database.
- * @returns {object} findAi, saveAi, addSamples, savePlanSamples, saveCorpus, corpusRows, corpusCount, learned en removePlan.
+ * @returns {object} findAi, saveAi, addSamples, savePlanSamples, saveCorpus, corpusRows, learned en removePlan.
  */
 function createRecognitionStore(db) {
   /**
@@ -244,16 +244,7 @@ function createRecognitionStore(db) {
     return result;
   }
 
-  /**
-   * Aantal tekeningen in het meetcorpus van een omgeving.
-   * @param {string} tenantId Id van de tenant.
-   * @returns {number} Het aantal.
-   */
-  function corpusCount(tenantId) {
-    return Number(prepare(`SELECT COUNT(*) AS total FROM plan_recognitions WHERE tenant_id = ? AND corpus_image <> ''`).get(tenantId).total);
-  }
-
-  return { findAi, saveAi, addSamples, savePlanSamples, saveCorpus, corpusRows, corpusCount, learned, removePlan };
+  return { findAi, saveAi, addSamples, savePlanSamples, saveCorpus, corpusRows, learned, removePlan };
 }
 
 module.exports = { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash, FEATURE_VERSION };

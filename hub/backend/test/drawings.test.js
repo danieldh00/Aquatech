@@ -283,6 +283,8 @@ test('meetcorpus: standaard uit, alleen goedgekeurd plan door wie mag goedkeuren
     const gerrit = createClient(base);
     await gerrit.login('gerrit', PW, 'groen');
     assert.strictEqual((await gerrit.post('/app/api/plan/corpus', { planId: id, image, final })).status, 409, 'andere organisatie heeft het corpus uit');
+    createSettings({ db, tenantId: groen.id }).update({ planCorpus: true });
+    assert.strictEqual((await gerrit.post('/app/api/plan/corpus', { planId: id, image, final })).status, 404, 'plan van een andere organisatie is onvindbaar, ook met het corpus aan');
     assert.strictEqual((await kees.post('/app/api/plan/corpus', { planId: id, image: 'data:image/png;base64,AAAA', final })).status, 400, 'geen echte afbeelding');
     assert.strictEqual((await kees.post('/app/api/plan/corpus', { planId: id, image, final: { areas: [{ type: 'lawn', points: [{ x: 'a', y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }] }] } })).status, 400);
     assert.strictEqual((await kees.post('/app/api/plan/corpus', { planId: id, image, final: { areas: [] } })).status, 400);
