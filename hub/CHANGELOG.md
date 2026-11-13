@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.14.8
+
+- Nieuw `platform/drive-backup.js`: OAuth2 met Google (scope `drive.file`, offline), hervatbare upload als stroom, opruimen boven het bewaaraantal (op bestandsnaam), logboek en stand in de instelling `backupDriveState`; geheimen versleuteld (`backupDriveClientSecret`, `backupDriveRefreshToken`).
+- Routes `GET|PUT /api/admin/backups/drive`, `POST .../connect|disconnect|sync|test`, `GET .../callback` (hoofdbeheerders, audit); `runBackup` en het uurlijkse onderhoud starten de kopie op de achtergrond, na een fout pas na 15 minuten opnieuw.
+- Beheer: sectie *Back-ups naar Google Drive* met handleiding, de lijst lokale back-ups toont *op Drive*.
+- Tests met een nagebootste Google (`test/helpers/google-fake.js`).
+
 ## 1.14.7
 
 - Nieuw: `deploy/apps01/compose.localdb.yml` (PostgreSQL 17-container met volume `pgdata/`, healthcheck, geen gepubliceerde poort; de app
