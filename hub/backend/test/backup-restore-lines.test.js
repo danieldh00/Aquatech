@@ -161,6 +161,21 @@ test('een bestelling in behandeling, online betaald of met een tekort aan voorra
   } finally { scene.cleanup(); }
 });
 
+test('een verstuurde offerte en een regel met een verdwenen artikel worden niet teruggezet', async () => {
+  const scene = await world();
+  try {
+    await withBackup(scene, ({ backup, current, context }) => {
+      scene.db.prepare("UPDATE quotes SET status = 'verzonden' WHERE id = 'qa'").run();
+      assert.match(lines.linesView({ backup, current, context }, { kind: 'quote', id: 'qa' }).blocked, /Alleen een conceptofferte/);
+      scene.db.prepare("UPDATE quotes SET status = 'concept' WHERE id = 'qa'").run();
+      const edited = { ...JSON.parse(scene.db.prepare("SELECT data FROM web_orders WHERE id = 'ow1'").get().data), lines: [orderLine(5)], totals: totalsOf([orderLine(5)]) };
+      scene.db.prepare("UPDATE web_orders SET data = ?, total = ? WHERE id = 'ow1'").run(JSON.stringify(edited), edited.totals.total);
+      scene.db.prepare("UPDATE stock_items SET archived = 1 WHERE id = 'si1'").run();
+      assert.throws(() => lines.applyLines({ backup, current, context }, { kind: 'web_order', id: 'ow1', keys: ['WS-1'] }, scene.deps), /niet meer bestaat/);
+    });
+  } finally { scene.cleanup(); }
+});
+
 test('een record dat niet bestaat, of een soort zonder regels, geeft een duidelijke melding', async () => {
   const scene = await world();
   try {
