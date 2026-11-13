@@ -203,6 +203,15 @@ test('voorstellen: afwijzen, herstellen en afwijzingen opruimen', async () => {
     assert.deepStrictEqual(writes(await refresh(kees)), { created: 1, updated: 0, removed: 0 });
     assert.deepStrictEqual((await proposals(kees)).orders[0].lines.map((line) => line.code), ['PIJP']);
 
+    // Een handmatige order die het artikel dekt haalt het uit het voorstel, maar de afwijzing blijft staan zolang de voorraad zelf laag is.
+    const cover = (await kees.post('/app/api/purchase-orders', { supplierId: supplier.id, lines: [{ itemId: pipe.id, qty: 50 }] })).body;
+    await kees.post('/app/api/purchase-orders/proposals/dismiss', { orderId: (await proposals(kees)).orders[0].id, itemIds: [pipe.id] });
+    await refresh(kees);
+    assert.ok((await proposals(kees)).dismissed.some((row) => row.itemId === pipe.id), 'afwijzing blijft na een refresh');
+    await kees.post('/app/api/purchase-orders/proposals/restore', { itemIds: [pipe.id] });
+    await kees.del(`/app/api/purchase-orders/${cover.id}`);
+    await refresh(kees);
+
     // Weer genoeg voorraad (hier: minimum 0) ruimt de afwijzing op; later onder het minimum komt het artikel gewoon terug.
     await kees.put(`/app/api/stock/items/${valve.id}`, { minQty: 0 });
     await refresh(kees);

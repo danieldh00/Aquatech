@@ -103,7 +103,7 @@
     $('#pp-approve-all').hidden = summary.count < 2;
     $('#pp-cards').innerHTML = summary.count
       ? summary.orders.map(cardHtml).join('')
-      : `<p class="muted pp-empty">${esc(summary.enabled ? 'Geen voorstellen: alles wat onder het minimum zit, is al besteld of staat op Niet bestellen.' : 'Geen voorstellen. Met Nu vernieuwen maak je ze handmatig.')}</p>`;
+      : `<p class="muted pp-empty">${esc(summary.enabled ? 'Geen voorstellen: alles wat onder het minimum zit, is al besteld of staat op Niet bestellen.' : 'Geen voorstellen: automatisch voorstellen staat uit.')}</p>`;
     renderDismissed();
     renderCount();
   }

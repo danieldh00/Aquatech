@@ -18,6 +18,7 @@
 //   bewerkt wordt handmatig (origin 'handmatig') en is daarna gewoon een order die als onderweg meetelt.
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
+const { createRateLimiter } = require('../beveiliging/rate-limit');
 
 const STATUSES = ['concept', 'besteld', 'deels_ontvangen', 'ontvangen', 'geannuleerd'];
 const OPEN_STATUSES = ['concept', 'besteld', 'deels_ontvangen'];
@@ -30,6 +31,7 @@ const ORIGIN_MANUAL = 'handmatig';
 const ORIGIN_PROPOSAL = 'voorstel';
 const PROPOSAL_NOTE = 'Automatisch voorstel';
 const MAX_APPROVE = 100;
+const WITHOUT_SUPPLIER_TTL_MS = 30 * 1000;
 const AUTOMATIC_USER = { id: '', name: 'Automatisch' };
 
 /**
@@ -617,6 +619,13 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @param {string} tenantId Id van de omgeving.
    * @returns {object} Het voorstel van stock.reorderProposal.
    */
+  // Het aantal artikelen zonder voorkeursleverancier kost een volledig bestelvoorstel: 30 s onthouden per omgeving.
+  const withoutSupplierCache = new Map();
+  /**
+   * Het verse bestelvoorstel van de hele omgeving, zonder de voorstel-orders zelf als onderweg te tellen.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ items: object[], total: number|null, suppliers: object[] }} Het bestelvoorstel (stock.reorderProposal).
+   */
   const freshProposal = (tenantId) => stock.reorderProposal(tenantId, { preferred: suppliers.preferredByItem(tenantId), incoming: incomingByItem(tenantId, { excludeProposals: true }) });
 
   /**
@@ -711,11 +720,18 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
         prepare('UPDATE purchase_orders SET updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, row.id);
         outcome.updated += 1;
       }
-      const stale = [...dismissed].filter((itemId) => !inProposal.has(itemId));
+      // Een afwijzing vervalt pas als de werkelijke voorraad (stand min reserveringen) weer op of boven het minimum zit,
+      // niet al als wat besteld of onderweg is het artikel tijdelijk uit het voorstel haalt.
+      const stale = prepare(`SELECT d.item_id FROM purchase_proposal_dismissals d
+        JOIN stock_items i ON i.tenant_id = d.tenant_id AND i.id = d.item_id
+        WHERE d.tenant_id = ? AND (i.archived = 1 OR i.has_variants = 1
+          OR i.on_hand - (SELECT COALESCE(SUM(r.qty), 0) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id) >= i.min_qty)`)
+        .all(tenantId).map((row) => row.item_id);
       for (let start = 0; start < stale.length; start += 500) {
         const chunk = stale.slice(start, start + 500);
         prepare(`DELETE FROM purchase_proposal_dismissals WHERE tenant_id = ? AND item_id IN (${placeholders(chunk.length)})`).run(tenantId, ...chunk);
       }
+      withoutSupplierCache.delete(tenantId);
       return outcome;
     });
   }
@@ -736,8 +752,12 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
     const dismissed = prepare(`SELECT d.item_id, d.dismissed_at, i.code, i.name FROM purchase_proposal_dismissals d
       JOIN stock_items i ON i.tenant_id = d.tenant_id AND i.id = d.item_id WHERE d.tenant_id = ? ORDER BY i.code`).all(tenantId)
       .map((row) => ({ itemId: row.item_id, code: row.code, name: row.name, dismissedAt: row.dismissed_at }));
-    const withoutSupplier = freshProposal(tenantId).items.filter((item) => !item.supplierId).length;
-    return { orders, dismissed, withoutSupplier };
+    let cached = withoutSupplierCache.get(tenantId);
+    if (!cached || Date.now() - cached.at > WITHOUT_SUPPLIER_TTL_MS) {
+      cached = { at: Date.now(), count: freshProposal(tenantId).items.filter((item) => !item.supplierId).length };
+      withoutSupplierCache.set(tenantId, cached);
+    }
+    return { orders, dismissed, withoutSupplier: cached.count };
   }
 
   /**
@@ -860,7 +880,9 @@ function registerPurchaseOrderRoutes(app, ctx) {
     res.json({ ...purchaseOrders.proposals(tenantId), enabled: Boolean(proposalsEnabled(tenantId)) });
   });
 
-  app.post('/api/purchase-orders/proposals/refresh', requireStock, (req, res) => {
+  const refreshLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 20, keyFn: (req) => `proposals-refresh:${tenantOf(req)}:${req.user && req.user.id}` });
+  app.post('/api/purchase-orders/proposals/refresh', requireStock, refreshLimiter, (req, res) => {
+    if (!proposalsEnabled(tenantOf(req))) return res.status(409).json({ error: 'proposals_off', message: 'Automatische bestelvoorstellen staan uit (Beheer > Instellingen).' });
     const out = purchaseOrders.autoPropose(tenantOf(req), req.user);
     audit(req, 'inkoopvoorstel_vernieuwd', { created: out.created, updated: out.updated, removed: out.removed });
     res.json(out);

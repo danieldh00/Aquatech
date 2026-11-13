@@ -83,6 +83,8 @@ test('server: standaard aan, uitzetten geldt alleen voor de eigen organisatie', 
   assert.deepStrictEqual((await adminA.get('/app/api/admin/settings')).body.settings.purchaseProposals.value, { enabled: true });
   const off = await adminA.put('/app/api/admin/settings', { purchaseProposals: { enabled: false, onzin: 1 } });
   assert.strictEqual(off.status, 200);
+  const refused = await adminA.post('/app/api/purchase-orders/proposals/refresh');
+  assert.deepStrictEqual([refused.status, refused.body.error], [409, 'proposals_off'], 'Nu vernieuwen respecteert de instelling');
   assert.deepStrictEqual(off.body.settings.purchaseProposals.value, { enabled: false }, 'andere sleutels vallen weg');
   assert.deepStrictEqual((await adminB.get('/app/api/admin/settings')).body.settings.purchaseProposals.value, { enabled: true }, 'andere organisatie ongemoeid');
   assert.strictEqual((await adminA.put('/app/api/admin/settings', { purchaseProposals: 'uit' })).status, 400);
