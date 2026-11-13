@@ -1,5 +1,5 @@
 // Beheer > Systeem > Terugzetten uit back-up: back-up en soort kiezen, zoeken, voorbeeld per record met de te kiezen velden,
-// en terugzetten na bevestiging met het eigen wachtwoord. API /api/admin/backups/restore, zie
+// (bij offertes en webshopbestellingen ook per regel) en terugzetten na bevestiging met het eigen wachtwoord. API /api/admin/backups/restore, zie
 // backend/src/platform/backup-restore.js.
 (function () {
   /**
@@ -31,11 +31,12 @@
     return text.length > 160 ? `${text.slice(0, 157)}…` : text;
   }
 
-  const STATE_TEXT = { ontbreekt: 'Verwijderd', gewijzigd: 'Gewijzigd', gelijk: 'Gelijk aan nu' };
+  const STATE_TEXT = { ontbreekt: 'Verwijderd', gewijzigd: 'Gewijzigd', gelijk: 'Gelijk aan nu', extra: 'Nieuw sinds de back-up' };
   const STATUS_TEXT = { hersteld: 'Teruggezet', bijgewerkt: 'Bijgewerkt', overgeslagen: 'Overgeslagen', geblokkeerd: 'Geblokkeerd' };
   let loaded = false;
   let previews = [];
   let kind = '';
+  const LINE_KINDS = ['quote', 'web_order'];
 
   /**
    * Roept de API aan.
@@ -119,8 +120,10 @@
         if (plan.blocked) body = `<p class="err small">${esc(plan.blocked)}</p>`;
         else if (plan.state === 'ontbreekt') body = `<p class="small">Wordt teruggezet${children ? `, met ${esc(children)}` : ''}.</p>`;
         else body = `<table class="list"><thead><tr><th></th><th>Veld</th><th>Nu</th><th>In de back-up</th></tr></thead><tbody>${plan.diffs.map((diff) => `<tr><td><input type="checkbox" data-plan="${index}" data-field="${esc(diff.field)}"></td><td>${esc(diff.field)}</td><td>${esc(shown(diff.current))}</td><td>${esc(shown(diff.backup))}</td></tr>`).join('')}</tbody></table>`;
-        return `<div class="card"><h4>${esc(plan.label)} <span class="muted small">(${esc(STATE_TEXT[plan.state] || plan.state)})</span></h4>${body}</div>`;
+        const lineButton = LINE_KINDS.includes(kind) && plan.state !== 'ontbreekt' ? `<div class="form-actions"><button type="button" class="btn small" data-lines-of="${esc(plan.id)}">Regels afzonderlijk terugzetten</button></div><div data-lines-box="${esc(plan.id)}"></div>` : '';
+        return `<div class="card"><h4>${esc(plan.label)} <span class="muted small">(${esc(STATE_TEXT[plan.state] || plan.state)})</span></h4>${body}${lineButton}</div>`;
       }).join('');
+      document.querySelectorAll('#r-preview [data-lines-of]').forEach((button) => button.addEventListener('click', () => showLines(button.dataset.linesOf)));
       byId('r-confirm').hidden = !previews.some((plan) => !plan.blocked);
       say('');
     } catch (error) {
@@ -128,8 +131,54 @@
     }
   }
 
+  /**
+   * Haalt de regels van één record op en toont ze met een keuzevakje per regel die terug kan.
+   * @param {string} id Het record.
+   */
+  async function showLines(id) {
+    const box = document.querySelector(`#r-preview [data-lines-box="${CSS.escape(id)}"]`);
+    box.textContent = 'Regels ophalen…';
+    try {
+      const view = await call('/lines/preview', { method: 'POST', body: { backup: byId('r-backup').value, kind, id } });
+      if (view.blocked) { box.innerHTML = `<p class="err small">${esc(view.blocked)}</p>`; return; }
+      box.innerHTML = `<table class="list"><thead><tr><th></th><th>Regel</th><th>In de back-up</th><th>Nu</th></tr></thead><tbody>${view.lines.map((line) => `<tr><td>${line.state === 'ontbreekt' || line.state === 'gewijzigd' ? `<input type="checkbox" data-lines="${esc(id)}" data-key="${esc(line.key)}">` : ''}</td><td>${esc(STATE_TEXT[line.state] || line.state)}</td><td>${esc(line.backup || '–')}</td><td>${esc(line.current || '–')}</td></tr>`).join('')}</tbody></table><p class="muted small">Het totaal wordt opnieuw berekend. Kies je regels, dan worden alleen die regels teruggezet (de velden hierboven niet).</p>`;
+      byId('r-confirm').hidden = false;
+    } catch (error) {
+      box.innerHTML = `<p class="err small">${esc(error.message)}</p>`;
+    }
+  }
+
+  /**
+   * Zet de aangevinkte regels terug, per record, en toont per record wat er gebeurde.
+   * @returns {Promise<void>}
+   */
+  async function applyLines() {
+    const groups = new Map();
+    document.querySelectorAll('#r-preview [data-lines]:checked').forEach((box) => groups.set(box.dataset.lines, [...(groups.get(box.dataset.lines) || []), box.dataset.key]));
+    const password = byId('r-password').value;
+    const totp = byId('r-totp').value;
+    const lines = [];
+    for (const [id, keys] of groups) {
+      const out = await call('/lines/apply', { method: 'POST', body: { backup: byId('r-backup').value, kind, id, keys, password, totp } });
+      lines.push(`<li>${esc(out.label || id)} · ${esc(STATUS_TEXT[out.status] || out.status)} · ${esc(out.message)}</li>`);
+    }
+    byId('r-password').value = '';
+    byId('r-totp').value = '';
+    byId('r-preview').innerHTML = `<ul class="timeline">${lines.join('')}</ul>`;
+    byId('r-confirm').hidden = true;
+    byId('r-list').innerHTML = '';
+    say('Klaar. Vooraf is een back-up gemaakt.');
+  }
+
   /** Zet de records terug na het wachtwoord, en toont per record wat er gebeurde. */
   async function apply() {
+    if (document.querySelector('#r-preview [data-lines]:checked')) {
+      const lineButton = byId('r-apply');
+      lineButton.disabled = true;
+      say('Back-up maken en regels terugzetten…');
+      try { await applyLines(); } catch (error) { say(error.message, true); } finally { lineButton.disabled = false; }
+      return;
+    }
     const items = previews.filter((plan) => !plan.blocked).map((plan) => ({
       id: plan.id,
       fields: [...document.querySelectorAll(`#r-preview [data-plan="${previews.indexOf(plan)}"]:checked`)].map((box) => box.dataset.field),

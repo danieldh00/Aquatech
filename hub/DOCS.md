@@ -1058,8 +1058,11 @@ Het voorbeeld toont per veld wat er nu staat en wat er in de back-up stond; vink
 zoals `data.lines`). Een record dat sindsdien is verwijderd komt volledig terug, met zijn onderliggende regels. Niet overschreven worden
 definitieve facturen, bestellingen, inkooporders en geaccepteerde offertes; nooit teruggezet worden organisatie, wachtwoorden, 2FA,
 deellinks, voorraadstand en webshopsynchronisatie. Vóór het schrijven maakt de app een nieuwe back-up en je bevestigt met je wachtwoord.
-Alles terugzetten (de hele database) blijft een beheeractie op de server (`pve/db-local.sh restore`). Losse orderregels terugzetten
-volgt later.
+Alles terugzetten (de hele database) blijft een beheeractie op de server (`pve/db-local.sh restore`). Bij een offerte of webshopbestelling kan ook één regel
+terug (*Regels afzonderlijk terugzetten* in het voorbeeld): een verwijderde of gewijzigde regel gaat terug naar de stand van de
+back-up, het totaal wordt opnieuw berekend en bij een bestelling wordt de voorraadreservering opnieuw gelegd. Dat kan alleen zolang
+de bestelling nieuw is, niets is geleverd, er geen online betaling is en er genoeg voorraad is; een geaccordeerde offerte blijft
+vergrendeld.
 
 **Back-ups naar Google Drive** (Beheer > Systeem > *Back-ups naar Google Drive*, alleen hoofdbeheerders). De app kopieert elke
 nieuwe back-up, zoals hij op de server staat (dus versleuteld), naar een map in je eigen Google Drive. Alles staat in de app,
