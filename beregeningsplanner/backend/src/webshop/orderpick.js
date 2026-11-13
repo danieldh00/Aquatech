@@ -30,6 +30,9 @@ function byLocation(left, right) {
  * @returns {{ list: Function, detail: Function, pick: Function, packingSlip: Function, label: Function }} De functies.
  */
 function createOrderpick(db, { orders, slips, labels }) {
+  /** Zendingen waarvan nu een label wordt gemaakt. */
+  const labelsBusy = new Set();
+
   /**
    * Leest de locatie, EAN en code van de artikelen en de EAN van hun verpakkingen (twee queries per 200 artikelen).
    * @param {string} tenantId Id van de omgeving.
@@ -119,6 +122,7 @@ function createOrderpick(db, { orders, slips, labels }) {
   function pick(tenantId, id, body, user) {
     if (!body || !Array.isArray(body.lines)) return { error: 'Geef de gepickte regels op.', status: 400 };
     if (!Number.isInteger(body.shipmentCount) || body.shipmentCount < 0) return { error: 'Geef het aantal bekende zendingen op.', status: 400 };
+    if (body.lines.some((part) => !part || !Number.isInteger(part.index) || typeof part.qty !== 'number' || !Number.isFinite(part.qty))) return { error: 'Ongeldige regel of ongeldig aantal.', status: 400 };
     const order = orders.get(tenantId, id);
     if (!order) return { error: 'Bestelling niet gevonden.', status: 404 };
     if (!orders.pickable(order)) return { error: 'Deze bestelling staat niet klaar om te picken.', code: 'not_pickable', status: 409 };
@@ -142,7 +146,8 @@ function createOrderpick(db, { orders, slips, labels }) {
    * @returns {Promise<{ pdf?: Buffer, fileName?: string, orders?: object[], error?: string, status?: number }>} De PDF of een foutmelding.
    */
   function packingSlip(tenantId, id, shipmentId) {
-    return slips.pdfFor(tenantId, [id], { shipmentId: String(shipmentId || '') });
+    // Een herdruk van een zendingspakbon zet de bestelling niet opnieuw op "afgedrukt" (dat hoort bij de pakbon van Te picken).
+    return slips.pdfFor(tenantId, [id], { shipmentId: String(shipmentId || ''), markPrinted: false });
   }
 
   /**
@@ -153,14 +158,33 @@ function createOrderpick(db, { orders, slips, labels }) {
    * @returns {Promise<{ pdf?: Buffer, fileName?: string, order?: object, error?: string, code?: string, status?: number, cause?: Error }>} Het label of een foutmelding.
    */
   async function label(tenantId, id, shipmentId) {
+    // Eén label tegelijk per zending (dubbel tikken, twee schermen): anders maakt de vervoerder er twee en verandert de volgcode.
+    const lockKey = `${tenantId}:${id}:${shipmentId}`;
+    if (labelsBusy.has(lockKey)) return { error: 'Het label voor deze zending wordt al gemaakt. Wacht even.', code: 'label_busy', status: 409 };
+    labelsBusy.add(lockKey);
+    try {
+      return await makeLabel(tenantId, id, shipmentId);
+    } finally {
+      labelsBusy.delete(lockKey);
+    }
+  }
+
+  /**
+   * Maakt het label (zie label) zodra de zending is vergrendeld.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {string} shipmentId Id van de zending.
+   * @returns {Promise<object>} Zie label.
+   */
+  async function makeLabel(tenantId, id, shipmentId) {
     const order = orders.get(tenantId, id);
     if (!order) return { error: 'Bestelling niet gevonden.', status: 404 };
     const shipment = order.shipments.find((entry) => entry.id === String(shipmentId || ''));
     if (!shipment) return { error: 'Zending niet gevonden.', status: 404 };
     const made = await labels.create(tenantId, order, shipment);
     if (made.error) return made;
-    // Een nieuwe volgcode gaat bij de bestelling (de klant krijgt de mail met track & trace); een ongeldige code stopt het label niet.
-    if (made.trackingCode && !(order.shipping && order.shipping.tracking && order.shipping.tracking.code === made.trackingCode)) orders.setTracking(tenantId, id, made.trackingCode);
+    // Een volgcode gaat alleen bij de bestelling als die er nog geen heeft (de klant krijgt dan de mail met track & trace); een ongeldige code stopt het label niet.
+    if (made.trackingCode && !(order.shipping && order.shipping.tracking)) orders.setTracking(tenantId, id, made.trackingCode);
     return { pdf: made.pdf, fileName: `Label ${order.number}.pdf`.replace(/[^\w .()-]/g, ''), order };
   }
 

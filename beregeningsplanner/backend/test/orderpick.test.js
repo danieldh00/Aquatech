@@ -172,6 +172,10 @@ test('controle: een verouderde afmelding, ongeldige aantallen en een onbekende o
   assert.strictEqual((await picker.post(url, { lines: [{ index: 0, qty: 5 }], shipmentCount: 0 })).status, 400, 'meer dan besteld');
   assert.strictEqual((await picker.post(url, { lines: [{ index: 0, qty: -1 }], shipmentCount: 0 })).status, 400);
   assert.strictEqual((await picker.post(url, { lines: [{ index: 9, qty: 1 }], shipmentCount: 0 })).status, 400);
+  assert.strictEqual((await picker.post(url, { lines: [{ index: 0, qty: null }], shipmentCount: 0 })).status, 400, 'NaN komt als null aan');
+  assert.strictEqual((await picker.post(url, { lines: [{ index: 0, qty: '2' }], shipmentCount: 0 })).status, 400, 'een tekst is geen aantal');
+  assert.strictEqual((await picker.post(url, { lines: [{ index: 0, qty: 1 }, { index: 0, qty: 1 }], shipmentCount: 0 })).status, 400, 'dezelfde regel twee keer');
+  assert.strictEqual((await picker.post(url, { lines: Array.from({ length: 300 }, (_, index) => ({ index, qty: 1 })), shipmentCount: 0 })).status, 400, 'te veel regels');
   assert.strictEqual((await picker.post(url, { lines: [{ index: 0, qty: 0 }], shipmentCount: 0 })).status, 409, 'alles niet aanwezig = niets gepickt');
   db.prepare("UPDATE stock_items SET on_hand = 3 WHERE code = 'BUS'").run();
   const over = await picker.post(url, { lines: [{ index: 0, qty: 4 }], shipmentCount: 0 });
@@ -225,6 +229,7 @@ test('verzendlabel: zonder DPD-koppeling een nette melding, met koppeling het la
   assert.strictEqual(label.status, 200);
   assert.strictEqual(label.raw.toString('latin1'), '%PDF-label');
   assert.strictEqual(calls.length, 1);
+  assert.strictEqual((await admin.get(`/app/api/admin/web-orders/${id}`)).body.order.packingSlip, null, 'een zendingspakbon telt niet als afgedrukt in Te picken');
   const order = (await admin.get(`/app/api/admin/web-orders/${id}`)).body.order;
   assert.strictEqual(order.shipping.tracking.code, 'DPD123456');
   assert.strictEqual((await picker.post(`/app/api/orderpick/orders/${id}/shipments/onbekend/label`, {})).status, 404);
