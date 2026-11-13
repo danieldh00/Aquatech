@@ -87,13 +87,12 @@ test('een verkeerd wachtwoord wijzigt niets; het goede zet de regel terug, met v
     const wrong = await world.baas.post(`${BASE}/restore/lines/apply`, { ...target, password: 'Fout-wachtwoord-2026!' });
     assert.strictEqual(wrong.status, 401);
     assert.strictEqual(lineCount(world), 1, 'niets gewijzigd');
-    const before = fs.readdirSync(world.dir).length;
     const done = await world.baas.post(`${BASE}/restore/lines/apply`, { ...target, password: PW });
     assert.strictEqual(done.status, 200, done.text);
     assert.strictEqual(done.body.restored, 1);
     assert.strictEqual(lineCount(world), 2);
-    assert.ok(fs.readdirSync(world.dir).length > before, 'er is vooraf een nieuwe back-up gemaakt');
-    assert.ok(done.body.safetyBackup);
+    // De naam telt per seconde: een back-up in dezelfde seconde als de eerste overschrijft die, dus we letten op het bestand zelf.
+    assert.ok(done.body.safetyBackup && fs.existsSync(path.join(world.dir, done.body.safetyBackup)), 'er is vooraf een back-up gemaakt');
     const audit = world.db.prepare("SELECT action FROM audit WHERE action IN ('backup_regels_teruggezet', 'backup_terugzetten_wachtwoord_fout')").all().map((row) => row.action).sort();
     assert.deepStrictEqual(audit, ['backup_regels_teruggezet', 'backup_terugzetten_wachtwoord_fout']);
   } finally { world.cleanup(); }
