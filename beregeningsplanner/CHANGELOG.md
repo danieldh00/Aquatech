@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.14.5
+
+Orderpick deel 3: offline werken (geen migratie).
+
+- Offline-regels (`shared/offline-core.js`): recht `orderpick` mag offline werken, de bestellijst en -regels worden bewaard, `POST …/pick` mag in de wachtrij; `orderpick/` wordt vooraf in de cache gezet.
+- Scherm: opgeslagen-melding, wachtende bestellingen verborgen en genoemd, afhandeling bij verzenden of weggooien uit de wachtrij.
+- Tests in `test/offline.test.js`.
+
 ## 1.14.4
 
 Orderpick deel 2: het scherm (geen migratie).

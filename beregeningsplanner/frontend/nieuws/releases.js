@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.14.5',
+      date: '2026-11-13',
+      title: 'Orderpick werkt ook zonder verbinding',
+      items: [
+        { text: 'Orderpick werkt nu ook in een hoek van het magazijn zonder bereik: de bestellingen die al geladen waren blijven openen en een afgemelde pick wordt bewaard en verstuurd zodra je weer online bent. Pakbon en label maak je daarna onder *Net gepickt*.', for: ['orderpick'] },
+      ],
+    },
+    {
       version: '1.14.4',
       date: '2026-11-13',
       title: 'Orderpick-scherm voor het magazijn',
