@@ -821,6 +821,7 @@ function createMcpTools(ctx) {
               for (const variant of variants) rows.push({ code: variant.code, naam: `${article.name} ${Object.values(variant.values || {}).join(' ')}`.trim(), eenheid: article.unit || 'st', prijs: variant.salePrice, btw: article.vatRate, beschikbaar: variant.available });
             } else rows.push({ code: article.code, naam: article.name, eenheid: article.unit || 'st', prijs: article.salePrice, btw: article.vatRate, beschikbaar: article.available });
           }
+          if (rows.length > MAX_REPORT_ROWS) { rows.length = MAX_REPORT_ROWS; truncated = true; }
           sheets = [{ name: 'Voorraad', columns: [
             { header: 'Code', key: 'code', width: 16 }, { header: 'Naam', key: 'naam', width: 40 }, { header: 'Eenheid', key: 'eenheid', width: 9 },
             { header: 'Prijs excl. btw', key: 'prijs', type: 'money', width: 15 }, { header: 'Btw %', key: 'btw', type: 'number', width: 8 }, { header: 'Beschikbaar', key: 'beschikbaar', type: 'number', width: 12 }], rows }];
