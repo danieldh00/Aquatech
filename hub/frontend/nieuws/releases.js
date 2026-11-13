@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.14.9',
+      date: '2026-11-13',
+      title: 'Terugzetten uit een back-up (deels of per record)',
+      items: [
+        { text: 'Beheer > Terugzetten uit back-up: open een back-up (alleen lezen), zoek een offerte, werkorder, factuur, bestelling, inkooporder, artikel, leverancier, klant of tuinplan en zet hem terug, helemaal of alleen de velden die je kiest. Je ziet eerst precies wat er verandert, en vóór het terugzetten wordt automatisch een nieuwe back-up gemaakt. Je bevestigt met je wachtwoord.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.14.8',
       date: '2026-11-13',
       title: 'Back-ups automatisch naar Google Drive',
