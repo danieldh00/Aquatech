@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Webshopbestellingen – AquaTech Hub</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="rapportage.css">
+  <script src="../shared/common.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Webshopbestellingen</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash wide">
+    <div id="denied" class="notice" hidden></div>
+
+    <div id="app" hidden>
+      <section class="intro">
+        <h1>Webshopbestellingen</h1>
+        <p class="muted">Bestellingen, retouren en de rapportage van de eigen webshop (startpagina /).</p>
+      </section>
+      <nav class="tabs" role="tablist" aria-label="Bestellingen, te picken, backorders, retouren en rapportage">
+        <button class="tab active" data-tab="bestellingen" role="tab" id="t-bestellingen" aria-selected="true" aria-controls="tab-bestellingen">Bestellingen</button>
+        <button class="tab" data-tab="te-picken" role="tab" id="t-te-picken" tabindex="-1" aria-selected="false" aria-controls="tab-te-picken">Te picken</button>
+        <button class="tab" data-tab="backorders" role="tab" id="t-backorders" tabindex="-1" aria-selected="false" aria-controls="tab-backorders">Backorders</button>
+        <button class="tab" data-tab="retouren" role="tab" id="t-retouren" tabindex="-1" aria-selected="false" aria-controls="tab-retouren">Retouren</button>
+        <button class="tab" data-tab="rapportage" role="tab" id="t-rapportage" tabindex="-1" aria-selected="false" aria-controls="tab-rapportage">Rapportage</button>
+      </nav>
+      <section id="tab-bestellingen" class="tabpane" role="tabpanel" aria-labelledby="t-bestellingen">
+        <div class="filters">
+          <select id="wo-status" aria-label="Status"></select>
+          <input id="wo-search" type="search" placeholder="Zoek op nummer, naam of e-mail" aria-label="Zoeken">
+          <button id="wo-export" class="btn primary">Exporteer naar Excel</button>
+        </div>
+        <p class="muted small">Bestellingen uit de eigen webshop (startpagina /). Een nieuwe bestelling reserveert de voorraad; <i>Verzonden</i> boekt de artikelen af, <i>Annuleren</i> geeft de reservering vrij. Betalen gaat op rekening of online via Mollie; een online bestelling kan pas verzonden worden als hij betaald is.</p>
+        <p class="muted small" id="wo-counts"></p>
+        <div class="tablewrap"><table class="grid" id="wo-table"></table></div>
+        <div class="pager"><button id="wo-prev" class="btn small">Vorige</button> <span id="wo-info" class="muted small"></span> <button id="wo-next" class="btn small">Volgende</button></div>
+        <div id="wo-detail" class="card-form settings" hidden></div>
+      </section>
+      <section id="tab-te-picken" class="tabpane" role="tabpanel" aria-labelledby="t-te-picken" hidden>
+        <div class="filters">
+          <button id="tp-print" class="btn primary" disabled>Afdrukken (0)</button>
+          <span id="tp-count" class="muted small"></span>
+        </div>
+        <p class="muted small">Nieuwe bestellingen die klaarstaan om te picken (online betaalde alleen als ze betaald zijn), oudste eerst. <i>Afdrukken</i> maakt één PDF met een pakbon per bestelling, met de artikelen gesorteerd op magazijnlocatie. Daarna zet je de bestelling op <i>Verzonden</i>.</p>
+        <p id="tp-waiting" class="muted small" hidden></p>
+        <div class="tablewrap"><table class="grid" id="tp-table"></table></div>
+      </section>
+      <section id="tab-backorders" class="tabpane" role="tabpanel" aria-labelledby="t-backorders" hidden>
+        <div class="filters">
+          <button id="bo-export" class="btn primary" disabled>Exporteer naar Excel</button>
+          <span id="bo-count" class="muted small"></span>
+        </div>
+        <p class="muted small">Open bestellingen met artikelen die nog niet (allemaal) leverbaar zijn. De voorraad gaat eerst naar de oudste bestelling. De verwachte datum komt uit de bestelde inkooporders. Zodra er voorraad binnenkomt, staat de bestelling in Te picken met een nieuwe pakbon.</p>
+        <div class="tablewrap"><table class="grid" id="bo-table"></table></div>
+      </section>
+      <section id="tab-retouren" class="tabpane" role="tabpanel" aria-labelledby="t-retouren" hidden>
+        <div class="filters">
+          <select id="wr-status" aria-label="Status"></select>
+          <button id="wr-export" class="btn primary">Exporteer naar Excel</button>
+        </div>
+        <p class="muted small">Retouren van webshopbestellingen. De klant vraagt ze binnen 14 dagen na verzending aan; hier keur je ze goed of wijs je ze af. Bij <i>Retour ontvangen</i> gaan de artikelen terug op voorraad en wordt de creditnota gemaakt.</p>
+        <div class="tablewrap"><table class="grid" id="wr-table"></table></div>
+        <div class="pager"><button id="wr-prev" class="btn small">Vorige</button> <span id="wr-info" class="muted small"></span> <button id="wr-next" class="btn small">Volgende</button></div>
+        <div id="wr-detail" class="card-form settings" hidden></div>
+      </section>
+      <section id="tab-rapportage" class="tabpane" role="tabpanel" aria-labelledby="t-rapportage" hidden>
+        <div class="filters">
+          <label>Periode<select id="rp-preset">
+            <option value="maand">Deze maand</option>
+            <option value="vorige-maand">Vorige maand</option>
+            <option value="30">Laatste 30 dagen</option>
+            <option value="kwartaal">Dit kwartaal</option>
+            <option value="jaar" selected>Dit jaar</option>
+            <option value="vorig-jaar">Vorig jaar</option>
+            <option value="12">Laatste 12 maanden</option>
+            <option value="eigen">Eigen periode</option>
+          </select></label>
+          <label>Van<input id="rp-from" type="date"></label>
+          <label>Tot en met<input id="rp-to" type="date"></label>
+          <label>Grafiek<select id="rp-interval">
+            <option value="">Automatisch</option>
+            <option value="day">Per dag</option>
+            <option value="week">Per week</option>
+            <option value="month">Per maand</option>
+          </select></label>
+          <button id="rp-export" class="btn primary">Exporteer naar Excel</button>
+        </div>
+        <div id="rp-body">
+          <p class="muted small"><span id="rp-period"></span>. Omzet van de artikelen excl. btw, zonder verzendkosten. De inkoopwaarde komt uit de voorraad (FIFO): een verkoop houdt de inkoopprijs van de partij waaruit hij kwam, ook als de inkoopprijs later is gestegen.</p>
+          <div id="rp-tiles" class="stats report-tiles"></div>
+          <div id="rp-notes"></div>
+          <section class="card-form report-card">
+            <h3 id="rp-trend-title">Omzet, inkoop en brutowinst</h3>
+            <div id="rp-trend"></div>
+          </section>
+          <div class="report-cols">
+            <section class="card-form report-card">
+              <h3>Artikelen met de meeste brutowinst</h3>
+              <div id="rp-items"></div>
+            </section>
+            <section class="card-form report-card">
+              <h3>Brutowinst per categorie</h3>
+              <div id="rp-categories"></div>
+            </section>
+          </div>
+          <section class="card-form report-card">
+            <h3>Alle artikelen</h3>
+            <div class="tablewrap"><table class="grid" id="rp-table"></table></div>
+          </section>
+          <div id="rp-tip" class="chart-tip" role="tooltip" hidden></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../shared/roles.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="bestellingen.js"></script>
+  <script src="te-picken.js"></script>
+  <script src="backorders.js"></script>
+  <script src="retouren.js"></script>
+  <script src="rapportage.js"></script>
+  <script src="webshop-bestellingen.js"></script>
+</body>
+</html>

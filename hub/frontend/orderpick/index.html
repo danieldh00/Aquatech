@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Orderpick – AquaTech Hub</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="../shared/offline.css">
+  <link rel="stylesheet" href="orderpick.css">
+  <script src="../shared/common.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Orderpick</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash op">
+    <div id="op-denied" class="notice" hidden></div>
+
+    <section id="op-list" hidden>
+      <div class="op-head">
+        <h1>Te picken</h1>
+        <button class="btn" id="op-refresh" type="button">Vernieuwen</button>
+      </div>
+      <p id="op-list-note" class="muted"></p>
+      <div id="op-orders" class="op-orders"></div>
+      <p id="op-empty" class="muted" hidden>Er zijn nu geen bestellingen om te picken.</p>
+      <p id="op-queued" class="note" hidden></p>
+      <div id="op-recent-block" hidden>
+        <h2>Net gepickt</h2>
+        <div id="op-recent" class="op-orders"></div>
+      </div>
+    </section>
+
+    <section id="op-order" hidden>
+      <div class="op-head">
+        <button class="btn" id="op-back" type="button">← Terug</button>
+        <h1 id="op-title"></h1>
+        <span id="op-meta" class="muted"></span>
+      </div>
+      <div class="op-scanbar">
+        <input id="op-scan" type="text" placeholder="Scan of typ de code en druk op Enter" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Code van het artikel">
+        <button class="btn" id="op-camera" type="button" hidden>Camera</button>
+      </div>
+      <div id="op-current" class="op-current"></div>
+      <div id="op-finish" class="op-finish"></div>
+      <h2>Alle regels</h2>
+      <div id="op-lines" class="op-lines"></div>
+    </section>
+
+    <section id="op-done" hidden></section>
+  </main>
+
+  <div id="op-camera-view" class="op-camera" hidden>
+    <video id="op-video" playsinline muted></video>
+    <p id="op-camera-note" class="op-camera-note">Houd de streepjescode in beeld</p>
+    <button class="btn" id="op-camera-close" type="button">Sluiten</button>
+  </div>
+  <div id="op-toast" class="op-toast" role="status" aria-live="polite"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="../shared/offline-core.js"></script>
+  <script src="../shared/offline.js"></script>
+  <script src="orderpick-core.js"></script>
+  <script src="orderpick.js"></script>
+</body>
+</html>

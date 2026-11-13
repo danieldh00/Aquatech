@@ -12,7 +12,7 @@ on:
   push:
     branches: [master]
     paths:
-      - "beregeningsplanner/**"
+      - "hub/**"
       - "changes/**"
       - ".github/workflows/release.yml"
   workflow_dispatch:
@@ -58,13 +58,13 @@ jobs:
           for attempt in 1 2 3 4 5; do
             git fetch origin master
             git reset --hard origin/master
-            node beregeningsplanner/backend/tools/release-notes.js
+            node hub/backend/tools/release-notes.js
             if git diff --quiet HEAD; then
               echo "Niets te bumpen."
               break
             fi
-            version=$(jq -r .version beregeningsplanner/backend/package.json)
-            git add -A changes beregeningsplanner/backend/package.json beregeningsplanner/CHANGELOG.md beregeningsplanner/frontend/nieuws/releases.js
+            version=$(jq -r .version hub/backend/package.json)
+            git add -A changes hub/backend/package.json hub/CHANGELOG.md hub/frontend/nieuws/releases.js
             git commit -m "Release $version [skip ci]"
             if git push origin HEAD:master; then
               break
@@ -93,7 +93,7 @@ jobs:
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:
-        working-directory: beregeningsplanner/backend
+        working-directory: hub/backend
     steps:
       - uses: actions/checkout@v4
         with:
@@ -102,7 +102,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: beregeningsplanner/backend/package-lock.json
+          cache-dependency-path: hub/backend/package-lock.json
       - run: npm ci
       - run: npm test
       - run: npm test
@@ -125,7 +125,7 @@ jobs:
       - name: Versie bepalen
         id: version
         run: |
-          v=$(jq -r .version beregeningsplanner/backend/package.json)
+          v=$(jq -r .version hub/backend/package.json)
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "Versie: $v"
 
@@ -152,7 +152,7 @@ jobs:
         if: steps.exists.outputs.skip == 'false'
         uses: docker/build-push-action@v6
         with:
-          context: beregeningsplanner
+          context: hub
           platforms: linux/amd64
           load: true
           tags: aquatech:smoke
@@ -172,7 +172,7 @@ jobs:
         if: steps.exists.outputs.skip == 'false'
         uses: docker/build-push-action@v6
         with:
-          context: beregeningsplanner
+          context: hub
           platforms: linux/amd64
           push: true
           tags: |

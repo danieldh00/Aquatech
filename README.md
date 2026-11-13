@@ -1,6 +1,6 @@
-# Aquatech
+# AquaTech Hub
 
-Aquatech is een modulair, ERP-achtig pakket voor beregeningsbedrijven, met een eigen webshop. Na het inloggen
+AquaTech Hub is een modulair, ERP-achtig pakket voor beregeningsbedrijven, met een eigen webshop. Na het inloggen
 kom je op een dashboard met een tegel per module (beheerders krijgen een zijbalk). Alles draait als één
 webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als database.
 
@@ -48,7 +48,7 @@ webserver in Docker (poort 3300) met PostgreSQL (Supabase) of SQLite als databas
   rolt zelf niets uit: het updatescript op de server pakt de aanvraag op (zie `deploy/apps01/README.md`, eenmalig
   inrichten met `setup-app-update.sh`).
 - **Beveiliging**: sessies alleen als hash, wachtwoorden met scrypt, tweestapsverificatie (TOTP), versleutelde
-  back-ups (dagelijks, ook vóór elke update), auditlog. Zie *Beveiliging en privacy* in `beregeningsplanner/DOCS.md`.
+  back-ups (dagelijks, ook vóór elke update), auditlog. Zie *Beveiliging en privacy* in `hub/DOCS.md`.
 
 ## Beregeningsplanner
 
@@ -58,8 +58,8 @@ De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn twee
 
 | Manier | Hoe |
 |---|---|
-| **Eigen server** (Docker) | `docker compose up -d --build` in de root → `http://<server>:3300/app/`; bij de eerste aanmelding maak je het eerste beheerdersaccount aan. Zie *Server (Docker)* in `beregeningsplanner/DOCS.md`. |
-| **Lokaal** | `beregeningsplanner/frontend/index.html` (dashboard) of `beregeningsplanner/frontend/beregening/index.html` direct in de browser openen |
+| **Eigen server** (Docker) | `docker compose up -d --build` in de root → `http://<server>:3300/app/`; bij de eerste aanmelding maak je het eerste beheerdersaccount aan. Zie *Server (Docker)* in `hub/DOCS.md`. |
+| **Lokaal** | `hub/frontend/index.html` (dashboard) of `hub/frontend/beregening/index.html` direct in de browser openen |
 
 ## Stappen
 
@@ -92,8 +92,8 @@ Het `.xlsx`-bestand bevat de tabbladen:
 
 ## Aanpassen
 
-- **Artikelen en prijzen**: `beregeningsplanner/frontend/beregening/js/catalog.js` → `C.articles` (prijzen zijn indicatief, excl. btw).
-- **Sproeiertypes, druppelslang, buizen en hydraulische uitgangspunten**: eveneens in `beregeningsplanner/frontend/beregening/js/catalog.js`.
+- **Artikelen en prijzen**: `hub/frontend/beregening/js/catalog.js` → `C.articles` (prijzen zijn indicatief, excl. btw).
+- **Sproeiertypes, druppelslang, buizen en hydraulische uitgangspunten**: eveneens in `hub/frontend/beregening/js/catalog.js`.
 
 ## Opslag
 
@@ -101,10 +101,10 @@ Ingelogd wordt een plan op de server bewaard (met historie); zonder server wordt
 
 ## Nieuwe module toevoegen
 
-1. Maak `beregeningsplanner/frontend/<id>/index.html` met eigen css/js in die
+1. Maak `hub/frontend/<id>/index.html` met eigen css/js in die
    map en laad `../shared/brand.css` voor de huisstijl, `../shared/common.js` in de `<head>`, daarna
    `../dashboard/modules.js` en `../shared/sidebar.js`. Alle URL's relatief; terug naar het dashboard met `href="../"`.
-2. Zet de module in `beregeningsplanner/frontend/dashboard/modules.js` op
+2. Zet de module in `hub/frontend/dashboard/modules.js` op
    `status: 'actief'` met `href: '<id>/'`.
 3. Klaar: de server serveert elke map met een `index.html` als module (ook
    `<id>` zonder slash en diepe paden). Tests controleren de verwijzingen.
@@ -119,7 +119,7 @@ Ingelogd wordt een plan op de server bewaard (met historie); zonder server wordt
 docker-compose.yml, .env.example     de server als Docker-container (poort 3300)
 deploy/apps01/                       uitrol op de server (update.sh, compose.yml)
 changes/                             releasenotes per PR (worden bij de release versie + changelog)
-beregeningsplanner/                  de app
+hub/                               de app (AquaTech Hub; de planner is module `frontend/beregening/`)
   Dockerfile, CHANGELOG.md, DOCS.md
   backend/
     src/server.js                    Express: pagina's, modules, login en alle /api-routes
@@ -158,14 +158,14 @@ server geladen (dezelfde berekening aan beide kanten).
 ## Ontwikkelen
 
 ```sh
-cd beregeningsplanner/backend && npm install
+cd hub/backend && npm install
 DATA_DIR=/tmp/bp PORT=3300 node src/server.js   # http://localhost:3300/app/ -> eerste beheerder aanmaken
 npm test                                        # node --test (SQLite)
 TEST_DATABASE_URL=postgres://… npm test         # dezelfde suite tegen PostgreSQL
 ```
 
 - `master` is productie. Elke wijziging gaat via een eigen branch en een pull request; een wijziging in
-  `beregeningsplanner/` vraagt een bestand `changes/<naam>.md` met releasenotes (zie `changes/README.md`); het
+  `hub/` vraagt een bestand `changes/<naam>.md` met releasenotes (zie `changes/README.md`); het
   versienummer, `CHANGELOG.md` en `frontend/nieuws/releases.js` worden na het mergen automatisch bijgewerkt. Werk dit README bij als een PR features of de installatie wijzigt.
 - Een PR merget pas als de tests (SQLite en PostgreSQL), de releasenotes-controle en de verplichte controles **Claude code
   review** en **Claude security review** (`.github/workflows/claude-review.yml`) groen zijn. CodeRabbit is uitgeschakeld;

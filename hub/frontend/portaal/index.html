@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Mijn portaal – AquaTech Hub</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="portaal.css">
+  <script src="../shared/common.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Mijn portaal</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <main class="dash portal">
+    <section class="intro">
+      <h1 id="p-welcome">Mijn portaal</h1>
+      <p class="muted">Alles over uw tuinberegening op één plek: offertes, afspraken, de voortgang van de aanleg en het opleverdossier.</p>
+    </section>
+
+    <div id="p-message" class="notice" hidden></div>
+
+    <section id="s-season" hidden>
+      <h2>Seizoensonderhoud</h2>
+      <div id="season" class="cards"></div>
+      <label class="chk season-mail" id="season-mail-row"><input type="checkbox" id="season-mail"> Stuur mij deze herinneringen ook per e-mail</label>
+    </section>
+
+    <section id="s-todo" hidden>
+      <h2>Actie nodig</h2>
+      <div id="todo" class="cards"></div>
+    </section>
+
+    <section id="s-requests" hidden>
+      <h2>Storingen en onderhoud</h2>
+      <div class="req-intro">
+        <p class="muted">Werkt er iets niet, of wilt u onderhoud laten uitvoeren? Meld het hier, eventueel met foto's. Wij nemen contact met u op.</p>
+        <button class="btn primary" id="r-new" type="button">Storing of onderhoud melden</button>
+      </div>
+      <div id="requests" class="cards"></div>
+    </section>
+
+    <section id="s-work" hidden>
+      <h2>Afspraken en werkzaamheden</h2>
+      <div id="work" class="cards"></div>
+    </section>
+
+    <section id="s-locations" hidden>
+      <h2>Mijn installaties per adres</h2>
+      <div id="locations" class="cards"></div>
+    </section>
+
+    <section id="s-quotes" hidden>
+      <h2>Offertes</h2>
+      <div class="tablewrap"><table class="grid" id="quotes"></table></div>
+    </section>
+
+    <section id="s-plans" hidden>
+      <h2>Mijn plannen <a class="h2-link" href="../plannen/">Alle plannen →</a></h2>
+      <div id="plans" class="tiles"></div>
+    </section>
+
+    <section id="s-contact" hidden>
+      <h2>Contact</h2>
+      <div id="contact" class="contact"></div>
+    </section>
+  </main>
+
+  <div id="detail" class="modal" hidden>
+    <div class="modal-card wide">
+      <button class="btn ghost close no-print" id="detail-close" title="Sluiten">✕</button>
+      <div id="detail-body"></div>
+    </div>
+  </div>
+
+  <div id="r-modal" class="modal" hidden>
+    <div class="modal-card">
+      <button class="btn ghost close" id="r-close" type="button" title="Sluiten">✕</button>
+      <h2>Storing of onderhoud melden</h2>
+      <form id="r-form" class="card-form req-form" novalidate>
+        <fieldset class="kinds">
+          <legend>Waar gaat het om?</legend>
+          <label class="chk"><input type="radio" name="kind" value="storing" checked> Storing</label>
+          <label class="chk"><input type="radio" name="kind" value="onderhoud"> Onderhoud</label>
+          <label class="chk"><input type="radio" name="kind" value="overig"> Vraag of verzoek</label>
+        </fieldset>
+        <label class="chk" id="r-urgent-row"><input type="checkbox" name="urgent"> Spoed (bijvoorbeeld een lekkage die niet stopt)</label>
+        <label id="r-inst-row" hidden>Installatie<select name="installationId"></select></label>
+        <label>Onderwerp<input name="subject" maxlength="200" required placeholder="Bijv. sproeiers bij de border gaan niet aan"></label>
+        <label>Omschrijving<textarea name="description" rows="4" maxlength="4000" required placeholder="Wat ziet u, sinds wanneer, en welke zone of welk deel van de tuin?"></textarea></label>
+        <div class="row">
+          <label class="grow">Adres<input data-address-lookup name="address" maxlength="400" autocomplete="street-address"></label>
+          <label>Telefoon<input name="phone" maxlength="40" type="tel" autocomplete="tel"></label>
+        </div>
+        <label>Wanneer komt het u uit? (optioneel)<input name="preferred" maxlength="300" placeholder="Bijv. liefst 's ochtends, niet op woensdag"></label>
+        <label>Foto's (optioneel, maximaal 6)<input name="photos" type="file" accept="image/*" multiple></label>
+        <div id="r-previews" class="photos small-photos"></div>
+        <div class="row">
+          <button class="btn primary" type="submit">Melding versturen</button>
+          <button class="btn" type="button" id="r-cancel">Annuleren</button>
+        </div>
+        <div class="err" role="alert"></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="photo" class="modal photo-view" hidden>
+    <figure>
+      <img id="photo-img" alt="">
+      <figcaption id="photo-cap"></figcaption>
+    </figure>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
+  <script src="../shared/address-lookup.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="../werkorders/photos.js"></script>
+  <script src="locaties.js"></script>
+  <script src="portaal.js"></script>
+</body>
+</html>

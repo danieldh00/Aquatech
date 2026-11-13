@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <title>AquaTech Hub</title>
+  <link rel="stylesheet" href="shared/brand.css">
+  <link rel="stylesheet" href="shared/theme.css">
+  <link rel="stylesheet" href="shared/sidebar.css">
+  <link rel="stylesheet" href="shared/offline.css">
+  <link rel="stylesheet" href="dashboard/dashboard.css">
+  <script src="shared/common.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-logo" src="shared/logo-white.png" alt="AquaTech Service">
+    </div>
+    <div class="topbar-right">
+      <span id="account" class="account"></span>
+    </div>
+  </header>
+
+  <main class="dash">
+    <section class="intro">
+      <h1>Overzicht</h1>
+      <p id="intro-text">Kies een onderdeel om mee te werken.</p>
+    </section>
+
+    <section id="news-banner" class="news-banner" role="status" hidden></section>
+
+    <section id="today" class="today" hidden></section>
+
+    <section id="recent" class="recent" hidden></section>
+
+    <section id="myplans" hidden>
+      <h2>Mijn plannen <a class="h2-link" href="plannen/">Alle plannen →</a></h2>
+      <div id="myplans-list" class="tiles"></div>
+    </section>
+
+    <section id="modules-section">
+      <h2>Modules</h2>
+      <div id="modules" class="tiles"></div>
+    </section>
+
+    <section id="support" hidden></section>
+  </main>
+
+  <script src="shared/env.js"></script>
+  <script src="shared/offline-core.js"></script>
+  <script src="shared/offline.js"></script>
+  <script src="dashboard/modules.js"></script>
+  <script src="shared/sidebar.js"></script>
+  <script src="dashboard/account.js"></script>
+  <script src="dashboard/support.js"></script>
+  <script src="dashboard/today.js"></script>
+  <script src="dashboard/dashboard.js"></script>
+</body>
+</html>
