@@ -289,6 +289,31 @@ function packingSlipsPdfWithRanges(orders, { profile = {}, colors = {}, logo = n
 }
 
 /**
+ * De bestelling zoals één zending hem op de pakbon zet: `fulfilment` krijgt per regel besteld, eerder geleverd, nu (deze zending) en wat er
+ * daarna nog op backorder staat. Zo klopt de pakbon met wat de picker echt heeft gepickt, ook als dat minder was dan de berekende voorraad.
+ * @param {object} order De bestelling (shapeFull) met regels en alle zendingen.
+ * @param {{ lines: { index: number, qty: number }[] }} shipment De zending.
+ * @param {Map<number, string>} expected De verwachte leverdatum per regelnummer (leeg als onbekend of niet meer open).
+ * @returns {object} De bestelling met `fulfilment`.
+ */
+function orderForShipment(order, shipment, expected) {
+  const nowByIndex = new Map(shipment.lines.map((entry) => [entry.index, Number(entry.qty) || 0]));
+  const before = new Map();
+  const position = order.shipments.findIndex((entry) => entry.id === shipment.id);
+  for (const earlier of order.shipments.slice(0, Math.max(0, position))) {
+    for (const entry of earlier.lines) before.set(entry.index, (before.get(entry.index) || 0) + (Number(entry.qty) || 0));
+  }
+  const lines = order.lines.map((line, index) => {
+    const now = nowByIndex.get(index) || 0;
+    const ordered = Number(line.qty) || 0;
+    const shipped = before.get(index) || 0;
+    const backorder = Math.max(0, Math.round((ordered - shipped - now) * 1000) / 1000);
+    return { index, ordered, shipped, remaining: backorder + now, ready: now, backorder, expected: backorder > 0 ? expected.get(index) || '' : '' };
+  });
+  return { ...order, fulfilment: { lines, canShip: false, complete: lines.every((entry) => entry.backorder === 0), backorder: lines.some((entry) => entry.backorder > 0) } };
+}
+
+/**
  * Maakt de opslag en de routes voor pakbonnen.
  * @param {object} db De database.
  * @param {{ orders: object, slips: object, settingsFor: Function, colorsOf?: Function }} deps De bestellingen (web-orders.js), de pakbonnen van klanten bij dropshipping (order-slips.js), settingsFor(tenantId) en colorsOf(tenantId) = kleuren van het thema.
@@ -333,19 +358,26 @@ function createPackingSlips(db, { orders, slips, settingsFor, colorsOf = () => (
    * staat in plaats van onze pakbon de pakbon van de klant in de PDF (met het bestelnummer erop).
    * @param {string} tenantId Id van de omgeving.
    * @param {string[]} ids Ids van de bestellingen (hoogstens MAX_SLIPS).
-   * @param {{ markPrinted?: boolean }} [options] Of het afdrukken wordt vastgelegd.
+   * @param {{ markPrinted?: boolean, shipmentId?: string }} [options] Of het afdrukken wordt vastgelegd; met `shipmentId` (één bestelling) is het de pakbon van die zending, na het verzenden, met de aantallen die echt zijn gepickt.
    * @returns {Promise<{ pdf?: Buffer, fileName?: string, orders?: object[], error?: string, status?: number }>} De PDF of een foutmelding.
    */
-  async function pdfFor(tenantId, ids, { markPrinted = true } = {}) {
+  async function pdfFor(tenantId, ids, { markPrinted = true, shipmentId = '' } = {}) {
     if (!Array.isArray(ids) || !ids.length) return { error: 'Kies minstens één bestelling.', status: 400 };
     if (ids.length > MAX_SLIPS) return { error: `Hoogstens ${MAX_SLIPS} pakbonnen tegelijk.`, status: 400 };
-    const found = orders.withFulfilment(tenantId, orders.getMany(tenantId, ids).filter((order) => order.status !== 'geannuleerd'));
+    if (shipmentId && ids.length !== 1) return { error: 'Een zending hoort bij één bestelling.', status: 400 };
+    let found = orders.withFulfilment(tenantId, orders.getMany(tenantId, ids).filter((order) => order.status !== 'geannuleerd'));
+    if (shipmentId && found.length) {
+      const shipment = found[0].shipments.find((entry) => entry.id === shipmentId);
+      if (!shipment) return { error: 'Zending niet gevonden.', status: 404 };
+      const expected = new Map(found[0].fulfilment ? found[0].fulfilment.lines.map((entry) => [entry.index, entry.expected]) : []);
+      found = [orderForShipment(found[0], shipment, expected)];
+    }
     if (!found.length) return { error: 'Geen bestelling gevonden om een pakbon van te maken.', status: 404 };
     // Een nieuwe online bestelling die nog niet betaald is wordt niet gepickt: geen pakbon tot de betaling binnen is.
     const unpaid = found.filter((order) => order.status === 'nieuw' && order.payment === 'online' && !(order.pay && order.pay.status === 'betaald'));
     if (unpaid.length) return { error: `Nog niet betaald, dus nog geen pakbon: ${unpaid.map((order) => order.number).join(', ')}.`, status: 409 };
     // Een open bestelling waar nu niets van leverbaar is (of niet alles, zonder deellevering) heeft nog geen pakbon: eerst voorraad.
-    const waiting = found.filter((order) => order.status === 'nieuw' && order.fulfilment && !order.fulfilment.canShip);
+    const waiting = shipmentId ? [] : found.filter((order) => order.status === 'nieuw' && order.fulfilment && !order.fulfilment.canShip);
     if (waiting.length) return { error: `Wacht op voorraad, dus nog geen pakbon: ${waiting.map((order) => order.number).join(', ')}.`, status: 409 };
     const dropshipped = found.filter((order) => order.dropshipping);
     const customerSlips = slips.readMany(tenantId, dropshipped.map((order) => order.id));
@@ -410,4 +442,4 @@ function registerPackingSlipRoutes(app, { slips, audit, requireJson }) {
   });
 }
 
-module.exports = { createPackingSlips, registerPackingSlipRoutes, packingSlipsPdf, slipLines, MAX_SLIPS };
+module.exports = { createPackingSlips, registerPackingSlipRoutes, packingSlipsPdf, slipLines, orderForShipment, MAX_SLIPS };

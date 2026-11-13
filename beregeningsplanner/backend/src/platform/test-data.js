@@ -183,6 +183,8 @@ const ACCOUNTS = [
   { key: 'inst2', suffix: 'installateur2', displayName: 'Iris Installateur (test)', role: 'installateur' },
   // Planner: plant werkorders in en regelt de afspraak, voert zelf niets uit.
   { key: 'planner', suffix: 'planner', displayName: 'Pim Planner (test)', role: 'planner' },
+  // Picker: pickt webshopbestellingen in de orderpick-app (alleen het recht orderpick).
+  { key: 'picker', suffix: 'picker', displayName: 'Pien Picker (test)', role: 'picker' },
   { key: 'klant1', suffix: 'klant1', displayName: 'Fam. de Vries (test)', role: 'klant' },
   { key: 'klant2', suffix: 'klant2', displayName: 'Fam. Bakker (test)', role: 'klant' },
   { key: 'klant3', suffix: 'klant3', displayName: 'Dhr. en mevr. Visser (test)', role: 'klant' },

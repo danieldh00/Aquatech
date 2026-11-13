@@ -37,6 +37,8 @@ const { createShopContentStore, registerShopContentRoutes } = require('./webshop
 const { createStorefrontData } = require('./webshop/storefront-data');
 const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
 const { createPackingSlips, registerPackingSlipRoutes } = require('./webshop/packing-slips');
+const { createOrderpick, registerOrderpickRoutes } = require('./webshop/orderpick');
+const { createShippingLabels } = require('./webshop/shipping-labels');
 const { createOrderSlips } = require('./webshop/order-slips');
 const { createQuoteOrders, registerQuoteOrderRoutes } = require('./verkoop/quote-orders');
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
@@ -313,10 +315,10 @@ function staticHeaders(version) {
 
 /**
  * Bouwt de Express-app met alle routes en opslag.
- * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch en wanIp (tests vervangen hiermee de buitenwereld).
+ * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, wanIp = createWanIp(), loginDelayMs = 1000 }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000 }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -598,6 +600,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Status van een webshopbestelling wijzigen (web-orders.js): alleen { status }.
   app.use('/api/admin/web-orders/packing-slips', express.json({ limit: '16kb' }));
   app.use('/api/admin/web-orders', express.json({ limit: '4kb' }));
+  // Orderpick-app (webshop/orderpick.js): de gepickte regels (hoogstens MAX_LINES) en het aantal bekende zendingen.
+  app.use('/api/orderpick', express.json({ limit: '16kb' }));
   app.use('/api/quotes', express.json({ limit: '1mb' }));
   // Tekening indienen zonder inloggen (drawings.js): plan met achtergrond.
   app.use('/api/public/drawing', express.json({ limit: '8mb' }));
@@ -1140,6 +1144,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     uitbesteden: 'Je rol heeft geen toegang tot uitbesteden.',
     nieuws: 'Je rol mag geen nieuwsberichten plaatsen.',
     voorraad: 'Je rol heeft geen toegang tot Artikelen.',
+    orderpick: 'Je rol mag geen orders picken.',
     portaal: 'Het klantportaal is er voor klanten.',
     plannen: 'Je rol heeft geen toegang tot de beregeningsplanner.',
   };
@@ -2456,6 +2461,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     },
   });
   registerPackingSlipRoutes(app, { slips: packingSlips, audit, requireJson });
+  // Orderpick-app voor het magazijn (webshop/orderpick.js, recht orderpick); verzendlabels via een koppeling per vervoerder (DPD volgt).
+  registerOrderpickRoutes(app, {
+    orderpick: createOrderpick(database, { orders: webOrders, slips: packingSlips, labels: createShippingLabels({ providers: shippingLabelProviders }) }),
+    requireRight, requireJson, audit,
+    limiter: createRateLimiter({ windowMs: 60 * 1000, max: 60, keyFn: (req) => req.user?.id || clientKey(req) }),
+  });
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
   // Offerte omzetten naar bestelling (verkoop/quote-orders.js).
   const quoteOrders = createQuoteOrders(database, { orders: webOrders });

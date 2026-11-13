@@ -23,6 +23,8 @@
 //                 historie.
 // - planner:      werkorders inplannen in de agenda en de afspraaklink naar de
 //                 klant sturen; werkorders en klantdossiers inzien.
+// - picker:       alleen de orderpick-app van het magazijn: bestellingen picken,
+//                 scannen en afmelden; geen prijzen, adressen of instellingen.
 // - klant:        alleen de eigen plannen, en de offertes die voor hem zijn
 //                 klaargezet inzien en accepteren of afwijzen; in het
 //                 klantportaal ook de werkorders uit zijn offertes (afspraak,
@@ -48,6 +50,7 @@
     uitvoerder: { label: 'Uitvoerder', description: 'Kan als uitvoerder aan een werkorder worden toegewezen en staat als kolom in de planning.', kind: ['medewerker'], needs: ['werkorders'] },
     nieuws: { label: 'Nieuwsberichten plaatsen', description: 'Berichten plaatsen op de pagina Nieuws voor de collega\'s (of ook voor klanten), eventueel ook per e-mail.', kind: ['medewerker'] },
     voorraad: { label: 'Artikelen', description: 'De voorraad beheren: artikelen, ontvangsten, tellingen, correcties en wat er op werkorders gereserveerd en afgeboekt is.', kind: ['medewerker'] },
+    orderpick: { label: 'Orders picken', description: 'Webshopbestellingen picken in de orderpick-app: regels scannen, aantallen invullen en de bestelling als gepickt afmelden. Geen prijzen, klantgegevens of instellingen.', kind: ['medewerker'] },
     nacalculatie: { label: 'Nacalculatie', description: 'Per werkorder de begroting uit de offerte naast de geboekte uren, het materiaalverbruik en de facturen zien, met kosten en marge.', kind: ['medewerker'], needs: ['werkorders'] },
     facturen: { label: 'Facturen', description: 'Facturen maken vanuit werkorders of als losse verkoop, crediteren, betalingen bijhouden en exporteren naar de boekhouding.', kind: ['medewerker'] },
     uitbesteden: { label: 'Uitbesteden', description: 'Opdrachten uitbesteden aan of aannemen van een andere organisatie (als dat in de instellingen aan staat).', kind: ['medewerker'], needs: ['werkorders'] },
@@ -64,7 +67,7 @@
       kind: 'medewerker',
       locked: true,
       description: 'Alles binnen de organisatie: gebruikers, rollen, instellingen, historie, alle plannen, offertes en werkorders, en opdrachten uitbesteden.',
-      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'klanten', 'werkorders', 'planning', 'uitvoerder', 'nieuws', 'voorraad', 'nacalculatie', 'facturen', 'uitbesteden', 'beheer'],
+      rights: ['plannen', 'plannen.alle', 'plannen.goedkeuren', 'offertes', 'offertes.alle', 'klanten', 'werkorders', 'planning', 'uitvoerder', 'nieuws', 'voorraad', 'orderpick', 'nacalculatie', 'facturen', 'uitbesteden', 'beheer'],
     },
     installateur: {
       label: 'Installateur',
@@ -77,6 +80,12 @@
       kind: 'medewerker',
       description: 'Werkorders inplannen in de agenda en afspraken met klanten regelen; werkorders en klantdossiers inzien.',
       rights: ['werkorders', 'planning'],
+    },
+    picker: {
+      label: 'Picker',
+      kind: 'medewerker',
+      description: 'Alleen bestellingen picken in de orderpick-app van het magazijn: scannen, aantallen invullen en afmelden.',
+      rights: ['orderpick'],
     },
     klant: {
       label: 'Klant',

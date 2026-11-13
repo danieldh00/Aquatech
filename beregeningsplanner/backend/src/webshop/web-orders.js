@@ -804,10 +804,10 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    * @param {string} id Id van de bestelling.
    * @param {{ index: number, qty: number }[]|null} parts De regels en aantallen (in de eenheid van de orderregel); null = alles wat nu leverbaar is. Een minder gepickt aantal laat het verschil op backorder staan.
    * @param {object|null} user Wie verzendt.
-   * @param {{ trackingCode?: string, ignoreStock?: boolean }} [options] De volgcode van DPD (leeg mag) en of meer dan de nu leverbare hoeveelheid mag.
+   * @param {{ trackingCode?: string, ignoreStock?: boolean, expectedShipments?: number }} [options] De volgcode van DPD (leeg mag), of meer dan de nu leverbare hoeveelheid mag en het aantal zendingen dat de aanroeper kent (orderpick: is er intussen verzonden, dan 409 `changed` en gebeurt er niets).
    * @returns {{ order?: object, shipment?: object, complete?: boolean, error?: string, code?: string, status?: number }} De bijgewerkte bestelling, de zending en of alles geleverd is, of een foutmelding.
    */
-  function ship(tenantId, id, parts, user, { trackingCode = '', ignoreStock = false } = {}) {
+  function ship(tenantId, id, parts, user, { trackingCode = '', ignoreStock = false, expectedShipments = null } = {}) {
     const tracking = String(trackingCode || '').trim() ? Shipping.trackingOf(trackingCode) : null;
     if (String(trackingCode || '').trim() && !tracking) return { error: 'Ongeldige volgcode (6 tot 40 letters, cijfers of streepjes).', status: 400 };
     const out = transaction(db, () => {
@@ -816,6 +816,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       if (row.status !== 'nieuw') return { error: `Een bestelling met status ${STATUSES[row.status]} kan niet meer verzonden worden.`, status: 409 };
       const data = JSON.parse(row.data);
       if (data.payment === 'online' && !(data.pay && data.pay.status === 'betaald')) return { error: 'Deze bestelling is nog niet betaald: verzenden kan pas na de betaling.', status: 409 };
+      if (expectedShipments !== null && (Array.isArray(data.shipments) ? data.shipments.length : 0) !== expectedShipments) return { error: 'Deze bestelling is intussen al (deels) verzonden of aangepast. Ververs de bestelling.', code: 'changed', status: 409 };
       // Rijsloten op id: tot het einde van de transactie kan niemand deze voorraad reserveren of afboeken.
       lockItemIds(tenantId, data.lines);
       const order = shapeFull(row);
