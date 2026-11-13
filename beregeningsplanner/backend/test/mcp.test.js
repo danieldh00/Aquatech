@@ -283,6 +283,11 @@ test('de koppeling vraagt terug bij onduidelijkheid in plaats van te raden', asy
   const none = (await callTool(base, token, 'zoek_klant', { zoekterm: 'bestaatniet' })).structuredContent;
   assert.strictEqual(none.keuzeNodig, true);
   assert.match(none.vraag, /Maak niet zelf een klant aan/);
+  // Bij de limiet (10 resultaten) is het aantal niet exact: "10 of meer", niet "10 mogelijke treffers".
+  for (let number = 1; number <= 10; number += 1) await callTool(base, token, 'maak_klant', { naam: `Piet Extra ${number}` });
+  const capped = (await callTool(base, token, 'zoek_klant', { zoekterm: 'extra' })).structuredContent;
+  assert.strictEqual(capped.aantal, 10);
+  assert.match(capped.vraag, /10 of meer mogelijke treffers/);
   assert.strictEqual((await callTool(base, token, 'zoek_artikelen', { zoekterm: 'PE-25' })).structuredContent.keuzeNodig, undefined);
   assert.strictEqual((await callTool(base, token, 'zoek_artikelen', { zoekterm: 'nietbestaand' })).structuredContent.keuzeNodig, true);
   assert.strictEqual((await callTool(base, token, 'zoek_artikelen', { zoekterm: 'sproeier beregeningscomputer' })).structuredContent.keuzeNodig, true);

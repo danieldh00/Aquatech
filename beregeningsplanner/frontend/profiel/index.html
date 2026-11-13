@@ -100,7 +100,7 @@
           <p class="hint">Scan de QR-code met je authenticator-app, of tik op de link op je telefoon. Lukt dat niet, typ dan de sleutel over.</p>
           <div id="tf-qr" class="tf-qr"></div>
           <p class="tf-secret-line">Sleutel: <code id="tf-secret"></code> · <a id="tf-link" href="#">Openen in de app</a></p>
-          <label class="field full"><span class="label">Code uit de app</span>
+          <label class="field"><span class="label">Code uit de app</span>
             <input id="tf-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456"></label>
           <div class="form-actions">
             <button class="btn primary" type="submit" id="tf-confirm">Bevestigen</button>
@@ -115,9 +115,9 @@
         <form id="tf-on" hidden novalidate>
           <p class="hint" id="tf-left"></p>
           <p class="hint">Uitzetten kan met je wachtwoord en een code uit de app (of een herstelcode). Telefoon en herstelcodes kwijt? Vraag een beheerder om het uit te zetten.</p>
-          <label class="field full"><span class="label">Wachtwoord</span>
+          <label class="field"><span class="label">Wachtwoord</span>
             <input id="tf-off-password" type="password" autocomplete="current-password" maxlength="1024"></label>
-          <label class="field full"><span class="label">Code uit de app of herstelcode</span>
+          <label class="field"><span class="label">Code uit de app of herstelcode</span>
             <input id="tf-off-code" autocomplete="one-time-code" maxlength="20"></label>
           <div class="form-actions"><button class="btn" type="submit">Uitzetten</button></div>
         </form>
@@ -128,7 +128,7 @@
         <h2>AI-koppeling (Claude of ChatGPT)</h2>
         <p class="hint">Spreek na een klantgesprek in de Claude- of ChatGPT-app een samenvatting in; de AI zet de offerte dan als concept klaar in AquaTech. Jij controleert en verstuurt hem zelf.</p>
         <div id="ai-setup" hidden>
-          <label class="field full"><span class="label">Adres van de koppeling</span>
+          <label class="field"><span class="label">Adres van de koppeling</span>
             <input id="ai-url" type="text" readonly></label>
           <p class="hint">Voeg dit adres toe als eigen connector in Claude of ChatGPT; de stappen staan in de handleiding hieronder.</p>
           <div class="form-actions"><button class="btn" type="button" id="ai-copy">Adres kopiëren</button></div>
