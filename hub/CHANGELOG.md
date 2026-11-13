@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.5
+
+`localrecog.js`: `paintEnclosedWhite` zet een compact, rondom door kleur omsloten wit vak (≥ 1,5% van het beeld, niet aan de rand) op verharding; in `classMap` wordt een warme beplantingskleur zonder textuur (`TEX_FLAT`) verharding. Gemeten met de plangenerator op 10 verzonnen plannen (`npm run recog-bench`): functionele nauwkeurigheid 76% → 86%, juist benoemd 40% → 50%, gazon-overlap gelijk (87%). Test in `localrecog.test.js`. Geen wijziging van de leerbak (`FEATURE_VERSION` blijft).
+
 ## 1.15.4
 
 `hub/backend/tools/plan-generator.js` (`node tools/plan-generator.js <map> [aantal] [eerste-seed]`) tekent verzonnen tuinontwerpen (gazon, borders, bomen, terras, woning, vijver, labels, titelblok; afwisselend digitaal en scan) met de bekende waarheid in `naam.json`, voor `npm run recog-bench`. De meetlat (`recog-metrics.js`) kent een eigen `layer` per vlak en toont de functionele nauwkeurigheid (gazon = sproeiers, beplanting = druppel, verharding/water = geen beregening). Geen effect op de app zelf.

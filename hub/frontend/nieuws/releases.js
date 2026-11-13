@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.15.5',
+      date: '2026-11-13',
+      title: 'Betere herkenning van huis en terras zonder AI',
+      items: [
+        { text: 'Plannen lezen zonder AI herkent een woning (wit vak met omtrek) en egale terrassen (baksteen, hout) nu als verharding in plaats van als beplanting of niets, zodat daar geen sproeiers of druppelslang komen.' },
+      ],
+    },
+    {
       version: '1.15.4',
       date: '2026-11-13',
       title: 'Verzonnen tuinplannen om de herkenning te meten',
