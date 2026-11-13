@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.16.1',
+      date: '2026-11-14',
+      title: 'Concept-werkorder via de AI-koppeling',
+      items: [
+        { text: 'Via Claude of ChatGPT kun je nu een werkorder laten klaarzetten, bijvoorbeeld voor onderhoud of een reparatie. Hij staat als Nieuw klaar, zonder planning en zonder uitvoerder; jij plant hem zelf in. Je moet de AI-koppeling opnieuw koppelen om dit te kunnen gebruiken.', for: ['werkorders'] },
+      ],
+    },
+    {
       version: '1.16.0',
       date: '2026-11-13',
       title: 'Bewaking en meldingen bij storingen',

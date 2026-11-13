@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.1
+
+- MCP-tool `maak_concept_werkorder` met nieuwe scope `werkorders.concept` (recht `werkorders`): werkorder zonder offerte via `workorders.createReceived`, status `open`, klant en adres uit de klantkaart, stappen met uren en materiaal (reserveert voorraad via `onWorkOrderChange`). Onbekend artikel, variant of ontbrekende klant geeft status `terugvragen` zonder iets aan te maken (`ookMetOpenPunten` gaat bewust door; de open punten komen in de interne notitie). Limieten 20 per uur en 100 per dag per gebruiker, audit `werkorder_concept_via_ai`.
+- Bestaande koppelingen moeten opnieuw worden gekoppeld om de nieuwe scope te krijgen.
+
 ## 1.16.0
 
 Bewaking: tabel `monitor_incidents` (migratie 72), `platform/monitoring.js` (incidenten, meldingen, heartbeat), `monitoring-checks.js` (controles), `monitoring-routes.js` (`/api/admin/monitoring`) en het scherm `beheer/bewaking.js`. Instelling `monitoring` per omgeving (ontvangers, webhook, herinneringen, drempels, dempen); platformcontroles alleen voor wie ook mag updaten. `errorCounter` in `error-report.js` telt 500-antwoorden; `mailer.verify` en `mollie.checkKey` zijn nieuw. Testdata: twee voorbeeldincidenten.
