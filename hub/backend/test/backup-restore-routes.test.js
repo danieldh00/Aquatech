@@ -114,3 +114,16 @@ test('een record van een andere organisatie is niet te zien en niet terug te zet
     assert.strictEqual(JSON.parse(world.db.prepare("SELECT data FROM quotes WHERE id = 'qx'").get().data).lines.length, 0, 'de andere organisatie is ongemoeid');
   } finally { world.cleanup(); }
 });
+
+test('een onbekende soort (ook een naam uit het prototype) geeft 400, geen interne fout', async () => {
+  const world = await start();
+  try {
+    const made = await world.baas.post(BASE);
+    for (const kind of ['constructor', 'toString', '__proto__', 'bestaat-niet']) {
+      const view = await world.baas.post(`${BASE}/restore/lines/preview`, { backup: made.body.name, kind, id: 'qa' });
+      assert.strictEqual(view.status, 400, kind);
+      const records = await world.baas.get(`${BASE}/restore/records?backup=${encodeURIComponent(made.body.name)}&kind=${kind}`);
+      assert.strictEqual(records.status, 400, kind);
+    }
+  } finally { world.cleanup(); }
+});

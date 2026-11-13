@@ -80,7 +80,7 @@ function lineKinds() {
  * @returns {{ spec: object, before: ?object, now: ?object }} De definitie en beide rijen (leeg als ze er niet zijn).
  */
 function rowsOf({ backup, current, context }, kind, id) {
-  const spec = LINE_KINDS[kind];
+  const spec = Object.hasOwn(LINE_KINDS, kind) ? LINE_KINDS[kind] : undefined;
   if (!spec) throw Object.assign(new Error('Van dit soort record zijn de regels niet afzonderlijk terug te zetten.'), { status: 400 });
   return {
     spec,
