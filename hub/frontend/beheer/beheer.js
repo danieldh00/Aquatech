@@ -1497,6 +1497,7 @@
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
     if (section.pane === 'kleuren') window.BeheerKleuren.load();
     if (section.pane === 'updates') window.BeheerUpdates.load(); else window.BeheerUpdates.stop();
+    if (section.pane === 'bewaking') window.BeheerBewaking.load(); else window.BeheerBewaking.stop();
     if (section.pane === 'audit') loadAudit();
     activePane = section.pane;
     if (location.hash === `#${section.id}`) return;

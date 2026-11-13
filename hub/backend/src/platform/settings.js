@@ -13,6 +13,7 @@ const { sanitizeDriveBackup, sanitizeDriveState } = require('./drive-backup');
 const { sanitizeLabelTemplates } = require('../artikelen/labels');
 const { sanitizeCategoryDiscounts } = require('../webshop/category-discounts');
 const { sanitizePriceFactors } = require('../artikelen/price-factor');
+const { sanitizeMonitoring } = require('./monitoring-notify');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
@@ -95,6 +96,9 @@ const FIELDS = {
   backupDriveClientSecret: { type: 'secret', default: '', min: 8, internal: true, liveOnly: true },
   backupDriveRefreshToken: { type: 'secret', default: '', min: 1, max: 4000, internal: true, liveOnly: true },
   backupDriveState: { type: 'object', default: {}, sanitize: sanitizeDriveState, internal: true, liveOnly: true },
+  // Bewaking (platform/monitoring.js, Beheer > Systeem > Bewaking; alleen via /api/admin/monitoring): ontvangers, webhook,
+  // heartbeat-adres (alleen de hoofdtenant), herinneringen, herstelmelding, gedempte controles en drempels van de platformcontroles.
+  monitoring: { type: 'object', default: {}, sanitize: sanitizeMonitoring, internal: true, liveOnly: true },
   // Bedrijfsgegevens, uurtarief en standaardteksten voor offertes (quotes.js).
   quoteProfile: { type: 'object', default: {}, sanitize: sanitizeProfile },
   // Eigen SMTP-server voor offertes en bevestigingen (mailer.js); het
@@ -404,4 +408,4 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
   return { get, rejectedStart, update, view, FIELDS };
 }
 
-module.exports = { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest, sanitizePurchaseProposals };
+module.exports = { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest, sanitizePurchaseProposals, sanitizeMonitoring };
