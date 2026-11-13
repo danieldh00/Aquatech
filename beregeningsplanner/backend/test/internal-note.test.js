@@ -70,7 +70,8 @@ test('medewerker bewaart en leest de notitie; de klant ziet hem nergens', async 
   assert.strictEqual(portal.body.quotes.length, 1, 'de klant ziet de verzonden offerte');
   assert.ok(!JSON.stringify(portal.body).includes(NOTE), 'portaal zonder notitie');
   const own = await customer.get(`/app/api/quotes/${quote.id}`);
-  if (own.status === 200) assert.ok(!JSON.stringify(own.body).includes(NOTE), 'eigen offerte zonder notitie');
+  assert.strictEqual(own.status, 200, 'de klant leest de eigen verzonden offerte');
+  assert.ok(!JSON.stringify(own.body).includes(NOTE), 'eigen offerte zonder notitie');
   // De openbare link.
   const token = (await installer.post(`/app/api/quotes/${quote.id}/share`, { url: 'https://aquatech.example/pad/openbaar/offerte.html' })).body.share.url.split('#t=')[1];
   const publicQuote = await fetch(`${base}/app/api/public/quote`, { headers: { 'X-Offerte-Token': token } });

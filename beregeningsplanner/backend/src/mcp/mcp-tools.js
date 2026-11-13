@@ -73,11 +73,14 @@ const errorOf = (message, extra = {}) => ({ content: [{ type: 'text', text: JSON
  * @param {number} count Het aantal treffers.
  * @param {string} noun Wat er gezocht werd (klant of artikel).
  * @param {string} ifNone Wat de AI bij geen treffer moet doen.
+ * @param {number} cap Het maximale aantal resultaten dat de zoekopdracht teruggeeft.
  * @returns {object} { keuzeNodig, vraag } of een leeg object als er precies één treffer is.
  */
-function choiceHint(count, noun, ifNone) {
+function choiceHint(count, noun, ifNone, cap) {
   if (count === 1) return {};
   if (count === 0) return { keuzeNodig: true, vraag: `Geen ${noun} gevonden. ${ifNone}` };
+  // Bij de limiet kan er meer zijn dan wat we tonen: dat niet als exact aantal melden.
+  if (count >= cap) return { keuzeNodig: true, vraag: `Er zijn ${cap} of meer mogelijke treffers; alleen de eerste ${cap} worden getoond. Vraag de gebruiker om de zoekterm te verfijnen; kies niet zelf.` };
   return { keuzeNodig: true, vraag: `Er zijn ${count} mogelijke treffers. Vraag de gebruiker welke bedoeld wordt; kies niet zelf.` };
 }
 
@@ -207,7 +210,7 @@ function createMcpTools(ctx) {
           adres: String(customer.address || '').split(/\s*\n\s*/).join(', '),
         }));
         return resultOf({ klanten: items, aantal: items.length, ...choiceHint(items.length, 'klant',
-          'Vraag de gebruiker om een andere schrijfwijze of een straat/postcode, en of hij een nieuwe klant wil laten aanmaken. Maak niet zelf een klant aan.') });
+          'Vraag de gebruiker om een andere schrijfwijze of een straat/postcode, en of hij een nieuwe klant wil laten aanmaken. Maak niet zelf een klant aan.', CUSTOMER_RESULTS) });
       },
     },
     maak_klant: {
@@ -299,7 +302,7 @@ function createMcpTools(ctx) {
         return resultOf({ artikelen: found.items.map(articleView), aantal: found.items.length,
           ...(exact ? {} : found.items.length && !found.allWords
             ? { keuzeNodig: true, vraag: 'Geen artikel met alle zoekwoorden. Vraag de gebruiker welk artikel bedoeld is; kies niet zelf.' }
-            : choiceHint(found.items.length, 'artikel', 'Vraag de gebruiker welk artikel hij bedoelt, of laat hem iets anders omschrijven. Verzin geen artikelcode.')),
+            : choiceHint(found.items.length, 'artikel', 'Vraag de gebruiker welk artikel hij bedoelt, of laat hem iets anders omschrijven. Verzin geen artikelcode.', limit)),
           ...(found.items.length && !found.allWords ? { let_op: 'Geen artikel met alle zoekwoorden; dit zijn de beste gedeeltelijke treffers. Twijfel je, zet dan twijfel=true bij de regel.' } : {}) });
       },
     },
@@ -570,6 +573,8 @@ function createMcpTools(ctx) {
           lines.push(line);
         }
         if (questions.length && args.ookMetOpenPunten !== true) {
+          // Een terugvraag telt mee in de leeslimiet, zodat een AI die steeds terugvraagt niet onbeperkt doorgaat.
+          if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
           return resultOf({ status: 'terugvragen', aangemaakt: false, vragen: questions,
             melding: 'Er is nog niets aangemaakt. Leg de vragen voor aan de gebruiker, pas de invoer aan en roep opnieuw aan (of zet ookMetOpenPunten=true als de gebruiker bewust met open punten door wil).' });
         }
