@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.0
+
+Bewaking: tabel `monitor_incidents` (migratie 72), `platform/monitoring.js` (incidenten, meldingen, heartbeat), `monitoring-checks.js` (controles), `monitoring-routes.js` (`/api/admin/monitoring`) en het scherm `beheer/bewaking.js`. Instelling `monitoring` per omgeving (ontvangers, webhook, herinneringen, drempels, dempen); platformcontroles alleen voor wie ook mag updaten. `errorCounter` in `error-report.js` telt 500-antwoorden; `mailer.verify` en `mollie.checkKey` zijn nieuw. Testdata: twee voorbeeldincidenten.
+
 ## 1.15.7
 
 `purchase_orders.origin` (`handmatig`|`voorstel`) en tabel `purchase_proposal_dismissals` (migratie in `MIGRATIONS` en `PG_MIGRATIONS`). `purchaseOrders.autoPropose` houdt per voorkeursleverancier één concept met origin `voorstel` bij (één transactie, idempotent, geen nummerverspilling); een aangepast voorstel wordt `handmatig` en telt als onderweg (`incomingByItem` met `excludeProposals`). Routes `/api/purchase-orders/proposals[/refresh|approve|dismiss|restore]`. Instelling `purchaseProposals` {enabled} (standaard aan, per omgeving, geen liveOnly), uurlijkse taak `app.locals.purchaseProposalsAll` in `runMaintenance` en kort na het opstarten; de voorstel-routes horen bij `configuration` van de module Artikelen. Tests: `purchase-proposals*.test.js`, `proposals-core.test.js`, `module-settings.test.js`.

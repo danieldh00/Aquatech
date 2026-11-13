@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.16.0',
+      date: '2026-11-13',
+      title: 'Bewaking en meldingen bij storingen',
+      items: [
+        { text: 'Nieuw in Beheer > Systeem > Bewaking: de app controleert zelf of de database, back-ups, updates en koppelingen (Google Drive, mail, Mollie, Visma, webshop, AI) werken en meldt een storing per e-mail of webhook, met een herstelmelding en herinneringen.', for: ['beheer'] },
+        { text: 'Een extern heartbeat-adres laat je weten als de app of de server zelf uitvalt.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.15.7',
       date: '2026-11-13',
       title: 'Automatische bestelvoorstellen',
