@@ -1122,6 +1122,29 @@ const PG_MIGRATIONS = [
     PRIMARY KEY (tenant_id, item_id)
   );
   `,
+  // 72: bewaking (zie db.js).
+  `
+  CREATE TABLE monitor_incidents (
+    id                   ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id            ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    scope                ${TEXT_TYPE} NOT NULL DEFAULT 'tenant',
+    check_key            ${TEXT_TYPE} NOT NULL,
+    severity             ${TEXT_TYPE} NOT NULL,
+    state                ${TEXT_TYPE} NOT NULL DEFAULT 'open',
+    title                ${TEXT_TYPE} NOT NULL DEFAULT '',
+    message              ${TEXT_TYPE} NOT NULL DEFAULT '',
+    first_at             ${TEXT_TYPE} NOT NULL,
+    last_at              ${TEXT_TYPE} NOT NULL,
+    resolved_at          ${TEXT_TYPE} NOT NULL DEFAULT '',
+    occurrences          BIGINT NOT NULL DEFAULT 1,
+    notified_at          ${TEXT_TYPE} NOT NULL DEFAULT '',
+    reminded_at          ${TEXT_TYPE} NOT NULL DEFAULT '',
+    resolved_notified_at ${TEXT_TYPE} NOT NULL DEFAULT '',
+    notify_error         ${TEXT_TYPE} NOT NULL DEFAULT ''
+  );
+  CREATE UNIQUE INDEX monitor_incidents_open ON monitor_incidents (tenant_id, check_key) WHERE state = 'open';
+  CREATE INDEX monitor_incidents_recent ON monitor_incidents (tenant_id, state, last_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

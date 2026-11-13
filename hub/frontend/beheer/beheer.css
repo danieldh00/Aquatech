@@ -279,3 +279,32 @@ dl.kv dd { margin: 0; }
 .up-release:first-child h4 { margin-top: 0; }
 .up-release ul { margin: 0; padding-left: 20px; font-size: 14px; }
 .notice.warn { border-color: var(--at-warning, #b45309); color: var(--at-warning, #b45309); padding: 10px 14px; }
+
+/* Systeem > Bewaking en meldingen (bewaking.js): stip per controle (groen/oranje/rood/grijs), samenvatting en open problemen. */
+.mon-dot { flex: none; display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--line); margin-top: 4px; }
+.mon-dot.ok { background: var(--at-ok); }
+.mon-dot.warn { background: var(--at-warn); }
+.mon-dot.bad { background: var(--at-danger); }
+.mon-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 14px; }
+.mon-summary-text { display: flex; align-items: flex-start; gap: 10px; flex: 1 1 320px; min-width: 0; }
+.mon-summary-text strong { display: block; font-size: 16px; }
+.mon-summary-actions { margin-top: 0; }
+.mon-summary .mon-feedback, .mon-summary .err { flex-basis: 100%; margin: 0; }
+.mon-summary .mon-feedback:empty { display: none; }
+.mon-nomail { padding: 10px 14px; margin: 0 0 14px; }
+.mon-incident { border-left: 4px solid var(--at-warn); }
+.mon-incident.bad { border-left-color: var(--at-danger); }
+.mon-incident .mon-message { margin: 0 0 6px; overflow-wrap: anywhere; }
+.mon-incident p:last-child { margin-bottom: 0; }
+.mon-notify-error { color: var(--at-danger); }
+.mon-checks { list-style: none; margin: 0 0 8px; padding: 0; }
+.mon-check { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.mon-check:last-child { border-bottom: 0; }
+.mon-check-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.mon-check-state { color: var(--text); }
+.mon-mute { flex: none; display: flex; align-items: center; gap: 4px; color: var(--muted); white-space: nowrap; }
+.mon-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 999px; border: 1px solid var(--at-teal); color: var(--at-navy); vertical-align: middle; }
+.mon-badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; color: var(--at-surface); background: var(--at-warn); }
+.mon-badge.bad { background: var(--at-danger); }
+.mon-platform h4 { margin: 4px 0 10px; font-size: 14px; }
+.mon-platform code { font-size: 12px; }

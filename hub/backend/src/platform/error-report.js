@@ -11,6 +11,8 @@
 // - Ook in de debugmodus gaan bekende soorten geheimen er eerst uit (`redact`).
 // - `catchAsync(app)` zorgt dat een async route die een fout gooit bij de foutafhandeling
 //   uitkomt, in plaats van een verzoek dat blijft hangen.
+// - `errorCounter` telt de 500-antwoorden per minuut (een ring van minuutemmers, alleen aantallen, nooit
+//   meldingen of geheimen); de bewaking (platform/monitoring-checks.js) leest er het aantal van het laatste uur uit.
 const crypto = require('crypto');
 const path = require('path');
 
@@ -18,6 +20,8 @@ const SOURCE_DIR = path.join(__dirname, '..');
 const MAX_TEXT = 2000;
 const MAX_FRAMES = 12;
 const ROUTE_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'all', 'use'];
+const MINUTE_MS = 60 * 1000;
+const COUNTER_MINUTES = 24 * 60;
 
 // Bekende vormen van geheimen die in een foutmelding terecht kunnen komen.
 const SECRET_PATTERNS = [
@@ -175,13 +179,70 @@ function catchAsync(target) {
 }
 
 /**
+ * Maakt een teller van serverfouten: een ring van minuutemmers over de laatste 24 uur. Zuiver (geen I/O) en klein:
+ * er worden alleen aantallen bewaard.
+ * @param {{ now?: () => number, minutes?: number }} [options] Klok (tests) en hoeveel minuten de ring onthoudt.
+ * @returns {{ add: Function, count: Function, reset: Function }} De teller.
+ */
+function createErrorCounter({ now = () => Date.now(), minutes = COUNTER_MINUTES } = {}) {
+  const size = Math.max(1, Math.floor(minutes));
+  const bucketMinutes = new Array(size).fill(-1);
+  const bucketCounts = new Array(size).fill(0);
+
+  /**
+   * Telt één fout (of meer) mee in de emmer van de huidige minuut.
+   * @param {number} [amount] Aantal (standaard 1).
+   * @returns {void}
+   */
+  function add(amount = 1) {
+    const minute = Math.floor(now() / MINUTE_MS);
+    const slot = minute % size;
+    if (bucketMinutes[slot] !== minute) {
+      bucketMinutes[slot] = minute;
+      bucketCounts[slot] = 0;
+    }
+    bucketCounts[slot] += Math.max(0, Math.floor(Number(amount)) || 0);
+  }
+
+  /**
+   * Het aantal getelde fouten vanaf een tijdstip (op de minuut nauwkeurig, hoogstens de lengte van de ring terug).
+   * @param {number} sinceMs Tijdstip in milliseconden (bijv. now - 3600000 voor het laatste uur).
+   * @returns {number} Het aantal.
+   */
+  function count(sinceMs) {
+    const current = Math.floor(now() / MINUTE_MS);
+    const first = Math.max(Math.floor(Number(sinceMs) / MINUTE_MS) || 0, current - size + 1);
+    let total = 0;
+    for (let i = 0; i < size; i++) {
+      if (bucketMinutes[i] >= first && bucketMinutes[i] <= current) total += bucketCounts[i];
+    }
+    return total;
+  }
+
+  /**
+   * Zet de teller op nul (tests).
+   * @returns {void}
+   */
+  function reset() {
+    bucketMinutes.fill(-1);
+    bucketCounts.fill(0);
+  }
+
+  return { add, count, reset };
+}
+
+// De teller van dit proces: de foutafhandeling hoogt hem op, de bewaking leest hem.
+const errorCounter = createErrorCounter();
+
+/**
  * Bouwt de foutafhandeling van de app.
  * @param {object} options Opties.
  * @param {(req: object) => boolean} options.debugFor Of dit verzoek details mag krijgen (debugmodus aan + beheerder).
  * @param {(line: string, detail: string) => void} [options.log] Schrijft een fout naar het log (standaard console.error); detail = de stacktrace of melding, zonder geheimen.
- * @returns {{ attach: Function, handler: Function }} Middleware (vroeg plaatsen) en foutafhandelaar (als laatste).
+ * @param {{ add: Function }} [options.counter] Teller van 500-antwoorden (standaard `errorCounter` van dit proces).
+ * @returns {{ attach: Function, handler: Function, counter: object }} Middleware (vroeg plaatsen), foutafhandelaar (als laatste) en de teller.
  */
-function createErrorReport({ debugFor, log = (line, detail) => console.error(line, detail) }) {
+function createErrorReport({ debugFor, log = (line, detail) => console.error(line, detail), counter = errorCounter }) {
   /**
    * Of dit verzoek details mag zien; een fout bij die controle betekent nee.
    * @param {object} req Het verzoek.
@@ -252,6 +313,7 @@ function createErrorReport({ debugFor, log = (line, detail) => console.error(lin
     if (error && error.type === 'entity.too.large') return res.status(413).json({ error: 'too_large', message: 'Het verzoek is te groot (bijvoorbeeld een te grote afbeelding).' });
     const errorId = newErrorId();
     res.locals.errorId = errorId;
+    try { counter.add(); } catch { /* tellen mag de foutafhandeling nooit breken */ }
     const who = req.user ? ` gebruiker ${req.user.id}` : '';
     const where = req.tenantId ? ` omgeving ${req.tenantId}` : '';
     log(`[fout ${errorId}] ${req.method} ${requestPath(req)}${who}${where}`, redact(error && error.stack ? error.stack : error, 8000));
@@ -262,7 +324,7 @@ function createErrorReport({ debugFor, log = (line, detail) => console.error(lin
     });
   }
 
-  return { attach, handler };
+  return { attach, handler, counter };
 }
 
-module.exports = { createErrorReport, catchAsync, withCause, withHiddenCause, describeError, redact, ownFrames };
+module.exports = { createErrorReport, createErrorCounter, errorCounter, catchAsync, withCause, withHiddenCause, describeError, redact, ownFrames };

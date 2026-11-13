@@ -572,6 +572,84 @@
           </section>
         </div>
       </section>
+      <section id="tab-bewaking" class="tabpane" hidden>
+        <p class="muted small">De app controleert zichzelf en de koppelingen van deze omgeving. Gaat er iets mis, dan krijg je een mail (en eventueel een bericht via een webhook); is het weer in orde, dan hoor je dat ook. Alles staat hier en in de database, dus het verhuist mee met een back-up.</p>
+        <div class="card mon-summary" id="mon-summary">
+          <div class="mon-summary-text">
+            <span class="mon-dot" id="mon-summary-dot" aria-hidden="true"></span>
+            <div>
+              <strong id="mon-summary-title" role="status" aria-live="polite">Laden…</strong>
+              <span class="muted small" id="mon-summary-sub"></span>
+            </div>
+          </div>
+          <div class="form-actions mon-summary-actions">
+            <button class="btn primary" type="button" id="mon-run">Nu controleren</button>
+            <button class="btn" type="button" id="mon-test">Testmelding versturen</button>
+          </div>
+          <p class="muted small mon-feedback" id="mon-feedback" role="status" aria-live="polite"></p>
+          <div id="mon-err" class="err" role="alert"></div>
+        </div>
+        <p class="notice mon-nomail" id="mon-nomail" hidden>Er is geen mailserver ingesteld. Meldingen zijn dan alleen hier te zien. Stel de mailserver in bij <a href="#mail">Koppelingen &gt; E-mail</a>.</p>
+        <div id="mon-open"></div>
+        <div class="card-grid">
+          <section class="card" aria-labelledby="mon-checks-title">
+            <h3 id="mon-checks-title">Controles</h3>
+            <ul class="mon-checks" id="mon-checks"></ul>
+            <p class="hint muted small">Gedempt: de controle draait wel en staat hier, maar er gaat geen mail of webhook uit.</p>
+          </section>
+          <form class="card" id="mon-form" novalidate aria-labelledby="mon-form-title">
+            <h3 id="mon-form-title">Meldingen</h3>
+            <div class="form-grid">
+              <label class="field chk full"><input type="checkbox" id="mon-enabled"> Bewaking aan</label>
+              <label class="field full">Ontvangers
+                <textarea id="mon-recipients" rows="2" maxlength="1300" placeholder="beheer@voorbeeld.nl"></textarea>
+                <span class="hint">Hoogstens 5 e-mailadressen, gescheiden door een komma of een nieuwe regel.</span>
+              </label>
+              <label class="field full">Webhook (optioneel)
+                <input type="url" id="mon-webhook" maxlength="500" placeholder="https://" autocomplete="off" spellcheck="false">
+                <span class="hint">Krijgt bij elke melding een POST met JSON (titel, bericht, ernst, status). Bijvoorbeeld een Teams-, Slack- of ntfy-adres.</span>
+              </label>
+              <label class="field">Herinnering na (uren)
+                <input type="number" id="mon-reminder" min="0" max="168" step="1" inputmode="numeric">
+                <span class="hint">Zolang een probleem openstaat; 0 = geen herinnering.</span>
+              </label>
+              <label class="field chk"><input type="checkbox" id="mon-recovery"> Melden als het weer in orde is</label>
+              <div class="full mon-platform" id="mon-platform" hidden>
+                <h4>Platform</h4>
+                <div class="form-grid">
+                  <label class="field full">Heartbeat-adres (optioneel)
+                    <input type="url" id="mon-heartbeat" maxlength="500" placeholder="https://hc-ping.com/…" autocomplete="off" spellcheck="false">
+                    <span class="hint">Een externe dienst (zoals healthchecks.io) die alarm slaat als de app zich niet meer meldt. Na elke ronde zonder fout opent de app dit adres; bij een fout <code>…/fail</code>. Zo hoor je het ook als de server helemaal plat ligt.</span>
+                  </label>
+                  <label class="field">Back-up maximaal oud (uren)<input type="number" id="mon-backupMaxHours" min="1" max="720" step="1" inputmode="numeric"></label>
+                  <label class="field">Minimaal vrij op de schijf (%)<input type="number" id="mon-diskMinFreePct" min="1" max="90" step="1" inputmode="numeric"></label>
+                  <label class="field">Minimaal vrij op de schijf (MB)<input type="number" id="mon-diskMinFreeMb" min="0" max="1000000" step="1" inputmode="numeric"></label>
+                  <label class="field">Serverfouten per uur<input type="number" id="mon-errorsPerHour" min="1" max="10000" step="1" inputmode="numeric"></label>
+                  <label class="field">Database traag vanaf (ms)<input type="number" id="mon-dbSlowMs" min="50" max="60000" step="1" inputmode="numeric"></label>
+                </div>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn primary" type="submit" id="mon-save">Opslaan</button>
+              <span class="muted small" id="mon-saved" role="status" aria-live="polite"></span>
+            </div>
+            <div id="mon-form-err" class="err" role="alert"></div>
+          </form>
+        </div>
+        <section class="card" aria-labelledby="mon-history-title">
+          <h3 id="mon-history-title">Geschiedenis</h3>
+          <div class="filters">
+            <select id="mon-state" aria-label="Welke meldingen">
+              <option value="">Alle meldingen</option>
+              <option value="open">Openstaand</option>
+              <option value="opgelost">Opgelost</option>
+            </select>
+            <button class="btn" type="button" id="mon-export">Exporteer naar Excel</button>
+          </div>
+          <div class="tablewrap"><table class="grid" id="mon-history"></table></div>
+          <div class="form-actions"><button class="btn" type="button" id="mon-more" hidden>Oudere meldingen</button></div>
+        </section>
+      </section>
       <section id="tab-aikosten" class="tabpane" hidden>
         <div class="filters">
           <select id="ai-range" aria-label="Periode">
@@ -641,6 +719,7 @@
   <script src="aikosten.js"></script>
   <script src="kleuren.js"></script>
   <script src="updates.js"></script>
+  <script src="bewaking.js"></script>
   <script src="drive-backup.js"></script>
   <script src="backup-restore.js"></script>
   <script src="beheer.js"></script>

@@ -1362,6 +1362,30 @@ const MIGRATIONS = [
     PRIMARY KEY (tenant_id, item_id)
   );
   `,
+  // 72: bewaking (platform/monitoring.js): incidenten van controles (server, database, back-ups, koppelingen). Hoogstens één
+  // open incident per controle per omgeving; platformincidenten staan onder de hoofdtenant met scope 'platform'.
+  `
+  CREATE TABLE monitor_incidents (
+    id                   TEXT PRIMARY KEY,
+    tenant_id            TEXT NOT NULL REFERENCES tenants(id),
+    scope                TEXT NOT NULL DEFAULT 'tenant',
+    check_key            TEXT NOT NULL,
+    severity             TEXT NOT NULL,
+    state                TEXT NOT NULL DEFAULT 'open',
+    title                TEXT NOT NULL DEFAULT '',
+    message              TEXT NOT NULL DEFAULT '',
+    first_at             TEXT NOT NULL,
+    last_at              TEXT NOT NULL,
+    resolved_at          TEXT NOT NULL DEFAULT '',
+    occurrences          INTEGER NOT NULL DEFAULT 1,
+    notified_at          TEXT NOT NULL DEFAULT '',
+    reminded_at          TEXT NOT NULL DEFAULT '',
+    resolved_notified_at TEXT NOT NULL DEFAULT '',
+    notify_error         TEXT NOT NULL DEFAULT ''
+  );
+  CREATE UNIQUE INDEX monitor_incidents_open ON monitor_incidents (tenant_id, check_key) WHERE state = 'open';
+  CREATE INDEX monitor_incidents_recent ON monitor_incidents (tenant_id, state, last_at);
+  `,
 ];
 
 /**

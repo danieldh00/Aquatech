@@ -57,7 +57,7 @@ const validEmail = (value) => {
  * blijft op naam gecontroleerd.
  * @param {object} settings Instellingen van de tenant (mailServer en mailPassword).
  * @param {object} [options] createTransport en resolveHost, te vervangen in tests.
- * @returns {{ configured: Function, send: Function, config: Function }} De mailfuncties.
+ * @returns {{ configured: Function, send: Function, verify: Function, config: Function }} De mailfuncties.
  */
 function createMailer(settings, { createTransport = nodemailer.createTransport, resolveHost = publicAddress } = {}) {
   /**
@@ -74,15 +74,12 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
     return Boolean(server.host && server.from);
   };
   /**
-   * Verstuurt een e-mail via de mailserver van de tenant.
-   * @param {{ to: string|string[], subject: string, text?: string, html?: string, replyTo?: string, bcc?: string, attachments?: object[] }} message Het bericht; attachments: [{ filename, content (Buffer), contentType }], hoogstens 5.
-   * @returns {Promise<object>} Het resultaat van nodemailer.
-   * @throws {Error} Met code not_configured, invalid_to of invalid_host.
+   * Maakt de verbinding (transport) met de ingestelde mailserver. De server moet een openbaar adres hebben; er wordt
+   * verbonden met het gevonden adres, het certificaat blijft op naam gecontroleerd.
+   * @returns {Promise<{ transport: object, server: object }>} Het transport van nodemailer en de instelling mailServer.
+   * @throws {Error} Met code invalid_host.
    */
-  async function send({ to, subject, text, html, replyTo, bcc, attachments }) {
-    if (!configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld.'), { code: 'not_configured' });
-    const list = (Array.isArray(to) ? to : [to]).filter(validEmail);
-    if (!list.length) throw Object.assign(new Error('Geen geldig e-mailadres.'), { code: 'invalid_to' });
+  async function openTransport() {
     const server = config();
     const password = settings.get('mailPassword');
     let address = server.host;
@@ -103,6 +100,19 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
       tls: { rejectUnauthorized: true },
       connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 20000,
     });
+    return { transport, server };
+  }
+  /**
+   * Verstuurt een e-mail via de mailserver van de tenant.
+   * @param {{ to: string|string[], subject: string, text?: string, html?: string, replyTo?: string, bcc?: string, attachments?: object[] }} message Het bericht; attachments: [{ filename, content (Buffer), contentType }], hoogstens 5.
+   * @returns {Promise<object>} Het resultaat van nodemailer.
+   * @throws {Error} Met code not_configured, invalid_to of invalid_host.
+   */
+  async function send({ to, subject, text, html, replyTo, bcc, attachments }) {
+    if (!configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld.'), { code: 'not_configured' });
+    const list = (Array.isArray(to) ? to : [to]).filter(validEmail);
+    if (!list.length) throw Object.assign(new Error('Geen geldig e-mailadres.'), { code: 'invalid_to' });
+    const { transport, server } = await openTransport();
     return transport.sendMail({
       from: server.from, to: list.join(', '), bcc: bcc && validEmail(bcc) ? bcc.trim() : undefined, replyTo: replyTo && validEmail(replyTo) ? replyTo : server.replyTo || undefined,
       subject: String(subject || '').replace(/[\r\n]/g, ' ').slice(0, 300), text, html,
@@ -111,7 +121,23 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
       })) : undefined,
     });
   }
-  return { configured, send, config };
+  /**
+   * Controleert of de mailserver bereikbaar is en de inloggegevens accepteert, zonder iets te versturen (SMTP-verify
+   * van nodemailer). Voor de bewaking (platform/monitoring-checks.js).
+   * @returns {Promise<true>} true als de server de verbinding en de aanmelding accepteert.
+   * @throws {Error} Met code not_configured of invalid_host, of de fout van nodemailer (zie mailFailure).
+   */
+  async function verify() {
+    if (!configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld.'), { code: 'not_configured' });
+    const { transport } = await openTransport();
+    try {
+      await transport.verify();
+      return true;
+    } finally {
+      if (typeof transport.close === 'function') transport.close();
+    }
+  }
+  return { configured, send, verify, config };
 }
 
 /**

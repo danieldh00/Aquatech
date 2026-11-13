@@ -97,7 +97,7 @@ const validPaymentId = (value) => /^tr_[A-Za-z0-9]{4,40}$/.test(String(value || 
 /**
  * Maakt de Mollie-client.
  * @param {{ fetchImpl?: Function }} [options] fetchImpl vervangt de netwerkaanroep (tests).
- * @returns {{ createPayment: Function, getPayment: Function, createRefund: Function }} De functies.
+ * @returns {{ createPayment: Function, getPayment: Function, createRefund: Function, checkKey: Function }} De functies.
  */
 function createMollie({ fetchImpl = fetch } = {}) {
   /**
@@ -180,7 +180,20 @@ function createMollie({ fetchImpl = fetch } = {}) {
     return { id: String(out.id), status: String(out.status || ''), amount: out.amount ? Number(out.amount.value) : amount };
   }
 
-  return { createPayment, getPayment, createRefund };
+  /**
+   * Controleert of Mollie de API-sleutel nog accepteert, met een lichte opvraging (de actieve betaalmethodes). Voor de
+   * bewaking (platform/monitoring-checks.js); er wordt niets aangemaakt.
+   * @param {string} apiKey De API-sleutel.
+   * @returns {Promise<{ methods: number }>} Het aantal actieve betaalmethodes.
+   * @throws {MollieError} Met status 401 als Mollie de sleutel weigert, 0 als Mollie niet bereikbaar is.
+   */
+  async function checkKey(apiKey) {
+    const out = await call(apiKey, 'GET', '/methods');
+    const methods = out._embedded && Array.isArray(out._embedded.methods) ? out._embedded.methods.length : Number(out.count) || 0;
+    return { methods };
+  }
+
+  return { createPayment, getPayment, createRefund, checkKey };
 }
 
 module.exports = { createMollie, MollieError, sanitizePayment, configOf, validPaymentId, cleanPublicUrl, ON_ACCOUNT, DEFAULT_HOLD_HOURS, DEFAULT_ACCOUNT_HOLD_DAYS };
